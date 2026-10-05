@@ -1298,6 +1298,9 @@ export const en: Messages = {
   "keys.desc":
     "Secret keys your sessions can use. The value stays in the system keychain (Windows Credential Manager, macOS Keychain). ADE never writes it to a file or shows it, and only passes it as an environment variable to the agents you choose for each key, when a session starts.",
   "keys.noKeychain": "This version of ADE can't access the keychain.",
+  "keys.voiceConflict": "The voice used another OpenRouter key, not the one in the keychain. Which one should I keep?",
+  "keys.voiceConflict.voice": "Use the voice's",
+  "keys.voiceConflict.keychain": "Keep the keychain's",
   "keys.none": "No saved keys.",
   "keys.hidden": "hidden value",
   "keys.missingValue": "value missing from the keychain",

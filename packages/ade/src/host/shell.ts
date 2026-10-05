@@ -138,6 +138,12 @@ export interface Host {
   assignedSecrets?: (command: string) => Promise<{ name: string; env: string }[]>
   /** Copies a key to the clipboard from the host; resolves to the seconds before it is cleared. */
   copySecret?: (name: string) => Promise<number>
+  /**
+   * The voice's OpenRouter key (`secret_voice_key`): the value of the one entry
+   * whose variable is `OPENROUTER_API_KEY`, undefined without one. The only
+   * value the page can read back; Rust refuses any other variable.
+   */
+  voiceKey?: () => Promise<string | undefined>
 
   // -- Messages between sessions (see `src-tauri/src/mailbox.rs`) -----------
   /** Takes every message `ade-msg send` has dropped since the last call. */
@@ -708,6 +714,10 @@ export async function getHost(): Promise<Host | undefined> {
     async copySecret(name) {
       const { invoke } = await import("@tauri-apps/api/core")
       return invoke<number>("secret_copy", { name })
+    },
+    async voiceKey() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return (await invoke<string | null>("secret_voice_key", { env: "OPENROUTER_API_KEY" })) ?? undefined
     },
 
     // -- Filesystem access (backed by dedicated Tauri commands) -------------

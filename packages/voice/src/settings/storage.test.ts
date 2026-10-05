@@ -9,6 +9,8 @@ import {
   isOpenRouterKeyRemoved,
   loadVoiceSettings,
   markOpenRouterKeyRemoved,
+  readLegacyOpenRouterKey,
+  clearLegacyOpenRouterKey,
   resetVoiceSettings,
   saveVoiceSettings,
 } from "./storage"
@@ -144,80 +146,80 @@ describe("settings/storage", () => {
 })
 
 /*
- * La chiave OpenRouter era un campo come gli altri dentro `voice.settings`:
- * qualunque cosa toccasse le impostazioni toccava la credenziale. Un blob
- * copiato per una segnalazione, un dump nei log, una futura funzione di
- * esportazione — ognuno avrebbe portato con sé una chiave viva senza che
- * nessuno avesse deciso che dovesse.
+ * La chiave OpenRouter era un campo come gli altri dentro `voice.settings`,
+ * poi una voce sua in localStorage: in chiaro nel profilo di WebView2 in tutti
+ * e due i casi. Dalla S6 sta nel portachiavi del sistema, e questo file non la
+ * scrive più: la legge dal vecchio posto solo perché ADE la sposti.
  */
-describe("la chiave API sta fuori dal blob delle impostazioni", () => {
-  test("viene salvata in una voce sua, e il blob non la contiene", () => {
+describe("la chiave API non è più un'impostazione salvata", () => {
+  test("salvare non la scrive da nessuna parte del browser", () => {
     const storage = new MemoryStorage()
     saveVoiceSettings({ openRouterApiKey: "sk-or-segreta" }, storage)
 
-    expect(storage.getItem(VOICE_API_KEY_STORAGE_KEY)).toBe("sk-or-segreta")
+    expect(storage.getItem(VOICE_API_KEY_STORAGE_KEY)).toBeNull()
     expect(storage.getItem(VOICE_SETTINGS_STORAGE_KEY)).not.toContain("sk-or-segreta")
     expect(storage.getItem(VOICE_SETTINGS_STORAGE_KEY)).not.toContain("openRouterApiKey")
+    expect(loadVoiceSettings(storage).openRouterApiKey).toBeUndefined()
   })
 
-  test("rileggendo, la chiave torna al suo posto", () => {
+  test("una chiave nel vecchio posto non torna nelle impostazioni, ma si legge per spostarla", () => {
     const storage = new MemoryStorage()
-    saveVoiceSettings({ openRouterApiKey: "sk-or-segreta", mode: "transcription" }, storage)
+    storage.setItem(VOICE_API_KEY_STORAGE_KEY, "sk-or-vecchia")
 
-    const loaded = loadVoiceSettings(storage)
-    expect(loaded.openRouterApiKey).toBe("sk-or-segreta")
-    expect(loaded.mode).toBe("transcription")
+    expect(loadVoiceSettings(storage).openRouterApiKey).toBeUndefined()
+    expect(readLegacyOpenRouterKey(storage)).toBe("sk-or-vecchia")
+    clearLegacyOpenRouterKey(storage)
+    expect(readLegacyOpenRouterKey(storage)).toBeUndefined()
   })
 
   /*
    * Un profilo scritto prima della separazione ha ancora la chiave dentro il
-   * blob: leggerla da lì tiene l'utente collegato, e il primo salvataggio la
-   * sposta fuori per sempre.
+   * blob: il primo salvataggio la toglie dal blob, e non deve perderla prima
+   * che ADE l'abbia spostata nel portachiavi.
    */
-  test("una chiave scritta dalla versione precedente viene recuperata e poi migrata", () => {
+  test("una chiave dentro il blob sopravvive al primo salvataggio, fuori dal blob", () => {
     const storage = new MemoryStorage()
     storage.setItem(
       VOICE_SETTINGS_STORAGE_KEY,
       JSON.stringify({ ...DEFAULT_VOICE_SETTINGS, openRouterApiKey: "sk-or-vecchia" }),
     )
 
-    expect(loadVoiceSettings(storage).openRouterApiKey).toBe("sk-or-vecchia")
-
+    expect(loadVoiceSettings(storage).openRouterApiKey).toBeUndefined()
     saveVoiceSettings({}, storage)
     expect(storage.getItem(VOICE_SETTINGS_STORAGE_KEY)).not.toContain("sk-or-vecchia")
-    expect(storage.getItem(VOICE_API_KEY_STORAGE_KEY)).toBe("sk-or-vecchia")
+    expect(readLegacyOpenRouterKey(storage)).toBe("sk-or-vecchia")
   })
 
-  test("togliere la chiave la rimuove davvero e impedisce il reimport", () => {
+  test("togliere la vecchia chiave la toglie anche da dentro il blob", () => {
     const storage = new MemoryStorage()
-    saveVoiceSettings({ openRouterApiKey: "sk-or-segreta" }, storage)
-    saveVoiceSettings({ openRouterApiKey: "" }, storage)
-
-    expect(storage.getItem(VOICE_API_KEY_STORAGE_KEY)).toBeNull()
-    expect(loadVoiceSettings(storage).openRouterApiKey).toBeUndefined()
-    expect(storage.getItem(VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY)).toBe("1")
-    expect(isOpenRouterKeyRemoved(storage)).toBe(true)
+    storage.setItem(
+      VOICE_SETTINGS_STORAGE_KEY,
+      JSON.stringify({ ...DEFAULT_VOICE_SETTINGS, language: "en", openRouterApiKey: "sk-or-vecchia" }),
+    )
+    clearLegacyOpenRouterKey(storage)
+    expect(readLegacyOpenRouterKey(storage)).toBeUndefined()
+    expect(storage.getItem(VOICE_SETTINGS_STORAGE_KEY)).not.toContain("sk-or-vecchia")
+    expect(loadVoiceSettings(storage).language).toBe("en")
   })
 
-  test("una chiave inserita di nuovo pulisce il segno di rimozione", () => {
+  test("un salvataggio non tocca il segno di rimozione: lo decide chi toglie la chiave", () => {
     const storage = new MemoryStorage()
     markOpenRouterKeyRemoved(storage)
-
     saveVoiceSettings({ openRouterApiKey: "sk-or-nuova" }, storage)
-
+    expect(isOpenRouterKeyRemoved(storage)).toBe(true)
+    clearOpenRouterKeyRemoved(storage)
+    saveVoiceSettings({ openRouterApiKey: "" }, storage)
     expect(isOpenRouterKeyRemoved(storage)).toBe(false)
-    expect(storage.getItem(VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY)).toBeNull()
   })
 
-  test("«reset» non lascia dietro una chiave API e segnala la rimozione", () => {
+  test("«reset» toglie la vecchia chiave del browser, senza segnare una rimozione", () => {
     const storage = new MemoryStorage()
-    saveVoiceSettings({ openRouterApiKey: "sk-or-segreta" }, storage)
+    storage.setItem(VOICE_API_KEY_STORAGE_KEY, "sk-or-vecchia")
 
     resetVoiceSettings(storage)
 
     expect(storage.getItem(VOICE_API_KEY_STORAGE_KEY)).toBeNull()
-    expect(loadVoiceSettings(storage).openRouterApiKey).toBeUndefined()
-    expect(isOpenRouterKeyRemoved(storage)).toBe(true)
+    expect(isOpenRouterKeyRemoved(storage)).toBe(false)
   })
 
   test("il segno di rimozione sopravvive a una modifica che non tocca la chiave", () => {

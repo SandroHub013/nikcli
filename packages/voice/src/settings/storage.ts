@@ -21,18 +21,14 @@ import { t } from "@nikcli-ai/ade/i18n"
 export const VOICE_SETTINGS_STORAGE_KEY = "voice.settings"
 
 /**
- * The OpenRouter key, kept out of the settings blob.
+ * Where the OpenRouter key used to be kept: read now only to move it out.
  *
- * It used to be one field among the rest, so anything that touched the
- * settings touched the credential: a copied `voice.settings` for a bug
- * report, a settings dump in a log, a future export feature — each would
- * have carried a live API key without anyone deciding that it should.
- *
- * This does not make it secret. It is still plaintext in the WebView2
- * profile on disk, which is what browser storage is; the fix for *that* is
- * the OS credential store behind a Tauri command, and it is not this. What
- * the split buys is that the key is now reached deliberately, by name, and
- * `exportVoiceSettings` below can hand out settings that provably exclude it.
+ * It was a field of the settings blob, then a slot of its own in browser
+ * storage — plaintext in the WebView2 profile on disk either way. Since S6 it
+ * is an entry of the system keychain («OpenRouter», `OPENROUTER_API_KEY`), on
+ * ADE's Chiavi API page. The host moves what it finds here into the keychain
+ * (`readLegacyOpenRouterKey`, `clearLegacyOpenRouterKey`) and fills
+ * `settings.openRouterApiKey` in memory; this file never writes a key again.
  */
 export const VOICE_API_KEY_STORAGE_KEY = "voice.openrouter.key"
 export const VOICE_OPENROUTER_KEY_REMOVED_STORAGE_KEY = "voice.openrouter.keyRemoved"
@@ -78,23 +74,25 @@ export function loadVoiceSettings(storage?: Storage, options?: VoiceSettingsLoad
     const parsed: unknown = raw ? JSON.parse(raw) : null
 
     /*
-     * The key comes from its own slot, and from the blob only once.
-     *
-     * A profile written before the split still has it inside `voice.settings`;
-     * reading it from there keeps that user signed in, and the first save
-     * moves it out and strips it from the blob for good.
+     * The key is not a setting any more: it is in the keychain, and the host
+     * puts it in memory. One written inline by a profile older than the slot
+     * is moved to the slot before the blob can be written back without it,
+     * so the host's move to the keychain still finds it.
      */
-    const stored = safeRead(store, VOICE_API_KEY_STORAGE_KEY)
-    const legacy =
+    const inline =
       typeof parsed === "object" && parsed !== null && "openRouterApiKey" in parsed
         ? (parsed as { openRouterApiKey?: unknown }).openRouterApiKey
         : undefined
-
-    const apiKey = stored || (typeof legacy === "string" ? legacy : "")
-    const merged =
-      parsed === null && !apiKey
-        ? null
-        : { ...(typeof parsed === "object" && parsed !== null ? parsed : {}), openRouterApiKey: apiKey }
+    if (typeof inline === "string" && inline.trim() && !safeRead(store, VOICE_API_KEY_STORAGE_KEY)) {
+      store.setItem(VOICE_API_KEY_STORAGE_KEY, inline.trim())
+    }
+    let merged: Record<string, unknown> | null = null
+    if (typeof parsed === "object" && parsed !== null) {
+      const { openRouterApiKey: _inline, ...rest } = parsed as Record<string, unknown>
+      merged = rest
+    } else if (parsed !== null) {
+      merged = {}
+    }
 
     // New is nothing stored at all: a stored `{}` next to a key is a profile, and keeps Ugo.
     const normalized = normalizeSettings(merged, { ...options, fresh: parsed === null })
@@ -148,21 +146,44 @@ function storedReplyVoice(store: Storage): unknown {
   }
 }
 
-/** Writes the blob and the credential, each in its own slot. Never throws. */
+/** Writes the blob, never with the credential in it. Never throws. */
 function writeSettings(store: Storage, settings: VoiceSettings): boolean {
   try {
-    // The blob never carries the credential again, including for a profile
-    // that had it inline before the split.
-    const { openRouterApiKey, ...withoutKey } = settings
+    const { openRouterApiKey: _key, ...withoutKey } = settings
     store.setItem(VOICE_SETTINGS_STORAGE_KEY, JSON.stringify(withoutKey))
-    if (openRouterApiKey) {
-      store.setItem(VOICE_API_KEY_STORAGE_KEY, openRouterApiKey)
-    } else {
-      store.removeItem(VOICE_API_KEY_STORAGE_KEY)
-    }
     return true
   } catch {
     return false
+  }
+}
+
+/** The key a profile from before S6 kept in browser storage, or undefined: for the host's move to the keychain. */
+export function readLegacyOpenRouterKey(storage = voiceStorage()): string | undefined {
+  if (!storage) return undefined
+  const slot = safeRead(storage, VOICE_API_KEY_STORAGE_KEY).trim()
+  if (slot) return slot
+  try {
+    const raw = storage.getItem(VOICE_SETTINGS_STORAGE_KEY)
+    const inline = raw ? (JSON.parse(raw) as { openRouterApiKey?: unknown }).openRouterApiKey : undefined
+    return typeof inline === "string" && inline.trim() ? inline.trim() : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Takes the old key out of browser storage, slot and blob both: once the keychain has it, or the user chose the keychain's. */
+export function clearLegacyOpenRouterKey(storage = voiceStorage()): void {
+  if (!storage) return
+  try {
+    storage.removeItem(VOICE_API_KEY_STORAGE_KEY)
+    const raw = storage.getItem(VOICE_SETTINGS_STORAGE_KEY)
+    const parsed = raw ? (JSON.parse(raw) as Record<string, unknown>) : null
+    if (parsed && typeof parsed === "object" && "openRouterApiKey" in parsed) {
+      const { openRouterApiKey: _key, ...rest } = parsed
+      storage.setItem(VOICE_SETTINGS_STORAGE_KEY, JSON.stringify(rest))
+    }
+  } catch {
+    return
   }
 }
 
@@ -222,8 +243,6 @@ export function saveVoiceSettings(
 
   const intended = "replyVoice" in patch ? patch.replyVoice : storedReplyVoice(store)
   if (writeSettings(store, persisted(normalized.settings, intended, options))) {
-    if (normalized.settings.openRouterApiKey) clearOpenRouterKeyRemoved(store)
-    else if (current.settings.openRouterApiKey) markOpenRouterKeyRemoved(store)
     return normalized
   }
   return {
@@ -238,13 +257,10 @@ export function saveVoiceSettings(
 export function resetVoiceSettings(storage?: Storage, options?: VoiceSettingsLoadOptions): NormalizedVoiceSettings {
   const store = resolveStorage(storage)
   if (store) {
-    const hadKey = Boolean(loadVoiceSettings(store, options).openRouterApiKey)
     try {
       store.removeItem(VOICE_SETTINGS_STORAGE_KEY)
-      // The credential goes too. "Reset" that leaves an API key behind is
-      // the one reading of the word nobody has.
+      // An old key still waiting to be moved goes too; the keychain's is not the voice's to reset.
       store.removeItem(VOICE_API_KEY_STORAGE_KEY)
-      if (hadKey) markOpenRouterKeyRemoved(store)
     } catch {
       // ignore
     }

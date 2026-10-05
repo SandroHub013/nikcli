@@ -319,14 +319,10 @@ export const voiceIt = {
   "vui.backend.openrouter.desc": "Trascrizione cloud ad alta accuratezza (microsoft/mai-transcribe-2)",
   "vui.key.title": "Chiave API OpenRouter",
   "vui.key.saved": (masked: string) => `Chiave salvata: ${masked}`,
-  "vui.key.remove": "Rimuovi",
-  "vui.key.replace": "Inserisci una nuova chiave per sostituirla",
-  "vui.key.hide": "Nascondi",
-  "vui.key.show": "Mostra",
-  "vui.key.save": "Salva",
-  "vui.key.looksWrong": "Le chiavi OpenRouter iniziano di norma con sk-or-: controlla di aver incollato quella giusta.",
-  "vui.key.hint":
-    "La chiave non viene mai mostrata in chiaro né registrata nei file di log. Invio salva, Esc svuota il campo.",
+  "vui.key.none": "Nessuna chiave OpenRouter salvata",
+  "vui.key.manage": "Gestisci in Chiavi API",
+  "vui.key.where":
+    "La chiave sta nel portachiavi del sistema, nella pagina Chiavi API: la usano la trascrizione e la voce MAI.",
   "vui.key.cost": "Costo dell'ultima richiesta:",
   "vui.commands.title": "Comandi vocali",
   "vui.commands.desc": "Il vocabolario riconosciuto. Scrivine uno per provarlo senza parlare",

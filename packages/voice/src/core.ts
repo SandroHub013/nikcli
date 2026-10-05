@@ -286,6 +286,8 @@ export {
   clearVoiceSettings,
   exportVoiceSettings,
   isOpenRouterKeyRemoved,
+  readLegacyOpenRouterKey,
+  clearLegacyOpenRouterKey,
   loadVoiceSettings,
   markOpenRouterKeyRemoved,
   resetVoiceSettings,

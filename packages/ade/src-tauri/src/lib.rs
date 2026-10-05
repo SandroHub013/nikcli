@@ -2389,6 +2389,7 @@ pub fn run() {
             secrets::secret_delete,
             secrets::secret_copy,
             secrets::secret_assigned,
+            secrets::secret_voice_key,
             stt_stream::stt_stream_open,
             stt_stream::stt_stream_send,
             stt_stream::stt_stream_end,

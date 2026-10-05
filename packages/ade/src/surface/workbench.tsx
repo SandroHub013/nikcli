@@ -60,6 +60,14 @@ import { oneAtATime } from "./one-at-a-time"
 import { RunningSessions } from "./running"
 import { restartOf, startArgsFor } from "./start-args"
 import { KeyRequestDialog, type KeysHost } from "../secrets/keys-section"
+import {
+  migrateVoiceKey,
+  resolveVoiceKeyConflict,
+  saveVoiceKey,
+  VOICE_KEY_ENV,
+  type LegacyVoiceKey,
+  type VoiceKeyHost,
+} from "../secrets/voice-key"
 import { KEYS_VERBS, runKeysCommand, type KeyAsker } from "../secrets/keys"
 import {
   DEFAULT_MAX_DEPTH,
@@ -520,6 +528,10 @@ import {
   replyLocale,
   g2pLocale,
   isOpenRouterKeyRemoved,
+  markOpenRouterKeyRemoved,
+  clearOpenRouterKeyRemoved,
+  readLegacyOpenRouterKey,
+  clearLegacyOpenRouterKey,
   dropLegacyParakeet,
   loadVoiceSettings,
   saveVoiceSettings,
@@ -903,10 +915,30 @@ export function Workbench() {
     }
     return host as Required<Pick<typeof host, "listSecrets" | "saveSecret" | "deleteSecret" | "copySecret">>
   }
+  /*
+   * The page's saves and deletions also reach the voice when they touch its
+   * key (`OPENROUTER_API_KEY`): removed here, the voice stops spending it at
+   * the next sentence and nikcli's copy does not bring it back; saved here,
+   * the voice uses it from the next sentence.
+   */
   const keysService: KeysHost = {
     list: () => withKeys().then((host) => host.listSecrets()),
-    save: (draft) => withKeys().then((host) => host.saveSecret(draft)),
-    remove: (name) => withKeys().then((host) => host.deleteSecret(name)),
+    save: async (draft) => {
+      await withKeys().then((host) => host.saveSecret(draft))
+      if (draft.env === VOICE_KEY_ENV) {
+        clearOpenRouterKeyRemoved()
+        void refreshVoiceKey()
+      }
+    },
+    remove: async (name) => {
+      const host = await withKeys()
+      const wasVoice = (await host.listSecrets()).some((key) => key.name === name && key.env === VOICE_KEY_ENV)
+      await host.deleteSecret(name)
+      if (wasVoice) {
+        markOpenRouterKeyRemoved()
+        void refreshVoiceKey()
+      }
+    },
     copy: (name) => withKeys().then((host) => host.copySecret(name)),
   }
   const keysHost = (): KeysHost | undefined => (keysAvailable() ? keysService : undefined)
@@ -4885,6 +4917,19 @@ export function Workbench() {
   const testBuild = testBuildMarked()
   const initialVoice = loadVoiceSettings(undefined, { testIdentity: testBuild })
   const [voiceSettings, setVoiceSettings] = createSignal<VoiceSettings>(initialVoice.settings)
+  /*
+   * The voice's OpenRouter key, in memory only (S6): read from the keychain
+   * at start and after the Chiavi API page changes it, and merged into the
+   * settings the engine and MAI read. The settings on disk never carry it.
+   */
+  const [voiceKey, setVoiceKey] = createSignal<string | undefined>(undefined)
+  const withVoiceKey = (settings: VoiceSettings): VoiceSettings => {
+    const { openRouterApiKey: _stored, ...rest } = settings
+    const key = voiceKey()
+    return key ? { ...rest, openRouterApiKey: key } : rest
+  }
+  /** The old key waits for the user's answer on the Chiavi API page: it differs from the keychain's. */
+  const [voiceKeyConflict, setVoiceKeyConflict] = createSignal(false)
   const [voiceSettingsOpen, setVoiceSettingsOpen] = createSignal(false)
   const [voiceSettingsSection, setVoiceSettingsSection] = createSignal<string | undefined>(undefined)
   const closeVoiceSettings = () => {
@@ -5525,7 +5570,9 @@ export function Workbench() {
     setVoiceSettingsNotice(undefined)
     const before = listensByItself(voiceSettings())
     const previousVoice = activePiperVoice()
-    const saved = saveVoiceSettings(next, undefined, { testIdentity: testBuild })
+    const stored = saveVoiceSettings(next, undefined, { testIdentity: testBuild })
+    // The key is not the panel's to change: it is the keychain's, whatever `next` says.
+    const saved = { ...stored, settings: withVoiceKey(stored.settings) }
     setVoiceSettings(saved.settings)
     const nextVoice = activeReplyVoice(saved.settings.replyVoice, locale())
     if (nextVoice !== previousVoice) {
@@ -5540,6 +5587,84 @@ export function Workbench() {
     // The switch is the switch: on opens the microphone, off closes it.
     if (after && !before) listenForName()
     else if (before && !after && voiceEngine.isRunning()) void voiceEngine.stop()
+  }
+
+  /** The voice's key as the keychain has it now, in memory and in the engine. */
+  const applyVoiceKey = async (key: string | undefined) => {
+    const before = listensByItself(voiceSettings())
+    setVoiceKey(key || undefined)
+    const settings = withVoiceKey(voiceSettings())
+    setVoiceSettings(settings)
+    await voiceEngine.updateSettings(settings)
+    if (listensByItself(settings) && !before) listenForName()
+  }
+
+  const voiceKeyHost = async (): Promise<VoiceKeyHost | undefined> => {
+    const host = await getHost()
+    if (!host?.listSecrets || !host.saveSecret || !host.deleteSecret || !host.voiceKey) return undefined
+    return {
+      list: () => host.listSecrets!(),
+      save: (draft) => host.saveSecret!(draft),
+      remove: (name) => host.deleteSecret!(name),
+      read: () => host.voiceKey!(),
+    }
+  }
+  const legacyVoiceKey: LegacyVoiceKey = {
+    read: () => readLegacyOpenRouterKey(),
+    clear: () => clearLegacyOpenRouterKey(),
+  }
+
+  /** After the Chiavi API page saved or deleted the voice's entry. */
+  const refreshVoiceKey = async () => {
+    const host = await voiceKeyHost()
+    if (host) await applyVoiceKey(await host.read().catch(() => undefined))
+  }
+
+  /** The Chiavi API page's answer to a conflict between the old key and the keychain's. */
+  const answerVoiceKeyConflict = async (choice: "voice" | "keychain") => {
+    const host = await voiceKeyHost()
+    if (!host) return
+    await resolveVoiceKeyConflict(host, legacyVoiceKey, choice)
+    setVoiceKeyConflict(false)
+    if (choice === "voice") clearOpenRouterKeyRemoved()
+    await refreshVoiceKey()
+  }
+
+  /*
+   * At start: the key moves out of browser storage into the keychain (once),
+   * the keychain's is read into memory, and only when there is none is
+   * nikcli's `auth.json` copied, into the keychain too. Never under ADE Test's
+   * identity (`syncOpenRouterKey`): its profiles would get the user's paid key.
+   */
+  const startVoiceKey = async () => {
+    const host = await voiceKeyHost()
+    if (!host) {
+      // No keychain (the browser build): the old key, in memory, is all there is.
+      await applyVoiceKey(legacyVoiceKey.read())
+      return
+    }
+    const migration = await migrateVoiceKey(host, legacyVoiceKey)
+    if (migration.kind === "conflict") setVoiceKeyConflict(true)
+    if (migration.kind === "failed") {
+      console.warn("ADE: chiave OpenRouter non spostata nel portachiavi:", migration.reason)
+    }
+    let key = await host.read().catch(() => undefined)
+    if (!key) {
+      const shell = await getHost()
+      if (shell?.homeDir && shell.readTextFile) {
+        await syncOpenRouterKey({
+          identifier: async () => (await import("@tauri-apps/api/app")).getIdentifier(),
+          homeDir: () => shell.homeDir!(),
+          readTextFile: (path, maxBytes) => shell.readTextFile!(path, maxBytes),
+          save: async (copied) => {
+            await saveVoiceKey(host, copied)
+            key = copied
+          },
+          removed: isOpenRouterKeyRemoved,
+        })
+      }
+    }
+    await applyVoiceKey(key)
   }
 
   const isScreenLocked = async () => {
@@ -6167,21 +6292,8 @@ export function Workbench() {
     window.addEventListener("keyup", handleKeyUp, true)
     window.addEventListener("blur", handleBlur)
     window.addEventListener("beforeunload", handleBeforeUnload)
-    // The voice's OpenRouter key from nikcli's auth.json when the profile has none;
-    // never under ADE Test's identity, whose profiles would get the user's paid key.
-    if (!voiceSettings().openRouterApiKey) {
-      void (async () => {
-        const host = await getHost()
-        if (!host?.homeDir || !host.readTextFile) return
-        await syncOpenRouterKey({
-          identifier: async () => (await import("@tauri-apps/api/app")).getIdentifier(),
-          homeDir: () => host.homeDir!(),
-          readTextFile: (path, maxBytes) => host.readTextFile!(path, maxBytes),
-          save: (key) => handleVoiceSettingsChange({ ...voiceSettings(), openRouterApiKey: key }),
-          removed: isOpenRouterKeyRemoved,
-        })
-      })().catch(() => {})
-    }
+    // The voice's OpenRouter key: from the keychain, after moving the old one there (S6).
+    void startVoiceKey().catch(() => {})
 
     // The bots' gateways: a message from a chat becomes a turn of its bot (G4).
     // Rust reads no chat until this listens; the cleanup is registered before
@@ -9607,6 +9719,12 @@ export function Workbench() {
           refreshHooks={refreshHooks}
           openLoginSession={(runner) => openLoginSession(runner)}
           keysHost={keysHost}
+          voiceKeyConflict={voiceKeyConflict() ? answerVoiceKeyConflict : undefined}
+          onManageKeys={() => {
+            // Through undefined, so asking twice for the same tab still moves the sheet.
+            setVoiceSettingsSection(undefined)
+            setVoiceSettingsSection("agents/keys")
+          }}
           extensionsIo={extensionsIo}
           pluginRuntime={pluginRuntime}
           openGuide={openGuide}

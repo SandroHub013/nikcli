@@ -147,6 +147,23 @@ pub(crate) fn value_of_env(app: &AppHandle, env: &str) -> Result<Option<String>,
     value_for_env(&SystemVault, &service(app), &index_path(app)?, env)
 }
 
+/// The one variable whose value the page may read: the voice's OpenRouter key.
+///
+/// The voice speaks to OpenRouter from the webview (transcription and MAI), so
+/// it needs the value there, as it had it in `localStorage` before the key moved
+/// into the keychain. Every other key stays where the rule at the top of this
+/// file keeps it: `voice_key_in` refuses any other variable, and the value is
+/// never logged. xAI's key, by contrast, never leaves Rust (`stt_stream`).
+pub const VOICE_KEY_ENV: &str = "OPENROUTER_API_KEY";
+
+/// The voice's key, and only it: any variable but `VOICE_KEY_ENV` is refused, compared exactly.
+fn voice_key_in(vault: &dyn Vault, service: &str, path: &std::path::Path, env: &str) -> Result<Option<String>, String> {
+    if env != VOICE_KEY_ENV {
+        return Err(format!("dalla pagina si legge solo {VOICE_KEY_ENV}"));
+    }
+    value_for_env(vault, service, path, env)
+}
+
 /// Serialises index writes: two saves at once would each drop the other's key.
 #[derive(Default)]
 pub struct SecretsLock(Mutex<()>);
@@ -466,6 +483,13 @@ pub async fn secret_delete(app: AppHandle, lock: tauri::State<'_, SecretsLock>, 
     delete_in(&SystemVault, &service(&app), &index_path(&app)?, &name)
 }
 
+/// The voice's OpenRouter key, for the webview's own requests. `None` when there is none.
+#[tauri::command]
+pub async fn secret_voice_key(app: AppHandle, lock: tauri::State<'_, SecretsLock>, env: String) -> Result<Option<String>, String> {
+    let _guard = lock.0.lock().map_err(|_| "chiavi bloccate")?;
+    voice_key_in(&SystemVault, &service(&app), &index_path(&app)?, &env)
+}
+
 /// Seconds a copied key stays on the clipboard before ADE clears it.
 const CLIPBOARD_CLEAR_SECS: u64 = 45;
 
@@ -529,6 +553,43 @@ mod tests {
         assert_eq!(value_for_env(&vault, "svc", &path, "XAI_API_KEY"), Ok(None));
         vault.set("svc", "xai", "   ").unwrap();
         assert_eq!(value_for_env(&vault, "svc", &path, "XAI_API_KEY"), Ok(None));
+    }
+
+    #[test]
+    fn the_page_reads_the_voice_key_and_no_other() {
+        let vault = MemoryVault::default();
+        let path = temp_index("voice-key");
+        assert_eq!(voice_key_in(&vault, "svc", &path, VOICE_KEY_ENV), Ok(None));
+        save_in(&vault, "svc", &path, "OpenRouter", VOICE_KEY_ENV, vec![], Some(FAKE), 1).unwrap();
+        save_in(&vault, "svc", &path, "xai", "XAI_API_KEY", vec![], Some("xai-value"), 1).unwrap();
+        save_in(&vault, "svc", &path, "anthropic", "ANTHROPIC_API_KEY", vec![], Some("sk-ant-value"), 1).unwrap();
+        assert_eq!(voice_key_in(&vault, "svc", &path, VOICE_KEY_ENV), Ok(Some(FAKE.to_string())));
+        // Every other variable is refused, saved or not, and so is any spelling of this one but the exact one.
+        for env in ["XAI_API_KEY", "ANTHROPIC_API_KEY", "NOPE_API_KEY", "", "openrouter_api_key", " OPENROUTER_API_KEY", "OPENROUTER_API_KEY "] {
+            let refused = voice_key_in(&vault, "svc", &path, env);
+            assert!(refused.is_err(), "{env:?} letta dalla pagina");
+            let said = format!("{refused:?}");
+            for value in [FAKE, "xai-value", "sk-ant-value"] {
+                assert!(!said.contains(value), "{env:?}: un valore nell'errore");
+            }
+        }
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn the_voice_key_command_logs_nothing() {
+        let source = include_str!("secrets.rs");
+        let start = source.find("pub async fn secret_voice_key").unwrap();
+        let body_of = |name: &str| {
+            let start = source.find(name).unwrap();
+            let end = source[start..].find("\n}\n").unwrap() + start;
+            &source[start..end]
+        };
+        for body in [body_of("pub async fn secret_voice_key"), body_of("fn voice_key_in")] {
+            for logger in ["println!", "eprintln!", "dbg!", "log::", "tracing::"] {
+                assert!(!body.contains(logger), "{logger} in {body}");
+            }
+        }
     }
 
     #[test]

@@ -2,7 +2,8 @@ import { isTestIdentifier } from "./build-identity"
 
 /**
  * The OpenRouter key for the voice, taken from nikcli's `auth.json` when the
- * profile has none.
+ * keychain has none. `save` writes it into the keychain, as the «OpenRouter»
+ * entry of the Chiavi API page (S6), never into browser storage.
  *
  * Never under the test identity (ADE Test, `ai.nikcli.ade.test`): every new
  * ADE Test profile starts without a key, so each one received the user's paid

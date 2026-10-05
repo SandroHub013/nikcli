@@ -1331,6 +1331,10 @@ export const it = {
   "keys.desc":
     "Le chiavi segrete che le sessioni possono usare. Il valore resta nel portachiavi del sistema (Gestione credenziali di Windows, Portachiavi di macOS): ADE non lo scrive in file né lo mostra, e lo passa come variabile d'ambiente solo agli agenti scelti per ciascuna chiave, all'avvio della sessione.",
   "keys.noKeychain": "Questa versione di ADE non ha accesso al portachiavi.",
+  "keys.voiceConflict":
+    "La voce usava un'altra chiave OpenRouter, diversa da quella nel portachiavi. Quale tengo?",
+  "keys.voiceConflict.voice": "Usa quella della voce",
+  "keys.voiceConflict.keychain": "Tieni quella del portachiavi",
   "keys.none": "Nessuna chiave salvata.",
   "keys.hidden": "valore nascosto",
   "keys.missingValue": "valore mancante nel portachiavi",
