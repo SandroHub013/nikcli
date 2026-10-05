@@ -132,6 +132,7 @@ export namespace SystemPrompt {
     return [
       [
         `<command_execution>`,
+        `Use the monitor tool, not bash, for tests, typecheck, builds, installs, codegen, dev servers, watchers and log tails: bash blocks the turn and can hang on them. A command that finishes within 15 seconds is answered in the same call; a longer one keeps running in the background, writes its full output to the "Log file:" path it returns, and wakes the session when it finishes. Keep bash for commands that finish in a few seconds.`,
         `Launch task-tool subagents in the background (the default) and keep working; launch independent ones together.`,
         `</command_execution>`,
       ].join("\n"),

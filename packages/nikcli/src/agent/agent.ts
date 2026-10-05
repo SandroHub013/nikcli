@@ -41,7 +41,7 @@ ${PROMPT_DELEGATION}
 
 const MONITOR_TOOL_AWARENESS = `
 
-For typecheck, builds, test suites, dev servers, and any long-running or potentially long-running command, use the monitor tool instead of bash. The bash tool blocks the turn and will hang on commands that take a while or never exit; the monitor tool runs the command in the background, persists its output, and wakes the session when it finishes so you can keep working. Reserve bash for short, fast, clearly-bounded commands (a few seconds at most).
+For typecheck, builds, test suites, dev servers, and any long-running or potentially long-running command, use the monitor tool instead of bash. The bash tool blocks the turn and will hang on commands that take a while or never exit. A monitored command that finishes within 15 seconds (most unit test runs) is answered in the same call with its exit code and output, exactly like bash; one that takes longer keeps running in the background and wakes the session when it finishes.
 
 For a job still running when the call returns, the full output is written to its log file (the "Log file:" path in the result); read that file once the job has finished if the streamed preview is not enough.
 
