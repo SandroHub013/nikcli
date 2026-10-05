@@ -25,7 +25,12 @@ import {
   transcribeSegment,
   type OpenRouterTranscriberOptions,
 } from "./openrouter"
-import { createGrokStreamTranscriber, type GrokBatch, type SttStreamTransport } from "./grok-stream"
+import {
+  createGrokStreamTranscriber,
+  type GrokBatch,
+  type StreamSpend,
+  type SttStreamTransport,
+} from "./grok-stream"
 import { t } from "@nikcli-ai/ade/i18n"
 
 // ---------------------------------------------------------------------------
@@ -52,6 +57,10 @@ export interface GrokStreamSelectOptions {
   transport: SttStreamTransport
   /** Wake word and custom words, sent so they come back as written. */
   keyterms?: readonly string[]
+  /** Where the streamed seconds are counted: the day's tally, read before every socket opens. */
+  spend?: StreamSpend
+  /** Dollars of streaming allowed per day (`VoiceSettings.streamDailyCapUsd`); 0 is off. */
+  dailyCapUsd?: number
 }
 
 export interface SelectTranscriberOptions {
@@ -163,6 +172,8 @@ export function createTranscriberFor(backend: TranscriberBackend, options: Selec
         batch,
         language: or?.language ?? options.language,
         keyterms: options.grokStreamOptions?.keyterms,
+        spend: options.grokStreamOptions?.spend,
+        dailyCapUsd: options.grokStreamOptions?.dailyCapUsd,
         now: or?.now,
         nameGate: or?.nameGate,
         capture: or?.capture,

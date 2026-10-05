@@ -12,7 +12,12 @@ import {
   resetVoiceSettings,
   saveVoiceSettings,
 } from "./storage"
-import { DEFAULT_VOICE_SETTINGS, setShortcutActivationEnabledForTests, setWakeWordEnabledForTests } from "./model"
+import {
+  CURRENT_SETTINGS_VERSION,
+  DEFAULT_VOICE_SETTINGS,
+  setShortcutActivationEnabledForTests,
+  setWakeWordEnabledForTests,
+} from "./model"
 import { maiVoiceOfferPending } from "./reply-voices"
 
 class MemoryStorage implements Storage {
@@ -374,7 +379,7 @@ describe("ADE Test e la voce cloud", () => {
     const store = rosaV8()
     const loaded = loadVoiceSettings(store, { testIdentity: true })
     expect(loaded.settings.replyVoice).toBe("ugo")
-    expect(onDisk(store).version).toBe(9)
+    expect(onDisk(store).version).toBe(CURRENT_SETTINGS_VERSION)
     expect(onDisk(store).replyVoice).toBe("it-IT-Rosa")
     expect(onDisk(store).replyBackend).toBe("mai")
     // Fuori da ADE Test la Rosa c'è ancora.

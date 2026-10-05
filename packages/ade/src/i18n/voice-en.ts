@@ -392,6 +392,8 @@ export const voiceEn: VoiceMessages = {
   "vui.fix.ttsLocale": (value) => `Unknown reply language '${value}': restored Italian.`,
   "vui.fix.agentSpeed": (value) => `Unknown agent speed '${value}': restored fast.`,
   "vui.fix.agentEngine": (value) => `Unknown agent engine '${value}': restored automatic.`,
+  "vui.fix.streamCap": (value, fallback) =>
+    `Invalid daily cap '${value}' for live transcription: used $${fallback}.`,
   "vui.fix.codexFallback": "Invalid Codex fallback setting: turned back off.",
   "vui.command.palette": "Command palette",
   "vui.command.sessionNew": "New session",

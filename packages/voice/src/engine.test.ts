@@ -9,6 +9,7 @@ import { createVoiceEngine, holdsToTalk } from "./engine"
 import { FOLLOW_UP_MS, WAKE_WINDOW_MS } from "./effect/program"
 import { firstWords } from "./dialog/while-thinking"
 import { createFakeTranscriber } from "./asr/fake"
+import { createSpendTally } from "./settings/spend"
 import type { SelectTranscriberOptions } from "./asr/select"
 import { createFakeSpeaker } from "./tts/speaker"
 import { VOCABULARY } from "./intent/vocabulary"
@@ -515,6 +516,84 @@ describe("engine/createVoiceEngine", () => {
     // Deduped against itself and against the wake word, custom words first.
     expect(captured[0]?.grokStreamOptions?.keyterms).toEqual(["docker", "nik"])
     await engine.stop()
+  })
+
+  describe("the streaming socket counts against the day's cap", () => {
+    const transport = {
+      open: async () => {},
+      send: async () => {},
+      end: async () => {},
+      cancel: () => {},
+    }
+    const build = (settings: Record<string, unknown>, tally: ReturnType<typeof createSpendTally>) => {
+      const captured: SelectTranscriberOptions[] = []
+      const engine = createVoiceEngine({
+        host: new MockVoiceHost(),
+        speaker: createFakeSpeaker(),
+        now: () => 10_000,
+        settings: { activation: "toggle", agentEngine: "off", backend: "grok-stream", ...settings } as never,
+        backendOptions: { grokStreamOptions: { transport } },
+        spendTally: tally,
+        creditLeft: async () => undefined,
+        createTranscriber: (_backend, options) => {
+          if (options) captured.push(options)
+          return createFakeTranscriber()
+        },
+      })
+      return { engine, captured }
+    }
+
+    test("the transcriber gets the setting's cap and the day's tally to count in", async () => {
+      const tally = createSpendTally(null, 10_000)
+      const { engine, captured } = build({ streamDailyCapUsd: 0.25 }, tally)
+      await engine.start()
+
+      const stream = captured[0]?.grokStreamOptions
+      expect(stream?.dailyCapUsd).toBe(0.25)
+      expect(stream?.spend).not.toBeUndefined()
+      // Nothing streamed yet.
+      expect(stream?.spend?.costToday()).toBe(0)
+      // Seconds the socket carried go to the day's tally, at the hourly rate.
+      stream?.spend?.addSeconds(3600)
+      expect(tally.today(10_000).streamSeconds).toBe(3600)
+      expect(stream?.spend?.costToday()).toBeCloseTo(0.2, 10)
+      // The OpenRouter figures are not touched.
+      expect(tally.today(10_000).calls).toBe(0)
+      expect(tally.today(10_000).cost).toBe(0)
+      await engine.stop()
+    })
+
+    test("a cap of zero is handed over as zero: streaming off", async () => {
+      const { engine, captured } = build({ streamDailyCapUsd: 0 }, createSpendTally(null, 10_000))
+      await engine.start()
+      expect(captured[0]?.grokStreamOptions?.dailyCapUsd).toBe(0)
+      await engine.stop()
+    })
+
+    test("what OpenRouter and the replies spent today is not what the socket has spent", async () => {
+      const tally = createSpendTally(null, 10_000)
+      tally.add(10_000, 0.4)
+      tally.addReply(10_000, 0.3)
+      const { engine, captured } = build({}, tally)
+      await engine.start()
+      expect(captured[0]?.grokStreamOptions?.spend?.costToday()).toBe(0)
+      await engine.stop()
+    })
+
+    test("the default cap is fifty cents", async () => {
+      const { engine, captured } = build({}, createSpendTally(null, 10_000))
+      await engine.start()
+      expect(captured[0]?.grokStreamOptions?.dailyCapUsd).toBe(0.5)
+      await engine.stop()
+    })
+
+    test("changing the cap while listening opens a transcriber that has the new one", async () => {
+      const { engine, captured } = build({ streamDailyCapUsd: 0.5 }, createSpendTally(null, 10_000))
+      await engine.start()
+      await engine.updateSettings({ streamDailyCapUsd: 1 })
+      expect(captured.map((options) => options.grokStreamOptions?.dailyCapUsd)).toEqual([0.5, 1])
+      await engine.stop()
+    })
   })
 
   test("a settings restart opens the replacement transcriber with the new key", async () => {

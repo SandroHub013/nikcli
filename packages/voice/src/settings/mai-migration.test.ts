@@ -24,14 +24,15 @@ function v8(over: Record<string, unknown> = {}): Record<string, unknown> {
 
 describe("la migrazione a v9", () => {
   test("MAI è la versione 9, dopo Kokoro", () => {
-    expect(CURRENT_SETTINGS_VERSION).toBe(9)
+    // La 10 è lo streaming (stream-migration.test.ts); la 9 resta una migrazione che si attraversa.
+    expect(CURRENT_SETTINGS_VERSION).toBeGreaterThanOrEqual(9)
   })
 
   test("un profilo esistente resta sulla voce che aveva", () => {
     for (const voice of ["ugo", "paola", "lessac", "af_heart", "system"] as const) {
       const res = normalizeSettings(v8({ replyVoice: voice }))
       expect(res.replyVoice).toBe(voice)
-      expect(res.version).toBe(9)
+      expect(res.version).toBe(CURRENT_SETTINGS_VERSION)
       expect(res.replyVoiceOffer).toBeUndefined()
     }
   })
