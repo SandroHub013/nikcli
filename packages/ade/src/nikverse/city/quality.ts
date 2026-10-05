@@ -92,6 +92,13 @@ export async function probeGpu(gpu: { requestAdapter(options?: { powerPreference
   }
 }
 
+/** `navigator.hardwareConcurrency` at or below this, and the automatic level is Bassa whatever the GPU. */
+export const FEW_CORES = 4
+
+/** Whether the renderer's own name is a software one: SwiftShader (Chromium without a GPU), llvmpipe, WARP. */
+export const isSoftwareRenderer = (name: string | undefined): boolean =>
+  /swiftshader|llvmpipe|softpipe|basic render|\bwarp\b|software/i.test(name ?? "")
+
 export interface Resolved {
   level: Level
   /** Why it is not what was asked for, or how Auto chose. */
@@ -102,9 +109,14 @@ export interface Resolved {
  * The level to run at. `request` is what was asked for (`auto`, or nothing, or a level's id); a level the
  * machine cannot run is lowered to the best one it can: Alta needs WebGPU and a dedicated GPU, Media needs WebGPU.
  */
-export function resolveLevel(request: string | undefined, gpu: Pick<GpuProbe, "webgpu" | "dedicated">): Resolved {
+export function resolveLevel(request: string | undefined, gpu: Pick<GpuProbe, "webgpu" | "dedicated">, cores?: number): Resolved {
   const best: LevelId = gpu.webgpu ? (gpu.dedicated ? "alta" : "media") : "bassa"
-  if (!isLevelId(request)) return { level: LEVELS[best], why: `automatico: ${LEVELS[best].label}${gpu.webgpu ? (gpu.dedicated ? " (WebGPU, GPU dedicata)" : " (WebGPU)") : " (senza WebGPU)"}` }
+  if (!isLevelId(request)) {
+    // The GPU is not the only limit: on four processors or fewer Media takes the main thread (old PCs, point 2).
+    if (best !== "bassa" && cores !== undefined && cores > 0 && cores <= FEW_CORES)
+      return { level: LEVELS.bassa, why: `automatico: Bassa (${cores} processori)` }
+    return { level: LEVELS[best], why: `automatico: ${LEVELS[best].label}${gpu.webgpu ? (gpu.dedicated ? " (WebGPU, GPU dedicata)" : " (WebGPU)") : " (senza WebGPU)"}` }
+  }
   const rank = (id: LevelId) => LEVEL_IDS.indexOf(id)
   if (rank(request) <= rank(best)) return { level: LEVELS[request], why: `richiesto: ${LEVELS[request].label}` }
   const reason = request === "alta" && gpu.webgpu ? "senza GPU dedicata" : "senza WebGPU"

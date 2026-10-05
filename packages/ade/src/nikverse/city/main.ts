@@ -35,17 +35,17 @@ import { MOUTH, type Box } from "./layout"
 import { CHECK_PIXELS_PER_UNIT, logoCheck } from "./hologram"
 import { parseLogo } from "./logo"
 import { loadLevel } from "./load-level"
-import { movingIntervalMs, probeGpu, resolveLevel, type LevelId } from "./quality"
+import { isSoftwareRenderer, movingIntervalMs, probeGpu, resolveLevel, type LevelId } from "./quality"
 import { chooseRenderer, type Backend, type DrawingSurface } from "./renderers"
 import type { Cast } from "./rig"
 import type { GpuTiming } from "./bench"
-import { benchScaled, gpuIdleOf, hasTimestampQuery, liveGpuTimer } from "./gpu-idle"
+import { benchScaled, gpuIdleOf, hasTimestampQuery, liveGpuTimer, rendererName } from "./gpu-idle"
 import { createLoadLog, drawProbe, shortUrl } from "./load-log"
 import { createGovernor } from "./resolution"
 import { createPictureDecoder, type Ktx2Support } from "./ktx2"
 import { disposeTree, releaseRenderer } from "./release"
 import { startShot } from "./shot-handle"
-import { STILL_INTERVAL_MS, drawMode, pace, shouldSavePosition, type DrawMode } from "./schedule"
+import { IMMOBILE_AFTER_MS, SOFTWARE_IMMOBILE_AFTER_MS, STILL_INTERVAL_MS, drawMode, pace, shouldSavePosition, type DrawMode } from "./schedule"
 import { createTown, type Picture } from "./town"
 import { createCityScene } from "./view"
 
@@ -144,7 +144,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   log.phase("gpu")
   // The level decides the renderer and the assets: what the machine has, and what was asked for.
   const gpu = check ? { webgpu: false, dedicated: false } : await probeGpu((win.navigator as Navigator & { gpu?: never }).gpu)
-  const resolved = resolveLevel(deps.quality, gpu)
+  const resolved = resolveLevel(deps.quality, gpu, (win.navigator as Navigator).hardwareConcurrency)
   const level = resolved.level
   log.phase("renderer")
   const chosen = await pickRenderer(deps, check, deps.classic === true || level.renderer === "classic")
@@ -153,6 +153,10 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   renderer.toneMapping = NoToneMapping
   doc.documentElement.dataset.backend = backend
   if (chosen.why) doc.documentElement.dataset.backendWhy = chosen.why
+  // Drawn in software (no GPU): every frame costs processors, so the city rests as soon as it can (`schedule.ts`).
+  const software = isSoftwareRenderer(rendererName(renderer, backend, (gpu as { info?: Parameters<typeof rendererName>[2] }).info))
+  if (software) doc.documentElement.dataset.software = "1"
+  const quietMs = software ? SOFTWARE_IMMOBILE_AFTER_MS : IMMOBILE_AFTER_MS
 
   if (check) {
     log.done()
@@ -199,7 +203,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   data.quality = level.id
   data.assets = loaded.assets.id
   // Why the level is what it is, and what is plain or missing in it.
-  data.qualityWhy = [resolved.why, ...loaded.notes].filter(Boolean).join(" | ").slice(0, 600)
+  data.qualityWhy = [resolved.why, software ? "rendering software" : "", ...loaded.notes].filter(Boolean).join(" | ").slice(0, 600)
   data.cast = cast ? "ok" : "failed"
   data.kit = kit ? "ok" : "failed"
 
@@ -342,7 +346,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
 
     const moving = busy()
     if (moving) lastActivity = ts
-    const now: DrawMode = drawMode({ moving, sinceActivityMs: ts - lastActivity })
+    const now: DrawMode = drawMode({ moving, sinceActivityMs: ts - lastActivity }, quietMs)
     if (now !== mode) {
       mode = now
       doc.documentElement.dataset.drawMode = mode

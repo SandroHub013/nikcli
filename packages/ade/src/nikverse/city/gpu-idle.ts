@@ -196,3 +196,30 @@ export async function benchScaled(bench: ScaledBench): Promise<GpuTiming | Settl
   }
   return bench.dynamic ? settle(at, bench.maxScale) : at(bench.maxScale ?? 1)
 }
+
+interface GlNames {
+  RENDERER: number
+  getParameter(name: number): unknown
+  getExtension(name: string): { UNMASKED_RENDERER_WEBGL: number } | null
+}
+
+/**
+ * The name of what draws: for WebGL the GL renderer string (unmasked where the browser gives it), for WebGPU the
+ * adapter's own description. What `quality.isSoftwareRenderer` reads; undefined when nothing says.
+ */
+export function rendererName(renderer: unknown, backend: Backend, adapter?: { vendor?: string; device?: string; description?: string; isFallbackAdapter?: boolean }): string | undefined {
+  if (backend === "webgpu") {
+    if (adapter?.isFallbackAdapter) return "software (fallback adapter)"
+    const text = [adapter?.vendor, adapter?.device, adapter?.description].filter(Boolean).join(" ")
+    return text || undefined
+  }
+  try {
+    const gl = (renderer as { getContext?(): GlNames | null }).getContext?.()
+    if (!gl) return undefined
+    const debug = gl.getExtension("WEBGL_debug_renderer_info")
+    const name = (debug && gl.getParameter(debug.UNMASKED_RENDERER_WEBGL)) || gl.getParameter(gl.RENDERER)
+    return typeof name === "string" && name ? name : undefined
+  } catch {
+    return undefined
+  }
+}

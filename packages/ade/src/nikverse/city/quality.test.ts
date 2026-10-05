@@ -4,7 +4,7 @@ import { join } from "node:path"
 import { LEVELS_DIR } from "./test-cast"
 import { BODIES, glbUrl } from "./rig"
 import { SCALE_MAX, SCALE_MIN } from "./resolution"
-import { LEVELS, LEVEL_IDS, MAX_FPS, isDedicatedGpu, isLevelId, movingIntervalMs, probeGpu, resolveLevel } from "./quality"
+import { LEVELS, LEVEL_IDS, MAX_FPS, isDedicatedGpu, isLevelId, isSoftwareRenderer, movingIntervalMs, probeGpu, resolveLevel } from "./quality"
 
 describe("the levels", () => {
   test("three, in order of what they ask of the machine, and each has its assets", () => {
@@ -149,5 +149,41 @@ describe("asking the browser what GPU there is", () => {
     expect([probe.webgpu, probe.dedicated]).toEqual([true, true])
     const soft = await probeGpu({ requestAdapter: async () => ({ info: { vendor: "nvidia" }, isFallbackAdapter: true }) })
     expect([soft.webgpu, soft.dedicated]).toEqual([true, false])
+  })
+})
+
+describe("a slow machine picks Bassa by itself", () => {
+  const webgpu = { webgpu: true, dedicated: false }
+  const strong = { webgpu: true, dedicated: true }
+
+  test("four processors or fewer: Bassa, and the reason says why", () => {
+    for (const cores of [1, 2, 4]) {
+      const resolved = resolveLevel(undefined, strong, cores)
+      expect(resolved.level.id).toBe("bassa")
+      expect(resolved.why).toBe(`automatico: Bassa (${cores} processori)`)
+    }
+    expect(resolveLevel("auto", webgpu, 4).level.id).toBe("bassa")
+  })
+
+  test("more processors, or a number the browser does not give, change nothing", () => {
+    expect(resolveLevel(undefined, webgpu, 8).level.id).toBe("media")
+    expect(resolveLevel(undefined, strong, 6).level.id).toBe("alta")
+    expect(resolveLevel(undefined, webgpu, undefined).level.id).toBe("media")
+    expect(resolveLevel(undefined, webgpu, 0).level.id).toBe("media")
+  })
+
+  test("a level asked for by name is not second-guessed by the processor count", () => {
+    expect(resolveLevel("media", webgpu, 2).level.id).toBe("media")
+  })
+})
+
+describe("a renderer drawn in software", () => {
+  test("SwiftShader, llvmpipe, WARP and the like are software; a real GPU, or nothing known, is not", () => {
+    expect(isSoftwareRenderer("ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)")).toBe(true)
+    expect(isSoftwareRenderer("llvmpipe (LLVM 15.0.7, 256 bits)")).toBe(true)
+    expect(isSoftwareRenderer("ANGLE (Microsoft, Microsoft Basic Render Driver Direct3D11 vs_5_0 ps_5_0)")).toBe(true)
+    expect(isSoftwareRenderer("ANGLE (NVIDIA, NVIDIA GeForce RTX 5070 Laptop GPU Direct3D11 vs_5_0 ps_5_0, D3D11)")).toBe(false)
+    expect(isSoftwareRenderer("WebKit WebGL")).toBe(false)
+    expect(isSoftwareRenderer(undefined)).toBe(false)
   })
 })

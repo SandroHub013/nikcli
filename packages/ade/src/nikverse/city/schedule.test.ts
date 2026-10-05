@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { IMPOSTOR_BEYOND, SLOW_BEYOND, SLOW_POSE_MS, detailAt, poseDue, shopInRange } from "./lod"
-import { IMMOBILE_AFTER_MS, POSITION_EVERY_MS, STILL_INTERVAL_MS, drawMode, pace, shouldSavePosition } from "./schedule"
+import { IMMOBILE_AFTER_MS, POSITION_EVERY_MS, SOFTWARE_IMMOBILE_AFTER_MS, STILL_INTERVAL_MS, drawMode, pace, shouldSavePosition } from "./schedule"
 
 describe("the three ways to draw", () => {
   test("moving draws every frame; standing with the hologram turning draws 15 a second; quiet for ten seconds draws nothing", () => {
@@ -9,6 +9,16 @@ describe("the three ways to draw", () => {
     expect(drawMode({ moving: false, sinceActivityMs: 0 })).toBe("still")
     expect(drawMode({ moving: false, sinceActivityMs: IMMOBILE_AFTER_MS - 1 })).toBe("still")
     expect(drawMode({ moving: false, sinceActivityMs: IMMOBILE_AFTER_MS })).toBe("immobile")
+  })
+
+  test("drawn in software (no GPU), a still frame costs as much as a moving one: the city rests after a second and a half, not ten", () => {
+    const quiet = SOFTWARE_IMMOBILE_AFTER_MS
+    expect(drawMode({ moving: false, sinceActivityMs: quiet - 1 }, quiet)).toBe("still")
+    expect(drawMode({ moving: false, sinceActivityMs: quiet }, quiet)).toBe("immobile")
+    expect(drawMode({ moving: true, sinceActivityMs: 60_000 }, quiet)).toBe("moving")
+    // Long enough for the camera to settle behind the character after it stops.
+    expect(quiet).toBeGreaterThanOrEqual(1000)
+    expect(quiet).toBeLessThan(IMMOBILE_AFTER_MS)
   })
 
   test("the resting rate is 15 frames a second and the quiet time is ten seconds", () => {

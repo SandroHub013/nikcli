@@ -14,9 +14,16 @@ export const STILL_INTERVAL_MS = 66
 /** Quiet for this long, and the city stops drawing until something happens. */
 export const IMMOBILE_AFTER_MS = 10_000
 
-export function drawMode(state: { moving: boolean; sinceActivityMs: number }): DrawMode {
+/**
+ * The quiet time when the frames are drawn in software (no GPU: SwiftShader and the like). There a still frame costs
+ * as much as a moving one, three to five processors at 15 a second (old PCs, point 1): the city rests as soon as the
+ * camera has settled, and the light and the water stop with it until an event.
+ */
+export const SOFTWARE_IMMOBILE_AFTER_MS = 1500
+
+export function drawMode(state: { moving: boolean; sinceActivityMs: number }, immobileAfterMs = IMMOBILE_AFTER_MS): DrawMode {
   if (state.moving) return "moving"
-  return state.sinceActivityMs >= IMMOBILE_AFTER_MS ? "immobile" : "still"
+  return state.sinceActivityMs >= immobileAfterMs ? "immobile" : "still"
 }
 
 /** How often the position is sent to ADE while the character walks. */
