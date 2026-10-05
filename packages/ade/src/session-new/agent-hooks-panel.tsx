@@ -1,5 +1,6 @@
 import { For, Show, createSignal } from "solid-js"
-import { HOOK_TARGETS, type HookStatus, type HookHost, setHook } from "./agent-hooks"
+import { HowItWorks } from "@nikcli-ai/voice"
+import { HOOK_TARGETS, hooksSummary, type HookStatus, type HookHost, setHook } from "./agent-hooks"
 import { t } from "../i18n"
 
 /**
@@ -31,6 +32,8 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
   const [busy, setBusy] = createSignal<string | undefined>()
   const [failure, setFailure] = createSignal<string | undefined>()
 
+  const summary = () => hooksSummary(props.states)
+
   const apply = async (id: string, install: boolean) => {
     const target = HOOK_TARGETS.find((entry) => entry.id === id)
     if (!target) return
@@ -49,13 +52,18 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
   return (
     <>
       <div data-slot="section-head">
-        <h3 data-slot="section-title" tabIndex={-1}>
-          {t("hooks.title")}
-        </h3>
-        <p data-slot="section-desc">{t("hooks.desc")}</p>
+        <p data-slot="section-desc" data-hooks-summary>
+          {summary().attention > 0
+            ? t("hooks.summary.attention", summary().on, summary().total, summary().attention)
+            : t("hooks.summary", summary().on, summary().total)}
+        </p>
       </div>
 
-      <p data-slot="section-desc">{t("hooks.files")}</p>
+      <HowItWorks title={t("settings.howItWorks")}>
+        <p data-slot="section-desc">{t("hooks.desc")}</p>
+        <p data-slot="section-desc">{t("hooks.files")}</p>
+        <p data-slot="section-desc">{t("hooks.outside")}</p>
+      </HowItWorks>
 
       <ul data-slot="hook-list">
         <For each={HOOK_TARGETS}>
@@ -152,7 +160,6 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
         <p data-slot="hook-note">{failure()}</p>
       </Show>
 
-      <p data-slot="section-desc">{t("hooks.outside")}</p>
     </>
   )
 }

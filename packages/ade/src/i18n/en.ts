@@ -297,6 +297,10 @@ export const en: Messages = {
     "When ADE restarts, it reopens your sessions where they left off. To do that it needs to know which conversation each panel had. Some CLIs accept an ID chosen by ADE; others, like codex, don't, and only they can report it. Here ADE adds an entry to that CLI's configuration so it reports the ID whenever a session starts.",
   "hooks.files":
     "These files don't belong to ADE. They're shown in full below, any entries already in them are left alone, and Remove puts the configuration back the way it was.",
+  "hooks.summary": (on, total) =>
+    on === 0 ? "Resume is not on for any program." : `Resume is on for ${on} of ${total} programs.`,
+  "hooks.summary.attention": (on, total, attention) =>
+    `Resume is on for ${on} of ${total} programs; ${attention === 1 ? "one needs" : `${attention} need`} attention.`,
   "hooks.state.unavailable": "unavailable",
   "hooks.state.on": "on",
   "hooks.state.broken": "needs reinstalling",
@@ -535,7 +539,6 @@ export const en: Messages = {
   "settings.howItWorks": "How it works",
   "settings.account.intro":
     "The runners bots can run on, each using its own CLI account.",
-  "settings.providers.title": "Providers",
   "settings.providers.desc1":
     "The runners a bot can use, each with its own CLI account: Anthropic subscriptions go through Claude Code, ChatGPT through Codex, and keys and other subscriptions through nikcli. The engine, model, and reasoning effort are set in each bot's card.",
   "settings.providers.desc2Before": (max) =>

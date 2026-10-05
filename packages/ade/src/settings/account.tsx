@@ -8,14 +8,12 @@ import { t } from "../i18n"
 export interface AccountSectionProps {
   /** Opens the runner's sign-in in a terminal pane. Absent: no button. */
   onLogin?: (runner: Runner) => void
-  /** Injected state reader, for tests with a fake host. */
-  fetchState?: (runner: Runner) => Promise<ProviderState>
 }
 
 export type ProviderStatusKind = "connected" | "not-connected" | "not-installed" | "checking" | "unverified"
 
-export function resolveStatusKind(state: ProviderState | undefined, checking: boolean): ProviderStatusKind {
-  if (checking || !state) return "checking"
+export function resolveStatusKind(state: ProviderState | undefined): ProviderStatusKind {
+  if (!state) return "checking"
   if (!state.installed) return "not-installed"
   if (state.login.state === "in") return "connected"
   if (state.login.state === "out") return "not-connected"
@@ -49,8 +47,6 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
   const [checking, setChecking] = createSignal(false)
   const [confirming, setConfirming] = createSignal<string | undefined>()
 
-  const readState = props.fetchState ?? providerState
-
   const check = () => {
     if (checking()) return
     setChecking(true)
@@ -58,7 +54,7 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
     setConfirming(undefined)
     void Promise.all(
       RUNNERS.map((runner) =>
-        readState(runner).then((state) => setStates((prev) => ({ ...prev, [runner.id]: state }))),
+        providerState(runner).then((state) => setStates((prev) => ({ ...prev, [runner.id]: state }))),
       ),
     ).finally(() => setChecking(false))
   }
@@ -67,15 +63,12 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
   return (
     <>
       <div data-slot="section-head">
-        <h3 data-slot="section-title" tabIndex={-1}>
-          {t("settings.tab.account")}
-        </h3>
         <p data-slot="section-desc">{t("settings.account.intro")}</p>
       </div>
 
       <HowItWorks title={t("settings.howItWorks")}>
-        <p>{t("settings.providers.desc1")}</p>
-        <p>
+        <p data-slot="section-desc">{t("settings.providers.desc1")}</p>
+        <p data-slot="section-desc">
           {t("settings.providers.desc2Before", MAX_PARALLEL_TURNS)}
           <code>{"codex login --with-api-key"}</code>
           {t("settings.providers.desc2After")}
@@ -86,15 +79,11 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
         <For each={RUNNERS}>
           {(runner) => {
             const state = () => states()[runner.id]
-            const kind = () => resolveStatusKind(state(), checking())
+            const kind = () => resolveStatusKind(state())
             const isConfirming = () => confirming() === runner.id
 
             return (
-              <div
-                data-slot="provider-card"
-                data-runner={runner.id}
-                data-state={kind()}
-              >
+              <div data-slot="provider-card" data-runner={runner.id} data-state={kind()}>
                 <div data-slot="provider-head">
                   <span data-slot="provider-name">{runner.label}</span>
                   <span
@@ -108,10 +97,6 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
                 </div>
 
                 <p data-slot="provider-desc">{runnerAccount(runner.id)}</p>
-
-                <Show when={state()?.login.detail}>
-                  <span data-slot="settings-meta">{state()!.login.detail}</span>
-                </Show>
 
                 <div data-slot="provider-actions">
                   <Show when={props.onLogin && state()?.installed && runner.login.length > 0}>
@@ -141,10 +126,16 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
                           </button>
                         }
                       >
-                        <div data-slot="switch-confirm">
-                          <p data-slot="switch-prompt">
-                            {t("settings.providers.switchPrompt", runner.label)}
-                          </p>
+                        <div
+                          data-slot="switch-confirm"
+                          role="group"
+                          onKeyDown={(event) => {
+                            if (event.key !== "Escape") return
+                            event.stopPropagation()
+                            setConfirming(undefined)
+                          }}
+                        >
+                          <p data-slot="switch-prompt">{t("settings.providers.switchPrompt", runner.label)}</p>
                           <div data-slot="switch-buttons">
                             <button
                               type="button"
@@ -156,11 +147,7 @@ export function AccountSection(props: AccountSectionProps): JSX.Element {
                             >
                               {t("settings.providers.switchContinue")}
                             </button>
-                            <button
-                              type="button"
-                              data-slot="switch-cancel"
-                              onClick={() => setConfirming(undefined)}
-                            >
+                            <button type="button" data-slot="switch-cancel" onClick={() => setConfirming(undefined)}>
                               {t("settings.providers.switchCancel")}
                             </button>
                           </div>

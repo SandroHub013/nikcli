@@ -303,6 +303,12 @@ export const it = {
     "Al riavvio ADE riapre le sessioni dov'erano. Per farlo deve sapere quale conversazione aveva ogni pannello: alcune CLI accettano un identificativo scelto da ADE, altre — codex fra queste — no, e possono solo dirlo loro. Qui ADE aggiunge una voce alla configurazione di quella CLI perché all'avvio di ogni sessione lo comunichi.",
   "hooks.files":
     "Sono file che non appartengono ad ADE: vengono mostrati per intero qui sotto, le altre voci già presenti restano intatte, e «Rimuovi» rimette la configurazione com'era.",
+  "hooks.summary": (on: number, total: number) =>
+    on === 0
+      ? "La ripresa non è attiva per nessun programma."
+      : `Ripresa attiva per ${on} ${on === 1 ? "programma" : "programmi"} su ${total}.`,
+  "hooks.summary.attention": (on: number, total: number, attention: number) =>
+    `Ripresa attiva per ${on} ${on === 1 ? "programma" : "programmi"} su ${total}; ${attention === 1 ? "uno chiede" : `${attention} chiedono`} attenzione.`,
   "hooks.state.unavailable": "non disponibile",
   "hooks.state.on": "attivo",
   "hooks.state.broken": "da reinstallare",
@@ -549,7 +555,6 @@ export const it = {
   "settings.howItWorks": "Come funziona",
   "settings.account.intro":
     "I programmi su cui possono girare i bot, ognuno con l'account della propria CLI.",
-  "settings.providers.title": "Provider",
   "settings.providers.desc1":
     "I programmi su cui può girare un bot, ognuno con l'account della propria CLI: l'abbonamento Anthropic passa da Claude Code, quello ChatGPT da Codex, le chiavi e gli altri abbonamenti da nikcli. Il motore, il modello e lo sforzo si scelgono nella scheda di ogni bot.",
   "settings.providers.desc2Before": (max: number) =>

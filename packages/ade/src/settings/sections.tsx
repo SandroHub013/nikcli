@@ -1,9 +1,6 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
 import type { AgentFile } from "../bots/nikcli"
-import { providerState, type ProviderState } from "../bots/providers"
-import { RUNNERS, runnerAccount, type Runner } from "../bots/runners"
 import { listBots, resolveRoots } from "../bots/store"
-import { MAX_PARALLEL_TURNS } from "../bots/terms"
 import { QUALITY_LEVELS, qualityLevel, sizePerMinute, type RecordQuality } from "../record/recording"
 import { LOCALE_PREFERENCES, locale, localePreference, setLocalePreference, t, type LocalePreference } from "../i18n"
 import { DEFAULT_GLASS_OPACITY, GLASS_READABLE_MIN, THEME_CHOICES, isGlassReadable, type Theme } from "../theme"
@@ -78,9 +75,7 @@ export function BotSection(props: BotSectionProps) {
   return (
     <>
       <div data-slot="section-head">
-        <h3 data-slot="section-title" tabIndex={-1}>
-          {t("settings.bots.title")}
-        </h3>
+        <h4 data-slot="section-subtitle">{t("settings.bots.title")}</h4>
         <p data-slot="section-desc">{t("settings.bots.desc")}</p>
       </div>
 
@@ -109,6 +104,8 @@ export function BotSection(props: BotSectionProps) {
   )
 }
 
+const unquoted = (tool: string) => tool.replace(/^(["'])(.*)\1$/, "$2")
+
 export interface SkillsSectionProps {
   projectRoot?: string
 }
@@ -133,9 +130,7 @@ export function SkillsSection(props: SkillsSectionProps) {
   return (
     <>
       <div data-slot="section-head">
-        <h3 data-slot="section-title" tabIndex={-1}>
-          {t("settings.skills.title")}
-        </h3>
+        <h4 data-slot="section-subtitle">{t("settings.skills.title")}</h4>
         <p data-slot="section-desc">{t("settings.skills.desc")}</p>
       </div>
 
@@ -151,14 +146,16 @@ export function SkillsSection(props: SkillsSectionProps) {
         <ul data-slot="settings-list">
           <For each={restricted()}>
             {(bot) => {
-              const hasNoTools = () => bot.disabledTools.includes("*")
+              /* The file spells the key as it is written there: `"*": false`, quotes included. */
+              const disabled = () => bot.disabledTools.map(unquoted)
+              const hasNoTools = () => disabled().includes("*")
               return (
                 <li data-slot="settings-row">
                   <span data-slot="settings-name">{bot.identifier}</span>
                   <span data-slot="settings-meta">
                     {hasNoTools()
                       ? t("settings.skills.none")
-                      : t("settings.skills.without", bot.disabledTools.join(", "))}
+                      : t("settings.skills.without", disabled().join(", "))}
                   </span>
                   <Show when={hasNoTools()}>
                     <span data-slot="settings-hint">{t("settings.skills.addHint")}</span>
@@ -365,98 +362,6 @@ export function GridSection(props: GridSectionProps) {
             </button>
           )}
         </For>
-      </div>
-    </>
-  )
-}
-
-export interface ProviderSectionProps {
-  /** Opens the runner's sign-in in a terminal pane. Absent: no button. */
-  onLogin?: (runner: Runner) => void
-}
-
-/**
- * The programs a bot can run on, and whether each is signed in.
- *
- * ADE keeps no keys of its own for bots. Each runner uses the account its CLI
- * already has — an Anthropic subscription through Claude Code, ChatGPT through
- * Codex, the providers `nikcli auth` holds — so this screen only reports what
- * each CLI says, and "Accedi" opens that CLI's own sign-in in a terminal.
- */
-export function ProviderSection(props: ProviderSectionProps) {
-  const [states, setStates] = createSignal<Record<string, ProviderState>>({})
-  const [checking, setChecking] = createSignal(false)
-
-  const check = () => {
-    if (checking()) return
-    setChecking(true)
-    setStates({})
-    void Promise.all(
-      RUNNERS.map((runner) =>
-        providerState(runner).then((state) => setStates((prev) => ({ ...prev, [runner.id]: state }))),
-      ),
-    ).finally(() => setChecking(false))
-  }
-  onMount(check)
-
-  const label = (state: ProviderState | undefined) => {
-    if (!state) return t("settings.providers.checking")
-    if (!state.installed) return t("settings.providers.notInstalled")
-    if (state.login.state === "in") return t("settings.providers.connected")
-    if (state.login.state === "out") return t("settings.providers.notConnected")
-    return t("settings.providers.unverified")
-  }
-
-  return (
-    <>
-      <div data-slot="section-head">
-        <h3 data-slot="section-title" tabIndex={-1}>
-          {t("settings.providers.title")}
-        </h3>
-        <p data-slot="section-desc">{t("settings.providers.desc1")}</p>
-        <p data-slot="section-desc">
-          {t("settings.providers.desc2Before", MAX_PARALLEL_TURNS)}
-          <code>{"codex login --with-api-key"}</code>
-          {t("settings.providers.desc2After")}
-        </p>
-      </div>
-
-      <ul data-slot="settings-list">
-        <For each={RUNNERS}>
-          {(runner) => {
-            const state = () => states()[runner.id]
-            return (
-              <li data-slot="provider-row" data-state={state()?.installed === false ? "missing" : state()?.login.state}>
-                <div data-slot="provider-head">
-                  <span data-slot="settings-name">{runner.label}</span>
-                  <span data-slot="provider-badge">{label(state())}</span>
-                  <Show when={props.onLogin && state()?.installed && runner.login.length > 0}>
-                    <button
-                      type="button"
-                      data-slot="settings-choice"
-                      onClick={() => props.onLogin?.(runner)}
-                      title={`${runner.command} ${runner.login.join(" ")}`}
-                    >
-                      {state()?.login.state === "in"
-                        ? t("settings.providers.switchAccount")
-                        : t("settings.providers.login")}
-                    </button>
-                  </Show>
-                </div>
-                <span data-slot="provider-detail">{runnerAccount(runner.id)}</span>
-                <Show when={state()?.login.detail}>
-                  <span data-slot="settings-meta">{state()!.login.detail}</span>
-                </Show>
-              </li>
-            )
-          }}
-        </For>
-      </ul>
-
-      <div data-slot="settings-choices">
-        <button type="button" data-slot="settings-choice" disabled={checking()} onClick={check}>
-          {checking() ? t("settings.providers.checking") : t("settings.providers.checkAgain")}
-        </button>
       </div>
     </>
   )

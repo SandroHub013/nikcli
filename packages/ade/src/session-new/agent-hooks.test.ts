@@ -12,6 +12,7 @@ import {
   hookOutdated,
   hookScript,
   hookTarget,
+  hooksSummary,
   installHook,
   installedCommand,
   isAdeCommand,
@@ -861,5 +862,34 @@ describe("an earlier ADE's hook script", () => {
     const { state, host } = disk(oldConfig, sha(script))
     expect(await refreshHookScript(host, claude, undefined)).toBe(script)
     expect(state.writes).toBe(1)
+  })
+})
+
+describe("the line the resume page opens with", () => {
+  const status = (id: string, over: Record<string, unknown>) => ({
+    target: hookTarget(id)!,
+    installed: false,
+    broken: false,
+    configPath: "c",
+    scriptPath: "s",
+    ...over,
+  })
+
+  test("nothing read yet is nothing on, out of every target", () => {
+    expect(hooksSummary({})).toEqual({ on: 0, total: HOOK_TARGETS.length, attention: 0 })
+  })
+
+  test("counts the installed ones, and those that want attention apart", () => {
+    const states = {
+      "claude-code": status("claude-code", { installed: true }),
+      codex: status("codex", { installed: true, outdated: true }),
+      [HOOK_TARGETS[2]!.id]: status(HOOK_TARGETS[2]!.id, { broken: true }),
+    }
+    expect(hooksSummary(states as never)).toEqual({ on: 2, total: HOOK_TARGETS.length, attention: 2 })
+  })
+
+  test("a state that could not be read counts for neither", () => {
+    const states = { "claude-code": status("claude-code", { installed: true, error: "boom" }) }
+    expect(hooksSummary(states as never)).toEqual({ on: 0, total: HOOK_TARGETS.length, attention: 0 })
   })
 })
