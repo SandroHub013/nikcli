@@ -7,7 +7,15 @@
  * - Always passes data through normalizeSettings before reading or writing
  */
 
-import { DEFAULT_VOICE_SETTINGS, normalizeSettings, type NormalizedVoiceSettings, type VoiceSettings } from "./model"
+import {
+  DEFAULT_VOICE_SETTINGS,
+  normalizeSettings,
+  REPLY_BACKEND_BY_VOICE,
+  REPLY_VOICES,
+  type NormalizedVoiceSettings,
+  type ReplyVoice,
+  type VoiceSettings,
+} from "./model"
 import { t } from "@nikcli-ai/ade/i18n"
 
 export const VOICE_SETTINGS_STORAGE_KEY = "voice.settings"
@@ -51,10 +59,18 @@ function resolveStorage(customStorage?: Storage): Storage | null {
  *
  * Guarantees: Never throws. Falls back to normalized default settings on failure.
  */
-export function loadVoiceSettings(storage?: Storage): NormalizedVoiceSettings {
+/**
+ * `testIdentity` is ADE Test: a new profile there starts on Piper, and no
+ * stored voice that spends a key is read (see `normalizeSettings`).
+ */
+export interface VoiceSettingsLoadOptions {
+  readonly testIdentity?: boolean
+}
+
+export function loadVoiceSettings(storage?: Storage, options?: VoiceSettingsLoadOptions): NormalizedVoiceSettings {
   const store = resolveStorage(storage)
   if (!store) {
-    return normalizeSettings(null)
+    return normalizeSettings(null, options)
   }
 
   try {
@@ -80,7 +96,8 @@ export function loadVoiceSettings(storage?: Storage): NormalizedVoiceSettings {
         ? null
         : { ...(typeof parsed === "object" && parsed !== null ? parsed : {}), openRouterApiKey: apiKey }
 
-    const normalized = normalizeSettings(merged)
+    // New is nothing stored at all: a stored `{}` next to a key is a profile, and keeps Ugo.
+    const normalized = normalizeSettings(merged, { ...options, fresh: parsed === null })
 
     /*
      * A profile the loader had to migrate is written back at once.
@@ -94,12 +111,40 @@ export function loadVoiceSettings(storage?: Storage): NormalizedVoiceSettings {
     // Also a profile of the current version that a migration still moved (a backend that was removed
     // after it was written): without the write it is moved, and told, at every start.
     if (merged !== null && (storedVersion !== normalized.settings.version || normalized.migrations.length > 0)) {
-      writeSettings(store, normalized.settings)
+      writeSettings(store, persisted(normalized.settings, replyVoiceOf(parsed), options))
     }
 
     return normalized
   } catch {
-    return normalizeSettings(null)
+    return normalizeSettings(null, options)
+  }
+}
+
+/**
+ * What is written, under ADE Test.
+ *
+ * ADE Test reads a voice that spends a key as Ugo (`normalizeSettings`), and
+ * that is a reading, not a choice. Written back, it would put Ugo over the
+ * user's Rosa the first time a test build opened the profile, so the MAI voice
+ * the profile named, or the one a save asked for, is written as it was.
+ */
+function persisted(settings: VoiceSettings, intended: unknown, options?: VoiceSettingsLoadOptions): VoiceSettings {
+  if (!options?.testIdentity) return settings
+  const voice = intended as ReplyVoice
+  if (!REPLY_VOICES.includes(voice) || REPLY_BACKEND_BY_VOICE[voice] !== "mai") return settings
+  return { ...settings, replyVoice: voice, replyBackend: "mai" }
+}
+
+function replyVoiceOf(parsed: unknown): unknown {
+  return typeof parsed === "object" && parsed !== null ? (parsed as { replyVoice?: unknown }).replyVoice : undefined
+}
+
+function storedReplyVoice(store: Storage): unknown {
+  try {
+    const raw = store.getItem(VOICE_SETTINGS_STORAGE_KEY)
+    return replyVoiceOf(raw ? JSON.parse(raw) : null)
+  } catch {
+    return undefined
   }
 }
 
@@ -157,10 +202,15 @@ export function clearOpenRouterKeyRemoved(storage = voiceStorage()): void {
  * Guarantees: Never throws. Returns the normalized settings that were stored
  * or recovered.
  */
-export function saveVoiceSettings(patch: Partial<VoiceSettings>, storage?: Storage): NormalizedVoiceSettings {
-  const current = loadVoiceSettings(storage)
+export function saveVoiceSettings(
+  patch: Partial<VoiceSettings>,
+  storage?: Storage,
+  options?: VoiceSettingsLoadOptions,
+): NormalizedVoiceSettings {
+  // The same identity as the load: in ADE Test, a first save must not write the new profile's Rosa to disk.
+  const current = loadVoiceSettings(storage, options)
   const merged = { ...current.settings, ...patch }
-  const normalized = normalizeSettings(merged)
+  const normalized = normalizeSettings(merged, options)
 
   const store = resolveStorage(storage)
   if (!store) {
@@ -170,7 +220,8 @@ export function saveVoiceSettings(patch: Partial<VoiceSettings>, storage?: Stora
     }
   }
 
-  if (writeSettings(store, normalized.settings)) {
+  const intended = "replyVoice" in patch ? patch.replyVoice : storedReplyVoice(store)
+  if (writeSettings(store, persisted(normalized.settings, intended, options))) {
     if (normalized.settings.openRouterApiKey) clearOpenRouterKeyRemoved(store)
     else if (current.settings.openRouterApiKey) markOpenRouterKeyRemoved(store)
     return normalized
@@ -184,10 +235,10 @@ export function saveVoiceSettings(patch: Partial<VoiceSettings>, storage?: Stora
 /**
  * Clears persistent settings from storage and returns default settings.
  */
-export function resetVoiceSettings(storage?: Storage): NormalizedVoiceSettings {
+export function resetVoiceSettings(storage?: Storage, options?: VoiceSettingsLoadOptions): NormalizedVoiceSettings {
   const store = resolveStorage(storage)
   if (store) {
-    const hadKey = Boolean(loadVoiceSettings(store).openRouterApiKey)
+    const hadKey = Boolean(loadVoiceSettings(store, options).openRouterApiKey)
     try {
       store.removeItem(VOICE_SETTINGS_STORAGE_KEY)
       // The credential goes too. "Reset" that leaves an API key behind is
@@ -198,7 +249,7 @@ export function resetVoiceSettings(storage?: Storage): NormalizedVoiceSettings {
       // ignore
     }
   }
-  return normalizeSettings(DEFAULT_VOICE_SETTINGS)
+  return normalizeSettings(DEFAULT_VOICE_SETTINGS, options)
 }
 
 /**

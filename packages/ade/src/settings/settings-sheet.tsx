@@ -7,6 +7,7 @@ import {
   type InstallProgress,
   type LocalProvider,
   type PackState,
+  type MaiFailureKind,
 } from "@nikcli-ai/voice"
 import type { Binding } from "../keyboard/keymap"
 import { getHost } from "../host/shell"
@@ -66,6 +67,9 @@ export interface SettingsSheetProps {
   onInstallKokoro?: () => void
   onDeleteKokoro?: () => void
   onTestVoice?: () => void
+  maiBlocked?: MaiFailureKind
+  onRetryMai?: () => void
+  testIdentity?: boolean
   bindings?: readonly Binding[]
   voiceSettingsNotice?: string
 
@@ -164,6 +168,9 @@ export function SettingsSheet(props: SettingsSheetProps): JSX.Element {
             onInstallKokoro={props.onInstallKokoro}
             onDeleteKokoro={props.onDeleteKokoro}
             onTestVoice={props.onTestVoice}
+            {...(props.maiBlocked ? { maiBlocked: props.maiBlocked } : {})}
+            onRetryMai={props.onRetryMai}
+            testIdentity={props.testIdentity}
             existingBindings={props.bindings}
             settingsNotice={props.voiceSettingsNotice}
             title={t("settings.title")}

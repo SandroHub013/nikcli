@@ -8,8 +8,9 @@
  * track — no room noise, no system sounds, no music the user had on — which is
  * exactly what an editor wants for a voice-over.
  *
- * 16-bit PCM only, because that is what Piper writes. A clip in any other
- * shape is left out and counted, rather than guessed at.
+ * 16-bit PCM only, because that is what the voices write. A clip in any other
+ * shape is left out and counted, rather than guessed at; a different rate or
+ * channel count is not another shape, it is resampled.
  */
 
 export interface Pcm {
@@ -88,38 +89,73 @@ export function writeWav(pcm: Pcm): ArrayBuffer {
 
 export interface VoiceTrack {
   readonly wav: ArrayBuffer
-  /** Clips that were not 16-bit PCM in the track's own format. */
+  /** Clips that were not 16-bit PCM. */
   readonly skipped: number
 }
 
 /**
- * The clips on one timeline as long as the take, silence between them.
+ * The track's own format. The voices do not agree on one — MAI speaks at
+ * 24 kHz, Piper at 22.05 kHz — and a take can hold both, so the track picks
+ * one and brings every clip to it. 24 kHz keeps MAI untouched and only lifts
+ * Piper; mono because a voice-over is one voice.
+ */
+const TRACK_RATE = 24000
+
+/** `pcm` as one channel at `TRACK_RATE`, the channels averaged, linearly interpolated. */
+function toTrackFormat(pcm: Pcm): Int16Array {
+  const { channels, samples } = pcm
+  const frames = Math.floor(samples.length / channels)
+  const mono = new Float64Array(frames)
+  for (let f = 0; f < frames; f++) {
+    let sum = 0
+    for (let c = 0; c < channels; c++) sum += samples[f * channels + c]!
+    mono[f] = sum / channels
+  }
+  if (frames === 0) return new Int16Array(0)
+
+  // Same rate is a copy, so a MAI clip comes out sample for sample.
+  const step = pcm.sampleRate / TRACK_RATE
+  const out = new Int16Array(Math.round(frames / step))
+  for (let i = 0; i < out.length; i++) {
+    const at = i * step
+    const left = Math.min(Math.floor(at), frames - 1)
+    const right = Math.min(left + 1, frames - 1)
+    out[i] = Math.round(mono[left]! + (mono[right]! - mono[left]!) * (at - left))
+  }
+  return out
+}
+
+/**
+ * The clips on one timeline as long as the take, silence between them, at
+ * 24 kHz mono 16-bit whatever each clip was.
  *
- * The first readable clip sets the format. Two sentences that overlap — a new
- * one started before the old one was stopped — are summed and clipped, as the
- * listener heard them. Nothing at all to lay out gives no track.
+ * Two sentences that overlap — a new one started before the old one was
+ * stopped — are summed and clipped, as the listener heard them. Nothing at all
+ * to lay out gives no track.
  */
 export function buildVoiceTrack(clips: readonly VoiceClip[], durationMs: number): VoiceTrack | undefined {
-  const read = clips.map((clip) => ({ at: clip.at, pcm: readWav(clip.wav) }))
-  const first = read.find((clip) => clip.pcm)?.pcm
-  if (!first) return undefined
+  // A header with no rate cannot be placed in time: refused like any other bad WAV.
+  const read = clips.map((clip) => {
+    const pcm = readWav(clip.wav)
+    return { at: clip.at, pcm: pcm && pcm.sampleRate > 0 ? pcm : undefined }
+  })
+  if (!read.some((clip) => clip.pcm)) return undefined
 
-  const { sampleRate, channels } = first
-  const frames = Math.max(0, Math.round((durationMs / 1000) * sampleRate))
-  const out = new Int16Array(frames * channels)
+  const out = new Int16Array(Math.max(0, Math.round((durationMs / 1000) * TRACK_RATE)))
   let skipped = 0
   for (const clip of read) {
-    if (!clip.pcm || clip.pcm.sampleRate !== sampleRate || clip.pcm.channels !== channels) {
+    if (!clip.pcm) {
       skipped++
       continue
     }
-    const start = Math.max(0, Math.round((clip.at / 1000) * sampleRate)) * channels
+    const samples = toTrackFormat(clip.pcm)
+    const start = Math.max(0, Math.round((clip.at / 1000) * TRACK_RATE))
     const room = Math.max(0, out.length - start)
-    const length = Math.min(clip.pcm.samples.length, room)
+    const length = Math.min(samples.length, room)
     for (let i = 0; i < length; i++) {
-      const sum = out[start + i]! + clip.pcm.samples[i]!
+      const sum = out[start + i]! + samples[i]!
       out[start + i] = Math.max(-32768, Math.min(32767, sum))
     }
   }
-  return { wav: writeWav({ sampleRate, channels, samples: out }), skipped }
+  return { wav: writeWav({ sampleRate: TRACK_RATE, channels: 1, samples: out }), skipped }
 }

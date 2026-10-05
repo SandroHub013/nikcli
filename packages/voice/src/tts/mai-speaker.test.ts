@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createMaiSpeaker, maiFallbackNotice, type MaiSpeakerDeps } from "./mai-speaker"
-import { MaiError, type MaiClientDeps } from "./mai"
+import { MAI_DAILY_CAP_USD, MaiError, reserveMai, type MaiClientDeps } from "./mai"
+import { createSpendTally } from "../settings/spend"
 
 const PCM = new Uint8Array([0, 0, 1, 0])
 
@@ -264,10 +265,101 @@ describe("MAI davanti alla voce locale", () => {
     expect(inputs.join(" ")).toBe("Vedi la guida per i dettagli.")
   })
 
+  test("l'avviso si riarma solo dopo una frase sentita, non dopo una sintetizzata", async () => {
+    const w = world()
+    let clock = 0
+    w.deps.client.now = () => clock
+    const notices = () => w.spoken.filter((text) => text.includes("non è disponibile"))
+    const speaker = createMaiSpeaker(w.deps)
+    w.setStatus(500)
+    await speaker.speak("Prima.")
+    expect(notices()).toHaveLength(1)
+    // Il breaker si riapre, MAI sintetizza, ma l'audio non suona: il guasto non è finito.
+    clock += 10 * 60_000
+    w.setStatus(200)
+    w.deps.play = async () => {
+      throw new Error("dispositivo audio")
+    }
+    await speaker.speak("Seconda.")
+    expect(w.fetchCount()).toBe(2)
+    expect(notices()).toHaveLength(1)
+    expect(w.spoken.at(-1)).toBe("Seconda.")
+  })
+
   test("prepare non esiste: il prefetch di una voce MAI non chiede nulla", () => {
     const w = world()
     const speaker = createMaiSpeaker(w.deps)
     speaker.prefetch?.("Ciao.")
     expect(w.fetchCount()).toBe(0)
+  })
+})
+
+describe("la spesa della voce MAI", () => {
+  const at = new Date(2026, 9, 5, 12).getTime()
+
+  function withTally(w: World, tally = createSpendTally(null, at)) {
+    w.deps.client.now = () => at
+    w.deps.spend = { tally }
+    return tally
+  }
+
+  test("la prenotazione è nel tally prima che parta la richiesta", async () => {
+    const w = world()
+    const tally = withTally(w)
+    let seenBefore: number | undefined
+    w.deps.client.fetchFn = async () => {
+      seenBefore = tally.today(at).replyCalls
+      return ok()
+    }
+    await createMaiSpeaker(w.deps).speak("Ciao, come va?")
+    expect(seenBefore).toBe(1)
+    expect(tally.today(at).replyCost).toBeCloseTo(reserveMai("Ciao, come va?"))
+  })
+
+  test("oltre il tetto non parte nessuna richiesta, e l'avviso è uno al giorno", async () => {
+    const w = world()
+    const tally = withTally(w)
+    tally.addReply(at, MAI_DAILY_CAP_USD)
+    const speaker = createMaiSpeaker(w.deps)
+    await speaker.speak("Prima risposta.")
+    await speaker.speak("Seconda risposta.")
+    expect(w.fetchCount()).toBe(0)
+    expect(w.spoken).toEqual([
+      "Tetto di spesa della voce raggiunto: uso la voce locale.",
+      "Prima risposta.",
+      "Seconda risposta.",
+    ])
+  })
+
+  test("il costo vero corregge la prenotazione, una volta sola", async () => {
+    const w = world()
+    const tally = withTally(w)
+    let settled: () => void = () => {}
+    const done = new Promise<void>((resolve) => (settled = resolve))
+    w.deps.spend!.settle = async (id) => {
+      expect(id).toBe("gen")
+      queueMicrotask(settled)
+      return 0.00001
+    }
+    await createMaiSpeaker(w.deps).speak("Ciao, come va?")
+    await done
+    await Promise.resolve()
+    expect(tally.today(at).replyCost).toBeCloseTo(0.00001)
+    expect(tally.today(at).settled).toEqual(["gen"])
+  })
+
+  test("un 402 restituisce la prenotazione e lo dice al pannello; Riprova lo riapre", async () => {
+    const w = world()
+    const tally = withTally(w)
+    const states: (string | undefined)[] = []
+    w.deps.onState = (kind) => states.push(kind)
+    w.setStatus(402)
+    const speaker = createMaiSpeaker(w.deps)
+    await speaker.speak("Ciao, come va?")
+    expect(tally.today(at).replyCost).toBeCloseTo(0)
+    expect(tally.today(at).replyCalls).toBe(1)
+    expect(states.at(-1)).toBe("payment")
+    speaker.retry()
+    expect(states.at(-1)).toBeUndefined()
   })
 })

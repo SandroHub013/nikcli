@@ -13,9 +13,17 @@
  */
 
 import { MAI_MODEL, MAI_VOICES, type MaiVoiceId } from "../settings/reply-voices"
+import type { DaySpend } from "../settings/spend"
 
 /** What one character is reserved at, in dollars. The list price is $15 per million. */
 export const MAI_USD_PER_CHAR = 0.000015
+
+/**
+ * What the voice of the replies may spend in a day, in dollars. A constant, not
+ * a setting: version 9 adds no field for it. Compared with the replies' own
+ * share of the day (`replyCost`), before every request.
+ */
+export const MAI_DAILY_CAP_USD = 0.5
 
 /** PCM the trial measured: 16-bit, mono, 24 kHz. Anything else is refused. */
 export const MAI_SAMPLE_RATE = 24_000
@@ -23,6 +31,11 @@ export const MAI_CHANNELS = 1
 export const MAI_BITS = 16
 
 export const MAI_ENDPOINT = "https://openrouter.ai/api/v1/audio/speech"
+/** Where OpenRouter says what one generation really cost. */
+export const MAI_GENERATION_ENDPOINT = "https://openrouter.ai/api/v1/generation"
+/** How many times, and how far apart, the cost is asked for: it is written a moment after the audio. */
+export const MAI_SETTLE_ATTEMPTS = 3
+export const MAI_SETTLE_DELAY_MS = 2_000
 
 /** How long one sentence may take in all, and how long the first byte may take. */
 export const MAI_DEADLINE_MS = 15_000
@@ -48,6 +61,8 @@ export type MaiFailureKind =
   | "format"
   | "empty"
   | "timeout"
+  /** Not a failure of the service: the day's cap would be passed, so nothing was asked. */
+  | "cap"
 
 export class MaiError extends Error {
   constructor(
@@ -87,6 +102,45 @@ export interface MaiClientDeps {
 /** What a sentence costs to reserve, before OpenRouter says what it really cost. */
 export function reserveMai(text: string): number {
   return text.length * MAI_USD_PER_CHAR
+}
+
+/** Whether a request reserved at `reserved` would take the replies past the day's cap. */
+export function maiCapReached(today: DaySpend, reserved: number, cap = MAI_DAILY_CAP_USD): boolean {
+  return (today.replyCost ?? 0) + reserved > cap
+}
+
+export interface MaiSettleDeps {
+  apiKey: () => string | undefined
+  fetchFn: (input: string, init: RequestInit) => Promise<Response>
+  /** The pause between attempts; a test passes one that does not wait. */
+  wait?: (ms: number) => Promise<void>
+}
+
+/**
+ * What one generation really cost, in dollars, or `undefined` when OpenRouter
+ * did not say. Asked a few times, because the figure is written a moment after
+ * the audio; never throws, and never sends anything but the id and the key.
+ */
+export async function settleMai(generationId: string, deps: MaiSettleDeps): Promise<number | undefined> {
+  const wait = deps.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+  for (let attempt = 0; attempt < MAI_SETTLE_ATTEMPTS; attempt++) {
+    if (attempt > 0) await wait(MAI_SETTLE_DELAY_MS)
+    const key = deps.apiKey()
+    if (!key) return undefined
+    try {
+      const response = await deps.fetchFn(`${MAI_GENERATION_ENDPOINT}?id=${encodeURIComponent(generationId)}`, {
+        method: "GET",
+        headers: { Authorization: `Bearer ${key}` },
+      })
+      if (!response.ok) continue
+      const body = (await response.json()) as { data?: { total_cost?: unknown } }
+      const cost = body?.data?.total_cost
+      if (typeof cost === "number" && Number.isFinite(cost) && cost >= 0) return cost
+    } catch {
+      // Asked again below; a cost that never arrives leaves the reservation as it is.
+    }
+  }
+  return undefined
 }
 
 /** A 16-bit PCM buffer wrapped as a WAV the player already knows how to play. */

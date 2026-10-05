@@ -8,6 +8,11 @@ import {
   reserveMai,
   speakMai,
   MaiError,
+  MAI_DAILY_CAP_USD,
+  MAI_GENERATION_ENDPOINT,
+  MAI_SETTLE_ATTEMPTS,
+  maiCapReached,
+  settleMai,
   type MaiClientDeps,
 } from "./mai"
 import { MAI_MODEL } from "../settings/reply-voices"
@@ -226,5 +231,48 @@ describe("il breaker", () => {
     breaker.trip("transient", 0)
     breaker.reset()
     expect(breaker.blocked(0)).toBeUndefined()
+  })
+})
+
+describe("il costo vero di una generazione", () => {
+  const noWait = { wait: async () => {} }
+
+  test("chiede /generation con l'id e legge total_cost", async () => {
+    let url = ""
+    const cost = await settleMai("gen-7", {
+      apiKey: () => "key",
+      fetchFn: async (input) => {
+        url = input
+        return new Response(JSON.stringify({ data: { total_cost: 0.00042 } }))
+      },
+      ...noWait,
+    })
+    expect(url).toBe(`${MAI_GENERATION_ENDPOINT}?id=gen-7`)
+    expect(cost).toBe(0.00042)
+  })
+
+  test("riprova qualche volta, poi lascia la prenotazione", async () => {
+    let calls = 0
+    const fetchFn: MaiClientDeps["fetchFn"] = async () => {
+      calls += 1
+      return new Response("non ancora", { status: 404 })
+    }
+    expect(await settleMai("gen-8", { apiKey: () => "key", fetchFn, ...noWait })).toBeUndefined()
+    expect(calls).toBe(MAI_SETTLE_ATTEMPTS)
+  })
+
+  test("senza chiave non chiede niente", async () => {
+    let calls = 0
+    const fetchFn: MaiClientDeps["fetchFn"] = async () => {
+      calls += 1
+      return new Response("{}")
+    }
+    expect(await settleMai("gen-9", { apiKey: () => undefined, fetchFn, ...noWait })).toBeUndefined()
+    expect(calls).toBe(0)
+  })
+
+  test("il tetto guarda solo la parte delle risposte", () => {
+    expect(maiCapReached({ day: "d", calls: 9, cost: 5 }, 0.01)).toBe(false)
+    expect(maiCapReached({ day: "d", calls: 9, cost: 5, replyCost: MAI_DAILY_CAP_USD - 0.001 }, 0.01)).toBe(true)
   })
 })
