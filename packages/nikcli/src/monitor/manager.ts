@@ -143,6 +143,8 @@ export namespace Monitor {
     exited: boolean
     finalizing?: boolean
     persistThrottle: ReturnType<typeof throttleTrailing>
+    /** set while the starting tool call is still waiting for a quick finish */
+    inlineWaiter?: (record: Record) => void
   }
 
   const state = Instance.state(
@@ -385,6 +387,15 @@ export namespace Monitor {
       wake: runtime.record.wake,
     })
 
+    // The tool call that started this job is still waiting: it returns the
+    // result itself, so a wake would only repeat it in another turn.
+    if (runtime.inlineWaiter) {
+      const resolve = runtime.inlineWaiter
+      runtime.inlineWaiter = undefined
+      resolve(runtime.record)
+      return
+    }
+
     if (runtime.record.wake && runtime.record.status !== "cancelled") {
       void wake(runtime.record)
     }
@@ -604,6 +615,29 @@ export namespace Monitor {
     Bus.publish(Event.Created, { sessionID: record.sessionID, record })
     attach(runtime)
     return record
+  }
+
+  /**
+   * Waits up to `ms` for a job started by `start` to finish. Resolves with the
+   * final record when it does — and then no wake is sent, because the caller
+   * reports the result — or with undefined when the job is still running, in
+   * which case it continues in the background and wakes as usual.
+   */
+  export function awaitInline(monitorID: string, ms: number): Promise<Record | undefined> {
+    const runtime = state().get(key(monitorID))
+    if (!runtime || runtime.finalizing) return Promise.resolve(undefined)
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        if (runtime.inlineWaiter !== done) return
+        runtime.inlineWaiter = undefined
+        resolve(undefined)
+      }, ms)
+      const done = (record: Record) => {
+        clearTimeout(timer)
+        resolve(record)
+      }
+      runtime.inlineWaiter = done
+    })
   }
 
   export async function get(sessionID: string, monitorID: string): Promise<Record> {

@@ -39,16 +39,46 @@ describe("MonitorTool", () => {
     ).rejects.toThrow(/Invalid timeout/)
   })
 
-  it("starts a background command and asks bash permission", async () => {
+  it("returns a command that finishes quickly in the same call", async () => {
     const { ctx, asked } = makeToolContext()
     const result = await withProjectDirectory(projectDir, () =>
-      def.executeAsync({ command: "echo monitor-ok", title: "echo monitor", wake: false }, ctx),
+      def.executeAsync({ command: "echo monitor-inline-ok", title: "quick", wake: false }, ctx),
     )
+
+    expect(result.output).toContain("Command finished in")
+    expect(result.output).toContain("exit code 0")
+    expect(result.output).toContain("monitor-inline-ok")
+    expect(result.output).not.toContain("Started monitor")
+    expect(result.metadata.status).toBe("complete")
+    expect(asked.some((a) => a.permission === "bash")).toBe(true)
+  })
+
+  it("reports the exit code of a quick command that fails", async () => {
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ command: "echo failing-now; exit 3", title: "quick failure", wake: false }, ctx),
+    )
+
+    expect(result.output).toContain("exit code 3")
+    expect(result.output).toContain("failing-now")
+    expect(result.metadata.status).toBe("error")
+  })
+
+  it("starts a background command and asks bash permission", async () => {
+    const { ctx, asked } = makeToolContext()
+    const previous = process.env.NIKCLI_MONITOR_INLINE_MS
+    process.env.NIKCLI_MONITOR_INLINE_MS = "50"
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ command: "sleep 2 && echo monitor-ok", title: "echo monitor", wake: false }, ctx),
+    ).finally(() => {
+      if (previous === undefined) delete process.env.NIKCLI_MONITOR_INLINE_MS
+      else process.env.NIKCLI_MONITOR_INLINE_MS = previous
+    })
 
     expect(result.output).toContain('Started monitor "echo monitor"')
     expect(result.output).toContain("Log file:")
     expect(result.metadata.monitorId).toBeTruthy()
-    expect(result.metadata.command).toBe("echo monitor-ok")
+    expect(result.metadata.command).toBe("sleep 2 && echo monitor-ok")
     expect(result.metadata.status).toBe("running")
     expect(asked.some((a) => a.permission === "bash")).toBe(true)
 

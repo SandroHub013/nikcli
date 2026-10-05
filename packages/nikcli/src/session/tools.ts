@@ -7,12 +7,12 @@ import { type JSONSchema7, type Tool as AITool, tool, jsonSchema, type ToolCallO
 import { ProviderTransform } from "@/provider/transform"
 import { Plugin } from "@/plugin"
 import { ToolRegistry } from "@/tool/registry"
+import { setCallToolExecutor } from "@/tool/call_tool"
 import { MCP } from "@/mcp"
 import { PermissionNext } from "@/permission/next"
 import { Flag } from "@nikcli-ai/util/flag"
 import { Truncate } from "@/tool/truncation"
 import { Tool } from "@/tool/tool"
-import { loadTools, withDeferredIndex } from "@/tool/search_tools"
 import { Config } from "@/config/config"
 import { Mod } from "@/mod"
 import { Effect } from "effect"
@@ -192,11 +192,11 @@ function sessionUpdatePart(part: MessageV2.Part) {
 /**
  * The session's toolset for one step.
  *
- * `tools` holds everything the model may call this step; `deferred` names the
- * entries of it whose schemas are left out of the request (see
- * `ToolRegistry.exposure`). A deferred tool stays in `tools` so a call to it by
- * name still runs — the same way `invalid` is callable without being offered —
- * and that call loads it for the steps after.
+ * `tools` holds everything the model is offered; `deferred` names the entries of it that are left
+ * out of the request. Upstream keeps deferred tools in `tools` so a call by name still runs and
+ * loads them. Here a deferred tool is simply not in `tools`: it is reached through `call_tool`,
+ * so the array the provider sees is the same bytes on every step of the session and `deferred`
+ * is always empty. The field stays because `LLM.stream` and `prompt.ts` take it.
  */
 export type ResolvedTools = {
   tools: Record<string, AITool>
@@ -219,8 +219,8 @@ export async function resolveTools(input: {
 
   // Tools the user disabled for this session are dropped entirely: the model
   // never sees their schema and the permission rule is never registered. The
-  // same map records the deferred tools the session has loaded — see
-  // `ToolRegistry.exposure`.
+  // same map also carries the opt-in tools, which are dropped until it says
+  // otherwise — see `ToolRegistry.enabled`.
   const disabledTools = input.session.disabledTools ?? {}
 
   // Wholly-denied tools (`{ tool: { "name*": "deny" } }` with pattern "*") are
@@ -286,6 +286,72 @@ export async function resolveTools(input: {
     },
   })
 
+  /**
+   * The one way a registry tool runs: parameter validation has already happened at
+   * the `tool({...})` boundary, and this covers plugin hooks, the per-tool timeout and
+   * the result.
+   *
+   * Extracted so `call_tool` runs a deferred tool through *this* function rather than
+   * through a second copy of it. A forwarded call that skipped a hook, a timeout or the
+   * permission path would be a different tool wearing the same name.
+   */
+  const runRegistryTool = async (item: ToolRegistry.Resolved, args: Record<string, unknown>, ctx: Tool.Context) => {
+    // Before hook - errors are non-fatal, log and continue
+    await runPlugin(
+      Effect.gen(function* () {
+        const plugin = yield* Plugin.Service
+        yield* plugin.trigger(
+          "tool.execute.before",
+          {
+            tool: item.id,
+            sessionID: ctx.sessionID,
+            agent: ctx.agent,
+            messageID: ctx.messageID,
+            callID: ctx.callID,
+          },
+          {
+            args,
+          },
+        )
+      }),
+    ).catch((err) => {
+      log.debug("plugin trigger failed", {
+        error: String(err),
+        tool: item.id,
+      })
+    })
+    const timeoutMs = await resolveToolTimeoutMs(item.id, "registry")
+    const result = await executeWithTimeout(item.id, (linkedCtx) => item.executeAsync(args, linkedCtx), ctx, timeoutMs)
+    // After hook - errors are non-fatal, log and continue
+    await runPlugin(
+      Effect.gen(function* () {
+        const plugin = yield* Plugin.Service
+        yield* plugin.trigger(
+          "tool.execute.after",
+          {
+            tool: item.id,
+            sessionID: ctx.sessionID,
+            agent: ctx.agent,
+            messageID: ctx.messageID,
+            callID: ctx.callID,
+          },
+          result,
+        )
+      }),
+    ).catch((err) => {
+      log.debug("plugin trigger failed", {
+        error: String(err),
+        tool: item.id,
+      })
+    })
+    return result
+  }
+
+  const registryTools = await toolRegistryTools(
+    { modelID: input.model.api.id, providerID: input.model.providerID },
+    input.agent,
+  )
+  const byId = new Map(registryTools.map((item) => [item.id, item]))
   const eager = await runConfig(
     Effect.gen(function* () {
       const config = yield* Config.Service
@@ -293,32 +359,69 @@ export async function resolveTools(input: {
     }),
   ).then((config) => config.tool?.eager ?? [])
 
-  const registryTools = (
-    await toolRegistryTools({ modelID: input.model.api.id, providerID: input.model.providerID }, input.agent)
-  ).map((item) => ({
-    item,
-    exposure: ToolRegistry.exposure(item.id, { disabledTools, ruleset: permissionRuleset, eager }),
-  }))
-  const deferred = new Set(registryTools.filter((entry) => entry.exposure === "deferred").map((entry) => entry.item.id))
-  // `search_tools` is where the model learns what it can load, so its
-  // description carries the index of the deferred tools.
-  const deferredIndex = registryTools
-    .filter((entry) => entry.exposure === "deferred")
-    .map((entry) => ({ id: entry.item.id, description: entry.item.description }))
-
-  // A deferred tool the model reached for is one it needs: from the next step
-  // on it gets the tool's schema, same as if `search_tools` had loaded it.
-  const load = (id: string) =>
-    loadTools(input.session.id, [id]).catch((error) => {
-      log.warn("failed to load deferred tool", { tool: id, error: String(error) })
-      return [] as string[]
+  /**
+   * `call_tool` runs a tool the model cannot see the schema of. It goes through
+   * {@link runRegistryTool}, and the part is reported under the real tool name: the title
+   * and the metadata both say `generate_image` rather than `call_tool`, so the session
+   * log and the UI read as if the model had called it directly. The part's `tool` field
+   * stays `call_tool` because the call the model actually made is what a replay has to
+   * show.
+   */
+  setCallToolExecutor(async (name, forwarded, ctx) => {
+    const item = byId.get(name)
+    if (!item) {
+      const names = [...byId.keys()].sort(ToolRegistry.compareIds)
+      return {
+        title: `Unknown tool: ${name}`,
+        output: [
+          `No registered tool is called "${name}".`,
+          `Call search_tools with query "${name}" to see what exists, or one of: ${names.join(", ")}.`,
+        ].join(" "),
+        metadata: { tool: name, ok: false },
+      }
+    }
+    // Visibility is the same check that decides the model's toolset, so a tool the user
+    // disabled or a rule denied fails here exactly as it would from the schema.
+    if (!ToolRegistry.visible(item.id, { disabledTools, ruleset: permissionRuleset })) {
+      return {
+        title: `${item.id} is not available`,
+        output: `The ${item.id} tool is disabled for this session or denied by permissions, so it cannot run.`,
+        metadata: { tool: item.id, ok: false },
+      }
+    }
+    const parsed = item.parameters.safeParse(forwarded)
+    if (!parsed.success) {
+      const complaint = item.formatValidationError?.(parsed.error) ?? "the arguments do not match its schema"
+      return {
+        title: `Invalid arguments for ${item.id}`,
+        output: [
+          `The arguments for ${item.id} do not match its schema: ${complaint}`,
+          `Run search_tools with query "${item.id}" to see the parameters it expects.`,
+        ].join("\n"),
+        metadata: { tool: item.id, ok: false },
+      }
+    }
+    // Run it as its own tool, asking the permission the same way, and report the result
+    // under its real name.
+    const linked = context(forwarded, {
+      toolCallId: ctx.callID,
+      abortSignal: ctx.abort,
+      messages: [],
+    } as never)
+    const result = await runRegistryTool(item, parsed.data as Record<string, unknown>, linked)
+    await ctx.metadata({
+      title: result.title || item.id,
+      metadata: { tool: item.id, via: "call_tool", ...result.metadata },
     })
+    return { ...result, metadata: { tool: item.id, via: "call_tool", ...result.metadata } }
+  })
 
   // `tool.describe` mods rewrite what the model reads about a tool. Asked once per step, not per tool.
   const describeTools = await Mod.handles("tool.describe")
 
-  for (const { item, exposure } of registryTools) {
-    if (exposure === "hidden") continue
+  for (const item of registryTools) {
+    // `deferred` and `hidden` are both kept out of the array: a deferred tool is run through `call_tool`.
+    if (ToolRegistry.exposure(item.id, { disabledTools, ruleset: permissionRuleset, eager }) !== "active") continue
     const schema = ProviderTransform.schema(input.model, z.toJSONSchema(item.parameters) as JSONSchema7)
     tools[item.id] = tool({
       id: String(item.id) as `${string}.${string}`,
@@ -333,76 +436,8 @@ export async function resolveTools(input: {
       inputSchema: jsonSchema(schema),
       async execute(initialArgs, options) {
         const ctx = context(initialArgs, options)
-        if (exposure === "deferred") await load(item.id)
-        // The body below is nikcli's own behaviour for a tool call. `tool.call`
-        // mods wrap it: they can change `args`, retry, or answer instead of it.
-        const runTool = async (args: typeof initialArgs) => {
-          // Before hook - errors are non-fatal, log and continue
-          await runPlugin(
-            Effect.gen(function* () {
-              const plugin = yield* Plugin.Service
-              yield* plugin.trigger(
-                "tool.execute.before",
-                {
-                  tool: item.id,
-                  sessionID: ctx.sessionID,
-                  agent: ctx.agent,
-                  messageID: ctx.messageID,
-                  callID: ctx.callID,
-                },
-                {
-                  args,
-                },
-              )
-            }),
-          ).catch((err) => {
-            log.debug("plugin trigger failed", {
-              error: String(err),
-              tool: item.id,
-            })
-          })
-          const timeoutMs = await resolveToolTimeoutMs(item.id, "registry")
-          const executed = await executeWithTimeout(
-            item.id,
-            (linkedCtx) => item.executeAsync(args, linkedCtx),
-            ctx,
-            timeoutMs,
-          )
-          // A deferred tool called by name with arguments its schema rejects is
-          // repaired into an `invalid` call (see `LLM.stream`). The model never
-          // saw that schema, so load it and say the retry will have it.
-          const missed = item.id === "invalid" ? deferredTarget(args, deferred) : undefined
-          if (missed) await load(missed)
-          const result = missed
-            ? {
-                ...executed,
-                output: `${executed.output}\n\n\`${missed}\` was not loaded yet, so you called it without seeing its parameters. It is loaded now: its schema is in your toolset from your next step — call it again.`,
-              }
-            : executed
-          // After hook - errors are non-fatal, log and continue
-          await runPlugin(
-            Effect.gen(function* () {
-              const plugin = yield* Plugin.Service
-              yield* plugin.trigger(
-                "tool.execute.after",
-                {
-                  tool: item.id,
-                  sessionID: ctx.sessionID,
-                  agent: ctx.agent,
-                  messageID: ctx.messageID,
-                  callID: ctx.callID,
-                },
-                result,
-              )
-            }),
-          ).catch((err) => {
-            log.debug("plugin trigger failed", {
-              error: String(err),
-              tool: item.id,
-            })
-          })
-          return result
-        }
+        // `runRegistryTool` is nikcli's own behaviour for a tool call. `tool.call` mods wrap it:
+        // they can change `args`, retry, or answer instead of it.
         return Mod.toolCall(
           {
             tool: item.id,
@@ -684,18 +719,8 @@ export async function resolveTools(input: {
     tools: Object.fromEntries(
       Object.entries(tools).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
     ),
-    deferred,
+    deferred: new Set<string>(),
   }
-}
-
-/**
- * The deferred tool an `invalid` call was aimed at, if any. `invalid` receives
- * `{ tool, error }` from the repair in `LLM.stream`.
- */
-function deferredTarget(args: unknown, deferred: ReadonlySet<string>): string | undefined {
-  if (typeof args !== "object" || args === null || !("tool" in args)) return undefined
-  const target = args.tool
-  return typeof target === "string" && deferred.has(target) ? target : undefined
 }
 
 export function createStructuredOutputTool(input: {

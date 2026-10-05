@@ -1901,6 +1901,18 @@ export namespace Config {
         .optional(),
       experimental: z
         .object({
+          /**
+           * Keep the deferred tools out of the model's tool schema.
+           *
+           * On by default, because a tool that is merely available costs its description and JSON
+           * schema on every request of every step — paid by every session, including the ones that
+           * never generate an image or drive a browser. Set to `false` to put every registered tool
+           * back in the schema, which restores the pre-split behaviour byte for byte.
+           */
+          deferredTools: z
+            .boolean()
+            .optional()
+            .describe("Ship only the core toolset; reach the rest with search_tools + call_tool (default: true)"),
           policies: z
             .array(PolicyStatement)
             .optional()

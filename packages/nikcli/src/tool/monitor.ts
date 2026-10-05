@@ -15,6 +15,12 @@ const parameters = z.object({
   wake: z.boolean().describe("Wake the parent session when the command finishes").optional(),
 })
 
+/** How long a monitor call waits for its command before leaving it in the background. */
+function inlineWindowMs(): number {
+  const fromEnv = Number(process.env.NIKCLI_MONITOR_INLINE_MS)
+  return Number.isFinite(fromEnv) && fromEnv >= 0 ? fromEnv : 15_000
+}
+
 type MonitorMetadata = {
   monitorId: string
   sessionId: string
@@ -83,6 +89,30 @@ export const MonitorTool = Tool.define<typeof parameters, MonitorMetadata>("moni
       wake: params.wake,
       timeoutMs: params.timeout,
     })
+
+    ctx.metadata({ title, metadata: monitorMetadata(record) })
+
+    // Most commands handed to monitor are short (unit tests, a typecheck on a
+    // small project). Answering those in this call saves the turns a model
+    // otherwise spends reading the log and waiting for the wake.
+    const finished = await Monitor.awaitInline(record.id, inlineWindowMs())
+    if (finished) {
+      const snapshot = await Monitor.readLog(ctx.sessionID, finished.id)
+      const metadata = monitorMetadata(finished)
+      ctx.metadata({ title, metadata })
+      const seconds = ((finished.time.completed ?? Date.now()) - finished.time.created) / 1000
+      return {
+        title,
+        metadata,
+        output: [
+          `Command finished in ${seconds.toFixed(1)}s: ${finished.status}, exit code ${finished.exitCode ?? "none"}.`,
+          `Command: ${params.command}`,
+          "",
+          snapshot.output.trimEnd() || "(no output)",
+          ...(snapshot.truncated ? ["", `Output truncated; full log: ${finished.logPath}`] : []),
+        ].join("\n"),
+      }
+    }
 
     const metadata = monitorMetadata(record)
     ctx.metadata({ title, metadata })

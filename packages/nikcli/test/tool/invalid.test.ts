@@ -40,6 +40,32 @@ describe("InvalidTool", () => {
     expect(result.output).toContain("invalid")
   })
 
+  it("tells the model how to load a deferred tool it tried to call", async () => {
+    const def = await InvalidTool.init()
+    const result = await def.executeAsync(
+      { tool: "generate_image", error: "No such tool: generate_image" },
+      {
+        get instance(): never {
+          throw new Error("InvalidTool must not read the instance")
+        },
+        sessionID: "ses_test",
+        messageID: "msg_test",
+        callID: "call_test",
+        agent: "build",
+        abort: new AbortController().signal,
+        metadata() {},
+        async progress() {},
+        async ask() {},
+      },
+    )
+    // A deferred tool has no schema, so the model can only have guessed the
+    // name. The recovery is one call_tool, and this is where it hears about it.
+    expect(result.title).toBe("Tool not deferred")
+    expect(result.output).toContain("call_tool")
+    expect(result.output).toContain("generate_image")
+    expect(result.metadata.deferred).toBe(true)
+  })
+
   it("forwards progress from Promise and Effect tool implementations", async () => {
     const updates: Tool.Progress[] = []
     const context: Tool.Context = {

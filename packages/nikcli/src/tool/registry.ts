@@ -52,6 +52,7 @@ import { AdvisorTool } from "./advisor"
 import { DelegatorTool } from "./delegator"
 import { CodeModeTool } from "./code_mode"
 import { SearchToolsTool } from "./search_tools"
+import { CallToolTool } from "./call_tool"
 import { CreateGoalTool, GetGoalTool, UpdateGoalTool } from "./goal"
 import { BrowserControlTool } from "./browser-control"
 import { ComputerTool } from "./computer"
@@ -84,62 +85,165 @@ export namespace ToolRegistry {
   }
 
   /**
-   * The registry tools an open-ended agent gets in its **first** request.
+   * Tools that stay registered but are **off until the user asks for them**.
    *
-   * Every other registry tool is deferred: its schema stays out of the prompt,
-   * `search_tools` lists it by name and one-line summary, and it joins the
-   * toolset for the rest of the session once `search_tools` loads it or the
-   * model calls it by name. Tool schemas are the first and largest block of the
-   * provider prompt, so each tool here is paid for on every request of every
-   * session — it has to earn that by being used in most of them, or by being
-   * something the system prompt tells the model to reach for unprompted:
+   * Everything else is on unless `session.disabledTools` says otherwise. These
+   * invert that: `opentui` carries a large schema and an equally large
+   * description, and it pays for that space in every prompt of every session —
+   * including the ones that will never draw a dashboard. Being registered but
+   * excluded is what lets `/usage` list it and switch it on per session; a flag
+   * in the registry would hide it from that dialog entirely.
    *
-   * - the edit loop: `read`, `edit`/`write` (`apply_patch` for GPT), `bash`,
-   *   `glob`, `grep`;
-   * - how the agent organises its work: `task`, `todowrite`/`todoread`,
-   *   `skill`, `question`, and `search_tools` itself;
-   * - code intelligence and publishing the agent is expected to reach for
-   *   unprompted: `lsp` and `artifact`;
-   * - tools the primary agents' prompts name as the way to do something:
-   *   `monitor` (long-running commands), `delegation` (background results),
-   *   `plan_enter`/`plan_exit`, and the goal tools the `/goal`, mission and
-   *   loop prompts call;
-   * - tools that only exist because config opted in to them for exactly this
-   *   use: `advisor` (`agent.advisor`), `batch` (`experimental.batch_tool`).
-   *
-   * `invalid` is here so it is never offered for loading; the model does not
-   * see it either way.
-   *
-   * `config.tool.eager` adds to this set; MCP and connector tools are not
-   * registry tools and are not deferred.
+   * Distinct from {@link DEFERRED}: `search_tools` may load a deferred tool on
+   * its own, but an opt-in tool waits for a human. `opentui` alone is 75 KB of
+   * schema, which is not a thing a keyword match should be able to spend.
    */
-  export const CORE: ReadonlySet<string> = new Set([
-    "invalid",
-    "read",
-    "edit",
-    "write",
+  export const OPT_IN = new Set(["opentui"])
+
+  /**
+   * Tools registered, discoverable, and **not sent to the model's schema** — the
+   * model reaches them with `search_tools` (which returns their parameters) and
+   * then `call_tool`.
+   *
+   * The whole tool array is re-sent on every request of every step, so a tool
+   * that is merely *available* costs its description plus its JSON schema over
+   * and over. The measured cost on the benchmark's own tasks: `code_mode` 7.1k
+   * characters, `plugin` 5.3k, `task` 3.7k, `generate_image` 3.3k,
+   * `browser_control` 3.1k — and every one of them had **0 calls in 30 runs**.
+   *
+   * What is *not* here, and why: the read/search/edit/run loop, `tree` and
+   * `task` (8 calls in 30 runs, and a subagent that has to search for the tool
+   * that spawns subagents pays a turn on every spawn), plus `webfetch`, which
+   * `beast.txt` and `copilot-gpt-5.txt` name a dozen times per task.
+   *
+   * The list is explicit rather than "everything outside {@link CORE}" so that
+   * MCP, connector, plugin and config-dir tools keep their existing behaviour:
+   * `search_tools` only knows about the registry, so deferring a tool it cannot
+   * surface would strand it.
+   */
+  export const DEFERRED = new Set([
+    "advisor",
+    "artifact",
+    "batch",
+    "browser_control",
+    "code_mode",
+    "codesearch",
+    "computer",
+    "context_collect",
+    "context_diagnostics",
+    "context_related",
+    "create_goal",
+    "delegation",
+    "delegator",
+    "generate_image",
+    "get_goal",
+    "herdr",
+    "memory_search",
+    "plugin",
+    "repo_clone",
+    "repo_overview",
+    "speak",
+    "update_goal",
+    "voice",
+    "websearch",
+  ])
+
+  /**
+   * The tools every session is assumed to need, kept in the schema at all times.
+   *
+   * **The split in one place.** Moving a tool between here and {@link DEFERRED} is one line, and
+   * nothing else reads either set: `visible()` is the single decision point that the model's
+   * toolset, the `search_tools` catalog and `call_tool` all go through.
+   *
+   * Membership is decided by what a *deferral* would cost, not by how often the tool is called. The
+   * `calls` column is the benchmark's own count over 30 runs (bunny), so the two can be read against
+   * each other: the tools with real traffic are in here for the obvious reason, and the ones at zero
+   * are here because a saved schema would buy a wasted turn on their first use.
+   *
+   * ```
+   *   tool          calls   why it is here
+   *   bash            284   the run loop
+   *   read            136   the read loop
+   *   write            66   the edit loop
+   *   edit             57   the edit loop
+   *   tree             16   orientation, and `explore`/`planner` name it
+   *   monitor          14   half the process work
+   *   multiedit         8   batch edits in one turn
+   *   todowrite         7   tracking long work
+   *   grep              5   search
+   *   glob              3   search
+   *   --- zero calls in 30 runs, kept on judgement, not on data ---
+   *   task              0   a subagent that has to search for the tool that spawns subagents pays a
+   *                         turn on every spawn; it is also the only way to reach the tools above
+   *   webfetch          0   `beast.txt` and `copilot-gpt-5.txt` name it a dozen times per task
+   *   apply_patch       -   the registry already picks it over `edit`/`write` on some models
+   *   question          -   client-gated, as before
+   *   todoread          0   `todowrite` writes todos nothing can read back
+   *   skill             0   the slash-command path
+   *   plan_enter/exit   0   the plan mode, paired with `question`
+   *   invalid           -   where a malformed call lands; keeps the repair hook reachable
+   *   search_tools      -   the way to the rest
+   *   call_tool         -   how the rest is run
+   * ```
+   *
+   * The six zero-call entries are the ones worth revisiting once there is a measurement: each is a
+   * self-contained string, and moving one down costs one turn to whoever needs it.
+   */
+  export const CORE = new Set([
     "apply_patch",
     "bash",
+    "call_tool",
+    "edit",
     "glob",
     "grep",
-    "task",
-    "todowrite",
-    "todoread",
+    "invalid",
     "lsp",
-    "artifact",
-    "skill",
-    "question",
-    "search_tools",
     "monitor",
-    "delegation",
+    "multiedit",
     "plan_enter",
     "plan_exit",
-    "create_goal",
-    "get_goal",
-    "update_goal",
-    "advisor",
-    "batch",
+    "question",
+    "read",
+    "search_tools",
+    "skill",
+    "task",
+    "todoread",
+    "todowrite",
+    "tree",
+    "webfetch",
+    "write",
   ])
+
+  /**
+   * Whether the deferral split applies at all.
+   *
+   * The default is on: a flag that only lives in a benchmark config would mean
+   * the benchmark never measures nikcli as distributed. `false` restores the
+   * pre-split behaviour — every registered tool in the schema.
+   */
+  let deferralEnabled = true
+
+  export function setDeferralEnabled(value: boolean) {
+    deferralEnabled = value
+  }
+
+  export function deferralOn() {
+    return deferralEnabled
+  }
+
+  /** Whether this tool is registered but kept out of the model's schema. */
+  export function deferred(id: string): boolean {
+    return deferralEnabled && DEFERRED.has(id)
+  }
+
+  /**
+   * Whether a tool waits to be switched on rather than shipping by default.
+   * Both opt-in and deferred tools read their `disabledTools` entry the same
+   * way; they differ only in who is allowed to write it.
+   */
+  export function optional(id: string): boolean {
+    return OPT_IN.has(id) || deferred(id)
+  }
 
   /**
    * Whether the ruleset hands the agent a curated toolset: anything it does not
@@ -157,46 +261,53 @@ export namespace ToolRegistry {
    * How a registry tool reaches the model:
    *
    * - `active` — schema in every request;
-   * - `deferred` — callable, and listed by `search_tools`, but its schema is
-   *   left out of the request until it is loaded;
+   * - `deferred` — registered and reachable through `search_tools` + `call_tool`, but its schema is
+   *   never in the request, so the tool list is the same bytes for the whole session;
    * - `hidden` — not offered at all.
+   *
+   * Upstream's `deferred` loads a tool into the schema mid-session once `search_tools` or a direct
+   * call asks for it. Here it never does: adding a tool to the array (or shrinking the index in
+   * `search_tools`) rewrites the first block of the provider prompt, so every later step would
+   * re-read the whole conversation uncached. The only way a deferred tool joins the schema is the
+   * user's own switch (`/usage` writes `disabledTools[id] = false`) or `config.tool.eager`, both of
+   * which are decided before the session's first request or by a person.
    */
   export type Exposure = "active" | "deferred" | "hidden"
 
   /**
-   * Where a registry tool stands for one session, on top of the
-   * model/agent/flag filters {@link Interface.tools} already applies.
+   * Where a registry tool stands for one session, on top of the model/agent/flag filters
+   * {@link Interface.tools} already applies.
    *
-   * `session.disabledTools` is tri-state: `true` is the user switching a tool
-   * off, `false` is a deferred tool that has been loaded — by `search_tools`,
-   * by a direct call, or by the `/usage` toggle — and an absent entry is the
-   * default for the tool.
-   *
-   * Shared on purpose. `resolveTools` uses it to build the toolset the model
-   * receives, `search_tools` to build the catalog it offers and `/usage` to
-   * report what is in context; if they drifted, `search_tools` would offer a
-   * tool the session will not run.
+   * Shared on purpose: `resolveTools` builds the model's toolset from it, `search_tools` its catalog
+   * and `/usage` its report. `session.disabledTools` is `true` for a tool the user switched off and
+   * `false` for one they switched on (the only way in for an opt-in tool).
    */
   export function exposure(
     id: string,
     input: {
       disabledTools?: Record<string, boolean>
       ruleset: PermissionRuleset.Ruleset
-      /** `config.tool.eager`: ids or wildcards loaded from the first request. */
+      /** `config.tool.eager`: ids or wildcards sent with their schema from the first request. */
       eager?: readonly string[]
     },
   ): Exposure {
     if (!visible(id, input)) return "hidden"
-    if (CORE.has(id)) return "active"
-    if (input.disabledTools?.[id] === false) return "active"
+    const on = input.disabledTools?.[id] === false
+    // Waits for a human, whatever a keyword search or an agent's rules say.
+    if (OPT_IN.has(id)) return on ? "active" : "hidden"
+    if (!deferred(id)) return "active"
+    if (on) return "active"
     if (input.eager?.some((pattern) => Wildcard.match(id, pattern))) return "active"
-    if (curated(input.ruleset)) return "active"
+    // An agent that named a deferred tool in its own permission rules has already asked for it:
+    // `explore` allows `webfetch` and `planner` allows `tree`, and deferring those would start each
+    // subagent without the tool its prompt tells it to use.
+    if (curated(input.ruleset) || PermissionRuleset.requested([id], input.ruleset).has(id)) return "active"
     return "deferred"
   }
 
   /**
-   * Whether the session can use a tool at all — the switch MCP and connector
-   * tools go through, and the `hidden` half of {@link exposure}.
+   * Whether the session can use a tool at all — the switch MCP and connector tools go through, the
+   * `hidden` half of {@link exposure}, and what `call_tool` checks before it runs a deferred tool.
    */
   export function visible(
     id: string,
@@ -472,6 +583,9 @@ export namespace ToolRegistry {
         const registered = yield* InstanceState.get(runtime).pipe(Effect.map((x) => x.entries))
         const ctx = yield* InstanceState.context
         const config = yield* Effect.promise(() => configGet(ctx))
+        // Default on; `experimental.deferredTools: false` (or `tool.eager: ["*"]`) is the escape hatch back to
+        // "every registered tool in the schema".
+        setDeferralEnabled(config.experimental?.deferredTools !== false)
 
         return lastWins([
           InvalidTool,
@@ -522,6 +636,7 @@ export namespace ToolRegistry {
           AdvisorTool,
           DelegatorTool,
           SearchToolsTool,
+          CallToolTool,
           // exec_code (NativeExecutor, unconfined) is deprecated in favor of code_mode.
           ...(Flag.NIKCLI_EXPERIMENTAL_CODE_MODE ? [CodeModeTool] : []),
           ...(Flag.NIKCLI_EXPERIMENTAL_BROWSER_CONTROL_TOOL ? [BrowserControlTool] : []),
