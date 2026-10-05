@@ -1171,6 +1171,19 @@ describe("S8: i colori delle Impostazioni vengono dal tema", () => {
   })
 })
 
+describe("S8: a finestra stretta le schede vanno a capo", () => {
+  test("nessuna scheda tagliata sotto una barra di scorrimento: la riga si spezza in due", () => {
+    const decls: Record<string, string> = {}
+    narrowMedia().walkRules('[data-slot="settings-tabs"]', (rule) => {
+      rule.walkDecls((d) => {
+        decls[d.prop] = d.value
+      })
+    })
+    expect(decls["flex-wrap"]).toBe("wrap")
+    expect(decls["overflow-x"]).toBe("visible")
+  })
+})
+
 describe("S7: la barra di stato della voce resta in vista", () => {
   test("è appiccicata in cima al corpo, sopra le righe che scorrono, con lo sfondo dell'area", () => {
     const parsed = postcss.parse(readFileSync(join(import.meta.dir, "shell.css"), "utf-8"))
