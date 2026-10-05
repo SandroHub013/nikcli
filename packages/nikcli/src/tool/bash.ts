@@ -19,7 +19,7 @@ import { BashArity } from "@/permission/arity"
 import { splitShellStatements } from "@/permission/shell-split"
 import { Truncate } from "./truncation"
 import { Plugin } from "@/plugin"
-import { InstanceState, runPromiseWithLayer, withCurrentInstance } from "@/effect"
+import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
 
 export const MAX_METADATA_LENGTH = 30_000
 export const MAX_OUTPUT_LENGTH = 5 * 1024 * 1024
@@ -480,18 +480,16 @@ const parser = lazyAsync(async () => {
   return p
 })
 
-export const BashTool = Tool.define("bash", async (initCtx?: Tool.InitContext) => {
-  // The description names the default working directory, so the definition
-  // itself depends on the project. The registry passes the instance in; the
-  // fallback is the one named boundary read this module keeps, for the ad hoc
-  // `init()` calls that carry no context.
-  const instance = initCtx?.instance ?? InstanceState.ambient()
+export const BashTool = Tool.define("bash", async () => {
+  // The description used to name the default working directory, which made the schema of the
+  // second tool in the list differ between sessions and cut the provider's cache prefix at ~2k
+  // characters. The directory is now carried by the per-session `<env>` block instead, so this
+  // description is the same string in every session on the machine.
   return {
     // The model otherwise guesses the shell dialect from the OS, which is wrong whenever the
     // resolved shell is not the platform default (zsh vs bash on macOS, Git Bash or PowerShell on
     // Windows) — and a command in the wrong dialect fails for reasons the model cannot see.
-    description: DESCRIPTION.replaceAll("${directory}", instance.directory)
-      .replaceAll("${platform}", PLATFORM_LABEL)
+    description: DESCRIPTION.replaceAll("${platform}", PLATFORM_LABEL)
       .replaceAll("${shell}", Shell.describe())
       .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
       .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
@@ -504,7 +502,7 @@ export const BashTool = Tool.define("bash", async (initCtx?: Tool.InitContext) =
           description: "Optional timeout in milliseconds",
         }),
         workdir: Schema.optional(Schema.String).annotate({
-          description: `The working directory to run the command in. Defaults to ${instance.directory}. Use this instead of 'cd' commands.`,
+          description: `The working directory to run the command in. Defaults to the working directory in <env>. Use this instead of 'cd' commands.`,
         }),
         // Opencode #26419: local OpenAI-compatible backends (llama.cpp, LM Studio,
         // LiteLLM) sometimes omit `description`. Make it optional and synthesize a

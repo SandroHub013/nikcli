@@ -101,8 +101,15 @@ export namespace SessionRetry {
       if (json.type === "error" && json.error?.type === "too_many_requests") {
         return "Too Many Requests"
       }
-      if (json.code?.includes("exhausted") || json.code?.includes("unavailable")) {
+      if (typeof json.code === "string" && (json.code.includes("exhausted") || json.code.includes("unavailable"))) {
         return "Provider is overloaded"
+      }
+      // OpenRouter reports an upstream failure inside a stream that already
+      // answered 200, as {code: 502, message, metadata: {error_type}}, so the
+      // HTTP status never says 5xx. A numeric code used to reach the string
+      // check above and throw, which made the error look fatal.
+      if ((typeof json.code === "number" && json.code >= 500) || json.metadata?.error_type === "provider_unavailable") {
+        return "Provider Server Error"
       }
       if (json.type === "error" && json.error?.code?.includes("rate_limit")) {
         return "Rate Limited"

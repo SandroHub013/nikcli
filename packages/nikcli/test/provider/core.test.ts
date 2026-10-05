@@ -377,12 +377,31 @@ describe("ProviderTransform", () => {
     expect(o2["store"]).toBe(false)
   })
 
-  it("options sets promptCacheKey for openai and session id", () => {
-    const o = ProviderTransform.options({
-      model: makeModel({ providerID: "openai" }),
-      sessionID: "sess-abc",
-    })
-    expect(o["promptCacheKey"]).toBe("sess-abc")
+  it("options gives openai, azure and openrouter one cache key across sessions", () => {
+    const keys = (model: ReturnType<typeof makeModel>, field: string) =>
+      ["sess-abc", "sess-def"].map((sessionID) => ProviderTransform.options({ model, sessionID })[field])
+
+    const openai = makeModel({ providerID: "openai" })
+    expect(keys(openai, "promptCacheKey")).toEqual([
+      ProviderTransform.stableCacheKey(openai),
+      ProviderTransform.stableCacheKey(openai),
+    ])
+
+    const azure = makeModel({ providerID: "azure", api: { id: "gpt-4.1", url: "u", npm: "@ai-sdk/azure" } })
+    const [a1, a2] = keys(azure, "promptCacheKey")
+    expect(a1).toBe(a2)
+    expect(a1).not.toContain("sess-")
+
+    const openrouter = makeModel({ providerID: "openrouter" })
+    const [r1, r2] = keys(openrouter, "prompt_cache_key")
+    expect(r1).toBe(r2)
+    expect(r1).not.toContain("sess-")
+  })
+
+  it("options keys the cache by model, so two models never share a key", () => {
+    const a = ProviderTransform.options({ model: makeModel({ providerID: "openai", id: "gpt-a" }), sessionID: "s" })
+    const b = ProviderTransform.options({ model: makeModel({ providerID: "openai", id: "gpt-b" }), sessionID: "s" })
+    expect(a["promptCacheKey"]).not.toBe(b["promptCacheKey"])
   })
 
   it("schema converts integer enums to strings for google models", () => {

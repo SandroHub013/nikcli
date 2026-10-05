@@ -124,6 +124,24 @@ describe("SessionRetry", () => {
       expect(SessionRetry.retryable(plain as never)).toBe("Provider is overloaded")
     })
 
+    it("retries an OpenRouter upstream failure reported inside a 200 stream", () => {
+      const streamError = {
+        code: 502,
+        message: "Provider returned an empty response",
+        metadata: { error_type: "provider_unavailable" },
+      }
+      const error = MessageV2.fromError(streamError, { providerID: "openrouter" })
+      expect(error.name).toBe("UnknownError")
+      // SAFETY: fromError's union includes the UnknownError shape retryable reads.
+      expect(SessionRetry.retryable(error as never)).toBe("Provider Server Error")
+    })
+
+    it("does not retry a numeric 4xx code in a stream error", () => {
+      const error = MessageV2.fromError({ code: 400, message: "bad request" }, { providerID: "openrouter" })
+      // SAFETY: as above.
+      expect(SessionRetry.retryable(error as never)).toBeUndefined()
+    })
+
     it("retries NVIDIA worker local request limit plain-text errors", () => {
       const err = apiError({
         message: "Worker local total request limit reached (100)",

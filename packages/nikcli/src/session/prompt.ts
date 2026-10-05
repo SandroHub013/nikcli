@@ -1325,6 +1325,13 @@ export namespace SessionPrompt {
         sessionID,
         system,
         messages: [
+          // Per-session context first, so the system prompt and the tool schemas ahead of it stay
+          // byte-identical between sessions: that is the prefix a provider can serve from cache
+          // when a new session starts while the cache from the previous one is still warm.
+          ...assembled.sessionMessages.map((content) => ({
+            role: "user" as const,
+            content,
+          })),
           ...assembled.skillMessages.map((content) => ({
             role: "user" as const,
             content,

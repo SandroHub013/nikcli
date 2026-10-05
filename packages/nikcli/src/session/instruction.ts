@@ -13,12 +13,18 @@ import type { MessageV2 } from "./message-v2"
 export const INSTRUCTION_HASH_RE = /^[0-9a-f]{64}$/
 export const INSTRUCTION_REMOVED = "removed" as const
 
-export type InstructionKind = "file" | "url" | "env" | "profile" | "skill"
+export type InstructionKind = "file" | "url" | "env" | "env-session" | "profile" | "skill"
 
 export type InstructionBlobBody =
   | { kind: "file"; text: string }
   | { kind: "url"; text: string }
   | { kind: "env"; parts: string[] }
+  /**
+   * The environment block that depends on the session. Kept out of the system prompt and sent once,
+   * ahead of the conversation, so the static prefix ahead of it can be served from the provider's
+   * cache when a new session starts while that cache is still warm.
+   */
+  | { kind: "env-session"; parts: string[] }
   | { kind: "profile"; parts: string[] }
   | { kind: "skill"; name: string; text: string }
 
@@ -31,12 +37,14 @@ export const InstructionKey = {
   file: (filepath: string) => `file:${path.resolve(filepath)}`,
   url: (url: string) => `url:${url}`,
   env: "env",
+  envSession: "env-session",
   profile: "profile",
   skill: (name: string) => `skill:${name}`,
 } as const
 
 export function parseInstructionKey(key: string): { kind: InstructionKind; id: string } | undefined {
   if (key === "env") return { kind: "env", id: "" }
+  if (key === "env-session") return { kind: "env-session", id: "" }
   if (key === "profile") return { kind: "profile", id: "" }
   if (key.startsWith("file:")) return { kind: "file", id: key.slice(5) }
   if (key.startsWith("url:")) return { kind: "url", id: key.slice(4) }

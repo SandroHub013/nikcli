@@ -10,6 +10,7 @@ import { Command } from "@/command"
 import { EOL } from "os"
 import { pathToFileURL } from "url"
 import { isHeadless, resolvePermissionPrompt } from "@/cli/headless"
+import { armExitWatchdog } from "@/cli/exit-watchdog"
 import { createNikcliClient, type Event as SdkEvent, type NikcliClient } from "@nikcli-ai/sdk/httpapi"
 import { Server } from "@/server/server"
 import { Provider } from "@/provider/provider"
@@ -746,6 +747,14 @@ export async function runWithArgs(args: any): Promise<void> {
     // The envelope is for embedded callers; here it is always `{}` or
     // unreachable. Matches the sibling call site below.
     await execute(sdk, sessionID)
+    // The work is done and `bootstrap`'s `finally` has disposed the instance, so the
+    // process should now fall off the end of the event loop. Arm the watchdog *after*
+    // that, so its timer only exists once there is nothing left to do, and `unref()` it
+    // so a clean exit never waits on it. It fires only if something is still holding
+    // the loop open — which is the one failure the benchmark could not otherwise
+    // diagnose, because the process was killed before it could say anything.
+    // Not the TUI: this is the `run` command, and the timer is inert there.
+    armExitWatchdog()
     return
   }
 
@@ -809,6 +818,7 @@ export async function runWithArgs(args: any): Promise<void> {
     }
 
     await execute(sdk, sessionID)
+    armExitWatchdog()
   })
 }
 

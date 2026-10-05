@@ -1228,6 +1228,18 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   return {}
 }
 
+/**
+ * OpenAI routes a request by its prompt_cache_key together with the prefix, so
+ * a key per session sends every new session to a machine that has never seen
+ * the system prompt and tools: measured on openai/gpt-6-luna through
+ * OpenRouter, the first turn of a new session was never cached (0 of 5,713
+ * tokens) with a per-session key, and cached 5,710 of 5,713 with a stable one.
+ * The prefix still decides what is shared, so one key per model is enough.
+ */
+export function stableCacheKey(model: Provider.Model): string {
+  return `nikcli:${model.providerID}/${model.id}`
+}
+
 export function options(input: {
   model: Provider.Model
   sessionID: string
@@ -1253,7 +1265,7 @@ export function options(input: {
 
   if (input.model.api.npm === "@ai-sdk/azure") {
     result["store"] = false
-    result["promptCacheKey"] = input.sessionID
+    result["promptCacheKey"] = stableCacheKey(input.model)
   }
 
   if (input.model.api.npm === "@openrouter/ai-sdk-provider" || input.model.api.npm === "@llmgateway/ai-sdk-provider") {
@@ -1283,7 +1295,7 @@ export function options(input: {
   }
 
   if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
-    result["promptCacheKey"] = input.sessionID
+    result["promptCacheKey"] = stableCacheKey(input.model)
   }
 
   if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
@@ -1380,7 +1392,7 @@ export function options(input: {
   }
 
   if (input.model.providerID === "openrouter") {
-    result["prompt_cache_key"] = input.sessionID
+    result["prompt_cache_key"] = stableCacheKey(input.model)
   }
   if (input.model.api.npm === "@ai-sdk/gateway") {
     result["gateway"] = {
