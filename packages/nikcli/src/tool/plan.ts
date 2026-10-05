@@ -3,6 +3,7 @@ import { zod } from "@nikcli-ai/util/effect-zod"
 import path from "path"
 import { Tool } from "./tool"
 import { Question } from "../question"
+import { isQuestionForbidden } from "./question"
 import { Session } from "../session"
 import { sessionModel } from "@/session/model"
 import { MessageV2 } from "../session/message-v2"
@@ -32,10 +33,21 @@ function runSession<A, E>(effect: Effect.Effect<A, E, Session.Service>) {
   return runPromiseWithLayer(Session.defaultLayer, withCurrentInstance(effect))
 }
 
+function unattended(kind: "enter" | "exit") {
+  return {
+    title: "Mode switch not made",
+    output: `No user is available to approve ${kind === "enter" ? "entering" : "leaving"} plan mode in this session, so the agent was not changed. Continue in the current agent and finish the task.`,
+    metadata: {},
+  }
+}
+
 export const PlanExitTool = Tool.define("plan_exit", {
   description: EXIT_DESCRIPTION,
   parameters: zod(Schema.Struct({})),
   async execute(_params, ctx) {
+    // Approval goes through `question`, so a session that forbids it (`nikcli run`) has no one to
+    // approve: say so at once instead of parking for the 600s tool timeout.
+    if (await isQuestionForbidden(ctx.sessionID)) return unattended("exit")
     const plan = await runSession(
       Effect.gen(function* () {
         const session = yield* Session.Service
@@ -101,6 +113,9 @@ export const PlanEnterTool = Tool.define("plan_enter", {
   description: ENTER_DESCRIPTION,
   parameters: zod(Schema.Struct({})),
   async execute(_params, ctx) {
+    // Approval goes through `question`, so a session that forbids it (`nikcli run`) has no one to
+    // approve: say so at once instead of parking for the 600s tool timeout.
+    if (await isQuestionForbidden(ctx.sessionID)) return unattended("enter")
     const plan = await runSession(
       Effect.gen(function* () {
         const session = yield* Session.Service

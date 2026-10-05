@@ -30,6 +30,15 @@ import z from "zod"
 
 export const log = Log.create({ service: "run-command" })
 
+// `run` has no one at the other end: tools that stop to ask a human (`question`, and the
+// plan-mode switches, which confirm through it) are denied for every pattern so they never
+// reach the model's schema. Shared by the local and `--attach` session creation.
+export const HEADLESS_PERMISSION = ["question", "plan_enter", "plan_exit"].map((permission) => ({
+  permission,
+  action: "deny" as const,
+  pattern: "*",
+}))
+
 export const TOOL = new Map<string, [string, string]>(
   Object.entries({
     todowrite: ["Todo", UI.Style.TEXT_WARNING_BOLD],
@@ -711,26 +720,7 @@ export async function runWithArgs(args: any): Promise<void> {
           : undefined
 
       const result = await sdk.session.create(
-        title
-          ? {
-              title,
-              permission: [
-                {
-                  permission: "question",
-                  action: "deny",
-                  pattern: "*",
-                },
-              ],
-            }
-          : {
-              permission: [
-                {
-                  permission: "question",
-                  action: "deny",
-                  pattern: "*",
-                },
-              ],
-            },
+        title ? { title, permission: HEADLESS_PERMISSION } : { permission: HEADLESS_PERMISSION },
       )
       return result.data?.id
     })()
@@ -794,7 +784,11 @@ export async function runWithArgs(args: any): Promise<void> {
             : args.title
           : undefined
 
-      const result = await sdk.session.create(title ? { title } : {})
+      // Same rule as the --attach branch: without it the local session carries no permission at
+      // all, so the tools stay in the model's schema and a call parks for the 600s tool timeout.
+      const result = await sdk.session.create(
+        title ? { title, permission: HEADLESS_PERMISSION } : { permission: HEADLESS_PERMISSION },
+      )
       return result.data?.id
     })()
 

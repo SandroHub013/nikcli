@@ -29,6 +29,8 @@ const Parameters = Schema.Struct({
 
 // True when the session's own rules deny `question` for every pattern. A session that cannot
 // be read (or has no rules) is not forbidden: the tool behaves as it always did.
+export async function isQuestionForbidden(sessionID: string) {
+  try {
     const info = await runPromiseWithLayer(
       Session.defaultLayer,
       withCurrentInstance(Effect.flatMap(Session.Service, (session) => session.get(sessionID))),
@@ -46,6 +48,8 @@ export const QuestionTool = Tool.define("question", {
     // The session can forbid `question` outright (`nikcli run` does: nobody is there to answer).
     // The tool is normally hidden from the model then; if a call still gets here, answering
     // "no one can reply" now beats parking for the 600s tool timeout.
+    if (await isQuestionForbidden(ctx.sessionID)) {
+      return {
         title: "Question not asked",
         output:
           "No user is available to answer questions in this session, so nothing was asked. Decide on your own with the best-supported assumption, state it briefly, and continue the task.",
