@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { IMPOSTOR_BEYOND, SLOW_BEYOND, SLOW_POSE_MS, detailAt, poseDue, shopInRange } from "./lod"
-import { IMMOBILE_AFTER_MS, POSITION_EVERY_MS, SLOW_FRAME_MS, SLOW_SECONDS, SLOW_SHARE, VSYNC_60_MS, SOFTWARE_IMMOBILE_AFTER_MS, STILL_INTERVAL_MS, createSlowWatch, drawMode, pace, shouldSavePosition } from "./schedule"
+import { IMMOBILE_AFTER_MS, POSITION_EVERY_MS, SLOW_FORGET_AFTER_MS, SLOW_FRAME_MS, SLOW_SECONDS, SLOW_SHARE, VSYNC_60_MS, SOFTWARE_IMMOBILE_AFTER_MS, STILL_INTERVAL_MS, createSlowWatch, drawMode, pace, shouldSavePosition } from "./schedule"
 
 describe("the three ways to draw", () => {
   test("moving draws every frame; standing with the hologram turning draws 15 a second; quiet for ten seconds draws nothing", () => {
@@ -152,6 +152,23 @@ describe("a machine that cannot keep up with 60 frames a second", () => {
     for (let i = 0; i < 3; i++) expect(second(watch, 5)).toBe(false)
     expect(second(watch, 5)).toBe(true)
     expect(watch.state()).toEqual({ seconds: SLOW_SECONDS, share: expect.any(Number), said: true })
+  })
+
+  test("a pause of more than a minute forgets the seconds before it; a short one does not", () => {
+    let clock = 0
+    const watch = createSlowWatch(() => clock)
+    for (let i = 0; i < SLOW_SECONDS - 1; i++) expect(second(watch, 5)).toBe(false)
+    watch.pause()
+    clock += SLOW_FORGET_AFTER_MS + 1
+    watch.pause() // the still frames of the pause do not move its start
+    expect(second(watch, 5)).toBe(false)
+    expect(watch.state().seconds).toBe(1)
+    // Nine more slow seconds fill the new window; a short pause in the middle keeps it.
+    for (let i = 0; i < 4; i++) expect(second(watch, 5)).toBe(false)
+    watch.pause()
+    clock += SLOW_FORGET_AFTER_MS
+    for (let i = 0; i < 4; i++) expect(second(watch, 5)).toBe(false)
+    expect(second(watch, 5)).toBe(true)
   })
 
   test("a few slow frames (a hitch, 2 in a second) for ten seconds are not slow; the window slides", () => {

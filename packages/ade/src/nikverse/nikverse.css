@@ -79,7 +79,7 @@
   background: var(--ade-sunken, canvas);
   color: var(--ade-text, currentColor);
   border: 1px solid var(--ade-line, currentColor);
-  border-radius: var(--ade-radius-md);
+  border-radius: var(--ade-radius-md, 8px);
 }
 
 [data-slot="nikverse-late"] p {
@@ -88,19 +88,19 @@
 }
 
 [data-slot="nikverse-late"] button {
-  padding: var(--ade-space-2, 4px) var(--ade-space-5, 12px);
-  border-radius: var(--ade-radius-sm);
+  padding: var(--ade-space-2, 4px) var(--ade-space-5, 10px);
+  border-radius: var(--ade-radius-sm, 5px);
   font-size: var(--ade-font-xs);
   font-weight: var(--ade-weight-medium);
-  background: var(--ade-active);
-  color: var(--ade-text);
-  border: 1px solid var(--ade-border);
+  background: var(--ade-active, transparent);
+  color: var(--ade-text, currentColor);
+  border: 1px solid var(--ade-border, currentColor);
   cursor: pointer;
 }
 
 [data-slot="nikverse-late"] button:hover {
-  background: var(--ade-hover);
-  border-color: var(--ade-text-weak);
+  background: var(--ade-hover, transparent);
+  border-color: var(--ade-text-weak, currentColor);
 }
 
 [data-slot="nikverse-ask"] {

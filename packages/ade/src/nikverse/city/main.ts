@@ -276,7 +276,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   // Only a 60 fps level the machine chose by itself is watched: not a level asked for by name, not the bench's.
   // Not where the bench's door is open either (the gate measures what it asked for), unless a trial asks for it.
   const slowWatch =
-    deps.onSlow && level.fps === MAX_FPS && !isLevelId(deps.quality) && (!deps.measuring || deps.tune?.slowWatch) ? createSlowWatch() : undefined
+    deps.onSlow && level.fps === MAX_FPS && !isLevelId(deps.quality) && (!deps.measuring || deps.tune?.slowWatch) ? createSlowWatch(() => win.performance.now()) : undefined
   /** The last display frame of the moving mode, and the shortest gap seen between two: the display's vsync. */
   let lastMovingFrame = 0
   let vsyncMs = Number.POSITIVE_INFINITY

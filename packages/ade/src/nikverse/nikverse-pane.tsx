@@ -20,8 +20,8 @@ import { t } from "../i18n"
  * picture. Anything that changes something asks in this panel's own DOM, never
  * in the frame.
  *
- * A `.tsx`, so its wiring is not reachable from `bun test`; what it decides is
- * in `protocol.ts`, `link.ts`, `snapshot.ts` and `lifecycle.ts`, which are.
+ * What it decides is in `protocol.ts`, `link.ts`, `snapshot.ts`, `lifecycle.ts`
+ * and `opening.ts`; the wiring is mounted in `nikverse-pane.test.ts` (`compileSolidJsx`).
  */
 /** ADE's own storage, when there is one to use (it may be missing or throw). */
 function spotStorage(): SpotStorage | undefined {
