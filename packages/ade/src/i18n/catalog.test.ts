@@ -30,6 +30,7 @@ const SAME_IN_BOTH = new Set<string>([
   "vui.hud.no",
   "pane.video.title",
   "vui.audio.title",
+  "settings.tab.voiceDevices",
   "browser.owner.ready",
   "bots.card.file",
   "bots.form.persona",

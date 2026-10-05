@@ -4,6 +4,7 @@ import { providerState, type ProviderState } from "../bots/providers"
 import { RUNNERS, runnerAccount, type Runner } from "../bots/runners"
 import { listBots, resolveRoots } from "../bots/store"
 import { MAX_PARALLEL_TURNS } from "../bots/terms"
+import { QUALITY_LEVELS, qualityLevel, sizePerMinute, type RecordQuality } from "../record/recording"
 import { LOCALE_PREFERENCES, locale, localePreference, setLocalePreference, t, type LocalePreference } from "../i18n"
 import { DEFAULT_GLASS_OPACITY, GLASS_READABLE_MIN, THEME_CHOICES, isGlassReadable, type Theme } from "../theme"
 import type { GlassStatus } from "../surface/glass-window"
@@ -12,17 +13,11 @@ import "./sections.css"
 /**
  * ADE's own screens inside the settings panel.
  *
- * The panel itself is `VoiceSettingsPanel`, which owns the shell, the rail
- * and the modal chrome. It began as the voice panel and grew a slot for the
- * host's screens; these are those screens. The voice sections keep their own
- * heading in the rail, so "Voce" reads as one part of the list rather than
- * as the list with six strangers appended.
- *
- * Two of these are real and four are not yet, and the ones that are not say
- * so in as many words. A settings screen that shows plausible-looking
- * controls doing nothing is worse than an empty one: the user changes a
- * setting, nothing happens, and they have no way to tell whether the feature
- * is broken or absent.
+ * The panel itself is `SettingsShell`, which owns the categories, the tabs
+ * and the modal chrome; these are the contents of the tabs. Each screen names
+ * itself in prose under `section-desc` only: the shell's header already shows
+ * the category and the tab bar the tab, and a third heading inside the body
+ * ("Tema" under "Aspetto") was one more name for the same screen.
  */
 
 /**
@@ -46,17 +41,6 @@ export function NotBuiltYet(props: { title: string; what: string; instead?: stri
         <Show when={props.instead}>{(instead) => <> {instead()}</>}</Show>
       </p>
     </>
-  )
-}
-
-/** Automations: a thing ADE runs on its own, on a schedule or on an event. */
-export function RoutineSection() {
-  return (
-    <NotBuiltYet
-      title={t("settings.routine")}
-      what={t("settings.routine.desc")}
-      instead={t("settings.routine.instead")}
-    />
   )
 }
 
@@ -209,9 +193,6 @@ export function ThemeSection(props: ThemeSectionProps) {
   return (
     <>
       <div data-slot="section-head">
-        <h3 data-slot="section-title" tabIndex={-1}>
-          {t("settings.theme.title")}
-        </h3>
         <p data-slot="section-desc">{t("settings.theme.desc")}</p>
       </div>
 
@@ -302,9 +283,6 @@ export function LanguageSection(props: LanguageSectionProps) {
   return (
     <>
       <div data-slot="section-head">
-        <h3 data-slot="section-title" tabIndex={-1}>
-          {t("settings.language.title")}
-        </h3>
         <p data-slot="section-desc">{t("settings.language.desc")}</p>
       </div>
 
@@ -352,9 +330,6 @@ export function GridSection(props: GridSectionProps) {
   return (
     <>
       <div data-slot="section-head">
-        <h3 data-slot="section-title" tabIndex={-1}>
-          {t("settings.grid.title")}
-        </h3>
         <p data-slot="section-desc">{t("settings.grid.desc")}</p>
       </div>
 
@@ -472,4 +447,161 @@ export function ProviderSection(props: ProviderSectionProps) {
 /** Servers ADE would speak the Model Context Protocol to. */
 export function McpSection() {
   return <NotBuiltYet title="MCP" what={t("settings.mcp.desc")} instead={t("settings.mcp.instead")} />
+}
+
+export interface RecordVideoSectionProps {
+  /** What the workbench will record at, read live. */
+  quality: () => RecordQuality
+  /** The same write the `record.quality` command performs. */
+  onQuality: (next: RecordQuality) => void
+  /** Whether takes start with the microphone on (`record.mic`). */
+  mic: () => boolean
+  onMic: (next: boolean) => void
+  /** The folder takes are saved to, or `undefined` until one is chosen. */
+  dir: () => string | undefined
+  /** The same dialog `record.folder` opens. */
+  onPickFolder: () => void
+  /** The same export `record.export` runs. */
+  onExport: () => void
+}
+
+/**
+ * Registrazione › Registrazione video: quality, microphone, folder, export.
+ *
+ * Every control hands its choice straight to the workbench functions the
+ * palette commands call, so the two entrances are one setting, not two that
+ * can drift; the current value is read live, and nothing is stored here.
+ */
+export function RecordVideoSection(props: RecordVideoSectionProps) {
+  return (
+    <>
+      <div data-slot="section-head">
+        <p data-slot="section-desc">{t("settings.category.record.desc")}</p>
+      </div>
+
+      <div data-slot="settings-choices" role="group" aria-label={t("settings.record.quality")}>
+        <For each={QUALITY_LEVELS}>
+          {(level) => (
+            <button
+              type="button"
+              data-slot="settings-choice"
+              data-quality={level.id}
+              data-active={props.quality() === level.id ? "true" : undefined}
+              aria-pressed={props.quality() === level.id}
+              onClick={() => props.onQuality(level.id)}
+            >
+              {level.label}
+            </button>
+          )}
+        </For>
+      </div>
+      <p data-slot="settings-meta">{sizePerMinute(qualityLevel(props.quality()))}</p>
+
+      <div data-slot="settings-choices" role="group" aria-label={t("settings.record.mic")}>
+        <button
+          type="button"
+          data-slot="settings-choice"
+          data-mic="on"
+          data-active={props.mic() ? "true" : undefined}
+          aria-pressed={props.mic()}
+          onClick={() => props.onMic(true)}
+        >
+          {t("settings.record.mic.on")}
+        </button>
+        <button
+          type="button"
+          data-slot="settings-choice"
+          data-mic="off"
+          data-active={!props.mic() ? "true" : undefined}
+          aria-pressed={!props.mic()}
+          onClick={() => props.onMic(false)}
+        >
+          {t("settings.record.mic.off")}
+        </button>
+      </div>
+
+      <ul data-slot="settings-list">
+        <li data-slot="settings-row">
+          <span data-slot="settings-name">{t("settings.record.folder")}</span>
+          <span data-slot="settings-meta">{props.dir() ?? t("settings.record.folder.none")}</span>
+          <button type="button" data-slot="settings-choice" onClick={() => props.onPickFolder()}>
+            {t("settings.record.folder.choose")}
+          </button>
+        </li>
+      </ul>
+
+      <div data-slot="settings-choices">
+        <button type="button" data-slot="settings-choice" data-action="record.export" onClick={() => props.onExport()}>
+          {t("settings.record.export")}
+        </button>
+      </div>
+      <p data-slot="settings-meta">{t("settings.record.export.desc")}</p>
+    </>
+  )
+}
+
+export interface UpdatesSectionProps {
+  /** The installed version; while it is unknown the row is not drawn. */
+  version?: string
+  /** Whether the check is running, shared with the bell's button. */
+  checking: () => boolean
+  /** The update the last check found, if any. */
+  available: () => { version: string } | undefined
+  /** The same check `update.check` runs. */
+  onCheck: () => void
+  /** Opens the same `UpdateDialog` a release notice opens. */
+  onInstall: () => void
+}
+
+/**
+ * Sistema › Aggiornamenti: the version, the check, and the release found.
+ *
+ * The check and the dialog are the workbench's own — the bell and the
+ * palette reach them from here unchanged, so "Controlla aggiornamenti" can
+ * never mean two different things.
+ */
+export function UpdatesSection(props: UpdatesSectionProps) {
+  return (
+    <>
+      <div data-slot="section-head">
+        <p data-slot="section-desc">{t("settings.updates.desc")}</p>
+      </div>
+
+      <Show when={props.version}>
+        {(version) => (
+          <p data-slot="settings-meta">
+            {t("settings.updates.installed")} ADE {version()}
+          </p>
+        )}
+      </Show>
+
+      <div data-slot="settings-choices">
+        <button
+          type="button"
+          data-slot="settings-choice"
+          data-action="update.check"
+          disabled={props.checking()}
+          onClick={() => props.onCheck()}
+        >
+          {props.checking() ? t("update.checking") : t("palette.update.check")}
+        </button>
+      </div>
+
+      <Show when={props.available()}>
+        {(update) => (
+          <div data-slot="settings-notice" data-state="info" role="status">
+            <span>{t("update.available", update().version)}</span>
+            <button
+              type="button"
+              data-slot="settings-choice"
+              data-action="update.install"
+              onClick={() => props.onInstall()}
+            >
+              {t("update.restart.ok")}
+            </button>
+          </div>
+        )}
+      </Show>
+    </>
+  )
 }

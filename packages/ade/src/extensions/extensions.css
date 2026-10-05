@@ -7,20 +7,6 @@
  * something — a community badge, a warning.
  */
 
-[data-slot="ext-tabs"] {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  margin: var(--ade-space-3) 0 var(--ade-space-4);
-  padding: 2px;
-  width: fit-content;
-  max-width: 100%;
-  border: 1px solid var(--ade-border);
-  border-radius: var(--ade-radius-md);
-  background: var(--ade-raised);
-}
-
-[data-slot="ext-tab"],
 [data-slot="ext-filter"] {
   height: 26px;
   padding: 0 var(--ade-space-4);
@@ -39,16 +25,10 @@
   transform: var(--ade-press);
 }
 
-[data-slot="ext-tab"]:active {
-  transform: var(--ade-press);
-}
-
-[data-slot="ext-tab"]:hover,
 [data-slot="ext-filter"]:hover {
   color: var(--ade-text);
 }
 
-[data-slot="ext-tab"][data-active],
 [data-slot="ext-filter"][data-active] {
   background: var(--ade-surface);
   color: var(--ade-text);

@@ -290,6 +290,12 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       disabledReason: ctx.hasHost ? undefined : t("palette.record.desktopOnly"),
     },
     {
+      id: "settings.open",
+      title: t("palette.settings.open"),
+      group: t("palette.group.view"),
+      keywords: ["impostazioni", "configurazione", "preferenze", "settings", "preferences", "config"],
+    },
+    {
       id: "voice.settings",
       title: t("palette.voice.settings"),
       group: t("palette.group.view"),
