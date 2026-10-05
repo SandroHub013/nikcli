@@ -297,6 +297,21 @@ describe("the 3D city the page starts", () => {
   })
 })
 
+describe("what keeps the loop awake (old PCs, point 4)", () => {
+  test("the bench's door asks the city, on demand; a release build has no such door", async () => {
+    const awake = { mode: "still", animating: true }
+    const handle = { sync() {}, pause() {}, resume() {}, dispose() {}, why: () => awake }
+    const bench = page("?bench=1")
+    boot(bench.win, { loadCity: async () => ({ startCity: async () => handle }) })
+    await settled()
+    expect((bench.win as unknown as { __nikverseWhy(): unknown }).__nikverseWhy()).toEqual(awake)
+    const release = page()
+    boot(release.win, { loadCity: async () => ({ startCity: async () => handle }) })
+    await settled()
+    expect((release.win as unknown as { __nikverseWhy?: unknown }).__nikverseWhy).toBeUndefined()
+  })
+})
+
 describe("the world tells ADE it is on screen (old PCs, points 2 and 3)", () => {
   const opened = (seen: unknown[]) => seen.filter((m) => (m as { type?: string }).type === "opened").length
 

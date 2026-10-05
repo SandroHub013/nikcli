@@ -309,6 +309,8 @@ export function boot(win, options = {}) {
       // Only the bench page and ADE's test build put the timing on the window; a release build has no such door.
       if (query.bench || query.shot) {
         win.__nikverseBench = (frames) => (city?.bench ? city.bench(frames) : Promise.reject(new Error("no bench")))
+        // What keeps the loop awake, for the measures of a world that does not come to rest.
+        win.__nikverseWhy = () => city?.why?.()
       }
       mark("city", "1")
       if (spot) city.restore(spot)

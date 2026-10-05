@@ -96,6 +96,11 @@ export interface CityHandle {
   info(): { backend: Backend; mode: CityDeps["mode"]; level?: LevelId; cast: boolean; kit: boolean }
   /** Draws the current view `frames` times back to back and says how long the GPU took (the gate's and the bench's number). */
   bench?(frames?: number): Promise<GpuTiming>
+  /**
+   * What keeps the loop awake now, read only when asked (the bench's door, `window.__nikverseWhy`): for finding why a
+   * still world does not come to rest (old PCs, point 4). Nothing of it is computed per frame.
+   */
+  why?(): Record<string, unknown>
   dispose(): void
 }
 
@@ -551,6 +556,21 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       wake()
     },
     info: () => ({ backend, mode: deps.mode, level: level.id, cast: cast !== undefined, kit: kit !== undefined }),
+    why: () => ({
+      mode,
+      software,
+      quietMs,
+      sinceActivityMs: Math.round(win.performance.now() - lastActivity),
+      animating: town.animating,
+      dragging,
+      keys: Object.entries(keys)
+        .filter(([, down]) => down)
+        .map(([key]) => key),
+      speed: Math.round(player.speed * 1000) / 1000,
+      sized,
+      eye: eye !== undefined,
+      running,
+    }),
     async bench(frames = 240) {
       if (benching) throw new Error("il banco è già in corso")
       benching = true
