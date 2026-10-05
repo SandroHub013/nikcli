@@ -104,6 +104,12 @@ mod native {
         }
     }
 
+    /// Whether this question's window is recorded as open.
+    #[cfg(test)]
+    pub fn is_recorded(dialog: isize) -> bool {
+        open_list().contains(&dialog)
+    }
+
     /// Forgets a question's window.
     pub fn closed(dialog: isize) {
         open_list().retain(|open| *open != dialog);
@@ -133,7 +139,14 @@ mod native {
     /// after it does.
     pub fn question_of(parent: isize) -> Option<isize> {
         let owner = HWND(parent as *mut core::ffi::c_void);
-        let open = open_list().clone();
+        // A dialog whose destroy notice never came (it was torn down with its window) is dropped here,
+        // so the list does not keep a handle for good, or hand it on to a window that reuses the number.
+        let open = {
+            let mut open = open_list();
+            // SAFETY: a handle in, nothing read; a stale one answers false.
+            open.retain(|dialog| unsafe { IsWindow(Some(HWND(*dialog as *mut core::ffi::c_void))).as_bool() });
+            open.clone()
+        };
         open.into_iter().rev().find(|dialog| {
             let dialog = HWND(*dialog as *mut core::ffi::c_void);
             // SAFETY: both calls take a handle and read no memory of ours; a stale handle makes them fail.
@@ -300,6 +313,22 @@ mod tests {
         native::closed(id(question));
         destroy(first);
         destroy(second);
+    }
+
+    /// B2 of the review: a dialog destroyed with no notice must not stay in the list for good.
+    #[cfg(windows)]
+    #[test]
+    fn a_question_whose_destroy_notice_never_came_is_dropped_from_the_list() {
+        use windows_of_the_test::{destroy, id, make};
+        let owner = make(None);
+        let question = make(Some(owner));
+        native::opened(id(question));
+        assert!(native::is_recorded(id(question)));
+        // Destroyed without `closed`, as when the window goes first.
+        destroy(question);
+        assert_eq!(native::question_of(id(owner)), None);
+        assert!(!native::is_recorded(id(question)), "the stale handle is still recorded");
+        destroy(owner);
     }
 
     #[cfg(windows)]
