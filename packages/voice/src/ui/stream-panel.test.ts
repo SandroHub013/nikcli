@@ -133,3 +133,11 @@ describe("il costo dell'ascolto in Attivazione (review S7, M1)", () => {
     }
   })
 })
+
+test("a cap reached sends listening back to MAI-Transcribe-2: the line says OpenRouter's estimate (review S7b, B1)", () => {
+  const spend = { ...today, calls: 2, cost: 0.01, streamSeconds: 9000, streamCost: 0.5 }
+  expect(listenStreams({ ...base, spend })).toBe(false)
+  expect(listenCostLines({ ...base, spend })[0]).toStartWith("Costo: circa 0,02 $ l'ora")
+  // Raised, the stream carries it again.
+  expect(listenStreams({ ...base, spend, capUsd: 1 })).toBe(true)
+})

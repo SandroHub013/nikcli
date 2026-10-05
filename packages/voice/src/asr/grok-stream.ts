@@ -286,7 +286,6 @@ function pcm16le(samples: Float32Array): Uint8Array {
   return bytes
 }
 
-/** The refusal codes as the local runtime reports them, in its own words. */
 /**
  * What a transport says when the session it was asked to use was cancelled from
  * outside — the xAI key removed while a frame was on its way. Not a network
@@ -294,6 +293,7 @@ function pcm16le(samples: Float32Array): Uint8Array {
  */
 export const STT_STREAM_CANCELLED = "stt_stream cancelled"
 
+/** The refusal codes as the local runtime reports them, in its own words. */
 function reasonOf(message: string): SttStreamReason {
   const m = String(message).toLowerCase()
   if (m.includes(STT_STREAM_CANCELLED)) return "busy"

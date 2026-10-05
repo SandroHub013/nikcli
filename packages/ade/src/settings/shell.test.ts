@@ -1116,6 +1116,34 @@ describe("S7: schede e corpo legati per chi usa uno screen reader", () => {
   })
 })
 
+describe("S8: i colori delle Impostazioni vengono dal tema", () => {
+  test("shell.css usa solo token che il tema definisce: niente ripieghi chiari nel tema scuro", () => {
+    const shell = readFileSync(join(import.meta.dir, "shell.css"), "utf-8")
+    const theme = readFileSync(join(import.meta.dir, "..", "index.css"), "utf-8")
+    const used = new Set([...shell.matchAll(/var\((--ade-[a-z0-9-]+)/g)].map((m) => m[1]!))
+    const defined = new Set([...(theme + shell).matchAll(/(--ade-[a-z0-9-]+)\s*:/g)].map((m) => m[1]!))
+    expect([...used].filter((token) => !defined.has(token))).toEqual([])
+  })
+
+  test("a finestra stretta il pulsante degli aggiornamenti non sta tagliato nella colonna: c'è in Sistema", () => {
+    const parsed = postcss.parse(readFileSync(join(import.meta.dir, "shell.css"), "utf-8"))
+    let display: string | undefined
+    parsed.walkAtRules("media", (media) => {
+      if (!media.params.includes("max-width: 760px")) return
+      media.walkRules('[data-slot="settings-check-update"]', (rule) => {
+        rule.walkDecls("display", (d) => {
+          display = d.value
+        })
+      })
+    })
+    expect(display).toBe("none")
+    renderSettingsSheet({ initialTarget: "system/updates" })
+    expect(document.body.querySelector('[data-slot="settings-tab"][data-active="true"]')?.getAttribute("data-tab")).toBe(
+      "system/updates",
+    )
+  })
+})
+
 describe("S7: la barra di stato della voce resta in vista", () => {
   test("è appiccicata in cima al corpo, sopra le righe che scorrono, con lo sfondo dell'area", () => {
     const parsed = postcss.parse(readFileSync(join(import.meta.dir, "shell.css"), "utf-8"))
@@ -1129,7 +1157,9 @@ describe("S7: la barra di stato della voce resta in vista", () => {
     })
     expect(decls.position).toBe("sticky")
     expect(decls.top).toBe("calc(-1 * var(--space-5, 20px))")
-    expect(decls["background-color"]).toBe("var(--ade-bg, #ffffff)")
+    // Opaque under every theme: the main area's ground, and the sheet's overlay where that is transparent (glass, S8).
+    expect(decls["background-color"]).toBe("var(--ade-overlay)")
+    expect(decls["background-image"]).toBe("linear-gradient(var(--ade-bg), var(--ade-bg))")
     // Il selettore è la struttura vera: la barra è il primo figlio del corpo.
     renderSettingsSheet({ initialTarget: "voice/commands" })
     expect(document.body.querySelector('[data-slot="settings-body"] > [data-part="status"]')).not.toBeNull()

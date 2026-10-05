@@ -78,6 +78,9 @@ describe("the day's cost as money", () => {
     expect(formatSpendCost(0.0000556, "en-US")).toBe("< $0.01")
     expect(formatSpendCost(0.024, "en-US")).toBe("$0.02")
     expect(formatSpendCost(1.5, "en-US")).toBe("$1.50")
+    // In Italian the sign is the one the texts around it use: «0,02 $», never «0,02 USD».
+    expect(formatSpendCost(0.024, "it-IT")).toBe("0,02\u00a0$")
+    expect(formatSpendCost(0.0000556, "it-IT")).toBe("< 0,01\u00a0$")
   })
 })
 

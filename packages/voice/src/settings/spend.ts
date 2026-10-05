@@ -169,6 +169,8 @@ export function formatSpendCost(cost: number, locale?: string): string {
     new Intl.NumberFormat(locale, {
       style: "currency",
       currency: "USD",
+      // «0,02 $» in Italian, as the texts beside it write it, not «0,02 USD» (S8).
+      currencyDisplay: "narrowSymbol",
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(value)
