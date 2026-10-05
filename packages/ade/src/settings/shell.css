@@ -6,11 +6,11 @@
   width: min(1100px, calc(100vw - 2 * var(--space-6, 24px)));
   height: min(90vh, calc(100vh - 2 * var(--space-6, 24px)));
   max-width: 1100px;
-  background-color: var(--ade-bg-panel, var(--ade-surface, #ffffff));
+  background-color: var(--ade-surface);
   color: var(--ade-text, #1d2330);
   border-radius: var(--ade-radius-lg, 12px);
   border: 1px solid var(--ade-border, #d4d8df);
-  box-shadow: var(--ade-shadow-xl, 0 20px 40px rgba(0, 0, 0, 0.2));
+  box-shadow: var(--ade-shadow-lg);
   overflow: hidden;
   box-sizing: border-box;
 }
@@ -31,7 +31,7 @@
 [data-slot="settings-rail"] {
   width: 220px;
   min-width: 220px;
-  background-color: var(--ade-sidebar-bg, var(--ade-bg-sidebar, #f5f6f8));
+  background-color: var(--ade-sunken);
   border-right: 1px solid var(--ade-border, #e3e6eb);
   display: flex;
   flex-direction: column;
@@ -69,7 +69,7 @@
   border-radius: var(--ade-radius-md, 8px);
   border: 1px solid transparent;
   background: transparent;
-  color: var(--ade-text-muted, #5b6475);
+  color: var(--ade-text-weak);
   font-size: var(--ade-font-lg);
   font-weight: var(--ade-weight-medium);
   cursor: pointer;
@@ -85,13 +85,13 @@
 
 [data-slot="category-button"]:focus-visible {
   outline: none;
-  box-shadow: var(--ade-focus-ring, 0 0 0 2px var(--ade-primary, #3a6df0));
+  box-shadow: var(--ade-focus-ring);
 }
 
 [data-slot="category-button"][data-active="true"] {
-  background-color: var(--ade-active-bg, var(--ade-surface, #ffffff));
+  background-color: var(--ade-raised);
   border-color: var(--ade-border, #d4d8df);
-  color: var(--ade-primary, #3a6df0);
+  color: var(--ade-accent);
   font-weight: var(--ade-weight-semibold);
   box-shadow: var(--ade-shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.05));
 }
@@ -115,7 +115,7 @@
 
 [data-slot="settings-version"] {
   font-size: var(--ade-font-sm);
-  color: var(--ade-muted, #8a92a3);
+  color: var(--ade-text-weak);
 }
 
 [data-slot="settings-check-update"] {
@@ -136,7 +136,7 @@
 
 [data-slot="settings-check-update"]:focus-visible {
   outline: none;
-  box-shadow: var(--ade-focus-ring, 0 0 0 2px var(--ade-primary, #3a6df0));
+  box-shadow: var(--ade-focus-ring);
 }
 
 /* Main panel area */
@@ -175,7 +175,7 @@
 [data-slot="settings-subtitle"] {
   margin: 0;
   font-size: var(--ade-font-body);
-  color: var(--ade-muted, #5b6475);
+  color: var(--ade-text-weak);
 }
 
 [data-slot="settings-close"] {
@@ -183,7 +183,7 @@
   border: none;
   padding: 6px;
   border-radius: var(--ade-radius-sm, 6px);
-  color: var(--ade-text-muted, #5b6475);
+  color: var(--ade-text-weak);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -197,7 +197,7 @@
 
 [data-slot="settings-close"]:focus-visible {
   outline: none;
-  box-shadow: var(--ade-focus-ring, 0 0 0 2px var(--ade-primary, #3a6df0));
+  box-shadow: var(--ade-focus-ring);
 }
 
 /* Tab bar */
@@ -218,7 +218,7 @@
   padding: 10px 12px;
   font-size: var(--ade-font-lg);
   font-weight: var(--ade-weight-medium);
-  color: var(--ade-text-muted, #5b6475);
+  color: var(--ade-text-weak);
   cursor: pointer;
   white-space: nowrap;
   transition: color 0.12s ease, border-color 0.12s ease;
@@ -230,12 +230,12 @@
 
 [data-slot="settings-tab"]:focus-visible {
   outline: none;
-  box-shadow: var(--ade-focus-ring, 0 0 0 2px var(--ade-primary, #3a6df0));
+  box-shadow: var(--ade-focus-ring);
 }
 
 [data-slot="settings-tab"][data-active="true"] {
-  color: var(--ade-primary, #3a6df0);
-  border-bottom-color: var(--ade-primary, #3a6df0);
+  color: var(--ade-accent);
+  border-bottom-color: var(--ade-accent);
   font-weight: var(--ade-weight-semibold);
 }
 
@@ -292,7 +292,7 @@
 
 [data-slot="settings-done"]:focus-visible {
   outline: none;
-  box-shadow: var(--ade-focus-ring, 0 0 0 2px var(--ade-primary, #3a6df0));
+  box-shadow: var(--ade-focus-ring);
 }
 
 /* Responsive: narrow viewport (< 760px) */

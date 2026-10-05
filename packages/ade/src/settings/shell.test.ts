@@ -1116,6 +1116,16 @@ describe("S7: schede e corpo legati per chi usa uno screen reader", () => {
   })
 })
 
+describe("S8: i colori delle Impostazioni vengono dal tema", () => {
+  test("shell.css usa solo token che il tema definisce: niente ripieghi chiari nel tema scuro", () => {
+    const shell = readFileSync(join(import.meta.dir, "shell.css"), "utf-8")
+    const theme = readFileSync(join(import.meta.dir, "..", "index.css"), "utf-8")
+    const used = new Set([...shell.matchAll(/var\((--ade-[a-z0-9-]+)/g)].map((m) => m[1]!))
+    const defined = new Set([...(theme + shell).matchAll(/(--ade-[a-z0-9-]+)\s*:/g)].map((m) => m[1]!))
+    expect([...used].filter((token) => !defined.has(token))).toEqual([])
+  })
+})
+
 describe("S7: la barra di stato della voce resta in vista", () => {
   test("è appiccicata in cima al corpo, sopra le righe che scorrono, con lo sfondo dell'area", () => {
     const parsed = postcss.parse(readFileSync(join(import.meta.dir, "shell.css"), "utf-8"))
