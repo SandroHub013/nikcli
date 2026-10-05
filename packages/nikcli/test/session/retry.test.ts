@@ -208,4 +208,55 @@ describe("SessionRetry", () => {
       expect(performance.now() - t0).toBeGreaterThanOrEqual(10)
     })
   })
+  describe("rate limits", () => {
+    const limited = (headers?: Record<string, string>, statusCode = 429, message = "Too Many Requests") =>
+      apiError({ message, isRetryable: true, statusCode, ...(headers ? { responseHeaders: headers } : {}) })
+    let randomSpy: ReturnType<typeof spyOn>
+    beforeEach(() => {
+      randomSpy = spyOn(Math, "random").mockReturnValue(0)
+    })
+    afterEach(() => {
+      randomSpy.mockRestore()
+    })
+
+    it("a 429 with Retry-After waits that time", () => {
+      expect(SessionRetry.delay(1, limited({ "retry-after": "7" }), { rateLimited: true })).toBe(7_000)
+      expect(SessionRetry.delay(3, limited({ "retry-after-ms": "1500" }), { rateLimited: true })).toBe(1_500)
+    })
+
+    it("a 429 without headers waits longer each time, up to 60 s", () => {
+      const waits = [1, 2, 3, 4, 5, 6, 7].map((n) => SessionRetry.delay(n, limited(), { rateLimited: true }))
+      expect(waits).toEqual([2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000])
+    })
+
+    it("x-ratelimit-reset headers are read as a Unix time, seconds or a duration", () => {
+      const now = 1_800_000_000_000
+      expect(SessionRetry.resetDelay({ "x-ratelimit-reset": String(now + 5_000) }, now)).toBe(5_000)
+      expect(SessionRetry.resetDelay({ "x-ratelimit-reset": String(now / 1000 + 5) }, now)).toBe(5_000)
+      expect(SessionRetry.resetDelay({ "x-ratelimit-reset": "12" }, now)).toBe(12_000)
+      expect(SessionRetry.resetDelay({ "x-ratelimit-reset-requests": "1m30s" }, now)).toBe(90_000)
+      expect(SessionRetry.resetDelay({ "x-ratelimit-reset-tokens": "250ms" }, now)).toBe(250)
+      expect(SessionRetry.resetDelay({ "x-ratelimit-reset": "soon" }, now)).toBeUndefined()
+      expect(SessionRetry.delay(1, limited({ "x-ratelimit-reset": "9" }), { rateLimited: true })).toBe(9_000)
+    })
+
+    it("recognises 429, 503 and a body that says rate limit, but not a spent quota", () => {
+      expect(SessionRetry.isRateLimit(limited())).toBe(true)
+      expect(SessionRetry.isRateLimit(limited(undefined, 503, "Provider is overloaded"))).toBe(true)
+      expect(SessionRetry.isRateLimit(limited(undefined, 503, "Service Unavailable"))).toBe(false)
+      expect(SessionRetry.isRateLimit(limited(undefined, 400, "Rate limit exceeded: free-models-per-min"))).toBe(true)
+      expect(SessionRetry.isRateLimit(limited(undefined, 400, "Bad Request"))).toBe(false)
+      expect(SessionRetry.isRateLimit(limited(undefined, 429, "FreeUsageLimitError"))).toBe(false)
+    })
+
+    it("a wait in slices beats before each slice, and an abort ends it", async () => {
+      let beats = 0
+      await SessionRetry.sleepWithHeartbeat(25, new AbortController().signal, () => void beats++, 10)
+      expect(beats).toBe(3)
+      const ac = new AbortController()
+      const waiting = SessionRetry.sleepWithHeartbeat(10_000, ac.signal, () => {}, 1_000)
+      ac.abort()
+      await expect(waiting).rejects.toThrow()
+    })
+  })
 })

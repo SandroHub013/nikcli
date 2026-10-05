@@ -304,6 +304,63 @@ describe("SessionProcessor retry safety", () => {
     expect(result.parts).toHaveLength(0)
   })
 
+  function rateLimited(headers?: Record<string, string>) {
+    return new APICallError({
+      message: "Too Many Requests",
+      url: "https://provider.example.test/chat",
+      requestBodyValues: {},
+      statusCode: 429,
+      isRetryable: true,
+      ...(headers ? { responseHeaders: headers } : {}),
+      responseBody: "rate limit",
+    })
+  }
+  const instantly = async () => {}
+  // A rate-limit wait goes through sleepWithHeartbeat (which calls sleep in slices): record whole waits.
+  async function runRateLimited(stream: (attempt: number) => AsyncIterable<StreamEvent>) {
+    const heartbeat = spyOn(SessionRetry, "sleepWithHeartbeat").mockImplementation(async () => {})
+    try {
+      const result = await runProcessor(stream, { sleep: instantly })
+      return { ...result, waits: heartbeat.mock.calls.map(([ms]) => ms) }
+    } finally {
+      heartbeat.mockRestore()
+    }
+  }
+
+  it("waits out a 429 for as long as Retry-After says, then succeeds", async () => {
+    const result = await runRateLimited(async function* (attempt) {
+      if (attempt === 1) throw rateLimited({ "retry-after": "7" })
+      yield* success()
+    })
+    expect(result.calls).toBe(2)
+    expect(result.waits).toEqual([7_000])
+    expect(result.info.error).toBeUndefined()
+    expect(result.parts).toMatchObject([{ type: "text", text: "recovered output" }])
+  })
+
+  it("keeps waiting on a 429 past the five tries an ordinary error gets, with growing waits", async () => {
+    const result = await runRateLimited(async function* (attempt) {
+      if (attempt <= 7) throw rateLimited()
+      yield* success()
+    })
+    expect(result.calls).toBe(8)
+    expect(result.waits).toHaveLength(7)
+    for (let i = 1; i < 6; i++) expect(result.waits[i]!).toBeGreaterThan(result.waits[i - 1]!)
+    for (const wait of result.waits) expect(wait).toBeLessThanOrEqual(SessionRetry.RATE_LIMIT_MAX_DELAY)
+    expect(result.info.error).toBeUndefined()
+  })
+
+  it("gives up with the provider's own error once the wait budget is spent", async () => {
+    // 400 s per wait against a 600 s budget: the first wait fits, the second does not.
+    const result = await runRateLimited(async function* () {
+      throw rateLimited({ "retry-after": "400" })
+    })
+    expect(result.calls).toBe(2)
+    expect(result.waits).toEqual([400_000])
+    expect(result.info.error).toMatchObject({ name: "APIError", data: { statusCode: 429, isRetryable: true } })
+    expect(result.errors).toEqual([result.info.error] as typeof result.errors)
+  })
+
   for (const status of [401, 400]) {
     it(`does not retry non-retryable HTTP ${status}`, async () => {
       const result = await runProcessor(async function* () {

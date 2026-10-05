@@ -165,6 +165,9 @@ export namespace SessionProcessor {
     let snapshot: string | undefined
     let blocked = false
     let attempt = 0
+    // Rate limits are counted in time waited, not in tries (see SessionRetry.RATE_LIMIT_BUDGET_MS).
+    let rateAttempt = 0
+    let rateWaited = 0
     let needsCompaction = false
     let outputEmitted = false
     // Ring buffer for doom-loop detection - avoids repeated storage I/O
@@ -711,9 +714,58 @@ export namespace SessionProcessor {
               })
             }
             // Removing a part cannot retract streamed output or undo a tool call.
-            const retry = interrupted || outputEmitted ? undefined : SessionRetry.retryable(error)
-            if (retry !== undefined) {
-              const nextAttempt = attempt + 1
+            const rateLimited =
+              !interrupted && !outputEmitted && MessageV2.APIError.isInstance(error) && SessionRetry.isRateLimit(error)
+            const retry =
+              interrupted || outputEmitted
+                ? undefined
+                : (SessionRetry.retryable(error) ?? (rateLimited ? "Rate limited" : undefined))
+            const budget = (await configGet()).experimental?.rateLimitBudgetMs ?? SessionRetry.RATE_LIMIT_BUDGET_MS
+            const nextAttempt = rateLimited ? rateAttempt + 1 : attempt + 1
+            if (retry !== undefined && rateLimited) {
+              const apiError = MessageV2.APIError.isInstance(error) ? new MessageV2.APIError(error.data) : undefined
+              const delay = SessionRetry.delay(nextAttempt, apiError, { rateLimited: true })
+              if (rateWaited + Math.max(delay, 1000) <= budget) {
+                rateAttempt = nextAttempt
+                // A zero wait still costs a second, or a server that keeps saying "0" would never exhaust the budget.
+                rateWaited += Math.max(delay, 1000)
+                log.warn("rate limited, waiting", {
+                  sessionID: input.sessionID,
+                  attempt: rateAttempt,
+                  waitMs: delay,
+                  waitedMs: rateWaited,
+                  budgetMs: budget,
+                  status: MessageV2.APIError.isInstance(error) ? error.data.statusCode : undefined,
+                })
+                for (const id of Object.keys(reasoningMap)) {
+                  delete reasoningMap[id]
+                }
+                await cleanupRetryAttempt(attemptPartIDs)
+                await setStatus(input.sessionID, {
+                  type: "retry",
+                  attempt: rateAttempt,
+                  message: retry,
+                  next: Date.now() + delay,
+                })
+                try {
+                  // A sub-agent that only waits for the window to reopen is not stalled: tell the watchdog.
+                  const beat = async () => {
+                    const { Delegation } = await import("@/delegation/manager")
+                    const active = Delegation.getBySessionID(input.sessionID)
+                    if (active) Delegation.touch(active.id)
+                  }
+                  await SessionRetry.sleepWithHeartbeat(delay, input.abort, beat)
+                  input.abort.throwIfAborted()
+                  continue
+                } catch (sleepError) {
+                  error = MessageV2.fromError(sleepError, {
+                    providerID: input.model.providerID,
+                  })
+                }
+              } else {
+                log.warn("rate limit budget exhausted, giving up", { sessionID: input.sessionID, waitedMs: rateWaited, budgetMs: budget })
+              }
+            } else if (retry !== undefined) {
               if (nextAttempt <= SessionRetry.RETRY_MAX_ATTEMPTS) {
                 attempt = nextAttempt
                 const delay = SessionRetry.delay(

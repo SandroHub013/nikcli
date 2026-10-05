@@ -905,7 +905,11 @@ export namespace MessageV2 {
                       text: outputText,
                       attachments: finalAttachments,
                     }
-                  : outputText
+                  : // Some providers (Cohere) reject a tool result whose content is empty with a 400
+                    // that no retry can fix, so an empty output is sent as an explicit "(no output)".
+                    outputText.trim() === ""
+                    ? "(no output)"
+                    : outputText
 
               assistantMessage.parts.push({
                 type: ("tool-" + part.tool) as `tool-${string}`,

@@ -1913,6 +1913,14 @@ export namespace Config {
             .boolean()
             .optional()
             .describe("Ship only the core toolset; reach the rest with search_tools + call_tool (default: true)"),
+          rateLimitBudgetMs: z
+            .number()
+            .int()
+            .nonnegative()
+            .optional()
+            .describe(
+              "How long, in total, one request keeps waiting out provider rate limits (429, overloaded 503) before giving up (default: 600000 = 10 min; 0 = do not wait)",
+            ),
           policies: z
             .array(PolicyStatement)
             .optional()
