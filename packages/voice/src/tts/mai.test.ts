@@ -93,6 +93,55 @@ describe("MAI", () => {
       called += 1
       return response(PCM)
     }
+    const error = await speakMai(
+      { voice: "it-IT-Rosa", text: "Ciao." },
+      client(fetchFn, { apiKey: () => undefined }),
+    ).catch((caught) => caught)
+    expect(error.kind).toBe("no-key")
+    expect(called).toBe(0)
+  })
+
+  test("un abort a metà richiesta chiude la fetch e non diventa un errore di rete", async () => {
+    const controller = new AbortController()
+    let seen: AbortSignal | undefined
+    const fetchFn: MaiClientDeps["fetchFn"] = (_url, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        seen = init.signal ?? undefined
+        init.signal?.addEventListener("abort", () =>
+          reject(Object.assign(new Error("aborted"), { name: "AbortError" })),
+        )
+      })
+    const pending = speakMai({ voice: "it-IT-Rosa", text: "Ciao.", signal: controller.signal }, client(fetchFn))
+    await Promise.resolve()
+    controller.abort()
+    const error = await pending.catch((caught) => caught)
+    expect(error.kind).toBe("aborted")
+    expect(seen?.aborted).toBe(true)
+  })
+
+  test("una risposta che non si legge chiude la richiesta, invece di lasciarla scaricare", async () => {
+    for (const bad of [
+      () => response("niente", { status: 500 }),
+      () => response(PCM, { headers: { "content-type": "audio/mpeg" } }),
+    ]) {
+      let seen: AbortSignal | undefined
+      const fetchFn: MaiClientDeps["fetchFn"] = async (_url, init) => {
+        seen = init.signal ?? undefined
+        return bad()
+      }
+      await speakMai({ voice: "it-IT-Rosa", text: "Ciao." }, client(fetchFn)).catch(() => undefined)
+      expect(seen?.aborted).toBe(true)
+    }
+  })
+
+  test("una frase riuscita lascia la sua richiesta com'era", async () => {
+    let seen: AbortSignal | undefined
+    const fetchFn: MaiClientDeps["fetchFn"] = async (_url, init) => {
+      seen = init.signal ?? undefined
+      return response(PCM)
+    }
+    await speakMai({ voice: "it-IT-Rosa", text: "Ciao." }, client(fetchFn))
+    expect(seen?.aborted).toBe(false)
   })
 
   test("un abort prima della risposta non diventa un errore di rete", async () => {
@@ -127,7 +176,7 @@ describe("MAI", () => {
       }),
     ).catch((caught) => caught)
     expect(error.kind).toBe("timeout")
-    expect(aborted).toBe(false)
+    expect(aborted).toBe(true)
   })
 
   test("la prenotazione è il prezzo di listino, in un solo posto", () => {
@@ -144,14 +193,23 @@ describe("MAI", () => {
 })
 
 describe("il breaker", () => {
-  test("un 402 lo chiude per 60 secondi, e Riprova lo riapre subito", () => {
+  test("un 402 lo chiude finché non si preme Riprova, anche con un Retry-After", () => {
     const breaker = createMaiBreaker()
     breaker.trip("payment", 1_000)
-    expect(breaker.blocked(1_000 + 59_000)?.kind).toBe("payment")
-    expect(breaker.blocked(1_000 + 60_000)).toBeUndefined()
-    breaker.trip("payment", 2_000)
+    expect(breaker.blocked(1_000 + 60_000)?.kind).toBe("payment")
+    expect(breaker.blocked(1_000 + 3_600_000)?.kind).toBe("payment")
+    breaker.trip("payment", 2_000, 5_000)
+    expect(breaker.blocked(2_000 + 3_600_000)?.kind).toBe("payment")
     breaker.retry()
     expect(breaker.blocked(2_000)).toBeUndefined()
+  })
+
+  test("il 402 non porta un Retry-After nell'errore", async () => {
+    const fetchFn: MaiClientDeps["fetchFn"] = async () =>
+      response(null, { status: 402, headers: { "retry-after": "5" } })
+    const error = await speakMai({ voice: "it-IT-Rosa", text: "Ciao." }, client(fetchFn)).catch((caught) => caught)
+    expect(error.kind).toBe("payment")
+    expect(error.retryAfterMs).toBeUndefined()
   })
 
   test("un 401 resta chiuso finché non si riprova, un 429 onora il suo tempo", () => {

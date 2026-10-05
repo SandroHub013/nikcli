@@ -30,7 +30,7 @@ export const MAI_FIRST_BYTE_MS = 5_000
 
 /** How long a 429 stays closed when the response names nothing. */
 export const MAI_RETRY_AFTER_MS = 30_000
-/** How long a 402, 403 or 404 stays closed: credit and model change out of band. */
+/** How long a 403 or 404 stays closed: access and the model change out of band. */
 export const MAI_MANUAL_COOLDOWN_MS = 60_000
 
 const EXPECTED_TYPE = `audio/pcm;rate=${MAI_SAMPLE_RATE};channels=${MAI_CHANNELS}`
@@ -133,7 +133,6 @@ export interface MaiBreaker {
 }
 
 const COOLDOWN_MS: Partial<Record<MaiFailureKind, number>> = {
-  payment: MAI_MANUAL_COOLDOWN_MS,
   forbidden: MAI_MANUAL_COOLDOWN_MS,
   unavailable: MAI_MANUAL_COOLDOWN_MS,
   "rate-limited": MAI_RETRY_AFTER_MS,
@@ -143,8 +142,15 @@ const COOLDOWN_MS: Partial<Record<MaiFailureKind, number>> = {
   format: MAI_RETRY_AFTER_MS,
 }
 
-/** Kinds the cooldown does not reopen: only a different key, or «Riprova». */
-const MANUAL: ReadonlySet<MaiFailureKind> = new Set(["unauthorized", "bad-request"])
+/**
+ * Kinds the cooldown does not reopen: only a different key, or «Riprova».
+ *
+ * A 402 is one of them. Credit comes back when the user adds it, not when a
+ * minute has passed, and a breaker that reopened by itself would send a request
+ * a minute for as long as the account stays empty. A `Retry-After` on these is
+ * not a promise that anything changed, so it is not honoured either.
+ */
+const MANUAL: ReadonlySet<MaiFailureKind> = new Set(["unauthorized", "bad-request", "payment"])
 
 export function createMaiBreaker(): MaiBreaker {
   let closed: { kind: MaiFailureKind; until: number } | undefined
@@ -158,11 +164,11 @@ export function createMaiBreaker(): MaiBreaker {
       return closed
     },
     trip(kind, now, retryAfterMs) {
-      const cooldown = retryAfterMs ?? COOLDOWN_MS[kind] ?? MAI_RETRY_AFTER_MS
-      closed = {
-        kind,
-        until: MANUAL.has(kind) ? Number.POSITIVE_INFINITY : now + cooldown,
+      if (MANUAL.has(kind)) {
+        closed = { kind, until: Number.POSITIVE_INFINITY }
+        return
       }
+      closed = { kind, until: now + (retryAfterMs ?? COOLDOWN_MS[kind] ?? MAI_RETRY_AFTER_MS) }
     },
     reset() {
       closed = undefined
@@ -190,12 +196,16 @@ export async function speakMai(request: MaiSpeakRequest, deps: MaiClientDeps): P
 
   const now = deps.now ?? Date.now
   const startedAt = now()
+  // The deadlines are cleared on the way out: a sentence read in a second leaves no timer behind for fifteen.
+  const timers: ReturnType<typeof setTimeout>[] = []
   const schedule =
     deps.schedule ??
     ((ms: number) =>
       new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new MaiError("timeout", "MAI non ha risposto in tempo.")), ms)
+        timers.push(setTimeout(() => reject(new MaiError("timeout", "MAI non ha risposto in tempo.")), ms))
       }))
+  // Until the PCM is whole, the request is open; leaving any other way closes it, so nothing goes on being paid for.
+  let whole = false
 
   try {
     const pending = deps.fetchFn(MAI_ENDPOINT, {
@@ -221,6 +231,7 @@ export async function speakMai(request: MaiSpeakRequest, deps: MaiClientDeps): P
     const pcm = await readBody(response, controller, schedule, MAI_DEADLINE_MS - (now() - startedAt))
     if (pcm.byteLength === 0) throw new MaiError("empty", "MAI ha risposto senza audio.")
     if (pcm.byteLength % 2 !== 0) throw new MaiError("format", "Audio MAI di lunghezza dispari.")
+    whole = true
     return {
       wav: pcmToWav(pcm),
       reservedUsd: reserveMai(text),
@@ -233,6 +244,8 @@ export async function speakMai(request: MaiSpeakRequest, deps: MaiClientDeps): P
     }
     throw new MaiError("transient", "MAI non raggiungibile.")
   } finally {
+    if (!whole) controller.abort()
+    for (const timer of timers) clearTimeout(timer)
     outer?.removeEventListener("abort", onOuter)
   }
 }
@@ -278,7 +291,7 @@ async function failureOf(response: Response): Promise<MaiError> {
   const retryAfter = retryAfterMs(response.headers.get("retry-after"))
   const status = response.status
   if (status === 401) return new MaiError("unauthorized", "Chiave OpenRouter rifiutata.")
-  if (status === 402) return new MaiError("payment", "Credito OpenRouter esaurito.", retryAfter)
+  if (status === 402) return new MaiError("payment", "Credito OpenRouter esaurito.")
   if (status === 403) return new MaiError("forbidden", "OpenRouter ha rifiutato la richiesta.", retryAfter)
   if (status === 404) return new MaiError("unavailable", "MAI non è disponibile.", retryAfter)
   if (status === 429) return new MaiError("rate-limited", "Troppe richieste a MAI.", retryAfter)
