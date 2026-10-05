@@ -157,5 +157,120 @@ describe("ReadTool", () => {
     )
   })
 })
+
+describe("ReadTool missing-file suggestions", () => {
+  let dir: string
+  let def: Awaited<ReturnType<typeof ReadTool.init>>
+
+  async function gitInit(target: string) {
+    const proc = Bun.spawn(["git", "init", "--quiet"], {
+      cwd: target,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const code = await proc.exited
+    if (code !== 0) {
+      throw new Error(`git init failed in ${target}: ${await new Response(proc.stderr).text()}`)
+    }
+  }
+
+  beforeAll(async () => {
+    dir = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-read-suggest-"))
+    // A real repository, so the instance worktree is this directory — which is
+    // the tree the suggestions search, exactly as it behaves in production.
+    await gitInit(dir)
+    def = await withProjectDirectory(dir, () => ReadTool.init())
+  })
+
+  afterAll(async () => {
+    await Instance.disposeAll().catch(() => undefined)
     const { Database } = await import("@/database/database")
     Database.closeAll()
+    await removeTestDir(dir)
+  })
+
+  async function failure(filePath: string): Promise<string> {
+    const { ctx } = makeToolContext()
+    try {
+      await withProjectDirectory(dir, () => def.executeAsync({ filePath }, ctx))
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error)
+    }
+    throw new Error(`expected ${filePath} to fail`)
+  }
+
+  it("suggests the same basename living in another folder", async () => {
+    await fs.mkdir(path.join(dir, "src", "tool"), { recursive: true })
+    await fs.mkdir(path.join(dir, "guess"), { recursive: true })
+    await fs.writeFile(path.join(dir, "src", "tool", "read.ts"), "export const read = 1\n")
+
+    const message = await failure(path.join(dir, "guess", "read.ts"))
+    expect(message).toContain("Did you mean: src/tool/read.ts?")
+
+    // Same guess, but the folder itself is a hallucination, so the sibling
+    // listing cannot run at all — the project search is the only source.
+    const missingDir = await failure(path.join(dir, "tool", "read.ts"))
+    expect(missingDir).toContain("Did you mean: src/tool/read.ts?")
+  })
+
+  it("suggests a file that is one letter off", async () => {
+    await fs.writeFile(path.join(dir, "parser.ts"), "export const parse = 1\n")
+
+    const message = await failure(path.join(dir, "paresr.ts"))
+    expect(message).toContain("Did you mean: parser.ts?")
+  })
+
+  it("keeps the plain message when nothing is close", async () => {
+    const message = await failure(path.join(dir, "zzqqx-totally-unrelated-4711.bin"))
+    expect(message).toBe(`File not found: ${path.join(dir, "zzqqx-totally-unrelated-4711.bin")}`)
+    expect(message).not.toContain("Did you mean")
+  })
+
+  it("ignores files excluded by .gitignore", async () => {
+    await fs.mkdir(path.join(dir, "generated"), { recursive: true })
+    await fs.writeFile(path.join(dir, "generated", "widget.ts"), "export const widget = 1\n")
+    await fs.writeFile(path.join(dir, ".gitignore"), "generated/\n")
+
+    const message = await failure(path.join(dir, "widgte.ts"))
+    expect(message).not.toContain("Did you mean")
+  })
+
+  it("stays bounded on a large tree", async () => {
+    const big = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-read-big-"))
+    try {
+      await gitInit(big)
+      const shards = Array.from({ length: 40 }, (_, index) => `shard-${String(index).padStart(2, "0")}`)
+      await Promise.all(
+        shards.map((shard) =>
+          fs
+            .mkdir(path.join(big, shard), { recursive: true })
+            .then(() =>
+              Promise.all(
+                Array.from({ length: 200 }, (_, index) =>
+                  fs.writeFile(path.join(big, shard, `file-${String(index).padStart(3, "0")}.ts`), ""),
+                ),
+              ),
+            ),
+        ),
+      )
+
+      const { ctx } = makeToolContext()
+      const started = performance.now()
+      let message = ""
+      try {
+        await withProjectDirectory(big, () => def.executeAsync({ filePath: path.join(big, "nope-9f3a.ts") }, ctx))
+      } catch (error) {
+        message = error instanceof Error ? error.message : String(error)
+      }
+      const elapsed = performance.now() - started
+
+      expect(message).toContain("File not found")
+      // 8k files: an unbounded walk would enumerate all of them. The scan caps
+      // itself at 4k files / 120 ms, so this stays far under a second even on a
+      // cold Windows filesystem.
+      expect(elapsed).toBeLessThan(1000)
+    } finally {
+      await removeTestDir(big)
+    }
+  })
+})
