@@ -6,7 +6,7 @@
  * The chip is plain, in the field's own black: no accent, no ring of colour
  * (the user: «semplice base nero», DS-chat).
  */
-import { createEffect, createSignal, createUniqueId, For, onCleanup, Show, type JSX } from "solid-js"
+import { children, createEffect, createSignal, createUniqueId, For, onCleanup, Show, type JSX } from "solid-js"
 import { moveActive, type ChipMenuItem } from "./picker"
 
 export type { ChipMenuItem }
@@ -36,6 +36,24 @@ export interface ChipMenuProps {
   readonly tone?: "warn"
   readonly onOpen?: () => void
   readonly onChoose: (value: string) => void
+}
+
+/**
+ * A band above or below the list that is shown only when it has something in it.
+ *
+ * A JSX prop is a getter: every read builds its elements again. Read twice,
+ * once for the test and once for the content, `status` and `footer` were built
+ * twice and one copy thrown away — harmless while they are a note and a button,
+ * and the bug of the bell menu the day one of them mounts something that binds a
+ * listener to the document. Read once, with `children`, and shown from that.
+ */
+function ChipBand(props: { readonly slot: string; readonly content: JSX.Element }) {
+  const content = children(() => props.content)
+  return (
+    <Show when={content()}>
+      <div data-slot={props.slot}>{content()}</div>
+    </Show>
+  )
 }
 
 export function ChipMenu(props: ChipMenuProps) {
@@ -174,9 +192,7 @@ export function ChipMenu(props: ChipMenuProps) {
               />
             )}
           </Show>
-          <Show when={props.status}>
-            <div data-slot="chip-status">{props.status}</div>
-          </Show>
+          <ChipBand slot="chip-status" content={props.status} />
           <ul
             data-slot="chip-list"
             id={`${id}-list`}
@@ -224,9 +240,7 @@ export function ChipMenu(props: ChipMenuProps) {
               </li>
             </Show>
           </ul>
-          <Show when={props.footer}>
-            <div data-slot="chip-footer">{props.footer}</div>
-          </Show>
+          <ChipBand slot="chip-footer" content={props.footer} />
         </div>
       </Show>
     </div>
