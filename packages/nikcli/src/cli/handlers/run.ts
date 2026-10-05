@@ -17,6 +17,7 @@ import { Provider } from "@/provider/provider"
 import { Agent } from "@/agent/agent"
 import { SessionRepo } from "@/session/repo"
 import type { Project } from "@/project/project"
+import { InstanceReload } from "@/project/reload"
 import { SessionDiffRepo } from "@/session/diff-repo"
 import { SessionV2Write } from "@/session/v2/write"
 import type { Session } from "@/session"
@@ -763,6 +764,13 @@ export async function runWithArgs(args: any): Promise<void> {
     armExitWatchdog()
     return
   }
+
+  // A one-shot headless run has nothing to reload: the config cannot change
+  // under a process that ends with its turn, and `fs.watch` keeps a directory
+  // handle open past dispose on Windows. `--attach` returned above, so the
+  // remote server that owns the config still watches it; the TUI never
+  // reaches this handler.
+  if (isHeadless()) InstanceReload.disableForHeadlessRun()
 
   await bootstrap(process.cwd(), async (instance) => {
     log.debug("Running local nikcli session")
