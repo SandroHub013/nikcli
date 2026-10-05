@@ -57,6 +57,60 @@ describe("chiudere un pannello con un file non salvato", () => {
     expect(await first).toBe(true)
   })
 
+  /* A second ✕ on a question hidden behind a minimised ADE: shown again, not asked again. */
+  test("una seconda chiusura con la domanda aperta la ricorda, non la chiede due volte", async () => {
+    const closed: string[] = []
+    const questions: ((yes: boolean) => void)[] = []
+    let reminded = 0
+    const closer = createCloser({
+      unsaved: () => "C:/p/a.ts",
+      ask: () => new Promise<boolean>((resolve) => questions.push(resolve)),
+      closeNow: (id) => void closed.push(id),
+      exists: () => true,
+      remind: () => void reminded++,
+    })
+    expect(closer.close("f")).toBe(false)
+    // The first close asks; nothing to remind yet.
+    expect(questions).toHaveLength(1)
+    expect(reminded).toBe(0)
+    expect(closer.close("f")).toBe(false)
+    expect(questions).toHaveLength(1)
+    expect(reminded).toBe(1)
+    // The pane stays until the yes.
+    expect(closed).toEqual([])
+    questions[0]!(true)
+    await tick()
+    expect(closed).toEqual(["f"])
+  })
+
+  test("al no dopo il richiamo il pannello resta, e la domanda dopo è di nuovo la prima", async () => {
+    const closed: string[] = []
+    const questions: ((yes: boolean) => void)[] = []
+    let reminded = 0
+    const closer = createCloser({
+      unsaved: () => "C:/p/a.ts",
+      ask: () => new Promise<boolean>((resolve) => questions.push(resolve)),
+      closeNow: (id) => void closed.push(id),
+      exists: () => true,
+      remind: () => void reminded++,
+    })
+    closer.close("f")
+    closer.close("f")
+    questions[0]!(false)
+    await tick()
+    expect(closed).toEqual([])
+    closer.close("f")
+    expect(questions).toHaveLength(2)
+    expect(reminded).toBe(1)
+  })
+
+  test("senza remind il comportamento è quello di prima", async () => {
+    const s = setup({ f: "C:/p/a.ts" })
+    s.closer.close("f")
+    expect(s.closer.close("f")).toBe(false)
+    expect(s.questions).toHaveLength(1)
+  })
+
   test("un pannello sparito prima del sì non si chiude due volte", async () => {
     const s = setup({ f: "C:/p/a.ts" })
     const done = s.closer.closeAsking("f")

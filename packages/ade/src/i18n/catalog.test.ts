@@ -16,6 +16,8 @@ const SAME_IN_BOTH = new Set<string>([
   "choices.samePane",
   "settings.language.it",
   "settings.language.en",
+  // The «No» button of a yes/no question: the same word in both.
+  "ask.no",
   "preset.solo",
   "sidebar.spaces",
   "pane.quota",

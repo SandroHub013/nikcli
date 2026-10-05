@@ -116,6 +116,8 @@ windows = { version = "0.61", features = [
     "Win32_System_Com_StructuredStorage",
     "Win32_System_JobObjects",
     "Win32_System_Threading",
+    "Win32_UI_Controls",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 # Windows.Graphics.Capture for S36: captures a window's composed pixels, which
 # includes the WebView2 content that a GDI grab misses, and brings its own

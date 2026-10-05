@@ -203,7 +203,7 @@ function askCloseConfirmation(message: string): Promise<boolean> {
   return askYesNo(message, { ok: t("window.closeConfirm.ok"), cancel: t("window.closeConfirm.cancel") })
 }
 
-import { askYesNo } from "../host/ask"
+import { askYesNo, remindQuestion } from "../host/ask"
 import { createCloser } from "../editor/closer"
 import { pruneProject } from "../session/ade-prune"
 import { noRescue, reclaimWorktree, worktreeWork, type Reclaimed, type Retry } from "../session/worktree-close"
@@ -6875,8 +6875,10 @@ export function Workbench() {
       return host ? unintegrated(host, id) : undefined
     },
     askWorktree: (reason) => askYesNo(t("pane.closeWorktree", reason)),
+    // A second ✕ while the question is open brings it back, even from the icon.
+    remind: () => void remindQuestion(),
   })
-  const close = (id: string): boolean => closer.close(id)
+  const close =(id: string): boolean => closer.close(id)
 
   /*
    * A session's worktree, given back when the session closes, whichever way it closes.

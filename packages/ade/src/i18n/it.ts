@@ -657,6 +657,8 @@ export const it = {
     `${count} ${count === 1 ? "sessione sta lavorando" : "sessioni stanno lavorando"}. Chiudere lo stesso?`,
   "window.closeConfirm.ok": "Chiudi",
   "window.closeConfirm.cancel": "Annulla",
+  "ask.yes": "Sì",
+  "ask.no": "No",
   "tray.hide.working": (count: number) =>
     `Un gateway è acceso: ADE va nella tray e resta aperta. ${count} ${count === 1 ? "sessione sta lavorando e continuerà" : "sessioni stanno lavorando e continueranno"} anche con la finestra nascosta. Per chiudere ADE del tutto: Esci, nel menu della sua icona.`,
   "tray.hide.keepSessions": "Nascondi, le sessioni continuano",
