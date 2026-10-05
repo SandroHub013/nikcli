@@ -1128,6 +1128,25 @@ describe("S7: schede e corpo legati per chi usa uno screen reader", () => {
   })
 })
 
+/**
+ * The narrow layout's media query, whatever width it is written at: the one
+ * that folds the rail to its icons. A test that looked for «max-width: 760px»
+ * by hand would stop finding it the day the threshold moves (review S8, B2).
+ */
+function narrowMedia(): postcss.AtRule {
+  const found: postcss.AtRule[] = []
+  postcss.parse(readFileSync(join(import.meta.dir, "shell.css"), "utf-8")).walkAtRules("media", (media) => {
+    let rail = false
+    media.walkRules('[data-slot="settings-rail"]', () => {
+      rail = true
+    })
+    if (rail) found.push(media)
+  })
+  expect(found).toHaveLength(1)
+  expect(found[0]!.params).toMatch(/max-width/)
+  return found[0]!
+}
+
 describe("S8: i colori delle Impostazioni vengono dal tema", () => {
   test("shell.css usa solo token che il tema definisce: niente ripieghi chiari nel tema scuro", () => {
     const shell = readFileSync(join(import.meta.dir, "shell.css"), "utf-8")
@@ -1138,14 +1157,10 @@ describe("S8: i colori delle Impostazioni vengono dal tema", () => {
   })
 
   test("a finestra stretta il pulsante degli aggiornamenti non sta tagliato nella colonna: c'è in Sistema", () => {
-    const parsed = postcss.parse(readFileSync(join(import.meta.dir, "shell.css"), "utf-8"))
     let display: string | undefined
-    parsed.walkAtRules("media", (media) => {
-      if (!media.params.includes("max-width: 760px")) return
-      media.walkRules('[data-slot="settings-check-update"]', (rule) => {
-        rule.walkDecls("display", (d) => {
-          display = d.value
-        })
+    narrowMedia().walkRules('[data-slot="settings-check-update"]', (rule) => {
+      rule.walkDecls("display", (d) => {
+        display = d.value
       })
     })
     expect(display).toBe("none")
