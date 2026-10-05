@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { IMPOSTOR_BEYOND, SLOW_BEYOND, SLOW_POSE_MS, detailAt, poseDue, shopInRange } from "./lod"
-import { IMMOBILE_AFTER_MS, POSITION_EVERY_MS, STILL_INTERVAL_MS, drawMode, pace, shouldSavePosition } from "./schedule"
+import { IMMOBILE_AFTER_MS, POSITION_EVERY_MS, SLOW_FRAME_MS, SLOW_SECONDS, SLOW_SHARE, VSYNC_60_MS, SOFTWARE_IMMOBILE_AFTER_MS, STILL_INTERVAL_MS, createSlowWatch, drawMode, pace, shouldSavePosition } from "./schedule"
 
 describe("the three ways to draw", () => {
   test("moving draws every frame; standing with the hologram turning draws 15 a second; quiet for ten seconds draws nothing", () => {
@@ -9,6 +9,16 @@ describe("the three ways to draw", () => {
     expect(drawMode({ moving: false, sinceActivityMs: 0 })).toBe("still")
     expect(drawMode({ moving: false, sinceActivityMs: IMMOBILE_AFTER_MS - 1 })).toBe("still")
     expect(drawMode({ moving: false, sinceActivityMs: IMMOBILE_AFTER_MS })).toBe("immobile")
+  })
+
+  test("drawn in software (no GPU), a still frame costs as much as a moving one: the city rests after a second and a half, not ten", () => {
+    const quiet = SOFTWARE_IMMOBILE_AFTER_MS
+    expect(drawMode({ moving: false, sinceActivityMs: quiet - 1 }, quiet)).toBe("still")
+    expect(drawMode({ moving: false, sinceActivityMs: quiet }, quiet)).toBe("immobile")
+    expect(drawMode({ moving: true, sinceActivityMs: 60_000 }, quiet)).toBe("moving")
+    // Long enough for the camera to settle behind the character after it stops.
+    expect(quiet).toBeGreaterThanOrEqual(1000)
+    expect(quiet).toBeLessThan(IMMOBILE_AFTER_MS)
   })
 
   test("the resting rate is 15 frames a second and the quiet time is ten seconds", () => {
@@ -111,5 +121,71 @@ describe("pacing the draws to the level's frame rate", () => {
     const step = pace(0, 0, 66)
     expect(step.next).toBeCloseTo(66, 6)
     expect(pace(17, step.next, 16.67).draw).toBe(true)
+  })
+})
+
+describe("a machine that cannot keep up with 60 frames a second", () => {
+  const second = (watch: ReturnType<typeof createSlowWatch>, slowFrames: number) => {
+    // One second of frames: `slowFrames` of 26 ms, then 20 ms ones until the second is full (about 50 in all).
+    let said = false
+    let total = 0
+    for (let i = 0; total < 1000; i++) {
+      const ms = i < slowFrames ? SLOW_FRAME_MS + 1 : 20
+      total += ms
+      said = watch.push(ms) || said
+    }
+    return said
+  }
+
+  test("ten seconds of moving in a row with a p95 above 25 ms: said once, and never again", () => {
+    const watch = createSlowWatch()
+    const said = Array.from({ length: SLOW_SECONDS + 3 }, () => second(watch, 5))
+    expect(said.indexOf(true)).toBe(SLOW_SECONDS - 1)
+    expect(said.filter(Boolean)).toHaveLength(1)
+  })
+
+  test("the ten seconds are one window: a good second among slow ones does not start the count again", () => {
+    // A machine near the line: nine slow seconds and one good one are still a p95 above 25 ms over the ten.
+    const watch = createSlowWatch()
+    for (let i = 0; i < 5; i++) expect(second(watch, 5)).toBe(false)
+    expect(second(watch, 0)).toBe(false)
+    for (let i = 0; i < 3; i++) expect(second(watch, 5)).toBe(false)
+    expect(second(watch, 5)).toBe(true)
+    expect(watch.state()).toEqual({ seconds: SLOW_SECONDS, share: expect.any(Number), said: true })
+  })
+
+  test("a few slow frames (a hitch, 2 in a second) for ten seconds are not slow; the window slides", () => {
+    const watch = createSlowWatch()
+    for (let i = 0; i < SLOW_SECONDS * 3; i++) expect(second(watch, 2)).toBe(false)
+    expect(watch.state().share).toBeLessThan(SLOW_SHARE)
+    // Then the machine slows down: the window fills with slow seconds and says so.
+    let said = false
+    for (let i = 0; i < SLOW_SECONDS; i++) said = second(watch, 6) || said
+    expect(said).toBe(true)
+  })
+
+  test("a 75 or 144 Hz display pacing 60 fps calls back on every vsync: never slow; a missed vsync there is", () => {
+    for (const hz of [75, 144]) {
+      const watch = createSlowWatch()
+      const vsync = 1000 / hz
+      let said = false
+      for (let i = 0; i < hz * (SLOW_SECONDS + 2); i++) said = watch.push(vsync, vsync) || said
+      expect([hz, said]).toEqual([hz, false])
+    }
+    const busy = createSlowWatch()
+    let said = false
+    // Every tenth callback two vsyncs late on a 144 Hz display: 10 % of the frames missed theirs.
+    for (let i = 0; i < 144 * (SLOW_SECONDS + 2); i++) said = busy.push(i % 10 ? 1000 / 144 : 3000 / 144, 1000 / 144) || said
+    expect(said).toBe(true)
+    expect(Math.round(1.5 * VSYNC_60_MS)).toBe(SLOW_FRAME_MS)
+  })
+
+  test("a pause drops only the second in progress", () => {
+    const watch = createSlowWatch()
+    for (let i = 0; i < SLOW_SECONDS - 1; i++) second(watch, 5)
+    for (let i = 0; i < 30; i++) watch.push(SLOW_FRAME_MS + 1)
+    watch.pause()
+    expect(second(watch, 5)).toBe(true)
+    expect(SLOW_SHARE).toBe(0.05)
   })
 })

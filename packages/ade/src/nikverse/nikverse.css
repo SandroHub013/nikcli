@@ -66,6 +66,43 @@
   transition: width 200ms linear;
 }
 
+/* An opening that did not come (`opening.ts`): one line over the frame, the reason and the two ways on. */
+[data-slot="nikverse-late"] {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--ade-sunken, canvas);
+  color: var(--ade-text, currentColor);
+  border: 1px solid var(--ade-line, currentColor);
+  border-radius: var(--ade-radius-md);
+}
+
+[data-slot="nikverse-late"] p {
+  flex: 1;
+  margin: 0;
+}
+
+[data-slot="nikverse-late"] button {
+  padding: var(--ade-space-2, 4px) var(--ade-space-5, 12px);
+  border-radius: var(--ade-radius-sm);
+  font-size: var(--ade-font-xs);
+  font-weight: var(--ade-weight-medium);
+  background: var(--ade-active);
+  color: var(--ade-text);
+  border: 1px solid var(--ade-border);
+  cursor: pointer;
+}
+
+[data-slot="nikverse-late"] button:hover {
+  background: var(--ade-hover);
+  border-color: var(--ade-text-weak);
+}
+
 [data-slot="nikverse-ask"] {
   display: flex;
   align-items: center;

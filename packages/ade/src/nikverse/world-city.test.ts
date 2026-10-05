@@ -296,3 +296,75 @@ describe("the 3D city the page starts", () => {
     expect(document.documentElement.dataset.load).toBe("module")
   })
 })
+
+describe("what keeps the loop awake (old PCs, point 4)", () => {
+  test("the bench's door asks the city, on demand; a release build has no such door", async () => {
+    const awake = { mode: "still", animating: true }
+    const handle = { sync() {}, pause() {}, resume() {}, dispose() {}, why: () => awake }
+    const bench = page("?bench=1")
+    boot(bench.win, { loadCity: async () => ({ startCity: async () => handle }) })
+    await settled()
+    expect((bench.win as unknown as { __nikverseWhy(): unknown }).__nikverseWhy()).toEqual(awake)
+    const release = page()
+    boot(release.win, { loadCity: async () => ({ startCity: async () => handle }) })
+    await settled()
+    expect((release.win as unknown as { __nikverseWhy?: unknown }).__nikverseWhy).toBeUndefined()
+  })
+})
+
+describe("the world tells ADE it is on screen (old PCs, points 2 and 3)", () => {
+  const opened = (seen: unknown[]) => seen.filter((m) => (m as { type?: string }).type === "opened").length
+
+  test("once the city drew its first frame, not before, and only once", async () => {
+    const { win, offer, seen } = page()
+    const city = fakeCity()
+    boot(win, { loadCity: async () => city.module })
+    await settled()
+    offer()
+    expect(opened(seen)).toBe(0)
+    const deps = city.started[0] as { onDrawn(): void }
+    deps.onDrawn()
+    deps.onDrawn()
+    expect(opened(seen)).toBe(1)
+  })
+
+  test("drawn before ADE's port came, it says so as soon as the port is there", async () => {
+    const { win, offer, seen } = page()
+    const city = fakeCity()
+    boot(win, { loadCity: async () => city.module })
+    await settled()
+    ;(city.started[0] as { onDrawn(): void }).onDrawn()
+    expect(opened(seen)).toBe(0)
+    offer()
+    expect(opened(seen)).toBe(1)
+  })
+
+  test("a city that fails leaves the list, which is on screen too; ?city=0 is the list with no city at all", async () => {
+    const failing = page()
+    boot(failing.win, { loadCity: async () => Promise.reject(new Error("no renderer")) })
+    await settled()
+    failing.offer()
+    expect(opened(failing.seen)).toBe(1)
+    const list = page("?city=0")
+    const city = fakeCity()
+    boot(list.win, { loadCity: async () => city.module })
+    await settled()
+    list.offer()
+    expect(city.started).toHaveLength(0)
+    expect(document.documentElement.dataset.city).toBe("off")
+    expect(opened(list.seen)).toBe(1)
+  })
+
+  test("a city too slow at its level tells ADE; one opened lowered by ADE knows it", async () => {
+    const { win, offer, seen } = page("?quality=bassa&lowered=1")
+    const city = fakeCity()
+    boot(win, { loadCity: async () => city.module })
+    await settled()
+    offer()
+    const deps = city.started[0] as { onSlow(): void; lowered?: boolean; quality?: string }
+    expect([deps.quality, deps.lowered]).toEqual(["bassa", true])
+    deps.onSlow()
+    expect(seen).toContainEqual({ type: "slow" })
+    expect(readOptions("").lowered).toBeUndefined()
+  })
+})

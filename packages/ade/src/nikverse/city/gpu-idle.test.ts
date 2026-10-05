@@ -6,6 +6,7 @@ import {
   hasTimestampQuery,
   liveGpuTimer,
   measureGpu,
+  rendererName,
   timestampFrames,
 } from "./gpu-idle"
 import type { Settled } from "./resolution"
@@ -272,5 +273,27 @@ describe("timing at the scales the level would settle at", () => {
     expect("scale" in timing).toBe(false)
     expect([...new Set(sizes)]).toEqual([1600])
     expect(timing.p95).toBe(20)
+  })
+})
+
+describe("the name of what draws", () => {
+  const gl = (unmasked: string | null, plain: string) => ({
+    getContext: () => ({
+      RENDERER: 7937,
+      getExtension: (name: string) => (name === "WEBGL_debug_renderer_info" && unmasked !== null ? { UNMASKED_RENDERER_WEBGL: 37446 } : null),
+      getParameter: (id: number) => (id === 37446 ? unmasked : id === 7937 ? plain : undefined),
+    }),
+  })
+
+  test("WebGL: the unmasked renderer where the browser gives it, the plain one otherwise", () => {
+    expect(rendererName(gl("ANGLE (Google, SwiftShader Device)", "WebKit WebGL"), "webgl2")).toBe("ANGLE (Google, SwiftShader Device)")
+    expect(rendererName(gl(null, "ANGLE (NVIDIA GeForce)"), "webgl2")).toBe("ANGLE (NVIDIA GeForce)")
+    expect(rendererName({}, "webgl2")).toBeUndefined()
+  })
+
+  test("WebGPU: the adapter's description, and a fallback adapter says it is software", () => {
+    expect(rendererName({}, "webgpu", { vendor: "nvidia", description: "RTX 5070" })).toBe("nvidia RTX 5070")
+    expect(rendererName({}, "webgpu", { isFallbackAdapter: true })).toContain("software")
+    expect(rendererName({}, "webgpu", {})).toBeUndefined()
   })
 })

@@ -1,9 +1,10 @@
-import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
+import { Show, batch, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { createAssetsFlow, type AssetsFlow, type AssetsHost, type AssetsView } from "./assets"
 import { createLifecycle } from "./lifecycle"
 import { createHandshake, newNonce } from "./handshake"
 import { createLink } from "./link"
 import { createPlayerStore, type SpotStorage } from "./player"
+import { createLoweredStore, createOpenWatch, worldQuery } from "./opening"
 import { PORT_OFFER, PROTOCOL_VERSION, worldUrl, type Command, type Snapshot } from "./protocol"
 import type { ForwardedChord } from "./chords"
 import "./nikverse.css"
@@ -36,6 +37,8 @@ function spotStorage(): SpotStorage | undefined {
  * back mounts a new one, which must find the character where it was even when storage is not there.
  */
 const places = createPlayerStore(spotStorage())
+/** Whether the world was too slow at its own level and opens at Bassa (`opening.ts`): ADE's to keep, like the place. */
+const lowering = createLoweredStore(spotStorage())
 
 export function NikversePane(props: {
   /** The picture of ADE now; undefined while there is nothing to show. */
@@ -65,10 +68,24 @@ export function NikversePane(props: {
   const benchQuery = () =>
     document.documentElement.dataset.adeBuild === "test"
       ? // The gate's `--tune` (`samples=1&maxscale=0.9`) rides on the same door, and only in the test build.
-        `?bench=1${(window as { __nikverseTune?: string }).__nikverseTune ? `&${(window as { __nikverseTune?: string }).__nikverseTune}` : ""}`
+        `bench=1${(window as { __nikverseTune?: string }).__nikverseTune ? `&${(window as { __nikverseTune?: string }).__nikverseTune}` : ""}`
       : ""
-  const sourceFor = (secret: string) => `${worldUrl()}${benchQuery()}#n=${secret}`
+  /** The user chose the list after an opening that did not come: the next load is the page without the city. */
+  let list = false
+  // A measuring run (the gate and the measures set `__nikverseTune`, even empty) is never lowered by what an earlier run
+  // left in the profile, unless it is a trial of the watch itself (`slowwatch=1`).
+  const tuned = () => {
+    const tune = (window as { __nikverseTune?: string }).__nikverseTune
+    return tune !== undefined && !/(^|&)slowwatch=1(&|$)/.test(tune)
+  }
+  const sourceFor = (secret: string) =>
+    `${worldUrl()}${worldQuery({ bench: benchQuery(), lowered: !tuned() && lowering.lowered(), list })}#n=${secret}`
   const [frameSrc, setFrameSrc] = createSignal(sourceFor(nonce))
+  /*
+   * Each reload is a new frame element. The address of a retry differs from the last one only after the `#` (the
+   * nonce), and a frame whose address changes only there is not reloaded: its old document stays, without its port.
+   */
+  const [frameLoad, setFrameLoad] = createSignal(1)
   const handshake = createHandshake({ frameWindow: () => frame?.contentWindow, nonce: () => nonce })
   const [loaded, setLoaded] = createSignal(true)
   /*
@@ -80,8 +97,39 @@ export function NikversePane(props: {
   const [assetsView, setAssetsView] = createSignal<AssetsView>({ kind: "ready" })
   let assetsFlow: AssetsFlow | undefined
   const reloadFrame = () => {
+    // The old document's port goes now: nothing it still says (an `opened`, say) may speak for the new one.
+    link?.close()
+    link = undefined
     nonce = newNonce()
-    setFrameSrc(sourceFor(nonce))
+    batch(() => {
+      setFrameSrc(sourceFor(nonce))
+      setFrameLoad((n) => n + 1)
+    })
+  }
+  /** Whether the panel can be seen: only that time counts against the opening (`opening.ts`). */
+  let seen = true
+  const [late, setLate] = createSignal(false)
+  const openWatch = createOpenWatch({
+    schedule: (fn, ms) => {
+      const timer = setTimeout(fn, ms)
+      return () => clearTimeout(timer)
+    },
+    visible: () => seen,
+    late: () => setLate(true),
+  })
+  // Every load of the frame is an opening to wait for, from the moment it starts.
+  createEffect(() => {
+    if (!loaded() || waiting()) return openWatch.dispose()
+    frameSrc()
+    setLate(false)
+    openWatch.start()
+  })
+  const reopen = (asList: boolean) => {
+    // The list is for this load only: the next one (the panel coming back, a retry) tries the city again.
+    list = asList
+    setLate(false)
+    reloadFrame()
+    list = false
   }
   const startAssets = async () => {
     if (!assetsFlow) {
@@ -138,6 +186,15 @@ export function NikversePane(props: {
       // Where the character stood is ADE's to keep: the frame is unloaded when it is not seen.
       player: places.load,
       savePlayer: places.save,
+      opened: () => {
+        openWatch.opened()
+        setLate(false)
+      },
+      // Too slow at the level it chose: from now on it opens at Bassa, and the page says so.
+      slow: () => {
+        lowering.lower()
+        reloadFrame()
+      },
     })
     link = current
     channel.port1.onmessage = (event) => current.receive(event.data)
@@ -191,7 +248,12 @@ export function NikversePane(props: {
   onMount(() => {
     // Visible means the window is shown and the panel is on screen (not behind another section, nor scrolled away).
     let onScreen = true
-    const apply = () => lifecycle.setVisible(onScreen && document.visibilityState !== "hidden")
+    const apply = () => {
+      const was = seen
+      seen = onScreen && document.visibilityState !== "hidden"
+      if (seen && !was) openWatch.seenAgain()
+      lifecycle.setVisible(seen)
+    }
     const observer =
       typeof IntersectionObserver === "undefined" || !root
         ? undefined
@@ -216,6 +278,7 @@ export function NikversePane(props: {
   })
 
   onCleanup(() => {
+    openWatch.dispose()
     assetsFlow?.dispose()
     lifecycle.dispose()
     link?.close()
@@ -318,21 +381,36 @@ export function NikversePane(props: {
             </div>
           )}
         </Show>
+        <Show when={late()}>
+          <div data-slot="nikverse-late" role="alert">
+            <p>{t("nikverse.late")}</p>
+            <button type="button" data-slot="nikverse-late-retry" onClick={() => reopen(false)}>
+              {t("nikverse.late.retry")}
+            </button>
+            <button type="button" data-slot="nikverse-late-list" onClick={() => reopen(true)}>
+              {t("nikverse.late.list")}
+            </button>
+          </div>
+        </Show>
         <Show when={loaded() && !waiting()} fallback={loaded() ? null : <p data-slot="nikverse-unloaded">{t("nikverse.unloaded")}</p>}>
-          <iframe
-            ref={frame}
-            data-slot="nikverse-frame"
-            title={t("newPane.nikverse")}
-            name="ade-nikverse"
-            src={frameSrc()}
-            // No `allow-same-origin`: the origin is `null`, which Tauri's IPC refuses (every registered scheme is
-            // a local origin for it, so the world's own would not be). No top navigation, no popups, no forms.
-            // Scripts and nothing else: the camera turns by dragging, WebView2 gives a frame no pointer lock.
-            sandbox="allow-scripts"
-            referrerpolicy="no-referrer"
-            // A navigation takes the document and the port with it: ask whether the one at the other end is still there.
-            onLoad={() => link?.probe()}
-          />
+          <Show when={frameLoad()} keyed>
+            {(_load) => (
+              <iframe
+                ref={frame}
+                data-slot="nikverse-frame"
+                title={t("newPane.nikverse")}
+                name="ade-nikverse"
+                src={frameSrc()}
+                // No `allow-same-origin`: the origin is `null`, which Tauri's IPC refuses (every registered scheme is
+                // a local origin for it, so the world's own would not be). No top navigation, no popups, no forms.
+                // Scripts and nothing else: the camera turns by dragging, WebView2 gives a frame no pointer lock.
+                sandbox="allow-scripts"
+                referrerpolicy="no-referrer"
+                // A navigation takes the document and the port with it: ask whether the one at the other end is still there.
+                onLoad={() => link?.probe()}
+              />
+            )}
+          </Show>
         </Show>
       </div>
     </article>

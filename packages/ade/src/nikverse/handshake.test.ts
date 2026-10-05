@@ -86,7 +86,9 @@ describe("only the world, proving it knows the nonce, is given the port", () => 
     const load = pane.slice(from, pane.indexOf("schedule:", from))
     expect(load).toContain("nonce = newNonce()")
     expect(load.indexOf("nonce = newNonce()")).toBeLessThan(load.indexOf("setFrameSrc(sourceFor(nonce))"))
-    expect(pane).toContain("`${worldUrl()}${benchQuery()}#n=${secret}`")
+    // The address is the world's, its query (the bench door, a lowered level, the list: `opening.worldQuery`), and the nonce.
+    expect(pane).toContain("`${worldUrl()}${worldQuery({ bench: benchQuery(), ")
+    expect(pane).toContain("})}#n=${secret}`")
     expect(pane).toContain("connect(event.source as Window)")
     expect(pane).not.toContain("frame!.contentWindow")
   })

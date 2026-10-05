@@ -48,6 +48,10 @@ export interface LinkDeps {
   player?: () => PlayerSpot | undefined
   /** The world says where the character is; ADE keeps it. */
   savePlayer?: (spot: PlayerSpot) => void
+  /** The world is on screen (`opening.ts` stops waiting for it). */
+  opened?: () => void
+  /** The world was too slow at its level: ADE remembers it and opens it at Bassa. */
+  slow?: () => void
 }
 
 export function createLink(deps: LinkDeps) {
@@ -86,6 +90,8 @@ export function createLink(deps: LinkDeps) {
         deps.savePlayer?.({ x: message.x, z: message.z, heading: message.heading })
         return
       }
+      if (message.type === "opened") return deps.opened?.()
+      if (message.type === "slow") return deps.slow?.()
       if (message.type === "ready") {
         ready = true
         const spot = deps.player?.()

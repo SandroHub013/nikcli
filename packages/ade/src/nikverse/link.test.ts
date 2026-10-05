@@ -72,6 +72,25 @@ function rig(initial: Snapshot | null = picture()) {
 }
 
 describe("ADE's end of the channel", () => {
+  test("the world on screen and the world too slow reach the panel, and nothing goes back", () => {
+    const heard: string[] = []
+    const sent: ToWorld[] = []
+    const link = createLink({
+      port: { postMessage: (message) => void sent.push(message), close: () => {} },
+      picture: () => picture(),
+      run: () => {},
+      ask: () => {},
+      ignored: (reason) => void heard.push(`ignored ${reason}`),
+      schedule: () => () => {},
+      opened: () => void heard.push("opened"),
+      slow: () => void heard.push("slow"),
+    })
+    link.receive({ type: "opened" })
+    link.receive({ type: "slow" })
+    expect(heard).toEqual(["opened", "slow"])
+    expect(sent).toEqual([])
+  })
+
   test("the world gets the whole picture when it says it is ready, and not before", () => {
     const { link, sent } = rig()
     link.push()

@@ -115,6 +115,9 @@ describe("the commands the world may ask for", () => {
 
   test("a message from the world is `ready` or a command, and nothing else", () => {
     expect(readFromWorld({ type: "ready" })).toEqual({ type: "ready" })
+    // The world on screen, and too slow at its level (old PCs, points 3 and 2): nothing else rides along.
+    expect(readFromWorld({ type: "opened", extra: "x" })).toEqual({ type: "opened" })
+    expect(readFromWorld({ type: "slow", level: "alta" })).toEqual({ type: "slow" })
     expect(readFromWorld({ type: "command", command: { cmd: "release-focus" } })).toEqual({
       type: "command",
       command: { cmd: "release-focus" },
@@ -163,7 +166,9 @@ describe("where the world lives", () => {
     expect(answered.indexOf("if (!verdict.ok)")).toBeLessThan(answered.indexOf("connect(event.source as Window)"))
     expect(source.match(/connect\(/g)).toHaveLength(2)
     // The secret is in the address' fragment, fresh for each load of the frame.
-    expect(source).toContain("`${worldUrl()}${benchQuery()}#n=${secret}`")
+    // The address is the world's, its query (the bench door, a lowered level, the list: `opening.worldQuery`), and the nonce.
+    expect(source).toContain("`${worldUrl()}${worldQuery({ bench: benchQuery(), ")
+    expect(source).toContain("})}#n=${secret}`")
     // The bench door is asked for by the test build only.
     expect(source).toContain('dataset.adeBuild === "test"')
     expect(source).toContain("?bench=1")
