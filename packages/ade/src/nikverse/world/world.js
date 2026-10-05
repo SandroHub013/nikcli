@@ -201,6 +201,9 @@ const loadCityModule = () => import("./assets/world/city.js")
  * Which of the page's query options are set, for the tests: `?check=logo`, `?quality=` and `?renderer=classic` to draw
  * with the classic WebGL renderer where WebGPU exists, to compare the two. There is no way to ask for
  * WebGPURenderer's own WebGL backend: it is never used.
+ *
+ * @returns {{ check: boolean, classic: boolean, quality: string | undefined, bench: boolean, shot: number | undefined,
+ *   tune: { samples?: number, maxScale?: number, compile?: "async" } | undefined, list?: true, lowered?: true }}
  */
 export function readOptions(search) {
   const params = new URLSearchParams(String(search))
@@ -216,6 +219,10 @@ export function readOptions(search) {
     shot: Number.isInteger(shot) && shot >= 1 && shot <= 8 ? shot : undefined,
     // For measuring only, and only where the bench's door is open: `?samples=1|4`, `?maxscale=0.75..1` and `?compile=async` (see `CityDeps.tune`).
     tune: params.get("bench") === "1" || (Number.isInteger(shot) && shot >= 1 && shot <= 8) ? tuneOf(params) : undefined,
+    // `?city=0`: the list the user chose after an opening that did not come (`opening.ts`), no city at all.
+    list: params.get("city") === "0" ? true : undefined,
+    // `?lowered=1`: ADE opens the world at Bassa because it was too slow at its own level, and the page says so.
+    lowered: params.get("lowered") === "1" ? true : undefined,
   }
 }
 
@@ -256,11 +263,28 @@ export function boot(win, options = {}) {
   // The check page shows the logo and nothing else, from the first paint.
   if (query.check) mark("check", "1")
 
+  /** The world is on screen (the city's first frame, or the list): ADE stops waiting for it, once (`opening.ts`). */
+  let onScreen = false
+  let told = false
+  const tellOpened = () => {
+    if (!onScreen || told || !port) return
+    told = true
+    port.postMessage({ type: "opened" })
+  }
+  const shown = () => {
+    onScreen = true
+    tellOpened()
+  }
+
   // The city starts by itself and the list above stays as it is: if the module is missing, or the
   // renderer cannot start, the page keeps working as the list. Until the city's own phases (`city/load-log.ts`),
   // the opening is loading the city's module.
-  if (!query.check) mark("load", "module")
-  Promise.resolve()
+  if (!query.check && !query.list) mark("load", "module")
+  // The list the user chose: no city.
+  if (query.list) {
+    mark("city", "off")
+    shown()
+  } else Promise.resolve()
     .then(loadCity)
     .then((module) =>
       module.startCity({
@@ -274,6 +298,9 @@ export function boot(win, options = {}) {
         tune: query.tune,
         // ADE keeps the place, not this frame: it is handed back when the frame comes up again.
         savePosition: (place) => port?.postMessage({ type: "position", x: place.x, z: place.z, heading: place.heading }),
+        lowered: query.lowered,
+        onDrawn: shown,
+        onSlow: () => port?.postMessage({ type: "slow" }),
       }),
     )
     .then((started) => {
@@ -290,6 +317,8 @@ export function boot(win, options = {}) {
     .catch((error) => {
       mark("city", "failed")
       mark("cityError", String(error?.message ?? error).slice(0, 200))
+      // The page works as the list: that is on screen too.
+      shown()
     })
 
   // Without the nonce this is not the world ADE made, and it says nothing: no port will come.
@@ -323,6 +352,7 @@ export function boot(win, options = {}) {
       renderer.invalidate()
     }
     port.postMessage({ type: "ready" })
+    tellOpened()
   }
   win.addEventListener("message", onPort)
   if (nonce) win.parent.postMessage({ type: HELLO, nonce }, "*")

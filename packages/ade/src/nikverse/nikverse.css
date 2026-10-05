@@ -37,7 +37,8 @@
 }
 
 /* The frame is in place under a failure line: the line sits over it instead of pushing it. */
-[data-slot="nikverse-assets"][data-failed="true"] {
+[data-slot="nikverse-assets"][data-failed="true"],
+[data-slot="nikverse-late"] {
   position: absolute;
   left: 8px;
   right: 8px;

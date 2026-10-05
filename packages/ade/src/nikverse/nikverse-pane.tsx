@@ -4,6 +4,7 @@ import { createLifecycle } from "./lifecycle"
 import { createHandshake, newNonce } from "./handshake"
 import { createLink } from "./link"
 import { createPlayerStore, type SpotStorage } from "./player"
+import { createLoweredStore, createOpenWatch, worldQuery } from "./opening"
 import { PORT_OFFER, PROTOCOL_VERSION, worldUrl, type Command, type Snapshot } from "./protocol"
 import type { ForwardedChord } from "./chords"
 import "./nikverse.css"
@@ -36,6 +37,8 @@ function spotStorage(): SpotStorage | undefined {
  * back mounts a new one, which must find the character where it was even when storage is not there.
  */
 const places = createPlayerStore(spotStorage())
+/** Whether the world was too slow at its own level and opens at Bassa (`opening.ts`): ADE's to keep, like the place. */
+const lowering = createLoweredStore(spotStorage())
 
 export function NikversePane(props: {
   /** The picture of ADE now; undefined while there is nothing to show. */
@@ -65,9 +68,14 @@ export function NikversePane(props: {
   const benchQuery = () =>
     document.documentElement.dataset.adeBuild === "test"
       ? // The gate's `--tune` (`samples=1&maxscale=0.9`) rides on the same door, and only in the test build.
-        `?bench=1${(window as { __nikverseTune?: string }).__nikverseTune ? `&${(window as { __nikverseTune?: string }).__nikverseTune}` : ""}`
+        `bench=1${(window as { __nikverseTune?: string }).__nikverseTune ? `&${(window as { __nikverseTune?: string }).__nikverseTune}` : ""}`
       : ""
-  const sourceFor = (secret: string) => `${worldUrl()}${benchQuery()}#n=${secret}`
+  /** The user chose the list after an opening that did not come: the next load is the page without the city. */
+  let list = false
+  // A measuring run (the gate's `--tune`) is never lowered by what an earlier run left in the profile.
+  const tuned = () => Boolean((window as { __nikverseTune?: string }).__nikverseTune)
+  const sourceFor = (secret: string) =>
+    `${worldUrl()}${worldQuery({ bench: benchQuery(), lowered: !tuned() && lowering.lowered(), list })}#n=${secret}`
   const [frameSrc, setFrameSrc] = createSignal(sourceFor(nonce))
   const handshake = createHandshake({ frameWindow: () => frame?.contentWindow, nonce: () => nonce })
   const [loaded, setLoaded] = createSignal(true)
@@ -82,6 +90,29 @@ export function NikversePane(props: {
   const reloadFrame = () => {
     nonce = newNonce()
     setFrameSrc(sourceFor(nonce))
+  }
+  /** Whether the panel can be seen: only that time counts against the opening (`opening.ts`). */
+  let seen = true
+  const [late, setLate] = createSignal(false)
+  const openWatch = createOpenWatch({
+    schedule: (fn, ms) => {
+      const timer = setTimeout(fn, ms)
+      return () => clearTimeout(timer)
+    },
+    visible: () => seen,
+    late: () => setLate(true),
+  })
+  // Every load of the frame is an opening to wait for, from the moment it starts.
+  createEffect(() => {
+    if (!loaded() || waiting()) return openWatch.dispose()
+    frameSrc()
+    setLate(false)
+    openWatch.start()
+  })
+  const reopen = (asList: boolean) => {
+    list = asList
+    setLate(false)
+    reloadFrame()
   }
   const startAssets = async () => {
     if (!assetsFlow) {
@@ -138,6 +169,15 @@ export function NikversePane(props: {
       // Where the character stood is ADE's to keep: the frame is unloaded when it is not seen.
       player: places.load,
       savePlayer: places.save,
+      opened: () => {
+        openWatch.opened()
+        setLate(false)
+      },
+      // Too slow at the level it chose: from now on it opens at Bassa, and the page says so.
+      slow: () => {
+        lowering.lower()
+        reloadFrame()
+      },
     })
     link = current
     channel.port1.onmessage = (event) => current.receive(event.data)
@@ -191,7 +231,10 @@ export function NikversePane(props: {
   onMount(() => {
     // Visible means the window is shown and the panel is on screen (not behind another section, nor scrolled away).
     let onScreen = true
-    const apply = () => lifecycle.setVisible(onScreen && document.visibilityState !== "hidden")
+    const apply = () => {
+      seen = onScreen && document.visibilityState !== "hidden"
+      lifecycle.setVisible(seen)
+    }
     const observer =
       typeof IntersectionObserver === "undefined" || !root
         ? undefined
@@ -216,6 +259,7 @@ export function NikversePane(props: {
   })
 
   onCleanup(() => {
+    openWatch.dispose()
     assetsFlow?.dispose()
     lifecycle.dispose()
     link?.close()
@@ -317,6 +361,17 @@ export function NikversePane(props: {
               </button>
             </div>
           )}
+        </Show>
+        <Show when={late()}>
+          <div data-slot="nikverse-late" role="alert">
+            <p>{t("nikverse.late")}</p>
+            <button type="button" data-slot="nikverse-late-retry" onClick={() => reopen(false)}>
+              {t("nikverse.late.retry")}
+            </button>
+            <button type="button" data-slot="nikverse-late-list" onClick={() => reopen(true)}>
+              {t("nikverse.late.list")}
+            </button>
+          </div>
         </Show>
         <Show when={loaded() && !waiting()} fallback={loaded() ? null : <p data-slot="nikverse-unloaded">{t("nikverse.unloaded")}</p>}>
           <iframe

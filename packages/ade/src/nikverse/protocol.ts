@@ -77,6 +77,10 @@ export type FromWorld =
   | { type: "command"; command: unknown }
   /** Where the character is: sent when it stops and now and then while it walks, for ADE to keep. */
   | ({ type: "position" } & PlayerSpot)
+  /** The world is on screen: the city drew its first frame, or the page works as the list. */
+  | { type: "opened" }
+  /** The frames stayed too slow at this level: ADE opens the world at Bassa from now on. */
+  | { type: "slow" }
 
 export type Command =
   | { cmd: "open-session"; paneId: string }
@@ -175,6 +179,8 @@ export function readFromWorld(data: unknown): FromWorld | undefined {
   if (!data || typeof data !== "object") return undefined
   const body = data as { type?: unknown; command?: unknown; id?: unknown }
   if (body.type === "ready") return { type: "ready" }
+  if (body.type === "opened") return { type: "opened" }
+  if (body.type === "slow") return { type: "slow" }
   if (body.type === "pong") return typeof body.id === "number" ? { type: "pong", id: body.id } : undefined
   if (body.type === "command") return { type: "command", command: body.command }
   if (body.type === "position") {

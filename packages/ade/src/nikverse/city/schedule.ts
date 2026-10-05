@@ -26,6 +26,43 @@ export function drawMode(state: { moving: boolean; sinceActivityMs: number }, im
   return state.sinceActivityMs >= immobileAfterMs ? "immobile" : "still"
 }
 
+/** A frame later than this after the one before, at a level that draws at 60, is a slow one (old PCs, point 2). */
+export const SLOW_FRAME_MS = 25
+/** More slow frames than this share of a second is a second whose p95 is above `SLOW_FRAME_MS`. */
+export const SLOW_SHARE = 0.05
+/** That many such seconds in a row while moving, and the level is too much for the machine. */
+export const SLOW_SECONDS = 10
+
+/**
+ * Whether the machine keeps up with a 60 fps level: fed the moving mode's frames one by one (the time since the frame
+ * before), it says yes once, when ten seconds of moving in a row had a p95 above 25 ms. Still and immobile time is not
+ * fed: there the frames are slow on purpose. `pause` drops the second in progress, not the run of slow seconds.
+ */
+export function createSlowWatch() {
+  let elapsed = 0
+  let frames = 0
+  let slow = 0
+  let run = 0
+  let said = false
+  return {
+    push(ms: number): boolean {
+      if (said) return false
+      elapsed += ms
+      frames++
+      if (ms > SLOW_FRAME_MS) slow++
+      if (elapsed < 1000) return false
+      run = slow / frames > SLOW_SHARE ? run + 1 : 0
+      elapsed = frames = slow = 0
+      if (run < SLOW_SECONDS) return false
+      said = true
+      return true
+    },
+    pause() {
+      elapsed = frames = slow = 0
+    },
+  }
+}
+
 /** How often the position is sent to ADE while the character walks. */
 export const POSITION_EVERY_MS = 3000
 

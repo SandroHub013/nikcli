@@ -35,7 +35,7 @@ import { MOUTH, type Box } from "./layout"
 import { CHECK_PIXELS_PER_UNIT, logoCheck } from "./hologram"
 import { parseLogo } from "./logo"
 import { loadLevel } from "./load-level"
-import { isSoftwareRenderer, movingIntervalMs, probeGpu, resolveLevel, type LevelId } from "./quality"
+import { MAX_FPS, isLevelId, isSoftwareRenderer, movingIntervalMs, probeGpu, resolveLevel, type LevelId } from "./quality"
 import { chooseRenderer, type Backend, type DrawingSurface } from "./renderers"
 import type { Cast } from "./rig"
 import type { GpuTiming } from "./bench"
@@ -45,7 +45,7 @@ import { createGovernor } from "./resolution"
 import { createPictureDecoder, type Ktx2Support } from "./ktx2"
 import { disposeTree, releaseRenderer } from "./release"
 import { startShot } from "./shot-handle"
-import { IMMOBILE_AFTER_MS, SOFTWARE_IMMOBILE_AFTER_MS, STILL_INTERVAL_MS, drawMode, pace, shouldSavePosition, type DrawMode } from "./schedule"
+import { IMMOBILE_AFTER_MS, SOFTWARE_IMMOBILE_AFTER_MS, STILL_INTERVAL_MS, createSlowWatch, drawMode, pace, shouldSavePosition, type DrawMode } from "./schedule"
 import { createTown, type Picture } from "./town"
 import { createCityScene } from "./view"
 
@@ -78,6 +78,12 @@ export interface CityDeps {
   assets?: string
   /** Tells ADE where the character is, so that a reload of the frame can stand it there again. */
   savePosition?(spot: Spot): void
+  /** ADE opens the world at Bassa because it was too slow at its own level (`?lowered=1`): the page says so, discreetly. */
+  lowered?: boolean
+  /** The city drew its first frame: the world is on screen (ADE stops waiting for it). */
+  onDrawn?(): void
+  /** The frames stayed too slow at a 60 fps level the machine chose by itself: ADE opens it at Bassa from now on. */
+  onSlow?(): void
 }
 
 export interface CityHandle {
@@ -203,7 +209,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   data.quality = level.id
   data.assets = loaded.assets.id
   // Why the level is what it is, and what is plain or missing in it.
-  data.qualityWhy = [resolved.why, software ? "rendering software" : "", ...loaded.notes].filter(Boolean).join(" | ").slice(0, 600)
+  data.qualityWhy = [deps.lowered ? "abbassata da ADE: troppo lenta al livello automatico" : "", resolved.why, software ? "rendering software" : "", ...loaded.notes].filter(Boolean).join(" | ").slice(0, 600)
   data.cast = cast ? "ok" : "failed"
   data.kit = kit ? "ok" : "failed"
 
@@ -260,6 +266,9 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       ? (renderer as unknown as { compileAsync?(scene: unknown, camera: unknown): Promise<void> }).compileAsync
       : undefined
   let compileTrial: "pending" | "running" | "done" = compileAsync ? "pending" : "done"
+  // Only a 60 fps level the machine chose by itself is watched: not a level asked for by name, not the bench's.
+  const slowWatch = deps.onSlow && level.fps === MAX_FPS && !isLevelId(deps.quality) && !deps.tune ? createSlowWatch() : undefined
+  let lastMovingDraw = 0
   doc.documentElement.dataset.renderScale = String(renderScale)
 
   const resize = () => {
@@ -392,7 +401,17 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
       // A count of the frames drawn, for the render check: pausing must stop it.
       const counter = win as unknown as { __nikverseFrames?: number }
       counter.__nikverseFrames = (counter.__nikverseFrames ?? 0) + 1
-      if (probe.after()) doc.documentElement.dataset.ready = "1"
+      if (probe.after()) {
+        doc.documentElement.dataset.ready = "1"
+        deps.onDrawn?.()
+      }
+      if (slowWatch) {
+        // Two moving frames in a row: the time between them is the machine's. Anything else is a pause, not a slow frame.
+        if (mode === "moving" && lastMovingDraw > 0 && ts - lastMovingDraw < 250) {
+          if (slowWatch.push(ts - lastMovingDraw)) deps.onSlow!()
+        } else slowWatch.pause()
+        lastMovingDraw = mode === "moving" ? ts : 0
+      }
     }
     schedule(mode === "moving")
   }
@@ -488,6 +507,15 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   canvas.addEventListener("wheel", onWheel, { passive: false })
 
   town.sync(deps.picture())
+  if (deps.lowered) {
+    // One discreet line, for a few seconds: why the world looks plainer than before.
+    const note = doc.getElementById("note")
+    if (note) {
+      note.textContent = "NikVerse in qualità Bassa: a Media questo PC era lento"
+      note.hidden = false
+      setTimeout(() => (note.hidden = true), 8000)
+    }
+  }
   // Until the loop draws: an opening stopped here is waiting for its first frame (a paused pane, a hidden frame).
   log.phase("first-frame")
   resize()

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { IMPOSTOR_BEYOND, SLOW_BEYOND, SLOW_POSE_MS, detailAt, poseDue, shopInRange } from "./lod"
-import { IMMOBILE_AFTER_MS, POSITION_EVERY_MS, SOFTWARE_IMMOBILE_AFTER_MS, STILL_INTERVAL_MS, drawMode, pace, shouldSavePosition } from "./schedule"
+import { IMMOBILE_AFTER_MS, POSITION_EVERY_MS, SLOW_FRAME_MS, SLOW_SECONDS, SLOW_SHARE, SOFTWARE_IMMOBILE_AFTER_MS, STILL_INTERVAL_MS, createSlowWatch, drawMode, pace, shouldSavePosition } from "./schedule"
 
 describe("the three ways to draw", () => {
   test("moving draws every frame; standing with the hologram turning draws 15 a second; quiet for ten seconds draws nothing", () => {
@@ -121,5 +121,43 @@ describe("pacing the draws to the level's frame rate", () => {
     const step = pace(0, 0, 66)
     expect(step.next).toBeCloseTo(66, 6)
     expect(pace(17, step.next, 16.67).draw).toBe(true)
+  })
+})
+
+describe("a machine that cannot keep up with 60 frames a second", () => {
+  const second = (watch: ReturnType<typeof createSlowWatch>, slowFrames: number) => {
+    // One second of frames: `slowFrames` of 26 ms, then 20 ms ones until the second is full (about 50 in all).
+    let said = false
+    let total = 0
+    for (let i = 0; total < 1000; i++) {
+      const ms = i < slowFrames ? SLOW_FRAME_MS + 1 : 20
+      total += ms
+      said = watch.push(ms) || said
+    }
+    return said
+  }
+
+  test("ten seconds of moving in a row with a p95 above 25 ms: said once, and never again", () => {
+    const watch = createSlowWatch()
+    const said = Array.from({ length: SLOW_SECONDS + 3 }, () => second(watch, 5))
+    expect(said.indexOf(true)).toBe(SLOW_SECONDS - 1)
+    expect(said.filter(Boolean)).toHaveLength(1)
+  })
+
+  test("a good second breaks the run; a few slow frames (a hitch) do not make a slow second", () => {
+    const watch = createSlowWatch()
+    for (let i = 0; i < SLOW_SECONDS - 1; i++) expect(second(watch, 5)).toBe(false)
+    expect(second(watch, 2)).toBe(false)
+    for (let i = 0; i < SLOW_SECONDS - 1; i++) expect(second(watch, 5)).toBe(false)
+    expect(second(watch, 5)).toBe(true)
+  })
+
+  test("a pause drops only the second in progress", () => {
+    const watch = createSlowWatch()
+    for (let i = 0; i < SLOW_SECONDS - 1; i++) second(watch, 5)
+    for (let i = 0; i < 30; i++) watch.push(SLOW_FRAME_MS + 1)
+    watch.pause()
+    expect(second(watch, 5)).toBe(true)
+    expect(SLOW_SHARE).toBe(0.05)
   })
 })

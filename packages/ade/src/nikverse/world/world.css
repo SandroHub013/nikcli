@@ -192,6 +192,25 @@ button:focus-visible {
   display: none;
 }
 
+/* A discreet line about the world itself (its level was lowered): small, in a corner, gone after a few seconds. */
+#note {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  margin: 0;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  color: var(--text);
+  font-size: 0.75rem;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+#note[hidden] {
+  display: none;
+}
+
 html[data-city="1"] #world {
   position: fixed;
   inset: 0;
