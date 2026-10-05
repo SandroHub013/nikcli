@@ -95,6 +95,13 @@ export interface SettingsSheetProps {
   refreshHooks: () => void
   openLoginSession: (runner: Runner) => void
   keysHost: () => KeysHost | undefined
+  /**
+   * Set while the voice's old OpenRouter key differs from the keychain's: the
+   * Chiavi API page asks once which to keep, and this takes the answer.
+   */
+  voiceKeyConflict?: ((choice: "voice" | "keychain") => Promise<void>) | undefined
+  /** Opens Agenti e account › Chiavi API: the voice's «Gestisci in Chiavi API». */
+  onManageKeys?: () => void
   extensionsIo: () => McpConfigIO | undefined
   pluginRuntime: ReturnType<typeof createAdePluginRuntime>
   openGuide: (url: string) => void
@@ -190,6 +197,9 @@ function voiceStateProps(props: SettingsSheetProps): VoiceSettingsStateProps {
     get testIdentity() {
       return props.testIdentity
     },
+    get onManageKeys() {
+      return props.onManageKeys
+    },
     get existingBindings() {
       return props.bindings
     },
@@ -249,7 +259,7 @@ export function SettingsSheet(props: SettingsSheetProps): JSX.Element {
 
       case "agents":
         if (tab === "agents/keys") {
-          return <KeysSection host={props.keysHost()} agents={AGENTS} />
+          return <KeysSection host={props.keysHost()} agents={AGENTS} voiceConflict={props.voiceKeyConflict} />
         }
         if (tab === "agents/bots") {
           return (

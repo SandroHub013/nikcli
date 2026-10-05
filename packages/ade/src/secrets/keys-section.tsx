@@ -35,7 +35,15 @@ const message = (failure: unknown) => (failure instanceof Error ? failure.messag
  * a password field that is emptied as soon as the keychain has it; after that
  * the page can only copy it (the host writes the clipboard) or delete it.
  */
-export function KeysSection(props: { host: KeysHost | undefined; agents: readonly AgentOption[] }) {
+export function KeysSection(props: {
+  host: KeysHost | undefined
+  agents: readonly AgentOption[]
+  /**
+   * The voice's old OpenRouter key and the keychain's differ (S6): asked here,
+   * once, which to keep. Undefined when there is nothing to ask.
+   */
+  voiceConflict?: ((choice: "voice" | "keychain") => Promise<void>) | undefined
+}) {
   const [keys, setKeys] = createSignal<KeyInfo[]>([])
   const [loadProblem, setLoadProblem] = createSignal<string>()
   const [editing, setEditing] = createSignal<string | "new">()
@@ -76,6 +84,31 @@ export function KeysSection(props: { host: KeysHost | undefined; agents: readonl
         <p data-slot="keys-notice" role="status">
           {notice()}
         </p>
+      </Show>
+      <Show when={props.voiceConflict}>
+        {(answer) => (
+          <div data-slot="keys-voice-conflict" role="group" aria-label={t("keys.voiceConflict")}>
+            <p data-slot="section-desc">{t("keys.voiceConflict")}</p>
+            <div data-slot="keys-actions">
+              <button
+                type="button"
+                data-slot="settings-choice"
+                data-voice-conflict="voice"
+                onClick={() => void answer()("voice").then(refresh, (failure) => setLoadProblem(message(failure)))}
+              >
+                {t("keys.voiceConflict.voice")}
+              </button>
+              <button
+                type="button"
+                data-slot="settings-choice"
+                data-voice-conflict="keychain"
+                onClick={() => void answer()("keychain").then(refresh, (failure) => setLoadProblem(message(failure)))}
+              >
+                {t("keys.voiceConflict.keychain")}
+              </button>
+            </div>
+          </div>
+        )}
       </Show>
 
       <Show when={props.host}>

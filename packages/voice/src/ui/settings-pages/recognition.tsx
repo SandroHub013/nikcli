@@ -6,19 +6,7 @@ import type { VoiceSettingsState } from "../settings-state"
 import { PageHead } from "./head"
 
 export function RecognitionPage(p: { state: VoiceSettingsState; bare?: boolean }): JSX.Element {
-  const {
-    props,
-    apiKeyInput,
-    setApiKeyInput,
-    apiKeyVisible,
-    setApiKeyVisible,
-    backendStatuses,
-    resolvedCost,
-    updateSettings,
-    commitApiKey,
-    apiKeyLooksWrong,
-    backendKeys,
-  } = p.state
+  const { props, backendStatuses, resolvedCost, updateSettings, backendKeys } = p.state
   return (
     <>
       <PageHead id="section-backend-title" title={t("vui.backend.title")} desc={t("vui.backend.desc")} bare={p.bare} />
@@ -57,77 +45,31 @@ export function RecognitionPage(p: { state: VoiceSettingsState; bare?: boolean }
           {/* Sub-fields under OpenRouter */}
           <Show when={props.settings.backend === "openrouter"}>
             <div data-slot="backend-subfields">
-              <div data-slot="stack">
-                <label for="openrouter-key-field" data-slot="label">
-                  {t("vui.key.title")}
-                </label>
-
-                {/* Masked display when key already saved */}
-                <Show when={Boolean(props.settings.openRouterApiKey)}>
-                  <div data-slot="key-status-badge">
-                    <span>{t("vui.key.saved", formatMaskedApiKey(props.settings.openRouterApiKey))}</span>
+              {/*
+               * The key is not typed here any more: it is an entry of the
+               * system keychain, on ADE's Chiavi API page, the one place for
+               * keys. This says whether there is one and where it is managed.
+               */}
+              <div data-slot="stack" data-key-status>
+                <span data-slot="label">{t("vui.key.title")}</span>
+                <div data-slot="key-status-badge">
+                  <span>
+                    {props.settings.openRouterApiKey
+                      ? t("vui.key.saved", formatMaskedApiKey(props.settings.openRouterApiKey))
+                      : t("vui.key.none")}
+                  </span>
+                  <Show when={props.onManageKeys}>
                     <button
                       type="button"
-                      data-slot="key-clear-btn"
-                      onClick={() => updateSettings({ openRouterApiKey: undefined })}
+                      data-slot="link-button"
+                      data-manage-keys=""
+                      onClick={() => props.onManageKeys?.()}
                     >
-                      {t("vui.key.remove")}
+                      {t("vui.key.manage")}
                     </button>
-                  </div>
-                </Show>
-
-                {/* Input for setting or updating key */}
-                <div data-slot="field-row">
-                  <input
-                    id="openrouter-key-field"
-                    data-slot="input"
-                    type={apiKeyVisible() ? "text" : "password"}
-                    autocomplete="off"
-                    spellcheck={false}
-                    placeholder={props.settings.openRouterApiKey ? t("vui.key.replace") : "sk-or-v1-…"}
-                    value={apiKeyInput()}
-                    aria-describedby="openrouter-key-hint"
-                    onInput={(e) => setApiKeyInput(e.currentTarget.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault()
-                        commitApiKey()
-                      } else if (e.key === "Escape") {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        setApiKeyInput("")
-                      }
-                    }}
-                    onBlur={commitApiKey}
-                  />
-                  <button
-                    type="button"
-                    data-slot="ghost-btn"
-                    aria-pressed={apiKeyVisible()}
-                    disabled={apiKeyInput().length === 0}
-                    onClick={() => setApiKeyVisible((v) => !v)}
-                  >
-                    {apiKeyVisible() ? t("vui.key.hide") : t("vui.key.show")}
-                  </button>
-                  <button
-                    type="button"
-                    data-slot="solid-btn"
-                    disabled={apiKeyInput().trim().length === 0}
-                    onClick={commitApiKey}
-                  >
-                    {t("vui.key.save")}
-                  </button>
+                  </Show>
                 </div>
-
-                <Show when={apiKeyLooksWrong()}>
-                  <div data-slot="reason-box" data-tone="muted">
-                    {t("vui.key.looksWrong")}
-                  </div>
-                </Show>
-
-                <p id="openrouter-key-hint" data-slot="hint">
-                  {t("vui.key.hint")}
-                </p>
+                <p data-slot="hint">{t("vui.key.where")}</p>
               </div>
 
               {/* Cost of the last request if exposed */}

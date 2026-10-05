@@ -443,7 +443,10 @@ describe("Agenti e account › Chiavi API", () => {
       "agents/keys",
     )
     const source = readFileSync(join(import.meta.dir, "settings-sheet.tsx"), "utf-8")
-    expect(source).toContain('return <KeysSection host={props.keysHost()} agents={AGENTS} />')
+    // S6: lo stesso portachiavi, più la domanda sulla chiave OpenRouter della voce.
+    expect(source).toContain(
+      "return <KeysSection host={props.keysHost()} agents={AGENTS} voiceConflict={props.voiceKeyConflict} />",
+    )
   })
 })
 

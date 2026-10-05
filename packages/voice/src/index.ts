@@ -394,6 +394,8 @@ export {
   // not be reached from outside the package and the safe route did not exist.
   exportVoiceSettings,
   isOpenRouterKeyRemoved,
+  readLegacyOpenRouterKey,
+  clearLegacyOpenRouterKey,
   loadVoiceSettings,
   markOpenRouterKeyRemoved,
   resetVoiceSettings,

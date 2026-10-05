@@ -96,6 +96,8 @@ export interface VoiceSettingsStateProps {
   maiBlocked?: MaiFailureKind
   /** The panel's «Riprova MAI»: opens the breaker, and asks nothing until a sentence needs it. */
   onRetryMai?: () => void
+  /** Opens the host's page for keys (ADE's Chiavi API), where the OpenRouter key is managed. Absent: no link. */
+  onManageKeys?: () => void
   /** ADE Test: MAI is never used, and its question is never asked. */
   testIdentity?: boolean
   /** Optional cost of the most recent speech transcription request. */
@@ -237,9 +239,7 @@ export function createVoiceSettingsState(props: VoiceSettingsStateProps, options
    */
   const [pendingModifiers, setPendingModifiers] = createSignal<readonly string[]>([])
 
-  // Local input states for API key, language filter and command trial
-  const [apiKeyInput, setApiKeyInput] = createSignal("")
-  const [apiKeyVisible, setApiKeyVisible] = createSignal(false)
+  // Local input states for language filter and command trial
   const [languageFilter, setLanguageFilter] = createSignal("")
   const [commandFilter, setCommandFilter] = createSignal("")
   const [trialText, setTrialText] = createSignal("")
@@ -383,19 +383,6 @@ export function createVoiceSettingsState(props: VoiceSettingsStateProps, options
     updateSettings({ activation })
   }
 
-  const commitApiKey = () => {
-    const trimmed = apiKeyInput().trim()
-    if (trimmed.length === 0) return
-    updateSettings({ openRouterApiKey: trimmed })
-    setApiKeyInput("")
-    setApiKeyVisible(false)
-  }
-
-  const apiKeyLooksWrong = createMemo(() => {
-    const value = apiKeyInput().trim()
-    return value.length > 0 && !value.startsWith("sk-or-")
-  })
-
   const toggleListening = () => {
     void props.engine.toggle()
   }
@@ -418,8 +405,6 @@ export function createVoiceSettingsState(props: VoiceSettingsStateProps, options
       return
     }
     setResetArmed(false)
-    setApiKeyInput("")
-    setApiKeyVisible(false)
     setLanguageFilter("")
     props.onChange({ ...DEFAULT_VOICE_SETTINGS })
   }
@@ -694,10 +679,6 @@ export function createVoiceSettingsState(props: VoiceSettingsStateProps, options
     recordingField,
     agentWarning,
     transcriptionWarning,
-    apiKeyInput,
-    setApiKeyInput,
-    apiKeyVisible,
-    setApiKeyVisible,
     languageFilter,
     setLanguageFilter,
     commandFilter,
@@ -722,8 +703,6 @@ export function createVoiceSettingsState(props: VoiceSettingsStateProps, options
     updateSettings,
     selectMode,
     selectActivation,
-    commitApiKey,
-    apiKeyLooksWrong,
     toggleListening,
     runTrial,
     restoreDefaults,
