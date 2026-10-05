@@ -181,7 +181,10 @@ describe("una domanda sì/no in ADE", () => {
     expect(source).toContain('invoke("ade_ask_front")')
     expect(source).toContain("if (minimized) await deps.restore()")
     const rust = readFileSync(join(import.meta.dir, "../../src-tauri/src/ask.rs"), "utf8")
-    expect(rust).toContain("GW_ENABLEDPOPUP")
+    // The question is known by the window the dialog reports when it is created, not guessed among the popups the window owns.
+    expect(rust).toContain("TDN_CREATED")
+    expect(rust).toContain("question_of")
+    expect(rust).not.toContain("GW_ENABLEDPOPUP")
     expect(readFileSync(join(import.meta.dir, "../../src-tauri/src/lib.rs"), "utf8")).toContain("ask::ade_ask_front,")
   })
 

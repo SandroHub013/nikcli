@@ -21,6 +21,7 @@ pub const BUTTON_YES: i32 = 1000;
 /// The button that answers «no», and the one Enter presses.
 pub const BUTTON_NO: i32 = 1001;
 /// What a dismissed dialog reports (Esc, the window's ✕): `IDCANCEL`.
+#[cfg_attr(not(test), allow(dead_code))]
 pub const BUTTON_DISMISSED: i32 = 2;
 /// `TDF_ALLOW_DIALOG_CANCELLATION | TDF_SIZE_TO_CONTENT`: Esc and ✕ close it, and it fits its text.
 pub const DIALOG_FLAGS: i32 = 8 | 0x0100_0000;
@@ -33,11 +34,14 @@ pub fn answer_of(button: i32) -> bool {
 #[cfg(windows)]
 mod native {
     use super::{answer_of, BUTTON_NO, BUTTON_YES, DIALOG_FLAGS};
-    use windows::core::PCWSTR;
-    use windows::Win32::Foundation::HWND;
+    use std::sync::Mutex;
+    use windows::core::{HRESULT, PCWSTR};
+    use windows::Win32::Foundation::{HWND, LPARAM, S_OK, WPARAM};
     use windows::Win32::UI::Controls::{
-        TaskDialogIndirect, TASKDIALOGCONFIG, TASKDIALOG_BUTTON, TASKDIALOG_FLAGS, TD_WARNING_ICON,
+        TaskDialogIndirect, TASKDIALOGCONFIG, TASKDIALOG_BUTTON, TASKDIALOG_FLAGS, TASKDIALOG_NOTIFICATIONS, TDN_CREATED,
+        TDN_DESTROYED, TD_WARNING_ICON,
     };
+    use windows::Win32::UI::WindowsAndMessaging::{GetWindow, IsWindow, SetForegroundWindow, GW_OWNER};
 
     fn wide(text: &str) -> Vec<u16> {
         text.encode_utf16().chain(std::iter::once(0)).collect()
@@ -77,25 +81,77 @@ mod native {
             config.cButtons = buttons.len() as u32;
             config.pButtons = buttons.as_ptr();
             config.nDefaultButton = BUTTON_NO;
+            // So `front` knows which window is the question.
+            config.pfCallback = Some(on_event);
             config
         }
+    }
+
+    /// The questions that are open, by window: pushed when the dialog is created, dropped when it is
+    /// destroyed. `front` takes its window from here instead of guessing which popup the window owns.
+    static OPEN: Mutex<Vec<isize>> = Mutex::new(Vec::new());
+
+    fn open_list() -> std::sync::MutexGuard<'static, Vec<isize>> {
+        // A panic while the list is held leaves it usable: it is only handles.
+        OPEN.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    /// Records a question's window as open.
+    pub fn opened(dialog: isize) {
+        let mut open = open_list();
+        if !open.contains(&dialog) {
+            open.push(dialog);
+        }
+    }
+
+    /// Forgets a question's window.
+    pub fn closed(dialog: isize) {
+        open_list().retain(|open| *open != dialog);
+    }
+
+    /// The dialog tells when it is created and destroyed; the hwnd it passes is the question's own.
+    unsafe extern "system" fn on_event(
+        dialog: HWND,
+        notification: TASKDIALOG_NOTIFICATIONS,
+        _wparam: WPARAM,
+        _lparam: LPARAM,
+        _data: isize,
+    ) -> HRESULT {
+        if notification == TDN_CREATED {
+            opened(dialog.0 as isize);
+        } else if notification == TDN_DESTROYED {
+            closed(dialog.0 as isize);
+        }
+        S_OK
+    }
+
+    /// The window of the question open over `parent`, the newest first, or none.
+    ///
+    /// Only a dialog this module opened counts, and only one `parent` owns and that still exists:
+    /// another window `parent` owns (a file picker, say) is never taken for the question. Not
+    /// required to be visible: with the window just back from the icon, the question shows a moment
+    /// after it does.
+    pub fn question_of(parent: isize) -> Option<isize> {
+        let owner = HWND(parent as *mut core::ffi::c_void);
+        let open = open_list().clone();
+        open.into_iter().rev().find(|dialog| {
+            let dialog = HWND(*dialog as *mut core::ffi::c_void);
+            // SAFETY: both calls take a handle and read no memory of ours; a stale handle makes them fail.
+            unsafe { IsWindow(Some(dialog)).as_bool() && GetWindow(dialog, GW_OWNER).is_ok_and(|found| found == owner) }
+        })
     }
 
     /// Gives the foreground to the question that is open over `parent`, and says whether there was one.
     ///
     /// The question is modal, so `parent` is disabled while it stands: focusing the window (what
     /// `unminimize` and `setFocus` do) leaves the foreground on a window that ignores every key, and
-    /// an answer from the keyboard needs a click first. `GW_ENABLEDPOPUP` finds the enabled window
-    /// `parent` owns, which is the question; with none it returns `parent` itself, and that is «no».
+    /// an answer from the keyboard needs a click first.
     pub fn front(parent: isize) -> bool {
-        use windows::Win32::UI::WindowsAndMessaging::{GetWindow, SetForegroundWindow, GW_ENABLEDPOPUP};
-        let parent = HWND(parent as *mut core::ffi::c_void);
-        // SAFETY: both calls take a handle and read no memory of ours; a stale handle makes them fail.
-        let popup = match unsafe { GetWindow(parent, GW_ENABLEDPOPUP) } {
-            Ok(popup) if !popup.0.is_null() && popup != parent => popup,
-            _ => return false,
-        };
-        unsafe { SetForegroundWindow(popup) }.as_bool()
+        match question_of(parent) {
+            // SAFETY: a handle in, nothing read; the system may refuse the foreground, and that is «false».
+            Some(dialog) => unsafe { SetForegroundWindow(HWND(dialog as *mut core::ffi::c_void)) }.as_bool(),
+            None => false,
+        }
     }
 
     /// Opens the question over `parent` and waits for the answer. Any failure is «no».
@@ -162,6 +218,99 @@ mod tests {
         // No window at all, and a handle that is not one: both say «no question», without a panic.
         assert!(!native::front(0));
         assert!(!native::front(1));
+        assert_eq!(native::question_of(0), None);
+    }
+
+    /// Real windows, made on the test's thread: `GetWindow` and `IsWindow` need no message loop.
+    #[cfg(windows)]
+    mod windows_of_the_test {
+        use windows::core::w;
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            CreateWindowExW, DestroyWindow, WINDOW_EX_STYLE, WS_OVERLAPPED, WS_POPUP,
+        };
+
+        /// A top-level window, or a popup owned by `owner`.
+        pub fn make(owner: Option<HWND>) -> HWND {
+            let style = if owner.is_some() { WS_POPUP } else { WS_OVERLAPPED };
+            // SAFETY: the STATIC class is the system's own; the handle is destroyed by the test.
+            unsafe { CreateWindowExW(WINDOW_EX_STYLE(0), w!("STATIC"), w!("prova"), style, 0, 0, 10, 10, owner, None, None, None) }
+                .expect("a test window")
+        }
+
+        pub fn destroy(window: HWND) {
+            // SAFETY: a window this test made.
+            let _ = unsafe { DestroyWindow(window) };
+        }
+
+        pub fn id(window: HWND) -> isize {
+            window.0 as isize
+        }
+    }
+
+    /// B3 of the review: the positive case. The question is found by the owner it was opened over.
+    #[cfg(windows)]
+    #[test]
+    fn the_open_question_is_found_by_the_window_that_owns_it() {
+        use windows_of_the_test::{destroy, id, make};
+        let owner = make(None);
+        let question = make(Some(owner));
+        native::opened(id(question));
+        assert_eq!(native::question_of(id(owner)), Some(id(question)));
+        // Closed (the dialog's destroy notice): no question any more.
+        native::closed(id(question));
+        assert_eq!(native::question_of(id(owner)), None);
+        destroy(question);
+        destroy(owner);
+    }
+
+    /// B1 of the review: a popup the window owns that is not one of ours is never taken for the question.
+    #[cfg(windows)]
+    #[test]
+    fn another_popup_of_the_window_is_not_the_question() {
+        use windows_of_the_test::{destroy, id, make};
+        let owner = make(None);
+        let picker = make(Some(owner));
+        // Owned and enabled, but never registered as a question: not taken.
+        assert_eq!(native::question_of(id(owner)), None);
+        assert!(!native::front(id(owner)));
+        // With the question open as well, it is the question, not the picker, whichever was made first.
+        let question = make(Some(owner));
+        native::opened(id(question));
+        assert_eq!(native::question_of(id(owner)), Some(id(question)));
+        native::closed(id(question));
+        destroy(question);
+        destroy(picker);
+        destroy(owner);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_question_over_another_window_or_already_gone_is_not_found() {
+        use windows_of_the_test::{destroy, id, make};
+        let (first, second) = (make(None), make(None));
+        let question = make(Some(first));
+        native::opened(id(question));
+        // Owned by the first window, so not the second's.
+        assert_eq!(native::question_of(id(second)), None);
+        assert_eq!(native::question_of(id(first)), Some(id(question)));
+        // A window destroyed without the notice (a crash of the dialog) is skipped, not trusted.
+        destroy(question);
+        assert_eq!(native::question_of(id(first)), None);
+        native::closed(id(question));
+        destroy(first);
+        destroy(second);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn the_dialog_reports_when_it_is_created() {
+        let spec = native::Spec::new("ADE", "Close anyway?", "Yes", "No");
+        let buttons = spec.buttons();
+        let config = spec.config(windows::Win32::Foundation::HWND(std::ptr::null_mut()), &buttons);
+        // Copied out of the packed struct before it is compared.
+        let callback = config.pfCallback;
+        assert!(callback.is_some(), "without it `front` cannot tell which window is the question");
     }
 
     #[test]
