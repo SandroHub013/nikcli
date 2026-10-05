@@ -264,6 +264,54 @@ describe("ProviderTransform.options — gpt-6 astra defaults", () => {
   })
 })
 
+// OpenRouter's SDK copies providerOptions.openrouter into the body as-is and
+// only understands `reasoning: { effort }`. The OpenAI-SDK names must not leak.
+describe("ProviderTransform.options — openrouter gpt reasoning params", () => {
+  function gptModel(apiId: string, npm: string, providerID: string): Provider.Model {
+    return {
+      providerID,
+      id: apiId,
+      release_date: "2026-09-03",
+      api: { id: apiId, url: "https://example.test/v1", npm },
+      capabilities: { reasoning: true },
+      limit: { context: 1_050_000, output: 128_000 },
+    } as unknown as Provider.Model
+  }
+  const optionsOf = (model: Provider.Model) =>
+    ProviderTransform.options({ sessionID: "ses_test", model } as unknown as Parameters<
+      typeof ProviderTransform.options
+    >[0])
+
+  it("sends only reasoning.effort for a gpt-6 model on openrouter at medium", () => {
+    const model = gptModel("openai/gpt-6-luna", "@openrouter/ai-sdk-provider", "openrouter")
+    const variant = ProviderTransform.variants(model)["medium"]
+    const merged = { ...optionsOf(model), ...variant }
+    expect(merged["reasoning"]).toEqual({ effort: "medium" })
+    expect(merged).not.toHaveProperty("reasoningEffort")
+    expect(merged).not.toHaveProperty("reasoningSummary")
+  })
+
+  it("keeps the openrouter cache key and usage accounting", () => {
+    const result = optionsOf(gptModel("openai/gpt-5.2", "@openrouter/ai-sdk-provider", "openrouter"))
+    expect(result).not.toHaveProperty("reasoningEffort")
+    expect(result).not.toHaveProperty("reasoningSummary")
+    expect(result["usage"]).toEqual({ include: true })
+    expect(result["prompt_cache_key"]).toBeDefined()
+  })
+
+  it("leaves @ai-sdk/openai, azure and copilot on their camelCase names", () => {
+    const openai = optionsOf(gptModel("gpt-6-luna", "@ai-sdk/openai", "openai"))
+    expect(openai["reasoningEffort"]).toBe("medium")
+    expect(openai["reasoningSummary"]).toBe("detailed")
+    const azure = optionsOf(gptModel("gpt-6-luna", "@ai-sdk/azure", "azure"))
+    expect(azure["reasoningEffort"]).toBe("medium")
+    expect(azure["reasoningSummary"]).toBe("auto")
+    const copilot = optionsOf(gptModel("gpt-6-luna", "@ai-sdk/github-copilot", "github-copilot"))
+    expect(copilot["reasoningEffort"]).toBe("medium")
+    expect(copilot["reasoningSummary"]).toBe("auto")
+  })
+})
+
 // GPT-Reserve is the model a ChatGPT plan falls back to once its main models
 // are spent. It is version-less, so it matches neither the gpt-5 nor the gpt-6
 // family rules and needs its own tier set: low/medium/high/xhigh/max, with no

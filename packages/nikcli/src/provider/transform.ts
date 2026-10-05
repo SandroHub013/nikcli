@@ -1338,7 +1338,12 @@ export function options(input: {
   // `text.verbosity` (the Codex manifest defaults it to "low").
   const isReserve = isGptReserve(input.model.api.id)
   if (isGpt5 || isGpt6 || isReserve) {
-    if (!input.model.api.id.includes("gpt-5-pro")) {
+    // @openrouter/ai-sdk-provider spreads providerOptions.openrouter into the
+    // request body verbatim and never reads these camelCase names, so on
+    // OpenRouter they would go out as unknown top-level keys. Its effort
+    // comes from the variant's `reasoning: { effort }` instead.
+    const viaOpenRouter = input.model.api.npm === "@openrouter/ai-sdk-provider"
+    if (!input.model.api.id.includes("gpt-5-pro") && !viaOpenRouter) {
       result["reasoningEffort"] = "medium"
       // Direct OpenAI accepts "detailed" (richest summary the API exposes);
       // gateways (Copilot, Azure, opencode) stay on "auto" for compatibility.
