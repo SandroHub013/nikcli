@@ -9,6 +9,7 @@ import {
   type SttStreamTransport,
   type StreamSpend,
   type StreamState,
+  STT_STREAM_CANCELLED,
 } from "./grok-stream"
 import { createMicCapture, encodeWav, type CapturedSegment, type SegmentAudio } from "../audio/capture"
 import type { TranscriptEvent } from "./transcriber"
@@ -49,6 +50,8 @@ function setup(
     doneTimeoutMs?: number
     /** Milliseconds each `send` settles after, by call order: a slow transport. */
     sendDelays?: number[]
+    /** Read when a send settles: a message makes it reject, as a transport cut under it would. */
+    sendError?: () => string | undefined
     endDelayMs?: number
   } = {},
 ): Harness {
@@ -66,6 +69,8 @@ function setup(
     send: async (bytes) => {
       const delay = options.sendDelays?.[sendCalls++] ?? 0
       if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay))
+      const failure = options.sendError?.()
+      if (failure) throw new Error(failure)
       sent.push(bytes.length)
       order.push("send")
     },
@@ -668,5 +673,35 @@ describe("asr/grok-stream transport order", () => {
       "prima parte seconda",
       "prima parte seconda ancora",
     ])
+  })
+})
+
+describe("asr/grok-stream: the xAI key removed under a send in flight (review S7, B2-B3)", () => {
+  test("the cut socket sends the sentence to the batch and owes no pause: the next one streams again", async () => {
+    let cut = false
+    const states: StreamState[] = []
+    const h = setup({
+      sendDelays: [30],
+      sendError: () => (cut ? `${STT_STREAM_CANCELLED}: la sessione è stata annullata.` : undefined),
+      onStreamState: (state) => states.push(state),
+    })
+    await h.transcriber.start()
+
+    h.startSeg(1)
+    await h.tick()
+    expect(h.opens).toHaveLength(1)
+    h.frames(1, [new Float32Array(1600)])
+    // The page removes the key while that frame is on its way: the transport is cancelled under it.
+    cut = true
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    h.endSeg(1)
+    h.close(1, 1_000)
+    expect(h.batches).toHaveLength(1)
+    expect(states.some((state) => state.kind === "paused")).toBe(false)
+
+    cut = false
+    h.startSeg(2)
+    await h.tick()
+    expect(h.opens).toHaveLength(2)
   })
 })

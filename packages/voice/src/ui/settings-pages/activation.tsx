@@ -3,13 +3,13 @@ import { Show, type JSX } from "solid-js"
 import { t } from "@nikcli-ai/ade/i18n"
 import { wakeWordEnabled, shortcutActivationEnabled } from "../../settings/model"
 import { describeShortcut } from "../../settings/shortcuts"
-import { formatSpendCost } from "../../settings/spend"
+import { listenCostLines } from "../stream-panel"
 import type { VoiceSettingsState } from "../settings-state"
 import { HowItWorks } from "../how-it-works"
 import { PageHead } from "./head"
 
 export function ActivationPage(p: { state: VoiceSettingsState; bare?: boolean }): JSX.Element {
-  const { props, platform, updateSettings, selectActivation, listenKeys, activationKeys } = p.state
+  const { props, platform, updateSettings, selectActivation, listenKeys, activationKeys, streamInput } = p.state
   return (
     <>
       <PageHead
@@ -146,14 +146,20 @@ export function ActivationPage(p: { state: VoiceSettingsState; bare?: boolean })
                 <p id="wake-word-hint" data-slot="hint">
                   {t("vui.wake.short", props.settings.wakeWord)}
                 </p>
-                {/* What listening costs and has spent today, on one line beside the switch that spends it. */}
+                {/*
+                 * What listening costs and has spent today, beside the switch that spends it:
+                 * at the stream's rate when Grok carries it, at OpenRouter's otherwise.
+                 */}
                 <p data-slot="cost-tag" data-testid="listen-spend">
-                  {t(
-                    "vui.listen.spend",
-                    props.engine.listenSpend().calls,
-                    formatSpendCost(props.engine.listenSpend().cost),
-                  )}
+                  {listenCostLines(streamInput())[0]}
                 </p>
+                <Show when={listenCostLines(streamInput())[1]}>
+                  {(other) => (
+                    <p data-slot="cost-tag" data-testid="listen-spend-other">
+                      {other()}
+                    </p>
+                  )}
+                </Show>
                 <HowItWorks title={t("settings.howItWorks")}>
                   <p data-slot="hint">{t("vui.wake.hint", props.settings.wakeWord)}</p>
                   <p data-slot="hint">{t("vui.activation.manualHow")}</p>

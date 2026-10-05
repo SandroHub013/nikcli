@@ -17,6 +17,7 @@
  */
 
 import type { SttStreamEvent, SttStreamOpenOptions, SttStreamTransport } from "@nikcli-ai/voice"
+import { STT_STREAM_CANCELLED } from "@nikcli-ai/voice/core"
 
 /** The four Rust commands, as the page sees them. Tests pass a fake. */
 export interface SttStreamBridge {
@@ -80,6 +81,10 @@ interface LiveSession {
  */
 export function createSttStreamTransport(bridge: SttStreamBridge = tauriSttStreamBridge()): SttStreamTransport {
   let session: LiveSession | undefined
+  /** The last session went by `cancel`: a send or an end still on its way says so, not «no session». */
+  let cancelled = false
+  const missing = (what: string) =>
+    new Error(cancelled ? `${STT_STREAM_CANCELLED}: la sessione è stata annullata.` : what)
 
   const close = (current: LiveSession): void => {
     current.closed = true
@@ -93,6 +98,7 @@ export function createSttStreamTransport(bridge: SttStreamBridge = tauriSttStrea
       }
       const current: LiveSession = { dropped: false, closed: false }
       session = current
+      cancelled = false
       try {
         const id = await bridge.open(options.language, options.keyterms, (event) => {
           if (current.closed) return
@@ -112,13 +118,13 @@ export function createSttStreamTransport(bridge: SttStreamBridge = tauriSttStrea
 
     async send(bytes: Uint8Array): Promise<void> {
       const current = session
-      if (!current?.id) throw new Error("Nessuna sessione stt_stream da cui inviare l'audio.")
+      if (!current?.id) throw missing("Nessuna sessione stt_stream da cui inviare l'audio.")
       await bridge.send(current.id, bytes)
     },
 
     async end(): Promise<void> {
       const current = session
-      if (!current?.id) throw new Error("Nessuna sessione stt_stream da chiudere.")
+      if (!current?.id) throw missing("Nessuna sessione stt_stream da chiudere.")
       await bridge.end(current.id)
       // The session stays until `done` or `failed` closes it.
     },
@@ -127,6 +133,7 @@ export function createSttStreamTransport(bridge: SttStreamBridge = tauriSttStrea
       const current = session
       if (!current) return
       current.dropped = true
+      cancelled = true
       if (current.id === undefined) return
       const id = current.id
       close(current)

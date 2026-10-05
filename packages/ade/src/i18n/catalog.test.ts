@@ -96,6 +96,17 @@ describe("the catalogs", () => {
     expect(it["vui.reply.title"]).toBe("Voce delle risposte")
     // The MAI box sits on Voce delle risposte: its title does not say it again.
     expect(it["vui.mai.title"]).toBe("Microsoft MAI")
+    expect(it["vui.activation.toggle"]).not.toMatch(/click/i)
+  })
+
+  test("the commands are named for what they do (review S7, B1)", () => {
+    expect(it["vui.intent.app.new"]).toBe("Apri il simulatore")
+    expect(it["vui.intent.model.new"]).toBe("Apri il visore 3D")
+    expect(it["vui.intent.project.recent"]).toBe("Apri un progetto recente")
+    expect(it["vui.intent.dictation.finish"]).toBe("Finisci e invia la dettatura")
+    expect(it["vui.intent.palette.open"]).toBe("Apri la tavolozza dei comandi")
+    expect(en["vui.intent.app.new"]).toBe("Open the simulator")
+    expect(en["vui.intent.dictation.finish"]).toBe("Finish and send the dictation")
   })
 
   test("every voice command has a name in both languages (S7)", async () => {
