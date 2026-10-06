@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { memoryAccountStore, ACCOUNT_PLAN } from "./account"
 import { forgetBotTraces } from "./forget"
+import { memoryRemoteStore, remoteKey } from "./gateway/remote"
 import { EMPTY_MEMORY, type BotMemory, type MemoryStore } from "./memory"
 import { memoryRoutineStore, removeRoutinesOf, type Routine, type RoutineBook } from "./routine"
 
@@ -35,14 +36,21 @@ describe("a deleted bot's traces (full review 2026-10-06, bots 17)", () => {
       get: (bot) => saved.get(bot) ?? EMPTY_MEMORY,
       set: (bot, value) => void saved.set(bot, value),
     }
+    const remote = memoryRemoteStore()
+    remote.set(remoteKey("C:/a/news.md", "telegram"), { commands: true, fingerprint: "f" })
+    remote.set(remoteKey("C:/a/news.md", "slack"), { commands: true, fingerprint: "f" })
+    remote.set(remoteKey("C:/a/other.md", "telegram"), { commands: true, fingerprint: "g" })
     account.set("C:/a/news.md", { mode: "key", key: "k" })
     account.set("C:/a/other.md", { mode: "key", key: "o" })
 
-    forgetBotTraces("C:/a/news.md", { memory, account, routines: (change) => routines.set(change(routines.get())) })
+    forgetBotTraces("C:/a/news.md", { memory, account, remote, routines: (change) => routines.set(change(routines.get())) })
 
     expect(routines.get().routines.map((r) => r.id)).toEqual(["r2"])
     expect(memory.get("C:/a/news.md")).toEqual(EMPTY_MEMORY)
     expect(account.get("C:/a/news.md")).toEqual(ACCOUNT_PLAN)
+    expect(remote.get(remoteKey("C:/a/news.md", "telegram")).commands).toBe(false)
+    expect(remote.get(remoteKey("C:/a/news.md", "slack")).commands).toBe(false)
+    expect(remote.get(remoteKey("C:/a/other.md", "telegram")).commands).toBe(true)
     expect(memory.get("C:/a/other.md").notes).toEqual(["altra"])
     expect(account.get("C:/a/other.md")).toEqual({ mode: "key", key: "o" })
   })

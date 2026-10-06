@@ -295,7 +295,8 @@ function XaiKeyBlock(props: {
 
   const save = async (event: Event) => {
     event.preventDefault()
-    const value = field?.value ?? ""
+    // Trimmed like the form's key (review of F7d): a pasted space or line break is not part of the key.
+    const value = (field?.value ?? "").trim()
     const wrong = valueProblem(value)
     if (wrong) {
       setProblem(wrong)

@@ -618,6 +618,11 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
         const at = now()
         change((thread) => appendMessage(thread, { role: "tool", tool: "ade", text: note }, at))
       }
+      // What the stream already holds is read first, then a `busy` seen before the prompt is forgotten: it is the tail of an
+      // earlier turn, and its `idle` after this line would end this one empty. The `busy` that counts comes after the prompt
+      // (review of F7d).
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+      busy = false
       sent = true
       const prompt = await orEnd(
         server.prompt({

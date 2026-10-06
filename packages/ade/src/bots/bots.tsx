@@ -92,6 +92,7 @@ import {
 import { gatewayVisible } from "../surface/state"
 import { appGatewayPanelDeps } from "./gateway/bridge"
 import { GatewaySection } from "./gateway/panel"
+import { localRemoteStore } from "./gateway/remote"
 import { openExternally } from "../browser/host-bridge"
 import {
   addRoutine,
@@ -1691,7 +1692,12 @@ function BotCard(props: {
       return
     }
     // Its routines, memory and account choice go with the file: a new bot at the same path starts clean.
-    forgetBotTraces(props.bot.path, { memory: memories, account: accounts, routines: writeRoutines })
+    forgetBotTraces(props.bot.path, {
+      memory: memories,
+      account: accounts,
+      remote: localRemoteStore(),
+      routines: writeRoutines,
+    })
     props.onDeleted()
   }
 

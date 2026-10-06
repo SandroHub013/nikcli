@@ -252,6 +252,22 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(outcome).toBe("ended")
   })
 
+  // Review of F7d: the tail of an earlier turn (a `busy` before the prompt) must not let the `idle` after it end this one empty.
+  test("a busy seen before the prompt does not make the idle after it the end of the turn", async () => {
+    const idle: ChatEvent = { type: "session.status", properties: { sessionID: SESSION, status: { type: "idle" } } }
+    const fake = server({ session: SESSION, onPrompt: (stream) => stream.push(idle) })
+    fake.stream.push(busyOf())
+    const run = runServeTurn(panel(), fake.deps)
+    const outcome = await Promise.race([
+      run.result.then(() => "ended"),
+      new Promise<string>((resolve) => setTimeout(() => resolve("waiting"), 300)),
+    ])
+    // This turn's own busy and idle end it.
+    fake.stream.push(busyOf(), idle)
+    await run.result
+    expect(outcome).toBe("waiting")
+  })
+
   test("the prompt: the bot as agent, its model and effort, never tools or a system prompt", async () => {
     const events = turnOf(fixture("conversazione"), 0)
     const fake = server({ events, session: sessionIdOf(events) })
