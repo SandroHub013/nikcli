@@ -493,7 +493,9 @@ fn is_env_file(path: &Path) -> bool {
 }
 
 /// `"ok"`, or why the chat may not attach `path` (`attachment_inside`).
-#[tauri::command]
+///
+/// `async`: on the pool, not on the window's thread, which a slow disk would hold (full review 2026-10-06, rust minor).
+#[tauri::command(async)]
 fn chat_attachment_inside(root: String, path: String) -> String {
     match attachment_inside(Path::new(&root), Path::new(&path)) {
         Ok(_) => "ok".to_string(),
@@ -1326,6 +1328,7 @@ const GIT_WRITING_FLAGS: &[&str] = &["--output", "--output-directory"];
 /// The only variable ADE sets for git: the throwaway index a snapshot stages
 /// into, so the user's real index is never touched.
 const GIT_ENV_KEYS: &[&str] = &["GIT_INDEX_FILE"];
+
 /// What every git call of ADE runs with, before the page's own variables.
 ///
 /// A repository with `core.fsmonitor=true` starts a daemon on its first `git status`; started from a call that runs in a job that ends
@@ -2508,7 +2511,7 @@ pub fn run() {
          * that served an arbitrary path would let anything in the browser
          * pane's frame read the disk through a `<video>` tag.
          */
-        .register_uri_scheme_protocol(media::SCHEME, |ctx, request| {
+        .register_asynchronous_uri_scheme_protocol(media::SCHEME, |ctx, request, responder| {
             use tauri::Manager;
             let state = ctx.app_handle().state::<WriteRoots>();
             let mut roots = match state.0.lock() {
@@ -2525,14 +2528,19 @@ pub fn run() {
                 .and_then(|webview| webview.url().ok())
                 .map(|url| url.origin().ascii_serialization());
             let opened = state.1.lock().map(|guard| guard.clone()).unwrap_or_default();
-            media::respond(&roots, &opened, &request, origin.as_deref())
+            // Off the thread that took the request: the window's own, which a seek on a network drive or OneDrive stopped for
+            // every panel (full review 2026-10-06, rust minor).
+            tauri::async_runtime::spawn_blocking(move || {
+                responder.respond(media::respond(&roots, &opened, &request, origin.as_deref()));
+            });
         })
         /*
          * NikVerse's world: the package's own files, in an origin of its own.
          * Nothing on disk is reachable through it (`nikverse.rs`).
          */
-        .register_uri_scheme_protocol(nikverse::SCHEME, |ctx, request| {
-            nikverse::respond(&request, nikverse::source(ctx.app_handle()))
+        .register_asynchronous_uri_scheme_protocol(nikverse::SCHEME, |ctx, request, responder| {
+            let source = nikverse::source(ctx.app_handle());
+            tauri::async_runtime::spawn_blocking(move || responder.respond(nikverse::respond(&request, source)));
         })
         .setup(|app| {
             // Before the window, not after: a webview pointed at a port that
@@ -2981,6 +2989,22 @@ mod tests {
         let took = started.elapsed();
         assert_eq!(answer.as_deref(), Some("/usr/local/bin"), "la riga arrivata e' la risposta");
         assert!(took < Duration::from_secs(3), "ha aspettato il lettore: {took:?}");
+    }
+
+    // Full review 2026-10-06, rust (minor): the two schemes read the disk and the two commands stat it, none of it on the window's thread.
+    #[test]
+    fn what_reads_the_disk_does_not_run_on_the_window_thread() {
+        let source = include_str!("lib.rs");
+        let sync_scheme = [".register_uri", "_scheme_protocol("].concat();
+        assert!(!source.contains(&sync_scheme), "a scheme that answers on the window's thread");
+        for scheme in ["media::SCHEME", "nikverse::SCHEME"] {
+            assert!(source.contains(&format!("register_asynchronous_uri_scheme_protocol({scheme}")), "{scheme}");
+        }
+        let at = source.find("fn chat_attachment_inside(").expect("chat_attachment_inside");
+        assert!(source[..at].trim_end().ends_with("#[tauri::command(async)]"));
+        let stats = include_str!("stats.rs");
+        let at = stats.find("pub fn system_stats(").expect("system_stats");
+        assert!(stats[..at].trim_end().ends_with("#[tauri::command(async)]"));
     }
 
     // Review of F6a, B1: git is told not to start a file-system monitor inside the call's job, and not to take optional locks.

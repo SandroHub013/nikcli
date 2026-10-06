@@ -62,7 +62,8 @@ pub struct SystemStats {
     processes: u32,
 }
 
-#[tauri::command]
+/// `async`: on the pool, not on the window's thread; it refreshes the process list every 2 s (full review 2026-10-06, rust minor).
+#[tauri::command(async)]
 pub fn system_stats(stats: tauri::State<'_, Stats>) -> Result<SystemStats, String> {
     let mut sampler = stats.0.lock().map_err(|_| "statistiche bloccate")?;
     let sampler = &mut *sampler;
