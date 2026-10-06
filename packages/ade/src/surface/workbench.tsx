@@ -289,7 +289,7 @@ import { CONSENT_KEY, consentQuestion, hasConsent, withConsent } from "../plugin
 import { toPluginSession } from "../plugin/session"
 import type { DiscoveryIO } from "../plugin/discovery"
 import { markSaved, openBuffer, saveBlockedReason, toLf, withEol } from "../editor"
-import { detectPermission, followPermission, type PermissionAnswer } from "../session/permission"
+import { detectPermission, followPermission, permissionIdentity, type PermissionAnswer } from "../session/permission"
 import { readReportLine } from "../session/report"
 import { asOneLine, asSubmittedLine, confirmDeadline, pasteSettled, submitCheck } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
@@ -7429,10 +7429,10 @@ export function Workbench() {
     questionSeenAt.set(paneId, Date.now())
     setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
     if (voiceEngine.isRunning()) {
-      void voiceEngine.handlePermissionRequest(paneId, request.what, { kind: request.kind })
+      void voiceEngine.handlePermissionRequest(paneId, permissionIdentity(request), { kind: request.kind })
     } else {
       const pane = wb().panes.find((p) => p.id === paneId)
-      proactiveAlerts.notifyPermission(paneId, pane?.title ?? paneId, request.what, request.kind)
+      proactiveAlerts.notifyPermission(paneId, pane?.title ?? paneId, permissionIdentity(request), request.kind)
     }
   }
 
