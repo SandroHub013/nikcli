@@ -193,6 +193,9 @@ export function serverFetch(bridge: ServerBridge, options: { directory?: string 
           if (finished) return
           done()
           settled = true
+          // Rust refused the request outright, which it does when the server it knew has gone:
+          // find it again, and let ADE start a new one (bots 4).
+          started = undefined
           reject(error instanceof Error ? error : new TypeError(String(error)))
         })
     })
