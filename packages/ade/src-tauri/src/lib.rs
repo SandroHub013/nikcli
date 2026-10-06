@@ -494,13 +494,16 @@ fn is_env_file(path: &Path) -> bool {
 
 /// `"ok"`, or why the chat may not attach `path` (`attachment_inside`).
 ///
-/// `async`: on the pool, not on the window's thread, which a slow disk would hold (full review 2026-10-06, rust minor).
-#[tauri::command(async)]
-fn chat_attachment_inside(root: String, path: String) -> String {
-    match attachment_inside(Path::new(&root), Path::new(&path)) {
+/// Off the window's thread, and off the async worker too: `canonicalize` on a OneDrive file that is only online can wait, and
+/// that would hold a worker of the runtime instead (full review 2026-10-06, rust minor; review of F7c, B5).
+#[tauri::command]
+async fn chat_attachment_inside(root: String, path: String) -> String {
+    tauri::async_runtime::spawn_blocking(move || match attachment_inside(Path::new(&root), Path::new(&path)) {
         Ok(_) => "ok".to_string(),
         Err(reason) => reason.to_string(),
-    }
+    })
+    .await
+    .unwrap_or_else(|_| "controllo interrotto".to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -3007,8 +3010,9 @@ mod tests {
         for scheme in ["media::SCHEME", "nikverse::SCHEME"] {
             assert!(source.contains(&format!("register_asynchronous_uri_scheme_protocol({scheme}")), "{scheme}");
         }
-        let at = source.find("fn chat_attachment_inside(").expect("chat_attachment_inside");
-        assert!(source[..at].trim_end().ends_with("#[tauri::command(async)]"));
+        let at = source.find("async fn chat_attachment_inside(").expect("chat_attachment_inside");
+        let body = &source[at..source[at..].find("\n}\n").map(|end| at + end).expect("fine")];
+        assert!(body.contains("spawn_blocking"), "the check leaves the async worker");
         let stats = include_str!("stats.rs");
         let at = stats.find("pub fn system_stats(").expect("system_stats");
         assert!(stats[..at].trim_end().ends_with("#[tauri::command(async)]"));
