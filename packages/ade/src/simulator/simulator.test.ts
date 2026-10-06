@@ -129,6 +129,25 @@ describe("app URLs", () => {
     expect(isLoadableAppUrl("data:text/html,hi", "http://tauri.localhost")).toBe(false)
   })
 
+  /*
+   * Full review 2026-10-06, nikverse M1: `ade-media` serves every file of the open
+   * projects at `http(s)://ade-media.localhost/<path>` on Windows; a page of them in a
+   * frame with allow-same-origin could `fetch` the others, `.env` included. The browser
+   * pane refuses it (`isAdeOrigin`); the simulator did not.
+   */
+  test("the media origin cannot be loaded with same-origin rights, in any spelling", () => {
+    for (const url of [
+      "http://ade-media.localhost/C%3A%2Fproj%2Fpage.html",
+      "https://ade-media.localhost/x",
+      "http://ADE-MEDIA.localhost:80/x",
+      "ade-media://localhost/C%3A%2Fproj%2Fpage.html",
+    ]) {
+      expect(isLoadableAppUrl(url, "http://localhost:5177")).toBe(false)
+      expect(isLoadableAppUrl(url, "http://tauri.localhost")).toBe(false)
+    }
+    expect(isLoadableAppUrl("http://media.localhost:5173/", "http://localhost:5177")).toBe(true)
+  })
+
   test("a page cannot sneak onto ADE by navigating to tauri.localhost from elsewhere", () => {
     expect(isLoadableAppUrl("http://tauri.localhost/", "http://localhost:5177")).toBe(false)
     expect(isLoadableAppUrl("https://tauri.localhost/index.html", "http://localhost:5270")).toBe(false)
