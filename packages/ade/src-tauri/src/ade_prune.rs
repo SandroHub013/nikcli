@@ -6,9 +6,17 @@
 //! the project's memory (`decisions.jsonl`, `design.jsonl`, `memory.md`) or that keep `.ade/` out of git (`.gitignore`). A link is never
 //! followed: what is removed is the link's own file or nothing.
 
-use crate::plugin_install::main_only;
 use crate::WriteRoots;
 use std::path::{Component, Path};
+
+/// The commands that remove files answer to ADE's own window and no other: a browser pane or a second window that reaches `invoke` is refused.
+fn main_only(label: &str) -> Result<(), String> {
+    if label == "main" {
+        Ok(())
+    } else {
+        Err("comando riservato alla finestra principale".into())
+    }
+}
 
 /// Never removed, whatever else is true of them.
 const PROTECTED: [&str; 4] = ["decisions.jsonl", "design.jsonl", "memory.md", ".gitignore"];

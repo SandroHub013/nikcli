@@ -101,6 +101,7 @@ function Plant {
     }
   }
   Write-Text $Settings (($document | ConvertTo-Json -Depth 10) + "`n")
+  # `plugins\` is the folder of the plugins in a frame (A1), removed on 2026-10-06: the cleanup stays for whoever had them.
   foreach ($file in @('tts\piper\piper.exe', 'tts\voices\ugo.onnx', 'nikverse-assets\world\city.glb', 'plugins\alpha\1.0.0\index.html', 'plugins\alpha\current', 'EBWebView\Default\Local Storage\leveldb\000003.log')) {
     Write-Text (Join-Path $Local $file) ('x' * 64)
   }

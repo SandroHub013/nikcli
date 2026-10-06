@@ -218,11 +218,6 @@ export interface Pane {
    */
   plugin?: { pluginId: string; name: string }
   /**
-   * Set when the tile hosts an installed plugin in a sandboxed frame (`plugin-frame/`). Not `plugin`, which is the plugins that draw in
-   * ADE's own DOM. Saved and restored (`FramePluginPaneState`): a plugin that is no longer installed comes back as its placeholder.
-   */
-  framePlugin?: { id: string }
-  /**
    * What this session was asked to do, kept so a retry restarts the same work.
    * Without it "Riprova" relaunches the agent with an empty prompt, which is a
    * different session wearing the same title.
@@ -269,7 +264,7 @@ export interface Pane {
  * empty player was listed as a session and offered to be restarted as one.
  */
 export function isPanelPane(
-  pane: Pick<Pane, "mode" | "browserUrl" | "filePath" | "videoPath" | "modelPath" | "appUrl" | "plugin" | "framePlugin">,
+  pane: Pick<Pane, "mode" | "browserUrl" | "filePath" | "videoPath" | "modelPath" | "appUrl" | "plugin">,
 ): boolean {
   return Boolean(
     pane.browserUrl ||
@@ -278,14 +273,12 @@ export function isPanelPane(
     pane.modelPath ||
     pane.appUrl ||
     pane.plugin ||
-    pane.framePlugin ||
     pane.mode === "video" ||
     pane.mode === "model" ||
     pane.mode === "app" ||
     pane.mode === "decisions" ||
     pane.mode === "design" ||
-    pane.mode === "nikverse" ||
-    pane.mode === "plugin-frame",
+    pane.mode === "nikverse",
   )
 }
 
@@ -604,22 +597,10 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
       ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
     }))
 
-  const framePlugins = workbench.panes
-    .filter((p) => p.framePlugin)
-    .map((p) => ({
-      id: p.id,
-      plugin: p.framePlugin!.id,
-      title: p.title,
-      ...(p.workspaceId ? { project: p.workspaceId } : {}),
-      ...(p.projectRoot ? { projectRoot: p.projectRoot } : {}),
-      ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
-    }))
-
   return {
     version: CURRENT_VERSION,
     panes: boundWorkspaceTranscripts(saved, workbench.focusedId),
     ...(browsers.length ? { browsers } : {}),
-    ...(framePlugins.length ? { framePlugins } : {}),
     focusedPaneId: workbench.focusedId,
     pinnedColumns: workbench.pinnedColumns,
     currentView: workbench.view,
@@ -672,7 +653,7 @@ function samePath(a: string, b: string): boolean {
 
 export function fromWorkspaceState(state: WorkspaceState, projectName?: string): Workbench {
   const owner = projectName ?? lastSegment(state.projectPath) ?? "ws-restored"
-  return {
+  const restored: Workbench = {
     panes: state.panes
       .map((p): Pane => {
         /*
@@ -795,23 +776,6 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
             lines: [],
           }),
         ),
-      )
-      .concat(
-        (state.framePlugins ?? []).map(
-          (f): Pane => ({
-            id: f.id,
-            title: f.title,
-            // As `openFramePluginPane` creates it: a panel is never a finished session.
-            status: "working",
-            model: "—",
-            mode: "plugin-frame",
-            framePlugin: { id: f.plugin },
-            workspaceId: f.project || owner,
-            ...(f.projectRoot ? { projectRoot: f.projectRoot } : {}),
-            ...(f.span ? { span: { columns: f.span.columns, rows: f.span.rows } } : {}),
-            lines: [],
-          }),
-        ),
       ),
     focusedId: state.focusedPaneId,
     pinnedColumns: state.pinnedColumns,
@@ -820,6 +784,14 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
     sidebarWidth: state.sidebarWidth,
     projectPath: state.projectPath,
   }
+  /*
+   * A pane that is not restored (a plugin panel from a release that had them, a page with no URL) leaves the saved focus pointing at
+   * nothing, and the commands that act on "the focused pane" would be given an id no pane has.
+   */
+  if (restored.focusedId && !restored.panes.some((pane) => pane.id === restored.focusedId)) {
+    restored.focusedId = restored.panes[0]?.id
+  }
+  return restored
 }
 
 /**
