@@ -18,10 +18,17 @@
 //! uninstall leaves it: `--clean-caches` takes the voices, NikVerse's assets and the plugins' files, never this
 //! (`uninstall.rs`). Only Tauri's own «elimina i dati» takes it, with everything else of the folder.
 
-use crate::plugin_install::main_only;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
+
+fn main_only(label: &str) -> Result<(), String> {
+    if label == "main" {
+        Ok(())
+    } else {
+        Err("comando riservato alla finestra principale".into())
+    }
+}
 
 /// The folder of the learner's own data, under the app's local data.
 pub const PROGRESS_DIR: &str = "learn";
