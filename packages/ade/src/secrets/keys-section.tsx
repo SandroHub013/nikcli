@@ -579,6 +579,13 @@ export function KeyRequestDialog(props: {
   const given = (existing?: KeyInfo) => keyRequestAgents(existing?.agents, props.asker)
   onMount(() => void props.host.list().then(setKeys, () => undefined))
   const existing = () => keys().find((key) => key.env === props.env)
+  /*
+   * The form below reads its variable and its agents once, when it is made. A second `keys ask` while this
+   * dialog is open changes the title and the words but not the form, which went on offering the first key with
+   * the first agent ticked under the second agent's name: the user approved what they did not read (full review
+   * 2026-10-06, bots 10). A new request is a new object, so the form is made again for it.
+   */
+  const request = createMemo(() => ({ env: props.env, asker: props.asker }))
 
   return (
     <Sheet component="key-request" size="md" onClose={() => props.onClose(undefined)}>
@@ -595,29 +602,34 @@ export function KeyRequestDialog(props: {
         <span>{text().goes}</span>
       </header>
       <div data-slot="keys-dialog-body">
-        <Show
-          when={existing()}
-          keyed
-          fallback={
-            <KeyForm
-              host={props.host}
-              agents={props.agents}
-              others={keys()}
-              initialEnv={props.env}
-              initialAgents={given()}
-              onDone={props.onClose}
-            />
-          }
-        >
-          {(key) => (
-            <KeyForm
-              host={props.host}
-              agents={props.agents}
-              existing={key}
-              others={keys()}
-              initialAgents={given(key)}
-              onDone={props.onClose}
-            />
+        <Show when={request()} keyed>
+          {/* A function with a parameter: `Show` calls it again for each new request, and only then. */}
+          {(asked) => (
+            <Show
+              when={existing()}
+              keyed
+              fallback={
+                <KeyForm
+                  host={props.host}
+                  agents={props.agents}
+                  others={keys()}
+                  initialEnv={asked.env}
+                  initialAgents={given()}
+                  onDone={props.onClose}
+                />
+              }
+            >
+              {(key) => (
+                <KeyForm
+                  host={props.host}
+                  agents={props.agents}
+                  existing={key}
+                  others={keys()}
+                  initialAgents={given(key)}
+                  onDone={props.onClose}
+                />
+              )}
+            </Show>
           )}
         </Show>
       </div>

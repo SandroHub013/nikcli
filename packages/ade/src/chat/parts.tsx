@@ -12,6 +12,7 @@ import { createSignal, For, Index, Match, Show, Switch } from "solid-js"
 import type { Part, PermissionRequest, QuestionRequest } from "@nikcli-ai/sdk/httpapi"
 import { t } from "../i18n"
 import { CodeBlock } from "./code-block"
+import type { CodeSegment, Segment } from "./segments"
 import {
   allowsTyping,
   answersOf,
@@ -32,9 +33,17 @@ const STATUS = {
   error: "chat.tool.error",
 } as const satisfies Record<ToolStatus, string>
 
+const codeOf = (segment: Segment): CodeSegment | undefined => (segment.kind === "code" ? segment : undefined)
+
+/*
+ * `Index`, not `For`: the views are made again from the parts at every token, so each one is a new object, and
+ * `For` (which knows an item by its identity) threw the whole message away and built it again. A reasoning or a
+ * tool call the user had opened closed at the next token, and a text selection was lost (full review 2026-10-06,
+ * bots 13). With `Index` the block at a position stays and its text is what changes.
+ */
 export function MessageParts(props: { parts: readonly Part[] }) {
   const views = () => props.parts.map(partView).filter((view): view is PartView => view !== undefined)
-  return <For each={views()}>{(view) => <PartBlock view={view} />}</For>
+  return <Index each={views()}>{(view) => <PartBlock view={view()} />}</Index>
 }
 
 function PartBlock(props: { view: PartView }) {
@@ -42,15 +51,13 @@ function PartBlock(props: { view: PartView }) {
     <Switch>
       <Match when={props.view.kind === "text" ? props.view : undefined}>
         {(view) => (
-          <For each={view().segments}>
-            {(segment) =>
-              segment.kind === "code" ? (
-                <CodeBlock language={segment.language} text={segment.text} />
-              ) : (
-                <p data-slot="chat-prose">{segment.text}</p>
-              )
-            }
-          </For>
+          <Index each={view().segments}>
+            {(segment) => (
+              <Show when={codeOf(segment())} fallback={<p data-slot="chat-prose">{segment().text}</p>}>
+                {(code) => <CodeBlock language={code().language} text={code().text} />}
+              </Show>
+            )}
+          </Index>
         )}
       </Match>
       <Match when={props.view.kind === "reasoning" ? props.view : undefined}>

@@ -130,13 +130,19 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
   /** Answers nikcli's question `asked` and closes it; a line in the thread when there is something to say. */
   const reply = (path: string, turn: Turn, asked: PendingPermission, answer: "once" | "reject", line?: string) => {
     cancelExpiry(path)
-    // On ADE's server the question has an id (B8d): the answer goes to it, and to no other (review, M1).
-    if (asked.requestID !== undefined) turn.answer?.(asked.requestID, answer)
     const at = now()
+    /*
+     * The question is closed in the thread BEFORE the server is told. `turn.answer` shows the next waiting
+     * question at once, synchronously, and that one is put in the thread by `onPermission`; closing this one
+     * afterwards cleared it too: the card of the second question vanished, its expiry found nothing on screen,
+     * and the turn waited for nikcli's answer for the whole turn timeout (full review 2026-10-06, bots 5).
+     */
     deps.update(threadOf(path), (talk) => {
       const answered = permissionAnswered(talk, at)
       return line ? appendMessage(answered, { role: "error", text: line }, at) : answered
     })
+    // On ADE's server the question has an id (B8d): the answer goes to it, and to no other (review, M1).
+    if (asked.requestID !== undefined) turn.answer?.(asked.requestID, answer)
   }
 
   /**

@@ -555,6 +555,48 @@ pub async fn secret_voice_key(app: AppHandle, lock: tauri::State<'_, SecretsLock
 /// Seconds a copied key stays on the clipboard before ADE clears it.
 const CLIPBOARD_CLEAR_SECS: u64 = 45;
 
+/// Puts a key on the clipboard.
+///
+/// On Windows through `arboard` with the three exclusions: the plugin's `write_text` sets no flag, so with Win+V or
+/// the synchronised clipboard on, the key stayed in the history, and on the user's other devices, long after the
+/// clear below (full review 2026-10-06, bots 11). Elsewhere it is the plugin's write as before: macOS has no such
+/// flag in `arboard`, and on Linux the owner of the selection must stay alive to serve it.
+#[cfg(windows)]
+fn write_secret(_app: &AppHandle, text: &str) -> Result<(), String> {
+    write_excluded(text)
+}
+
+#[cfg(windows)]
+fn write_excluded(text: &str) -> Result<(), String> {
+    use arboard::SetExtWindows;
+    // Another program may hold the clipboard for a moment (a clipboard manager reading what was just copied).
+    for attempt in 0..5 {
+        if attempt > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        let written = arboard::Clipboard::new().and_then(|mut clipboard| {
+            clipboard
+                .set()
+                .exclude_from_history()
+                .exclude_from_cloud()
+                .exclude_from_monitoring()
+                .text(text.to_string())
+        });
+        match written {
+            Ok(()) => return Ok(()),
+            Err(arboard::Error::ClipboardOccupied) => {}
+            Err(_) => break,
+        }
+    }
+    Err("appunti non disponibili".to_string())
+}
+
+#[cfg(not(windows))]
+fn write_secret(app: &AppHandle, text: &str) -> Result<(), String> {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    app.clipboard().write_text(text.to_string()).map_err(|_| "appunti non disponibili".to_string())
+}
+
 /// Copies a key to the clipboard from here, so the value never enters the page.
 /// Cleared after a while, unless something else was copied since.
 #[tauri::command]
@@ -569,7 +611,7 @@ pub async fn secret_copy(app: AppHandle, lock: tauri::State<'_, SecretsLock>, na
             .get(&service(&app), &name)?
             .ok_or_else(|| format!("chiave «{name}» senza valore nel portachiavi"))?
     };
-    app.clipboard().write_text(value.clone()).map_err(|_| "appunti non disponibili".to_string())?;
+    write_secret(&app, &value)?;
     let handle = app.clone();
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_secs(CLIPBOARD_CLEAR_SECS));
@@ -583,6 +625,40 @@ pub async fn secret_copy(app: AppHandle, lock: tauri::State<'_, SecretsLock>, na
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /*
+     * Full review 2026-10-06, bots 11. The history exclusion is a clipboard format that the copy registers beside the
+     * text, so it can be seen on the real clipboard and nowhere else: this opens the desktop session's own, hence
+     * `ignore` (it replaces what the user had copied). Run by hand: `cargo test --lib -- --ignored a_copied_key`.
+     */
+    #[cfg(windows)]
+    #[test]
+    #[ignore = "writes to the real clipboard"]
+    fn a_copied_key_is_kept_out_of_the_clipboard_history_and_the_cloud() {
+        use windows::core::{w, PCWSTR};
+        use windows::Win32::System::DataExchange::{IsClipboardFormatAvailable, RegisterClipboardFormatW};
+        let flagged = |name: PCWSTR| unsafe {
+            let format = RegisterClipboardFormatW(name);
+            format != 0 && IsClipboardFormatAvailable(format).is_ok()
+        };
+        let names = [
+            w!("CanIncludeInClipboardHistory"),
+            w!("CanUploadToCloudClipboard"),
+            w!("ExcludeClipboardContentFromMonitorProcessing"),
+        ];
+
+        write_excluded("clipboard-test-not-a-key").expect("write");
+        for name in names {
+            assert!(flagged(name), "the copy must carry the exclusion format {}", unsafe { name.display() });
+        }
+
+        // What the plugin's `write_text` does: the text alone, which the history keeps.
+        arboard::Clipboard::new().expect("clipboard").set_text("clipboard-test-plain").expect("write");
+        for name in names {
+            assert!(!flagged(name), "a plain write has no exclusion format");
+        }
+        let _ = arboard::Clipboard::new().and_then(|mut clipboard| clipboard.set_text(String::new()));
+    }
     use std::collections::HashMap;
 
     #[derive(Default)]

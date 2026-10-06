@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { t } from "../i18n"
-import { composerAction, isComposing, liveAnnouncement } from "./composer"
+import { composerAction, isComposing, liveAnnouncement, settleSend } from "./composer"
+import type { Attachment } from "./attachments"
 import type { Turn } from "./sessions"
 
 /* C6: the composer's keys, the IME, and what a screen reader hears. */
@@ -69,5 +70,36 @@ describe("what a screen reader hears", () => {
     expect(liveAnnouncement(failed)!.text).toBe(t("chat.live.error", t("chat.error.aborted")))
     const long: Turn[] = [{ info: assistant("m4", true), parts: [textPart("x".repeat(1000))] }]
     expect(liveAnnouncement(long)!.text.length).toBeLessThan(450)
+  })
+})
+
+/* Full review 2026-10-06, bots 15: what the user did while the first send was waiting is not undone by it. */
+describe("what the composer keeps after a send", () => {
+  const file = (name: string) => ({ name }) as unknown as Attachment
+  const a = file("a.ts")
+  const b = file("b.ts")
+  const began = { draft: "spiega questo", attachments: [a], folder: "C:/x", session: "s1" }
+
+  test("nothing changed meanwhile: the draft is emptied, the attachments go, the session is shown", () => {
+    expect(settleSend(began, began)).toEqual({ clearDraft: true, attachments: [], follow: true })
+  })
+
+  test("typed or attached meanwhile: that stays, only the sent ones go", () => {
+    const now = { ...began, draft: "spiega questo e poi quello", attachments: [a, b] }
+    expect(settleSend(began, now)).toEqual({ clearDraft: false, attachments: [b], follow: true })
+  })
+
+  test("another folder or another session opened meanwhile: the send does not take the user back", () => {
+    expect(settleSend(began, { ...began, folder: "C:/y" }).follow).toBe(false)
+    expect(settleSend(began, { ...began, session: "s2" }).follow).toBe(false)
+    // A first message, from no session: still followed when nothing else was opened.
+    const fresh = { ...began, session: undefined }
+    expect(settleSend(fresh, fresh).follow).toBe(true)
+  })
+
+  test("the chat uses it", () => {
+    const source = readFileSync(new URL("./chat.tsx", import.meta.url), "utf8")
+    expect(source).toContain("settleSend(sent, moment())")
+    expect(source).not.toMatch(/setCurrent\(id\)\s*\n\s*setDraft\(""\)/)
   })
 })

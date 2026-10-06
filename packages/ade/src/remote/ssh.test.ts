@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { discoverSshHosts, globMatcher, resolveInclude } from "./discover"
 import type { Host } from "../host/shell"
 import {
@@ -12,6 +14,7 @@ import {
   remoteName,
   remoteRoot,
   sshArgs,
+  agentMissing,
   sshAsking,
   targetOf,
 } from "./ssh"
@@ -146,6 +149,29 @@ describe("the command line", () => {
     expect(sshAsking("Enter passphrase for key '/home/n/.ssh/id_ed25519':")).toBe(true)
     expect(sshAsking("Are you sure you want to continue connecting (yes/no/[fingerprint])?")).toBe(true)
     expect(sshAsking("niko@devbox:~/app$")).toBe(false)
+  })
+})
+
+describe("an agent that is not on the server", () => {
+  test("the shell's «not found», in each shell's words, is told apart from a running agent", () => {
+    expect(agentMissing("bash: claude: command not found\r\nniko@devbox:~$ ", "claude")).toBe(true)
+    expect(agentMissing("zsh: command not found: claude", "claude")).toBe(true)
+    expect(agentMissing("sh: 1: claude: not found", "claude")).toBe(true)
+    expect(agentMissing("fish: Unknown command: claude", "claude")).toBe(true)
+    expect(agentMissing("'claude' is not recognized as an internal or external command", "claude")).toBe(true)
+    expect(agentMissing("bash: /opt/bin/claude: No such file or directory", "claude --model x")).toBe(true)
+    // A running agent, an unrelated «not found», the echo of what was typed: not missing.
+    expect(agentMissing("Claude Code v2\r\n> ", "claude")).toBe(false)
+    expect(agentMissing("bash: foo: command not found", "claude")).toBe(false)
+    expect(agentMissing("niko@devbox:~$ claude\r\n", "claude")).toBe(false)
+    expect(agentMissing("anything", "   ")).toBe(false)
+  })
+
+  test("the workbench does not type the task when the agent is missing", () => {
+    const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+    const body = source.slice(source.indexOf("const startRemoteProcess"), source.indexOf("/** Adds a remote Space"))
+    expect(body).toContain("agentMissing(")
+    expect(body).toContain("task.agentMissing")
   })
 })
 

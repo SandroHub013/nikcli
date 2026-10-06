@@ -12,7 +12,7 @@ import {
   type PairingInfo,
   type PairingRequest,
 } from "./panel-state"
-import { memoryRemoteStore, REMOTE_OFF } from "./remote"
+import { memoryRemoteStore, REMOTE_OFF, remoteKey } from "./remote"
 
 /*
  * G6: the Gateway section of a bot's card, with a fake Rust side. The token
@@ -314,16 +314,38 @@ describe("the Gateway section of a bot's card", () => {
     panel.askRemote()
     expect(panel.confirmingRemote()).toBe(true)
     // Asking is not saying yes.
-    expect(remote.get(BOT.path)).toEqual(REMOTE_OFF)
+    expect(remote.get(remoteKey(BOT.path, "telegram"))).toEqual(REMOTE_OFF)
     panel.cancelRemote()
     expect(panel.confirmingRemote()).toBe(false)
     panel.askRemote()
     await panel.confirmRemote()
     expect(asked).toEqual([`aiuto ${PROJECT}`])
-    expect(remote.get(BOT.path)).toEqual({ commands: true, fingerprint: "f-1" })
+    expect(remote.get(remoteKey(BOT.path, "telegram"))).toEqual({ commands: true, fingerprint: "f-1" })
     expect(panel.remote().commands).toBe(true)
     await panel.remoteOff()
-    expect(remote.get(BOT.path)).toEqual(REMOTE_OFF)
+    expect(remote.get(remoteKey(BOT.path, "telegram"))).toEqual(REMOTE_OFF)
+  })
+
+  // Full review 2026-10-06, bots 12: the yes is for the platform shown when it was given.
+  test("the yes given on Telegram is not on for Discord, and a yes on Discord is its own", async () => {
+    const fake = fakeApi()
+    const { panel, remote } = panelWith(fake)
+    await panel.ready
+    panel.askRemote()
+    await panel.confirmRemote()
+    expect(panel.remote().commands).toBe(true)
+    panel.choose("discord")
+    await panel.ready
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(panel.remote()).toEqual(REMOTE_OFF)
+    expect(remote.get(remoteKey(BOT.path, "discord"))).toEqual(REMOTE_OFF)
+    panel.askRemote()
+    await panel.confirmRemote()
+    expect(remote.get(remoteKey(BOT.path, "discord"))).toEqual({ commands: true, fingerprint: "f-1" })
+    // Turning it off here leaves Telegram's alone.
+    await panel.remoteOff()
+    expect(remote.get(remoteKey(BOT.path, "discord"))).toEqual(REMOTE_OFF)
+    expect(remote.get(remoteKey(BOT.path, "telegram"))).toEqual({ commands: true, fingerprint: "f-1" })
   })
 
   test("a trust refused at the yes leaves the commands off", async () => {
@@ -331,7 +353,7 @@ describe("the Gateway section of a bot's card", () => {
     const { panel, remote } = panelWith(fake, { approve: async () => ({ ok: false, problem: "no" }) })
     panel.askRemote()
     await panel.confirmRemote()
-    expect(remote.get(BOT.path)).toEqual(REMOTE_OFF)
+    expect(remote.get(remoteKey(BOT.path, "telegram"))).toEqual(REMOTE_OFF)
     expect(panel.problem()).toBe("no")
   })
 
@@ -343,7 +365,7 @@ describe("the Gateway section of a bot's card", () => {
       panel.askRemote()
       expect(panel.confirmingRemote()).toBe(false)
       await panel.confirmRemote()
-      expect(remote.get(BOT.path)).toEqual(REMOTE_OFF)
+      expect(remote.get(remoteKey(BOT.path, "telegram"))).toEqual(REMOTE_OFF)
     }
   })
 

@@ -5,6 +5,7 @@
 
 import type { Part } from "@nikcli-ai/sdk/httpapi"
 import { t } from "../i18n"
+import type { Attachment } from "./attachments"
 import { messageError, type Turn } from "./sessions"
 
 export interface ComposerKeyEvent {
@@ -70,4 +71,32 @@ export function liveAnnouncement(turns: readonly Turn[], since = 0): { id: strin
   if (!text) return undefined
   const spoken = text.length > SPOKEN_MAX ? `${text.slice(0, SPOKEN_MAX - 1)}…` : text
   return { id: last.info.id, text: t("chat.live.answer", spoken) }
+}
+
+/** What the composer held, and which folder and session were open, at one moment. */
+export interface ComposerMoment {
+  readonly draft: string
+  readonly attachments: readonly Attachment[]
+  readonly folder: string | undefined
+  readonly session: string | undefined
+}
+
+/**
+ * What to do with the composer when a send has gone through.
+ *
+ * The first send waits for the folder, the catalog and a cold start, up to 45 s, with the field still live: what the
+ * user wrote or attached meanwhile was emptied with the sent text, and `setCurrent` took them back to the session
+ * they had left (full review 2026-10-06, bots 15). The draft is emptied only if it is still the one sent; the
+ * attachments, only the ones sent; and the session sent to is shown only if the folder and the session are still the
+ * ones the send began in.
+ */
+export function settleSend(
+  sent: ComposerMoment,
+  now: ComposerMoment,
+): { clearDraft: boolean; attachments: readonly Attachment[]; follow: boolean } {
+  return {
+    clearDraft: now.draft === sent.draft,
+    attachments: now.attachments.filter((file) => !sent.attachments.includes(file)),
+    follow: now.folder === sent.folder && now.session === sent.session,
+  }
 }
