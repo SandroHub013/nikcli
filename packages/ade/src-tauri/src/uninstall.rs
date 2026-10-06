@@ -334,6 +334,7 @@ mod tests {
         put(&local.join("EBWebView/Default/Network/Cookies"), 42);
         put(&local.join("agent-sessions/abc.json"), 4);
         put(&local.join("mailbox/m.json"), 4);
+        put(&local.join("learn/progress.json"), 60);
     }
 
     #[test]
@@ -360,6 +361,9 @@ mod tests {
             "EBWebView/Default/Network/Cookies",
             "agent-sessions/abc.json",
             "mailbox/m.json",
+            // The lessons of «Impara» are the user's work, not a download: a normal uninstall leaves them, and only Tauri's
+            // «elimina i dati» takes them, with the rest of the folder (`learn.rs`).
+            "learn/progress.json",
         ] {
             assert!(local.join(kept).exists(), "{kept} was removed");
         }

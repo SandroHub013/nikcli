@@ -21,6 +21,7 @@ mod browse;
 mod browser_shot;
 mod frontend;
 mod gateway;
+mod learn;
 mod media;
 mod nikverse;
 mod nikverse_assets;
@@ -2318,6 +2319,8 @@ pub fn run() {
             nikverse_assets::nikverse_assets_install,
             nikverse_assets::nikverse_assets_bytes,
             nikverse_assets::nikverse_assets_remove,
+            learn::learn_progress_get,
+            learn::learn_progress_set,
             plugin_install::plugin_list,
             plugin_install::plugin_check,
             plugin_install::plugin_install,
