@@ -1,0 +1,313 @@
+id: ai/04-allucinazioni
+versione: 1.0.0
+lingua: it
+tema: ai
+unita: 1
+numero: 4
+titolo: "Risposte inventate e affidabilità"
+durata_min: 4
+livello: 2
+prerequisiti:
+  - ai/03-embedding-rag
+stato: rivista
+autori:
+  bozza: agy
+  revisione: Architetto
+
+obiettivi:
+  - id: O1
+    testo: "Spiegare perché un modello può inventare: genera il testo più probabile e non controlla una base di fatti."
+  - id: O2
+    testo: "Riconoscere i segnali tipici delle risposte inventate: citazioni fittizie, numeri troppo precisi e dettagli su temi rari."
+  - id: O3
+    testo: "Elencare le strategie per ridurre le invenzioni: inserire fonti nel contesto, citare brani e ammettere 'non lo so'."
+  - id: O4
+    testo: "Spiegare che la sicurezza e l'eleganza del tono non costituiscono una prova della veridicità della risposta."
+  - id: O5
+    testo: "Distinguere quando un'invenzione comporta rischi trascurabili e quando produce costi o danni critici."
+
+fonti:
+  - id: F6
+    titolo: "Ji e altri, Survey of Hallucination in Natural Language Generation (2022)"
+    url: "https://arxiv.org/abs/2202.03629"
+  - id: F7
+    titolo: "NIST, AI Risk Management Framework"
+    url: "https://www.nist.gov/itl/ai-risk-management-framework"
+
+teoria:
+  - id: T1
+    obiettivi: [O1, O2]
+    fonti: [F6]
+    testo: >-
+      Le risposte inventate (o allucinazioni) avvengono perché un modello linguistico produce sempre la
+      prosecuzione statisticamente più plausibile, senza disporre di una coscienza né di un controllo di verità
+      sul mondo reale. I segnali tipici di un'invenzione includono: **citazioni di fonti inesistenti**, numeri
+      insolitamente precisi privi di origine ed elaborazioni dettagliate su argomenti marginali o recenti. Il
+      modello non mente: calcola probabilità sui token.
+  - id: T2
+    obiettivi: [O3, O4]
+    fonti: [F6, F7]
+    testo: >-
+      Il tono assertivo di un modello **non è una prova di verità**: un assistente può esporre errori
+      grossolani con assoluta compostezza formale. Per ridurre le risposte inventate serve: inserire documenti
+      affidabili nel contesto, chiedere di **citare il passaggio utilizzato**, autorizzare esplicitamente la
+      risposta «non lo so» in caso di incertezza, e verificare sempre in modo autonomo le informazioni critiche
+      prima di utilizzarle.
+  - id: T3
+    obiettivi: [O5]
+    fonti: [F7]
+    testo: >-
+      Il pericolo di un'invenzione dipende dall'ambito. Nel brainstorming o nella stesura di una fiaba un
+      dettaglio inventato **costa poco** ed è facile da scartare. In ambiti come calcoli finanziari, norme
+      amministrative, dosaggi o comandi operativi distruttivi, una risposta falsa può causare **danni
+      gravissimi**. La gestione responsabile dell'AI impone di valutare sempre il rischio prima di agire sulla
+      base di una risposta generata.
+
+esercizi:
+  - id: l04-e01
+    tipo: scelta
+    obiettivo: O1
+    difficolta: 1
+    fonte: F6
+    consegna: "Perché un modello linguistico può generare affermazioni del tutto inventate?"
+    opzioni:
+      - "Perché decide deliberatamente di ingannare l'utente quando la domanda è difficile"
+      - "Perché calcola la sequenza di parole statisticamente più plausibile, senza verificare i fatti reali"
+      - "Perché durante l'inferenza si verificano errori di trasmissione sulla rete internet"
+      - "Perché la memoria dei parametri si svuota temporaneamente in presenza di richieste complesse"
+    giusta: 1
+    spiegazione: >-
+      Il modello non controlla archivi di verità: costruisce frasi che suonano plausibili e corrette dal punto
+      di vista linguistico, ma che possono non corrispondere ad alcun fatto reale.
+    sbagliate:
+      - risposta: 0
+        perche: "Il modello non ha intenzioni, desideri né volontà di ingannare: genera solo testo coerente statisticamente."
+      - risposta: 2
+        perche: "L'allucinazione è un fenomeno della generazione probabilistica, non un errore nei pacchetti di rete."
+      - risposta: 3
+        perche: "I parametri rimangono stabili e caricati in memoria durante tutta la fase di inferenza."
+
+  - id: l04-e02
+    tipo: trova-riga
+    obiettivo: O2
+    difficolta: 2
+    fonte: F6
+    consegna: "L'assistente risponde sulla storia dell'isola. Quale riga contiene una citazione inventata che sembra autorevole?"
+    etichetta: "storia-navigazione.txt"
+    righe:
+      - "1. La pesca costiera è documentata nell'arcipelago fin dal medioevo."
+      - "2. Le imbarcazioni tradizionali usavano vele latine in cotone grezzo."
+      - "3. Secondo il saggio «Annali Nautici dell'Isola» del professor De Rosis (2018), il porto fu fondato dai fenici."
+      - "4. I registri comunali attestano un aumento del commercio marittimo nell'ottocento."
+    giuste: [2]
+    spiegazione: >-
+      La riga 3 inventa un autore («professor De Rosis»), un titolo di libro e un anno fittizio per dare
+      un'apparenza accademica e incontestabile a una propria affermazione.
+    sbagliate:
+      - risposta: 0
+        perche: "La riga 1 è una descrizione generale di contesto storico, senza false fonti formali."
+      - risposta: 3
+        perche: "La riga 4 cita registri generici senza fabbricare un titolo di libro e un autore: va comunque verificata, ma non è la citazione costruita per sembrare autorevole."
+
+  - id: l04-e03
+    tipo: trova-riga
+    obiettivo: O2
+    difficolta: 2
+    fonte: F6
+    consegna: "Una relazione descrive il meteo dell'isola senza che vi siano sensori ufficiali. Quale riga inventa un dato con precisione sospetta?"
+    etichetta: "bollettino-meteo.txt"
+    righe:
+      - "1. Durante la mattinata il cielo si è mantenuto parzialmente coperto."
+      - "2. I venti soffiano moderati dai quadranti settentrionali lungo la costa."
+      - "3. Il tasso di umidità relativo registrato nel borgo antico è esattamente del 74,38%."
+      - "4. Nel pomeriggio sono attese brevi schiarite sulle scogliere occidentali."
+    giuste: [2]
+    spiegazione: >-
+      Un valore con due cifre decimali (74,38%) trasmette una falsa impressione di rigore scientifico in un
+      contesto in cui mancano strumenti di misura documentati.
+    sbagliate:
+      - risposta: 1
+        perche: "La stima sui venti è una formulazione qualitativa standard per le osservazioni meteo generali."
+      - risposta: 0
+        perche: "La copertura nuvolosa è descritta in termini visivi plausibili e non presenta cifre artefatte."
+
+  - id: l04-e04
+    tipo: scelta
+    obiettivo: O2
+    difficolta: 2
+    fonte: F6
+    consegna: "Quale di questi indizi deve far sospettare maggiormente la presenza di una risposta inventata?"
+    opzioni:
+      - "La risposta riporta un passaggio del documento che hai messo nel contesto, e lo ritrovi lì"
+      - "La risposta include dettagli minuziosi, date precise e citazioni bibliografiche su un fatto insolito mai documentato"
+      - "La risposta ammette con chiarezza di non avere dati sufficienti per rispondere"
+      - "La risposta è organizzata con brevi elenchi puntati per agevolare la lettura"
+    giusta: 1
+    spiegazione: >-
+      Dettagli iper-precisi su eventi oscuri o marginali sono un campanello d'allarme: i modelli tendono a
+      colmare i vuoti informativi inventando nomi, date e titoli con grande verosimiglianza formale.
+    sbagliate:
+      - risposta: 0
+        perche: "Il passaggio è nel documento che hai fornito e lo hai controllato: è il contrario di una citazione inventata."
+      - risposta: 2
+        perche: "Dichiarare «non lo so» è un comportamento trasparente che indica assenza di invenzione."
+      - risposta: 3
+        perche: "La formattazione a punti è solo una scelta di impaginazione e non indica inaffidabilità del contenuto."
+
+  - id: l04-e05
+    tipo: ordina
+    obiettivo: O3
+    difficolta: 2
+    fonte: F7
+    consegna: "Metti in ordine i passaggi raccomandati per verificare un'affermazione importante generata da un modello."
+    elementi:
+      - "Individua nella risposta le affermazioni concrete e le cifre indicate"
+      - "Cerca una fonte primaria indipendente non prodotta dal modello"
+      - "Confronta il dato generato con il testo della fonte primaria"
+      - "Usa l'informazione solo se confermata dalla fonte verificata"
+    spiegazione: >-
+      Si isolano i fatti chiave, si cerca un riferimento esterno affidabile e non generato da AI, si verifica la
+      corrispondenza e solo allora si considera valida l'informazione.
+    sbagliate:
+      - risposta: [1, 0, 2, 3]
+        perche: "Prima di cercare fonti esterne occorre isolare quali fatti specifici necessitano di verifica."
+      - risposta: [0, 2, 1, 3]
+        perche: "Non si può confrontare il dato con la fonte prima di aver reperito la fonte primaria indipendente."
+
+  - id: l04-e06
+    tipo: completa
+    obiettivo: O3
+    difficolta: 2
+    fonte: F7
+    consegna: "Completa la frase."
+    testo: "Per ridurre le allucinazioni conviene fornire documenti nel [[1]] e autorizzare l'assistente a dire [[2]] quando l'informazione manca."
+    banca: ["contesto", "non lo so", "sempre", "segreto", "subito"]
+    giusta: ["contesto", "non lo so"]
+    spiegazione: >-
+      Ancorare il modello a documenti affidabili e permettergli di ammettere l'assenza di dati riduce le
+      risposte inventate, anche se non le elimina.
+    sbagliate:
+      - risposta: ["contesto", "sempre"]
+        perche: "Istruire l'agente a confermare sempre aumenta il rischio di invenzioni accondiscendenti."
+      - risposta: ["segreto", "non lo so"]
+        perche: "Le fonti devono essere caricate chiaramente nel contesto operativo, non tenute segrete."
+
+  - id: l04-e07
+    tipo: scelta
+    obiettivo: O4
+    difficolta: 1
+    fonte: F6
+    consegna: "Un modello risponde con un tono estremamente sicuro ed elegante a una domanda complessa. Che cosa dimostra questo tono?"
+    opzioni:
+      - "Dimostra che la risposta è vera, perché i modelli mostrano esitazione quando sbagliano"
+      - "Dimostra che il modello ha verificato i fatti consultando archivi scientifici"
+      - "Dimostra solo che la frase è ben costruita dal punto di vista linguistico, non che sia vera"
+      - "Dimostra che la risposta proviene direttamente dall'addestramento supervisionato"
+    giusta: 2
+    spiegazione: >-
+      La fluidità e la sicurezza stilistica dipendono dalla capacità di generare testo grammaticalmente
+      impeccabile, ma non hanno alcuna relazione con la veridicità dei fatti esposti.
+    sbagliate:
+      - risposta: 0
+        perche: "I modelli linguistici non esitano in base alla verità: possono affermare errori con totale sicurezza stilistica."
+      - risposta: 1
+        perche: "La fluidità del discorso riflette la grammatica appresa, non una consultazione di archivi esterni."
+      - risposta: 3
+        perche: "Anche risposte completamente inventate possono avere la stessa struttura delle risposte supervisionate."
+
+  - id: l04-e08
+    tipo: trova-riga
+    obiettivo: O4
+    difficolta: 2
+    fonte: F6
+    consegna: "Il contesto dice solo: «Nel porto è vietata la pesca tra le 08:00 e le 20:00». Quale riga inventa una regola non presente?"
+    etichetta: "parere-pesca.txt"
+    righe:
+      - "1. In base al regolamento del porto, la pesca è vietata dalle 08:00 alle 20:00."
+      - "2. Fuori da quella fascia oraria, il documento non indica altri divieti di orario."
+      - "3. I pescatori devono obbligatoriamente indossare un gilet catarifrangente omologato classe tre."
+      - "4. È consigliabile consultare la capitaneria per eventuali ordinanze temporanee."
+    giuste: [2]
+    spiegazione: >-
+      La riga 3 inventa un obbligo di equipaggiamento (il gilet catarifrangente classe tre) che non ha alcun
+      riscontro nel documento di riferimento fornito.
+    sbagliate:
+      - risposta: 0
+        perche: "La riga 1 riporta esattamente il divieto diurno scritto nel documento."
+      - risposta: 1
+        perche: "La riga 2 dice solo che cosa il documento non contiene, senza aggiungere regole nuove."
+
+  - id: l04-e09
+    tipo: abbina
+    obiettivo: O5
+    difficolta: 1
+    fonte: F7
+    consegna: "Abbina ogni scenario al livello di rischio derivante da una risposta inventata."
+    coppie:
+      - sinistra: "suggerimento di idee per il titolo di una favola isolana"
+        destra: "rischio basso: l'invenzione non provoca danni e stimola la creatività"
+      - sinistra: "dosaggio di una sostanza chimica per la potabilizzazione dell'acqua"
+        destra: "rischio critico: un errore numerico può compromettere la salute pubblica"
+      - sinistra: "comando da eseguire per cancellare volumi di backup su un server"
+        destra: "rischio alto: una risposta inventata può causare perdita irreversibile di dati"
+    spiegazione: >-
+      La gravità di un'allucinazione si misura sulle conseguenze nel mondo reale: un'idea creativa innocua ha
+      rischio minimo, mentre dosaggi o cancellazioni possono fare danni gravi e difficili da riparare.
+    sbagliate:
+      - risposta:
+          sinistra: "suggerimento di idee per il titolo di una favola isolana"
+          destra: "rischio critico: un errore numerico può compromettere la salute pubblica"
+        perche: "Un'idea creativa per una favola non comporta alcun rischio per la salute o la sicurezza."
+      - risposta:
+          sinistra: "dosaggio di una sostanza chimica per la potabilizzazione dell'acqua"
+          destra: "rischio basso: l'invenzione non provoca danni e stimola la creatività"
+        perche: "I parametri chimici e sanitari sono ad altissimo rischio e richiedono verifica rigorosa da esperti umani."
+
+  - id: l04-e10
+    tipo: abbina
+    obiettivo: O5
+    difficolta: 2
+    fonte: F7
+    consegna: "Abbina ogni situazione alla misura di cautela più appropriata."
+    coppie:
+      - sinistra: "generazione di bozze di testo per un volantino della festa locale"
+        destra: "revisione umana rapida dello stile senza controlli specialistici"
+      - sinistra: "calcolo di imposte e scadenze fiscali per un'impresa dell'isola"
+        destra: "verifica incrociata su testi normativi e approvazione di un contabile"
+      - sinistra: "generazione di codice per il controllo accessi alla rete comunale"
+        destra: "test isolati in sandbox e revisione accurata da uno sviluppatore"
+    spiegazione: >-
+      Più alte sono le conseguenze di un errore, più stringenti devono essere i controlli indipendenti e i
+      vincoli operativi applicati all'output del modello.
+    sbagliate:
+      - risposta:
+          sinistra: "generazione di bozze di testo per un volantino della festa locale"
+          destra: "verifica incrociata su testi normativi e approvazione di un contabile"
+        perche: "Un volantino per una festa non richiede consulenze contabili né analisi di norme fiscali."
+      - risposta:
+          sinistra: "calcolo di imposte e scadenze fiscali per un'impresa dell'isola"
+          destra: "revisione umana rapida dello stile senza controlli specialistici"
+        perche: "I calcoli fiscali richiedono controlli di esattezza matematica e conformità normativa, non solo ritocchi di stile."
+
+  - id: l04-e11
+    tipo: completa
+    obiettivo: O1
+    difficolta: 1
+    fonte: F6
+    consegna: "Completa la frase."
+    testo: "Un modello linguistico non consulta una base di [[1]] oggettivi, ma genera le parole che appaiono statisticamente più [[2]] nel contesto."
+    banca: ["fatti", "probabili", "brevi", "regole", "costose"]
+    giusta: ["fatti", "probabili"]
+    spiegazione: >-
+      I modelli operano su probabilità linguistiche: non interrogano un registro di verità per convalidare le
+      proprie affermazioni prima di generarle.
+    sbagliate:
+      - risposta: ["regole", "costose"]
+        perche: "Il modello non sceglie le parole in base al loro costo o a regole fisse, ma per probabilità statistica."
+      - risposta: ["fatti", "brevi"]
+        perche: "Il criterio di generazione non privilegia le parole corte ma quelle statisticamente coerenti."
+
+# Dubbi e note:
+# - F6 per la survey sulle allucinazioni (NLG) e i pattern tipici.
+# - F7 per la gestione del rischio e i contesti ad alto/basso impatto.
+# - Rispettate le cose da non dire: nessun esempio con persone o sentenze reali (usati solo contesti fittizi dell'isola), nessun cenno all'eliminazione totale delle allucinazioni.

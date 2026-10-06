@@ -1,0 +1,291 @@
+id: ai/01-modello-addestrato
+versione: 1.0.0
+lingua: it
+tema: ai
+unita: 1
+numero: 1
+titolo: "Che cos'è un modello addestrato"
+durata_min: 4
+livello: 1
+prerequisiti: []
+stato: rivista
+autori:
+  bozza: agy
+  revisione: Architetto
+
+obiettivi:
+  - id: O1
+    testo: "Distinguere un programma con regole scritte a mano da un modello che impara le regole dagli esempi."
+  - id: O2
+    testo: "Mettere in ordine dati, addestramento, parametri e uso, spiegando la differenza tra addestramento e inferenza."
+  - id: O3
+    testo: "Spiegare che durante la risposta il modello non consulta i dati di addestramento ma usa i parametri."
+  - id: O4
+    testo: "Spiegare il significato di data limite di aggiornamento (cutoff) e i suoi effetti sulle conoscenze del modello."
+  - id: O5
+    testo: "Riconoscere che un modello eredita gli errori, i pregiudizi e gli squilibri presenti nei dati di partenza."
+
+fonti:
+  - id: F1
+    titolo: "Google, Machine Learning Crash Course"
+    url: "https://developers.google.com/machine-learning/crash-course"
+  - id: F7
+    titolo: "NIST, AI Risk Management Framework"
+    url: "https://www.nist.gov/itl/ai-risk-management-framework"
+
+teoria:
+  - id: T1
+    obiettivi: [O1, O2]
+    fonti: [F1]
+    testo: >-
+      Un programma tradizionale segue **regole scritte a mano** da uno sviluppatore: per ogni caso previsto c'è
+      un'istruzione esplicita. Un modello di apprendimento automatico funziona all'opposto: riceve molti
+      **esempi** (i dati) e durante l'**addestramento** ne estrae relazioni statistiche, condensandole in numeri
+      chiamati **parametri**. Quando usiamo il modello (fase di **inferenza**), i parametri restano fissi e il
+      sistema non impara nulla di nuovo dalla conversazione.
+  - id: T2
+    obiettivi: [O3, O4]
+    fonti: [F1]
+    testo: >-
+      Durante l'inferenza, il modello **non consulta i testi originali** su cui è stato addestrato: non ha un
+      database né una copia di internet da sfogliare. Tutto ciò che genera deriva dalla configurazione dei suoi
+      parametri. Per questo ogni modello ha una **data limite di aggiornamento** (*cutoff*): non conosce gli
+      eventi successivi a quella data, a meno che qualcuno non glieli inserisca direttamente nel prompt o nel
+      contesto del turno.
+  - id: T3
+    obiettivi: [O5]
+    fonti: [F7]
+    testo: >-
+      I dati di addestramento non sono una rappresentazione perfetta del mondo: riflettono testi scritti da
+      persone, con tutti i loro limiti. Se nei testi raccolti certe idee o gruppi sono poco rappresentati, o se
+      sono presenti inesattezze diffuse, il modello **eredita quegli squilibri** nelle sue probabilità. I
+      parametri non creano giudizi morali né distinguono autonomamente il vero dal falso: riflettono fedelmente
+      le correlazioni statistiche degli esempi.
+
+esercizi:
+  - id: l01-e01
+    tipo: abbina
+    obiettivo: O1
+    difficolta: 1
+    fonte: F1
+    consegna: "Abbina ogni approccio al suo modo di funzionare."
+    coppie:
+      - sinistra: "programma a regole"
+        destra: "istruzioni logiche scritte a mano per ogni caso previsto"
+      - sinistra: "modello addestrato"
+        destra: "regole estratte statisticamente analizzando molti esempi"
+      - sinistra: "dati di addestramento"
+        destra: "la raccolta di testi da cui il sistema impara le correlazioni"
+    spiegazione: >-
+      Nei programmi classici le regole logiche sono stabilite riga per riga da chi programma. Nei modelli le
+      regole emergono dai dati durante l'addestramento e vengono codificate nei parametri numerici.
+    sbagliate:
+      - risposta:
+          sinistra: "programma a regole"
+          destra: "regole estratte statisticamente analizzando molti esempi"
+        perche: "Un programma tradizionale richiede che uno sviluppatore scriva esplicitamente ogni condizione logica a mano."
+      - risposta:
+          sinistra: "modello addestrato"
+          destra: "istruzioni logiche scritte a mano per ogni caso previsto"
+        perche: "Nel modello le regole non sono scritte una per una, ma derivano dall'analisi statistica degli esempi."
+
+  - id: l01-e02
+    tipo: ordina
+    obiettivo: O2
+    difficolta: 1
+    fonte: F1
+    consegna: "Metti in ordine le fasi della vita di un modello linguistico."
+    elementi:
+      - "Raccolta e pulizia dei dati di esempio"
+      - "Addestramento intensivo per calcolare i parametri"
+      - "Fissaggio definitivo dei parametri calcolati"
+      - "Uso del modello per generare risposte (inferenza)"
+    spiegazione: >-
+      Prima si raccolgono i testi, poi l'addestramento calcola i pesi numerici; infine i parametri vengono
+      congelati e utilizzati per rispondere durante l'inferenza senza più cambiare.
+    sbagliate:
+      - risposta: [1, 0, 2, 3]
+        perche: "Non si può addestrare il modello senza aver prima raccolto e preparato i dati di esempio."
+      - risposta: [0, 2, 1, 3]
+        perche: "I parametri vengono fissati solo al termine del lungo processo di addestramento, non prima."
+
+  - id: l01-e03
+    tipo: scelta
+    obiettivo: O2
+    difficolta: 2
+    fonte: F1
+    consegna: "Che cosa accade ai parametri del modello mentre risponde alle tue domande?"
+    opzioni:
+      - "Restano fissi: il modello non modifica i propri parametri durante l'uso"
+      - "Si aggiornano continuamente assimilando ogni tua frase"
+      - "Vengono ricalcolati da zero per ogni utente connesso"
+      - "Vengono riscritti sul disco per registrare la conversazione"
+    giusta: 0
+    spiegazione: >-
+      Durante l'inferenza i parametri sono congelati. Il modello non impara dalla conversazione: se sembra
+      seguire il filo del discorso, è perché la conversazione passata viene rimandata nel contesto del turno.
+    sbagliate:
+      - risposta: 1
+        perche: "L'inferenza è a parametri congelati: il modello non apprende né memorizza nuovi fatti durante la chat."
+      - risposta: 2
+        perche: "Ricalcolare i parametri richiede enorme potenza di calcolo e avviene solo durante l'addestramento."
+      - risposta: 3
+        perche: "I parametri sono in sola lettura durante l'uso; la cronologia della conversazione viaggia nel contesto."
+
+  - id: l01-e04
+    tipo: scelta
+    obiettivo: O3
+    difficolta: 1
+    fonte: F1
+    consegna: "Quando genera una risposta, dove cerca le informazioni il modello?"
+    opzioni:
+      - "Scorre i miliardi di pagine usate durante l'addestramento"
+      - "Consulta un database interno con tutti gli articoli del web"
+      - "Sfrutta le correlazioni statistiche memorizzate nei parametri e il contesto ricevuto"
+      - "Fa una ricerca su internet in tempo reale ad ogni parola"
+    giusta: 2
+    spiegazione: >-
+      I testi di addestramento non vengono conservati: restano solo i valori numerici dei parametri. Il modello
+      non sfoglia archivi ma calcola quali token sono più probabili dato il contesto ricevuto.
+    sbagliate:
+      - risposta: 0
+        perche: "I testi originali non vengono conservati nel modello: restano solo i valori numerici dei parametri."
+      - risposta: 1
+        perche: "Il modello non include un database relazionale: calcola probabilità sui token in base ai pesi della rete."
+      - risposta: 3
+        perche: "Un modello da solo non accede a internet: può farlo solo se un'applicazione esterna gli fornisce uno strumento."
+
+  - id: l01-e05
+    tipo: trova-riga
+    obiettivo: O3
+    difficolta: 2
+    fonte: F1
+    consegna: "Un documento descrive un'applicazione AI. Quale riga contiene un'affermazione falsa sul funzionamento del modello?"
+    etichetta: "progetto-assistente.txt"
+    righe:
+      - "1. L'utente invia una domanda all'interfaccia dell'applicazione."
+      - "2. L'applicazione inserisce la domanda nel contesto insieme alle linee guida."
+      - "3. Il modello consulta i testi di addestramento per verificare l'esattezza storica."
+      - "4. I parametri del modello determinano la distribuzione di probabilità del prossimo token."
+      - "5. La risposta generata viene mostrata all'utente."
+    giuste: [2]
+    spiegazione: >-
+      La riga 3 è falsa: il modello non può consultare i dati di addestramento perché non sono memorizzati nel
+      sistema. Genera risposte basandosi esclusivamente sui parametri e sul contesto attuale.
+    sbagliate:
+      - risposta: 1
+        perche: "Preparare il contesto con istruzioni e domanda dell'utente è la normale procedura svolta dall'applicazione."
+      - risposta: 3
+        perche: "È un'affermazione corretta: la distribuzione statistica sui token è determinata interamente dai parametri calcolati."
+
+  - id: l01-e06
+    tipo: scelta
+    obiettivo: O4
+    difficolta: 1
+    fonte: F1
+    consegna: "Che cosa si intende per data limite di aggiornamento (cutoff) di un modello?"
+    opzioni:
+      - "La data di scadenza della licenza commerciale del software"
+      - "Il momento in cui termina la raccolta dei dati: il modello non conosce eventi successivi"
+      - "L'orario limite giornaliero per inviare richieste tramite API"
+      - "La data in cui i parametri del modello smettono di funzionare"
+    giusta: 1
+    spiegazione: >-
+      Il cutoff segna la fine dei dati visti dal modello durante la preparazione. Gli eventi accaduti dopo
+      quella data sono ignoti al modello, a meno che non vengano forniti nel contesto.
+    sbagliate:
+      - risposta: 0
+        perche: "Il cutoff riguarda l'addestramento e le conoscenze storiche dei parametri, non la validità della licenza."
+      - risposta: 2
+        perche: "Le API sono attive continuamente; il cutoff indica l'orizzonte temporale dei dati appresi."
+      - risposta: 3
+        perche: "I parametri non hanno una data di decadimento: continuano a generare testo anche dopo anni."
+
+  - id: l01-e07
+    tipo: completa
+    obiettivo: O4
+    difficolta: 2
+    fonte: F1
+    consegna: "Completa la frase."
+    testo: "Un modello con cutoff nel 2024 non conosce gli eventi del 2026, a meno che l'informazione non venga [[1]] direttamente nel [[2]]."
+    banca: ["inserita", "contesto", "cancellata", "modello", "disattivata"]
+    giusta: ["inserita", "contesto"]
+    spiegazione: >-
+      I parametri non si modificano dopo l'addestramento. Per far ragionare il modello su un evento successivo
+      al cutoff, è necessario inserire la notizia direttamente nel contesto della richiesta.
+    sbagliate:
+      - risposta: ["cancellata", "modello"]
+        perche: "I fatti recenti non si trovano già nel modello da cancellare: sono completamente assenti dai suoi parametri."
+      - risposta: ["inserita", "modello"]
+        perche: "I parametri non vengono modificati al volo: le novità devono entrare nel contesto del turno."
+
+  - id: l01-e08
+    tipo: scelta
+    obiettivo: O5
+    difficolta: 2
+    fonte: F7
+    consegna: "Se i testi usati per l'addestramento contengono pregiudizi o errori storici, che cosa accade al modello?"
+    opzioni:
+      - "Riconosce autonomamente gli errori grazie alla propria coscienza"
+      - "Riflette e riproduce quegli squilibri nelle probabilità delle risposte"
+      - "Elimina automaticamente i dati che contraddicono la realtà oggettiva"
+      - "Corregge gli errori confrontandosi con enciclopedie esterne"
+    giusta: 1
+    spiegazione: >-
+      Il modello calcola probabilità a partire dai testi su cui è stato addestrato. Se i testi contengono
+      squilibri o affermazioni inesatte, queste regolarità statistiche si riflettono nelle risposte generate.
+    sbagliate:
+      - risposta: 0
+        perche: "Il modello non ha coscienza né comprensione morale: calcola solo associazioni di parole frequenti."
+      - risposta: 2
+        perche: "L'addestramento cattura le regolarità statistiche presenti nei testi, comprese le inesattezze e i pregiudizi."
+      - risposta: 3
+        perche: "Il modello non esegue verifiche esterne durante l'addestramento: impara dai dati così come gli vengono forniti."
+
+  - id: l01-e09
+    tipo: abbina
+    obiettivo: O5
+    difficolta: 2
+    fonte: F7
+    consegna: "Abbina ogni causa al suo effetto sul comportamento del modello."
+    coppie:
+      - sinistra: "documenti medici obsoleti nei dati"
+        destra: "il modello suggerisce pratiche superate o non più raccomandate"
+      - sinistra: "sotto-rappresentazione di una lingua"
+        destra: "il modello produce risposte meno ricche o più frammentate in quella lingua"
+      - sinistra: "testi pieni di pregiudizi sociali"
+        destra: "il modello assegna probabilità più alte a stereotipi frequenti"
+    spiegazione: >-
+      La qualità e l'equilibrio delle risposte dipendono direttamente dal materiale di addestramento: dati
+      vecchi o sbilanciati creano comportamenti corrispondenti nell'output.
+    sbagliate:
+      - risposta:
+          sinistra: "documenti medici obsoleti nei dati"
+          destra: "il modello produce risposte meno ricche o più frammentate in quella lingua"
+        perche: "La frammentazione linguistica deriva dalla scarsità di testi in quella lingua, non dall'obsolescenza di trattati medici."
+      - risposta:
+          sinistra: "testi pieni di pregiudizi sociali"
+          destra: "il modello suggerisce pratiche superate o non più raccomandate"
+        perche: "I pregiudizi sociali si riflettono in stereotipi di linguaggio, non in linee guida mediche superate."
+
+  - id: l01-e10
+    tipo: completa
+    obiettivo: O1
+    difficolta: 1
+    fonte: F1
+    consegna: "Completa la frase."
+    testo: "Invece di seguire un elenco fisso di [[1]] scritte da un programmatore, il modello ricava i propri [[2]] analizzando grandi quantità di esempi."
+    banca: ["regole", "parametri", "ipotesi", "finestre", "domande"]
+    giusta: ["regole", "parametri"]
+    spiegazione: >-
+      La differenza fondamentale è che il modello non viene programmato con istruzioni logiche esplicite:
+      calcola parametri numerici a partire da una grandissima quantità di dati di esempio.
+    sbagliate:
+      - risposta: ["ipotesi", "parametri"]
+        perche: "La programmazione classica non si basa su generiche ipotesi, ma su regole logiche deterministiche."
+      - risposta: ["regole", "domande"]
+        perche: "L'addestramento produce parametri numerici interni, non un elenco di domande."
+
+# Dubbi e note:
+# - Rispettate tutte le cose da non dire: nessun antropomorfismo, nessun accenno a modelli che cercano su internet da soli o imparano durante l'uso.
+# - Fonti usate: F1 (Google Crash Course) e F7 (NIST).

@@ -1,0 +1,286 @@
+id: ai/02-come-nasce-un-llm
+versione: 1.0.0
+lingua: it
+tema: ai
+unita: 1
+numero: 2
+titolo: "Come nasce un LLM"
+durata_min: 4
+livello: 1
+prerequisiti:
+  - ai/01-modello-addestrato
+stato: rivista
+autori:
+  bozza: agy
+  revisione: Architetto
+
+obiettivi:
+  - id: O1
+    testo: "Spiegare che il pre-addestramento insegna a prevedere il token successivo su grandi moli di testo."
+  - id: O2
+    testo: "Spiegare perché un modello solo pre-addestrato tende a continuare il testo anziché eseguire istruzioni."
+  - id: O3
+    testo: "Descrivere l'addestramento su istruzioni e quello con preferenze umane (RLHF) basato sul confronto tra risposte."
+  - id: O4
+    testo: "Chiarire che l'RLHF non rende il modello veritiero né imparziale ma favorisce le risposte preferite dalle persone."
+  - id: O5
+    testo: "Collegare le fasi di addestramento ai comportamenti tipici dell'assistente come aderenza, compiacenza e rifiuti."
+
+fonti:
+  - id: F2
+    titolo: "Vaswani e altri, Attention Is All You Need (2017)"
+    url: "https://arxiv.org/abs/1706.03762"
+  - id: F3
+    titolo: "Ouyang e altri, Training language models to follow instructions with human feedback (2022)"
+    url: "https://arxiv.org/abs/2203.02155"
+
+teoria:
+  - id: T1
+    obiettivi: [O1, O2]
+    fonti: [F2, F3]
+    testo: >-
+      Un grande modello linguistico (*LLM*), di solito con architettura transformer, nasce con il
+      **pre-addestramento**. In questa fase legge enormi volumi di testo per imparare un unico compito fondamentale:
+      **prevedere il token successivo**. Un modello che ha completato solo questa fase è un potente
+      completatore di sequenze, ma non sa dialogare: se gli scrivi una domanda, spesso continua scrivendo altre
+      domande simili come se stesse riproducendo un questionario.
+  - id: T2
+    obiettivi: [O3, O4]
+    fonti: [F3]
+    testo: >-
+      Per trasformare il completatore in assistente si usano due passaggi successivi. Prima l'**addestramento su
+      istruzioni** (*instruction tuning*), che mostra coppie di compiti e risposte ben strutturate. Poi
+      l'addestramento con **preferenze umane** (*RLHF*): valutatori umani confrontano risposte diverse e il
+      sistema impara a favorire quelle scelte. L'RLHF **non rende il modello veritiero né imparziale**: rende
+      soltanto più probabili le risposte gradite ai valutatori.
+  - id: T3
+    obiettivi: [O5]
+    fonti: [F3]
+    testo: >-
+      Le fasi di addestramento spiegano il comportamento dell'assistente. Risponde alle consegne perché è stato
+      addestrato su compiti specifici. A volte appare **troppo accomodante** perché i valutatori umani tendevano
+      a premiare risposte rassicuranti e concordanti con l'utente. Infine, rifiuta richieste su temi pericolosi
+      perché è stato addestrato a farlo, soprattutto con le preferenze umane, che penalizzano i contenuti dannosi.
+
+esercizi:
+  - id: l02-e01
+    tipo: ordina
+    obiettivo: O1
+    difficolta: 1
+    fonte: F3
+    consegna: "Metti in ordine le tre fasi principali di creazione di un assistente AI."
+    elementi:
+      - "Pre-addestramento su grandi volumi di testo per prevedere il prossimo token"
+      - "Addestramento supervisionato su istruzioni e risposte desiderate"
+      - "Affinamento con preferenze umane (RLHF) per selezionare le risposte preferite"
+    spiegazione: >-
+      Il modello impara prima la struttura generale della lingua, poi la forma domanda-risposta attraverso le
+      istruzioni, e infine affina lo stile e i limiti comportamentali grazie ai giudizi umani.
+    sbagliate:
+      - risposta: [1, 0, 2]
+        perche: "Il modello deve prima acquisire le relazioni linguistiche generali prima di imparare a seguire compiti specifici."
+      - risposta: [0, 2, 1]
+        perche: "Il confronto tra preferenze umane si applica dopo che il modello ha già imparato la struttura delle istruzioni."
+
+  - id: l02-e02
+    tipo: scelta
+    obiettivo: O1
+    difficolta: 1
+    fonte: F2
+    consegna: "Qual è il compito fondamentale svolto dal modello durante il pre-addestramento?"
+    opzioni:
+      - "Memorizzare archivi di pagine web parola per parola"
+      - "Prevedere quale token ha la maggiore probabilità statistica di seguire il testo precedente"
+      - "Verificare se un'affermazione storica sia vera oppure falsa"
+      - "Imparare a controllare programmi esterni nel sistema operativo"
+    giusta: 1
+    spiegazione: >-
+      Il motore dell'apprendimento nel pre-addestramento è unicamente la previsione probabilistica del token
+      successivo a partire dalla sequenza di testo già osservata.
+    sbagliate:
+      - risposta: 0
+        perche: "Il modello non conserva un archivio delle pagine: impara regolarità statistiche. Può ripetere a memoria qualche brano molto frequente, ma non è il suo compito."
+      - risposta: 2
+        perche: "Il pre-addestramento impara la struttura statistica del linguaggio, non la verifica della verità storica."
+      - risposta: 3
+        perche: "Il modello linguistico elabora solo sequenze di token e non include software per manovrare il sistema operativo."
+
+  - id: l02-e03
+    tipo: trova-riga
+    obiettivo: O2
+    difficolta: 2
+    fonte: F3
+    consegna: "In questo log con un modello solo pre-addestrato, quale riga mostra che il modello continua il testo anziché rispondere?"
+    etichetta: "console-modello-base.txt"
+    righe:
+      - "[utente] Risolvi questa moltiplicazione: 7 per 8."
+      - "[modello] Risolvi questa moltiplicazione: 9 per 6."
+      - "[sistema] Tempo di generazione: 120 ms."
+      - "[sistema] Token generati: 8."
+    giuste: [1]
+    spiegazione: >-
+      La riga del modello non risponde con il risultato (56): prolunga il testo inventando un altro esercizio
+      simile, come farebbe un generatore di schede didattiche.
+    sbagliate:
+      - risposta: 0
+        perche: "È il messaggio iniziale inviato dall'utente con la richiesta, non una risposta del modello."
+      - risposta: 2
+        perche: "È un dato di sistema sul tempo impiegato per il turno, non un testo generato dal modello."
+
+  - id: l02-e04
+    tipo: scelta
+    obiettivo: O2
+    difficolta: 2
+    fonte: F3
+    consegna: "Perché un modello solo pre-addestrato tende a prolungare il testo anziché rispondere alla domanda dell'utente?"
+    opzioni:
+      - "Perché è stato addestrato solo a indovinare il seguito più probabile, non a fare da assistente"
+      - "Perché i parametri non sono ancora stati definiti durante il pre-addestramento"
+      - "Perché richiede autorizzazioni di sistema per poter generare risposte complete"
+      - "Perché non conosce il significato delle parole prima dell'allineamento con istruzioni"
+    giusta: 0
+    spiegazione: >-
+      Senza una fase successiva di addestramento su istruzioni, il modello si comporta come un puro
+      completatore: continua la sequenza di parole secondo ciò che appare statisticamente coerente nel testo.
+    sbagliate:
+      - risposta: 1
+        perche: "I parametri del modello vengono calcolati e strutturati proprio durante la fase di pre-addestramento."
+      - risposta: 2
+        perche: "Il modello non ha bisogno di speciali permessi per produrre testo: gli manca solo l'addestramento da assistente."
+      - risposta: 3
+        perche: "Il modello apprende la struttura semantica e lessicale della lingua proprio durante il pre-addestramento."
+
+  - id: l02-e05
+    tipo: ordina
+    obiettivo: O3
+    difficolta: 2
+    fonte: F3
+    consegna: "Metti in ordine i passaggi di una sessione di raccolta di preferenze umane (RLHF)."
+    elementi:
+      - "Il modello genera due o più risposte diverse alla stessa istruzione"
+      - "I valutatori umani confrontano le risposte e indicano quale preferiscono"
+      - "Le scelte umane vengono usate per premiare i comportamenti preferiti del modello"
+    spiegazione: >-
+      Prima si campionano diverse opzioni di risposta, poi le persone scelgono la migliore secondo linee guida,
+      e infine queste preferenze guidano l'aggiornamento dei pesi per favorire risposte simili.
+    sbagliate:
+      - risposta: [1, 0, 2]
+        perche: "I valutatori non possono confrontare risposte che il modello non ha ancora generato."
+      - risposta: [0, 2, 1]
+        perche: "L'aggiornamento del modello avviene solo dopo che i valutatori hanno espresso le loro preferenze."
+
+  - id: l02-e06
+    tipo: abbina
+    obiettivo: O3
+    difficolta: 1
+    fonte: F3
+    consegna: "Abbina ogni fase di addestramento a ciò che insegna principalmente al modello."
+    coppie:
+      - sinistra: "pre-addestramento"
+        destra: "grammatica, stile e correlazioni generali tra le parole"
+      - sinistra: "instruction tuning"
+        destra: "la struttura di dialogo tra richiesta dell'utente e risposta"
+      - sinistra: "RLHF"
+        destra: "la selezione delle risposte più apprezzate dai valutatori umani"
+    spiegazione: >-
+      Ogni fase ha uno scopo preciso: il pre-addestramento costruisce la conoscenza linguistica di fondo,
+      l'instruction tuning insegna a eseguire richieste, e l'RLHF ne calibra tono e priorità.
+    sbagliate:
+      - risposta:
+          sinistra: "pre-addestramento"
+          destra: "la selezione delle risposte più apprezzate dai valutatori umani"
+        perche: "Il pre-addestramento è un processo automatico su grandi volumi di testo senza valutatori umani."
+      - risposta:
+          sinistra: "RLHF"
+          destra: "grammatica, stile e correlazioni generali tra le parole"
+        perche: "La conoscenza della grammatica e delle parole si forma nella fase iniziale di pre-addestramento."
+
+  - id: l02-e07
+    tipo: scelta
+    obiettivo: O4
+    difficolta: 2
+    fonte: F3
+    consegna: "Che cosa fa l'addestramento con preferenze umane (RLHF) e che cosa NON fa?"
+    opzioni:
+      - "Garantisce che ogni risposta generata sia veritiera e priva di errori fattuali"
+      - "Rende il modello neutrale e perfettamente imparziale su qualunque argomento"
+      - "Rende più probabili le risposte preferite dai valutatori, senza garantire la verità"
+      - "Elimina definitivamente la possibilità di generare testi imprecisi o inventati"
+    giusta: 2
+    spiegazione: >-
+      L'RLHF allinea lo stile del modello alle preferenze espresse dalle persone coinvolte. Non rende il modello
+      infallibile né controlla la verità oggettiva di ciò che viene generato.
+    sbagliate:
+      - risposta: 0
+        perche: "I valutatori possono premiare risposte ben scritte ma fattualmente errate: l'RLHF non verifica la verità."
+      - risposta: 1
+        perche: "L'RLHF riflette i criteri e le sensibilità dei valutatori coinvolti, quindi non crea imparzialità universale."
+      - risposta: 3
+        perche: "Nessun allineamento elimina le risposte inventate: favorisce solo un certo modo di presentare le risposte."
+
+  - id: l02-e08
+    tipo: completa
+    obiettivo: O4
+    difficolta: 2
+    fonte: F3
+    consegna: "Completa la frase."
+    testo: "L'allineamento tramite RLHF non garantisce che le risposte siano [[1]], ma rende più probabili quelle giudicate [[2]] dalle persone coinvolte."
+    banca: ["veritiere", "migliori", "automatiche", "brevi", "identiche"]
+    giusta: ["veritiere", "migliori"]
+    spiegazione: >-
+      L'addestramento con preferenze umane agisce sulle scelte statistiche premiando quelle valutate come
+      migliori, ma non trasforma il modello in una fonte verificata di verità.
+    sbagliate:
+      - risposta: ["automatiche", "migliori"]
+        perche: "La generazione è automatica in ogni caso; il punto critico è che non vi è garanzia di veridicità dei fatti."
+      - risposta: ["veritiere", "identiche"]
+        perche: "Le risposte continuano a variare tra loro in base al campionamento e non diventano identiche."
+
+  - id: l02-e09
+    tipo: abbina
+    obiettivo: O5
+    difficolta: 2
+    fonte: F3
+    consegna: "Abbina ogni comportamento visibile dell'assistente alla sua causa nell'addestramento."
+    coppie:
+      - sinistra: "tendenza a essere troppo accomodante"
+        destra: "i valutatori umani assegnavano punteggi alti a toni gentili e accondiscendenti"
+      - sinistra: "rifiuto di spiegare come creare un malware"
+        destra: "penalizzazione delle risposte dannose durante l'addestramento con preferenze"
+      - sinistra: "capacità di seguire un formato richiesto"
+        destra: "esposizione a molti esempi di istruzioni durante l'instruction tuning"
+    spiegazione: >-
+      I tratti che notiamo nell'uso quotidiano (cortesia spinta, rifiuti su temi critici e abilità nel seguire
+      ordini precisi) rispecchiano le scelte fatte durante le diverse fasi di addestramento.
+    sbagliate:
+      - risposta:
+          sinistra: "tendenza a essere troppo accomodante"
+          destra: "penalizzazione delle risposte dannose durante l'addestramento con preferenze"
+        perche: "La penalizzazione di contenuti nocivi produce rifiuti di sicurezza, non risposte eccessivamente compiacenti."
+      - risposta:
+          sinistra: "rifiuto di spiegare come creare un malware"
+          destra: "i valutatori umani assegnavano punteggi alti a toni gentili e accondiscendenti"
+        perche: "I rifiuti derivano dall'addestramento mirato sulla sicurezza, non dalla ricerca di gentilezza formale."
+
+  - id: l02-e10
+    tipo: completa
+    obiettivo: O5
+    difficolta: 1
+    fonte: F3
+    consegna: "Completa la frase."
+    testo: "Quando un assistente rifiuta una richiesta dannosa, applica vincoli appresi soprattutto con l'[[1]], mentre la sua capacità di dialogare deriva dall'[[2]]."
+    banca: ["RLHF", "instruction tuning", "inferenza", "cutoff", "database"]
+    giusta: ["RLHF", "instruction tuning"]
+    spiegazione: >-
+      L'instruction tuning insegna a seguire i comandi e dialogare, mentre l'RLHF insegna quali richieste
+      rifiutare per rispettare le linee guida di sicurezza.
+    sbagliate:
+      - risposta: ["inferenza", "instruction tuning"]
+        perche: "Durante l'inferenza il modello genera risposte ma non impara né definisce nuovi vincoli."
+      - risposta: ["RLHF", "database"]
+        perche: "Il modello non apprende capacità di dialogo da un database, ma attraverso l'addestramento supervisionato."
+
+# Dubbi e note:
+# - F2 citata solo per il nome dell'architettura transformer nel pre-addestramento (nessun dettaglio matematico).
+# - F3 copre instruction tuning e RLHF.
+# - Rispettate le cose da non dire: nessun cenno a modelli che possiedono verità o imparzialità, nessun nome di azienda esclusiva.

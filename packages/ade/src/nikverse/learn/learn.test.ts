@@ -1,3 +1,8 @@
+if (typeof document === "undefined") {
+  const { GlobalRegistrator } = await import("@happy-dom/global-registrator")
+  GlobalRegistrator.register()
+}
+
 import { describe, expect, mock, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -64,6 +69,8 @@ interface Lesson {
 }
 const content = JSON.parse(readFileSync(join(import.meta.dir, "content.json"), "utf8")) as Content
 const lezioni: Lesson[] = content.percorsi.flatMap((percorso) => percorso.lezioni)
+/** What the page lists: the lessons of the path it opens on. The others are one tab away. */
+const primoPercorso = content.percorsi[0].lezioni
 const esercizi: Exercise[] = lezioni.flatMap((lezione) => lezione.esercizi)
 
 /** The answer the lesson says is right. */
@@ -396,8 +403,8 @@ describe("the page and ADE, over one port", () => {
     const via = port()
     offer(parent, [via])
     const lista = document.querySelectorAll(".lesson")
-    expect(lista).toHaveLength(lezioni.length)
-    expect(lista[0]?.querySelector(".testo span")?.textContent).toBe(lezioni[0].titolo)
+    expect(lista).toHaveLength(primoPercorso.length)
+    expect(lista[0]?.querySelector(".testo span")?.textContent).toBe(primoPercorso[0].titolo)
     const invia = (data: unknown) => (via.onmessage as (event: unknown) => void)({ data })
     invia({ type: "progress", progress: { v: 1, xp: 90, giorni: ["2026-10-06"], esercizi: {} } })
     expect(document.getElementById("summary")?.textContent).toContain("90 XP")
@@ -425,10 +432,10 @@ describe("the page and ADE, over one port", () => {
     offer(parent, [via])
     // The first lesson: its theory, then all of its exercises.
     document.querySelector<HTMLButtonElement>(".lesson")!.click()
-    const teoria = lezioni[0].teoria.length
+    const teoria = primoPercorso[0].teoria.length
     for (let i = 0; i < teoria; i += 1) document.querySelector<HTMLButtonElement>(".azioni button.principale")!.click()
     const visti = new Set<string>()
-    for (let n = 0; n < lezioni[0].esercizi.length + 1; n += 1) {
+    for (let n = 0; n < primoPercorso[0].esercizi.length + 1; n += 1) {
       const box = document.querySelector<HTMLElement>(".esercizio[data-esercizio]")
       if (!box) break
       visti.add(box.dataset.esercizio!)
@@ -442,18 +449,18 @@ describe("the page and ADE, over one port", () => {
       expect(salvati(via)).toHaveLength(n + 1)
       document.querySelector<HTMLButtonElement>('[data-slot="prossima"]')!.click()
     }
-    expect(visti.size).toBe(lezioni[0].esercizi.length)
+    expect(visti.size).toBe(primoPercorso[0].esercizi.length)
     const salvato = salvati(via).at(-1) as { progress: { v: number; xp: number; giorni: string[]; esercizi: Record<string, unknown> } }
     expect(salvato.progress.v).toBe(1)
     // A wrong answer is worth something too: two XP for having read why.
-    expect(salvato.progress.xp).toBe(lezioni[0].esercizi.length * 2)
+    expect(salvato.progress.xp).toBe(primoPercorso[0].esercizi.length * 2)
     expect(salvato.progress.giorni).toHaveLength(1)
-    expect(Object.keys(salvato.progress.esercizi)).toEqual([...visti].map((id) => `${lezioni[0].id}#${id}`))
+    expect(Object.keys(salvato.progress.esercizi)).toEqual([...visti].map((id) => `${primoPercorso[0].id}#${id}`))
     // The end of the lesson, and back to the list.
-    expect(document.querySelector(".esercizio h2")?.textContent).toBe(`Fine di ${lezioni[0].titolo}`)
+    expect(document.querySelector(".esercizio h2")?.textContent).toBe(`Fine di ${primoPercorso[0].titolo}`)
     expect(document.querySelector(".cifre")?.textContent).toContain("11")
     document.querySelector<HTMLButtonElement>('[data-slot="torna"]')!.click()
-    expect(document.querySelectorAll(".lesson")).toHaveLength(lezioni.length)
+    expect(document.querySelectorAll(".lesson")).toHaveLength(primoPercorso.length)
   })
 
   test("the end of a ripasso is titled as a ripasso, not after the lesson of its first exercise", async () => {
