@@ -165,4 +165,55 @@ describe("PillTabs", () => {
     const badges = root.querySelectorAll('[data-slot="ade-pill-badge"]')
     expect(badges.length).toBe(0)
   })
+
+  test("preserves button DOM nodes and activeElement when items are replaced with new object instances (Index)", async () => {
+    const { createSignal } = await import("solid-js")
+    const root = document.createElement("div")
+    document.body.append(root)
+
+    const [items, setItems] = createSignal<PillTabItem[]>([
+      { id: "decisions", label: "Decisioni", badge: 1 },
+      { id: "design", label: "Design", badge: 0 },
+    ])
+
+    cleanup = render(
+      () =>
+        createComponent(PillTabs, {
+          role: "button",
+          dataSlot: "ade-pill-tabs",
+          ariaLabel: "Queue",
+          get items() {
+            return items()
+          },
+          onSelect: () => {},
+        }),
+      root,
+    )
+
+    const container = root.querySelector('[data-slot="ade-pill-tabs"]') as HTMLElement
+    expect(container).not.toBeNull()
+    const initialButtons = [...root.querySelectorAll('button[data-slot="ade-pill-tab"]')] as HTMLButtonElement[]
+    expect(initialButtons.length).toBe(2)
+
+    initialButtons[0].focus()
+    expect(document.activeElement).toBe(initialButtons[0])
+
+    // Replace items with completely new object references
+    setItems([
+      { id: "decisions", label: "Decisioni", badge: 2 },
+      { id: "design", label: "Design", badge: 1 },
+    ])
+
+    const updatedButtons = [...root.querySelectorAll('button[data-slot="ade-pill-tab"]')] as HTMLButtonElement[]
+    expect(updatedButtons.length).toBe(2)
+    // Same DOM node instances (preserved via Index)
+    expect(updatedButtons[0]).toBe(initialButtons[0])
+    expect(updatedButtons[1]).toBe(initialButtons[1])
+    // Focus is preserved
+    expect(document.activeElement).toBe(initialButtons[0])
+
+    // Values inside updated reactively
+    expect(updatedButtons[0].querySelector('[data-slot="ade-pill-badge"]')?.textContent).toBe("2")
+    expect(updatedButtons[1].querySelector('[data-slot="ade-pill-badge"]')?.textContent).toBe("1")
+  })
 })

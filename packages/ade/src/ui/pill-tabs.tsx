@@ -1,4 +1,4 @@
-import { For, Show } from "solid-js"
+import { Index, Show } from "solid-js"
 import "./pill-tabs.css"
 
 export interface PillTabItem {
@@ -22,6 +22,7 @@ export interface PillTabsProps {
   readonly role: "tab" | "button"
   readonly ariaLabel: string
   readonly dataSlot?: string
+  readonly itemDataSlot?: string
 }
 
 /**
@@ -32,6 +33,7 @@ export interface PillTabsProps {
  */
 export function PillTabs(props: PillTabsProps) {
   const isTab = () => props.role === "tab"
+  const itemSlot = () => props.itemDataSlot ?? (props.dataSlot === "ade-pill-tabs" ? "ade-pill-tab" : "ade-view-tab")
 
   return (
     <div
@@ -39,11 +41,13 @@ export function PillTabs(props: PillTabsProps) {
       role={isTab() ? "tablist" : "group"}
       aria-label={props.ariaLabel}
     >
-      <For each={props.items}>
+      <Index each={props.items}>
         {(item) => {
-          const isActive = () => item.active ?? (props.active === item.id)
-          const hasBadge = () =>
-            item.badge !== undefined && item.badge !== "" && item.badge !== 0 && item.badge !== "0"
+          const isActive = () => item().active ?? (props.active === item().id)
+          const hasBadge = () => {
+            const b = item().badge
+            return b !== undefined && b !== "" && b !== 0 && b !== "0"
+          }
 
           return (
             <button
@@ -52,28 +56,28 @@ export function PillTabs(props: PillTabsProps) {
               aria-selected={isTab() ? isActive() : undefined}
               aria-pressed={!isTab() ? isActive() : undefined}
               aria-haspopup={!isTab() ? "dialog" : undefined}
-              data-slot="ade-view-tab"
+              data-slot={itemSlot()}
               data-active={isActive() ? "true" : undefined}
-              data-attention={item.attention ? "true" : undefined}
-              data-family={item.family}
-              title={item.title}
-              aria-label={item.ariaLabel}
-              onClick={() => props.onSelect(item.id)}
+              data-attention={item().attention ? "true" : undefined}
+              data-family={item().family}
+              title={item().title}
+              aria-label={item().ariaLabel}
+              onClick={() => props.onSelect(item().id)}
             >
-              <Show when={item.attention}>
+              <Show when={item().attention}>
                 <span data-slot="ade-pill-dot" aria-hidden="true" />
               </Show>
-              <Show when={item.shortLabel} fallback={item.label}>
-                <span data-slot="ade-pill-label-full">{item.label}</span>
-                <span data-slot="ade-pill-label-short">{item.shortLabel}</span>
+              <Show when={item().shortLabel} fallback={item().label}>
+                <span data-slot="ade-pill-label-full">{item().label}</span>
+                <span data-slot="ade-pill-label-short">{item().shortLabel}</span>
               </Show>
               <Show when={hasBadge()}>
-                <span data-slot="ade-pill-badge">{item.badge}</span>
+                <span data-slot="ade-pill-badge">{item().badge}</span>
               </Show>
             </button>
           )
         }}
-      </For>
+      </Index>
     </div>
   )
 }

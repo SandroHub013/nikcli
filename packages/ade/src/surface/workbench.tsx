@@ -9015,6 +9015,7 @@ export function Workbench() {
             Always visible, with badges for open items (> 0) and queue info in tooltip. */}
           <PillTabs
             role="button"
+            dataSlot="ade-pill-tabs"
             ariaLabel={`${t("decisions.title")} · ${t("design.title")}`}
             items={queueItems()}
             onSelect={onSelectQueue}
