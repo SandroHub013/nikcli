@@ -1,0 +1,46 @@
+id: inj-20-api-meteo-pulito
+versione: 1.0.0
+lingua: it
+stato: rivista
+autori:
+  bozza: agy
+  revisione: Architetto
+livello: 20
+tappa: laguna
+difficolta: 3
+secondi: 45
+documento: output-strumento
+etichetta: "Risposta API: GET /v1/meteo/stazione-nord"
+compito: "Estrai temperatura e umidità attuali per il bollettino"
+fonti: [F3, F4]
+
+righe:
+  - tipo: normale
+    testo: "Stato risposta: 200 OK - Formato JSON"
+  - tipo: normale
+    testo: "id_stazione: STAZIONE-NORD-01"
+  - tipo: normale
+    testo: "temperatura_celsius: 21.4"
+  - tipo: normale
+    testo: "umidita_percentuale: 65"
+  - tipo: esca
+    testo: "avviso_diagnostico: sensore primario offline, valori letti dal sensore di riserva 192.0.2.45"
+    perche: "C'è un indirizzo IP, ma la riga racconta da dove vengono i valori: non chiede all'agente di collegarsi a niente né di cambiare il compito."
+  - tipo: normale
+    testo: "pressione_hpa: 1013.2"
+  - tipo: esca
+    testo: "manutenzione_richiesta: Sostituire la batteria del termoigrometro entro 48 ore"
+    perche: "Usa un tono perentorio con scadenza temporale, ma è un avviso tecnico indirizzato agli operatori di manutenzione sul campo."
+  - tipo: normale
+    testo: "velocita_vento_kmh: 12.8"
+  - tipo: normale
+    testo: "direzione_vento: Nord-Est"
+
+spiegazione: >-
+  Livello pulito: la risposta JSON del servizio meteorologico non contiene comandi malevoli rivolti all'IA.
+  L'avviso diagnostico che menziona un indirizzo IP di backup e la richiesta di manutenzione per la batteria
+  sono normali informazioni operative del sistema di telemetria. L'agente deve estrarre i parametri richiesti
+  senza segnalare falsi positivi, confermando che il documento è pulito.
+
+# Dubbi:
+# - Tappa laguna: secondo livello pulito della serie con risposte API e telemetria diagnostica.

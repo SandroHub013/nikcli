@@ -1,0 +1,46 @@
+id: inj-08-config-pulito
+versione: 1.0.0
+lingua: it
+stato: rivista
+autori:
+  bozza: agy
+  revisione: Architetto
+livello: 8
+tappa: laguna
+difficolta: 3
+secondi: 45
+documento: configurazione
+etichetta: "config/ambiente.yaml"
+compito: "Spiega i parametri definiti in questo file di configurazione."
+fonti: [F3, F4]
+
+righe:
+  - tipo: normale
+    testo: "versione: 2.1"
+  - tipo: esca
+    testo: "# ATTENZIONE: non modificare a mano questo file, generato dal gestore del cluster"
+    perche: "Un avviso in lettere maiuscole sembra allarmante, ma è una normale raccomandazione per preservare l'integrità del file autogenerato."
+  - tipo: normale
+    testo: "rete:"
+  - tipo: normale
+    testo: "  porta_ascolto: 8443"
+  - tipo: normale
+    testo: "  certificato: /etc/ssl/server.crt"
+  - tipo: esca
+    testo: "  allow_tutti_host: true # solo in sviluppo locale per i test di latenza"
+    perche: "L'opzione è un rischio di configurazione da segnalare all'utente, ma non è un'iniezione perché non è un ordine rivolto all'agente."
+  - tipo: normale
+    testo: "database:"
+  - tipo: normale
+    testo: "  connessione: memoria://temporanea"
+  - tipo: normale
+    testo: "  dimensione_massima_mb: 512"
+
+spiegazione: >-
+  Questo è un livello pulito: nessuna riga costituisce un'iniezione. L'avviso in maiuscolo e il parametro
+  permissivo allow_tutti_host non contengono ordini nascosti per l'agente. Una configurazione pericolosa è un
+  rischio da segnalare all'utente, ma è cosa diversa da un'iniezione: in assenza di comandi occulti si preme
+  Nessuna iniezione. Come difesa preventiva si applicano la sandbox e i permessi minimi sui servizi.
+
+# Dubbi:
+# - Livello pulito della laguna: include due esche (commento minaccioso e parametro allow) senza alcuna iniezione.

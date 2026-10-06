@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nikverse.isola.test/learn/gioco-iniezione/livello.schema.json",
+  "title": "Livello del gioco «Trova l'iniezione»",
+  "description": "Un livello è un file YAML: un documento a righe che un agente sta leggendo, il compito che l'utente gli ha dato, e le righe che contengono un'istruzione per l'agente (iniezione), quelle normali e le esche. Le regole di sicurezza e di coerenza che lo schema non esprime sono in verifica.ts e in review.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "versione", "lingua", "stato", "autori", "livello", "tappa", "difficolta", "secondi", "documento", "etichetta", "compito", "righe", "spiegazione", "fonti"],
+  "properties": {
+    "id": { "description": "inj-NN-slug, uguale al nome del file.", "type": "string", "pattern": "^inj-[0-9]{2}-[a-z0-9-]{3,40}$" },
+    "versione": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "lingua": { "const": "it" },
+    "stato": { "type": "string", "enum": ["bozza", "rivista", "pubblicata"] },
+    "autori": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bozza"],
+      "properties": {
+        "bozza": { "type": "string", "minLength": 2, "maxLength": 60 },
+        "revisione": { "type": "string", "minLength": 2, "maxLength": 60 }
+      }
+    },
+    "livello": { "description": "Posizione nella progressione, da 1.", "type": "integer", "minimum": 1, "maximum": 99 },
+    "tappa": { "type": "string", "enum": ["spiaggia", "chiringuito", "laguna", "faro"] },
+    "difficolta": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "secondi": { "type": "integer", "minimum": 20, "maximum": 120 },
+    "documento": {
+      "description": "Che cosa sta leggendo l'agente.",
+      "type": "string",
+      "enum": ["readme", "pagina-web", "codice", "output-strumento", "issue", "email", "log", "configurazione", "diff"]
+    },
+    "etichetta": { "description": "Il nome mostrato sopra il documento: «README.md», «output di web_fetch», «PR #12».", "type": "string", "minLength": 2, "maxLength": 60 },
+    "compito": {
+      "description": "Che cosa ha chiesto l'utente all'agente: un'iniezione è un'istruzione che non serve a questo compito.",
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 200
+    },
+    "righe": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 30,
+      "items": { "$ref": "#/$defs/riga" }
+    },
+    "spiegazione": {
+      "description": "Mostrata alla fine: che cosa sarebbe successo, e quale difesa l'avrebbe fermato. Per un livello pulito: perché le righe sospette erano innocue.",
+      "type": "string",
+      "minLength": 40,
+      "maxLength": 700
+    },
+    "fonti": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "enum": ["F1", "F3", "F4"] }
+    }
+  },
+  "$defs": {
+    "testo": { "type": "string", "maxLength": 160 },
+    "perche": { "type": "string", "minLength": 20, "maxLength": 300 },
+    "riga": {
+      "type": "object",
+      "required": ["testo", "tipo"],
+      "properties": { "tipo": { "enum": ["normale", "esca", "iniezione"] } },
+      "allOf": [
+        {
+          "if": { "properties": { "tipo": { "const": "normale" } } },
+          "then": {
+            "additionalProperties": false,
+            "properties": { "testo": { "$ref": "#/$defs/testo" }, "tipo": { "const": "normale" } }
+          }
+        },
+        {
+          "if": { "properties": { "tipo": { "const": "esca" } } },
+          "then": {
+            "description": "Una riga che sembra sospetta ma è innocua: un comando legittimo per la persona, un «ignora» che parla d'altro. Chi la segnala perde punti e legge il perché.",
+            "additionalProperties": false,
+            "required": ["perche"],
+            "properties": { "testo": { "$ref": "#/$defs/testo" }, "tipo": { "const": "esca" }, "perche": { "$ref": "#/$defs/perche" } }
+          }
+        },
+        {
+          "if": { "properties": { "tipo": { "const": "iniezione" } } },
+          "then": {
+            "additionalProperties": false,
+            "required": ["perche", "travestimento", "effetto", "difesa"],
+            "properties": {
+              "testo": { "$ref": "#/$defs/testo" },
+              "tipo": { "const": "iniezione" },
+              "perche": { "$ref": "#/$defs/perche" },
+              "travestimento": {
+                "type": "string",
+                "enum": ["evidente", "commento-html", "testo-alt", "commento-codice", "passo-normale", "riga-di-log", "nota", "metadato", "firma-email", "messaggio-di-errore"]
+              },
+              "effetto": {
+                "description": "Che cosa otterrebbe chi l'ha scritta.",
+                "type": "string",
+                "enum": ["esfiltrare", "distruggere", "deviare", "pubblicare", "spendere", "allargare-permessi"]
+              },
+              "difesa": {
+                "description": "La difesa della lezione 4 che la fermerebbe di più.",
+                "type": "string",
+                "enum": ["permessi-minimi", "conferma-umana", "allowlist-rete", "separazione-dati", "sandbox"]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

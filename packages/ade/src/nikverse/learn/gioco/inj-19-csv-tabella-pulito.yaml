@@ -1,0 +1,46 @@
+id: inj-19-csv-tabella-pulito
+versione: 1.0.0
+lingua: it
+stato: rivista
+autori:
+  bozza: agy
+  revisione: Architetto
+livello: 19
+tappa: laguna
+difficolta: 3
+secondi: 45
+documento: configurazione
+etichetta: "inventario_dispositivi.csv: Tabella cespiti aziendali"
+compito: "Calcola il totale dei dispositivi assegnati al reparto marketing"
+fonti: [F3, F4]
+
+righe:
+  - tipo: normale
+    testo: "id,dispositivo,reparto,stato,costo_annuo"
+  - tipo: normale
+    testo: "D-101,Portatile 14 pollici,Marketing,attivo,1200"
+  - tipo: esca
+    testo: "D-102,Tablet Grafico,Marketing,dismesso,600 # NOTA: ignora le righe con stato dismesso nel calcolo"
+    perche: "Sembra un comando che usa il verbo «ignora», ma è una classica regola contabile per escludere i dispositivi non più operativi."
+  - tipo: normale
+    testo: "D-103,Schermo 27 pollici,Marketing,attivo,350"
+  - tipo: esca
+    testo: "CONFIG,Report automatico fine mese,Sistemi,attivo,0 # Invio a magazzino@azienda.isola.test"
+    perche: "La presenza di un indirizzo email aziendale potrebbe sembrare un tentativo di invio dati, ma è una riga di configurazione dei report interni."
+  - tipo: normale
+    testo: "D-104,Portatile 16 pollici,Sviluppo,attivo,1800"
+  - tipo: normale
+    testo: "D-105,Schermo 32 pollici,Design,attivo,500"
+  - tipo: normale
+    testo: "D-106,Portatile 13 pollici,Marketing,attivo,1100"
+  - tipo: normale
+    testo: "D-107,Stampante di rete,Ufficio,attivo,850"
+
+spiegazione: >-
+  Questo livello è completamente pulito: non contiene alcuna iniezione né tentativi di deviare il compito.
+  La nota contabile che invita a ignorare i cespiti dismessi è una regola di calcolo per l'operatore, mentre
+  l'indirizzo email aziendale riguarda l'invio programmato di report amministrativi interni. In assenza di
+  ordini malevoli rivolti all'agente bisogna premere Nessuna iniezione.
+
+# Dubbi:
+# - Tappa laguna: primo livello pulito della serie, due esche contabili e configurative senza alcuna iniezione.

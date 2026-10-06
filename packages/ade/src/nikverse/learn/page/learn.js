@@ -71,6 +71,8 @@ export function normalizeProgress(raw) {
       giuste: intero(record.giuste),
       intervallo: Math.min(MAX_INTERVAL, intero(record.intervallo)),
       dovuta: isIso(record.dovuta) ? record.dovuta : undefined,
+      ...(intero(record.stelle) > 0 ? { stelle: Math.min(3, intero(record.stelle)) } : {}),
+      ...(intero(record.punti) > 0 ? { punti: intero(record.punti) } : {}),
     }
   }
   return progress
@@ -326,6 +328,198 @@ export function rich(doc, testo) {
   return fuori
 }
 
+// ---------------------------------------------------------------- the game «Trova l'iniezione»
+
+export const CATALOGO_GIOCO = {
+  it: {
+    trovaIniezione: "Trova l'iniezione",
+    sottotitolo: "Un agente legge un documento per fare un compito: trova le righe che gli danno ordini estranei.",
+    nessunaIniezione: "Nessuna iniezione",
+    verifica: "Verifica segnalazioni",
+    partitaInCorso: "Partita in corso",
+    tempoScaduto: "Tempo scaduto!",
+    secondi: "s",
+    compito: "Compito dell'agente",
+    documento: "Documento",
+    difficolta: "Difficoltà",
+    punteggio: "Punteggio",
+    iniezioniTrovate: "Iniezioni trovate",
+    iniezioniPerse: "Iniezioni non viste",
+    falseSegnalazioni: "Segnalazioni errate",
+    bonusTempo: "Bonus tempo",
+    totaleXP: "Totale XP",
+    spiegazione: "Spiegazione",
+    riprova: "Riprova livello",
+    tornaLivelli: "Torna ai livelli",
+    prossimoLivello: "Livello successivo",
+    tutteTrovate: "Tre stelle! Tutte trovate senza errori.",
+    tutteConErrori: "Due stelle! Tutte trovate con alcune segnalazioni errate.",
+    parziali: "Una stella! Iniezione individuata.",
+    nessunaStella: "Nessuna stella. Riprova!",
+    pulitoCorretto: "Tre stelle! Documento correttamente riconosciuto come pulito.",
+    pulitoErrato: "Il documento era pulito: nessuna riga andava segnalata.",
+  },
+  en: {
+    trovaIniezione: "Find the injection",
+    sottotitolo: "An agent is reading a document: spot the lines giving unauthorized orders.",
+    nessunaIniezione: "No injection",
+    verifica: "Check reports",
+    partitaInCorso: "Game in progress",
+    tempoScaduto: "Time's up!",
+    secondi: "s",
+    compito: "Agent task",
+    documento: "Document",
+    difficolta: "Difficulty",
+    punteggio: "Score",
+    iniezioniTrovate: "Injections found",
+    iniezioniPerse: "Missed injections",
+    falseSegnalazioni: "False alarms",
+    bonusTempo: "Time bonus",
+    totaleXP: "Total XP",
+    spiegazione: "Explanation",
+    riprova: "Retry level",
+    tornaLivelli: "Back to levels",
+    prossimoLivello: "Next level",
+    tutteTrovate: "Three stars! All found with zero mistakes.",
+    tutteConErrori: "Two stars! All found with some false alarms.",
+    parziali: "One star! Injection spotted.",
+    nessunaStella: "No stars. Retry!",
+    pulitoCorretto: "Three stars! Document correctly recognized as clean.",
+    pulitoErrato: "The document was clean: no lines should have been reported.",
+  },
+}
+
+export function t(chiave, lingua = "it") {
+  const lang = lingua === "en" ? "en" : "it"
+  return CATALOGO_GIOCO[lang]?.[chiave] ?? CATALOGO_GIOCO.it[chiave] ?? chiave
+}
+
+/**
+ * Grades a player's answer on an injection game level deterministically.
+ *
+ * Scoring rules:
+ * - +100 for each injection found
+ * - -50 for each innocent line reported (decoys or normal lines)
+ * - Time bonus for remaining time when successful
+ * - 3 stars if all injections found (or clean level correctly identified) and 0 false reports
+ * - 2 stars if all injections found but has false reports
+ * - 1 star if some injections found
+ * - 0 stars if none
+ */
+export function valutaLivello(livello, righeScelte, tempoRimanente = 0) {
+  const scelte = new Set(Array.isArray(righeScelte) ? righeScelte : [])
+  const iniezioni = []
+  const esche = []
+  const normali = []
+
+  livello.righe.forEach((riga, idx) => {
+    if (riga.tipo === "iniezione") iniezioni.push(idx)
+    else if (riga.tipo === "esca") esche.push(idx)
+    else normali.push(idx)
+  })
+
+  const isPulito = iniezioni.length === 0
+
+  if (isPulito) {
+    if (scelte.size === 0) {
+      const tempoBonus = Math.max(0, Math.floor(tempoRimanente * 2))
+      return {
+        successo: true,
+        isPulito: true,
+        trovate: [],
+        perse: [],
+        falsePositive: [],
+        escheSegnalate: [],
+        puntiIniezioni: 100,
+        penalita: 0,
+        tempoBonus,
+        punteggio: 100 + tempoBonus,
+        stelle: 3,
+      }
+    } else {
+      const falsePositive = [...scelte]
+      const penalita = falsePositive.length * 50
+      return {
+        successo: false,
+        isPulito: true,
+        trovate: [],
+        perse: [],
+        falsePositive,
+        escheSegnalate: falsePositive.filter((idx) => esche.includes(idx)),
+        puntiIniezioni: 0,
+        penalita,
+        tempoBonus: 0,
+        punteggio: 0,
+        stelle: 0,
+      }
+    }
+  }
+
+  const trovate = iniezioni.filter((idx) => scelte.has(idx))
+  const perse = iniezioni.filter((idx) => !scelte.has(idx))
+  const falsePositive = [...scelte].filter((idx) => !iniezioni.includes(idx))
+  const escheSegnalate = falsePositive.filter((idx) => esche.includes(idx))
+
+  const tutteTrovate = trovate.length === iniezioni.length
+  const puntiIniezioni = trovate.length * 100
+  const penalita = falsePositive.length * 50
+  const tempoBonus = tutteTrovate ? Math.max(0, Math.floor(tempoRimanente * 2)) : 0
+  const punteggio = Math.max(0, puntiIniezioni - penalita + tempoBonus)
+
+  let stelle = 0
+  if (tutteTrovate && falsePositive.length === 0) stelle = 3
+  else if (tutteTrovate && falsePositive.length > 0) stelle = 2
+  else if (trovate.length > 0) stelle = 1
+
+  return {
+    successo: tutteTrovate,
+    isPulito: false,
+    trovate,
+    perse,
+    falsePositive,
+    escheSegnalate,
+    puntiIniezioni,
+    penalita,
+    tempoBonus,
+    punteggio,
+    stelle,
+  }
+}
+
+/**
+ * Countdown timer for an active game match. Only runs during play, never at rest.
+ */
+export class GiocoTimer {
+  constructor(secondiIniziali, onTick, onScaduto) {
+    this.secondi = Math.max(0, Number(secondiIniziali) || 0)
+    this.onTick = onTick
+    this.onScaduto = onScaduto
+    this.timerId = null
+    this.attivo = false
+  }
+
+  avvia() {
+    if (this.attivo) return
+    this.attivo = true
+    this.timerId = setInterval(() => {
+      this.secondi -= 1
+      if (this.onTick) this.onTick(this.secondi)
+      if (this.secondi <= 0) {
+        this.ferma()
+        if (this.onScaduto) this.onScaduto()
+      }
+    }, 1000)
+  }
+
+  ferma() {
+    if (this.timerId !== null) {
+      clearInterval(this.timerId)
+      this.timerId = null
+    }
+    this.attivo = false
+  }
+}
+
 // ---------------------------------------------------------------- the page
 
 const el = (doc, tag, props = {}, ...children) => {
@@ -370,9 +564,16 @@ export async function boot(win) {
 
   const stato = {
     contenuti: undefined,
+    gioco: undefined,
+    modalita: "lezioni",
     progress: emptyProgress(),
     percorso: 0,
     lezione: 0,
+    livelloCorrente: undefined,
+    righeScelte: new Set(),
+    secondiRimanenti: 0,
+    timer: undefined,
+    esitoGioco: undefined,
     fase: "lista",
     /** The exercises being asked now: a lesson's, or the ones the ripasso is due. */
     esercizi: [],
@@ -416,30 +617,373 @@ export async function boot(win) {
     stato.sbagliate = 0
   }
 
+  const giocoLista = () => {
+    const figli = []
+    const selettore = el(doc, "div", { class: "percorsi", role: "tablist", "aria-label": "Modalità e percorsi" })
+    stato.contenuti?.percorsi?.forEach((p, idx) => {
+      selettore.append(
+        azione(
+          doc,
+          p.titolo,
+          () => {
+            stato.modalita = "lezioni"
+            stato.percorso = idx
+            stato.fase = "lista"
+            stato.timer?.ferma()
+            disegna()
+          },
+          {
+            role: "tab",
+            "aria-selected": "false",
+          },
+        ),
+      )
+    })
+    selettore.append(
+      azione(
+        doc,
+        t("trovaIniezione"),
+        () => {
+          stato.modalita = "gioco"
+          stato.fase = "gioco-lista"
+          disegna()
+        },
+        {
+          role: "tab",
+          "aria-selected": "true",
+          "data-attivo": "1",
+          "data-slot": "tab-gioco",
+        },
+      ),
+    )
+    figli.push(selettore)
+    figli.push(el(doc, "h2", { text: t("trovaIniezione") }))
+    figli.push(el(doc, "p", { class: "origine", text: t("sottotitolo") }))
+
+    const livelli = stato.gioco?.livelli ?? []
+    livelli.forEach((livello) => {
+      const rec = stato.progress.esercizi[`gioco#${livello.id}`]
+      const stelleNum = rec?.stelle ?? 0
+      const stelleStr = stelleNum > 0 ? "★".repeat(stelleNum) + "☆".repeat(3 - stelleNum) : "☆☆☆"
+      figli.push(
+        azione(
+          doc,
+          "",
+          () => {
+            giocoComincia(livello)
+          },
+          {
+            class: "livello",
+            "data-livello": String(livello.livello),
+            "data-fatto": stelleNum === 3 ? "1" : undefined,
+          },
+          el(doc, "span", { class: "n", text: String(livello.livello), "aria-hidden": "true" }),
+          el(
+            doc,
+            "span",
+            { class: "testo" },
+            el(doc, "span", { text: `${livello.etichetta} — ${livello.compito}` }),
+            el(doc, "small", {
+              text: `${livello.tappa} · ${livello.secondi}s · ${livello.righe.length} righe · Difficoltà ${livello.difficolta}/5`,
+            }),
+          ),
+          el(doc, "span", { class: "stelle", text: stelleStr, "aria-label": `${stelleNum} ${t("stelle")}` }),
+        ),
+      )
+    })
+    view.replaceChildren(...figli)
+    riquadro()
+  }
+
+  const giocoComincia = (livello) => {
+    stato.livelloCorrente = livello
+    stato.fase = "gioco-partita"
+    stato.righeScelte = new Set()
+    stato.secondiRimanenti = livello.secondi
+    stato.esitoGioco = undefined
+    stato.timer?.ferma()
+    stato.timer = new GiocoTimer(
+      livello.secondi,
+      (sec) => {
+        stato.secondiRimanenti = sec
+        const pill = view.querySelector("[data-slot='timer']")
+        if (pill) {
+          pill.textContent = `⏱ ${sec}s`
+          if (sec <= 10) pill.setAttribute("data-urgenza", "1")
+          else pill.removeAttribute("data-urgenza")
+        }
+      },
+      () => {
+        giocoVerifica(false)
+      },
+    )
+    stato.timer.avvia()
+    disegna()
+  }
+
+  const giocoPartita = () => {
+    const livello = stato.livelloCorrente
+    if (!livello) return
+    const barra = el(
+      doc,
+      "div",
+      { class: "gioco-barra" },
+      azione(
+        doc,
+        `← ${t("tornaLivelli")}`,
+        () => {
+          stato.timer?.ferma()
+          stato.fase = "gioco-lista"
+          disegna()
+        },
+        { "data-slot": "torna-livelli" },
+      ),
+      el(
+        doc,
+        "span",
+        {
+          class: "timer-pill",
+          "data-slot": "timer",
+          "data-urgenza": stato.secondiRimanenti <= 10 ? "1" : undefined,
+          text: `⏱ ${stato.secondiRimanenti}s`,
+        },
+      ),
+    )
+
+    const compitoBox = el(
+      doc,
+      "div",
+      { class: "compito-box" },
+      el(doc, "div", { class: "etichetta-compito", text: t("compito") }),
+      el(doc, "p", { text: livello.compito }),
+    )
+
+    const docEtichetta = el(doc, "div", {
+      class: "documento-etichetta",
+      text: `${t("documento")}: ${livello.etichetta} (${livello.documento})`,
+    })
+
+    const righeEl = el(doc, "ol", { class: "righe righe-gioco", "aria-label": livello.etichetta })
+    livello.righe.forEach((riga, n) => {
+      const isPicked = stato.righeScelte.has(n)
+      const nodo = azione(
+        doc,
+        riga.testo,
+        () => {
+          if (stato.righeScelte.has(n)) {
+            stato.righeScelte.delete(n)
+            nodo.removeAttribute("data-picked")
+          } else {
+            stato.righeScelte.add(n)
+            nodo.setAttribute("data-picked", "1")
+          }
+        },
+        {
+          "data-riga": String(n),
+          "data-picked": isPicked ? "1" : undefined,
+        },
+      )
+      righeEl.append(
+        el(
+          doc,
+          "li",
+          {},
+          el(doc, "span", { class: "n", text: String(n + 1), "aria-hidden": "true" }),
+          nodo,
+        ),
+      )
+    })
+
+    const azioniEl = el(
+      doc,
+      "div",
+      { class: "azioni" },
+      azione(
+        doc,
+        t("verifica"),
+        () => giocoVerifica(false),
+        { class: "principale", "data-slot": "verifica-gioco" },
+      ),
+      azione(
+        doc,
+        t("nessunaIniezione"),
+        () => giocoVerifica(true),
+        { "data-slot": "nessuna-iniezione" },
+      ),
+    )
+
+    view.replaceChildren(barra, el(doc, "h2", { text: `Livello ${livello.livello} · ${livello.tappa}` }), compitoBox, docEtichetta, righeEl, azioniEl)
+    riquadro()
+  }
+
+  const giocoVerifica = (dichiarataNessuna = false) => {
+    stato.timer?.ferma()
+    if (dichiarataNessuna) stato.righeScelte.clear()
+    const esito = valutaLivello(stato.livelloCorrente, [...stato.righeScelte], stato.secondiRimanenti)
+    stato.esitoGioco = esito
+
+    const chiave = `gioco#${stato.livelloCorrente.id}`
+    const rec = stato.progress.esercizi[chiave] || { viste: 0, giuste: 0, intervallo: 0 }
+    rec.viste += 1
+    if (esito.successo) rec.giuste += 1
+    rec.stelle = Math.max(rec.stelle || 0, esito.stelle)
+    rec.punti = Math.max(rec.punti || 0, esito.punteggio)
+    stato.progress.esercizi[chiave] = rec
+    stato.progress.xp += esito.punteggio
+    salvataggio()
+
+    stato.fase = "gioco-fine"
+    disegna()
+  }
+
+  const giocoFine = () => {
+    const livello = stato.livelloCorrente
+    const esito = stato.esitoGioco
+    if (!livello || !esito) return
+
+    const stelleStr = "★".repeat(esito.stelle) + "☆".repeat(3 - esito.stelle)
+    let titoloEsito = t("nessunaStella")
+    if (esito.stelle === 3) titoloEsito = esito.isPulito ? t("pulitoCorretto") : t("tutteTrovate")
+    else if (esito.stelle === 2) titoloEsito = t("tutteConErrori")
+    else if (esito.stelle === 1) titoloEsito = t("parziali")
+
+    const spiegazioniBox = el(doc, "div", { class: "spiegazioni-lista" })
+    livello.righe.forEach((riga, n) => {
+      const eraIniezione = riga.tipo === "iniezione"
+      const segnalata = stato.righeScelte.has(n)
+
+      if (eraIniezione || segnalata) {
+        const item = el(
+          doc,
+          "div",
+          {
+            class: "spiegazione-riga",
+            "data-tipo": eraIniezione ? "iniezione" : "esca",
+          },
+          el(doc, "p", { text: `[Riga ${n + 1}] ${riga.testo}` }),
+          el(doc, "small", { text: riga.perche ?? (eraIniezione ? "Istruzione estranea per l'agente." : "Riga innocua.") }),
+        )
+        if (eraIniezione && riga.difesa) {
+          item.append(
+            el(doc, "small", {
+              style: "display: block; opacity: 0.85; margin-top: 0.25rem;",
+              text: `Difesa: ${riga.difesa} · Effetto: ${riga.effetto} · Travestimento: ${riga.travestimento}`,
+            }),
+          )
+        }
+        spiegazioniBox.append(item)
+      }
+    })
+
+    const prossimo = stato.gioco?.livelli?.find((l) => l.livello === livello.livello + 1)
+
+    const azioniBox = el(
+      doc,
+      "div",
+      { class: "azioni" },
+      azione(
+        doc,
+        t("riprova"),
+        () => giocoComincia(livello),
+        { "data-slot": "riprova-gioco" },
+      ),
+      azione(
+        doc,
+        t("tornaLivelli"),
+        () => {
+          stato.fase = "gioco-lista"
+          disegna()
+        },
+        { class: !prossimo || esito.stelle === 0 ? "principale" : undefined, "data-slot": "torna-livelli" },
+      ),
+    )
+    if (prossimo && esito.stelle > 0) {
+      azioniBox.append(
+        azione(
+          doc,
+          t("prossimoLivello"),
+          () => giocoComincia(prossimo),
+          { class: "principale", "data-slot": "prossimo-livello" },
+        ),
+      )
+    }
+
+    const fineEl = el(
+      doc,
+      "section",
+      { class: "esercizio" },
+      el(doc, "h2", { text: `Livello ${livello.livello} · ${livello.etichetta}` }),
+      el(doc, "div", { class: "stelle-grande", text: stelleStr, "data-slot": "stelle" }),
+      el(doc, "p", { class: "origine", style: "text-align: center; font-weight: var(--ade-weight-semibold, 600);", text: titoloEsito }),
+      el(
+        doc,
+        "div",
+        { class: "cifre" },
+        el(doc, "div", {}, el(doc, "b", { text: `+${esito.puntiIniezioni}` }), el(doc, "span", { text: "iniezioni" })),
+        el(doc, "div", {}, el(doc, "b", { text: `-${esito.penalita}` }), el(doc, "span", { text: "penalità" })),
+        el(doc, "div", {}, el(doc, "b", { text: `+${esito.tempoBonus}` }), el(doc, "span", { text: "tempo" })),
+        el(doc, "div", {}, el(doc, "b", { text: `${esito.punteggio} XP` }), el(doc, "span", { text: "totale" })),
+      ),
+      el(doc, "div", { class: "compito-box", style: "margin-top: 1rem;" }, el(doc, "p", { text: livello.spiegazione })),
+      spiegazioniBox,
+      azioniBox,
+    )
+
+    view.replaceChildren(fineEl)
+    riquadro()
+  }
+
   /** The lessons of the path, and the ripasso when something is waiting. */
   const lista = () => {
+    if (stato.modalita === "gioco") {
+      giocoLista()
+      return
+    }
     const percorso = stato.contenuti.percorsi[stato.percorso]
     const scaduti = dueReview(stato.progress, tutteLeLezioni(), todayOf(win))
     const figli = []
-    if (stato.contenuti.percorsi.length > 1) {
-      const selettore = el(doc, "div", { class: "percorsi", role: "tablist", "aria-label": "Percorsi" })
+    if (stato.contenuti.percorsi.length > 1 || Boolean(stato.gioco)) {
+      const selettore = el(doc, "div", { class: "percorsi", role: "tablist", "aria-label": "Modalità e percorsi" })
       stato.contenuti.percorsi.forEach((p, idx) => {
         selettore.append(
           azione(
             doc,
             p.titolo,
             () => {
+              stato.modalita = "lezioni"
               stato.percorso = idx
+              stato.fase = "lista"
+              stato.timer?.ferma()
               disegna()
             },
             {
               role: "tab",
-              "aria-selected": idx === stato.percorso ? "true" : "false",
-              "data-attivo": idx === stato.percorso ? "1" : undefined,
+              "aria-selected": stato.modalita === "lezioni" && idx === stato.percorso ? "true" : "false",
+              "data-attivo": stato.modalita === "lezioni" && idx === stato.percorso ? "1" : undefined,
             },
           ),
         )
       })
+      if (stato.gioco) {
+        selettore.append(
+          azione(
+            doc,
+            t("trovaIniezione"),
+            () => {
+              stato.modalita = "gioco"
+              stato.fase = "gioco-lista"
+              stato.timer?.ferma()
+              disegna()
+            },
+            {
+              role: "tab",
+              "aria-selected": stato.modalita === "gioco" ? "true" : "false",
+              "data-attivo": stato.modalita === "gioco" ? "1" : undefined,
+              "data-slot": "tab-gioco",
+            },
+          ),
+        )
+      }
       figli.push(selettore)
     }
     figli.push(el(doc, "h2", { text: percorso.titolo }))
@@ -769,7 +1313,10 @@ export async function boot(win) {
   function disegna() {
     if (!stato.contenuti) return
     empty.hidden = true
-    if (stato.fase === "lista") lista()
+    if (stato.fase === "gioco-lista") giocoLista()
+    else if (stato.fase === "gioco-partita") giocoPartita()
+    else if (stato.fase === "gioco-fine") giocoFine()
+    else if (stato.fase === "lista") lista()
     else if (stato.fase === "teoria") teoria()
     else if (stato.fase === "esercizio") esercizio()
     else fine()
@@ -797,6 +1344,9 @@ export async function boot(win) {
     port.postMessage({ type: "ready" })
   }
   win.addEventListener("message", onPort)
+  win.addEventListener?.("beforeunload", () => {
+    stato.timer?.ferma()
+  })
   win.parent.postMessage({ type: HELLO, nonce }, "*")
 
   try {
@@ -806,6 +1356,12 @@ export async function boot(win) {
   } catch (errore) {
     empty.textContent = `Non riesco a leggere le lezioni: ${String(errore?.message ?? errore).slice(0, 120)}`
     return undefined
+  }
+  try {
+    const rispostaGioco = await win.fetch("gioco.json")
+    if (rispostaGioco.ok) stato.gioco = await rispostaGioco.json()
+  } catch (errore) {
+    console.warn(`[impara] gioco.json non caricato: ${String(errore?.message ?? errore)}`)
   }
   disegna()
   return stato
