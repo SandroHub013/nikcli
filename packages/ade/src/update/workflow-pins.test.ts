@@ -82,6 +82,8 @@ describe("the release workflows keep their guards", () => {
   test("the updater feed is written only when the guard says so", () => {
     const text = read("ade-release.yml")
     expect(text).toContain("script/feed-guard.ts")
+    // The publish job checks out only what it runs: the script and the rule it imports.
+    expect(text).toContain("packages/ade/src/update/feed-guard.ts")
     // The only upload to the fixed release is inside the `write` branch.
     const uploads = text.split("\n").filter((line) => line.includes("release upload ade-updater latest.json"))
     expect(uploads.length).toBe(1)

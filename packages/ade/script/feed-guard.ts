@@ -10,37 +10,11 @@
  * feed with no look at what was in it (full review 2026-10-06, ui 7). The same version is rewritten (a
  * rerun of the newest release); a feed that cannot be read is replaced, since it works for nobody.
  *
- * Standalone, with no import from `src/`: the `publish` job checks out only what it needs.
+ * The rule is in `src/update/feed-guard.ts`; the `publish` job checks out both files.
  */
 
 import { readFileSync } from "node:fs"
-
-const VERSION = /^(\d+)\.(\d+)\.(\d+)$/
-
-function parse(text: unknown): [number, number, number] | undefined {
-  if (typeof text !== "string") return undefined
-  const match = VERSION.exec(text.trim())
-  return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : undefined
-}
-
-/** `write` when the candidate may replace the feed's text, else `skip` and why. */
-export function feedDecision(feedText: string | undefined, candidate: string): string {
-  const next = parse(candidate)
-  if (!next) return `skip the version to release is not x.y.z: ${candidate}`
-  if (feedText === undefined) return "write"
-  let current: [number, number, number] | undefined
-  try {
-    current = parse((JSON.parse(feedText) as { version?: unknown }).version)
-  } catch {
-    current = undefined
-  }
-  if (!current) return "write"
-  for (let i = 0; i < 3; i++) {
-    if (current[i]! > next[i]!) return `skip the feed is at ${current.join(".")}, newer than ${candidate}`
-    if (current[i]! < next[i]!) return "write"
-  }
-  return "write"
-}
+import { feedDecision } from "../src/update/feed-guard"
 
 if (import.meta.main) {
   const [file, candidate] = process.argv.slice(2)

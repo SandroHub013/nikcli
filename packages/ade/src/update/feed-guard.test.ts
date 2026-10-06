@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { join } from "node:path"
-import { feedDecision } from "../../script/feed-guard"
+import { feedDecision } from "./feed-guard"
 
 /*
  * Full review 2026-10-06, ui 7: `ade-release` overwrote `ade-updater/latest.json` with no look at its

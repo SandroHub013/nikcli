@@ -404,6 +404,7 @@ jobs:
           sparse-checkout: |
             packages/ade/brand.json
             packages/ade/script/feed-guard.ts
+            packages/ade/src/update/feed-guard.ts
             /package.json
           sparse-checkout-cone-mode: false
 
