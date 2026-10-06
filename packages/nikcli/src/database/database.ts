@@ -7,6 +7,7 @@ import { Global } from "@nikcli-ai/util/global"
 import { Log } from "@nikcli-ai/util/log"
 import { errorMessage } from "@nikcli-ai/util/error-format"
 import { DatabaseMigration } from "./migration"
+import { assertNotARealFolder } from "./test-guard"
 
 export namespace Database {
   const log = Log.create({ service: "database" })
@@ -135,6 +136,7 @@ export namespace Database {
   }
 
   function open(filename: string): Interface {
+    assertNotARealFolder(filename)
     if (filename !== ":memory:") fs.mkdirSync(nodePath.dirname(filename), { recursive: true })
 
     log.info("opening database", { filename })

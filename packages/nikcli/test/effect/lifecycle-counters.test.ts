@@ -1,8 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test"
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "bun:test"
+import { mkdtempSync } from "fs"
+import os from "os"
+import path from "path"
 import { Effect, Exit, Fiber, Layer } from "effect"
 import { increment, LIFECYCLE_KEYS, reset, snapshot } from "@/effect/lifecycle-counters"
 import { InstanceScope } from "@/effect/instance-scope"
 import { runPromiseWithLayer } from "@/effect/runtime"
+import { removeTestDirSync } from "../helpers/fs"
+
+// One folder per run under the temp dir. These tests used literal /tmp paths, which on Windows is
+// C:\tmp: a folder of the user, outside the temp dir, left behind after every run.
+const ROOT = mkdtempSync(path.join(os.tmpdir(), "nikcli-counter-"))
+afterAll(() => removeTestDirSync(ROOT))
 
 // The counters are module-level state, and `bun test` shares one module
 // registry across every file in a run — any earlier file that crossed the
@@ -38,8 +47,8 @@ describe("lifecycle-counters", () => {
   it("InstanceScope records scope.created on entry and scope.completed on success", async () => {
     const home = process.env.NIKCLI_TEST_HOME
     const db = process.env.NIKCLI_DB
-    process.env.NIKCLI_TEST_HOME = "/tmp/nikcli-counter-success"
-    process.env.NIKCLI_DB = "/tmp/nikcli-counter-success/nikcli.db"
+    process.env.NIKCLI_TEST_HOME = path.join(ROOT, "success")
+    process.env.NIKCLI_DB = path.join(ROOT, "success", "nikcli.db")
     try {
       const result = await Effect.runPromise(InstanceScope.with({ directory: "/tmp" }, Effect.succeed("ok")))
       expect(result).toBe("ok")
@@ -58,8 +67,8 @@ describe("lifecycle-counters", () => {
   it("InstanceScope records scope.interrupted on caller cancel", async () => {
     const home = process.env.NIKCLI_TEST_HOME
     const db = process.env.NIKCLI_DB
-    process.env.NIKCLI_TEST_HOME = "/tmp/nikcli-counter-interrupt"
-    process.env.NIKCLI_DB = "/tmp/nikcli-counter-interrupt/nikcli.db"
+    process.env.NIKCLI_TEST_HOME = path.join(ROOT, "interrupt")
+    process.env.NIKCLI_DB = path.join(ROOT, "interrupt", "nikcli.db")
     try {
       const fiber = Effect.runFork(InstanceScope.with({ directory: "/tmp" }, Effect.never))
       await Effect.runPromise(Effect.sleep(5))
@@ -83,8 +92,8 @@ describe("lifecycle-counters", () => {
   it("records scope.failed, not scope.interrupted, when instance bootstrap throws", async () => {
     const home = process.env.NIKCLI_TEST_HOME
     const db = process.env.NIKCLI_DB
-    process.env.NIKCLI_TEST_HOME = "/tmp/nikcli-counter-bootstrap"
-    process.env.NIKCLI_DB = "/tmp/nikcli-counter-bootstrap/nikcli.db"
+    process.env.NIKCLI_TEST_HOME = path.join(ROOT, "bootstrap")
+    process.env.NIKCLI_DB = path.join(ROOT, "bootstrap", "nikcli.db")
     try {
       const boom = new Error("bootstrap exploded")
       const exit = await Effect.runPromiseExit(
