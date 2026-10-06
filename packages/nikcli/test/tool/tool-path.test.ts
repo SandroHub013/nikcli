@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { normalizeToolPath } from "@/tool/tool-path"
+import { normalizeToolPath, resolveWorkdir } from "@/tool/tool-path"
 
 const root = "C:\\work\\proj"
 const exists = (...present: string[]) => (target: string) => present.map((p) => p.toLowerCase()).includes(target.toLowerCase())
@@ -46,5 +46,30 @@ describe("normalizeToolPath on POSIX", () => {
 
   it("points /src/x at the project when it is not there but the project has src", () => {
     expect(normalizeToolPath("/src/x.py", "/work/proj", posix(["/work/proj/src"]))).toBe("/work/proj/src/x.py")
+  })
+})
+
+describe("resolveWorkdir", () => {
+  const dirs = (...present: string[]) => (target: string) => present.map((p) => p.toLowerCase()).includes(target.toLowerCase())
+  const win = (present: string[]) => ({ platform: "win32" as const, exists: exists(...present), isDirectory: dirs(...present) })
+  const posix = (present: string[]) => ({ platform: "linux" as const, exists: exists(...present), isDirectory: dirs(...present) })
+
+  it("reads an MSYS workdir as the drive path", () => {
+    expect(resolveWorkdir("/c/sbx/ws", root, win(["C:\\sbx\\ws"]))).toBe("C:\\sbx\\ws")
+  })
+
+  it("resolves a relative workdir against the project", () => {
+    expect(resolveWorkdir("src", root, win(["C:\\work\\proj\\src"]))).toBe("C:\\work\\proj\\src")
+  })
+
+  it("names the resolved path and the given one when the directory is missing", () => {
+    expect(() => resolveWorkdir("/c/sbx/missing", root, win([]))).toThrow(
+      'workdir does not exist: C:\\sbx\\missing (from "/c/sbx/missing")',
+    )
+  })
+
+  it("does not read /c/x as a drive on POSIX", () => {
+    expect(resolveWorkdir("/c/sbx", "/work/proj", posix(["/c/sbx"]))).toBe("/c/sbx")
+    expect(() => resolveWorkdir("/c/nope", "/work/proj", posix([]))).toThrow("workdir does not exist: /c/nope")
   })
 })

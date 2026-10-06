@@ -1,5 +1,5 @@
 import path from "path"
-import { existsSync } from "fs"
+import { existsSync, statSync } from "fs"
 
 type PathEnv = {
   platform?: NodeJS.Platform
@@ -43,4 +43,25 @@ export function normalizeToolPath(value: string, root: string, env: PathEnv = {}
   const first = rest.split(/[\\/]/)[0]
   if (first && exists(p.join(root, first))) return p.join(root, rest)
   return absolute
+}
+
+/**
+ * The directory a `bash` call runs in. The model writes `workdir` the way its shell printed it, so it goes
+ * through the same normaliser as the file tools (`/c/work/x` is `C:\work\x`; a relative one is relative to the
+ * project). A directory that is not there fails here, with its own name in the message: left to `spawn`, the
+ * error that comes back names the shell binary and sends the model looking at the wrong thing.
+ */
+export function resolveWorkdir(value: string, root: string, env: PathEnv & { isDirectory?: (target: string) => boolean } = {}): string {
+  const resolved = normalizeToolPath(value, root, env)
+  const isDirectory =
+    env.isDirectory ??
+    ((target: string) => {
+      try {
+        return statSync(target).isDirectory()
+      } catch {
+        return false
+      }
+    })
+  if (!isDirectory(resolved)) throw new Error(`workdir does not exist: ${resolved} (from "${value}")`)
+  return resolved
 }

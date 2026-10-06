@@ -19,6 +19,7 @@ import { BashArity } from "@/permission/arity"
 import { splitShellStatements } from "@/permission/shell-split"
 import { Truncate } from "./truncation"
 import { Plugin } from "@/plugin"
+import { resolveWorkdir } from "./tool-path"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
 
 export const MAX_METADATA_LENGTH = 30_000
@@ -518,13 +519,18 @@ export const BashTool = Tool.define("bash", async () => {
         throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
       }
 
+      // The model's `workdir` is read like a file tool's path (`/c/x` is the drive path) and checked before
+      // anything else sees it, so plugins and the permission check get the final directory and a missing one
+      // is reported as such instead of as a failed spawn of the shell.
+      const workdir = params.workdir ? resolveWorkdir(params.workdir, ctx.instance.directory) : undefined
+
       // Plugins get to rewrite the invocation before anything else looks at it. Everything below —
       // including the permission check — then runs against the *final* command, cwd and shell, so a
       // hook cannot slip a different command past an approval granted for the original one.
       const invocation = await triggerShellCreateBefore({
         sessionID: ctx.sessionID,
         command: params.command,
-        cwd: params.workdir || ctx.instance.directory,
+        cwd: workdir ?? ctx.instance.directory,
         timeout: params.timeout ?? DEFAULT_TIMEOUT,
       })
 
