@@ -21,7 +21,7 @@ import { groupIntoTurns, type AgentEntry, type AgentTurn } from "@nikcli-ai/voic
 import { presenceLabel, presenceOf } from "./status"
 import { isVoiceReady, voicePrerequisitesList } from "./onboarding"
 import "./agent-console.css"
-import { t } from "../i18n"
+import { locale, t } from "../i18n"
 
 export interface AgentConsoleProps {
   history: AgentEntry[]
@@ -48,7 +48,8 @@ export interface AgentConsoleProps {
 
 function timeOf(at: number): string {
   if (!Number.isFinite(at) || at <= 0) return ""
-  return new Date(at).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })
+  const loc = locale() === "it" ? "it-IT" : "en-US"
+  return new Date(at).toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" })
 }
 
 export function AgentConsole(props: AgentConsoleProps) {

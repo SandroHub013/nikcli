@@ -11,6 +11,8 @@
  * them on a permission prompt is a two-minute session, not a twenty-minute one.
  */
 
+import { locale } from "../i18n"
+
 // ---------------------------------------------------------------------------
 // Duration
 // ---------------------------------------------------------------------------
@@ -59,13 +61,14 @@ export function formatTokens(n: number): string {
 
   if (n < 1_000) return String(Math.round(n))
 
+  const loc = locale() === "it" ? "it-IT" : "en-US"
   if (n < 1_000_000) {
     const k = n / 1_000
-    return `${k.toFixed(1).replace(".", ",")}k`
+    return `${new Intl.NumberFormat(loc, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(k)}k`
   }
 
   const m = n / 1_000_000
-  return `${m.toFixed(1).replace(".", ",")}M`
+  return `${new Intl.NumberFormat(loc, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(m)}M`
 }
 
 // ---------------------------------------------------------------------------
@@ -78,8 +81,11 @@ export function formatTokens(n: number): string {
  * Always two decimals: "$0,42", "$12,00".
  */
 export function formatCost(usd: number): string {
-  if (!Number.isFinite(usd) || usd < 0) return "$0,00"
-  return `$${usd.toFixed(2).replace(".", ",")}`
+  const loc = locale() === "it" ? "it-IT" : "en-US"
+  if (!Number.isFinite(usd) || usd < 0) {
+    return `$${new Intl.NumberFormat(loc, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(0)}`
+  }
+  return `$${new Intl.NumberFormat(loc, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(usd)}`
 }
 
 // ---------------------------------------------------------------------------

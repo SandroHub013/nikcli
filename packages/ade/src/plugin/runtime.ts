@@ -15,6 +15,7 @@
  * on which plugin's `setup` happened to await first.
  */
 import { createSignal } from "solid-js"
+import { t } from "../i18n"
 import type { Definition } from "@nikcli-ai/plugin/v2/ade/plugin"
 import { createPluginRegistry, type PluginRegistry } from "./registry"
 import { adaptV2AdePlugin, readV2AdePlugin, type AdePluginHost, type LoadedV2Plugin } from "./v2"
@@ -112,7 +113,7 @@ export function createAdePluginRuntime(options: RuntimeOptions): AdePluginRuntim
     pluginOptions?: Record<string, unknown>,
   ) => {
     if (loaded.some((item) => item.id === definition.id)) {
-      note({ id: definition.id, spec, source, active: false, error: "un plugin con questo id è già caricato" })
+      note({ id: definition.id, spec, source, active: false, error: t("plugins.error.alreadyLoaded") })
       return
     }
     try {
@@ -164,7 +165,7 @@ export function createAdePluginRuntime(options: RuntimeOptions): AdePluginRuntim
           spec: plugin.spec,
           source: "file",
           active: false,
-          error: "non autorizzato per questo progetto",
+          error: t("plugins.error.notAuthorized"),
         })
       }
       return
@@ -185,7 +186,7 @@ export function createAdePluginRuntime(options: RuntimeOptions): AdePluginRuntim
           spec: plugin.spec,
           source: "file",
           active: false,
-          error: "il modulo non esporta un plugin v2 (manca l'export default con id e setup)",
+          error: t("plugins.error.notV2"),
         })
         continue
       }

@@ -54,12 +54,19 @@ const ARROWS: Record<string, Direction> = {
 const DRAG_THRESHOLD = 6
 
 /** The word the overlay shows for the zone the pointer is over. */
-const ZONE_LABELS: Record<DropZone, string> = {
-  before: "Prima",
-  after: "Dopo",
-  above: "Sopra",
-  below: "Sotto",
-  swap: "Scambia",
+function zoneLabel(zone: DropZone): string {
+  switch (zone) {
+    case "before":
+      return t("grid.zone.before")
+    case "after":
+      return t("grid.zone.after")
+    case "above":
+      return t("grid.zone.above")
+    case "below":
+      return t("grid.zone.below")
+    case "swap":
+      return t("grid.zone.swap")
+  }
 }
 
 /**
@@ -351,7 +358,7 @@ export function SessionGrid(props: SessionGridProps) {
               <Show when={zone()}>
                 {(current) => (
                   <div data-slot="drop-zone" data-zone={current()} aria-hidden="true">
-                    <span data-slot="drop-zone-label">{ZONE_LABELS[current()]}</span>
+                    <span data-slot="drop-zone-label">{zoneLabel(current())}</span>
                   </div>
                 )}
               </Show>
