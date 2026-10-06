@@ -484,10 +484,20 @@ export function deriveWorkspaces(
   known: ReadonlyArray<{ root: string; name: string; branch?: string; missing?: boolean }> = [],
 ): Workspace[] {
   const workspaces: Record<string, Workspace> = {}
+  // Two projects can end in the same folder name (`C:/a/app`, `D:/b/app`): the name is not what tells them apart, the
+  // root is (full review 2026-10-06, sessions 10). The row's id stays the name, unless another project has it too.
+  const byRoot = new Map<string, string>()
+  const byName = new Map<string, string>()
 
   for (const project of known) {
-    workspaces[project.name] = {
-      id: project.name,
+    const root = rootKey(project.root)
+    if (byRoot.has(root)) continue
+    const taken = Object.prototype.hasOwnProperty.call(workspaces, project.name)
+    const id = taken ? project.root : project.name
+    byRoot.set(root, id)
+    if (!taken) byName.set(project.name, id)
+    workspaces[id] = {
+      id,
       name: project.name,
       path: project.root,
       branch: project.branch,
@@ -502,18 +512,28 @@ export function deriveWorkspaces(
     // something different from the number of agents running.
     if (isPanelPane(pane)) continue
 
-    if (!workspaces[pane.workspaceId]) {
-      workspaces[pane.workspaceId] = {
-        id: pane.workspaceId,
-        name: pane.workspaceId,
-        sessions: [],
+    // A pane that knows its root goes to the project with that root; one without (an old one) goes by name.
+    const root = pane.projectRoot ? rootKey(pane.projectRoot) : undefined
+    let id = (root !== undefined ? byRoot.get(root) : undefined) ?? (root === undefined ? byName.get(pane.workspaceId) : undefined)
+    if (id === undefined) {
+      // Not a known project: by its root when it has one and the name is already another project's, else by name.
+      id = root !== undefined && workspaces[pane.workspaceId] ? pane.projectRoot! : pane.workspaceId
+      if (!workspaces[id]) {
+        workspaces[id] = {
+          id,
+          name: pane.workspaceId,
+          ...(pane.projectRoot ? { path: pane.projectRoot } : {}),
+          sessions: [],
+        }
       }
+      if (root !== undefined) byRoot.set(root, id)
+      else if (!byName.has(pane.workspaceId)) byName.set(pane.workspaceId, id)
     }
 
-    const ws = workspaces[pane.workspaceId]
-    const branch = pane.tree?.branch || ws?.branch
+    const ws = workspaces[id]!
+    const branch = pane.tree?.branch || ws.branch
 
-    workspaces[pane.workspaceId].sessions.push({
+    ws.sessions.push({
       id: pane.id,
       title: pane.title,
       status: pane.status,
@@ -527,6 +547,11 @@ export function deriveWorkspaces(
   }
 
   return Object.values(workspaces)
+}
+
+/** A root as `pathEquals` reads it: same project whatever the separators and the case. */
+function rootKey(root: string): string {
+  return normalizePath(root).toLowerCase()
 }
 
 /** The project's name, as the folder it lives in calls it. */
