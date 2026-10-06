@@ -379,6 +379,7 @@ import {
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
 import {
   canSuspend,
+  closeSuspendedTree,
   stopForSuspend,
   offersSuspend,
   parseSuspendedMail,
@@ -4281,7 +4282,7 @@ export function Workbench() {
       const old = running.get(pane.id)
       running.delete(pane.id)
       touchRunning()
-      old?.kill()
+      void closeSuspendedTree(old)
       setWb((w) => updatePane(w, pane.id, { spawnArgs, ...(message.fresh ? { resumeId: undefined } : {}) }))
       if (message.fresh) {
         for (const request of [...openRequests.values()]) {
@@ -5056,7 +5057,7 @@ export function Workbench() {
     // Dictated text goes into the line and is not submitted: it counts as typed.
     getRunningSession: (id) => {
       const session = running.get(id)
-      return session && { write: (text: string) => typeAsUser(id, text), kill: () => session.kill() }
+      return session && { write: (text: string) => typeAsUser(id, text), kill: () => void closeSuspendedTree(session) }
     },
     openFile: (path) => openFile(path),
     appendLine: (id, text, kind) => appendLine(id, text, kind),
@@ -6565,7 +6566,7 @@ export function Workbench() {
       if (wb().focusedId) void suspendSession(wb().focusedId!)
     } else if (id === "process.kill") {
       if (wb().focusedId && isRunning(wb().focusedId!)) {
-        running.get(wb().focusedId!)?.kill()
+        void closeSuspendedTree(running.get(wb().focusedId!))
         running.delete(wb().focusedId!)
         touchRunning()
         setWb((w) =>
@@ -7022,7 +7023,7 @@ export function Workbench() {
   const closeNow = (id: string) => {
     const closing = wb().panes.find((candidate) => candidate.id === id)
     if (closing?.worktree) giveBackWorktree(closing, closing.worktree)
-    running.get(id)?.kill()
+    void closeSuspendedTree(running.get(id))
     running.delete(id)
     touchRunning()
     // A question the voice is asking about this pane has nobody left to answer it.
