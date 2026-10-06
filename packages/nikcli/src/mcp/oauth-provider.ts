@@ -79,6 +79,11 @@ export class McpOAuthProvider implements OAuthClientProvider {
       return {
         client_id: entry.clientInfo.clientId,
         client_secret: entry.clientInfo.clientSecret,
+        // Given back with the rest: the SDK saves this very object again once it binds it to a server.
+        ...(entry.clientInfo.clientIdIssuedAt !== undefined ? { client_id_issued_at: entry.clientInfo.clientIdIssuedAt } : {}),
+        ...(entry.clientInfo.clientSecretExpiresAt !== undefined
+          ? { client_secret_expires_at: entry.clientInfo.clientSecretExpiresAt }
+          : {}),
         ...(entry.clientInfo.issuer ? { issuer: entry.clientInfo.issuer } : {}),
       }
     }

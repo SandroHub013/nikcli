@@ -168,6 +168,31 @@ describe("MCP OAuth provider keeps the issuer the SDK stamps", () => {
     }
   })
 
+  it("keeps when a dynamically registered client expires once the SDK binds it to a server", async () => {
+    const stored = new McpOAuthProvider("issuer-client-expiry", SERVER, {}, { onRedirect: () => {} })
+    names.push("issuer-client-expiry")
+    const issuedAt = Math.floor(Date.now() / 1000) - 60
+    const expiresAt = Math.floor(Date.now() / 1000) + 86_400
+    // Registered before the stamp existed: no issuer, so the SDK binds it on the next auth().
+    await stored.saveClientInformation({
+      client_id: "dyn-1",
+      client_secret: "shh",
+      client_id_issued_at: issuedAt,
+      client_secret_expires_at: expiresAt,
+      redirect_uris: [stored.redirectUrl],
+    })
+    await stored.saveTokens({ access_token: "a", token_type: "Bearer", refresh_token: "r", issuer: AS_A })
+    const network = fakeNetwork(AS_A)
+
+    expect(await auth(stored, { serverUrl: SERVER, fetchFn: network.fetchFn })).toBe("AUTHORIZED")
+
+    // The binding saved it again with the stamp; it must not have dropped the expiry on the way.
+    const info = await stored.clientInformation()
+    expect(info?.issuer).toBe(AS_A)
+    expect(info?.client_id_issued_at).toBe(issuedAt)
+    expect(info?.client_secret_expires_at).toBe(expiresAt)
+  })
+
   it("does not save the client from the configuration, so nothing can bind it", async () => {
     const p = provider("issuer-config-client-save")
     await p.saveClientInformation({ client_id: "client-1", redirect_uris: [p.redirectUrl], issuer: AS_A })
