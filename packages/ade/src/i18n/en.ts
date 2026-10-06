@@ -2178,13 +2178,13 @@ export const en: Messages = {
   "video.error.noFrame": "no frame available",
   "video.error.noCanvas": "canvas not available",
   "video.error.encodingFailed": "frame encoding failed",
-  "video.error.unsupportedFormat": (exts: string) => `unplayable format; supported: ${exts}`,
+  "video.error.unsupportedFormat": (exts: string) => `unsupported format; supported: ${exts}`,
   "video.error.unreadableOrUnsupported": "file is unreadable or format is unsupported",
-  "video.error.noPlayer": "no player",
+  "video.error.noPlayer": "no video player",
   "video.error.cannotWrite": "this host cannot write files",
 
   // F7a2: Workbench & Keys
-  "keys.error.noKeyring": "this version of ADE has no keyring",
+  "keys.error.noKeyring": "this version of ADE has no keychain",
   "workbench.error.noOpenProject": "no open project to save to",
   "session.cannotClose": (reasons: string) =>
     `will not close: ${reasons}. Merge or commit first, or use --force (worktree remains on disk)`,
@@ -2207,4 +2207,19 @@ export const en: Messages = {
   "model.error.noModelLoaded": "no model loaded",
   "model.error.unsupportedFormat": "unsupported format",
   "model.error.encodingFailed": "image encoding failed",
+
+  // F7a2: Plugin discovery
+  "plugins.error.manifestNotJson": "package.json is not valid JSON",
+  "plugins.error.manifestNotObject": "package.json is not an object",
+  "plugins.error.noExportKind": (kind: string) => `the package does not declare exports["./${kind}"]`,
+  "plugins.error.invalidExportPath": (kind: string) => `exports["./${kind}"] is not a valid path`,
+  "plugins.error.escapesPackage": "the plugin entrypoint escapes the package directory",
+  "plugins.error.npmDesktopNotSupported":
+    "npm plugins cannot be installed from the desktop window: add it from the terminal, then reopen ADE",
+  "plugins.error.uncNotAllowed": "network paths (UNC) are not allowed for plugins",
+  "plugins.error.invalidPluginPath": "invalid plugin path",
+  "plugins.error.fileNotFound": "the plugin file does not exist",
+  "plugins.error.noManifest": "the plugin directory does not contain a package.json",
+  "plugins.error.manifestUnreadable": "package.json is not readable",
+  "plugins.error.entrypointNotFound": "the declared entrypoint does not exist",
 }

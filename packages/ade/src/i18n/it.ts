@@ -2270,6 +2270,21 @@ export const it = {
   "model.error.noModelLoaded": "nessun modello caricato",
   "model.error.unsupportedFormat": "formato non supportato",
   "model.error.encodingFailed": "codifica dell'immagine fallita",
+
+  // F7a2: Plugin discovery
+  "plugins.error.manifestNotJson": "package.json non è JSON valido",
+  "plugins.error.manifestNotObject": "package.json non è un oggetto",
+  "plugins.error.noExportKind": (kind: string) => `il pacchetto non dichiara exports["./${kind}"]`,
+  "plugins.error.invalidExportPath": (kind: string) => `exports["./${kind}"] non è un percorso valido`,
+  "plugins.error.escapesPackage": "l'entrypoint del plugin esce dalla cartella del pacchetto",
+  "plugins.error.npmDesktopNotSupported":
+    "i plugin npm non si possono installare dalla finestra desktop: aggiungilo dal terminale, poi riapri ADE",
+  "plugins.error.uncNotAllowed": "i percorsi di rete (UNC) non sono consentiti per i plugin",
+  "plugins.error.invalidPluginPath": "percorso del plugin non valido",
+  "plugins.error.fileNotFound": "il file del plugin non esiste",
+  "plugins.error.noManifest": "la cartella del plugin non contiene un package.json",
+  "plugins.error.manifestUnreadable": "package.json non è leggibile",
+  "plugins.error.entrypointNotFound": "l'entrypoint dichiarato non esiste",
 }
 
 /** The shape every catalog has: the same keys, the same parameters. */
