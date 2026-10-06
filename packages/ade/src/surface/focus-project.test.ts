@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { addPane, closePane, createWorkbench, focusInProject, type Pane } from "./state"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import { addPane, closePane, createWorkbench, focusedInOpenProject, focusInProject, type Pane } from "./state"
 
 /*
  * Full review 2026-10-06, sessioni 4: focus left on a pane of another project, one that is not drawn,
@@ -71,5 +73,69 @@ describe("opening a project", () => {
 
   test("a project with no pane has no focus", () => {
     expect(focusInProject(wb, { name: "c", root: "C:/work/c" })).toBeUndefined()
+  })
+})
+
+/*
+ * Dario's review of F3, O1: a pane added to a project that is not the open one (a subagent spawned from a
+ * session there, a dev browser it owns) took focus, and the next Ctrl+W or «Termina processo» reached it unseen.
+ */
+describe("adding a pane to a project that is not open", () => {
+  const open = (root: string) => ({ ...createWorkbench(), projectPath: root })
+
+  test("a pane of another project does not take the focus", () => {
+    let wb = addPane(open(A.root), pane("a1", A.root))
+    wb = addPane(wb, pane("b1", B.root))
+    expect(wb.panes.map((p) => p.id)).toEqual(["a1", "b1"])
+    expect(wb.focusedId).toBe("a1")
+  })
+
+  test("with nothing focused it stays that way: the pane is not drawn", () => {
+    const wb = addPane(open(A.root), pane("b1", B.root))
+    expect(wb.focusedId).toBeUndefined()
+  })
+
+  test("a pane of the open project takes the focus, spelled in another case", () => {
+    let wb = addPane(open(A.root), pane("a1", A.root))
+    wb = addPane(wb, pane("a2", "c:/WORK/a/"))
+    expect(wb.focusedId).toBe("a2")
+  })
+
+  test("without a project path, or a pane with no folder, the new pane is focused as before", () => {
+    expect(addPane(createWorkbench(), pane("b1", B.root)).focusedId).toBe("b1")
+    const old = { ...pane("x", A.root), projectRoot: undefined }
+    expect(addPane(open(A.root), old).focusedId).toBe("x")
+  })
+})
+
+describe("close, suspend and kill act only on a pane of the open project", () => {
+  let wb = createWorkbench()
+  wb = addPane(wb, pane("a1", A.root))
+  wb = addPane(wb, pane("b1", B.root))
+  // Focus left on b1 (an old id after a switch, or set by some path that missed the guard).
+  const onB = { ...wb, focusedId: "b1" }
+
+  test("the focused pane of the open project is the target", () => {
+    expect(focusedInOpenProject({ ...wb, focusedId: "a1" }, A)).toBe("a1")
+  })
+
+  test("a focused pane of another project is no target", () => {
+    expect(focusedInOpenProject(onB, A)).toBeUndefined()
+    expect(focusedInOpenProject(onB, B)).toBe("b1")
+  })
+
+  test("no focus, a focus on a pane that is gone, or no open project: nothing to guard against", () => {
+    expect(focusedInOpenProject({ ...wb, focusedId: undefined }, A)).toBeUndefined()
+    expect(focusedInOpenProject({ ...wb, focusedId: "gone" }, A)).toBeUndefined()
+    expect(focusedInOpenProject(onB, undefined)).toBe("b1")
+  })
+
+  test("the commands use it", () => {
+    const source = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf8")
+    const body = (id: string) => source.slice(source.indexOf(`id === "${id}"`)).split("} else if (id ===")[0]!
+    for (const id of ["pane.close", "session.suspend", "process.kill"]) {
+      expect(body(id)).toContain("focusedHere()")
+      expect(body(id)).not.toContain("wb().focusedId")
+    }
   })
 })

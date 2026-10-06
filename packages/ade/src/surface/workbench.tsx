@@ -222,6 +222,7 @@ import {
   addPane,
   closePane,
   focusInProject,
+  focusedInOpenProject,
   updatePane,
   withPaneNotice,
   isPanelPane,
@@ -6420,6 +6421,9 @@ export function Workbench() {
 
   // Commands
   // Behind an open sheet, what opens something to type into would open it under the sheet's focus trap.
+  /** The focused pane, when it is one of the open project's: what close, suspend and kill act on. */
+  const focusedHere = () => focusedInOpenProject(wb(), project())
+
   const runCommand = guardedBySheet(sheetOpen, async (id: string) => {
     // Returns, because the last line of this function closes the palette.
     // See `keepsPaletteOpen` for why that is not a detail.
@@ -6474,7 +6478,8 @@ export function Workbench() {
       }
     } else if (id === "pane.close") {
       // A shortcut or the palette: an agent at work is ended only on a yes (ALTO 6).
-      if (wb().focusedId) closer.close(wb().focusedId!, { confirmRunning: true })
+      const target = focusedHere()
+      if (target) closer.close(target, { confirmRunning: true })
     } else if (id === "pane.expand") {
       if (wb().focusedId) setWb((w) => expandPane(w, w.focusedId!))
     } else if (id === "pane.rename") {
@@ -6575,18 +6580,20 @@ export function Workbench() {
         }),
       )
     } else if (id === "session.suspend") {
-      if (wb().focusedId) void suspendSession(wb().focusedId!)
+      const target = focusedHere()
+      if (target) void suspendSession(target)
     } else if (id === "process.kill") {
-      if (wb().focusedId && isRunning(wb().focusedId!)) {
-        void closeSuspendedTree(running.get(wb().focusedId!))
-        running.delete(wb().focusedId!)
+      const target = focusedHere()
+      if (target && isRunning(target)) {
+        void closeSuspendedTree(running.get(target))
+        running.delete(target)
         touchRunning()
         setWb((w) =>
-          updatePane(w, w.focusedId!, {
+          updatePane(w, target, {
             status: "error",
             activity: "killed",
             lines: [
-              ...(w.panes.find((p) => p.id === w.focusedId)?.lines || []),
+              ...(w.panes.find((p) => p.id === target)?.lines || []),
               { kind: "note", text: t("pane.killed") },
             ],
           }),

@@ -304,10 +304,16 @@ export function createWorkbench(): Workbench {
 }
 
 export function addPane(workbench: Workbench, pane: Pane): Workbench {
+  // A pane of another project than the open one — a subagent spawned from a session there, a dev browser
+  // that session owns — is not drawn, so it must not take focus: the next Ctrl+W or «Termina processo»
+  // would close or kill it unseen (full review 2026-10-06, sessioni 4, scenario C).
+  const elsewhere = Boolean(
+    workbench.projectPath && pane.projectRoot && !pathEquals(pane.projectRoot, workbench.projectPath),
+  )
   return {
     ...workbench,
     panes: [...workbench.panes, pane],
-    focusedId: pane.id,
+    focusedId: elsewhere ? workbench.focusedId : pane.id,
   }
 }
 
@@ -331,6 +337,24 @@ export function closePane(workbench: Workbench, paneId: string): Workbench {
     focusedId: nextFocused,
     expandedId: workbench.expandedId === paneId ? undefined : workbench.expandedId,
   }
+}
+
+/**
+ * The focused pane's id when it is a pane of the open project, else none.
+ *
+ * Closing, suspending and killing act on the focused pane, and the user can only see the open project's
+ * panes: a focus left elsewhere (a pane added by a session of another project, an old id) must not be acted on
+ * unseen. With no project open, or no focus, there is nothing to guard.
+ */
+export function focusedInOpenProject(
+  workbench: Pick<Workbench, "panes" | "focusedId">,
+  open: { readonly name: string; readonly root: string } | undefined,
+): string | undefined {
+  const id = workbench.focusedId
+  if (!id) return undefined
+  const pane = workbench.panes.find((p) => p.id === id)
+  if (!pane) return undefined
+  return !open || belongsTo(pane, open) ? id : undefined
 }
 
 /**
