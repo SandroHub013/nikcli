@@ -1448,6 +1448,10 @@ fn check_git_args(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// How long one git command may take. They are all local (status, diff, worktree, ...), so a git that has not
+/// answered by then is stuck (a lock, a dead network share) and holds a blocking thread for good.
+const GIT_TIMEOUT: Duration = Duration::from_secs(120);
+
 /// Runs one git command and hands back what it printed.
 #[tauri::command]
 async fn git_run(
@@ -1484,15 +1488,15 @@ async fn git_run(
         command.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let output = command
-        .output()
-        .map_err(|e| format!("git non eseguibile: {e}"))?;
-
-    Ok(ShellOutput {
-        code: output.status.code(),
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-    })
+    /*
+     * Off the async worker, and bounded: `output()` here blocked a runtime thread until git was done, with no
+     * limit, so a git stuck on a lock took one worker for good and a few of them stopped every command.
+     * Same runner as `nikcli_bot` and `claude_agents`: a job that ends the tree, a deadline, the output read
+     * on its own threads.
+     */
+    tauri::async_runtime::spawn_blocking(move || run_bounded_output(command, GIT_TIMEOUT, "git"))
+        .await
+        .map_err(|_| "avvio di git interrotto".to_string())?
 }
 
 #[tauri::command]
@@ -2922,6 +2926,19 @@ mod tests {
         let took = started.elapsed();
         assert_eq!(answer.as_deref(), Some("/usr/local/bin"), "la riga arrivata e' la risposta");
         assert!(took < Duration::from_secs(3), "ha aspettato il lettore: {took:?}");
+    }
+
+    // Full review 2026-10-06, rust 14: `git_run` ran `output()` with no limit on the async runtime. The command
+    // needs a window to be called, so what is checked is the shape: it goes through the bounded runner, off the worker.
+    #[test]
+    fn git_run_is_bounded_and_off_the_async_worker() {
+        let source = include_str!("lib.rs");
+        let start = source.find("async fn git_run(").expect("git_run");
+        let body = &source[start..source[start..].find("async fn current_dir").map(|end| start + end).expect("fine")];
+        assert!(body.contains("spawn_blocking"), "git_run must leave the async worker");
+        assert!(body.contains("run_bounded_output(command, GIT_TIMEOUT"), "git_run must have a deadline");
+        assert!(!body.contains(".output()"), "git_run must not block on `output()`");
+        assert!(GIT_TIMEOUT >= Duration::from_secs(30), "a slow worktree add must fit");
     }
 
     #[test]
