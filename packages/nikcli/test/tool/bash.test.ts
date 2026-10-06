@@ -63,6 +63,39 @@ describe("BashTool", () => {
     expect(result.output).toContain("marker.txt")
   })
 
+  it("reads a relative workdir against the project", async () => {
+    const nested = path.join(projectDir, "rel-nested")
+    await fs.mkdir(nested)
+    await fs.writeFile(path.join(nested, "rel-marker.txt"), "ok\n")
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ command: "ls rel-marker.txt", workdir: "rel-nested", description: "list marker" }, ctx),
+    )
+    expect(result.output).toContain("rel-marker.txt")
+  })
+
+  it.skipIf(process.platform !== "win32")("runs in an MSYS-form workdir (/c/...) as the drive path", async () => {
+    const nested = path.join(projectDir, "msys-nested")
+    await fs.mkdir(nested)
+    await fs.writeFile(path.join(nested, "msys-marker.txt"), "ok\n")
+    const msys = "/" + nested[0]!.toLowerCase() + nested.slice(2).replaceAll("\\", "/")
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ command: "ls msys-marker.txt", workdir: msys, description: "list marker" }, ctx),
+    )
+    expect(result.output).toContain("msys-marker.txt")
+  })
+
+  it("fails a workdir that does not exist before it spawns, naming the directory", async () => {
+    const { ctx } = makeToolContext()
+    const missing = path.join(projectDir, "no-such-dir")
+    await expect(
+      withProjectDirectory(projectDir, () =>
+        def.executeAsync({ command: "echo x", workdir: missing, description: "x" }, ctx),
+      ),
+    ).rejects.toThrow(/workdir does not exist: .*no-such-dir/)
+  })
+
   it("rejects a negative timeout before spawn", async () => {
     const { ctx } = makeToolContext()
     await expect(
