@@ -589,12 +589,16 @@ function readMap(raw: string | null): Record<string, unknown> {
 /** In the WebView's storage, by the bot file's path, like its account. */
 export function localMemoryStore(key: string = STORAGE_KEY): MemoryStore {
   const fallback = new Map<string, BotMemory>()
+  // The bots whose last write did not land: their copy here is newer than storage's (bots 3).
+  const unsaved = new Set<string>()
   return {
     get: (bot) => {
+      const kept = fallback.get(bot)
+      if (kept && unsaved.has(bot)) return kept
       try {
         return parseMemory(readMap(localStorage.getItem(key))[bot])
       } catch {
-        return fallback.get(bot) ?? EMPTY_MEMORY
+        return kept ?? EMPTY_MEMORY
       }
     },
     set: (bot, memory) => {
@@ -603,8 +607,10 @@ export function localMemoryStore(key: string = STORAGE_KEY): MemoryStore {
         const all = readMap(localStorage.getItem(key))
         all[bot] = parseMemory(memory)
         localStorage.setItem(key, JSON.stringify(all))
+        unsaved.delete(bot)
       } catch {
         // Storage blocked: the memory lasts until ADE closes.
+        unsaved.add(bot)
       }
     },
   }

@@ -245,8 +245,16 @@ const STORAGE_KEY = "ade.bots.routines"
 /** In the WebView's storage, like the bots' accounts. No credential is ever part of it. */
 export function localRoutineStore(key: string = STORAGE_KEY): RoutineStore {
   let memory: RoutineBook | undefined
+  /*
+   * The last write did not land (storage full or blocked): what storage still holds is older
+   * than `memory`, so `memory` answers until a write lands. Reading the old book back lost
+   * `lastRunAt`, `runs` and `spentUsd`, and a routine with a daily cap was due again at the
+   * next tick (full review 2026-10-06, bots 3).
+   */
+  let unsaved = false
   return {
     get: () => {
+      if (unsaved && memory) return memory
       try {
         return parseBook(localStorage.getItem(key))
       } catch {
@@ -257,8 +265,10 @@ export function localRoutineStore(key: string = STORAGE_KEY): RoutineStore {
       memory = book
       try {
         localStorage.setItem(key, JSON.stringify(book))
+        unsaved = false
       } catch {
         // Storage blocked: the routines last until ADE closes.
+        unsaved = true
       }
     },
   }
