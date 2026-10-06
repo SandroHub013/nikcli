@@ -33,7 +33,9 @@ afterAll(() => {
 })
 
 ;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
-const { getHost } = await import("./shell")
+// A fresh copy: another test file may have asked for the host before there was a Tauri window, and getHost keeps that answer.
+const fresh = "./shell.ts?refusal"
+const { getHost } = (await import(fresh)) as typeof import("./shell")
 
 async function launch(onRefused?: (reason: string) => void) {
   const host = await getHost()
