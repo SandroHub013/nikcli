@@ -82,7 +82,7 @@
     "@types/turndown": "5.0.5",
     "@types/ws": "^8.18.1",
     "@typescript/native": "catalog:",
-    "drizzle-kit": "0.31.10",
+    "drizzle-kit": "0.31.11",
     "oxlint": "1.79.0",
     "typescript": "catalog:",
     "vscode-languageserver-types": "3.18.0",
