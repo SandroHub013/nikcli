@@ -63,8 +63,8 @@ describe("content.json", () => {
     const keys: string[] = []
     for (const percorso of content.percorsi) {
       for (const lezione of percorso.lezioni) {
-        for (const esercizio of lezione.esercizi) {
-          keys.push(`${lezione.id}#${esercizio.id}`)
+        for (const esercizio of (lezione.esercizi as { id: string }[])) {
+          keys.push(`${String(lezione.id)}#${esercizio.id}`)
         }
       }
     }
