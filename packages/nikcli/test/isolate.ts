@@ -35,7 +35,9 @@ process.env.NIKCLI_TEST_ALLOWED_DIRS ??= path.resolve(os.tmpdir())
 const PREFIX = "nikcli-test-home-"
 const STALE_MS = 6 * 60 * 60 * 1000
 
-if (!process.env.NIKCLI_TEST_HOME) {
+const created = !process.env.NIKCLI_TEST_HOME
+
+if (created) {
   // `bun test` fires neither "exit" nor "beforeExit", so the folder of the run before this
   // one is still there: sweep the ones nobody can still be using.
   try {
@@ -51,7 +53,19 @@ if (!process.env.NIKCLI_TEST_HOME) {
   process.on("exit", () => removeTestDirSync(home))
 }
 
-const home = process.env.NIKCLI_TEST_HOME
+/** The folder this run made, and so must remove; `undefined` when `NIKCLI_TEST_HOME` came from outside. */
+export const ownedHome: string | undefined = created ? process.env.NIKCLI_TEST_HOME : undefined
+
+// Set above, or from outside.
+const home = process.env.NIKCLI_TEST_HOME!
+
+// The test home is a place a test may use even when it sits inside a forbidden folder: a CI that sets
+// NIKCLI_TEST_HOME to its own temp folder (`${runner.temp}`, under HOME on Linux and macOS) while os.tmpdir()
+// is elsewhere would otherwise fail every test that opens a database.
+process.env.NIKCLI_TEST_ALLOWED_DIRS = [
+  ...new Set([...process.env.NIKCLI_TEST_ALLOWED_DIRS!.split(path.delimiter).filter(Boolean), path.resolve(home)]),
+].join(path.delimiter)
+
 const roots = {
   LOCALAPPDATA: path.join(home, "os", "LocalAppData"),
   APPDATA: path.join(home, "os", "AppData"),

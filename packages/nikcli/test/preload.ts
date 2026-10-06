@@ -1,10 +1,11 @@
 // First: no test may reach the user's own data folders (see ./isolate.ts).
-import "./isolate"
+import { ownedHome } from "./isolate"
 import "@opentui/solid/preload"
 import { afterAll, afterEach, beforeAll } from "bun:test"
 import path from "path"
 import { initialize as initGlobal } from "@nikcli-ai/util/global"
 import { setTestEnvBaseline } from "./helpers/env"
+import { removeTestDirSync } from "./helpers/fs"
 
 // Keep the whole suite hermetic: skip the `bun add @nikcli-ai/plugin` bootstrap
 // step, which requires the npm registry and otherwise hangs/trips timeouts when
@@ -19,6 +20,18 @@ let globalInitPromise = initGlobal()
 // Make tests wait for global init before running
 beforeAll(async () => {
   await globalInitPromise
+})
+
+// Registered here, a hook runs once for the whole run, after the last file (`bun test` fires no "exit"): the
+// home `isolate.ts` made goes with it. A database still open on Windows keeps it, and the next run sweeps it.
+afterAll(async () => {
+  if (!ownedHome) return
+  // The run's own database is closed first: Windows will not remove a folder that holds an open file.
+  try {
+    const { Database } = await import("../src/database/database")
+    Database.close(path.join(ownedHome, "data", "nikcli.db"))
+  } catch {}
+  removeTestDirSync(ownedHome)
 })
 
 // CLI command tests intentionally exercise failure paths that set exitCode.

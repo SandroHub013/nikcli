@@ -1,6 +1,16 @@
 import { beforeEach } from "bun:test"
 
-const extra = new Set(["AUR_KEY", "ISLAND_SUPPORT_DIR", "NPM_TOKEN", "OPENAI_API_KEY", "PORT", "SST_GITHUB_TOKEN"])
+// LOCALAPPDATA and APPDATA: the preload points them at the run's temporary home (see ./isolate.ts).
+const extra = new Set([
+  "APPDATA",
+  "AUR_KEY",
+  "ISLAND_SUPPORT_DIR",
+  "LOCALAPPDATA",
+  "NPM_TOKEN",
+  "OPENAI_API_KEY",
+  "PORT",
+  "SST_GITHUB_TOKEN",
+])
 
 const managed = (key: string) => key.startsWith("NIKCLI_") || key.startsWith("XDG_") || extra.has(key)
 
