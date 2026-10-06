@@ -379,6 +379,9 @@ export const projectFs: ProjectFs = {
     if (!host?.readTextFile) throw new Error(t("bots.store.noRead"))
     return host.readTextFile(path)
   },
+  async home() {
+    return (await getHost())?.homeDir?.()
+  },
 }
 
 /**
