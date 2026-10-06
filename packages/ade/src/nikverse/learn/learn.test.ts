@@ -455,6 +455,31 @@ describe("the page and ADE, over one port", () => {
     document.querySelector<HTMLButtonElement>('[data-slot="torna"]')!.click()
     expect(document.querySelectorAll(".lesson")).toHaveLength(lezioni.length)
   })
+
+  test("the end of a ripasso is titled as a ripasso, not after the lesson of its first exercise", async () => {
+    const { win, parent, port, offer } = fakePage(`#n=${NONCE}`)
+    await boot(win)
+    const via = port()
+    offer(parent, [via])
+    const esercizio = lezioni[0].esercizi[0]
+    const invia = (data: unknown) => (via.onmessage as (event: unknown) => void)({ data })
+    invia({
+      type: "progress",
+      progress: {
+        v: 1,
+        xp: 4,
+        giorni: ["2026-01-01"],
+        esercizi: { [`${lezioni[0].id}#${esercizio.id}`]: { viste: 1, giuste: 1, intervallo: 1, dovuta: "2026-01-02" } },
+      },
+    })
+    const ripasso = [...document.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent?.startsWith("Ripasso"))
+    expect(ripasso).toBeDefined()
+    ripasso!.click()
+    rispondiMale()
+    document.querySelector<HTMLButtonElement>('[data-slot="prossima"]')!.click()
+    expect(document.querySelector(".esercizio h2")?.textContent).toBe("Fine del ripasso")
+    expect(document.querySelector(".cifre")?.textContent).toContain("in questo ripasso")
+  })
 })
 
 describe("the page is served, not built", () => {

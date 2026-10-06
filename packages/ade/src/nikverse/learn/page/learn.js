@@ -383,6 +383,8 @@ export async function boot(win) {
     xp: 0,
     giuste: 0,
     sbagliate: 0,
+    /** The exercises in hand are the ripasso's, from several lessons, and not one lesson's. */
+    ripasso: false,
   }
   let port
 
@@ -414,6 +416,7 @@ export async function boot(win) {
     stato.xp = 0
     stato.giuste = 0
     stato.sbagliate = 0
+    stato.ripasso = false
   }
 
   /** The lessons of the path, and the ripasso when something is waiting. */
@@ -450,6 +453,7 @@ export async function boot(win) {
           `Ripasso: ${scaduti.length} esercizi ti aspettano`,
           () => {
             comincia(scaduti.map((voce) => Object.assign({}, voce.esercizio, { _lezione: voce.lezione })))
+            stato.ripasso = true
             disegna()
           },
           { class: "principale" },
@@ -731,12 +735,12 @@ export async function boot(win) {
         doc,
         "section",
         { class: "esercizio" },
-        el(doc, "h2", { text: `Fine di ${lezione?.titolo ?? "ripasso"}` }),
+        el(doc, "h2", { text: stato.ripasso ? "Fine del ripasso" : `Fine di ${lezione?.titolo ?? "lezione"}` }),
         el(
           doc,
           "div",
           { class: "cifre" },
-          el(doc, "div", {}, el(doc, "b", { text: `${stato.xp} XP` }), el(doc, "span", { text: "in questa lezione" })),
+          el(doc, "div", {}, el(doc, "b", { text: `${stato.xp} XP` }), el(doc, "span", { text: stato.ripasso ? "in questo ripasso" : "in questa lezione" })),
           el(doc, "div", {}, el(doc, "b", { text: String(stato.giuste) }), el(doc, "span", { text: "giuste" })),
           el(doc, "div", {}, el(doc, "b", { text: String(stato.sbagliate) }), el(doc, "span", { text: "da rivedere" })),
         ),
