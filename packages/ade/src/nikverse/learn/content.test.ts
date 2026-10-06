@@ -15,8 +15,9 @@ const schema = JSON.parse(readFileSync(join(ROOT, "schema.json"), "utf8")) as Sc
 const committed = readFileSync(join(ROOT, "content.json"), "utf8")
 
 interface Schema {
+  $id?: string
   required: string[]
-  properties: Record<string, { type?: string; enum?: unknown[]; pattern?: string; items?: Schema }>
+  properties: Record<string, { type?: string; enum?: unknown[]; pattern?: string; items?: { properties?: Record<string, { pattern?: string }> } }>
   $defs: Record<string, Schema>
 }
 
@@ -92,7 +93,7 @@ describe("every lesson, against the schema", () => {
 
     test(`${file}: the objectives, and every exercise serves one that exists`, () => {
       const obiettivi = lesson.obiettivi as { id: string; testo: string }[]
-      const pattern = new RegExp(schema.properties.obiettivi.items.properties.id.pattern)
+      const pattern = new RegExp(schema.properties.obiettivi.items!.properties!.id.pattern!)
       expect(obiettivi.length).toBeGreaterThanOrEqual(3)
       for (const obiettivo of obiettivi) {
         expect(obiettivo.id).toMatch(pattern)
