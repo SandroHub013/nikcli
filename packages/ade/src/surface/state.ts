@@ -485,17 +485,25 @@ export function deriveWorkspaces(
 ): Workspace[] {
   const workspaces: Record<string, Workspace> = {}
   // Two projects can end in the same folder name (`C:/a/app`, `D:/b/app`): the name is not what tells them apart, the
-  // root is (full review 2026-10-06, sessions 10). The row's id stays the name, unless another project has it too.
+  // root is (full review 2026-10-06, sessions 10). The row's id stays the name, unless another project has it too: then
+  // every one of them takes its root, so the ids do not swap when the recents are put in another order (review of F6c, N2).
   const byRoot = new Map<string, string>()
   const byName = new Map<string, string>()
+  const namesakes = new Map<string, Set<string>>()
+  for (const project of known) {
+    const roots = namesakes.get(project.name) ?? new Set<string>()
+    roots.add(rootKey(project.root))
+    namesakes.set(project.name, roots)
+  }
 
   for (const project of known) {
     const root = rootKey(project.root)
     if (byRoot.has(root)) continue
-    const taken = Object.prototype.hasOwnProperty.call(workspaces, project.name)
-    const id = taken ? project.root : project.name
+    const shared = (namesakes.get(project.name)?.size ?? 0) > 1
+    const id = shared ? project.root : project.name
     byRoot.set(root, id)
-    if (!taken) byName.set(project.name, id)
+    // A pane that knows only the name goes to the first project of that name, as it always did.
+    if (!byName.has(project.name)) byName.set(project.name, id)
     workspaces[id] = {
       id,
       name: project.name,

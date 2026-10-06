@@ -57,6 +57,17 @@ describe("deriveWorkspaces", () => {
     expect(first?.name).toBe("app")
   })
 
+  // Review of F6c, N2.
+  test("the ids of two projects with the same name are the same whatever the order of the list", () => {
+    const one = { root: "C:/a/app", name: "app" }
+    const two = { root: "D:/b/app", name: "app" }
+    const idsOf = (known: typeof one[]) => Object.fromEntries(deriveWorkspaces([], known).map((r) => [r.path, r.id]))
+    expect(idsOf([one, two])).toEqual(idsOf([two, one]))
+    expect(idsOf([one, two])).toEqual({ "C:/a/app": "C:/a/app", "D:/b/app": "D:/b/app" })
+    // A name that is alone keeps being the id.
+    expect(idsOf([one, { root: "C:/c/solo", name: "solo" }])["C:/c/solo"]).toBe("solo")
+  })
+
   test("a pane of an unlisted folder with a name already in use gets its own row", () => {
     const rows = deriveWorkspaces([{ ...pane("p1", "app"), projectRoot: "E:/c/app" }], [{ root: "C:/a/app", name: "app" }])
     expect(rows).toHaveLength(2)
