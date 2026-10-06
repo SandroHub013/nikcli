@@ -34,17 +34,17 @@ jobs:
       # shipping the plain list in silence (`nikverse/release-env.test.ts`).
       NIKVERSE_WORLD_REQUIRED: "1"
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - uses: ./.github/actions/setup-bun
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
         with:
           targets: aarch64-apple-darwin
 
       - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: packages/ade/src-tauri -> target
           key: aarch64-apple-darwin
@@ -84,7 +84,7 @@ jobs:
           ditto -c -k --keepParent "$BUNDLE/macos/ADE.app" "$STAGE/ADE-aarch64-apple-darwin.app.zip"
           ls -la "$STAGE"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ADE-macos-arm64
           path: ade-macos

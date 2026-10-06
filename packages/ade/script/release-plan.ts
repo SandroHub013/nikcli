@@ -2,7 +2,7 @@
 /**
  * Git plumbing around `src/update/release-plan.ts`, for the ADE workflows.
  *
- *   bun packages/ade/script/release-plan.ts plan [--min-age-hours N] [--skip-shas FILE] [--major-shas FILE]
+ *   bun packages/ade/script/release-plan.ts plan [--min-age-hours N] [--skip-shas FILE] [--major-shas FILE] [--published-tags FILE]
  *   bun packages/ade/script/release-plan.ts check <from>..<to>
  *   bun packages/ade/script/release-plan.ts notes <from> <to>
  *
@@ -73,9 +73,16 @@ function commits(range: string): Commit[] {
     })
 }
 
-function lastTag(): string | undefined {
+/**
+ * The newest `ade-v*` tag HEAD contains. With `published`, only a tag whose release is public counts.
+ *
+ * `ade-auto-release` pushes the tag before the release is built. A build that fails leaves the tag and a
+ * draft: counted as the base, the next run saw «nothing to release» and the commits of the lost release
+ * never went out (full review 2026-10-06, ui 5). The workflow passes the tags of the public releases.
+ */
+function lastTag(published?: ReadonlySet<string>): string | undefined {
   const tags = git("tag", "--list", "ade-v*", "--merged", "HEAD", "--sort=-v:refname").split("\n").filter(Boolean)
-  return tags[0]
+  return tags.find((tag) => !published || published.has(tag))
 }
 
 function shas(flag: string, argv: string[]): Set<string> {
@@ -98,7 +105,16 @@ function output(values: Record<string, string>) {
 }
 
 function plan(argv: string[]) {
-  const last = lastTag()
+  // The flag given and the file missing is a refusal, not «every tag»: a workflow that could not list the
+  // releases must not fall back to counting an unreleased tag.
+  const publishedFlag = argv.indexOf("--published-tags")
+  const publishedFile = publishedFlag >= 0 ? argv[publishedFlag + 1] : undefined
+  if (publishedFlag >= 0 && (!publishedFile || !existsSync(publishedFile))) {
+    console.error("--published-tags needs the file of public release tags")
+    process.exit(2)
+  }
+  const published = publishedFile ? new Set(readFileSync(publishedFile, "utf8").split(/\s+/).filter(Boolean)) : undefined
+  const last = lastTag(published)
   const skip = shas("--skip-shas", argv)
   const major = shas("--major-shas", argv)
   const list = commits(last ? `${last}..HEAD` : "HEAD").map((c) => ({
@@ -160,7 +176,7 @@ else if (command === "check") check(rest[0])
 else if (command === "notes" && rest[0] && rest[1]) console.log(releaseNotes(commits(`${rest[0]}..${rest[1]}`)))
 else {
   console.error(
-    "usage: release-plan.ts plan [--min-age-hours N] [--skip-shas FILE] [--major-shas FILE] | check <range> | notes <from> <to>",
+    "usage: release-plan.ts plan [--min-age-hours N] [--skip-shas FILE] [--major-shas FILE] [--published-tags FILE] | check <range> | notes <from> <to>",
   )
   process.exit(2)
 }
