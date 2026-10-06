@@ -317,7 +317,7 @@ export function createWarmClaude(deps: TurnDeps & { idleMs?: number } = {}): War
             }
             case "exit":
               if (talk.status !== "error") {
-                update(applyProblem(talk, `${runner.label} si è chiuso prima di rispondere.`, Date.now()))
+                update(applyProblem(talk, t("bots.closedBeforeReply", runner.label), Date.now()))
               }
               return finish("error", talk.problem ?? talk.messages.at(-1)?.text)
             case "done":

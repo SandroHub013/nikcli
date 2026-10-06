@@ -140,6 +140,7 @@ export const it = {
   "stats.ram": (who: string, size: string) => `RAM occupata da ${who}: ${size}`,
   "stats.mem": (total: string) => `Quota della memoria del computer (${total}) usata da ADE`,
   "newPane.session": "Sessione",
+  "newPane.browser": "Browser",
   "paneTitle.agent": "Sessione",
   "paneTitle.reviewer": "Revisione",
   "paneTitle.shell": "Terminale",
@@ -2152,6 +2153,82 @@ export const it = {
   "bots.settings.unsaved": "Modifiche non salvate.",
   "bots.settings.saving": "Salvataggio…",
   "bots.settings.save": "Salva",
+
+  // F7a: Worktree close reasons
+  "worktree.close.statusError": (title: string, worktree: string) => `"${title}": git non riesce a dire se ci sono modifiche in ${worktree}`,
+  "worktree.close.uncommitted": (title: string, worktree: string) => `"${title}" ha modifiche non committate in ${worktree}`,
+  "worktree.close.unknownBranch": (title: string, branch: string) => `"${title}": non so su quale branch di ADE lavora (${branch}), non posso dire se il lavoro è integrato`,
+  "worktree.close.none": "nessuno",
+  "worktree.close.mergedCheckError": (title: string, branch: string) => `"${title}": git non riesce a dire se il branch ${branch} è integrato`,
+  "worktree.close.unmerged": (title: string, branch: string) => `"${title}" ha commit sul branch ${branch} non ancora integrati`,
+  "worktree.close.noRescue": "questo host non può mettere al sicuro i rapporti della sessione",
+  "worktree.close.noRoot": (title: string, worktree: string) => `"${title}": non trovo il progetto da cui è nata la worktree ${worktree}`,
+  "worktree.close.rescueFailed": (title: string, worktree: string, error: string) => `"${title}": non riesco a mettere al sicuro i rapporti della sessione, la worktree resta in ${worktree} (${error})`,
+  "worktree.close.gitRefused": "git ha rifiutato",
+  "worktree.close.removeFailed": (title: string, worktree: string, error: string) => `"${title}": git non toglie ${worktree} (${error})`,
+
+  // F7a: Pane actions and workbench
+  "pane.retry": "Riprova",
+  "record.pickDirTitle": "Dove salvare i video registrati",
+  "pane.simulator.title": "Simulatore",
+  "pane.mcpGuide.title": "Guida MCP",
+  "pane.tree.workingIn": (cwd: string) => `Lavora in ${cwd}`,
+  "pane.tree.worktree": (path: string) => `Worktree ${path}`,
+  "bell.unread": (n: number) => `Notifiche, ${n} da leggere`,
+
+  // F7a: Grid and pane details
+  "grid.zone.before": "Prima",
+  "grid.zone.after": "Dopo",
+  "grid.zone.above": "Sopra",
+  "grid.zone.below": "Sotto",
+  "grid.zone.swap": "Scambia",
+  "pane.elapsed": (elapsed: string) => ` · da ${elapsed}`,
+  "pane.repeatCount": (n: number) => `Ripetuta ${n} volte`,
+
+  // F7a: Host selectors and commands
+  "project.open.title": "Apri progetto",
+  "host.commandNotAllowed": (cmd: string) => `comando non consentito: ${cmd}`,
+  "host.pickDirectory": "Scegli cartella",
+  "host.pickFile": "Scegli file",
+
+  // F7a: Bots
+  "bots.didNotReply": (label: string) => `${label} non ha risposto.`,
+  "bots.closedBeforeReply": (label: string) => `${label} si è chiuso prima di rispondere.`,
+  "bots.unknownError": "Errore sconosciuto.",
+  "bots.provider.desktopOnly": "Solo nell'app desktop.",
+  "bots.provider.notInstalled": "Non installato.",
+  "bots.provider.statusUnavailable": "Stato non disponibile.",
+  "bots.provider.noStatusReply": "Nessuna risposta dal comando di stato.",
+  "bots.alreadyExists": (identifier: string) => `Esiste già un bot con identificativo «${identifier}».`,
+  "bots.defaultDescription": (name: string) => `Bot «${name}».`,
+  "bots.terms.codexNoCost": "Codex non riporta un costo, quindi il tetto di spesa non si può controllare",
+  "bots.terms.xaiNotRead": "i termini xAI non sono stati letti",
+  "bots.terms.runnerCannotRunRoutines": "questo runner non può eseguire routine",
+  "bots.room.few": (min: number) => `Servono almeno ${min} bot: con uno solo è una chat.`,
+  "bots.room.many": (max: number) => `Al massimo ${max} bot: oltre, un messaggio ne produce troppi.`,
+  "bots.room.duplicate": "Lo stesso bot è stato aggiunto due volte.",
+
+  // F7a: Plugins
+  "plugin.source.internal": "interno",
+  "plugin.source.project": "progetto",
+  "plugin.title": "Plugin",
+  "plugin.command.showLoaded": "Mostra i plugin caricati",
+  "plugins.error.alreadyLoaded": "un plugin con questo id è già caricato",
+  "plugins.error.notAuthorized": "non autorizzato per questo progetto",
+  "plugins.error.notV2": "il modulo non esporta un plugin v2 (manca l'export default con id e setup)",
+
+  // F7a: Record
+  "record.export.cancelled": "Esportazione annullata.",
+
+  // F7a: 3D Model state
+  "model.state.noModel": "nessun modello aperto",
+  "model.state.loading": (source: string) => `${source} — in caricamento`,
+  "model.state.error": (source: string, error: string) => `${source} — errore: ${error}`,
+  "model.state.meshes": (count: string) => `${count} mesh`,
+  "model.state.triangles": (count: string) => `${count} triangoli`,
+  "model.state.dimensions": (x: string, y: string, z: string) => `ingombro ${x} × ${y} × ${z}`,
+  "model.state.animations": (count: number) => `${count} animazioni`,
+  "pane.runnerLogin": (label: string) => `${label} · accesso`,
 }
 
 /** The shape every catalog has: the same keys, the same parameters. */

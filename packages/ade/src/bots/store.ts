@@ -300,13 +300,13 @@ async function writeBot(
    * nobody notices until the bot answers differently.
    */
   if (await host.exists?.(path)) {
-    return { ok: false, problem: `Esiste già un bot con identificativo «${identifier}».` }
+    return { ok: false, problem: t("bots.alreadyExists", identifier) }
   }
 
   const failure = await host.writeTextFile(
     path,
     serializeAgentFile({
-      description: input.description || `Bot «${input.name}».`,
+      description: input.description || t("bots.defaultDescription", input.name),
       mode: input.mode,
       ...(input.model ? { model: input.model } : {}),
       ...(input.effort ? { effort: input.effort } : {}),

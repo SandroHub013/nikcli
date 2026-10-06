@@ -10,6 +10,7 @@ import {
   activeElapsed,
   sumMetrics,
 } from "./metrics"
+import { setLocalePreference } from "../i18n"
 
 describe("formatDuration", () => {
   test("seconds only", () => {
@@ -58,6 +59,16 @@ describe("formatTokens", () => {
     expect(formatTokens(1_300_000)).toBe("1,3M")
   })
 
+  test("thousands and millions with English dot when locale is English", () => {
+    setLocalePreference("en")
+    try {
+      expect(formatTokens(2_100)).toBe("2.1k")
+      expect(formatTokens(1_300_000)).toBe("1.3M")
+    } finally {
+      setLocalePreference("it")
+    }
+  })
+
   test("negative and non-finite inputs", () => {
     expect(formatTokens(-1)).toBe("0")
     expect(formatTokens(NaN)).toBe("0")
@@ -70,6 +81,16 @@ describe("formatCost", () => {
     expect(formatCost(0.42)).toBe("$0,42")
     expect(formatCost(12)).toBe("$12,00")
     expect(formatCost(1.5)).toBe("$1,50")
+  })
+
+  test("formats with English dot when locale is English", () => {
+    setLocalePreference("en")
+    try {
+      expect(formatCost(0.42)).toBe("$0.42")
+      expect(formatCost(12)).toBe("$12.00")
+    } finally {
+      setLocalePreference("it")
+    }
   })
 
   test("negative and non-finite inputs", () => {

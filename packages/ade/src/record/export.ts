@@ -295,7 +295,7 @@ async function render(input: ExportInput, cleanup: ReturnType<typeof createClean
   const done = new Promise<void>((resolve, reject) => {
     const tick = () => {
       if (!running) return
-      if (input.signal?.aborted) return reject(new Error("Esportazione annullata."))
+      if (input.signal?.aborted) return reject(new Error(t("record.export.cancelled")))
       draw()
       if (!video.ended) requestAnimationFrame(tick)
     }

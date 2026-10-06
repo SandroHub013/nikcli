@@ -430,6 +430,7 @@ import type { InstallProgress, PackStatus } from "@nikcli-ai/voice"
 import type { KeyDraft, KeyInfo } from "../secrets/keys"
 import type { QualityLevel, RecordTarget, RecordingState } from "../record/recording"
 import type { AssetsStatus } from "../nikverse/assets"
+import { t } from "../i18n"
 
 const inTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)
@@ -476,7 +477,7 @@ export async function getHost(): Promise<Host | undefined> {
        * any argument at all, and `git -c core.pager=<anything>` runs anything.
        */
       if (command !== "git") {
-        return { code: null, stdout: "", stderr: `comando non consentito: ${command}` }
+        return { code: null, stdout: "", stderr: t("host.commandNotAllowed", command) }
       }
 
       const { invoke } = await import("@tauri-apps/api/core")
@@ -1003,7 +1004,7 @@ export async function getHost(): Promise<Host | undefined> {
     async pickDirectory(title) {
       try {
         const { open } = await import("@tauri-apps/plugin-dialog")
-        const selected = await open({ directory: true, title: title ?? "Scegli cartella" })
+        const selected = await open({ directory: true, title: title ?? t("host.pickDirectory") })
         // open() returns string | string[] | null depending on `multiple`
         if (typeof selected === "string") return selected
         return undefined
@@ -1018,7 +1019,7 @@ export async function getHost(): Promise<Host | undefined> {
         const selected = await open({
           directory: false,
           multiple: false,
-          title: options?.title ?? "Scegli file",
+          title: options?.title ?? t("host.pickFile"),
           ...(options?.filters ? { filters: options.filters } : {}),
         })
         if (typeof selected === "string") return selected

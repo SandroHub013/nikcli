@@ -164,11 +164,11 @@ export function roomProblem(memberIds: readonly string[]): RoomProblem | undefin
 export function describeProblem(problem: RoomProblem): string {
   switch (problem) {
     case "troppo-pochi":
-      return `Servono almeno ${MIN_MEMBERS} bot: con uno solo è una chat.`
+      return t("bots.room.few", MIN_MEMBERS)
     case "troppi":
-      return `Al massimo ${MAX_MEMBERS} bot: oltre, un messaggio ne produce troppi.`
+      return t("bots.room.many", MAX_MEMBERS)
     case "duplicati":
-      return "Lo stesso bot è stato aggiunto due volte."
+      return t("bots.room.duplicate")
   }
 }
 
