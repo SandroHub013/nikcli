@@ -101,6 +101,11 @@ To release, the maintainer runs **ade-auto-release** from the Actions tab
 (`min_age_hours: 0`; `dry_run` shows the plan without tagging), or pushes a
 tag: `git tag -a ade-vX.Y.Z -m "ADE X.Y.Z" && git push origin ade-vX.Y.Z`.
 
+After merging a release of nikcli/nikcli into `feat/ade`, add its sha to
+`packages/ade/release/upstream-bases.txt` (one full sha per line, a `#` comment
+after it). `check`, `plan` and `notes` skip everything reachable from those
+commits, so Nik's `release:` and `Revert` subjects are not read as ours.
+
 To see what the next release would be, locally:
 
 ```bash
