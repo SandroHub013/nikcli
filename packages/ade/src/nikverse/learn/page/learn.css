@@ -13,6 +13,7 @@
   --radius-lg: 8px;
   /* The name every ADE sheet draws its focus with; here it is the page's own, since the frame has none of ADE's tokens. */
   --ade-focus-ring: 0 0 0 2px var(--accent);
+  --ade-weight-semibold: 600;
 }
 
 @media (prefers-color-scheme: light) {
@@ -80,6 +81,18 @@ h2 {
   display: none;
 }
 
+.percorsi {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-bottom: 0.75rem;
+}
+
+.percorsi button[data-attivo="1"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
 .lesson {
   display: flex;
   align-items: center;
@@ -136,7 +149,7 @@ h2 {
 
 .consegna {
   margin: 0 0 0.75rem;
-  font-weight: 600;
+  font-weight: var(--ade-weight-semibold);
 }
 
 .opzioni {

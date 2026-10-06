@@ -138,6 +138,12 @@ export function nextInterval(record, ok, difficolta) {
   return Math.min(MAX_INTERVAL, Math.round(precedente * crescita))
 }
 
+/** The key under which an exercise is kept in the progress: the lesson's id and the exercise's, so paths never collide. */
+export function exerciseKey(lezione, esercizio) {
+  const lezioneId = typeof lezione === "string" ? lezione : lezione?.id ?? ""
+  return `${lezioneId}#${esercizio.id}`
+}
+
 /**
  * The progress after one answer: the XP, the day, and how far the exercise now rests.
  *
@@ -146,20 +152,31 @@ export function nextInterval(record, ok, difficolta) {
  *
  * @returns {Progress}
  */
-export function recordAnswer(progress, esercizio, ok, oggi) {
-  const prima = progress.esercizi[esercizio.id] ?? { viste: 0, giuste: 0, intervallo: 0 }
-  const intervallo = nextInterval(prima, ok, esercizio.difficolta)
+export function recordAnswer(progress, lezione, esercizio, ok, oggi) {
+  let l = lezione
+  let e = esercizio
+  let o = ok
+  let d = oggi
+  if (typeof o === "string" || (o === undefined && typeof e === "boolean")) {
+    d = o
+    o = e
+    e = l
+    l = e._lezione ?? e.lezione ?? ""
+  }
+  const key = exerciseKey(l, e)
+  const prima = progress.esercizi[key] ?? { viste: 0, giuste: 0, intervallo: 0 }
+  const intervallo = nextInterval(prima, o, e.difficolta)
   return {
     v: PROGRESS_VERSION,
-    xp: progress.xp + xpFor(ok, esercizio.difficolta),
-    giorni: progress.giorni.includes(oggi) ? progress.giorni : [...progress.giorni, oggi].sort(),
+    xp: progress.xp + xpFor(o, e.difficolta),
+    giorni: progress.giorni.includes(d) ? progress.giorni : [...progress.giorni, d].sort(),
     esercizi: {
       ...progress.esercizi,
-      [esercizio.id]: {
+      [key]: {
         viste: prima.viste + 1,
-        giuste: prima.giuste + (ok ? 1 : 0),
+        giuste: prima.giuste + (o ? 1 : 0),
         intervallo,
-        dovuta: addDays(oggi, intervallo),
+        dovuta: addDays(d, intervallo),
       },
     },
   }
@@ -170,7 +187,7 @@ export function dueReview(progress, lezioni, oggi) {
   const scaduti = []
   for (const lezione of lezioni) {
     for (const esercizio of lezione.esercizi) {
-      const record = progress.esercizi[esercizio.id]
+      const record = progress.esercizi[exerciseKey(lezione, esercizio)]
       if (record?.dovuta && record.dovuta <= oggi) scaduti.push({ lezione, esercizio })
     }
   }
@@ -383,6 +400,7 @@ export async function boot(win) {
     summary.textContent = `${stato.progress.xp} XP · livello ${levelFor(stato.progress.xp)} · serie di ${serie.giorni} ${serie.giorni === 1 ? "giorno" : "giorni"}`
   }
 
+  const tutteLeLezioni = () => stato.contenuti?.percorsi?.flatMap((p) => p.lezioni) ?? []
   const lezioniDi = () => stato.contenuti?.percorsi[stato.percorso]?.lezioni ?? []
 
   const comincia = (esercizi, lezione) => {
@@ -401,15 +419,37 @@ export async function boot(win) {
   /** The lessons of the path, and the ripasso when something is waiting. */
   const lista = () => {
     const percorso = stato.contenuti.percorsi[stato.percorso]
-    const scaduti = dueReview(stato.progress, lezioniDi(), todayOf(win))
-    const figli = [el(doc, "h2", { text: percorso.titolo })]
+    const scaduti = dueReview(stato.progress, tutteLeLezioni(), todayOf(win))
+    const figli = []
+    if (stato.contenuti.percorsi.length > 1) {
+      const selettore = el(doc, "div", { class: "percorsi", role: "tablist", "aria-label": "Percorsi" })
+      stato.contenuti.percorsi.forEach((p, idx) => {
+        selettore.append(
+          azione(
+            doc,
+            p.titolo,
+            () => {
+              stato.percorso = idx
+              disegna()
+            },
+            {
+              role: "tab",
+              "aria-selected": idx === stato.percorso ? "true" : "false",
+              "data-attivo": idx === stato.percorso ? "1" : undefined,
+            },
+          ),
+        )
+      })
+      figli.push(selettore)
+    }
+    figli.push(el(doc, "h2", { text: percorso.titolo }))
     if (scaduti.length > 0) {
       figli.push(
         azione(
           doc,
           `Ripasso: ${scaduti.length} esercizi ti aspettano`,
           () => {
-            comincia(scaduti.map((voce) => voce.esercizio))
+            comincia(scaduti.map((voce) => Object.assign({}, voce.esercizio, { _lezione: voce.lezione })))
             disegna()
           },
           { class: "principale" },
@@ -417,7 +457,7 @@ export async function boot(win) {
       )
     }
     lezioniDi().forEach((lezione, n) => {
-      const visti = lezione.esercizi.filter((esercizio) => stato.progress.esercizi[esercizio.id]).length
+      const visti = lezione.esercizi.filter((esercizio) => stato.progress.esercizi[exerciseKey(lezione, esercizio)]).length
       figli.push(
         azione(
           doc,
@@ -468,7 +508,7 @@ export async function boot(win) {
           doc,
           ultima ? "Vai agli esercizi" : "Continua",
           () => {
-            if (ultima) comincia(shuffle(lezione.esercizi, seedOf(lezione.id) + stato.tentativo))
+            if (ultima) comincia(shuffle(lezione.esercizi, seedOf(lezione.id) + stato.tentativo).map((es) => Object.assign({}, es, { _lezione: lezione })))
             else stato.indice = n + 1
             disegna()
           },
@@ -614,7 +654,8 @@ export async function boot(win) {
       if (esito.ok) stato.giuste += 1
       else stato.sbagliate += 1
       stato.xp += xpFor(esito.ok, voce.difficolta)
-      stato.progress = recordAnswer(stato.progress, voce, esito.ok, todayOf(win))
+      const lezioneCorrente = voce._lezione ?? lezioniDi()[stato.lezione]
+      stato.progress = recordAnswer(stato.progress, lezioneCorrente, voce, esito.ok, todayOf(win))
       salvataggio()
       disegna()
     }
@@ -683,7 +724,7 @@ export async function boot(win) {
 
   /** The end of a lesson: what it cost and what it gave, and nothing about the next one. */
   const fine = () => {
-    const lezione = lezioniDi()[stato.lezione]
+    const lezione = stato.esercizi[0]?._lezione ?? lezioniDi()[stato.lezione]
     const serie = streak(stato.progress.giorni, todayOf(win))
     view.replaceChildren(
       el(

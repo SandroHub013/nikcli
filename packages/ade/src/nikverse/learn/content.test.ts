@@ -57,6 +57,19 @@ describe("content.json", () => {
       expect(String(fromFile(file).id)).toBe(`${theme}/${String(name).replace(/\.yaml$/, "")}`)
     }
   })
+
+  test("every exercise has a unique progress key across all lessons and percorsi", () => {
+    const content = convert(join(ROOT, "lezzioni"))
+    const keys: string[] = []
+    for (const percorso of content.percorsi) {
+      for (const lezione of percorso.lezioni) {
+        for (const esercizio of lezione.esercizi) {
+          keys.push(`${lezione.id}#${esercizio.id}`)
+        }
+      }
+    }
+    expect(new Set(keys).size).toBe(keys.length)
+  })
 })
 
 describe("a lesson is refused before it is ever served", () => {

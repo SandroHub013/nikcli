@@ -10,6 +10,7 @@ import {
   checkAnswer,
   dueReview,
   emptyProgress,
+  exerciseKey,
   isProgress,
   levelFor,
   nextInterval,
@@ -22,6 +23,11 @@ import {
   streak,
   xpFor,
 } from "./page/learn.js"
+
+if (typeof document === "undefined") {
+  const { GlobalRegistrator } = await import("@happy-dom/global-registrator")
+  GlobalRegistrator.register()
+}
 
 /**
  * The engine of «Impara», run without a page, the way `world.test.ts` runs the world's.
@@ -114,6 +120,11 @@ describe("the progress, from what came off the disk", () => {
     expect(isProgress({ v: 1 })).toBe(true)
     for (const rotta of [undefined, null, "{}", [], { v: 2 }, { xp: 1 }]) expect(isProgress(rotta)).toBe(false)
   })
+
+  test("every exercise has a unique progress key across all lessons and percorsi", () => {
+    const keys = content.percorsi.flatMap((p) => p.lezioni.flatMap((l) => l.esercizi.map((e) => exerciseKey(l, e))))
+    expect(new Set(keys).size).toBe(keys.length)
+  })
 })
 
 describe("the streak, read from the days at every opening", () => {
@@ -165,11 +176,13 @@ describe("what an answer is worth", () => {
 
   test("an answer moves the progress without touching the one it came from", () => {
     const prima = normalizeProgress({ v: 1, xp: 10, giorni: ["2026-10-05"], esercizi: {} })
+    const lezione = lezioni[0]
     const esercizio = esercizi[0]
-    const dopo = recordAnswer(prima, esercizio, true, "2026-10-06")
+    const dopo = recordAnswer(prima, lezione, esercizio, true, "2026-10-06")
+    const chiave = exerciseKey(lezione, esercizio)
     expect(dopo.xp).toBe(10 + xpFor(true, esercizio.difficolta))
     expect(dopo.giorni).toEqual(["2026-10-05", "2026-10-06"])
-    expect(dopo.esercizi[esercizio.id]).toEqual({
+    expect(dopo.esercizi[chiave]).toEqual({
       viste: 1,
       giuste: 1,
       intervallo: 1,
@@ -178,15 +191,25 @@ describe("what an answer is worth", () => {
     expect(prima.esercizi).toEqual({})
     expect(prima.giorni).toEqual(["2026-10-05"])
     // The same day twice is still one day.
-    expect(recordAnswer(dopo, esercizio, false, "2026-10-06").giorni).toEqual(["2026-10-05", "2026-10-06"])
+    expect(recordAnswer(dopo, lezione, esercizio, false, "2026-10-06").giorni).toEqual(["2026-10-05", "2026-10-06"])
   })
 
   test("the ripasso is the exercises whose day has come, and nothing that is not there", () => {
+    const lezione = lezioni[0]
     const esercizio = esercizi[0]
-    const progress = recordAnswer(emptyProgress(), esercizio, true, "2026-10-01")
+    const progress = recordAnswer(emptyProgress(), lezione, esercizio, true, "2026-10-01")
     expect(dueReview(progress, lezioni, "2026-10-01")).toEqual([])
-    expect(dueReview(progress, lezioni, "2026-10-02")).toEqual([{ lezione: lezioni[0], esercizio }])
-    expect(dueReview(progress, lezioni, "2026-11-01")).toEqual([{ lezione: lezioni[0], esercizio }])
+    expect(dueReview(progress, lezioni, "2026-10-02")).toEqual([{ lezione, esercizio }])
+    expect(dueReview(progress, lezioni, "2026-11-01")).toEqual([{ lezione, esercizio }])
+  })
+
+  test("exercises with the same local id across different lessons do not collide in progress or ripasso", () => {
+    const l1 = { id: "p1/01", esercizi: [{ id: "l01-e01", difficolta: 1 }] } as Lesson
+    const l2 = { id: "p2/01", esercizi: [{ id: "l01-e01", difficolta: 1 }] } as Lesson
+    const prog1 = recordAnswer(emptyProgress(), l1, l1.esercizi[0], true, "2026-10-01")
+    expect(dueReview(prog1, [l1, l2], "2026-10-02")).toEqual([{ lezione: l1, esercizio: l1.esercizi[0] }])
+    expect(prog1.esercizi[exerciseKey(l1, l1.esercizi[0])]).toBeDefined()
+    expect(prog1.esercizi[exerciseKey(l2, l2.esercizi[0])]).toBeUndefined()
   })
 })
 
@@ -254,7 +277,9 @@ describe("the presentation is mixed from a seed, not from luck", () => {
     expect(shuffle(lezione.esercizi, seedOf(lezione.id))).toEqual(primo)
     expect(shuffle(lezione.esercizi, seedOf(lezione.id) + 1)).not.toEqual(primo)
     // And the real ids give different orders, so the path is not a page that always looks the same.
-    expect(new Set(lezioni.map((voce) => shuffle(voce.esercizi, seedOf(voce.id))[0].id)).size).toBe(lezioni.length)
+    for (const percorso of content.percorsi) {
+      expect(new Set(percorso.lezioni.map((voce) => shuffle(voce.esercizi, seedOf(voce.id))[0].id)).size).toBe(percorso.lezioni.length)
+    }
   })
 })
 
@@ -423,7 +448,7 @@ describe("the page and ADE, over one port", () => {
     // A wrong answer is worth something too: two XP for having read why.
     expect(salvato.progress.xp).toBe(lezioni[0].esercizi.length * 2)
     expect(salvato.progress.giorni).toHaveLength(1)
-    expect(Object.keys(salvato.progress.esercizi)).toEqual([...visti])
+    expect(Object.keys(salvato.progress.esercizi)).toEqual([...visti].map((id) => `${lezioni[0].id}#${id}`))
     // The end of the lesson, and back to the list.
     expect(document.querySelector(".esercizio h2")?.textContent).toBe(`Fine di ${lezioni[0].titolo}`)
     expect(document.querySelector(".cifre")?.textContent).toContain("11")
