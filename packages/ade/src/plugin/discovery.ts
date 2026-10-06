@@ -161,7 +161,15 @@ function directoryOf(url: string): string {
 
 /** A `file://` URL back to something `read_text_file` will accept. */
 export function urlToPath(url: string): string {
-  const raw = decodeURIComponent(url.replace(/^file:\/\//, ""))
+  const encoded = url.replace(/^file:\/\//, "")
+  // A `%` that is not an escape (`100%/plugin.js`) makes `decodeURIComponent` throw, and with it the whole project's rows
+  // (full review 2026-10-06, bots): such a path is taken as it is written.
+  let raw = encoded
+  try {
+    raw = decodeURIComponent(encoded)
+  } catch {
+    // Not an escape: as written.
+  }
   // `file:///C:/x` leaves a leading slash in front of the drive letter, which
   // Windows will not open.
   return /^\/[A-Za-z]:/.test(raw) ? raw.slice(1) : raw

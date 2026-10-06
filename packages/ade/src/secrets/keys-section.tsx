@@ -454,7 +454,9 @@ export function KeyForm(props: {
 
   const submit = async (event: Event) => {
     event.preventDefault()
-    const value = valueField?.value ?? ""
+    // A key pasted with a space or a line break at its end is that key (full review 2026-10-06, bots): saved as it was it would
+    // fail at the provider with nothing to show why.
+    const value = (valueField?.value ?? "").trim()
     const problems = [
       props.existing ? undefined : nameProblem(name()),
       envProblem(effectiveEnv(), props.others, props.existing?.name ?? name()),

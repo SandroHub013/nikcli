@@ -44,6 +44,13 @@ describe("a check that fails", () => {
   })
 })
 
+describe("a `%` that is not an escape", () => {
+  test("is a path like any other, not an exception", () => {
+    expect(urlToPath("file:///C:/p/100%/plugin.js")).toBe("C:/p/100%/plugin.js")
+    expect(urlToPath("file:///C:/p/a%20b/plugin.js")).toBe("C:/p/a b/plugin.js")
+  })
+})
+
 describe("parseDeclaredPlugins", () => {
   test("reads the same `plugin` array the TUI reads, in both spec forms", () => {
     const text = JSON.stringify({ plugin: ["file:///a/b", ["file:///c", { token: 1 }]] })
