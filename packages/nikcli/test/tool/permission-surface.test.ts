@@ -76,12 +76,54 @@ async function registryIds(): Promise<Set<string>> {
 describe("permission and agent surfaces reference real tools", () => {
   it("every preset permission key maps to a tool or a documented non-tool permission", async () => {
     const ids = await registryIds()
+    // This guard used to assert a floor on the aggregate number of preset
+    // keys (>50 while the presets enumerated every tool, 33 after they
+    // stopped). That number tracked the size of the tool list: it moved
+    // whenever a tool was added or a preset changed, and the old floor was
+    // satisfied by a preset full of the very tool keys it should not have
+    // written. The exact key set each preset must write proves the same
+    // thing without depending on how many tools exist: nothing stale can
+    // creep in and nothing real can go missing.
+    const expectedKeys: Record<string, readonly string[]> = {
+      require_approval: ["plan_enter", "plan_exit", "question"],
+      full_access: ["plan_enter", "plan_exit", "question"],
+      approve_for_me: [
+        "bash",
+        "browser_control",
+        "codesearch",
+        "computer",
+        "doom_loop",
+        "edit",
+        "external_directory",
+        "generate_image",
+        "glob",
+        "grep",
+        "list",
+        "lsp",
+        "memory_search",
+        "plan_enter",
+        "plan_exit",
+        "plugin",
+        "question",
+        "read",
+        "repo_clone",
+        "skill",
+        "task",
+        "todoread",
+        "todowrite",
+        "tree",
+        "voice",
+        "webfetch",
+        "websearch",
+      ],
+    }
     const unknown: string[] = []
-    let checked = 0
     for (const preset of ["require_approval", "approve_for_me", "full_access"] as const) {
-      for (const key of Object.keys(permissionPresetPatch(preset))) {
-        if (key === "*") continue
-        checked++
+      const keys = Object.keys(permissionPresetPatch(preset))
+        .filter((key) => key !== "*")
+        .sort()
+      expect(keys).toEqual([...expectedKeys[preset]].sort())
+      for (const key of keys) {
         if (ids.has(key) || NON_TOOL_PERMISSIONS.has(key) || FLAG_GATED.has(key)) continue
         // `question` is registered only for app/cli/desktop clients.
         if (key === "question") continue
@@ -89,11 +131,6 @@ describe("permission and agent surfaces reference real tools", () => {
       }
     }
     expect(unknown).toEqual([])
-    // Guard the guard: an empty preset would satisfy the assertion above. The
-    // floor is the shape the presets now have by design: 3 keys for
-    // full_access (the internal denies), 3 for require_approval, and 27 for
-    // approve_for_me (32 entries minus the 5 wildcard-covered allow rules).
-    expect(checked).toBeGreaterThanOrEqual(33)
   })
 
   it("every subagent toolset entry names a real tool", async () => {
