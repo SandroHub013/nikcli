@@ -1913,6 +1913,16 @@ export namespace Config {
             .boolean()
             .optional()
             .describe("Ship only the core toolset; reach the rest with search_tools + call_tool (default: true)"),
+          /**
+           * How much of the core toolset the model's schema carries. `default` is the shipped set; `a1` also
+           * defers lsp, webfetch, skill, todoread, todowrite, grep and glob; `t5` keeps only read, bash,
+           * apply_patch (edit/write on models that use them), search_tools and call_tool. Deferred tools stay
+           * reachable through search_tools + call_tool. The NIKCLI_TOOLSET environment variable wins.
+           */
+          toolset: z
+            .enum(["default", "a1", "t5"])
+            .optional()
+            .describe("Tool schema size: default, a1 (7 rarely used tools deferred) or t5 (read, bash, patch/edit/write, search_tools, call_tool)"),
           rateLimitBudgetMs: z
             .number()
             .int()

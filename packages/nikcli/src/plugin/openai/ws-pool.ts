@@ -65,7 +65,10 @@ export function createWebSocketFetch(options?: CreateWebSocketFetchOptions) {
       return httpFetch(input, httpInit)
     }
 
-    const sessionID = internalHeaders["x-session-affinity"] ?? internalHeaders["session-id"]
+    // `session_id` is the header the Codex request already carries (LLM.buildRequestHeaders): without it here every
+    // request of a headless `nikcli run` fell back to HTTP with reason "missing_session".
+    const sessionID =
+      internalHeaders["x-session-affinity"] ?? internalHeaders["session-id"] ?? internalHeaders["session_id"]
     if (!sessionID) {
       log.debug("http fallback", { reason: "missing_session" })
       return httpFetch(input, httpInit)
