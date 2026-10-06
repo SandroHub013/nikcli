@@ -6,7 +6,7 @@
  * asks about every command on the phone. Offered for nikcli only: Claude Code
  * and Codex cannot ask mid-turn, and from a chat they never have a shell.
  *
- * Kept in the renderer's storage, by the bot file's path: a file cannot turn
+ * Kept in the renderer's storage, by the bot file's path and the platform (`remoteKey`): a file cannot turn
  * it on for itself, a repository least of all. With the file's fingerprint as
  * it was when the owner said yes: another file at the same path (a checkout,
  * an edit) finds it off (G5 review, BASSO 1).
@@ -26,6 +26,16 @@ export interface RemoteStore {
 }
 
 export const REMOTE_OFF: RemoteTools = { commands: false }
+
+/**
+ * Where the switch is kept: the bot AND the platform. The owner says yes on one card, and the question they read
+ * names that platform («ogni comando arriva su Telegram»); a key by bot alone made the yes hold on Discord and
+ * Slack too, in a public channel, with the commands' text posted there (full review 2026-10-06, bots 12). What was
+ * saved by the bot alone before is not found by this key: it is off, and the owner says yes again where they want it.
+ */
+export function remoteKey(bot: string, platform: string): string {
+  return `${bot}\n${platform}`
+}
 
 /** The tools of a turn of the bot whose file is now `fingerprint`: on only for the file said yes to. */
 export function remoteTools(setting: RemoteSetting | undefined, fingerprint: string | undefined): RemoteTools {
