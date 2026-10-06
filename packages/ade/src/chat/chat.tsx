@@ -47,7 +47,7 @@ import {
   mentionCandidates,
   type Attachment,
 } from "./attachments"
-import { composerAction, liveAnnouncement } from "./composer"
+import { composerAction, liveAnnouncement, settleSend, type ComposerMoment } from "./composer"
 import { forgetLegacyConversation } from "./legacy"
 import { requestProblem, retryNotice } from "./errors"
 import { answerUsage, answerUsageText, sessionUsage, sessionUsageText } from "./usage"
@@ -386,6 +386,13 @@ export function Chat(props: ChatProps) {
   const send = async () => {
     const text = draft().trim()
     if (!text || !canSend()) return
+    const moment = (): ComposerMoment => ({
+      draft: draft(),
+      attachments: attachments(),
+      folder: props.projectRoot,
+      session: open(),
+    })
+    const sent = moment()
     setSending(true)
     setProblem(undefined)
     try {
@@ -398,9 +405,10 @@ export function Chat(props: ChatProps) {
       // Only a level this model has: the chip cannot choose another, and one saved for another model is not sent.
       const variant = effortValue(effort(), levels()) || undefined
       const id = await store.send(open(), text, ref, agent() || undefined, attachmentParts(attachments()), variant)
-      setCurrent(id)
-      setDraft("")
-      setAttachments([])
+      const after = settleSend(sent, moment())
+      if (after.follow) setCurrent(id)
+      if (after.clearDraft) setDraft("")
+      setAttachments(after.attachments)
     } catch (error) {
       setProblem(requestProblem(error))
     } finally {
