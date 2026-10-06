@@ -559,8 +559,10 @@ const CLIPBOARD_CLEAR_SECS: u64 = 45;
 ///
 /// On Windows through `arboard` with the three exclusions: the plugin's `write_text` sets no flag, so with Win+V or
 /// the synchronised clipboard on, the key stayed in the history, and on the user's other devices, long after the
-/// clear below (full review 2026-10-06, bots 11). Elsewhere it is the plugin's write as before: macOS has no such
-/// flag in `arboard`, and on Linux the owner of the selection must stay alive to serve it.
+/// clear below (full review 2026-10-06, bots 11). Elsewhere it is the plugin's write as before, for now: `arboard`
+/// has the exclusion on macOS (`SetExtApple::exclude_from_history`) and on Linux (`SetExtLinux`) too, so those two
+/// are left to do, not impossible: on macOS the flag is all it takes, on Linux the `Clipboard` that writes must stay
+/// alive in the app's state for as long as the key is on the clipboard.
 #[cfg(windows)]
 fn write_secret(_app: &AppHandle, text: &str) -> Result<(), String> {
     write_excluded(text)
