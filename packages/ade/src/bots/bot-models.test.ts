@@ -12,13 +12,14 @@ const TEXT = [
 ].join("\n")
 
 function deps(over: Partial<BotModelsDeps> = {}) {
-  const reads: (string | undefined)[] = []
+  const reads: string[] = []
   const opened: string[] = []
   const value: BotModelsDeps = {
     openCatalog: async (cwd) => {
       opened.push(cwd)
       return undefined
     },
+    homeDir: async () => "C:/Users/u",
     readCatalog: async (cwd) => {
       reads.push(cwd)
       return { ok: true, text: TEXT }
@@ -30,11 +31,11 @@ function deps(over: Partial<BotModelsDeps> = {}) {
 }
 
 describe("the model menu of a bot form", () => {
-  test("with no server open on the folder, nikcli models runs with no folder at all", async () => {
+  test("with no server open on the folder, nikcli models runs in the home, not in the folder nor ADE's own", async () => {
     const { value, reads, opened } = deps()
     const read = await readBotModels("C:/clonato/repo", value)
     expect(opened).toEqual(["C:/clonato/repo"])
-    expect(reads).toEqual([undefined])
+    expect(reads).toEqual(["C:/Users/u"])
     expect(read.ok).toBe(true)
   })
 
@@ -42,7 +43,14 @@ describe("the model menu of a bot form", () => {
     const { value, reads, opened } = deps()
     await readBotModels("", value)
     expect(opened).toEqual([])
-    expect(reads).toEqual([undefined])
+    expect(reads).toEqual(["C:/Users/u"])
+  })
+
+  test("a host that cannot say its home runs nothing: no folder means ADE's start folder", async () => {
+    const { value, reads } = deps({ homeDir: async () => undefined })
+    const read = await readBotModels("C:/clonato/repo", value)
+    expect(read.ok).toBe(false)
+    expect(reads).toEqual([])
   })
 
   test("with the server open on the folder, the Chat's catalog answers and nikcli is not run", async () => {

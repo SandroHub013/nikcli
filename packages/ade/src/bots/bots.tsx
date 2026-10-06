@@ -338,7 +338,8 @@ async function botModels(cwd: string): Promise<ModelRead> {
       if (!isOpenOn(chat, folder)) return undefined
       return (await chat.catalog().catch(() => undefined))?.configProviders
     },
-    readCatalog: (folder) => readModelCatalog(undefined, folder),
+    homeDir: async () => (await getHost())?.homeDir?.(),
+    readCatalog: (home) => readModelCatalog(undefined, home),
   })
 }
 
