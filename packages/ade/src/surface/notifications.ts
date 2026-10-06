@@ -76,8 +76,12 @@ export function addNotice(list: readonly Notice[], input: NoticeInput): Notice[]
     return [{ ...previous, at: input.at }, ...list.slice(1)]
   }
 
+  // The length alone repeats once the list is full (it stays at the limit): two notices of the same millisecond would share an
+  // id, and the ✕ of one would take both (full review 2026-10-06, sessions).
+  let id = `n${input.at}-${list.length}`
+  for (let n = 1; list.some((other) => other.id === id); n++) id = `n${input.at}-${list.length}-${n}`
   const notice: Notice = {
-    id: `n${input.at}-${list.length}`,
+    id,
     kind: input.kind,
     text: input.text,
     ...(input.paneId !== undefined ? { paneId: input.paneId } : {}),

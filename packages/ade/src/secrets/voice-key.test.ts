@@ -87,6 +87,14 @@ describe("the voice's key moves into the keychain", () => {
     expect(legacy.value()).toBe("sk-or-finta-1111")
   })
 
+  test("a refusal the host sends as a code is told in the interface's language (F7b)", async () => {
+    const keychain = fakeKeychain()
+    keychain.refuseWith("key.keychain.refused")
+    const legacy = fakeLegacy("sk-or-finta-1111")
+    const outcome = await migrateVoiceKey(keychain.host, legacy)
+    expect(outcome).toEqual({ kind: "failed", reason: "il portachiavi di sistema ha rifiutato l'operazione" })
+  })
+
   test("nothing in the browser is nothing to do", async () => {
     const keychain = fakeKeychain()
     expect(await migrateVoiceKey(keychain.host, fakeLegacy())).toEqual({ kind: "none" })

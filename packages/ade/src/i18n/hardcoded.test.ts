@@ -49,6 +49,9 @@ const SINKS = new Set([
   "setLoadError",
   "setVoiceNotice",
   "setVoiceSettingsNotice",
+  "setListenWarning",
+  "stopListening",
+  "noteError",
   "pickDirectory",
 ])
 

@@ -69,12 +69,15 @@ export function parseSubject(subject: string): ParsedSubject | undefined {
 }
 
 /**
- * Subjects that break the format, with the reason. Merge commits are git's
- * own wording and are left alone.
+ * Git's own wording: merge commits, `git revert`'s `Revert "…"` / `Reapply "…"` and the `fixup!` / `squash!` / `amend!`
+ * lines of an autosquash. None asks for a release, since `parseSubject` does not read them (full review 2026-10-06, ui 16).
  */
+const GIT_OWN_SUBJECT = /^(?:Merge |(?:Revert|Reapply) "|(?:fixup|squash|amend)! )/
+
+/** Subjects that break the format, with the reason; git's own wording is left alone. */
 export function invalidSubjects(commits: readonly Commit[]): { sha: string; subject: string }[] {
   return commits
-    .filter((c) => !c.subject.startsWith("Merge ") && !parseSubject(c.subject))
+    .filter((c) => !GIT_OWN_SUBJECT.test(c.subject) && !parseSubject(c.subject))
     .map((c) => ({ sha: c.sha, subject: c.subject }))
 }
 
@@ -129,6 +132,8 @@ export function releaseNotes(commits: readonly Commit[]): string {
   const parts: string[] = []
   for (const section of SECTIONS) {
     const lines = commits.flatMap((c) => {
+      // A commit that asked not to be released is not announced by the release of another one either.
+      if (c.subject.includes(SKIP_MARKER) || c.body.includes(SKIP_MARKER)) return []
       const parsed = parseSubject(c.subject)
       if (!parsed || !section.types.includes(parsed.type)) return []
       const scope = parsed.scope ? `**${parsed.scope}:** ` : ""

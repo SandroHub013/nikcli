@@ -32,23 +32,34 @@ export async function startMicTake(deviceId?: string): Promise<MicTake | undefin
       echoCancellation: true,
     },
   })
-  const recorder = new MediaRecorder(stream, { mimeType: mime.mimeType, audioBitsPerSecond: 128_000 })
+  const release = () => {
+    for (const track of stream.getTracks()) track.stop()
+  }
   const chunks: Blob[] = []
-  recorder.addEventListener("dataavailable", (event) => {
-    if (event.data.size > 0) chunks.push(event.data)
-  })
-  // Chunks every second, so a take that ends abruptly still has its audio.
-  recorder.start(1000)
+  let recorder: MediaRecorder
+  try {
+    recorder = new MediaRecorder(stream, { mimeType: mime.mimeType, audioBitsPerSecond: 128_000 })
+    recorder.addEventListener("dataavailable", (event) => {
+      if (event.data.size > 0) chunks.push(event.data)
+    })
+    // Chunks every second, so a take that ends abruptly still has its audio.
+    recorder.start(1000)
+  } catch (error) {
+    // The stream is open already: without a take to end it the microphone would stay on (full review 2026-10-06, nikverse B1).
+    release()
+    throw error
+  }
 
   return {
     extension: mime.extension,
     stop: () =>
       new Promise<Uint8Array | undefined>((resolve) => {
         const finish = async () => {
-          for (const track of stream.getTracks()) track.stop()
+          release()
           if (chunks.length === 0) return resolve(undefined)
           const blob = new Blob(chunks, { type: mime.mimeType })
-          resolve(new Uint8Array(await blob.arrayBuffer()))
+          // A take whose bytes cannot be read ends with none, instead of a promise nobody settles.
+          resolve(await blob.arrayBuffer().then((buffer) => new Uint8Array(buffer), () => undefined))
         }
         if (recorder.state === "inactive") return void finish()
         recorder.addEventListener("stop", () => void finish(), { once: true })

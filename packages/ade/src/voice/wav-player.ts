@@ -1,4 +1,5 @@
 import { wavEnvelope, type PlaybackMeter } from "@nikcli-ai/voice/core"
+import { t } from "../i18n"
 
 /**
  * Plays one WAV the voice host synthesised, on the chosen output device.
@@ -48,11 +49,11 @@ export function playWav(
       URL.revokeObjectURL(url)
       signal.removeEventListener("abort", done)
       if (error && !signal.aborted)
-        reject(error instanceof Error ? error : new Error("Riproduzione della voce non riuscita."))
+        reject(error instanceof Error ? error : new Error(t("voice.msg.wav.playFailed")))
       else resolve()
     }
     const done = () => finish()
-    const failed = (error?: unknown) => finish(error ?? new Error("Riproduzione della voce non riuscita."))
+    const failed = (error?: unknown) => finish(error ?? new Error(t("voice.msg.wav.playFailed")))
     audio.addEventListener("ended", done, { once: true })
     audio.addEventListener("error", () => failed(), { once: true })
     signal.addEventListener("abort", done, { once: true })

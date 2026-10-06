@@ -1,2 +1,2 @@
 [test]
-preload = ["./src/offline-guard.ts"]
+preload = ["./src/offline-guard.ts", "./src/test-support/locale-it.ts"]

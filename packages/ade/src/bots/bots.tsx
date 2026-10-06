@@ -92,6 +92,7 @@ import {
 import { gatewayVisible } from "../surface/state"
 import { appGatewayPanelDeps } from "./gateway/bridge"
 import { GatewaySection } from "./gateway/panel"
+import { localRemoteStore } from "./gateway/remote"
 import { openExternally } from "../browser/host-bridge"
 import {
   addRoutine,
@@ -108,6 +109,7 @@ import {
   type RoutineBook,
   type RoutineContext,
 } from "./routine"
+import { forgetBotTraces } from "./forget"
 import { RoutineSection, type RoutinePanelDeps } from "./routine-panel"
 import { botModelLabel, catalogFree, catalogFromText, modelGone, nikcliModelVariants } from "./catalog"
 import { effortChoices, effortToSave } from "./effort"
@@ -1689,6 +1691,13 @@ function BotCard(props: {
       setConfirming(false)
       return
     }
+    // Its routines, memory and account choice go with the file: a new bot at the same path starts clean.
+    forgetBotTraces(props.bot.path, {
+      memory: memories,
+      account: accounts,
+      remote: localRemoteStore(),
+      routines: writeRoutines,
+    })
     props.onDeleted()
   }
 
@@ -1810,8 +1819,11 @@ function BotCard(props: {
         </Show>
 
         <Show when={props.bot.mode !== "subagent"}>
-          <RoutineSection bot={props.bot} account={account()} projectRoot={props.projectRoot} deps={routineDeps} />
-          <MemorySection bot={props.bot.path} store={memories} />
+          {/* Keyed on the bot, like the gateway: the routine form and its consent tick belong to one bot (full review 2026-10-06, bots 16). */}
+          <Show when={props.bot.path} keyed>
+            <RoutineSection bot={props.bot} account={account()} projectRoot={props.projectRoot} deps={routineDeps} />
+            <MemorySection bot={props.bot.path} store={memories} />
+          </Show>
         </Show>
 
         <section data-slot="bots-card-section">

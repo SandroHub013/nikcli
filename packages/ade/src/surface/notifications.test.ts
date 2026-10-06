@@ -84,6 +84,20 @@ describe("addNotice", () => {
   })
 })
 
+describe("the id of a notice", () => {
+  test("is not repeated when the list is full and two come in the same millisecond", () => {
+    let list: ReturnType<typeof addNotice> = []
+    for (let n = 0; n < MAX_NOTICES; n++) list = addNotice(list, { kind: "done", text: `fatto ${n}`, at: 1000 + n * COALESCE_MS })
+    const at = 1000 + MAX_NOTICES * COALESCE_MS
+    list = addNotice(list, { kind: "done", text: "uno", at })
+    list = addNotice(list, { kind: "error", text: "due", at })
+    expect(list).toHaveLength(MAX_NOTICES)
+    expect(new Set(list.map((notice) => notice.id)).size).toBe(MAX_NOTICES)
+    // The ✕ of one takes that one.
+    expect(dismissNotice(list, list[0]!.id)).toHaveLength(MAX_NOTICES - 1)
+  })
+})
+
 describe("unreadCount and markAllRead", () => {
   const three = ["a", "b", "c"].reduce<Notice[]>(
     (list, text, i) => addNotice(list, { kind: "info", text, at: at + i * COALESCE_MS }),

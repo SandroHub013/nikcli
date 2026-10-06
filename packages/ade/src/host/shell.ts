@@ -427,7 +427,7 @@ export { stripAnsi } from "./ansi"
 import { createLineAccumulator } from "./line-stream"
 import type { TokenUsage } from "../session/shared"
 import type { InstallProgress, PackStatus } from "@nikcli-ai/voice"
-import type { KeyDraft, KeyInfo } from "../secrets/keys"
+import { keyError, type KeyDraft, type KeyInfo } from "../secrets/keys"
 import type { QualityLevel, RecordTarget, RecordingState } from "../record/recording"
 import type { AssetsStatus } from "../nikverse/assets"
 import { t } from "../i18n"
@@ -642,7 +642,8 @@ export async function getHost(): Promise<Host | undefined> {
       } catch (error) {
         dead = true
         stop()
-        const reason = error instanceof Error ? error.message : String(error)
+        // `secrets.rs` refuses a launch's keys with codes; the pane shows the sentence (review of F7b, O1).
+        const reason = keyError(error instanceof Error ? error.message : String(error))
         if (onRefused) onRefused(reason)
         else onLine(reason, "err")
         onExit(null)
@@ -785,11 +786,9 @@ export async function getHost(): Promise<Host | undefined> {
 
     async exists(path) {
       const { invoke } = await import("@tauri-apps/api/core")
-      try {
-        return await invoke<boolean>("path_exists", { path })
-      } catch {
-        return false
-      }
+      // A check that fails rejects: «the folder is gone» is for the callers to say when it IS gone, not for every error
+      // (full review 2026-10-06, sessions 16). Those that mean «assume it is there» already `catch`.
+      return invoke<boolean>("path_exists", { path })
     },
 
     async systemStats() {

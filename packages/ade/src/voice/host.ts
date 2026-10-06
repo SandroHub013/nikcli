@@ -2,7 +2,13 @@ import type { PaneSummary, VoiceHost, VoiceStateSnapshot } from "@nikcli-ai/voic
 import type { Host, SpawnedSession } from "../host/shell"
 import type { Project } from "../host/project"
 import type { RecentEntry } from "../host/recent"
-import { permissionIdentity, type PermissionAnswer, type PermissionRequest } from "../session/permission"
+import {
+  isPermanent,
+  isRefusal,
+  permissionIdentity,
+  type PermissionAnswer,
+  type PermissionRequest,
+} from "../session/permission"
 import { AGENTS } from "../session-new/agents"
 import type { AgentStatus } from "../session-new/availability"
 import { asOneLine, asSubmittedLine } from "../session/typing"
@@ -131,13 +137,6 @@ const OPENS_IN_GRID = new Set(["session.new", "browser.new", "video.new", "model
 /** How long a warm agent waits for the project before starting without one. */
 const PREPARE_WAIT_MS = 30_000
 
-/** An answer that reads as a refusal. */
-const REFUSAL_ANSWER = /^(?:no|nega|rifiuta|deny|reject|annulla|cancel)/i
-
-/** An answer that grants more than the request on screen: for always, for the session, without asking again. */
-const PERMANENT_ANSWER =
-  /always|sempre|non chiedere|non chiederlo|don'?t ask|do not ask|never ask|(?:for|during) (?:this|the) session|allow all|per (?:questa )?sessione|tutta la sessione/i
-
 export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
   /*
    * No voice text into a terminal whose agent is asking a permission
@@ -169,8 +168,19 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
     if (typeof window !== "undefined") window.addEventListener("pagehide", () => warm.close())
     return warm
   }
-  const voiceAgent = () =>
-    (agent ??= deps.voiceAgentFactory
+  const voiceAgent = () => {
+    if (agent) return agent
+    const made = makeVoiceAgent()
+    agent = made
+    // A start that failed is not kept: the next sentence tries again, instead of every one getting the same rejection until the
+    // window is reloaded (full review 2026-10-06, ui 20).
+    made.catch(() => {
+      if (agent === made) agent = undefined
+    })
+    return made
+  }
+  const makeVoiceAgent = (): Promise<VoiceAgent> =>
+    deps.voiceAgentFactory
       ? deps.voiceAgentFactory()
       : Promise.all([import("../bots/serve-turn"), import("../bots/warm")]).then(
           ([{ runBotTurn }, { createWarmClaude }]) =>
@@ -183,7 +193,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
               cwd: () => deps.project()?.root,
               codexFallback: () => deps.codexFallback?.() ?? false,
             }),
-        ))
+        )
 
   return {
     async askAgent(request) {
@@ -295,7 +305,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
         const target = resolveProject(input.project, listProjectsFrom(deps.recents?.() ?? [], deps.project()))
         if (!target.isOpen) {
           if (!deps.switchProject) {
-            throw new Error(`Non posso passare al progetto «${target.name}» da qui: aprilo tu e ripeti.`)
+            throw new Error(t("voice.msg.host.cannotSwitch", target.name))
           }
           // Awaited, because the new session's working directory is whatever
           // project is open when the process spawns.
@@ -311,11 +321,11 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
        * an assistant saying it started. Better to ask which project.
        */
       if (!deps.project()) {
-        throw new Error("Non c'è nessun progetto aperto: dimmi in quale progetto avviare la sessione.")
+        throw new Error(t("voice.msg.host.noProject"))
       }
 
       if (!deps.openAgentSession) {
-        throw new Error("Non posso avviare sessioni da qui.")
+        throw new Error(t("voice.msg.host.cannotStart"))
       }
       return deps.openAgentSession({ agentId, task: input.task?.trim() ?? "" })
     },
@@ -326,11 +336,11 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
 
     async sendPrompt(paneId: string, text: string): Promise<void> {
       if (!deps.isRunning(paneId)) {
-        throw new Error(`Il pannello '${paneId}' non ha un processo vivo a cui inviare il messaggio.`)
+        throw new Error(t("voice.msg.host.noProcess", paneId))
       }
       const session = deps.getRunningSession(paneId)
       if (!session) {
-        throw new Error(`Nessuna sessione attiva per il pannello '${paneId}'.`)
+        throw new Error(t("voice.msg.host.noSession", paneId))
       }
       /*
        * One line, and submitted.
@@ -387,16 +397,14 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
       const current = deps.project()
       // Thrown, not answered with an empty list: «0 risultati» and a search
       // that could not run are different things to the person who asked.
-      if (!host) throw new Error("la ricerca nel progetto funziona solo nell'app desktop")
-      if (!current) throw new Error("non c'è nessun progetto aperto in cui cercare")
+      if (!host) throw new Error(t("voice.msg.host.searchDesktopOnly"))
+      if (!current) throw new Error(t("voice.msg.host.searchNoProject"))
       try {
         const result = await walkProject({ host, root: current.root })
         const hits = findByName(result.files, query, 40)
         return hits.map((hit) => ({ path: hit.path }))
       } catch (error) {
-        throw new Error(
-          `non riesco a leggere i file del progetto (${error instanceof Error ? error.message : String(error)})`,
-        )
+        throw new Error(t("voice.msg.host.searchUnreadable", error instanceof Error ? error.message : String(error)))
       }
     },
 
@@ -446,14 +454,12 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
          * every one that follows; when only permanent answers are left, nothing is sent and the request stays on
          * screen for the user.
          */
-        const once = pending.answers.filter((a) => !PERMANENT_ANSWER.test(a.label))
+        // By what the answer does (`intent`, set where the CLI's prompt is read), not by the words on the button: those are in
+        // the user's language and the CLI's own wording.
+        const once = pending.answers.filter((a) => !isPermanent(a))
         chosen =
-          once.find(
-            (a) =>
-              a.tone === "primary" ||
-              /^(?:sì|si|consenti|allow|yes|accetta|procedi|conferma)/i.test(a.label) ||
-              a.send.toLowerCase() === "y",
-          ) ?? once.find((a) => !REFUSAL_ANSWER.test(a.label))
+          once.find((a) => a.tone === "primary" || a.intent === "yes" || a.intent === "once" || a.send.toLowerCase() === "y") ??
+          once.find((a) => !isRefusal(a))
       } else {
         /*
          * No fallback, on purpose.
@@ -466,9 +472,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
          * refusal nothing is sent and the request stays on screen for the
          * user to answer by hand.
          */
-        chosen = pending.answers.find(
-          (a) => REFUSAL_ANSWER.test(a.label) || /^(?:n|no)$/i.test(a.send.trim().toLowerCase()),
-        )
+        chosen = pending.answers.find((a) => isRefusal(a) || /^(?:n|no)$/i.test(a.send.trim().toLowerCase()))
       }
 
       if (chosen) {
@@ -643,7 +647,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
           }
           if (waitingSessions > 0) {
             details.push(
-              `${waitingSessions === 1 ? "una" : (ITALIAN_NUMBERS[waitingSessions] ?? workingSessions)} in attesa`,
+              `${waitingSessions === 1 ? "una" : (ITALIAN_NUMBERS[waitingSessions] ?? waitingSessions)} in attesa`,
             )
           }
           if (doneSessions > 0) {

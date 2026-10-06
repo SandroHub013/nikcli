@@ -83,6 +83,9 @@ export function createDesignHub(deps: {
   const [problems, setProblems] = createSignal<Record<string, string | undefined>>({})
   const [inline, setInline] = createSignal<string>()
 
+  // The keys are the agent's (`isDesignKey` lets `constructor`, `toString` through): only an own value counts, or a
+  // read of those would give back a function of Object (full review 2026-10-06, nikverse B7).
+  const problemOf = (k: string) => (Object.hasOwn(problems(), k) ? problems()[k] : undefined)
   const setProblem = (k: string, text: string | undefined) => setProblems((all) => ({ ...all, [k]: text }))
   const setBusy = (k: string, on: boolean) =>
     setBusyKeys((keys) => {
@@ -107,10 +110,10 @@ export function createDesignHub(deps: {
     }
   }
 
-  const draft = (k: string): DesignDraft => drafts()[k] ?? { note: "" }
+  const draft = (k: string): DesignDraft => (Object.hasOwn(drafts(), k) ? drafts()[k] : undefined) ?? { note: "" }
   const setDraft = (k: string, value: DesignDraft) => {
     setDrafts((all) => ({ ...all, [k]: value }))
-    if (problems()[k]) setProblem(k, undefined)
+    if (problemOf(k)) setProblem(k, undefined)
   }
   const clearDraft = (k: string) => {
     setDrafts((all) => {
@@ -159,7 +162,7 @@ export function createDesignHub(deps: {
     },
     chosen: (k) => chosenKeys().has(k),
     busy: (k) => busyKeys().has(k),
-    problem: (k) => problems()[k],
+    problem: problemOf,
     answer,
     inlineRecipient: inline,
     setInlineRecipient: (id) => {

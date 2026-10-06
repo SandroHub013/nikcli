@@ -625,6 +625,18 @@ describe("a variant's preview", () => {
     expect(isInsideRoot(String.raw`C:\P\.ade\design\x.html`, "c:/p")).toBe(true)
   })
 
+  // Full review 2026-10-06, nikverse B5: the HTML branch was confined to the project, the image one was not.
+  test("an image outside the project root gets no picture either", () => {
+    expect(previewPlan("C:/altrove/a.png", root, "DS1", true)).toEqual({
+      kind: "error",
+      text: "Fuori dal progetto: C:/altrove/a.png — le anteprime stanno in .ade/design/DS1/",
+    })
+    expect(previewPlan("../fuori.png", root, "DS1", true).kind).toBe("error")
+    expect(previewPlan("C:/p/shots/a.png", root, "DS1", true).kind).toBe("image")
+    // Without a root there is nothing to measure it against: as before.
+    expect(previewPlan("C:/altrove/a.png", undefined, "DS1", true).kind).toBe("image")
+  })
+
   test("a failure names the path: Non si carica", () => {
     expect(loadFailure("C:/p/.ade/design/DS1/4.html", new Error("file non trovato"))).toBe(
       "Non si carica: C:/p/.ade/design/DS1/4.html — file non trovato",

@@ -224,6 +224,8 @@ export namespace Flag {
 
   // TUI plugin system
   export declare const NIKCLI_TUI_CONFIG: string | undefined
+  /** Where the ChatGPT-plan (Codex) provider sends its model calls; the plugin's own URL when unset. */
+  export declare const NIKCLI_CODEX_ENDPOINT: string | undefined
   export const NIKCLI_PURE = truthy("NIKCLI_PURE")
   export const NIKCLI_PLUGIN_META_FILE = process.env["NIKCLI_PLUGIN_META_FILE"]
 
@@ -322,6 +324,15 @@ Object.defineProperty(Flag, "NIKCLI_CONFIG_DIR", {
 Object.defineProperty(Flag, "NIKCLI_CONFIG_CONTENT", {
   get() {
     return process.env["NIKCLI_CONFIG_CONTENT"]
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+// Dynamic getter for NIKCLI_CODEX_ENDPOINT: read at each request, so a test or a wrapper can set it late.
+Object.defineProperty(Flag, "NIKCLI_CODEX_ENDPOINT", {
+  get() {
+    return process.env["NIKCLI_CODEX_ENDPOINT"]
   },
   enumerable: true,
   configurable: false,

@@ -127,6 +127,8 @@ export function previewPlan(
   }
   if (/^(data:|ade-media:)/.test(raw)) return { kind: "image", path: raw, src: raw }
   const path = resolvePreviewPath(raw, projectRoot)
+  // The same rule as the page's: a path that leaves the project is not drawn (full review 2026-10-06, nikverse B5).
+  if (projectRoot && !isInsideRoot(path, projectRoot)) return { kind: "error", text: t("design.preview.outside", path, k) }
   return { kind: "image", path, src: mediaUrl(path, windows) }
 }
 

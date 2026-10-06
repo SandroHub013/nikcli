@@ -298,10 +298,17 @@ import { CONSENT_KEY, consentQuestion, hasConsent, withConsent } from "../plugin
 import { toPluginSession } from "../plugin/session"
 import type { DiscoveryIO } from "../plugin/discovery"
 import { markSaved, openBuffer, saveBlockedReason, toLf, withEol } from "../editor"
-import { detectPermission, followPermission, permissionIdentity, type PermissionAnswer } from "../session/permission"
+import {
+  answerLabel,
+  detectPermission,
+  followPermission,
+  permissionIdentity,
+  type PermissionAnswer,
+} from "../session/permission"
 import { readReportLine } from "../session/report"
 import { asOneLine, asSubmittedLine, confirmDeadline, pasteSettled, submitCheck } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
+import { createProjectWalk } from "./project-walk"
 import {
   DEFAULT_MAX_SPAWNED,
   USAGE,
@@ -1929,6 +1936,9 @@ export function Workbench() {
     const path = `${root.replace(/[/\\]+$/, "")}/.ade/frames/${name}`
     const failure = await host.writeBytes(path, png)
     if (failure) throw new Error(failure)
+    // `.ade/` is only ignored by git once a spawn or `memory` has said so: a frame captured first would show in `git status`
+    // (full review 2026-10-06, sessions 15).
+    await excludeAdeResults(host, root).catch(() => {})
     return path
   }
 
@@ -5595,7 +5605,7 @@ export function Workbench() {
     // The key is not the panel's to change: it is the keychain's, whatever `next` says.
     const saved = { ...stored, settings: withVoiceKey(stored.settings) }
     setVoiceSettings(saved.settings)
-    const nextVoice = activeReplyVoice(saved.settings.replyVoice, locale())
+    const nextVoice = activeReplyVoice(localReplyVoice(saved.settings), locale())
     if (nextVoice !== previousVoice) {
       setVoiceFailure(undefined)
       setVoiceInstalled(nextVoice === "system")
@@ -7100,53 +7110,27 @@ export function Workbench() {
   }
 
   /*
-   * The project's file list, walked once and kept.
-   *
-   * Walking a repository costs seconds; doing it on every keystroke would make
-   * the search box unusable on exactly the projects where search matters. The
-   * list is read on the first query and reused until the project changes —
-   * or until it is old enough that files created since would be missing. A
-   * stale list still answers at once; the fresh one replaces it for the next
-   * keystroke.
+   * The project's file list, walked once and kept (`createProjectWalk` says how, and why a walk of the previous project
+   * does not answer for this one).
    */
-  type Walked = { root: string; at: number; entries: { path: string; kind: "file" | "directory" }[] }
-  const WALK_FRESH_MS = 30_000
-  let walked: Walked | undefined
-  let walkingPromise: Promise<Walked> | undefined
+  const walkedEntries = createProjectWalk({
+    walk: async (root) => {
+      const host = await getHost()
+      if (!host) return []
+      const result = await walkProject({ host, root })
+      return [
+        ...(result.dirs ?? []).map((path) => ({ path, kind: "directory" as const })),
+        ...result.files.map((path) => ({ path, kind: "file" as const })),
+      ]
+    },
+  })
 
   const searchProjectFiles = async (query: string, kinds: ReadonlySet<"file" | "directory">) => {
     const host = await getHost()
     const current = project()
     if (!host || !current) return []
-
-    const sameRoot = walked?.root === current.root
-    if (!sameRoot || Date.now() - walked!.at > WALK_FRESH_MS) {
-      if (!walkingPromise) {
-        walkingPromise = walkProject({ host, root: current.root })
-          .then((result) => {
-            const entry: Walked = {
-              root: current.root,
-              at: Date.now(),
-              entries: [
-                ...(result.dirs ?? []).map((path) => ({ path, kind: "directory" as const })),
-                ...result.files.map((path) => ({ path, kind: "file" as const })),
-              ],
-            }
-            walked = entry
-            walkingPromise = undefined
-            return entry
-          })
-          .catch((err) => {
-            walkingPromise = undefined
-            throw err
-          })
-      }
-      // Only a different project has to wait; a merely old list answers now.
-      if (!sameRoot) await walkingPromise
-    }
-
-    if (!walked) return []
-    return searchPaths(walked.entries, query, { root: current.root, kinds, limit: 200 })
+    const entries = await walkedEntries(current.root)
+    return searchPaths([...entries], query, { root: current.root, kinds, limit: 200 })
   }
 
   /*
@@ -7463,7 +7447,7 @@ export function Workbench() {
      * answered, the agent was still waiting.
      */
     session.write(asSubmittedLine(answer.send))
-    appendLine(paneId, `> ${answer.label}`, "shell")
+    appendLine(paneId, `> ${answerLabel(answer)}`, "shell")
 
     /*
      * The request is not cleared here.
@@ -7521,7 +7505,8 @@ export function Workbench() {
     if (!resumeId || !root || !host?.homeDir || !host.exists) return false
     const home = await host.homeDir().catch(() => "")
     const path = home ? RESUME[agentId]?.transcript?.(home, root, resumeId) : undefined
-    if (path) return !(await host.exists(path))
+    // A check that fails says nothing: the conversation is taken as there.
+    if (path) return !(await host.exists(path).catch(() => true))
     // No file to look for (nikcli): the CLI is asked. No answer in time, and the id is reopened as before.
     const exists = RESUME[agentId]?.exists
     const command = agentById(agentId)?.command

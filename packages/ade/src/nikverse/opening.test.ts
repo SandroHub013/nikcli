@@ -93,7 +93,31 @@ describe("the level ADE lowered the world to", () => {
     return { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v), data }
   }
 
-  test("too slow once: Bassa for a week, kept in storage, then the machine's own level again", () => {
+  // Review of F7d, B4: a day, not a week, and a way back.
+  test("the lowering lasts a day, and clear forgets it here and in storage", () => {
+    expect(LOWERED_FOR_MS).toBe(24 * 3600 * 1000)
+    let now = 1_000_000
+    const storage = memory()
+    const store = createLoweredStore(storage, () => now)
+    store.lower()
+    expect(store.lowered()).toBe(true)
+    store.clear()
+    expect(store.lowered()).toBe(false)
+    expect(createLoweredStore(storage, () => now).lowered()).toBe(false)
+    // Lowered again afterwards, as any new slow opening would.
+    store.lower()
+    expect(createLoweredStore(storage, () => now).lowered()).toBe(true)
+    // A storage that throws does not stop the way back.
+    const fail = () => {
+      throw new Error("blocked")
+    }
+    const blocked = createLoweredStore({ getItem: fail, setItem: fail })
+    blocked.lower()
+    blocked.clear()
+    expect(blocked.lowered()).toBe(false)
+  })
+
+  test("too slow once: Bassa for a day, kept in storage, then the machine's own level again", () => {
     let now = 1_000_000
     const storage = memory()
     const store = createLoweredStore(storage, () => now)

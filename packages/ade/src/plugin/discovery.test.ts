@@ -27,6 +27,30 @@ function io(files: Record<string, string>): DiscoveryIO {
   }
 }
 
+// Full review 2026-10-06, sessions 16: `path_exists` now rejects when the check fails instead of saying «not there».
+describe("a check that fails", () => {
+  test("is a plugin that is not there, not an exception that takes the whole list down", async () => {
+    const broken: DiscoveryIO = {
+      async exists() {
+        throw new Error("share non raggiungibile")
+      },
+      async readTextFile() {
+        return { text: "" }
+      },
+    }
+    const resolved = await resolveDeclaredPlugin({ spec: "file:///C:/p/plugin.js" }, "C:/p", broken)
+    expect("reason" in resolved ? resolved.reason : undefined).toBe("il file del plugin non esiste")
+    expect(await discoverPlugins("C:/p", broken)).toEqual({ resolved: [], rejected: [] })
+  })
+})
+
+describe("a `%` that is not an escape", () => {
+  test("is a path like any other, not an exception", () => {
+    expect(urlToPath("file:///C:/p/100%/plugin.js")).toBe("C:/p/100%/plugin.js")
+    expect(urlToPath("file:///C:/p/a%20b/plugin.js")).toBe("C:/p/a b/plugin.js")
+  })
+})
+
 describe("parseDeclaredPlugins", () => {
   test("reads the same `plugin` array the TUI reads, in both spec forms", () => {
     const text = JSON.stringify({ plugin: ["file:///a/b", ["file:///c", { token: 1 }]] })

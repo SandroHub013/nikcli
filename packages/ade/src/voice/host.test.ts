@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { resetLocaleForTests } from "../i18n/locale"
 import { createAdeVoiceHost, type AdeVoiceHostDeps } from "./host"
 import type { VoiceAgent } from "./agent"
 import { AGENTS } from "../session-new/agents"
@@ -267,8 +268,8 @@ describe("createAdeVoiceHost", () => {
       what: "run command",
       kind: "shell",
       answers: [
-        { label: "Sì", send: "y", tone: "primary" },
-        { label: "No", send: "n", tone: "secondary" },
+        { intent: "yes", label: "Sì", send: "y", tone: "primary" },
+        { intent: "no", label: "No", send: "n", tone: "secondary" },
       ],
     }
 
@@ -293,8 +294,8 @@ describe("createAdeVoiceHost", () => {
   describe("the request whose question was read is told by its target too", () => {
     const heading = "Do you want to proceed?"
     const answers = [
-      { label: "Sì", send: "1", tone: "primary" as const },
-      { label: "No", send: "3", tone: "secondary" as const },
+      { intent: "yes" as const, label: "Sì", send: "1", tone: "primary" as const },
+      { intent: "no" as const, label: "No", send: "3", tone: "secondary" as const },
     ]
     const request = (target: string): PermissionRequest => ({ what: heading, kind: "shell", target, answers })
 
@@ -338,18 +339,18 @@ describe("createAdeVoiceHost", () => {
 
     test("with [Allow always, Allow once, Deny] it picks Allow once", () => {
       const { answered } = grant([
-        { label: "Allow always", send: "1", tone: "primary" },
-        { label: "Allow once", send: "2", tone: "secondary" },
-        { label: "Deny", send: "3", tone: "secondary" },
+        { intent: "always", label: "Allow always", send: "1", tone: "primary" },
+        { intent: "once", label: "Allow once", send: "2", tone: "secondary" },
+        { intent: "no", label: "Deny", send: "3", tone: "secondary" },
       ])
       expect(answered.map((answer) => answer.send)).toEqual(["2"])
     })
 
     test("with [«Sì, e non chiedere più», «Sì, solo questa volta», No] it picks the single one", () => {
       const { answered } = grant([
-        { label: "Sì, e non chiedere più", send: "1", tone: "primary" },
-        { label: "Sì, solo questa volta", send: "2", tone: "secondary" },
-        { label: "No", send: "3", tone: "secondary" },
+        { intent: "always", label: "Sì, e non chiedere più", send: "1", tone: "primary" },
+        { intent: "once", label: "Sì, solo questa volta", send: "2", tone: "secondary" },
+        { intent: "no", label: "No", send: "3", tone: "secondary" },
       ])
       expect(answered.map((answer) => answer.send)).toEqual(["2"])
     })
@@ -357,17 +358,46 @@ describe("createAdeVoiceHost", () => {
     // Review of F6c, N1: Claude Code's edit permission offers «Yes, allow all edits during this session» as its second option.
     test("«allow all edits during this session» is not the single yes", () => {
       const { answered } = grant([
-        { label: "Yes, allow all edits during this session", send: "2", tone: "primary" },
-        { label: "Yes", send: "1", tone: "secondary" },
-        { label: "No", send: "3", tone: "secondary" },
+        { intent: "always", label: "Yes, allow all edits during this session", send: "2", tone: "primary" },
+        { intent: "yes", label: "Yes", send: "1", tone: "secondary" },
+        { intent: "no", label: "No", send: "3", tone: "secondary" },
       ])
       expect(answered.map((answer) => answer.send)).toEqual(["1"])
     })
 
+    // Full review 2026-10-06, sessions 13: the voice reads what an answer does (`intent`), not the words on the button.
+    test("the answer is told by its intent, whatever language or wording the button has", () => {
+      const { answered } = grant([
+        { intent: "always", label: "Autorizar siempre", send: "1", tone: "primary" },
+        { intent: "yes", label: "Autorizar", send: "2", tone: "secondary" },
+        { intent: "no", label: "Rechazar", send: "3", tone: "secondary" },
+      ])
+      expect(answered.map((answer) => answer.send)).toEqual(["2"])
+    })
+
+    test("a refusal is found by its intent in a wording the old patterns did not know", () => {
+      const answered: PermissionAnswer[] = []
+      const { deps } = createMockDeps({
+        permissions: () => ({
+          p1: {
+            what: "Bash command",
+            kind: "shell",
+            answers: [
+              { intent: "yes", label: "Autorizar", send: "1", tone: "primary" },
+              { intent: "no", label: "Rechazar", send: "2", tone: "secondary" },
+            ],
+          },
+        }),
+        answerPermission: (_id, answer) => void answered.push(answer),
+      })
+      expect(createAdeVoiceHost(deps).answerPermission("p1", "deny")).toBe(true)
+      expect(answered.map((answer) => answer.send)).toEqual(["2"])
+    })
+
     test("with only the permanent answer and a refusal, nothing is sent", () => {
       const { answered, sent } = grant([
-        { label: "Allow always", send: "1", tone: "primary" },
-        { label: "Deny", send: "2", tone: "secondary" },
+        { intent: "always", label: "Allow always", send: "1", tone: "primary" },
+        { intent: "no", label: "Deny", send: "2", tone: "secondary" },
       ])
       expect(sent).toBe(false)
       expect(answered).toHaveLength(0)
@@ -383,8 +413,8 @@ describe("createAdeVoiceHost", () => {
           what: raw,
           kind: "shell",
           answers: [
-            { label: "Sì", send: "y", tone: "primary" },
-            { label: "No", send: "n", tone: "secondary" },
+            { intent: "yes", label: "Sì", send: "y", tone: "primary" },
+            { intent: "no", label: "No", send: "n", tone: "secondary" },
           ],
         },
       }),
@@ -411,8 +441,8 @@ describe("createAdeVoiceHost", () => {
       what: "Bash command",
       kind: "shell",
       answers: [
-        { label: "Consenti una volta", send: "1", tone: "primary" },
-        { label: "Sì, e non chiedere più", send: "2", tone: "secondary" },
+        { intent: "once", label: "Consenti una volta", send: "1", tone: "primary" },
+        { intent: "always", label: "Sì, e non chiedere più", send: "2", tone: "secondary" },
       ],
     }
 
@@ -438,7 +468,7 @@ describe("createAdeVoiceHost", () => {
         permissions: () => ({
           p1: {
             ...permissive,
-            answers: [...permissive.answers, { label: "No", send: "3", tone: "secondary" as const }],
+            answers: [...permissive.answers, { intent: "no" as const, label: "No", send: "3", tone: "secondary" as const }],
           },
         }),
         answerPermission: (_id, ans) => {
@@ -532,6 +562,21 @@ describe("createAdeVoiceHost", () => {
     expect(state3.spokenSummary).toContain("completata")
   })
 
+  // Full review 2026-10-06, ui 15: the waiting count past the table of words fell back to the working one.
+  test("describeState says the waiting count, not the working one, when it has no word", () => {
+    const { deps } = createMockDeps()
+    deps.setWb((w) => ({
+      ...w,
+      panes: [
+        makePane({ id: "w1", status: "working" }),
+        ...Array.from({ length: 11 }, (_, i) => makePane({ id: `a${i}`, status: "waiting" })),
+      ],
+    }))
+    const summary = createAdeVoiceHost(deps).describeState().spokenSummary
+    expect(summary).toContain("11 in attesa")
+    expect(summary).not.toMatch(/(?<!\d)1 in attesa/)
+  })
+
   test("describeState produces correct English grammatical number for 0, 1 and 3 sessions", () => {
     // 0 sessions
     const { deps: deps0 } = createMockDeps({ locale: () => "en" })
@@ -617,6 +662,30 @@ describe("createAdeVoiceHost", () => {
     const request = { system: "R", user: "U", engine: "claude" as const, speed: "fast" as const }
     expect(await host.plan!(request)).toBe('{"speech":"ok","steps":[]}')
     expect(seen).toEqual([request])
+  })
+
+  // Full review 2026-10-06, ui 20: a rejected start was kept for good.
+  test("a voice agent that failed to start is started again at the next sentence", async () => {
+    let starts = 0
+    const agent: VoiceAgent = {
+      ask: async () => ({ ok: true, text: "fatto", ran: true }),
+      plan: async () => "[]",
+      prepare: () => {},
+      forget: () => {},
+      release: () => {},
+    }
+    const { deps } = createMockDeps({
+      voiceAgentFactory: async () => {
+        starts++
+        if (starts === 1) throw new Error("import fallito")
+        return agent
+      },
+    })
+    const host = createAdeVoiceHost(deps)
+    const request = { text: "ciao", engine: "claude" as const }
+    await expect(host.askAgent!(request)).rejects.toThrow("import fallito")
+    expect((await host.askAgent!(request)).text).toBe("fatto")
+    expect(starts).toBe(2)
   })
 
   test("releasing the voice cancels a prepare waiting for a project", async () => {
@@ -827,6 +896,18 @@ describe("createAdeVoiceHost, spoken planning", () => {
       "Non posso avviare sessioni da qui.",
     )
   })
+
+  test("the same refusal is said in English with the interface in English (F7b)", async () => {
+    resetLocaleForTests("en")
+    try {
+      const { deps } = createMockDeps({ project: () => nikcli })
+      await expect(createAdeVoiceHost(deps).startSession!({ agent: "claude" })).rejects.toThrow(
+        "I can't start sessions from here.",
+      )
+    } finally {
+      resetLocaleForTests("it")
+    }
+  })
 })
 
 /*
@@ -839,8 +920,8 @@ describe("answerPermission answers only the request that was asked", () => {
     what,
     kind: "shell",
     answers: [
-      { label: "Sì", send: "y", tone: "primary" },
-      { label: "No", send: "n", tone: "secondary" },
+      { intent: "yes", label: "Sì", send: "y", tone: "primary" },
+      { intent: "no", label: "No", send: "n", tone: "secondary" },
     ],
   })
 
@@ -895,8 +976,8 @@ describe("no voice text into a pane asking a permission", () => {
     what: "rm -rf build",
     kind: "shell",
     answers: [
-      { label: "Sì", send: "1", tone: "primary" },
-      { label: "No", send: "3", tone: "secondary" },
+      { intent: "yes", label: "Sì", send: "1", tone: "primary" },
+      { intent: "no", label: "No", send: "3", tone: "secondary" },
     ],
   }
 

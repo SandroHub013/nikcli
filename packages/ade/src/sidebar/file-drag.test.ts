@@ -108,6 +108,11 @@ describe("readDraggedPaths", () => {
     expect(readDraggedPaths(data)).toEqual(["C:/Users/x/repo/note.md", "C:/Users/x/repo/altro.ts"])
   })
 
+  test("keeps the leading slash of a POSIX path", () => {
+    const data = fakeTransfer({ "text/uri-list": "file:///Users/x/repo/a.ts" })
+    expect(readDraggedPaths(data)).toEqual(["/Users/x/repo/a.ts"])
+  })
+
   test("decodes percent-escapes in a uri", () => {
     const data = fakeTransfer({ "text/uri-list": "file:///C:/repo/con%20spazio.ts" })
     expect(readDraggedPaths(data)).toEqual(["C:/repo/con spazio.ts"])
