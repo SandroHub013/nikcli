@@ -1082,23 +1082,19 @@ fn first_line_within(child: &mut std::process::Child, timeout: std::time::Durati
  * for a `-c`; the handful of per-subcommand options that also carry a command
  * are refused wherever they appear; and the environment is narrowed to the one
  * variable ADE sets, so GIT_PAGER and friends cannot arrive that way either.
+ *
+ * The subcommands are the ones ADE sends and nothing else: `rebase`, `merge`,
+ * `cherry-pick`, `commit` and the rest were allowed "in case", and `rebase
+ * --exe=<cmd>` (git takes any unique prefix of a long option) ran the command.
+ * Full review of 2026-10-06, Rust area, ALTO 1.
  */
 const GIT_SUBCOMMANDS: &[&str] = &[
     "status",
     "worktree",
     "rev-parse",
-    "rev-list",
     "branch",
     "add",
-    "commit",
-    "commit-tree",
-    "write-tree",
-    "merge",
-    "rebase",
-    "cherry-pick",
     "diff",
-    "show",
-    "log",
     "ls-files",
 ];
 
@@ -1130,7 +1126,7 @@ struct ShellOutput {
 }
 
 /// Where a git call would write outside the index and the work tree it runs
-/// in: a `worktree add` or `move` destination, and a `GIT_INDEX_FILE`. Each
+/// in: a `worktree add` destination, and a `GIT_INDEX_FILE`. Each
 /// must be a place ADE may write, inside a project, or the
 /// `<project>-worktrees` folder beside one, where ADE puts its own checkouts
 /// (`worktreePlan`).
@@ -1165,22 +1161,11 @@ fn check_git_destinations(
             Err(format!("git scriverebbe fuori dal progetto: {raw}"))
         }
     };
-    if args.first().map(String::as_str) == Some("worktree") {
-        let sub = args.get(1).map(String::as_str);
-        if matches!(sub, Some("add" | "move")) {
-            // The positionals, past the options and the values some of them take.
-            let mut positionals = Vec::new();
-            let mut rest = args[2..].iter();
-            while let Some(arg) = rest.next() {
-                if arg == "-b" || arg == "-B" || arg == "--reason" {
-                    rest.next();
-                } else if !arg.starts_with('-') {
-                    positionals.push(arg.as_str());
-                }
-            }
-            let destination = if sub == Some("add") { positionals.first() } else { positionals.get(1) };
-            place(destination.ok_or("git worktree senza cartella di destinazione")?)?;
-        }
+    // Only the one form ADE sends is read for its destination, so there is no
+    // option left to hide a value in (`-fb x <dest>` is `-f -b x`, not `-fb`
+    // with a value: the old positional walk validated `x`, git wrote `<dest>`).
+    if let Some(destination) = worktree_form(args)? {
+        place(destination)?;
     }
     if let Some(index) = env.get("GIT_INDEX_FILE") {
         // The review's own index is in the repository's git dir, which for a
@@ -1197,6 +1182,32 @@ fn check_git_destinations(
     Ok(())
 }
 
+/// The one `git worktree` call per purpose ADE makes, and nothing else:
+///
+/// - `worktree add -b <branch> <path> [<base>]` (`worktreeAddArgs`), whose path
+///   is returned so the caller can check where it lands;
+/// - `worktree list --porcelain`;
+/// - `worktree remove <path>`.
+///
+/// Every operand is a name, never an option: git reads a short-option cluster
+/// like `-fb` as `-f -b`, so a check that skips "the value of `-b`" validates
+/// the wrong word.
+fn worktree_form(args: &[String]) -> Result<Option<&str>, String> {
+    if args.first().map(String::as_str) != Some("worktree") {
+        return Ok(None);
+    }
+    let name = |value: &String| !value.is_empty() && !value.starts_with('-');
+    let refused = || Err("forma di git worktree non consentita".to_string());
+    match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+        ["worktree", "add", "-b", _, _] | ["worktree", "add", "-b", _, _, _] if args[3..].iter().all(name) => {
+            Ok(Some(args[4].as_str()))
+        }
+        ["worktree", "list", "--porcelain"] => Ok(None),
+        ["worktree", "remove", _] if name(&args[2]) => Ok(None),
+        _ => refused(),
+    }
+}
+
 fn check_git_args(args: &[String]) -> Result<(), String> {
     let Some(subcommand) = args.first() else {
         return Err("git senza sottocomando".to_string());
@@ -1204,6 +1215,7 @@ fn check_git_args(args: &[String]) -> Result<(), String> {
     if !GIT_SUBCOMMANDS.contains(&subcommand.as_str()) {
         return Err(format!("sottocomando git non consentito: {subcommand}"));
     }
+    worktree_form(args)?;
     for arg in &args[1..] {
         if arg == "--" {
             break;
@@ -1214,12 +1226,18 @@ fn check_git_args(args: &[String]) -> Result<(), String> {
             return Err(format!("opzione git non consentita: {arg}"));
         }
         /*
-         * `rebase -x <cmd>` is `--exec`, and git's option parser also takes it
-         * glued (`-xcmd`) or clustered (`-ix cmd`). Any short-option cluster
-         * holding an x is refused for rebase; `cherry-pick -x` only annotates
-         * the message and stays allowed.
+         * git's option parser takes any unique prefix of a long option:
+         * `--exe=calc` is `--exec=calc` and `--outp=file` is `--output=file`.
+         * A word that begins a forbidden long option is refused, so the
+         * abbreviations go the way of the full names.
          */
-        if subcommand == "rebase" && arg.starts_with('-') && !arg.starts_with("--") && arg[1..].contains('x') {
+        if head.len() > 2
+            && head.starts_with("--")
+            && GIT_EXECUTING_FLAGS
+                .iter()
+                .chain(GIT_WRITING_FLAGS)
+                .any(|flag| flag.starts_with("--") && flag.starts_with(head))
+        {
             return Err(format!("opzione git non consentita: {arg}"));
         }
     }
@@ -2961,6 +2979,12 @@ mod tests {
             &["rebase", "-ix", "calc"],
             &["rebase", "-xcalc"],
             &["rebase", "--exec=calc"],
+            // Full review 2026-10-06, Rust ALTO 1: git takes any unique prefix of a long option.
+            &["rebase", "--exe=calc", "--root"],
+            &["rebase", "--ex", "calc", "--root"],
+            &["diff", "--outp=C:/evil.txt"],
+            &["diff", "--ext-d"],
+            &["diff", "--text=x"],
             &["diff", "--output=C:/evil.txt"],
             &["log", "--output", "x"],
             &["diff", "--ext-diff"],
@@ -2970,12 +2994,75 @@ mod tests {
             assert!(check_git_args(&args(bad)).is_err(), "{bad:?}");
         }
         for good in [
-            &["cherry-pick", "-x", "abc"][..],
-            &["rebase", "main"],
-            &["diff", "--cached", "HEAD"],
-            &["log", "--", "--output=x"],
+            &["diff", "--cached", "HEAD"][..],
+            &["diff", "--cached", "--name-status", "HEAD"],
+            &["diff", "--cached", "--shortstat", "main"],
+            &["diff", "--", "--output=x"],
+            &["status", "--porcelain"],
+            &["rev-parse", "--show-toplevel"],
+            &["rev-parse", "--git-path", "ade-review-index"],
+            &["add", "-A", "--", ":!.ade-trees"],
+            &["ls-files", "-co", "--exclude-standard"],
+            &["ls-files", "-z", "--", "a.md"],
+            &["branch", "--list", "ade/*", "--merged"],
+            &["branch", "-d", "ade/x"],
         ] {
             assert!(check_git_args(&args(good)).is_ok(), "{good:?}");
+        }
+    }
+
+    /// Full review 2026-10-06, Rust ALTO 1: only the subcommands ADE sends are left.
+    #[test]
+    fn git_subcommands_ade_never_sends_are_refused() {
+        let args = |list: &[&str]| list.iter().map(|a| a.to_string()).collect::<Vec<_>>();
+        for bad in [
+            &["rebase", "main"][..],
+            &["merge", "x"],
+            &["cherry-pick", "-x", "abc"],
+            &["commit", "-m", "x"],
+            &["commit-tree", "HEAD^{tree}"],
+            &["write-tree"],
+            &["log"],
+            &["show", "HEAD"],
+            &["rev-list", "HEAD"],
+            &["config", "core.pager", "calc"],
+        ] {
+            assert!(check_git_args(&args(bad)).is_err(), "{bad:?}");
+        }
+    }
+
+    /// Full review 2026-10-06, Rust 3: `worktree add` only in the form of `worktreeAddArgs`.
+    #[test]
+    fn git_worktree_is_called_only_in_the_forms_ade_uses() {
+        let args = |list: &[&str]| list.iter().map(|a| a.to_string()).collect::<Vec<_>>();
+        for good in [
+            &["worktree", "add", "-b", "ade/x", "C:/p-worktrees/x"][..],
+            &["worktree", "add", "-b", "ade/x", "C:/p-worktrees/x", "main"],
+            &["worktree", "list", "--porcelain"],
+            &["worktree", "remove", "C:/p-worktrees/x"],
+        ] {
+            assert!(check_git_args(&args(good)).is_ok(), "{good:?}");
+        }
+        for bad in [
+            // `-fb x <dest>` is `-f -b x`: the destination was never validated.
+            &["worktree", "add", "-fb", "x", "C:/Users/u/Documents/WindowsPowerShell"][..],
+            &["worktree", "add", "-f", "-b", "x", "C:/elsewhere"],
+            &["worktree", "add", "C:/elsewhere"],
+            &["worktree", "add", "--detach", "C:/elsewhere"],
+            &["worktree", "add", "-B", "x", "C:/elsewhere"],
+            &["worktree", "add", "-b", "-x", "C:/elsewhere"],
+            &["worktree", "add", "-b", "x", "-fdest"],
+            &["worktree", "add", "-b", "x", "C:/p", "-f"],
+            &["worktree", "add", "-b", "x", "C:/p", "main", "extra"],
+            &["worktree", "add", "-b", "x", ""],
+            &["worktree", "move", "a", "b"],
+            &["worktree", "remove", "-f", "C:/p-worktrees/x"],
+            &["worktree", "remove", "C:/a", "C:/b"],
+            &["worktree", "prune"],
+            &["worktree", "lock", "C:/p"],
+            &["worktree"],
+        ] {
+            assert!(check_git_args(&args(bad)).is_err(), "{bad:?}");
         }
     }
 
@@ -2997,14 +3084,17 @@ mod tests {
 
         // ADE's own: a branch, in the folder beside the project.
         assert_eq!(check(&["worktree", "add", "-b", "ade/x", &format!("{beside}/x"), "main"], &none), Ok(()));
-        assert_eq!(check(&["worktree", "add", "inside"], &none), Ok(()));
+        assert_eq!(check(&["worktree", "add", "-b", "ade/x", "inside"], &none), Ok(()));
         // Anywhere else, refused, however it is spelled.
         for bad in [
-            vec!["worktree", "add", &elsewhere],
+            vec!["worktree", "add", "-b", "ade/x", &elsewhere],
             vec!["worktree", "add", "-b", "ade/x", &elsewhere, "main"],
-            vec!["worktree", "add", "../elsewhere"],
+            vec!["worktree", "add", "-b", "ade/x", "../elsewhere"],
+            vec!["worktree", "add", "-b", "ade/x", ".git/hooks"],
+            // Not the form ADE sends: the destination cannot be told, so it is refused.
+            vec!["worktree", "add", &elsewhere],
+            vec!["worktree", "add", "-fb", "x", &elsewhere],
             vec!["worktree", "move", "inside", &elsewhere],
-            vec!["worktree", "add", ".git/hooks"],
         ] {
             assert!(check(&bad, &none).is_err(), "{bad:?}");
         }
