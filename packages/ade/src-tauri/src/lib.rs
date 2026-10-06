@@ -789,6 +789,11 @@ fn check_nikcli_args(roots: &WriteRoots, args: &[String]) -> Result<(), String> 
                 }
                 seen.push(flag);
                 if flag == "--path" {
+                    // Read against ADE's folder here and against `cwd` by nikcli: only an absolute path means one place
+                    // (full review 2026-10-06, rust 20).
+                    if !Path::new(value).is_absolute() {
+                        return Err(format!("--path deve essere un percorso assoluto: {value}"));
+                    }
                     let resolved = resolve_for_check(Path::new(value))?;
                     let global = nikcli_global_dir().map(|d| d.canonicalize().unwrap_or(d));
                     let in_project = within_roots(roots, value).is_ok();
@@ -3302,6 +3307,23 @@ mod tests {
         assert!(!is_bot_path(&config.join("agent").join("run.js"), config));
         assert!(!is_bot_path(&config.join("agent"), config));
         assert!(!is_bot_path(Path::new("C:\\elsewhere\\agent\\x.md"), config));
+    }
+
+    // Full review 2026-10-06, rust 20: the check read a relative path against ADE's folder, nikcli reads it against `cwd`.
+    #[test]
+    fn a_relative_config_path_is_refused_whatever_folder_it_would_land_in() {
+        let here = std::env::current_dir().expect("cartella di lavoro").canonicalize().expect("canonica");
+        let roots = WriteRoots::default();
+        roots.0.lock().unwrap().push(here);
+        let args = |path: &str| {
+            ["agent", "create", "--path", path, "--description", "a", "--mode", "primary", "--tools", ""]
+                .map(String::from)
+                .to_vec()
+        };
+        // Inside ADE's own folder, so the old check passed it; nikcli would put the file under `cwd`.
+        let error = check_nikcli_args(&roots, &args(".nikcli-rel-test")).unwrap_err();
+        assert!(error.contains("assoluto"), "{error}");
+        assert!(check_nikcli_args(&roots, &args("..\\x")).is_err());
     }
 
     #[test]
