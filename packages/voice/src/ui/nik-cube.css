@@ -86,7 +86,7 @@
   width: var(--cube-edge);
   height: var(--cube-edge);
   transform-style: preserve-3d;
-  animation: nik-cube-turn var(--cube-seconds) linear infinite;
+  animation: nik-cube-turn var(--cube-seconds) linear infinite var(--ade-loops, running);
 }
 
 /*

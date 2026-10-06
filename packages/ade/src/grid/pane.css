@@ -69,7 +69,7 @@
   background-color: color-mix(in srgb, var(--pane-status) 25%, transparent);
   background-size: 35% 100%;
   background-repeat: no-repeat;
-  animation: ade-pane-sweep 1.6s var(--ade-ease) infinite;
+  animation: ade-pane-sweep 1.6s var(--ade-ease) infinite var(--ade-loops, running);
 }
 
 [data-component="session-pane"][data-status="working"],
@@ -964,7 +964,7 @@
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  animation: ade-pane-halo-rest 1.6s ease-in-out infinite;
+  animation: ade-pane-halo-rest 1.6s ease-in-out infinite var(--ade-loops, running);
 }
 
 [data-component="session-pane"][data-status="working"] [data-slot="pane-identity"]::before,
@@ -1155,15 +1155,15 @@
   stroke: none;
 }
 .ic-work {
-  animation: ade-spin 1s linear infinite;
+  animation: ade-spin 1s linear infinite var(--ade-loops, running);
 }
 .ic-perm {
-  animation: ade-attn 1.6s steps(1, end) infinite;
+  animation: ade-attn 1.6s steps(1, end) infinite var(--ade-loops, running);
 }
 .ic-ask .d1,
 .ic-ask .d2,
 .ic-ask .d3 {
-  animation: ade-dot 1.2s ease-in-out infinite;
+  animation: ade-dot 1.2s ease-in-out infinite var(--ade-loops, running);
 }
 .ic-ask .d2 {
   animation-delay: 0.2s;

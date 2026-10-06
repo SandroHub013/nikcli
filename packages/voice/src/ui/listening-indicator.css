@@ -49,11 +49,11 @@
 
 @media (prefers-reduced-motion: no-preference) {
   [data-component="listening-indicator"][data-state="listening"] [data-slot="listening-dot"] {
-    animation: listening-pulse 2s ease-in-out infinite;
+    animation: listening-pulse 2s ease-in-out infinite var(--ade-loops, running);
   }
 
   [data-component="listening-indicator"][data-state="follow-up"] [data-slot="listening-dot"] {
-    animation: listening-pulse 0.8s ease-in-out infinite;
+    animation: listening-pulse 0.8s ease-in-out infinite var(--ade-loops, running);
   }
 }
 

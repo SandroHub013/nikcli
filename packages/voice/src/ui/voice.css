@@ -92,7 +92,7 @@
 }
 
 [data-component="voice-button"][data-status="listening"] [data-slot="mic-ring"] {
-  animation: ade-voice-ring-pulse 2s var(--ade-ease) infinite;
+  animation: ade-voice-ring-pulse 2s var(--ade-ease) infinite var(--ade-loops, running);
 }
 
 [data-component="voice-button"] [data-slot="mic-icon"] {
