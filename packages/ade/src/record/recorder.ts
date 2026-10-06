@@ -149,6 +149,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
 
       const startedAt = deps.now()
       const name = recordingName(startedAt)
+      let capturing = false
       try {
         const level = deps.quality?.() ?? qualityLevel(undefined)
         const started = await deps.start(target, dir, name, {
@@ -157,6 +158,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
           ...(level.width ? { width: level.width } : {}),
           ...(level.height ? { height: level.height } : {}),
         })
+        capturing = true
         log = createEventLog(startedAt)
         voice = []
         const frame = deps.frame?.(target)
@@ -178,6 +180,26 @@ export function createRecorder(deps: RecorderDeps): Recorder {
         })
         return undefined
       } catch (error) {
+        /*
+         * A take that failed after the capture came up must not leave it running with the recorder saying «idle»: the
+         * button would offer a new take over a capture nobody can stop, and the microphone would stay open (full review
+         * 2026-10-06, nikverse B2). What is up is shut down, its output left where it is.
+         */
+        if (capturing) {
+          const micTake = mic
+          log = undefined
+          voice = []
+          mic = undefined
+          if (state.status !== "idle") {
+            try {
+              settle({ status: "idle" })
+            } catch {
+              // `settle` set the state before it told anyone.
+            }
+          }
+          await deps.stop().catch(() => undefined)
+          await micTake?.stop().catch(() => undefined)
+        }
         return error instanceof Error ? error.message : String(error)
       }
     },

@@ -61,6 +61,52 @@ describe("record/recorder", () => {
     expect(written).toEqual([])
   })
 
+  // Full review 2026-10-06, nikverse B2.
+  test("a take that fails after the capture came up stops the capture and the microphone", async () => {
+    let stops = 0
+    let micStops = 0
+    const recorder = createRecorder({
+      start: async (_target, dir, name) => ({ path: `${dir}/${name}.mp4` }),
+      stop: async () => {
+        stops += 1
+        return { path: null }
+      },
+      writeText: async () => {},
+      dir: () => "C:/video",
+      now: () => T0,
+      onState: (state) => {
+        if (state.status === "recording") throw new Error("nessun frame")
+      },
+      startMic: async () => ({
+        extension: "webm",
+        stop: async () => {
+          micStops += 1
+          return undefined
+        },
+      }),
+    })
+    expect(await recorder.start({ kind: "window" }, { mic: true })).toBe("nessun frame")
+    expect(stops).toBe(1)
+    expect(micStops).toBe(1)
+    expect(recorder.state()).toEqual({ status: "idle" })
+    // A capture that never came up is not stopped: nothing to stop.
+    const refused = createRecorder({
+      start: async () => {
+        throw new Error("rifiutata")
+      },
+      stop: async () => {
+        stops += 1
+        return { path: null }
+      },
+      writeText: async () => {},
+      dir: () => "C:/video",
+      now: () => T0,
+      onState: () => {},
+    })
+    expect(await refused.start({ kind: "window" })).toBe("rifiutata")
+    expect(stops).toBe(1)
+  })
+
   test("a second take is refused while one runs, and notes outside a take are dropped", async () => {
     const { recorder, started, written } = setup()
     await recorder.start({ kind: "window" })
