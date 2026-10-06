@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { localePreference, setLocalePreference } from "../i18n"
-import { NARROW_BAR, queueItemLabel, queueShown, queueText, queueTitle } from "./bar-queue"
+import { NARROW_BAR, createOpenKeyTracker, newlyOpened, queueItemLabel, queueShown, queueText, queueTitle } from "./bar-queue"
 import { codeOf } from "../test-support/source-text"
 
 /*
@@ -82,6 +82,72 @@ describe("the queue buttons' words", () => {
     expect(workbench).toContain("openDecisionsPane()")
     expect(workbench).toContain("setDesignOpen(true)")
     expect(workbench).toContain("openDesignPane()")
+  })
+})
+
+describe("tracking newly opened register keys (O2)", () => {
+  test("newlyOpened returns only items with keys not yet in seen", () => {
+    const seen = new Set<string>(["D1", "D2"])
+    const items = [
+      { k: "D1", title: "Prima" },
+      { k: "D2", title: "Seconda" },
+      { k: "D3", title: "Terza" },
+    ]
+    const fresh = newlyOpened(seen, items)
+    expect(fresh).toEqual([{ k: "D3", title: "Terza" }])
+    expect(seen.has("D3")).toBe(true)
+  })
+
+  test("createOpenKeyTracker establishes baseline on first load without reporting new items", () => {
+    const tracker = createOpenKeyTracker<{ k: string; title: string }>()
+    const initial = [
+      { k: "D1", title: "Prima" },
+      { k: "D2", title: "Seconda" },
+      { k: "D3", title: "Terza" },
+    ]
+    // Initial load: 3 open items, returns empty (no false alerts on startup)
+    const fresh = tracker.update("/progetto-1", initial)
+    expect(fresh).toEqual([])
+    expect(tracker.seen.size).toBe(3)
+
+    // +1 key added: reports the new item
+    const withNew = [...initial, { k: "D4", title: "Quarta" }]
+    const added = tracker.update("/progetto-1", withNew)
+    expect(added).toEqual([{ k: "D4", title: "Quarta" }])
+    expect(tracker.seen.size).toBe(4)
+
+    // Same items again: nothing new
+    expect(tracker.update("/progetto-1", withNew)).toEqual([])
+  })
+
+  test("createOpenKeyTracker resets baseline on project change without reporting new items", () => {
+    const tracker = createOpenKeyTracker<{ k: string; title: string }>()
+    tracker.update("/progetto-1", [{ k: "D1", title: "Prima" }])
+
+    // Switch to another project with existing open items: no false alerts
+    const freshOnSwitch = tracker.update("/progetto-2", [
+      { k: "X1", title: "Altro progetto 1" },
+      { k: "X2", title: "Altro progetto 2" },
+    ])
+    expect(freshOnSwitch).toEqual([])
+    expect(tracker.seen.has("X1")).toBe(true)
+    expect(tracker.seen.has("X2")).toBe(true)
+    expect(tracker.seen.has("D1")).toBe(false)
+  })
+
+  test("createOpenKeyTracker reports newly opened items when one closes and another opens with equal count", () => {
+    const tracker = createOpenKeyTracker<{ k: string; title: string }>()
+    tracker.update("/progetto-1", [
+      { k: "D1", title: "Prima" },
+      { k: "D2", title: "Seconda" },
+    ])
+
+    // D1 is closed, but D3 is newly opened. Count remains 2.
+    const updated = tracker.update("/progetto-1", [
+      { k: "D2", title: "Seconda" },
+      { k: "D3", title: "Terza" },
+    ])
+    expect(updated).toEqual([{ k: "D3", title: "Terza" }])
   })
 })
 

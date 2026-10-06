@@ -164,7 +164,7 @@ import { EmptyProject } from "./empty-project"
 import { ProjectBar } from "./project-bar"
 import { SidebarToggle, readSidebarHidden, writeSidebarHidden } from "./sidebar-toggle"
 import { PillTabs, type PillTabItem } from "../ui/pill-tabs"
-import { queueItemLabel } from "./bar-queue"
+import { queueItemLabel, createOpenKeyTracker } from "./bar-queue"
 import { NikChromeLogo } from "./nik-chrome-logo"
 const isTauriDesktop = () => typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)
 
@@ -1826,46 +1826,45 @@ export function Workbench() {
   const [decisionsAttention, setDecisionsAttention] = createSignal(false)
   const [designAttention, setDesignAttention] = createSignal(false)
 
-  let prevDecisionsCount = -1
+  const decisionsTracker = createOpenKeyTracker<{ k: string; title: string }>()
+  const designTracker = createOpenKeyTracker<{ k: string; title: string }>()
+
   createEffect(() => {
-    const current = decisionsWaiting()
-    const list = decisionsRegister.state()?.decisions ?? []
-    if (prevDecisionsCount === -1) {
-      prevDecisionsCount = current
+    const root = project()?.root
+    const loaded = decisionsRegister.loaded()
+    if (!loaded) {
+      decisionsTracker.reset()
       return
     }
-    if (current > prevDecisionsCount) {
+    const openItems = (decisionsRegister.state()?.decisions ?? []).filter((d) => d.status === "aperta")
+    const fresh = decisionsTracker.update(root, openItems)
+    if (fresh.length > 0) {
       setDecisionsAttention(true)
-      const openItems = list.filter((d) => d.status === "aperta")
-      const latest = openItems[openItems.length - 1]
-      if (latest) {
-        toast.show(t("decisions.notice.toTake", latest.title))
+      for (const item of fresh) {
+        toast.show(t("decisions.notice.toTake", item.title))
       }
-    } else if (current === 0) {
+    } else if (openItems.length === 0) {
       setDecisionsAttention(false)
     }
-    prevDecisionsCount = current
   })
 
-  let prevDesignCount = -1
   createEffect(() => {
-    const current = designWaiting()
-    const list = designRegister.state()?.proposals ?? []
-    if (prevDesignCount === -1) {
-      prevDesignCount = current
+    const root = project()?.root
+    const loaded = designRegister.loaded()
+    if (!loaded) {
+      designTracker.reset()
       return
     }
-    if (current > prevDesignCount) {
+    const openItems = (designRegister.state()?.proposals ?? []).filter((p) => p.status === "aperta")
+    const fresh = designTracker.update(root, openItems)
+    if (fresh.length > 0) {
       setDesignAttention(true)
-      const openItems = list.filter((p) => p.status === "aperta")
-      const latest = openItems[openItems.length - 1]
-      if (latest) {
-        toast.show(t("design.notice.toChoose", latest.title))
+      for (const item of fresh) {
+        toast.show(t("design.notice.toChoose", item.title))
       }
-    } else if (current === 0) {
+    } else if (openItems.length === 0) {
       setDesignAttention(false)
     }
-    prevDesignCount = current
   })
 
   createEffect(() => {

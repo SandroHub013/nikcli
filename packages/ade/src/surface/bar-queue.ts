@@ -76,3 +76,59 @@ export function queueItemLabel(family: "decisions" | "design", waiting: number, 
   const queuedText = queued > 0 ? t("bar.queue.queued", queued) : undefined
   return [name, forYou, queuedText].filter(Boolean).join(", ")
 }
+
+/**
+ * Returns the items from `open` whose keys are not in `seen`, and adds them to `seen`.
+ * Used to detect genuinely new items arriving in registers (O2).
+ */
+export function newlyOpened<T extends { k: string }>(seen: Set<string>, open: readonly T[]): T[] {
+  const fresh: T[] = []
+  for (const item of open) {
+    if (!seen.has(item.k)) {
+      seen.add(item.k)
+      fresh.push(item)
+    }
+  }
+  return fresh
+}
+
+export interface OpenKeyTracker<T extends { k: string }> {
+  readonly seen: ReadonlySet<string>
+  update(projectRoot: string | undefined, open: readonly T[]): T[]
+  reset(): void
+}
+
+/**
+ * Tracks open register keys across project changes and first loads (O2).
+ * Establishes a baseline on the initial load of each project without alerting.
+ * Returns only items whose keys are newly added to an already loaded project.
+ */
+export function createOpenKeyTracker<T extends { k: string }>(): OpenKeyTracker<T> {
+  let trackedRoot: string | undefined = undefined
+  let initialized = false
+  const seen = new Set<string>()
+
+  return {
+    get seen() {
+      return seen
+    },
+    update(projectRoot, open) {
+      if (projectRoot !== trackedRoot) {
+        trackedRoot = projectRoot
+        seen.clear()
+        initialized = false
+      }
+      if (!initialized) {
+        for (const item of open) seen.add(item.k)
+        initialized = true
+        return []
+      }
+      return newlyOpened(seen, open)
+    },
+    reset() {
+      trackedRoot = undefined
+      initialized = false
+      seen.clear()
+    },
+  }
+}
