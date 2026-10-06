@@ -26,6 +26,15 @@ export function readNonce(hash) {
   return value && /^[0-9a-f]{32,}$/.test(value) ? value : undefined
 }
 
+/**
+ * Where ADE asks the page to open (`&a=…` in the fragment): the paths, or the game. Only these two are believed: anything else, or
+ * nothing, is the paths.
+ */
+export function readPlace(hash) {
+  const value = new URLSearchParams(String(hash).replace(/^#/, "")).get("a")
+  return value === "gioco" ? "gioco" : "percorsi"
+}
+
 const PROGRESS_VERSION = 1
 /** The most an exercise can come back for the same right answer: past this, it rests. */
 export const MAX_INTERVAL = 30
@@ -362,6 +371,7 @@ export async function boot(win) {
   const summary = doc.getElementById("summary")
   const empty = doc.getElementById("empty")
   const nonce = readNonce(win.location?.hash ?? "")
+  const luogo = readPlace(win.location?.hash ?? "")
   if (!view || !summary || !empty) return undefined
   if (!nonce) {
     empty.textContent = "Questa pagina va aperta da ADE."
@@ -374,6 +384,8 @@ export async function boot(win) {
     percorso: 0,
     lezione: 0,
     fase: "lista",
+    /** Where ADE asked the page to open: the paths or the game (`readPlace`). */
+    luogo,
     /** The exercises being asked now: a lesson's, or the ones the ripasso is due. */
     esercizi: [],
     indice: 0,
@@ -801,6 +813,15 @@ export async function boot(win) {
     port.postMessage({ type: "ready" })
   }
   win.addEventListener("message", onPort)
+  // The page is a layer over the world and cannot close it: Esc asks ADE to, on the port. Without the port there is no one to ask.
+  win.addEventListener("keydown", (evento) => {
+    if (evento.key !== "Escape" || evento.defaultPrevented) return
+    try {
+      port?.postMessage({ type: "close" })
+    } catch (errore) {
+      console.warn(`[impara] non riesco a chiudere: ${String(errore?.message ?? errore)}`)
+    }
+  })
   win.parent.postMessage({ type: HELLO, nonce }, "*")
 
   try {

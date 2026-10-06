@@ -5,8 +5,10 @@ import { createHandshake, newNonce } from "./handshake"
 import { createLink } from "./link"
 import { createPlayerStore, type SpotStorage } from "./player"
 import { createLoweredStore, createOpenWatch, worldQuery } from "./opening"
-import { PORT_OFFER, PROTOCOL_VERSION, worldUrl, type Command, type Snapshot } from "./protocol"
+import { PORT_OFFER, PROTOCOL_VERSION, worldUrl, type Command, type LearnPlace, type Snapshot } from "./protocol"
 import type { ForwardedChord } from "./chords"
+import { LearnLayer } from "./learn/learn-layer"
+import type { LearnOpening, LearnProgressHost } from "./learn/learn-frame"
 import "./nikverse.css"
 import { t } from "../i18n"
 
@@ -19,6 +21,10 @@ import { t } from "../i18n"
  * (`createLifecycle`); when it comes back the frame starts again from a fresh
  * picture. Anything that changes something asks in this panel's own DOM, never
  * in the frame.
+ *
+ * The lessons open over the world, in this same panel (`open-learn`, from the world's list or its lighthouse): a layer in ADE's
+ * own DOM with a frame of its own, its own nonce and its own port. While it is open the world is paused (`lifecycle.ts`) and its frame
+ * stays where it is; closing the layer — Esc in the page, Esc on the bar, «Torna al mondo» — takes the lesson frame away.
  *
  * What it decides is in `protocol.ts`, `link.ts`, `snapshot.ts`, `lifecycle.ts`
  * and `opening.ts`; the wiring is mounted in `nikverse-pane.test.ts` (`compileSolidJsx`).
@@ -52,6 +58,11 @@ export function NikversePane(props: {
   onChord: (chord: ForwardedChord) => void
   /** A message the world sent that ADE ignored, and why. */
   onIgnored?: (reason: string) => void
+  /** What the lessons over the world need from ADE: the learner's progress, and what the lesson page said that ADE ignored. Absent: the page only shows. */
+  learn?: {
+    progress: () => Promise<LearnProgressHost | undefined>
+    ignored?: (reason: string) => void
+  }
   onFocus?: () => void
   onClose?: () => void
   onExpand?: () => void
@@ -153,6 +164,22 @@ export function NikversePane(props: {
     await assetsFlow.start()
   }
   const [asking, setAsking] = createSignal<{ command: Command; approve: () => void }>()
+  /** The lesson over the world: where it opens. One at a time. */
+  const [lesson, setLesson] = createSignal<{ opening: LearnOpening }>()
+  /** The lighthouse opens the lessons and the kiosk the game: the page's own names for where it starts. */
+  const openLearn = (place: LearnPlace) => {
+    if (lesson()) return
+    setLesson({ opening: place === "gioco" ? "gioco" : "percorsi" })
+    // The world is paused for as long as the layer is there (the panel being seen is the other half of the rule).
+    lifecycle.setLesson(true)
+  }
+  const closeLearn = () => {
+    if (!lesson()) return
+    setLesson(undefined)
+    lifecycle.setLesson(false)
+    // The focus goes back to the world, where the learner came from.
+    frame?.focus()
+  }
 
   const run = (command: Command) => {
     switch (command.cmd) {
@@ -162,6 +189,8 @@ export function NikversePane(props: {
         return props.onFocusProject(command.project)
       case "chord":
         return props.onChord(command)
+      case "open-learn":
+        return openLearn(command.place)
       case "release-focus":
         // The frame cannot give the focus back; blurring it hands it to ADE's own document, whose shortcuts listen on the window.
         return frame?.blur()
@@ -224,6 +253,9 @@ export function NikversePane(props: {
       link?.close()
       link = undefined
       setAsking(undefined)
+      // The frame is let go: the lesson over it goes with it.
+      setLesson(undefined)
+      lifecycle.setLesson(false)
       setLoaded(false)
     },
     load: () => {
@@ -407,6 +439,19 @@ export function NikversePane(props: {
               {t("nikverse.late.list")}
             </button>
           </div>
+        </Show>
+        <Show when={lesson()}>
+          {(open) => (
+            <div data-slot="nikverse-learn">
+              <LearnLayer
+                place={open().opening}
+                progress={props.learn?.progress}
+                onIgnored={props.learn?.ignored}
+                onBack={closeLearn}
+                autofocus
+              />
+            </div>
+          )}
         </Show>
         <Show when={loaded() && !waiting()} fallback={loaded() ? null : <p data-slot="nikverse-unloaded">{t("nikverse.unloaded")}</p>}>
           <Show when={frameLoad()} keyed>

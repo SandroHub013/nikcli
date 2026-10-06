@@ -156,6 +156,8 @@ export const en: Messages = {
   "newPane.nikverse.hint": "the city of your sessions, live",
   "newPane.learn": "Learn",
   "newPane.learn.hint": "short lessons, a few at a time",
+  "learn.title": "Learn",
+  "learn.back": "Back to the world",
   "learn.export": "Export progress",
   "learn.import": "Import progress",
   "learn.exported": "Progress exported.",

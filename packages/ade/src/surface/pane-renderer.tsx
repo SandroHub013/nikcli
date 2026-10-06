@@ -394,6 +394,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         onChord={deps.world.chord}
         onIgnored={deps.world.ignored}
         assets={deps.world.assets}
+        learn={deps.learn}
         onFocus={focus}
         onClose={() => deps.close(current().id)}
         onExpand={expand}

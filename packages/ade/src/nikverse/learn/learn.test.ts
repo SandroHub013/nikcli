@@ -21,6 +21,7 @@ import {
   nextInterval,
   normalizeProgress,
   readNonce,
+  readPlace,
   recordAnswer,
   rich,
   seedOf,
@@ -332,7 +333,8 @@ describe("the page and ADE, over one port", () => {
     }
     const offer = (source: unknown, ports: unknown[], type = PORT_OFFER) =>
       listeners.get("message")?.({ source, data: { type, version: 1 }, ports })
-    return { win, parent, toParent, port, offer }
+    const press = (key: string, defaultPrevented = false) => listeners.get("keydown")?.({ key, defaultPrevented })
+    return { win, parent, toParent, port, offer, press }
   }
 
   /** What the port answered ADE with, of one type. */
@@ -370,6 +372,39 @@ describe("the page and ADE, over one port", () => {
     const { win, toParent } = fakePage(`#n=${NONCE}`)
     void boot(win)
     expect(toParent).toEqual([[{ type: HELLO, nonce: NONCE }, "*"]])
+  })
+
+  test("`a=` picks where the page opens: the game or the paths, and anything else is the paths", async () => {
+    for (const [hash, luogo] of [
+      [`#n=${NONCE}&a=gioco`, "gioco"],
+      [`#n=${NONCE}&a=percorsi`, "percorsi"],
+      [`#n=${NONCE}&a=altro`, "percorsi"],
+      [`#n=${NONCE}&a=GIOCO`, "percorsi"],
+      [`#n=${NONCE}&a=`, "percorsi"],
+      [`#n=${NONCE}`, "percorsi"],
+      [`#a=gioco&n=${NONCE}`, "gioco"],
+    ] as const) {
+      expect([hash, readPlace(hash)]).toEqual([hash, luogo])
+      const { win } = fakePage(hash)
+      const stato = await boot(win)
+      expect([hash, stato?.luogo]).toEqual([hash, luogo])
+    }
+  })
+
+  test("Esc asks ADE to close the layer over the port, only once the port is there, and not when something else took the key", async () => {
+    const { win, parent, port, offer, press } = fakePage(`#n=${NONCE}`)
+    await boot(win)
+    // No port yet: nobody to ask, nothing thrown.
+    press("Escape")
+    const via = port()
+    offer(parent, [via])
+    expect(via.seen).toEqual([{ type: "ready" }])
+    press("a")
+    press("Enter")
+    press("Escape", true)
+    expect(via.seen).toEqual([{ type: "ready" }])
+    press("Escape")
+    expect(via.seen).toEqual([{ type: "ready" }, { type: "close" }])
   })
 
   test("without the nonce it says nothing, and no port offered to it is taken", async () => {

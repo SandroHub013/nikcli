@@ -16,6 +16,16 @@
   background: transparent;
 }
 
+/* A lesson over the world: ADE's own DOM, in this panel, above the world's frame (which stays loaded, paused, under it). */
+[data-slot="nikverse-learn"] {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  background: var(--ade-bg, canvas);
+}
+
 [data-slot="nikverse-unloaded"] {
   margin: auto;
   padding: 16px;

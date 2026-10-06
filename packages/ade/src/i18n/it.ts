@@ -161,6 +161,8 @@ export const it = {
   "newPane.nikverse.hint": "la città delle tue sessioni, in tempo reale",
   "newPane.learn": "Impara",
   "newPane.learn.hint": "lezioni brevi, da fare a pezzi",
+  "learn.title": "Impara",
+  "learn.back": "Torna al mondo",
   "learn.export": "Esporta progressi",
   "learn.import": "Importa progressi",
   "learn.exported": "Progressi esportati.",
