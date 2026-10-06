@@ -227,13 +227,62 @@ export namespace ToolRegistry {
     deferralEnabled = value
   }
 
+  /**
+   * Smaller schemas for the core toolset, behind `experimental.toolset` / `NIKCLI_TOOLSET`. The default is the
+   * set above, unchanged; the others defer more of {@link CORE}, so one build serves several arms.
+   *
+   * - `a1`: lsp, webfetch, skill, todoread, todowrite, grep and glob leave the schema.
+   * - `t5`: only read, bash, apply_patch (edit/write on the models that use them), search_tools and call_tool stay;
+   *   every other core tool is deferred, and `invalid` — where a malformed call lands, which the model is told not
+   *   to call — stays runnable but is not advertised ({@link schemaHidden}).
+   *
+   * A deferred tool keeps its own description and parameters, reached through `search_tools` and `call_tool`.
+   */
+  export const TOOLSETS = ["default", "a1", "t5"] as const
+  export type Toolset = (typeof TOOLSETS)[number]
+
+  const A1_DEFERRED = ["glob", "grep", "lsp", "skill", "todoread", "todowrite", "webfetch"]
+  const T5_EXPOSED = new Set(["apply_patch", "bash", "call_tool", "edit", "read", "search_tools", "write"])
+
+  /** What a toolset defers on top of {@link DEFERRED}. */
+  function extraDeferred(toolset: Toolset): ReadonlySet<string> {
+    if (toolset === "a1") return new Set(A1_DEFERRED)
+    if (toolset === "t5") return new Set([...CORE].filter((id) => !T5_EXPOSED.has(id) && id !== "invalid"))
+    return new Set()
+  }
+
+  let currentToolset: Toolset = "default"
+  let deferredIds: ReadonlySet<string> = DEFERRED
+  let toolsetExtra: ReadonlySet<string> = new Set()
+
+  export function toolset(): Toolset {
+    return currentToolset
+  }
+
+  export function setToolset(value: string | undefined) {
+    const next = (TOOLSETS as readonly string[]).includes(value ?? "") ? (value as Toolset) : "default"
+    currentToolset = next
+    toolsetExtra = extraDeferred(next)
+    deferredIds = next === "default" ? DEFERRED : new Set([...DEFERRED, ...toolsetExtra])
+  }
+
+  /** Every id the current toolset keeps out of the schema, in the order `search_tools` names them. */
+  export function deferredToolIds(): ReadonlySet<string> {
+    return deferredIds
+  }
+
+  /** Entries of the resolved tools that stay runnable but are not sent to the model (`invalid` under t5). */
+  export function schemaHidden(): ReadonlySet<string> {
+    return currentToolset === "t5" ? new Set(["invalid"]) : new Set()
+  }
+
   export function deferralOn() {
     return deferralEnabled
   }
 
   /** Whether this tool is registered but kept out of the model's schema. */
   export function deferred(id: string): boolean {
-    return deferralEnabled && DEFERRED.has(id)
+    return deferralEnabled && deferredIds.has(id)
   }
 
   /**
@@ -301,7 +350,10 @@ export namespace ToolRegistry {
     // An agent that named a deferred tool in its own permission rules has already asked for it:
     // `explore` allows `webfetch` and `planner` allows `tree`, and deferring those would start each
     // subagent without the tool its prompt tells it to use.
-    if (curated(input.ruleset) || PermissionRuleset.requested([id], input.ruleset).has(id)) return "active"
+    if (curated(input.ruleset)) return "active"
+    // A tool the toolset itself defers is not brought back by a rule that names it: headless and auto sessions
+    // carry an explicit allow for nearly every core tool, which would make a1 and t5 no-ops.
+    if (!toolsetExtra.has(id) && PermissionRuleset.requested([id], input.ruleset).has(id)) return "active"
     return "deferred"
   }
 
@@ -586,6 +638,7 @@ export namespace ToolRegistry {
         // Default on; `experimental.deferredTools: false` (or `tool.eager: ["*"]`) is the escape hatch back to
         // "every registered tool in the schema".
         setDeferralEnabled(config.experimental?.deferredTools !== false)
+        setToolset(Flag.NIKCLI_TOOLSET || config.experimental?.toolset)
 
         return lastWins([
           InvalidTool,

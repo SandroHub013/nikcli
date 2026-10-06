@@ -226,6 +226,8 @@ export namespace Flag {
   export declare const NIKCLI_TUI_CONFIG: string | undefined
   /** Where the ChatGPT-plan (Codex) provider sends its model calls; the plugin's own URL when unset. */
   export declare const NIKCLI_CODEX_ENDPOINT: string | undefined
+  /** Which tool set the model's schema carries: default | a1 | t5 (see ToolRegistry.TOOLSETS); the config's `experimental.toolset` when unset. */
+  export declare const NIKCLI_TOOLSET: string | undefined
   export const NIKCLI_PURE = truthy("NIKCLI_PURE")
   export const NIKCLI_PLUGIN_META_FILE = process.env["NIKCLI_PLUGIN_META_FILE"]
 
@@ -333,6 +335,14 @@ Object.defineProperty(Flag, "NIKCLI_CONFIG_CONTENT", {
 Object.defineProperty(Flag, "NIKCLI_CODEX_ENDPOINT", {
   get() {
     return process.env["NIKCLI_CODEX_ENDPOINT"]
+  },
+  enumerable: true,
+  configurable: false,
+})
+
+Object.defineProperty(Flag, "NIKCLI_TOOLSET", {
+  get() {
+    return process.env["NIKCLI_TOOLSET"]
   },
   enumerable: true,
   configurable: false,

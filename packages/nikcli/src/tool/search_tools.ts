@@ -140,7 +140,7 @@ export const SearchToolsTool = Tool.define("search_tools", async (initCtx) => {
    * that is present is a capability the model cannot discover, so the first
    * failure is the cheaper one.
    */
-  const deferredNames = [...ToolRegistry.DEFERRED].sort(ToolRegistry.compareIds)
+  const deferredNames = [...ToolRegistry.deferredToolIds()].sort(ToolRegistry.compareIds)
 
   return {
     description: [

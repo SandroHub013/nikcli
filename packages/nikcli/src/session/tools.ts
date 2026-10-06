@@ -712,7 +712,8 @@ export async function resolveTools(input: {
     tools: Object.fromEntries(
       Object.entries(tools).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0)),
     ),
-    deferred: new Set<string>(),
+    // Empty unless the toolset keeps something runnable but out of the schema (`invalid` under t5).
+    deferred: ToolRegistry.schemaHidden(),
   }
 }
 
