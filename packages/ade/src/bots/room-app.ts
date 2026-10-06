@@ -142,8 +142,11 @@ const STORAGE_KEY = "ade.bots.rooms"
 /** In the WebView's storage, like the routines. What the bots said, never a credential. */
 export function localRoomStore(key: string = STORAGE_KEY): RoomStore {
   let memory: RoomBook | undefined
+  // The last write did not land: `memory` is newer than what storage holds, so it answers (bots 3).
+  let unsaved = false
   return {
     get: () => {
+      if (unsaved && memory) return memory
       try {
         return parseRooms(localStorage.getItem(key))
       } catch {
@@ -154,8 +157,10 @@ export function localRoomStore(key: string = STORAGE_KEY): RoomStore {
       memory = book
       try {
         localStorage.setItem(key, JSON.stringify(book))
+        unsaved = false
       } catch {
         // Storage blocked: the rooms last until ADE closes.
+        unsaved = true
       }
     },
   }

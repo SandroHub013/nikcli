@@ -17,11 +17,12 @@ interface Sent {
   readonly id: number
 }
 
-function fakeBridge(options: { startFails?: number } = {}) {
+function fakeBridge(options: { startFails?: number; sendFails?: number } = {}) {
   const sent: Sent[] = []
   const aborted: number[] = []
   let starts = 0
   let failures = options.startFails ?? 0
+  let sendFailures = options.sendFails ?? 0
   const answers: ((sent: Sent) => void)[] = []
   const bridge: ServerBridge = {
     async start() {
@@ -33,6 +34,11 @@ function fakeBridge(options: { startFails?: number } = {}) {
       return { url: "http://127.0.0.1:49374", version: "1.384.0" }
     },
     async send(request, onEvent) {
+      if (sendFailures > 0) {
+        sendFailures--
+        // What Rust answers when the server it knew has gone: the command is refused outright.
+        throw new Error("il server di nikcli non è avviato")
+      }
       const entry = { request, emit: onEvent, id: sent.length + 1 }
       sent.push(entry)
       answers.shift()?.(entry)
@@ -163,6 +169,20 @@ describe("il trasporto della chat", () => {
     fake.answer(json(200, { healthy: true, version: "1" }))
     const fetch = serverFetch(fake.bridge)
     await expect(fetch(`${SERVER_BASE}/global/health`)).rejects.toThrow("il server di nikcli non risponde")
+    expect((await fetch(`${SERVER_BASE}/global/health`)).status).toBe(200)
+    expect(fake.starts()).toBe(2)
+  })
+
+  /*
+   * Full review 2026-10-06, bots 4: `nikcli serve` exits (crash, killed, updated) and Rust refuses
+   * the request at once instead of sending an `error` event. `started` stayed the old resolved
+   * promise, `start` was never called again and the Chat stayed on «retrying» until ADE restarted.
+   */
+  test("un server che si è fermato: la richiesta rifiutata da Rust fa cercare di nuovo il server", async () => {
+    const fake = fakeBridge({ sendFails: 1 })
+    fake.answer(json(200, { healthy: true, version: "1" }))
+    const fetch = serverFetch(fake.bridge)
+    await expect(fetch(`${SERVER_BASE}/global/health`)).rejects.toThrow("il server di nikcli non è avviato")
     expect((await fetch(`${SERVER_BASE}/global/health`)).status).toBe(200)
     expect(fake.starts()).toBe(2)
   })

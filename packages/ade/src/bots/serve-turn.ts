@@ -548,7 +548,12 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
             const id = props["id"]
             if (typeof id !== "string") return
             const permission = String(props["permission"] ?? "")
-            const patterns = Array.isArray(props["patterns"]) ? props["patterns"].map(String).join(", ") : ""
+            /*
+             * One command to a line: nikcli's bash tool sends a pattern per command, and `decide`
+             * reads a new line as the start of one. Joined with ", " the second command followed
+             * no separator it knows, and `npm test, rm -rf src` was let through unasked.
+             */
+            const patterns = Array.isArray(props["patterns"]) ? props["patterns"].map(String).join("\n") : ""
             if (!request.onPermission) {
               // Nobody to answer: refused as it comes, and said.
               void server.reply(id, "reject").catch(() => {})
