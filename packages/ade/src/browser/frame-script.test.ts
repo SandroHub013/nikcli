@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { FRAME_ENVELOPE, FrameGate, frameGuard, frameScript, newFrameSecret, openEnvelope } from "./frame-script"
+import {
+  FRAME_ENVELOPE,
+  FrameGate,
+  frameGuard,
+  frameScript,
+  MAX_PENDING_ASKS,
+  newFrameSecret,
+  openEnvelope,
+} from "./frame-script"
 
 const KEY = "invoke-key-that-must-not-leak"
 
@@ -455,6 +463,39 @@ describe("FrameGate", () => {
     g.ask(gone.pane)
     await tick()
     expect(gone.pane.closed).toBe(true)
+  })
+
+  // Full review 2026-10-06, M4: a page posting `ade-browser:ask` in a loop held a port, a ping and a place in the list each.
+  test("a flood of asks holds eight, closes the rest unheard, and the verdict still comes", async () => {
+    const { g } = gate()
+    const script = asker()
+    g.ask(script.pane)
+    // The document that held the secret is gone (a navigation).
+    script.state.live = false
+    const flood = Array.from({ length: 200 }, () => asker())
+    for (const ask of flood) g.ask(ask.pane)
+    const held = flood.filter((ask) => !ask.pane.closed)
+    expect(held.length).toBe(MAX_PENDING_ASKS)
+    // The first ones are the ones kept: in a new document the script's ask is the first of all.
+    expect(held).toEqual(flood.slice(0, MAX_PENDING_ASKS))
+    // The ports closed over the cap were never pinged, so they cost no work.
+    expect(flood.slice(MAX_PENDING_ASKS).every((ask) => ask.pane.closed)).toBe(true)
+    await tick()
+    // The old document is gone and the first ask that answered gets the secret: the gate still works.
+    expect(flood[0]!.state.hello).toBeDefined()
+    expect(flood.filter((ask) => ask.state.hello !== undefined).length).toBe(1)
+  })
+
+  test("after the verdict the room is free again", async () => {
+    const { g } = gate()
+    const script = asker()
+    g.ask(script.pane)
+    script.state.live = false
+    for (let i = 0; i < MAX_PENDING_ASKS + 4; i++) g.ask(asker().pane)
+    await tick()
+    const next = asker()
+    g.ask(next.pane)
+    expect(next.pane.closed).toBe(false)
   })
 
   test("an ask without a port is ignored, and dispose closes everything", () => {

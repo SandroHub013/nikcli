@@ -242,6 +242,9 @@ export function frameGuard(win: any, bridge: (shim: any) => void): void {
   postToParent(parent, { type: "ade-browser:ask" }, "*", [channel.port2])
 }
 
+/** How many asks wait for a verdict at once. A navigation and its script need two; a page that sends more is not asking. */
+export const MAX_PENDING_ASKS = 8
+
 /** What `FrameGate` needs of a port: a browser `MessagePort`, or a test's. */
 export type GatePort = Pick<MessagePort, "postMessage" | "close" | "onmessage">
 
@@ -281,6 +284,12 @@ export class FrameGate {
     if (!port) return
     if (!this.current) {
       this.accept(port)
+      return
+    }
+    // Anything in the frame can post an ask, in a loop: past the cap the port is closed unheard (full review
+    // 2026-10-06, M4). Without it every ask held a port, a ping and a place in this list until the verdict.
+    if (this.asks.length >= MAX_PENDING_ASKS) {
+      port.close()
       return
     }
     const entry = { port, alive: false }
