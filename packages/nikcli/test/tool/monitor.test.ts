@@ -127,4 +127,28 @@ describe("MonitorTool", () => {
       withProjectDirectory(projectDir, () => Monitor.get("ses_missing", "mon_missing")),
     ).rejects.toBeInstanceOf(SessionError.NotFoundError)
   })
+
+  it("truncates quick command output over 8k chars", async () => {
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync(
+        {
+          command: "node -e \"process.stdout.write('MON_START_' + 'Z'.repeat(12000) + '_MON_END')\"",
+          title: "long output test",
+          wake: false,
+        },
+        ctx,
+      ),
+    )
+    expect(result.output).toContain("MON_START_")
+    expect(result.output).toContain("_MON_END")
+    expect(result.output).toContain("The tool call succeeded but the output was truncated")
+    expect(result.output.length).toBeLessThan(10000)
+    expect(result.metadata.truncated).toBe(true)
+    expect(result.metadata.outputPath).toBeDefined()
+    const full = await fs.readFile(result.metadata.outputPath as string, "utf8")
+    expect(full).toContain("MON_START_")
+    expect(full).toContain("_MON_END")
+    expect(full.length).toBe(12018)
+  })
 })

@@ -2,6 +2,7 @@ import { Monitor } from "@/monitor/manager"
 import { authorizeBashCommand } from "./bash"
 import DESCRIPTION from "./monitor.txt"
 import { Tool } from "./tool"
+import { Truncate } from "./truncation"
 import z from "zod"
 
 const parameters = z.object({
@@ -35,6 +36,8 @@ type MonitorMetadata = {
   exitCode?: number
   recentOutput?: string
   bytes?: number
+  truncated?: boolean
+  outputPath?: string
 }
 
 function monitorMetadata(record: Monitor.Record): MonitorMetadata {
@@ -101,14 +104,27 @@ export const MonitorTool = Tool.define<typeof parameters, MonitorMetadata>("moni
       const metadata = monitorMetadata(finished)
       ctx.metadata({ title, metadata })
       const seconds = ((finished.time.completed ?? Date.now()) - finished.time.created) / 1000
+      let logOutput = snapshot.output.trimEnd() || "(no output)"
+      let headTailTruncated = false
+      if (logOutput.length > Truncate.HEAD_TAIL_THRESHOLD) {
+        const trunc = Truncate.truncateHeadTail(logOutput, {
+          existingPath: finished.logPath,
+          toolName: "monitor",
+        })
+        logOutput = trunc.content
+        headTailTruncated = true
+      }
       return {
         title,
-        metadata,
+        metadata: {
+          ...metadata,
+          ...(headTailTruncated ? { truncated: true, outputPath: finished.logPath } : {}),
+        },
         output: [
           `Command finished in ${seconds.toFixed(1)}s: ${finished.status}, exit code ${finished.exitCode ?? "none"}.`,
           `Command: ${params.command}`,
           "",
-          snapshot.output.trimEnd() || "(no output)",
+          logOutput,
           ...(snapshot.truncated ? ["", `Output truncated; full log: ${finished.logPath}`] : []),
         ].join("\n"),
       }

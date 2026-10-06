@@ -2,6 +2,8 @@ import { Identifier } from "@nikcli-ai/util/id"
 import { PermissionRuleset } from "../permission/ruleset"
 import type { Agent } from "../agent/agent"
 import { Scheduler } from "../scheduler"
+import * as fs from "fs"
+import path from "path"
 import { DIR as TruncationDir, GLOB as TruncationGlob, outputPath } from "./truncation-dir"
 import { Context, Effect, Layer } from "effect"
 import { AppRuntime } from "@/effect"
@@ -9,10 +11,86 @@ import { AppRuntime } from "@/effect"
 export namespace Truncate {
   export const MAX_LINES = 2000
   export const MAX_BYTES = 50 * 1024
+  export const HEAD_TAIL_THRESHOLD = 8_000
+  export const HEAD_CHARS = 1_000
+  export const TAIL_CHARS = 7_000
   export const DIR = TruncationDir
   export const GLOB = TruncationGlob
   const RETENTION_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
   const HOUR_MS = 60 * 60 * 1000
+
+  export function truncateHeadTail(
+    text: string,
+    options?: {
+      maxChars?: number
+      headChars?: number
+      tailChars?: number
+      existingPath?: string
+      toolName?: string
+      dir?: string
+    },
+  ): { content: string; truncated: boolean; outputPath?: string } {
+    const maxChars = options?.maxChars ?? HEAD_TAIL_THRESHOLD
+    if (text.length <= maxChars) {
+      return { content: text, truncated: false }
+    }
+
+    let headChars = options?.headChars ?? HEAD_CHARS
+    let tailChars = options?.tailChars ?? TAIL_CHARS
+
+    // Do not split a surrogate pair on the cut boundary (shift by 1 character if slice falls mid-pair)
+    if (headChars > 0 && headChars < text.length) {
+      const prev = text.charCodeAt(headChars - 1)
+      const curr = text.charCodeAt(headChars)
+      if (prev >= 0xd800 && prev <= 0xdbff && curr >= 0xdc00 && curr <= 0xdfff) {
+        headChars -= 1
+      }
+    }
+
+    if (tailChars > 0 && tailChars < text.length) {
+      const tailIndex = text.length - tailChars
+      const prev = text.charCodeAt(tailIndex - 1)
+      const curr = text.charCodeAt(tailIndex)
+      if (prev >= 0xd800 && prev <= 0xdbff && curr >= 0xdc00 && curr <= 0xdfff) {
+        tailChars -= 1
+      }
+    }
+
+    const dir = options?.dir ?? DIR
+    let filepath = options?.existingPath
+    let saved = false
+    if (!filepath) {
+      const id = Identifier.ascending("tool")
+      filepath = path.join(dir, id)
+      try {
+        fs.mkdirSync(dir, { recursive: true })
+        fs.writeFileSync(filepath, text, "utf-8")
+        saved = true
+      } catch {
+        saved = false
+        filepath = undefined
+      }
+    } else {
+      saved = true
+    }
+
+    const head = text.slice(0, headChars)
+    const tail = text.slice(-tailChars)
+    const omitted = text.length - head.length - tail.length
+
+    const saveMsg =
+      saved && filepath
+        ? `Full output saved to: ${filepath}. Use Grep or Read with offset/limit to see more.`
+        : `Full output was not saved to disk.`
+
+    const message = `${head}\n\n... [The tool call succeeded but the output was truncated (${omitted} characters omitted). ${saveMsg}] ...\n\n${tail}`
+
+    return {
+      content: message,
+      truncated: true,
+      outputPath: saved ? filepath : undefined,
+    }
+  }
 
   export type Result = { content: string; truncated: false } | { content: string; truncated: true; outputPath: string }
 
