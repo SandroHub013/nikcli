@@ -144,6 +144,7 @@ import { EffortPicker } from "../chat/effort-picker"
 import { ChipMenu } from "../chat/chip-menu"
 import { readableModelName } from "../chat/picker"
 import { createModelSource, stateOf, type ModelRead, type ModelSourceState } from "../chat/model-source"
+import { readBotModels } from "./bot-models"
 
 /*
  * The conversations, outside any component.
@@ -329,15 +330,15 @@ const loadCatalog = (provider: string) => {
  * started for it: opening a folder asks for its trust, and a form cannot.
  */
 async function botModels(cwd: string): Promise<ModelRead> {
-  const options = { isTest: isAdeTestBuild() }
-  const chat = appChatStore()
-  if (cwd && isOpenOn(chat, cwd)) {
-    const configured = (await chat.catalog().catch(() => undefined))?.configProviders
-    if (configured) return { ok: true, models: modelsFromConfigProviders(configured, options) }
-  }
-  const read = await readModelCatalog(undefined, cwd || undefined)
-  if (!read.ok) return read
-  return { ok: true, models: modelsFromConfigProviders(catalogFromText(read.text), options) }
+  return readBotModels(cwd, {
+    isTest: isAdeTestBuild(),
+    openCatalog: async (folder) => {
+      const chat = appChatStore()
+      if (!isOpenOn(chat, folder)) return undefined
+      return (await chat.catalog().catch(() => undefined))?.configProviders
+    },
+    readCatalog: (folder) => readModelCatalog(undefined, folder),
+  })
 }
 
 /* Read when a model menu opens, kept for the session per folder; a failure is not kept (`model-source.ts`). */
