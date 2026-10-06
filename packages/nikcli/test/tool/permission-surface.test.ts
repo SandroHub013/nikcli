@@ -25,7 +25,10 @@ preserveTestEnv([
 const { InstanceScope } = await import("@/effect")
 const { ToolRegistry } = await import("@/tool/registry")
 const { Agent } = await import("@/agent/agent")
-const { permissionPresetPatch } = await import("@tui/util/permission-presets")
+const { PermissionRuleset } = await import("@/permission/ruleset")
+const { permissionPresetPatch, detectPermissionMode, presetPermissionMode } = await import(
+  "@tui/util/permission-presets"
+)
 
 /**
  * Permissions that gate something other than a registry tool. They will never
@@ -86,8 +89,11 @@ describe("permission and agent surfaces reference real tools", () => {
       }
     }
     expect(unknown).toEqual([])
-    // Guard the guard: an empty preset would satisfy the assertion above.
-    expect(checked).toBeGreaterThan(50)
+    // Guard the guard: an empty preset would satisfy the assertion above. The
+    // floor is the shape the presets now have by design: 3 keys for
+    // full_access (the internal denies), 3 for require_approval, and 27 for
+    // approve_for_me (32 entries minus the 5 wildcard-covered allow rules).
+    expect(checked).toBeGreaterThanOrEqual(33)
   })
 
   it("every subagent toolset entry names a real tool", async () => {
@@ -103,5 +109,90 @@ describe("permission and agent surfaces reference real tools", () => {
     }
     expect(unknown).toEqual([])
     expect(checked).toBeGreaterThan(20)
+  })
+})
+
+describe("permission presets", () => {
+  /**
+   * `permissionPresetPatch` returns the wider TUI `PermissionMap` (values may be
+   * `string[]`/`undefined` for path rules), while `fromConfig` takes the config
+   * schema's tighter shape. The patches built here only ever hold plain actions,
+   * so the single cast at each call site is the honest boundary.
+   */
+  type AgentPermission = Parameters<typeof PermissionRuleset.fromConfig>[0]
+
+  it("full access and require approval write only the wildcard plus the internal denies", () => {
+    // A per-tool `allow` in an agent's rules counts as a deliberate request
+    // (`PermissionRuleset.requested`) and drags every deferred tool into the
+    // schema — 30 tools and ~18.7k tokens instead of 18 and ~10.4k.
+    expect(permissionPresetPatch("full_access")).toEqual({
+      "*": "allow",
+      question: "deny",
+      plan_enter: "deny",
+      plan_exit: "deny",
+    })
+    expect(permissionPresetPatch("require_approval")).toEqual({
+      "*": "ask",
+      question: "deny",
+      plan_enter: "deny",
+      plan_exit: "deny",
+    })
+    expect(permissionPresetPatch("auto")).toEqual({})
+  })
+
+  it("approve for me drops the allow rules the wildcard already covers", () => {
+    const patch = permissionPresetPatch("approve_for_me")
+    for (const key of ["repo_overview", "context_collect", "context_related", "context_diagnostics", "speak"] as const) {
+      expect(patch[key]).toBeUndefined()
+    }
+    expect(patch["*"]).toBe("allow")
+    expect(patch.edit).toBe("allow")
+    expect(patch.bash).toBe("ask")
+    expect(patch.voice).toBe("ask")
+    expect(patch.plugin).toBe("ask")
+    expect(patch.question).toBe("deny")
+    expect(patch.plan_enter).toBe("deny")
+    expect(patch.plan_exit).toBe("deny")
+  })
+
+  it("detectPermissionMode recognises each preset from the map it writes", () => {
+    expect(detectPermissionMode(permissionPresetPatch("require_approval"))).toBe("require_approval")
+    expect(detectPermissionMode(permissionPresetPatch("approve_for_me"))).toBe("approve_for_me")
+    expect(detectPermissionMode(permissionPresetPatch("full_access"))).toBe("full_access")
+    expect(detectPermissionMode(permissionPresetPatch("auto"), presetPermissionMode("auto"))).toBe("auto")
+  })
+
+  it("full access keeps every non-core deferred tool deferred in the registry", () => {
+    const ruleset = PermissionRuleset.fromConfig(permissionPresetPatch("full_access") as AgentPermission)
+    const nonCoreDeferred = [
+      "browser_control",
+      "computer",
+      "codesearch",
+      "context_collect",
+      "context_diagnostics",
+      "context_related",
+      "generate_image",
+      "memory_search",
+      "plugin",
+      "repo_clone",
+      "repo_overview",
+      "speak",
+      "voice",
+      "websearch",
+    ]
+    for (const id of nonCoreDeferred) {
+      expect(ToolRegistry.exposure(id, { disabledTools: {}, ruleset })).toBe("deferred")
+    }
+    expect(ToolRegistry.exposure("bash", { disabledTools: {}, ruleset })).toBe("active")
+    expect(ToolRegistry.exposure("read", { disabledTools: {}, ruleset })).toBe("active")
+    expect(ToolRegistry.exposure("tree", { disabledTools: {}, ruleset })).toBe("active")
+  })
+
+  it("approve for me keeps its allow-listed deferred tools deferred", () => {
+    const ruleset = PermissionRuleset.fromConfig(permissionPresetPatch("approve_for_me") as AgentPermission)
+    for (const id of ["repo_overview", "context_collect", "context_related", "context_diagnostics", "speak"]) {
+      expect(ToolRegistry.exposure(id, { disabledTools: {}, ruleset })).toBe("deferred")
+    }
+    expect(ToolRegistry.exposure("bash", { disabledTools: {}, ruleset })).toBe("active")
   })
 })

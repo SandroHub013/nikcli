@@ -63,11 +63,10 @@ const APPROVE_FOR_ME_PERMISSIONS: PermissionMap = {
   lsp: "allow",
   todoread: "allow",
   todowrite: "allow",
-  repo_overview: "allow",
-  context_collect: "allow",
-  context_related: "allow",
-  context_diagnostics: "allow",
-  speak: "allow",
+  // `repo_overview`, `context_collect`, `context_related`, `context_diagnostics`
+  // and `speak` are deliberately absent: the wildcard already allows them, and a
+  // rule that names a tool counts as a request for it, which activates deferred
+  // tools and puts their schema in every request of the session.
   bash: "ask",
   webfetch: "ask",
   websearch: "ask",
@@ -221,9 +220,18 @@ function hasRuleAction(value: PermissionValue, action: PermissionAction) {
   return Object.values(value).some((entry) => entry === action)
 }
 
+/**
+ * `Full access` and `Require approval` as a single wildcard plus the three
+ * internal denies — nothing that names a tool. A rule whose permission is the
+ * tool's own id and whose action is `allow` reads as a deliberate request
+ * (`PermissionRuleset.requested`), which `ToolRegistry.exposure` uses to keep a
+ * deferred tool out of the "still deferred" bucket: naming all 29 tools pulled
+ * 14 of them into the schema of every request (30 tools, ~18.7k tokens instead
+ * of 18, ~10.4k). The wildcard covers the same tools for permission purposes
+ * without activating any of them.
+ */
 function uniformPermissionPatch(action: PermissionAction): PermissionMap {
   const patch: PermissionMap = { "*": action }
-  for (const key of PERMISSION_TOOL_KEYS) patch[key] = action
   for (const key of INTERNAL_DENY_PERMISSION_KEYS) patch[key] = "deny"
   return patch
 }
