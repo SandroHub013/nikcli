@@ -33,6 +33,7 @@ import {
   type ModelStats,
   type ViewPreset,
 } from "./model"
+import { t } from "../i18n"
 
 export type ReadBytes = (path: string) => Promise<Uint8Array>
 
@@ -208,7 +209,7 @@ export function createModelViewer(stage: HTMLElement, onLost: (reason: string) =
     isCurrent?: () => boolean,
   ): Promise<LoadResult> => {
     const format = modelFormat(path)
-    if (!format) throw new Error("formato non supportato")
+    if (!format) throw new Error(t("model.error.unsupportedFormat"))
 
     const bytes = await read(path)
     const files = [path]
@@ -347,7 +348,7 @@ export function createModelViewer(stage: HTMLElement, onLost: (reason: string) =
     // the buffer is only guaranteed until the frame is composited.
     renderer.render(scene, camera)
     const blob = await new Promise<Blob | null>((resolve) => renderer.domElement.toBlob(resolve, "image/png"))
-    if (!blob) throw new Error("codifica dell'immagine fallita")
+    if (!blob) throw new Error(t("model.error.encodingFailed"))
     return new Uint8Array(await blob.arrayBuffer())
   }
 

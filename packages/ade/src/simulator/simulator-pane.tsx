@@ -126,7 +126,7 @@ export function SimulatorPane(props: SimulatorPaneProps) {
   let loads = 0
   const load = async (url: string): Promise<boolean> => {
     if (!isLoadableAppUrl(url, window.location.origin)) {
-      throw new Error("questo indirizzo è ADE stessa; apri il dev server della tua app")
+      throw new Error(t("simulator.error.sameOrigin"))
     }
     const mine = ++loads
     setNote(undefined)

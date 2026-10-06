@@ -2233,6 +2233,43 @@ export const it = {
   "model.state.dimensions": (x: string, y: string, z: string) => `ingombro ${x} × ${y} × ${z}`,
   "model.state.animations": (count: number) => `${count} animazioni`,
   "pane.runnerLogin": (label: string) => `${label} · accesso`,
+
+  // F7a2: Simulator
+  "simulator.error.sameOrigin": "questo indirizzo è ADE stessa; apri il dev server della tua app",
+
+  // F7a2: Video
+  "video.error.noFrame": "nessun fotogramma disponibile",
+  "video.error.noCanvas": "canvas non disponibile",
+  "video.error.encodingFailed": "codifica del fotogramma fallita",
+  "video.error.unsupportedFormat": (exts: string) => `formato non riproducibile; supportati: ${exts}`,
+  "video.error.unreadableOrUnsupported": "il file non è leggibile o il formato non è supportato",
+  "video.error.noPlayer": "nessun riproduttore",
+  "video.error.cannotWrite": "questo host non può scrivere file",
+
+  // F7a2: Workbench & Keys
+  "keys.error.noKeyring": "questa versione di ADE non ha il portachiavi",
+  "workbench.error.noOpenProject": "nessun progetto aperto in cui salvare",
+  "session.cannotClose": (reasons: string) =>
+    `non chiudo: ${reasons}. Integra o committa prima, oppure usa --force (la worktree resta su disco)`,
+  "plugins.error.noDesktopHost": "nessun host desktop",
+  "host.error.cannotReadBinary": "questo host non può leggere file binari",
+
+  // F7a2: Update & Browser
+  "update.skip.rateLimited": "GitHub ha chiesto di aspettare: riprovo più tardi.",
+  "browser.forget.notDesktop": "non disponibile fuori dall'app",
+
+  // F7a2: Review & Plugin consent
+  "review.error.details": "Impossibile calcolare i dettagli delle modifiche.",
+  "plugins.consent.question": (root: string, list: string) =>
+    `Il progetto\n${root}\n\ndichiara in .nikcli/tui.json dei plugin che verrebbero eseguiti dentro ADE:\n\n${list}\n\nUn plugin è codice con accesso alle sessioni e ai file del progetto. Eseguirli?`,
+
+  // F7a2: 3D Model
+  "model.error.paneClosed": "pannello chiuso",
+  "model.error.unsupportedFormatExts": (exts: string) => `formato non supportato; supportati: ${exts}`,
+  "model.error.cannotWrite": "questo host non può scrivere file",
+  "model.error.noModelLoaded": "nessun modello caricato",
+  "model.error.unsupportedFormat": "formato non supportato",
+  "model.error.encodingFailed": "codifica dell'immagine fallita",
 }
 
 /** The shape every catalog has: the same keys, the same parameters. */

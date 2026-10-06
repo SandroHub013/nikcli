@@ -2170,4 +2170,41 @@ export const en: Messages = {
   "model.state.dimensions": (x, y, z) => `size ${x} × ${y} × ${z}`,
   "model.state.animations": (count) => `${count} ${count === 1 ? "animation" : "animations"}`,
   "pane.runnerLogin": (label: string) => `${label} · sign-in`,
+
+  // F7a2: Simulator
+  "simulator.error.sameOrigin": "this address is ADE itself; open your app's dev server",
+
+  // F7a2: Video
+  "video.error.noFrame": "no frame available",
+  "video.error.noCanvas": "canvas not available",
+  "video.error.encodingFailed": "frame encoding failed",
+  "video.error.unsupportedFormat": (exts: string) => `unplayable format; supported: ${exts}`,
+  "video.error.unreadableOrUnsupported": "file is unreadable or format is unsupported",
+  "video.error.noPlayer": "no player",
+  "video.error.cannotWrite": "this host cannot write files",
+
+  // F7a2: Workbench & Keys
+  "keys.error.noKeyring": "this version of ADE has no keyring",
+  "workbench.error.noOpenProject": "no open project to save to",
+  "session.cannotClose": (reasons: string) =>
+    `will not close: ${reasons}. Merge or commit first, or use --force (worktree remains on disk)`,
+  "plugins.error.noDesktopHost": "no desktop host",
+  "host.error.cannotReadBinary": "this host cannot read binary files",
+
+  // F7a2: Update & Browser
+  "update.skip.rateLimited": "GitHub asked to wait: trying again later.",
+  "browser.forget.notDesktop": "not available outside the app",
+
+  // F7a2: Review & Plugin consent
+  "review.error.details": "Unable to calculate change details.",
+  "plugins.consent.question": (root: string, list: string) =>
+    `The project\n${root}\n\ndeclares plugins in .nikcli/tui.json that would be run inside ADE:\n\n${list}\n\nA plugin is code with access to project sessions and files. Run them?`,
+
+  // F7a2: 3D Model
+  "model.error.paneClosed": "pane closed",
+  "model.error.unsupportedFormatExts": (exts: string) => `unsupported format; supported: ${exts}`,
+  "model.error.cannotWrite": "this host cannot write files",
+  "model.error.noModelLoaded": "no model loaded",
+  "model.error.unsupportedFormat": "unsupported format",
+  "model.error.encodingFailed": "image encoding failed",
 }

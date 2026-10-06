@@ -99,6 +99,58 @@ function sinkTexts(node: ts.Expression, into: string[]): void {
   }
 }
 
+const PROSE_PROPERTIES = new Set(["reason", "problem", "detail", "note", "error"])
+
+/**
+ * Files and zones excluded from the hardcoded prose ratchet:
+ * - Excluded zones (per F7a2 specification):
+ *     release-plan.ts: changelog and release plan generator script
+ *     session/permission.ts: voice regex dependencies (mapChoiceLabelToItalian)
+ *     voice/: Kokoro and voice pack subsystem
+ *     nikverse/: 3D world city frame and handshake/iframe protocols
+ * - Internal CLI / IPC protocol implementation (ade-msg terminal stdout/stderr, not UI):
+ *     session/ and session-new/ (internal subagent mailbox, orchestra, native mail, etc.)
+ * - Panel IPC handlers (@ade command line terminal reply formatting, not UI components):
+ *     panels/router.ts, record/record-panel.ts, secrets/keys.ts, simulator/commands.ts,
+ *     video/commands.ts, video/video.ts
+ * - Internal dev scripts, test tools and CI guards (never shown in user window):
+ *     host/drive-test-app.ts, update/feed-guard.ts, brand.ts
+ * - Internal data/type mappings:
+ *     plugin/discovery.ts (internal RefusedPlugin reason codes)
+ *     sidebar/workspace-tree.ts (AgentDisplayStatus type union mapped via t() in sidebar.tsx)
+ *     decisions/, design/, bots/ (terminal queue dispatching and LLM prompt wrappers)
+ */
+function isExcluded(path: string): boolean {
+  const norm = path.replace(/\\/g, "/")
+  return (
+    norm.endsWith("release-plan.ts") ||
+    norm.endsWith("session/permission.ts") ||
+    norm.includes("nikverse/") ||
+    norm.includes("/voice/") ||
+    norm.startsWith("voice/") ||
+    norm.includes("/session/") ||
+    norm.includes("/session-new/") ||
+    norm.endsWith("panels/router.ts") ||
+    norm.endsWith("record/record-panel.ts") ||
+    norm.endsWith("secrets/keys.ts") ||
+    norm.endsWith("simulator/commands.ts") ||
+    norm.endsWith("video/commands.ts") ||
+    norm.endsWith("video/video.ts") ||
+    norm.endsWith("model3d/commands.ts") ||
+    norm.endsWith("browser/request.ts") ||
+    norm.endsWith("host/stt-stream.ts") ||
+    norm.endsWith("plugin/registry.ts") ||
+    norm.endsWith("host/drive-test-app.ts") ||
+    norm.endsWith("update/feed-guard.ts") ||
+    norm.endsWith("brand.ts") ||
+    norm.endsWith("plugin/discovery.ts") ||
+    norm.endsWith("sidebar/workspace-tree.ts") ||
+    norm.includes("/decisions/") ||
+    norm.includes("/design/") ||
+    norm.includes("/bots/")
+  )
+}
+
 function count(path: string): number {
   const file = ts.createSourceFile(
     path,
@@ -136,13 +188,37 @@ function count(path: string): number {
       ts.isPropertyAssignment(node) &&
       node.name.getText() === "title" &&
       !ts.isJsxAttribute(node.parent) &&
-      !path.replace(/\\/g, "/").endsWith("release-plan.ts") &&
-      !path.replace(/\\/g, "/").includes("nikverse/city/") &&
-      !path.replace(/\\/g, "/").includes("/voice/")
+      !isExcluded(path)
     ) {
       const texts: string[] = []
       sinkTexts(node.initializer, texts)
       found += texts.filter((text) => isText(text.trim())).length
+    } else if (
+      ts.isPropertyAssignment(node) &&
+      PROSE_PROPERTIES.has(node.name.getText()) &&
+      !ts.isJsxAttribute(node.parent) &&
+      !isExcluded(path)
+    ) {
+      const texts: string[] = []
+      sinkTexts(node.initializer, texts)
+      found += texts.filter((text) => isProse(text)).length
+    } else if (
+      ts.isNewExpression(node) &&
+      node.expression.getText() === "Error" &&
+      node.arguments &&
+      !isExcluded(path)
+    ) {
+      const texts: string[] = []
+      for (const argument of node.arguments) sinkTexts(argument, texts)
+      found += texts.filter((text) => isProse(text)).length
+    } else if (
+      ts.isReturnStatement(node) &&
+      node.expression &&
+      !isExcluded(path)
+    ) {
+      const texts: string[] = []
+      sinkTexts(node.expression, texts)
+      found += texts.filter((text) => isProse(text)).length
     }
     ts.forEachChild(node, visit)
   }
@@ -207,6 +283,37 @@ describe("fixed text in JSX", () => {
     )
     try {
       expect(count(fixtureTs)).toBe(2)
+    } finally {
+      require("node:fs").rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("catches hardcoded prose in reason, problem, detail, note, error, new Error, and return statements", () => {
+    const dir = join(require("node:os").tmpdir(), `ade-hardcoded-props-${process.pid}`)
+    require("node:fs").mkdirSync(dir, { recursive: true })
+    const fixtureTs = join(dir, "fixture.ts")
+    writeFileSync(
+      fixtureTs,
+      [
+        'export const r = { reason: "Nessun dato trovato nel sistema" }',
+        'export const p = { problem: "Impossibile caricare il file selezionato" }',
+        'export const d = { detail: "La connessione è caduta improvvisamente" }',
+        'export const n = { note: "Attenzione alle modifiche non salvate" }',
+        'export const e = { error: "Errore durante il salvataggio dei file" }',
+        'export const err = () => { throw new Error("Questo indirizzo non è valido") }',
+        'export function askUser() { return "Vuoi procedere con l operazione richiesta?" }',
+        'export const okR = { reason: t("some.reason") }',
+        'export const okP = { problem: t("some.problem") }',
+        'export const okD = { detail: t("some.detail") }',
+        'export const okN = { note: t("some.note") }',
+        'export const okE = { error: t("some.error") }',
+        'export const okErr = () => { throw new Error(t("some.error")) }',
+        'export function okAsk() { return t("some.question") }',
+        'export const machineCodes = { reason: "timeout", problem: "busy", error: "ENOENT" }',
+      ].join("\n"),
+    )
+    try {
+      expect(count(fixtureTs)).toBe(7)
     } finally {
       require("node:fs").rmSync(dir, { recursive: true, force: true })
     }
