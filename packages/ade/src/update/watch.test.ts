@@ -281,6 +281,25 @@ describe("githubReleaseFeed", () => {
     expect((seen[1] as Record<string, string>)["If-None-Match"]).toBe('W/"abc"')
   })
 
+  // Full review 2026-10-06, ui 13.
+  test("a body that cannot be read does not advance the tag", async () => {
+    const seen: (HeadersInit | undefined)[] = []
+    let call = 0
+    const doFetch = (async (_url: string, init?: RequestInit) => {
+      seen.push(init?.headers)
+      call++
+      if (call === 1) return new Response(JSON.stringify(RELEASES), { status: 200, headers: { etag: 'W/"one"' } })
+      if (call === 2) return new Response("{not json", { status: 200, headers: { etag: 'W/"two"' } })
+      return new Response(JSON.stringify(RELEASES), { status: 200, headers: { etag: 'W/"two"' } })
+    }) as unknown as typeof fetch
+    const it = githubReleaseFeed(doFetch)
+    await it.read()
+    await expect(it.read()).rejects.toThrow()
+    await it.read()
+    // The third look still asks with the tag of the list that was read, not the one that was not.
+    expect((seen[2] as Record<string, string>)["If-None-Match"]).toBe('W/"one"')
+  })
+
   test("a failed request says which status it was", async () => {
     const doFetch = (async () => new Response("no", { status: 403 })) as unknown as typeof fetch
     expect(githubReleaseFeed(doFetch).read()).rejects.toThrow("GitHub 403")

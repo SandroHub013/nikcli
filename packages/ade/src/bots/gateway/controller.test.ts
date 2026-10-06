@@ -6,7 +6,7 @@ import { turnsRunning } from "../terms"
 import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "../turn"
 import { startGatewayController, type GatewayBridge, type GatewayMessage } from "./controller"
 import { chatHeader } from "./policy"
-import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteTools } from "./remote"
+import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteKey, remoteTools } from "./remote"
 import { localSessionStore, memorySessionStore, sessionKey } from "./session"
 import { createGatewayThreads, gatewayThreadKey, type ThreadDisk } from "./threads"
 import { volatileMemoryStore } from "../memory"
@@ -739,6 +739,41 @@ describe("the tools of a turn from a chat", () => {
       await until("il turno", () => turns.started.length === 1)
       expect(turns.started[0]!.request.remote).toEqual(REMOTE_OFF)
     }
+  })
+
+  // Full review 2026-10-06, bots 12: the yes is for the platform of the card it was given on.
+  test("a yes given for Telegram does not hold on Discord or Slack", async () => {
+    const saved = new Map([[remoteKey(BOT.path, "telegram"), on]])
+    const lookup = (bot: string, platform: string) => saved.get(remoteKey(bot, platform)) ?? REMOTE_OFF
+    for (const [platform, expected] of [
+      ["telegram", { commands: true }],
+      ["discord", REMOTE_OFF],
+      ["slack", REMOTE_OFF],
+    ] as const) {
+      const b = bridge()
+      const turns = typedTurns()
+      await startGatewayController({
+        bridge: b.fake,
+        runTurn: turns.runTurn,
+        loadBot: nikcli,
+        sessions: memorySessionStore(),
+        remote: lookup,
+      })
+      b.emit("pulisci la build", { platform })
+      await until("il turno", () => turns.started.length === 1)
+      expect(turns.started[0]!.request.remote).toEqual(expected)
+    }
+  })
+
+  test("the panel's yes on one platform is not found under another", async () => {
+    const store = memoryRemoteStore()
+    store.set(remoteKey(BOT.path, "telegram"), on)
+    expect(store.get(remoteKey(BOT.path, "telegram"))).toEqual(on)
+    expect(store.get(remoteKey(BOT.path, "discord"))).toEqual(REMOTE_OFF)
+    // The old key, by the bot alone, is no yes for any platform.
+    store.set(BOT.path, on)
+    expect(store.get(remoteKey(BOT.path, "telegram"))).toEqual(on)
+    expect(remoteTools(store.get(remoteKey(BOT.path, "slack")), "f-1")).toEqual(REMOTE_OFF)
   })
 
   test("a Claude bot gets them off even when saved on", async () => {

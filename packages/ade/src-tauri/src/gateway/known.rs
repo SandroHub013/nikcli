@@ -57,16 +57,32 @@ fn auth_values(text: &str) -> Vec<String> {
     out
 }
 
-/// Variables that are credentials by their name, Claude's and Codex's included.
+/// The password of a `scheme://user:password@host/...` value, if it has one.
+fn url_password(value: &str) -> Option<String> {
+    let rest = value.trim().split_once("://")?.1;
+    let authority = rest.split(['/', '?', '#']).next()?;
+    let userinfo = authority.rsplit_once('@')?.0;
+    let password = userinfo.split_once(':')?.1;
+    (!password.is_empty()).then(|| password.to_string())
+}
+
+/// Variables that are credentials by their name, Claude's and Codex's included, and the password inside any value that
+/// is a URL with credentials (`DATABASE_URL`, a proxy): neither `_KEY` nor `_PASSWORD` nor those were covered before
+/// (full review 2026-10-06, rust minor).
 fn env_values(vars: impl IntoIterator<Item = (String, String)>) -> Vec<String> {
-    vars.into_iter()
-        .filter(|(name, _)| {
-            let name = name.to_ascii_uppercase();
-            ["_API_KEY", "_TOKEN", "_SECRET"].iter().any(|end| name.ends_with(end))
-        })
-        .map(|(_, value)| value.trim().to_string())
-        .filter(|value| value.chars().count() >= MIN_ENV_LEN)
-        .collect()
+    let mut out = Vec::new();
+    for (name, value) in vars {
+        let upper = name.to_ascii_uppercase();
+        let by_name = ["_API_KEY", "_KEY", "_TOKEN", "_SECRET", "_PASSWORD", "_PASSWD"].iter().any(|end| upper.ends_with(end));
+        if by_name {
+            out.push(value.trim().to_string());
+        }
+        if let Some(password) = url_password(&value) {
+            out.push(password);
+        }
+    }
+    out.retain(|value| value.chars().count() >= MIN_ENV_LEN);
+    out
 }
 
 /// Every secret of nikcli's and of ADE's environment, read now.
@@ -111,6 +127,33 @@ mod tests {
             ]
         );
         assert!(auth_values("{ non json").is_empty());
+    }
+
+    // Full review 2026-10-06, rust (minor): _KEY, _PASSWORD and a password inside a URL were not redacted.
+    #[test]
+    fn keys_passwords_and_urls_with_a_password_are_secrets_too() {
+        let vars = [
+            ("AWS_SECRET_ACCESS_KEY", "finta-chiave-aws-0123456789"),
+            ("STRIPE_KEY", "finta-chiave-stripe-0123"),
+            ("DB_PASSWORD", "finta-password-del-db"),
+            ("DATABASE_URL", "postgres://utente:finta-password-url@db.example.org:5432/app"),
+            ("PROXY", "http://utente:altra-finta-password@proxy.example.org:8080"),
+            ("HOMEPAGE", "https://example.org/senza-credenziali"),
+            ("SSH_AUTH_SOCK", "/tmp/ssh-agent.sock"),
+        ]
+        .map(|(name, value)| (name.to_string(), value.to_string()));
+        let mut values = env_values(vars);
+        values.sort();
+        assert_eq!(
+            values,
+            vec![
+                "altra-finta-password",
+                "finta-chiave-aws-0123456789",
+                "finta-chiave-stripe-0123",
+                "finta-password-del-db",
+                "finta-password-url",
+            ]
+        );
     }
 
     #[test]

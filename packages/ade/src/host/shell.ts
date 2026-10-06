@@ -279,24 +279,6 @@ export interface Host {
   learnProgressGet?: () => Promise<unknown>
   /** Replaces the progress with this JSON, written to a staging file and renamed over the old one. */
   learnProgressSet?: (json: string) => Promise<void>
-  /**
-   * Plugins in a frame (`plugin_install.rs`, `plugin_scheme.rs`): what is installed, and the commands that check, download, switch on, take
-   * back and remove a version. All of them answer to the main window only.
-   */
-  pluginList?: () => Promise<InstalledPlugin[]>
-  pluginCheck?: (id: string) => Promise<PluginAvailable>
-  /** Downloads into `pending`; resolves when it is over, `false` when there was nothing to download. */
-  pluginInstall?: (id: string) => Promise<boolean>
-  pluginStatus?: (id: string) => Promise<PluginProgress>
-  /** `pending` becomes `current`; the version now in use. */
-  pluginCommit?: (id: string) => Promise<string>
-  /** `previous` becomes `current`; the version now in use. */
-  pluginRollback?: (id: string) => Promise<string>
-  /** Removes the plugin and its data; the bytes freed. */
-  pluginUninstall?: (id: string) => Promise<number>
-  /** The plugin's own document (`storage.json`), `null` when it never wrote one. */
-  pluginStorageGet?: (id: string) => Promise<unknown>
-  pluginStorageSet?: (id: string, json: string) => Promise<void>
 
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
@@ -455,7 +437,7 @@ import type { InstallProgress, PackStatus } from "@nikcli-ai/voice"
 import type { KeyDraft, KeyInfo } from "../secrets/keys"
 import type { QualityLevel, RecordTarget, RecordingState } from "../record/recording"
 import type { AssetsStatus } from "../nikverse/assets"
-import type { InstalledPlugin, PluginAvailable, PluginProgress } from "../plugin-frame/host-types"
+import { t } from "../i18n"
 
 const inTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)
@@ -502,7 +484,7 @@ export async function getHost(): Promise<Host | undefined> {
        * any argument at all, and `git -c core.pager=<anything>` runs anything.
        */
       if (command !== "git") {
-        return { code: null, stdout: "", stderr: `comando non consentito: ${command}` }
+        return { code: null, stdout: "", stderr: t("host.commandNotAllowed", command) }
       }
 
       const { invoke } = await import("@tauri-apps/api/core")
@@ -810,11 +792,9 @@ export async function getHost(): Promise<Host | undefined> {
 
     async exists(path) {
       const { invoke } = await import("@tauri-apps/api/core")
-      try {
-        return await invoke<boolean>("path_exists", { path })
-      } catch {
-        return false
-      }
+      // A check that fails rejects: «the folder is gone» is for the callers to say when it IS gone, not for every error
+      // (full review 2026-10-06, sessions 16). Those that mean «assume it is there» already `catch`.
+      return invoke<boolean>("path_exists", { path })
     },
 
     async systemStats() {
@@ -876,52 +856,6 @@ export async function getHost(): Promise<Host | undefined> {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("learn_progress_set", { json })
     },
-
-    async pluginList() {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<InstalledPlugin[]>("plugin_list")
-    },
-
-    async pluginCheck(id) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<PluginAvailable>("plugin_check", { id })
-    },
-
-    async pluginInstall(id) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<boolean>("plugin_install", { id })
-    },
-
-    async pluginStatus(id) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<PluginProgress>("plugin_status", { id })
-    },
-
-    async pluginCommit(id) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<string>("plugin_commit", { id })
-    },
-
-    async pluginRollback(id) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<string>("plugin_rollback", { id })
-    },
-
-    async pluginUninstall(id) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<number>("plugin_uninstall", { id })
-    },
-
-    async pluginStorageGet(id) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<unknown>("plugin_storage_get", { id })
-    },
-
-    async pluginStorageSet(id, json) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      await invoke("plugin_storage_set", { id, json })
-    },
-
     /*
      * The names are K4b's: `tts_local_*` with the provider as a parameter
      * (Kokoro plan, K4). Until that is in the build the command is missing,
@@ -1040,7 +974,9 @@ export async function getHost(): Promise<Host | undefined> {
 
     async recordWrite(path, contents) {
       const { invoke } = await import("@tauri-apps/api/core")
-      await invoke("record_write", { path, contents: Array.from(contents) })
+      // The bytes are the body, raw: as a JSON array of numbers a long recording is past what a string can hold.
+      // The path rides in a header, percent-encoded (a header is ASCII).
+      await invoke("record_write", contents, { headers: { "x-record-path": encodeURIComponent(path) } })
     },
 
     async recordStop() {
@@ -1082,7 +1018,7 @@ export async function getHost(): Promise<Host | undefined> {
     async pickDirectory(title) {
       try {
         const { open } = await import("@tauri-apps/plugin-dialog")
-        const selected = await open({ directory: true, title: title ?? "Scegli cartella" })
+        const selected = await open({ directory: true, title: title ?? t("host.pickDirectory") })
         // open() returns string | string[] | null depending on `multiple`
         if (typeof selected === "string") return selected
         return undefined
@@ -1097,7 +1033,7 @@ export async function getHost(): Promise<Host | undefined> {
         const selected = await open({
           directory: false,
           multiple: false,
-          title: options?.title ?? "Scegli file",
+          title: options?.title ?? t("host.pickFile"),
           ...(options?.filters ? { filters: options.filters } : {}),
         })
         if (typeof selected === "string") return selected

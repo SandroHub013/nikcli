@@ -166,4 +166,40 @@ describe("BashTool", () => {
       "Remove-Item build",
     ])
   })
+
+  it("truncates long bash output over 8k chars keeping 1k head and 7k tail and saving full output", async () => {
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ command: "node -e \"process.stdout.write('START_' + 'X'.repeat(12000) + '_END')\"" }, ctx),
+    )
+    expect(result.output).toContain("START_")
+    expect(result.output).toContain("_END")
+    expect(result.output).toContain("The tool call succeeded but the output was truncated")
+    expect(result.output).toContain("Full output saved to:")
+    expect(result.output.length).toBeLessThan(10000)
+    expect(result.metadata.truncated).toBe(true)
+    expect(result.metadata.outputPath).toBeDefined()
+    const full = await fs.readFile(result.metadata.outputPath as string, "utf8")
+    expect(full).toContain("START_")
+    expect(full).toContain("_END")
+    expect(full.length).toBe(12010)
+  })
+
+  it("reports output was not saved if writing spool file fails", async () => {
+    const { Truncate } = await import("@/tool/truncation")
+    const tempFile = path.join(projectDir, "temp-file-blocking-dir")
+    await fs.writeFile(tempFile, "blocking")
+    const unwritableDir = path.join(tempFile, "sub")
+    try {
+      const result = Truncate.truncateHeadTail("START_" + "X".repeat(12000) + "_END", {
+        dir: unwritableDir,
+      })
+      expect(result.content).toContain("The tool call succeeded but the output was truncated")
+      expect(result.content).toContain("Full output was not saved to disk.")
+      expect(result.content).not.toContain("Full output saved to:")
+      expect(result.outputPath).toBeUndefined()
+    } finally {
+      await fs.unlink(tempFile).catch(() => {})
+    }
+  })
 })

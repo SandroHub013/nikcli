@@ -31,13 +31,20 @@ const BACKSPACE = "\u0008\u007f"
 /** The markers around a declared paste, which are not themselves typed. */
 const PASTE_MARKERS = /\u001b\[20[01]~/g
 const PASTE_START = `${ESC}[200~`
-const SUBMIT = /[\r\n]/
+/**
+ * Enter is `\r`. A lone `\n` (Ctrl+J) is a new line in the box of Claude Code and the other TUIs, and `\` followed by
+ * Enter is too: neither sends the draft (full review 2026-10-06, sessions 7). Read as sends, the line counted as empty,
+ * the session as free, and ADE's own Enter shipped the user's half-written prompt with the mail typed after it.
+ */
+const SUBMIT = /\r/
 
 export interface TypedLine {
   /** Characters typed since the line was last known empty. */
   pending: number
   /** When the last keystroke arrived, epoch ms. */
   at: number
+  /** The last thing typed was a backslash: an Enter right after it is a new line, not a send. */
+  backslash?: boolean
   /**
    * The last key was a lone Escape. In Claude Code one Escape closes a menu
    * or interrupts; the draft goes only on the second. Clearing on the first
@@ -85,16 +92,21 @@ export function typedAfter(line: TypedLine | undefined, data: string, now: numbe
    * there put the next delivery on top of `b`, and its Enter ran `b` with it.
    */
   if (SUBMIT.test(data)) {
-    const rest = data.slice(Math.max(data.lastIndexOf("\r"), data.lastIndexOf("\n")) + 1)
+    // `\` then Enter: the backslash turns into a new line in the draft, which stays as long as it was.
+    if (data === "\r" && line?.backslash) return { pending, at: now }
+    let rest = data.slice(data.lastIndexOf("\r") + 1)
+    // The `\n` of a `\r\n` is part of the same Enter.
+    if (rest.startsWith("\n")) rest = rest.slice(1)
     return rest.length === 0 ? undefined : typedAfter(undefined, rest, now)
   }
 
   let count = pending
   for (const char of data) {
     if (BACKSPACE.includes(char)) count = Math.max(0, count - 1)
-    else if (char >= " " && char !== "\u007f") count += 1
+    else if (char === "\n" || (char >= " " && char !== "\u007f")) count += 1
   }
-  return count === 0 ? undefined : { pending: count, at: now }
+  if (count === 0) return undefined
+  return data.endsWith("\\") ? { pending: count, at: now, backslash: true } : { pending: count, at: now }
 }
 
 /** The line as it was, minus a pending Escape, with the clock moved on. */

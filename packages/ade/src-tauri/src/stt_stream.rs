@@ -38,8 +38,11 @@ const BYTES_PER_SECOND: f64 = 32_000.0;
 const MAX_KEYTERMS: usize = 100;
 const MAX_KEYTERM_CHARS: usize = 50;
 const MAX_SESSIONS: usize = 2;
-/// Frames waiting to be sent: 5 s at 100 ms each. A page that is further ahead than that is not keeping time.
-const QUEUE_FRAMES: usize = 50;
+/// Frames waiting to be sent: 12 s at 100 ms each. The page streams while the session is still connecting (up to
+/// `connect` + `created`, 10 s by default), so a queue shorter than that stopped dictation on a slow line with
+/// `backpressure` before the server was ready (full review 2026-10-06, rust minor). A page further ahead than this is
+/// not keeping time.
+const QUEUE_FRAMES: usize = 120;
 const MAX_FRAME_BYTES: usize = 64 * 1024;
 
 /// How long each wait lasts. The defaults are the product's; the tests shorten them.
@@ -196,7 +199,7 @@ impl Sessions {
         Ok(id)
     }
 
-    /// Hands a frame of audio to a session. A page that is more than 5 s ahead of the socket ends the session with `backpressure`.
+    /// Hands a frame of audio to a session. A page that is more than 12 s ahead of the socket ends the session with `backpressure`.
     pub fn send(&self, id: u64, frame: Vec<u8>) -> Result<(), String> {
         if frame.len() > MAX_FRAME_BYTES {
             return Err("frame troppo grande".into());
@@ -1067,6 +1070,14 @@ mod tests {
         let again = Events::default();
         assert!(sessions.start(Some(KEY.into()), url(port), limits, again.emit()).is_ok());
         sessions.close_all();
+    }
+
+    // Full review 2026-10-06, rust (minor): 5 s of queue against 10 s to connect stopped dictation on a slow line.
+    #[test]
+    fn the_queue_holds_at_least_what_connecting_can_take() {
+        let limits = Limits::default();
+        let queued_secs = QUEUE_FRAMES as f64 * 0.1;
+        assert!(queued_secs >= (limits.connect + limits.created).as_secs_f64(), "{queued_secs} s of queue");
     }
 
     #[tokio::test]

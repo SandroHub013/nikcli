@@ -1203,11 +1203,11 @@
   }
 
   [data-slot="agent-status-dot"][data-agent-status="a lavoro"] {
-    animation: ade-agent-pulse-yellow 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    animation: ade-agent-pulse-yellow 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite var(--ade-loops, running);
   }
 
   [data-slot="agent-status-dot"][data-agent-status="in attesa di input"] {
-    animation: ade-agent-pulse-amber 1.4s ease-in-out infinite;
+    animation: ade-agent-pulse-amber 1.4s ease-in-out infinite var(--ade-loops, running);
   }
 
   [data-slot="agent-status-dot"][data-agent-status="a lavoro"]::after,
@@ -1221,12 +1221,12 @@
 
   [data-slot="agent-status-dot"][data-agent-status="a lavoro"]::after {
     background: rgba(250, 204, 21, 0.6);
-    animation: ade-agent-ripple 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    animation: ade-agent-ripple 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite var(--ade-loops, running);
   }
 
   [data-slot="agent-status-dot"][data-agent-status="in attesa di input"]::after {
     background: rgba(249, 115, 22, 0.6);
-    animation: ade-agent-ripple 1.4s ease-in-out infinite;
+    animation: ade-agent-ripple 1.4s ease-in-out infinite var(--ade-loops, running);
   }
 }
 

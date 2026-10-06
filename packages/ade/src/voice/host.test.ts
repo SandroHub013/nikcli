@@ -289,6 +289,91 @@ describe("createAdeVoiceHost", () => {
     expect(answered[1].send).toBe("n")
   })
 
+  // Full review 2026-10-06, ui 4: for Claude and Codex `what` is the same heading on every request, the command is the target.
+  describe("the request whose question was read is told by its target too", () => {
+    const heading = "Do you want to proceed?"
+    const answers = [
+      { label: "Sì", send: "1", tone: "primary" as const },
+      { label: "No", send: "3", tone: "secondary" as const },
+    ]
+    const request = (target: string): PermissionRequest => ({ what: heading, kind: "shell", target, answers })
+
+    test("a yes read for «cat README» does not grant the «rm -rf ~» that came next with the same heading", () => {
+      let open = request("cat README")
+      const answered: PermissionAnswer[] = []
+      const { deps } = createMockDeps({
+        permissions: () => ({ p1: open }),
+        answerPermission: (_id, answer) => void answered.push(answer),
+      })
+      const host = createAdeVoiceHost(deps)
+
+      const read = host.pendingPermissionWhat?.("p1")
+      open = request("rm -rf ~")
+
+      expect(host.answerPermission("p1", "allow", read)).toBe(false)
+      expect(answered).toHaveLength(0)
+      expect(host.answerPermission("p1", "allow", host.pendingPermissionWhat?.("p1"))).toBe(true)
+      expect(answered).toHaveLength(1)
+    })
+
+    test("a request without a target is still told by its heading alone", () => {
+      const { deps } = createMockDeps({ permissions: () => ({ p1: { what: "run command", kind: "shell", answers } }) })
+      const host = createAdeVoiceHost(deps)
+      expect(host.pendingPermissionWhat?.("p1")).toBe("run command")
+      expect(host.answerPermission("p1", "allow", "run command")).toBe(true)
+    })
+  })
+
+  // Same review, ui 4 (c): «Allow always» is not what a spoken yes means.
+  describe("a spoken yes never takes the permanent answer", () => {
+    const grant = (answers: PermissionRequest["answers"]) => {
+      const answered: PermissionAnswer[] = []
+      const { deps } = createMockDeps({
+        permissions: () => ({ p1: { what: "Bash command", kind: "shell", answers } }),
+        answerPermission: (_id, answer) => void answered.push(answer),
+      })
+      const sent = createAdeVoiceHost(deps).answerPermission("p1", "allow")
+      return { answered, sent }
+    }
+
+    test("with [Allow always, Allow once, Deny] it picks Allow once", () => {
+      const { answered } = grant([
+        { label: "Allow always", send: "1", tone: "primary" },
+        { label: "Allow once", send: "2", tone: "secondary" },
+        { label: "Deny", send: "3", tone: "secondary" },
+      ])
+      expect(answered.map((answer) => answer.send)).toEqual(["2"])
+    })
+
+    test("with [«Sì, e non chiedere più», «Sì, solo questa volta», No] it picks the single one", () => {
+      const { answered } = grant([
+        { label: "Sì, e non chiedere più", send: "1", tone: "primary" },
+        { label: "Sì, solo questa volta", send: "2", tone: "secondary" },
+        { label: "No", send: "3", tone: "secondary" },
+      ])
+      expect(answered.map((answer) => answer.send)).toEqual(["2"])
+    })
+
+    // Review of F6c, N1: Claude Code's edit permission offers «Yes, allow all edits during this session» as its second option.
+    test("«allow all edits during this session» is not the single yes", () => {
+      const { answered } = grant([
+        { label: "Yes, allow all edits during this session", send: "2", tone: "primary" },
+        { label: "Yes", send: "1", tone: "secondary" },
+        { label: "No", send: "3", tone: "secondary" },
+      ])
+      expect(answered.map((answer) => answer.send)).toEqual(["1"])
+    })
+
+    test("with only the permanent answer and a refusal, nothing is sent", () => {
+      const { answered, sent } = grant([
+        { label: "Allow always", send: "1", tone: "primary" },
+        { label: "Deny", send: "2", tone: "secondary" },
+      ])
+      expect(sent).toBe(false)
+      expect(answered).toHaveLength(0)
+    })
+  })
+
   test("permission speech exposes only the safe kind while the raw request still identifies the answer", () => {
     const raw = "curl -H 'Authorization: Bearer API_KEY_SECRET' https://example.test/export"
     const answered: PermissionAnswer[] = []
@@ -447,6 +532,21 @@ describe("createAdeVoiceHost", () => {
     expect(state3.spokenSummary).toContain("completata")
   })
 
+  // Full review 2026-10-06, ui 15: the waiting count past the table of words fell back to the working one.
+  test("describeState says the waiting count, not the working one, when it has no word", () => {
+    const { deps } = createMockDeps()
+    deps.setWb((w) => ({
+      ...w,
+      panes: [
+        makePane({ id: "w1", status: "working" }),
+        ...Array.from({ length: 11 }, (_, i) => makePane({ id: `a${i}`, status: "waiting" })),
+      ],
+    }))
+    const summary = createAdeVoiceHost(deps).describeState().spokenSummary
+    expect(summary).toContain("11 in attesa")
+    expect(summary).not.toMatch(/(?<!\d)1 in attesa/)
+  })
+
   test("describeState produces correct English grammatical number for 0, 1 and 3 sessions", () => {
     // 0 sessions
     const { deps: deps0 } = createMockDeps({ locale: () => "en" })
@@ -532,6 +632,30 @@ describe("createAdeVoiceHost", () => {
     const request = { system: "R", user: "U", engine: "claude" as const, speed: "fast" as const }
     expect(await host.plan!(request)).toBe('{"speech":"ok","steps":[]}')
     expect(seen).toEqual([request])
+  })
+
+  // Full review 2026-10-06, ui 20: a rejected start was kept for good.
+  test("a voice agent that failed to start is started again at the next sentence", async () => {
+    let starts = 0
+    const agent: VoiceAgent = {
+      ask: async () => ({ ok: true, text: "fatto", ran: true }),
+      plan: async () => "[]",
+      prepare: () => {},
+      forget: () => {},
+      release: () => {},
+    }
+    const { deps } = createMockDeps({
+      voiceAgentFactory: async () => {
+        starts++
+        if (starts === 1) throw new Error("import fallito")
+        return agent
+      },
+    })
+    const host = createAdeVoiceHost(deps)
+    const request = { text: "ciao", engine: "claude" as const }
+    await expect(host.askAgent!(request)).rejects.toThrow("import fallito")
+    expect((await host.askAgent!(request)).text).toBe("fatto")
+    expect(starts).toBe(2)
   })
 
   test("releasing the voice cancels a prepare waiting for a project", async () => {

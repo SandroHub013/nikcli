@@ -15,6 +15,24 @@ import { addMcpServer } from "./mcp-config"
 
 const stripe = findMcpServer("stripe")!
 
+// Full review 2026-10-06, bots: a hand-written `"args": "x"` or `"args": 5` threw a TypeError out of the Installed tab.
+describe("a server whose args are not a list", () => {
+  test("is still listed, with the rest of the file", () => {
+    const raw = JSON.stringify({
+      mcpServers: {
+        texty: { command: "npx", args: "-y @x/y" },
+        numbery: { command: "npx", args: 5 },
+        fine: { command: "npx", args: ["-y", "@a/b"] },
+      },
+    })
+    let listed: ReturnType<typeof installedServers> = []
+    expect(() => (listed = installedServers(raw))).not.toThrow()
+    expect(listed.map((server) => server.name)).toEqual(["texty", "numbery", "fine"])
+    expect(listed[2]!.detail).toBe("npx -y @a/b")
+    expect(listed[0]!.detail).toBe("npx")
+  })
+})
+
 describe("installed servers", () => {
   test("read from .mcp.json, matched to the catalog, with the variables they reference", () => {
     const raw = addMcpServer(

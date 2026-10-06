@@ -361,7 +361,7 @@
   height: 15px;
   border-radius: 1px;
   background: var(--ade-accent);
-  animation: chat-blink 1.1s steps(2, start) infinite;
+  animation: chat-blink 1.1s steps(2, start) infinite var(--ade-loops, running);
 }
 
 @keyframes chat-blink {

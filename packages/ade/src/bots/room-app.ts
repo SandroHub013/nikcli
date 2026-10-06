@@ -142,8 +142,11 @@ const STORAGE_KEY = "ade.bots.rooms"
 /** In the WebView's storage, like the routines. What the bots said, never a credential. */
 export function localRoomStore(key: string = STORAGE_KEY): RoomStore {
   let memory: RoomBook | undefined
+  // The last write did not land: `memory` is newer than what storage holds, so it answers (bots 3).
+  let unsaved = false
   return {
     get: () => {
+      if (unsaved && memory) return memory
       try {
         return parseRooms(localStorage.getItem(key))
       } catch {
@@ -154,8 +157,10 @@ export function localRoomStore(key: string = STORAGE_KEY): RoomStore {
       memory = book
       try {
         localStorage.setItem(key, JSON.stringify(book))
+        unsaved = false
       } catch {
         // Storage blocked: the rooms last until ADE closes.
+        unsaved = true
       }
     },
   }
@@ -235,6 +240,9 @@ export function createRoomRunner(deps: RoomRunnerDeps): RoomRunner {
   const now = deps.now ?? Date.now
   const newId = deps.newId ?? (() => crypto.randomUUID())
   const runs = new Map<string, { cancelled: boolean; speaking?: AgentFile; done: Promise<unknown> }>()
+  /** The newest message of each room: a `send` that finds a newer one after waiting for the stop leaves the run to it. */
+  const latest = new Map<string, number>()
+  let sent = 0
 
   const write = (id: string, change: (room: RoomRecord) => RoomRecord) => {
     const next = changeRoom(deps.store.get(), id, change)
@@ -255,6 +263,8 @@ export function createRoomRunner(deps: RoomRunnerDeps): RoomRunner {
     const said = message.trim()
     if (said.length === 0 || !roomOf(roomId)) return undefined
     // A newer message ends the run under way: the room answers this one.
+    const mine = ++sent
+    latest.set(roomId, mine)
     await stop(roomId)
     write(roomId, (room) => {
       const { note: _old, noteKind: _kind, ...rest } = room
@@ -264,6 +274,12 @@ export function createRoomRunner(deps: RoomRunnerDeps): RoomRunner {
         needsYou: false,
       }
     })
+    /*
+     * Two messages sent while the run stopped both get here after the same wait. The older one has said its words
+     * (they are in the log, above) and leaves the run to the newer: starting its own would overwrite the other in
+     * `runs`, leave it beyond «Ferma», and have two members speak at once, each with a spending cap of its own.
+     */
+    if (latest.get(roomId) !== mine) return undefined
     // Held from here, so a message sent while the members are checked ends this run too.
     const run: { cancelled: boolean; speaking?: AgentFile; done: Promise<unknown> } = {
       cancelled: false,

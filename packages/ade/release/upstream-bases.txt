@@ -1,0 +1,4 @@
+# Commits of nikcli/nikcli that feat/ade has already merged: the release plan and the
+# commit-subject check skip everything reachable from them (see script/release-plan.ts).
+# One full sha per line; `#` starts a comment. Add the sha of the Nik release you merge.
+35e90095bdba19b1c183775ff7d41216c9632e4b  # nikcli/nikcli v1.430.0

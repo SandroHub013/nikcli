@@ -645,6 +645,15 @@ export const BashTool = Tool.define("bash", async () => {
         resultMetadata.push("User aborted the command")
       }
 
+      let headTailTruncated = false
+      let headTailFilePath: string | undefined
+      if (output.length > Truncate.HEAD_TAIL_THRESHOLD) {
+        const trunc = Truncate.truncateHeadTail(output, { toolName: "bash" })
+        output = trunc.content
+        headTailTruncated = trunc.truncated
+        headTailFilePath = trunc.outputPath
+      }
+
       if (outputTruncated) {
         resultMetadata.push(
           `Output exceeded ${MAX_OUTPUT_LENGTH} characters; the beginning was omitted and the most recent output retained`,
@@ -661,6 +670,7 @@ export const BashTool = Tool.define("bash", async () => {
           output: previewOutput(output),
           exit: proc.exitCode,
           description,
+          ...(headTailTruncated ? { truncated: true, outputPath: headTailFilePath } : {}),
         },
         output,
       }

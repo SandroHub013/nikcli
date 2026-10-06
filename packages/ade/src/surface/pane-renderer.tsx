@@ -1,4 +1,4 @@
-import { Show, Suspense, createMemo, lazy } from "solid-js"
+import { Show, createMemo } from "solid-js"
 import { BrowserPane } from "../browser"
 import { FilePane, editBuffer, revertBuffer } from "../editor"
 import { SessionPane } from "../grid/pane"
@@ -34,12 +34,6 @@ import { LearnPane, type LearnProgressHost } from "../nikverse/learn/learn-pane"
 import type { AssetsHost } from "../nikverse/assets"
 import type { Snapshot } from "../nikverse/protocol"
 import type { ForwardedChord } from "../nikverse/chords"
-import type { Host } from "../host/shell"
-import type { Chord } from "../plugin-frame/api"
-import type { FramePaneInput } from "../plugin-frame/plugin-pane"
-
-/** The panel of a plugin in a frame is loaded when one opens: ADE with none never fetches it. */
-const PluginFramePane = lazy(() => import("../plugin-frame/plugin-pane").then((module) => ({ default: module.PluginFramePane })))
 import type { DesignHub } from "../design/hub"
 import { isPicked } from "../design/answer"
 import type { PanelRouter } from "../panels/router"
@@ -130,19 +124,6 @@ export interface PaneRendererDeps {
     progress: () => Promise<LearnProgressHost | undefined>
     /** A message the lesson page sent that ADE ignored, and why. */
     ignored: (reason: string) => void
-  }
-  /** What a plugin's panel needs from ADE: the workbench it is shown a picture of, and the few things it may ask for. */
-  framePlugin: {
-    input: () => FramePaneInput | undefined
-    host: () => Promise<Host | undefined>
-    focusPane: (paneId: string) => void
-    /** Whether the chord was navigation, and so was run. */
-    chord: (chord: Chord) => boolean
-    ignored: (reason: string) => void
-    /** A new version did not start and the earlier one is back. */
-    rolledBack: (name: string) => void
-    /** «Installa» on the placeholder. */
-    install: () => void
   }
   /** Writes a captured frame and resolves to where it went. */
   captureFrame: (name: string, png: Uint8Array) => Promise<string>
@@ -429,25 +410,6 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         onExpand={expand}
       />
     )
-
-    const framePluginPane = () => (
-      <PluginFramePane
-        pluginId={current().framePlugin?.id ?? ""}
-        title={current().title}
-        input={deps.framePlugin.input}
-        host={deps.framePlugin.host}
-        focused={isFocused()}
-        onFocusPane={deps.framePlugin.focusPane}
-        onChord={deps.framePlugin.chord}
-        onIgnored={deps.framePlugin.ignored}
-        onRolledBack={deps.framePlugin.rolledBack}
-        onInstall={deps.framePlugin.install}
-        onFocus={focus}
-        onClose={() => deps.close(current().id)}
-        onExpand={expand}
-      />
-    )
-
     const simulatorPane = () => (
       <SimulatorPane
         id={current().id}
@@ -608,7 +570,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                 : restartable()
                   ? [
                       {
-                        label: current().status === "error" ? "Riprova" : "Riprendi",
+                        label: current().status === "error" ? t("pane.retry") : t("pane.resume"),
                         tone: "primary" as const,
                         onClick: () => deps.restart(current()),
                       },
@@ -687,14 +649,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                                       <Show
                                         when={current().mode === "nikverse"}
                                         fallback={
-                                          <Show
-                                            when={current().mode === "learn"}
-                                            fallback={
-                                              <Show when={current().framePlugin} fallback={sessionPane()}>
-                                                <Suspense>{framePluginPane()}</Suspense>
-                                              </Show>
-                                            }
-                                          >
+                                          <Show when={current().mode === "learn"} fallback={sessionPane()}>
                                             {learnPane()}
                                           </Show>
                                         }

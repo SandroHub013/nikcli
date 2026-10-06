@@ -2,7 +2,7 @@ import type { PaneSummary, VoiceHost, VoiceStateSnapshot } from "@nikcli-ai/voic
 import type { Host, SpawnedSession } from "../host/shell"
 import type { Project } from "../host/project"
 import type { RecentEntry } from "../host/recent"
-import type { PermissionAnswer, PermissionRequest } from "../session/permission"
+import { permissionIdentity, type PermissionAnswer, type PermissionRequest } from "../session/permission"
 import { AGENTS } from "../session-new/agents"
 import type { AgentStatus } from "../session-new/availability"
 import { asOneLine, asSubmittedLine } from "../session/typing"
@@ -131,6 +131,13 @@ const OPENS_IN_GRID = new Set(["session.new", "browser.new", "video.new", "model
 /** How long a warm agent waits for the project before starting without one. */
 const PREPARE_WAIT_MS = 30_000
 
+/** An answer that reads as a refusal. */
+const REFUSAL_ANSWER = /^(?:no|nega|rifiuta|deny|reject|annulla|cancel)/i
+
+/** An answer that grants more than the request on screen: for always, for the session, without asking again. */
+const PERMANENT_ANSWER =
+  /always|sempre|non chiedere|non chiederlo|don'?t ask|do not ask|never ask|(?:for|during) (?:this|the) session|allow all|per (?:questa )?sessione|tutta la sessione/i
+
 export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
   /*
    * No voice text into a terminal whose agent is asking a permission
@@ -162,8 +169,19 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
     if (typeof window !== "undefined") window.addEventListener("pagehide", () => warm.close())
     return warm
   }
-  const voiceAgent = () =>
-    (agent ??= deps.voiceAgentFactory
+  const voiceAgent = () => {
+    if (agent) return agent
+    const made = makeVoiceAgent()
+    agent = made
+    // A start that failed is not kept: the next sentence tries again, instead of every one getting the same rejection until the
+    // window is reloaded (full review 2026-10-06, ui 20).
+    made.catch(() => {
+      if (agent === made) agent = undefined
+    })
+    return made
+  }
+  const makeVoiceAgent = (): Promise<VoiceAgent> =>
+    deps.voiceAgentFactory
       ? deps.voiceAgentFactory()
       : Promise.all([import("../bots/serve-turn"), import("../bots/warm")]).then(
           ([{ runBotTurn }, { createWarmClaude }]) =>
@@ -176,7 +194,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
               cwd: () => deps.project()?.root,
               codexFallback: () => deps.codexFallback?.() ?? false,
             }),
-        ))
+        )
 
   return {
     async askAgent(request) {
@@ -409,7 +427,8 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
     },
 
     pendingPermissionWhat(paneId: string): string | undefined {
-      return deps.permissions()[paneId]?.what
+      const pending = deps.permissions()[paneId]
+      return pending ? permissionIdentity(pending) : undefined
     },
 
     pendingPermissionKind(paneId: string) {
@@ -426,19 +445,26 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
        * the first one answered by hand and a new one asked, a yes to «cat
        * README» would otherwise grant the «rm -rf ~» on screen now.
        */
-      if (what !== undefined && pending.what !== what) {
+      if (what !== undefined && permissionIdentity(pending) !== what) {
         return false
       }
 
       let chosen: PermissionAnswer | undefined
       if (answer === "allow") {
+        /*
+         * Never the permanent one (ui 4, c): «Sì, e non chiedere più» starts with «sì», and with a menu that offers
+         * [Allow always, Allow once, Deny] the first option is the primary one. A spoken yes grants this request, not
+         * every one that follows; when only permanent answers are left, nothing is sent and the request stays on
+         * screen for the user.
+         */
+        const once = pending.answers.filter((a) => !PERMANENT_ANSWER.test(a.label))
         chosen =
-          pending.answers.find(
+          once.find(
             (a) =>
               a.tone === "primary" ||
               /^(?:sì|si|consenti|allow|yes|accetta|procedi|conferma)/i.test(a.label) ||
               a.send.toLowerCase() === "y",
-          ) ?? pending.answers[0]
+          ) ?? once.find((a) => !REFUSAL_ANSWER.test(a.label))
       } else {
         /*
          * No fallback, on purpose.
@@ -452,9 +478,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
          * user to answer by hand.
          */
         chosen = pending.answers.find(
-          (a) =>
-            /^(?:no|nega|rifiuta|deny|reject|annulla|cancel)/i.test(a.label) ||
-            /^(?:n|no)$/i.test(a.send.trim().toLowerCase()),
+          (a) => REFUSAL_ANSWER.test(a.label) || /^(?:n|no)$/i.test(a.send.trim().toLowerCase()),
         )
       }
 
@@ -630,7 +654,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
           }
           if (waitingSessions > 0) {
             details.push(
-              `${waitingSessions === 1 ? "una" : (ITALIAN_NUMBERS[waitingSessions] ?? workingSessions)} in attesa`,
+              `${waitingSessions === 1 ? "una" : (ITALIAN_NUMBERS[waitingSessions] ?? waitingSessions)} in attesa`,
             )
           }
           if (doneSessions > 0) {

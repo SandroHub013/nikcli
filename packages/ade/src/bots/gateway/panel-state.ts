@@ -20,7 +20,7 @@ import { createSignal, type Accessor } from "solid-js"
 import { t } from "../../i18n"
 import type { AgentFile } from "../nikcli"
 import type { GatewayMessage } from "./controller"
-import { offersRemoteCommands, REMOTE_OFF, type RemoteStore } from "./remote"
+import { offersRemoteCommands, REMOTE_OFF, remoteKey, type RemoteStore } from "./remote"
 
 export interface Sender {
   readonly id: string
@@ -158,7 +158,7 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
   const [probed, setProbed] = createSignal<string>()
   const [redactedAt, setRedactedAt] = createSignal<number>()
   const [confirmingRemote, setConfirmingRemote] = createSignal(false)
-  const [remote, setRemote] = createSignal(deps.remote.get(path()))
+  const [remote, setRemote] = createSignal(deps.remote.get(remoteKey(path(), platform())))
 
   const refresh = async () => {
     try {
@@ -170,7 +170,7 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
       }
       setLink(all.find(mine) ?? { ...OFF, bot: path(), platform: platform() })
       setPairing(await deps.api.pairingList(path(), platform()))
-      setRemote(deps.remote.get(path()))
+      setRemote(deps.remote.get(remoteKey(path(), platform())))
     } catch (error) {
       setProblem(reason(error))
     }
@@ -345,12 +345,12 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
           if (trusted.problem) throw new Error(trusted.problem)
           return
         }
-        deps.remote.set(path(), { commands: true, fingerprint: trusted.fingerprint })
+        deps.remote.set(remoteKey(path(), platform()), { commands: true, fingerprint: trusted.fingerprint })
       }),
     remoteOff: () =>
       act(async () => {
         setConfirmingRemote(false)
-        deps.remote.set(path(), REMOTE_OFF)
+        deps.remote.set(remoteKey(path(), platform()), REMOTE_OFF)
       }),
 
     dispose: () => {

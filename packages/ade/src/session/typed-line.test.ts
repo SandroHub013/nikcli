@@ -16,7 +16,34 @@ describe("typedAfter", () => {
 
   test("Enter empties it: what was typed has gone", () => {
     expect(typeAll(["git st", "\r"])).toBeUndefined()
-    expect(typeAll(["git st", "\n"])).toBeUndefined()
+    expect(typeAll(["git st", "\r\n"])).toBeUndefined()
+  })
+
+  // Full review 2026-10-06, sessions 7: a new line in the draft is not a send.
+  test("Ctrl+J and backslash-Enter add a line to the draft instead of sending it", () => {
+    // Ctrl+J is `\n`: a new line in Claude Code's box.
+    expect(pending(typeAll(["git st", "\n"]))).toBe(7)
+    expect(isTyping(typeAll(["prima riga", "\n"]))).toBe(true)
+    // `\` then Enter: the backslash becomes the new line, the draft keeps its length.
+    const line = typeAll(["prima riga\\", "\r"])
+    expect(pending(line)).toBe(11)
+    expect(isTyping(line)).toBe(true)
+    // Typed one key at a time, as a keyboard does.
+    expect(pending(typeAll(["a", "b", "\\", "\r", "c"]))).toBe(4)
+    // And the Enter after that does send.
+    expect(typeAll(["prima riga\\", "\r", "seconda", "\r"])).toBeUndefined()
+  })
+
+  test("a backslash that is not the last thing typed does not turn Enter into a new line", () => {
+    expect(typeAll(["a\\b", "\r"])).toBeUndefined()
+    expect(typeAll(["a\\", "\u007f", "\r"])).toBeUndefined()
+    expect(typeAll(["a\\", "\u001b[D", "\r"])).toBeUndefined()
+  })
+
+  test("a pasted block with LF newlines counts every line, and CRLF is one Enter", () => {
+    expect(pending(typedAfter(undefined, "a\nb\nc", 5))).toBe(5)
+    expect(pending(typedAfter(undefined, "uno\r\ndue", 5))).toBe(3)
+    expect(typedAfter({ pending: 3, at: 1 }, "x\r\n", 5)).toBeUndefined()
   })
 
   test("Ctrl+C throws the line away", () => {

@@ -297,6 +297,15 @@ const INHERITED_SESSION_MARKERS: &[&str] = &[
     "AI_AGENT",
     "TRACEPARENT",
     "ADE_MAILBOX_ROOT",
+    // The identity an ADE gives its own panes. An ADE launched from an agent's pane (ADE Test, driven by an
+    // agent) inherits the outer one's: the bots and the auxiliary spawns, which get no pane of their own, would
+    // write into the outer ADE's mailbox and activity, a pane «at work» that is not, and resume the wrong
+    // conversation (full review 2026-10-06, Rust 10). A pane that has an identity is given its own, after this.
+    "ADE_PANE_ID",
+    "ADE_PANE_TOKEN",
+    "ADE_MAILBOX",
+    "ADE_SPAWN_NONCE",
+    "ADE_SESSION_DIR",
 ];
 
 /// Whether `key`, inherited from whatever launched ADE, is another session's.
@@ -1056,6 +1065,15 @@ pub async fn pty_spawn(
      * such problem: the wait ends on its own.
      */
     let (chunk_tx, chunk_rx) = std::sync::mpsc::channel::<String>();
+    /*
+     * How the waiter wakes the sender when the child has exited: an empty chunk, which the readers never send. It is
+     * kept in a slot, not held by the waiter, so that the channel still counts as closed when the readers are done:
+     * the main reader empties the slot when it ends, and only then does the sender see the hang-up. Held by the
+     * waiter, which lives until the child exits, it would have delayed every exit that EOF announces first.
+     */
+    let wake: std::sync::Arc<Mutex<Option<std::sync::mpsc::Sender<String>>>> =
+        std::sync::Arc::new(Mutex::new(Some(chunk_tx.clone())));
+    let wake_reader = std::sync::Arc::clone(&wake);
     // A piped process's errors go to the same stream: that is where a terminal would have shown them.
     if let Some(mut errors) = errors {
         let error_tx = chunk_tx.clone();
@@ -1113,51 +1131,49 @@ pub async fn pty_spawn(
             }
         }
         // Dropping `chunk_tx` here is what tells the sender the pty reached
-        // EOF, so it can flush the last frame and report the exit.
+        // EOF, so it can flush the last frame and report the exit: the waiter's way in goes with it.
+        if let Ok(mut slot) = wake_reader.lock() {
+            slot.take();
+        }
     });
 
     // For the waiter thread below; taken before `app` moves into the sender.
     let waiter = app.clone();
     let waited_id = id.clone();
+    // The waiter hands the exit it saw to the sender, which says it after the last output: see `drain_then_exit`.
+    let (exit_tx, exit_rx) = std::sync::mpsc::channel::<Option<i32>>();
 
     let emitter = app.clone();
     let stream_id = id.clone();
     std::thread::spawn(move || {
         let topic = data_topic(&stream_id);
+        let exit_id = stream_id.clone();
+        let exit_emitter = emitter.clone();
 
-        // Returns once the reader has hung up and the last frame is out.
-        pump(&chunk_rx, |data| {
-            let _ = emitter.emit(
-                &topic,
-                Chunk {
-                    id: stream_id.clone(),
-                    data,
-                },
-            );
-        });
-
-        let taken = app
-            .state::<Registry>()
-            .0
-            .lock()
-            .ok()
-            .and_then(|mut sessions| sessions.remove(&stream_id));
-
-        /*
-         * Nothing left to report: the waiter below already took the session
-         * and said the exit — that is what let this reader reach EOF at all —
-         * or `pty_kill` did. One exit per session, from whoever saw it first.
-         */
-        let Some(mut session) = taken else {
-            return;
-        };
-        let code = session.child.wait().ok().map(|status| status.exit_code() as i32);
-
-        let _ = emitter.emit(
-            "pty:exit",
-            Exit {
-                id: stream_id,
-                code,
+        drain_then_exit(
+            &chunk_rx,
+            |data| {
+                let _ = emitter.emit(
+                    &topic,
+                    Chunk {
+                        id: stream_id.clone(),
+                        data,
+                    },
+                );
+            },
+            || {
+                let taken = app
+                    .state::<Registry>()
+                    .0
+                    .lock()
+                    .ok()
+                    .and_then(|mut sessions| sessions.remove(&stream_id));
+                taken.map(|mut session| session.child.wait().ok().map(|status| status.exit_code() as i32))
+            },
+            &exit_rx,
+            EXIT_DRAIN,
+            |code| {
+                let _ = exit_emitter.emit("pty:exit", Exit { id: exit_id, code });
             },
         );
     });
@@ -1173,7 +1189,8 @@ pub async fn pty_spawn(
      * exited left a pane that said "working" forever, with an OpenConsole
      * process for every turn. So the child is asked directly, twice a second;
      * once it has gone the session is dropped — which is what lets the
-     * reader finish — and the exit is reported from here with the real code.
+     * reader finish — and the real code is handed to the sender, which
+     * reports the exit once the last output is out.
      * On unix this is merely redundant: EOF arrives first, the reader takes
      * the session, and this thread finds nothing and stops.
      */
@@ -1199,17 +1216,69 @@ pub async fn pty_spawn(
                 }
             }
         };
-        let _ = waiter.emit(
-            "pty:exit",
-            Exit {
-                id: waited_id,
-                code,
-            },
-        );
+        // Not said from here: the sender may still have output queued, and the page stops listening at the exit.
+        let _ = exit_tx.send(code);
+        // The sender may be waiting for output that will never come (no EOF): it looks at the code when it is woken.
+        if let Ok(slot) = wake.lock() {
+            if let Some(tx) = slot.as_ref() {
+                let _ = tx.send(String::new());
+            }
+        }
         break;
     });
 
     Ok(())
+}
+
+/*
+ * What the sender does from start to end: the output, then the exit, in that order.
+ *
+ * The exit used to be said by whichever thread saw it first. On Windows that is the waiter, which notices the
+ * process is gone up to half a second late and drops the session while the sender still holds up to a frame
+ * (16 ms, 256 KB) of the command's last output; the page stops listening at `pty:exit`, so a short command's
+ * final lines were lost. Now the exit is only ever said here, after `pump` has returned and the last frame is out.
+ *
+ * `take_session` removes the session if it is still registered and returns the exit code of its child (the
+ * unix case: EOF came first). If it is gone, the waiter took it and `late` carries the code it saw; if `pty_kill`
+ * took it, the waiter ends without sending and nothing is said, as before.
+ *
+ * The wait for the output has a limit once the exit is known. The waiter was made to break the dependence on EOF
+ * (a console host that outlives its child keeps the pipe open), and an exit that waited for EOF without limit
+ * brought the pane that says «working» for ever back whenever EOF did not come: a pipe handle inherited by another
+ * process, a slow `ClosePseudoConsole` (Architect's review of F6a, O2). So when the code arrives the sender drains for
+ * at most `grace` more, then says the exit with what it has.
+ */
+fn drain_then_exit(
+    chunks: &Receiver<String>,
+    emit: impl FnMut(String),
+    take_session: impl FnOnce() -> Option<Option<i32>>,
+    late: &Receiver<Option<i32>>,
+    grace: Duration,
+    emit_exit: impl FnOnce(Option<i32>),
+) {
+    // The code and the moment the grace ends, once the waiter has sent it.
+    let seen: std::cell::Cell<Option<(Option<i32>, Instant)>> = std::cell::Cell::new(None);
+    let ended = || {
+        if seen.get().is_none() {
+            if let Ok(code) = late.try_recv() {
+                seen.set(Some((code, Instant::now() + grace)));
+            }
+        }
+        seen.get().map(|(_, at)| at)
+    };
+    pump_until(chunks, emit, &ended);
+    let code = match take_session() {
+        Some(code) => code,
+        None => match seen.get() {
+            Some((code, _)) => code,
+            // The waiter ends, with or without sending, within a tick of the session being gone: the cap is only a net.
+            None => match late.recv_timeout(Duration::from_secs(5)) {
+                Ok(code) => code,
+                Err(_) => return,
+            },
+        },
+    };
+    emit_exit(code);
 }
 
 /*
@@ -1232,7 +1301,18 @@ pub async fn pty_spawn(
  * Split out of `pty_spawn` so the rules can be tested with a channel and a
  * closure, without a window to emit into.
  */
-fn pump(chunks: &Receiver<String>, mut emit: impl FnMut(String)) {
+fn pump(chunks: &Receiver<String>, emit: impl FnMut(String)) {
+    pump_until(chunks, emit, &|| None)
+}
+
+/// How long the sender goes on draining once the child's exit is known, before the exit is said without the EOF.
+const EXIT_DRAIN: Duration = Duration::from_secs(1);
+
+/// `pump`, which also ends when `ended` gives a moment that has passed, flushing what it holds first.
+///
+/// With a live, silent process there is no deadline at all: the wait is a plain `recv()`, which is zero work until
+/// something arrives. `ended` is asked once per message, and the waiter sends an empty one when the child exits.
+fn pump_until(chunks: &Receiver<String>, mut emit: impl FnMut(String), ended: &dyn Fn() -> Option<Instant>) {
     let mut pending = String::new();
     // Set while `pending` holds something; the moment it must go out.
     let mut deadline: Option<Instant> = None;
@@ -1245,11 +1325,20 @@ fn pump(chunks: &Receiver<String>, mut emit: impl FnMut(String)) {
     };
 
     loop {
-        let received = match deadline {
+        let end = ended();
+        if matches!(end, Some(at) if Instant::now() >= at) {
+            flush(&mut pending, &mut deadline);
+            return;
+        }
+        // The nearer of the frame's deadline and the end of the wait for the exit, when either is set.
+        let limit = [deadline, end].into_iter().flatten().min();
+        let received = match limit {
             None => chunks.recv().map_err(|_| RecvTimeoutError::Disconnected),
             Some(at) => chunks.recv_timeout(at.saturating_duration_since(Instant::now())),
         };
         match received {
+            // A wake-up from the waiter: the top of the loop looks at the exit.
+            Ok(text) if text.is_empty() => {}
             Ok(text) => {
                 pending.push_str(&text);
                 // A burst larger than the cap goes out without waiting:
@@ -1388,6 +1477,24 @@ fn tree_of(root: u32, rows: &[ProcRow]) -> Vec<u32> {
 /// `ade-msg ask` waiting, a node process — and killing only the CLI leaves them
 /// running, holding the turn's mailbox identity and its files.
 pub(crate) fn kill_tree(pid: u32) {
+    kill_tree_keeping(pid, true);
+}
+
+/// The processes to kill for `root`: its tree, children first, with or without `root` itself.
+fn victims(root: u32, rows: &[ProcRow], include_root: bool) -> Vec<u32> {
+    let mut members = tree_of(root, rows);
+    if !include_root {
+        members.retain(|pid| *pid != root);
+    }
+    members
+}
+
+/// `kill_tree`, with the choice of leaving the root to its owner.
+///
+/// A pane's own child is ended afterwards by `portable-pty`, which on unix sends SIGHUP and waits up to
+/// 200 ms before SIGKILL: the agent gets to close its files. Killing the whole tree first, root included,
+/// took that away (Dario's review of F3, N1), so there only the descendants go here.
+fn kill_tree_keeping(pid: u32, include_root: bool) {
     use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
     let mut sys = System::new();
     sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
@@ -1400,7 +1507,7 @@ pub(crate) fn kill_tree(pid: u32) {
             started: process.start_time(),
         })
         .collect();
-    for member in tree_of(pid, &rows) {
+    for member in victims(pid, &rows, include_root) {
         if let Some(process) = sys.process(Pid::from_u32(member)) {
             process.kill();
         }
@@ -1410,8 +1517,11 @@ pub(crate) fn kill_tree(pid: u32) {
 /// Ends the session. Safe to call on one that already ended.
 ///
 /// With `tree`, the processes the child started go too (see `kill_tree`).
-/// Panes do not ask for it: closing a pane has always ended the agent, not a
-/// dev server it left running on purpose.
+/// Panes ask for it, in every place a pane's process ends (closing it, «Termina
+/// processo», a relaunch, the voice): closing a pane ends what the agent started
+/// along with it, a dev server it left running included. Before the 2026-10-06
+/// review they did not, and the agent's MCP servers and shells outlived the pane
+/// with nothing left in the registry to find them.
 ///
 /// `async` because `wait()` below is exactly as blocking as the write is: a
 /// child that takes its time dying would otherwise take the window with it.
@@ -1425,7 +1535,8 @@ pub async fn pty_kill(registry: tauri::State<'_, Registry>, id: String, tree: Op
         if tree == Some(true) {
             if let Some(pid) = session.child.process_id() {
                 // Reading the process table takes a moment: off the async worker.
-                let _ = tauri::async_runtime::spawn_blocking(move || kill_tree(pid)).await;
+                // On unix the root is left to `child.kill()` below (SIGHUP, a short wait, SIGKILL).
+                let _ = tauri::async_runtime::spawn_blocking(move || kill_tree_keeping(pid, cfg!(windows))).await;
             }
         }
         let _ = session.child.kill();
@@ -1930,6 +2041,128 @@ mod tests {
         emitted
     }
 
+    // Full review 2026-10-06, rust 11: the exit is said after the last output, even when the waiter saw it first.
+    #[test]
+    fn the_exit_comes_after_the_last_output_even_when_the_waiter_saw_it_first() {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let (exit_tx, exit_rx) = std::sync::mpsc::channel::<Option<i32>>();
+        // The waiter has already reported (code 0) and the session is gone; the output is still queued.
+        exit_tx.send(Some(0)).unwrap();
+        tx.send("last line\n".to_string()).unwrap();
+        drop(tx);
+        let log = std::cell::RefCell::new(Vec::<String>::new());
+        drain_then_exit(
+            &rx,
+            |data| log.borrow_mut().push(format!("data:{}", data.trim_end())),
+            || None,
+            &exit_rx,
+            Duration::from_millis(50),
+            |code| log.borrow_mut().push(format!("exit:{code:?}")),
+        );
+        assert_eq!(log.into_inner(), vec!["data:last line".to_string(), "exit:Some(0)".to_string()]);
+    }
+
+    #[test]
+    fn a_session_the_sender_takes_itself_reports_the_code_it_waited_for() {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let (_exit_tx, exit_rx) = std::sync::mpsc::channel::<Option<i32>>();
+        tx.send("x".to_string()).unwrap();
+        drop(tx);
+        let mut exits = Vec::new();
+        drain_then_exit(&rx, |_| {}, || Some(Some(3)), &exit_rx, Duration::from_millis(50), |code| exits.push(code));
+        assert_eq!(exits, vec![Some(3)]);
+    }
+
+    #[test]
+    fn a_session_killed_by_pty_kill_says_no_exit() {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let (exit_tx, exit_rx) = std::sync::mpsc::channel::<Option<i32>>();
+        drop(tx);
+        // The waiter found the session gone and ended without sending.
+        drop(exit_tx);
+        let mut exits = Vec::new();
+        drain_then_exit(&rx, |_| {}, || None, &exit_rx, Duration::from_millis(50), |code| exits.push(code));
+        assert!(exits.is_empty());
+    }
+
+    // Architect's review of F6a, O2: the exit does not wait for an EOF that never comes.
+    #[test]
+    fn the_exit_is_said_after_the_grace_even_when_the_output_never_ends() {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let (exit_tx, exit_rx) = std::sync::mpsc::channel::<Option<i32>>();
+        // The code has arrived, the last line is queued, and the channel is never closed: `tx` stays alive.
+        exit_tx.send(Some(7)).unwrap();
+        tx.send("last line\n".to_string()).unwrap();
+        // As the waiter does after sending the code: the empty chunk that wakes a sender blocked in `recv()`.
+        tx.send(String::new()).unwrap();
+        let log = std::cell::RefCell::new(Vec::<String>::new());
+        let started = Instant::now();
+        drain_then_exit(
+            &rx,
+            |data| log.borrow_mut().push(format!("data:{}", data.trim_end())),
+            || None,
+            &exit_rx,
+            Duration::from_millis(100),
+            |code| log.borrow_mut().push(format!("exit:{code:?}")),
+        );
+        assert_eq!(log.into_inner(), vec!["data:last line".to_string(), "exit:Some(7)".to_string()]);
+        // Neither the idle poll nor the grace is anywhere near the five seconds of the old net.
+        assert!(started.elapsed() < Duration::from_millis(1500), "took {:?}", started.elapsed());
+        drop(tx);
+    }
+
+    // Master, on O2: a live, silent process costs no wake-ups at all.
+    #[test]
+    fn a_silent_session_wakes_the_sender_never_until_the_exit_is_known() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::{Arc, Mutex};
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let asked = Arc::new(AtomicUsize::new(0));
+        let end: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
+        let (asked_in, end_in) = (Arc::clone(&asked), Arc::clone(&end));
+        let sender = std::thread::spawn(move || {
+            let ended = move || {
+                asked_in.fetch_add(1, Ordering::SeqCst);
+                *end_in.lock().unwrap()
+            };
+            pump_until(&rx, |_| {}, &ended);
+        });
+        // Longer than a periodic poll would need to show itself several times over.
+        std::thread::sleep(Duration::from_millis(900));
+        assert_eq!(asked.load(Ordering::SeqCst), 1, "a silent live process must not wake the sender");
+        assert!(!sender.is_finished());
+        // The exit becomes known and the waiter wakes the sender: it ends at the end of the grace.
+        *end.lock().unwrap() = Some(Instant::now() + Duration::from_millis(100));
+        tx.send(String::new()).unwrap();
+        let started = Instant::now();
+        sender.join().unwrap();
+        assert!(started.elapsed() < Duration::from_millis(600), "took {:?}", started.elapsed());
+        drop(tx);
+    }
+
+    #[test]
+    fn output_that_keeps_coming_does_not_hold_the_exit_past_the_grace() {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let (exit_tx, exit_rx) = std::sync::mpsc::channel::<Option<i32>>();
+        exit_tx.send(Some(0)).unwrap();
+        // A grandchild that never stops writing: a line every few milliseconds, for longer than the grace.
+        let writer = std::thread::spawn(move || {
+            for _ in 0..200 {
+                if tx.send("x".to_string()).is_err() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        });
+        let mut said = false;
+        let started = Instant::now();
+        drain_then_exit(&rx, |_| {}, || None, &exit_rx, Duration::from_millis(100), |_| said = true);
+        assert!(said);
+        assert!(started.elapsed() < Duration::from_millis(900), "took {:?}", started.elapsed());
+        drop(rx);
+        let _ = writer.join();
+    }
+
     #[test]
     fn a_session_that_says_nothing_emits_nothing() {
         assert!(pumped(&[]).is_empty());
@@ -2026,6 +2259,11 @@ mod tests {
             "CLAUDECODE",
             "CLAUDE_PID",
             "ADE_MAILBOX_ROOT",
+            "ADE_PANE_ID",
+            "ADE_PANE_TOKEN",
+            "ADE_MAILBOX",
+            "ADE_SPAWN_NONCE",
+            "ADE_SESSION_DIR",
             // Windows' names have no case.
             "claude_code_session_id",
         ] {
@@ -2106,6 +2344,32 @@ mod tests {
         }
     }
 
+    /// Full review 2026-10-06, Rust 10: another ADE's pane identity is not inherited.
+    #[test]
+    fn the_outer_ades_pane_identity_does_not_reach_a_spawn_that_has_none() {
+        let inherited = [
+            ("ADE_PANE_ID", "riquadro-esterno"),
+            ("ADE_PANE_TOKEN", "token-esterno"),
+            ("ADE_MAILBOX", "C:/esterna/posta"),
+            ("ADE_SPAWN_NONCE", "nonce-esterno"),
+            ("ADE_SESSION_DIR", "C:/esterna/sessioni"),
+            ("ADE_MAILBOX_ROOT", "C:/esterna"),
+            ("PATH", "C:/bin"),
+        ];
+        let mut builder = CommandBuilder::new("bot");
+        for (key, value) in inherited {
+            builder.env(key, value);
+        }
+        scrub_inherited(&mut builder, inherited.iter().map(|(key, _)| key.to_string()), &[]);
+        for (gone, _) in &inherited[..6] {
+            assert!(builder.get_env(gone).is_none(), "{gone} is the outer ADE's and must not reach the child");
+        }
+        assert!(builder.get_env("PATH").is_some());
+        // The ones a pane is given afterwards are set after the scrub, so they survive it.
+        builder.env("ADE_PANE_ID", "riquadro-proprio");
+        assert_eq!(builder.get_env("ADE_PANE_ID").and_then(|v| v.to_str()), Some("riquadro-proprio"));
+    }
+
     #[test]
     fn a_tree_is_walked_down_by_start_time_and_killed_children_first() {
         let row = |pid, parent, started| ProcRow { pid, parent, started };
@@ -2130,6 +2394,19 @@ mod tests {
         let at = |pid| tree.iter().position(|p| *p == pid).unwrap();
         assert!(at(111) < at(110) && at(110) < at(100) && at(120) < at(100));
         assert!(tree_of(999, &rows).is_empty());
+    }
+
+    #[test]
+    fn a_pane_leaves_its_root_to_the_gentle_kill_but_the_tree_below_it_goes() {
+        let row = |pid, parent, started| ProcRow { pid, parent, started };
+        let rows = [row(100, Some(1), 1_000), row(110, Some(100), 1_001), row(111, Some(110), 1_002)];
+        // Descendants only, deepest first: the root is left for `child.kill()`.
+        assert_eq!(victims(100, &rows, false), vec![111, 110]);
+        // The whole tree, root last, as `kill_tree` always did.
+        assert_eq!(victims(100, &rows, true), vec![111, 110, 100]);
+        // A root that is not in the table has nothing to kill, with or without it.
+        assert!(victims(999, &rows, false).is_empty());
+        assert!(victims(999, &rows, true).is_empty());
     }
 
     /// B8d: nikcli's bot turns run on ADE's server; no spawn sets a variable by name any more.
@@ -2274,8 +2551,6 @@ mod tests {
             "USERPROFILE",
             "ANTHROPIC_API_KEY",
             "TERM",
-            "ADE_MAILBOX",
-            "ADE_PANE_ID",
             "CLAUDE_CODE_USE_BEDROCK",
             concat!("CLAUDE_CODE_", "OAUTH_TOKEN"),
             "CLAUDE_CODE_GIT_BASH_PATH",

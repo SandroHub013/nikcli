@@ -67,6 +67,9 @@ export type DiscoveryResult = {
   readonly rejected: RejectedPlugin[]
 }
 
+/** A check that fails is a file that is not there for discovery: one plugin must not take the whole list down (`path_exists` rejects). */
+const there = (io: DiscoveryIO, path: string) => io.exists(path).catch(() => false)
+
 /** The slice of `host/shell.ts` discovery needs. Injected, so tests need no Tauri. */
 export interface DiscoveryIO {
   readTextFile: (path: string, maxBytes?: number) => Promise<{ text: string }>
@@ -110,6 +113,27 @@ export function isPathSpec(spec: string): boolean {
 }
 
 /**
+ * Whether a specifier names a file on another machine: `//host/share`,
+ * `\\host\share`, `\\?\UNC\host\share`, `file://host/share` or `file:////host/share`.
+ *
+ * Asking Windows whether such a path exists opens an SMB connection to the host
+ * and sends the user's NTLM hash with it. A specifier comes from the project's
+ * own `tui.json`, which a cloned repository writes, so this is decided from the
+ * text, before the disk is touched (Rust ALTO 2; the commands refuse them too).
+ */
+export function isUncSpec(spec: string): boolean {
+  const slashed = spec.trim().replace(/\\/g, "/")
+  if (slashed.startsWith("//")) return true
+  const file = /^file:(\/*)([^/]*)/i.exec(slashed)
+  if (!file) return false
+  const slashes = file[1]!.length
+  // `file:///x` has an empty host; `file://host/x` and `file:////x` do not.
+  if (slashes > 3) return true
+  if (slashes === 2) return file[2]!.toLowerCase() !== "localhost" && file[2] !== ""
+  return false
+}
+
+/**
  * A path or `file://` specifier as a URL, resolved against the project root.
  *
  * Windows backslashes are normalised first: `new URL` treats `\` as an
@@ -137,7 +161,15 @@ function directoryOf(url: string): string {
 
 /** A `file://` URL back to something `read_text_file` will accept. */
 export function urlToPath(url: string): string {
-  const raw = decodeURIComponent(url.replace(/^file:\/\//, ""))
+  const encoded = url.replace(/^file:\/\//, "")
+  // A `%` that is not an escape (`100%/plugin.js`) makes `decodeURIComponent` throw, and with it the whole project's rows
+  // (full review 2026-10-06, bots): such a path is taken as it is written.
+  let raw = encoded
+  try {
+    raw = decodeURIComponent(encoded)
+  } catch {
+    // Not an escape: as written.
+  }
   // `file:///C:/x` leaves a leading slash in front of the drive letter, which
   // Windows will not open.
   return /^\/[A-Za-z]:/.test(raw) ? raw.slice(1) : raw
@@ -197,17 +229,21 @@ export async function resolveDeclaredPlugin(
     }
   }
 
+  if (isUncSpec(declared.spec)) {
+    return { ...declared, reason: "i percorsi di rete (UNC) non sono consentiti per i plugin" }
+  }
+
   const url = specToUrl(declared.spec, projectRoot)
   if (!url) return { ...declared, reason: "percorso del plugin non valido" }
 
   if (/\.(m?js|mjs|jsx)$/i.test(url)) {
-    if (!(await io.exists(urlToPath(url)))) return { ...declared, reason: "il file del plugin non esiste" }
+    if (!(await there(io, urlToPath(url)))) return { ...declared, reason: "il file del plugin non esiste" }
     return { ...declared, entry: url }
   }
 
   const manifestUrl = new URL("package.json", url.endsWith("/") ? url : `${url}/`).href
   const manifestPath = urlToPath(manifestUrl)
-  if (!(await io.exists(manifestPath))) {
+  if (!(await there(io, manifestPath))) {
     return { ...declared, reason: "la cartella del plugin non contiene un package.json" }
   }
 
@@ -217,7 +253,7 @@ export async function resolveDeclaredPlugin(
   const outcome = resolveManifestEntry(manifestUrl, manifest.text)
   if ("reason" in outcome) return { ...declared, reason: outcome.reason }
 
-  if (!(await io.exists(urlToPath(outcome.entry)))) {
+  if (!(await there(io, urlToPath(outcome.entry)))) {
     return { ...declared, reason: "l'entrypoint dichiarato non esiste" }
   }
   return { ...declared, entry: outcome.entry }
@@ -226,7 +262,7 @@ export async function resolveDeclaredPlugin(
 /** Everything the project declares, sorted into what loads and what does not. */
 export async function discoverPlugins(projectRoot: string, io: DiscoveryIO): Promise<DiscoveryResult> {
   const configPath = urlToPath(specToUrl(CONFIG_RELATIVE_PATH, projectRoot) ?? "")
-  if (!configPath || !(await io.exists(configPath))) return { resolved: [], rejected: [] }
+  if (!configPath || !(await there(io, configPath))) return { resolved: [], rejected: [] }
 
   const config = await io.readTextFile(configPath).catch(() => undefined)
   if (!config) return { resolved: [], rejected: [] }

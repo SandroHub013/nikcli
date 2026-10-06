@@ -85,7 +85,7 @@
    point: motion in the corner of the eye must mean the microphone is open. */
 [data-slot="agent-presence"][data-tone="done"] [data-slot="agent-dot"],
 [data-slot="agent-presence"][data-tone="working"] [data-slot="agent-dot"] {
-  animation: agent-pulse 2s var(--ade-ease) infinite;
+  animation: agent-pulse 2s var(--ade-ease) infinite var(--ade-loops, running);
 }
 
 @keyframes agent-pulse {

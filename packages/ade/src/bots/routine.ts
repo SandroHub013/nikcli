@@ -245,8 +245,16 @@ const STORAGE_KEY = "ade.bots.routines"
 /** In the WebView's storage, like the bots' accounts. No credential is ever part of it. */
 export function localRoutineStore(key: string = STORAGE_KEY): RoutineStore {
   let memory: RoutineBook | undefined
+  /*
+   * The last write did not land (storage full or blocked): what storage still holds is older
+   * than `memory`, so `memory` answers until a write lands. Reading the old book back lost
+   * `lastRunAt`, `runs` and `spentUsd`, and a routine with a daily cap was due again at the
+   * next tick (full review 2026-10-06, bots 3).
+   */
+  let unsaved = false
   return {
     get: () => {
+      if (unsaved && memory) return memory
       try {
         return parseBook(localStorage.getItem(key))
       } catch {
@@ -257,8 +265,10 @@ export function localRoutineStore(key: string = STORAGE_KEY): RoutineStore {
       memory = book
       try {
         localStorage.setItem(key, JSON.stringify(book))
+        unsaved = false
       } catch {
         // Storage blocked: the routines last until ADE closes.
+        unsaved = true
       }
     },
   }
@@ -620,6 +630,17 @@ export function addRoutine(book: RoutineBook, routine: Routine): RoutineBook {
 export function removeRoutine(book: RoutineBook, id: string): RoutineBook {
   const { [id]: _gone, ...logs } = book.logs
   return { ...book, routines: book.routines.filter((routine) => routine.id !== id), logs }
+}
+
+/** Every routine of a bot, with their logs: the bot's file is gone. */
+export function removeRoutinesOf(book: RoutineBook, bot: string): RoutineBook {
+  const gone = new Set(book.routines.filter((routine) => routine.bot === bot).map((routine) => routine.id))
+  if (gone.size === 0) return book
+  return {
+    ...book,
+    routines: book.routines.filter((routine) => !gone.has(routine.id)),
+    logs: Object.fromEntries(Object.entries(book.logs).filter(([id]) => !gone.has(id))),
+  }
 }
 
 export function pauseRoutine(book: RoutineBook, id: string, paused: boolean): RoutineBook {

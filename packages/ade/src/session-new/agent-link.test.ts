@@ -54,6 +54,17 @@ describe("parseReport", () => {
     expect(parseReport(huge)).toBeUndefined()
   })
 
+  // Full review 2026-10-06, sessions 14: the id ends up as an argument of the CLI (`--resume <id>`).
+  test("an id that would read as an option or carry spaces and quotes is not an id", () => {
+    const report = (sessionId: string) => parseReport(JSON.stringify({ pane: "p", nonce: "n", agent: "a", sessionId }))
+    for (const bad of ["--dangerously-skip-permissions", "-c", "a b", 'x"y', "a;b", "a\nb", ".hidden/..", "id|calc"]) {
+      expect(report(bad)).toBeUndefined()
+    }
+    for (const good of ["019a5c0e-1e4f-7a11-9b2c-2f0d4d8a1c33", "ses_1a2B3c", "s", "agent:conv.1_x-2"]) {
+      expect(report(good)?.sessionId).toBe(good)
+    }
+  })
+
   test("drops a timestamp that is not a number, keeping the report", () => {
     const odd = JSON.stringify({ pane: "p", nonce: "n", agent: "a", sessionId: "s", at: "ieri" })
     expect(parseReport(odd)).toEqual({ pane: "p", nonce: "n", agent: "a", sessionId: "s" })

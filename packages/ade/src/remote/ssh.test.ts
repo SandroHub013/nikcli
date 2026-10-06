@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { discoverSshHosts, globMatcher, resolveInclude } from "./discover"
 import type { Host } from "../host/shell"
 import {
@@ -12,6 +14,9 @@ import {
   remoteName,
   remoteRoot,
   sshArgs,
+  agentMissing,
+  lastLineOf,
+  shellReturned,
   sshAsking,
   targetOf,
 } from "./ssh"
@@ -146,6 +151,62 @@ describe("the command line", () => {
     expect(sshAsking("Enter passphrase for key '/home/n/.ssh/id_ed25519':")).toBe(true)
     expect(sshAsking("Are you sure you want to continue connecting (yes/no/[fingerprint])?")).toBe(true)
     expect(sshAsking("niko@devbox:~/app$")).toBe(false)
+  })
+})
+
+describe("an agent that is not on the server", () => {
+  test("the shell's «not found», in each shell's words, is told apart from a running agent", () => {
+    expect(agentMissing("bash: claude: command not found\r\nniko@devbox:~$ ", "claude")).toBe(true)
+    expect(agentMissing("zsh: command not found: claude", "claude")).toBe(true)
+    expect(agentMissing("sh: 1: claude: not found", "claude")).toBe(true)
+    expect(agentMissing("fish: Unknown command: claude", "claude")).toBe(true)
+    expect(agentMissing("'claude' is not recognized as an internal or external command", "claude")).toBe(true)
+    expect(agentMissing("bash: /opt/bin/claude: No such file or directory", "claude --model x")).toBe(true)
+    // A running agent, an unrelated «not found», the echo of what was typed: not missing.
+    expect(agentMissing("Claude Code v2\r\n> ", "claude")).toBe(false)
+    expect(agentMissing("bash: foo: command not found", "claude")).toBe(false)
+    expect(agentMissing("niko@devbox:~$ claude\r\n", "claude")).toBe(false)
+    expect(agentMissing("anything", "   ")).toBe(false)
+  })
+
+  // Verifiche's review of F6b, voce 8: the shell's message in the server's language, and a message that is long.
+  test("bash in Italian, a long PowerShell 5.1 message and a refused execution are told as missing", () => {
+    expect(agentMissing("bash: claude: comando non trovato\r\nniko@devbox:~$ ", "claude")).toBe(true)
+    expect(agentMissing("bash: /usr/bin/claude: Permesso negato", "claude")).toBe(true)
+    expect(agentMissing("bash: /usr/bin/claude: Permission denied", "claude")).toBe(true)
+    expect(agentMissing("bash: /opt/claude: Nessun file o directory", "claude")).toBe(true)
+    // PowerShell 5.1: the error is 400+ characters, and its first line is the one that says it.
+    const ps51 =
+      "claude : The term 'claude' is not recognized as the name of a cmdlet, function, script file, or operable program. " +
+      "Check the spelling of the name, or if a path was included, verify that the path is correct and try again.\r\n" +
+      "At line:1 char:1\r\n+ claude\r\n+ ~~~~~~\r\n    + CategoryInfo          : ObjectNotFound: (claude:String) [], " +
+      "CommandNotFoundException\r\n    + FullyQualifiedErrorId : CommandNotFoundException\r\n\r\nPS C:\\Users\\niko> "
+    expect(ps51.length).toBeGreaterThan(400)
+    expect(agentMissing(ps51, "claude")).toBe(true)
+  })
+
+  test("the shell back at the prompt it had is told whatever the language or the message", () => {
+    const before = "niko@devbox:~$"
+    // Not found, in a language the words do not know; or an agent that exits at once: the prompt again.
+    expect(shellReturned("niko@devbox:~$ claude\r\nbash: claude: commande introuvable\r\nniko@devbox:~$ ", before)).toBe(true)
+    expect(shellReturned("niko@devbox:~$ claude\r\nniko@devbox:~$", before)).toBe(true)
+    // The agent is up: its screen, not the prompt, is the last line.
+    expect(shellReturned("niko@devbox:~$ claude\r\nClaude Code v2\r\n> ", before)).toBe(false)
+    expect(shellReturned("niko@devbox:~$ claude\r\n", before)).toBe(false)
+    // No prompt known: nothing to compare with.
+    expect(shellReturned("niko@devbox:~$", "")).toBe(false)
+    expect(lastLineOf("a\r\n\r\n  b  \r\n\r\n")).toBe("b")
+    expect(lastLineOf("")).toBe("")
+  })
+
+  test("the workbench does not type the task when the agent is missing", () => {
+    const source = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
+    const body = source.slice(source.indexOf("const startRemoteProcess"), source.indexOf("/** Adds a remote Space"))
+    expect(body).toContain("agentMissing(")
+    expect(body).toContain("shellReturned(")
+    // The output since the step is kept whole (up to a generous cap), not cut to the last 400 characters.
+    expect(body).not.toContain("sinceStep = (sinceStep + stripAnsi(chunk)).slice(-400)")
+    expect(body).toContain("task.agentMissing")
   })
 })
 

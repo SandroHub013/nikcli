@@ -10,6 +10,7 @@
 import type { Host } from "./shell"
 import { normalizePath, basename } from "./path"
 import { isRemoteRoot, parseRemoteRoot, remoteName, remoteRoot, type RemoteTarget } from "../remote/ssh"
+import { t } from "../i18n"
 
 export interface Project {
   /** Set for a remote Space: sessions open over ssh, and nothing on the local disk belongs to it. */
@@ -109,7 +110,7 @@ export async function rootMissing(host: Pick<Host, "exists">, root: string): Pro
  */
 export async function openProject(host: Host): Promise<Project | undefined> {
   if (!host.pickDirectory) return undefined
-  const dir = await host.pickDirectory("Apri progetto")
+  const dir = await host.pickDirectory(t("project.open.title"))
   if (!dir) return undefined
   return discoverProject(host, dir)
 }

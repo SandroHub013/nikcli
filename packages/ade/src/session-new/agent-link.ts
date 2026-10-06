@@ -137,6 +137,9 @@ function asId(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined
   const trimmed = value.trim()
   if (trimmed.length === 0 || trimmed.length > MAX_SESSION_ID) return undefined
+  // It becomes an argument of the CLI (`--resume <id>`): one that starts with `-` would be read as an option, and spaces or
+  // quotes would split or break the line (full review 2026-10-06, sessions 14). Every id the CLIs mint fits this.
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(trimmed)) return undefined
   return trimmed
 }
 

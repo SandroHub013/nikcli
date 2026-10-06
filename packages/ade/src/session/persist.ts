@@ -15,7 +15,6 @@
 
 import { restoreHistory } from "../browser/history"
 import { restoreNotes, type SheetNote } from "../design/notes"
-import { validPluginId } from "../plugin-frame/frame-url"
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -123,21 +122,6 @@ export interface BrowserPaneState {
 }
 
 /**
- * A panel that hosts a plugin in a frame, saved apart from the sessions (as `BrowserPaneState` is). Added without a version bump, for the
- * reason given on `PaneState.span`. What comes back is the panel, not the plugin: if the plugin is no longer installed the panel shows its
- * placeholder (`plugin-frame/`).
- */
-export interface FramePluginPaneState {
-  id: string
-  /** The plugin's id. */
-  plugin: string
-  title: string
-  project?: string
-  projectRoot?: string
-  span?: { columns: number; rows: number }
-}
-
-/**
  * The «Impara» panel, saved apart from the sessions (as `BrowserPaneState` is). Added without a version bump, for the reason given on
  * `PaneState.span`. There is one of these and it holds no page: what it shows is read back from the progress file when it opens, so a
  * restored panel is the panel, not a stale copy of a lesson.
@@ -149,14 +133,11 @@ export interface LearnPaneState {
   projectRoot?: string
   span?: { columns: number; rows: number }
 }
-
 export interface WorkspaceState {
   version: number
   panes: PaneState[]
   /** Absent in states saved before browser panes were kept. */
   browsers?: BrowserPaneState[]
-  /** Absent when no plugin panel was open, and in states saved before there were any. */
-  framePlugins?: FramePluginPaneState[]
   /** Absent when no «Impara» panel was open, and in states saved before there were any. */
   learns?: LearnPaneState[]
   focusedPaneId: string | undefined
@@ -302,35 +283,6 @@ function sanitiseSpan(raw: unknown): { columns: number; rows: number } | undefin
   return { columns: whole(columns), rows: whole(rows) }
 }
 
-function framePluginsIfAny(raw: unknown): { framePlugins?: FramePluginPaneState[] } {
-  const panels = sanitiseFramePlugins(raw)
-  return panels.length ? { framePlugins: panels } : {}
-}
-
-/** A plugin panel needs its own id and the id of a plugin as the native side would accept it; without either there is nothing to reopen. */
-function sanitiseFramePlugins(raw: unknown): FramePluginPaneState[] {
-  if (!Array.isArray(raw)) return []
-  const panels: FramePluginPaneState[] = []
-  for (const entry of raw) {
-    if (!isObject(entry)) continue
-    const id = asOptionalString(entry.id)
-    const plugin = asOptionalString(entry.plugin)
-    if (!id || !validPluginId(plugin)) continue
-    const project = asOptionalString(entry.project)
-    const projectRoot = asOptionalString(entry.projectRoot)
-    const span = sanitiseSpan(entry.span)
-    panels.push({
-      id,
-      plugin,
-      title: asString(entry.title, ""),
-      ...(project ? { project } : {}),
-      ...(projectRoot ? { projectRoot } : {}),
-      ...(span ? { span } : {}),
-    })
-  }
-  return panels
-}
-
 /** The «Impara» panel needs only its id: what it shows it reads back itself, so nothing else is worth keeping. */
 function sanitiseLearns(raw: unknown): LearnPaneState[] {
   if (!Array.isArray(raw)) return []
@@ -352,7 +304,6 @@ function sanitiseLearns(raw: unknown): LearnPaneState[] {
   }
   return panels
 }
-
 /** A browser pane needs an id and a URL; without either there is nothing to reopen. */
 function sanitiseBrowsers(raw: unknown): BrowserPaneState[] {
   if (!Array.isArray(raw)) return []
@@ -513,7 +464,6 @@ export function parseWorkspace(json: string): WorkspaceState | undefined {
     version: CURRENT_VERSION,
     panes: sanitisePanes(data.panes),
     browsers: sanitiseBrowsers(data.browsers),
-    ...(Array.isArray(data.framePlugins) && data.framePlugins.length ? framePluginsIfAny(data.framePlugins) : {}),
     // There is one «Impara» panel, so at most one is kept: a saved workbench that named several is a workbench from a bug.
     ...(sanitiseLearns(data.learns).length ? { learns: sanitiseLearns(data.learns).slice(0, 1) } : {}),
     focusedPaneId: asOptionalString(data.focusedPaneId),

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { permissionIdentity } from "../session/permission"
 import { createProactiveAlerts, summarizeCompletion, ALERT_COOLDOWN_MS, RESPONSE_WINDOW_MS } from "./proactive-alerts"
 
 describe("proactive-alerts", () => {
@@ -10,6 +11,16 @@ describe("proactive-alerts", () => {
     expect(summarizeCompletion([{ text: "2 failed" }], "en")).toBe("two failed tests")
     expect(summarizeCompletion([{ text: "just regular output" }])).toBeUndefined()
     expect(summarizeCompletion([])).toBeUndefined()
+  })
+
+  // Full review 2026-10-06, ui 14.
+  test("summarizeCompletion does not hide failures behind passes, and ignores a zero count", () => {
+    expect(summarizeCompletion([{ text: "5 passed, 2 failed" }])).toBe("due test falliti")
+    // The usual last line of a green run.
+    expect(summarizeCompletion([{ text: "12 pass" }, { text: "0 fail" }])).toBe("12 test verdi")
+    expect(summarizeCompletion([{ text: "0 failed" }])).toBeUndefined()
+    expect(summarizeCompletion([{ text: "0 passed" }])).toBeUndefined()
+    expect(summarizeCompletion([{ text: "7 passed, 0 failed" }], "en")).toBe("seven passed tests")
   })
 
   test("does nothing when proactive alerts are disabled", async () => {
@@ -89,6 +100,29 @@ describe("proactive-alerts", () => {
 
     expect(spoken[0]).toContain("un'azione generica")
     expect(spoken[0]).not.toContain(raw)
+  })
+
+  // Full review 2026-10-06, ui 4 (b): the alert key is the request's identity, so the next request of a pane is announced.
+  test("two requests of the same pane with the same heading but another command are both announced", async () => {
+    const spoken: string[] = []
+    let clock = 1000
+    const alerts = createProactiveAlerts({
+      now: () => clock,
+      isLocked: async () => false,
+      isEnabled: () => true,
+      speak: async (text) => void spoken.push(text),
+      openResponseWindow: async () => {},
+    })
+    const heading = "Do you want to proceed?"
+
+    alerts.notifyPermission("p1", "Sessione 1", permissionIdentity({ what: heading, target: "cat README" }), "shell")
+    await new Promise((r) => setTimeout(r, 20))
+    // Past the cooldown between two alerts: what is left is only whether the second one is a duplicate.
+    clock += ALERT_COOLDOWN_MS + 1
+    alerts.notifyPermission("p1", "Sessione 1", permissionIdentity({ what: heading, target: "rm -rf ~" }), "shell")
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(spoken).toHaveLength(2)
   })
 
   test("speaks session completion alert with summary", async () => {

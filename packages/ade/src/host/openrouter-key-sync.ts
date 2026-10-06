@@ -32,6 +32,9 @@ export function authCandidates(home: string): string[] {
     `${normalizedHome}/AppData/Roaming/nikcli/auth.json`,
     `${home}/AppData/Roaming/nikcli/auth.json`,
     `${home}\\AppData\\Roaming\\nikcli\\auth.json`,
+    // macOS and Linux: nikcli's data folder is `$XDG_DATA_HOME/nikcli`, `~/.local/share/nikcli` by default (`packages/util/src/global.ts`);
+    // without this the copy never found the file there (full review 2026-10-06, sessions). The two below it are older guesses.
+    `${normalizedHome}/.local/share/nikcli/auth.json`,
     `${normalizedHome}/.config/nikcli/auth.json`,
     `${normalizedHome}/.nikcli/auth.json`,
   ]

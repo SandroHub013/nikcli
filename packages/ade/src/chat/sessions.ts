@@ -89,6 +89,19 @@ export function conversationOf(data: ChatData, sessionID: string): Turn[] {
   return (data.message[sessionID] ?? []).map((info) => ({ info, parts: data.part[info.id] ?? [] }))
 }
 
+/**
+ * One message with its parts, the parts read when asked: the message is what the chat knows a turn by, so a new
+ * message adds one turn and the others are left as they are (full review 2026-10-06, bots 13).
+ */
+export function turnOf(data: ChatData, info: Message): Turn {
+  return {
+    info,
+    get parts() {
+      return data.part[info.id] ?? []
+    },
+  }
+}
+
 /** The parts of every message of a session, for finding the call a permission request is about. */
 export function partsOf(data: ChatData, sessionID: string): Part[] {
   return (data.message[sessionID] ?? []).flatMap((info) => data.part[info.id] ?? [])

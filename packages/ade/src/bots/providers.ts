@@ -8,6 +8,7 @@
  * "collegato" about an account the user has since signed out of.
  */
 
+import { t } from "../i18n"
 import { getHost } from "../host/shell"
 import { readLoginStatus, type LoginState, type Runner } from "./runners"
 
@@ -23,10 +24,10 @@ const STATUS_TIMEOUT_MS = 15_000
 
 export async function providerState(runner: Runner): Promise<ProviderState> {
   const host = await getHost()
-  if (!host) return { installed: false, login: { state: "unknown", detail: "Solo nell'app desktop." } }
+  if (!host) return { installed: false, login: { state: "unknown", detail: t("bots.provider.desktopOnly") } }
 
   const path = await host.probe(runner.command, "--version").catch(() => null)
-  if (path === null) return { installed: false, login: { state: "out", detail: "Non installato." } }
+  if (path === null) return { installed: false, login: { state: "out", detail: t("bots.provider.notInstalled") } }
   const found = path.split("\n")[0]?.trim()
   const base = { installed: true, ...(found ? { path: found } : {}) }
 
@@ -36,7 +37,7 @@ export async function providerState(runner: Runner): Promise<ProviderState> {
    * Through a pty for every runner, nikcli included: `nikcliBot` runs only
    * the two commands the bot form needs, and the host is right to keep it so.
    */
-  if (!host.spawn) return { ...base, login: { state: "unknown", detail: "Stato non disponibile." } }
+  if (!host.spawn) return { ...base, login: { state: "unknown", detail: t("bots.provider.statusUnavailable") } }
   const lines: string[] = []
   const status = runner.status
   const login = await new Promise<LoginState>((resolve) => {
@@ -50,7 +51,7 @@ export async function providerState(runner: Runner): Promise<ProviderState> {
     }
     const timer = setTimeout(() => {
       kill?.()
-      finish({ state: "unknown", detail: "Nessuna risposta dal comando di stato." })
+      finish({ state: "unknown", detail: t("bots.provider.noStatusReply") })
     }, STATUS_TIMEOUT_MS)
     host
       .spawn({

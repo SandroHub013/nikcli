@@ -121,7 +121,6 @@ function renderTab(tab: string) {
         extensionsIo: () => undefined,
         pluginRuntime: { registry: { sections: () => [] } } as never,
         openGuide: () => {},
-        openFramePluginPane: () => {},
         askYesNo: async () => true,
         record: {
           quality: () => "alta" as const,
@@ -379,6 +378,17 @@ describe("Agenti e account › Bot e strumenti", () => {
 })
 
 describe("Agenti e account › Ripresa delle sessioni", () => {
+  // The PowerShell hooks are offered on Windows only (full review 2026-10-06, sessions 6): the page reads the system
+  // from the user agent, so these tests, which are about the Windows rows, say which system they run on.
+  const realAgent = Object.getOwnPropertyDescriptor(window.navigator, "userAgent")
+  const runOn = (agent: string) =>
+    Object.defineProperty(window.navigator, "userAgent", { value: agent, configurable: true })
+  beforeEach(() => runOn("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"))
+  afterEach(() => {
+    if (realAgent) Object.defineProperty(window.navigator, "userAgent", realAgent)
+    else delete (window.navigator as { userAgent?: string }).userAgent
+  })
+
   const state = (id: string, over: Record<string, unknown>) => ({
     target: HOOK_TARGETS.find((target) => target.id === id)!,
     installed: false,
@@ -421,6 +431,43 @@ describe("Agenti e account › Ripresa delle sessioni", () => {
     expect((details as HTMLDetailsElement).open).toBe(false)
     expect(details?.querySelector("summary")?.textContent).toBe("Dettagli")
     expect(details?.querySelector('[data-slot="hook-paths"]')?.textContent).toContain("C:/u/claude-code.ps1")
+  })
+
+  test("fuori da Windows restano solo il plugin di nikcli e la nota che dice perché", async () => {
+    runOn("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15")
+    hookStates = {
+      "claude-code": state("claude-code", {}),
+      codex: state("codex", {}),
+      nikcli: state("nikcli", {}),
+    }
+    renderTab("agents/resume")
+    await settle()
+
+    const names = Array.from(document.body.querySelectorAll('[data-slot="hook-name"]')).map((node) => node.textContent)
+    expect(names).toEqual(["nikcli"])
+    expect(document.body.querySelector("[data-hooks-summary]")?.textContent).toBe("La ripresa non è attiva per nessun programma.")
+    expect(document.body.querySelector("[data-hooks-windows-only]")?.textContent).toContain("solo su Windows")
+  })
+
+  // Review of F6c, O2.
+  test("fuori da Windows un hook PowerShell già installato resta in elenco, con il solo Rimuovi", async () => {
+    runOn("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15")
+    hookStates = {
+      "claude-code": state("claude-code", { installed: true }),
+      codex: state("codex", {}),
+      nikcli: state("nikcli", {}),
+    }
+    renderTab("agents/resume")
+    await settle()
+
+    const rows = Array.from(document.body.querySelectorAll('[data-slot="hook-row"]'))
+    expect(rows.map((row) => row.querySelector('[data-slot="hook-name"]')?.textContent)).toEqual(["Claude Code", "nikcli"])
+    const claude = rows[0]!
+    expect(claude.querySelector("[data-hook-remove-only]")).not.toBeNull()
+    const buttons = Array.from(claude.querySelectorAll('[data-slot="hook-action"]')).map((button) => button.textContent)
+    expect(buttons).toEqual(["Rimuovi"])
+    // The plugin row still offers its install.
+    expect(rows[1]!.querySelector("[data-hook-remove-only]")).toBeNull()
   })
 
   test("se uno è da reinstallare la riga lo dice", async () => {

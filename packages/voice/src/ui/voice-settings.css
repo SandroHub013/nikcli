@@ -272,7 +272,7 @@
 }
 
 [data-component="voice-settings-panel"] [data-slot="status-pill"][data-tone="live"] [data-slot="status-dot"] {
-  animation: ade-voice-pulse 1.4s var(--ade-ease) infinite;
+  animation: ade-voice-pulse 1.4s var(--ade-ease) infinite var(--ade-loops, running);
 }
 
 [data-component="voice-settings-panel"] [data-slot="status-pill"][data-tone="warn"] {
@@ -1301,7 +1301,7 @@
   background: var(--ade-accent-soft);
   color: var(--ade-accent-strong);
   box-shadow: var(--ade-focus-ring);
-  animation: ade-voice-recording 1.6s var(--ade-ease) infinite;
+  animation: ade-voice-recording 1.6s var(--ade-ease) infinite var(--ade-loops, running);
 }
 
 @keyframes ade-voice-recording {

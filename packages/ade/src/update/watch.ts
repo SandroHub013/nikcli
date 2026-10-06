@@ -164,11 +164,6 @@ export interface UpdateWatchOptions {
    * costs one call.
    */
   readonly memory?: UpdateMemoryStore
-  /**
-   * A background check ran (it was not skipped): whatever else looks for something new on the same schedule does it now. The plugins in a
-   * frame ask their own index here (`plugin-frame/update-runner.ts`), and decide for themselves how often that is worth a call.
-   */
-  readonly onChecked?: () => void
 }
 
 /**
@@ -195,9 +190,12 @@ export function githubReleaseFeed(doFetch: typeof fetch = fetch, initialEtag?: s
       if (response.status === 304) return { notModified: true }
       if (!response.ok) throw new ReleaseFeedError(`GitHub ${response.status}`, retryAfter(response, Date.now()))
       const tag = response.headers.get("etag")
+      // The list first, the tag after: a body that cannot be read (cut short, not JSON) must not leave the tag of a list ADE
+      // never saw, or the next look would be told «not modified» and a release would be missed (full review 2026-10-06, ui 13).
+      const releases = (await response.json()) as GithubRelease[]
       if (tag) etag = tag
       return {
-        releases: (await response.json()) as GithubRelease[],
+        releases,
         notModified: false,
         ...(tag ? { etag: tag } : {}),
       }
@@ -385,12 +383,7 @@ export function createUpdateWatch(options: UpdateWatchOptions): UpdateWatch {
     }
   }
 
-  const background = () =>
-    void check()
-      .then((result) => {
-        if (result.status !== "skipped") options.onChecked?.()
-      })
-      .catch(() => {})
+  const background = () => void check().catch(() => {})
 
   return {
     start() {

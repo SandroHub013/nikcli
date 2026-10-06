@@ -79,6 +79,19 @@ impl Requests {
             Err(poisoned) => poisoned.into_inner(),
         }
     }
+
+    /// Stops every request in flight and forgets them; how many were stopped.
+    ///
+    /// The page that asked for them is going away: a reload kills the listeners of their channels, but
+    /// `Channel::send` keeps answering `Ok`, so a chat's `GET /event` stream would otherwise stay open on
+    /// `nikcli serve` for ever, one more with every F5 (full review 2026-10-06, Rust 8).
+    pub(crate) fn abort_all(&self) -> usize {
+        let drained: Vec<_> = self.lock().drain().map(|(_, handle)| handle).collect();
+        for handle in &drained {
+            handle.abort();
+        }
+        drained.len()
+    }
 }
 
 /// Installs the TLS provider reqwest insists on, once; the updater does the
@@ -566,7 +579,7 @@ pub(crate) mod test_server {
 #[cfg(test)]
 mod tests {
     use super::test_server::{plain, serve};
-    use super::{ProxyEvent, fenced, forwarded, method_of, relay, target};
+    use super::{ProxyEvent, Requests, fenced, forwarded, method_of, relay, target};
     use reqwest::Method;
     use std::time::Duration;
 
@@ -592,6 +605,36 @@ mod tests {
             },
         ));
         (unreachable, events)
+    }
+
+    /// Full review 2026-10-06, Rust 8: a page reload ends the streams its page had open.
+    #[test]
+    fn a_reload_stops_every_request_in_flight_and_forgets_them() {
+        use std::sync::Arc;
+        let requests = Requests::default();
+        let alive = Arc::new(());
+        for id in 1..=3u64 {
+            // A stream that never ends, holding a clone: it is dropped only when the task is.
+            let held = alive.clone();
+            let handle = tauri::async_runtime::spawn(async move {
+                let _held = held;
+                std::future::pending::<()>().await;
+            });
+            requests.lock().insert(id, handle);
+        }
+        assert_eq!(Arc::strong_count(&alive), 4);
+        assert_eq!(requests.abort_all(), 3);
+        assert!(requests.lock().is_empty());
+        // Aborted tasks are dropped on the runtime, a moment later.
+        for _ in 0..200 {
+            if Arc::strong_count(&alive) == 1 {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(Arc::strong_count(&alive), 1, "the streams were left running");
+        // Nothing left to stop the second time.
+        assert_eq!(requests.abort_all(), 0);
     }
 
     #[test]

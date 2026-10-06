@@ -26,6 +26,17 @@ export interface PermissionRequest {
   answers: PermissionAnswer[]
 }
 
+/**
+ * What tells one request from another. For Claude and Codex `what` is «Do you want to proceed?» for every request: the
+ * command or the path is in `target`. Compared on `what` alone, the yes said to «cat README» granted the «rm -rf ~» that
+ * came next with the same heading, and every request after the first of a pane was dropped as a duplicate alert (full
+ * review 2026-10-06, ui 4). Raw, like `what`: it is never spoken, only compared.
+ */
+export function permissionIdentity(request: Pick<PermissionRequest, "what" | "target">): string {
+  return request.target ? `${request.what}
+${request.target}` : request.what
+}
+
 const PERMISSION_SPEECH_LABEL_KEYS = {
   shell: "voice.permission.type.shell",
   write: "voice.permission.type.write",

@@ -1,6 +1,9 @@
 export {
   type Buffer,
   type Position,
+  type Eol,
+  toLf,
+  withEol,
   openBuffer,
   editBuffer,
   markSaved,

@@ -43,6 +43,14 @@ export function emptySpace(): KvSpace {
   return { entries: {}, locks: {} }
 }
 
+/**
+ * A value of `record` only if it is the record's own: `isKvKey` accepts `constructor`, `toString` and `__proto__`, and a
+ * plain `record[key]` answers those with a function or the prototype (full review 2026-10-06, sessions 17).
+ */
+function own<T>(record: Record<string, T>, key: string): T | undefined {
+  return Object.hasOwn(record, key) ? record[key] : undefined
+}
+
 export function isKvKey(key: string): boolean {
   return /^[A-Za-z0-9._:/-]{1,80}$/.test(key)
 }
@@ -80,13 +88,13 @@ export function applyKv(
     return { space, reply: "errore: chiave non valida (lettere, cifre e . _ : / -, al massimo 80)" }
   }
   const held = (name: string) => {
-    const lock = space.locks[name]
+    const lock = own(space.locks, name)
     return lock && lock.until > now && alive(lock.owner) ? lock : undefined
   }
 
   switch (op) {
     case "get": {
-      const entry = space.entries[key]
+      const entry = own(space.entries, key)
       if (!entry) return { space, reply: `errore: nessun valore per ${key}` }
       return { space, reply: `ok\n${entry.value}` }
     }
@@ -120,7 +128,7 @@ export function applyKv(
           reply: `errore: valore oltre ${KV_MAX_VALUE} caratteri: mettilo in un file e salva il percorso`,
         }
       }
-      if (!space.entries[key] && Object.keys(space.entries).length >= KV_MAX_KEYS) {
+      if (!own(space.entries, key) && Object.keys(space.entries).length >= KV_MAX_KEYS) {
         return { space, reply: `errore: lo store ha già ${KV_MAX_KEYS} chiavi: cancellane qualcuna con ade-msg kv del` }
       }
       const lock = held(key)
@@ -132,7 +140,7 @@ export function applyKv(
       if (!who) return { space, reply: "errore: scrivere richiede una sessione avviata da ADE" }
       const lock = held(key)
       if (lock && lock.owner !== who.id) return { space, reply: `errore: ${key} è bloccata da "${lock.ownerTitle}"` }
-      if (!space.entries[key]) return { space, reply: `ok: ${key} non c'era` }
+      if (!own(space.entries, key)) return { space, reply: `ok: ${key} non c'era` }
       const entries = { ...space.entries }
       delete entries[key]
       return { space: { ...space, entries }, reply: `ok: ${key} cancellata` }
@@ -166,7 +174,7 @@ export function applyKv(
           reply: `errore: ${key} è bloccata da "${lock.ownerTitle}"; solo lei può rilasciarla (o --force)`,
         }
       }
-      if (!space.locks[key]) return { space, reply: `ok: ${key} non era bloccata` }
+      if (!own(space.locks, key)) return { space, reply: `ok: ${key} non era bloccata` }
       const locks = { ...space.locks }
       delete locks[key]
       return { space: { ...space, locks }, reply: `ok: ${key} rilasciata` }
@@ -191,11 +199,12 @@ export function parseKvStore(raw: string | null): Record<string, KvSpace> {
     for (const [project, space] of Object.entries(value as Record<string, unknown>)) {
       if (!space || typeof space !== "object") continue
       const { entries, locks } = space as { entries?: unknown; locks?: unknown }
-      const clean = emptySpace()
+      const cleanEntries: [string, KvEntry][] = []
+      const cleanLocks: [string, KvLock][] = []
       for (const [key, entry] of Object.entries((entries as Record<string, unknown>) ?? {})) {
         const e = entry as Partial<KvEntry>
         if (isKvKey(key) && typeof e?.value === "string" && typeof e.by === "string" && typeof e.at === "number") {
-          clean.entries[key] = { value: e.value, by: e.by, at: e.at }
+          cleanEntries.push([key, { value: e.value, by: e.by, at: e.at }])
         }
       }
       for (const [key, lock] of Object.entries((locks as Record<string, unknown>) ?? {})) {
@@ -206,15 +215,19 @@ export function parseKvStore(raw: string | null): Record<string, KvSpace> {
           typeof l.ownerTitle === "string" &&
           typeof l.until === "number"
         ) {
-          clean.locks[key] = {
-            owner: l.owner,
-            ownerTitle: l.ownerTitle,
-            until: l.until,
-            ...(typeof l.note === "string" ? { note: l.note } : {}),
-          }
+          cleanLocks.push([
+            key,
+            {
+              owner: l.owner,
+              ownerTitle: l.ownerTitle,
+              until: l.until,
+              ...(typeof l.note === "string" ? { note: l.note } : {}),
+            },
+          ])
         }
       }
-      out[project] = clean
+      // `fromEntries` defines own keys; `clean[key] = …` with `__proto__` would have set the prototype and lost the key.
+      out[project] = { entries: Object.fromEntries(cleanEntries), locks: Object.fromEntries(cleanLocks) }
     }
     return out
   } catch {

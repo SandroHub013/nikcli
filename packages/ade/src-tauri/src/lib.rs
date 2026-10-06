@@ -25,9 +25,6 @@ mod learn;
 mod media;
 mod nikverse;
 mod nikverse_assets;
-mod plugin_install;
-mod plugin_scheme;
-mod plugin_storage;
 mod project_bytes;
 mod pty;
 mod record;
@@ -92,6 +89,7 @@ pub struct WriteRoots(Mutex<Vec<PathBuf>>, Mutex<Vec<String>>);
 /// Adds a directory to the set this window may write inside.
 #[tauri::command]
 async fn allow_write_root(roots: tauri::State<'_, WriteRoots>, path: String) -> Result<(), String> {
+    refuse_network_path(&path)?;
     let resolved = Path::new(&path)
         .canonicalize()
         .map_err(|e| format!("{path}: {e}"))?;
@@ -132,6 +130,74 @@ async fn design_sheet_path(roots: tauri::State<'_, WriteRoots>, path: String, cw
 /// a folder the user works in; a directory holding the user's whole profile, a
 /// system directory or ADE's own configuration is not one, whoever asks.
 fn too_broad_root(dir: &Path, home: Option<&Path>) -> Option<&'static str> {
+    too_broad_root_in(dir, home)
+}
+
+/// The `PATH` entries of this process.
+fn environment_path_dirs() -> Vec<PathBuf> {
+    std::env::var_os("PATH")
+        .map(|value| std::env::split_paths(&value).collect())
+        .unwrap_or_default()
+}
+
+/// Why the file at `resolved` must not be written, when what is written there
+/// runs by itself later (full review 2026-10-06, Rust 4; Architect's R1).
+///
+/// A root check cannot see this: a root that is a parent of a `PATH` folder, or
+/// the OneDrive folder whose `Documents` holds the PowerShell profile, is a
+/// reasonable-looking project. So the file is checked, whatever the root:
+/// a `PATH` folder (`~/.nikcli/bin`, `~/.bun/bin`, `~/.local/bin`) is where the
+/// next `nikcli` or `bun` comes from, and `Documents/WindowsPowerShell` and
+/// `Documents/PowerShell` hold the profile every PowerShell opens in ADE's terminal.
+/// Names are compared in lower case, as the file system does.
+fn runs_by_itself(resolved: &Path, home: Option<&Path>, path_dirs: &[PathBuf]) -> Option<&'static str> {
+    let lowered = |p: &Path| -> Vec<String> {
+        p.components()
+            .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
+            .collect()
+    };
+    let target = lowered(resolved);
+    for entry in path_dirs {
+        let entry = entry.canonicalize().unwrap_or_else(|_| entry.clone());
+        // A drive root on PATH would make every folder on the drive a PATH folder.
+        let broad = entry.parent().is_none() || entry.components().count() <= 2;
+        if !broad && target.starts_with(lowered(&entry).as_slice()) {
+            return Some("cartella in PATH");
+        }
+    }
+    if let Some(home) = home.and_then(|h| h.canonicalize().ok()) {
+        for bin in [
+            ".nikcli/bin",
+            ".bun/bin",
+            ".local/bin",
+            ".cargo/bin",
+            ".deno/bin",
+            ".volta/bin",
+            "go/bin",
+            "bin",
+        ] {
+            if target.starts_with(lowered(&home.join(bin)).as_slice()) {
+                return Some("cartella dei programmi dell'utente (PATH)");
+            }
+        }
+    }
+    // The profile folder may be redirected anywhere (OneDrive, another drive): the name decides.
+    for pair in target.windows(2) {
+        if pair[0] == "documents" && (pair[1] == "windowspowershell" || pair[1] == "powershell") {
+            return Some("cartella dei profili di PowerShell");
+        }
+    }
+    None
+}
+
+/// Why `dir` cannot be a write root: the profile, the system and ADE's own
+/// folders. What is written inside a root that runs by itself is refused file
+/// by file (`runs_by_itself`), not here.
+///
+/// The well-known folders of the profile are not projects either, only what is
+/// inside them; the home's own program folders (`~/.nikcli/bin` and what holds
+/// them) are not roots.
+fn too_broad_root_in(dir: &Path, home: Option<&Path>) -> Option<&'static str> {
     if dir.parent().is_none() {
         return Some("la radice del disco non è un progetto");
     }
@@ -149,7 +215,50 @@ fn too_broad_root(dir: &Path, home: Option<&Path>) -> Option<&'static str> {
                 return Some("cartella di configurazione dell'utente");
             }
         }
+        // A folder the shell or the system looks in by itself: the root or anything above it.
+        for bin in [
+            ".nikcli/bin",
+            ".bun/bin",
+            ".local/bin",
+            ".cargo/bin",
+            ".deno/bin",
+            ".volta/bin",
+            "go/bin",
+            "bin",
+        ] {
+            if home.join(bin).starts_with(dir) || dir.starts_with(home.join(bin)) {
+                return Some("cartella dei programmi dell'utente (PATH)");
+            }
+        }
+        // The profile's own folders, which hold everything and are nobody's project.
+        let lowered = |p: &Path| -> Vec<String> {
+            p.components()
+                .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
+                .collect()
+        };
+        let (target, base) = (lowered(dir), lowered(&home));
+        if let Some(below) = target.strip_prefix(base.as_slice()) {
+            // `Documents` may sit under OneDrive when the folder is redirected.
+            let below = match below {
+                [first, rest @ ..] if first.starts_with("onedrive") => rest,
+                other => other,
+            };
+            if let [only] = below {
+                if ["documents", "desktop", "downloads", "pictures", "videos", "music"].contains(&only.as_str()) {
+                    return Some("una cartella del profilo non è un progetto");
+                }
+            }
+            // PowerShell reads its profile from `Documents\WindowsPowerShell` and `Documents\PowerShell`.
+            if let [parent, name, ..] = below {
+                if parent == "documents" && (name == "windowspowershell" || name == "powershell") {
+                    return Some("cartella dei profili di PowerShell");
+                }
+            }
+        }
     }
+    // A root that contains a `PATH` entry, or sits in one, is not refused here:
+    // the file that is written is checked instead (`runs_by_itself`), which also
+    // covers a root that merely contains the folder.
     let lowered = dir.to_string_lossy().to_lowercase().replace('\\', "/");
     for system in ["/windows", "/program files", "/program files (x86)", "/programdata"] {
         if lowered.contains(&format!(":{system}")) {
@@ -199,6 +308,73 @@ fn is_git_executable_path(path: &Path) -> bool {
     })
 }
 
+/// Whether `path` names a file on another machine: `\\host\share`, `//host/share`,
+/// `\\?\UNC\host\share` or a device path (`\\.\`).
+///
+/// Asking Windows about such a path (`exists`, `open`, `canonicalize`) opens an
+/// SMB connection to the host and sends the user's NTLM hash with it, so the
+/// answer has to come from the text, before the file system is touched. A
+/// project's own `.nikcli/tui.json`, written by whoever cloned it, could name
+/// one and ADE looked at it on opening the project (full review 2026-10-06,
+/// Rust ALTO 2). `\\?\C:\x` is the extended spelling of a local path and stays.
+/// A mapped drive letter cannot be told from a local one by its text.
+fn is_network_path(path: &str) -> bool {
+    let normal = path.trim().replace('/', "\\");
+    // After `\\?\` or `\??\`, only a drive letter is a local path; a server, a volume or a device is not.
+    let local_after_prefix = |inner: &str| {
+        let mut chars = inner.chars();
+        matches!((chars.next(), chars.next()), (Some(drive), Some(':')) if drive.is_ascii_alphabetic())
+    };
+    // The NT object-manager spelling `\??\` reaches the SMB redirector exactly as `\\?\` does.
+    if let Some(inner) = normal.strip_prefix("\\??\\") {
+        return !local_after_prefix(inner);
+    }
+    let Some(rest) = normal.strip_prefix("\\\\") else {
+        return false;
+    };
+    match rest.strip_prefix("?\\") {
+        Some(inner) => !local_after_prefix(inner),
+        None => true,
+    }
+}
+
+fn refuse_network_path(path: &str) -> Result<(), String> {
+    if is_network_path(path) {
+        return Err(format!("percorso di rete non consentito: {path}"));
+    }
+    Ok(())
+}
+
+/// Folders and files of the user's credentials, which the page has no reason to
+/// read through `read_text_file`, which otherwise opens any path.
+///
+/// Not the whole home: the sidebar opens files anywhere, plugin discovery reads
+/// `~/.config/nikcli`, and the OpenRouter key sync reads nikcli's own `auth.json`.
+/// What is listed is what no ADE feature reads.
+fn is_credential_path(path: &Path, home: Option<&Path>) -> bool {
+    let Some(home) = home.and_then(|h| h.canonicalize().ok()) else {
+        return false;
+    };
+    let Ok(resolved) = path.canonicalize() else {
+        // It does not exist, so it cannot be read either.
+        return false;
+    };
+    let lowered = |p: &Path| -> Vec<String> {
+        p.components()
+            .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
+            .collect()
+    };
+    let (target, base) = (lowered(&resolved), lowered(&home));
+    if !target.starts_with(&base) {
+        return false;
+    }
+    match &target[base.len()..] {
+        [first, ..] if [".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker"].contains(&first.as_str()) => true,
+        [only] => [".netrc", "_netrc", ".git-credentials", ".pgpass"].contains(&only.as_str()),
+        _ => false,
+    }
+}
+
 /// Resolves `path` to a form that can be compared against a root, without
 /// requiring it to exist yet.
 ///
@@ -210,6 +386,7 @@ fn is_git_executable_path(path: &Path) -> bool {
 /// appended — with `..` refused rather than resolved, since a `..` that climbs
 /// out of the root is exactly what this is here to stop.
 fn resolve_for_check(path: &Path) -> Result<PathBuf, String> {
+    refuse_network_path(&path.to_string_lossy())?;
     let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -246,6 +423,16 @@ fn resolve_for_check(path: &Path) -> Result<PathBuf, String> {
 /// The resolved path, when it falls inside a registered root; an error naming
 /// the refusal otherwise.
 fn within_roots(roots: &WriteRoots, path: &str) -> Result<PathBuf, String> {
+    within_roots_with(roots, path, dirs::home_dir().as_deref(), &environment_path_dirs())
+}
+
+/// The same check with the home and the `PATH` entries given, so a test can name them.
+fn within_roots_with(
+    roots: &WriteRoots,
+    path: &str,
+    home: Option<&Path>,
+    path_dirs: &[PathBuf],
+) -> Result<PathBuf, String> {
     let resolved = resolve_for_check(Path::new(path))?;
     let allowed = roots.0.lock().map_err(|_| "radici bloccate")?;
     if allowed.is_empty() {
@@ -256,6 +443,9 @@ fn within_roots(roots: &WriteRoots, path: &str) -> Result<PathBuf, String> {
     if allowed.iter().any(|root| resolved.starts_with(root)) {
         if is_git_executable_path(&resolved) {
             return Err(format!("configurazione o hook di git: {path}"));
+        }
+        if let Some(reason) = runs_by_itself(&resolved, home, path_dirs) {
+            return Err(format!("{reason}: {path}"));
         }
         return Ok(resolved);
     }
@@ -304,12 +494,17 @@ fn is_env_file(path: &Path) -> bool {
 }
 
 /// `"ok"`, or why the chat may not attach `path` (`attachment_inside`).
+///
+/// Off the window's thread, and off the async worker too: `canonicalize` on a OneDrive file that is only online can wait, and
+/// that would hold a worker of the runtime instead (full review 2026-10-06, rust minor; review of F7c, B5).
 #[tauri::command]
-fn chat_attachment_inside(root: String, path: String) -> String {
-    match attachment_inside(Path::new(&root), Path::new(&path)) {
+async fn chat_attachment_inside(root: String, path: String) -> String {
+    tauri::async_runtime::spawn_blocking(move || match attachment_inside(Path::new(&root), Path::new(&path)) {
         Ok(_) => "ok".to_string(),
         Err(reason) => reason.to_string(),
-    }
+    })
+    .await
+    .unwrap_or_else(|_| "controllo interrotto".to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -330,6 +525,7 @@ struct DirEntry {
 /// silently skipped instead of aborting the whole listing.
 #[tauri::command]
 async fn read_dir(path: String) -> Result<Vec<DirEntry>, String> {
+    refuse_network_path(&path)?;
     let rd = std::fs::read_dir(&path).map_err(|e| format!("{path}: {e}"))?;
     let mut dirs: Vec<DirEntry> = Vec::new();
     let mut files: Vec<DirEntry> = Vec::new();
@@ -382,6 +578,10 @@ async fn read_text_file(path: String, max_bytes: usize) -> Result<FileRead, Stri
 
 /// The reading itself, as a plain function so the tests below can call it.
 fn read_text(path: &str, max_bytes: usize) -> Result<FileRead, String> {
+    refuse_network_path(path)?;
+    if is_credential_path(Path::new(path), dirs::home_dir().as_deref()) {
+        return Err(format!("credenziali dell'utente: lettura non consentita: {path}"));
+    }
     /*
      * One byte past the cap, rather than the whole file. The sidebar makes it
      * one click to open a 2 GB pack file, and reading it whole would allocate
@@ -595,6 +795,11 @@ fn check_nikcli_args(roots: &WriteRoots, args: &[String]) -> Result<(), String> 
                 }
                 seen.push(flag);
                 if flag == "--path" {
+                    // Read against ADE's folder here and against `cwd` by nikcli: only an absolute path means one place
+                    // (full review 2026-10-06, rust 20).
+                    if !Path::new(value).is_absolute() {
+                        return Err(format!("--path deve essere un percorso assoluto: {value}"));
+                    }
                     let resolved = resolve_for_check(Path::new(value))?;
                     let global = nikcli_global_dir().map(|d| d.canonicalize().unwrap_or(d));
                     let in_project = within_roots(roots, value).is_ok();
@@ -629,7 +834,7 @@ extern "system" {
 }
 
 #[cfg(windows)]
-fn resume_child(child: &std::process::Child) -> Result<(), String> {
+pub(crate) fn resume_child(child: &std::process::Child) -> Result<(), String> {
     use std::os::windows::io::AsRawHandle;
     /*
      * The child starts suspended so it cannot create descendants before entering the job.
@@ -645,11 +850,17 @@ fn resume_child(child: &std::process::Child) -> Result<(), String> {
 }
 
 #[cfg(windows)]
-struct ChildTreeGuard(windows::Win32::Foundation::HANDLE);
+pub(crate) struct ChildTreeGuard(windows::Win32::Foundation::HANDLE);
+
+// A job handle is a kernel handle, valid from any thread; the server's guard lives in the shared slot.
+#[cfg(windows)]
+unsafe impl Send for ChildTreeGuard {}
+#[cfg(windows)]
+unsafe impl Sync for ChildTreeGuard {}
 
 #[cfg(windows)]
 impl ChildTreeGuard {
-    fn new() -> Result<Self, String> {
+    pub(crate) fn new() -> Result<Self, String> {
         use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::System::JobObjects::{
             CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
@@ -676,7 +887,7 @@ impl ChildTreeGuard {
         Ok(Self(handle))
     }
 
-    fn assign_pid(&self, pid: u32) -> Result<(), String> {
+    pub(crate) fn assign_pid(&self, pid: u32) -> Result<(), String> {
         use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::System::JobObjects::AssignProcessToJobObject;
         use windows::Win32::System::Threading::{
@@ -699,15 +910,15 @@ impl Drop for ChildTreeGuard {
 }
 
 #[cfg(not(windows))]
-struct ChildTreeGuard;
+pub(crate) struct ChildTreeGuard;
 
 #[cfg(not(windows))]
 impl ChildTreeGuard {
-    fn new() -> Result<Self, String> {
+    pub(crate) fn new() -> Result<Self, String> {
         Ok(Self)
     }
 
-    fn assign_pid(&self, _pid: u32) -> Result<(), String> {
+    pub(crate) fn assign_pid(&self, _pid: u32) -> Result<(), String> {
         Ok(())
     }
 }
@@ -1086,23 +1297,19 @@ fn first_line_within(child: &mut std::process::Child, timeout: std::time::Durati
  * for a `-c`; the handful of per-subcommand options that also carry a command
  * are refused wherever they appear; and the environment is narrowed to the one
  * variable ADE sets, so GIT_PAGER and friends cannot arrive that way either.
+ *
+ * The subcommands are the ones ADE sends and nothing else: `rebase`, `merge`,
+ * `cherry-pick`, `commit` and the rest were allowed "in case", and `rebase
+ * --exe=<cmd>` (git takes any unique prefix of a long option) ran the command.
+ * Full review of 2026-10-06, Rust area, ALTO 1.
  */
 const GIT_SUBCOMMANDS: &[&str] = &[
     "status",
     "worktree",
     "rev-parse",
-    "rev-list",
     "branch",
     "add",
-    "commit",
-    "commit-tree",
-    "write-tree",
-    "merge",
-    "rebase",
-    "cherry-pick",
     "diff",
-    "show",
-    "log",
     "ls-files",
 ];
 
@@ -1126,6 +1333,25 @@ const GIT_WRITING_FLAGS: &[&str] = &["--output", "--output-directory"];
 /// into, so the user's real index is never touched.
 const GIT_ENV_KEYS: &[&str] = &["GIT_INDEX_FILE"];
 
+/// What every git call of ADE runs with, before the page's own variables, given the `GIT_CONFIG_COUNT` ADE itself was started
+/// with.
+///
+/// The count is read and added to, not set to 1: a user who launched ADE with their own `GIT_CONFIG_COUNT`/`KEY_n` would have
+/// had them replaced (review of F7c, B4). Ours takes the next index, so it also wins over a setting of the same key.
+///
+/// A repository with `core.fsmonitor=true` starts a daemon on its first `git status`; started from a call that runs in a job that ends
+/// with the call, it died with it and was started again by the next one. `GIT_OPTIONAL_LOCKS=0` keeps a `status` that a timeout killed
+/// from leaving `index.lock`, and from taking the lock the user's own git wants (full review 2026-10-06, review of F6a, B1).
+fn git_base_env(inherited_count: Option<&str>) -> Vec<(String, String)> {
+    let next = inherited_count.and_then(|count| count.trim().parse::<usize>().ok()).unwrap_or(0);
+    vec![
+        ("GIT_OPTIONAL_LOCKS".to_string(), "0".to_string()),
+        ("GIT_CONFIG_COUNT".to_string(), (next + 1).to_string()),
+        (format!("GIT_CONFIG_KEY_{next}"), "core.fsmonitor".to_string()),
+        (format!("GIT_CONFIG_VALUE_{next}"), "false".to_string()),
+    ]
+}
+
 #[derive(Serialize, Clone, Debug)]
 struct ShellOutput {
     code: Option<i32>,
@@ -1134,7 +1360,7 @@ struct ShellOutput {
 }
 
 /// Where a git call would write outside the index and the work tree it runs
-/// in: a `worktree add` or `move` destination, and a `GIT_INDEX_FILE`. Each
+/// in: a `worktree add` destination, and a `GIT_INDEX_FILE`. Each
 /// must be a place ADE may write, inside a project, or the
 /// `<project>-worktrees` folder beside one, where ADE puts its own checkouts
 /// (`worktreePlan`).
@@ -1169,22 +1395,11 @@ fn check_git_destinations(
             Err(format!("git scriverebbe fuori dal progetto: {raw}"))
         }
     };
-    if args.first().map(String::as_str) == Some("worktree") {
-        let sub = args.get(1).map(String::as_str);
-        if matches!(sub, Some("add" | "move")) {
-            // The positionals, past the options and the values some of them take.
-            let mut positionals = Vec::new();
-            let mut rest = args[2..].iter();
-            while let Some(arg) = rest.next() {
-                if arg == "-b" || arg == "-B" || arg == "--reason" {
-                    rest.next();
-                } else if !arg.starts_with('-') {
-                    positionals.push(arg.as_str());
-                }
-            }
-            let destination = if sub == Some("add") { positionals.first() } else { positionals.get(1) };
-            place(destination.ok_or("git worktree senza cartella di destinazione")?)?;
-        }
+    // Only the one form ADE sends is read for its destination, so there is no
+    // option left to hide a value in (`-fb x <dest>` is `-f -b x`, not `-fb`
+    // with a value: the old positional walk validated `x`, git wrote `<dest>`).
+    if let Some(destination) = worktree_form(args)? {
+        place(destination)?;
     }
     if let Some(index) = env.get("GIT_INDEX_FILE") {
         // The review's own index is in the repository's git dir, which for a
@@ -1201,6 +1416,32 @@ fn check_git_destinations(
     Ok(())
 }
 
+/// The one `git worktree` call per purpose ADE makes, and nothing else:
+///
+/// - `worktree add -b <branch> <path> [<base>]` (`worktreeAddArgs`), whose path
+///   is returned so the caller can check where it lands;
+/// - `worktree list --porcelain`;
+/// - `worktree remove <path>`.
+///
+/// Every operand is a name, never an option: git reads a short-option cluster
+/// like `-fb` as `-f -b`, so a check that skips "the value of `-b`" validates
+/// the wrong word.
+fn worktree_form(args: &[String]) -> Result<Option<&str>, String> {
+    if args.first().map(String::as_str) != Some("worktree") {
+        return Ok(None);
+    }
+    let name = |value: &String| !value.is_empty() && !value.starts_with('-');
+    let refused = || Err("forma di git worktree non consentita".to_string());
+    match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+        ["worktree", "add", "-b", _, _] | ["worktree", "add", "-b", _, _, _] if args[3..].iter().all(name) => {
+            Ok(Some(args[4].as_str()))
+        }
+        ["worktree", "list", "--porcelain"] => Ok(None),
+        ["worktree", "remove", _] if name(&args[2]) => Ok(None),
+        _ => refused(),
+    }
+}
+
 fn check_git_args(args: &[String]) -> Result<(), String> {
     let Some(subcommand) = args.first() else {
         return Err("git senza sottocomando".to_string());
@@ -1208,6 +1449,7 @@ fn check_git_args(args: &[String]) -> Result<(), String> {
     if !GIT_SUBCOMMANDS.contains(&subcommand.as_str()) {
         return Err(format!("sottocomando git non consentito: {subcommand}"));
     }
+    worktree_form(args)?;
     for arg in &args[1..] {
         if arg == "--" {
             break;
@@ -1218,16 +1460,39 @@ fn check_git_args(args: &[String]) -> Result<(), String> {
             return Err(format!("opzione git non consentita: {arg}"));
         }
         /*
-         * `rebase -x <cmd>` is `--exec`, and git's option parser also takes it
-         * glued (`-xcmd`) or clustered (`-ix cmd`). Any short-option cluster
-         * holding an x is refused for rebase; `cherry-pick -x` only annotates
-         * the message and stays allowed.
+         * git's option parser takes any unique prefix of a long option:
+         * `--exe=calc` is `--exec=calc` and `--outp=file` is `--output=file`.
+         * A word that begins a forbidden long option is refused, so the
+         * abbreviations go the way of the full names.
          */
-        if subcommand == "rebase" && arg.starts_with('-') && !arg.starts_with("--") && arg[1..].contains('x') {
+        if head.len() > 2
+            && head.starts_with("--")
+            && GIT_EXECUTING_FLAGS
+                .iter()
+                .chain(GIT_WRITING_FLAGS)
+                .any(|flag| flag.starts_with("--") && flag.starts_with(head))
+        {
             return Err(format!("opzione git non consentita: {arg}"));
         }
     }
     Ok(())
+}
+
+/// How long one git command may take. They are all local (status, diff, worktree, ...), so a git that has not
+/// answered by then is stuck (a lock, a dead network share) and holds a blocking thread for good.
+const GIT_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// `worktree add` is a whole checkout: the repository's `post-checkout` hook runs (husky and the like, sometimes an
+/// install) and with LFS the smudge downloads from the network. Cut at two minutes it left a half-made worktree and a
+/// branch already created, and ADE said it had failed (Architect's review of F6a, O3).
+const GIT_WORKTREE_ADD_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+
+/// The deadline of one git command of `git_run`.
+fn git_timeout(args: &[String]) -> Duration {
+    match args {
+        [worktree, add, ..] if worktree == "worktree" && add == "add" => GIT_WORKTREE_ADD_TIMEOUT,
+        _ => GIT_TIMEOUT,
+    }
 }
 
 /// Runs one git command and hands back what it printed.
@@ -1244,6 +1509,7 @@ async fn git_run(
 
     let mut command = std::process::Command::new("git");
     command.args(&args);
+    command.envs(git_base_env(std::env::var("GIT_CONFIG_COUNT").ok().as_deref()));
     if let Some(dir) = cwd.as_ref().filter(|d| !d.is_empty()) {
         command.current_dir(dir);
     }
@@ -1266,15 +1532,16 @@ async fn git_run(
         command.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let output = command
-        .output()
-        .map_err(|e| format!("git non eseguibile: {e}"))?;
-
-    Ok(ShellOutput {
-        code: output.status.code(),
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-    })
+    /*
+     * Off the async worker, and bounded: `output()` here blocked a runtime thread until git was done, with no
+     * limit, so a git stuck on a lock took one worker for good and a few of them stopped every command.
+     * Same runner as `nikcli_bot` and `claude_agents`: a job that ends the tree, a deadline, the output read
+     * on its own threads.
+     */
+    let timeout = git_timeout(&args);
+    tauri::async_runtime::spawn_blocking(move || run_bounded_output(command, timeout, "git"))
+        .await
+        .map_err(|_| "avvio di git interrotto".to_string())?
 }
 
 #[tauri::command]
@@ -1443,9 +1710,17 @@ async fn home_dir() -> Result<String, String> {
         .ok_or_else(|| "impossibile determinare la home".to_string())
 }
 
+/// Whether the path is there. `try_exists`, not `exists`: a check that fails (a share whose VPN is off, a denied folder) is an error
+/// the page can tell from «not there», which `exists()` made `false` (full review 2026-10-06, sessions 16). Off the async worker as
+/// well: a share that does not answer can wait a long time.
 #[tauri::command]
-async fn path_exists(path: String) -> bool {
-    Path::new(&path).exists()
+async fn path_exists(path: String) -> Result<bool, String> {
+    if is_network_path(&path) {
+        return Ok(false);
+    }
+    tauri::async_runtime::spawn_blocking(move || Path::new(&path).try_exists().map_err(|e| e.to_string()))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Opens an ADE release page in the default browser.
@@ -1541,6 +1816,12 @@ fn ade_window_close(window: tauri::WebviewWindow) -> Result<(), String> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CloseAction {
     PreventAndAsk(u64),
+    /// A question is already open (asked, or waiting for its first answer): this request is the same one.
+    /// The window stays, no second question is asked and no second timer starts.
+    AlreadyAsking(u64),
+    /// The page had acknowledged the question and has not answered it: asked again, with the same id, and with a
+    /// timer of its own (`epoch`) that the older one cannot cut short.
+    AskAgain { id: u64, epoch: u32 },
     AllowClose,
 }
 
@@ -1555,7 +1836,8 @@ enum CloseRequestStatus {
 #[derive(Debug)]
 pub(crate) struct CloseManager {
     confirmed: std::sync::atomic::AtomicBool,
-    active_request: Mutex<Option<(u64, CloseRequestStatus)>>,
+    /// The open question: its id, where it stands, and how many times it was asked again (the `epoch` of its timer).
+    active_request: Mutex<Option<(u64, CloseRequestStatus, u32)>>,
     request_counter: std::sync::atomic::AtomicU64,
     default_timeout: std::time::Duration,
 }
@@ -1579,17 +1861,40 @@ impl CloseManager {
         if self.confirmed.swap(false, Ordering::SeqCst) {
             CloseAction::AllowClose
         } else {
-            let req_id = self.request_counter.fetch_add(1, Ordering::SeqCst) + 1;
-            if let Ok(mut guard) = self.active_request.lock() {
-                *guard = Some((req_id, CloseRequestStatus::Pending));
+            let Ok(mut guard) = self.active_request.lock() else {
+                // A poisoned lock cannot tell whether a question is open: ask again, as before.
+                let req_id = self.request_counter.fetch_add(1, Ordering::SeqCst) + 1;
+                return CloseAction::PreventAndAsk(req_id);
+            };
+            // A second click on X (or «Esci» in the tray) while the question is open used to start request N+1 with
+            // a timer of its own, which the page ignored and never acknowledged: 4 s later it closed the window with
+            // the agents still at work, and a «No» cancelled N, which was no longer the active one (full review
+            // 2026-10-06, Rust 7). The open question keeps its id and its one timer.
+            match *guard {
+                Some((id, CloseRequestStatus::Pending, _)) => return CloseAction::AlreadyAsking(id),
+                /*
+                 * Acknowledged and not answered: the page may be gone (reloaded, its handler ended on an error,
+                 * `askYesNo` refused) and nothing disarms an `Acked` question, so a window that only ever said
+                 * «already asking» could not be closed at all (Architect's review of F6a, O1). The click asks
+                 * again, same id: a live page acknowledges in a few ms and the timer is disarmed; one that is
+                 * stuck is closed by this timer, as it was before the dedup.
+                 */
+                Some((id, CloseRequestStatus::Acked, epoch)) => {
+                    let epoch = epoch + 1;
+                    *guard = Some((id, CloseRequestStatus::Pending, epoch));
+                    return CloseAction::AskAgain { id, epoch };
+                }
+                _ => {}
             }
+            let req_id = self.request_counter.fetch_add(1, Ordering::SeqCst) + 1;
+            *guard = Some((req_id, CloseRequestStatus::Pending, 0));
             CloseAction::PreventAndAsk(req_id)
         }
     }
 
     pub(crate) fn ack(&self, request_id: u64) -> bool {
         if let Ok(mut guard) = self.active_request.lock() {
-            if let Some((id, status)) = &mut *guard {
+            if let Some((id, status, _)) = &mut *guard {
                 if *id == request_id && *status == CloseRequestStatus::Pending {
                     *status = CloseRequestStatus::Acked;
                     return true;
@@ -1603,7 +1908,7 @@ impl CloseManager {
         use std::sync::atomic::Ordering;
         let mut confirmed = false;
         if let Ok(mut guard) = self.active_request.lock() {
-            if let Some((id, status)) = &mut *guard {
+            if let Some((id, status, _)) = &mut *guard {
                 if request_id.is_none() || request_id == Some(*id) {
                     *status = CloseRequestStatus::Confirmed;
                     confirmed = true;
@@ -1620,7 +1925,7 @@ impl CloseManager {
 
     pub(crate) fn cancel(&self, request_id: Option<u64>) -> bool {
         if let Ok(mut guard) = self.active_request.lock() {
-            if let Some((id, status)) = &mut *guard {
+            if let Some((id, status, _)) = &mut *guard {
                 if request_id.is_none() || request_id == Some(*id) {
                     *status = CloseRequestStatus::Cancelled;
                     return true;
@@ -1630,12 +1935,14 @@ impl CloseManager {
         false
     }
 
-    pub(crate) fn on_timeout(&self, request_id: u64) -> bool {
+    /// The timer of question `request_id`, asked for the `epoch`-th time: it closes the window only if that ask is the
+    /// latest and still unacknowledged. An older timer of the same question finds a newer epoch and does nothing.
+    pub(crate) fn on_timeout(&self, request_id: u64, epoch: u32) -> bool {
         use std::sync::atomic::Ordering;
         let mut force_close = false;
         if let Ok(mut guard) = self.active_request.lock() {
-            if let Some((id, status)) = &mut *guard {
-                if *id == request_id && *status == CloseRequestStatus::Pending {
+            if let Some((id, status, current)) = &mut *guard {
+                if *id == request_id && *current == epoch && *status == CloseRequestStatus::Pending {
                     *status = CloseRequestStatus::Confirmed;
                     force_close = true;
                 }
@@ -1675,8 +1982,15 @@ fn attach_close_handler(window: &tauri::WebviewWindow, manager: std::sync::Arc<C
             }
             match manager.on_close_requested() {
                 CloseAction::AllowClose => {}
-                CloseAction::PreventAndAsk(request_id) => {
+                // The question is open: the window stays, and nothing else is started.
+                CloseAction::AlreadyAsking(_) => api.prevent_close(),
+                action @ (CloseAction::PreventAndAsk(_) | CloseAction::AskAgain { .. }) => {
                     api.prevent_close();
+                    let (request_id, epoch) = match action {
+                        CloseAction::AskAgain { id, epoch } => (id, epoch),
+                        CloseAction::PreventAndAsk(id) => (id, 0),
+                        _ => unreachable!(),
+                    };
                     if let Err(err) = target.emit(
                         "ade-window-close-requested",
                         CloseRequestPayload { request_id },
@@ -1688,7 +2002,7 @@ fn attach_close_handler(window: &tauri::WebviewWindow, manager: std::sync::Arc<C
                     let win = target.clone();
                     std::thread::spawn(move || {
                         std::thread::sleep(timeout);
-                        if mgr.on_timeout(request_id) {
+                        if mgr.on_timeout(request_id, epoch) {
                             eprintln!(
                                 "ADE: la pagina non ha risposto entro {timeout:?}, chiusura finestra forzata"
                             );
@@ -1853,6 +2167,8 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
                 window.state::<pty::Registry>().end_all_in_background();
                 // Nor any listener for the chats' messages: they wait for the new page.
                 window.state::<gateway::Gateway>().page_loading();
+                // Nor the chat's streams to `nikcli serve`: their channels are gone with the old page.
+                window.state::<serve_proxy::Requests>().abort_all();
             }
         })
         .inner_size(1440.0, 900.0)
@@ -2192,7 +2508,6 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(pty::Registry::default())
         .manage(nikverse_assets::Assets::default())
-        .manage(plugin_install::Installer::default())
         .manage(record::Recorder::default())
         .manage(frontend::DevServer::default())
         .manage(serve::Server::default())
@@ -2215,7 +2530,7 @@ pub fn run() {
          * that served an arbitrary path would let anything in the browser
          * pane's frame read the disk through a `<video>` tag.
          */
-        .register_uri_scheme_protocol(media::SCHEME, |ctx, request| {
+        .register_asynchronous_uri_scheme_protocol(media::SCHEME, |ctx, request, responder| {
             use tauri::Manager;
             let state = ctx.app_handle().state::<WriteRoots>();
             let mut roots = match state.0.lock() {
@@ -2232,21 +2547,19 @@ pub fn run() {
                 .and_then(|webview| webview.url().ok())
                 .map(|url| url.origin().ascii_serialization());
             let opened = state.1.lock().map(|guard| guard.clone()).unwrap_or_default();
-            media::respond(&roots, &opened, &request, origin.as_deref())
-        })
-        /*
-         * A plugin's files, in an origin of its own: only what its installed, verified manifest
-         * lists (`plugin_scheme.rs`). The frame that shows it is sandboxed, so two plugins share nothing.
-         */
-        .register_uri_scheme_protocol(plugin_scheme::SCHEME, |ctx, request| {
-            plugin_scheme::respond(&request, plugin_scheme::store(ctx.app_handle()))
+            // Off the thread that took the request: the window's own, which a seek on a network drive or OneDrive stopped for
+            // every panel (full review 2026-10-06, rust minor).
+            tauri::async_runtime::spawn_blocking(move || {
+                responder.respond(media::respond(&roots, &opened, &request, origin.as_deref()));
+            });
         })
         /*
          * NikVerse's world: the package's own files, in an origin of its own.
          * Nothing on disk is reachable through it (`nikverse.rs`).
          */
-        .register_uri_scheme_protocol(nikverse::SCHEME, |ctx, request| {
-            nikverse::respond(&request, nikverse::source(ctx.app_handle()))
+        .register_asynchronous_uri_scheme_protocol(nikverse::SCHEME, |ctx, request, responder| {
+            let source = nikverse::source(ctx.app_handle());
+            tauri::async_runtime::spawn_blocking(move || responder.respond(nikverse::respond(&request, source)));
         })
         .setup(|app| {
             // Before the window, not after: a webview pointed at a port that
@@ -2321,15 +2634,6 @@ pub fn run() {
             nikverse_assets::nikverse_assets_remove,
             learn::learn_progress_get,
             learn::learn_progress_set,
-            plugin_install::plugin_list,
-            plugin_install::plugin_check,
-            plugin_install::plugin_install,
-            plugin_install::plugin_status,
-            plugin_install::plugin_commit,
-            plugin_install::plugin_rollback,
-            plugin_install::plugin_uninstall,
-            plugin_storage::plugin_storage_get,
-            plugin_storage::plugin_storage_set,
             mailbox::mailbox_receipt,
             mailbox::mailbox_publish,
             mailbox::mailbox_result,
@@ -2708,6 +3012,107 @@ mod tests {
         assert!(took < Duration::from_secs(3), "ha aspettato il lettore: {took:?}");
     }
 
+    // Full review 2026-10-06, rust (minor): the two schemes read the disk and the two commands stat it, none of it on the window's thread.
+    #[test]
+    fn what_reads_the_disk_does_not_run_on_the_window_thread() {
+        let source = include_str!("lib.rs");
+        let sync_scheme = [".register_uri", "_scheme_protocol("].concat();
+        assert!(!source.contains(&sync_scheme), "a scheme that answers on the window's thread");
+        for scheme in ["media::SCHEME", "nikverse::SCHEME"] {
+            assert!(source.contains(&format!("register_asynchronous_uri_scheme_protocol({scheme}")), "{scheme}");
+        }
+        let at = source.find("async fn chat_attachment_inside(").expect("chat_attachment_inside");
+        let body = &source[at..source[at..].find("\n}\n").map(|end| at + end).expect("fine")];
+        assert!(body.contains("spawn_blocking"), "the check leaves the async worker");
+        let stats = include_str!("stats.rs");
+        let at = stats.find("pub fn system_stats(").expect("system_stats");
+        assert!(stats[..at].trim_end().ends_with("#[tauri::command(async)]"));
+    }
+
+    // Review of F6a, B1: git is told not to start a file-system monitor inside the call's job, and not to take optional locks.
+    #[test]
+    fn git_is_run_without_an_fsmonitor_daemon_and_without_optional_locks() {
+        if std::process::Command::new("git").arg("--version").output().is_err() {
+            eprintln!("git non c'è: prova saltata");
+            return;
+        }
+        let repo = TempDir::new("git-base-env");
+        let git = |args: &[&str]| {
+            std::process::Command::new("git").args(args).current_dir(&repo.0).envs(git_base_env(None)).output().expect("git")
+        };
+        assert!(git(&["init", "-q"]).status.success());
+        // The repository asks for the daemon; the call's own environment wins over the repository.
+        assert!(git(&["config", "--local", "core.fsmonitor", "true"]).status.success());
+        let asked = git(&["config", "--get", "core.fsmonitor"]);
+        assert_eq!(String::from_utf8_lossy(&asked.stdout).trim(), "false");
+        assert!(git_base_env(None).contains(&("GIT_OPTIONAL_LOCKS".to_string(), "0".to_string())));
+        // And it is what `git_run` sets, before the page's variables.
+        let source = include_str!("lib.rs");
+        let start = source.find("async fn git_run(").expect("git_run");
+        let body = &source[start..source[start..].find("async fn current_dir").map(|end| start + end).expect("fine")];
+        assert!(body.contains("command.envs(git_base_env("));
+    }
+
+    // Review of F7c, B4: the user's own `GIT_CONFIG_COUNT`/`KEY_n` stay, ours comes after them.
+    #[test]
+    fn the_git_environment_is_added_to_the_users_not_written_over_it() {
+        let env = |inherited: Option<&str>| git_base_env(inherited).into_iter().collect::<std::collections::HashMap<_, _>>();
+        let alone = env(None);
+        assert_eq!(alone["GIT_CONFIG_COUNT"], "1");
+        assert_eq!(alone["GIT_CONFIG_KEY_0"], "core.fsmonitor");
+        let after_two = env(Some("2"));
+        assert_eq!(after_two["GIT_CONFIG_COUNT"], "3");
+        assert_eq!(after_two["GIT_CONFIG_KEY_2"], "core.fsmonitor");
+        assert_eq!(after_two["GIT_CONFIG_VALUE_2"], "false");
+        assert!(!after_two.contains_key("GIT_CONFIG_KEY_0") && !after_two.contains_key("GIT_CONFIG_KEY_1"));
+        // Nonsense counts as none.
+        assert_eq!(env(Some("abc"))["GIT_CONFIG_COUNT"], "1");
+        // With real git: a setting the user passed in the environment survives, and ours is added.
+        if std::process::Command::new("git").arg("--version").output().is_err() {
+            return;
+        }
+        let repo = TempDir::new("git-user-env");
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&repo.0)
+                .env("GIT_CONFIG_COUNT", "1")
+                .env("GIT_CONFIG_KEY_0", "user.name")
+                .env("GIT_CONFIG_VALUE_0", "Chi Lancia ADE")
+                .envs(git_base_env(Some("1")))
+                .output()
+                .expect("git")
+        };
+        assert!(git(&["init", "-q"]).status.success());
+        assert_eq!(String::from_utf8_lossy(&git(&["config", "--get", "user.name"]).stdout).trim(), "Chi Lancia ADE");
+        assert!(git(&["config", "--local", "core.fsmonitor", "true"]).status.success());
+        assert_eq!(String::from_utf8_lossy(&git(&["config", "--get", "core.fsmonitor"]).stdout).trim(), "false");
+    }
+
+    // Full review 2026-10-06, rust 14: `git_run` ran `output()` with no limit on the async runtime. The command
+    // needs a window to be called, so what is checked is the shape: it goes through the bounded runner, off the worker.
+    #[test]
+    fn git_run_is_bounded_and_off_the_async_worker() {
+        let source = include_str!("lib.rs");
+        let start = source.find("async fn git_run(").expect("git_run");
+        let body = &source[start..source[start..].find("async fn current_dir").map(|end| start + end).expect("fine")];
+        assert!(body.contains("spawn_blocking"), "git_run must leave the async worker");
+        assert!(body.contains("run_bounded_output(command, timeout"), "git_run must have a deadline");
+        assert!(body.contains("git_timeout(&args)"), "the deadline is chosen by the command");
+        assert!(!body.contains(".output()"), "git_run must not block on `output()`");
+        assert!(GIT_TIMEOUT >= Duration::from_secs(30), "a slow worktree add must fit");
+    }
+
+    // Architect's review of F6a, O3: a checkout needs far more than the two minutes of the local commands.
+    #[test]
+    fn a_worktree_add_gets_ten_minutes_and_the_other_commands_two() {
+        let args = |parts: &[&str]| parts.iter().map(|part| part.to_string()).collect::<Vec<_>>();
+        assert_eq!(git_timeout(&args(&["worktree", "add", "-b", "x", "../x"])), Duration::from_secs(600));
+        for other in [&["worktree", "list"][..], &["worktree", "remove", "../x"], &["status", "--porcelain"], &["diff"], &[]] {
+            assert_eq!(git_timeout(&args(other)), Duration::from_secs(120), "{other:?}");
+        }
+    }
+
     #[test]
     fn bounded_nikcli_output_kills_and_reaps_a_command_that_does_not_finish() {
         let started = Instant::now();
@@ -2912,6 +3317,104 @@ mod tests {
         assert!(too_broad_root(&project_path, Some(&home)).is_none());
     }
 
+    /// Full review 2026-10-06, Rust 4: a root where what is written runs by itself later is refused.
+    #[test]
+    fn a_root_where_written_files_run_by_themselves_is_refused() {
+        let home = TempDir::new("rootshome");
+        let home = home.0.canonicalize().expect("canonical home");
+        let at = |relative: &str| home.join(relative);
+        let refused = |dir: PathBuf| too_broad_root_in(&dir, Some(&home)).is_some();
+
+        for relative in [
+            "Documents",
+            "documents",
+            "Desktop",
+            "Downloads",
+            "OneDrive/Documents",
+            "OneDrive - Acme/Documents",
+            "Documents/WindowsPowerShell",
+            "Documents/WindowsPowerShell/Modules",
+            "Documents/PowerShell",
+            "OneDrive/Documents/WindowsPowerShell",
+            ".nikcli",
+            ".nikcli/bin",
+            ".nikcli/bin/x",
+            ".bun",
+            ".bun/bin",
+            ".local",
+            ".local/bin",
+            ".cargo/bin",
+        ] {
+            assert!(refused(at(relative)), "{relative}");
+        }
+        // What is inside them is a project; so is a project that merely sits near.
+        for relative in [
+            "Documents/GitHub/app",
+            "Documents/app",
+            "Desktop/app",
+            "OneDrive/Documents/app",
+            "code/app",
+            ".nikcli/projects/app",
+            "tools/app",
+            "tools",
+            "go/src/app",
+        ] {
+            assert!(!refused(at(relative)), "{relative}");
+        }
+    }
+
+    /// Architect's R1: what runs by itself is refused on the file, whatever the root.
+    #[test]
+    fn a_file_that_runs_by_itself_is_refused_whatever_the_root() {
+        let home = TempDir::new("runshome");
+        let home = home.0.canonicalize().expect("canonical home");
+        let at = |relative: &str| home.join(relative);
+        let path_dirs = vec![at("tools/bin")];
+        let roots_at = |root: PathBuf| {
+            let roots = WriteRoots::default();
+            roots.0.lock().expect("roots").push(root);
+            roots
+        };
+        for dir in ["tools/bin", "Documents/WindowsPowerShell", "OneDrive/Documents/PowerShell", ".nikcli/bin"] {
+            std::fs::create_dir_all(at(dir)).expect("dir");
+        }
+        // The roots a page could register: the home's child that holds the folder, or the home's OneDrive.
+        for (root, file) in [
+            ("tools", "tools/bin/nikcli.cmd"),
+            ("tools", "tools/bin/sub/x.cmd"),
+            ("tools/bin", "tools/bin/nikcli.cmd"),
+            ("OneDrive", "OneDrive/Documents/PowerShell/profile.ps1"),
+            ("OneDrive", "OneDrive/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1"),
+            ("Documents/WindowsPowerShell", "Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1"),
+            ("Documents", "Documents/PowerShell/profile.ps1"),
+            ("Documents", "documents/windowspowershell/x.ps1"),
+            (".nikcli", ".nikcli/bin/nikcli.cmd"),
+        ] {
+            let roots = roots_at(at(root));
+            let error = within_roots_with(&roots, &at(file).to_string_lossy(), Some(&home), &path_dirs)
+                .expect_err(file);
+            assert!(!error.starts_with("fuori dal progetto"), "{file}: {error}");
+        }
+        // Next to them, inside the same roots, a file is written.
+        for (root, file) in [
+            ("tools", "tools/src/main.ts"),
+            ("tools", "tools/binary/x.txt"),
+            ("OneDrive", "OneDrive/Documents/app/main.ts"),
+            ("Documents", "Documents/GitHub/app/main.ts"),
+            ("Documents", "Documents/PowerShellish/x.ts"),
+        ] {
+            let roots = roots_at(at(root));
+            assert!(
+                within_roots_with(&roots, &at(file).to_string_lossy(), Some(&home), &path_dirs).is_ok(),
+                "{file}"
+            );
+        }
+        // A drive root among the PATH entries refuses nothing by itself.
+        let broad = vec![PathBuf::from("C:\\"), PathBuf::from("/")];
+        let roots = roots_at(at("code"));
+        assert!(within_roots_with(&roots, &at("code/app/x.ts").to_string_lossy(), Some(&home), &broad).is_ok());
+    }
+
     #[test]
     fn only_an_agent_file_counts_as_a_bot() {
         let config = Path::new("C:\\cfg\\nikcli");
@@ -2922,6 +3425,23 @@ mod tests {
         assert!(!is_bot_path(&config.join("agent").join("run.js"), config));
         assert!(!is_bot_path(&config.join("agent"), config));
         assert!(!is_bot_path(Path::new("C:\\elsewhere\\agent\\x.md"), config));
+    }
+
+    // Full review 2026-10-06, rust 20: the check read a relative path against ADE's folder, nikcli reads it against `cwd`.
+    #[test]
+    fn a_relative_config_path_is_refused_whatever_folder_it_would_land_in() {
+        let here = std::env::current_dir().expect("cartella di lavoro").canonicalize().expect("canonica");
+        let roots = WriteRoots::default();
+        roots.0.lock().unwrap().push(here);
+        let args = |path: &str| {
+            ["agent", "create", "--path", path, "--description", "a", "--mode", "primary", "--tools", ""]
+                .map(String::from)
+                .to_vec()
+        };
+        // Inside ADE's own folder, so the old check passed it; nikcli would put the file under `cwd`.
+        let error = check_nikcli_args(&roots, &args(".nikcli-rel-test")).unwrap_err();
+        assert!(error.contains("assoluto"), "{error}");
+        assert!(check_nikcli_args(&roots, &args("..\\x")).is_err());
     }
 
     #[test]
@@ -2984,6 +3504,12 @@ mod tests {
             &["rebase", "-ix", "calc"],
             &["rebase", "-xcalc"],
             &["rebase", "--exec=calc"],
+            // Full review 2026-10-06, Rust ALTO 1: git takes any unique prefix of a long option.
+            &["rebase", "--exe=calc", "--root"],
+            &["rebase", "--ex", "calc", "--root"],
+            &["diff", "--outp=C:/evil.txt"],
+            &["diff", "--ext-d"],
+            &["diff", "--text=x"],
             &["diff", "--output=C:/evil.txt"],
             &["log", "--output", "x"],
             &["diff", "--ext-diff"],
@@ -2993,12 +3519,75 @@ mod tests {
             assert!(check_git_args(&args(bad)).is_err(), "{bad:?}");
         }
         for good in [
-            &["cherry-pick", "-x", "abc"][..],
-            &["rebase", "main"],
-            &["diff", "--cached", "HEAD"],
-            &["log", "--", "--output=x"],
+            &["diff", "--cached", "HEAD"][..],
+            &["diff", "--cached", "--name-status", "HEAD"],
+            &["diff", "--cached", "--shortstat", "main"],
+            &["diff", "--", "--output=x"],
+            &["status", "--porcelain"],
+            &["rev-parse", "--show-toplevel"],
+            &["rev-parse", "--git-path", "ade-review-index"],
+            &["add", "-A", "--", ":!.ade-trees"],
+            &["ls-files", "-co", "--exclude-standard"],
+            &["ls-files", "-z", "--", "a.md"],
+            &["branch", "--list", "ade/*", "--merged"],
+            &["branch", "-d", "ade/x"],
         ] {
             assert!(check_git_args(&args(good)).is_ok(), "{good:?}");
+        }
+    }
+
+    /// Full review 2026-10-06, Rust ALTO 1: only the subcommands ADE sends are left.
+    #[test]
+    fn git_subcommands_ade_never_sends_are_refused() {
+        let args = |list: &[&str]| list.iter().map(|a| a.to_string()).collect::<Vec<_>>();
+        for bad in [
+            &["rebase", "main"][..],
+            &["merge", "x"],
+            &["cherry-pick", "-x", "abc"],
+            &["commit", "-m", "x"],
+            &["commit-tree", "HEAD^{tree}"],
+            &["write-tree"],
+            &["log"],
+            &["show", "HEAD"],
+            &["rev-list", "HEAD"],
+            &["config", "core.pager", "calc"],
+        ] {
+            assert!(check_git_args(&args(bad)).is_err(), "{bad:?}");
+        }
+    }
+
+    /// Full review 2026-10-06, Rust 3: `worktree add` only in the form of `worktreeAddArgs`.
+    #[test]
+    fn git_worktree_is_called_only_in_the_forms_ade_uses() {
+        let args = |list: &[&str]| list.iter().map(|a| a.to_string()).collect::<Vec<_>>();
+        for good in [
+            &["worktree", "add", "-b", "ade/x", "C:/p-worktrees/x"][..],
+            &["worktree", "add", "-b", "ade/x", "C:/p-worktrees/x", "main"],
+            &["worktree", "list", "--porcelain"],
+            &["worktree", "remove", "C:/p-worktrees/x"],
+        ] {
+            assert!(check_git_args(&args(good)).is_ok(), "{good:?}");
+        }
+        for bad in [
+            // `-fb x <dest>` is `-f -b x`: the destination was never validated.
+            &["worktree", "add", "-fb", "x", "C:/Users/u/Documents/WindowsPowerShell"][..],
+            &["worktree", "add", "-f", "-b", "x", "C:/elsewhere"],
+            &["worktree", "add", "C:/elsewhere"],
+            &["worktree", "add", "--detach", "C:/elsewhere"],
+            &["worktree", "add", "-B", "x", "C:/elsewhere"],
+            &["worktree", "add", "-b", "-x", "C:/elsewhere"],
+            &["worktree", "add", "-b", "x", "-fdest"],
+            &["worktree", "add", "-b", "x", "C:/p", "-f"],
+            &["worktree", "add", "-b", "x", "C:/p", "main", "extra"],
+            &["worktree", "add", "-b", "x", ""],
+            &["worktree", "move", "a", "b"],
+            &["worktree", "remove", "-f", "C:/p-worktrees/x"],
+            &["worktree", "remove", "C:/a", "C:/b"],
+            &["worktree", "prune"],
+            &["worktree", "lock", "C:/p"],
+            &["worktree"],
+        ] {
+            assert!(check_git_args(&args(bad)).is_err(), "{bad:?}");
         }
     }
 
@@ -3020,14 +3609,17 @@ mod tests {
 
         // ADE's own: a branch, in the folder beside the project.
         assert_eq!(check(&["worktree", "add", "-b", "ade/x", &format!("{beside}/x"), "main"], &none), Ok(()));
-        assert_eq!(check(&["worktree", "add", "inside"], &none), Ok(()));
+        assert_eq!(check(&["worktree", "add", "-b", "ade/x", "inside"], &none), Ok(()));
         // Anywhere else, refused, however it is spelled.
         for bad in [
-            vec!["worktree", "add", &elsewhere],
+            vec!["worktree", "add", "-b", "ade/x", &elsewhere],
             vec!["worktree", "add", "-b", "ade/x", &elsewhere, "main"],
-            vec!["worktree", "add", "../elsewhere"],
+            vec!["worktree", "add", "-b", "ade/x", "../elsewhere"],
+            vec!["worktree", "add", "-b", "ade/x", ".git/hooks"],
+            // Not the form ADE sends: the destination cannot be told, so it is refused.
+            vec!["worktree", "add", &elsewhere],
+            vec!["worktree", "add", "-fb", "x", &elsewhere],
             vec!["worktree", "move", "inside", &elsewhere],
-            vec!["worktree", "add", ".git/hooks"],
         ] {
             assert!(check(&bad, &none).is_err(), "{bad:?}");
         }
@@ -3039,6 +3631,112 @@ mod tests {
         assert_eq!(check(&["add", "-A"], &index(&main.join("ade-review-index").to_string_lossy())), Ok(()));
         assert!(check(&["add", "-A"], &index(&format!("{elsewhere}/profile.ps1"))).is_err());
         assert!(check(&["add", "-A"], &index(&format!("{elsewhere}/ade-review-index"))).is_err());
+    }
+
+    /// Full review 2026-10-06, Rust ALTO 2: a path on another machine is refused from its text,
+    /// before the file system is asked, so Windows never opens SMB (and sends the NTLM hash).
+    #[test]
+    fn a_path_on_another_machine_is_refused_before_the_disk_is_asked() {
+        for unc in [
+            "\\\\attacker.example\\s\\p",
+            "//attacker.example/s/p",
+            "\\\\attacker.example/s/p",
+            "/\\attacker.example\\s",
+            "\\\\?\\UNC\\attacker.example\\s\\p",
+            "//?/UNC/attacker.example/s/p",
+            "\\\\.\\pipe\\x",
+            "\\\\?\\Volume{01234567-89ab-cdef-0123-456789abcdef}\\x",
+            "  //attacker.example/s/p/package.json",
+            // The NT object-manager prefix `\??\` is `\\?\` for the redirector: provably sent to SMB
+            // (review of F1, O1: `\??\UNC\127.0.0.1\C$\…` answers "network access denied", error 65).
+            "\\??\\UNC\\attacker.example\\s\\p",
+            "\\??\\UNC\\127.0.0.1\\C$\\Windows\\win.ini",
+            "\\??\\GLOBALROOT\\Device\\Mup\\attacker.example\\s",
+            "\\??\\Volume{01234567-89ab-cdef-0123-456789abcdef}\\x",
+            "/??/UNC/attacker.example/s/p",
+        ] {
+            assert!(is_network_path(unc), "{unc}");
+            assert!(refuse_network_path(unc).is_err(), "{unc}");
+            assert!(read_text(unc, 10).is_err_and(|e| e.contains("percorso di rete non consentito")), "{unc}");
+            assert!(resolve_for_check(Path::new(unc)).is_err_and(|e| e.contains("percorso di rete non consentito")), "{unc}");
+        }
+        for local in [
+            "C:\\Users\\u\\p",
+            "C:/Users/u/p",
+            "\\\\?\\C:\\Users\\u\\p",
+            "\\??\\C:\\Users\\u\\p",
+            "/home/u/p",
+            "relative/p",
+            "./p",
+            "",
+        ] {
+            assert!(!is_network_path(local), "{local}");
+        }
+    }
+
+    #[test]
+    fn a_network_path_is_not_listed_or_checked_for_existence() {
+        let dir = tauri::async_runtime::block_on(read_dir("//attacker.example/s".to_string()));
+        assert!(dir.is_err_and(|e| e.contains("percorso di rete non consentito")));
+        assert_eq!(tauri::async_runtime::block_on(path_exists("//attacker.example/s/p/package.json".to_string())), Ok(false));
+    }
+
+    // Full review 2026-10-06, sessions 16: a check that fails is not «the folder is gone».
+    #[test]
+    fn a_check_that_fails_is_an_error_and_not_a_missing_folder() {
+        let here = std::env::temp_dir().to_string_lossy().into_owned();
+        assert_eq!(tauri::async_runtime::block_on(path_exists(here.clone())), Ok(true));
+        assert_eq!(tauri::async_runtime::block_on(path_exists(format!("{here}/ade-path-exists-nothing-here-{}", std::process::id()))), Ok(false));
+        // A name the system cannot even ask about.
+        assert!(tauri::async_runtime::block_on(path_exists(format!("{here}/a\0b"))).is_err());
+    }
+
+    /// The credential folders of the user's home are not read through `read_text_file`;
+    /// the rest of the home, and what ADE features read there, still are.
+    #[test]
+    fn credential_stores_in_the_home_are_not_readable_by_the_page() {
+        let home = TempDir::new("credhome");
+        let put = |relative: &str| {
+            let path = home.0.join(relative);
+            std::fs::create_dir_all(path.parent().expect("parent")).expect("dirs");
+            std::fs::write(&path, "x").expect("write");
+            path
+        };
+        let secret = [
+            ".ssh/id_ed25519",
+            ".SSH/config",
+            ".gnupg/private-keys-v1.d/k.key",
+            ".aws/credentials",
+            ".azure/accessTokens.json",
+            ".kube/config",
+            ".docker/config.json",
+            ".netrc",
+            ".git-credentials",
+        ];
+        for relative in secret {
+            let path = put(relative);
+            assert!(is_credential_path(&path, Some(&home.0)), "{relative}");
+        }
+        for relative in [
+            "notes.txt",
+            "project/.ssh-notes.md",
+            "project/.aws/readme.md",
+            ".config/nikcli/auth.json",
+            ".config/nikcli/tui.json",
+            ".claude/settings.json",
+            "AppData/Local/nikcli/auth.json",
+        ] {
+            let path = put(relative);
+            assert!(!is_credential_path(&path, Some(&home.0)), "{relative}");
+        }
+        // Not the home at all, a missing file, and no home to compare with.
+        let outside = TempDir::new("credoutside");
+        let elsewhere = outside.join(".ssh");
+        std::fs::create_dir_all(&elsewhere).expect("dir");
+        std::fs::write(elsewhere.join("id"), "x").expect("write");
+        assert!(!is_credential_path(&elsewhere.join("id"), Some(&home.0)));
+        assert!(!is_credential_path(&home.0.join(".ssh/missing"), Some(&home.0)));
+        assert!(!is_credential_path(&home.0.join(".ssh/id_ed25519"), None));
     }
 
     #[test]
@@ -3151,7 +3849,7 @@ mod tests {
             panic!("expected PreventAndAsk, got {action:?}");
         };
         std::thread::sleep(Duration::from_millis(60));
-        assert!(manager.on_timeout(req_id));
+        assert!(manager.on_timeout(req_id, 0));
         assert_eq!(manager.on_close_requested(), CloseAction::AllowClose);
     }
 
@@ -3165,7 +3863,7 @@ mod tests {
         };
         assert!(manager.ack(req_id));
         std::thread::sleep(Duration::from_millis(60));
-        assert!(!manager.on_timeout(req_id));
+        assert!(!manager.on_timeout(req_id, 0));
     }
 
     #[test]
@@ -3178,9 +3876,83 @@ mod tests {
         };
         assert!(manager.cancel(Some(req_id)));
         std::thread::sleep(Duration::from_millis(60));
-        assert!(!manager.on_timeout(req_id));
+        assert!(!manager.on_timeout(req_id, 0));
         let action2 = manager.on_close_requested();
         assert!(matches!(action2, CloseAction::PreventAndAsk(_)));
+    }
+
+    /// Full review 2026-10-06, Rust 7: a second click on close while the question is open.
+    #[test]
+    fn a_second_click_while_the_question_is_open_asks_nothing_and_arms_no_second_timer() {
+        use std::time::Duration;
+        let manager = CloseManager::new(Duration::from_millis(50));
+        let CloseAction::PreventAndAsk(first) = manager.on_close_requested() else {
+            panic!("the first click asks");
+        };
+        // Waiting for the page's first answer: the same question.
+        assert_eq!(manager.on_close_requested(), CloseAction::AlreadyAsking(first));
+        // No request N+1 exists to be forced shut by a timer, and the open one is not forced either.
+        assert!(!manager.on_timeout(first + 1, 0));
+        assert!(manager.ack(first));
+        assert!(!manager.on_timeout(first, 0));
+        // A «No» reaches the question that is open.
+        assert!(manager.cancel(Some(first)));
+        // Once answered, the next click is a new question with a new id.
+        let CloseAction::PreventAndAsk(next) = manager.on_close_requested() else {
+            panic!("after a «No» the next click asks again");
+        };
+        assert_eq!(next, first + 1);
+    }
+
+    #[test]
+    fn the_unanswered_question_still_closes_after_its_one_timeout() {
+        use std::time::Duration;
+        let manager = CloseManager::new(Duration::from_millis(50));
+        let CloseAction::PreventAndAsk(first) = manager.on_close_requested() else {
+            panic!("the first click asks");
+        };
+        assert_eq!(manager.on_close_requested(), CloseAction::AlreadyAsking(first));
+        // The one timer of the first request is what closes a window whose page never answers.
+        assert!(manager.on_timeout(first, 0));
+        assert_eq!(manager.on_close_requested(), CloseAction::AllowClose);
+    }
+
+    /// Architect's review of F6a, O1: an acknowledged question that is never answered must not shut the X for good.
+    #[test]
+    fn a_click_on_an_acknowledged_question_asks_again_with_the_same_id_and_a_timer_of_its_own() {
+        use std::time::Duration;
+        let manager = CloseManager::new(Duration::from_millis(50));
+        let CloseAction::PreventAndAsk(first) = manager.on_close_requested() else {
+            panic!("the first click asks");
+        };
+        assert!(manager.ack(first));
+        // The page acknowledged and went quiet (reloaded, or its handler ended): the next click asks again.
+        assert_eq!(manager.on_close_requested(), CloseAction::AskAgain { id: first, epoch: 1 });
+        // The first timer, armed for the first ask, is not the one that counts any more.
+        assert!(!manager.on_timeout(first, 0));
+        // A page that is alive acknowledges again, and the new timer finds nothing to force.
+        assert!(manager.ack(first));
+        assert!(!manager.on_timeout(first, 1));
+        // And once more.
+        assert_eq!(manager.on_close_requested(), CloseAction::AskAgain { id: first, epoch: 2 });
+        // A page that never acknowledges is closed by the timer of the latest ask.
+        assert!(manager.on_timeout(first, 2));
+        assert_eq!(manager.on_close_requested(), CloseAction::AllowClose);
+    }
+
+    #[test]
+    fn a_page_that_answers_the_second_ask_is_not_forced() {
+        use std::time::Duration;
+        let manager = CloseManager::new(Duration::from_millis(50));
+        let CloseAction::PreventAndAsk(first) = manager.on_close_requested() else {
+            panic!("the first click asks");
+        };
+        assert!(manager.ack(first));
+        assert_eq!(manager.on_close_requested(), CloseAction::AskAgain { id: first, epoch: 1 });
+        assert!(manager.cancel(Some(first)));
+        assert!(!manager.on_timeout(first, 1));
+        // Answered: the next click is a new question.
+        assert!(matches!(manager.on_close_requested(), CloseAction::PreventAndAsk(next) if next == first + 1));
     }
 
     #[test]

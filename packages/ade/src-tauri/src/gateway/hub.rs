@@ -355,13 +355,23 @@ impl Hub {
         }
         let name = secret_name(bot, platform, kind);
         let previous = self.vault.get(&self.service, &name)?;
+        // The bot's updates are numbered by the bot: the same bot with a new secret goes on from where it was, another
+        // bot would have its first messages confirmed and dropped by a position that is not its own (full review
+        // 2026-10-06, rust 19). Telegram's token starts with the bot's id; elsewhere any other token is another start.
+        let same_bot = previous.as_deref().is_some_and(|old| bot_id(old) == bot_id(token));
         self.vault.set(&self.service, &name, token)?;
         let recorded = self.store.update(bot, platform, |link, others| {
             if let Some(why) = conflict(link, others) {
                 return Err(why);
             }
             match kind {
-                TokenKind::Bot => link.token_hash = Some(hash.clone()),
+                TokenKind::Bot => {
+                    link.token_hash = Some(hash.clone());
+                    if !same_bot {
+                        link.cursor = None;
+                        link.cursor_saved_ms = None;
+                    }
+                }
                 TokenKind::App => link.app_token_hash = Some(hash.clone()),
             }
             Ok(())
@@ -401,6 +411,9 @@ impl Hub {
             link.token_hash = None;
             link.app_token_hash = None;
             link.enabled = false;
+            // No token, no bot: nothing for a position to belong to.
+            link.cursor = None;
+            link.cursor_saved_ms = None;
             Ok(())
         })
     }
@@ -1031,6 +1044,12 @@ impl Task {
         self.env.log(&format!("{tag}: codice di abbinamento mandato a un mittente non autorizzato"));
         self.env.pairing(&pairing_request(&self.bot, self.platform, &pending));
     }
+}
+
+/// The part of a token that says which bot it is: Telegram's token is `<bot id>:<secret>`, the others have no colon and
+/// are whole.
+fn bot_id(token: &str) -> &str {
+    token.split(':').next().unwrap_or(token)
 }
 
 #[cfg(test)]
@@ -1930,8 +1949,38 @@ mod tests {
         eventually("il messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
         eventually("la posizione salvata", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("501")).await;
         // Made again (a new token, ADE reopened): from where it was.
-        s.hub.set_token(BOT, Platform::Fake, "987654321:ALTRO-token-di-prova_ZyXwVuTsRqPoNm").unwrap();
+        s.hub.set_token(BOT, Platform::Fake, "123456789:ALTRO-token-di-prova_ZyXwVuTsRqPoNm").unwrap();
         assert_eq!(s.made.lock().unwrap().last().unwrap().1.as_deref(), Some("501"));
+    }
+
+    // Full review 2026-10-06, rust 19: another bot's updates are numbered from elsewhere, and the old position would confirm and drop them.
+    #[tokio::test]
+    async fn another_bots_token_does_not_inherit_the_position_of_the_old_one() {
+        let s = setup("cursor-other-bot");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        *adapter.position.lock().unwrap() = Some("501".into());
+        feed.send(Ok(vec![message("500", "c42", "42", "uno")])).unwrap();
+        eventually("la posizione salvata", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("501")).await;
+        // The same bot with a new secret (revoked and made again): from where it was.
+        s.hub.set_token(BOT, Platform::Fake, "123456789:RUOTATO-token-di-prova_ZyXwVuTsRqPoNm").unwrap();
+        assert_eq!(s.made.lock().unwrap().last().unwrap().1.as_deref(), Some("501"));
+        // Another bot's token: it starts from nothing.
+        s.hub.set_token(BOT, Platform::Fake, "987654321:ALTRO-token-di-prova_ZyXwVuTsRqPoNm").unwrap();
+        assert_eq!(s.made.lock().unwrap().last().unwrap().1, None);
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor, None);
+    }
+
+    #[tokio::test]
+    async fn forgetting_the_token_forgets_the_position() {
+        let s = setup("cursor-cleared");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        *adapter.position.lock().unwrap() = Some("501".into());
+        feed.send(Ok(vec![message("500", "c42", "42", "uno")])).unwrap();
+        eventually("la posizione salvata", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("501")).await;
+        s.hub.clear_token(BOT, Platform::Fake).unwrap();
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor, None);
     }
 
     #[tokio::test]

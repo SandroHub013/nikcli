@@ -1241,17 +1241,41 @@ export function afterInterrupt(read: Activity | undefined, interruptedAt: number
   return { ...read, state: "idle", at: interruptedAt! }
 }
 
+/** How long the second Esc of a double-Esc interrupt waits: well inside the TUI's 5 s window. */
+export const INTERRUPT_GAP_MS = 300
+
 /**
- * The keys that stop what an agent is doing without closing it.
+ * How to stop what an agent is doing without closing it: the key presses in
+ * order, or the reason it cannot be done safely.
  *
- * Esc for the CLIs that cancel a turn on it and keep the session (Claude
- * Code, codex, agy); Ctrl-C for the rest, which is what a shell expects.
- * Ctrl-C to Claude Code twice would quit it, so it is never sent there.
+ * Each agent has its own way, and the wrong one closes it (full review
+ * 2026-10-06, sessioni 5; OpenCode and Mimo 2.6 were lost on 2026-09-24):
+ * - Claude Code, codex, agy: one Esc cancels the turn and keeps the session.
+ *   Ctrl-C to Claude Code twice would quit it.
+ * - nikcli and OpenCode: Esc twice within five seconds (`session_interrupt`,
+ *   «esc again to interrupt», `packages/tui/src/component/prompt`); the first
+ *   only arms it. Ctrl-C there is `app_exit`.
+ * - The shell: Ctrl-C, which is what it expects.
+ * - Any other agent: not guessed. Ctrl-C quits most TUIs, so the sender is told
+ *   to send a correcting line instead.
  */
-export function interruptKeys(agentId: string | undefined): string {
-  return agentId === "claude-code" || agentId === "codex" || agentId === "agy"
-    ? String.fromCharCode(27)
-    : String.fromCharCode(3)
+export function interruptPlan(agentId: string | undefined): { keys: string[] } | { refusal: string } {
+  const esc = String.fromCharCode(27)
+  switch (agentId) {
+    case "claude-code":
+    case "codex":
+    case "agy":
+      return { keys: [esc] }
+    case "nikcli":
+    case "opencode":
+      return { keys: [esc, esc] }
+    case "terminal":
+      return { keys: [String.fromCharCode(3)] }
+    default:
+      return {
+        refusal: `errore: ADE non sa come interrompere ${agentId ?? "questa sessione"} senza chiuderla (Ctrl-C la chiuderebbe): mandale una riga correttiva con ade-msg send`,
+      }
+  }
 }
 
 /** A decision still waiting for an answer, from the specs' event logs. */

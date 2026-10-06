@@ -42,6 +42,7 @@ const SAME_IN_BOTH = new Set<string>([
   "agent.empty.example3",
   "design.title",
   "newPane.design",
+  "newPane.browser",
   "newPane.nikverse",
   "update.dialog.escKey",
   "vui.backend.piper",
@@ -60,6 +61,7 @@ const SAME_IN_BOTH = new Set<string>([
   "vui.replies.sample.it",
   "vui.replies.sample.en",
   "bar.meta.ade",
+  "pane.tree.worktree",
 ])
 
 type Key = keyof typeof it

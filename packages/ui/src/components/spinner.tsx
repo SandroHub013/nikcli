@@ -40,7 +40,7 @@ export function Spinner(props: {
               opacity: square.corner ? 0 : undefined,
               animation: square.corner
                 ? undefined
-                : `${square.outer ? "pulse-opacity-dim" : "pulse-opacity"} ${square.duration}s ease-in-out infinite`,
+                : `${square.outer ? "pulse-opacity-dim" : "pulse-opacity"} ${square.duration}s ease-in-out infinite var(--ade-loops, running)`,
               "animation-delay": square.corner ? undefined : `${square.delay}s`,
             }}
           />

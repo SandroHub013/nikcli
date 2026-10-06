@@ -236,3 +236,95 @@ describe("i permessi concessi dal nikcli.json del progetto", () => {
     expect(prepare).toContain("await admitTurn(bot, routine.cwd, () => false)")
   })
 })
+
+/*
+ * Full review 2026-10-06, bots 6: nikcli looks for `nikcli.json` and `.nikcli/` from the folder it
+ * runs in up to the worktree root (the git root; outside git, the root of the disk). A project
+ * opened below that, or a folder with no git of its own, runs what its ancestors bring, and the
+ * trust question only looked at the folder itself.
+ */
+describe("la fiducia guarda anche le cartelle superiori, come nikcli", () => {
+  const SUB = "C:/work/app/sub"
+
+  test("una cartella con un .nikcli sopra di sé, dentro lo stesso repository: il plugin entra nell'impronta", async () => {
+    const fs = fakeFs({
+      "C:/work/.git/HEAD": "ref",
+      "C:/work/.nikcli/plugin/evil.ts": "export default {}",
+      "C:/work/nikcli.json": '{"plugin":["./x"]}',
+      [`${SUB}/src/a.ts`]: "x",
+    })
+    const paths = (await projectSurface(SUB, fs)).map((file) => file.path)
+    expect(paths).toEqual(["../../.nikcli/plugin/evil.ts", "../../nikcli.json"])
+  })
+
+  test("senza git, fino alla radice del disco", async () => {
+    const fs = fakeFs({
+      "C:/.nikcli/plugin/evil.ts": "export default {}",
+      "C:/work/app/nikcli.jsonc": "{}",
+      [`${SUB}/src/a.ts`]: "x",
+    })
+    const surface = await projectSurface(SUB, fs)
+    expect(surface.map((file) => file.path)).toEqual(["../../../.nikcli/plugin/evil.ts", "../nikcli.jsonc"])
+  })
+
+  test("sopra la radice del repository non si guarda: nikcli lì si ferma", async () => {
+    const fs = fakeFs({
+      "C:/work/app/.git/HEAD": "ref",
+      "C:/work/.nikcli/plugin/evil.ts": "export default {}",
+      "C:/work/app/sub/src/a.ts": "x",
+    })
+    expect(await projectSurface("C:/work/app/sub", fs)).toEqual([])
+    // And a root that is itself the git root has no ancestors at all.
+    expect(await projectSurface("C:/work/app", fs)).toEqual([])
+  })
+
+  test("la cartella dell'utente e quelle sopra non contano: è la sua configurazione", async () => {
+    const fs = fakeFs({
+      "C:/Users/u/.nikcli/plugin/mio.ts": "export default {}",
+      "C:/Users/u/proj/src/a.ts": "x",
+    })
+    expect(await projectSurface("C:/Users/u/proj", { ...fs, home: async () => "C:\\Users\\u" })).toEqual([])
+    // Without it, the same folder is read: that is the user's own `.nikcli`, counted as the project's.
+    expect((await projectSurface("C:/Users/u/proj", fs)).map((file) => file.path)).toEqual(["../.nikcli/plugin/mio.ts"])
+  })
+
+  test("un cambiamento in una cartella superiore cambia l'impronta, e quindi richiede di nuovo il sì", async () => {
+    const files: Record<string, string> = {
+      "C:/work/.git/HEAD": "ref",
+      "C:/work/.nikcli/plugin/p.ts": "export default { v: 1 }",
+      [`${SUB}/src/a.ts`]: "x",
+    }
+    const fs = fakeFs(files)
+    const store = memoryTrustStore()
+    const asked: string[] = []
+    const deps = {
+      store,
+      surface: () => projectSurface(SUB, fs),
+      confirm: async (question: string) => {
+        asked.push(question)
+        return true
+      },
+    }
+    expect(await admitProject(SUB, deps)).toEqual({ ok: true })
+    expect(asked).toHaveLength(1)
+    expect(await admitProject(SUB, deps)).toEqual({ ok: true })
+    expect(asked).toHaveLength(1)
+    files["C:/work/.nikcli/plugin/p.ts"] = "export default { v: 2 }"
+    expect(await admitProject(SUB, deps)).toEqual({ ok: true })
+    expect(asked).toHaveLength(2)
+  })
+
+  test("un progetto che è la radice del repository costa una sola lettura in più: la sua lista", async () => {
+    const fs = fakeFs({ "C:/progetto/.git/HEAD": "ref", "C:/progetto/src/a.ts": "x" })
+    const listed: string[] = []
+    const watching: ProjectFs = {
+      readText: fs.readText,
+      readDir: (path) => {
+        listed.push(path)
+        return fs.readDir(path)
+      },
+    }
+    expect(await projectSurface("C:/progetto", watching)).toEqual([])
+    expect(listed.filter((path) => path !== "C:/progetto/.nikcli")).toEqual(["C:/progetto"])
+  })
+})

@@ -610,6 +610,16 @@ mod tests {
         assert!(!is_ade_origin("not a url", "http://tauri.localhost"));
     }
 
+    // Full review 2026-10-06, rust 17: the answer is sandboxed (`nikverse::CSP`), not the frame refused. This frame
+    // handler cannot tell a site's nested frame from ADE's own panel, which loads the world and the design sheets from
+    // these hosts: refusing them here would take NikVerse down.
+    #[test]
+    fn ades_own_panel_frames_are_not_refused_by_the_frame_guard() {
+        for url in ["http://nikverse.localhost/", "http://ade-media.localhost/x.mp4", "nikverse://localhost/", "ade-media://localhost/x.mp4"] {
+            assert!(!is_ade_origin(url, "http://tauri.localhost"), "{url}");
+        }
+    }
+
     #[test]
     fn forget_site_takes_the_origin_and_refuses_the_rest() {
         assert_eq!(

@@ -86,7 +86,7 @@ export interface GatewayControllerDeps {
   /** The chat's thread on disk, apart from the panel's. Absent in a test that does not keep one. */
   readonly threads?: GatewayThreads
   /** The bot's remote commands as saved (`remote.ts`); off when absent. */
-  readonly remote?: (bot: string) => RemoteSetting
+  readonly remote?: (bot: string, platform: string) => RemoteSetting
   /** The bot's account in ADE (`account.ts`). Absent is a subscription. */
   readonly account?: (bot: string) => BotAccount
   /**
@@ -286,7 +286,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       sendTyping()
       typing = setInterval(sendTyping, deps.typingEveryMs ?? TYPING_EVERY_MS)
       const remote = remoteTools(
-        offersRemoteCommands(runner) ? deps.remote?.(message.bot) : undefined,
+        offersRemoteCommands(runner) ? deps.remote?.(message.bot, message.platform) : undefined,
         loaded.fingerprint,
       )
       let turn: Turn | undefined

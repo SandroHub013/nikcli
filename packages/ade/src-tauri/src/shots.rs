@@ -321,6 +321,7 @@ pub async fn shots_watch(
     watch: tauri::State<'_, Watch>,
     dir: String,
 ) -> Result<(), String> {
+    crate::refuse_network_path(&dir)?;
     let path = PathBuf::from(&dir);
     if !path.is_dir() {
         return Err(format!("{dir} non è una cartella"));
@@ -555,6 +556,8 @@ fn shots_root(watch: &Watch, path: &Path) -> Option<(PathBuf, PathBuf)> {
 }
 
 fn check_shot(watch: &Watch, path: &str) -> Result<PathBuf, String> {
+    // Before `canonicalize`, which on a UNC path talks to the server first (and sends it the user's hash).
+    crate::refuse_network_path(path)?;
     let file = PathBuf::from(path);
     /*
      * Named like a screenshot as well as being in the folder, judged by the
@@ -615,6 +618,14 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("cartella temporanea");
         dir
+    }
+
+    // Full review 2026-10-06, rust (minor): `canonicalize` on a UNC path talks to the server before the text check.
+    #[test]
+    fn a_network_path_is_refused_before_it_is_resolved() {
+        let watch = Watch::default();
+        let error = check_shot(&watch, "\\\\ade-test-unreachable.invalid\\share\\Screenshot 1.png").unwrap_err();
+        assert!(error.contains("rete"), "{error}");
     }
 
     #[test]

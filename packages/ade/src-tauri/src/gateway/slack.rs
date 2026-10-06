@@ -678,7 +678,7 @@ impl Inner {
                 .await
                 .map_err(Failure::for_sending)?;
         }
-        hold(&self.preview).insert(format!("{chat}/{last}"), text.to_string());
+        chunk::remember(&mut hold(&self.preview), format!("{chat}/{last}"), text.to_string());
         Ok(last)
     }
 }
@@ -989,7 +989,7 @@ impl Adapter for Slack {
             .call_patiently(reqwest::Method::POST, "/chat.update", Token::Bot, Some(&body))
             .await
             .map_err(Failure::for_sending)?;
-        hold(&self.inner.preview).insert(key, text.to_string());
+        chunk::remember(&mut hold(&self.inner.preview), key, text.to_string());
         Ok(message.to_string())
     }
 
