@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
 import { Sheet, SheetTitle } from "../ui/sheet"
-import { deferredStatus, enterReady, isFormField, sheetKey, togglePick } from "./answer"
+import { deferredStatus, enterReady, isFormField, isOwnButton, sheetKey, togglePick } from "./answer"
 import { submitControl } from "./card"
 import { DecisionCard } from "./decision-card"
 import { answeredStatus, type RecipientStatus } from "./delivery"
@@ -21,12 +21,10 @@ export function DecisionsSheet(props: {
   hub: DecisionsHub
   onClose: () => void
   onOpenPanel: () => void
-  /** The key to open at: the entry picked in «Da scegliere». */
+  /** The key to open at. */
   start?: string
-  /** How many entries wait in «Da scegliere», this sheet's included. */
-  waiting?: () => number
-  /** After the last answer here: back to «Da scegliere», or closed (`afterAnswer`). */
-  onDone?: (next: "list" | "close", said?: string) => void
+  /** After the last answer here: closed (`afterAnswer`). */
+  onDone?: (next: "stay" | "close", said?: string) => void
 }) {
   const buckets = createMemo(() => bucketDecisions(props.hub.register.state()?.decisions ?? []))
   const open = () => buckets().forYou
@@ -67,7 +65,7 @@ export function DecisionsSheet(props: {
   const [answered, setAnswered] = createSignal(false)
   createEffect(() => {
     if (!answered()) return
-    const next = afterAnswer(open().length, props.waiting?.() ?? 0)
+    const next = afterAnswer(open().length)
     // What the footer said goes with the sheet: the caller shows it as a toast (rifiniture 2).
     if (next !== "stay") props.onDone?.(next, untrack(statusMessage))
   })
@@ -106,7 +104,14 @@ export function DecisionsSheet(props: {
       decision && draft && enterReady(Boolean(decision.multi), draft.picked, draft.note, chosenHere().has(decision.k)),
     )
     const inText = event.target === note
-    const action = sheetKey(event, decision?.options.length ?? 0, inText, picked, !inText && isFormField(event.target))
+    const action = sheetKey(
+      event,
+      decision?.options.length ?? 0,
+      inText,
+      picked,
+      !inText && isFormField(event.target),
+      isOwnButton(event.target),
+    )
     if (!action) return
     event.preventDefault()
     event.stopPropagation()

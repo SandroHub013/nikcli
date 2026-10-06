@@ -526,7 +526,7 @@ export function SessionPane(props: SessionPaneProps) {
   })
 
   const tipState = createMemo(() => {
-    const elText = props.elapsed ? ` · da ${props.elapsed}` : ""
+    const elText = props.elapsed ? t("pane.elapsed", props.elapsed) : ""
     return `${STATE_FULL[state()]}\n${stateDetail()}${elText}`
   })
 
@@ -923,7 +923,7 @@ export function SessionPane(props: SessionPaneProps) {
                   <LineSpans text={line.text} />
                 </span>
                 <Show when={line.repeat && line.repeat > 1}>
-                  <span data-slot="pane-repeat" title={`Ripetuta ${line.repeat} volte`}>
+                  <span data-slot="pane-repeat" title={t("pane.repeatCount", line.repeat!)}>
                     ×{line.repeat}
                   </span>
                 </Show>

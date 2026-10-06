@@ -2,6 +2,7 @@ import { redactHistory, redactUrl, type BrowserHistory } from "../browser/histor
 import type { PaneSheet } from "../design/sheet"
 import { type Span, applyOrder } from "../grid/arrange"
 import { focusAfterClose } from "../grid/focus"
+import { belongsTo, sameProject } from "./pane-project"
 import { normalizePath, pathEquals, isAbsolutePath } from "../host/path"
 import { CURRENT_VERSION, type WorkspaceState, type PaneState } from "../session/persist"
 import { boundPaneTranscript, boundWorkspaceTranscripts } from "../session/transcript-budget"
@@ -218,11 +219,6 @@ export interface Pane {
    */
   plugin?: { pluginId: string; name: string }
   /**
-   * Set when the tile hosts an installed plugin in a sandboxed frame (`plugin-frame/`). Not `plugin`, which is the plugins that draw in
-   * ADE's own DOM. Saved and restored (`FramePluginPaneState`): a plugin that is no longer installed comes back as its placeholder.
-   */
-  framePlugin?: { id: string }
-  /**
    * What this session was asked to do, kept so a retry restarts the same work.
    * Without it "Riprova" relaunches the agent with an empty prompt, which is a
    * different session wearing the same title.
@@ -269,7 +265,7 @@ export interface Pane {
  * empty player was listed as a session and offered to be restarted as one.
  */
 export function isPanelPane(
-  pane: Pick<Pane, "mode" | "browserUrl" | "filePath" | "videoPath" | "modelPath" | "appUrl" | "plugin" | "framePlugin">,
+  pane: Pick<Pane, "mode" | "browserUrl" | "filePath" | "videoPath" | "modelPath" | "appUrl" | "plugin">,
 ): boolean {
   return Boolean(
     pane.browserUrl ||
@@ -278,14 +274,13 @@ export function isPanelPane(
     pane.modelPath ||
     pane.appUrl ||
     pane.plugin ||
-    pane.framePlugin ||
     pane.mode === "video" ||
     pane.mode === "model" ||
     pane.mode === "app" ||
     pane.mode === "decisions" ||
     pane.mode === "design" ||
     pane.mode === "nikverse" ||
-    pane.mode === "plugin-frame",
+    pane.mode === "learn",
   )
 }
 
@@ -309,20 +304,35 @@ export function createWorkbench(): Workbench {
   }
 }
 
-export function addPane(workbench: Workbench, pane: Pane): Workbench {
+export function addPane(workbench: Workbench, pane: Pane, open?: { name: string; root: string }): Workbench {
+  // A pane of another project than the open one — a subagent spawned from a session there, a dev browser
+  // that session owns — is not drawn, so it must not take focus: the next Ctrl+W or «Termina processo»
+  // would close or kill it unseen (full review 2026-10-06, sessioni 4, scenario C).
+  // With the open project given, a pane that knows only its project's name (its root is found when it starts) is
+  // judged by that name too (Dario's note on F3): `workbench.projectPath` alone cannot tell it.
+  const elsewhere = open
+    ? !belongsTo(pane, open)
+    : Boolean(workbench.projectPath && pane.projectRoot && !pathEquals(pane.projectRoot, workbench.projectPath))
   return {
     ...workbench,
     panes: [...workbench.panes, pane],
-    focusedId: pane.id,
+    focusedId: elsewhere ? workbench.focusedId : pane.id,
   }
 }
 
 export function closePane(workbench: Workbench, paneId: string): Workbench {
-  const nextFocused = focusAfterClose({
-    panes: workbench.panes.map((p) => p.id),
-    focused: workbench.focusedId,
-    closing: paneId,
-  })
+  const closing = workbench.panes.find((p) => p.id === paneId)
+  // Focus passes to a neighbour of the same project: a pane of another project is not drawn, and
+  // the next Ctrl+W or «Termina processo» would reach it unseen (full review 2026-10-06, sessioni 4).
+  const neighbours = closing ? workbench.panes.filter((p) => sameProject(p, closing)) : workbench.panes
+  const nextFocused =
+    workbench.focusedId !== paneId
+      ? workbench.focusedId
+      : focusAfterClose({
+          panes: neighbours.map((p) => p.id),
+          focused: workbench.focusedId,
+          closing: paneId,
+        })
 
   return {
     ...workbench,
@@ -330,6 +340,38 @@ export function closePane(workbench: Workbench, paneId: string): Workbench {
     focusedId: nextFocused,
     expandedId: workbench.expandedId === paneId ? undefined : workbench.expandedId,
   }
+}
+
+/**
+ * The focused pane's id when it is a pane of the open project, else none.
+ *
+ * Closing, suspending and killing act on the focused pane, and the user can only see the open project's
+ * panes: a focus left elsewhere (a pane added by a session of another project, an old id) must not be acted on
+ * unseen. With no project open, or no focus, there is nothing to guard.
+ */
+export function focusedInOpenProject(
+  workbench: Pick<Workbench, "panes" | "focusedId">,
+  open: { readonly name: string; readonly root: string } | undefined,
+): string | undefined {
+  const id = workbench.focusedId
+  if (!id) return undefined
+  const pane = workbench.panes.find((p) => p.id === id)
+  if (!pane) return undefined
+  return !open || belongsTo(pane, open) ? id : undefined
+}
+
+/**
+ * The pane that holds focus once `project` is the open one: the focused pane when it is the
+ * project's, else the project's first, else none. Focus left on a pane of the project just left
+ * is on nothing drawn, and «Termina processo» or Ctrl+W would act on it (sessioni 4, scenario B).
+ */
+export function focusInProject(
+  workbench: Pick<Workbench, "panes" | "focusedId">,
+  project: { readonly name: string; readonly root: string },
+): string | undefined {
+  const mine = workbench.panes.filter((p) => belongsTo(p, project))
+  if (workbench.focusedId && mine.some((p) => p.id === workbench.focusedId)) return workbench.focusedId
+  return mine[0]?.id
 }
 
 /** How many notes stay over a terminal at once: the latest ones. */
@@ -445,10 +487,28 @@ export function deriveWorkspaces(
   known: ReadonlyArray<{ root: string; name: string; branch?: string; missing?: boolean }> = [],
 ): Workspace[] {
   const workspaces: Record<string, Workspace> = {}
+  // Two projects can end in the same folder name (`C:/a/app`, `D:/b/app`): the name is not what tells them apart, the
+  // root is (full review 2026-10-06, sessions 10). The row's id stays the name, unless another project has it too: then
+  // every one of them takes its root, so the ids do not swap when the recents are put in another order (review of F6c, N2).
+  const byRoot = new Map<string, string>()
+  const byName = new Map<string, string>()
+  const namesakes = new Map<string, Set<string>>()
+  for (const project of known) {
+    const roots = namesakes.get(project.name) ?? new Set<string>()
+    roots.add(rootKey(project.root))
+    namesakes.set(project.name, roots)
+  }
 
   for (const project of known) {
-    workspaces[project.name] = {
-      id: project.name,
+    const root = rootKey(project.root)
+    if (byRoot.has(root)) continue
+    const shared = (namesakes.get(project.name)?.size ?? 0) > 1
+    const id = shared ? project.root : project.name
+    byRoot.set(root, id)
+    // A pane that knows only the name goes to the first project of that name, as it always did.
+    if (!byName.has(project.name)) byName.set(project.name, id)
+    workspaces[id] = {
+      id,
       name: project.name,
       path: project.root,
       branch: project.branch,
@@ -463,18 +523,28 @@ export function deriveWorkspaces(
     // something different from the number of agents running.
     if (isPanelPane(pane)) continue
 
-    if (!workspaces[pane.workspaceId]) {
-      workspaces[pane.workspaceId] = {
-        id: pane.workspaceId,
-        name: pane.workspaceId,
-        sessions: [],
+    // A pane that knows its root goes to the project with that root; one without (an old one) goes by name.
+    const root = pane.projectRoot ? rootKey(pane.projectRoot) : undefined
+    let id = (root !== undefined ? byRoot.get(root) : undefined) ?? (root === undefined ? byName.get(pane.workspaceId) : undefined)
+    if (id === undefined) {
+      // Not a known project: by its root when it has one and the name is already another project's, else by name.
+      id = root !== undefined && workspaces[pane.workspaceId] ? pane.projectRoot! : pane.workspaceId
+      if (!workspaces[id]) {
+        workspaces[id] = {
+          id,
+          name: pane.workspaceId,
+          ...(pane.projectRoot ? { path: pane.projectRoot } : {}),
+          sessions: [],
+        }
       }
+      if (root !== undefined) byRoot.set(root, id)
+      else if (!byName.has(pane.workspaceId)) byName.set(pane.workspaceId, id)
     }
 
-    const ws = workspaces[pane.workspaceId]
-    const branch = pane.tree?.branch || ws?.branch
+    const ws = workspaces[id]!
+    const branch = pane.tree?.branch || ws.branch
 
-    workspaces[pane.workspaceId].sessions.push({
+    ws.sessions.push({
       id: pane.id,
       title: pane.title,
       status: pane.status,
@@ -488,6 +558,11 @@ export function deriveWorkspaces(
   }
 
   return Object.values(workspaces)
+}
+
+/** A root as `pathEquals` reads it: same project whatever the separators and the case. */
+function rootKey(root: string): string {
+  return normalizePath(root).toLowerCase()
 }
 
 /** The project's name, as the folder it lives in calls it. */
@@ -604,11 +679,18 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
       ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
     }))
 
-  const framePlugins = workbench.panes
-    .filter((p) => p.framePlugin)
+  /*
+   * The «Impara» panel is saved, and only the one there is.
+   *
+   * Every other panel is dropped here (see above), because what it showed belongs to whatever it was showing. The lessons do not: they
+   * are the app's own, and the progress is one file, so a restored panel is the same panel with the same lessons and the same progress,
+   * which is exactly what the user left open.
+   */
+  const learns = workbench.panes
+    .filter((p) => p.mode === "learn")
+    .slice(0, 1)
     .map((p) => ({
       id: p.id,
-      plugin: p.framePlugin!.id,
       title: p.title,
       ...(p.workspaceId ? { project: p.workspaceId } : {}),
       ...(p.projectRoot ? { projectRoot: p.projectRoot } : {}),
@@ -619,7 +701,7 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
     version: CURRENT_VERSION,
     panes: boundWorkspaceTranscripts(saved, workbench.focusedId),
     ...(browsers.length ? { browsers } : {}),
-    ...(framePlugins.length ? { framePlugins } : {}),
+    ...(learns.length ? { learns } : {}),
     focusedPaneId: workbench.focusedId,
     pinnedColumns: workbench.pinnedColumns,
     currentView: workbench.view,
@@ -672,7 +754,7 @@ function samePath(a: string, b: string): boolean {
 
 export function fromWorkspaceState(state: WorkspaceState, projectName?: string): Workbench {
   const owner = projectName ?? lastSegment(state.projectPath) ?? "ws-restored"
-  return {
+  const restored: Workbench = {
     panes: state.panes
       .map((p): Pane => {
         /*
@@ -797,18 +879,17 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
         ),
       )
       .concat(
-        (state.framePlugins ?? []).map(
-          (f): Pane => ({
-            id: f.id,
-            title: f.title,
-            // As `openFramePluginPane` creates it: a panel is never a finished session.
+        (state.learns ?? []).map(
+          (l): Pane => ({
+            id: l.id,
+            title: l.title,
+            // As `openLearnPane` creates it: a panel is never a finished session.
             status: "working",
             model: "—",
-            mode: "plugin-frame",
-            framePlugin: { id: f.plugin },
-            workspaceId: f.project || owner,
-            ...(f.projectRoot ? { projectRoot: f.projectRoot } : {}),
-            ...(f.span ? { span: { columns: f.span.columns, rows: f.span.rows } } : {}),
+            mode: "learn",
+            workspaceId: l.project || owner,
+            ...(l.projectRoot ? { projectRoot: l.projectRoot } : {}),
+            ...(l.span ? { span: { columns: l.span.columns, rows: l.span.rows } } : {}),
             lines: [],
           }),
         ),
@@ -820,6 +901,14 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
     sidebarWidth: state.sidebarWidth,
     projectPath: state.projectPath,
   }
+  /*
+   * A pane that is not restored (a plugin panel from a release that had them, a page with no URL) leaves the saved focus pointing at
+   * nothing, and the commands that act on "the focused pane" would be given an id no pane has.
+   */
+  if (restored.focusedId && !restored.panes.some((pane) => pane.id === restored.focusedId)) {
+    restored.focusedId = restored.panes[0]?.id
+  }
+  return restored
 }
 
 /**

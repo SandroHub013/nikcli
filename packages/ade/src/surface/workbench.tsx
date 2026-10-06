@@ -20,7 +20,16 @@ import {
 } from "./before-unload"
 import { hideButtons, hideChoice, markTrayNoticed, planHide, trayNoticed } from "./tray-hide"
 import { NIKCLI_VERSION_EVERY_MS, parseNikcliVersion } from "../host/nikcli-version"
-import { isRemoteRoot, remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
+import {
+  agentMissing,
+  isRemoteRoot,
+  lastLineOf,
+  remoteRoot,
+  shellReturned,
+  sshArgs,
+  sshAsking,
+  type RemoteTarget,
+} from "../remote/ssh"
 import { RemoteSpaceDialog } from "../remote/remote-dialog"
 import { discoverProject, grantedRoots, openProject, rootMissing, type Project } from "../host/project"
 import {
@@ -154,8 +163,8 @@ import { requestRename } from "../grid/rename"
 import { EmptyProject } from "./empty-project"
 import { ProjectBar } from "./project-bar"
 import { SidebarToggle, readSidebarHidden, writeSidebarHidden } from "./sidebar-toggle"
-import { BarQueueButton } from "./bar-queue-button"
-import { queueShown } from "./bar-queue"
+import { PillTabs, type PillTabItem } from "../ui/pill-tabs"
+import { queueItemLabel, createOpenKeyTracker } from "./bar-queue"
 import { NikChromeLogo } from "./nik-chrome-logo"
 const isTauriDesktop = () => typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)
 
@@ -221,6 +230,8 @@ import {
   type Pane,
   addPane,
   closePane,
+  focusInProject,
+  focusedInOpenProject,
   updatePane,
   withPaneNotice,
   isPanelPane,
@@ -237,6 +248,7 @@ import {
   ADE_VIEW_LABELS,
   VISIBLE_VIEWS,
   isViewVisible,
+  type AdeView,
   type Workbench as WorkbenchState,
 } from "./state"
 import { AgentConsole } from "../agent/agent-console"
@@ -286,11 +298,18 @@ import { parseCommandId } from "../plugin/trust"
 import { CONSENT_KEY, consentQuestion, hasConsent, withConsent } from "../plugin/consent"
 import { toPluginSession } from "../plugin/session"
 import type { DiscoveryIO } from "../plugin/discovery"
-import { markSaved, openBuffer, saveBlockedReason } from "../editor"
-import { detectPermission, followPermission, type PermissionAnswer } from "../session/permission"
+import { markSaved, openBuffer, saveBlockedReason, toLf, withEol } from "../editor"
+import {
+  answerLabel,
+  detectPermission,
+  followPermission,
+  permissionIdentity,
+  type PermissionAnswer,
+} from "../session/permission"
 import { readReportLine } from "../session/report"
 import { asOneLine, asSubmittedLine, confirmDeadline, pasteSettled, submitCheck } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
+import { createProjectWalk } from "./project-walk"
 import {
   DEFAULT_MAX_SPAWNED,
   USAGE,
@@ -346,7 +365,8 @@ import {
   HELD_BY_LINE,
   formatUnread,
   formatWedged,
-  interruptKeys,
+  INTERRUPT_GAP_MS,
+  interruptPlan,
   shellRefusal,
   typesMailInto,
   WEDGE_MS,
@@ -364,10 +384,6 @@ import type { Snapshot } from "../nikverse/protocol"
 import { createSlotBook, shopId, worldSnapshot } from "../nikverse/snapshot"
 import { forwardedCommand } from "../nikverse/chords"
 import { nikverseOpening } from "../nikverse/open"
-import { framePluginOpening } from "../plugin-frame/open"
-import { forwardedCommand as forwardedNavigation } from "../plugin-frame/navigation"
-import { anyFramePlugin } from "../plugin-frame/marker"
-import type { FramePaneInput } from "../plugin-frame/plugin-pane"
 
 import { quotaForAgent } from "../session/quota"
 import { useSharedQuota } from "../session/quota-store"
@@ -383,6 +399,7 @@ import {
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
 import {
   canSuspend,
+  closeSuspendedTree,
   stopForSuspend,
   offersSuspend,
   parseSuspendedMail,
@@ -457,8 +474,7 @@ import {
 } from "./open-route"
 import { guessDevServers } from "../simulator/simulator"
 import { DecisionsSheet } from "../decisions/decisions-sheet"
-import { ChoicesSheet } from "../choices/choices-sheet"
-import { choiceCounts, choiceItems, distinctNames, type ChoiceItem } from "../choices/list"
+import { distinctNames } from "../choices/list"
 import { createToast } from "./toast"
 import { createSettled } from "./settled"
 import {
@@ -914,7 +930,7 @@ export function Workbench() {
   const withKeys = async () => {
     const host = await getHost()
     if (!host?.listSecrets || !host.saveSecret || !host.deleteSecret || !host.copySecret) {
-      throw new Error("questa versione di ADE non ha il portachiavi")
+      throw new Error(t("keys.error.noKeyring"))
     }
     return host as Required<Pick<typeof host, "listSecrets" | "saveSecret" | "deleteSecret" | "copySecret">>
   }
@@ -1010,7 +1026,7 @@ export function Workbench() {
   ): Pane => {
     const pane: Pane = {
       id: newPaneId("b"),
-      title: sheet ? sheetLabel(sheet) : "Browser",
+      title: sheet ? sheetLabel(sheet) : t("newPane.browser"),
       ...(sheet ? { designSheet: sheet } : {}),
       status: "working",
       model: "—",
@@ -1147,7 +1163,7 @@ export function Workbench() {
   // One dialog at a time: a second command while it is open waits for its answer.
   const pickRecordDir = onePickAtATime(async () => {
     const host = await getHost()
-    const chosen = await host?.pickDirectory?.("Dove salvare i video registrati")
+    const chosen = await host?.pickDirectory?.(t("record.pickDirTitle"))
     if (!chosen) return undefined
     setRecordDir(chosen)
     saveRecordDir(chosen)
@@ -1755,11 +1771,8 @@ export function Workbench() {
   })
 
   /*
-   * «Da scegliere»: one button and one list for what waits for the user,
-   * decisions and design alike (notifiche-design). An entry opens its own
-   * window at that entry.
+   * The entry to start the decisions or design sheet at.
    */
-  const [choicesOpen, setChoicesOpen] = createSignal(false)
   const [choiceStart, setChoiceStart] = createSignal<string>()
   const [decisionsOpen, setDecisionsOpen] = createSignal(false)
   const decisionsWaiting = createMemo(
@@ -1779,13 +1792,6 @@ export function Workbench() {
           (decision) => decision.status === "risposta" && decisionsHub.delivery(decision).state === "in coda",
         ).length ?? 0,
   )
-  // Lines thrown away and events refused: the button shows them too, so a wrong line never passes unseen.
-  const decisionsDiscarded = createMemo(
-    () => (decisionsRegister.loaded()?.problems.length ?? 0) + (decisionsRegister.state()?.rejected.length ?? 0),
-  )
-  const designDiscarded = createMemo(
-    () => (designRegister.loaded()?.problems.length ?? 0) + (designRegister.state()?.rejected.length ?? 0),
-  )
   const designQueued = createMemo(
     () =>
       designRegister
@@ -1796,25 +1802,57 @@ export function Workbench() {
             designHub.delivery(proposal).state === "in coda",
         ).length ?? 0,
   )
-  // An answer on its way to the pane that asked is queued for half a second: not «0» on the button (`createSettled`).
-  const settledQueued = createSettled(() => decisionsQueued() + designQueued())
-  const choicesCounts = createMemo(() => ({
-    ...choiceCounts(
-      { waiting: decisionsWaiting(), queued: decisionsQueued(), discarded: decisionsDiscarded() },
-      { waiting: designWaiting(), queued: designQueued(), discarded: designDiscarded() },
-    ),
-    queued: settledQueued(),
-  }))
-  // Not a memo: it reads the panes (`mailPanes`), defined further down, and a memo runs at once.
-  const choices = () =>
-    choiceItems(decisionsRegister.state()?.decisions ?? [], designRegister.state()?.proposals ?? [], paneNames())
-  /** An entry of «Da scegliere» opens its own window, at that entry. */
-  const pickChoice = (item: ChoiceItem) => {
-    setChoicesOpen(false)
-    setChoiceStart(item.k)
-    if (item.kind === "decision") setDecisionsOpen(true)
-    else setDesignOpen(true)
-  }
+  const settledDecisionsQueued = createSettled(() => decisionsQueued())
+  const settledDesignQueued = createSettled(() => designQueued())
+
+  const [decisionsAttention, setDecisionsAttention] = createSignal(false)
+  const [designAttention, setDesignAttention] = createSignal(false)
+
+  const decisionsTracker = createOpenKeyTracker<{ k: string; title: string }>()
+  const designTracker = createOpenKeyTracker<{ k: string; title: string }>()
+
+  createEffect(() => {
+    const path = decisionsRegister.loadedPath()
+    if (!path) {
+      decisionsTracker.reset()
+      return
+    }
+    const openItems = (decisionsRegister.state()?.decisions ?? []).filter((d) => d.status === "aperta")
+    const fresh = decisionsTracker.update(path, openItems)
+    if (fresh.length > 0) {
+      setDecisionsAttention(true)
+      for (const item of fresh) {
+        toast.show(t("decisions.notice.toTake", item.title))
+      }
+    } else if (openItems.length === 0) {
+      setDecisionsAttention(false)
+    }
+  })
+
+  createEffect(() => {
+    const path = designRegister.loadedPath()
+    if (!path) {
+      designTracker.reset()
+      return
+    }
+    const openItems = (designRegister.state()?.proposals ?? []).filter((p) => p.status === "aperta")
+    const fresh = designTracker.update(path, openItems)
+    if (fresh.length > 0) {
+      setDesignAttention(true)
+      for (const item of fresh) {
+        toast.show(t("design.notice.toChoose", item.title))
+      }
+    } else if (openItems.length === 0) {
+      setDesignAttention(false)
+    }
+  })
+
+  createEffect(() => {
+    if (decisionsOpen()) setDecisionsAttention(false)
+  })
+  createEffect(() => {
+    if (designOpen()) setDesignAttention(false)
+  })
 
   onMount(() => {
     // One pass and one listing of `.ade/` for both registers (P1-C2c).
@@ -1847,7 +1885,7 @@ export function Workbench() {
     setWb((w) => ({
       ...addPane(w, {
         id: newPaneId("des"),
-        title: "Design",
+        title: t("design.title"),
         status: "working",
         model: "—",
         mode: "design",
@@ -1885,32 +1923,30 @@ export function Workbench() {
   }
 
   /**
-   * Opens the panel of an installed plugin, or takes the user to the one already open: one per plugin, in the project it was opened in.
-   * The plugin is not looked at here: the panel does that when it opens, and shows its placeholder if the plugin is not there.
+   * Opens the «Impara» panel, or takes the user to the one already open.
+   *
+   * There is one, and it belongs to nobody: the lessons are the user's, not a project's, and the progress is a file of the app's local
+   * data (`learn.rs`). Asking for the panel twice therefore focuses it rather than opening a second copy of the same lessons.
    */
-  const openFramePluginPane = async (pluginId: string, title?: string) => {
-    const opening = framePluginOpening(wb().panes, pluginId, project()?.root, pathEquals)
-    if (opening.kind === "focus") {
-      if (opening.switchTo) await switchProjectTo(opening.switchTo)
-      setStarting(false)
-      setWb((w) => ({ ...w, view: "code", focusedId: opening.id }))
+  const openLearnPane = () => {
+    const existing = wb().panes.find((pane) => pane.mode === "learn")
+    if (existing) {
+      setWb((w) => ({ ...w, view: "code", focusedId: existing.id }))
       return
     }
     setWb((w) => ({
       ...addPane(w, {
-        id: newPaneId("fp"),
-        title: title ?? pluginId,
+        id: newPaneId("lp"),
+        title: t("newPane.learn"),
         status: "working",
         model: "—",
-        mode: "plugin-frame",
-        framePlugin: { id: pluginId },
+        mode: "learn",
         ...here(),
         lines: [],
       }),
       view: "code",
     }))
   }
-
   /** Opens the Decisions panel, or focuses the one already open. */
   const openDecisionsPane = () => {
     const existing = wb().panes.find((pane) => pane.mode === "decisions")
@@ -1921,7 +1957,7 @@ export function Workbench() {
     setWb((w) => ({
       ...addPane(w, {
         id: newPaneId("d"),
-        title: "Decisioni",
+        title: t("decisions.title"),
         status: "working",
         model: "—",
         mode: "decisions",
@@ -1930,6 +1966,73 @@ export function Workbench() {
       }),
       view: "code",
     }))
+  }
+
+  const handleOpenDecisions = () => {
+    setDecisionsAttention(false)
+    if (decisionsOpen()) {
+      setDecisionsOpen(false)
+      return
+    }
+    const first = decisionsRegister.state()?.decisions.find((d) => d.status === "aperta")
+    if (first) {
+      setChoiceStart(first.k)
+      setDecisionsOpen(true)
+    } else {
+      openDecisionsPane()
+    }
+  }
+
+  const handleOpenDesign = () => {
+    setDesignAttention(false)
+    if (designOpen()) {
+      setDesignOpen(false)
+      return
+    }
+    const first = designRegister.state()?.proposals.find((p) => p.status === "aperta")
+    if (first) {
+      setChoiceStart(first.k)
+      setDesignOpen(true)
+    } else {
+      openDesignPane()
+    }
+  }
+
+  const queueItems = createMemo<PillTabItem[]>(() => {
+    const decWaiting = decisionsWaiting()
+    const decQueued = settledDecisionsQueued()
+    const desWaiting = designWaiting()
+    const desQueued = settledDesignQueued()
+
+    return [
+      {
+        id: "decisions",
+        family: "decisions",
+        label: t("decisions.title"),
+        shortLabel: t("decisions.shortTitle"),
+        badge: decWaiting > 0 ? decWaiting : undefined,
+        attention: decisionsAttention(),
+        active: decisionsOpen() || wb().panes.some((p) => p.mode === "decisions"),
+        title: queueItemLabel("decisions", decWaiting, decQueued),
+        ariaLabel: queueItemLabel("decisions", decWaiting, decQueued),
+      },
+      {
+        id: "design",
+        family: "design",
+        label: t("design.title"),
+        shortLabel: t("design.shortTitle"),
+        badge: desWaiting > 0 ? desWaiting : undefined,
+        attention: designAttention(),
+        active: designOpen() || wb().panes.some((p) => p.mode === "design"),
+        title: queueItemLabel("design", desWaiting, desQueued),
+        ariaLabel: queueItemLabel("design", desWaiting, desQueued),
+      },
+    ]
+  })
+
+  const onSelectQueue = (id: string) => {
+    if (id === "decisions") handleOpenDecisions()
+    else if (id === "design") handleOpenDesign()
   }
 
   /**
@@ -1943,10 +2046,13 @@ export function Workbench() {
   const captureFrame = async (name: string, png: Uint8Array): Promise<string> => {
     const host = await getHost()
     const root = project()?.root
-    if (!host?.writeBytes || !root) throw new Error("nessun progetto aperto in cui salvare")
+    if (!host?.writeBytes || !root) throw new Error(t("workbench.error.noOpenProject"))
     const path = `${root.replace(/[/\\]+$/, "")}/.ade/frames/${name}`
     const failure = await host.writeBytes(path, png)
     if (failure) throw new Error(failure)
+    // `.ade/` is only ignored by git once a spawn or `memory` has said so: a frame captured first would show in `git status`
+    // (full review 2026-10-06, sessions 15).
+    await excludeAdeResults(host, root).catch(() => {})
     return path
   }
 
@@ -3086,7 +3192,7 @@ export function Workbench() {
     const branch = result && result.code === 0 ? result.stdout.trim() : ""
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
     if (!pane || !branch || branch === "HEAD" || pane.tree?.branch === branch) return
-    setWb((w) => updatePane(w, paneId, { tree: { branch, fidelity: "full", note: `Lavora in ${cwd}` } }))
+    setWb((w) => updatePane(w, paneId, { tree: { branch, fidelity: "full", note: t("pane.tree.workingIn", cwd) } }))
   }
 
   /** When each pane was last set working, so an older idle from its hook does not end the new turn. */
@@ -3261,7 +3367,7 @@ export function Workbench() {
     }
     if (blocked.size > 0 && !force) {
       return {
-        error: `non chiudo: ${[...blocked.values()].join("; ")}. Integra o committa prima, oppure usa --force (la worktree resta su disco)`,
+        error: t("session.cannotClose", [...blocked.values()].join("; ")),
       }
     }
     const closed: string[] = []
@@ -4260,7 +4366,17 @@ export function Workbench() {
         return true
       }
       const pane = wb().panes.find((candidate) => candidate.id === target.pane.id)
-      session.write(interruptKeys(pane?.agent ?? pane?.model))
+      const plan = interruptPlan(pane?.agent ?? pane?.model)
+      if ("refusal" in plan) {
+        await answer(plan.refusal)
+        return true
+      }
+      for (const [index, keys] of plan.keys.entries()) {
+        if (index > 0) await new Promise((resolve) => setTimeout(resolve, INTERRUPT_GAP_MS))
+        // The session may have gone while the gap ran: nothing is written to a closed one.
+        if (running.get(target.pane.id) !== session) break
+        session.write(keys)
+      }
       interrupted(target.pane.id)
       // The TUI drops whatever was in the line with the work: so does the count.
       records.typed.forget(target.pane.id)
@@ -4312,7 +4428,7 @@ export function Workbench() {
       const old = running.get(pane.id)
       running.delete(pane.id)
       touchRunning()
-      old?.kill()
+      void closeSuspendedTree(old)
       setWb((w) => updatePane(w, pane.id, { spawnArgs, ...(message.fresh ? { resumeId: undefined } : {}) }))
       if (message.fresh) {
         for (const request of [...openRequests.values()]) {
@@ -4646,10 +4762,6 @@ export function Workbench() {
       },
       // A window nobody is looking at does not poll: see `watch.ts`.
       isVisible: () => typeof document === "undefined" || document.visibilityState === "visible",
-      // The plugins in a frame look at their own index on the same schedule, but only when one is installed: ADE with none never loads this.
-      onChecked: () => {
-        if (anyFramePlugin()) void import("../plugin-frame/update-runner").then((runner) => runner.runPluginUpdates(getHost))
-      },
       /*
        * Coming back to ADE is the moment to look: the release may have been
        * published while the window sat behind something else. `focus` and
@@ -4687,7 +4799,6 @@ export function Workbench() {
     }
     setCheckingUpdate(true)
     try {
-      if (anyFramePlugin()) void import("../plugin-frame/update-runner").then((runner) => runner.runPluginUpdates(getHost, { force: true }))
       const result = await updateWatch.check({ force: true })
       /*
        * The release already has its line in the bell. Repeating it would be
@@ -4951,7 +5062,6 @@ export function Workbench() {
   }
   /** One of the sheets on `Sheet` is open: modal, with a focus trap (see `waitsForSheet`). */
   const sheetOpen = () =>
-    choicesOpen() ||
     decisionsOpen() ||
     designOpen() ||
     voiceSettingsOpen() ||
@@ -5092,7 +5202,7 @@ export function Workbench() {
     // Dictated text goes into the line and is not submitted: it counts as typed.
     getRunningSession: (id) => {
       const session = running.get(id)
-      return session && { write: (text: string) => typeAsUser(id, text), kill: () => session.kill() }
+      return session && { write: (text: string) => typeAsUser(id, text), kill: () => void closeSuspendedTree(session) }
     },
     openFile: (path) => openFile(path),
     appendLine: (id, text, kind) => appendLine(id, text, kind),
@@ -5608,7 +5718,7 @@ export function Workbench() {
     // The key is not the panel's to change: it is the keychain's, whatever `next` says.
     const saved = { ...stored, settings: withVoiceKey(stored.settings) }
     setVoiceSettings(saved.settings)
-    const nextVoice = activeReplyVoice(saved.settings.replyVoice, locale())
+    const nextVoice = activeReplyVoice(localReplyVoice(saved.settings), locale())
     if (nextVoice !== previousVoice) {
       setVoiceFailure(undefined)
       setVoiceInstalled(nextVoice === "system")
@@ -5838,7 +5948,7 @@ export function Workbench() {
   const pluginIO: DiscoveryIO = {
     async readTextFile(path, maxBytes) {
       const host = await getHost()
-      if (!host?.readTextFile) throw new Error("nessun host desktop")
+      if (!host?.readTextFile) throw new Error(t("plugins.error.noDesktopHost"))
       return host.readTextFile(path, maxBytes)
     },
     async exists(path) {
@@ -6001,7 +6111,7 @@ export function Workbench() {
       setRecents(newRecents)
       localStorage.setItem("ade.recents", serializeRecents(newRecents))
 
-      setWb((w) => ({ ...w, projectPath: p.root }))
+      setWb((w) => ({ ...w, projectPath: p.root, focusedId: focusInProject(w, p) }))
 
       /*
        * Restarting what was running when the app went away.
@@ -6222,6 +6332,16 @@ export function Workbench() {
       void import("@tauri-apps/api/event").then(({ listen }) => {
         listen<{ requestId?: number }>("ade-window-close-requested", async (event) => {
           const requestId = event.payload?.requestId
+          /*
+           * Acknowledged before anything else, even when a question is already open: Rust asks the same question
+           * again when a click finds it acknowledged and unanswered, and the page answering the ack in a few ms is
+           * what disarms that timer. Behind the guard below the second ask went unanswered and closed the window
+           * with the agents at work (Architect's review of F6a, O1).
+           */
+          try {
+            const { invoke } = await import("@tauri-apps/api/core")
+            await invoke("ade_close_ack", { requestId })
+          } catch {}
           if (isHandlingClose) return
           isHandlingClose = true
           const closeForGood = () =>
@@ -6239,13 +6359,6 @@ export function Workbench() {
             })
 
           try {
-            // Acknowledge receipt to Rust to disarm the safety timeout while
-            // prompting the user, or while the workbench reaches the disk.
-            try {
-              const { invoke } = await import("@tauri-apps/api/core")
-              await invoke("ade_close_ack", { requestId })
-            } catch {}
-
             const working = countWorkingSessions(wb().panes, running)
             if (!shouldConfirmWindowClose({ working })) {
               closingConfirmed = true
@@ -6443,6 +6556,9 @@ export function Workbench() {
 
   // Commands
   // Behind an open sheet, what opens something to type into would open it under the sheet's focus trap.
+  /** The focused pane, when it is one of the open project's: what close, suspend and kill act on. */
+  const focusedHere = () => focusedInOpenProject(wb(), project())
+
   const runCommand = guardedBySheet(sheetOpen, async (id: string) => {
     // Returns, because the last line of this function closes the palette.
     // See `keepsPaletteOpen` for why that is not a detail.
@@ -6489,7 +6605,7 @@ export function Workbench() {
         if (p) {
           setProject(p)
           // The panes of the project being left stay: their sessions keep running, and keep talking to the others.
-          setWb((w) => ({ ...w, projectPath: p.root, expandedId: undefined }))
+          setWb((w) => ({ ...w, projectPath: p.root, expandedId: undefined, focusedId: focusInProject(w, p) }))
           const newRecents = addRecent(recents(), { root: p.root, name: p.name })
           setRecents(newRecents)
           localStorage.setItem("ade.recents", serializeRecents(newRecents))
@@ -6497,7 +6613,8 @@ export function Workbench() {
       }
     } else if (id === "pane.close") {
       // A shortcut or the palette: an agent at work is ended only on a yes (ALTO 6).
-      if (wb().focusedId) closer.close(wb().focusedId!, { confirmRunning: true })
+      const target = focusedHere()
+      if (target) closer.close(target, { confirmRunning: true })
     } else if (id === "pane.expand") {
       if (wb().focusedId) setWb((w) => expandPane(w, w.focusedId!))
     } else if (id === "pane.rename") {
@@ -6541,15 +6658,18 @@ export function Workbench() {
       )
     } else if (id === "update.check") {
       void checkForUpdates()
-    } else if (id === "decisions.open" || id === "design.open") {
-      // Both open the one list; the voice's «apri le decisioni» comes here too.
-      setChoicesOpen(true)
+    } else if (id === "decisions.open") {
+      handleOpenDecisions()
+    } else if (id === "design.open") {
+      handleOpenDesign()
     } else if (id === "decisions.pane") {
       openDecisionsPane()
     } else if (id === "design.pane") {
       openDesignPane()
     } else if (id === "nikverse.pane") {
       void openNikversePane()
+    } else if (id === "learn.pane") {
+      openLearnPane()
     } else if (id === "model.new") {
       // Opened empty, like the video panel; a model file clicked in the tree opens it directly.
       openModel("")
@@ -6562,7 +6682,7 @@ export function Workbench() {
       setWb((w) =>
         addPane(w, {
           id: newPaneId("a"),
-          title: "Simulatore",
+          title: t("pane.simulator.title"),
           status: "working",
           model: "—",
           mode: "app",
@@ -6576,7 +6696,7 @@ export function Workbench() {
       setWb((w) =>
         addPane(w, {
           id: newId,
-          title: "Browser",
+          title: t("newPane.browser"),
           status: "working",
           model: "—",
           mode: "browser",
@@ -6598,18 +6718,20 @@ export function Workbench() {
         }),
       )
     } else if (id === "session.suspend") {
-      if (wb().focusedId) void suspendSession(wb().focusedId!)
+      const target = focusedHere()
+      if (target) void suspendSession(target)
     } else if (id === "process.kill") {
-      if (wb().focusedId && isRunning(wb().focusedId!)) {
-        running.get(wb().focusedId!)?.kill()
-        running.delete(wb().focusedId!)
+      const target = focusedHere()
+      if (target && isRunning(target)) {
+        void closeSuspendedTree(running.get(target))
+        running.delete(target)
         touchRunning()
         setWb((w) =>
-          updatePane(w, w.focusedId!, {
+          updatePane(w, target, {
             status: "error",
             activity: "killed",
             lines: [
-              ...(w.panes.find((p) => p.id === w.focusedId)?.lines || []),
+              ...(w.panes.find((p) => p.id === target)?.lines || []),
               { kind: "note", text: t("pane.killed") },
             ],
           }),
@@ -6679,7 +6801,7 @@ export function Workbench() {
       if (host && !(await refuseMissingRoot(host, root))) {
         const p = await discoverProject(host, root)
         setProject(p)
-        setWb((w) => ({ ...w, projectPath: p.root, expandedId: undefined }))
+        setWb((w) => ({ ...w, projectPath: p.root, expandedId: undefined, focusedId: focusInProject(w, p) }))
         const newRecents = addRecent(recents(), { root: p.root, name: p.name })
         setRecents(newRecents)
         localStorage.setItem("ade.recents", serializeRecents(newRecents))
@@ -6870,7 +6992,7 @@ export function Workbench() {
     setProject(picked)
     // Same reason as switchProject: an expansion made in another project
     // narrows this one's grid to nothing.
-    setWb((w) => ({ ...w, projectPath: picked.root, expandedId: undefined }))
+    setWb((w) => ({ ...w, projectPath: picked.root, expandedId: undefined, focusedId: focusInProject(w, picked) }))
     setStarting(false)
   }
 
@@ -6901,7 +7023,7 @@ export function Workbench() {
      * screen however many sessions it had running, with no visible control to
      * get out of an expansion the user could not see.
      */
-    setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined }))
+    setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined, focusedId: focusInProject(w, opened) }))
     setStarting(false)
   }
 
@@ -7058,7 +7180,7 @@ export function Workbench() {
   const closeNow = (id: string) => {
     const closing = wb().panes.find((candidate) => candidate.id === id)
     if (closing?.worktree) giveBackWorktree(closing, closing.worktree)
-    running.get(id)?.kill()
+    void closeSuspendedTree(running.get(id))
     running.delete(id)
     touchRunning()
     // A question the voice is asking about this pane has nobody left to answer it.
@@ -7104,53 +7226,27 @@ export function Workbench() {
   }
 
   /*
-   * The project's file list, walked once and kept.
-   *
-   * Walking a repository costs seconds; doing it on every keystroke would make
-   * the search box unusable on exactly the projects where search matters. The
-   * list is read on the first query and reused until the project changes —
-   * or until it is old enough that files created since would be missing. A
-   * stale list still answers at once; the fresh one replaces it for the next
-   * keystroke.
+   * The project's file list, walked once and kept (`createProjectWalk` says how, and why a walk of the previous project
+   * does not answer for this one).
    */
-  type Walked = { root: string; at: number; entries: { path: string; kind: "file" | "directory" }[] }
-  const WALK_FRESH_MS = 30_000
-  let walked: Walked | undefined
-  let walkingPromise: Promise<Walked> | undefined
+  const walkedEntries = createProjectWalk({
+    walk: async (root) => {
+      const host = await getHost()
+      if (!host) return []
+      const result = await walkProject({ host, root })
+      return [
+        ...(result.dirs ?? []).map((path) => ({ path, kind: "directory" as const })),
+        ...result.files.map((path) => ({ path, kind: "file" as const })),
+      ]
+    },
+  })
 
   const searchProjectFiles = async (query: string, kinds: ReadonlySet<"file" | "directory">) => {
     const host = await getHost()
     const current = project()
     if (!host || !current) return []
-
-    const sameRoot = walked?.root === current.root
-    if (!sameRoot || Date.now() - walked!.at > WALK_FRESH_MS) {
-      if (!walkingPromise) {
-        walkingPromise = walkProject({ host, root: current.root })
-          .then((result) => {
-            const entry: Walked = {
-              root: current.root,
-              at: Date.now(),
-              entries: [
-                ...(result.dirs ?? []).map((path) => ({ path, kind: "directory" as const })),
-                ...result.files.map((path) => ({ path, kind: "file" as const })),
-              ],
-            }
-            walked = entry
-            walkingPromise = undefined
-            return entry
-          })
-          .catch((err) => {
-            walkingPromise = undefined
-            throw err
-          })
-      }
-      // Only a different project has to wait; a merely old list answers now.
-      if (!sameRoot) await walkingPromise
-    }
-
-    if (!walked) return []
-    return searchPaths(walked.entries, query, { root: current.root, kinds, limit: 200 })
+    const entries = await walkedEntries(current.root)
+    return searchPaths([...entries], query, { root: current.root, kinds, limit: 200 })
   }
 
   /*
@@ -7291,7 +7387,7 @@ export function Workbench() {
           report(t("editor.saveCancelled.unreadable", String(unreadable)), "warning")
           return
         }
-      } else if (onDisk && !onDisk.truncated && onDisk.text !== buffer.saved) {
+      } else if (onDisk && !onDisk.truncated && toLf(onDisk.text) !== buffer.saved) {
         const overwrite = await askYesNo(t("editor.saveChanged", buffer.path))
         if (!overwrite) {
           report(t("editor.saveCancelled.changed"), "warning")
@@ -7304,7 +7400,8 @@ export function Workbench() {
     // as written are the same string.
     const written = buffer.draft
 
-    const error = await host.writeTextFile(buffer.path, written)
+    // The file keeps the line ending it had: the editor holds LF, the disk gets CRLF back.
+    const error = await host.writeTextFile(buffer.path, withEol(written, buffer.eol))
     if (error) {
       report(t("editor.saveFailed", String(error)))
       return
@@ -7444,10 +7541,10 @@ export function Workbench() {
     questionSeenAt.set(paneId, Date.now())
     setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
     if (voiceEngine.isRunning()) {
-      void voiceEngine.handlePermissionRequest(paneId, request.what, { kind: request.kind })
+      void voiceEngine.handlePermissionRequest(paneId, permissionIdentity(request), { kind: request.kind })
     } else {
       const pane = wb().panes.find((p) => p.id === paneId)
-      proactiveAlerts.notifyPermission(paneId, pane?.title ?? paneId, request.what, request.kind)
+      proactiveAlerts.notifyPermission(paneId, pane?.title ?? paneId, permissionIdentity(request), request.kind)
     }
   }
 
@@ -7466,7 +7563,7 @@ export function Workbench() {
      * answered, the agent was still waiting.
      */
     session.write(asSubmittedLine(answer.send))
-    appendLine(paneId, `> ${answer.label}`, "shell")
+    appendLine(paneId, `> ${answerLabel(answer)}`, "shell")
 
     /*
      * The request is not cleared here.
@@ -7524,7 +7621,8 @@ export function Workbench() {
     if (!resumeId || !root || !host?.homeDir || !host.exists) return false
     const home = await host.homeDir().catch(() => "")
     const path = home ? RESUME[agentId]?.transcript?.(home, root, resumeId) : undefined
-    if (path) return !(await host.exists(path))
+    // A check that fails says nothing: the conversation is taken as there.
+    if (path) return !(await host.exists(path).catch(() => true))
     // No file to look for (nikcli): the CLI is asked. No answer in time, and the id is reopened as before.
     const exists = RESUME[agentId]?.exists
     const command = agentById(agentId)?.command
@@ -8371,6 +8469,10 @@ export function Workbench() {
     appendLine(paneId, `ssh ${args.join(" ")}`, "shell")
 
     let tail = ""
+    // What the shell printed since the last step was typed: where «command not found» would show.
+    let sinceStep = ""
+    // The shell's prompt as it was when the agent was typed: the shell coming back to it means the agent is not running.
+    let promptBefore = ""
     let spawned: SpawnedSession | undefined
     // The host refused to start it: said by `onRefused`, then the exit that follows.
     let refused = false
@@ -8387,6 +8489,8 @@ export function Workbench() {
           lastOutputAt.set(paneId, Date.now())
           noteBracketedPaste(paneId, chunk)
           tail = (tail + stripAnsi(chunk)).slice(-400)
+          // Whole, up to a generous cap: a PowerShell 5.1 error is 400+ characters, and what says it comes first.
+          sinceStep = (sinceStep + stripAnsi(chunk)).slice(-8000)
           feedTerminal(paneId, chunk)
         },
         onLine: (line, stream) => appendLine(paneId, line, stream === "err" ? "note" : "step"),
@@ -8439,8 +8543,17 @@ export function Workbench() {
           setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
           return
         }
+        // The agent was typed and the shell answered that it has none: the task is not a command for this shell.
+        if (!shellOnly && index === 1 && (agentMissing(sinceStep, command) || shellReturned(sinceStep, promptBefore))) {
+          stopOpeningPoll(poll)
+          tellPane(paneId, t("task.agentMissing", command))
+          setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
+          return
+        }
         const text = steps[index]!
+        if (!shellOnly && index === 0) promptBefore = lastLineOf(tail)
         index += 1
+        sinceStep = ""
         void typeLine(session, text)
         setWb((w) =>
           updatePane(w, paneId, { activity: index < steps.length || !task.trim() ? "connected" : "running" }),
@@ -8468,7 +8581,7 @@ export function Workbench() {
     setRecents(newRecents)
     localStorage.setItem("ade.recents", serializeRecents(newRecents))
     setProject(opened)
-    setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined }))
+    setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined, focusedId: focusInProject(w, opened) }))
     setRemoteOpen(false)
     if (!wb().panes.some((pane) => belongsTo(pane, opened))) {
       addAgent(
@@ -8531,29 +8644,34 @@ export function Workbench() {
         ? undefined
         : open
     setWb((w) =>
-      addPane(w, {
-        id,
-        title,
-        // If there is an initial task, provisioning begins; otherwise idle ("disponibile")
-        status: hasInitialTask ? "provisioning" : "idle",
-        activity: hasInitialTask ? "starting" : "ready",
-        model: entry.agentId,
-        agent: entry.agentId,
-        mode: input.preset ?? "custom",
-        task,
-        lines: [{ kind: "note", text: task || t("task.none") }],
-        workspaceId: input.workspaceId || currentProj?.name || "workspace",
-        ...((input.projectRoot ?? currentProj?.root) ? { projectRoot: input.projectRoot ?? currentProj!.root } : {}),
-        cwd: input.worktree?.path ?? currentProj?.root,
-        tree: input.worktree
-          ? { branch: input.worktree.branch, fidelity: "full", note: `Worktree ${input.worktree.path}` }
-          : currentProj?.branch
-            ? { branch: currentProj.branch, fidelity: "project" }
-            : undefined,
-        ...(input.worktree ? { worktree: input.worktree.path } : {}),
-        ...(input.spawnArgs?.length ? { spawnArgs: input.spawnArgs } : {}),
-        ...(input.fork?.resumeId ? { resumeId: input.fork.resumeId } : {}),
-      }),
+      addPane(
+        w,
+        {
+          id,
+          title,
+          // If there is an initial task, provisioning begins; otherwise idle ("disponibile")
+          status: hasInitialTask ? "provisioning" : "idle",
+          activity: hasInitialTask ? "starting" : "ready",
+          model: entry.agentId,
+          agent: entry.agentId,
+          mode: input.preset ?? "custom",
+          task,
+          lines: [{ kind: "note", text: task || t("task.none") }],
+          workspaceId: input.workspaceId || currentProj?.name || "workspace",
+          ...((input.projectRoot ?? currentProj?.root) ? { projectRoot: input.projectRoot ?? currentProj!.root } : {}),
+          cwd: input.worktree?.path ?? currentProj?.root,
+          tree: input.worktree
+            ? { branch: input.worktree.branch, fidelity: "full", note: t("pane.tree.worktree", input.worktree.path) }
+            : currentProj?.branch
+              ? { branch: currentProj.branch, fidelity: "project" }
+              : undefined,
+          ...(input.worktree ? { worktree: input.worktree.path } : {}),
+          ...(input.spawnArgs?.length ? { spawnArgs: input.spawnArgs } : {}),
+          ...(input.fork?.resumeId ? { resumeId: input.fork.resumeId } : {}),
+        },
+        // The open project, so a session named for another one does not take the focus unseen.
+        open,
+      ),
     )
     setStarting(false)
     // A fork opens as a resumed conversation, and the task is typed into it all the same.
@@ -8640,7 +8758,7 @@ export function Workbench() {
     setWb((w) =>
       addPane(w, {
         id,
-        title: `${runner.label} · accesso`,
+        title: t("pane.runnerLogin", runner.label),
         status: "idle",
         activity: "ready",
         model: runner.command,
@@ -8674,7 +8792,7 @@ export function Workbench() {
     setWb((w) => ({
       ...addPane(w, {
         id: newPaneId("b"),
-        title: "Guida MCP",
+        title: t("pane.mcpGuide.title"),
         status: "working",
         model: "—",
         mode: "browser",
@@ -8721,44 +8839,12 @@ export function Workbench() {
         hasActions: Boolean(records.permissions()[pane.id]),
         quota: quotaForAgent(pane.agent ?? pane.model, quotas.snapshot(), quotas.now()),
       }),
-      decisions: choicesCounts().waiting,
+      decisions: decisionsWaiting() + designWaiting(),
       now: Date.now(),
       ...(previous ? { previous } : {}),
       slots: worldSlots,
     })
   })
-
-  /*
-   * What the plugins in a frame are shown of ADE is made from this, by each panel with its own salt (`plugin-frame/bridge.ts`). Held only
-   * while a plugin panel exists, so the quota store is not kept for nobody; read inside an effect it subscribes to what changed.
-   */
-  let pluginQuota: ReturnType<typeof useSharedQuota> | undefined
-  const framePluginOpen = createMemo(() => wb().panes.some((pane) => Boolean(pane.framePlugin)))
-  createEffect(() => {
-    if (framePluginOpen()) return
-    pluginQuota?.release()
-    pluginQuota = undefined
-  })
-  onCleanup(() => pluginQuota?.release())
-  const framePluginInput = (): FramePaneInput | undefined => {
-    const panes = wb().panes
-    if (!framePluginOpen()) return undefined
-    pluginQuota ??= useSharedQuota()
-    const quotas = pluginQuota.store
-    const open = project()
-    return {
-      panes,
-      ...(open ? { open: { name: open.name, root: open.root } } : {}),
-      facts: (pane) => ({
-        activity: records.reports()[pane.id]?.activity,
-        exited: !isRunning(pane.id),
-        hasActions: Boolean(records.permissions()[pane.id]),
-        quota: quotaForAgent(pane.agent ?? pane.model, quotas.snapshot(), quotas.now()),
-      }),
-      decisions: choicesCounts().waiting,
-      now: Date.now(),
-    }
-  }
 
   /** A project's folder, from the id the world knows its shop by: the world never sees a path. */
   const rootOfShop = (id: string): string | undefined => {
@@ -8794,7 +8880,7 @@ export function Workbench() {
     pickModel,
     readBytes: (path, maxBytes) =>
       getHost().then((host) => {
-        if (!host?.readBytes) throw new Error("questo host non può leggere file binari")
+        if (!host?.readBytes) throw new Error(t("host.error.cannotReadBinary"))
         return host.readBytes(path, maxBytes)
       }),
     readDir: (path) => getHost().then((host) => (host?.readDir ? host.readDir(path) : [])),
@@ -8815,23 +8901,14 @@ export function Workbench() {
       ignored: (reason) => console.warn(`[nikverse] ignorato: ${reason}`),
       assets: () => getHost(),
     },
-    framePlugin: {
-      input: framePluginInput,
-      host: getHost,
-      // The same way NikVerse takes the user to a session.
-      focusPane: (paneId) => void openSession(paneId),
-      // Read as one of ADE's own bindings, and run by its id only if it is navigation: no key event is made for the plugin.
-      chord: (chord) => {
-        const id = forwardedNavigation(bindings, chord, platform)
-        if (id) {
-          void runCommand(id)
-          return true
-        }
-        return false
-      },
-      ignored: (reason) => console.warn(`[plugin-frame] ignorato: ${reason}`),
-      rolledBack: (name) => setNotices((list) => addNotice(list, { kind: "info", text: t("plugin.rolledBack", name), at: Date.now() })),
-      install: () => openVoiceSettings("extensions/plugins"),
+    learn: {
+      progress: () =>
+        getHost().then((host) =>
+          host?.learnProgressGet && host.learnProgressSet
+            ? { load: host.learnProgressGet, save: host.learnProgressSet }
+            : undefined,
+        ),
+      ignored: (reason) => console.warn(`[impara] ignorato: ${reason}`),
     },
     guessServers,
     confirmOpen,
@@ -8913,22 +8990,16 @@ export function Workbench() {
           {/* A segmented control rather than loose chips: with four sections
             the set is the navigation, and it has to read as one object with
             one selection — not as four independent toggles. */}
-          <div data-slot="ade-views" role="tablist" aria-label={t("bar.sections")}>
-            <For each={VISIBLE_VIEWS}>
-              {(view) => (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={wb().view === view}
-                  data-slot="ade-view-tab"
-                  data-active={wb().view === view ? "true" : undefined}
-                  onClick={() => setWb((w) => ({ ...w, view }))}
-                >
-                  {ADE_VIEW_LABELS[view]}
-                </button>
-              )}
-            </For>
-          </div>
+          <PillTabs
+            role="tab"
+            ariaLabel={t("bar.sections")}
+            items={VISIBLE_VIEWS.map((view) => ({
+              id: view,
+              label: ADE_VIEW_LABELS[view],
+            }))}
+            active={wb().view}
+            onSelect={(id) => setWb((w) => ({ ...w, view: id as AdeView }))}
+          />
           {/* The palette, next to the sections rather than in the middle of the
             bar: it is navigation too — the way to reach what the four tabs do
             not show — and it belongs with the thing it extends. Reduced to its
@@ -8955,18 +9026,15 @@ export function Workbench() {
               <path d="M10.2 10.2L14 14" stroke-linecap="round" />
             </svg>
           </button>
-          {/* Decisions and design proposals waiting for the user: one button
-            for both, «Da scegliere» (notifiche-design; it was one each).
-            Hidden at zero; it opens its list only when pressed. */}
-          <Show when={queueShown(choicesCounts())}>
-            <BarQueueButton
-              family="choices"
-              counts={choicesCounts()}
-              open={choicesOpen() || decisionsOpen() || designOpen()}
-              theme={theme()}
-              onOpen={() => setChoicesOpen(true)}
-            />
-          </Show>
+          {/* Decisions and design proposals: segmented pill buttons (T1).
+            Always visible, with badges for open items (> 0) and queue info in tooltip. */}
+          <PillTabs
+            role="button"
+            dataSlot="ade-pill-tabs"
+            ariaLabel={`${t("decisions.title")} · ${t("design.title")}`}
+            items={queueItems()}
+            onSelect={onSelectQueue}
+          />
         </div>
 
         <div data-slot="ade-bar-side" data-side="end">
@@ -9365,7 +9433,7 @@ export function Workbench() {
                     if (opening) setNotices((list) => markAllRead(list))
                   }}
                   aria-label={
-                    unreadCount(notices()) > 0 ? `Notifiche, ${unreadCount(notices())} da leggere` : "Notifiche"
+                    unreadCount(notices()) > 0 ? t("bell.unread", unreadCount(notices())) : t("bell.title")
                   }
                   title={t("bell.title")}
                 >
@@ -9639,27 +9707,12 @@ export function Workbench() {
         )}
       </Show>
 
-      <Show when={choicesOpen()}>
-        <ChoicesSheet
-          items={choices()}
-          onPick={pickChoice}
-          onClose={() => setChoicesOpen(false)}
-          onOpenPanels={() => {
-            setChoicesOpen(false)
-            openDecisionsPane()
-            openDesignPane()
-          }}
-        />
-      </Show>
-
       <Show when={decisionsOpen()}>
         <DecisionsSheet
           hub={decisionsHub}
           start={choiceStart()}
-          waiting={() => choices().length}
-          onDone={(next, said) => {
+          onDone={(_next, said) => {
             setDecisionsOpen(false)
-            if (next === "list") setChoicesOpen(true)
             if (said) toast.show(said)
           }}
           onClose={() => setDecisionsOpen(false)}
@@ -9674,10 +9727,8 @@ export function Workbench() {
         <DesignSheet
           hub={designHub}
           start={choiceStart()}
-          waiting={() => choices().length}
-          onDone={(next, said) => {
+          onDone={(_next, said) => {
             setDesignOpen(false)
-            if (next === "list") setChoicesOpen(true)
             if (said) toast.show(said)
           }}
           onClose={() => setDesignOpen(false)}
@@ -9770,7 +9821,6 @@ export function Workbench() {
           extensionsIo={extensionsIo}
           pluginRuntime={pluginRuntime}
           openGuide={openGuide}
-          openFramePluginPane={(id) => void openFramePluginPane(id)}
           askYesNo={askYesNo}
           record={{
             quality: recordQuality,
@@ -9882,6 +9932,10 @@ function NewPaneGlyph(props: { kind: NewPaneItem["glyph"] }) {
       </Show>
       <Show when={props.kind === "nikverse"}>
         <path d="M2 14V7l3-2v9M5 14V4l4-2v12M9 14V6l5 2v6M1.5 14h13" stroke-linecap="round" stroke-linejoin="round" />
+      </Show>
+      <Show when={props.kind === "learn"}>
+        <path d="M2 14V7l3-2v9M5 14V4l4-2v12M9 14V6l5 2v6M1.5 14h13" stroke-linecap="round" stroke-linejoin="round" />
+        <path d="M11.5 3.2l.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2L8.6 5.3l2-.3z" stroke-linejoin="round" />
       </Show>
     </svg>
   )

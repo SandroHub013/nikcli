@@ -1,4 +1,4 @@
-import { Show, Suspense, createMemo, lazy } from "solid-js"
+import { Show, createMemo } from "solid-js"
 import { BrowserPane } from "../browser"
 import { FilePane, editBuffer, revertBuffer } from "../editor"
 import { SessionPane } from "../grid/pane"
@@ -10,7 +10,7 @@ import { PluginPane } from "../plugin/pane"
 import type { AdePluginRuntime } from "../plugin/runtime"
 import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
-import type { PermissionAnswer } from "../session/permission"
+import { answerLabel, type PermissionAnswer } from "../session/permission"
 import { typedAfter } from "../session/typed-line"
 import { answersPrompt, isInterruptInput } from "../session/mailbox"
 import { showsSuspendButton, SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
@@ -30,15 +30,10 @@ import { DecisionsPane } from "../decisions/decisions-pane"
 import type { DecisionsHub } from "../decisions/hub"
 import { DesignPane } from "../design/design-pane"
 import { NikversePane } from "../nikverse/nikverse-pane"
+import { LearnPane, type LearnProgressHost } from "../nikverse/learn/learn-pane"
 import type { AssetsHost } from "../nikverse/assets"
 import type { Snapshot } from "../nikverse/protocol"
 import type { ForwardedChord } from "../nikverse/chords"
-import type { Host } from "../host/shell"
-import type { Chord } from "../plugin-frame/api"
-import type { FramePaneInput } from "../plugin-frame/plugin-pane"
-
-/** The panel of a plugin in a frame is loaded when one opens: ADE with none never fetches it. */
-const PluginFramePane = lazy(() => import("../plugin-frame/plugin-pane").then((module) => ({ default: module.PluginFramePane })))
 import type { DesignHub } from "../design/hub"
 import { isPicked } from "../design/answer"
 import type { PanelRouter } from "../panels/router"
@@ -123,18 +118,12 @@ export interface PaneRendererDeps {
     /** The host's commands for NikVerse's assets (fetched the first time the world opens); absent where there is no host. */
     assets: () => Promise<AssetsHost | undefined>
   }
-  /** What a plugin's panel needs from ADE: the workbench it is shown a picture of, and the few things it may ask for. */
-  framePlugin: {
-    input: () => FramePaneInput | undefined
-    host: () => Promise<Host | undefined>
-    focusPane: (paneId: string) => void
-    /** Whether the chord was navigation, and so was run. */
-    chord: (chord: Chord) => boolean
+  /** What the Learn panel needs from ADE: the learner's progress, and the few things it may ask for. */
+  learn: {
+    /** ADE's commands for the progress; absent where there is no host, and then the panel only shows the page. */
+    progress: () => Promise<LearnProgressHost | undefined>
+    /** A message the lesson page sent that ADE ignored, and why. */
     ignored: (reason: string) => void
-    /** A new version did not start and the earlier one is back. */
-    rolledBack: (name: string) => void
-    /** «Installa» on the placeholder. */
-    install: () => void
   }
   /** Writes a captured frame and resolves to where it went. */
   captureFrame: (name: string, png: Uint8Array) => Promise<string>
@@ -411,24 +400,16 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
       />
     )
 
-    const framePluginPane = () => (
-      <PluginFramePane
-        pluginId={current().framePlugin?.id ?? ""}
-        title={current().title}
-        input={deps.framePlugin.input}
-        host={deps.framePlugin.host}
+    const learnPane = () => (
+      <LearnPane
         focused={isFocused()}
-        onFocusPane={deps.framePlugin.focusPane}
-        onChord={deps.framePlugin.chord}
-        onIgnored={deps.framePlugin.ignored}
-        onRolledBack={deps.framePlugin.rolledBack}
-        onInstall={deps.framePlugin.install}
+        progress={deps.learn.progress}
+        onIgnored={deps.learn.ignored}
         onFocus={focus}
         onClose={() => deps.close(current().id)}
         onExpand={expand}
       />
     )
-
     const simulatorPane = () => (
       <SimulatorPane
         id={current().id}
@@ -578,7 +559,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
            */
           permissions()[current().id]
             ? permissions()[current().id].answers.map((answer) => ({
-                label: answer.label,
+                label: answerLabel(answer),
                 tone: answer.tone,
                 onClick: () => deps.answerPermission(current().id, answer),
               }))
@@ -589,7 +570,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                 : restartable()
                   ? [
                       {
-                        label: current().status === "error" ? "Riprova" : "Riprendi",
+                        label: current().status === "error" ? t("pane.retry") : t("pane.resume"),
                         tone: "primary" as const,
                         onClick: () => deps.restart(current()),
                       },
@@ -668,8 +649,8 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                                       <Show
                                         when={current().mode === "nikverse"}
                                         fallback={
-                                          <Show when={current().framePlugin} fallback={sessionPane()}>
-                                            <Suspense>{framePluginPane()}</Suspense>
+                                          <Show when={current().mode === "learn"} fallback={sessionPane()}>
+                                            {learnPane()}
                                           </Show>
                                         }
                                       >

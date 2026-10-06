@@ -86,9 +86,12 @@ describe("the bot form's model list", () => {
     expect(form).toContain("const botModelSource = createModelSource(botModels)")
     expect(form).toContain("onOpen={() => props.catalog?.open()}")
     expect(form).toContain("onRetry={() => props.catalog?.retry()}")
-    expect(form).toContain(
+    // The read itself moved to `bot-models.ts` (bots 2), where a test runs it.
+    const read = readFileSync(join(import.meta.dir, "bot-models.ts"), "utf8")
+    expect(read).toContain(
       "if (configured) return { ok: true, models: modelsFromConfigProviders(configured, options) }",
     )
+    expect(form).toContain("readBotModels(cwd, {")
     expect(form).not.toMatch(/createResource\(\s*\(\) => projectRoot\(\) \?\? "",\s*\(cwd\) => botModels/)
   })
 })

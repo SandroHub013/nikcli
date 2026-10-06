@@ -17,6 +17,7 @@ import { t } from "../i18n"
 import { getHost, type Host, type RunResult } from "../host/shell"
 import type { ProjectFs } from "./project-trust"
 import { joinPath } from "../host/path"
+import { SAFE_EFFORT, SAFE_MODEL } from "./runners"
 import { isLegacyTalkKey, parseTalk, serializeTalk, talkKey, TALK_KEY_PREFIX, type Talk } from "./talk"
 import { createGatewayThreads, type GatewayThreads } from "./gateway/threads"
 import {
@@ -275,7 +276,7 @@ function identifierFromCreated(path: string): string {
   return name.replace(/\.md$/i, "")
 }
 
-async function writeBot(
+export async function writeBot(
   input: CreateBotInput & { home: string; base: string; mode: AgentMode },
   host: Host,
 ): Promise<CreateBotResult> {
@@ -298,14 +299,22 @@ async function writeBot(
    * because two names collapsed to the same identifier is the kind of loss
    * nobody notices until the bot answers differently.
    */
-  if (await host.exists?.(path)) {
-    return { ok: false, problem: `Esiste già un bot con identificativo «${identifier}».` }
+  let there: boolean | undefined
+  try {
+    there = await host.exists?.(path)
+  } catch (error) {
+    // `path_exists` rejects when the check itself fails (a drive that does not answer, access denied). Not «absent»: that
+    // would let the write below go over a file that may be there. Said, so the form does not stay busy for good (review of F7d, O1).
+    return { ok: false, problem: error instanceof Error ? error.message : String(error) }
+  }
+  if (there) {
+    return { ok: false, problem: t("bots.alreadyExists", identifier) }
   }
 
   const failure = await host.writeTextFile(
     path,
     serializeAgentFile({
-      description: input.description || `Bot «${input.name}».`,
+      description: input.description || t("bots.defaultDescription", input.name),
       mode: input.mode,
       ...(input.model ? { model: input.model } : {}),
       ...(input.effort ? { effort: input.effort } : {}),
@@ -378,6 +387,9 @@ export const projectFs: ProjectFs = {
     const host = await getHost()
     if (!host?.readTextFile) throw new Error(t("bots.store.noRead"))
     return host.readTextFile(path)
+  },
+  async home() {
+    return (await getHost())?.homeDir?.()
   },
 }
 
@@ -486,17 +498,19 @@ export function botLaunch(bot: AgentFile): { agentId: string; command: string; a
    * model and effort.
    */
   switch (bot.runner) {
+    // The model and effort of a bot file go on the line only in the shapes a turn allows (`runners.ts`,
+    // B1): `effort` sits inside a TOML string in `-c`, and a quote there wrote a second setting (bots 7).
     case "claude": {
       const args: string[] = []
-      if (bot.model) args.push("--model", bot.model)
-      if (bot.effort) args.push("--effort", bot.effort)
+      if (bot.model && SAFE_MODEL.test(bot.model)) args.push("--model", bot.model)
+      if (bot.effort && SAFE_EFFORT.test(bot.effort)) args.push("--effort", bot.effort)
       if (bot.prompt.trim()) args.push("--append-system-prompt", bot.prompt.trim())
       return { agentId: "claude-code", command: "claude", args }
     }
     case "codex": {
       const args: string[] = []
-      if (bot.model) args.push("-m", bot.model)
-      if (bot.effort) args.push("-c", `model_reasoning_effort="${bot.effort}"`)
+      if (bot.model && SAFE_MODEL.test(bot.model)) args.push("-m", bot.model)
+      if (bot.effort && SAFE_EFFORT.test(bot.effort)) args.push("-c", `model_reasoning_effort="${bot.effort}"`)
       return { agentId: "codex", command: "codex", args }
     }
     default:

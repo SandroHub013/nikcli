@@ -614,7 +614,7 @@ impl Core {
                 }
             }
         }
-        hold(&self.shared.preview).insert(format!("{chat}/{last}"), text.to_string());
+        chunk::remember(&mut hold(&self.shared.preview), format!("{chat}/{last}"), text.to_string());
         Ok(last)
     }
 }
@@ -1052,7 +1052,7 @@ impl Adapter for Discord {
         // on every call would flood the channel as the text grows, once per
         // update. What does not fit goes out once, at the end of the turn, with
         // the sending call.
-        hold(&self.shared.preview).insert(key, text.to_string());
+        chunk::remember(&mut hold(&self.shared.preview), key, text.to_string());
         Ok(message.to_string())
     }
 

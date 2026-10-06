@@ -15,7 +15,7 @@
  * The voice never runs on nikcli (`voice/agent.ts`).
  */
 
-import { joinPath } from "../host/path"
+import { dirname, joinPath, normalizePath } from "../host/path"
 import { t } from "../i18n"
 import type { AgentFile } from "./nikcli"
 import { fileFingerprint, reachesShell, selfApproval, type TrustStore } from "./trust"
@@ -24,6 +24,11 @@ import { fileFingerprint, reachesShell, selfApproval, type TrustStore } from "./
 export interface ProjectFs {
   readDir: (path: string) => Promise<readonly { readonly name: string; readonly is_dir: boolean }[]>
   readText: (path: string) => Promise<{ readonly text: string; readonly truncated: boolean }>
+  /**
+   * The user's home folder, when the host can say: nikcli reads `~/.nikcli` for every project
+   * (it is the user's own), so the climb through the ancestors stops short of it.
+   */
+  home?: () => Promise<string | undefined>
 }
 
 /** One file nikcli would load, by its path under the project. */
@@ -84,17 +89,66 @@ async function readOrMark(fs: ProjectFs, path: string): Promise<string | undefin
 }
 
 /**
- * What nikcli would load from the project at `root`, sorted by path. Empty
- * when the project has no configuration of its own.
+ * The folders above `root` that nikcli also reads, nearest first.
+ *
+ * nikcli looks for `nikcli.json` and `.nikcli/` from the folder it runs in up to the worktree
+ * root: the git root, or outside git the root of the disk (`ConfigPaths.directories`). A
+ * project below the git root, or a folder with no git of its own, so runs what its ancestors
+ * bring, and a clone's `repo/.nikcli/plugin` was never part of the question asked for
+ * `repo/packages/app` (full review 2026-10-06, bots 6). The climb stops at the folder that
+ * holds `.git` (included, as nikcli includes its worktree), and short of the user's home, whose
+ * `.nikcli` is the user's own.
+ */
+async function ancestorFolders(root: string, fs: ProjectFs): Promise<string[]> {
+  const home = normalizePath((await fs.home?.().catch(() => undefined)) ?? "").toLowerCase()
+  const holdsGit = async (directory: string) => {
+    try {
+      return (await fs.readDir(directory)).some((entry) => entry.name === ".git")
+    } catch {
+      return false
+    }
+  }
+  const aboveHome = (directory: string) => {
+    if (!home) return false
+    const folder = normalizePath(directory).toLowerCase()
+    return folder === home || home.startsWith(folder.endsWith("/") ? folder : `${folder}/`)
+  }
+  const found: string[] = []
+  let current = root
+  // The count only bounds a loop that `dirname` ends anyway at the root of the disk.
+  for (let level = 0; level < 64; level++) {
+    if (await holdsGit(current)) break
+    const parent = dirname(current)
+    if (parent === current || parent === "." || aboveHome(parent)) break
+    found.push(parent)
+    current = parent
+  }
+  return found
+}
+
+/**
+ * What nikcli would load from the project at `root`, and from the folders above it that it also
+ * reads, sorted by path (those under `../`). Empty when there is no configuration of its own.
  */
 export async function projectSurface(root: string, fs: ProjectFs): Promise<SurfaceFile[]> {
+  const found = await surfaceAt(root, "", fs)
+  const ancestors = await ancestorFolders(root, fs)
+  for (const [index, folder] of ancestors.entries()) {
+    found.push(...(await surfaceAt(folder, "../".repeat(index + 1), fs)))
+  }
+  return found.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+}
+
+/** One folder's own configuration: its `nikcli.json(c)` and `.nikcli/`, named under `prefix`. */
+async function surfaceAt(folder: string, prefix: string, fs: ProjectFs): Promise<SurfaceFile[]> {
   const found: SurfaceFile[] = []
+  // The root of a disk (`C:/`, `/`) already ends in a slash: `C://.nikcli` is not the folder.
+  const root = normalizePath(folder).replace(/\/+$/, "")
 
   for (const name of ["nikcli.json", "nikcli.jsonc"]) {
-    const text = await readOrMark(fs, joinPath(root, name))
-    if (text !== undefined) found.push({ path: name, text })
+    const text = await readOrMark(fs, `${root}/${name}`)
+    if (text !== undefined) found.push({ path: `${prefix}${name}`, text })
   }
-
   let count = 0
   const walk = async (directory: string, relative: string, depth: number, inAgents: boolean): Promise<void> => {
     let entries: Awaited<ReturnType<ProjectFs["readDir"]>>
@@ -136,9 +190,9 @@ export async function projectSurface(root: string, fs: ProjectFs): Promise<Surfa
       found.push({ path: rel, text: text ?? "<non leggibile>" })
     }
   }
-  await walk(joinPath(root, ".nikcli"), ".nikcli", 0, false)
+  await walk(`${root}/.nikcli`, `${prefix}.nikcli`, 0, false)
 
-  return found.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+  return found
 }
 
 /** One fingerprint for all of it: paths and contents. */

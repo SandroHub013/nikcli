@@ -88,6 +88,8 @@ export function NikversePane(props: {
   const [frameLoad, setFrameLoad] = createSignal(1)
   const handshake = createHandshake({ frameWindow: () => frame?.contentWindow, nonce: () => nonce })
   const [loaded, setLoaded] = createSignal(true)
+  /** The world opens at Bassa because an earlier one was too slow: the panel offers the way back (review of F7d, B4). */
+  const [lowered, setLowered] = createSignal(!tuned() && lowering.lowered())
   /*
    * The frame is held back while the world's files are looked at and fetched: started at once it would load with placeholders and again with the
    * files. Without a host to ask there is nothing to wait for. Once the files are in it starts; if they could not be fetched it starts anyway
@@ -193,6 +195,7 @@ export function NikversePane(props: {
       // Too slow at the level it chose: from now on it opens at Bassa, and the page says so.
       slow: () => {
         lowering.lower()
+        setLowered(!tuned())
         reloadFrame()
       },
     })
@@ -380,6 +383,19 @@ export function NikversePane(props: {
               </button>
             </div>
           )}
+        </Show>
+        <Show when={lowered()}>
+          <button
+            type="button"
+            data-slot="nikverse-lowered-retry"
+            onClick={() => {
+              lowering.clear()
+              setLowered(false)
+              reloadFrame()
+            }}
+          >
+            {t("nikverse.lowered.retry")}
+          </button>
         </Show>
         <Show when={late()}>
           <div data-slot="nikverse-late" role="alert">

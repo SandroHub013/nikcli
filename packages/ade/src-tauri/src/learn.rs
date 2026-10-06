@@ -12,16 +12,24 @@
 //! - **A rename, not a write.** The document goes to `progress.json.part` and is renamed over the old one, so a reader sees the old
 //!   progress or the new one and never half of one, and a write that dies leaves the last good document where it was.
 //! - **The version is ADE's to read.** The file says which shape it is (`{"v": 1, …}`) and the host checks it before writing
-//!   (`src/nikverse/learn/page/learn.js`, `isProgress`), because an older or a newer document is not something to write over.
+//!   (`src/nikverse/learn/link.ts`, `parseProgress`: a file of another version is neither handed to the page nor written over, and
+//!   neither is one that could not be read), because an older or a newer document is not something to write over.
 //!
 //! **It is the user's data.** `learn/` is in the app's local data folder, next to the sessions and the settings, and a normal
 //! uninstall leaves it: `--clean-caches` takes the voices, NikVerse's assets and the plugins' files, never this
 //! (`uninstall.rs`). Only Tauri's own «elimina i dati» takes it, with everything else of the folder.
 
-use crate::plugin_install::main_only;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use tauri::Manager;
+
+fn main_only(label: &str) -> Result<(), String> {
+    if label == "main" {
+        Ok(())
+    } else {
+        Err("comando riservato alla finestra principale".into())
+    }
+}
 
 /// The folder of the learner's own data, under the app's local data.
 pub const PROGRESS_DIR: &str = "learn";
@@ -35,7 +43,7 @@ pub const PROGRESS_PART: &str = "progress.json.part";
 /// The most the document may weigh, in bytes. A progress of a few hundred exercises stays far under it.
 pub const MAX_PROGRESS_BYTES: u64 = 256 * 1024;
 
-/// The shape the document is in. The page refuses to write anything else (`isProgress`).
+/// The shape the document is in. ADE's end of the channel refuses to write anything else (`parseProgress` in `link.ts`).
 pub const PROGRESS_VERSION: i64 = 1;
 
 /// Where the document is, given the app's local data folder.

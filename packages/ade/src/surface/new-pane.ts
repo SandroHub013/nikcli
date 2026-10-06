@@ -21,7 +21,16 @@ export interface NewPaneItem {
   /** One line under the label: what this pane is actually for. */
   readonly hint: string
   /** Drawn by the component; named here so the order and the icon agree. */
-  readonly glyph: "session" | "browser" | "video" | "model" | "app" | "decisions" | "design" | "nikverse"
+  readonly glyph:
+    | "session"
+    | "browser"
+    | "video"
+    | "model"
+    | "app"
+    | "decisions"
+    | "design"
+    | "nikverse"
+    | "learn"
   /** The one the button performs on a plain click, without opening the menu. */
   readonly primary?: true
 }
@@ -110,6 +119,16 @@ export const NEW_PANE_ITEMS: readonly NewPaneItem[] = [
       return t("newPane.nikverse.hint")
     },
     glyph: "nikverse",
+  },
+  {
+    commandId: "learn.pane",
+    get label() {
+      return t("newPane.learn")
+    },
+    get hint() {
+      return t("newPane.learn.hint")
+    },
+    glyph: "learn",
   },
 ]
 

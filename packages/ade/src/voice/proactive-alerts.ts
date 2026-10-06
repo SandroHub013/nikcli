@@ -103,19 +103,18 @@ export function summarizeCompletion(lines: readonly { text: string }[], currentL
 
   for (let i = lines.length - 1; i >= Math.max(0, lines.length - 15); i--) {
     const text = lines[i]?.text ?? ""
-    // Check for pass/green tests
-    const passMatch = text.match(/(\d+)\s*(?:pass(?:ed)?|verdi|superati)/i)
-    if (passMatch) {
-      const count = parseInt(passMatch[1]!, 10)
-      const numStr = (numberNames[loc] ?? numberNames.it)[count] ?? String(count)
-      return translate(loc, "voice.alert.testsPassed", numStr)
-    }
-    // Check for failed tests
+    // Failures first: «5 passed, 2 failed» is a failed run. A zero count (the «0 fail» of a green run) says nothing.
     const failMatch = text.match(/(\d+)\s*(?:fail(?:ed)?|falliti|errori)/i)
-    if (failMatch) {
-      const count = parseInt(failMatch[1]!, 10)
-      const numStr = (numberNames[loc] ?? numberNames.it)[count] ?? String(count)
+    const failCount = failMatch ? parseInt(failMatch[1]!, 10) : 0
+    if (failCount > 0) {
+      const numStr = (numberNames[loc] ?? numberNames.it)[failCount] ?? String(failCount)
       return translate(loc, "voice.alert.testsFailed", numStr)
+    }
+    const passMatch = text.match(/(\d+)\s*(?:pass(?:ed)?|verdi|superati)/i)
+    const passCount = passMatch ? parseInt(passMatch[1]!, 10) : 0
+    if (passCount > 0) {
+      const numStr = (numberNames[loc] ?? numberNames.it)[passCount] ?? String(passCount)
+      return translate(loc, "voice.alert.testsPassed", numStr)
     }
   }
   return undefined

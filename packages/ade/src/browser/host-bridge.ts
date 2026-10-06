@@ -5,6 +5,8 @@
  * tests): the pane then behaves as it did before they existed.
  */
 
+import { t } from "../i18n"
+
 export interface FramingHeaders {
   xFrameOptions?: string | null
   csp?: string | null
@@ -117,7 +119,7 @@ export function forgetMessage(report: ForgetReport): ForgetMessage {
 export async function forgetSite(
   url: string,
 ): Promise<{ report: ForgetReport; error?: undefined } | { error: string; report?: undefined }> {
-  if (!isDesktop()) return { error: "non disponibile fuori dall'app" }
+  if (!isDesktop()) return { error: t("browser.forget.notDesktop") }
   try {
     const { invoke } = await import("@tauri-apps/api/core")
     const report = await invoke<ForgetReport>("ade_forget_site", { url })

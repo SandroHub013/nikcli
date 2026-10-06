@@ -8,6 +8,9 @@ import {
   lineCount,
   positionOf,
   offsetOfLine,
+  eolOf,
+  toLf,
+  withEol,
 } from "./buffer"
 
 describe("editor buffer model", () => {
@@ -181,5 +184,52 @@ describe("offsetOfLine (S76)", () => {
 
   test("past the end is the start of the last line", () => {
     expect(offsetOfLine(text, 99)).toBe(8)
+  })
+})
+
+/*
+ * Full review 2026-10-06, ui 1: a CRLF file became LF on the first edit, because the textarea hands
+ * back LF. The whole file was rewritten and git's diff covered every line.
+ */
+describe("a file with CRLF line ends", () => {
+  const crlf = "one\r\ntwo\r\nthree\r\n"
+  const open = (text: string) => openBuffer({ path: "/a.txt", text, truncated: false })
+
+  test("opens with LF and remembers the line ending", () => {
+    const buf = open(crlf)
+    expect(buf.draft).toBe("one\ntwo\nthree\n")
+    expect(buf.saved).toBe("one\ntwo\nthree\n")
+    expect(buf.eol).toBe("\r\n")
+    expect(buf.dirty).toBe(false)
+  })
+
+  test("the first keystroke is the only change: undoing it is clean again", () => {
+    const buf = open(crlf)
+    const typed = editBuffer(buf, "one!\ntwo\nthree\n")
+    expect(typed.dirty).toBe(true)
+    // The textarea's own value, after the edit is undone: LF, equal to what was opened.
+    expect(editBuffer(typed, buf.draft).dirty).toBe(false)
+  })
+
+  test("what is written has the file's line ending back, so only the edited line differs", () => {
+    const buf = editBuffer(open(crlf), "one!\ntwo\nthree\n")
+    expect(withEol(buf.draft, buf.eol)).toBe("one!\r\ntwo\r\nthree\r\n")
+  })
+
+  test("a LF file stays LF, and a lone CR is read as a line end", () => {
+    const lf = open("a\nb\n")
+    expect(lf.eol).toBe("\n")
+    expect(withEol(lf.draft, lf.eol)).toBe("a\nb\n")
+    expect(open("a\rb").draft).toBe("a\nb")
+  })
+
+  test("a mixed file takes the line ending most of it has", () => {
+    expect(eolOf("a\r\nb\r\nc\n")).toBe("\r\n")
+    expect(eolOf("a\nb\nc\r\n")).toBe("\n")
+    expect(eolOf("no line end")).toBe("\n")
+  })
+
+  test("the disk's text is compared with the saved one in LF", () => {
+    expect(toLf(crlf)).toBe(open(crlf).saved)
   })
 })

@@ -11,7 +11,7 @@
  * only when they move. Master appending from a shell shows up within one tick.
  */
 
-import { createMemo, createSignal, type Accessor } from "solid-js"
+import { batch, createMemo, createSignal, type Accessor } from "solid-js"
 import { every } from "../host/every"
 import type { DirEntry } from "../host/shell"
 import type { ReadDir } from "../host/register-watch"
@@ -34,6 +34,8 @@ export interface DecisionsRegister {
   readonly path: Accessor<string | undefined>
   /** Undefined until the first read, and while there is no project. */
   readonly loaded: Accessor<LoadedRegister | undefined>
+  /** The path whose register is currently loaded, updated together with loaded. */
+  readonly loadedPath: Accessor<string | undefined>
   /**
    * Where every decision stands now. Folded again when the minute changes, so
    * a deferral that runs out while ADE is open comes back without a write.
@@ -54,16 +56,23 @@ export interface DecisionsRegister {
 
 export function createDecisionsRegister(deps: DecisionsRegisterDeps): DecisionsRegister {
   const [loaded, setLoaded] = createSignal<LoadedRegister>()
+  const [loadedPath, setLoadedPath] = createSignal<string>()
   const [error, setError] = createSignal<string>()
   const [now, setNow] = createSignal(new Date())
-  let loadedPath: string | undefined
   const state = createMemo<DecisionsState | undefined>((prev) => {
     const register = loaded()
     if (!register) return undefined
-    const events = deps.vouch && loadedPath ? deps.vouch(loadedPath, register.events) : register.events
+    const p = loadedPath()
+    const events = deps.vouch && p ? deps.vouch(p, register.events) : register.events
     return foldDecisions(events, now(), prev)
   })
   let stamp: string | undefined
+  /**
+   * The file and stamp of a read that failed (a register over 8 MB, an unreadable file). `loadedPath` stays behind in
+   * that case, so without this every tick saw `path !== loadedPath` and read the file again, every 2.5 s, for as long as
+   * the window was open (full review 2026-10-06, ui 9). The next read waits for the file to change.
+   */
+  let failed: { path: string; stamp: string | undefined } | undefined
 
   const stampOf = async (path: string, listing?: ReadDir): Promise<string | undefined> => {
     const readDir = listing ?? (await deps.io())?.readDir
@@ -79,26 +88,36 @@ export function createDecisionsRegister(deps: DecisionsRegisterDeps): DecisionsR
   const refresh = async () => {
     const path = deps.path()
     if (!path) {
-      loadedPath = undefined
+      batch(() => {
+        setLoadedPath(undefined)
+        setLoaded(undefined)
+      })
       stamp = undefined
-      setLoaded(undefined)
+      failed = undefined
       setError(undefined)
       return
     }
     const io = await deps.io()
     if (!io) return
+    let nextStamp: string | undefined
     try {
-      const nextStamp = await stampOf(path)
+      nextStamp = await stampOf(path)
       setNow(new Date())
       const register = await loadDecisions(io, path)
       // The project may have changed while this read was on its way.
       if (deps.path() !== path) return
-      loadedPath = path
+      batch(() => {
+        setLoadedPath(path)
+        setLoaded(register)
+      })
       stamp = nextStamp
-      setLoaded(register)
+      failed = undefined
       setError(undefined)
     } catch (failure) {
-      if (deps.path() === path) setError(failure instanceof Error ? failure.message : String(failure))
+      if (deps.path() === path) {
+        failed = { path, stamp: nextStamp }
+        setError(failure instanceof Error ? failure.message : String(failure))
+      }
     }
   }
 
@@ -114,7 +133,14 @@ export function createDecisionsRegister(deps: DecisionsRegisterDeps): DecisionsR
     // Set only when the minute turns: nothing re-renders between two ticks.
     if (Math.floor(Date.now() / 60_000) !== Math.floor(now().getTime() / 60_000)) setNow(new Date())
     const path = deps.path()
-    if (path !== loadedPath) return refresh()
+    if (path !== loadedPath()) {
+      const last = failed
+      if (!path || last?.path !== path) return refresh()
+      // This file's last read failed: look at it again only if it has changed since.
+      const changed = await stampOf(path, listing)
+      if (changed === undefined || changed !== last.stamp) await refresh()
+      return
+    }
     if (!path) return
     const next = await stampOf(path, listing)
     // Without a directory listing there is nothing cheap to compare: read.
@@ -124,6 +150,7 @@ export function createDecisionsRegister(deps: DecisionsRegisterDeps): DecisionsR
   return {
     path: deps.path,
     loaded,
+    loadedPath,
     state,
     now,
     error,

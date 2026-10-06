@@ -108,6 +108,11 @@ describe("readDraggedPaths", () => {
     expect(readDraggedPaths(data)).toEqual(["C:/Users/x/repo/note.md", "C:/Users/x/repo/altro.ts"])
   })
 
+  test("keeps the leading slash of a POSIX path", () => {
+    const data = fakeTransfer({ "text/uri-list": "file:///Users/x/repo/a.ts" })
+    expect(readDraggedPaths(data)).toEqual(["/Users/x/repo/a.ts"])
+  })
+
   test("decodes percent-escapes in a uri", () => {
     const data = fakeTransfer({ "text/uri-list": "file:///C:/repo/con%20spazio.ts" })
     expect(readDraggedPaths(data)).toEqual(["C:/repo/con spazio.ts"])
@@ -218,5 +223,44 @@ describe("formatDroppedPaths", () => {
 
   test("nothing dropped is an empty string, not a stray space", () => {
     expect(formatDroppedPaths([], "C:/repo")).toBe("")
+  })
+})
+
+/*
+ * Full review 2026-10-06, sessioni 1: a dropped path reaches the session as keystrokes, so a path
+ * that decodes to a carriage return, an escape or a quote is a command nobody typed.
+ */
+describe("a dropped path that would type something else", () => {
+  const link = (encoded: string) => fakeTransfer({ "text/uri-list": `file:///${encoded}` })
+
+  test("%0D, %0A and %1B in a file link are refused", () => {
+    expect(readDraggedPaths(link("x%0Dcalc%0D%23"))).toEqual([])
+    expect(readDraggedPaths(link("x%0Acalc"))).toEqual([])
+    expect(readDraggedPaths(link("x%1B%5B31m"))).toEqual([])
+  })
+
+  test("a quote that would close the quoting is refused", () => {
+    expect(readDraggedPaths(link("x%22%0Dcalc%0D%23"))).toEqual([])
+    expect(readDraggedPaths(link("a%22b"))).toEqual([])
+  })
+
+  test("ADE's own type with a lone carriage return or an escape is refused", () => {
+    expect(readDraggedPaths(fakeTransfer({ [ADE_FILE_MIME]: "C:/repo/a\rcalc" }))).toEqual([])
+    expect(readDraggedPaths(fakeTransfer({ [ADE_FILE_MIME]: "C:/repo/a\u001b[2Jb" }))).toEqual([])
+  })
+
+  test("plain text with a control character is not a path", () => {
+    expect(readDraggedPaths(fakeTransfer({ "text/plain": "C:/repo/a\u0003b" }))).toEqual([])
+  })
+
+  test("the clean paths of the same drag survive", () => {
+    const data = fakeTransfer({ "text/uri-list": "file:///C:/repo/ok.ts\r\nfile:///x%0Dcalc" })
+    expect(readDraggedPaths(data)).toEqual(["C:/repo/ok.ts"])
+  })
+
+  test("a path that bypassed the reader (a screenshot) is refused where it is typed", () => {
+    expect(formatDroppedPaths(["C:/shots/a\rcalc.png"], "C:/repo")).toBe("")
+    expect(formatDroppedPaths(["C:/shots/a\u001b.png", "C:/shots/ok.png"], "C:/repo")).toBe("C:/shots/ok.png")
+    expect(formatDroppedPaths(['C:/shots/a"b.png'], "C:/repo")).toBe("")
   })
 })

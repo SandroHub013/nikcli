@@ -6,6 +6,7 @@ version = 4
 name = "ade-desktop"
 version = "0.0.0"
 dependencies = [
+ "arboard",
  "async-trait",
  "dirs",
  "futures-util",
@@ -13,7 +14,6 @@ dependencies = [
  "image",
  "junction",
  "keyring",
- "minisign-verify",
  "portable-pty",
  "reqwest",
  "rustls",

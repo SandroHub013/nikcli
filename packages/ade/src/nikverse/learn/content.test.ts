@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { convert, lessonFiles, parseLesson, toJson, type Lesson } from "./content-build"
+import { convert, lessonFiles, parseLesson, toJson } from "./content-build"
 
 /**
  * The lessons are the one thing here that is not code: they come from a folder of YAML written by hand and reviewed, and the page is
@@ -10,7 +10,7 @@ import { convert, lessonFiles, parseLesson, toJson, type Lesson } from "./conten
  */
 
 const ROOT = import.meta.dir
-const lessons = (file: string) => readFileSync(join(ROOT, "lezzioni", file), "utf8")
+const lessons = (file: string) => readFileSync(join(ROOT, "lezioni", file), "utf8")
 const schema = JSON.parse(readFileSync(join(ROOT, "schema.json"), "utf8")) as Schema
 const committed = readFileSync(join(ROOT, "content.json"), "utf8")
 
@@ -24,16 +24,16 @@ interface Schema {
 /** A lesson read from its own file, so a failure names the file and not an index. */
 const fromFile = (file: string) => parseLesson(lessons(file), file)
 
-const files = lessonFiles(join(ROOT, "lezzioni"))
+const files = lessonFiles(join(ROOT, "lezioni"))
 
 describe("content.json", () => {
   test("is the conversion of the YAML, letter for letter", () => {
     // The drift this catches: a lesson edited, reviewed or added without running `scripts/learn-content.ts`.
-    expect(committed).toBe(toJson(convert(join(ROOT, "lezzioni"))))
+    expect(committed).toBe(toJson(convert(join(ROOT, "lezioni"))))
   })
 
   test("carries the four paths in order, each with its five lessons", () => {
-    const content = convert(join(ROOT, "lezzioni"))
+    const content = convert(join(ROOT, "lezioni"))
     expect(content.v).toBe(1)
     expect(content.percorsi.map((percorso) => percorso.tema)).toEqual(["agenti-llm", "ai", "cybersecurity", "harness"])
     expect(content.percorsi.map((percorso) => percorso.titolo)).toEqual(["Agenti e LLM", "AI", "Cybersecurity", "Harness"])
@@ -77,6 +77,19 @@ describe("content.json", () => {
       const [, theme, name] = /^([^/]+)\/([^/]+)$/.exec(file) ?? []
       expect(String(fromFile(file).id)).toBe(`${theme}/${String(name).replace(/\.yaml$/, "")}`)
     }
+  })
+
+  test("every exercise has a unique progress key across all lessons and percorsi", () => {
+    const content = convert(join(ROOT, "lezioni"))
+    const keys: string[] = []
+    for (const percorso of content.percorsi) {
+      for (const lezione of percorso.lezioni) {
+        for (const esercizio of (lezione.esercizi as { id: string }[])) {
+          keys.push(`${String(lezione.id)}#${esercizio.id}`)
+        }
+      }
+    }
+    expect(new Set(keys).size).toBe(keys.length)
   })
 })
 
@@ -194,6 +207,3 @@ describe("the schema in the repo is the one of the course", () => {
     expect([...used].sort()).toEqual(["abbina", "completa", "ordina", "scelta", "trova-riga"])
   })
 })
-
-/** The lesson the engine's own tests read: the smallest one there is, and the first a user opens. */
-export const sample = (): Lesson => fromFile("agenti-llm/01-token-contesto.yaml")

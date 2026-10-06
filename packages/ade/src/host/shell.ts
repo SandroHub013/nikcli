@@ -273,23 +273,12 @@ export interface Host {
   /** Takes the fetched assets off the disk; the bytes freed. They are fetched again when the world next opens. Refused while a fetch runs. */
   nikverseAssetsRemove?: () => Promise<number>
   /**
-   * Plugins in a frame (`plugin_install.rs`, `plugin_scheme.rs`): what is installed, and the commands that check, download, switch on, take
-   * back and remove a version. All of them answer to the main window only.
+   * The learner's progress for «Impara» (`learn.rs`): one JSON in the app's local data, `null` when there is none yet. The shape is
+   * checked by the caller before anything is written, and the file itself refuses what is not JSON or is over its ceiling.
    */
-  pluginList?: () => Promise<InstalledPlugin[]>
-  pluginCheck?: (id: string) => Promise<PluginAvailable>
-  /** Downloads into `pending`; resolves when it is over, `false` when there was nothing to download. */
-  pluginInstall?: (id: string) => Promise<boolean>
-  pluginStatus?: (id: string) => Promise<PluginProgress>
-  /** `pending` becomes `current`; the version now in use. */
-  pluginCommit?: (id: string) => Promise<string>
-  /** `previous` becomes `current`; the version now in use. */
-  pluginRollback?: (id: string) => Promise<string>
-  /** Removes the plugin and its data; the bytes freed. */
-  pluginUninstall?: (id: string) => Promise<number>
-  /** The plugin's own document (`storage.json`), `null` when it never wrote one. */
-  pluginStorageGet?: (id: string) => Promise<unknown>
-  pluginStorageSet?: (id: string, json: string) => Promise<void>
+  learnProgressGet?: () => Promise<unknown>
+  /** Replaces the progress with this JSON, written to a staging file and renamed over the old one. */
+  learnProgressSet?: (json: string) => Promise<void>
 
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
@@ -445,10 +434,10 @@ export { stripAnsi } from "./ansi"
 import { createLineAccumulator } from "./line-stream"
 import type { TokenUsage } from "../session/shared"
 import type { InstallProgress, PackStatus } from "@nikcli-ai/voice"
-import type { KeyDraft, KeyInfo } from "../secrets/keys"
+import { keyError, type KeyDraft, type KeyInfo } from "../secrets/keys"
 import type { QualityLevel, RecordTarget, RecordingState } from "../record/recording"
 import type { AssetsStatus } from "../nikverse/assets"
-import type { InstalledPlugin, PluginAvailable, PluginProgress } from "../plugin-frame/host-types"
+import { t } from "../i18n"
 
 const inTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)
@@ -495,7 +484,7 @@ export async function getHost(): Promise<Host | undefined> {
        * any argument at all, and `git -c core.pager=<anything>` runs anything.
        */
       if (command !== "git") {
-        return { code: null, stdout: "", stderr: `comando non consentito: ${command}` }
+        return { code: null, stdout: "", stderr: t("host.commandNotAllowed", command) }
       }
 
       const { invoke } = await import("@tauri-apps/api/core")
@@ -660,7 +649,8 @@ export async function getHost(): Promise<Host | undefined> {
       } catch (error) {
         dead = true
         stop()
-        const reason = error instanceof Error ? error.message : String(error)
+        // `secrets.rs` refuses a launch's keys with codes; the pane shows the sentence (review of F7b, O1).
+        const reason = keyError(error instanceof Error ? error.message : String(error))
         if (onRefused) onRefused(reason)
         else onLine(reason, "err")
         onExit(null)
@@ -803,11 +793,9 @@ export async function getHost(): Promise<Host | undefined> {
 
     async exists(path) {
       const { invoke } = await import("@tauri-apps/api/core")
-      try {
-        return await invoke<boolean>("path_exists", { path })
-      } catch {
-        return false
-      }
+      // A check that fails rejects: «the folder is gone» is for the callers to say when it IS gone, not for every error
+      // (full review 2026-10-06, sessions 16). Those that mean «assume it is there» already `catch`.
+      return invoke<boolean>("path_exists", { path })
     },
 
     async systemStats() {
@@ -860,51 +848,15 @@ export async function getHost(): Promise<Host | undefined> {
       return await invoke<number>("nikverse_assets_remove")
     },
 
-    async pluginList() {
+    async learnProgressGet() {
       const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<InstalledPlugin[]>("plugin_list")
+      return await invoke<unknown>("learn_progress_get")
     },
 
-    async pluginCheck(id) {
+    async learnProgressSet(json: string) {
       const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<PluginAvailable>("plugin_check", { id })
+      await invoke("learn_progress_set", { json })
     },
-
-    async pluginInstall(id) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<boolean>("plugin_install", { id })
-    },
-
-    async pluginStatus(id) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<PluginProgress>("plugin_status", { id })
-    },
-
-    async pluginCommit(id) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<string>("plugin_commit", { id })
-    },
-
-    async pluginRollback(id) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<string>("plugin_rollback", { id })
-    },
-
-    async pluginUninstall(id) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<number>("plugin_uninstall", { id })
-    },
-
-    async pluginStorageGet(id) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<unknown>("plugin_storage_get", { id })
-    },
-
-    async pluginStorageSet(id, json) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      await invoke("plugin_storage_set", { id, json })
-    },
-
     /*
      * The names are K4b's: `tts_local_*` with the provider as a parameter
      * (Kokoro plan, K4). Until that is in the build the command is missing,
@@ -1023,7 +975,9 @@ export async function getHost(): Promise<Host | undefined> {
 
     async recordWrite(path, contents) {
       const { invoke } = await import("@tauri-apps/api/core")
-      await invoke("record_write", { path, contents: Array.from(contents) })
+      // The bytes are the body, raw: as a JSON array of numbers a long recording is past what a string can hold.
+      // The path rides in a header, percent-encoded (a header is ASCII).
+      await invoke("record_write", contents, { headers: { "x-record-path": encodeURIComponent(path) } })
     },
 
     async recordStop() {
@@ -1065,7 +1019,7 @@ export async function getHost(): Promise<Host | undefined> {
     async pickDirectory(title) {
       try {
         const { open } = await import("@tauri-apps/plugin-dialog")
-        const selected = await open({ directory: true, title: title ?? "Scegli cartella" })
+        const selected = await open({ directory: true, title: title ?? t("host.pickDirectory") })
         // open() returns string | string[] | null depending on `multiple`
         if (typeof selected === "string") return selected
         return undefined
@@ -1080,7 +1034,7 @@ export async function getHost(): Promise<Host | undefined> {
         const selected = await open({
           directory: false,
           multiple: false,
-          title: options?.title ?? "Scegli file",
+          title: options?.title ?? t("host.pickFile"),
           ...(options?.filters ? { filters: options.filters } : {}),
         })
         if (typeof selected === "string") return selected

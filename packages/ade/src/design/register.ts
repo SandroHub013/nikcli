@@ -1,4 +1,4 @@
-import { createMemo, createSignal, type Accessor } from "solid-js"
+import { batch, createMemo, createSignal, type Accessor } from "solid-js"
 import { every } from "../host/every"
 import type { DirEntry } from "../host/shell"
 import type { ReadDir } from "../host/register-watch"
@@ -19,6 +19,7 @@ export interface DesignRegisterDeps {
 export interface DesignRegister {
   readonly path: Accessor<string | undefined>
   readonly loaded: Accessor<LoadedRegister | undefined>
+  readonly loadedPath: Accessor<string | undefined>
   readonly state: Accessor<DesignState | undefined>
   readonly error: Accessor<string | undefined>
   refresh: () => Promise<void>
@@ -30,12 +31,13 @@ export interface DesignRegister {
 
 export function createDesignRegister(deps: DesignRegisterDeps): DesignRegister {
   const [loaded, setLoaded] = createSignal<LoadedRegister>()
+  const [loadedPath, setLoadedPath] = createSignal<string>()
   const [error, setError] = createSignal<string>()
-  let loadedPath: string | undefined
   const state = createMemo<DesignState | undefined>((prev) => {
     const register = loaded()
     if (!register) return undefined
-    const events = deps.vouch && loadedPath ? deps.vouch(loadedPath, register.events) : register.events
+    const p = loadedPath()
+    const events = deps.vouch && p ? deps.vouch(p, register.events) : register.events
     return foldProposals(events, prev)
   })
   let stamp: string | undefined
@@ -54,9 +56,11 @@ export function createDesignRegister(deps: DesignRegisterDeps): DesignRegister {
   const refresh = async () => {
     const path = deps.path()
     if (!path) {
-      loadedPath = undefined
+      batch(() => {
+        setLoadedPath(undefined)
+        setLoaded(undefined)
+      })
       stamp = undefined
-      setLoaded(undefined)
       setError(undefined)
       return
     }
@@ -66,9 +70,11 @@ export function createDesignRegister(deps: DesignRegisterDeps): DesignRegister {
       const nextStamp = await stampOf(path)
       const register = await loadDesign(io, path)
       if (deps.path() !== path) return
-      loadedPath = path
+      batch(() => {
+        setLoadedPath(path)
+        setLoaded(register)
+      })
       stamp = nextStamp
-      setLoaded(register)
       setError(undefined)
     } catch (failure) {
       if (deps.path() === path) setError(failure instanceof Error ? failure.message : String(failure))
@@ -85,7 +91,7 @@ export function createDesignRegister(deps: DesignRegisterDeps): DesignRegister {
 
   const tick = async (listing?: ReadDir) => {
     const path = deps.path()
-    if (path !== loadedPath) return refresh()
+    if (path !== loadedPath()) return refresh()
     if (!path) return
     const next = await stampOf(path, listing)
     if (next === undefined || next !== stamp) await refresh()
@@ -94,6 +100,7 @@ export function createDesignRegister(deps: DesignRegisterDeps): DesignRegister {
   return {
     path: deps.path,
     loaded,
+    loadedPath,
     state,
     error,
     refresh,

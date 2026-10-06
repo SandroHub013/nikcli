@@ -51,6 +51,36 @@ function holdOpenings() {
   }
 }
 
+/*
+ * Review of F7d, B4. First in this file on purpose: the panel's store of the lowering reads its storage once, the first time
+ * a pane is built, so a test that needs it lowered has to set the storage before any pane of the run exists.
+ */
+test("a world lowered to Bassa offers «Riprova a qualità piena», which forgets it and reloads at the machine's level", () => {
+  localStorage.setItem("ade.nikverse.lowered", JSON.stringify({ at: Date.now() }))
+  if (navigation) navigation.disableChildFrameNavigation = true
+  const host = document.createElement("div")
+  document.body.append(host)
+  dispose = render(
+    () =>
+      createComponent(NikversePane, {
+        picture: () => undefined,
+        focused: false,
+        onOpenSession: () => {},
+        onFocusProject: () => {},
+        onChord: () => {},
+      }),
+    host,
+  )
+  const frame = () => host.querySelector<HTMLIFrameElement>('iframe[data-slot="nikverse-frame"]')!
+  expect(new URL(frame().src).searchParams.get("quality")).toBe("bassa")
+  const retry = host.querySelector<HTMLButtonElement>('[data-slot="nikverse-lowered-retry"]')
+  expect(retry?.textContent).toBe("Riprova a qualità piena")
+  retry!.click()
+  expect(new URL(frame().src).searchParams.get("quality")).toBeNull()
+  expect(host.querySelector('[data-slot="nikverse-lowered-retry"]')).toBeNull()
+  expect(JSON.parse(localStorage.getItem("ade.nikverse.lowered") ?? "null")).toBeNull()
+})
+
 test("«Riprova» and «Apri la lista» each load the world in a new frame element, not the old one with a new #", () => {
   const thirtySecondsPass = holdOpenings()
   if (navigation) navigation.disableChildFrameNavigation = true

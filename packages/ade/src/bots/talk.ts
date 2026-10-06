@@ -308,7 +308,7 @@ function errorText(error: unknown): string {
     if (record.data && typeof record.data.message === "string") return record.data.message
     if (typeof record.name === "string") return record.name
   }
-  return "Errore sconosciuto."
+  return t("bots.unknownError")
 }
 
 /**

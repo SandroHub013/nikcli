@@ -90,7 +90,7 @@ export function DecisionCard(props: {
                 </span>
                 <span data-slot="decision-option-text">
                   <b>
-                    {option.label}
+                    {option.title ? `${option.label} · ${option.title}` : option.label}
                     {/*
                       The one the writer recommends, on its own option too (rifiniture 3).
                       The badge is hidden from the name, which read «SìConsigliata va bene»:
@@ -105,6 +105,9 @@ export function DecisionCard(props: {
                   </b>
                   <Show when={option.detail}>
                     <small>{option.detail}</small>
+                  </Show>
+                  <Show when={option.effect}>
+                    <small data-slot="decision-option-effect">{option.effect}</small>
                   </Show>
                 </span>
               </button>

@@ -2,6 +2,7 @@ import { Monitor } from "@/monitor/manager"
 import { authorizeBashCommand } from "./bash"
 import DESCRIPTION from "./monitor.txt"
 import { Tool } from "./tool"
+import { Truncate } from "./truncation"
 import z from "zod"
 
 const parameters = z.object({
@@ -35,6 +36,8 @@ type MonitorMetadata = {
   exitCode?: number
   recentOutput?: string
   bytes?: number
+  truncated?: boolean
+  outputPath?: string
 }
 
 function monitorMetadata(record: Monitor.Record): MonitorMetadata {
@@ -101,15 +104,42 @@ export const MonitorTool = Tool.define<typeof parameters, MonitorMetadata>("moni
       const metadata = monitorMetadata(finished)
       ctx.metadata({ title, metadata })
       const seconds = ((finished.time.completed ?? Date.now()) - finished.time.created) / 1000
+      let logOutput = snapshot.output.trimEnd() || "(no output)"
+      let headTailTruncated = false
+
+      if (snapshot.truncated) {
+        headTailTruncated = true
+        let tailChars = Truncate.TAIL_CHARS
+        if (tailChars > 0 && tailChars < logOutput.length) {
+          const tailIndex = logOutput.length - tailChars
+          const prev = logOutput.charCodeAt(tailIndex - 1)
+          const curr = logOutput.charCodeAt(tailIndex)
+          if (prev >= 0xd800 && prev <= 0xdbff && curr >= 0xdc00 && curr <= 0xdfff) {
+            tailChars -= 1
+          }
+        }
+        const tail = tailChars > 0 ? logOutput.slice(-tailChars) : ""
+        logOutput = `... [The tool call succeeded but initial output was omitted. Full log: ${finished.logPath}. Use Grep or Read with offset/limit to see more.] ...\n\n${tail}`
+      } else if (logOutput.length > Truncate.HEAD_TAIL_THRESHOLD) {
+        const trunc = Truncate.truncateHeadTail(logOutput, {
+          existingPath: finished.logPath,
+          toolName: "monitor",
+        })
+        logOutput = trunc.content
+        headTailTruncated = true
+      }
+
       return {
         title,
-        metadata,
+        metadata: {
+          ...metadata,
+          ...(headTailTruncated ? { truncated: true, outputPath: finished.logPath } : {}),
+        },
         output: [
           `Command finished in ${seconds.toFixed(1)}s: ${finished.status}, exit code ${finished.exitCode ?? "none"}.`,
           `Command: ${params.command}`,
           "",
-          snapshot.output.trimEnd() || "(no output)",
-          ...(snapshot.truncated ? ["", `Output truncated; full log: ${finished.logPath}`] : []),
+          logOutput,
         ].join("\n"),
       }
     }

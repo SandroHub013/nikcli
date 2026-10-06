@@ -60,8 +60,6 @@ tauri-plugin-clipboard-manager = "2"
 tauri-plugin-single-instance = "2"
 # In-app updates from the fork's signed `latest.json` (see ade-release.yml).
 tauri-plugin-updater = "2"
-# The signature of the plugins' index (src/plugin_install.rs): the same minisign the updater checks its update with, already in the lock.
-minisign-verify = "0.2.5"
 serde = { version = "1", features = ["derive"] }
 # `time` and `select!` for the updater's stall watchdog and the gateways'
 # reading loops, `sync` for their stop signal; the runtime is Tauri's.
@@ -100,6 +98,9 @@ futures-util = { version = "0.3", default-features = false, features = ["sink"] 
 
 [target.'cfg(windows)'.dependencies]
 windows-version = "0.1"
+# The clipboard plugin's own backend (already in the tree, same version as its lock), used directly to copy a key
+# with the flags that keep it out of Windows' clipboard history and cloud sync, which the plugin cannot set.
+arboard = "3.6"
 # Directory junctions need no elevation, unlike symlinks. One small crate is a
 # far narrower grant than putting `cmd` on the shell allowlist, which would be
 # arbitrary execution for anything the page decides to run.
@@ -114,6 +115,7 @@ windows = { version = "0.61", features = [
     "Win32_Security",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
+    "Win32_System_DataExchange",
     "Win32_System_JobObjects",
     "Win32_System_Threading",
     "Win32_UI_Controls",

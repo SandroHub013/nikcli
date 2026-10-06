@@ -115,7 +115,6 @@ function renderSettingsSheet(
         extensionsIo: () => undefined,
         pluginRuntime: { registry: { sections: () => [] } } as never,
         openGuide: () => {},
-        openFramePluginPane: () => {},
         askYesNo: async () => true,
         record: {
           quality: () => "alta" as const,

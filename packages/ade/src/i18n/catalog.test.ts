@@ -11,13 +11,16 @@ import { it } from "./it"
 
 /** Texts that are the same word in both languages, or are names. */
 const SAME_IN_BOTH = new Set<string>([
-  "choices.kind.design",
+  "decisions.shortTitle",
+  "design.shortTitle",
   // «Sessione 1 — Terminal (2)»: a title and a number, in any language.
   "choices.samePane",
   "settings.language.it",
   "settings.language.en",
   // The «No» button of a yes/no question: the same word in both.
   "ask.no",
+  // The «No» of a permission prompt: the same word in both.
+  "permission.answer.no",
   "preset.solo",
   "sidebar.spaces",
   "pane.quota",
@@ -42,6 +45,7 @@ const SAME_IN_BOTH = new Set<string>([
   "agent.empty.example3",
   "design.title",
   "newPane.design",
+  "newPane.browser",
   "newPane.nikverse",
   "update.dialog.escKey",
   "vui.backend.piper",
@@ -60,6 +64,7 @@ const SAME_IN_BOTH = new Set<string>([
   "vui.replies.sample.it",
   "vui.replies.sample.en",
   "bar.meta.ade",
+  "pane.tree.worktree",
 ])
 
 type Key = keyof typeof it

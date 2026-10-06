@@ -110,7 +110,7 @@ export function ModelPane(props: ModelPaneProps) {
     if (viewer) return Promise.resolve(viewer)
     if (!viewerPromise) {
       viewerPromise = import("./viewer").then((module) => {
-        if (disposed || !stage) throw new Error("pannello chiuso")
+        if (disposed || !stage) throw new Error(t("model.error.paneClosed"))
         viewer = module.createModelViewer(stage, (reason) => setError(reason))
         return viewer
       })
@@ -189,7 +189,7 @@ export function ModelPane(props: ModelPaneProps) {
   const controller: ModelController = {
     state,
     async open(path) {
-      if (!isModel(path)) throw new Error(`formato non supportato; supportati: ${MODEL_EXTENSIONS.join(", ")}`)
+      if (!isModel(path)) throw new Error(t("model.error.unsupportedFormatExts", MODEL_EXTENSIONS.join(", ")))
       if (path === props.path) return load(path)
       // The effect on `props.path` starts the load when the prop changes;
       // this waits for that load rather than starting a second one.
@@ -204,8 +204,8 @@ export function ModelPane(props: ModelPaneProps) {
       viewer?.view(preset)
     },
     async capture() {
-      if (!props.onCapture) throw new Error("questo host non può scrivere file")
-      if (!viewer) throw new Error("nessun modello caricato")
+      if (!props.onCapture) throw new Error(t("model.error.cannotWrite"))
+      if (!viewer) throw new Error(t("model.error.noModelLoaded"))
       const png = await viewer.capture()
       return props.onCapture(viewFileName(props.path, new Date()), png)
     },

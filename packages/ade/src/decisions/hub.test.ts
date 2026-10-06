@@ -3,7 +3,7 @@ import { createRoot } from "solid-js"
 import { compileSolidJsx } from "../test-support/solid-jsx"
 import { GlobalRegistrator } from "@happy-dom/global-registrator"
 import { createDecisionsHub } from "./hub"
-import { isFormField, sheetKey } from "./answer"
+import { isFormField, isOwnButton, sheetKey } from "./answer"
 import { t } from "../i18n"
 import type { DecisionEvent } from "./log"
 import { createDecisionsRegister } from "./register"
@@ -134,6 +134,36 @@ describe("keys aimed at a field of the window (audit 0.7.7, MEDIO 7)", () => {
     expect(isFormField({ tagName: "DIV" })).toBe(false)
     expect(sheetKey({ key: "1" }, 2, false, false, false)).toEqual({ kind: "pick", index: 0 })
     expect(sheetKey({ key: "Enter" }, 2, false, true, false)).toEqual({ kind: "submit" })
+  })
+})
+
+describe("Enter on a button of the window (full review 2026-10-06, ui 3)", () => {
+  const rimanda = { tagName: "BUTTON", dataset: { slot: "decision-ghost" } }
+  const option = { tagName: "BUTTON", dataset: { slot: "decision-option" } }
+  const submit = { tagName: "BUTTON", dataset: { slot: "decision-submit" } }
+
+  test("Enter on Rimanda, on «Registra senza inviare», a chip or the × is the button's own click", () => {
+    expect(isOwnButton(rimanda)).toBe(true)
+    expect(isOwnButton({ tagName: "BUTTON", dataset: { slot: "decision-chip" } })).toBe(true)
+    expect(isOwnButton({ tagName: "BUTTON", dataset: { slot: "sheet-close" } })).toBe(true)
+    // Picked or not, it is not an answer: no submit, no «scegli prima».
+    expect(sheetKey({ key: "Enter" }, 2, false, true, false, isOwnButton(rimanda))).toBeUndefined()
+    expect(sheetKey({ key: "Enter" }, 2, false, false, false, isOwnButton(rimanda))).toBeUndefined()
+  })
+
+  test("Enter after clicking an option, or on Invia, still answers; so does Ctrl+Enter anywhere", () => {
+    expect(isOwnButton(option)).toBe(false)
+    expect(isOwnButton(submit)).toBe(false)
+    expect(isOwnButton({ tagName: "DIV" })).toBe(false)
+    expect(sheetKey({ key: "Enter" }, 2, false, true, false, isOwnButton(option))).toEqual({ kind: "submit" })
+    expect(sheetKey({ key: "Enter", ctrlKey: true }, 2, false, true, false, isOwnButton(rimanda))).toEqual({
+      kind: "submit",
+    })
+  })
+
+  test("digits and arrows keep working while a button has focus", () => {
+    expect(sheetKey({ key: "1" }, 2, false, false, false, isOwnButton(rimanda))).toEqual({ kind: "pick", index: 0 })
+    expect(sheetKey({ key: "ArrowRight" }, 2, false, false, false, isOwnButton(rimanda))).toEqual({ kind: "next" })
   })
 })
 
@@ -540,7 +570,6 @@ describe("Rimanda on the last decision (ultimi)", () => {
             hub,
             onClose: () => {},
             onOpenPanel: () => {},
-            waiting: () => 0,
             onDone: (next, said) => void done.push([next, said]),
           }),
         host,

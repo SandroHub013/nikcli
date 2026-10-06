@@ -10,5 +10,5 @@
 }
 
 .blinking-cursor {
-  animation: blink 1s step-end infinite;
+  animation: blink 1s step-end infinite var(--ade-loops, running);
 }

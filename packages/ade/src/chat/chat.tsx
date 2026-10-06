@@ -47,7 +47,7 @@ import {
   mentionCandidates,
   type Attachment,
 } from "./attachments"
-import { composerAction, liveAnnouncement } from "./composer"
+import { composerAction, liveAnnouncement, settleSend, type ComposerMoment } from "./composer"
 import { forgetLegacyConversation } from "./legacy"
 import { requestProblem, retryNotice } from "./errors"
 import { answerUsage, answerUsageText, sessionUsage, sessionUsageText } from "./usage"
@@ -55,6 +55,7 @@ import { SessionList } from "./session-list"
 import {
   connectionNotice,
   conversationOf,
+  turnOf,
   isBusy,
   messageError,
   partsOf,
@@ -250,6 +251,11 @@ export function Chat(props: ChatProps) {
     const id = open()
     return id ? conversationOf(store.state.data, id) : []
   })
+  // The messages themselves, which keep their identity from one event to the next: the list below is drawn from these.
+  const messages = createMemo(() => {
+    const id = open()
+    return id ? (store.state.data.message[id] ?? []) : []
+  })
   // What the open session has cost, and how full the model's window is when the catalog knows its size.
   const usageLine = () => {
     const list = turns()
@@ -380,6 +386,13 @@ export function Chat(props: ChatProps) {
   const send = async () => {
     const text = draft().trim()
     if (!text || !canSend()) return
+    const moment = (): ComposerMoment => ({
+      draft: draft(),
+      attachments: attachments(),
+      folder: props.projectRoot,
+      session: open(),
+    })
+    const sent = moment()
     setSending(true)
     setProblem(undefined)
     try {
@@ -392,9 +405,10 @@ export function Chat(props: ChatProps) {
       // Only a level this model has: the chip cannot choose another, and one saved for another model is not sent.
       const variant = effortValue(effort(), levels()) || undefined
       const id = await store.send(open(), text, ref, agent() || undefined, attachmentParts(attachments()), variant)
-      setCurrent(id)
-      setDraft("")
-      setAttachments([])
+      const after = settleSend(sent, moment())
+      if (after.follow) setCurrent(id)
+      if (after.clearDraft) setDraft("")
+      setAttachments(after.attachments)
     } catch (error) {
       setProblem(requestProblem(error))
     } finally {
@@ -509,7 +523,7 @@ export function Chat(props: ChatProps) {
                 </div>
               }
             >
-              <For each={turns()}>{(turn) => <Turn turn={turn} />}</For>
+              <For each={messages()}>{(info) => <Turn turn={turnOf(store.state.data, info)} />}</For>
             </Show>
             <Show when={retrying()}>
               {(line) => (

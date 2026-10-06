@@ -54,6 +54,15 @@ const PLUGIN_NAME: &str = "ade-agent-session.js";
 /// The TypeScript tests load this same file and run it.
 const PLUGIN_TEXT: &str = include_str!("../plugins/ade-agent-session.js");
 
+/// The hook script's text, compiled in like the plugin above (full review
+/// 2026-10-06, Rust 5): the page asks for the install and sends no program, so a
+/// compromised page cannot make every Claude Code or Codex session run a script
+/// of its choosing, outside ADE, after one "Consenti" on a dialog that shows only
+/// the path. `@AGENT@` is the name the script reports itself as. Not a `.ps1`
+/// file: `.gitattributes` gives those CRLF, and the TypeScript test compares this
+/// text with `hookScript` byte for byte.
+const HOOK_SCRIPT_TEMPLATE: &str = include_str!("../plugins/ade-agent-session.ps1.tmpl");
+
 /// The turn reporter ADE hands Prime Agent and pi with `-e`, compiled in like
 /// the plugin above: the page cannot choose what these agents load.
 const ACTIVITY_EXTENSION_TEXT: &str = include_str!("../plugins/ade-activity.js");
@@ -86,6 +95,8 @@ enum Base {
 /// fails until it is added there too.
 struct HookTarget {
     id: &'static str,
+    /// What the script writes as `agent` in its report. Mirrors `HookTarget.agent` in `agent-hooks.ts`.
+    reports_as: &'static str,
     base: Base,
     /// Empty for a plugin: there is no configuration to edit, only its file.
     config: &'static [&'static str],
@@ -95,12 +106,14 @@ struct HookTarget {
 const HOOK_TARGETS: &[HookTarget] = &[
     HookTarget {
         id: "claude-code",
+        reports_as: "claude",
         base: Base::Home,
         config: &[".claude", "settings.json"],
         script: &[".claude", "hooks", SCRIPT_NAME],
     },
     HookTarget {
         id: "codex",
+        reports_as: "codex",
         base: Base::Home,
         config: &[".codex", "hooks.json"],
         script: &[".codex", SCRIPT_NAME],
@@ -108,6 +121,7 @@ const HOOK_TARGETS: &[HookTarget] = &[
     // A TUI plugin, not a hook: the folder nikcli's TUI scans, and one file of ADE's in it.
     HookTarget {
         id: "nikcli",
+        reports_as: "nikcli",
         base: Base::ConfigHome,
         config: &[],
         script: &["nikcli", "plugin", "tui", PLUGIN_NAME],
@@ -291,6 +305,17 @@ fn file_digest(path: &Path) -> Option<String> {
     Some(Sha256::digest(&bytes).iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
+/// The script ADE installs for `agent`: its own text, whatever the page sent.
+fn hook_script_text(reports_as: &str) -> String {
+    HOOK_SCRIPT_TEMPLATE.replace("@AGENT@", reports_as)
+}
+
+/// What `agent_hook_write` puts on disk for a request: nothing for a removal
+/// (`None`), ADE's own text for an install or refresh, whatever text came with it.
+fn script_to_install(target: &HookTarget, requested: Option<String>) -> Option<String> {
+    requested.map(|_| hook_script_text(target.reports_as))
+}
+
 fn target(agent: &str) -> Result<&'static HookTarget, String> {
     HOOK_TARGETS
         .iter()
@@ -349,6 +374,23 @@ pub(crate) fn dirs_home() -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// Whether the hook scripts can be installed on this system.
+///
+/// Claude Code's and Codex's hooks are a PowerShell script that the CLI runs as `powershell -File`: off Windows it
+/// would fail at every event of every session on the machine, ADE's or not, and `--unlink-agents` exists only in the
+/// Windows installer, so it would stay after ADE was removed (full review 2026-10-06, sessions 6). `windows` is an
+/// argument so both answers are tested on either system.
+pub(crate) fn hooks_installable(windows: bool, agent: &str) -> Result<(), String> {
+    if windows {
+        Ok(())
+    } else {
+        Err(format!(
+            "gli hook di {agent} sono script PowerShell: {} li installa solo su Windows",
+            crate::brand::name()
+        ))
+    }
 }
 
 /// Reads one CLI's hook configuration so the frontend can decide what to write.
@@ -422,7 +464,13 @@ pub async fn agent_hook_write(
         .await
         .map_err(|e| e.to_string())?;
     }
+    // An install is refused where the script cannot run; a removal is not, so an earlier install can be taken back.
+    if script.is_some() {
+        hooks_installable(cfg!(windows), &agent)?;
+    }
     let config = under_base(target.base, target.config)?;
+    // Install or refresh is the page's say; what is installed is ADE's own text.
+    let script = script_to_install(target, script);
 
     tauri::async_runtime::spawn_blocking(move || {
         write_hook_files(&config, &script_path, &config_text, script.as_deref(), |script_path| {
@@ -914,6 +962,25 @@ pub fn unlink_from_env() -> i32 {
 mod tests {
     use super::*;
 
+    // Full review 2026-10-06, sessions 6: no PowerShell hook off Windows.
+    #[test]
+    fn a_powershell_hook_is_installed_only_on_windows() {
+        assert!(hooks_installable(true, "claude-code").is_ok());
+        let refused = hooks_installable(false, "claude-code").unwrap_err();
+        assert!(refused.contains("claude-code") && refused.contains("Windows"), "{refused}");
+        assert!(hooks_installable(false, "codex").is_err());
+    }
+
+    #[test]
+    fn the_write_command_checks_before_it_installs_and_not_before_it_removes() {
+        let source = include_str!("agent_link.rs");
+        let body = &source[source.find("pub async fn agent_hook_write").unwrap()..];
+        let body = &body[..body.find("fn write_hook_files").unwrap()];
+        let check = body.find("hooks_installable(cfg!(windows), &agent)").expect("agent_hook_write must check the system");
+        assert!(body[..check].contains("if script.is_some()"), "only an install is refused, a removal still goes through");
+        assert!(check < body.find("write_hook_files(").unwrap(), "the check comes before anything is written");
+    }
+
     #[test]
     fn a_hook_write_may_only_touch_ade_entries() {
         let script = Path::new("C:\\Users\\x\\.claude\\hooks").join(SCRIPT_NAME);
@@ -1047,6 +1114,27 @@ mod tests {
         assert!(refused.is_err());
         assert!(!script.exists());
         let _ = fs::remove_dir_all(dir);
+    }
+
+    /// Full review 2026-10-06, Rust 5: the script installed in `~/.claude/hooks` and `~/.codex`
+    /// is ADE's, not the page's: whatever text a compromised page sends, this is what is written.
+    #[test]
+    fn the_hook_script_written_is_ades_own_whatever_the_page_sends() {
+        let claude = target("claude-code").expect("claude");
+        let codex = target("codex").expect("codex");
+        let evil = "Remove-Item -Recurse $HOME".to_string();
+
+        let written = script_to_install(claude, Some(evil.clone())).expect("an install writes a script");
+        assert!(!written.contains("Remove-Item"), "{written}");
+        assert!(!written.contains("@AGENT@"));
+        assert!(written.contains("agent     = \"claude\""), "{written}");
+        assert!(written.contains("ade-agent-session"));
+        let other = script_to_install(codex, Some(evil)).expect("an install writes a script");
+        assert!(other.contains("agent     = \"codex\""), "{other}");
+        assert_ne!(written, other);
+        // A removal stays a removal, and an empty text is still an install of ADE's own.
+        assert_eq!(script_to_install(claude, None), None);
+        assert_eq!(script_to_install(claude, Some(String::new())), Some(written));
     }
 
     #[test]

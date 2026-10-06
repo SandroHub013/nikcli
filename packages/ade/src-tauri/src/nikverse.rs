@@ -242,7 +242,12 @@ fn io_status(error: std::io::Error) -> StatusCode {
 /// `http://nikverse.localhost` is the scheme as Windows answers it, `nikverse:` as the others do.
 /// `connect-src` lets the world load its own assets and nothing else; the data it needs from ADE
 /// arrives on the channel, which is not a request.
-pub const CSP: &str = "default-src http://nikverse.localhost nikverse:; script-src http://nikverse.localhost nikverse: 'wasm-unsafe-eval'; img-src http://nikverse.localhost nikverse: data: blob:; connect-src http://nikverse.localhost nikverse:";
+///
+/// `sandbox allow-scripts` is what the panel's `sandbox="allow-scripts"` already says, said by the answer itself: a
+/// frame nested in a site of the browser pane can load the world too, and there it would not have had the attribute
+/// (full review 2026-10-06, rust 17). `is_ade_origin` cannot refuse the two hosts instead: the navigation event of a
+/// frame does not say whose frame it is, and ADE's own panel frames both (the world, the design sheets).
+pub const CSP: &str = "default-src http://nikverse.localhost nikverse:; script-src http://nikverse.localhost nikverse: 'wasm-unsafe-eval'; img-src http://nikverse.localhost nikverse: data: blob:; connect-src http://nikverse.localhost nikverse:; sandbox allow-scripts";
 
 const HEADERS: [(&str, &str); 4] = [
     ("Content-Security-Policy", CSP),
@@ -326,8 +331,9 @@ fn resolve(raw_path: &str) -> Result<Route, StatusCode> {
     if let Some(asset) = relative.strip_prefix(ASSETS_PREFIX) {
         return Ok(Route::Asset(asset.to_string()));
     }
-    // `/learn` and `/learn/` are the lesson page: the panel frames `/learn/`, and a person typing the folder gets the same page.
-    if matches!(relative, "learn" | LEARN_PREFIX) {
+    // `/learn/` is the lesson page. `/learn` without the slash is not: the page's own addresses (`learn.css`, `learn.js`) are relative, so
+    // from there they would be asked of the root and the page would come up broken. Not found is better than a page that does not work.
+    if relative == LEARN_PREFIX {
         return PACKAGE
             .iter()
             .find(|file| file.path == LEARN_INDEX)
@@ -383,6 +389,13 @@ fn respond_with(request: &Request<Vec<u8>>, source: &Source, manifest: &[Manifes
 
 #[cfg(test)]
 mod tests {
+    // Full review 2026-10-06, rust 17: framed anywhere, the world is the same opaque origin the panel gives it.
+    #[test]
+    fn the_policy_sandboxes_the_world_whoever_frames_it() {
+        assert!(super::CSP.contains("sandbox allow-scripts;") || super::CSP.ends_with("sandbox allow-scripts"), "{}", super::CSP);
+        assert!(!super::CSP.contains("allow-same-origin"));
+    }
+
     use super::*;
 
     fn get(uri: &str) -> Response<Vec<u8>> {
@@ -489,13 +502,8 @@ mod tests {
 
     #[test]
     fn the_lesson_page_is_served_under_learn_and_the_pages_do_not_mix() {
-        // The panel frames `/learn/`: the folder is that page, in both spellings of the scheme and with or without the slash.
-        for uri in [
-            "nikverse://localhost/learn/",
-            "nikverse://localhost/learn",
-            "http://nikverse.localhost/learn/",
-            "http://nikverse.localhost/learn",
-        ] {
+        // The panel frames `/learn/`: the folder is that page, in both spellings of the scheme.
+        for uri in ["nikverse://localhost/learn/", "http://nikverse.localhost/learn/"] {
             let response = get(uri);
             assert_eq!(response.status(), StatusCode::OK, "{uri}");
             assert!(header(&response, "content-type").starts_with("text/html"), "{uri}");
@@ -503,6 +511,10 @@ mod tests {
             assert!(body.contains("data-learn"), "{uri}");
             assert_eq!(header(&response, "content-security-policy"), CSP, "{uri}");
             assert_eq!(header(&response, "access-control-allow-origin"), "*", "{uri}");
+        }
+        // Without the slash it is not the page: its relative files would be asked of the root, so there is nothing there.
+        for uri in ["nikverse://localhost/learn", "http://nikverse.localhost/learn"] {
+            assert_eq!(get(uri).status(), StatusCode::NOT_FOUND, "{uri}");
         }
         // Its four files, and each with its own type.
         for (file, mime) in [

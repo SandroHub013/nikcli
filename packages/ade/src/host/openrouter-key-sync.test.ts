@@ -25,6 +25,26 @@ function world(identifier: string | Error) {
   return { deps, reads, saved }
 }
 
+describe("where nikcli keeps its key on macOS and Linux", () => {
+  test("`~/.local/share/nikcli/auth.json` is looked at", async () => {
+    const seen: string[] = []
+    const outcome = await syncOpenRouterKey({
+      identifier: async () => "ai.nikcli.ade",
+      homeDir: async () => "/Users/chi",
+      readTextFile: async (path) => {
+        seen.push(path)
+        return path === "/Users/chi/.local/share/nikcli/auth.json"
+          ? { text: JSON.stringify({ openrouter: { key: "sk-or-x" } }) }
+          : undefined
+      },
+      save: async () => {},
+      removed: () => false,
+    })
+    expect(outcome).toBe("copied")
+    expect(seen).toContain("/Users/chi/.local/share/nikcli/auth.json")
+  })
+})
+
 describe("the voice's OpenRouter key from nikcli's auth.json", () => {
   test("ADE Test's identity: not copied, and auth.json is not even read", async () => {
     const { deps, reads, saved } = world("ai.nikcli.ade.test")

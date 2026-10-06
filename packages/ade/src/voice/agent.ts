@@ -21,7 +21,7 @@ import { limitReached } from "../bots/terms"
 import { answerSoFar, type RunnerId } from "../bots/runners"
 import type { Talk } from "../bots/talk"
 import type { TurnRequest, TurnResult } from "../bots/turn"
-import { locale as currentAppLocale, t } from "../i18n"
+import { locale as currentAppLocale, t, translate } from "../i18n"
 import { PLANNER_SYSTEM } from "@nikcli-ai/voice/core"
 
 export type VoiceAgentEngine = "auto" | "claude" | "codex" | "nikcli"
@@ -271,7 +271,10 @@ function textFollower(onText: (soFar: string) => void): (talk: Talk) => void {
 /** Whether a turn's outcome indicates Claude reached the plan's usage/quota limit. */
 function isLimitTurn(result: TurnResult): boolean {
   if (result.limited || result.talk?.limited) return true
-  // A thread saved before the flag, or a CLI line that names the limit itself.
+  // A turn that finished is not one the limit ended, whatever its words: Claude may well report that another session
+  // "had a 429" (full review 2026-10-06, ui 10). The words are for an `error`, from a thread saved before the flag or a
+  // CLI line that names the limit itself.
+  if (result.status === "done") return false
   const check = (s?: string) => {
     if (!s) return false
     return (
@@ -371,7 +374,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
         engine === "nikcli"
           ? { runner: "nikcli" as RunnerId }
           : resolveVoiceAgentRunner(engine, deps.statuses(), currentLocale())
-      if ("problem" in resolved) throw new Error(`Non riesco a pianificare: ${resolved.problem}`)
+      if ("problem" in resolved) throw new Error(translate(currentLocale(), "voice.msg.plan.cant", resolved.problem))
       const runner = resolved.runner
       /*
        * Codex has no warm process: every sentence would be a cold turn of its own, which costs more than the
@@ -380,7 +383,7 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
        */
       if (runner === "codex") {
         throw new Error(
-          "Non riesco a pianificare: con Codex la frase va direttamente all'agente, il pianificatore sarebbe più lento.",
+          translate(currentLocale(), "voice.msg.plan.cant", translate(currentLocale(), "voice.msg.plan.codexDirect")),
         )
       }
       const base =
@@ -429,12 +432,20 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
       signal?.addEventListener("abort", onAbort, { once: true })
       try {
         const result = await turn.result
-        if (silent && !signal?.aborted) throw new Error("Non riesco a pianificare: nessuna risposta in tempo.")
+        if (silent && !signal?.aborted) {
+          throw new Error(translate(currentLocale(), "voice.msg.plan.cant", translate(currentLocale(), "voice.msg.plan.noReplyInTime")))
+        }
         if (result.status === "stopped" || signal?.aborted) {
           throw Object.assign(new Error("This operation was aborted"), { name: "AbortError" })
         }
         if (result.status !== "done") {
-          throw new Error(`Non riesco a pianificare: ${result.problem || "l'agente non ha risposto."}`)
+          throw new Error(
+            translate(
+              currentLocale(),
+              "voice.msg.plan.cant",
+              result.problem || translate(currentLocale(), "voice.msg.plan.agentSilent"),
+            ),
+          )
         }
         lastPlanAt = Date.now()
         /*

@@ -92,6 +92,7 @@ import {
 import { gatewayVisible } from "../surface/state"
 import { appGatewayPanelDeps } from "./gateway/bridge"
 import { GatewaySection } from "./gateway/panel"
+import { localRemoteStore } from "./gateway/remote"
 import { openExternally } from "../browser/host-bridge"
 import {
   addRoutine,
@@ -108,6 +109,7 @@ import {
   type RoutineBook,
   type RoutineContext,
 } from "./routine"
+import { forgetBotTraces } from "./forget"
 import { RoutineSection, type RoutinePanelDeps } from "./routine-panel"
 import { botModelLabel, catalogFree, catalogFromText, modelGone, nikcliModelVariants } from "./catalog"
 import { effortChoices, effortToSave } from "./effort"
@@ -144,6 +146,8 @@ import { EffortPicker } from "../chat/effort-picker"
 import { ChipMenu } from "../chat/chip-menu"
 import { readableModelName } from "../chat/picker"
 import { createModelSource, stateOf, type ModelRead, type ModelSourceState } from "../chat/model-source"
+import { readBotModels } from "./bot-models"
+import { launchBot } from "./launch"
 
 /*
  * The conversations, outside any component.
@@ -329,15 +333,16 @@ const loadCatalog = (provider: string) => {
  * started for it: opening a folder asks for its trust, and a form cannot.
  */
 async function botModels(cwd: string): Promise<ModelRead> {
-  const options = { isTest: isAdeTestBuild() }
-  const chat = appChatStore()
-  if (cwd && isOpenOn(chat, cwd)) {
-    const configured = (await chat.catalog().catch(() => undefined))?.configProviders
-    if (configured) return { ok: true, models: modelsFromConfigProviders(configured, options) }
-  }
-  const read = await readModelCatalog(undefined, cwd || undefined)
-  if (!read.ok) return read
-  return { ok: true, models: modelsFromConfigProviders(catalogFromText(read.text), options) }
+  return readBotModels(cwd, {
+    isTest: isAdeTestBuild(),
+    openCatalog: async (folder) => {
+      const chat = appChatStore()
+      if (!isOpenOn(chat, folder)) return undefined
+      return (await chat.catalog().catch(() => undefined))?.configProviders
+    },
+    homeDir: async () => (await getHost())?.homeDir?.(),
+    readCatalog: (home) => readModelCatalog(undefined, home),
+  })
 }
 
 /* Read when a model menu opens, kept for the session per folder; a failure is not kept (`model-source.ts`). */
@@ -979,6 +984,19 @@ export function BotsMain(props: BotsMainProps) {
   const answer = (bot: AgentFile, choice: PermissionAnswer, requestID: string | undefined) =>
     turns.answer(bot, choice, requestID)
 
+  /*
+   * «Terminale»: a turn's checks first (a project's bot is asked about, a self-approving one is
+   * refused), then the pane with the file as it was trusted. No project question: the terminal is
+   * the user's own nikcli (bots 7).
+   */
+  const launch = (bot: AgentFile) => {
+    void launchBot(bot, {
+      admit: (candidate) => admitTurn(candidate, undefined, askTrust),
+      open: (trusted) => props.onLaunch?.(trusted),
+      refused: (candidate, problem) => updateTalk(candidate.path, (talk) => applyProblem(talk, problem, Date.now())),
+    })
+  }
+
   // The Gateway section (G6): in the desktop app only, where Rust holds the gateways.
   const gateway =
     gatewayVisible() && typeof window !== "undefined" && "__TAURI_INTERNALS__" in window
@@ -1067,7 +1085,7 @@ export function BotsMain(props: BotsMainProps) {
               expression={expression(bot())}
               {...(gateway ? { gateway } : {})}
               {...(props.projectRoot ? { projectRoot: props.projectRoot } : {})}
-              {...(props.onLaunch ? { onLaunch: props.onLaunch } : {})}
+              {...(props.onLaunch ? { onLaunch: launch } : {})}
               {...(props.onOpenFile ? { onOpenFile: props.onOpenFile } : {})}
               {...(props.onOpenKeys ? { onOpenKeys: props.onOpenKeys } : {})}
               onForget={() => forget(bot())}
@@ -1673,6 +1691,13 @@ function BotCard(props: {
       setConfirming(false)
       return
     }
+    // Its routines, memory and account choice go with the file: a new bot at the same path starts clean.
+    forgetBotTraces(props.bot.path, {
+      memory: memories,
+      account: accounts,
+      remote: localRemoteStore(),
+      routines: writeRoutines,
+    })
     props.onDeleted()
   }
 
@@ -1794,8 +1819,11 @@ function BotCard(props: {
         </Show>
 
         <Show when={props.bot.mode !== "subagent"}>
-          <RoutineSection bot={props.bot} account={account()} projectRoot={props.projectRoot} deps={routineDeps} />
-          <MemorySection bot={props.bot.path} store={memories} />
+          {/* Keyed on the bot, like the gateway: the routine form and its consent tick belong to one bot (full review 2026-10-06, bots 16). */}
+          <Show when={props.bot.path} keyed>
+            <RoutineSection bot={props.bot} account={account()} projectRoot={props.projectRoot} deps={routineDeps} />
+            <MemorySection bot={props.bot.path} store={memories} />
+          </Show>
         </Show>
 
         <section data-slot="bots-card-section">

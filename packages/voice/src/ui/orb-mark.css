@@ -91,7 +91,7 @@
     transparent 150deg,
     transparent 360deg
   );
-  animation: ade-orb-spin 4.2s linear infinite;
+  animation: ade-orb-spin 4.2s linear infinite var(--ade-loops, running);
 }
 
 [data-component="orb-mark"] [data-slot="orb-swirl"][data-arc="b"] {
@@ -102,7 +102,7 @@
     transparent 120deg,
     transparent 360deg
   );
-  animation: ade-orb-spin 2.6s linear infinite reverse;
+  animation: ade-orb-spin 2.6s linear infinite reverse var(--ade-loops, running);
 }
 
 /*
@@ -306,7 +306,7 @@
 
 [data-component="orb-mark"][data-awake] [data-slot="orb-iris"] {
   border-color: color-mix(in srgb, var(--orb-lit) 80%, transparent);
-  animation: ade-orb-breathe 3.4s var(--ade-ease, ease-in-out) infinite;
+  animation: ade-orb-breathe 3.4s var(--ade-ease, ease-in-out) infinite var(--ade-loops, running);
 }
 
 /* The iris breathes only while the arcs turn. After the rule above, whose `animation` shorthand would otherwise set the play state back to running. */

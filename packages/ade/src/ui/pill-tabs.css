@@ -1,0 +1,135 @@
+/* ── section tabs & pill controls ─────────────────────────────────────────── */
+/*
+ * The four sections, as one segmented control rather than four chips.
+ *
+ * With two views loose chips were fine — a pair reads as a pair. Four of them
+ * read as four unrelated toggles, and the user's question at a glance is
+ * "which one am I in", which a shared track with a single filled cell answers
+ * and adjacent buttons do not. The track is inset so the control sits *in* the
+ * bar rather than on it, which is what keeps it from competing with the
+ * command field beside it.
+ */
+[data-slot="ade-views"],
+[data-slot="ade-pill-tabs"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  flex: 0 0 auto;
+  padding: 2px;
+  border: 1px solid var(--ade-border-subtle);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-sunken);
+}
+
+[data-slot="ade-view-tab"],
+[data-slot="ade-pill-tab"] {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 var(--ade-space-5);
+  border: 1px solid transparent;
+  border-radius: var(--ade-radius-sm);
+  background: transparent;
+  /* `soft` on the sunken track: 5.5:1 in light, where `weak` was 4.2 (closure 3). */
+  color: var(--ade-text-soft);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+  box-sizing: border-box;
+  transition:
+    background var(--ade-dur-fast) var(--ade-ease),
+    color var(--ade-dur-fast) var(--ade-ease),
+    box-shadow var(--ade-dur-fast) var(--ade-ease);
+}
+
+[data-slot="ade-view-tab"]:hover,
+[data-slot="ade-pill-tab"]:hover {
+  color: var(--ade-text);
+}
+
+/* Raised, not tinted: the selected cell should look like it sits above the
+   track. An accent fill here would shout over the primary action in the bar. */
+[data-slot="ade-view-tab"][data-active],
+[data-slot="ade-pill-tab"][data-active] {
+  background: var(--ade-raised);
+  border-color: var(--ade-border);
+  color: var(--ade-text);
+  box-shadow: var(--ade-shadow-sm);
+}
+
+[data-slot="ade-view-tab"]:focus-visible,
+[data-slot="ade-pill-tab"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+  color: var(--ade-text);
+}
+
+/* ── Badges inside pill tabs ──────────────────────────────────────────────── */
+[data-slot="ade-pill-badge"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  box-sizing: border-box;
+  background: var(--ade-sunken);
+  color: var(--ade-text);
+  font-size: var(--ade-font-xs);
+  font-weight: var(--ade-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  text-align: center;
+  margin-left: 5px;
+}
+
+[data-family="decisions"] [data-slot="ade-pill-badge"] {
+  background: var(--ade-working);
+  color: var(--ade-accent-fg);
+}
+
+[data-family="design"] [data-slot="ade-pill-badge"] {
+  background: var(--ade-accent-strong);
+  color: var(--ade-accent-fg);
+}
+
+/* ── Attention dot and pulse ──────────────────────────────────────────────── */
+[data-slot="ade-pill-dot"] {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-warning);
+  margin-right: 5px;
+  flex: none;
+  animation: ade-pill-pulse 1.2s ease-in-out infinite var(--ade-loops, running);
+}
+
+@keyframes ade-pill-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.35);
+    opacity: 0.6;
+  }
+}
+
+/* ── Narrow bar responsive handling ───────────────────────────────────────── */
+[data-slot="ade-pill-label-short"] {
+  display: none;
+}
+
+@media (max-width: 1099.98px) {
+  [data-slot="ade-pill-tab"]:has([data-slot="ade-pill-label-short"]) [data-slot="ade-pill-label-full"] {
+    display: none;
+  }
+  [data-slot="ade-pill-tab"]:has([data-slot="ade-pill-label-short"]) [data-slot="ade-pill-label-short"] {
+    display: inline;
+  }
+}

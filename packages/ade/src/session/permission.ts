@@ -26,6 +26,17 @@ export interface PermissionRequest {
   answers: PermissionAnswer[]
 }
 
+/**
+ * What tells one request from another. For Claude and Codex `what` is «Do you want to proceed?» for every request: the
+ * command or the path is in `target`. Compared on `what` alone, the yes said to «cat README» granted the «rm -rf ~» that
+ * came next with the same heading, and every request after the first of a pane was dropped as a duplicate alert (full
+ * review 2026-10-06, ui 4). Raw, like `what`: it is never spoken, only compared.
+ */
+export function permissionIdentity(request: Pick<PermissionRequest, "what" | "target">): string {
+  return request.target ? `${request.what}
+${request.target}` : request.what
+}
+
 const PERMISSION_SPEECH_LABEL_KEYS = {
   shell: "voice.permission.type.shell",
   write: "voice.permission.type.write",
@@ -41,9 +52,38 @@ export function permissionSpeechLabel(kind?: PermissionRequest["kind"], currentL
   return translate(currentLocale, key)
 }
 
+/**
+ * What an answer does, decided where the CLI's prompt is read and never from the words shown: the voice and everything
+ * else that has to know «is this a yes, is this a no» look at this, not at a label that is in the user's language and in
+ * the CLI's own wording (full review 2026-10-06, sessions 13).
+ *
+ * - `yes`: this request, as the primary or the only yes;
+ * - `once`: this request only, said as such next to a permanent one;
+ * - `always`: more than this request: always, for the session, without asking again;
+ * - `no`, `cancel`: a refusal; `skip`: leave this one; `other`: a choice ADE does not read (shown as the CLI wrote it).
+ */
+export type AnswerIntent = "yes" | "once" | "always" | "no" | "cancel" | "skip" | "other"
+
+/** The catalogue entries a recognised answer is shown with (`answerLabel`). */
+export type AnswerLabelKey =
+  | "permission.answer.yes"
+  | "permission.answer.always"
+  | "permission.answer.alwaysShort"
+  | "permission.answer.once"
+  | "permission.answer.no"
+  | "permission.answer.noCancel"
+  | "permission.answer.cancel"
+  | "permission.answer.skip"
+  | "permission.answer.allow"
+  | "permission.answer.deny"
+
 export interface PermissionAnswer {
-  /** Etichetta per il bottone, in italiano. */
+  /** What the answer does: see `AnswerIntent`. */
+  intent: AnswerIntent
+  /** The CLI's own wording of the choice (or the plain English of ADE's own prompts): what is shown when `labelKey` is absent. */
   label: string
+  /** The catalogue entry the button is shown with, for the wordings ADE recognises: in the interface's language. */
+  labelKey?: AnswerLabelKey
   /**
    * The keystrokes that choose this answer — without the Enter that submits
    * them.
@@ -131,38 +171,63 @@ function extractKindAndTarget(
 }
 
 // ---------------------------------------------------------------------------
-// Italian Label Mapping
+// What an answer is, and how it is shown
 // ---------------------------------------------------------------------------
 
-function mapChoiceLabelToItalian(rawText: string): string {
-  const t = rawText.trim().toLowerCase()
+/** An answer that grants more than the request on screen: for always, for the session, without asking again. */
+const PERMANENT_ANSWER =
+  /always|sempre|non chiedere|non chiederlo|don'?t ask|do not ask|never ask|(?:for|during) (?:this|the) session|allow all|per (?:questa )?sessione|tutta la sessione/i
+// `` is not used: JS does not count «ì» as a letter, so «Sì» would never end a word.
+const REFUSAL_START = /^(?:no|n|deny|reject|nega|rifiuta)(?![\p{L}\p{N}])/iu
+const CANCEL_START = /^(?:cancel|annulla|abort)(?![\p{L}\p{N}])/iu
+const ONCE_START = /^(?:allow\s+once|consenti\s+una\s+volta|(?:yes|s[iì]),?\s+(?:only\s+this\s+(?:time|once)|solo\s+questa\s+volta))/iu
+const YES_START = /^(?:yes|y|s[iì]|allow|approve|proceed|confirm|concedi|consenti|accetta|procedi|conferma)(?![\p{L}\p{N}])/iu
+const SKIP_START = /^(?:skip|salta)(?![\p{L}\p{N}])/iu
 
+/** What a choice of the CLI does, from the words it was written in (English or Italian). Read once, here. */
+export function classifyAnswer(raw: string): AnswerIntent {
+  const text = raw.trim()
+  if (REFUSAL_START.test(text)) return "no"
+  if (CANCEL_START.test(text)) return "cancel"
+  if (SKIP_START.test(text)) return "skip"
+  if (PERMANENT_ANSWER.test(text)) return "always"
+  if (ONCE_START.test(text)) return "once"
+  if (YES_START.test(text)) return "yes"
+  return "other"
+}
+
+/** The wordings ADE has a translation for: the CLI's plain ones. Anything longer or odder is shown as the CLI wrote it. */
+function recognisedLabel(raw: string): AnswerLabelKey | undefined {
+  const t = raw.trim().toLowerCase()
   if (
     /^(?:yes,?\s+and\s+don't\s+ask\s+again|always\s+allow|allow\s+always|yes,?\s+always|allow\s+for\s+session|consenti\s+sempre)$/i.test(
       t,
     )
   ) {
-    return "Sì, e non chiedere più"
+    return "permission.answer.always"
   }
-  if (/^(?:allow\s+once|consenti\s+una\s+volta)$/i.test(t)) {
-    return "Consenti una volta"
-  }
-  if (/^(?:yes|y|sì|si|allow|approve|proceed|confirm|concedi|consenti|accetta)$/i.test(t)) {
-    return "Sì"
-  }
-  if (/^(?:no,?\s+and\s+cancel|no,?\s+e\s+annulla)$/i.test(t)) {
-    return "No, e annulla"
-  }
-  if (/^(?:no|n|deny|reject|nega|rifiuta)$/i.test(t)) {
-    return "No"
-  }
-  if (/^(?:cancel|annulla|abort)$/i.test(t)) {
-    return "Annulla"
-  }
-  if (/^(?:skip|salta)$/i.test(t)) {
-    return "Salta"
-  }
-  return rawText.trim()
+  if (/^(?:allow\s+once|consenti\s+una\s+volta)$/i.test(t)) return "permission.answer.once"
+  if (/^(?:yes|y|sì|si|allow|approve|proceed|confirm|concedi|consenti|accetta)$/i.test(t)) return "permission.answer.yes"
+  if (/^(?:no,?\s+and\s+cancel|no,?\s+e\s+annulla)$/i.test(t)) return "permission.answer.noCancel"
+  if (/^(?:no|n|deny|reject|nega|rifiuta)$/i.test(t)) return "permission.answer.no"
+  if (/^(?:cancel|annulla|abort)$/i.test(t)) return "permission.answer.cancel"
+  if (/^(?:skip|salta)$/i.test(t)) return "permission.answer.skip"
+  return undefined
+}
+
+/** The button's text: the catalogue's in the interface's language for a recognised answer, the CLI's own words otherwise. */
+export function answerLabel(answer: Pick<PermissionAnswer, "label" | "labelKey">, currentLocale: Locale = locale()): string {
+  return answer.labelKey ? translate(currentLocale, answer.labelKey) : answer.label
+}
+
+/** Whether the answer is a refusal. */
+export function isRefusal(answer: Pick<PermissionAnswer, "intent">): boolean {
+  return answer.intent === "no" || answer.intent === "cancel"
+}
+
+/** Whether the answer grants more than the request on screen. */
+export function isPermanent(answer: Pick<PermissionAnswer, "intent">): boolean {
+  return answer.intent === "always"
 }
 
 // ---------------------------------------------------------------------------
@@ -317,12 +382,15 @@ export const PERMISSION_SCHEMAS: readonly PermissionSchema[] = [
       const { kind, target } = extractKindAndTarget(whatLine, contextLines)
 
       const answers: PermissionAnswer[] = options.map((opt, idx) => {
-        const label = mapChoiceLabelToItalian(opt.text)
+        const text = opt.text.trim()
+        const labelKey = recognisedLabel(text)
         const t = opt.text.toLowerCase()
         const isNegative = /^(?:no|deny|reject|cancel|abort|nega|rifiuta|annulla)$/i.test(t)
         const tone: "primary" | "secondary" = idx === 0 && !isNegative ? "primary" : "secondary"
         return {
-          label,
+          intent: classifyAnswer(text),
+          label: text,
+          ...(labelKey ? { labelKey } : {}),
           send: opt.num,
           tone,
         }
@@ -364,12 +432,16 @@ export const PERMISSION_SCHEMAS: readonly PermissionSchema[] = [
 
       const answers: PermissionAnswer[] = [
         {
-          label: "Sì",
+          intent: "yes",
+          label: "Yes",
+          labelKey: "permission.answer.yes",
           send: "y",
           tone: isNoDefault ? "secondary" : "primary",
         },
         {
+          intent: "no",
           label: "No",
+          labelKey: "permission.answer.no",
           send: "n",
           tone: isNoDefault ? "primary" : "secondary",
         },
@@ -377,7 +449,9 @@ export const PERMISSION_SCHEMAS: readonly PermissionSchema[] = [
 
       if (hasAlways) {
         answers.push({
-          label: "Sempre",
+          intent: "always",
+          label: "Always",
+          labelKey: "permission.answer.alwaysShort",
           send: "a",
           tone: "secondary",
         })
@@ -428,12 +502,16 @@ export const PERMISSION_SCHEMAS: readonly PermissionSchema[] = [
         target,
         answers: [
           {
-            label: "Consenti",
+            intent: "yes",
+            label: "Allow",
+            labelKey: "permission.answer.allow",
             send: "y",
             tone: "primary",
           },
           {
-            label: "Nega",
+            intent: "no",
+            label: "Deny",
+            labelKey: "permission.answer.deny",
             send: "n",
             tone: "secondary",
           },

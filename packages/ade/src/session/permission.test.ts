@@ -1,11 +1,19 @@
 import { describe, expect, test } from "bun:test"
 import {
+  answerLabel,
+  classifyAnswer,
   detectPermission,
   followPermission,
   isResolved,
+  permissionIdentity,
   permissionSpeechLabel,
+  type PermissionAnswer,
   type PermissionRequest,
 } from "./permission"
+
+/** What a button shows, with the interface in Italian: the label, the keystroke and the tone. */
+const view = (answers: readonly PermissionAnswer[], language: "it" | "en" = "it") =>
+  answers.map((a) => ({ label: answerLabel(a, language), send: a.send, tone: a.tone }))
 
 describe("permissionSpeechLabel", () => {
   test("names only the safe request type in either locale", () => {
@@ -22,6 +30,75 @@ describe("permissionSpeechLabel", () => {
   })
 })
 
+// Full review 2026-10-06, sessions 13: the button's text is in the interface's language, and what an answer does is a field.
+describe("the answers of a prompt: intent and shown label", () => {
+  const menu = ["Do you want to run this command?", "  1. Yes", "  2. Yes, and don't ask again", "  3. No"]
+
+  test("each choice carries what it does, read once where the prompt is read", () => {
+    const req = detectPermission(menu, "claude-code")!
+    expect(req.answers.map((a) => a.intent)).toEqual(["yes", "always", "no"])
+    const edits = detectPermission(
+      ["Do you want to make this edit?", "  1. Yes", "  2. Yes, allow all edits during this session", "  3. No"],
+      "claude-code",
+    )!
+    expect(edits.answers.map((a) => a.intent)).toEqual(["yes", "always", "no"])
+    const menuTwo = detectPermission(
+      ["Allow this?", "  1. Allow always", "  2. Allow once", "  3. Deny"],
+      "claude-code",
+    )!
+    expect(menuTwo.answers.map((a) => a.intent)).toEqual(["always", "once", "no"])
+  })
+
+  test("with the interface in English the buttons are in English, in Italian they are in Italian", () => {
+    const req = detectPermission(menu, "claude-code")!
+    expect(view(req.answers, "en").map((a) => a.label)).toEqual(["Yes", "Yes, and don't ask again", "No"])
+    expect(view(req.answers, "it").map((a) => a.label)).toEqual(["Sì", "Sì, e non chiedere più", "No"])
+    // The CLI's own longer wording is shown as it wrote it, in either language.
+    const edits = detectPermission(
+      ["Do you want to make this edit?", "  1. Yes", "  2. Yes, allow all edits during this session", "  3. No"],
+      "claude-code",
+    )!
+    expect(view(edits.answers, "en")[1]!.label).toBe("Yes, allow all edits during this session")
+    expect(view(edits.answers, "it")[1]!.label).toBe("Yes, allow all edits during this session")
+  })
+
+  test("ADE's own prompts (the [y/N] one and the plain question) are shown in the interface's language too", () => {
+    const yn = detectPermission(["Run the tests? [y/N/a]"], "x")!
+    expect(yn.answers.map((a) => a.intent)).toEqual(["yes", "no", "always"])
+    expect(view(yn.answers, "en").map((a) => a.label)).toEqual(["Yes", "No", "Always"])
+    expect(view(yn.answers, "it").map((a) => a.label)).toEqual(["Sì", "No", "Sempre"])
+    const plain = detectPermission(["Do you want to proceed?"], "x")
+    if (plain) {
+      expect(view(plain.answers, "en").map((a) => a.label)).toEqual(["Allow", "Deny"])
+      expect(view(plain.answers, "it").map((a) => a.label)).toEqual(["Consenti", "Nega"])
+    }
+  })
+
+  test("classifyAnswer reads the CLI's wordings in both languages", () => {
+    const table: [string, string][] = [
+      ["Yes", "yes"],
+      ["Sì", "yes"],
+      ["Allow", "yes"],
+      ["Allow once", "once"],
+      ["Yes, only this time", "once"],
+      ["Always allow", "always"],
+      ["Sì, e non chiedere più", "always"],
+      ["Yes, and don't ask again for npm commands", "always"],
+      ["Yes, allow all edits during this session", "always"],
+      ["No", "no"],
+      ["No, and tell Claude what to do differently", "no"],
+      ["Deny", "no"],
+      ["Rifiuta", "no"],
+      ["Cancel", "cancel"],
+      ["Annulla", "cancel"],
+      ["Skip", "skip"],
+      ["Show me the diff", "other"],
+      ["Nothing", "other"],
+    ]
+    for (const [label, intent] of table) expect([label, classifyAnswer(label)]).toEqual([label, intent])
+  })
+})
+
 describe("detectPermission - Numbered Choices", () => {
   test("detects standard 3-choice permission prompt", () => {
     const lines = ["Do you want to run this command?", "  1. Yes", "  2. Yes, and don't ask again", "  3. No"]
@@ -30,17 +107,17 @@ describe("detectPermission - Numbered Choices", () => {
     expect(req!.what).toBe("Do you want to run this command?")
     expect(req!.answers.length).toBe(3)
 
-    expect(req!.answers[0]).toEqual({
+    expect(view([req!.answers[0]!])[0]).toEqual({
       label: "Sì",
       send: "1",
       tone: "primary",
     })
-    expect(req!.answers[1]).toEqual({
+    expect(view([req!.answers[1]!])[0]).toEqual({
       label: "Sì, e non chiedere più",
       send: "2",
       tone: "secondary",
     })
-    expect(req!.answers[2]).toEqual({
+    expect(view([req!.answers[2]!])[0]).toEqual({
       label: "No",
       send: "3",
       tone: "secondary",
@@ -84,7 +161,7 @@ describe("detectPermission - Numbered Choices", () => {
     expect(req!.what).toBe("Execute this command?")
     expect(req!.kind).toBe("shell")
     expect(req!.target).toBe("rm -rf dist/")
-    expect(req!.answers).toEqual([
+    expect(view(req!.answers)).toEqual([
       { label: "Consenti una volta", send: "1", tone: "primary" },
       { label: "Sì, e non chiedere più", send: "2", tone: "secondary" },
       { label: "No", send: "3", tone: "secondary" },
@@ -102,7 +179,7 @@ describe("detectPermission - Numbered Choices", () => {
     expect(req).toBeDefined()
     expect(req!.kind).toBe("write")
     expect(req!.target).toBe("packages/ade/src/session/stream.ts")
-    expect(req!.answers).toEqual([
+    expect(view(req!.answers)).toEqual([
       { label: "Sì", send: "1", tone: "primary" },
       { label: "No", send: "2", tone: "secondary" },
     ])
@@ -117,7 +194,7 @@ describe("detectPermission - [y/N] and (y/n) prompts", () => {
     expect(req!.what).toBe("Allow execution of `git reset --hard HEAD~1`? [y/N]")
     expect(req!.kind).toBe("shell")
     expect(req!.target).toBe("git reset --hard HEAD~1")
-    expect(req!.answers).toEqual([
+    expect(view(req!.answers)).toEqual([
       { label: "Sì", send: "y", tone: "secondary" },
       { label: "No", send: "n", tone: "primary" },
     ])
@@ -129,7 +206,7 @@ describe("detectPermission - [y/N] and (y/n) prompts", () => {
     expect(req).toBeDefined()
     expect(req!.kind).toBe("write")
     expect(req!.target).toBe("packages/ade/src/session/permission.ts")
-    expect(req!.answers).toEqual([
+    expect(view(req!.answers)).toEqual([
       { label: "Sì", send: "y", tone: "primary" },
       { label: "No", send: "n", tone: "secondary" },
     ])
@@ -141,7 +218,7 @@ describe("detectPermission - [y/N] and (y/n) prompts", () => {
     expect(req).toBeDefined()
     expect(req!.kind).toBe("network")
     expect(req!.target).toBe("https://api.github.com/repos")
-    expect(req!.answers).toEqual([
+    expect(view(req!.answers)).toEqual([
       { label: "Sì", send: "y", tone: "primary" },
       { label: "No", send: "n", tone: "secondary" },
     ])
@@ -153,7 +230,7 @@ describe("detectPermission - [y/N] and (y/n) prompts", () => {
     expect(req).toBeDefined()
     expect(req!.kind).toBe("shell")
     expect(req!.target).toBe("npm install")
-    expect(req!.answers).toEqual([
+    expect(view(req!.answers)).toEqual([
       { label: "Sì", send: "y", tone: "secondary" },
       { label: "No", send: "n", tone: "primary" },
       { label: "Sempre", send: "a", tone: "secondary" },
@@ -178,7 +255,7 @@ describe("detectPermission - Simple Question with Prompt", () => {
     expect(req!.what).toBe("Run this shell command?")
     expect(req!.kind).toBe("shell")
     expect(req!.target).toBe("git push origin main")
-    expect(req!.answers).toEqual([
+    expect(view(req!.answers)).toEqual([
       { label: "Consenti", send: "y", tone: "primary" },
       { label: "Nega", send: "n", tone: "secondary" },
     ])
@@ -190,7 +267,7 @@ describe("detectPermission - Simple Question with Prompt", () => {
     expect(req).toBeDefined()
     expect(req!.kind).toBe("write")
     expect(req!.target).toBe("packages/ade/package.json")
-    expect(req!.answers).toEqual([
+    expect(view(req!.answers)).toEqual([
       { label: "Consenti", send: "y", tone: "primary" },
       { label: "Nega", send: "n", tone: "secondary" },
     ])
@@ -276,8 +353,8 @@ describe("isResolved", () => {
     kind: "shell",
     target: "git status",
     answers: [
-      { label: "Sì", send: "y", tone: "secondary" },
-      { label: "No", send: "n", tone: "primary" },
+      { intent: "yes", label: "Yes", send: "y", tone: "secondary" },
+      { intent: "no", label: "No", send: "n", tone: "primary" },
     ],
   }
 
@@ -372,4 +449,19 @@ test("lint: the pane follows a pending request with followPermission", () => {
     "utf8",
   )
   expect(source).toContain("const still = followPermission(pending, recent, agent)")
+})
+
+// Full review 2026-10-06, ui 4: the voice and the alerts are handed the request's identity, not its heading alone.
+test("a request is told by its heading and its target, and the workbench hands that to the voice and the alerts", () => {
+  expect(permissionIdentity({ what: "Do you want to proceed?", target: "rm -rf ~" })).not.toBe(
+    permissionIdentity({ what: "Do you want to proceed?", target: "cat README" }),
+  )
+  expect(permissionIdentity({ what: "run command" })).toBe("run command")
+  const source = require("node:fs").readFileSync(
+    require("node:path").join(import.meta.dir, "../surface/workbench.tsx"),
+    "utf8",
+  )
+  expect(source).toContain("handlePermissionRequest(paneId, permissionIdentity(request)")
+  expect(source).toContain("permissionIdentity(request), request.kind)")
+  expect(source).not.toContain("handlePermissionRequest(paneId, request.what")
 })

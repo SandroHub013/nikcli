@@ -66,7 +66,9 @@ export default function PermissionsSettingsScreen() {
     if (!client || saving) return
     const before = permission
     const beforeMode = permissionModeSetting
-    const patch = permissionPresetPatch(preset)
+    // The server merges the patch into the map it already has, so the preset
+    // needs to see it: the keys it must rewrite are the ones already there.
+    const patch = permissionPresetPatch(preset, toPermissionMap(permission))
     const nextMode = presetPermissionMode(preset)
     const next = { ...toPermissionMap(before), ...patch }
     setPermission(next)

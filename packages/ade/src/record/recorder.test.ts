@@ -61,6 +61,74 @@ describe("record/recorder", () => {
     expect(written).toEqual([])
   })
 
+  // Full review 2026-10-06, nikverse B2.
+  test("a take that fails after the capture came up stops the capture and the microphone", async () => {
+    let stops = 0
+    let micStops = 0
+    const recorder = createRecorder({
+      start: async (_target, dir, name) => ({ path: `${dir}/${name}.mp4` }),
+      stop: async () => {
+        stops += 1
+        return { path: null }
+      },
+      writeText: async () => {},
+      dir: () => "C:/video",
+      now: () => T0,
+      onState: (state) => {
+        if (state.status === "recording") throw new Error("nessun frame")
+      },
+      startMic: async () => ({
+        extension: "webm",
+        stop: async () => {
+          micStops += 1
+          return undefined
+        },
+      }),
+    })
+    expect(await recorder.start({ kind: "window" }, { mic: true })).toBe("nessun frame")
+    expect(stops).toBe(1)
+    expect(micStops).toBe(1)
+    expect(recorder.state()).toEqual({ status: "idle" })
+    // A capture that never came up is not stopped: nothing to stop.
+    const refused = createRecorder({
+      start: async () => {
+        throw new Error("rifiutata")
+      },
+      stop: async () => {
+        stops += 1
+        return { path: null }
+      },
+      writeText: async () => {},
+      dir: () => "C:/video",
+      now: () => T0,
+      onState: () => {},
+    })
+    expect(await refused.start({ kind: "window" })).toBe("rifiutata")
+    expect(stops).toBe(1)
+  })
+
+  test("the microphone is stopped at the end of a take even when there is no way to write its file", async () => {
+    let micStops = 0
+    const recorder = createRecorder({
+      start: async (_target, dir, name) => ({ path: `${dir}/${name}.mp4` }),
+      stop: async () => ({ path: "C:/video/x.mp4" }),
+      writeText: async () => {},
+      dir: () => "C:/video",
+      now: () => T0,
+      onState: () => {},
+      startMic: async () => ({
+        extension: "webm",
+        stop: async () => {
+          micStops += 1
+          return new Uint8Array([1])
+        },
+      }),
+    })
+    expect(await recorder.start({ kind: "window" }, { mic: true })).toBeUndefined()
+    await recorder.stop()
+    expect(micStops).toBe(1)
+  })
+
   test("a second take is refused while one runs, and notes outside a take are dropped", async () => {
     const { recorder, started, written } = setup()
     await recorder.start({ kind: "window" })
@@ -126,12 +194,19 @@ describe("record/recorder tracks", () => {
     return buffer
   }
 
-  function withTracks(mic?: { extension: string; bytes?: Uint8Array; refuse?: boolean }) {
+  function withTracks(
+    mic?: { extension: string; bytes?: Uint8Array; refuse?: boolean; startsAfterMs?: number },
+    captureStartsAfterMs = 0,
+  ) {
     const bytes: { path: string; size: number }[] = []
     const texts: { path: string; text: string }[] = []
     let now = T0
     const recorder = createRecorder({
-      start: async (_target, dir, name) => ({ path: `${dir}/${name}.mp4` }),
+      start: async (_target, dir, name) => {
+        // The capture takes its time to come up: the video's zero is later than the take's.
+        now += captureStartsAfterMs
+        return { path: `${dir}/${name}.mp4` }
+      },
       stop: async () => ({ path: "C:/video/ADE.mp4" }),
       writeText: async (path, text) => {
         texts.push({ path, text })
@@ -140,8 +215,11 @@ describe("record/recorder tracks", () => {
         bytes.push({ path, size: data.length })
       },
       startMic: mic
-        ? async () =>
-            mic.refuse ? Promise.reject(new Error("negato")) : { extension: mic.extension, stop: async () => mic.bytes }
+        ? async () => {
+            // The microphone comes up after the capture did: time passes before it is recording.
+            now += mic.startsAfterMs ?? 0
+            return mic.refuse ? Promise.reject(new Error("negato")) : { extension: mic.extension, stop: async () => mic.bytes }
+          }
         : undefined,
       frame: () => ({ width: 1440, height: 900, dpr: 1.25 }),
       dir: () => "C:/video",
@@ -167,9 +245,43 @@ describe("record/recorder tracks", () => {
       .map((line) => JSON.parse(line))
     // The frame comes first, so the export can map page pixels to the video.
     expect(lines[0]).toMatchObject({ kind: "frame", at: 0, width: 1440, dpr: 1.25 })
-    expect(lines[1]).toEqual({ kind: "said", at: 200, text: "Ci sono due sessioni." })
+    expect(lines[1]).toEqual({ kind: "mic", at: 0 })
+    expect(lines[2]).toEqual({ kind: "said", at: 200, text: "Ci sono due sessioni." })
     // 1 s at the track's 24 kHz: the voice track lasts as long as the take.
     expect(bytes[0]!.size).toBe(44 + 24000 * 2)
+  })
+
+  // Full review 2026-10-06, M3: the microphone's file starts when its recorder does, later than the video.
+  test("the take notes the moment the microphone began, so the export can play it from there", async () => {
+    const { recorder, texts, advance } = withTracks({ extension: "webm", bytes: new Uint8Array([1]), startsAfterMs: 640 })
+    await recorder.start({ kind: "window" }, { mic: true })
+    advance(500)
+    await recorder.stop()
+    const lines = texts[0]!.text
+      .trimEnd()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+    expect(lines.find((line) => line.kind === "mic")).toEqual({ kind: "mic", at: 640 })
+  })
+
+  // Verifiche's review of F5, M3: the event is the microphone's own start-up time, whatever the capture's.
+  test("the mic event does not include the time the capture took to come up", async () => {
+    const { recorder, texts } = withTracks({ extension: "webm", bytes: new Uint8Array([1]), startsAfterMs: 200 }, 900)
+    await recorder.start({ kind: "window" }, { mic: true })
+    await recorder.stop()
+    const lines = texts[0]!.text
+      .trimEnd()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+    // 900 ms for the capture, 200 for the microphone: the track begins 200 ms into the video.
+    expect(lines.find((line) => line.kind === "mic")).toEqual({ kind: "mic", at: 200 })
+  })
+
+  test("a take with no microphone writes no mic event", async () => {
+    const { recorder, texts } = withTracks()
+    await recorder.start({ kind: "window" }, { mic: false })
+    await recorder.stop()
+    expect(texts[0]!.text).not.toContain('"kind":"mic"')
   })
 
   test("a refused microphone records the take anyway, without that track", async () => {

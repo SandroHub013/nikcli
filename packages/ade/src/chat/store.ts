@@ -449,7 +449,23 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
     },
     async loadMessages(sessionID) {
       watched.add(sessionID)
-      if (current) await fetchMessages(current.connection, sessionID, generation)
+      if (!current) return
+      /*
+       * As `bootstrap` does: an event that arrives while the messages are being fetched (the new message of an
+       * answer under way) may be newer than what the server lists, and the fetch is put in with `reconcile`, which
+       * took it away: the turn did not show until its step ended, and its cost and spoken line were lost (full
+       * review 2026-10-06, bots 14). The events of the wait go again on top.
+       */
+      const meanwhile: ChatEvent[] = []
+      arriving.add(meanwhile)
+      const mine = generation
+      try {
+        await fetchMessages(current.connection, sessionID, mine)
+        if (mine !== generation) return
+        for (const event of meanwhile) apply(event)
+      } finally {
+        arriving.delete(meanwhile)
+      }
     },
     async findFiles(query) {
       const found = await opened().client.find.files({ query, type: "file", limit: 20 })

@@ -1,4 +1,5 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect, spyOn } from "bun:test"
+import { parseWorkspace, serializeWorkspace } from "../session/persist"
 import {
   ADE_VIEWS,
   BOT_ENABLED,
@@ -172,3 +173,91 @@ describe("the Chat and Bot switches (S40)", () => {
     }
   }
 })
+
+describe("a layout saved by a release that had plugin panels", () => {
+  /*
+   * ADE once saved `framePlugins` next to `browsers` (plugins in a frame, removed 2026-10-06). The release in people's hands may have
+   * written one: reading it must drop the field and keep every other panel, without a word in the console.
+   */
+  const saved = JSON.stringify({
+    version: 2,
+    panes: [{ id: "s1", title: "Sessione 1", agent: "agy", cwd: "/project", branch: "main", status: "running" }],
+    browsers: [{ id: "b1", title: "Docs", url: "https://example.com/" }],
+    framePlugins: [{ id: "fp1", plugin: "nikverse", title: "NikVerse", project: "ws", projectRoot: "/project", span: { columns: 2, rows: 1 } }],
+    focusedPaneId: "fp1",
+    pinnedColumns: 2,
+    currentView: "grid",
+    sidebarWidth: 280,
+    projectPath: "/project",
+  })
+
+  test("is restored with the other panels intact and nothing in the console", () => {
+    const spies = (["error", "warn"] as const).map((level) => spyOn(console, level).mockImplementation(() => {}))
+    try {
+      const state = parseWorkspace(saved)
+      expect(state).toBeDefined()
+      expect(state && "framePlugins" in state).toBe(false)
+
+      const restored = fromWorkspaceState(state!)
+      expect(restored.panes.map((pane) => pane.id)).toEqual(["s1", "b1"])
+      expect(restored.panes.some((pane) => pane.mode === "plugin-frame")).toBe(false)
+      for (const spy of spies) expect(spy).not.toHaveBeenCalled()
+    } finally {
+      for (const spy of spies) spy.mockRestore()
+    }
+  })
+
+  test("focus falls back to a panel that exists when the focused one was a plugin's", () => {
+    const restored = fromWorkspaceState(parseWorkspace(saved)!)
+    expect(restored.focusedId).toBe("s1")
+  })
+
+  test("a focus on a panel that exists is kept", () => {
+    const restored = fromWorkspaceState(parseWorkspace(saved.replace('"focusedPaneId":"fp1"', '"focusedPaneId":"b1"'))!)
+    expect(restored.focusedId).toBe("b1")
+  })
+})
+
+describe("a layout saved with the «Impara» panel", () => {
+  const learn = (id: string, extra: Partial<Pane> = {}): Pane => ({
+    id,
+    title: "Impara",
+    status: "working",
+    model: "—",
+    mode: "learn",
+    lines: [],
+    cwd: "",
+    workspaceId: "ws1",
+    ...extra,
+  })
+  const roundTrip = (wb: ReturnType<typeof createWorkbench>) =>
+    fromWorkspaceState(parseWorkspace(serializeWorkspace(toWorkspaceState(wb)))!)
+
+  test("comes back as the same panel, with its span and the focus on it", () => {
+    let wb = createWorkbench()
+    wb = addPane(wb, { ...mockSession("s1") })
+    wb = addPane(wb, learn("l1", { span: { columns: 2, rows: 1 } }))
+    expect(wb.focusedId).toBe("l1")
+
+    const restored = roundTrip(wb)
+    const back = restored.panes.find((pane) => pane.mode === "learn")
+    expect(back?.id).toBe("l1")
+    expect(back?.title).toBe("Impara")
+    expect(back?.span).toEqual({ columns: 2, rows: 1 })
+    expect(restored.focusedId).toBe("l1")
+  })
+
+  test("only one comes back when the file has two", () => {
+    let wb = createWorkbench()
+    wb = addPane(wb, learn("l1"))
+    wb = addPane(wb, learn("l2"))
+    const saved = JSON.parse(serializeWorkspace(toWorkspaceState(wb)))
+    saved.learns = [...saved.learns, { id: "l2", title: "Impara" }]
+    const restored = fromWorkspaceState(parseWorkspace(JSON.stringify(saved))!)
+    expect(restored.panes.filter((pane) => pane.mode === "learn")).toHaveLength(1)
+  })
+})
+
+function mockSession(id: string): Pane {
+  return { id, title: "Sessione", status: "working", model: "test-model", mode: "auto", lines: [], cwd: "test/path", workspaceId: "ws1" }
+}

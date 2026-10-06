@@ -758,3 +758,49 @@ describe("which agents count as Codex", () => {
     }
   })
 })
+
+/* Full review 2026-10-06, sessions 8: a window whose reset has passed is unknown, not spent. */
+describe("a window that has reset since the reading", () => {
+  const spent = (resetAt: string): ProviderQuota => ({
+    id: "claude",
+    name: "Claude",
+    status: "ok",
+    metrics: [{ label: "5h", remaining: 0, resetAt }],
+  })
+  const before = Date.parse("2026-09-15T14:55:00Z")
+  const after = Date.parse("2026-09-15T15:05:00Z")
+
+  test("before the reset it is spent; after it, it is not", () => {
+    expect(calculateReadiness(spent("2026-09-15T15:00:00Z"), before).isAvailable).toBe(false)
+    expect(calculateReadiness(spent("2026-09-15T15:00:00Z"), after).isAvailable).toBe(true)
+  })
+
+  test("the bar is not red and carries no date that has already passed", () => {
+    const view = formatSessionQuota(spent("2026-09-15T15:00:00Z"), after)
+    expect(view.isLimit).toBe(false)
+    expect(view.windows[0]).toMatchObject({ ratio: 1, val: undefined, resetText: undefined })
+    expect(formatSessionQuota(spent("2026-09-15T15:00:00Z"), before).isLimit).toBe(true)
+  })
+
+  test("a rate-limited provider whose windows have all reset is no longer blocked", () => {
+    const limited: ProviderQuota = { ...spent("2026-09-15T15:00:00Z"), status: "rate_limited" }
+    expect(calculateReadiness(limited, before).isAvailable).toBe(false)
+    expect(calculateReadiness(limited, after).isAvailable).toBe(true)
+    expect(formatSessionQuota(limited, after).isLimit).toBe(false)
+  })
+
+  test("a window still to reset keeps its meaning next to one that has reset", () => {
+    const mixed: ProviderQuota = {
+      id: "claude",
+      name: "Claude",
+      status: "ok",
+      metrics: [
+        { label: "5h", remaining: 0, resetAt: "2026-09-15T15:00:00Z" },
+        { label: "7d", remaining: 30, resetAt: "2026-09-20T15:00:00Z" },
+      ],
+    }
+    const readiness = calculateReadiness(mixed, after)
+    expect(readiness.isAvailable).toBe(true)
+    expect(readiness.worstRemainingPct).toBe(30)
+  })
+})

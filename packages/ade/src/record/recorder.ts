@@ -128,9 +128,10 @@ export function createRecorder(deps: RecorderDeps): Recorder {
         .writeBytes(voicePathFor(video), new Uint8Array(track.wav))
         .catch((error) => problems.push(String(error)))
     }
-    if (micTake && deps.writeBytes) {
+    if (micTake) {
+      // Stopped whether or not there is a way to write it: its stream is open until then (full review 2026-10-06, nikverse B1).
       const bytes = await micTake.stop().catch(() => undefined)
-      if (bytes && bytes.length > 0) {
+      if (bytes && bytes.length > 0 && deps.writeBytes) {
         await deps
           .writeBytes(micPathFor(video, micTake.extension), bytes)
           .catch((error) => problems.push(String(error)))
@@ -149,6 +150,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
 
       const startedAt = deps.now()
       const name = recordingName(startedAt)
+      let capturing = false
       try {
         const level = deps.quality?.() ?? qualityLevel(undefined)
         const started = await deps.start(target, dir, name, {
@@ -157,18 +159,48 @@ export function createRecorder(deps: RecorderDeps): Recorder {
           ...(level.width ? { width: level.width } : {}),
           ...(level.height ? { height: level.height } : {}),
         })
+        capturing = true
         log = createEventLog(startedAt)
         voice = []
         const frame = deps.frame?.(target)
         if (frame) log.add({ kind: "frame", at: startedAt, ...frame })
         // The microphone is extra: a refusal records the take without it.
+        const micFrom = deps.now()
         mic = options.mic ? await deps.startMic?.().catch(() => undefined) : undefined
+        /*
+         * The microphone's file begins when its recorder did, which is `startMic`'s duration after the capture
+         * came up: that is where it sits in the VIDEO's time. Not `now - startedAt`: `startedAt` is taken before
+         * `deps.start`, and the video's zero is the moment the capture began, later by however long that took, so
+         * the track would be played late by that much (Verifiche's review of F5, M3). The log subtracts
+         * `startedAt` from every event, hence it is added back here.
+         */
+        if (mic) log.add({ kind: "mic", at: startedAt + (deps.now() - micFrom) })
         settle({
           status: "recording",
           recording: { target, path: started.path ?? `${dir}/${name}.mp4`, startedAt, mic: mic !== undefined },
         })
         return undefined
       } catch (error) {
+        /*
+         * A take that failed after the capture came up must not leave it running with the recorder saying «idle»: the
+         * button would offer a new take over a capture nobody can stop, and the microphone would stay open (full review
+         * 2026-10-06, nikverse B2). What is up is shut down, its output left where it is.
+         */
+        if (capturing) {
+          const micTake = mic
+          log = undefined
+          voice = []
+          mic = undefined
+          if (state.status !== "idle") {
+            try {
+              settle({ status: "idle" })
+            } catch {
+              // `settle` set the state before it told anyone.
+            }
+          }
+          await deps.stop().catch(() => undefined)
+          await micTake?.stop().catch(() => undefined)
+        }
         return error instanceof Error ? error.message : String(error)
       }
     },

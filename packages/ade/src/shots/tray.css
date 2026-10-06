@@ -243,7 +243,7 @@
   height: 100%;
   background: linear-gradient(100deg, var(--ade-sunken), var(--ade-raised), var(--ade-sunken));
   background-size: 300% 100%;
-  animation: ade-shot-shimmer 1.2s var(--ade-ease) infinite;
+  animation: ade-shot-shimmer 1.2s var(--ade-ease) infinite var(--ade-loops, running);
 }
 
 @keyframes ade-shot-shimmer {
