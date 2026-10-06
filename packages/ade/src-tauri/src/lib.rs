@@ -1452,6 +1452,19 @@ fn check_git_args(args: &[String]) -> Result<(), String> {
 /// answered by then is stuck (a lock, a dead network share) and holds a blocking thread for good.
 const GIT_TIMEOUT: Duration = Duration::from_secs(120);
 
+/// `worktree add` is a whole checkout: the repository's `post-checkout` hook runs (husky and the like, sometimes an
+/// install) and with LFS the smudge downloads from the network. Cut at two minutes it left a half-made worktree and a
+/// branch already created, and ADE said it had failed (Architect's review of F6a, O3).
+const GIT_WORKTREE_ADD_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+
+/// The deadline of one git command of `git_run`.
+fn git_timeout(args: &[String]) -> Duration {
+    match args {
+        [worktree, add, ..] if worktree == "worktree" && add == "add" => GIT_WORKTREE_ADD_TIMEOUT,
+        _ => GIT_TIMEOUT,
+    }
+}
+
 /// Runs one git command and hands back what it printed.
 #[tauri::command]
 async fn git_run(
@@ -1494,7 +1507,8 @@ async fn git_run(
      * Same runner as `nikcli_bot` and `claude_agents`: a job that ends the tree, a deadline, the output read
      * on its own threads.
      */
-    tauri::async_runtime::spawn_blocking(move || run_bounded_output(command, GIT_TIMEOUT, "git"))
+    let timeout = git_timeout(&args);
+    tauri::async_runtime::spawn_blocking(move || run_bounded_output(command, timeout, "git"))
         .await
         .map_err(|_| "avvio di git interrotto".to_string())?
 }
@@ -2960,9 +2974,20 @@ mod tests {
         let start = source.find("async fn git_run(").expect("git_run");
         let body = &source[start..source[start..].find("async fn current_dir").map(|end| start + end).expect("fine")];
         assert!(body.contains("spawn_blocking"), "git_run must leave the async worker");
-        assert!(body.contains("run_bounded_output(command, GIT_TIMEOUT"), "git_run must have a deadline");
+        assert!(body.contains("run_bounded_output(command, timeout"), "git_run must have a deadline");
+        assert!(body.contains("git_timeout(&args)"), "the deadline is chosen by the command");
         assert!(!body.contains(".output()"), "git_run must not block on `output()`");
         assert!(GIT_TIMEOUT >= Duration::from_secs(30), "a slow worktree add must fit");
+    }
+
+    // Architect's review of F6a, O3: a checkout needs far more than the two minutes of the local commands.
+    #[test]
+    fn a_worktree_add_gets_ten_minutes_and_the_other_commands_two() {
+        let args = |parts: &[&str]| parts.iter().map(|part| part.to_string()).collect::<Vec<_>>();
+        assert_eq!(git_timeout(&args(&["worktree", "add", "-b", "x", "../x"])), Duration::from_secs(600));
+        for other in [&["worktree", "list"][..], &["worktree", "remove", "../x"], &["status", "--porcelain"], &["diff"], &[]] {
+            assert_eq!(git_timeout(&args(other)), Duration::from_secs(120), "{other:?}");
+        }
     }
 
     #[test]
