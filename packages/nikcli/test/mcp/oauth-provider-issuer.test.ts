@@ -19,8 +19,10 @@ const NO_ISSUER = /have no 'issuer'/
 
 function fakeNetwork(authorizationServer: string) {
   const posts: string[] = []
+  const requested: string[] = []
   const fetchFn = async (input: string | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input)
+    requested.push(url)
     const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } })
     if (url.startsWith("https://mcp.example/.well-known/oauth-protected-resource")) {
       return json({ resource: SERVER, authorization_servers: [authorizationServer] })
@@ -42,7 +44,7 @@ function fakeNetwork(authorizationServer: string) {
     }
     return new Response("not found", { status: 404 })
   }
-  return { fetchFn, posts }
+  return { fetchFn, posts, requested }
 }
 
 let redirects: URL[]
@@ -144,16 +146,33 @@ describe("MCP OAuth provider keeps the issuer the SDK stamps", () => {
     }
   })
 
-  it("binds a client from the configuration once, instead of saving it again on every refresh", async () => {
+  it("uses the client from the configuration whichever authorization server discovery lands on", async () => {
+    // A client the SDK once stamped for AS_A is stored under the same name; the tokens belong to AS_B, which is
+    // where discovery points now (a failed read of the resource metadata is enough to land elsewhere).
+    const stamped = new McpOAuthProvider("issuer-config-client", SERVER, {}, { onRedirect: () => {} })
+    names.push("issuer-config-client")
+    await stamped.saveClientInformation({ client_id: "client-1", redirect_uris: [stamped.redirectUrl], issuer: AS_A })
     const p = provider("issuer-config-client")
-    await p.saveTokens({ access_token: "a", token_type: "Bearer", refresh_token: "r", issuer: AS_A })
-    const network = fakeNetwork(AS_A)
+    await p.saveTokens({ access_token: "a", token_type: "Bearer", refresh_token: "r", issuer: AS_B })
+    const network = fakeNetwork(AS_B)
     const warn = spyOn(console, "warn").mockImplementation(() => {})
     try {
-      await auth(p, { serverUrl: SERVER, fetchFn: network.fetchFn })
-      expect((await p.clientInformation())?.issuer).toBe(AS_A)
+      const result = await auth(p, { serverUrl: SERVER, fetchFn: network.fetchFn })
+
+      // Stamped, the client would be dropped for AS_B and a new one registered: there is no endpoint for it.
+      expect(result).toBe("AUTHORIZED")
+      expect(network.posts).toEqual([`${AS_B}/token`])
+      expect(network.requested.filter((url) => url.includes("register"))).toEqual([])
     } finally {
       warn.mockRestore()
     }
+  })
+
+  it("does not save the client from the configuration, so nothing can bind it", async () => {
+    const p = provider("issuer-config-client-save")
+    await p.saveClientInformation({ client_id: "client-1", redirect_uris: [p.redirectUrl], issuer: AS_A })
+
+    const reader = new McpOAuthProvider("issuer-config-client-save", SERVER, {}, { onRedirect: () => {} })
+    expect(await reader.clientInformation()).toBeUndefined()
   })
 })

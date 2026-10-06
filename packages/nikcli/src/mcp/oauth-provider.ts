@@ -53,6 +53,15 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async clientInformation(): Promise<OAuthClientInformation | undefined> {
+    // The user chose this client, for whichever authorization server the server points to: it carries no
+    // stamp, so the SDK never binds it to one and never drops it when discovery lands elsewhere.
+    if (this.config.clientId) {
+      return {
+        client_id: this.config.clientId,
+        client_secret: this.config.clientSecret,
+      }
+    }
+
     const mcpName = this.mcpName
     const serverUrl = this.serverUrl
     const entry = await this.runAuth(
@@ -61,17 +70,6 @@ export class McpOAuthProvider implements OAuthClientProvider {
         return yield* auth.getForUrl(mcpName, serverUrl)
       }),
     )
-
-    // A client from the configuration is the one the SDK stamped before, when it is the one stored: the stamp
-    // is what binds it to its authorization server (SDK 1.31+). Without it the SDK binds it again on every call.
-    if (this.config.clientId) {
-      const stored = entry?.clientInfo?.clientId === this.config.clientId ? entry.clientInfo.issuer : undefined
-      return {
-        client_id: this.config.clientId,
-        client_secret: this.config.clientSecret,
-        ...(stored ? { issuer: stored } : {}),
-      }
-    }
 
     if (entry?.clientInfo) {
       if (entry.clientInfo.clientSecretExpiresAt && entry.clientInfo.clientSecretExpiresAt < Date.now() / 1000) {
@@ -89,6 +87,9 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveClientInformation(info: OAuthClientInformationFull): Promise<void> {
+    // The SDK saves what it binds, the configured client included. That one stays unbound (see clientInformation).
+    if (this.config.clientId && info.client_id === this.config.clientId) return
+
     const mcpName = this.mcpName
     const serverUrl = this.serverUrl
     await this.runAuth(
