@@ -4,7 +4,7 @@ import { PORT_OFFER, PROTOCOL_VERSION, worldUrl } from "../protocol"
 import { EXPORT_NAME, parseProgress } from "./progress"
 import { createLearnLink } from "./link"
 import "./learn-pane.css"
-import { t } from "../../i18n"
+import { locale, t } from "../../i18n"
 
 /**
  * The «Impara» panel: the lesson page in a frame, and ADE's end of the channel.
@@ -22,6 +22,9 @@ export interface LearnProgressHost {
   /** Replaces it. The value has already been checked against the shape. */
   save: (json: string) => Promise<void>
 }
+
+/** The page's address: the nonce, and the language ADE is in, which the frame cannot see for itself (`l`, read by `readLocale`). */
+const addressOf = (nonce: string) => `${worldUrl()}learn/#n=${nonce}&l=${locale()}`
 
 export function LearnPane(props: {
   focused: boolean
@@ -42,7 +45,7 @@ export function LearnPane(props: {
    * port (`handshake.ts`). The world's own comment says why the fragment, and it is the same reason here.
    */
   let nonce = newNonce()
-  const [frameSrc, setFrameSrc] = createSignal(`${worldUrl()}learn/#n=${nonce}`)
+  const [frameSrc, setFrameSrc] = createSignal(addressOf(nonce))
   /*
    * Each load is a new frame element. An address that differs only after the `#` does not reload a frame, so its old document would
    * stay, without its port.
@@ -57,7 +60,7 @@ export function LearnPane(props: {
     link = undefined
     nonce = newNonce()
     batch(() => {
-      setFrameSrc(`${worldUrl()}learn/#n=${nonce}`)
+      setFrameSrc(addressOf(nonce))
       setFrameLoad((n) => n + 1)
     })
   }

@@ -11,6 +11,7 @@
   --err: #f87171;
   --radius: 6px;
   --radius-lg: 8px;
+  --ade-radius-full: 999px;
   /* The name every ADE sheet draws its focus with; here it is the page's own, since the frame has none of ADE's tokens. */
   --ade-focus-ring: 0 0 0 2px var(--accent);
   --ade-weight-semibold: 600;
@@ -404,11 +405,11 @@ button[disabled] {
   align-items: center;
   gap: 0.35rem;
   padding: 0.25rem 0.65rem;
-  border-radius: 999px;
+  border-radius: var(--ade-radius-full);
   background: color-mix(in srgb, var(--accent) 15%, transparent);
   border: 1px solid var(--accent);
   color: var(--text);
-  font-weight: var(--ade-weight-semibold, 600);
+  font-weight: var(--ade-weight-semibold);
   font-variant-numeric: tabular-nums;
 }
 
@@ -437,14 +438,14 @@ button[disabled] {
   color: var(--dim);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  font-weight: var(--ade-weight-semibold, 600);
+  font-weight: var(--ade-weight-semibold);
 }
 
 .documento-etichetta {
   font-size: 0.8125rem;
   color: var(--dim);
   margin-bottom: 0.375rem;
-  font-weight: var(--ade-weight-semibold, 600);
+  font-weight: var(--ade-weight-semibold);
 }
 
 .righe-gioco button {
@@ -471,17 +472,50 @@ button[disabled] {
 
 .spiegazione-riga p {
   margin: 0 0 0.25rem;
-  font-weight: var(--ade-weight-semibold, 600);
+  font-weight: var(--ade-weight-semibold);
 }
 
-.spiegazione-riga[data-tipo="iniezione"] {
+.spiegazione-riga .esito-riga {
+  display: block;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+}
+
+.spiegazione-riga .difesa-riga {
+  display: block;
+  margin-top: 0.25rem;
+  opacity: 0.85;
+}
+
+.spiegazione-riga[data-esito="trovata"] {
+  background: color-mix(in srgb, var(--work) 12%, transparent);
+  border: 1px solid var(--work);
+}
+
+.spiegazione-riga[data-esito="persa"] {
   background: color-mix(in srgb, var(--err) 12%, transparent);
   border: 1px solid var(--err);
 }
 
-.spiegazione-riga[data-tipo="esca"] {
+.spiegazione-riga[data-esito="errata"] {
   background: color-mix(in srgb, var(--perm) 12%, transparent);
   border: 1px solid var(--perm);
+}
+
+.righe-gioco button[data-picked="1"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.esito-titolo {
+  text-align: center;
+  font-weight: var(--ade-weight-semibold);
+}
+
+.spiegazione-finale {
+  margin-top: 1rem;
 }
 
 .stelle-grande {

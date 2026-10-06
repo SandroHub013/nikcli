@@ -521,11 +521,12 @@ mod tests {
         for uri in ["nikverse://localhost/learn", "http://nikverse.localhost/learn"] {
             assert_eq!(get(uri).status(), StatusCode::NOT_FOUND, "{uri}");
         }
-        // Its four files, and each with its own type.
+        // Its files, and each with its own type.
         for (file, mime) in [
             ("learn/learn.js", "text/javascript"),
             ("learn/learn.css", "text/css"),
             ("learn/content.json", "application/json"),
+            ("learn/gioco.json", "application/json"),
         ] {
             let response = get(&format!("nikverse://localhost/{file}"));
             assert_eq!(response.status(), StatusCode::OK, "{file}");
