@@ -297,6 +297,15 @@ const INHERITED_SESSION_MARKERS: &[&str] = &[
     "AI_AGENT",
     "TRACEPARENT",
     "ADE_MAILBOX_ROOT",
+    // The identity an ADE gives its own panes. An ADE launched from an agent's pane (ADE Test, driven by an
+    // agent) inherits the outer one's: the bots and the auxiliary spawns, which get no pane of their own, would
+    // write into the outer ADE's mailbox and activity, a pane «at work» that is not, and resume the wrong
+    // conversation (full review 2026-10-06, Rust 10). A pane that has an identity is given its own, after this.
+    "ADE_PANE_ID",
+    "ADE_PANE_TOKEN",
+    "ADE_MAILBOX",
+    "ADE_SPAWN_NONCE",
+    "ADE_SESSION_DIR",
 ];
 
 /// Whether `key`, inherited from whatever launched ADE, is another session's.
@@ -2048,6 +2057,11 @@ mod tests {
             "CLAUDECODE",
             "CLAUDE_PID",
             "ADE_MAILBOX_ROOT",
+            "ADE_PANE_ID",
+            "ADE_PANE_TOKEN",
+            "ADE_MAILBOX",
+            "ADE_SPAWN_NONCE",
+            "ADE_SESSION_DIR",
             // Windows' names have no case.
             "claude_code_session_id",
         ] {
@@ -2126,6 +2140,32 @@ mod tests {
         for gone in ["CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_MESSAGING_TOKEN", "CLAUDECODE"] {
             assert!(builder.get_env(gone).is_none(), "{gone} is another session's and must not reach the child");
         }
+    }
+
+    /// Full review 2026-10-06, Rust 10: another ADE's pane identity is not inherited.
+    #[test]
+    fn the_outer_ades_pane_identity_does_not_reach_a_spawn_that_has_none() {
+        let inherited = [
+            ("ADE_PANE_ID", "riquadro-esterno"),
+            ("ADE_PANE_TOKEN", "token-esterno"),
+            ("ADE_MAILBOX", "C:/esterna/posta"),
+            ("ADE_SPAWN_NONCE", "nonce-esterno"),
+            ("ADE_SESSION_DIR", "C:/esterna/sessioni"),
+            ("ADE_MAILBOX_ROOT", "C:/esterna"),
+            ("PATH", "C:/bin"),
+        ];
+        let mut builder = CommandBuilder::new("bot");
+        for (key, value) in inherited {
+            builder.env(key, value);
+        }
+        scrub_inherited(&mut builder, inherited.iter().map(|(key, _)| key.to_string()), &[]);
+        for (gone, _) in &inherited[..6] {
+            assert!(builder.get_env(gone).is_none(), "{gone} is the outer ADE's and must not reach the child");
+        }
+        assert!(builder.get_env("PATH").is_some());
+        // The ones a pane is given afterwards are set after the scrub, so they survive it.
+        builder.env("ADE_PANE_ID", "riquadro-proprio");
+        assert_eq!(builder.get_env("ADE_PANE_ID").and_then(|v| v.to_str()), Some("riquadro-proprio"));
     }
 
     #[test]
@@ -2309,8 +2349,6 @@ mod tests {
             "USERPROFILE",
             "ANTHROPIC_API_KEY",
             "TERM",
-            "ADE_MAILBOX",
-            "ADE_PANE_ID",
             "CLAUDE_CODE_USE_BEDROCK",
             concat!("CLAUDE_CODE_", "OAUTH_TOKEN"),
             "CLAUDE_CODE_GIT_BASH_PATH",
