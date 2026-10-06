@@ -1812,3 +1812,13 @@ html[data-ade-recording] [data-theme="glass"] [data-slot="browser-record-veil"] 
 html[data-ade-recording] [data-slot="browser-frame"] {
   visibility: hidden;
 }
+
+/* ADE covered or without the focus: nothing moves. WebView2 leaves document.hidden false for a window behind another
+   one, so the page learns it from the window's focus (surface/window-idle.ts); the sweep of every working pane, the
+   haloes, the spinners and the blink of a waiting permission would otherwise repaint for as long as ADE is covered. A
+   paused animation costs no frames, and it goes on from where it was when the window comes back. */
+:root[data-window-idle] *,
+:root[data-window-idle] *::before,
+:root[data-window-idle] *::after {
+  animation-play-state: paused !important;
+}
