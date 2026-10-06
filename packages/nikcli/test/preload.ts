@@ -1,3 +1,5 @@
+// First: no test may reach the user's own data folders (see ./isolate.ts).
+import "./isolate"
 import "@opentui/solid/preload"
 import { afterAll, afterEach, beforeAll } from "bun:test"
 import path from "path"
