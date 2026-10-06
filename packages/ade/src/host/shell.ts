@@ -784,11 +784,9 @@ export async function getHost(): Promise<Host | undefined> {
 
     async exists(path) {
       const { invoke } = await import("@tauri-apps/api/core")
-      try {
-        return await invoke<boolean>("path_exists", { path })
-      } catch {
-        return false
-      }
+      // A check that fails rejects: «the folder is gone» is for the callers to say when it IS gone, not for every error
+      // (full review 2026-10-06, sessions 16). Those that mean «assume it is there» already `catch`.
+      return invoke<boolean>("path_exists", { path })
     },
 
     async systemStats() {

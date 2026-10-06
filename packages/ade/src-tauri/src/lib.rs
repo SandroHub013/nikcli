@@ -1709,9 +1709,17 @@ async fn home_dir() -> Result<String, String> {
         .ok_or_else(|| "impossibile determinare la home".to_string())
 }
 
+/// Whether the path is there. `try_exists`, not `exists`: a check that fails (a share whose VPN is off, a denied folder) is an error
+/// the page can tell from «not there», which `exists()` made `false` (full review 2026-10-06, sessions 16). Off the async worker as
+/// well: a share that does not answer can wait a long time.
 #[tauri::command]
-async fn path_exists(path: String) -> bool {
-    !is_network_path(&path) && Path::new(&path).exists()
+async fn path_exists(path: String) -> Result<bool, String> {
+    if is_network_path(&path) {
+        return Ok(false);
+    }
+    tauri::async_runtime::spawn_blocking(move || Path::new(&path).try_exists().map_err(|e| e.to_string()))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Opens an ADE release page in the default browser.
@@ -3667,7 +3675,17 @@ mod tests {
     fn a_network_path_is_not_listed_or_checked_for_existence() {
         let dir = tauri::async_runtime::block_on(read_dir("//attacker.example/s".to_string()));
         assert!(dir.is_err_and(|e| e.contains("percorso di rete non consentito")));
-        assert!(!tauri::async_runtime::block_on(path_exists("//attacker.example/s/p/package.json".to_string())));
+        assert_eq!(tauri::async_runtime::block_on(path_exists("//attacker.example/s/p/package.json".to_string())), Ok(false));
+    }
+
+    // Full review 2026-10-06, sessions 16: a check that fails is not «the folder is gone».
+    #[test]
+    fn a_check_that_fails_is_an_error_and_not_a_missing_folder() {
+        let here = std::env::temp_dir().to_string_lossy().into_owned();
+        assert_eq!(tauri::async_runtime::block_on(path_exists(here.clone())), Ok(true));
+        assert_eq!(tauri::async_runtime::block_on(path_exists(format!("{here}/ade-path-exists-nothing-here-{}", std::process::id()))), Ok(false));
+        // A name the system cannot even ask about.
+        assert!(tauri::async_runtime::block_on(path_exists(format!("{here}/a\0b"))).is_err());
     }
 
     /// The credential folders of the user's home are not read through `read_text_file`;

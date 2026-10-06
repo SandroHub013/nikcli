@@ -7499,7 +7499,8 @@ export function Workbench() {
     if (!resumeId || !root || !host?.homeDir || !host.exists) return false
     const home = await host.homeDir().catch(() => "")
     const path = home ? RESUME[agentId]?.transcript?.(home, root, resumeId) : undefined
-    if (path) return !(await host.exists(path))
+    // A check that fails says nothing: the conversation is taken as there.
+    if (path) return !(await host.exists(path).catch(() => true))
     // No file to look for (nikcli): the CLI is asked. No answer in time, and the id is reopened as before.
     const exists = RESUME[agentId]?.exists
     const command = agentById(agentId)?.command
