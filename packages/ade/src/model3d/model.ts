@@ -308,8 +308,10 @@ export function formatMeasure(value: number): string {
   if (!Number.isFinite(value)) return "?"
   const abs = Math.abs(value)
   const digits = abs >= 100 ? 0 : abs >= 10 ? 1 : abs >= 1 ? 2 : 3
-  const formatted = value.toFixed(digits)
-  return locale() === "it" ? formatted.replace(".", ",") : formatted
+  return new Intl.NumberFormat(locale() === "it" ? "it-IT" : "en-US", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value)
 }
 
 export function formatCount(value: number): string {

@@ -2098,9 +2098,9 @@ export const en: Messages = {
   "worktree.close.none": "none",
   "worktree.close.mergedCheckError": (title, branch) => `"${title}": git cannot tell if branch ${branch} is merged`,
   "worktree.close.unmerged": (title, branch) => `"${title}" has commits on branch ${branch} that are not yet merged`,
-  "worktree.close.noRescue": "this host cannot rescue session reports",
+  "worktree.close.noRescue": "this host cannot save session reports",
   "worktree.close.noRoot": (title, worktree) => `"${title}": cannot find the project that created worktree ${worktree}`,
-  "worktree.close.rescueFailed": (title, worktree, error) => `"${title}": failed to rescue session reports, worktree remains at ${worktree} (${error})`,
+  "worktree.close.rescueFailed": (title, worktree, error) => `"${title}": failed to save session reports, worktree remains at ${worktree} (${error})`,
   "worktree.close.gitRefused": "git refused",
   "worktree.close.removeFailed": (title, worktree, error) => `"${title}": git did not remove ${worktree} (${error})`,
 
@@ -2125,7 +2125,7 @@ export const en: Messages = {
   // F7a: Host selectors and commands
   "project.open.title": "Open project",
   "host.commandNotAllowed": (cmd) => `command not allowed: ${cmd}`,
-  "host.pickDirectory": "Choose folder",
+  "host.pickDirectory": "Choose a folder",
   "host.pickFile": "Choose file",
 
   // F7a: Bots
@@ -2138,7 +2138,7 @@ export const en: Messages = {
   "bots.provider.noStatusReply": "No reply from status command.",
   "bots.alreadyExists": (identifier) => `A bot with identifier “${identifier}” already exists.`,
   "bots.defaultDescription": (name) => `Bot “${name}”.`,
-  "bots.terms.codexNoCost": "Codex does not report cost, so spending cap cannot be monitored",
+  "bots.terms.codexNoCost": "Codex does not report a cost, so the spending cap cannot be monitored",
   "bots.terms.xaiNotRead": "xAI terms have not been reviewed",
   "bots.terms.runnerCannotRunRoutines": "this runner cannot run routines",
   "bots.room.few": (min) => `At least ${min} bots are needed: with just one it is a chat.`,
@@ -2161,9 +2161,9 @@ export const en: Messages = {
   "model.state.noModel": "no model open",
   "model.state.loading": (source) => `${source} — loading`,
   "model.state.error": (source, error) => `${source} — error: ${error}`,
-  "model.state.meshes": (count) => `${count} meshes`,
-  "model.state.triangles": (count) => `${count} triangles`,
-  "model.state.dimensions": (x, y, z) => `dimensions ${x} × ${y} × ${z}`,
+  "model.state.meshes": (count) => `${count} ${count === "1" ? "mesh" : "meshes"}`,
+  "model.state.triangles": (count) => `${count} ${count === "1" ? "triangle" : "triangles"}`,
+  "model.state.dimensions": (x, y, z) => `size ${x} × ${y} × ${z}`,
   "model.state.animations": (count) => `${count} ${count === 1 ? "animation" : "animations"}`,
   "pane.runnerLogin": (label: string) => `${label} · sign-in`,
 }

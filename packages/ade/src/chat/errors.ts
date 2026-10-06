@@ -109,10 +109,7 @@ export function requestProblem(error: unknown): string {
   // The Rust bridge rejects with its own words: the server could not be reached.
   if (typeof error === "string") return line(withDetail(t("chat.error.server"), error))
   if (error instanceof TypeError && /fetch|network/i.test(error.message)) return t("chat.error.server")
-  if (error instanceof Error) {
-    if (/^(ClientError|Transport:)/i.test(error.message)) return t("chat.error.server")
-    return error.message || t("chat.error.unknown")
-  }
+  if (error instanceof Error) return error.message || t("chat.error.unknown")
   // The SDK throws the server's parsed error body.
   if (error && typeof error === "object") {
     const raw = error as Raw

@@ -2225,7 +2225,7 @@ export const it = {
   "model.state.loading": (source: string) => `${source} — in caricamento`,
   "model.state.error": (source: string, error: string) => `${source} — errore: ${error}`,
   "model.state.meshes": (count: string) => `${count} mesh`,
-  "model.state.triangles": (count: string) => `${count} triangoli`,
+  "model.state.triangles": (count: string) => `${count} ${count === "1" ? "triangolo" : "triangoli"}`,
   "model.state.dimensions": (x: string, y: string, z: string) => `ingombro ${x} × ${y} × ${z}`,
   "model.state.animations": (count: number) => `${count} animazioni`,
   "pane.runnerLogin": (label: string) => `${label} · accesso`,

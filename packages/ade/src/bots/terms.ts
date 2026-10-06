@@ -108,6 +108,7 @@ export interface RoutineRow {
   readonly source?: string
   readonly checked?: string
   readonly reason?: string
+  readonly reasonKey?: "bots.terms.codexNoCost" | "bots.terms.xaiNotRead" | "bots.terms.runnerCannotRunRoutines"
 }
 
 const OPENROUTER = "https://openrouter.ai/docs/api-reference/limits"
@@ -151,7 +152,10 @@ export const ROUTINE_POLICY: readonly RoutineRow[] = [
     runner: "codex",
     mode: "key",
     allowed: false,
-    reason: t("bots.terms.codexNoCost"),
+    reasonKey: "bots.terms.codexNoCost",
+    get reason() {
+      return t("bots.terms.codexNoCost")
+    },
     source: "https://learn.chatgpt.com/docs/auth",
     checked: "2026-09-25",
   },
@@ -167,7 +171,10 @@ export const ROUTINE_POLICY: readonly RoutineRow[] = [
     runner: "grok",
     mode: "plan",
     allowed: false,
-    reason: t("bots.terms.xaiNotRead"),
+    reasonKey: "bots.terms.xaiNotRead",
+    get reason() {
+      return t("bots.terms.xaiNotRead")
+    },
     checked: CHECKED_TERMS,
   },
 ]
@@ -195,15 +202,10 @@ export function routinePolicy(
   const effective: RoutineMode = runner === "nikcli" ? routineModeOf(runner, undefined, model, free) : mode
   const row = ROUTINE_POLICY.find((entry) => entry.runner === runner && entry.mode === effective)
   if (!row || !row.allowed || !row.cap) {
-    if (runner === "codex" && effective === "key") {
-      return { allowed: false, reason: t("bots.terms.codexNoCost") }
-    }
+    const key = row?.reasonKey
     return {
       allowed: false,
-      reason:
-        row?.runner === "grok"
-          ? t("bots.terms.xaiNotRead")
-          : (row?.reason ?? t("bots.terms.runnerCannotRunRoutines")),
+      reason: key ? t(key) : (row?.reason ?? t("bots.terms.runnerCannotRunRoutines")),
     }
   }
   return { allowed: true, cap: row.cap }

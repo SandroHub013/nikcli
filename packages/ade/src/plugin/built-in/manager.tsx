@@ -100,7 +100,7 @@ export function createManagerPlugin(status: () => PluginStatus[], registry: Plug
         id: "overview",
         title: t("plugin.command.showLoaded"),
         group: t("plugin.title"),
-        keywords: ["estensioni", "componenti", "aggiuntivi"],
+        keywords: ["estensioni", "componenti", "aggiuntivi", "extensions", "components"],
         run: () => {
           /*
            * One tile, not one per invocation.
