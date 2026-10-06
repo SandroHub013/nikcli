@@ -10,6 +10,8 @@ export namespace McpAuth {
     refreshToken: z.string().optional(),
     expiresAt: z.number().optional(),
     scope: z.string().optional(),
+    /** The authorization server these tokens were issued by, as the SDK stamps it (SDK 1.31+). Absent in entries saved before. */
+    issuer: z.string().optional(),
   })
   export type Tokens = z.infer<typeof Tokens>
 
@@ -18,6 +20,8 @@ export namespace McpAuth {
     clientSecret: z.string().optional(),
     clientIdIssuedAt: z.number().optional(),
     clientSecretExpiresAt: z.number().optional(),
+    /** The authorization server this client was registered with, as the SDK stamps it (SDK 1.31+). */
+    issuer: z.string().optional(),
   })
   export type ClientInfo = z.infer<typeof ClientInfo>
 
