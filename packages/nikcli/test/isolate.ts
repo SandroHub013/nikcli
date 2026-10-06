@@ -52,6 +52,14 @@ if (!process.env.NIKCLI_TEST_HOME) {
 }
 
 const home = process.env.NIKCLI_TEST_HOME
+
+// The test home is a place a test may use even when it sits inside a forbidden folder: a CI that sets
+// NIKCLI_TEST_HOME to its own temp folder (`${runner.temp}`, under HOME on Linux and macOS) while os.tmpdir()
+// is elsewhere would otherwise fail every test that opens a database.
+process.env.NIKCLI_TEST_ALLOWED_DIRS = [
+  ...new Set([...process.env.NIKCLI_TEST_ALLOWED_DIRS!.split(path.delimiter).filter(Boolean), path.resolve(home)]),
+].join(path.delimiter)
+
 const roots = {
   LOCALAPPDATA: path.join(home, "os", "LocalAppData"),
   APPDATA: path.join(home, "os", "AppData"),
