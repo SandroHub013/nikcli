@@ -69,6 +69,19 @@ h1 {
   color: var(--dim);
 }
 
+/* The way into the lessons and the game, at the top of the list. */
+#learn-entries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+#learn-entries button {
+  padding: 6px 12px;
+  background: var(--panel);
+}
+
 #shops {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
