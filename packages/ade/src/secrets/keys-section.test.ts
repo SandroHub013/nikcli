@@ -9,4 +9,10 @@ describe("the key form (full review 2026-10-06, bots)", () => {
     // And the xAI block's own save, which had its own copy of the line.
     expect(source).toContain('const value = (field?.value ?? "").trim()')
   })
+
+  test("what the host rejects with is read as a code before it is shown (F7b)", () => {
+    const source = readFileSync(join(__dirname, "keys-section.tsx"), "utf-8")
+    expect(source).toContain("const message = (failure: unknown) => keyError(")
+    expect(source).not.toMatch(/set(Problem|Notice|LoadProblem)\(failure/)
+  })
 })

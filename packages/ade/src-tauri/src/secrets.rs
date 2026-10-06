@@ -58,14 +58,14 @@ pub struct SystemVault;
 /// The keychain's error, without anything that could be the value.
 fn describe(error: keyring::Error) -> String {
     match error {
-        keyring::Error::NoStorageAccess(_) => "portachiavi di sistema non accessibile".into(),
-        keyring::Error::PlatformFailure(_) => "il portachiavi di sistema ha rifiutato l'operazione".into(),
-        keyring::Error::TooLong(field, max) => format!("{field} troppo lungo per il portachiavi (massimo {max})"),
-        keyring::Error::Invalid(field, _) => format!("{field} non valido per il portachiavi"),
-        keyring::Error::Ambiguous(_) => "più voci con lo stesso nome nel portachiavi".into(),
-        keyring::Error::BadEncoding(_) => "valore nel portachiavi non leggibile come testo".into(),
-        keyring::Error::NoEntry => "nessuna voce".into(),
-        _ => "errore del portachiavi".into(),
+        keyring::Error::NoStorageAccess(_) => "key.keychain.noAccess".into(),
+        keyring::Error::PlatformFailure(_) => "key.keychain.refused".into(),
+        keyring::Error::TooLong(..) => "key.keychain.tooLong".into(),
+        keyring::Error::Invalid(..) => "key.keychain.invalid".into(),
+        keyring::Error::Ambiguous(_) => "key.keychain.ambiguous".into(),
+        keyring::Error::BadEncoding(_) => "key.keychain.badEncoding".into(),
+        keyring::Error::NoEntry => "key.keychain.noEntry".into(),
+        _ => "key.keychain.other".into(),
     }
 }
 
@@ -183,7 +183,7 @@ pub fn check_name(name: &str) -> Result<(), String> {
     if ok {
         Ok(())
     } else {
-        Err("nome non valido: lettere, cifre, spazio, . _ -, fino a 64 caratteri".into())
+        Err("key.nameInvalid".into())
     }
 }
 
@@ -193,24 +193,24 @@ pub fn check_env(env: &str) -> Result<(), String> {
         && env.chars().next().is_some_and(|c| c.is_ascii_uppercase() || c == '_')
         && env.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_');
     if !ok {
-        return Err("variabile non valida: maiuscole, cifre e _, es. OPENAI_API_KEY".into());
+        return Err("key.envInvalid".into());
     }
     if RESERVED_ENV.contains(&env) || env.starts_with("ADE_") {
-        return Err(format!("{env} è riservata: ADE o il sistema la usano già"));
+        return Err(format!("key.envReserved:{env}"));
     }
     Ok(())
 }
 
 pub fn check_value(value: &str) -> Result<(), String> {
     if value.trim().is_empty() {
-        return Err("valore vuoto".into());
+        return Err("key.valueEmpty".into());
     }
     if value.len() > 4096 {
-        return Err("valore troppo lungo (massimo 4096 caratteri)".into());
+        return Err("key.valueTooLong".into());
     }
     // A line break or NUL in an environment variable breaks the agent's launch.
     if value.contains(['\0', '\r', '\n']) {
-        return Err("il valore contiene un a capo: incollalo su una riga".into());
+        return Err("key.valueNewline".into());
     }
     Ok(())
 }
@@ -277,7 +277,7 @@ fn save_in(
     check_env(env)?;
     let mut index = read_index(path);
     if index.keys.iter().any(|key| key.env == env && key.name != name) {
-        return Err(format!("{env} è già la variabile di un'altra chiave"));
+        return Err(format!("key.envTaken:{env}"));
     }
     let existing = index.keys.iter().position(|key| key.name == name);
     match value {
@@ -285,7 +285,7 @@ fn save_in(
             check_value(value)?;
             vault.set(service, name, value)?;
         }
-        None if existing.is_none() => return Err("una chiave nuova ha bisogno di un valore".into()),
+        None if existing.is_none() => return Err("key.valueNeeded".into()),
         None => {}
     }
     let mut agents: Vec<String> = agents.into_iter().filter(|a| !a.trim().is_empty()).collect();
@@ -531,7 +531,7 @@ pub async fn secret_save(
             .await
             .map_err(|e| e.to_string())?;
             if !confirmed {
-                return Err("modifica della chiave annullata".into());
+                return Err("key.editCancelled".into());
             }
         }
     }
@@ -607,11 +607,11 @@ pub async fn secret_copy(app: AppHandle, lock: tauri::State<'_, SecretsLock>, na
     let value = {
         let _guard = lock.0.lock().map_err(|_| "chiavi bloccate")?;
         if !read_index(&index_path(&app)?).keys.iter().any(|key| key.name == name) {
-            return Err(format!("chiave «{name}» non trovata"));
+            return Err(format!("key.notFound:{name}"));
         }
         SystemVault
             .get(&service(&app), &name)?
-            .ok_or_else(|| format!("chiave «{name}» senza valore nel portachiavi"))?
+            .ok_or_else(|| format!("key.noValue:{name}"))?
     };
     write_secret(&app, &value)?;
     let handle = app.clone();
@@ -942,5 +942,29 @@ mod tests {
         assert!(check_value("a\nb").is_err());
         assert!(check_value("  ").is_err());
         assert_eq!(mask("short"), "••••••••");
+    }
+
+    /// The page translates these: a code and its argument, never a sentence.
+    #[test]
+    fn what_the_page_reads_in_a_refusal_is_a_stable_code() {
+        assert_eq!(check_name("../x"), Err("key.nameInvalid".into()));
+        assert_eq!(check_env("openai"), Err("key.envInvalid".into()));
+        assert_eq!(check_env("PATH"), Err("key.envReserved:PATH".into()));
+        assert_eq!(check_env("ADE_PANE_TOKEN"), Err("key.envReserved:ADE_PANE_TOKEN".into()));
+        assert_eq!(check_value("  "), Err("key.valueEmpty".into()));
+        assert_eq!(check_value(&"a".repeat(4097)), Err("key.valueTooLong".into()));
+        assert_eq!(check_value("a\nb"), Err("key.valueNewline".into()));
+
+        let vault = MemoryVault::default();
+        let path = temp_index("codes");
+        save_in(&vault, "svc", &path, "One", "ONE_API_KEY", vec![], Some(FAKE), 1).unwrap();
+        assert_eq!(
+            save_in(&vault, "svc", &path, "Two", "ONE_API_KEY", vec![], Some(FAKE), 2),
+            Err("key.envTaken:ONE_API_KEY".into())
+        );
+        assert_eq!(
+            save_in(&vault, "svc", &path, "New", "NEW_API_KEY", vec![], None, 3),
+            Err("key.valueNeeded".into())
+        );
     }
 }

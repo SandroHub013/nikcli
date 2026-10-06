@@ -3,6 +3,7 @@ import {
   addedLabel,
   billingWarning,
   envProblem,
+  keyError,
   keysForAgent,
   nameProblem,
   runKeysCommand,
@@ -40,6 +41,51 @@ describe("the form's checks match the host's", () => {
     expect(valueProblem("sk-abc")).toBeUndefined()
     expect(valueProblem("sk-\nabc")).toBe("contiene un a capo: incollalo su una riga")
     expect(valueProblem("")).toBe("incolla il valore")
+  })
+})
+
+describe("what the host refuses with, said in the interface's language (F7b)", () => {
+  test("a code from the host becomes the page's sentence, in both languages", () => {
+    expect(keyError("key.envReserved:PATH", "it")).toBe("PATH è riservata")
+    expect(keyError("key.envReserved:PATH", "en")).toBe("PATH is reserved")
+    expect(keyError("key.valueNewline", "en")).toBe("contains a line break; paste it on one line")
+    expect(keyError("key.valueNewline", "it")).toBe("contiene un a capo: incollalo su una riga")
+    expect(keyError("key.envTaken:OPENAI_API_KEY", "en")).toBe("OPENAI_API_KEY already belongs to another key")
+    expect(keyError("key.notFound:GitHub", "en")).toBe("key «GitHub» not found")
+    expect(keyError("key.notFound:GitHub", "it")).toBe("chiave «GitHub» non trovata")
+    expect(keyError("key.keychain.refused", "en")).toContain("keychain")
+  })
+
+  test("every code the host sends has a sentence, none is shown raw", () => {
+    const codes = [
+      "key.nameInvalid",
+      "key.envInvalid",
+      "key.envReserved:PATH",
+      "key.envTaken:X",
+      "key.valueEmpty",
+      "key.valueTooLong",
+      "key.valueNewline",
+      "key.valueNeeded",
+      "key.editCancelled",
+      "key.notFound:k",
+      "key.noValue:k",
+      ...["noAccess", "refused", "tooLong", "invalid", "ambiguous", "badEncoding", "noEntry", "other"].map(
+        (kind) => `key.keychain.${kind}`,
+      ),
+    ]
+    for (const code of codes) {
+      for (const language of ["it", "en"] as const) {
+        const said = keyError(code, language)
+        expect(said.startsWith("key."), `${code} ${language}`).toBe(false)
+        expect(said.length).toBeGreaterThan(3)
+      }
+    }
+  })
+
+  test("a message that is not a code passes through, and a code is read in a thrown value too", () => {
+    expect(keyError("portachiavi non disponibile", "en")).toBe("portachiavi non disponibile")
+    expect(keyError("key.somethingNew", "en")).toBe("key.somethingNew")
+    expect(keyError("  key.valueEmpty\n", "it")).toBe(keyError("key.valueEmpty", "it"))
   })
 })
 
