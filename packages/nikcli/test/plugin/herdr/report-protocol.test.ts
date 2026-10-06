@@ -8,6 +8,7 @@
  * the contract herdr's sidebar, attention queue, and session-resume rely on.
  */
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "bun:test"
+import { removeTestDir } from "../../helpers/fs"
 import { createServer, type Server } from "node:net"
 import fs from "fs/promises"
 import os from "os"
@@ -60,7 +61,9 @@ afterAll(async () => {
   bridge.setTestSocketPath(undefined)
   process.env = { ...originalEnv }
   await new Promise<void>((resolve) => server.close(() => resolve()))
-  await fs.rm(tmpDir, { recursive: true, force: true })
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await removeTestDir(tmpDir)
 })
 
 afterEach(() => {

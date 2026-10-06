@@ -1,14 +1,8 @@
-Execute a shell command. Running on ${platform}; commands are interpreted by ${shell}, so use that shell's syntax. Default cwd: ${directory}.
+Execute a shell command. Running on ${platform}; commands are interpreted by ${shell}, so use that shell's syntax. The working directory is in <env>.
 
-Use for: git, package managers, docker, builds, one-shot scripts.
-Do NOT use for file CRUD/search — prefer Read, Write, Edit, Glob, Grep, LS.
-
-Rules:
-- Prefer `workdir` over `cd path && …`. Quote paths with spaces.
-- Short, bounded commands only. Long-running (dev servers, watchers, installs that stream) → `monitor`.
-- Use the project package manager (e.g. bun), never mix npm/pnpm/yarn ad hoc.
-- Prefer dedicated tools over find/grep/cat/sed/awk/echo when available.
+- Short, bounded commands only (git, package managers, builds, one-shot scripts); long-running ones (dev servers, watchers, test suites, streaming installs) go to `monitor`.
+- Read files with the read tool and change them with the edit tools, not with cat/sed/echo. For searching, a single `rg`/`find`/`ls` is fine when it saves calls.
+- Prefer `workdir` over `cd path && …`. Quote paths with spaces. Use the project's package manager (from the lockfile).
 - Optional `timeout` ms (default 120000). Output truncates at ${maxLines} lines / ${maxBytes} bytes (full log on disk).
-- Describe the command in 5–10 words via the description field.
-- Never skip git hooks (`--no-verify`) unless the user asks. No force-push to main/master.
-- Do not commit unless the user explicitly requests a commit.
+- Describe the command in 5–10 words in the description field.
+- Never skip git hooks (`--no-verify`) or force-push to main/master unless asked. Do not commit unless the user asks.

@@ -10,9 +10,11 @@ import { File } from "../file"
 import { FileTime } from "../file/time"
 import { Filesystem } from "@nikcli-ai/util/filesystem"
 import { Bom } from "../util/bom"
+import { withScratchHint } from "../util/scratch"
 import { Format } from "../format"
 import { buildFileDiff, readAfterMutation, trimDiff } from "./file-diff"
 import { assertExternalDirectory } from "./external-directory"
+import { normalizeToolPath } from "./tool-path"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
 import { Effect } from "effect"
 
@@ -57,9 +59,7 @@ export const WriteTool = Tool.define("write", {
   description: DESCRIPTION,
   parameters: zod(Parameters),
   async execute(params, ctx) {
-    const filepath = path.isAbsolute(params.filePath)
-      ? params.filePath
-      : path.join(ctx.instance.directory, params.filePath)
+    const filepath = normalizeToolPath(params.filePath, ctx.instance.directory)
     await assertExternalDirectory(ctx, filepath)
 
     const file = Bun.file(filepath)
@@ -94,8 +94,14 @@ export const WriteTool = Tool.define("write", {
 
     const writtenBom = original.bom || contentBom
     const written = Bom.join(preserveLineEndingsAndBom(contentOld, contentText), writtenBom)
-    await Bun.write(filepath, written)
-    await Format.formatFile(filepath, writtenBom)
+    try {
+      await Bun.write(filepath, written)
+    } catch (error) {
+      // `Bun.write` creates missing parents itself, so a path the model invented arrives as a bare
+      // EPERM from mkdir. That turn is already spent; it comes back with the two places that do work.
+      throw withScratchHint(error, ctx.instance.directory)
+    }
+    const reformatted = await Format.formatFileReport(filepath, writtenBom, written)
     await Bus.publish(File.Event.Edited, {
       file: filepath,
     })
@@ -111,6 +117,7 @@ export const WriteTool = Tool.define("write", {
     })
 
     let output = "Wrote file successfully."
+    if (reformatted) output += `\n\n${reformatted}`
     const diagnostics = await runLSP(
       Effect.gen(function* () {
         const lsp = yield* LSP.Service

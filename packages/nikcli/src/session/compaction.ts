@@ -97,6 +97,7 @@ export namespace SessionCompaction {
     isOverflow(input: { tokens: MessageV2.Assistant["tokens"]; model: Provider.Model }): Effect.Effect<boolean, unknown>
     editContext(input: { sessionID: string; keepLastNTurns?: number }): Effect.Effect<void, unknown>
     prune(input: { sessionID: string }): Effect.Effect<void, unknown>
+    pruneLoop(input: { sessionID: string }): Effect.Effect<number, unknown>
     process(input: ProcessInput): Effect.Effect<"continue" | "stop", unknown>
     create(input: CreateInput): Effect.Effect<void, unknown>
   }
@@ -105,6 +106,10 @@ export namespace SessionCompaction {
 
   export const PRUNE_MINIMUM = 20_000
   export const PRUNE_PROTECT = 40_000
+  /** Prompt size above which `pruneLoop` clears old tool outputs, and how much of the newest it leaves. */
+  export const LOOP_PRUNE_BUDGET = 64_000
+  export const LOOP_PRUNE_KEEP = 24_000
+  export const LOOP_PRUNE_DIGEST_KEEP = 30
 
   /**
    * Cap consecutive compaction failures per session before refusing to start
@@ -154,6 +159,7 @@ export namespace SessionCompaction {
   }
 
   const PRUNE_PROTECTED_TOOLS = ["skill"]
+  const LOOP_PRUNE_TODO_TOOLS = ["todowrite", "todoread"]
 
   // Removes tool results older than keepLastNTurns user turns regardless of size,
   // allowing the context window to stay clean for long sessions.
@@ -260,6 +266,163 @@ export namespace SessionCompaction {
       }
       log.info("pruned", { count: toPrune.length })
     }
+  }
+
+  /**
+   * Prune between two steps of one prompt, for tasks that run long on a single user message
+   * (`pruneImpl` needs two user turns and only runs when the loop ends).
+   *
+   * What fills a long prompt is not only tool output: on a reasoning model the replayed reasoning
+   * of every earlier step is most of it (in a 90-step ARC run, ~100k of 160k tokens against ~27k of
+   * tool output). So the unit is the step: an old step loses its tool outputs and, unless
+   * `pruneReasoning` is off, the reasoning it would send back.
+   *
+   * Every prune rewrites the prompt from the first cleared step onward, so the provider re-reads
+   * all of that uncached. It therefore runs in blocks: only once the prompt the provider reported
+   * for the last step passes the budget, and only when at least half a budget can be freed at once.
+   * Afterwards the prompt is well under the budget and nothing happens until it grows back.
+   *
+   * Left alone: steps holding a `skill` output or the newest todo output (the todo state has to
+   * stay readable), the last step (the model has not seen its outputs yet), steps still running,
+   * and the newest `pruneKeep` tokens of steps. Returns how many steps were cleared.
+   */
+  async function pruneLoopImpl(input: { sessionID: string; config: Config.Info; ctx: InstanceContext }) {
+    const compaction = input.config.compaction
+    if (compaction?.prune === false) return 0
+    const budget = compaction?.pruneBudget ?? LOOP_PRUNE_BUDGET
+    const keep = Math.min(compaction?.pruneKeep ?? LOOP_PRUNE_KEEP, budget)
+    const pruneReasoning = compaction?.pruneReasoning !== false
+    const digest = pruneReasoning && compaction?.pruneDigest !== false
+    const digestKeep = compaction?.pruneDigestKeep ?? LOOP_PRUNE_DIGEST_KEEP
+    const msgs = await runSession(
+      Effect.gen(function* () {
+        const session = yield* Session.Service
+        return yield* session.messages({ sessionID: input.sessionID })
+      }),
+      input.ctx,
+    )
+
+    // The prompt the provider reported for the newest finished step, not an estimate.
+    let promptTokens: number | undefined
+    let newestAssistant = -1
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const info = msgs[i].info
+      if (info.role !== "assistant") continue
+      if (newestAssistant === -1) newestAssistant = i
+      if (!info.finish) continue
+      if (info.summary) return 0
+      promptTokens = info.tokens.input + info.tokens.cache.read + info.tokens.cache.write
+      break
+    }
+    if (promptTokens === undefined || promptTokens <= budget) return 0
+
+    type Step = { tools: MessageV2.ToolPart[]; reasoning: MessageV2.ReasoningPart[] }
+    const steps: Step[] = []
+    // Every step that is cleared once this pass is done, newest first: earlier prunes' and this one's.
+    const cleared: MessageV2.ToolPart[][] = []
+    let total = 0
+    let freed = 0
+    let todoKept = false
+    let protectedSteps = 0
+    scan: for (let i = msgs.length - 1; i >= 0; i--) {
+      const msg = msgs[i]
+      if (msg.info.role !== "assistant") continue
+      if (msg.info.summary) break scan
+      if (i === newestAssistant) continue
+      const tools = msg.parts.filter((p): p is MessageV2.ToolPart => p.type === "tool")
+      if (tools.length === 0) continue
+      // A step still running, or one holding what must stay readable, is left whole.
+      if (tools.some((p) => p.state.status === "pending" || p.state.status === "running")) continue
+      const holdsTodo = tools.some((p) => LOOP_PRUNE_TODO_TOOLS.includes(p.tool))
+      const keepsTodo = holdsTodo && !todoKept
+      if (holdsTodo) todoKept = true
+      if (keepsTodo || tools.some((p) => PRUNE_PROTECTED_TOOLS.includes(p.tool))) {
+        protectedSteps++
+        continue
+      }
+      const reasoning = msg.parts.filter((p): p is MessageV2.ReasoningPart => p.type === "reasoning")
+      const liveOutputs = tools.reduce(
+        (sum, p) => sum + (p.state.status === "completed" && !p.state.time.compacted ? Token.estimate(p.state.output) : 0),
+        0,
+      )
+      const replayLive =
+        pruneReasoning &&
+        (reasoning.some((p) => !MessageV2.replayCleared(p.metadata)) ||
+          tools.some((p) => !MessageV2.replayCleared(p.metadata)))
+      const weight = liveOutputs + (replayLive ? msg.info.tokens.reasoning : 0)
+      if (weight === 0) {
+        if (tools.every((p) => p.state.status === "completed" && p.state.time.compacted && MessageV2.replayCleared(p.metadata)))
+          cleared.push(tools)
+        continue
+      }
+      if (total <= keep) {
+        total += weight
+        continue
+      }
+      freed += weight
+      steps.push({ tools, reasoning })
+      cleared.push(tools)
+    }
+    if (freed < budget / 2) {
+      // Over the budget and not acting: say why, so a long run's log shows it.
+      log.info("loop prune skipped", {
+        promptTokens,
+        budget,
+        freed,
+        needed: budget / 2,
+        prunableSteps: steps.length,
+        protectedSteps,
+        pruneReasoning,
+        reason: steps.length === 0 ? "nothing outside the protected window" : "less than half a budget can be freed",
+      })
+      return 0
+    }
+
+    const now = Date.now()
+    const update = (part: MessageV2.Part) =>
+      runSession(
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          yield* session.updatePart(part)
+        }),
+        input.ctx,
+      )
+    for (const step of steps) {
+      for (const part of step.tools) {
+        let changed = false
+        if (part.state.status === "completed" && !part.state.time.compacted) {
+          part.state.time.compacted = now
+          changed = true
+        }
+        if (pruneReasoning && !MessageV2.replayCleared(part.metadata)) {
+          part.metadata = { ...part.metadata, [MessageV2.REPLAY_CLEARED]: true }
+          changed = true
+        }
+        if (changed) await update(part)
+      }
+      if (!pruneReasoning) continue
+      for (const part of step.reasoning) {
+        if (MessageV2.replayCleared(part.metadata)) continue
+        part.metadata = { ...part.metadata, [MessageV2.REPLAY_CLEARED]: true }
+        await update(part)
+      }
+    }
+
+    // Old cleared steps cost ~80 tokens a call in arguments and notice, and there is one per call for
+    // the whole task: fold all but the newest `digestKeep` into the one-line-per-call digest.
+    let digested = 0
+    if (digest) {
+      for (const tools of cleared.slice(digestKeep)) {
+        for (const part of tools) {
+          if (MessageV2.digested(part.metadata)) continue
+          part.metadata = { ...part.metadata, [MessageV2.DIGESTED]: true }
+          await update(part)
+          digested++
+        }
+      }
+    }
+    log.info("loop pruned", { steps: steps.length, freed, promptTokens, budget, pruneReasoning, digested })
+    return steps.length
   }
 
   async function processImpl(
@@ -519,6 +682,12 @@ When constructing the summary, try to stick to this template:
           const ctx = yield* InstanceState.context
           const config = yield* Effect.promise(() => configGet(ctx))
           return yield* Effect.tryPromise(() => pruneImpl({ ...input, config, ctx }))
+        }),
+      pruneLoop: (input) =>
+        Effect.gen(function* () {
+          const ctx = yield* InstanceState.context
+          const config = yield* Effect.promise(() => configGet(ctx))
+          return yield* Effect.tryPromise(() => pruneLoopImpl({ ...input, config, ctx }))
         }),
       process: (input) =>
         InstanceState.context.pipe(

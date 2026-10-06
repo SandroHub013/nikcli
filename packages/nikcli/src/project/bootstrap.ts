@@ -213,7 +213,8 @@ export async function InstanceBootstrap(instance: InstanceContext) {
   // Config hot reload: watch the instance's config surface and invalidate
   // reloadable per-instance state when files change, announcing the reload
   // on the bus so connected clients stay in sync without a restart.
-  if (!Flag.NIKCLI_DISABLE_HOT_RELOAD) {
+  // A one-shot headless `nikcli run` opts out — see `InstanceReload.watching`.
+  if (InstanceReload.watching()) {
     background(
       "hot-reload",
       InstanceReload.watch(instance).then((stop) => {

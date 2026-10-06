@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
@@ -31,7 +32,7 @@ async function writeGlobalConfig(content: Record<string, unknown>) {
 }
 
 afterAll(async () => {
-  await fs.rm(testHome, { recursive: true, force: true })
+  await removeTestDir(testHome)
 })
 
 describe("resolveNetworkOptions — argv flag detection precise", () => {

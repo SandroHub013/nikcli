@@ -156,6 +156,8 @@ describe("SessionProjector", () => {
 
 afterAll(async () => {
   await Instance.disposeAll().catch(() => undefined)
-  await fs.rm(projectDir, { recursive: true, force: true })
+  await removeTestDir(projectDir)
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
   await removeTestDir(testHome)
 })

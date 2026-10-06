@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import { afterAll, describe, expect, it } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
@@ -61,5 +62,7 @@ describe("Brain habits prompt", () => {
 })
 
 afterAll(async () => {
-  await fs.rm(testHome, { recursive: true, force: true })
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await removeTestDir(testHome)
 })

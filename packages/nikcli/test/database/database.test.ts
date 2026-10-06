@@ -1,5 +1,6 @@
 import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
+import nodeFs from "fs"
 import os from "os"
 import path from "path"
 import { afterAll, describe, expect, it } from "bun:test"
@@ -256,5 +257,33 @@ describe("Database.Service", () => {
     } finally {
       await removeTestDir(legacyDir)
     }
+  })
+
+  it("releases the sqlite file when the layer scope closes, with no retry and no gc", async () => {
+    // The regression this pins: a Drizzle query leaves compiled statements in
+    // the bounded cache, and an unfinalized statement keeps the connection a
+    // zombie after `close()`. On Windows the file handle — and therefore the
+    // directory — stays locked until the process exits, which is why every
+    // suite that opened a database through the layer had to leave its temp dir
+    // behind. Plain `fs.rmSync` with no retries and no `Bun.gc(true)` is the
+    // whole assertion: if the handle were still open this throws EBUSY.
+    const releaseDir = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-database-release-"))
+
+    const rows = await Effect.runPromise(
+      Effect.scoped(
+        Effect.provide(
+          Effect.gen(function* () {
+            const database = yield* Database.Service
+            return yield* Effect.sync(() => database.db.select().from(account).all())
+          }),
+          Database.layerFromPath(path.join(releaseDir, "nikcli.db")),
+        ),
+      ),
+    )
+    expect(rows).toEqual([])
+
+    // No `maxRetries`, no `force`, no forced collection: this either works or it
+    // does not.
+    expect(() => nodeFs.rmSync(releaseDir, { recursive: true })).not.toThrow()
   })
 })

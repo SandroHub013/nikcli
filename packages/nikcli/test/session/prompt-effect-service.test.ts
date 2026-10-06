@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import { pathToFileURL } from "node:url"
 import { SessionPrompt } from "@/session/prompt"
 import { locallyInstance } from "@/effect"
@@ -48,7 +49,7 @@ describe("SessionPrompt.Service", () => {
         mime: "text/plain",
       })
     } finally {
-      await fs.rm(directory, { recursive: true, force: true })
+      await removeTestDir(directory)
     }
   })
 })

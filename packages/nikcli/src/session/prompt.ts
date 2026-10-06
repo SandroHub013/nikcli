@@ -1265,6 +1265,21 @@ export namespace SessionPrompt {
         )
       }
 
+      // Between steps of one long prompt: clear old tool outputs once the last step's real prompt
+      // passed the budget (see `SessionCompaction.pruneLoopImpl`), then rebuild from the store.
+      if (step > 1) {
+        const pruned = await runCompaction(
+          Effect.gen(function* () {
+            const compaction = yield* SessionCompaction.Service
+            return yield* compaction.pruneLoop({ sessionID })
+          }),
+        ).catch((error) => {
+          log.warn("loop prune failed", { sessionID, error })
+          return 0
+        })
+        if (pruned > 0) msgs = await MessageV2.filterCompacted(MessageV2.stream(sessionID))
+      }
+
       // Clone only for plugin transforms — do not mutate text for reminders.
       // Queued-user wrapping is applied in toModelMessages so stored parts (and
       // therefore prompt-cache prefixes) stay stable across turns.
@@ -1310,6 +1325,13 @@ export namespace SessionPrompt {
         sessionID,
         system,
         messages: [
+          // Per-session context first, so the system prompt and the tool schemas ahead of it stay
+          // byte-identical between sessions: that is the prefix a provider can serve from cache
+          // when a new session starts while the cache from the previous one is still warm.
+          ...assembled.sessionMessages.map((content) => ({
+            role: "user" as const,
+            content,
+          })),
           ...assembled.skillMessages.map((content) => ({
             role: "user" as const,
             content,

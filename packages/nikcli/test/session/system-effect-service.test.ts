@@ -50,7 +50,9 @@ afterEach(async () => {
 
 afterAll(async () => {
   await Instance.disposeAll().catch(() => undefined)
-  await Promise.all(projectDirs.map((dir) => fs.rm(dir, { recursive: true, force: true })))
+  await Promise.all(projectDirs.map((dir) => removeTestDir(dir)))
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
   await removeTestDir(testHome)
 })
 
@@ -67,7 +69,11 @@ describe("SystemPrompt.Service", () => {
         }),
       )
 
-      expect(result.environment[0]).toContain(`Working directory: ${projectDir}`)
+      // `environment()` is the whole block, static half first: the session half no longer lives in
+      // the system prompt but is delivered ahead of the conversation, so the two are no longer one
+      // string in one place. Assert on the content, not on which part carries it.
+      expect(result.environment.join("\n")).toContain(`Working directory: ${projectDir}`)
+      expect(result.environment.join("\n")).toContain("<command_execution>")
       if (!process.env.NIKCLI_DISABLE_PROJECT_CONFIG) {
         expect(result.custom[0]).toContain("Instructions from:")
         expect(result.custom[0]).toContain("Project instructions")

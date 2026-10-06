@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import { afterAll, beforeEach, describe, expect, it } from "bun:test"
 import { Effect } from "effect"
 import type { Auth as AuthNamespace } from "@/auth"
@@ -102,5 +103,7 @@ describe("Auth.Service", () => {
 
 afterAll(async () => {
   delete process.env.NIKCLI_AUTH_CONTENT
-  await fs.rm(testHome, { recursive: true, force: true })
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await removeTestDir(testHome)
 })

@@ -3,11 +3,8 @@ Launch a subagent for multi-step work that needs a focused agent type.
 Available agents:
 {agents}
 
-Require `subagent_type`. Always background (`background` defaults true) — returns immediately; completion wakes this session. Use `delegation` to inspect/cancel. Prefer parallel tasks when independent.
+Require `subagent_type`. Always background (`background` defaults true): returns immediately and the completion wakes this session; use `delegation` to inspect or cancel. Launch independent tasks in parallel.
 
-Optional `model` runs the subagent on a different model. When the user's request names a model in passing ("get a review from <model>", "run it on <model>"), pass that name through as they wrote it — nikcli resolves it against the models it can reach. If the name fits none, or fits several variants of a family, the tool answers with the candidates: pick the one that matches what the user asked for and call again with its full "providerID/modelID". Omit it when they named none.
+Optional `model` runs the subagent on another model: pass a model the user named as they wrote it; if it is ambiguous or unknown the tool lists candidates, then call again with the full "providerID/modelID". Omit it otherwise.
 
-Use Task when: multi-step research/implementation, slash-command handoff, deep analysis.
-Do NOT use Task for: single-file read, simple class lookup, 1–2 file edits (use Read/Glob/Edit).
-
-Prompt must state exact deliverable. Tell the agent whether to write code or only research. Subagent output is not shown to the user — summarize it yourself.
+Use for multi-step research or implementation and deep analysis, not for a single read, a lookup or a 1–2 file edit. The prompt must state the exact deliverable and whether to write code or only research. Subagent output is not shown to the user: summarize it yourself.

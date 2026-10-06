@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -22,7 +23,9 @@ describe("GlobTool", () => {
 
   afterAll(async () => {
     await Instance.disposeAll().catch(() => undefined)
-    await fs.rm(projectDir, { recursive: true, force: true }).catch(() => {})
+    const { Database } = await import("@/database/database")
+    Database.closeAll()
+    await removeTestDir(projectDir)
   })
 
   it("matches files by pattern and asks glob permission", async () => {
@@ -76,5 +79,21 @@ describe("GlobTool", () => {
       def.executeAsync({ pattern: "*.md", path: "undefined" }, ctx),
     )
     expect(result.output).toContain("c.md")
+  })
+})
+
+describe("GlobTool with the root of the disk spelled as a path", () => {
+  it('reads path "/" as the project, not as the disk', async () => {
+    const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-glob-root-"))
+    try {
+      await fs.writeFile(path.join(projectDir, "only-here.ts"), "x\n")
+      const def = await withProjectDirectory(projectDir, () => GlobTool.init())
+      const { ctx } = makeToolContext()
+      const result = await withProjectDirectory(projectDir, () => def.executeAsync({ pattern: "*.ts", path: "/" }, ctx))
+      expect(result.output).toContain("only-here.ts")
+    } finally {
+      await Instance.disposeAll().catch(() => undefined)
+      await fs.rm(projectDir, { recursive: true, force: true }).catch(() => {})
+    }
   })
 })

@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import { afterAll, beforeEach, describe, expect, it } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
@@ -35,8 +36,9 @@ const projectDir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "ni
 
 afterAll(async () => {
   await Instance.disposeAll().catch(() => undefined)
-  await fs.rm(testHome, { recursive: true, force: true }).catch(() => {})
-  await fs.rm(projectDir, { recursive: true, force: true }).catch(() => {})
+  Database.closeAll()
+  await removeTestDir(testHome)
+  await removeTestDir(projectDir)
 })
 
 /** Midday UTC on the given day, so a timezone slip would move the bucket visibly. */

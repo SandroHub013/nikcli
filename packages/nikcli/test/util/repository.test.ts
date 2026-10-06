@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -26,7 +27,7 @@ const cleanup: string[] = []
 
 afterEach(async () => {
   const paths = cleanup.splice(0)
-  await Promise.all(paths.map((item) => fs.rm(item, { recursive: true, force: true })))
+  await Promise.all(paths.map((item) => removeTestDir(item)))
   delete process.env.NIKCLI_TEST_HOME
 })
 

@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import { afterAll, afterEach, describe, expect, it } from "bun:test"
 import { Effect } from "effect"
 import fs from "fs/promises"
@@ -129,30 +130,42 @@ describe("ToolRegistry.Service", () => {
     expect(ids.length).toBeGreaterThan(1)
   })
 
-  it("defers every tool outside the core set until the session loads it", () => {
-    // An absent entry is "not loaded yet", an explicit `false` is loaded, and
-    // `true` is the user switching the tool off.
-    expect(ToolRegistry.exposure("opentui", { ruleset: [] })).toBe("deferred")
-    expect(ToolRegistry.exposure("webfetch", { disabledTools: {}, ruleset: [] })).toBe("deferred")
-    expect(ToolRegistry.exposure("webfetch", { disabledTools: { webfetch: false }, ruleset: [] })).toBe("active")
-    expect(ToolRegistry.exposure("webfetch", { disabledTools: { webfetch: true }, ruleset: [] })).toBe("hidden")
-    // Plugin and custom tools are not in the core set either.
-    expect(ToolRegistry.exposure("live_scores", { ruleset: [] })).toBe("deferred")
+  it("defers the listed tools until the user loads them", () => {
+    // An absent entry is "not loaded yet", an explicit `false` is switched on,
+    // and `true` is the user switching the tool off. A deferred tool is never
+    // loaded by the model itself: the schema stays the same all session.
+    expect(ToolRegistry.exposure("generate_image", { disabledTools: {}, ruleset: [] })).toBe("deferred")
+    expect(ToolRegistry.exposure("generate_image", { disabledTools: { generate_image: false }, ruleset: [] })).toBe(
+      "active",
+    )
+    expect(ToolRegistry.exposure("generate_image", { disabledTools: { generate_image: true }, ruleset: [] })).toBe(
+      "hidden",
+    )
+    // Opt-in tools wait for a human and are not even reachable through call_tool.
+    expect(ToolRegistry.exposure("opentui", { ruleset: [] })).toBe("hidden")
+    expect(ToolRegistry.exposure("opentui", { disabledTools: { opentui: false }, ruleset: [] })).toBe("active")
+    // Plugin and custom tools are not on the explicit deferred list: they keep their schema.
+    expect(ToolRegistry.exposure("live_scores", { ruleset: [] })).toBe("active")
 
     // Core tools keep the plain meaning: on unless switched off.
     expect(ToolRegistry.exposure("bash", { ruleset: [] })).toBe("active")
     expect(ToolRegistry.exposure("bash", { disabledTools: { bash: false }, ruleset: [] })).toBe("active")
     expect(ToolRegistry.exposure("bash", { disabledTools: { bash: true }, ruleset: [] })).toBe("hidden")
+    // A switched-off deferred tool is not usable, a plain deferred one is.
+    expect(ToolRegistry.visible("generate_image", { disabledTools: {}, ruleset: [] })).toBe(true)
+    expect(ToolRegistry.visible("generate_image", { disabledTools: { generate_image: true }, ruleset: [] })).toBe(
+      false,
+    )
   })
 
   it("loads configured tools from the first request", () => {
-    expect(ToolRegistry.exposure("webfetch", { ruleset: [], eager: ["webfetch"] })).toBe("active")
-    expect(ToolRegistry.exposure("live_scores", { ruleset: [], eager: ["live_*"] })).toBe("active")
-    expect(ToolRegistry.exposure("webfetch", { ruleset: [], eager: ["*"] })).toBe("active")
+    expect(ToolRegistry.exposure("generate_image", { ruleset: [], eager: ["generate_image"] })).toBe("active")
+    expect(ToolRegistry.exposure("code_mode", { ruleset: [], eager: ["code_*"] })).toBe("active")
+    expect(ToolRegistry.exposure("code_mode", { ruleset: [], eager: ["*"] })).toBe("active")
     // Configuring a tool as eager does not override the user switching it off.
-    expect(ToolRegistry.exposure("webfetch", { disabledTools: { webfetch: true }, ruleset: [], eager: ["*"] })).toBe(
-      "hidden",
-    )
+    expect(
+      ToolRegistry.exposure("code_mode", { disabledTools: { code_mode: true }, ruleset: [], eager: ["*"] }),
+    ).toBe("hidden")
   })
 
   it("defers nothing for an agent with a curated toolset", () => {
@@ -161,10 +174,10 @@ describe("ToolRegistry.Service", () => {
     const curated = [
       { permission: "*", pattern: "*", action: "allow" as const },
       { permission: "*", pattern: "*", action: "deny" as const },
-      { permission: "webfetch", pattern: "*", action: "allow" as const },
+      { permission: "code_mode", pattern: "*", action: "allow" as const },
     ]
     expect(ToolRegistry.curated(curated)).toBe(true)
-    expect(ToolRegistry.exposure("webfetch", { ruleset: curated })).toBe("active")
+    expect(ToolRegistry.exposure("code_mode", { ruleset: curated })).toBe("active")
     expect(ToolRegistry.exposure("generate_image", { ruleset: curated })).toBe("hidden")
 
     // An open agent that denies a few tools is not curated.
@@ -173,7 +186,7 @@ describe("ToolRegistry.Service", () => {
       { permission: "plan_exit", pattern: "*", action: "deny" as const },
     ]
     expect(ToolRegistry.curated(open)).toBe(false)
-    expect(ToolRegistry.exposure("webfetch", { ruleset: open })).toBe("deferred")
+    expect(ToolRegistry.exposure("code_mode", { ruleset: open })).toBe("deferred")
   })
 
   it("names only tools the registry can actually register in the core set", async () => {
@@ -322,6 +335,8 @@ afterEach(async () => {
 
 afterAll(async () => {
   await Instance.disposeAll().catch(() => undefined)
-  await Promise.all(projectDirs.map((dir) => fs.rm(dir, { recursive: true, force: true })))
-  await fs.rm(testHome, { recursive: true, force: true })
+  await Promise.all(projectDirs.map((dir) => removeTestDir(dir)))
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await removeTestDir(testHome)
 })

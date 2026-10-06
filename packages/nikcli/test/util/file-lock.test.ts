@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -7,7 +8,9 @@ import { FileLock } from "@/util/file-lock"
 const dir = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-file-lock-"))
 
 afterAll(async () => {
-  await fs.rm(dir, { recursive: true, force: true }).catch(() => undefined)
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await removeTestDir(dir)
 })
 
 function lockFile(name: string) {

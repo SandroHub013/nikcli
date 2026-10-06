@@ -189,4 +189,34 @@ export namespace PermissionRuleset {
     }
     return result
   }
+
+  /**
+   * Tools this ruleset asks for **by name** — the mirror of {@link disabled}.
+   *
+   * A rule that names the tool's own permission and allows it is a deliberate
+   * request for that capability, as opposed to a wildcard that happens to cover
+   * it. `ToolRegistry` reads this so a deferred tool an agent explicitly listed
+   * (`explore` allows `webfetch`, `planner` allows `tree`) still reaches that
+   * agent's schema, while a blanket `"*": "allow"` does not drag every deferred
+   * tool back in.
+   *
+   * `allow` specifically, not "anything but deny": the default ruleset carries
+   * `browser_control: "ask"` and `computer: "ask"` for every agent, and an
+   * ask-rule is a guard on a capability, not a request for it.
+   *
+   * Under `--auto` the ruleset is rewritten to a leading wildcard allow plus the
+   * denials, so no rule names a tool any more and this returns nothing — the
+   * same rewrite already makes {@link disabled} treat a subagent's `"*": "deny"`
+   * as covering everything, so the two agree.
+   */
+  export function requested(tools: string[], ruleset: Ruleset): Set<string> {
+    const result = new Set<string>()
+    for (const tool of tools) {
+      const permission = TOOL_PERMISSION[tool] ?? tool
+      const rule = ruleset.findLast((r: Rule) => Wildcard.match(permission, r.permission))
+      if (!rule) continue
+      if (rule.permission === permission && rule.action === "allow") result.add(tool)
+    }
+    return result
+  }
 }

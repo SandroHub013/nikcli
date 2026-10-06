@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -20,7 +21,9 @@ describe("GrepTool", () => {
 
   afterAll(async () => {
     await Instance.disposeAll().catch(() => undefined)
-    await fs.rm(projectDir, { recursive: true, force: true }).catch(() => {})
+    const { Database } = await import("@/database/database")
+    Database.closeAll()
+    await removeTestDir(projectDir)
   })
 
   it("finds pattern matches and asks grep permission", async () => {
@@ -46,5 +49,23 @@ describe("GrepTool", () => {
     await expect(
       withProjectDirectory(projectDir, () => def.executeAsync({ pattern: "", path: projectDir }, ctx)),
     ).rejects.toThrow(/pattern is required/)
+  })
+})
+
+describe("GrepTool with the root of the disk spelled as a path", () => {
+  it('reads path "/" as the project, not as the disk', async () => {
+    const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-grep-root-"))
+    try {
+      await fs.writeFile(path.join(projectDir, "needle.ts"), "zq-unique-needle-417\n")
+      const def = await withProjectDirectory(projectDir, () => GrepTool.init())
+      const { ctx } = makeToolContext()
+      const result = await withProjectDirectory(projectDir, () =>
+        def.executeAsync({ pattern: "zq-unique-needle-417", path: "/" }, ctx),
+      )
+      expect(result.output).toContain("needle.ts")
+    } finally {
+      await Instance.disposeAll().catch(() => undefined)
+      await fs.rm(projectDir, { recursive: true, force: true }).catch(() => {})
+    }
   })
 })

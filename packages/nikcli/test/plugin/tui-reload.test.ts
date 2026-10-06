@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
-import { mkdtemp, readdir, rm, writeFile } from "fs/promises"
+import { mkdtemp, readdir, writeFile } from "fs/promises"
+import { removeTestDir } from "../helpers/fs"
 import { tmpdir } from "os"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -11,7 +12,7 @@ async function scratch() {
   return {
     path: dir,
     async [Symbol.asyncDispose]() {
-      await rm(dir, { recursive: true, force: true })
+      await removeTestDir(dir)
     },
   }
 }

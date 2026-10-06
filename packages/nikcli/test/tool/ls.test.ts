@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -20,7 +21,9 @@ describe("ListTool", () => {
 
   afterAll(async () => {
     await Instance.disposeAll().catch(() => undefined)
-    await fs.rm(projectDir, { recursive: true, force: true }).catch(() => {})
+    const { Database } = await import("@/database/database")
+    Database.closeAll()
+    await removeTestDir(projectDir)
   })
 
   it("lists directory entries and asks list permission", async () => {

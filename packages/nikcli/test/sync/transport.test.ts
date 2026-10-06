@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -19,7 +20,9 @@ const run = Math.random().toString(36).slice(2)
 
 afterAll(async () => {
   if (process.env.NIKCLI_DB === path.join(testDir, "nikcli.db")) {
-    await fs.rm(testDir, { recursive: true, force: true })
+    const { Database } = await import("@/database/database")
+    Database.closeAll()
+    await removeTestDir(testDir)
   }
 })
 

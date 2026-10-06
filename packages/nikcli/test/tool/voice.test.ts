@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -28,8 +29,10 @@ describe("Voice", () => {
     if (originalPath === undefined) delete process.env.PATH
     else process.env.PATH = originalPath
     await Instance.disposeAll().catch(() => undefined)
-    await fs.rm(projectDir, { recursive: true, force: true }).catch(() => {})
-    await fs.rm(binDir, { recursive: true, force: true }).catch(() => {})
+    await removeTestDir(projectDir)
+    const { Database } = await import("@/database/database")
+    Database.closeAll()
+    await removeTestDir(binDir)
   })
 
   it("reports status without asking for anything", async () => {

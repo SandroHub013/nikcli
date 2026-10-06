@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -9,7 +10,8 @@ import { makeToolContext } from "../helpers/tool-context"
 
 /**
  * Deferred tools against a real session: what `resolveTools` offers, what
- * `search_tools` loads, and how a load persists into the next step.
+ * `search_tools` says about the rest, and that neither a search nor a call
+ * changes the toolset the provider sees (one cached prefix for the whole session).
  */
 describe.serial("deferred tools", () => {
   const anthropic = { providerID: "anthropic", api: { id: "claude-opus-5" } }
@@ -83,64 +85,57 @@ describe.serial("deferred tools", () => {
         })
       } finally {
         await Instance.disposeAll().catch(() => undefined)
-        await fs.rm(directory, { recursive: true, force: true }).catch(() => {})
+        await removeTestDir(directory)
       }
     })
   }
 
   const callOptions = () => ({ toolCallId: "call_test", abortSignal: new AbortController().signal, messages: [] })
 
-  it("offers core tools, keeps the rest callable but deferred, and indexes them", async () => {
+  const wire = (tools: Record<string, { description?: string }>) =>
+    Object.entries(tools)
+      .map(([id, tool]) => `${id} :: ${tool.description ?? ""}`)
+      .join("\n")
+
+  it("offers the core tools, leaves the deferred ones out and names them in search_tools", async () => {
     await withSession(async ({ resolve }) => {
       const { tools, deferred } = await resolve()
-      for (const id of ["read", "edit", "bash", "grep", "glob", "task", "search_tools", "monitor", "todoread"]) {
+      for (const id of ["read", "edit", "bash", "grep", "glob", "task", "search_tools", "call_tool", "monitor", "todoread"]) {
         expect(tools[id]).toBeDefined()
-        expect(deferred.has(id)).toBe(false)
       }
-      for (const id of ["webfetch", "generate_image", "opentui"]) {
-        // Still in the map, so a call by name runs.
-        expect(tools[id]).toBeDefined()
-        expect(deferred.has(id)).toBe(true)
-      }
+      for (const id of ["generate_image", "code_mode", "opentui"]) expect(tools[id]).toBeUndefined()
+      // Nothing is "deferred but present": upstream's field stays, always empty.
+      expect(deferred.size).toBe(0)
       const description = tools.search_tools.description ?? ""
-      expect(description).toMatch(/^- webfetch: \S/m)
-      expect(description).toMatch(/^- opentui: \S/m)
-      expect(description).not.toMatch(/^- read:/m)
+      expect(description).toContain("generate_image")
+      expect(description).toContain("call_tool")
     })
   })
 
-  it("loads a deferred tool by name for the rest of the session", async () => {
+  it("searching does not load anything: the toolset is byte-identical afterwards", async () => {
     await withSession(async ({ session, resolve, search }) => {
-      const result = await search("webfetch")
-      expect(result.output).toContain("Loaded 1 tool")
-      expect(result.metadata.loaded).toEqual(["webfetch"])
-      expect((await session()).disabledTools?.webfetch).toBe(false)
+      const before = await resolve()
+      const result = await search("generate_image")
+      expect(result.output).toContain('call_tool({"name": "generate_image"')
+      expect(result.output).toContain("parameters:")
+      expect((await session()).disabledTools ?? {}).toEqual({})
 
-      const { tools, deferred } = await resolve()
-      expect(deferred.has("webfetch")).toBe(false)
-      expect(tools.search_tools.description ?? "").not.toMatch(/^- webfetch:/m)
-
-      // Loading again is a no-op, reported as such.
-      const again = await search("webfetch")
-      expect(again.output).toContain("Already in your toolset: webfetch")
+      const after = await resolve()
+      expect(Object.keys(after.tools)).toEqual(Object.keys(before.tools))
+      expect(wire(after.tools)).toBe(wire(before.tools))
     })
   })
 
-  it("loads keyword matches only when the keyword is in the tool's name", async () => {
-    await withSession(async ({ session, search }) => {
-      const image = await search("image")
-      expect(image.metadata.loaded).toEqual(["generate_image"])
-      expect(image.output).toMatch(/^- generate_image \[loaded now\]:/m)
-
-      // "url" appears only in descriptions: listed, not loaded.
-      const url = await search("url")
-      expect(url.metadata.loaded).toEqual([])
-      expect(url.output).toContain("[deferred — load by name]")
-      expect((await session()).disabledTools).toEqual({ generate_image: false })
+  it("answers a list of names and says which ones the session does not have", async () => {
+    await withSession(async ({ search }) => {
+      const result = await search("grep,generate_image,no_such_tool")
+      expect(result.output).toContain("Already in your toolset: grep")
+      expect(result.output).toContain('call_tool({"name": "generate_image"')
+      expect(result.output).toContain("Not available in this session: no_such_tool")
     })
   })
 
-  it("never loads a tool the user switched off", async () => {
+  it("never offers a tool the user switched off", async () => {
     await withSession(async ({ sessionID, session, search, resolve }) => {
       const [{ Effect }, { Session }, effect] = await Promise.all([
         import("effect"),
@@ -153,43 +148,64 @@ describe.serial("deferred tools", () => {
           Effect.gen(function* () {
             const service = yield* Session.Service
             yield* service.update(sessionID, (draft) => {
-              draft.disabledTools = { webfetch: true }
+              draft.disabledTools = { generate_image: true, webfetch: true }
             })
           }),
         ),
       )
-      const result = await search("webfetch")
-      expect(result.output).toContain("Not available in this session: webfetch")
-      expect((await session()).disabledTools?.webfetch).toBe(true)
-      expect((await resolve()).tools.webfetch).toBeUndefined()
+      const result = await search("generate_image")
+      expect(result.output).toContain("Not available in this session: generate_image")
+      expect((await session()).disabledTools?.generate_image).toBe(true)
+      const { tools } = await resolve()
+      expect(tools.webfetch).toBeUndefined()
+
+      // call_tool asks the same question, so it cannot be used to get around the switch.
+      const blocked = (await tools.call_tool.execute!({ name: "generate_image", args: {} }, callOptions())) as {
+        output: string
+        metadata?: { ok?: boolean }
+      }
+      expect(blocked.metadata?.ok).toBe(false)
     })
   })
 
-  it("loads a deferred tool the model calls by name", async () => {
+  it("runs a deferred tool through call_tool without touching the session's toolset", async () => {
     await withSession(async ({ session, resolve }) => {
-      const { tools } = await resolve()
-      await tools.tree.execute!({}, callOptions())
-      expect((await session()).disabledTools?.tree).toBe(false)
-      expect((await resolve()).deferred.has("tree")).toBe(false)
+      const before = await resolve()
+      expect(before.tools.get_goal).toBeUndefined()
+      const result = (await before.tools.call_tool.execute!({ name: "get_goal", args: {} }, callOptions())) as {
+        title?: string
+        output: string
+        metadata?: { ok?: boolean }
+      }
+      // It ran: not "unknown tool", not "not available".
+      expect(result.title ?? "").not.toContain("Unknown tool")
+      expect(result.metadata?.ok).not.toBe(false)
+      expect((await session()).disabledTools ?? {}).toEqual({})
+
+      const after = await resolve()
+      expect(wire(after.tools)).toBe(wire(before.tools))
     })
   })
 
-  it("loads a deferred tool whose call was rejected, and says the retry will have its schema", async () => {
+  it("refuses a name the registry does not know and lists what exists", async () => {
+    await withSession(async ({ resolve }) => {
+      const { tools } = await resolve()
+      const result = (await tools.call_tool.execute!({ name: "no_such_tool", args: {} }, callOptions())) as {
+        output: string
+      }
+      expect(result.output).toContain('No registered tool is called "no_such_tool"')
+    })
+  })
+
+  it("a direct call to a deferred tool is redirected to search_tools + call_tool, and loads nothing", async () => {
     await withSession(async ({ session, resolve }) => {
       const { tools } = await resolve()
-      // What the repair in `LLM.stream` turns a schema-rejected call into.
-      const result = (await tools.invalid.execute!({ tool: "webfetch", error: "url: Required" }, callOptions())) as {
+      const result = (await tools.invalid.execute!({ tool: "generate_image", error: "prompt: Required" }, callOptions())) as {
         output: string
       }
-      expect(result.output).toContain("url: Required")
-      expect(result.output).toContain("`webfetch` was not loaded yet")
-      expect((await session()).disabledTools?.webfetch).toBe(false)
-
-      // An ordinary invalid call is left as it was.
-      const plain = (await tools.invalid.execute!({ tool: "read", error: "filePath: Required" }, callOptions())) as {
-        output: string
-      }
-      expect(plain.output).not.toContain("was not loaded yet")
+      expect(result.output).toContain("registered but not in your tool schema")
+      expect(result.output).toContain("call_tool")
+      expect((await session()).disabledTools ?? {}).toEqual({})
     })
   })
 })

@@ -1,15 +1,5 @@
-Run a long-lived command in the background without blocking the current turn.
+Run a command without blocking the turn: typecheck, builds, test suites, installs, dev servers, watchers, log tails, polling.
 
-Use for: typecheck, builds, test suites, dependency installs, dev servers, watchers, log tails, PR polling, anything that should keep running while the agent works.
-
-What it does:
-- Starts the command in the background.
-- Persists stdout/stderr to a log file on disk.
-- Streams live status into the session UI.
-- Wakes the parent session when the command finishes.
-
-Prefer this over `bash` for anything that takes more than a few seconds or never exits — `bash` blocks and hangs on such commands.
-
-Only a short preview is streamed into the session. To inspect complete output (e.g. full typecheck errors), read the job's log file (the "Log file:" path returned when the job starts) with the Read tool.
-
-Use the project's active package manager (e.g. `bun run typecheck` in a bun project) — never mix package managers.
+- If it finishes within 15 seconds, returns its exit code and output directly, as `bash` would.
+- Otherwise it keeps running in the background, writes stdout/stderr to a log file (the "Log file:" path in the result), streams a short preview, and wakes the session when it finishes. Read the log file for the full output.
+- Use this instead of `bash` for anything that may take more than a few seconds or never exits. Use the project's package manager.

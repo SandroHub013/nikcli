@@ -2,6 +2,8 @@ import { Effect, Schema } from "effect"
 import { zod } from "@nikcli-ai/util/effect-zod"
 import { Tool } from "./tool"
 import { Question } from "../question"
+import { Session } from "../session"
+import { PermissionNext } from "@/permission/next"
 import DESCRIPTION from "./question.txt"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
 
@@ -25,10 +27,35 @@ const Parameters = Schema.Struct({
   questions: Schema.Array(QuestionWithoutCustom).annotate({ description: "Questions to ask" }),
 })
 
+// True when the session's own rules deny `question` for every pattern. A session that cannot
+// be read (or has no rules) is not forbidden: the tool behaves as it always did.
+export async function isQuestionForbidden(sessionID: string) {
+  try {
+    const info = await runPromiseWithLayer(
+      Session.defaultLayer,
+      withCurrentInstance(Effect.flatMap(Session.Service, (session) => session.get(sessionID))),
+    )
+    return PermissionNext.disabled(["question"], info.permission ?? []).has("question")
+  } catch {
+    return false
+  }
+}
+
 export const QuestionTool = Tool.define("question", {
   description: DESCRIPTION,
   parameters: zod(Parameters),
   async execute(params, ctx) {
+    // The session can forbid `question` outright (`nikcli run` does: nobody is there to answer).
+    // The tool is normally hidden from the model then; if a call still gets here, answering
+    // "no one can reply" now beats parking for the 600s tool timeout.
+    if (await isQuestionForbidden(ctx.sessionID)) {
+      return {
+        title: "Question not asked",
+        output:
+          "No user is available to answer questions in this session, so nothing was asked. Decide on your own with the best-supported assumption, state it briefly, and continue the task.",
+        metadata: { answers: [] as Question.Answer[] },
+      }
+    }
     const answers = await runPromiseWithLayer(
       Question.defaultLayer,
       withCurrentInstance(

@@ -10,12 +10,14 @@ import { Command } from "@/command"
 import { EOL } from "os"
 import { pathToFileURL } from "url"
 import { isHeadless, resolvePermissionPrompt } from "@/cli/headless"
+import { armExitWatchdog } from "@/cli/exit-watchdog"
 import { createNikcliClient, type Event as SdkEvent, type NikcliClient } from "@nikcli-ai/sdk/httpapi"
 import { Server } from "@/server/server"
 import { Provider } from "@/provider/provider"
 import { Agent } from "@/agent/agent"
 import { SessionRepo } from "@/session/repo"
 import type { Project } from "@/project/project"
+import { InstanceReload } from "@/project/reload"
 import { SessionDiffRepo } from "@/session/diff-repo"
 import { SessionV2Write } from "@/session/v2/write"
 import type { Session } from "@/session"
@@ -29,6 +31,15 @@ import { Log } from "@nikcli-ai/util/log"
 import z from "zod"
 
 export const log = Log.create({ service: "run-command" })
+
+// `run` has no one at the other end: tools that stop to ask a human (`question`, and the
+// plan-mode switches, which confirm through it) are denied for every pattern so they never
+// reach the model's schema. Shared by the local and `--attach` session creation.
+export const HEADLESS_PERMISSION = ["question", "plan_enter", "plan_exit"].map((permission) => ({
+  permission,
+  action: "deny" as const,
+  pattern: "*",
+}))
 
 export const TOOL = new Map<string, [string, string]>(
   Object.entries({
@@ -459,6 +470,12 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<{ error?: st
         const part = event.properties.part
         if (part.sessionID !== sessionID) continue
 
+        // A failed call is a call too: without this the JSON stream shows only the ones that worked, and every
+        // consumer (the bench's tool counts, a failure analysis) sees an error-free run.
+        if (part.type === "tool" && part.state.status === "error") {
+          if (outputJsonEvent("tool_use", { part })) continue
+        }
+
         if (part.type === "tool" && part.state.status === "completed") {
           if (outputJsonEvent("tool_use", { part })) continue
           const [tool, color] = TOOL.get(part.tool) ?? [part.tool, UI.Style.TEXT_INFO_BOLD]
@@ -711,26 +728,7 @@ export async function runWithArgs(args: any): Promise<void> {
           : undefined
 
       const result = await sdk.session.create(
-        title
-          ? {
-              title,
-              permission: [
-                {
-                  permission: "question",
-                  action: "deny",
-                  pattern: "*",
-                },
-              ],
-            }
-          : {
-              permission: [
-                {
-                  permission: "question",
-                  action: "deny",
-                  pattern: "*",
-                },
-              ],
-            },
+        title ? { title, permission: HEADLESS_PERMISSION } : { permission: HEADLESS_PERMISSION },
       )
       return result.data?.id
     })()
@@ -756,8 +754,23 @@ export async function runWithArgs(args: any): Promise<void> {
     // The envelope is for embedded callers; here it is always `{}` or
     // unreachable. Matches the sibling call site below.
     await execute(sdk, sessionID)
+    // The work is done and `bootstrap`'s `finally` has disposed the instance, so the
+    // process should now fall off the end of the event loop. Arm the watchdog *after*
+    // that, so its timer only exists once there is nothing left to do, and `unref()` it
+    // so a clean exit never waits on it. It fires only if something is still holding
+    // the loop open — which is the one failure the benchmark could not otherwise
+    // diagnose, because the process was killed before it could say anything.
+    // Not the TUI: this is the `run` command, and the timer is inert there.
+    armExitWatchdog()
     return
   }
+
+  // A one-shot headless run has nothing to reload: the config cannot change
+  // under a process that ends with its turn, and `fs.watch` keeps a directory
+  // handle open past dispose on Windows. `--attach` returned above, so the
+  // remote server that owns the config still watches it; the TUI never
+  // reaches this handler.
+  if (isHeadless()) InstanceReload.disableForHeadlessRun()
 
   await bootstrap(process.cwd(), async (instance) => {
     log.debug("Running local nikcli session")
@@ -794,7 +807,11 @@ export async function runWithArgs(args: any): Promise<void> {
             : args.title
           : undefined
 
-      const result = await sdk.session.create(title ? { title } : {})
+      // Same rule as the --attach branch: without it the local session carries no permission at
+      // all, so the tools stay in the model's schema and a call parks for the 600s tool timeout.
+      const result = await sdk.session.create(
+        title ? { title, permission: HEADLESS_PERMISSION } : { permission: HEADLESS_PERMISSION },
+      )
       return result.data?.id
     })()
 
@@ -815,6 +832,10 @@ export async function runWithArgs(args: any): Promise<void> {
     }
 
     await execute(sdk, sessionID)
+    // The work is done. Arm the watchdog before the instance is disposed, not after: a hang inside
+    // the dispose (a language server, monitor or plugin that never stops) would otherwise never
+    // reach a line placed after `bootstrap`. The timer is unref'd, so a clean exit never waits on it.
+    armExitWatchdog()
   })
 }
 

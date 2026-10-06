@@ -1,6 +1,7 @@
 import { Log } from "@nikcli-ai/util/log"
 import { Bom } from "../util/bom"
 import path from "path"
+import { diffLines } from "diff"
 import z from "zod"
 
 import * as Formatter from "./formatter"
@@ -240,6 +241,66 @@ export namespace Format {
    * non-zero exit) falls through to the next match. Returns `true` when a
    * formatter ran successfully.
    */
+  // Which formatter last succeeded on a file, for the note a tool gives when it changed the file.
+  const ranFormatter = new Map<string, string>()
+
+  /** How many changed lines are quoted back to the agent; more than this is a reflow it must re-read. */
+  const REFORMAT_QUOTE_LINES = 12
+
+  /**
+   * What an edit tool tells the agent when the formatter changed the file it had just written: the
+   * agent's view of the file is now stale, and the next patch built on it would not match.
+   * `undefined` when the formatter left the text as it was.
+   */
+  export function reformatNotice(formatter: string, written: string, formatted: string): string | undefined {
+    const strip = (text: string) => text.replace(/^\uFEFF/, "")
+    const before = strip(written)
+    const after = strip(formatted)
+    if (before === after) return undefined
+
+    let added = 0
+    let removed = 0
+    const quoted: string[] = []
+    let line = 1
+    for (const part of diffLines(before, after)) {
+      const count = part.count ?? 0
+      if (part.added) {
+        added += count
+        const rows = part.value.replace(/\n$/, "").split("\n")
+        rows.forEach((text, i) => quoted.push(`${line + i}| ${text}`))
+        line += count
+      } else if (part.removed) {
+        removed += count
+      } else {
+        line += count
+      }
+    }
+
+    const changed = Math.max(added, removed)
+    let notice = `Note: ${formatter} reformatted this file after the write (${changed} ${changed === 1 ? "line" : "lines"} changed). Re-read it before the next edit.`
+    if (changed <= REFORMAT_QUOTE_LINES && quoted.length > 0) {
+      notice += `\nChanged lines as they are now:\n${quoted.join("\n")}`
+    }
+    return notice
+  }
+
+  /**
+   * {@link formatFile} that also says what the formatter did: the note for the tool output, or
+   * `undefined` when no formatter ran or it changed nothing. `written` is the text the tool wrote.
+   */
+  export async function formatFileReport(filepath: string, bom: boolean, written: string): Promise<string | undefined> {
+    ranFormatter.delete(filepath)
+    const formatted = await formatFile(filepath, bom)
+    if (!formatted) return undefined
+    const name = ranFormatter.get(filepath) ?? "the formatter"
+    ranFormatter.delete(filepath)
+    const now = await Bun.file(filepath)
+      .text()
+      .catch(() => undefined)
+    if (now === undefined) return undefined
+    return reformatNotice(name, written, now)
+  }
+
   async function runFormatters(s: State, filepath: string): Promise<boolean> {
     const ext = path.extname(filepath)
     for (const item of await getFormatter(s, ext)) {
@@ -256,7 +317,10 @@ export namespace Format {
           stderr: "ignore",
         })
         const exit = await proc.exited
-        if (exit === 0) return true
+        if (exit === 0) {
+          ranFormatter.set(filepath, item.name)
+          return true
+        }
         log.error("formatter exited unsuccessfully", {
           file: filepath,
           command: cmd,

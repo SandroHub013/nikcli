@@ -10,9 +10,11 @@ import { Bus } from "../bus"
 import { FileTime } from "../file/time"
 import { Filesystem } from "@nikcli-ai/util/filesystem"
 import { Bom } from "../util/bom"
+import { notFoundMessage } from "../util/scratch"
 import { Format } from "../format"
 import { buildFileDiff, trimDiff } from "./file-diff"
-import { assertExternalDirectory } from "./external-directory"
+import { assertExternalDirectory, isExternalPath } from "./external-directory"
+import { normalizeToolPath } from "./tool-path"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
 import { Log } from "@nikcli-ai/util/log"
 
@@ -67,14 +69,13 @@ export const EditTool = Tool.define("edit", {
       throw new Error("No changes to apply: oldString and newString are identical.")
     }
 
-    const filePath = path.isAbsolute(params.filePath)
-      ? params.filePath
-      : path.join(ctx.instance.directory, params.filePath)
+    const filePath = normalizeToolPath(params.filePath, ctx.instance.directory)
     await assertExternalDirectory(ctx, filePath)
 
     let diff = ""
     let contentOld = ""
     let contentNew = ""
+    let reformatted: string | undefined
     let replacements = 0
     await FileTime.withLock(filePath, async () => {
       if (params.oldString === "") {
@@ -101,7 +102,7 @@ export const EditTool = Tool.define("edit", {
           },
         })
         await Bun.write(filePath, Bom.join(contentNew, replacement.bom))
-        await Format.formatFile(filePath, replacement.bom)
+        reformatted = await Format.formatFileReport(filePath, replacement.bom, contentNew)
         await Bus.publish(File.Event.Edited, {
           file: filePath,
         })
@@ -113,7 +114,7 @@ export const EditTool = Tool.define("edit", {
 
       const file = Bun.file(filePath)
       const stats = await file.stat().catch(() => {})
-      if (!stats) throw new Error(`File not found: ${filePath}`)
+      if (!stats) throw new Error(notFoundMessage(filePath, ctx.instance.directory, isExternalPath(filePath)))
       if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
       await FileTime.assert(ctx.sessionID, filePath)
       // opencode #39564: `Bun.file().text()` drops the BOM, so read it explicitly
@@ -149,7 +150,7 @@ export const EditTool = Tool.define("edit", {
       })
 
       await file.write(Bom.join(contentNew, writtenBom))
-      await Format.formatFile(filePath, writtenBom)
+      reformatted = await Format.formatFileReport(filePath, writtenBom, contentNew)
       await Bus.publish(File.Event.Edited, {
         file: filePath,
       })
@@ -183,6 +184,7 @@ export const EditTool = Tool.define("edit", {
       replacements === 0
         ? "Created file."
         : `Replaced ${replacements} ${replacements === 1 ? "occurrence" : "occurrences"} in ${path.relative(ctx.instance.worktree, filePath)}.`
+    if (reformatted) output += `\n\n${reformatted}`
     const diagnostics = await runLSP(
       Effect.gen(function* () {
         const lsp = yield* LSP.Service

@@ -1859,10 +1859,68 @@ export namespace Config {
             .min(0)
             .optional()
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
+          pruneBudget: z
+            .number()
+            .int()
+            .min(1)
+            .optional()
+            .describe(
+              "Prompt size (tokens, as the provider reported it for the last step) above which old tool outputs are cleared between steps (default: 64000)",
+            ),
+          pruneKeep: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe("Tokens of the most recent tool outputs the in-loop prune leaves intact (default: 24000)"),
+          pruneReasoning: z
+            .boolean()
+            .optional()
+            .describe(
+              "Also stop replaying the reasoning of the steps whose tool outputs the in-loop prune clears (default: true). Reasoning is most of a long task's prompt.",
+            ),
+          pruneDigest: z
+            .boolean()
+            .optional()
+            .describe(
+              "Fold old cleared steps into one line per call (tool and main argument) instead of a call and a notice each (default: true)",
+            ),
+          pruneDigestKeep: z
+            .number()
+            .int()
+            .min(0)
+            .optional()
+            .describe("Most recent cleared steps left as individual calls when folding (default: 30)"),
+          threshold: z
+            .number()
+            .int()
+            .min(1)
+            .optional()
+            .describe("Prompt size (tokens) that triggers summarizing compaction before the window overflows (default: off)"),
         })
         .optional(),
       experimental: z
         .object({
+          /**
+           * Keep the deferred tools out of the model's tool schema.
+           *
+           * On by default, because a tool that is merely available costs its description and JSON
+           * schema on every request of every step — paid by every session, including the ones that
+           * never generate an image or drive a browser. Set to `false` to put every registered tool
+           * back in the schema, which restores the pre-split behaviour byte for byte.
+           */
+          deferredTools: z
+            .boolean()
+            .optional()
+            .describe("Ship only the core toolset; reach the rest with search_tools + call_tool (default: true)"),
+          rateLimitBudgetMs: z
+            .number()
+            .int()
+            .nonnegative()
+            .optional()
+            .describe(
+              "How long, in total, one request keeps waiting out provider rate limits (429, overloaded 503) before giving up (default: 600000 = 10 min; 0 = do not wait)",
+            ),
           policies: z
             .array(PolicyStatement)
             .optional()

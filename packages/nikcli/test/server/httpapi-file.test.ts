@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import { waitFor } from "../helpers/barrier"
 import { afterAll, afterEach, describe, expect, it } from "bun:test"
 import fs from "fs/promises"
@@ -122,6 +123,8 @@ afterEach(async () => {
 
 afterAll(async () => {
   await Instance.disposeAll().catch(() => undefined)
-  await Promise.all(projectDirs.map((dir) => fs.rm(dir, { recursive: true, force: true })))
-  await fs.rm(testHome, { recursive: true, force: true })
+  await Promise.all(projectDirs.map((dir) => removeTestDir(dir)))
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await removeTestDir(testHome)
 })

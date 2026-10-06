@@ -565,13 +565,23 @@ export function releaseAgentArgv(paneId: string, seq: number): string[] {
 export function releasePaneSync(): void {
   if (runtime.released) return
   const paneId = process.env["HERDR_PANE_ID"]
+  // No pane, nothing to hand back — and that is the normal case for anyone
+  // running nikcli outside Herdr, so it is the case that must cost nothing.
+  // Read the env guard *before* resolving the binary: `resolveHerdrBin` is a
+  // synchronous PATH walk, and doing it here meant every clean exit of every
+  // non-Herdr session paid for a `Bun.which` on the shutdown path.
+  if (!paneId) return
   const bin = resolveHerdrBin()
-  if (!paneId || !bin) return
+  if (!bin) return
   runtime.released = true
   try {
     spawnSync(bin, releaseAgentArgv(paneId, nextReportSeq()), {
       stdio: "ignore",
+      // Bounded: a `herdr` that never answers must not keep nikcli alive. The
+      // pane row is cosmetic (it clears itself when the pane's shell exits), so
+      // giving up after the timeout costs a stale row and nothing else.
       timeout: 2000,
+      killSignal: "SIGKILL",
       windowsHide: true,
     })
   } catch (error) {

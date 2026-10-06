@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test"
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs"
+import { removeTestDirSync } from "../helpers/fs"
+import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
@@ -142,7 +143,7 @@ describe("check-perf-baseline.ts (EOT-01 / P0)", () => {
     beforeEach(() => {
       dir = mkdtempSync(path.join(tmpdir(), "nikcli-perf-gate-"))
     })
-    afterEach(() => rmSync(dir, { recursive: true, force: true }))
+    afterEach(() => removeTestDirSync(dir))
 
     it("fails when the artifact is missing", () => {
       const result = run([`--baseline=${path.join(dir, "absent.json")}`])

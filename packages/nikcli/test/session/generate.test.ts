@@ -45,7 +45,10 @@ afterEach(() => {
 })
 
 afterAll(async () => {
-  for (const directory of directories) await fs.rm(directory, { recursive: true, force: true })
+  await Instance.disposeAll()
+  for (const directory of directories) await removeTestDir(directory)
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
   await removeTestDir(testHome)
 })
 

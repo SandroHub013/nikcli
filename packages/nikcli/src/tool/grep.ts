@@ -6,7 +6,8 @@ import DESCRIPTION from "./grep.txt"
 import { FFF } from "../file/fff"
 import { SearchBackend } from "../file/searchBackend"
 import type { GrepMode, GrepMatch as FFFGrepMatch } from "#fff"
-import { assertExternalDirectory } from "./external-directory"
+import { assertExternalDirectory, isProjectRootAlias } from "./external-directory"
+import { normalizeToolPath } from "./tool-path"
 import { withSearchDeadline } from "./search-deadline"
 
 const MAX_LINE = 180
@@ -180,8 +181,9 @@ export const GrepTool = Tool.define("grep", {
       },
     })
 
-    let dir = params.path ?? ctx.instance.directory
-    dir = path.isAbsolute(dir) ? dir : path.resolve(ctx.instance.directory, dir)
+    const dir = isProjectRootAlias(params.path)
+      ? ctx.instance.directory
+      : normalizeToolPath(params.path!, ctx.instance.directory)
     await assertExternalDirectory(ctx, dir, { kind: "directory" })
 
     const outcome = await withSearchDeadline(

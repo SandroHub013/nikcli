@@ -1,6 +1,7 @@
 import { describe, expect, it, afterEach, beforeEach } from "bun:test"
 import { MobileProjectDetect } from "@/mobile/project-detect"
-import { mkdtemp, rm, writeFile, mkdir } from "fs/promises"
+import { mkdtemp, writeFile, mkdir } from "fs/promises"
+import { removeTestDir } from "../helpers/fs"
 import { existsSync } from "fs"
 import path from "path"
 import os from "os"
@@ -14,7 +15,7 @@ async function setup(): Promise<string> {
 
 async function teardown(): Promise<void> {
   if (tmpDir && existsSync(tmpDir)) {
-    await rm(tmpDir, { recursive: true, force: true })
+    await removeTestDir(tmpDir)
   }
 }
 

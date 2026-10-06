@@ -1,15 +1,5 @@
-Find and load tools that are not in your toolset yet.
+Search the tools available in this session by name or capability keyword, and get the parameters of the ones you need.
 
-Only the core tools are sent with their full schemas on every request. The others are deferred: they are listed at the end of this description by name and a one-line summary, and once loaded a deferred tool is a regular tool — full schema included — for the rest of the session.
+Your tool list holds a core set; more tools are registered and cost nothing until you ask for them: image generation, artifacts, browser and computer control, web search, code search, memory search, LSP diagnostics, repo clone and overview, speech and voice, goals, delegation, batch execution, code_mode, and the plugin tools.
 
-The query is either:
-- Exact tool names, comma-separated (e.g. "webfetch" or "webfetch,websearch"). Each deferred one is loaded, and its schema is available from your next step. Prefer this whenever the list below has what you need.
-- A capability keyword (e.g. "image", "browser", "git") when you don't know which tool provides it. It is matched against the names and descriptions of every tool in the session, loaded or not, and the best few deferred matches are loaded.
-
-Only tools this session can actually use are listed or loaded — anything disabled or denied by permission is left out.
-
-Calling a deferred tool by name without loading it first also loads it, but you have not seen its parameters yet, so the call may be rejected; load it here first unless its arguments are obvious.
-
-When NOT to use:
-- The tool is already in your toolset: call it directly.
-- For searching the codebase, use grep or glob instead.
+The query matches tool names and descriptions, so a capability word works ("git", "screenshot"). Disabled or denied tools are left out. Each result gives the tool name, a one-line summary and, for a tool not in your list, its parameter schema and the exact call_tool invocation. One search is enough. Not for tools already in your list, and not for codebase searches (use grep or glob).

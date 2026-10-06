@@ -1,16 +1,18 @@
 import { Schema } from "effect"
 import { zod } from "@nikcli-ai/util/effect-zod"
+import { z } from "zod"
 import { Tool } from "./tool"
 // Type-only: erased at build time, so it cannot reintroduce the import cycle the
 // runtime `await import(...)` calls below exist to avoid.
 import type { PermissionNext } from "@/permission/next"
 import type { Agent } from "@/agent/agent"
+import type { ToolRegistry } from "./registry"
 import DESCRIPTION from "./search_tools.txt"
 
 const Parameters = Schema.Struct({
   query: Schema.String.annotate({
     description:
-      "Exact tool names to load, comma-separated (e.g. 'webfetch' or 'webfetch,websearch'), or a capability keyword (e.g. 'image', 'memory', 'git', 'browser') matched against tool names and descriptions.",
+      "A tool name (or a comma-separated list of them) or a capability keyword (e.g. 'image', 'memory', 'git', 'browser'). Matched against both tool names and their descriptions.",
   }),
 })
 
@@ -29,100 +31,36 @@ const HIDDEN = new Set(["invalid", "search_tools"])
 const MAX_MATCHES = 20
 
 /**
- * A keyword query loads at most this many deferred tools, and only ones whose
- * name contains the keyword. A word that merely appears in a description is
- * too weak a signal to put a schema into every remaining request — `opentui`
- * alone is larger than the whole core toolset — so those matches are listed
- * for the model to load by name.
+ * How many characters of parameter schema one search may print, and how many
+ * of those a single tool may take.
+ *
+ * The point of the split is that the schema is not in every request, so it can
+ * afford to be printed on demand — but not without a bound: one broad query
+ * matching a dozen tools would reprint the surface the split just removed. The
+ * per-tool cap stops a single large tool from eating the whole budget.
  */
-const MAX_KEYWORD_LOADS = 3
+const MAX_SCHEMA_CHARS = 12_000
+const MAX_SCHEMA_PER_TOOL = 4_000
 
-/** One line per tool. The full description arrives with the tool's own schema once it is loaded. */
+/** One line per tool. The full description arrives with the tool's own schema if it gets used. */
 const SUMMARY_LENGTH = 160
 
-/** The deferred index rides in every request, so its lines are kept shorter than a search result's. */
-const INDEX_SUMMARY_LENGTH = 100
-
-function summarize(description: string | undefined, length = SUMMARY_LENGTH): string {
+function summarize(description: string | undefined): string {
   const line =
     (description ?? "")
       .split("\n")
       .map((entry) => entry.trim())
       .find((entry) => entry.length > 0) ?? ""
-  if (line.length <= length) return line
-  return line.slice(0, length - 1).trimEnd() + "…"
-}
-
-/**
- * This tool's description plus the index of the tools it can load: the only
- * place the model learns a deferred tool exists, so it goes wherever the tool
- * does — the request `resolveTools` builds and the `/usage` estimate of it.
- *
- * Loaded tools drop out of the index. That changes this description, but only
- * on the step where the loaded tool's own schema joins the toolset, which
- * changes the tool block anyway.
- */
-export function withDeferredIndex(
-  description: string,
-  deferred: readonly { id: string; description?: string }[],
-): string {
-  const entries = deferred.filter((entry) => !HIDDEN.has(entry.id))
-  if (entries.length === 0) return description
-  return [
-    description.trimEnd(),
-    "",
-    `Deferred tools (${entries.length}) — load by exact name before first use:`,
-    ...entries.map((entry) => {
-      const summary = summarize(entry.description, INDEX_SUMMARY_LENGTH)
-      return summary ? `- ${entry.id}: ${summary}` : `- ${entry.id}`
-    }),
-  ].join("\n")
-}
-
-/**
- * Load deferred tools into a session: from the next step on, their schemas are
- * part of every request. Recorded as `disabledTools[id] = false` — the same
- * entry the `/usage` toggle writes — so a loaded tool survives restarts, shows
- * as enabled in `/usage` and can be switched back off there. An entry the
- * user already set, either way, is left alone.
- *
- * Resolves to the requested ids that are loaded once the write lands — a
- * concurrent call may have loaded some of them first; an id the user switched
- * off is not among them.
- */
-export async function loadTools(sessionID: string, ids: readonly string[]): Promise<string[]> {
-  if (ids.length === 0) return []
-  const { runPromiseWithLayer, withCurrentInstance } = await import("@/effect")
-  const { Effect } = await import("effect")
-  const { Session } = await import("@/session")
-  let loaded: string[] = []
-  await runPromiseWithLayer(
-    Session.defaultLayer,
-    withCurrentInstance(
-      Effect.gen(function* () {
-        const session = yield* Session.Service
-        yield* session.update(
-          sessionID,
-          (draft) => {
-            const map = { ...draft.disabledTools }
-            for (const id of ids) if (map[id] === undefined) map[id] = false
-            loaded = ids.filter((id) => map[id] === false)
-            draft.disabledTools = map
-          },
-          // Loading a tool is not activity the session list should reorder on.
-          { touch: false },
-        )
-      }),
-    ),
-  )
-  return loaded
+  if (line.length <= SUMMARY_LENGTH) return line
+  return line.slice(0, SUMMARY_LENGTH - 1).trimEnd() + "…"
 }
 
 type Candidate = {
   id: string
   summary: string
   haystack: string
-  deferred: boolean
+  loaded: boolean
+  tool: ToolRegistry.Resolved
 }
 
 function occurrences(haystack: string, needle: string): number {
@@ -135,12 +73,6 @@ function occurrences(haystack: string, needle: string): number {
     count++
     from = at + needle.length
   }
-}
-
-/** Exact-id match, id contains the query, description-only match. */
-function band(entry: Candidate, query: string): number {
-  const id = entry.id.toLowerCase()
-  return id === query ? 2 : id.includes(query) ? 1 : 0
 }
 
 /**
@@ -161,17 +93,16 @@ function score(entry: Candidate, query: string): number {
   // Three bands, each of which beats everything below it outright; density only
   // orders tools within a band. Asking for "read" must return `read` before
   // `todoread`, and both before whatever merely mentions reading.
+  const band = id === query ? 2 : id.includes(query) ? 1 : 0
   // Density is a fraction of the description, so it can never reach the gap
   // between two bands — a band always wins outright.
-  return band(entry, query) * 2 + density
+  return band * 2 + density
 }
 
 /**
- * The tool names a query asks for, or `undefined` for a keyword query. A
- * comma-separated list (or Claude Code's `select:` form) is always a list of
- * names; a single word is one only when it is exactly a tool's id — including
- * one this session cannot use, which is then reported as such — so "image"
- * still searches while "webfetch" loads.
+ * The tool names a query asks for, or `undefined` for a keyword query. A comma-separated list (or
+ * Claude Code's `select:` form) is always a list of names; a single word is one only when it is
+ * exactly a tool's id, so "image" still searches while "webfetch" is looked up. (Upstream 1.417.)
  */
 function requestedNames(query: string, ids: ReadonlySet<string>): string[] | undefined {
   const trimmed = query.trim()
@@ -186,17 +117,44 @@ function requestedNames(query: string, ids: ReadonlySet<string>): string[] | und
 }
 
 export const SearchToolsTool = Tool.define("search_tools", async (initCtx) => {
+  const { ToolRegistry } = await import("./registry")
+  // Only the agent's permission ruleset is read from here, and only at execute time; the
+  // description below is built without touching the registry at all.
   const agent = initCtx?.agent
 
+  /**
+   * The names of the deferred tools, so the model knows they exist without a
+   * search to find out.
+   *
+   * Read straight off the registry's own set, **not** by asking the registry
+   * which tools it resolved. A first attempt did the latter and it recursed:
+   * `registry.tools()` initialises every tool including this one, so each
+   * `init` asked the registry to init every tool, and the test log grew to ten
+   * million lines before anyone noticed. The set is a constant, so reading it
+   * makes the line not only stable within a session but constant across
+   * processes — which is what the cached prefix needs.
+   *
+   * The cost of the cheap version: a deferred tool that is not registered in this
+   * build (behind a flag, say) still gets named here, and a search for it comes
+   * back empty. Naming a tool that is absent is a wasted query; omitting a tool
+   * that is present is a capability the model cannot discover, so the first
+   * failure is the cheaper one.
+   */
+  const deferredNames = [...ToolRegistry.DEFERRED].sort(ToolRegistry.compareIds)
+
   return {
-    description: DESCRIPTION,
+    description: [
+      DESCRIPTION.trimEnd(),
+      "",
+      `The ${deferredNames.length} tools below are registered but not in your tool list: ${deferredNames.join(", ")}.`,
+      `search_tools returns any of their parameters, and call_tool runs one: call_tool({"name": "<tool>", "args": {...}}).`,
+    ].join("\n"),
     parameters: zod(Parameters),
 
     async execute({ query }, ctx) {
       const { runPromiseWithLayer, withCurrentInstance } = await import("@/effect")
       const { Effect } = await import("effect")
       const { ToolRegistry } = await import("./registry")
-      const { Log } = await import("@nikcli-ai/util/log")
 
       // The model this session is running against decides part of the toolset
       // (apply_patch vs edit/write, the Exa-backed search tools). Falling back to
@@ -221,67 +179,84 @@ export const SearchToolsTool = Tool.define("search_tools", async (initCtx) => {
         ),
       )
 
-      // Session-level exposure, evaluated exactly the way `resolveTools` does
-      // when it hands the toolset to the model — otherwise this tool would
-      // offer a tool the session will not run, or load one that is already in.
-      const state = await sessionState(ctx.sessionID, agent)
+      // Session-level visibility, evaluated exactly the way `resolveTools` does
+      // when it hands the toolset to the model — otherwise this tool would name
+      // tools the model has no schema for.
+      const ruleset = await sessionRuleset(ctx.sessionID, agent)
+      const disabledTools = ruleset.disabledTools
+      const eager = ruleset.eager
 
       const candidates: Candidate[] = []
       const known = new Set<string>()
       for (const tool of resolved) {
         if (HIDDEN.has(tool.id)) continue
         known.add(tool.id.toLowerCase())
-        const exposure = ToolRegistry.exposure(tool.id, state)
+        // A deferred tool is absent from the model's schema but is exactly what
+        // this search exists to find. "Could it be reached?" is asked by running
+        // the same exposure check, so a permission deny or a user switch-off
+        // still wins and the rules live in one place.
+        const exposure = ToolRegistry.exposure(tool.id, { disabledTools, ruleset: ruleset.rules, eager })
         if (exposure === "hidden") continue
+        const loaded = exposure === "active"
+        const summary = summarize(tool.description)
         candidates.push({
           id: tool.id,
-          summary: summarize(tool.description),
+          summary,
           // Descriptions are what make a capability keyword like "git" or
           // "screenshot" findable at all: no tool id contains either word.
           haystack: (tool.id + " " + (tool.description ?? "")).toLowerCase(),
-          deferred: exposure === "deferred",
+          loaded,
+          // The full description and parameter schema, so the model can call it
+          // without a second round-trip to ask what the parameters are.
+          tool,
         })
       }
       candidates.sort((left, right) => ToolRegistry.compareIds(left.id, right.id))
-      const byId = new Map(candidates.map((entry) => [entry.id.toLowerCase(), entry]))
 
-      const load = async (ids: string[]) => {
-        if (ids.length === 0) return []
-        // A session that cannot be written to (a tool driven outside one) still
-        // gets its answer: the tools stay callable by name, just not loaded.
-        return loadTools(ctx.sessionID, ids).catch((error) => {
-          Log.create({ service: "tool.search_tools" }).warn("failed to load deferred tools", {
-            sessionID: ctx.sessionID,
-            ids,
-            error: String(error),
-          })
-          return [] as string[]
-        })
+      // Deferred entries come back whole: description and parameter schema, so the next call is a
+      // `call_tool` and not another search. The cap keeps one broad query from reprinting the
+      // surface this split removed.
+      const render = (deferred: Candidate[], shownCount: number) => {
+        const budget = Math.max(0, MAX_SCHEMA_CHARS - shownCount * SUMMARY_LENGTH)
+        const lines: string[] = []
+        const withSchema: string[] = []
+        let spent = 0
+        for (const entry of deferred) {
+          const schema = schemaOf(entry.tool)
+          const size = entry.summary.length + schema.length
+          if (size > budget - spent) {
+            lines.push(`- ${entry.id}: ${entry.summary} [parameters omitted, narrow the query]`)
+            continue
+          }
+          spent += size
+          lines.push(
+            [
+              `- ${entry.id}: ${entry.summary}`,
+              `  call it with: call_tool({"name": "${entry.id}", "args": ...})`,
+              `  parameters: ${schema}`,
+            ].join("\n"),
+          )
+          withSchema.push(entry.id)
+        }
+        return { lines, withSchema }
       }
 
+      // Exact names (or a `select:` list): answer for each name, say which ones this session lacks.
       const names = requestedNames(query, known)
       if (names) {
+        const byId = new Map(candidates.map((entry) => [entry.id.toLowerCase(), entry]))
         const found = names.map((name) => byId.get(name.toLowerCase())).filter((entry) => entry !== undefined)
         const missing = names.filter((name) => !byId.has(name.toLowerCase()))
-        const loaded = new Set(await load(found.filter((entry) => entry.deferred).map((entry) => entry.id)))
-        const newly = found.filter((entry) => entry.deferred && loaded.has(entry.id))
-        const failed = found.filter((entry) => entry.deferred && !loaded.has(entry.id))
-        const already = found.filter((entry) => !entry.deferred)
+        const already = found.filter((entry) => entry.loaded)
+        const rendered = render(
+          found.filter((entry) => !entry.loaded),
+          found.length,
+        )
         return {
           title: `search_tools: ${query}`,
           output: [
-            ...(newly.length > 0
-              ? [
-                  `Loaded ${newly.length} tool${newly.length === 1 ? "" : "s"} — ${newly.length === 1 ? "its schema is" : "their schemas are"} in your toolset from your next step:`,
-                  ...newly.map((entry) => `- ${entry.id}: ${entry.summary}`),
-                ]
-              : []),
             ...(already.length > 0 ? [`Already in your toolset: ${already.map((entry) => entry.id).join(", ")}`] : []),
-            ...(failed.length > 0
-              ? [
-                  `Could not load ${failed.map((entry) => entry.id).join(", ")} into this session; ${failed.length === 1 ? "it is" : "they are"} still callable by name.`,
-                ]
-              : []),
+            ...rendered.lines,
             ...(missing.length > 0
               ? [
                   `Not available in this session: ${missing.join(", ")}`,
@@ -294,8 +269,8 @@ export const SearchToolsTool = Tool.define("search_tools", async (initCtx) => {
             query,
             matches: found.length,
             available: candidates.length,
-            loaded: [...loaded],
-            truncated: false,
+            schemas: rendered.withSchema,
+            truncated: rendered.withSchema.length < found.filter((entry) => !entry.loaded).length,
           },
         }
       }
@@ -318,60 +293,65 @@ export const SearchToolsTool = Tool.define("search_tools", async (initCtx) => {
             // shape of the toolset to retry, not 35 summaries it did not ask for.
             `Available tools (${candidates.length}): ${candidates.map((entry) => entry.id).join(", ")}`,
           ].join("\n"),
-          metadata: { query, matches: 0, available: candidates.length, loaded: [] as string[], truncated: false },
+          metadata: { query, matches: 0, available: candidates.length, schemas: [] as string[], truncated: false },
         }
       }
 
-      const loaded = new Set(
-        await load(
-          matches
-            .filter((entry) => entry.deferred && band(entry, q) > 0)
-            .slice(0, MAX_KEYWORD_LOADS)
-            .map((entry) => entry.id),
-        ),
-      )
       const shown = matches.slice(0, MAX_MATCHES)
       const overflow = matches.length - shown.length
-      const pending = shown.some((entry) => entry.deferred && !loaded.has(entry.id))
-      const status = (entry: Candidate) =>
-        loaded.has(entry.id) ? " [loaded now]" : entry.deferred ? " [deferred — load by name]" : ""
+
+      const deferred = shown.filter((entry) => !entry.loaded)
+      const { lines, withSchema } = render(deferred, shown.length)
+
       return {
         title: `search_tools: ${query}`,
         output: [
           `${matches.length} tool${matches.length === 1 ? "" : "s"} match "${query}" (of ${candidates.length} available in this session):`,
           "",
-          ...shown.map((entry) => `- ${entry.id}${status(entry)}: ${entry.summary}`),
+          ...shown.map((entry) => (entry.loaded ? `- ${entry.id}: ${entry.summary} [in your toolset]` : null)),
+          ...(deferred.length > 0 ? lines : []),
           ...(overflow > 0 ? ["", `…and ${overflow} more. Narrow the query to see them.`] : []),
-          ...(loaded.size > 0 ? ["", "Tools marked [loaded now] are in your toolset from your next step."] : []),
-          ...(pending ? ["", "To load a deferred tool, call search_tools again with its exact name."] : []),
-        ].join("\n"),
+        ]
+          .filter((line) => line !== null)
+          .join("\n"),
         metadata: {
           query,
           matches: matches.length,
           available: candidates.length,
-          loaded: [...loaded],
-          truncated: false,
+          schemas: withSchema,
+          truncated: withSchema.length < deferred.length,
         },
       }
     },
   }
 })
 
+/** The parameter schema as the model would receive it, bounded per tool. */
+function schemaOf(tool: { parameters: unknown }): string {
+  try {
+    const schema = z.toJSONSchema(tool.parameters as z.ZodType, {
+      io: "input",
+      unrepresentable: "any",
+    }) as unknown
+    const text = JSON.stringify(schema)
+    return text.length > MAX_SCHEMA_PER_TOOL ? text.slice(0, MAX_SCHEMA_PER_TOOL) + "…" : text
+  } catch {
+    return "{}"
+  }
+}
+
 /**
- * What {@link ToolRegistry.exposure} needs for this session: the effective
- * ruleset and the session's tool map — the same pair `resolveTools` builds —
- * plus `config.tool.eager`. A session that cannot be read (no session at all,
- * or a transient store error) degrades to "nothing disabled or loaded" rather
- * than failing the search: an over-broad catalog is a far better outcome here
- * than an error.
+ * The effective ruleset plus the session's disabled-tool map — the same pair
+ * `resolveTools` builds. A session that cannot be read (no session at all, or a
+ * transient store error) degrades to "nothing disabled" rather than failing the
+ * search: an over-broad catalog is a far better outcome here than an error.
  */
-async function sessionState(sessionID: string, agent?: Agent.Info) {
+async function sessionRuleset(sessionID: string, agent?: Agent.Info) {
   const { runPromiseWithLayer, withCurrentInstance } = await import("@/effect")
   const { Effect } = await import("effect")
   const { PermissionNext } = await import("@/permission/next")
   const { Flag } = await import("@nikcli-ai/util/flag")
   const { Session } = await import("@/session")
-  const { Config } = await import("@/config/config")
 
   const agentRules: PermissionNext.Ruleset = agent?.permission ?? []
 
@@ -385,20 +365,36 @@ async function sessionState(sessionID: string, agent?: Agent.Info) {
     ),
   ).catch(() => undefined)
 
-  const config = await runPromiseWithLayer(
+  const { Config } = await import("@/config/config")
+  const eager = await runPromiseWithLayer(
     Config.defaultLayer,
     withCurrentInstance(
       Effect.gen(function* () {
-        const service = yield* Config.Service
-        return yield* service.get()
+        const config = yield* Config.Service
+        return yield* config.get()
       }),
     ),
-  ).catch(() => undefined)
+  )
+    .then((config) => config.tool?.eager ?? [])
+    .catch(() => [] as string[])
 
   const merged = PermissionNext.merge(agentRules, info?.permission ?? [])
   return {
-    ruleset: Flag.autoApprove() ? PermissionNext.autoApprove(merged) : merged,
+    rules: Flag.autoApprove() ? PermissionNext.autoApprove(merged) : merged,
     disabledTools: info?.disabledTools ?? {},
-    eager: config?.tool?.eager ?? [],
+    eager,
   }
+}
+
+/**
+ * This tool's description plus an index of the deferred tools. Upstream appends the index so the
+ * model learns what it can load; here the list is fixed text in the description and a tool never
+ * leaves it, because a description that shrinks as tools are used would rewrite the first block of
+ * the prompt. Kept so `/usage` can size the tool the way `resolveTools` builds it.
+ */
+export function withDeferredIndex(
+  description: string,
+  _deferred: readonly { id: string; description?: string }[],
+): string {
+  return description
 }

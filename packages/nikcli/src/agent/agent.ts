@@ -41,9 +41,11 @@ ${PROMPT_DELEGATION}
 
 const MONITOR_TOOL_AWARENESS = `
 
-For typecheck, builds, test suites, dev servers, and any long-running or potentially long-running command, use the monitor tool instead of bash. The bash tool blocks the turn and will hang on commands that take a while or never exit; the monitor tool runs the command in the background, persists its output, and wakes the session when it finishes so you can keep working. Reserve bash for short, fast, clearly-bounded commands (a few seconds at most).
+For typecheck, builds, test suites, dev servers, and any long-running or potentially long-running command, use the monitor tool instead of bash. The bash tool blocks the turn and will hang on commands that take a while or never exit. A monitored command that finishes within 15 seconds (most unit test runs) is answered in the same call with its exit code and output, exactly like bash; one that takes longer keeps running in the background and wakes the session when it finishes.
 
-The monitor tool only streams a short preview of the output. The full results are written to a log file on disk (the "Log file:" path returned when the job starts). To read the complete output of a background job — for example to inspect typecheck or build errors — read that log file from the filesystem with the read tool once the job has produced output or finished, rather than relying on the streamed preview alone.
+For a job still running when the call returns, the full output is written to its log file (the "Log file:" path in the result); read that file once the job has finished if the streamed preview is not enough.
+
+Make independent tool calls in the same response: when you need several files, read them together with several read calls instead of one file per turn.
 `
 
 const MOD_TOOL_AWARENESS = `
@@ -53,12 +55,7 @@ When the user wants something enforced or changed in how nikcli itself behaves, 
 
 const PRIMARY_AGENT_RESEARCH_AWARENESS = `
 
-When you identify a knowledge gap, outdated external dependency question, missing docs context, or a decision that needs evidence, proactively launch a background research run with the task tool using subagent_type: "researcher".
-
-- Launch research only when it materially improves the result; skip it for purely local or mechanical tasks.
-- Keep only one active research run per parent session unless the existing one is clearly irrelevant.
-- While research runs, continue any independent work instead of blocking.
-- When the research becomes relevant, use delegator or delegation to read and incorporate the result.
+When a decision needs outside evidence (an external dependency, missing docs), launch one background research run with the task tool, subagent_type: "researcher", keep working, and read its result with delegation when it becomes relevant. Skip it for local or mechanical tasks.
 `
 
 const GeneratedAgent = z.object({

@@ -27,5 +27,9 @@ export function isOverflow(input: {
 
   const count =
     input.tokens.total || input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
+  // An absolute trigger, ahead of the window: a long autonomous task gets summarized at this size
+  // instead of running to a million-token prompt. Off unless configured.
+  const threshold = input.cfg.compaction?.threshold
+  if (threshold !== undefined && count >= threshold) return true
   return count >= usable(input)
 }

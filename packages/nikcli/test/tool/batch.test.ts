@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -23,12 +24,14 @@ describe("BatchTool", () => {
 
   afterAll(async () => {
     await Instance.disposeAll().catch(() => undefined)
+    const { Database } = await import("@/database/database")
+    Database.closeAll()
     if (previousHome === undefined) delete process.env.NIKCLI_TEST_HOME
     else process.env.NIKCLI_TEST_HOME = previousHome
     if (previousDisable === undefined) delete process.env.NIKCLI_DISABLE_PROJECT_CONFIG
     else process.env.NIKCLI_DISABLE_PROJECT_CONFIG = previousDisable
-    await fs.rm(projectDir, { recursive: true, force: true }).catch(() => {})
-    await fs.rm(testHome, { recursive: true, force: true }).catch(() => {})
+    await removeTestDir(projectDir)
+    await removeTestDir(testHome)
   })
 
   it("rejects an empty tool_calls array at validation time", async () => {

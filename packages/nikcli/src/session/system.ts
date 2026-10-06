@@ -1,5 +1,6 @@
 import { Config } from "../config/config"
 import { resolveLocale } from "../locale/resolve"
+import { scratchEnvLine } from "../util/scratch"
 import { Log } from "@nikcli-ai/util/log"
 import PROMPT_ANTHROPIC from "./prompt/anthropic.txt"
 import PROMPT_ANTHROPIC_WITHOUT_TODO from "./prompt/qwen.txt"
@@ -19,7 +20,19 @@ const log = Log.create({ service: "system-prompt" })
 
 export namespace SystemPrompt {
   export interface Interface {
+    /**
+     * The whole environment block, static part first. For readers that need to show or hash
+     * everything (`context-breakdown`).
+     */
     environment(): Effect.Effect<string[], unknown>
+    /** The part that is the same in every session, and stays in the system prompt. */
+    environmentStatic(): Effect.Effect<string[], unknown>
+    /**
+     * The part that depends on directory, project, date and locale. Emitted once per session ahead
+     * of the conversation, so the system prompt above it stays byte-identical between sessions and
+     * the provider can serve it from cache.
+     */
+    environmentSession(): Effect.Effect<string[], unknown>
     custom(disabled?: string[]): Effect.Effect<string[], unknown>
     skills(names?: string[]): Effect.Effect<string[], unknown>
     /** The signed-in user's personalization block, or `[]` when unset. */
@@ -106,6 +119,36 @@ export namespace SystemPrompt {
   }
 
   async function environmentImpl(ctx: InstanceContext, config: Config.Info) {
+    return [...(await environmentStaticImpl()), ...(await environmentSessionImpl(ctx, config))]
+  }
+
+  /**
+   * The part of the environment block that is the same in every session on the machine.
+   *
+   * Kept apart from {@link environmentSessionImpl} so it can stay in the system prompt: a provider
+   * serves the cached prefix from the first byte, so everything ahead of the first session-specific
+   * byte is what a new session gets for free when the cache is still warm from another one.
+   */
+  async function environmentStaticImpl() {
+    return [
+      [
+        `<command_execution>`,
+        `Use the monitor tool, not bash, for tests, typecheck, builds, installs, codegen, dev servers, watchers and log tails: bash blocks the turn and can hang on them. A command that finishes within 15 seconds is answered in the same call; a longer one keeps running in the background, writes its full output to the "Log file:" path it returns, and wakes the session when it finishes. Keep bash for commands that finish in a few seconds.`,
+        `Launch task-tool subagents in the background (the default) and keep working; launch independent ones together.`,
+        `</command_execution>`,
+      ].join("\n"),
+    ]
+  }
+
+  /**
+   * Everything that depends on the directory, the project, the date or the locale.
+   *
+   * This is what used to sit in the system prompt and cut the cache prefix once per new session. It
+   * is emitted once per session, ahead of the conversation, so the static block above it stays
+   * byte-identical between sessions. It does not change within a session either: the date is read
+   * here, at the first assemble, and not recomputed per turn.
+   */
+  async function environmentSessionImpl(ctx: InstanceContext, config: Config.Info) {
     const project = ctx.project
     const loc = resolveLocale(config.locale)
     const packageManager = await detectPackageManager(ctx.directory, ctx.worktree).catch(() => undefined)
@@ -117,33 +160,19 @@ export namespace SystemPrompt {
         `  Workspace root folder: ${ctx.worktree}`,
         `  Is directory a git repo: ${project.vcs === "git" ? "yes" : "no"}`,
         `  Platform: ${process.platform}`,
+        scratchEnvLine(),
         ...(packageManager ? [`  Package manager: ${packageManager}`] : []),
         `  Today's date: ${new Date().toDateString()}`,
         `  User locale: ${loc.locale}`,
         `  User region: ${loc.region}`,
         `  User timezone: ${loc.timezone}`,
         `</env>`,
-      ].join("\n"),
-      [
-        `<command_execution>`,
-        `Background-first policy: anything that runs for more than a few seconds runs in the background. You keep working while it runs and the session is woken when it finishes.`,
-        ``,
-        `Process commands — use the monitor tool, never bash:`,
-        `- Dev servers, watchers, log tails, and anything that never exits on its own.`,
-        `- Typecheck, builds, test suites, installs, codegen — anything long-running or potentially long-running.`,
-        `The bash tool blocks the current turn and will hang on these. The monitor tool runs the command in the background, persists stdout/stderr to a log file, streams live status, and wakes the session when the command finishes.`,
-        `Only a short preview of the output is streamed back into the session. The full results live in the log file on disk (the "Log file:" path returned when the job starts). To inspect complete output — e.g. the full list of typecheck or build errors — read that log file with the read tool instead of relying on the preview.`,
-        `Reserve bash for short, fast, clearly-bounded commands that complete in a few seconds at most (git status, ls, a quick script).`,
-        ``,
-        `Subagents — always background:`,
-        `Launch task-tool subagents in the background (the default). Never block waiting on a subagent: launch it, continue with other work, and the completion wake will arrive in this session. Launch independent subagents together so they run concurrently.`,
         ``,
         `Package manager:`,
         packageManager
           ? `This project uses ${packageManager} (see <env>). ALWAYS use it for installing dependencies and running scripts: ${runScriptHint(packageManager)}. Never mix package managers — do not run npm/npx commands in a ${packageManager} project (use the ${packageManager} equivalent).`
           : `No package manager was detected for this project. Before installing dependencies or running scripts, check for a lockfile or the package.json "packageManager" field and use the matching tool; ask the user if it is still ambiguous.`,
         `When the user or docs mention a script generically (e.g. "run typecheck"), run it through the active package manager (e.g. \`${packageManager ?? "npm"} run typecheck\`) via the monitor tool.`,
-        `</command_execution>`,
       ].join("\n"),
     ]
     if (loc.replyLanguage) {
@@ -244,6 +273,13 @@ export namespace SystemPrompt {
             const ctx = yield* InstanceState.context
             const cfg = yield* Effect.promise(() => configGet(ctx))
             return yield* Effect.tryPromise(() => environmentImpl(ctx, cfg))
+          }),
+        environmentStatic: () => Effect.tryPromise(() => environmentStaticImpl()),
+        environmentSession: () =>
+          Effect.gen(function* () {
+            const ctx = yield* InstanceState.context
+            const cfg = yield* Effect.promise(() => configGet(ctx))
+            return yield* Effect.tryPromise(() => environmentSessionImpl(ctx, cfg))
           }),
         custom: (disabled = []) =>
           Effect.gen(function* () {

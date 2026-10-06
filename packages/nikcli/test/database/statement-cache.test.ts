@@ -91,12 +91,13 @@ describe("Database statement cache", () => {
     expect(result[0]).toBe(1)
   })
 
-  it("leaves the native handle unwrapped for raw SQL and pragmas", async () => {
+  it("still reaches the real connection for raw SQL and pragmas", async () => {
     const result = await runDatabase(
       Effect.gen(function* () {
         const database = yield* Database.Service
-        // The wrapper is applied to the Drizzle client only; `rawSql` and the
-        // checkpoint loop must still reach the real connection.
+        // `native` is wrapped so that `prepare` is tracked, but the wrapper
+        // hands back the real handle for everything else: `rawSql` and the
+        // checkpoint loop must still reach the connection itself.
         const raw = Database.rawSql("test/statement-cache").query<{ one: number }, []>("SELECT 1 AS one").get()
         const checkpoint = Database.checkpointWal(database.native)
         return { raw, checkpoint }

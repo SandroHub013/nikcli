@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { removeTestDirSync } from "../helpers/fs"
+import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
@@ -25,7 +26,7 @@ async function check(source: string, filename = "Dockerfile.serve") {
     ])
     return { code, output: stdout + stderr }
   } finally {
-    rmSync(root, { recursive: true, force: true })
+    removeTestDirSync(root)
   }
 }
 

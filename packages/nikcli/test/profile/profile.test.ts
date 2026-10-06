@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import { afterAll, beforeEach, describe, expect, it } from "bun:test"
 import { Effect } from "effect"
 import fs from "fs/promises"
@@ -51,7 +52,7 @@ async function writeHabits(worktree: string, content: string) {
 beforeEach(async () => {
   // Each test starts from "no profile at all"; the service caches reads, so the
   // directory has to go before the cache would hand back a stale hit.
-  await fs.rm(Profile.directory(), { recursive: true, force: true })
+  await removeTestDir(Profile.directory())
   await run(
     Effect.gen(function* () {
       const profile = yield* Profile.Service
@@ -244,6 +245,8 @@ describe("Profile reminder", () => {
 })
 
 afterAll(async () => {
-  await Promise.all(worktrees.map((dir) => fs.rm(dir, { recursive: true, force: true })))
-  await fs.rm(testHome, { recursive: true, force: true })
+  await Promise.all(worktrees.map((dir) => removeTestDir(dir)))
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await removeTestDir(testHome)
 })

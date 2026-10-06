@@ -388,7 +388,7 @@ describe("BackgroundService.register", () => {
       await Bun.sleep(150)
       expect(evicted).toBe(0)
     } finally {
-      await fs.rm(registrationPath(), { recursive: true, force: true })
+      await removeTestDir(registrationPath())
       await release()
     }
   })

@@ -6,6 +6,7 @@ import { Log } from "@nikcli-ai/util/log"
 import path from "path"
 import { Bus } from "@/bus"
 import { LLM } from "./llm"
+import { HeadlessTitle } from "./headless-title"
 import { Agent } from "@/agent/agent"
 import { SessionDiffRepo } from "./diff-repo"
 import { zodObject } from "@nikcli-ai/util/effect-zod"
@@ -173,6 +174,27 @@ export namespace SessionSummary {
 
         const textPart = msgWithParts.parts.find((p) => p.type === "text" && !p.synthetic) as MessageV2.TextPart
         if (textPart && userMsg.summary?.title === undefined) {
+          // A `nikcli run` session has no reader: cut the title from the prompt, no model call.
+          const owner = await runSession(
+            Effect.gen(function* () {
+              const session = yield* Session.Service
+              return yield* session.get(userMsg.sessionID)
+            }),
+            ctx,
+          )
+          if (HeadlessTitle.isHeadless(owner)) {
+            const title = HeadlessTitle.fromPrompt(textPart.text ?? "")
+            if (!title) return
+            userMsg.summary.title = title
+            await runSession(
+              Effect.gen(function* () {
+                const session = yield* Session.Service
+                yield* session.updateMessage(userMsg)
+              }),
+              ctx,
+            )
+            return
+          }
           const agent = await AppRuntime.runPromise(locallyInstance(ctx, agentService.get("title")))
           if (!agent) return
           const model = await runProvider(

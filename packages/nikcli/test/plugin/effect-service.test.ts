@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -31,8 +32,11 @@ function runPlugin<A, E>(effect: Effect.Effect<A, E, Plugin.Service>) {
 }
 
 afterAll(async () => {
-  await Promise.all(projectDirs.map((dir) => fs.rm(dir, { recursive: true, force: true })))
-  await fs.rm(testHome, { recursive: true, force: true })
+  await Instance.disposeAll()
+  await Promise.all(projectDirs.map((dir) => removeTestDir(dir)))
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await removeTestDir(testHome)
 })
 
 describe("Plugin.Service", () => {

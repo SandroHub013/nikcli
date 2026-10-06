@@ -2,12 +2,15 @@ import { Effect, Schema } from "effect"
 import { zod } from "@nikcli-ai/util/effect-zod"
 import * as fs from "fs"
 import * as path from "path"
+import ignore from "ignore"
 import { Tool } from "./tool"
+import { isFilesystemRoot } from "../project/instance"
 import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
 import DESCRIPTION from "./read.txt"
 import { Identifier } from "@nikcli-ai/util/id"
 import { assertExternalDirectory } from "./external-directory"
+import { normalizeToolPath } from "./tool-path"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
 import { Log } from "@nikcli-ai/util/log"
 
@@ -43,13 +46,9 @@ export const ReadTool = Tool.define("read", {
     if (params.limit !== undefined && (!Number.isInteger(params.limit) || params.limit < 1)) {
       throw new Error("limit must be a positive integer")
     }
-    let filepath = params.filePath
-    if (!path.isAbsolute(filepath)) {
-      // The instance, not `process.cwd()`: the background service runs every
-      // project from one process, so its cwd is none of them. `write` and
-      // `edit` already resolve this way.
-      filepath = path.join(ctx.instance.directory, filepath)
-    }
+    // The instance, not `process.cwd()`: the background service runs every project from one process,
+    // so its cwd is none of them. Every file tool reads the path the same way (see normalizeToolPath).
+    const filepath = normalizeToolPath(params.filePath, ctx.instance.directory)
     const title = path.relative(ctx.instance.worktree, filepath)
 
     await assertExternalDirectory(ctx, filepath, {
@@ -68,14 +67,22 @@ export const ReadTool = Tool.define("read", {
       const dir = path.dirname(filepath)
       const base = path.basename(filepath)
 
+      // A parent directory listing only sees siblings. Agents that guess a
+      // folder (or mistype a name) otherwise burn a whole turn on glob/ls to
+      // find the real path, so fall back to searching the project. Deferred
+      // because the sibling listing is cheaper and usually enough.
+      let nearbyFiles: string[] | undefined
+      const nearby = async () =>
+        (nearbyFiles ??= await suggestNearbyFiles(searchRoot(ctx.instance.directory, ctx.instance.worktree), filepath))
+
       // The parent may not exist either. Reading it unguarded surfaced a raw
-      // ENOENT for the *directory*, which reads as an unrelated failure; fall
-      // back to the plain not-found message for the path the model asked for.
+      // ENOENT for the *directory*, which reads as an unrelated failure; report
+      // on the path the model asked for instead.
       let dirEntries: string[] = []
       try {
         dirEntries = fs.readdirSync(dir)
       } catch {
-        throw new Error(`File not found: ${filepath}`)
+        throw await notFound(filepath, await nearby())
       }
       const suggestions = dirEntries
         .filter(
@@ -86,10 +93,11 @@ export const ReadTool = Tool.define("read", {
         .slice(0, 3)
 
       if (suggestions.length > 0) {
+        logSuggestions(filepath, suggestions, "siblings")
         throw new Error(`File not found: ${filepath}\n\nDid you mean one of these?\n${suggestions.join("\n")}`)
       }
 
-      throw new Error(`File not found: ${filepath}`)
+      throw await notFound(filepath, await nearby())
     }
 
     if (stat.isDirectory()) {
@@ -380,4 +388,200 @@ async function isBinaryFile(filepath: string, file: Bun.BunFile): Promise<boolea
     }
   }
   return nonPrintableCount / bytes.length > 0.3
+}
+
+// ---------------------------------------------------------------------------
+// "Did you mean" suggestions for missing files
+// ---------------------------------------------------------------------------
+
+const SUGGESTION_LIMIT = 3
+// The scan runs on the error path, so it is capped twice over: a file count
+// (cheap trees finish early anyway) and a wall-clock budget. Both bounds keep
+// the whole suggestion under 200 ms on a monorepo-sized tree.
+const SUGGESTION_MAX_FILES = 4_000
+const SUGGESTION_MAX_MS = 120
+const SUGGESTION_SKIP_DIRECTORIES = new Set([
+  ".git",
+  ".hg",
+  ".svn",
+  "node_modules",
+  "dist",
+  "build",
+  "out",
+  "coverage",
+  "target",
+  "vendor",
+  ".next",
+  ".nuxt",
+  ".svelte-kit",
+  ".turbo",
+  ".cache",
+  ".output",
+  ".venv",
+  "__pycache__",
+])
+
+function relativeSlash(root: string, target: string): string {
+  return path.relative(root, target).split(path.sep).join("/")
+}
+
+const suggestLog = Log.create({ service: "read" })
+
+/**
+ * One line per read that came back with suggestions (`read.suggest n=K`), so a run log can count how often
+ * it happens and whether the next call uses one of the paths offered.
+ */
+function logSuggestions(requested: string, suggestions: string[], source: "siblings" | "project") {
+  suggestLog.info("read.suggest", { n: suggestions.length, source, requested, suggested: suggestions.join(",") })
+}
+
+/** The missing-file error, with near misses appended when any were found. */
+function notFound(filepath: string, nearby: string[]): Error {
+  if (nearby.length === 0) return new Error(`File not found: ${filepath}`)
+  logSuggestions(filepath, nearby, "project")
+  return new Error(`File not found: ${filepath}\n\nDid you mean: ${nearby.join(", ")}?`)
+}
+
+/**
+ * The tree to look for near misses in: the worktree, which is the project
+ * root and may sit above the working directory in a monorepo. A filesystem
+ * root is the "no repository" fallback rather than a project — searching it
+ * would walk the whole drive — so fall back to the working directory.
+ */
+function searchRoot(directory: string, worktree: string): string {
+  if (isFilesystemRoot(worktree)) return directory
+  const rel = path.relative(worktree, directory)
+  if (rel.startsWith("..") || path.isAbsolute(rel)) return directory
+  return worktree
+}
+
+function editBudget(length: number): number {
+  // One edit for short names, two once there is enough context to keep the
+  // false-positive rate sane.
+  return Math.min(2, Math.max(1, Math.floor(length / 5)))
+}
+
+/**
+ * Damerau-Levenshtein (optimal string alignment) distance, bailing out once
+ * every cell exceeds `max`. The transposition term is what makes the common
+ * `paresr.ts` / `parser.ts` slip cost one edit instead of two.
+ */
+function boundedLevenshtein(a: string, b: string, max: number): number {
+  if (a === b) return 0
+  if (Math.abs(a.length - b.length) > max) return max + 1
+  let older = Array.from({ length: b.length + 1 }, (_, index) => index)
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index)
+  for (let i = 1; i <= a.length; i++) {
+    const current = Array.from({ length: b.length + 1 }, () => 0)
+    current[0] = i
+    let rowMin = i
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      let value = Math.min(previous[j]! + 1, current[j - 1]! + 1, previous[j - 1]! + cost)
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        value = Math.min(value, older[j - 2]! + 1)
+      }
+      current[j] = value
+      if (value < rowMin) rowMin = value
+    }
+    if (rowMin > max) return max + 1
+    older = previous
+    previous = current
+  }
+  return previous[b.length]!
+}
+
+async function loadIgnoreFile(directory: string): Promise<ReturnType<typeof ignore> | undefined> {
+  const matcher = ignore()
+  let rules = ""
+  for (const name of [".gitignore", ".ignore"]) {
+    const file = Bun.file(path.join(directory, name))
+    if (await file.exists()) rules += (await file.text()) + "\n"
+  }
+  if (!rules.trim()) return undefined
+  matcher.add(rules)
+  return matcher
+}
+
+/**
+ * Collect gitignore-respecting, relative paths of files under `root`, bounded
+ * by `SUGGESTION_MAX_FILES` and `SUGGESTION_MAX_MS`. Ignore rules are scoped
+ * to the directory that declares them, so nested `.gitignore` files work.
+ */
+async function collectProjectFiles(root: string, deadline: number): Promise<string[]> {
+  const files: string[] = []
+  const scopes: Array<{ base: string; matcher: ReturnType<typeof ignore> }> = []
+  const rootMatcher = await loadIgnoreFile(root)
+  if (rootMatcher) scopes.push({ base: "", matcher: rootMatcher })
+  const stack: string[] = [root]
+  while (stack.length > 0) {
+    if (files.length >= SUGGESTION_MAX_FILES || Date.now() > deadline) break
+    const current = stack.pop()!
+    const entries = await fs.promises.readdir(current, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries) {
+      if (Date.now() > deadline) return files
+      const absolute = path.join(current, entry.name)
+      if (entry.isDirectory()) {
+        if (SUGGESTION_SKIP_DIRECTORIES.has(entry.name)) continue
+        const rel = relativeSlash(root, absolute)
+        if (scopes.some((scope) => isIgnored(scope, rel))) continue
+        const nested = await loadIgnoreFile(absolute)
+        if (nested) scopes.push({ base: rel, matcher: nested })
+        stack.push(absolute)
+        continue
+      }
+      if (!entry.isFile()) continue
+      const rel = relativeSlash(root, absolute)
+      if (scopes.some((scope) => isIgnored(scope, rel))) continue
+      files.push(rel)
+      if (files.length >= SUGGESTION_MAX_FILES) return files
+    }
+  }
+  return files
+}
+
+/**
+ * Whether `rel` is excluded by `scope`. A nested `.gitignore` only governs the
+ * subtree it was found in, and its patterns are relative to that subtree, so
+ * unrelated paths must never be handed to the matcher (`ignore` rejects
+ * anything that is not already `path.relative()`d).
+ */
+function isIgnored(scope: { base: string; matcher: ReturnType<typeof ignore> }, rel: string): boolean {
+  if (!scope.base) return scope.matcher.ignores(rel)
+  if (!rel.startsWith(scope.base + "/")) return false
+  const target = rel.slice(scope.base.length + 1)
+  if (!target) return false
+  return scope.matcher.ignores(target)
+}
+
+/**
+ * Rank existing project files by how likely they are to be what the model
+ * meant: an identical basename elsewhere wins, then a basename within a small
+ * edit distance, then a path that ends with the requested relative path.
+ */
+async function suggestNearbyFiles(root: string, requested: string): Promise<string[]> {
+  const rel = relativeSlash(root, requested)
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return []
+  const base = path.basename(requested).toLowerCase()
+  if (!base) return []
+  const candidates = await collectProjectFiles(root, Date.now() + SUGGESTION_MAX_MS)
+  const budget = editBudget(base.length)
+  const ranked: Array<{ rel: string; tier: number; distance: number }> = []
+  for (const candidate of candidates) {
+    const name = candidate.slice(candidate.lastIndexOf("/") + 1).toLowerCase()
+    if (name === base) {
+      ranked.push({ rel: candidate, tier: 0, distance: 0 })
+      continue
+    }
+    const distance = boundedLevenshtein(base, name, budget)
+    if (distance <= budget) {
+      ranked.push({ rel: candidate, tier: 1, distance })
+      continue
+    }
+    if (candidate.length > rel.length && candidate.endsWith("/" + rel)) {
+      ranked.push({ rel: candidate, tier: 2, distance: 0 })
+    }
+  }
+  ranked.sort((a, b) => a.tier - b.tier || a.distance - b.distance || a.rel.localeCompare(b.rel))
+  return ranked.slice(0, SUGGESTION_LIMIT).map((item) => item.rel)
 }

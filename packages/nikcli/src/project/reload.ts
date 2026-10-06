@@ -3,6 +3,7 @@ import path from "path"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { Global } from "@nikcli-ai/util/global"
+import { Flag } from "@nikcli-ai/util/flag"
 import { Log } from "@nikcli-ai/util/log"
 import {
   InstanceState,
@@ -32,6 +33,33 @@ export namespace InstanceReload {
   const log = Log.create({ service: "instance.reload" })
 
   const DEBOUNCE_MS = 300
+
+  /**
+   * A one-shot headless `nikcli run` opts out of watching the config.
+   *
+   * Nothing can change the config under a process that ends with its turn, so
+   * the watcher has nothing to report — and on Windows `fs.watch` holds a
+   * directory handle open, which is exactly what a teardown that runs while
+   * the watcher is still arming has to fight. Set once, before the instance
+   * is bootstrapped. The TUI, the server and `nikcli run --attach` never set
+   * it: they live long enough for the config to change under them.
+   */
+  let disabled = false
+
+  export function disableForHeadlessRun() {
+    disabled = true
+  }
+
+  /**
+   * Whether this process watches the config surface at all.
+   *
+   * `NIKCLI_DISABLE_HOT_RELOAD` is the operator's kill switch and outranks the
+   * per-process opt-out; both are read here so the call site in
+   * `project/bootstrap.ts` states the policy in one line.
+   */
+  export function watching() {
+    return !disabled && !Flag.NIKCLI_DISABLE_HOT_RELOAD
+  }
 
   /**
    * Both internal: no subscriber in this process or in any client. What a
@@ -227,6 +255,12 @@ export namespace InstanceReload {
     log.info("watching config for hot reload", { directory, paths: watchers.length })
 
     return () => {
+      // Idempotent: `registerDisposer` runs a late registration immediately
+      // when the instance is already disposed, and `dispose` is itself
+      // idempotent and can be entered twice — so this stop function is
+      // reachable more than once, and a second `watcher.close()` is an error
+      // event on a handle nobody owns any more.
+      if (stopped) return
       stopped = true
       if (timer) clearTimeout(timer)
       for (const watcher of watchers) {

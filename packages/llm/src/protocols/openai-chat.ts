@@ -185,9 +185,18 @@ const OpenAIChatChoice = Schema.Struct({
   finish_reason: optionalNull(Schema.String),
 })
 
+// OpenRouter and other gateways report an upstream failure inside a stream that already answered 200, as a
+// chunk with an `error` object and no `choices`: {error: {code: 502, message, metadata: {error_type}}}.
+const OpenAIChatStreamError = Schema.Struct({
+  code: Schema.optional(Schema.NullOr(Schema.Union([Schema.Number, Schema.String]))),
+  message: optionalNull(Schema.String),
+  metadata: optionalNull(Schema.Unknown),
+})
+
 export const OpenAIChatEvent = Schema.Struct({
-  choices: Schema.Array(OpenAIChatChoice),
+  choices: optionalArray(OpenAIChatChoice),
   usage: optionalNull(OpenAIChatUsage),
+  error: optionalNull(OpenAIChatStreamError),
 })
 export type OpenAIChatEvent = Schema.Schema.Type<typeof OpenAIChatEvent>
 type OpenAIChatRequestMessage = LLMRequest["messages"][number]
@@ -420,11 +429,32 @@ const mapUsage = (usage: OpenAIChatEvent["usage"]): Usage | undefined => {
   })
 }
 
+/**
+ * A gateway's in-stream error as a typed provider error. Retryable when the code says the upstream is down
+ * or throttled (5xx, 408, 429, or `error_type: provider_unavailable`), so the session's retry path treats it
+ * as it treats the same failure delivered as an HTTP status.
+ */
+const streamErrorEvent = (error: NonNullable<OpenAIChatEvent["error"]>): LLMEvent => {
+  const code = typeof error.code === "string" && /^d{3}$/.test(error.code) ? Number(error.code) : error.code
+  const status = typeof code === "number" ? code : undefined
+  const metadata = isRecord(error.metadata) ? error.metadata : undefined
+  const unavailable = metadata?.error_type === "provider_unavailable"
+  const message = error.message && error.message.length > 0 ? error.message : "Provider error"
+  const retryable = unavailable || (status !== undefined && (status === 408 || status === 429 || status >= 500))
+  return {
+    type: "provider-error",
+    message: status === 429 ? `Rate Limited: ${message}` : message,
+    retryable,
+    ...(status !== undefined ? { providerMetadata: { openrouter: { statusCode: status } } } : {}),
+  }
+}
+
 const step = (state: ParserState, event: OpenAIChatEvent) =>
   Effect.gen(function* () {
     const events: LLMEvent[] = []
+    if (event.error) return [state, [streamErrorEvent(event.error)]] as const
     const usage = mapUsage(event.usage) ?? state.usage
-    const choice = event.choices[0]
+    const choice = event.choices?.[0]
     const finishReason = choice?.finish_reason ? mapFinishReason(choice.finish_reason) : state.finishReason
     const rawFinishReason = choice?.finish_reason ?? state.rawFinishReason
     const delta = choice?.delta

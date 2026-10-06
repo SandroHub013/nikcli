@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -20,7 +21,7 @@ describe("Filesystem Benchmark", () => {
   })
 
   afterEach(async () => {
-    await fs.rm(testDir, { recursive: true, force: true })
+    await removeTestDir(testDir)
   })
 
   describe("exists performance", () => {

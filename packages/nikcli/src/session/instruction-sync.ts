@@ -33,6 +33,12 @@ export namespace InstructionSync {
   export type AssembleResult = {
     system: string[]
     skillMessages: string[]
+    /**
+     * Per-session context (working directory, date, locale, package manager), rendered ahead of the
+     * conversation rather than into `system`, so the system prompt and the tool schemas ahead of it
+     * are byte-identical between sessions and a warm provider cache covers them.
+     */
+    sessionMessages: string[]
     updates: Array<{ role: "user"; content: string }>
     delta?: Record<string, string>
     blocked: boolean
@@ -112,6 +118,8 @@ export namespace InstructionSync {
         return [`Instructions from: ${parsed?.id ?? key}\n${body.text}`]
       case "env":
         return body.parts
+      case "env-session":
+        return body.parts
       case "profile":
         return body.parts
       case "skill":
@@ -132,6 +140,7 @@ export namespace InstructionSync {
   function renderKeys(order: string[], values: Record<string, string>, blobs: Record<string, string>) {
     const system: string[] = []
     const skillBlocks: string[] = []
+    const sessionBlocks: string[] = []
     for (const key of order) {
       const hash = values[key]
       if (!hash) continue
@@ -147,11 +156,13 @@ export namespace InstructionSync {
       }
       const parts = renderBody(key, body)
       if (body.kind === "skill") skillBlocks.push(...parts)
+      else if (body.kind === "env-session") sessionBlocks.push(...parts)
       else system.push(...parts)
     }
     return {
       system,
       skillMessages: skillBlocks.length > 0 ? [SystemPrompt.skillsMessage(skillBlocks)] : [],
+      sessionMessages: sessionBlocks,
     }
   }
 
@@ -180,7 +191,7 @@ export namespace InstructionSync {
 
   export function render(sessionID: string, projectID?: string): Omit<AssembleResult, "delta" | "blocked"> {
     const state = Effect.runSync(InstructionRepo.get(sessionID))
-    if (!state) return { system: [], skillMessages: [], updates: [] }
+    if (!state) return { system: [], skillMessages: [], sessionMessages: [], updates: [] }
 
     const hashes = [...Object.values(state.data.epoch_values), ...Object.values(state.data.values)]
     const blobs = Effect.runSync(InstructionRepo.getBlobs([...new Set(hashes)]))
@@ -216,6 +227,7 @@ export namespace InstructionSync {
     return {
       system: prefix.system,
       skillMessages: prefix.skillMessages,
+      sessionMessages: prefix.sessionMessages,
       updates,
     }
   }
@@ -223,15 +235,18 @@ export namespace InstructionSync {
   export function renderLive(reads: InstructionRead[]): Omit<AssembleResult, "delta" | "blocked"> {
     const system: string[] = []
     const skillBlocks: string[] = []
+    const sessionBlocks: string[] = []
     for (const read of reads) {
       if (read.status !== "value") continue
       const parts = renderBody(read.key, read.body)
       if (read.body.kind === "skill") skillBlocks.push(...parts)
+      else if (read.body.kind === "env-session") sessionBlocks.push(...parts)
       else system.push(...parts)
     }
     return {
       system,
       skillMessages: skillBlocks.length > 0 ? [SystemPrompt.skillsMessage(skillBlocks)] : [],
+      sessionMessages: sessionBlocks,
       updates: [],
     }
   }
@@ -241,6 +256,7 @@ export namespace InstructionSync {
     config: Config.Info
     disabled: string[]
     envParts: string[]
+    envSessionParts: string[]
     profileParts: string[]
     skills: InstructionRead[]
   }): Promise<InstructionRead[]> {
@@ -255,6 +271,13 @@ export namespace InstructionSync {
     const reads: InstructionRead[] = [...files, ...fetched]
     if (input.envParts.length > 0) {
       reads.push({ key: InstructionKey.env, status: "value", body: { kind: "env", parts: input.envParts } })
+    }
+    if (input.envSessionParts.length > 0) {
+      reads.push({
+        key: InstructionKey.envSession,
+        status: "value",
+        body: { kind: "env-session", parts: input.envSessionParts },
+      })
     }
     if (input.profileParts.length > 0) {
       reads.push({
@@ -311,17 +334,29 @@ export namespace InstructionSync {
         }),
       ),
     )
-    const [envParts, profileParts, skills] = await Promise.all([
+    const [envParts, envSessionParts, profileParts, skills] = await Promise.all([
       runPromiseWithLayer(
         SystemPrompt.defaultLayer,
         withCurrentInstance(
           Effect.gen(function* () {
             const systemPrompt = yield* SystemPrompt.Service
-            return yield* systemPrompt.environment()
+            return yield* systemPrompt.environmentStatic()
           }),
         ),
       ).catch((error) => {
         log.warn("environment read unavailable", { error })
+        return undefined
+      }),
+      runPromiseWithLayer(
+        SystemPrompt.defaultLayer,
+        withCurrentInstance(
+          Effect.gen(function* () {
+            const systemPrompt = yield* SystemPrompt.Service
+            return yield* systemPrompt.environmentSession()
+          }),
+        ),
+      ).catch((error) => {
+        log.warn("session environment read unavailable", { error })
         return undefined
       }),
       runPromiseWithLayer(
@@ -344,10 +379,12 @@ export namespace InstructionSync {
       config,
       disabled: input.disabled,
       envParts: envParts ?? [],
+      envSessionParts: envSessionParts ?? [],
       profileParts: profileParts ?? [],
       skills,
     })
     if (envParts === undefined) reads.unshift({ key: InstructionKey.env, status: "unavailable" })
+    if (envSessionParts === undefined) reads.unshift({ key: InstructionKey.envSession, status: "unavailable" })
     if (profileParts === undefined) reads.push({ key: InstructionKey.profile, status: "unavailable" })
 
     const committed = commit(input.sessionID, input.projectID, reads)

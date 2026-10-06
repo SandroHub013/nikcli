@@ -17,6 +17,17 @@ export namespace Database {
     readonly db: Client
     readonly native: BunDatabase
     readonly filename: string
+    /**
+     * Release the file: finalize every cached statement, then close.
+     *
+     * The order is the whole point, and it is not interchangeable. `close()`
+     * alone leaves the connection a zombie when statements are still open —
+     * SQLite defers the real teardown until the last one is finalized — and
+     * Windows keeps the file handle until then, so a directory can only be
+     * deleted at process exit. Finalizing first makes `close()` the last
+     * reference to the file and the handle goes back immediately.
+     */
+    close(): void
   }
 
   export class Service extends Context.Service<Service, Interface>()("Database.Service") {}
@@ -56,10 +67,29 @@ export namespace Database {
    * because `bun:sqlite` is synchronous: a statement is executed in the same
    * tick it is handed out, so nothing can evict one that is still in flight.
    *
-   * Only the Drizzle connection is wrapped. `native` stays the real handle, so
-   * `rawSql`, the checkpoint loop, and migrations are untouched.
+   * `prepare` is intercepted for the same reason `query` is: a migration that
+   * prepares directly would otherwise leave the one statement that keeps the
+   * connection a zombie after `close()`. Sharing the cache with `query` is
+   * sound for the same reason the LRU is — every caller runs its statement
+   * synchronously, before anything can evict it.
+   *
+   * The wrapped client is what `Interface` hands out as `native` as well as to
+   * Drizzle, so `rawSql` and the checkpoint loop are covered by the same cache
+   * and the same release. Only the real handle stays private, because
+   * `close()` must reach the connection and not a proxy of it.
+   *
+   * The cache is reachable from here rather than left to the garbage collector
+   * on purpose: a statement is a live reference into the connection, so a cache
+   * that is only ever dropped implicitly holds the database open on Windows even
+   * after `close()` reported success. See `Interface.close`.
    */
-  function boundedStatements(native: BunDatabase, limit = STATEMENT_CACHE_LIMIT): BunDatabase {
+  interface BoundedStatements {
+    readonly client: BunDatabase
+    /** Finalize and forget every cached statement, so none outlives `close()`. */
+    finalizeAll(): void
+  }
+
+  function boundedStatements(native: BunDatabase, limit = STATEMENT_CACHE_LIMIT): BoundedStatements {
     const cache = new Map<string, Statement>()
 
     function query(sql: string): Statement {
@@ -82,15 +112,26 @@ export namespace Database {
       return compiled
     }
 
-    return new Proxy(native, {
+    const client = new Proxy(native, {
       get(target, property) {
-        if (property === "query") return query
+        if (property === "query" || property === "prepare") return query
         // `bun:sqlite`'s methods are native and reject a proxy as their
         // receiver, so they are handed back bound to the real connection.
         const value = target[property as keyof BunDatabase]
         return value instanceof Function ? value.bind(target) : value
       },
     })
+
+    function finalizeAll() {
+      for (const statement of cache.values()) {
+        try {
+          statement.finalize()
+        } catch {}
+      }
+      cache.clear()
+    }
+
+    return { client, finalizeAll }
   }
 
   function open(filename: string): Interface {
@@ -98,22 +139,42 @@ export namespace Database {
 
     log.info("opening database", { filename })
     const native = new BunDatabase(filename, { create: true })
-    native.exec("PRAGMA journal_mode = WAL")
-    native.exec("PRAGMA synchronous = NORMAL")
-    native.exec("PRAGMA busy_timeout = 5000")
-    native.exec("PRAGMA cache_size = -64000")
-    native.exec("PRAGMA foreign_keys = ON")
+    // Built before the pragmas and the migrations run, and used for both, so
+    // that every statement this connection compiles is one the cache knows
+    // about. The migration runner issues its own `query` calls: routed around
+    // the cache they would be the statements that survive `close()` and keep
+    // the file locked on Windows, and the leak would be invisible until the
+    // directory could not be deleted.
+    const bounded = boundedStatements(native)
+    const client = bounded.client
+    client.exec("PRAGMA journal_mode = WAL")
+    client.exec("PRAGMA synchronous = NORMAL")
+    client.exec("PRAGMA busy_timeout = 5000")
+    client.exec("PRAGMA cache_size = -64000")
+    client.exec("PRAGMA foreign_keys = ON")
     // Opencode #22428: disable mmap so the process footprint doesn't grow
     // with the DB file size. Default cache_size (~64MB) bounds the cache
     // anyway, and the latency cost is dwarfed by LLM API round-trips.
-    native.exec("PRAGMA mmap_size = 0")
-    DatabaseMigration.apply(native)
-    native.exec("PRAGMA wal_checkpoint(PASSIVE)")
+    client.exec("PRAGMA mmap_size = 0")
+    DatabaseMigration.apply(client)
+    client.exec("PRAGMA wal_checkpoint(PASSIVE)")
 
     return {
-      db: drizzle({ client: boundedStatements(native) }),
-      native,
+      db: drizzle({ client }),
+      // The wrapped client, not the bare handle: a `query` a caller issues here
+      // is compiled through the same cache, so `close()` can finalize it. The
+      // real handle stays private to this closure — it is the only thing that
+      // must reach the connection itself to close it.
+      native: client,
       filename,
+      close() {
+        // Statements first: they are the last references into the connection,
+        // and until they are finalized `close()` only marks it a zombie.
+        bounded.finalizeAll()
+        try {
+          native.close()
+        } catch {}
+      },
     }
   }
 
@@ -183,9 +244,12 @@ export namespace Database {
   export function close(filename = path()): boolean {
     const service = singletons.get(filename)
     if (!service) return false
+    // Drop the map entry first: the retained `Interface` is the only other
+    // reference to the handle, and leaving it reachable is what keeps a closed
+    // database collectable-later instead of collectable-now.
     singletons.delete(filename)
     try {
-      service.native.close()
+      service.close()
     } catch {}
     return true
   }
@@ -379,7 +443,14 @@ export namespace Database {
         const service = yield* Effect.sync(() => open(filename))
         yield* Effect.addFinalizer(() =>
           Effect.sync(() => {
-            service.native.close()
+            // The Effect runtime keeps the `Interface` reachable past this
+            // finalizer, so the release cannot rely on the handle becoming
+            // unreachable. It has to happen explicitly: finalize every cached
+            // statement, then close. The singleton entry, if this path is also
+            // registered as one, is dropped too, so nothing module-level is
+            // left holding a closed handle.
+            if (singletons.get(filename) === service) singletons.delete(filename)
+            service.close()
           }),
         )
         return Service.of(service)

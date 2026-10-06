@@ -9,7 +9,7 @@ Each section starts with a header:
 - `*** Delete File: <path>` — remove file. Nothing follows.
 - `*** Update File: <path>` — patch existing. Optionally `*** Move to: <new>` for rename.
 
-Update bodies are unified diff hunks (`@@`, ` ` / `-` / `+` lines).
+Update bodies are one or more changes. Each starts with a line `@@`, optionally followed by a line of the file to anchor on (for example `@@ def greet():`), and then lines prefixed with a space (unchanged), `-` (removed) or `+` (added). Line numbers are not used.
 
 Rules:
 - Prefix new lines with `+` even when creating a file.

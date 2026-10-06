@@ -10,9 +10,11 @@ import { Bus } from "../bus"
 import { FileTime } from "../file/time"
 import { Filesystem } from "@nikcli-ai/util/filesystem"
 import { Bom } from "../util/bom"
+import { notFoundMessage } from "../util/scratch"
 import { Format } from "../format"
 import { buildFileDiff, trimDiff } from "./file-diff"
-import { assertExternalDirectory } from "./external-directory"
+import { assertExternalDirectory, isExternalPath } from "./external-directory"
+import { normalizeToolPath } from "./tool-path"
 import { replaceWithCount } from "./edit"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
 import { Log } from "@nikcli-ai/util/log"
@@ -56,9 +58,7 @@ export const MultiEditTool = Tool.define("multiedit", {
       }
     }
 
-    const filePath = path.isAbsolute(params.filePath)
-      ? params.filePath
-      : path.join(ctx.instance.directory, params.filePath)
+    const filePath = normalizeToolPath(params.filePath, ctx.instance.directory)
     await assertExternalDirectory(ctx, filePath)
 
     // An empty first `oldString` is the "create" spelling, same as `edit`: the file need not
@@ -68,6 +68,7 @@ export const MultiEditTool = Tool.define("multiedit", {
     let diff = ""
     let contentOld = ""
     let contentNew = ""
+    let reformatted: string | undefined
     let replacements = 0
     await FileTime.withLock(filePath, async () => {
       let originalBom = false
@@ -75,7 +76,7 @@ export const MultiEditTool = Tool.define("multiedit", {
         const stats = await Bun.file(filePath)
           .stat()
           .catch(() => {})
-        if (!stats) throw new Error(`File not found: ${filePath}`)
+        if (!stats) throw new Error(notFoundMessage(filePath, ctx.instance.directory, isExternalPath(filePath)))
         if (stats.isDirectory()) throw new Error(`Path is a directory, not a file: ${filePath}`)
         await FileTime.assert(ctx.sessionID, filePath)
         // opencode #39564: `Bun.file().text()` drops the BOM, so read it explicitly
@@ -129,7 +130,7 @@ export const MultiEditTool = Tool.define("multiedit", {
       })
 
       await Bun.write(filePath, Bom.join(contentNew, writtenBom))
-      await Format.formatFile(filePath, writtenBom)
+      reformatted = await Format.formatFileReport(filePath, writtenBom, contentNew)
       await Bus.publish(File.Event.Edited, {
         file: filePath,
       })
@@ -163,6 +164,7 @@ export const MultiEditTool = Tool.define("multiedit", {
         ? "Created file."
         : `Replaced ${replacements} ${replacements === 1 ? "occurrence" : "occurrences"} in ${relative} across ${params.edits.length} ${params.edits.length === 1 ? "edit" : "edits"}.`
     let output = created && replacements > 0 ? `Created file. ${summary}` : summary
+    if (reformatted) output += `\n\n${reformatted}`
 
     const diagnostics = await runLSP(
       Effect.gen(function* () {

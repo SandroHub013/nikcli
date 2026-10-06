@@ -7,6 +7,7 @@ import { FileWatcher } from "../file/watcher"
 import { Patch } from "../patch"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { assertExternalDirectory } from "./external-directory"
+import { normalizeToolPath } from "./tool-path"
 import { buildFileDiff, readAfterMutation, trimDiff } from "./file-diff"
 import { Bom } from "../util/bom"
 import { Format } from "../format"
@@ -64,9 +65,10 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
     }> = []
 
     let totalDiff = ""
+    const reformatNotes: string[] = []
 
     for (const hunk of hunks) {
-      const filePath = path.resolve(ctx.instance.directory, hunk.path)
+      const filePath = normalizeToolPath(hunk.path, ctx.instance.directory)
       await assertExternalDirectory(ctx, filePath)
 
       switch (hunk.type) {
@@ -131,7 +133,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
             if (change.removed) deletions += change.count || 0
           }
 
-          const movePath = hunk.move_path ? path.resolve(ctx.instance.directory, hunk.move_path) : undefined
+          const movePath = hunk.move_path ? normalizeToolPath(hunk.move_path, ctx.instance.directory) : undefined
           await assertExternalDirectory(ctx, movePath)
 
           fileChanges.push({
@@ -238,7 +240,8 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       }
 
       if (edited) {
-        await Format.formatFile(edited, change.oldBom ?? false)
+        const reformatted = await Format.formatFileReport(edited, change.oldBom ?? false, change.newContent)
+        if (reformatted) reformatNotes.push(`${path.relative(ctx.instance.worktree, edited)}: ${reformatted}`)
         await Bus.publish(File.Event.Edited, {
           file: edited,
         })
@@ -296,6 +299,7 @@ export const ApplyPatchTool = Tool.define("apply_patch", {
       return `M ${path.relative(ctx.instance.worktree, target)}`
     })
     let output = `Success. Updated the following files:\n${summaryLines.join("\n")}`
+    if (reformatNotes.length > 0) output += `\n\n${reformatNotes.join("\n\n")}`
 
     // Report LSP errors for changed files
     const MAX_DIAGNOSTICS_PER_FILE = 20
