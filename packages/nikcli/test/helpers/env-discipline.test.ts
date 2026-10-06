@@ -28,9 +28,10 @@ if (!existsSync(TEST_ROOT)) {
 
 /**
  * `preload.ts` is the baseline itself: its assignments run before
- * `setTestEnvBaseline()` captures them, so they survive by construction.
+ * `setTestEnvBaseline()` captures them, so they survive by construction. So are
+ * those of `isolate.ts`, the first thing the preload imports.
  */
-const EXEMPT = new Set(["preload.ts"])
+const EXEMPT = new Set(["preload.ts", "isolate.ts"])
 
 /** A `process.env.X =` or `??=` starting at column zero. */
 const MODULE_SCOPE_ASSIGNMENT = /^process\.env\.(NIKCLI_[A-Z_0-9]+|XDG_[A-Z_0-9]+)\s*(=|\?\?=)/gm
