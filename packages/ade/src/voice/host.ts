@@ -2,7 +2,13 @@ import type { PaneSummary, VoiceHost, VoiceStateSnapshot } from "@nikcli-ai/voic
 import type { Host, SpawnedSession } from "../host/shell"
 import type { Project } from "../host/project"
 import type { RecentEntry } from "../host/recent"
-import { permissionIdentity, type PermissionAnswer, type PermissionRequest } from "../session/permission"
+import {
+  isPermanent,
+  isRefusal,
+  permissionIdentity,
+  type PermissionAnswer,
+  type PermissionRequest,
+} from "../session/permission"
 import { AGENTS } from "../session-new/agents"
 import type { AgentStatus } from "../session-new/availability"
 import { asOneLine, asSubmittedLine } from "../session/typing"
@@ -130,13 +136,6 @@ const OPENS_IN_GRID = new Set(["session.new", "browser.new", "video.new", "model
 
 /** How long a warm agent waits for the project before starting without one. */
 const PREPARE_WAIT_MS = 30_000
-
-/** An answer that reads as a refusal. */
-const REFUSAL_ANSWER = /^(?:no|nega|rifiuta|deny|reject|annulla|cancel)/i
-
-/** An answer that grants more than the request on screen: for always, for the session, without asking again. */
-const PERMANENT_ANSWER =
-  /always|sempre|non chiedere|non chiederlo|don'?t ask|do not ask|never ask|(?:for|during) (?:this|the) session|allow all|per (?:questa )?sessione|tutta la sessione/i
 
 export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
   /*
@@ -457,14 +456,12 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
          * every one that follows; when only permanent answers are left, nothing is sent and the request stays on
          * screen for the user.
          */
-        const once = pending.answers.filter((a) => !PERMANENT_ANSWER.test(a.label))
+        // By what the answer does (`intent`, set where the CLI's prompt is read), not by the words on the button: those are in
+        // the user's language and the CLI's own wording.
+        const once = pending.answers.filter((a) => !isPermanent(a))
         chosen =
-          once.find(
-            (a) =>
-              a.tone === "primary" ||
-              /^(?:sì|si|consenti|allow|yes|accetta|procedi|conferma)/i.test(a.label) ||
-              a.send.toLowerCase() === "y",
-          ) ?? once.find((a) => !REFUSAL_ANSWER.test(a.label))
+          once.find((a) => a.tone === "primary" || a.intent === "yes" || a.intent === "once" || a.send.toLowerCase() === "y") ??
+          once.find((a) => !isRefusal(a))
       } else {
         /*
          * No fallback, on purpose.
@@ -477,9 +474,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
          * refusal nothing is sent and the request stays on screen for the
          * user to answer by hand.
          */
-        chosen = pending.answers.find(
-          (a) => REFUSAL_ANSWER.test(a.label) || /^(?:n|no)$/i.test(a.send.trim().toLowerCase()),
-        )
+        chosen = pending.answers.find((a) => isRefusal(a) || /^(?:n|no)$/i.test(a.send.trim().toLowerCase()))
       }
 
       if (chosen) {

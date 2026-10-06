@@ -550,6 +550,16 @@ export const en: Messages = {
     `The shortcut ${chord} for ${feature} only works with ADE in front: its key cannot be registered with the system. Choose one with a letter, a digit or an F key in voice settings.`,
   "voice.shortcut.unknown": (chord) =>
     `Unrecognized voice shortcut (${chord}): the microphone was not opened. Reassign it in voice settings.`,
+  "permission.answer.yes": "Yes",
+  "permission.answer.always": "Yes, and don't ask again",
+  "permission.answer.alwaysShort": "Always",
+  "permission.answer.once": "Allow once",
+  "permission.answer.no": "No",
+  "permission.answer.noCancel": "No, and cancel",
+  "permission.answer.cancel": "Cancel",
+  "permission.answer.skip": "Skip",
+  "permission.answer.allow": "Allow",
+  "permission.answer.deny": "Deny",
   "voice.permission.notRefusal":
     "None of the proposed answers is a refusal: please answer yourself, I won't choose for you.",
   "voice.permission.type.shell": "a command",
