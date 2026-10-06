@@ -13,6 +13,7 @@
  * the host — the model proposes, it does not decide.
  */
 
+import { translate, t as tr } from "@nikcli-ai/ade/i18n"
 import { MAX_PLAN_STEPS, validatePlan, type PlanContext, type ValidatedPlan } from "./schema"
 
 /**
@@ -273,36 +274,47 @@ function tryParse(text: string): unknown {
  * `undefined` means there is nothing to say: the user pressed «annulla», so
  * the one thing wrong is that something is being said at all.
  */
+/**
+ * Whether a message is one of the sentences the runner writes for «could not plan» («Non riesco a pianificare: …»), in either
+ * language: it is a contract between the runner that writes it and the planner that lets it through as it is.
+ */
+export function isPlanningSentence(raw: string): boolean {
+  return (["it", "en"] as const).some((language) => {
+    const prefix = translate(language, "voice.msg.plan.cant", "").replace(/[:\s]+$/, "")
+    return raw.startsWith(prefix)
+  })
+}
+
 export function plannerFailure(error: unknown): string | undefined {
   const { name, message: raw } = providerError(error)
   // Case and punctuation vary between runtimes, and the message is the only
   // thing a fetch failure has.
   const text = raw.toLowerCase()
 
-  // Our own sentences, already written for the user: the runner's ("Non riesco a pianificare: Claude Code non si avvia").
-  if (raw.startsWith("Non riesco a pianificare")) return raw
+  // Our own sentences, already written for the user: the runner's («Non riesco a pianificare: Claude Code non si avvia»).
+  if (isPlanningSentence(raw)) return raw
 
   // A timeout is read before a cancellation, because a timed-out fetch is
   // aborted too and says so: only the name tells the two apart. Neither is a
   // user cancellation, and a user cancellation is not a failure to report.
   if (name === "TimeoutError" || (!name.includes("Abort") && /\btimed? ?out\b|timeout/.test(text))) {
-    return "Non ho raggiunto il servizio in tempo. Riprova fra un momento."
+    return tr("voice.msg.plan.timeout")
   }
   if (name === "AbortError" || text.includes("operation was aborted")) return undefined
 
   if (/\b429\b|rate limit|too many requests/.test(text)) {
-    return "Il servizio ha ricevuto troppe richieste in poco tempo. Riprova fra un momento."
+    return tr("voice.msg.plan.rateLimit")
   }
   if (/\b40[13]\b|unauthorized|forbidden|api[- ]?key|invalid.*key/.test(text)) {
-    return "La chiave del servizio non è valida. Puoi correggerla nelle impostazioni della voce."
+    return tr("voice.msg.plan.keyInvalid")
   }
   if (/\b5\d\d\b|internal server error|bad gateway|service unavailable|overloaded/.test(text)) {
-    return "Il servizio ha risposto con un errore. Riprova fra un momento."
+    return tr("voice.msg.plan.serverError")
   }
   if (/fetch failed|network|econnrefused|econnreset|enotfound|eai_again|socket|dns|certificate|unable to/.test(text)) {
-    return "Non ho raggiunto il servizio. Controlla la connessione e riprova."
+    return tr("voice.msg.plan.unreachable")
   }
-  return "Non sono riuscito a ottenere un piano. Riprova fra un momento."
+  return tr("voice.msg.plan.noPlan")
 }
 
 /**

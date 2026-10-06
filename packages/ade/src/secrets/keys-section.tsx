@@ -5,6 +5,7 @@ import {
   addedLabel,
   billingWarning,
   envProblem,
+  keyError,
   keyRequestAgents,
   keyRequestText,
   nameProblem,
@@ -26,7 +27,7 @@ export interface KeysHost {
   copy: (name: string) => Promise<number>
 }
 
-const message = (failure: unknown) => (failure instanceof Error ? failure.message : String(failure))
+const message = (failure: unknown) => keyError(failure instanceof Error ? failure.message : String(failure))
 
 /**
  * Impostazioni › Chiavi API.

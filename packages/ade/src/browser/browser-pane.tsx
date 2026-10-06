@@ -381,7 +381,7 @@ export function BrowserPane(props: BrowserPaneProps): JSX.Element {
       if ((await hostSaysBlocked()) && isCurrent()) setNotice(noticeWithoutCopy({ blocked: true, inspecting: false }))
     } catch {
       if (!isCurrent()) return
-      handshake({ type: "load-error", error: "Server non raggiungibile" })
+      handshake({ type: "load-error", error: t("browser.unreachable") })
       setLoadState("unreachable")
       setLoadError(t("browser.unreachable"))
     }

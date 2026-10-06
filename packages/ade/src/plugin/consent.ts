@@ -6,6 +6,7 @@
  * over a string store, so the rule is tested rather than trusted.
  */
 import type { ResolvedPlugin } from "./discovery"
+import { t } from "../i18n"
 
 export const CONSENT_KEY = "ade.pluginConsent"
 
@@ -46,5 +47,5 @@ export function withConsent(raw: string | null, root: string, plugins: readonly 
 /** The question put to the user, naming every plugin that would run. */
 export function consentQuestion(root: string, plugins: readonly Declared[]): string {
   const list = plugins.map((plugin) => `• ${plugin.spec}`).join("\n")
-  return `Il progetto\n${root}\n\ndichiara in .nikcli/tui.json dei plugin che verrebbero eseguiti dentro ADE:\n\n${list}\n\nUn plugin è codice con accesso alle sessioni e ai file del progetto. Eseguirli?`
+  return t("plugins.consent.question", root, list)
 }

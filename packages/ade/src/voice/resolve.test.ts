@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { resetLocaleForTests } from "../i18n/locale"
 import { AGENTS } from "../session-new/agents"
 import { listProjectsFrom, resolveAgentId, resolveProject, spokenKey } from "./resolve"
 
@@ -130,5 +131,20 @@ describe("spokenKey", () => {
     expect(spokenKey("  Claude-Code ")).toBe("claudecode")
     expect(spokenKey("Gemini CLI")).toBe("geminicli")
     expect(spokenKey("perché_no")).toBe("percheno")
+  })
+})
+
+describe("the refusals are said in the language of the interface (F7b)", () => {
+  test("an unknown agent or project is said in English with the interface in English", () => {
+    resetLocaleForTests("en")
+    try {
+      expect(() => resolveAgentId("aider", AGENTS)).toThrow(/I don't know the agent «aider»\. I can start: /)
+      expect(() => resolveProject("zzz", [{ name: "alfa", root: "C:/a" }])).toThrow(
+        /I don't know the project «zzz»\. The list has: alfa\./,
+      )
+      expect(() => resolveProject("zzz", [])).toThrow(/I have no projects in the list/)
+    } finally {
+      resetLocaleForTests("it")
+    }
   })
 })

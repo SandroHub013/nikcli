@@ -566,6 +566,16 @@ export const it = {
     `La scorciatoia ${chord} per ${feature} funziona solo con ADE in primo piano: il suo tasto non si può registrare nel sistema. Scegline una con una lettera, un numero o un tasto F nelle impostazioni vocali.`,
   "voice.shortcut.unknown": (chord: string) =>
     `Scorciatoia vocale non riconosciuta (${chord}): il microfono non è stato aperto. Riassegnala nelle impostazioni vocali.`,
+  "permission.answer.yes": "Sì",
+  "permission.answer.always": "Sì, e non chiedere più",
+  "permission.answer.alwaysShort": "Sempre",
+  "permission.answer.once": "Consenti una volta",
+  "permission.answer.no": "No",
+  "permission.answer.noCancel": "No, e annulla",
+  "permission.answer.cancel": "Annulla",
+  "permission.answer.skip": "Salta",
+  "permission.answer.allow": "Consenti",
+  "permission.answer.deny": "Nega",
   "voice.permission.notRefusal": "Nessuna delle risposte proposte è un rifiuto: rispondi tu, non scelgo al posto tuo.",
   "voice.permission.type.shell": "un comando",
   "voice.permission.type.write": "una modifica ai file",
@@ -1300,6 +1310,19 @@ export const it = {
   "keys.problem.noValue": "incolla il valore",
   "keys.problem.tooLong": "troppo lungo (massimo 4096 caratteri)",
   "keys.problem.newline": "contiene un a capo: incollalo su una riga",
+  // What the host refuses with, by code (secrets.rs): the page says it.
+  "keys.error.valueNeeded": "una chiave nuova ha bisogno di un valore",
+  "keys.error.editCancelled": "Modifica della chiave annullata.",
+  "keys.error.notFound": (name: string) => `chiave «${name}» non trovata`,
+  "keys.error.noValue": (name: string) => `chiave «${name}» senza valore nel portachiavi`,
+  "keys.error.keychain.noAccess": "portachiavi di sistema non accessibile",
+  "keys.error.keychain.refused": "il portachiavi di sistema ha rifiutato l'operazione",
+  "keys.error.keychain.tooLong": "un dato è troppo lungo per il portachiavi",
+  "keys.error.keychain.invalid": "un dato non è valido per il portachiavi",
+  "keys.error.keychain.ambiguous": "più voci con lo stesso nome nel portachiavi",
+  "keys.error.keychain.badEncoding": "valore nel portachiavi non leggibile come testo",
+  "keys.error.keychain.noEntry": "nessuna voce nel portachiavi",
+  "keys.error.keychain.other": "errore del portachiavi",
   "keys.billing": (agent: string, account: string) =>
     `${agent} userà questa chiave invece ${account}: consumo a pagamento`,
   "keys.billing.claude": "dell'abbonamento Claude",
@@ -2231,6 +2254,58 @@ export const it = {
   "model.state.dimensions": (x: string, y: string, z: string) => `ingombro ${x} × ${y} × ${z}`,
   "model.state.animations": (count: number) => `${count} animazioni`,
   "pane.runnerLogin": (label: string) => `${label} · accesso`,
+
+  // F7a2: Simulator
+  "simulator.error.sameOrigin": "questo indirizzo è ADE stessa; apri il dev server della tua app",
+
+  // F7a2: Video
+  "video.error.noFrame": "nessun fotogramma disponibile",
+  "video.error.noCanvas": "canvas non disponibile",
+  "video.error.encodingFailed": "codifica del fotogramma fallita",
+  "video.error.unsupportedFormat": (exts: string) => `formato non riproducibile; supportati: ${exts}`,
+  "video.error.unreadableOrUnsupported": "il file non è leggibile o il formato non è supportato",
+  "video.error.noPlayer": "nessun riproduttore",
+  "video.error.cannotWrite": "questo host non può scrivere file",
+
+  // F7a2: Workbench & Keys
+  "keys.error.noKeyring": "questa versione di ADE non ha il portachiavi",
+  "workbench.error.noOpenProject": "nessun progetto aperto in cui salvare",
+  "session.cannotClose": (reasons: string) =>
+    `non chiudo: ${reasons}. Integra o committa prima, oppure usa --force (la worktree resta su disco)`,
+  "plugins.error.noDesktopHost": "nessun host desktop",
+  "host.error.cannotReadBinary": "questo host non può leggere file binari",
+
+  // F7a2: Update & Browser
+  "update.skip.rateLimited": "GitHub ha chiesto di aspettare: riprovo più tardi.",
+  "browser.forget.notDesktop": "non disponibile fuori dall'app",
+
+  // F7a2: Review & Plugin consent
+  "review.error.details": "Impossibile calcolare i dettagli delle modifiche.",
+  "plugins.consent.question": (root: string, list: string) =>
+    `Il progetto\n${root}\n\ndichiara in .nikcli/tui.json dei plugin che verrebbero eseguiti dentro ADE:\n\n${list}\n\nUn plugin è codice con accesso alle sessioni e ai file del progetto. Eseguirli?`,
+
+  // F7a2: 3D Model
+  "model.error.paneClosed": "pannello chiuso",
+  "model.error.unsupportedFormatExts": (exts: string) => `formato non supportato; supportati: ${exts}`,
+  "model.error.cannotWrite": "questo host non può scrivere file",
+  "model.error.noModelLoaded": "nessun modello caricato",
+  "model.error.unsupportedFormat": "formato non supportato",
+  "model.error.encodingFailed": "codifica dell'immagine fallita",
+
+  // F7a2: Plugin discovery
+  "plugins.error.manifestNotJson": "package.json non è JSON valido",
+  "plugins.error.manifestNotObject": "package.json non è un oggetto",
+  "plugins.error.noExportKind": (kind: string) => `il pacchetto non dichiara exports["./${kind}"]`,
+  "plugins.error.invalidExportPath": (kind: string) => `exports["./${kind}"] non è un percorso valido`,
+  "plugins.error.escapesPackage": "l'entrypoint del plugin esce dalla cartella del pacchetto",
+  "plugins.error.npmDesktopNotSupported":
+    "i plugin npm non si possono installare dalla finestra desktop: aggiungilo dal terminale, poi riapri ADE",
+  "plugins.error.uncNotAllowed": "i percorsi di rete (UNC) non sono consentiti per i plugin",
+  "plugins.error.invalidPluginPath": "percorso del plugin non valido",
+  "plugins.error.fileNotFound": "il file del plugin non esiste",
+  "plugins.error.noManifest": "la cartella del plugin non contiene un package.json",
+  "plugins.error.manifestUnreadable": "package.json non è leggibile",
+  "plugins.error.entrypointNotFound": "l'entrypoint dichiarato non esiste",
 }
 
 /** The shape every catalog has: the same keys, the same parameters. */

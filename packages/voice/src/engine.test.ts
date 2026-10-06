@@ -2235,6 +2235,44 @@ describe("always-on listening", () => {
     await unknown.stop()
   })
 
+  // Full review 2026-10-06, ui 11: with the interface in English the notices about the key came out in Italian.
+  test("what is left on the key is said in English when the interface is English", async () => {
+    const { resetLocaleForTests } = await import("@nikcli-ai/ade/i18n")
+    resetLocaleForTests("en")
+    try {
+      const engineWith = (credit: { left: number } | { refused: true }) =>
+        createVoiceEngine({
+          host: new MockVoiceHost(),
+          speaker: createFakeSpeaker(),
+          transcriber: createFakeTranscriber(),
+          now: () => Date.now(),
+          settings: {
+            agentEngine: "off",
+            activation: "wake-word",
+            alwaysListen: true,
+            backend: "openrouter",
+            openRouterApiKey: "k",
+          },
+          creditLeft: async () => credit,
+        })
+      const nearly = engineWith({ left: 1.21 })
+      await nearly.start("agent", { waitForName: true })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(nearly.listenWarning()).toContain("1.21")
+      expect(nearly.listenWarning()).toContain("left on the OpenRouter credit")
+      await nearly.stop()
+
+      const refused = engineWith({ refused: true })
+      await refused.start("agent", { waitForName: true })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(refused.listenWarning()).toContain("is not accepted")
+      expect(refused.listenWarning()).not.toContain("non viene accettata")
+      await refused.stop()
+    } finally {
+      resetLocaleForTests("it")
+    }
+  })
+
   test("the key is not asked about at every opening of the microphone", async () => {
     let clock = 10_000
     const asked: number[] = []

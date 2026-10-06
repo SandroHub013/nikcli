@@ -19,6 +19,8 @@ const SAME_IN_BOTH = new Set<string>([
   "settings.language.en",
   // The «No» button of a yes/no question: the same word in both.
   "ask.no",
+  // The «No» of a permission prompt: the same word in both.
+  "permission.answer.no",
   "preset.solo",
   "sidebar.spaces",
   "pane.quota",

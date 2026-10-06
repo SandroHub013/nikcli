@@ -74,7 +74,7 @@ export async function loadSessionDiff(input: { host: Host; cwd: string; baseRef:
         added: 0,
         removed: 0,
         truncated: false,
-        error: "Impossibile calcolare i dettagli delle modifiche.",
+        error: t("review.error.details"),
       }
     }
   }

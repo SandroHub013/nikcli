@@ -13,7 +13,7 @@
  * tested under `bun test` without a keychain.
  */
 
-import type { KeyDraft, KeyInfo } from "./keys"
+import { keyError, type KeyDraft, type KeyInfo } from "./keys"
 
 /** The variable the voice's key becomes: the only one the page can read back. */
 export const VOICE_KEY_ENV = "OPENROUTER_API_KEY"
@@ -46,7 +46,7 @@ export type VoiceKeyMigration =
   /** The keychain refused the copy: the old place keeps it, and the next start tries again. */
   | { kind: "failed"; reason: string }
 
-const reasonOf = (failure: unknown) => (failure instanceof Error ? failure.message : String(failure))
+const reasonOf = (failure: unknown) => keyError(failure instanceof Error ? failure.message : String(failure))
 
 /** The entry the voice reads: the one whose variable is `OPENROUTER_API_KEY`. */
 export function voiceKeyEntry(keys: readonly KeyInfo[]): KeyInfo | undefined {

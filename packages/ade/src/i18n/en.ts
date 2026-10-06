@@ -550,6 +550,16 @@ export const en: Messages = {
     `The shortcut ${chord} for ${feature} only works with ADE in front: its key cannot be registered with the system. Choose one with a letter, a digit or an F key in voice settings.`,
   "voice.shortcut.unknown": (chord) =>
     `Unrecognized voice shortcut (${chord}): the microphone was not opened. Reassign it in voice settings.`,
+  "permission.answer.yes": "Yes",
+  "permission.answer.always": "Yes, and don't ask again",
+  "permission.answer.alwaysShort": "Always",
+  "permission.answer.once": "Allow once",
+  "permission.answer.no": "No",
+  "permission.answer.noCancel": "No, and cancel",
+  "permission.answer.cancel": "Cancel",
+  "permission.answer.skip": "Skip",
+  "permission.answer.allow": "Allow",
+  "permission.answer.deny": "Deny",
   "voice.permission.notRefusal":
     "None of the proposed answers is a refusal: please answer yourself, I won't choose for you.",
   "voice.permission.type.shell": "a command",
@@ -1268,6 +1278,18 @@ export const en: Messages = {
   "keys.problem.noValue": "paste the value",
   "keys.problem.tooLong": "too long (4096 characters at most)",
   "keys.problem.newline": "contains a line break; paste it on one line",
+  "keys.error.valueNeeded": "a new key needs a value",
+  "keys.error.editCancelled": "The key change was cancelled.",
+  "keys.error.notFound": (name) => `key «${name}» not found`,
+  "keys.error.noValue": (name) => `key «${name}» has no value in the keychain`,
+  "keys.error.keychain.noAccess": "the system keychain is not accessible",
+  "keys.error.keychain.refused": "the system keychain refused the operation",
+  "keys.error.keychain.tooLong": "a value is too long for the keychain",
+  "keys.error.keychain.invalid": "a value is not valid for the keychain",
+  "keys.error.keychain.ambiguous": "several entries with the same name in the keychain",
+  "keys.error.keychain.badEncoding": "the value in the keychain cannot be read as text",
+  "keys.error.keychain.noEntry": "no such entry in the keychain",
+  "keys.error.keychain.other": "keychain error",
   "keys.billing": (agent, account) => `${agent} will use this key instead of ${account}, which means paid usage`,
   "keys.billing.claude": "your Claude subscription",
   "keys.billing.chatgpt": "your ChatGPT sign-in",
@@ -2168,4 +2190,56 @@ export const en: Messages = {
   "model.state.dimensions": (x, y, z) => `size ${x} × ${y} × ${z}`,
   "model.state.animations": (count) => `${count} ${count === 1 ? "animation" : "animations"}`,
   "pane.runnerLogin": (label: string) => `${label} · sign-in`,
+
+  // F7a2: Simulator
+  "simulator.error.sameOrigin": "this address is ADE itself; open your app's dev server",
+
+  // F7a2: Video
+  "video.error.noFrame": "no frame available",
+  "video.error.noCanvas": "canvas not available",
+  "video.error.encodingFailed": "frame encoding failed",
+  "video.error.unsupportedFormat": (exts: string) => `unsupported format; supported: ${exts}`,
+  "video.error.unreadableOrUnsupported": "file is unreadable or format is unsupported",
+  "video.error.noPlayer": "no video player",
+  "video.error.cannotWrite": "this host cannot write files",
+
+  // F7a2: Workbench & Keys
+  "keys.error.noKeyring": "this version of ADE has no keychain",
+  "workbench.error.noOpenProject": "no open project to save to",
+  "session.cannotClose": (reasons: string) =>
+    `will not close: ${reasons}. Merge or commit first, or use --force (worktree remains on disk)`,
+  "plugins.error.noDesktopHost": "no desktop host",
+  "host.error.cannotReadBinary": "this host cannot read binary files",
+
+  // F7a2: Update & Browser
+  "update.skip.rateLimited": "GitHub asked to wait: trying again later.",
+  "browser.forget.notDesktop": "not available outside the app",
+
+  // F7a2: Review & Plugin consent
+  "review.error.details": "Unable to calculate change details.",
+  "plugins.consent.question": (root: string, list: string) =>
+    `The project\n${root}\n\ndeclares plugins in .nikcli/tui.json that would be run inside ADE:\n\n${list}\n\nA plugin is code with access to project sessions and files. Run them?`,
+
+  // F7a2: 3D Model
+  "model.error.paneClosed": "pane closed",
+  "model.error.unsupportedFormatExts": (exts: string) => `unsupported format; supported: ${exts}`,
+  "model.error.cannotWrite": "this host cannot write files",
+  "model.error.noModelLoaded": "no model loaded",
+  "model.error.unsupportedFormat": "unsupported format",
+  "model.error.encodingFailed": "image encoding failed",
+
+  // F7a2: Plugin discovery
+  "plugins.error.manifestNotJson": "package.json is not valid JSON",
+  "plugins.error.manifestNotObject": "package.json is not an object",
+  "plugins.error.noExportKind": (kind: string) => `the package does not declare exports["./${kind}"]`,
+  "plugins.error.invalidExportPath": (kind: string) => `exports["./${kind}"] is not a valid path`,
+  "plugins.error.escapesPackage": "the plugin entrypoint escapes the package directory",
+  "plugins.error.npmDesktopNotSupported":
+    "npm plugins cannot be installed from the desktop window: add it from the terminal, then reopen ADE",
+  "plugins.error.uncNotAllowed": "network paths (UNC) are not allowed for plugins",
+  "plugins.error.invalidPluginPath": "invalid plugin path",
+  "plugins.error.fileNotFound": "the plugin file does not exist",
+  "plugins.error.noManifest": "the plugin directory does not contain a package.json",
+  "plugins.error.manifestUnreadable": "package.json is not readable",
+  "plugins.error.entrypointNotFound": "the declared entrypoint does not exist",
 }

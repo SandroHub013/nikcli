@@ -335,7 +335,7 @@ export function createUpdateWatch(options: UpdateWatchOptions): UpdateWatch {
      * the refusal, and the wait would start again from here.
      */
     if (waitUntil !== undefined && at < waitUntil) {
-      return { status: "skipped", at, problem: "GitHub ha chiesto di aspettare: riprovo più tardi." }
+      return { status: "skipped", at, problem: t("update.skip.rateLimited") }
     }
     lastCallAt = at
     try {
