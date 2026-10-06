@@ -57,6 +57,7 @@ describe("the design register and the hub", () => {
     const register: DesignRegister = {
       path: () => "C:\\project\\.ade\\design.jsonl",
       loaded: () => undefined,
+      loadedPath: () => undefined,
       state: () => undefined,
       error: () => undefined,
       refresh: async () => {},
@@ -249,6 +250,7 @@ describe("Enter with nobody to receive the answer, in the Design window (audit 0
     const register: DesignRegister = {
       path: () => "/p/.ade/design.jsonl",
       loaded: () => undefined,
+      loadedPath: () => undefined,
       state: () => undefined,
       error: () => undefined,
       refresh: async () => {},
@@ -508,6 +510,7 @@ describe("the sheet keeps a choice made in this window", () => {
     const register: DesignRegister = {
       path: () => "C:\\project\\.ade\\design.jsonl",
       loaded: () => undefined,
+      loadedPath: () => undefined,
       state: () => ({ proposals: [proposal], outbox: [], rejected: [] }),
       error: () => undefined,
       refresh: async () => {},
@@ -622,6 +625,7 @@ describe("delivery text in DesignPane (MEDIO 2)", () => {
     const register: DesignRegister = {
       path: () => "C:\\project\\.ade\\design.jsonl",
       loaded: () => undefined,
+      loadedPath: () => undefined,
       state: () => ({ proposals: [proposal], rejected: [] }),
       error: () => undefined,
       refresh: async () => {},
@@ -940,7 +944,6 @@ describe("«Ho scelto sul foglio» on the last proposal (ultimi)", () => {
             hub,
             onClose: () => {},
             onOpenPanel: () => {},
-            waiting: () => 0,
             onDone: (next, said) => void done.push([next, said]),
           }),
         host,

@@ -11,7 +11,8 @@ import { it } from "./it"
 
 /** Texts that are the same word in both languages, or are names. */
 const SAME_IN_BOTH = new Set<string>([
-  "choices.kind.design",
+  "decisions.shortTitle",
+  "design.shortTitle",
   // «Sessione 1 — Terminal (2)»: a title and a number, in any language.
   "choices.samePane",
   "settings.language.it",

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { localePreference, setLocalePreference } from "../i18n"
-import { NARROW_BAR, queueShown, queueText, queueTitle } from "./bar-queue"
+import { createOpenKeyTracker, newlyOpened, queueItemLabel } from "./bar-queue"
 import { codeOf } from "../test-support/source-text"
 
 /*
@@ -14,72 +14,123 @@ import { codeOf } from "../test-support/source-text"
 const read = (...path: string[]) => readFileSync(join(import.meta.dir, "..", ...path), "utf8")
 
 describe("the queue buttons' words", () => {
-  test("the name for a screen reader is the text on the button, in its order", () => {
+  test("the queue buttons group uses PillTabs with role button, always rendered in the bar", () => {
+    const workbench = read("surface", "workbench.tsx")
+    expect(workbench).not.toContain("<BarQueueButton")
+    expect(workbench).toContain('role="button"')
+    expect(workbench).toContain("items={queueItems()}")
+    expect(workbench).toContain("onSelect={onSelectQueue}")
+    // The group is always rendered, never conditionally hidden behind queueShown
+    expect(workbench).not.toContain("<Show when={queueShown(")
+  })
+
+  test("queueItemLabel builds accessible name and title without discarded counts", () => {
     const before = localePreference()
     setLocalePreference("it")
-    const text = queueText("decisions", { waiting: 1, queued: 0, discarded: 14 })
-    expect(text.label).toBe("Decisioni, 1 per te, 14 scartate")
-    // Every visible piece is in the name, in the order it is read.
-    let at = -1
-    for (const piece of [text.name, text.pill, text.discarded!]) {
-      const found = text.label.indexOf(piece, at + 1)
-      expect([piece, found > at]).toEqual([piece, true])
-      at = found
-    }
-    const design = queueText("design", { waiting: 3, queued: 2, discarded: 1 })
-    expect(design.label).toBe("Design, 3 per te, 2 in coda, 1 scartata")
-    expect([design.name, design.pill, design.queued, design.discarded]).toEqual([
-      "Design",
-      "3",
-      "2 in coda",
-      "1 scartata",
-    ])
+    expect(queueItemLabel("decisions", 0, 0)).toBe("Decisioni")
+    expect(queueItemLabel("decisions", 2, 0)).toBe("Decisioni, 2 per te")
+    expect(queueItemLabel("decisions", 1, 3)).toBe("Decisioni, 1 per te, 3 in coda")
+    expect(queueItemLabel("design", 0, 2)).toBe("Design, 2 in coda")
     setLocalePreference("en")
-    expect(queueText("decisions", { waiting: 2, queued: 0, discarded: 0 }).label).toBe("Decisions, 2 for you")
+    expect(queueItemLabel("decisions", 2, 0)).toBe("Decisions, 2 for you")
+    expect(queueItemLabel("design", 1, 2)).toBe("Design, 1 for you, 2 queued")
     setLocalePreference(before)
   })
 
-  test("shown when anything waits, is queued or was discarded; hidden at zero", () => {
-    expect(queueShown({ waiting: 0, queued: 0, discarded: 0 })).toBe(false)
-    expect(queueShown({ waiting: 0, queued: 0, discarded: 3 })).toBe(true)
-    expect(queueShown({ waiting: 0, queued: 1, discarded: 0 })).toBe(true)
+  test("discarded lines do not turn on any badge: badge only reflects waiting items", () => {
+    const workbench = read("surface", "workbench.tsx")
+    expect(workbench).toContain("badge: decWaiting > 0 ? decWaiting : undefined")
+    expect(workbench).toContain("badge: desWaiting > 0 ? desWaiting : undefined")
   })
 
-  test("one component, with the open state and no title in place of the name", () => {
-    const button = read("surface", "bar-queue-button.tsx")
-    expect(button).toContain("aria-label={text().label}")
-    expect(button).toContain("aria-expanded={props.open}")
-    // The only title is the narrow one: with the name on the button it would repeat it.
-    expect(button.match(/title=/g)).toEqual(["title="])
-    expect(button).toContain("title={queueTitle(text(), narrow())}")
-    expect(button).toContain("matchMedia(NARROW_BAR)")
+  test("clicking Decisioni or Design opens the respective sheet or pane", () => {
     const workbench = read("surface", "workbench.tsx")
-    // notifiche-design: one button for decisions and design, «Da scegliere», not one each.
-    expect(workbench.match(/<BarQueueButton/g)).toEqual(["<BarQueueButton"])
-    expect(workbench).toContain('family="choices"')
-    expect(workbench).not.toContain('family="decisions"')
-    expect(workbench).not.toContain('family="design"')
-    expect(workbench).toContain("counts={choicesCounts()}")
-    expect(workbench).toContain("onOpen={() => setChoicesOpen(true)}")
-    expect(workbench).not.toContain('data-slot="decisions-badge"')
-    expect(workbench).not.toContain('data-slot="design-badge"')
+    expect(workbench).toContain('if (id === "decisions") handleOpenDecisions()')
+    expect(workbench).toContain('else if (id === "design") handleOpenDesign()')
+    expect(workbench).toContain("setDecisionsOpen(true)")
+    expect(workbench).toContain("openDecisionsPane()")
+    expect(workbench).toContain("setDesignOpen(true)")
+    expect(workbench).toContain("openDesignPane()")
   })
 })
 
-describe("the narrow bar", () => {
-  test("a tooltip equal to the accessible name, and none when the name is on the button", () => {
-    const text = queueText("decisions", { waiting: 1, queued: 0, discarded: 14 })
-    expect(queueTitle(text, true)).toBe(text.label)
-    expect(queueTitle(text, false)).toBeUndefined()
+describe("tracking newly opened register keys (O2)", () => {
+  test("newlyOpened returns only items with keys not yet in seen", () => {
+    const seen = new Set<string>(["D1", "D2"])
+    const items = [
+      { k: "D1", title: "Prima" },
+      { k: "D2", title: "Seconda" },
+      { k: "D3", title: "Terza" },
+    ]
+    const fresh = newlyOpened(seen, items)
+    expect(fresh).toEqual([{ k: "D3", title: "Terza" }])
+    expect(seen.has("D3")).toBe(true)
   })
 
-  test("the discarded get no dot: only what is queued keeps a mark", () => {
-    const css = read("dev.css")
-    const narrow = css.slice(css.indexOf(`@media ${NARROW_BAR}`))
-    expect(narrow.length).toBeLessThan(css.length)
-    const block = narrow.slice(0, narrow.indexOf("\n}\n"))
-    expect(block).not.toContain("[data-discarded]")
-    expect(block).toContain('[data-slot="bar-queue"][data-queued]::before')
+  test("createOpenKeyTracker establishes baseline on first load without reporting new items", () => {
+    const tracker = createOpenKeyTracker<{ k: string; title: string }>()
+    const initial = [
+      { k: "D1", title: "Prima" },
+      { k: "D2", title: "Seconda" },
+      { k: "D3", title: "Terza" },
+    ]
+    // Initial load: 3 open items, returns empty (no false alerts on startup)
+    const fresh = tracker.update("/progetto-1", initial)
+    expect(fresh).toEqual([])
+    expect(tracker.seen.size).toBe(3)
+
+    // +1 key added: reports the new item
+    const withNew = [...initial, { k: "D4", title: "Quarta" }]
+    const added = tracker.update("/progetto-1", withNew)
+    expect(added).toEqual([{ k: "D4", title: "Quarta" }])
+    expect(tracker.seen.size).toBe(4)
+
+    // Same items again: nothing new
+    expect(tracker.update("/progetto-1", withNew)).toEqual([])
+  })
+
+  test("createOpenKeyTracker resets baseline on register path change without reporting new items (D1)", () => {
+    const tracker = createOpenKeyTracker<{ k: string; title: string }>()
+    // Project A loaded: establishes baseline for A
+    const initialA = tracker.update("/progetto-A/.ade/decisions.jsonl", [{ k: "D1", title: "Prima" }])
+    expect(initialA).toEqual([])
+
+    // While project switches to B, old register A is still loaded: same path, no new items
+    const switchInFlight = tracker.update("/progetto-A/.ade/decisions.jsonl", [{ k: "D1", title: "Prima" }])
+    expect(switchInFlight).toEqual([])
+
+    // Now register B finishes loading and updates: path changes, baseline established for B: zero toasts
+    const initialB = tracker.update("/progetto-B/.ade/decisions.jsonl", [
+      { k: "X1", title: "Altro progetto 1" },
+      { k: "X2", title: "Altro progetto 2" },
+    ])
+    expect(initialB).toEqual([])
+    expect(tracker.seen.has("X1")).toBe(true)
+    expect(tracker.seen.has("X2")).toBe(true)
+    expect(tracker.seen.has("D1")).toBe(false)
+
+    // Later, a new item arrives in project B: alerts only for that item
+    const addedB = tracker.update("/progetto-B/.ade/decisions.jsonl", [
+      { k: "X1", title: "Altro progetto 1" },
+      { k: "X2", title: "Altro progetto 2" },
+      { k: "X3", title: "Nuova voce B" },
+    ])
+    expect(addedB).toEqual([{ k: "X3", title: "Nuova voce B" }])
+  })
+
+  test("createOpenKeyTracker reports newly opened items when one closes and another opens with equal count", () => {
+    const tracker = createOpenKeyTracker<{ k: string; title: string }>()
+    tracker.update("/progetto-1", [
+      { k: "D1", title: "Prima" },
+      { k: "D2", title: "Seconda" },
+    ])
+
+    // D1 is closed, but D3 is newly opened. Count remains 2.
+    const updated = tracker.update("/progetto-1", [
+      { k: "D2", title: "Seconda" },
+      { k: "D3", title: "Terza" },
+    ])
+    expect(updated).toEqual([{ k: "D3", title: "Terza" }])
   })
 })
 

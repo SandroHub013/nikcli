@@ -206,6 +206,7 @@
 }
 
 [data-slot="decision-option-text"] small {
+  display: block;
   font-size: var(--ade-font-xs);
   color: var(--ade-text-weak);
 }
