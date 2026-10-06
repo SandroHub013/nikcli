@@ -10,7 +10,7 @@ import { dirname, resolve } from "node:path"
 import { convert, lessonFiles, toJson } from "../src/nikverse/learn/content-build"
 
 const root = resolve(import.meta.dirname, "../src/nikverse/learn")
-const lessons = root + "/lezzioni"
+const lessons = root + "/lezioni"
 const target = `${root}/content.json`
 
 try {

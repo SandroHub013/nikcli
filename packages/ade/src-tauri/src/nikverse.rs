@@ -336,8 +336,9 @@ fn resolve(raw_path: &str) -> Result<Route, StatusCode> {
     if let Some(asset) = relative.strip_prefix(ASSETS_PREFIX) {
         return Ok(Route::Asset(asset.to_string()));
     }
-    // `/learn` and `/learn/` are the lesson page: the panel frames `/learn/`, and a person typing the folder gets the same page.
-    if matches!(relative, "learn" | LEARN_PREFIX) {
+    // `/learn/` is the lesson page. `/learn` without the slash is not: the page's own addresses (`learn.css`, `learn.js`) are relative, so
+    // from there they would be asked of the root and the page would come up broken. Not found is better than a page that does not work.
+    if relative == LEARN_PREFIX {
         return PACKAGE
             .iter()
             .find(|file| file.path == LEARN_INDEX)
@@ -506,13 +507,8 @@ mod tests {
 
     #[test]
     fn the_lesson_page_is_served_under_learn_and_the_pages_do_not_mix() {
-        // The panel frames `/learn/`: the folder is that page, in both spellings of the scheme and with or without the slash.
-        for uri in [
-            "nikverse://localhost/learn/",
-            "nikverse://localhost/learn",
-            "http://nikverse.localhost/learn/",
-            "http://nikverse.localhost/learn",
-        ] {
+        // The panel frames `/learn/`: the folder is that page, in both spellings of the scheme.
+        for uri in ["nikverse://localhost/learn/", "http://nikverse.localhost/learn/"] {
             let response = get(uri);
             assert_eq!(response.status(), StatusCode::OK, "{uri}");
             assert!(header(&response, "content-type").starts_with("text/html"), "{uri}");
@@ -520,6 +516,10 @@ mod tests {
             assert!(body.contains("data-learn"), "{uri}");
             assert_eq!(header(&response, "content-security-policy"), CSP, "{uri}");
             assert_eq!(header(&response, "access-control-allow-origin"), "*", "{uri}");
+        }
+        // Without the slash it is not the page: its relative files would be asked of the root, so there is nothing there.
+        for uri in ["nikverse://localhost/learn", "http://nikverse.localhost/learn"] {
+            assert_eq!(get(uri).status(), StatusCode::NOT_FOUND, "{uri}");
         }
         // Its four files, and each with its own type.
         for (file, mime) in [

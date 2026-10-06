@@ -1,12 +1,12 @@
 /**
  * The lessons of «Impara», read from their YAML and turned into the one `content.json` the page is served.
  *
- * A lesson is a YAML file under `lezzioni/<theme>/`, written by whoever drafts it and reviewed before it goes in (`schema.json`
+ * A lesson is a YAML file under `lezioni/<theme>/`, written by whoever drafts it and reviewed before it goes in (`schema.json`
  * next to this file, the contracts of `ade-team/learn/`). The page is plain JavaScript with no build, so it cannot read YAML: what it
  * is served is this file, and `content.test.ts` re-runs the conversion and fails if the committed JSON is not the same thing. That is
  * what keeps a lesson edited after the conversion from being lost.
  *
- * Only a lesson that went through the review is converted. A draft in `lezzioni/` stops the conversion instead of shipping its
+ * Only a lesson that went through the review is converted. A draft in `lezioni/` stops the conversion instead of shipping its
  * exercises with no «perché» behind them.
  */
 
