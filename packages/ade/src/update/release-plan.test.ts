@@ -36,6 +36,23 @@ describe("invalidSubjects", () => {
   })
 })
 
+describe("invalidSubjects, the wording git writes itself", () => {
+  // Full review 2026-10-06, ui 16: `git revert` and `git commit --fixup` write their own subject.
+  test("a revert, a reapply and an autosquash line are not offenders", () => {
+    const found = invalidSubjects([
+      commit('Revert "feat(ade): talk to bots"'),
+      commit('Reapply "feat(ade): talk to bots"'),
+      commit("fixup! fix(ade): ok"),
+      commit("squash! fix(ade): ok"),
+      commit("amend! fix(ade): ok"),
+    ])
+    expect(found).toEqual([])
+    // Only that wording: a plain «Revert» without git's quotes is still a subject outside the format.
+    expect(invalidSubjects([commit("Revert it")]).length).toBe(1)
+    expect(invalidSubjects([commit("Reverting things")]).length).toBe(1)
+  })
+})
+
 describe("planRelease", () => {
   test("nothing a user would notice means no release", () => {
     expect(
@@ -66,6 +83,21 @@ describe("planRelease", () => {
 
   test("no previous release starts from 0.0.0", () => {
     expect(planRelease(undefined, [commit("feat(ade): first")])?.version).toBe("0.1.0")
+  })
+})
+
+describe("releaseNotes and the skip marker", () => {
+  // Full review 2026-10-06, ui 12: a commit that asked not to be released still got its line in the notes of the next one.
+  test("a commit that carries the marker is not in the notes", () => {
+    const notes = releaseNotes([
+      commit("feat(ade): half done [skip release]"),
+      commit("fix(ade): hidden by the body", "not yet\n\n[skip release]"),
+      commit("fix(ade): shipped"),
+    ])
+    expect(notes).toBe("### Correzioni\n\n- **ade:** shipped")
+    expect(notes).not.toContain("skip release")
+    // And a release made of those alone has nothing to say.
+    expect(releaseNotes([commit("feat(ade): half done [skip release]")])).toBe("")
   })
 })
 
