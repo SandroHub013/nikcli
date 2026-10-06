@@ -15,6 +15,7 @@
 
 import { markVoice } from "../timing"
 import { plainProblem } from "../effect/errors"
+import { t as tr } from "@nikcli-ai/ade/i18n"
 import type {
   FinalTranscriptCallback,
   PartialTranscriptCallback,
@@ -117,10 +118,10 @@ export async function blobToBase64(blob: Blob): Promise<string> {
           const commaIdx = result.indexOf(",")
           resolve(commaIdx !== -1 ? result.slice(commaIdx + 1) : result)
         } else {
-          reject(new Error("Errore durante la codifica base64 del file audio: risultato nullo."))
+          reject(new Error(tr("voice.msg.asr.base64Null")))
         }
       }
-      reader.onerror = () => reject(reader.error ?? new Error("Errore durante la codifica base64 del file audio."))
+      reader.onerror = () => reject(reader.error ?? new Error(tr("voice.msg.asr.base64")))
       reader.readAsDataURL(blob)
     })
   }
@@ -351,9 +352,7 @@ export async function transcribeSegment(
     if (!apiKey || apiKey.trim().length === 0) {
       report(
         new ApiKeyMissing({
-          message: deps.languageSetting?.startsWith("en")
-            ? "OpenRouter API key missing. Enter a key from openrouter.ai in settings to use voice."
-            : "Chiave OpenRouter mancante. Inserisci una chiave da openrouter.ai nelle impostazioni per usare la voce.",
+          message: tr("voice.msg.asr.keyMissing"),
         }) as unknown as Error,
       )
       return
@@ -362,7 +361,7 @@ export async function transcribeSegment(
     if (segment.blob.size > MAX_AUDIO_BYTES) {
       const sizeMb = Math.round(segment.blob.size / (1024 * 1024))
       report(
-        new Error(`File audio troppo grande (${sizeMb} MB): il limite massimo consentito per richiesta è di 25 MB.`),
+        new Error(tr("voice.msg.asr.tooBig", String(sizeMb))),
       )
       return
     }
@@ -395,7 +394,7 @@ export async function transcribeSegment(
       try {
         base64Audio = await blobToBase64(segment.blob)
       } catch (err: any) {
-        report(new Error(`Impossibile convertire l'audio per l'invio: ${err?.message ?? "errore sconosciuto"}`))
+        report(new Error(tr("voice.msg.asr.convert", err?.message ?? tr("voice.msg.asr.unknownError"))))
         return
       }
     }
@@ -491,14 +490,14 @@ export async function transcribeSegment(
         report(
           new RequestTimeout({
             timeoutMs,
-            message: `Il servizio che trascrive la voce non ha risposto in ${Math.round(timeoutMs / 1000)} secondi: riprova tra poco.`,
+            message: tr("voice.msg.asr.timeout", Math.round(timeoutMs / 1000)),
           }) as unknown as Error,
         )
         return
       }
 
-      const safeNetMessage = sanitizeApiKey(netErr?.message ?? "connessione fallita", apiKey)
-      report(new Error(`Non ho rete in questo momento: ti sento appena torna. (${safeNetMessage})`))
+      const safeNetMessage = sanitizeApiKey(netErr?.message ?? tr("voice.msg.asr.connFailed"), apiKey)
+      report(new Error(tr("voice.msg.asr.offline", safeNetMessage)))
       return
     }
 
@@ -506,7 +505,7 @@ export async function transcribeSegment(
       if (response.status === 401) {
         report(
           new ApiKeyInvalid({
-            message: "La chiave OpenRouter non funziona: controllala nelle impostazioni della voce.",
+            message: tr("voice.msg.asr.keyInvalid"),
           }) as unknown as Error,
         )
         return
@@ -515,16 +514,14 @@ export async function transcribeSegment(
       if (response.status === 402) {
         report(
           new QuotaExhausted({
-            message: "Il credito OpenRouter è finito: ricaricalo e ti sento di nuovo.",
+            message: tr("voice.msg.asr.creditOut"),
           }) as unknown as Error,
         )
         return
       }
 
       if (response.status === 429) {
-        report(
-          new Error("Il servizio che trascrive la voce è occupato (troppe richieste): riprova tra qualche secondo."),
-        )
+        report(new Error(tr("voice.msg.asr.busy")))
         return
       }
 
@@ -542,11 +539,7 @@ export async function transcribeSegment(
 
       const safeDetail = sanitizeApiKey(detail, apiKey)
       const detailSuffix = safeDetail ? `: ${safeDetail}` : ""
-      report(
-        new Error(
-          `Il servizio che trascrive la voce ha avuto un problema (${response.status})${detailSuffix}: riprova tra poco.`,
-        ),
-      )
+      report(new Error(tr("voice.msg.asr.serverProblem", response.status, detailSuffix)))
       return
     }
 
@@ -569,13 +562,13 @@ export async function transcribeSegment(
         report(
           new RequestTimeout({
             timeoutMs,
-            message: `Il servizio che trascrive la voce non ha risposto in ${Math.round(timeoutMs / 1000)} secondi: riprova tra poco.`,
+            message: tr("voice.msg.asr.timeout", Math.round(timeoutMs / 1000)),
           }) as unknown as Error,
         )
         return
       }
       report(
-        new Error(`Risposta non valida dal servizio di trascrizione: ${parseErr?.message ?? "formato inatteso"}`),
+        new Error(tr("voice.msg.asr.badResponse", parseErr?.message ?? tr("voice.msg.asr.unexpectedFormat"))),
       )
     }
   } finally {
@@ -706,8 +699,8 @@ export function createOpenRouterTranscriber(options: OpenRouterTranscriberOption
       await transcribeSegment(segment, deliver, purpose, gated, segmentDeps)
       markVoice("asr-back")
     } catch (err: any) {
-      const safeMsg = sanitizeApiKey(err?.message ?? "errore sconosciuto", apiKey)
-      errorCb(new Error(`Non sono riuscito a trascrivere la frase: ${safeMsg}`), { purpose })
+      const safeMsg = sanitizeApiKey(err?.message ?? tr("voice.msg.asr.unknownError"), apiKey)
+      errorCb(new Error(tr("voice.msg.asr.transcribeFailed", safeMsg)), { purpose })
     } finally {
       inFlightRequests--
     }
@@ -761,9 +754,7 @@ export function createOpenRouterTranscriber(options: OpenRouterTranscriberOption
       // none is.
       if (!apiKey || apiKey.trim().length === 0) {
         const missing = new ApiKeyMissing({
-          message: options.language?.startsWith("en")
-            ? "OpenRouter API key missing. Enter a key from openrouter.ai in settings to use voice."
-            : "Chiave OpenRouter mancante. Inserisci una chiave da openrouter.ai nelle impostazioni per usare la voce.",
+          message: tr("voice.msg.asr.keyMissing"),
         })
         errorCb(missing as unknown as Error, { purpose: "turn" })
         throw missing
@@ -776,16 +767,15 @@ export function createOpenRouterTranscriber(options: OpenRouterTranscriberOption
         const lower = String(err?.message ?? "").toLowerCase()
         if (lower.includes("negato") || lower.includes("notallowed") || lower.includes("permission")) {
           const permErr = new MicPermissionDenied({
-            message:
-              "Accesso al microfono negato: consentilo nelle impostazioni di privacy del sistema (Windows: Impostazioni › Privacy e sicurezza › Microfono, per le app desktop).",
+            message: tr("voice.msg.asr.micDenied"),
             cause: err,
           })
           errorCb(permErr as unknown as Error, { purpose: "turn" })
           throw permErr
         }
-        if (lower.includes("nessun microfono") || lower.includes("notfound")) {
+        if (lower.includes("nessun microfono") || lower.includes("no microphone") || lower.includes("notfound")) {
           const unavailErr = new MicUnavailable({
-            message: "Nessun microfono rilevato o non accessibile. Collega un dispositivo audio e riprova.",
+            message: tr("voice.msg.asr.noMic"),
             cause: err,
           })
           errorCb(unavailErr as unknown as Error, { purpose: "turn" })
@@ -794,7 +784,8 @@ export function createOpenRouterTranscriber(options: OpenRouterTranscriberOption
         const failure = new TranscriptionFailed({
           cause: err,
           message:
-            plainProblem(err?.message) ?? `Non riesco ad aprire il microfono: ${err?.message ?? "non so perché"}`,
+            plainProblem(err?.message) ??
+            tr("voice.msg.asr.micOpenFailed", err?.message ?? tr("voice.msg.asr.unknownWhy")),
         })
         errorCb(failure as unknown as Error, { purpose: "turn" })
         throw failure

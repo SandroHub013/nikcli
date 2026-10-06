@@ -305,7 +305,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
         const target = resolveProject(input.project, listProjectsFrom(deps.recents?.() ?? [], deps.project()))
         if (!target.isOpen) {
           if (!deps.switchProject) {
-            throw new Error(`Non posso passare al progetto «${target.name}» da qui: aprilo tu e ripeti.`)
+            throw new Error(t("voice.msg.host.cannotSwitch", target.name))
           }
           // Awaited, because the new session's working directory is whatever
           // project is open when the process spawns.
@@ -321,11 +321,11 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
        * an assistant saying it started. Better to ask which project.
        */
       if (!deps.project()) {
-        throw new Error("Non c'è nessun progetto aperto: dimmi in quale progetto avviare la sessione.")
+        throw new Error(t("voice.msg.host.noProject"))
       }
 
       if (!deps.openAgentSession) {
-        throw new Error("Non posso avviare sessioni da qui.")
+        throw new Error(t("voice.msg.host.cannotStart"))
       }
       return deps.openAgentSession({ agentId, task: input.task?.trim() ?? "" })
     },
@@ -336,11 +336,11 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
 
     async sendPrompt(paneId: string, text: string): Promise<void> {
       if (!deps.isRunning(paneId)) {
-        throw new Error(`Il pannello '${paneId}' non ha un processo vivo a cui inviare il messaggio.`)
+        throw new Error(t("voice.msg.host.noProcess", paneId))
       }
       const session = deps.getRunningSession(paneId)
       if (!session) {
-        throw new Error(`Nessuna sessione attiva per il pannello '${paneId}'.`)
+        throw new Error(t("voice.msg.host.noSession", paneId))
       }
       /*
        * One line, and submitted.
@@ -397,16 +397,14 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
       const current = deps.project()
       // Thrown, not answered with an empty list: «0 risultati» and a search
       // that could not run are different things to the person who asked.
-      if (!host) throw new Error("la ricerca nel progetto funziona solo nell'app desktop")
-      if (!current) throw new Error("non c'è nessun progetto aperto in cui cercare")
+      if (!host) throw new Error(t("voice.msg.host.searchDesktopOnly"))
+      if (!current) throw new Error(t("voice.msg.host.searchNoProject"))
       try {
         const result = await walkProject({ host, root: current.root })
         const hits = findByName(result.files, query, 40)
         return hits.map((hit) => ({ path: hit.path }))
       } catch (error) {
-        throw new Error(
-          `non riesco a leggere i file del progetto (${error instanceof Error ? error.message : String(error)})`,
-        )
+        throw new Error(t("voice.msg.host.searchUnreadable", error instanceof Error ? error.message : String(error)))
       }
     },
 

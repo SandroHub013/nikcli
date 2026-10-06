@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { resetLocaleForTests } from "../i18n/locale"
 import { createAdeVoiceHost, type AdeVoiceHostDeps } from "./host"
 import type { VoiceAgent } from "./agent"
 import { AGENTS } from "../session-new/agents"
@@ -894,6 +895,18 @@ describe("createAdeVoiceHost, spoken planning", () => {
     await expect(createAdeVoiceHost(deps).startSession!({ agent: "claude" })).rejects.toThrow(
       "Non posso avviare sessioni da qui.",
     )
+  })
+
+  test("the same refusal is said in English with the interface in English (F7b)", async () => {
+    resetLocaleForTests("en")
+    try {
+      const { deps } = createMockDeps({ project: () => nikcli })
+      await expect(createAdeVoiceHost(deps).startSession!({ agent: "claude" })).rejects.toThrow(
+        "I can't start sessions from here.",
+      )
+    } finally {
+      resetLocaleForTests("it")
+    }
   })
 })
 

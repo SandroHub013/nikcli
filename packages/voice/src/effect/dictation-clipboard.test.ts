@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { Effect, Layer } from "effect"
+import { resetLocaleForTests } from "@nikcli-ai/ade/i18n"
 
 import { createFakeTranscriber } from "../asr/fake"
 import { createFakeSpeaker } from "../tts/speaker"
@@ -9,7 +10,7 @@ import { DEFAULT_VOICE_SETTINGS } from "../settings/model"
 import type { PaneSummary, VoiceHost, VoiceStateSnapshot } from "../bridge/host"
 import { writeClipboard } from "../engine"
 import { SpeakerFake, TranscriberFake, VoiceHostLive } from "./layers"
-import { DICTATION_IN_CLIPBOARD, makeVoiceProgram } from "./program"
+import { dictationInClipboard, makeVoiceProgram } from "./program"
 
 /*
  * Verdict of area 3, A4: every dictated sentence was written to the clipboard,
@@ -17,6 +18,9 @@ import { DICTATION_IN_CLIPBOARD, makeVoiceProgram } from "./program"
  * not, and nothing said so. Now: once, only when it did not land, and the line
  * on screen says where the text is.
  */
+// The sentences are checked in Italian: the language is pinned, not read from the machine running the test.
+resetLocaleForTests("it")
+
 class DictationHost implements VoiceHost {
   inserted: string[] = []
   panes: PaneSummary[] = [
@@ -112,7 +116,7 @@ describe("a dictated sentence and the clipboard", () => {
     expect(clipboard).toEqual(["aggiungi un test"])
     expect(visible).toHaveLength(1)
     expect(visible[0]).toContain("Il pannello non ha un processo in ascolto.")
-    expect(visible[0]!.endsWith(DICTATION_IN_CLIPBOARD)).toBe(true)
+    expect(visible[0]!.endsWith(dictationInClipboard())).toBe(true)
   })
 
   test("with no pane open the text is kept, and said to be, once", async () => {
@@ -120,7 +124,7 @@ describe("a dictated sentence and the clipboard", () => {
     host.panes = []
     const { clipboard, visible } = await dictate(host, true)
     expect(clipboard).toEqual(["aggiungi un test"])
-    expect(visible).toEqual([`Nessun pannello aperto. ${DICTATION_IN_CLIPBOARD}`])
+    expect(visible).toEqual([`Nessun pannello aperto. ${dictationInClipboard()}`])
   })
 
   test("where nothing could keep it, the line does not claim the clipboard has it", async () => {

@@ -487,4 +487,97 @@ export const voiceIt = {
 
   // Voice recording error
   "vui.mic.recordFailed": (reason: string) => `Errore avvio registrazione audio: ${reason}`,
+
+  // Texts of the voice engine, its recognisers and its host: errors and notices shown or spoken (F7b)
+  "voice.msg.closeFailed": (what: string) => `Chiusura non riuscita (${what}). Se il microfono resta acceso, riavvia ADE.`,
+  "voice.msg.idle.seconds": (n: number) => `${n} ${n === 1 ? "secondo" : "secondi"}`,
+  "voice.msg.idle.minutes": (n: number) => `${n} minuti`,
+  "voice.msg.idle.always": (idle: string) =>
+    `Non ti sento da ${idle}, quindi ho smesso di ascoltare: tenere il microfono aperto costa. Premi «In ascolto» in alto per riprendere.`,
+  "voice.msg.idle.tap": (idle: string) =>
+    `Non ho sentito una frase per ${idle}, quindi ho spento il microfono. Aprilo per riprovare.`,
+  "voice.msg.credit.refused":
+    "La chiave OpenRouter non viene accettata: la voce non può trascrivere niente finché non la sistemi nelle impostazioni della voce.",
+  "voice.msg.credit.out": "Il credito OpenRouter è finito: finché non lo ricarichi la voce non trascrive più niente.",
+  "voice.msg.credit.low": (amount: string) =>
+    `Sul credito OpenRouter restano ${amount}: ricaricalo prima che la voce si fermi a metà frase.`,
+  "voice.msg.rateCap": (cap: number) =>
+    `Nell'ultima ora l'ascolto ha mandato al servizio di trascrizione più di ${cap} frasi, e ognuna si paga: c'è molto parlato intorno, per esempio la televisione. Ho smesso di ascoltare; premi «In ascolto» in alto per riprendere.`,
+  "voice.msg.ignored.long": "Ignorata una frase lunga: non se ne poteva mandare solo l'inizio.",
+  "voice.msg.ignored.noWake": (wakeWord: string, words: string) => `Ignorata, non inizia con «${wakeWord}»: «${words}».`,
+  "voice.msg.synthFailed": "Errore durante la sintesi vocale.",
+  "voice.msg.micOpenFailed": "Non sono riuscito ad aprire il microfono: riprova.",
+  "voice.msg.settingsNotApplied": "Le nuove impostazioni vocali non sono state applicate.",
+
+  "voice.msg.asr.base64Null": "Errore durante la codifica base64 del file audio: risultato nullo.",
+  "voice.msg.asr.base64": "Errore durante la codifica base64 del file audio.",
+  "voice.msg.asr.keyMissing": "Chiave OpenRouter mancante. Inserisci una chiave da openrouter.ai nelle impostazioni per usare la voce.",
+  "voice.msg.asr.tooBig": (sizeMb: string) =>
+    `File audio troppo grande (${sizeMb} MB): il limite massimo consentito per richiesta è di 25 MB.`,
+  "voice.msg.asr.convert": (why: string) => `Impossibile convertire l'audio per l'invio: ${why}`,
+  "voice.msg.asr.timeout": (seconds: number) =>
+    `Il servizio che trascrive la voce non ha risposto in ${seconds} secondi: riprova tra poco.`,
+  "voice.msg.asr.keyInvalid": "La chiave OpenRouter non funziona: controllala nelle impostazioni della voce.",
+  "voice.msg.asr.creditOut": "Il credito OpenRouter è finito: ricaricalo e ti sento di nuovo.",
+  "voice.msg.asr.busy": "Il servizio che trascrive la voce è occupato (troppe richieste): riprova tra qualche secondo.",
+  "voice.msg.asr.serverProblem": (status: number, detail: string) =>
+    `Il servizio che trascrive la voce ha avuto un problema (${status})${detail}: riprova tra poco.`,
+  "voice.msg.asr.badResponse": (why: string) => `Risposta non valida dal servizio di trascrizione: ${why}`,
+  "voice.msg.asr.transcribeFailed": (why: string) => `Non sono riuscito a trascrivere la frase: ${why}`,
+  "voice.msg.asr.unknownError": "errore sconosciuto",
+  "voice.msg.asr.unexpectedFormat": "formato inatteso",
+  "voice.msg.asr.micDenied":
+    "Accesso al microfono negato: consentilo nelle impostazioni di privacy del sistema (Windows: Impostazioni › Privacy e sicurezza › Microfono, per le app desktop).",
+  "voice.msg.asr.noMic": "Nessun microfono rilevato o non accessibile. Collega un dispositivo audio e riprova.",
+  "voice.msg.asr.micOpenFailed": (why: string) => `Non riesco ad aprire il microfono: ${why}`,
+  "voice.msg.asr.unknownWhy": "non so perché",
+  "voice.msg.asr.streamLimit": "Oggi ho già mandato l'audio in streaming fino al limite: le frasi successive vanno a MAI-Transcribe-2.",
+  "voice.msg.asr.xaiKeyInvalid": "La chiave xAI non funziona: trascrivo con MAI-Transcribe-2.",
+  "voice.msg.asr.xaiCreditOut": "Il credito xAI è finito: trascrivo con MAI-Transcribe-2 finché non lo ricarichi.",
+
+  "voice.msg.program.sendRefused": "Non sono riuscito a inviare la dettatura: il testo non è partito.",
+  "voice.msg.program.inClipboard": "Il testo dettato è negli appunti.",
+  "voice.msg.program.whichPane": "Non so su quale pannello: dimmi il numero o il nome, oppure mettilo a fuoco.",
+  "voice.msg.program.insertFailed": "Errore durante l'inserimento del testo trascritto nel pannello.",
+  "voice.msg.program.hostFailed": "Errore durante l'esecuzione del comando sul VoiceHost.",
+  "voice.msg.program.noSuchPane": (paneId: string) => `Non trovo il pannello ${paneId}: la dettatura non è stata inviata.`,
+  "voice.msg.program.noPaneOpen": "Nessun pannello aperto: la dettatura non è stata inviata.",
+  "voice.msg.program.heardWhileThinking": (words: string) =>
+    `Sentito mentre pensavo: «${words}». Di' «invia questa» per mandarla dopo, o lasciala: si scarta.`,
+  "voice.msg.program.stoppedPrevious": "Ho fermato la richiesta precedente.",
+  "voice.msg.program.unknownCommand": "Comando non riconosciuto.",
+
+  "voice.msg.plan.cant": (why: string) => `Non riesco a pianificare: ${why}`,
+  "voice.msg.plan.codexDirect":
+    "con Codex la frase va direttamente all'agente, il pianificatore sarebbe più lento.",
+  "voice.msg.plan.noReplyInTime": "nessuna risposta in tempo.",
+  "voice.msg.plan.agentSilent": "l'agente non ha risposto.",
+  "voice.msg.plan.timeout": "Non ho raggiunto il servizio in tempo. Riprova fra un momento.",
+  "voice.msg.plan.rateLimit": "Il servizio ha ricevuto troppe richieste in poco tempo. Riprova fra un momento.",
+  "voice.msg.plan.keyInvalid": "La chiave del servizio non è valida. Puoi correggerla nelle impostazioni della voce.",
+  "voice.msg.plan.serverError": "Il servizio ha risposto con un errore. Riprova fra un momento.",
+  "voice.msg.plan.unreachable": "Non ho raggiunto il servizio. Controlla la connessione e riprova.",
+  "voice.msg.plan.noPlan": "Non sono riuscito a ottenere un piano. Riprova fra un momento.",
+
+  "voice.msg.host.paneAsking": "Quel pannello sta chiedendo un permesso: rispondi prima a quello. Il testo non è stato inviato.",
+  "voice.msg.host.noProject": "Non c'è nessun progetto aperto: dimmi in quale progetto avviare la sessione.",
+  "voice.msg.host.noProcess": (paneId: string) => `Il pannello '${paneId}' non ha un processo vivo a cui inviare il messaggio.`,
+  "voice.msg.host.noSession": (paneId: string) => `Nessuna sessione attiva per il pannello '${paneId}'.`,
+  "voice.msg.host.searchDesktopOnly": "la ricerca nel progetto funziona solo nell'app desktop",
+  "voice.msg.host.searchNoProject": "non c'è nessun progetto aperto in cui cercare",
+  "voice.msg.host.searchUnreadable": (why: string) => `non riesco a leggere i file del progetto (${why})`,
+  "voice.msg.host.paneNoListener": "Il pannello selezionato non ha un processo in ascolto.",
+  "voice.msg.host.paneNoInput": "Il pannello selezionato non ha dove ricevere il testo.",
+  "voice.msg.agent.nikcliReadOnly": "nikcli non può rispondere alla voce in sola lettura: scegli Claude Code o Codex.",
+  "voice.msg.agent.needsRunner": "Per rispondere mi serve Claude Code o Codex, e non ne trovo nessuno installato.",
+  "voice.msg.agent.silent": "Non sono riuscito a risponderti: l'agente non ha detto niente.",
+  "voice.msg.resolve.noProjects": (said: string) => `Non conosco il progetto «${said}»: non ho nessun progetto in elenco.`,
+  "voice.msg.resolve.unknownProject": (said: string, options: string) => `Non conosco il progetto «${said}». Ho in elenco: ${options}.`,
+  "voice.msg.wav.playFailed": "Riproduzione della voce non riuscita.",
+  "voice.msg.asr.connFailed": "connessione fallita",
+  "voice.msg.asr.offline": (why: string) => `Non ho rete in questo momento: ti sento appena torna. (${why})`,
+  "voice.msg.program.noPanelOpenPlain": "Nessun pannello aperto.",
+  "voice.msg.resolve.unknownAgent": (said: string, options: string) => `Non conosco l'agente «${said}». Posso avviare: ${options}.`,
+  "voice.msg.host.cannotSwitch": (name: string) => `Non posso passare al progetto «${name}» da qui: aprilo tu e ripeti.`,
+  "voice.msg.host.cannotStart": "Non posso avviare sessioni da qui.",
 }

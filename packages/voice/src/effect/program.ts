@@ -39,16 +39,17 @@ import { firstWords, isSendHeld, triageWhileThinking } from "../dialog/while-thi
 import { answersWithoutName, takesWithoutName } from "../dialog/name-gate"
 import { PLANNABLE_COMMANDS, type PlanStep } from "../plan/schema"
 
+import { locale as uiLocale, t as tr } from "@nikcli-ai/ade/i18n"
 import { HostActionFailed, spokenMessage, type VoiceError } from "./errors"
 import { Speaker, Transcriber, VoiceHostService, type SpeakerService, type TranscriberService } from "./services"
 
 /** Intents whose result is information to hear, not an action to see. */
 const SPOKEN_RESULTS = new Set(["pane.list", "state.describe", "help.list", "project.search"])
 
-const SEND_REFUSED = "Non sono riuscito a inviare la dettatura: il testo non è partito."
+const sendRefused = () => tr("voice.msg.program.sendRefused")
 
 /** Said with a dictation that did not reach a pane, once its text is in the clipboard. */
-export const DICTATION_IN_CLIPBOARD = "Il testo dettato è negli appunti."
+export const dictationInClipboard = () => tr("voice.msg.program.inClipboard")
 
 /**
  * Dispatches a transcribed utterance directly to the target pane composer or agent prompt,
@@ -79,10 +80,10 @@ export function dispatchTranscription(
        * said by the caller, which is the one that puts it there.
        */
       if (panes.length === 0) {
-        throw new Error("Nessun pannello aperto.")
+        throw new Error(tr("voice.msg.program.noPanelOpenPlain"))
       }
       if (!clearTarget) {
-        throw new Error("Non so su quale pannello: dimmi il numero o il nome, oppure mettilo a fuoco.")
+        throw new Error(tr("voice.msg.program.whichPane"))
       }
 
       if (sendMode === "auto") {
@@ -100,7 +101,7 @@ export function dispatchTranscription(
         message:
           err instanceof Error && err.message
             ? err.message
-            : "Errore durante l'inserimento del testo trascritto nel pannello.",
+            : tr("voice.msg.program.insertFailed"),
       }),
   })
 }
@@ -536,7 +537,7 @@ export function makeVoiceProgram(
           if (!text) return
           options.onSpoken?.(text)
           yield* speaker.speak(text)
-        }).pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err)))))
+        }).pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err, uiLocale())))))
 
         replyWatchFiber = yield* Effect.fork(watch)
       })
@@ -562,7 +563,7 @@ export function makeVoiceProgram(
               yield* speaker.speak(effect.text).pipe(
                 Effect.catchAll((err) =>
                   Effect.sync(() => {
-                    options.onError?.(spokenMessage(err))
+                    options.onError?.(spokenMessage(err, uiLocale()))
                   }),
                 ),
               )
@@ -600,7 +601,7 @@ export function makeVoiceProgram(
                   new HostActionFailed({
                     action: effect.intent.intent,
                     cause: err,
-                    message: "Errore durante l'esecuzione del comando sul VoiceHost.",
+                    message: tr("voice.msg.program.hostFailed"),
                   }),
               })
 
@@ -637,7 +638,7 @@ export function makeVoiceProgram(
                 }
               } else {
                 const vError = outcomeResult.left
-                const msg = spokenMessage(vError)
+                const msg = spokenMessage(vError, uiLocale())
                 // Said once, by the dialogue below: an error line and an action
                 // line with the same sentence made three copies of it.
                 options.onOutcome?.({ success: false, spoken: "" })
@@ -660,7 +661,7 @@ export function makeVoiceProgram(
               }).pipe(
                 Effect.catchAll((err) =>
                   Effect.sync(() => {
-                    options.onError?.(spokenMessage(err))
+                    options.onError?.(spokenMessage(err, uiLocale()))
                   }),
                 ),
               )
@@ -680,7 +681,7 @@ export function makeVoiceProgram(
                 }).pipe(
                   Effect.catchAll((err) =>
                     Effect.sync(() => {
-                      options.onError?.(spokenMessage(err))
+                      options.onError?.(spokenMessage(err, uiLocale()))
                     }),
                   ),
                 )
@@ -702,8 +703,8 @@ export function makeVoiceProgram(
                 : (panes.find((p) => p.id === focused) ?? panes[0])
               if (!target) {
                 const missing = effect.paneId
-                  ? `Non trovo il pannello ${effect.paneId}: la dettatura non è stata inviata.`
-                  : "Nessun pannello aperto: la dettatura non è stata inviata."
+                  ? tr("voice.msg.program.noSuchPane", effect.paneId)
+                  : tr("voice.msg.program.noPaneOpen")
                 options.onError?.(missing)
                 yield* say(missing)
                 break
@@ -721,7 +722,7 @@ export function makeVoiceProgram(
               }).pipe(
                 Effect.catchAll((err) =>
                   Effect.sync(() => {
-                    options.onError?.(spokenMessage(err))
+                    options.onError?.(spokenMessage(err, uiLocale()))
                     return undefined
                   }),
                 ),
@@ -732,7 +733,7 @@ export function makeVoiceProgram(
                 if (effect.readback) yield* saySendOutcome(effect.readback)
                 break
               }
-              yield* saySendOutcome(SEND_REFUSED)
+              yield* saySendOutcome(sendRefused())
               break
             }
 
@@ -901,7 +902,7 @@ export function makeVoiceProgram(
               saidText = text.slice(0, end).trim()
               options.onSpeaking?.(saidText)
               Effect.runFork(
-                append(piece).pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err))))),
+                append(piece).pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err, uiLocale()))))),
               )
             }
           : undefined
@@ -1017,7 +1018,7 @@ export function makeVoiceProgram(
           const tail = [rest, note].filter(Boolean).join(" ")
           options.onSpoken?.(`${whole}${note ? ` ${note}` : ""}`)
           if (tail && !quiet()) {
-            yield* append(tail).pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err)))))
+            yield* append(tail).pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err, uiLocale())))))
           }
           return true
         }
@@ -1105,7 +1106,7 @@ export function makeVoiceProgram(
               streamed = true
               options.onSpeaking?.(text.slice(0, end).trim())
               Effect.runFork(
-                append(piece).pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err))))),
+                append(piece).pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err, uiLocale()))))),
               )
             }
           : undefined
@@ -1132,7 +1133,7 @@ export function makeVoiceProgram(
           Effect.catchAll((err) =>
             Effect.succeed({
               ok: false,
-              text: err.cause instanceof Error && err.cause.message ? err.cause.message : spokenMessage(err),
+              text: err.cause instanceof Error && err.cause.message ? err.cause.message : spokenMessage(err, uiLocale()),
               ran: true,
             }),
           ),
@@ -1175,7 +1176,7 @@ export function makeVoiceProgram(
           const rest = !answer.ok ? whole : whole.startsWith(said) ? whole.slice(said.length).trim() : whole
           options.onSpoken?.(answer.ok ? whole : `${said} ${whole}`)
           yield* append(quiet() ? "" : rest).pipe(
-            Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err)))),
+            Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err, uiLocale())))),
           )
           return true
         }
@@ -1200,7 +1201,7 @@ export function makeVoiceProgram(
         options.onSpoken?.(text)
         yield* speaker
           .speak(text)
-          .pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err)))))
+          .pipe(Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err, uiLocale())))))
       })
     }
 
@@ -1378,7 +1379,7 @@ export function makeVoiceProgram(
             options.onOutcome?.({
               success: true,
               // The first words only: what the room says is not the console's business.
-              spoken: `Sentito mentre pensavo: «${firstWords(trimmed)}». Di' «invia questa» per mandarla dopo, o lasciala: si scarta.`,
+              spoken: tr("voice.msg.program.heardWhileThinking", firstWords(trimmed)),
             })
             return
           }
@@ -1390,7 +1391,7 @@ export function makeVoiceProgram(
           currentState = { ...currentState, status: "idle" }
           options.onStateChange?.(currentState)
           if (triage.action === "stop") {
-            options.onSpoken?.("Ho fermato la richiesta precedente.")
+            options.onSpoken?.(tr("voice.msg.program.stoppedPrevious"))
             return
           }
           // Said on screen, not aloud: the answer to the new sentence is what should be heard.
@@ -1459,7 +1460,7 @@ export function makeVoiceProgram(
 
         // 4. Unknown outcome: do NOT speak offline fallback suggestions.
         if (parsed.outcome === "unknown" && openToModels) {
-          options.onError?.("Comando non riconosciuto.")
+          options.onError?.(tr("voice.msg.program.unknownCommand"))
           return
         }
 
@@ -1488,10 +1489,10 @@ export function makeVoiceProgram(
             Effect.sync(() => {
               // `spokenMessage` turns every HostActionFailed into one generic
               // sentence; dictation is silent, so the specific one can be shown.
-              const said = err.message || spokenMessage(err)
+              const said = err.message || spokenMessage(err, uiLocale())
               // Only now, and once: the text did not land, so it is kept where the user can paste it.
               const kept = options.onUndelivered?.(text) === true
-              options.onError?.(kept ? `${said} ${DICTATION_IN_CLIPBOARD}` : said)
+              options.onError?.(kept ? `${said} ${dictationInClipboard()}` : said)
             }),
           ),
         )
@@ -1625,7 +1626,7 @@ export function makeVoiceProgram(
                */
               options.onOutcome?.({
                 success: true,
-                spoken: `Ignorata, non inizia con «${currentSettings.wakeWord}»: «${firstWords(trimmed)}».`,
+                spoken: tr("voice.msg.ignored.noWake", currentSettings.wakeWord, firstWords(trimmed)),
               })
               return
             }
@@ -1775,7 +1776,7 @@ export function makeVoiceProgram(
             handling++
             utteranceFiber = yield* Effect.forkIn(
               processUtterance(ev.event.text, true, false, ev.event.confidence, ev.event.spokenAt, dictated).pipe(
-                Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err)))),
+                Effect.catchAll((err) => Effect.sync(() => options.onError?.(spokenMessage(err, uiLocale())))),
                 Effect.ensuring(
                   Effect.gen(function* () {
                     handling--
@@ -1791,7 +1792,7 @@ export function makeVoiceProgram(
             // Critical requirement: recognition error must NOT terminate listening loop.
             options.onPartialTranscript?.("")
             // Written as it is said: the browser's own words mean nothing to the user.
-            const rawMsg = spokenMessage(ev.error)
+            const rawMsg = spokenMessage(ev.error, uiLocale())
             options.onError?.(rawMsg)
             if (currentState.status === "executing") {
               currentState = { ...currentState, status: "idle" }
@@ -1817,7 +1818,7 @@ export function makeVoiceProgram(
       }).pipe(
         Effect.catchAll((err) =>
           Effect.sync(() => {
-            options.onError?.(spokenMessage(err))
+            options.onError?.(spokenMessage(err, uiLocale()))
           }),
         ),
         Effect.ensuring(
