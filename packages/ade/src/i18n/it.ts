@@ -409,6 +409,8 @@ export const it = {
     "ADE non ha inviato il compito iniziale: la sessione non si è stabilizzata. Scrivilo tu quando è pronta.",
   "task.stepNotSent": (text: string) =>
     `ADE non ha scritto «${text}»: la connessione non si è stabilizzata. Scrivilo tu.`,
+  "task.agentMissing": (command: string) =>
+    `«${command}» non è installato sul server: ADE non ha scritto il compito, la shell remota lo avrebbe eseguito come comando.`,
   "task.none": "Nessun task iniziale",
   "bar.newPane": "Nuovo pannello",
   "bar.windowControls": "Controlli finestra",

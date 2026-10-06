@@ -394,6 +394,8 @@ export const en: Messages = {
   "task.notSent":
     "ADE didn't send the initial task because the session never settled. Type it yourself once it's ready.",
   "task.stepNotSent": (text) => `ADE didn't type “${text}” because the connection never settled. Type it yourself.`,
+  "task.agentMissing": (command) =>
+    `“${command}” isn't installed on the server, so ADE didn't type the task: the remote shell would have run it as a command.`,
   "task.none": "No initial task",
   "bar.newPane": "New panel",
   "bar.windowControls": "Window controls",

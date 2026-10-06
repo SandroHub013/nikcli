@@ -20,7 +20,7 @@ import {
 } from "./before-unload"
 import { hideButtons, hideChoice, markTrayNoticed, planHide, trayNoticed } from "./tray-hide"
 import { NIKCLI_VERSION_EVERY_MS, parseNikcliVersion } from "../host/nikcli-version"
-import { isRemoteRoot, remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
+import { agentMissing, isRemoteRoot, remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
 import { RemoteSpaceDialog } from "../remote/remote-dialog"
 import { discoverProject, grantedRoots, openProject, rootMissing, type Project } from "../host/project"
 import {
@@ -8356,6 +8356,8 @@ export function Workbench() {
     appendLine(paneId, `ssh ${args.join(" ")}`, "shell")
 
     let tail = ""
+    // What the shell printed since the last step was typed: where «command not found» would show.
+    let sinceStep = ""
     let spawned: SpawnedSession | undefined
     // The host refused to start it: said by `onRefused`, then the exit that follows.
     let refused = false
@@ -8372,6 +8374,7 @@ export function Workbench() {
           lastOutputAt.set(paneId, Date.now())
           noteBracketedPaste(paneId, chunk)
           tail = (tail + stripAnsi(chunk)).slice(-400)
+          sinceStep = (sinceStep + stripAnsi(chunk)).slice(-400)
           feedTerminal(paneId, chunk)
         },
         onLine: (line, stream) => appendLine(paneId, line, stream === "err" ? "note" : "step"),
@@ -8424,8 +8427,16 @@ export function Workbench() {
           setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
           return
         }
+        // The agent was typed and the shell answered that it has none: the task is not a command for this shell.
+        if (!shellOnly && index === 1 && agentMissing(sinceStep, command)) {
+          stopOpeningPoll(poll)
+          tellPane(paneId, t("task.agentMissing", command))
+          setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
+          return
+        }
         const text = steps[index]!
         index += 1
+        sinceStep = ""
         void typeLine(session, text)
         setWb((w) =>
           updatePane(w, paneId, { activity: index < steps.length || !task.trim() ? "connected" : "running" }),
