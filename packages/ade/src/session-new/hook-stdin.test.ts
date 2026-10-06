@@ -115,3 +115,37 @@ describe("Claude Code is asked for the Notification event", () => {
     expect(claude?.activityEvents).toEqual(["UserPromptSubmit", "Stop", "Notification", "StopFailure"])
   })
 })
+
+/*
+ * Full review 2026-10-06, sessions 12: Windows PowerShell 5.1 decodes `[Console]::In` with the console's code page (850
+ * on an Italian machine), so a `cwd` such as `C:\Università\app` reached `.activity` as `Universit├á`, and the links and
+ * `ade-msg design` that read it as a path found nothing. Run for real, with UTF-8 on stdin as Claude Code sends it.
+ */
+describe("the hook reads its stdin as UTF-8 (sessions 12)", () => {
+  test.skipIf(process.platform !== "win32")(
+    "a cwd with accents reaches the activity file as it was written",
+    () => {
+      const dir = mkdtempSync(join(tmpdir(), "ade-hook-utf8-"))
+      try {
+        const scriptPath = join(dir, "ade-agent-session.ps1")
+        writeFileSync(scriptPath, hookScript("claude"), "utf8")
+        const cwd = "C:\\Progetti\\Università\\perché-è\\日本"
+        const payload = JSON.stringify({ session_id: "s-s12", hook_event_name: "Stop", cwd })
+        // The hook runs under ConPTY, whose console is on the OEM page; a child of this test has no console, which reads as
+        // UTF-8 and would hide the defect. So the page is set the way the console sets it, before the script runs.
+        const oem = "[Console]::InputEncoding = [Text.Encoding]::GetEncoding(850); & '" + scriptPath.replace(/'/g, "''") + "'"
+        const run = Bun.spawnSync(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", oem], {
+          stdin: new TextEncoder().encode(payload),
+          env: { ...process.env, ADE_SPAWN_NONCE: "nonce-s12", ADE_PANE_ID: "pane-s12", ADE_SESSION_DIR: dir },
+        })
+        expect(run.exitCode).toBe(0)
+        const activity = readdirSync(dir).find((name) => name.endsWith(".activity"))
+        expect(activity).toBeDefined()
+        expect(JSON.parse(readFileSync(join(dir, activity!), "utf8")).cwd).toBe(cwd)
+      } finally {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    },
+    30_000,
+  )
+})

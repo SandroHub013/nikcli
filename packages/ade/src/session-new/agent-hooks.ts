@@ -746,7 +746,11 @@ if ([string]::IsNullOrWhiteSpace($env:ADE_PANE_ID)) { exit 0 }
 if ([string]::IsNullOrWhiteSpace($env:ADE_SESSION_DIR)) { exit 0 }
 if (-not (Test-Path -LiteralPath $env:ADE_SESSION_DIR)) { exit 0 }
 
-$raw = [Console]::In.ReadToEnd()
+# The bytes, as UTF-8: [Console]::In decodes with the console's code page (850 under ConPTY on an Italian machine),
+# and a cwd with accents reached the activity file as mojibake.
+$buffer = New-Object IO.MemoryStream
+[Console]::OpenStandardInput().CopyTo($buffer)
+$raw = (New-Object Text.UTF8Encoding $false).GetString($buffer.ToArray())
 if ([string]::IsNullOrWhiteSpace($raw)) { exit 0 }
 try { $payload = $raw | ConvertFrom-Json } catch { exit 0 }
 
