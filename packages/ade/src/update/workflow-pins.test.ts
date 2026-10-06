@@ -99,6 +99,28 @@ describe("the release workflows keep their guards", () => {
     expect(step).not.toMatch(/\|\s*grep\s+-\w*q/)
   })
 
+  // The same family, in the rest of ade-release: no `| grep -q` under `set -o pipefail`, anywhere in the workflows.
+  test("no step pipes into grep -q under pipefail", () => {
+    const found: string[] = []
+    for (const name of readdirSync(WORKFLOWS).filter((file) => /^ade-.*\.ya?ml$/.test(file))) {
+      read(name)
+        .split("\n")
+        .forEach((line, index) => {
+          // Comments may name the pattern; commands may not use it.
+          if (!line.trim().startsWith("#") && /\|\s*grep\s+-\w*q/.test(line)) found.push(`${name}:${index + 1} ${line.trim()}`)
+        })
+    }
+    expect(found).toEqual([])
+  })
+
+  test("the NikVerse asset checks grep a variable", () => {
+    const text = read("ade-release.yml")
+    expect(text).toContain('grep -qx "$ASSET" <<<"$HAVE"')
+    expect(text).toContain('grep -qx "$ASSET" <<<"$AFTER"')
+    expect(text).toContain('grep -qx "nikverse-$HASH" <<<"$LIVE"')
+    expect(text).toContain('grep -qx false <<<"$DRAFT"')
+  })
+
   test("the updater feed is written only when the guard says so", () => {
     const text = read("ade-release.yml")
     expect(text).toContain("script/feed-guard.ts")
