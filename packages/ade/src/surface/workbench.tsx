@@ -1812,14 +1812,13 @@ export function Workbench() {
   const designTracker = createOpenKeyTracker<{ k: string; title: string }>()
 
   createEffect(() => {
-    const root = project()?.root
-    const loaded = decisionsRegister.loaded()
-    if (!loaded) {
+    const path = decisionsRegister.loadedPath()
+    if (!path) {
       decisionsTracker.reset()
       return
     }
     const openItems = (decisionsRegister.state()?.decisions ?? []).filter((d) => d.status === "aperta")
-    const fresh = decisionsTracker.update(root, openItems)
+    const fresh = decisionsTracker.update(path, openItems)
     if (fresh.length > 0) {
       setDecisionsAttention(true)
       for (const item of fresh) {
@@ -1831,14 +1830,13 @@ export function Workbench() {
   })
 
   createEffect(() => {
-    const root = project()?.root
-    const loaded = designRegister.loaded()
-    if (!loaded) {
+    const path = designRegister.loadedPath()
+    if (!path) {
       designTracker.reset()
       return
     }
     const openItems = (designRegister.state()?.proposals ?? []).filter((p) => p.status === "aperta")
-    const fresh = designTracker.update(root, openItems)
+    const fresh = designTracker.update(path, openItems)
     if (fresh.length > 0) {
       setDesignAttention(true)
       for (const item of fresh) {

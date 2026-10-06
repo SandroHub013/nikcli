@@ -89,19 +89,33 @@ describe("tracking newly opened register keys (O2)", () => {
     expect(tracker.update("/progetto-1", withNew)).toEqual([])
   })
 
-  test("createOpenKeyTracker resets baseline on project change without reporting new items", () => {
+  test("createOpenKeyTracker resets baseline on register path change without reporting new items (D1)", () => {
     const tracker = createOpenKeyTracker<{ k: string; title: string }>()
-    tracker.update("/progetto-1", [{ k: "D1", title: "Prima" }])
+    // Project A loaded: establishes baseline for A
+    const initialA = tracker.update("/progetto-A/.ade/decisions.jsonl", [{ k: "D1", title: "Prima" }])
+    expect(initialA).toEqual([])
 
-    // Switch to another project with existing open items: no false alerts
-    const freshOnSwitch = tracker.update("/progetto-2", [
+    // While project switches to B, old register A is still loaded: same path, no new items
+    const switchInFlight = tracker.update("/progetto-A/.ade/decisions.jsonl", [{ k: "D1", title: "Prima" }])
+    expect(switchInFlight).toEqual([])
+
+    // Now register B finishes loading and updates: path changes, baseline established for B: zero toasts
+    const initialB = tracker.update("/progetto-B/.ade/decisions.jsonl", [
       { k: "X1", title: "Altro progetto 1" },
       { k: "X2", title: "Altro progetto 2" },
     ])
-    expect(freshOnSwitch).toEqual([])
+    expect(initialB).toEqual([])
     expect(tracker.seen.has("X1")).toBe(true)
     expect(tracker.seen.has("X2")).toBe(true)
     expect(tracker.seen.has("D1")).toBe(false)
+
+    // Later, a new item arrives in project B: alerts only for that item
+    const addedB = tracker.update("/progetto-B/.ade/decisions.jsonl", [
+      { k: "X1", title: "Altro progetto 1" },
+      { k: "X2", title: "Altro progetto 2" },
+      { k: "X3", title: "Nuova voce B" },
+    ])
+    expect(addedB).toEqual([{ k: "X3", title: "Nuova voce B" }])
   })
 
   test("createOpenKeyTracker reports newly opened items when one closes and another opens with equal count", () => {

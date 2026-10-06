@@ -32,17 +32,17 @@ export function newlyOpened<T extends { k: string }>(seen: Set<string>, open: re
 
 export interface OpenKeyTracker<T extends { k: string }> {
   readonly seen: ReadonlySet<string>
-  update(projectRoot: string | undefined, open: readonly T[]): T[]
+  update(registerPath: string | undefined, open: readonly T[]): T[]
   reset(): void
 }
 
 /**
- * Tracks open register keys across project changes and first loads (O2).
- * Establishes a baseline on the initial load of each project without alerting.
- * Returns only items whose keys are newly added to an already loaded project.
+ * Tracks open register keys across register path changes and first loads (O2, D1).
+ * Establishes a baseline on the initial load of each register path without alerting.
+ * Returns only items whose keys are newly added to an already loaded register.
  */
 export function createOpenKeyTracker<T extends { k: string }>(): OpenKeyTracker<T> {
-  let trackedRoot: string | undefined = undefined
+  let trackedPath: string | undefined = undefined
   let initialized = false
   const seen = new Set<string>()
 
@@ -50,9 +50,9 @@ export function createOpenKeyTracker<T extends { k: string }>(): OpenKeyTracker<
     get seen() {
       return seen
     },
-    update(projectRoot, open) {
-      if (projectRoot !== trackedRoot) {
-        trackedRoot = projectRoot
+    update(registerPath, open) {
+      if (registerPath !== trackedPath) {
+        trackedPath = registerPath
         seen.clear()
         initialized = false
       }
@@ -64,7 +64,7 @@ export function createOpenKeyTracker<T extends { k: string }>(): OpenKeyTracker<
       return newlyOpened(seen, open)
     },
     reset() {
-      trackedRoot = undefined
+      trackedPath = undefined
       initialized = false
       seen.clear()
     },
