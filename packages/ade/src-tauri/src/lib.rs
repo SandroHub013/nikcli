@@ -122,6 +122,23 @@ async fn design_sheet_path(roots: tauri::State<'_, WriteRoots>, path: String, cw
     media::design_sheet(&served, &opened, &path, &cwd).map(|sheet| sheet.to_string_lossy().into_owned())
 }
 
+/// The proposal `ade-msg design proponi` names, read and checked: see `media::design_proposal`.
+///
+/// Up to six pages of 2 MB are read, so off the async runtime.
+#[tauri::command]
+async fn design_proposal_read(
+    roots: tauri::State<'_, WriteRoots>,
+    folder: String,
+    cwd: String,
+    project: String,
+) -> Result<media::DesignProposal, String> {
+    let served = roots.0.lock().map(|guard| guard.clone()).unwrap_or_default();
+    let opened = roots.1.lock().map(|guard| guard.clone()).unwrap_or_default();
+    tauri::async_runtime::spawn_blocking(move || media::design_proposal(&served, &opened, &folder, &cwd, &project))
+        .await
+        .map_err(|e| format!("lettura della proposta interrotta: {e}"))?
+}
+
 /// Why `dir` cannot be a write root, when it cannot.
 ///
 /// Any folder used to be accepted, so a caller could register the drive root or
@@ -2643,6 +2660,7 @@ pub fn run() {
             agent_link::agent_activity_read_many,
             agent_link::agent_link_read,
             design_sheet_path,
+            design_proposal_read,
             agent_link::agent_link_clear,
             agent_link::agent_hook_read,
             agent_link::agent_hook_write,
