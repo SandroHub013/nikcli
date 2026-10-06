@@ -107,6 +107,28 @@ describe("record/recorder", () => {
     expect(stops).toBe(1)
   })
 
+  test("the microphone is stopped at the end of a take even when there is no way to write its file", async () => {
+    let micStops = 0
+    const recorder = createRecorder({
+      start: async (_target, dir, name) => ({ path: `${dir}/${name}.mp4` }),
+      stop: async () => ({ path: "C:/video/x.mp4" }),
+      writeText: async () => {},
+      dir: () => "C:/video",
+      now: () => T0,
+      onState: () => {},
+      startMic: async () => ({
+        extension: "webm",
+        stop: async () => {
+          micStops += 1
+          return new Uint8Array([1])
+        },
+      }),
+    })
+    expect(await recorder.start({ kind: "window" }, { mic: true })).toBeUndefined()
+    await recorder.stop()
+    expect(micStops).toBe(1)
+  })
+
   test("a second take is refused while one runs, and notes outside a take are dropped", async () => {
     const { recorder, started, written } = setup()
     await recorder.start({ kind: "window" })

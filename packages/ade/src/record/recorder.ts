@@ -128,9 +128,10 @@ export function createRecorder(deps: RecorderDeps): Recorder {
         .writeBytes(voicePathFor(video), new Uint8Array(track.wav))
         .catch((error) => problems.push(String(error)))
     }
-    if (micTake && deps.writeBytes) {
+    if (micTake) {
+      // Stopped whether or not there is a way to write it: its stream is open until then (full review 2026-10-06, nikverse B1).
       const bytes = await micTake.stop().catch(() => undefined)
-      if (bytes && bytes.length > 0) {
+      if (bytes && bytes.length > 0 && deps.writeBytes) {
         await deps
           .writeBytes(micPathFor(video, micTake.extension), bytes)
           .catch((error) => problems.push(String(error)))
