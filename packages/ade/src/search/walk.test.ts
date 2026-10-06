@@ -275,3 +275,21 @@ describe("walkProject", () => {
     expect(DEFAULT_SKIP_DIRS.has("coverage")).toBe(true)
   })
 })
+
+/* Full review 2026-10-06, ui 8: git quotes non-ASCII names unless it is asked for NUL-separated output. */
+describe("walkProject through git ls-files", () => {
+  const gitHost = (): Host => ({
+    ...createFakeHost({}),
+    run: async (_cmd, args) =>
+      args.includes("-z")
+        ? { code: 0, stdout: "src/a.ts\0città.md\0docs/ perché .md\0", stderr: "" }
+        : { code: 0, stdout: 'src/a.ts\n"citt\\303\\240.md"\n', stderr: "" },
+  })
+
+  it("lists a name with accents or spaces as it is on disk", async () => {
+    const result = await walkProject({ host: gitHost(), root: "C:/p" })
+    expect(result.files).toEqual(["C:/p/src/a.ts", "C:/p/città.md", "C:/p/docs/ perché .md"])
+    expect(result.dirs).toContain("C:/p/docs")
+    expect(result.stopped).toBe(false)
+  })
+})
