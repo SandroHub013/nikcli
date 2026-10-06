@@ -129,22 +129,74 @@ async fn design_sheet_path(roots: tauri::State<'_, WriteRoots>, path: String, cw
 /// a folder the user works in; a directory holding the user's whole profile, a
 /// system directory or ADE's own configuration is not one, whoever asks.
 fn too_broad_root(dir: &Path, home: Option<&Path>) -> Option<&'static str> {
-    let path_dirs: Vec<PathBuf> = std::env::var_os("PATH")
-        .map(|value| std::env::split_paths(&value).collect())
-        .unwrap_or_default();
-    too_broad_root_in(dir, home, &path_dirs)
+    too_broad_root_in(dir, home)
 }
 
-/// The same rule with the `PATH` entries given, so a test can name them.
+/// The `PATH` entries of this process.
+fn environment_path_dirs() -> Vec<PathBuf> {
+    std::env::var_os("PATH")
+        .map(|value| std::env::split_paths(&value).collect())
+        .unwrap_or_default()
+}
+
+/// Why the file at `resolved` must not be written, when what is written there
+/// runs by itself later (full review 2026-10-06, Rust 4; Architect's R1).
 ///
-/// Beyond the whole profile, a root may not be a place where what is written
-/// runs by itself later (full review 2026-10-06, Rust 4). `Documents` as a root
-/// let the page write `Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1`,
-/// which every PowerShell opens in ADE's terminal; a folder on `PATH`
-/// (`~/.nikcli/bin`, `~/.bun/bin`, `~/.local/bin`) is where the next `nikcli` or
-/// `bun` comes from. The well-known folders of the profile are not projects
-/// either, only what is inside them.
-fn too_broad_root_in(dir: &Path, home: Option<&Path>, path_dirs: &[PathBuf]) -> Option<&'static str> {
+/// A root check cannot see this: a root that is a parent of a `PATH` folder, or
+/// the OneDrive folder whose `Documents` holds the PowerShell profile, is a
+/// reasonable-looking project. So the file is checked, whatever the root:
+/// a `PATH` folder (`~/.nikcli/bin`, `~/.bun/bin`, `~/.local/bin`) is where the
+/// next `nikcli` or `bun` comes from, and `Documents/WindowsPowerShell` and
+/// `Documents/PowerShell` hold the profile every PowerShell opens in ADE's terminal.
+/// Names are compared in lower case, as the file system does.
+fn runs_by_itself(resolved: &Path, home: Option<&Path>, path_dirs: &[PathBuf]) -> Option<&'static str> {
+    let lowered = |p: &Path| -> Vec<String> {
+        p.components()
+            .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
+            .collect()
+    };
+    let target = lowered(resolved);
+    for entry in path_dirs {
+        let entry = entry.canonicalize().unwrap_or_else(|_| entry.clone());
+        // A drive root on PATH would make every folder on the drive a PATH folder.
+        let broad = entry.parent().is_none() || entry.components().count() <= 2;
+        if !broad && target.starts_with(lowered(&entry).as_slice()) {
+            return Some("cartella in PATH");
+        }
+    }
+    if let Some(home) = home.and_then(|h| h.canonicalize().ok()) {
+        for bin in [
+            ".nikcli/bin",
+            ".bun/bin",
+            ".local/bin",
+            ".cargo/bin",
+            ".deno/bin",
+            ".volta/bin",
+            "go/bin",
+            "bin",
+        ] {
+            if target.starts_with(lowered(&home.join(bin)).as_slice()) {
+                return Some("cartella dei programmi dell'utente (PATH)");
+            }
+        }
+    }
+    // The profile folder may be redirected anywhere (OneDrive, another drive): the name decides.
+    for pair in target.windows(2) {
+        if pair[0] == "documents" && (pair[1] == "windowspowershell" || pair[1] == "powershell") {
+            return Some("cartella dei profili di PowerShell");
+        }
+    }
+    None
+}
+
+/// Why `dir` cannot be a write root: the profile, the system and ADE's own
+/// folders. What is written inside a root that runs by itself is refused file
+/// by file (`runs_by_itself`), not here.
+///
+/// The well-known folders of the profile are not projects either, only what is
+/// inside them; the home's own program folders (`~/.nikcli/bin` and what holds
+/// them) are not roots.
+fn too_broad_root_in(dir: &Path, home: Option<&Path>) -> Option<&'static str> {
     if dir.parent().is_none() {
         return Some("la radice del disco non è un progetto");
     }
@@ -203,14 +255,9 @@ fn too_broad_root_in(dir: &Path, home: Option<&Path>, path_dirs: &[PathBuf]) -> 
             }
         }
     }
-    for entry in path_dirs {
-        let entry = entry.canonicalize().unwrap_or_else(|_| entry.clone());
-        // A drive root on PATH would make every folder on the drive a PATH folder.
-        let broad = entry.parent().is_none() || entry.components().count() <= 2;
-        if !broad && dir.starts_with(&entry) {
-            return Some("cartella in PATH");
-        }
-    }
+    // A root that contains a `PATH` entry, or sits in one, is not refused here:
+    // the file that is written is checked instead (`runs_by_itself`), which also
+    // covers a root that merely contains the folder.
     let lowered = dir.to_string_lossy().to_lowercase().replace('\\', "/");
     for system in ["/windows", "/program files", "/program files (x86)", "/programdata"] {
         if lowered.contains(&format!(":{system}")) {
@@ -375,6 +422,16 @@ fn resolve_for_check(path: &Path) -> Result<PathBuf, String> {
 /// The resolved path, when it falls inside a registered root; an error naming
 /// the refusal otherwise.
 fn within_roots(roots: &WriteRoots, path: &str) -> Result<PathBuf, String> {
+    within_roots_with(roots, path, dirs::home_dir().as_deref(), &environment_path_dirs())
+}
+
+/// The same check with the home and the `PATH` entries given, so a test can name them.
+fn within_roots_with(
+    roots: &WriteRoots,
+    path: &str,
+    home: Option<&Path>,
+    path_dirs: &[PathBuf],
+) -> Result<PathBuf, String> {
     let resolved = resolve_for_check(Path::new(path))?;
     let allowed = roots.0.lock().map_err(|_| "radici bloccate")?;
     if allowed.is_empty() {
@@ -385,6 +442,9 @@ fn within_roots(roots: &WriteRoots, path: &str) -> Result<PathBuf, String> {
     if allowed.iter().any(|root| resolved.starts_with(root)) {
         if is_git_executable_path(&resolved) {
             return Err(format!("configurazione o hook di git: {path}"));
+        }
+        if let Some(reason) = runs_by_itself(&resolved, home, path_dirs) {
+            return Err(format!("{reason}: {path}"));
         }
         return Ok(resolved);
     }
@@ -3051,8 +3111,7 @@ mod tests {
         let home = TempDir::new("rootshome");
         let home = home.0.canonicalize().expect("canonical home");
         let at = |relative: &str| home.join(relative);
-        let path_dirs = vec![at("tools/bin")];
-        let refused = |dir: PathBuf| too_broad_root_in(&dir, Some(&home), &path_dirs).is_some();
+        let refused = |dir: PathBuf| too_broad_root_in(&dir, Some(&home)).is_some();
 
         for relative in [
             "Documents",
@@ -3073,8 +3132,6 @@ mod tests {
             ".local",
             ".local/bin",
             ".cargo/bin",
-            "tools/bin",
-            "tools/bin/sub",
         ] {
             assert!(refused(at(relative)), "{relative}");
         }
@@ -3092,9 +3149,58 @@ mod tests {
         ] {
             assert!(!refused(at(relative)), "{relative}");
         }
+    }
+
+    /// Architect's R1: what runs by itself is refused on the file, whatever the root.
+    #[test]
+    fn a_file_that_runs_by_itself_is_refused_whatever_the_root() {
+        let home = TempDir::new("runshome");
+        let home = home.0.canonicalize().expect("canonical home");
+        let at = |relative: &str| home.join(relative);
+        let path_dirs = vec![at("tools/bin")];
+        let roots_at = |root: PathBuf| {
+            let roots = WriteRoots::default();
+            roots.0.lock().expect("roots").push(root);
+            roots
+        };
+        for dir in ["tools/bin", "Documents/WindowsPowerShell", "OneDrive/Documents/PowerShell", ".nikcli/bin"] {
+            std::fs::create_dir_all(at(dir)).expect("dir");
+        }
+        // The roots a page could register: the home's child that holds the folder, or the home's OneDrive.
+        for (root, file) in [
+            ("tools", "tools/bin/nikcli.cmd"),
+            ("tools", "tools/bin/sub/x.cmd"),
+            ("tools/bin", "tools/bin/nikcli.cmd"),
+            ("OneDrive", "OneDrive/Documents/PowerShell/profile.ps1"),
+            ("OneDrive", "OneDrive/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1"),
+            ("Documents/WindowsPowerShell", "Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1"),
+            ("Documents", "Documents/PowerShell/profile.ps1"),
+            ("Documents", "documents/windowspowershell/x.ps1"),
+            (".nikcli", ".nikcli/bin/nikcli.cmd"),
+        ] {
+            let roots = roots_at(at(root));
+            let error = within_roots_with(&roots, &at(file).to_string_lossy(), Some(&home), &path_dirs)
+                .expect_err(file);
+            assert!(!error.starts_with("fuori dal progetto"), "{file}: {error}");
+        }
+        // Next to them, inside the same roots, a file is written.
+        for (root, file) in [
+            ("tools", "tools/src/main.ts"),
+            ("tools", "tools/binary/x.txt"),
+            ("OneDrive", "OneDrive/Documents/app/main.ts"),
+            ("Documents", "Documents/GitHub/app/main.ts"),
+            ("Documents", "Documents/PowerShellish/x.ts"),
+        ] {
+            let roots = roots_at(at(root));
+            assert!(
+                within_roots_with(&roots, &at(file).to_string_lossy(), Some(&home), &path_dirs).is_ok(),
+                "{file}"
+            );
+        }
         // A drive root among the PATH entries refuses nothing by itself.
         let broad = vec![PathBuf::from("C:\\"), PathBuf::from("/")];
-        assert!(too_broad_root_in(&at("code/app"), Some(&home), &broad).is_none());
+        let roots = roots_at(at("code"));
+        assert!(within_roots_with(&roots, &at("code/app/x.ts").to_string_lossy(), Some(&home), &broad).is_ok());
     }
 
     #[test]
