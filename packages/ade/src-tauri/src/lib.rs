@@ -1753,6 +1753,9 @@ fn ade_window_close(window: tauri::WebviewWindow) -> Result<(), String> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CloseAction {
     PreventAndAsk(u64),
+    /// A question is already open (asked, or waiting for its first answer): this request is the same one.
+    /// The window stays, no second question is asked and no second timer starts.
+    AlreadyAsking(u64),
     AllowClose,
 }
 
@@ -1791,10 +1794,20 @@ impl CloseManager {
         if self.confirmed.swap(false, Ordering::SeqCst) {
             CloseAction::AllowClose
         } else {
-            let req_id = self.request_counter.fetch_add(1, Ordering::SeqCst) + 1;
-            if let Ok(mut guard) = self.active_request.lock() {
-                *guard = Some((req_id, CloseRequestStatus::Pending));
+            let Ok(mut guard) = self.active_request.lock() else {
+                // A poisoned lock cannot tell whether a question is open: ask again, as before.
+                let req_id = self.request_counter.fetch_add(1, Ordering::SeqCst) + 1;
+                return CloseAction::PreventAndAsk(req_id);
+            };
+            // A second click on X (or «Esci» in the tray) while the question is open used to start request N+1 with
+            // a timer of its own, which the page ignored and never acknowledged: 4 s later it closed the window with
+            // the agents still at work, and a «No» cancelled N, which was no longer the active one (full review
+            // 2026-10-06, Rust 7). The open question keeps its id and its one timer.
+            if let Some((id, CloseRequestStatus::Pending | CloseRequestStatus::Acked)) = *guard {
+                return CloseAction::AlreadyAsking(id);
             }
+            let req_id = self.request_counter.fetch_add(1, Ordering::SeqCst) + 1;
+            *guard = Some((req_id, CloseRequestStatus::Pending));
             CloseAction::PreventAndAsk(req_id)
         }
     }
@@ -1887,6 +1900,8 @@ fn attach_close_handler(window: &tauri::WebviewWindow, manager: std::sync::Arc<C
             }
             match manager.on_close_requested() {
                 CloseAction::AllowClose => {}
+                // The question is open: the window stays, and nothing else is started.
+                CloseAction::AlreadyAsking(_) => api.prevent_close(),
                 CloseAction::PreventAndAsk(request_id) => {
                     api.prevent_close();
                     if let Err(err) = target.emit(
@@ -3640,6 +3655,43 @@ mod tests {
         assert!(!manager.on_timeout(req_id));
         let action2 = manager.on_close_requested();
         assert!(matches!(action2, CloseAction::PreventAndAsk(_)));
+    }
+
+    /// Full review 2026-10-06, Rust 7: a second click on close while the question is open.
+    #[test]
+    fn a_second_click_while_the_question_is_open_asks_nothing_and_arms_no_second_timer() {
+        use std::time::Duration;
+        let manager = CloseManager::new(Duration::from_millis(50));
+        let CloseAction::PreventAndAsk(first) = manager.on_close_requested() else {
+            panic!("the first click asks");
+        };
+        // Waiting for the page's first answer, and again once it has acknowledged: the same question.
+        assert_eq!(manager.on_close_requested(), CloseAction::AlreadyAsking(first));
+        assert!(manager.ack(first));
+        assert_eq!(manager.on_close_requested(), CloseAction::AlreadyAsking(first));
+        // No request N+1 exists to be forced shut by a timer, and the open one is not forced either.
+        assert!(!manager.on_timeout(first + 1));
+        assert!(!manager.on_timeout(first));
+        // A «No» reaches the question that is open.
+        assert!(manager.cancel(Some(first)));
+        // Once answered, the next click is a new question with a new id.
+        let CloseAction::PreventAndAsk(next) = manager.on_close_requested() else {
+            panic!("after a «No» the next click asks again");
+        };
+        assert_eq!(next, first + 1);
+    }
+
+    #[test]
+    fn the_unanswered_question_still_closes_after_its_one_timeout() {
+        use std::time::Duration;
+        let manager = CloseManager::new(Duration::from_millis(50));
+        let CloseAction::PreventAndAsk(first) = manager.on_close_requested() else {
+            panic!("the first click asks");
+        };
+        assert_eq!(manager.on_close_requested(), CloseAction::AlreadyAsking(first));
+        // The one timer of the first request is what closes a window whose page never answers.
+        assert!(manager.on_timeout(first));
+        assert_eq!(manager.on_close_requested(), CloseAction::AllowClose);
     }
 
     #[test]
