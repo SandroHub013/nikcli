@@ -55,6 +55,7 @@ import { SessionList } from "./session-list"
 import {
   connectionNotice,
   conversationOf,
+  turnOf,
   isBusy,
   messageError,
   partsOf,
@@ -249,6 +250,11 @@ export function Chat(props: ChatProps) {
   const turns = createMemo<Turn[]>(() => {
     const id = open()
     return id ? conversationOf(store.state.data, id) : []
+  })
+  // The messages themselves, which keep their identity from one event to the next: the list below is drawn from these.
+  const messages = createMemo(() => {
+    const id = open()
+    return id ? (store.state.data.message[id] ?? []) : []
   })
   // What the open session has cost, and how full the model's window is when the catalog knows its size.
   const usageLine = () => {
@@ -509,7 +515,7 @@ export function Chat(props: ChatProps) {
                 </div>
               }
             >
-              <For each={turns()}>{(turn) => <Turn turn={turn} />}</For>
+              <For each={messages()}>{(info) => <Turn turn={turnOf(store.state.data, info)} />}</For>
             </Show>
             <Show when={retrying()}>
               {(line) => (

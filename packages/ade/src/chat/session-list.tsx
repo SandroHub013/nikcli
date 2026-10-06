@@ -6,7 +6,7 @@
  * nodes only.
  */
 
-import { createSignal, For, Show } from "solid-js"
+import { createMemo, createSignal, For, Show } from "solid-js"
 import { t } from "../i18n"
 import { requestProblem } from "./errors"
 import type { SessionEntry } from "./sessions"
@@ -19,6 +19,17 @@ export function SessionList(props: {
 }) {
   const [renaming, setRenaming] = createSignal<string>()
   const [failed, setFailed] = createSignal<string>()
+
+  /*
+   * A row is a session id, not the entry object: the entries are made again at every event (a session going busy
+   * makes a new one), and a row known by its object was thrown away and built again, taking with it the title
+   * being renamed (full review 2026-10-06, bots 13). The entry is read from the current list by the id.
+   */
+  const ids = createMemo(() => props.entries.map((entry) => entry.id))
+  const rowOf = (id: string) => {
+    let last = props.entries.find((entry) => entry.id === id)!
+    return () => (last = props.entries.find((entry) => entry.id === id) ?? last)
+  }
 
   // A session made outside the chat is read, never written to (C5): not renamed either.
   const begin = (entry: SessionEntry) => {
@@ -44,36 +55,40 @@ export function SessionList(props: {
         fallback={<p data-slot="chat-sessions-empty">{t("chat.sessions.empty")}</p>}
       >
         <ul data-slot="chat-session-list">
-          <For each={props.entries}>
-            {(entry) => (
-              <li data-slot="chat-session" data-current={entry.id === props.current} data-chat={entry.chat}>
+          <For each={ids()}>
+            {(id) => {
+              const entry = rowOf(id)
+              // A memo: a new entry with the same title leaves the field alone, and what is being typed in it.
+              const title = createMemo(() => entry().title)
+              return (
+              <li data-slot="chat-session" data-current={id === props.current} data-chat={entry().chat}>
                 <Show
-                  when={renaming() === entry.id}
+                  when={renaming() === id}
                   fallback={
                     <button
                       type="button"
                       data-slot="chat-session-open"
-                      aria-current={entry.id === props.current ? "true" : undefined}
-                      title={entry.chat ? t("chat.session.renameHint") : undefined}
-                      onClick={() => props.onOpen(entry.id)}
-                      onDblClick={() => begin(entry)}
+                      aria-current={id === props.current ? "true" : undefined}
+                      title={entry().chat ? t("chat.session.renameHint") : undefined}
+                      onClick={() => props.onOpen(id)}
+                      onDblClick={() => begin(entry())}
                       onKeyDown={(event) => {
                         if (event.key === "F2") {
                           event.preventDefault()
-                          begin(entry)
+                          begin(entry())
                         }
                       }}
                     >
-                      <span data-slot="chat-session-title">{entry.title}</span>
-                      <Show when={entry.waiting}>
+                      <span data-slot="chat-session-title">{title()}</span>
+                      <Show when={entry().waiting}>
                         <span data-slot="chat-session-mark" data-kind="waiting">
                           {t("chat.session.waiting")}
                         </span>
                       </Show>
-                      <Show when={!entry.waiting && entry.busy}>
+                      <Show when={!entry().waiting && entry().busy}>
                         <span data-slot="chat-session-mark">{t("chat.session.busy")}</span>
                       </Show>
-                      <Show when={!entry.chat}>
+                      <Show when={!entry().chat}>
                         <span data-slot="chat-session-mark">{t("chat.session.foreign")}</span>
                       </Show>
                     </button>
@@ -83,7 +98,7 @@ export function SessionList(props: {
                     type="text"
                     data-slot="chat-session-input"
                     aria-label={t("chat.session.renameInput")}
-                    value={entry.title}
+                    value={title()}
                     ref={(el) =>
                       queueMicrotask(() => {
                         el.focus()
@@ -93,7 +108,7 @@ export function SessionList(props: {
                     onKeyDown={(event) => {
                       if (event.key === "Enter") {
                         event.preventDefault()
-                        void commit(entry.id, event.currentTarget.value)
+                        void commit(id, event.currentTarget.value)
                       } else if (event.key === "Escape") {
                         event.preventDefault()
                         setRenaming(undefined)
@@ -103,7 +118,8 @@ export function SessionList(props: {
                   />
                 </Show>
               </li>
-            )}
+              )
+            }}
           </For>
         </ul>
       </Show>
