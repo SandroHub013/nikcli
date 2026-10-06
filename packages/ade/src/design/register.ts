@@ -1,4 +1,4 @@
-import { createMemo, createSignal, type Accessor } from "solid-js"
+import { batch, createMemo, createSignal, type Accessor } from "solid-js"
 import { every } from "../host/every"
 import type { DirEntry } from "../host/shell"
 import type { ReadDir } from "../host/register-watch"
@@ -56,9 +56,11 @@ export function createDesignRegister(deps: DesignRegisterDeps): DesignRegister {
   const refresh = async () => {
     const path = deps.path()
     if (!path) {
-      setLoadedPath(undefined)
+      batch(() => {
+        setLoadedPath(undefined)
+        setLoaded(undefined)
+      })
       stamp = undefined
-      setLoaded(undefined)
       setError(undefined)
       return
     }
@@ -68,9 +70,11 @@ export function createDesignRegister(deps: DesignRegisterDeps): DesignRegister {
       const nextStamp = await stampOf(path)
       const register = await loadDesign(io, path)
       if (deps.path() !== path) return
-      setLoadedPath(path)
+      batch(() => {
+        setLoadedPath(path)
+        setLoaded(register)
+      })
       stamp = nextStamp
-      setLoaded(register)
       setError(undefined)
     } catch (failure) {
       if (deps.path() === path) setError(failure instanceof Error ? failure.message : String(failure))

@@ -11,7 +11,7 @@
  * only when they move. Master appending from a shell shows up within one tick.
  */
 
-import { createMemo, createSignal, type Accessor } from "solid-js"
+import { batch, createMemo, createSignal, type Accessor } from "solid-js"
 import { every } from "../host/every"
 import type { DirEntry } from "../host/shell"
 import type { ReadDir } from "../host/register-watch"
@@ -88,10 +88,12 @@ export function createDecisionsRegister(deps: DecisionsRegisterDeps): DecisionsR
   const refresh = async () => {
     const path = deps.path()
     if (!path) {
-      setLoadedPath(undefined)
+      batch(() => {
+        setLoadedPath(undefined)
+        setLoaded(undefined)
+      })
       stamp = undefined
       failed = undefined
-      setLoaded(undefined)
       setError(undefined)
       return
     }
@@ -104,10 +106,12 @@ export function createDecisionsRegister(deps: DecisionsRegisterDeps): DecisionsR
       const register = await loadDecisions(io, path)
       // The project may have changed while this read was on its way.
       if (deps.path() !== path) return
-      setLoadedPath(path)
+      batch(() => {
+        setLoadedPath(path)
+        setLoaded(register)
+      })
       stamp = nextStamp
       failed = undefined
-      setLoaded(register)
       setError(undefined)
     } catch (failure) {
       if (deps.path() === path) {
