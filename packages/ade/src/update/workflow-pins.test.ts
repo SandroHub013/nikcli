@@ -79,6 +79,26 @@ describe("the release workflows keep their guards", () => {
     expect(text).toContain('if [ "$STATE" = "false" ]')
   })
 
+  /*
+   * Verifiche's review of F4: an API error read as «no release» cleared a tag and left its draft; a pipe into
+   * `grep -q` under pipefail read a SIGPIPE as «no feed» and wrote it unseen.
+   */
+  test("the tag step stops on an API error and takes only «release not found» for no release", () => {
+    const text = read("ade-auto-release.yml")
+    expect(text).not.toContain("|| echo none")
+    expect(text).toContain("release not found")
+    expect(text).toContain("exit 1")
+  })
+
+  test("the feed check reads the asset names into a variable, not through a pipe into grep -q", () => {
+    const text = read("ade-release.yml")
+    const at = text.indexOf("ade-updater feed")
+    const step = text.slice(text.lastIndexOf("CURRENT=-", at), at)
+    expect(step).toContain('ASSETS="$(gh release view ade-updater')
+    expect(step).toContain('grep -qx latest.json <<<"$ASSETS"')
+    expect(step).not.toMatch(/\|\s*grep\s+-\w*q/)
+  })
+
   test("the updater feed is written only when the guard says so", () => {
     const text = read("ade-release.yml")
     expect(text).toContain("script/feed-guard.ts")

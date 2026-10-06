@@ -545,7 +545,10 @@ jobs:
           # A feed that exists and cannot be fetched fails the step instead of being overwritten unseen.
           # (Two tags publishing in the same seconds can still cross; the window is as long as this step.)
           CURRENT=-
-          if gh release view ade-updater --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -qx latest.json; then
+          # The names first, in a variable: a pipe into grep -q under pipefail can take SIGPIPE when grep leaves early on a
+          # long list, and the feed would be written without being looked at. A failed listing fails the step.
+          ASSETS="$(gh release view ade-updater --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          if grep -qx latest.json <<<"$ASSETS"; then
             mkdir -p current
             gh release download ade-updater --repo "$GITHUB_REPOSITORY" --pattern latest.json --dir current --clobber
             CURRENT=current/latest.json

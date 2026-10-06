@@ -175,7 +175,16 @@ jobs:
           # a release that never went public (a failed build): it and its draft are cleared, and the tag is
           # made again on the commit that was checked. A public release is never touched.
           if [ -n "$(git ls-remote --tags origin "refs/tags/$TAG")" ]; then
-            STATE="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' 2>/dev/null || echo none)"
+            # Only «release not found» means there is no release. Any other error (network, rate limit) stops
+            # here: taking it for «none» would clear the tag and leave a draft behind with the old notes.
+            if VIEW="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' 2>&1)"; then
+              STATE="$VIEW"
+            elif grep -qi 'release not found' <<<"$VIEW"; then
+              STATE=none
+            else
+              echo "could not read the release of $TAG: $VIEW" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
             if [ "$STATE" = "false" ]; then
               echo "$TAG is a public release already; not touching it" | tee -a "$GITHUB_STEP_SUMMARY"
               exit 1
