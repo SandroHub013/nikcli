@@ -53,6 +53,8 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async clientInformation(): Promise<OAuthClientInformation | undefined> {
+    // The user chose this client, for whichever authorization server the server points to: it carries no
+    // stamp, so the SDK never binds it to one and never drops it when discovery lands elsewhere.
     if (this.config.clientId) {
       return {
         client_id: this.config.clientId,
@@ -68,6 +70,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
         return yield* auth.getForUrl(mcpName, serverUrl)
       }),
     )
+
     if (entry?.clientInfo) {
       if (entry.clientInfo.clientSecretExpiresAt && entry.clientInfo.clientSecretExpiresAt < Date.now() / 1000) {
         log.info("client secret expired, need to re-register", { mcpName: this.mcpName })
@@ -76,6 +79,12 @@ export class McpOAuthProvider implements OAuthClientProvider {
       return {
         client_id: entry.clientInfo.clientId,
         client_secret: entry.clientInfo.clientSecret,
+        // Given back with the rest: the SDK saves this very object again once it binds it to a server.
+        ...(entry.clientInfo.clientIdIssuedAt !== undefined ? { client_id_issued_at: entry.clientInfo.clientIdIssuedAt } : {}),
+        ...(entry.clientInfo.clientSecretExpiresAt !== undefined
+          ? { client_secret_expires_at: entry.clientInfo.clientSecretExpiresAt }
+          : {}),
+        ...(entry.clientInfo.issuer ? { issuer: entry.clientInfo.issuer } : {}),
       }
     }
 
@@ -83,6 +92,9 @@ export class McpOAuthProvider implements OAuthClientProvider {
   }
 
   async saveClientInformation(info: OAuthClientInformationFull): Promise<void> {
+    // The SDK saves what it binds, the configured client included. That one stays unbound (see clientInformation).
+    if (this.config.clientId && info.client_id === this.config.clientId) return
+
     const mcpName = this.mcpName
     const serverUrl = this.serverUrl
     await this.runAuth(
@@ -95,6 +107,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
             clientSecret: info.client_secret,
             clientIdIssuedAt: info.client_id_issued_at,
             clientSecretExpiresAt: info.client_secret_expires_at,
+            issuer: info.issuer,
           },
           serverUrl,
         )
@@ -125,6 +138,9 @@ export class McpOAuthProvider implements OAuthClientProvider {
         ? Math.max(0, Math.floor(entry.tokens.expiresAt - Date.now() / 1000))
         : undefined,
       scope: entry.tokens.scope,
+      // Handed back as it was saved: the SDK drops tokens stamped for another authorization server, and
+      // warns on every refresh about tokens that carry no stamp. Entries saved before have none, and keep working.
+      ...(entry.tokens.issuer ? { issuer: entry.tokens.issuer } : {}),
     }
   }
 
@@ -141,6 +157,7 @@ export class McpOAuthProvider implements OAuthClientProvider {
             refreshToken: tokens.refresh_token,
             expiresAt: tokens.expires_in ? Date.now() / 1000 + tokens.expires_in : undefined,
             scope: tokens.scope,
+            issuer: tokens.issuer,
           },
           serverUrl,
         )
