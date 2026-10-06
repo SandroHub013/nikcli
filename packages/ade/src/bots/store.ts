@@ -17,6 +17,7 @@ import { t } from "../i18n"
 import { getHost, type Host, type RunResult } from "../host/shell"
 import type { ProjectFs } from "./project-trust"
 import { joinPath } from "../host/path"
+import { SAFE_EFFORT, SAFE_MODEL } from "./runners"
 import { isLegacyTalkKey, parseTalk, serializeTalk, talkKey, TALK_KEY_PREFIX, type Talk } from "./talk"
 import { createGatewayThreads, type GatewayThreads } from "./gateway/threads"
 import {
@@ -489,17 +490,19 @@ export function botLaunch(bot: AgentFile): { agentId: string; command: string; a
    * model and effort.
    */
   switch (bot.runner) {
+    // The model and effort of a bot file go on the line only in the shapes a turn allows (`runners.ts`,
+    // B1): `effort` sits inside a TOML string in `-c`, and a quote there wrote a second setting (bots 7).
     case "claude": {
       const args: string[] = []
-      if (bot.model) args.push("--model", bot.model)
-      if (bot.effort) args.push("--effort", bot.effort)
+      if (bot.model && SAFE_MODEL.test(bot.model)) args.push("--model", bot.model)
+      if (bot.effort && SAFE_EFFORT.test(bot.effort)) args.push("--effort", bot.effort)
       if (bot.prompt.trim()) args.push("--append-system-prompt", bot.prompt.trim())
       return { agentId: "claude-code", command: "claude", args }
     }
     case "codex": {
       const args: string[] = []
-      if (bot.model) args.push("-m", bot.model)
-      if (bot.effort) args.push("-c", `model_reasoning_effort="${bot.effort}"`)
+      if (bot.model && SAFE_MODEL.test(bot.model)) args.push("-m", bot.model)
+      if (bot.effort && SAFE_EFFORT.test(bot.effort)) args.push("-c", `model_reasoning_effort="${bot.effort}"`)
       return { agentId: "codex", command: "codex", args }
     }
     default:

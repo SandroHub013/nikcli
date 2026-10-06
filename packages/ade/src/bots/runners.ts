@@ -355,8 +355,8 @@ export function withInstructions(bot: AgentFile, message: string): string {
  * shim an `&` ran a command. A value outside these shapes is left out, and
  * the turn runs with Codex's own default.
  */
-const SAFE_EFFORT = /^[a-z]{1,16}$/
-const SAFE_MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$/
+export const SAFE_EFFORT = /^[a-z]{1,16}$/
+export const SAFE_MODEL = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,79}$/
 
 /*
  * For `codex exec` and `exec resume` a PROMPT of `-` means «read it from
