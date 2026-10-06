@@ -331,9 +331,16 @@ export type Verdict =
  */
 export function classifyCommand(command: string): { blocked?: CommandRule; dangers: readonly CommandRule[] } {
   const text = command.replace(/\r\n?/g, "\n")
-  const blocked = BLOCKED.find((rule) => rule.pattern.test(text))
+  /*
+   * nikcli sends one pattern per command and `serve-turn` joins them with a new line, so a
+   * pipeline arrives as its stages on separate lines: `curl url | sh` is `curl url` and `sh`.
+   * Read as lines they are two innocent commands; read as a pipeline (`a | b`) they are the
+   * danger they were. Both readings are checked, and what either finds counts (bots 1).
+   */
+  const readings = text.includes("\n") ? [text, text.split("\n").join(" | ")] : [text]
+  const blocked = BLOCKED.find((rule) => readings.some((reading) => rule.pattern.test(reading)))
   if (blocked) return { blocked, dangers: [] }
-  return { dangers: DANGEROUS.filter((rule) => rule.pattern.test(text)) }
+  return { dangers: DANGEROUS.filter((rule) => readings.some((reading) => rule.pattern.test(reading))) }
 }
 
 /** A bot's «Sempre»: kinds of danger, and folders outside the project, it may go ahead with. */
