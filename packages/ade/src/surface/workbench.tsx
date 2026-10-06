@@ -1019,7 +1019,7 @@ export function Workbench() {
   ): Pane => {
     const pane: Pane = {
       id: newPaneId("b"),
-      title: sheet ? sheetLabel(sheet) : "Browser",
+      title: sheet ? sheetLabel(sheet) : t("newPane.browser"),
       ...(sheet ? { designSheet: sheet } : {}),
       status: "working",
       model: "—",
@@ -1156,7 +1156,7 @@ export function Workbench() {
   // One dialog at a time: a second command while it is open waits for its answer.
   const pickRecordDir = onePickAtATime(async () => {
     const host = await getHost()
-    const chosen = await host?.pickDirectory?.("Dove salvare i video registrati")
+    const chosen = await host?.pickDirectory?.(t("record.pickDirTitle"))
     if (!chosen) return undefined
     setRecordDir(chosen)
     saveRecordDir(chosen)
@@ -1856,7 +1856,7 @@ export function Workbench() {
     setWb((w) => ({
       ...addPane(w, {
         id: newPaneId("des"),
-        title: "Design",
+        title: t("design.title"),
         status: "working",
         model: "—",
         mode: "design",
@@ -1903,7 +1903,7 @@ export function Workbench() {
     setWb((w) => ({
       ...addPane(w, {
         id: newPaneId("d"),
-        title: "Decisioni",
+        title: t("decisions.title"),
         status: "working",
         model: "—",
         mode: "decisions",
@@ -3068,7 +3068,7 @@ export function Workbench() {
     const branch = result && result.code === 0 ? result.stdout.trim() : ""
     const pane = wb().panes.find((candidate) => candidate.id === paneId)
     if (!pane || !branch || branch === "HEAD" || pane.tree?.branch === branch) return
-    setWb((w) => updatePane(w, paneId, { tree: { branch, fidelity: "full", note: `Lavora in ${cwd}` } }))
+    setWb((w) => updatePane(w, paneId, { tree: { branch, fidelity: "full", note: t("pane.tree.workingIn", cwd) } }))
   }
 
   /** When each pane was last set working, so an older idle from its hook does not end the new turn. */
@@ -6556,7 +6556,7 @@ export function Workbench() {
       setWb((w) =>
         addPane(w, {
           id: newPaneId("a"),
-          title: "Simulatore",
+          title: t("pane.simulator.title"),
           status: "working",
           model: "—",
           mode: "app",
@@ -6570,7 +6570,7 @@ export function Workbench() {
       setWb((w) =>
         addPane(w, {
           id: newId,
-          title: "Browser",
+          title: t("newPane.browser"),
           status: "working",
           model: "—",
           mode: "browser",
@@ -8560,7 +8560,7 @@ export function Workbench() {
           ...((input.projectRoot ?? currentProj?.root) ? { projectRoot: input.projectRoot ?? currentProj!.root } : {}),
           cwd: input.worktree?.path ?? currentProj?.root,
           tree: input.worktree
-            ? { branch: input.worktree.branch, fidelity: "full", note: `Worktree ${input.worktree.path}` }
+            ? { branch: input.worktree.branch, fidelity: "full", note: t("pane.tree.worktree", input.worktree.path) }
             : currentProj?.branch
               ? { branch: currentProj.branch, fidelity: "project" }
               : undefined,
@@ -8657,7 +8657,7 @@ export function Workbench() {
     setWb((w) =>
       addPane(w, {
         id,
-        title: `${runner.label} · accesso`,
+        title: t("pane.runnerLogin", runner.label),
         status: "idle",
         activity: "ready",
         model: runner.command,
@@ -8691,7 +8691,7 @@ export function Workbench() {
     setWb((w) => ({
       ...addPane(w, {
         id: newPaneId("b"),
-        title: "Guida MCP",
+        title: t("pane.mcpGuide.title"),
         status: "working",
         model: "—",
         mode: "browser",
@@ -9332,7 +9332,7 @@ export function Workbench() {
                     if (opening) setNotices((list) => markAllRead(list))
                   }}
                   aria-label={
-                    unreadCount(notices()) > 0 ? `Notifiche, ${unreadCount(notices())} da leggere` : "Notifiche"
+                    unreadCount(notices()) > 0 ? t("bell.unread", unreadCount(notices())) : t("bell.title")
                   }
                   title={t("bell.title")}
                 >

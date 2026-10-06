@@ -49,10 +49,11 @@ const SINKS = new Set([
   "setLoadError",
   "setVoiceNotice",
   "setVoiceSettingsNotice",
+  "pickDirectory",
 ])
 
 /** Names and symbols that read the same in any language. */
-const NEUTRAL = /^(?:ADE|nik|nikcli|ssh|MCP|git|GitHub|OpenRouter|Codex|Claude Code|&lt;|&gt;|bun run|[A-Z][A-Z0-9_]+)$/
+const NEUTRAL = /^(?:ADE|nik|nikcli|NikVerse|ssh|MCP|git|GitHub|OpenRouter|Codex|Claude Code|&lt;|&gt;|bun run|[A-Z][A-Z0-9_]+)$/
 
 function sources(dir: string, into: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
@@ -122,7 +123,8 @@ function count(path: string): number {
     } else if (ts.isCallExpression(node) && SINKS.has(calleeName(node) ?? "")) {
       const texts: string[] = []
       for (const argument of node.arguments) sinkTexts(argument, texts)
-      found += texts.filter((text) => isProse(text)).length
+      const isPick = calleeName(node) === "pickDirectory"
+      found += texts.filter((text) => (isPick ? isText(text.trim()) : isProse(text))).length
     } else if (
       ts.isPropertyAssignment(node) &&
       node.name.getText() === "activity" &&
@@ -130,6 +132,17 @@ function count(path: string): number {
       !(ACTIVITY_CODES as readonly string[]).includes(node.initializer.text)
     ) {
       found++
+    } else if (
+      ts.isPropertyAssignment(node) &&
+      node.name.getText() === "title" &&
+      !ts.isJsxAttribute(node.parent) &&
+      !path.replace(/\\/g, "/").endsWith("release-plan.ts") &&
+      !path.replace(/\\/g, "/").includes("nikverse/city/") &&
+      !path.replace(/\\/g, "/").includes("/voice/")
+    ) {
+      const texts: string[] = []
+      sinkTexts(node.initializer, texts)
+      found += texts.filter((text) => isText(text.trim())).length
     }
     ts.forEachChild(node, visit)
   }
@@ -174,6 +187,26 @@ describe("fixed text in JSX", () => {
     )
     try {
       expect(count(fixture)).toBe(3)
+    } finally {
+      require("node:fs").rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("catches hardcoded text in pickDirectory, title properties, and non-JSX modules", () => {
+    const dir = join(require("node:os").tmpdir(), `ade-hardcoded-non-jsx-${process.pid}`)
+    require("node:fs").mkdirSync(dir, { recursive: true })
+    const fixtureTs = join(dir, "fixture.ts")
+    writeFileSync(
+      fixtureTs,
+      [
+        'export const open = (host: any) => host.pickDirectory("Apri cartella")',
+        'export const cmd = { title: "Mostra plugin" }',
+        'export const ok = { title: t("cmd.title") }',
+        'export const okPick = (host: any) => host.pickDirectory(t("pick.dir"))',
+      ].join("\n"),
+    )
+    try {
+      expect(count(fixtureTs)).toBe(2)
     } finally {
       require("node:fs").rmSync(dir, { recursive: true, force: true })
     }

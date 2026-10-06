@@ -138,6 +138,7 @@ export const en: Messages = {
   "paneTitle.reviewer": "Review",
   "paneTitle.shell": "Terminal",
   "newPane.session": "Session",
+  "newPane.browser": "Browser",
   "newPane.session.hint": "an agent in a terminal",
   "newPane.browser.hint": "the page you're building",
   "newPane.video.hint": "watch a project file, and show it to the agent",
@@ -2093,4 +2094,80 @@ export const en: Messages = {
   "bots.settings.unsaved": "Unsaved changes.",
   "bots.settings.saving": "Saving…",
   "bots.settings.save": "Save",
+
+  // F7a: Worktree close reasons
+  "worktree.close.statusError": (title, worktree) => `"${title}": git cannot tell if there are changes in ${worktree}`,
+  "worktree.close.uncommitted": (title, worktree) => `"${title}" has uncommitted changes in ${worktree}`,
+  "worktree.close.unknownBranch": (title, branch) => `"${title}": unknown ADE branch (${branch}), cannot tell if work is merged`,
+  "worktree.close.none": "none",
+  "worktree.close.mergedCheckError": (title, branch) => `"${title}": git cannot tell if branch ${branch} is merged`,
+  "worktree.close.unmerged": (title, branch) => `"${title}" has commits on branch ${branch} that are not yet merged`,
+  "worktree.close.noRescue": "this host cannot save session reports",
+  "worktree.close.noRoot": (title, worktree) => `"${title}": cannot find the project that created worktree ${worktree}`,
+  "worktree.close.rescueFailed": (title, worktree, error) => `"${title}": failed to save session reports, worktree remains at ${worktree} (${error})`,
+  "worktree.close.gitRefused": "git refused",
+  "worktree.close.removeFailed": (title, worktree, error) => `"${title}": git did not remove ${worktree} (${error})`,
+
+  // F7a: Pane actions and workbench
+  "pane.retry": "Retry",
+  "record.pickDirTitle": "Where to save recorded videos",
+  "pane.simulator.title": "Simulator",
+  "pane.mcpGuide.title": "MCP Guide",
+  "pane.tree.workingIn": (cwd) => `Working in ${cwd}`,
+  "pane.tree.worktree": (path) => `Worktree ${path}`,
+  "bell.unread": (n) => `Notifications, ${n} unread`,
+
+  // F7a: Grid and pane details
+  "grid.zone.before": "Before",
+  "grid.zone.after": "After",
+  "grid.zone.above": "Above",
+  "grid.zone.below": "Below",
+  "grid.zone.swap": "Swap",
+  "pane.elapsed": (elapsed) => ` · for ${elapsed}`,
+  "pane.repeatCount": (n) => `Repeated ${n} times`,
+
+  // F7a: Host selectors and commands
+  "project.open.title": "Open project",
+  "host.commandNotAllowed": (cmd) => `command not allowed: ${cmd}`,
+  "host.pickDirectory": "Choose a folder",
+  "host.pickFile": "Choose file",
+
+  // F7a: Bots
+  "bots.didNotReply": (label) => `${label} did not respond.`,
+  "bots.closedBeforeReply": (label) => `${label} closed before responding.`,
+  "bots.unknownError": "Unknown error.",
+  "bots.provider.desktopOnly": "Desktop app only.",
+  "bots.provider.notInstalled": "Not installed.",
+  "bots.provider.statusUnavailable": "Status unavailable.",
+  "bots.provider.noStatusReply": "No reply from status command.",
+  "bots.alreadyExists": (identifier) => `A bot with identifier “${identifier}” already exists.`,
+  "bots.defaultDescription": (name) => `Bot “${name}”.`,
+  "bots.terms.codexNoCost": "Codex does not report a cost, so the spending cap cannot be monitored",
+  "bots.terms.xaiNotRead": "xAI terms have not been reviewed",
+  "bots.terms.runnerCannotRunRoutines": "this runner cannot run routines",
+  "bots.room.few": (min) => `At least ${min} bots are needed: with just one it is a chat.`,
+  "bots.room.many": (max) => `At most ${max} bots: beyond that, one message produces too many.`,
+  "bots.room.duplicate": "The same bot was added twice.",
+
+  // F7a: Plugins
+  "plugin.source.internal": "internal",
+  "plugin.source.project": "project",
+  "plugin.title": "Plugins",
+  "plugin.command.showLoaded": "Show loaded plugins",
+  "plugins.error.alreadyLoaded": "a plugin with this id is already loaded",
+  "plugins.error.notAuthorized": "not authorized for this project",
+  "plugins.error.notV2": "module does not export a v2 plugin (missing default export with id and setup)",
+
+  // F7a: Record
+  "record.export.cancelled": "Export cancelled.",
+
+  // F7a: 3D Model state
+  "model.state.noModel": "no model open",
+  "model.state.loading": (source) => `${source} — loading`,
+  "model.state.error": (source, error) => `${source} — error: ${error}`,
+  "model.state.meshes": (count) => `${count} ${count === "1" ? "mesh" : "meshes"}`,
+  "model.state.triangles": (count) => `${count} ${count === "1" ? "triangle" : "triangles"}`,
+  "model.state.dimensions": (x, y, z) => `size ${x} × ${y} × ${z}`,
+  "model.state.animations": (count) => `${count} ${count === 1 ? "animation" : "animations"}`,
+  "pane.runnerLogin": (label: string) => `${label} · sign-in`,
 }

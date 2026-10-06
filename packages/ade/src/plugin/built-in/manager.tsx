@@ -47,7 +47,7 @@ function Rows(props: { rows: ManagerRow[]; dense?: boolean }) {
                   {(label) => <span data-slot="plugin-meta">{label()}</span>}
                 </Show>
               </div>
-              <span data-slot="plugin-source">{row.source === "internal" ? "interno" : "progetto"}</span>
+              <span data-slot="plugin-source">{row.source === "internal" ? t("plugin.source.internal") : t("plugin.source.project")}</span>
             </li>
           )}
         </For>
@@ -77,7 +77,7 @@ export function createManagerPlugin(status: () => PluginStatus[], registry: Plug
     setup(context) {
       context.ui.pane.register({
         name: "overview",
-        title: "Plugin",
+        title: t("plugin.title"),
         render: () => (
           <div data-component="plugin-overview">
             <p data-slot="plugin-summary">{managerSummary(rows())}</p>
@@ -88,7 +88,7 @@ export function createManagerPlugin(status: () => PluginStatus[], registry: Plug
 
       context.ui.section.register({
         name: "installed",
-        title: "Plugin",
+        title: t("plugin.title"),
         render: () => (
           <div data-component="plugin-section">
             <Rows rows={rows()} dense />
@@ -98,9 +98,9 @@ export function createManagerPlugin(status: () => PluginStatus[], registry: Plug
 
       context.ui.command.register({
         id: "overview",
-        title: "Mostra i plugin caricati",
-        group: "Plugin",
-        keywords: ["estensioni", "componenti", "aggiuntivi"],
+        title: t("plugin.command.showLoaded"),
+        group: t("plugin.title"),
+        keywords: ["estensioni", "componenti", "aggiuntivi", "extensions", "components"],
         run: () => {
           /*
            * One tile, not one per invocation.

@@ -552,7 +552,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                 : restartable()
                   ? [
                       {
-                        label: current().status === "error" ? "Riprova" : "Riprendi",
+                        label: current().status === "error" ? t("pane.retry") : t("pane.resume"),
                         tone: "primary" as const,
                         onClick: () => deps.restart(current()),
                       },

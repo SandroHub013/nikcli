@@ -10,6 +10,7 @@
  */
 
 import type { RunResult } from "../host/shell"
+import { t } from "../i18n"
 
 export type GitRun = (command: string, args: string[], cwd?: string) => Promise<Pick<RunResult, "code" | "stdout" | "stderr">>
 
@@ -42,15 +43,16 @@ export const isAdeBranch = (branch: string | undefined): branch is string => Boo
 export async function worktreeWork(run: GitRun, facts: WorktreeFacts): Promise<string | undefined> {
   // An answer that is not an answer is not «clean»: when git cannot say, the folder stays.
   const status = await run("git", ["status", "--porcelain"], facts.worktree)
-  if (status.code !== 0) return `"${facts.title}": git non riesce a dire se ci sono modifiche in ${facts.worktree}`
-  if (status.stdout.trim()) return `"${facts.title}" ha modifiche non committate in ${facts.worktree}`
+  if (status.code !== 0) return t("worktree.close.statusError", facts.title, facts.worktree)
+  if (status.stdout.trim()) return t("worktree.close.uncommitted", facts.title, facts.worktree)
   // Commits made on a detached HEAD, or on a branch ADE did not cut, are in no branch the project's branch can be compared with: removing
   // the folder would leave them to the reflog.
-  if (!isAdeBranch(facts.branch)) return `"${facts.title}": non so su quale branch di ADE lavora (${facts.branch ?? "nessuno"}), non posso dire se il lavoro è integrato`
+  if (!isAdeBranch(facts.branch))
+    return t("worktree.close.unknownBranch", facts.title, facts.branch ?? t("worktree.close.none"))
   if (facts.root) {
     const merged = await run("git", ["branch", "--list", facts.branch, "--merged"], facts.root)
-    if (merged.code !== 0) return `"${facts.title}": git non riesce a dire se il branch ${facts.branch} è integrato`
-    if (!merged.stdout.trim()) return `"${facts.title}" ha commit sul branch ${facts.branch} non ancora integrati`
+    if (merged.code !== 0) return t("worktree.close.mergedCheckError", facts.title, facts.branch)
+    if (!merged.stdout.trim()) return t("worktree.close.unmerged", facts.title, facts.branch)
   }
   return undefined
 }
@@ -64,7 +66,7 @@ export type Rescue = (root: string, worktree: string) => Promise<number>
 
 /** For a host that cannot save them: the worktree is then kept rather than removed over files nobody has read. */
 export const noRescue: Rescue = async () => {
-  throw new Error("questo host non può mettere al sicuro i rapporti della sessione")
+  throw new Error(t("worktree.close.noRescue"))
 }
 
 /** Trying `git worktree remove` again: the session's process may still be leaving the folder (on Windows it holds it until it has gone). */
@@ -85,7 +87,7 @@ export interface Retry {
 export async function reclaimWorktree(run: GitRun, facts: WorktreeFacts, rescue: Rescue, retry?: Retry): Promise<Reclaimed> {
   const work = await worktreeWork(run, facts)
   if (work) return { kind: "kept", reason: work }
-  if (!facts.root) return { kind: "kept", reason: `"${facts.title}": non trovo il progetto da cui è nata la worktree ${facts.worktree}` }
+  if (!facts.root) return { kind: "kept", reason: t("worktree.close.noRoot", facts.title, facts.worktree) }
   // Saved before anything is removed, and tried again like the removal: the session's process may still be leaving its files.
   let saved: unknown
   for (let again = 0; again <= (retry?.times ?? 0); again++) {
@@ -100,7 +102,7 @@ export async function reclaimWorktree(run: GitRun, facts: WorktreeFacts, rescue:
   }
   if (saved !== undefined) {
     const said = saved instanceof Error ? saved.message : String(saved)
-    return { kind: "kept", reason: `"${facts.title}": non riesco a mettere al sicuro i rapporti della sessione, la worktree resta in ${facts.worktree} (${said})` }
+    return { kind: "kept", reason: t("worktree.close.rescueFailed", facts.title, facts.worktree, said) }
   }
   let removed = await run("git", ["worktree", "remove", facts.worktree], facts.root)
   for (let again = 0; removed.code !== 0 && retry && again < retry.times; again++) {
@@ -108,8 +110,8 @@ export async function reclaimWorktree(run: GitRun, facts: WorktreeFacts, rescue:
     removed = await run("git", ["worktree", "remove", facts.worktree], facts.root)
   }
   if (removed.code !== 0) {
-    const said = (removed.stderr || removed.stdout).trim().split(/\r?\n/)[0] || "git ha rifiutato"
-    return { kind: "kept", reason: `"${facts.title}": git non toglie ${facts.worktree} (${said})` }
+    const said = (removed.stderr || removed.stdout).trim().split(/\r?\n/)[0] || t("worktree.close.gitRefused")
+    return { kind: "kept", reason: t("worktree.close.removeFailed", facts.title, facts.worktree, said) }
   }
   if (!isAdeBranch(facts.branch)) return { kind: "removed", branchDeleted: false }
   const deleted = await run("git", ["branch", "-d", facts.branch], facts.root)

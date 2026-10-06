@@ -24,6 +24,8 @@
  * are what CAD, printing and quick generators write; FBX because game assets
  * still arrive in it, with the caveat that only its embedded textures load.
  */
+import { locale, t } from "../i18n"
+
 export const MODEL_EXTENSIONS = ["glb", "gltf", "obj", "stl", "fbx"] as const
 
 export type ModelFormat = (typeof MODEL_EXTENSIONS)[number]
@@ -301,31 +303,34 @@ export interface ModelState {
   readonly stats?: ModelStats
 }
 
-/** A number the way an agent and a person both read it: short, with a comma. */
+/** A number the way an agent and a person both read it: short, with a comma (or dot in English). */
 export function formatMeasure(value: number): string {
   if (!Number.isFinite(value)) return "?"
   const abs = Math.abs(value)
   const digits = abs >= 100 ? 0 : abs >= 10 ? 1 : abs >= 1 ? 2 : 3
-  return value.toFixed(digits).replace(".", ",")
+  return new Intl.NumberFormat(locale() === "it" ? "it-IT" : "en-US", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value)
 }
 
 export function formatCount(value: number): string {
-  return Math.round(value).toLocaleString("it-IT")
+  return Math.round(value).toLocaleString(locale() === "it" ? "it-IT" : "en-US")
 }
 
 export function describeModelState(state: ModelState): string {
-  if (!state.source) return "nessun modello aperto"
-  if (state.loading) return `${state.source} — in caricamento`
-  if (state.error) return `${state.source} — errore: ${state.error}`
+  if (!state.source) return t("model.state.noModel")
+  if (state.loading) return t("model.state.loading", state.source)
+  if (state.error) return t("model.state.error", state.source, state.error)
   const stats = state.stats
   if (!stats) return state.source
   const [x, y, z] = stats.size
   const parts = [
-    `${formatCount(stats.meshes)} mesh`,
-    `${formatCount(stats.triangles)} triangoli`,
-    `ingombro ${formatMeasure(x)} × ${formatMeasure(y)} × ${formatMeasure(z)}`,
+    t("model.state.meshes", formatCount(stats.meshes)),
+    t("model.state.triangles", formatCount(stats.triangles)),
+    t("model.state.dimensions", formatMeasure(x), formatMeasure(y), formatMeasure(z)),
   ]
-  if (stats.animations > 0) parts.push(`${stats.animations} animazioni`)
+  if (stats.animations > 0) parts.push(t("model.state.animations", stats.animations))
   return `${state.source} — ${parts.join(", ")}`
 }
 

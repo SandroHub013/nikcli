@@ -273,7 +273,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       deps.update(thread, (talk) => {
         if (result.status === "stopped") return applyExit(talk, null, at, runner.label)
         if (result.exitCode !== undefined) return applyExit(talk, result.exitCode, at, runner.label, result.lastWords)
-        return applyProblem(talk, result.problem ?? `${runner.label} non ha risposto.`, at)
+        return applyProblem(talk, result.problem ?? t("bots.didNotReply", runner.label), at)
       })
     })
     return turn
