@@ -1159,6 +1159,7 @@ pub async fn pty_spawn(
                 taken.map(|mut session| session.child.wait().ok().map(|status| status.exit_code() as i32))
             },
             &exit_rx,
+            EXIT_DRAIN,
             |code| {
                 let _ = exit_emitter.emit("pty:exit", Exit { id: exit_id, code });
             },
@@ -1222,21 +1223,41 @@ pub async fn pty_spawn(
  * `take_session` removes the session if it is still registered and returns the exit code of its child (the
  * unix case: EOF came first). If it is gone, the waiter took it and `late` carries the code it saw; if `pty_kill`
  * took it, the waiter ends without sending and nothing is said, as before.
+ *
+ * The wait for the output has a limit once the exit is known. The waiter was made to break the dependence on EOF
+ * (a console host that outlives its child keeps the pipe open), and an exit that waited for EOF without limit
+ * brought the pane that says «working» for ever back whenever EOF did not come: a pipe handle inherited by another
+ * process, a slow `ClosePseudoConsole` (Architect's review of F6a, O2). So when the code arrives the sender drains for
+ * at most `grace` more, then says the exit with what it has.
  */
 fn drain_then_exit(
     chunks: &Receiver<String>,
     emit: impl FnMut(String),
     take_session: impl FnOnce() -> Option<Option<i32>>,
     late: &Receiver<Option<i32>>,
+    grace: Duration,
     emit_exit: impl FnOnce(Option<i32>),
 ) {
-    pump(chunks, emit);
+    // The code and the moment the grace ends, once the waiter has sent it.
+    let seen: std::cell::Cell<Option<(Option<i32>, Instant)>> = std::cell::Cell::new(None);
+    let ended = || {
+        if seen.get().is_none() {
+            if let Ok(code) = late.try_recv() {
+                seen.set(Some((code, Instant::now() + grace)));
+            }
+        }
+        seen.get().map(|(_, at)| at)
+    };
+    pump_until(chunks, emit, &ended);
     let code = match take_session() {
         Some(code) => code,
-        // The waiter ends, with or without sending, within a tick of the session being gone: the cap is only a net.
-        None => match late.recv_timeout(Duration::from_secs(5)) {
-            Ok(code) => code,
-            Err(_) => return,
+        None => match seen.get() {
+            Some((code, _)) => code,
+            // The waiter ends, with or without sending, within a tick of the session being gone: the cap is only a net.
+            None => match late.recv_timeout(Duration::from_secs(5)) {
+                Ok(code) => code,
+                Err(_) => return,
+            },
         },
     };
     emit_exit(code);
@@ -1262,7 +1283,19 @@ fn drain_then_exit(
  * Split out of `pty_spawn` so the rules can be tested with a channel and a
  * closure, without a window to emit into.
  */
-fn pump(chunks: &Receiver<String>, mut emit: impl FnMut(String)) {
+fn pump(chunks: &Receiver<String>, emit: impl FnMut(String)) {
+    pump_until(chunks, emit, &|| None)
+}
+
+/// How often a sender with nothing to send looks whether the end of its wait has come (`ended`): a few times a second,
+/// not the sixty a frame would be.
+const IDLE_POLL: Duration = Duration::from_millis(250);
+
+/// How long the sender goes on draining once the child's exit is known, before the exit is said without the EOF.
+const EXIT_DRAIN: Duration = Duration::from_secs(1);
+
+/// `pump`, which also ends when `ended` gives a moment that has passed, flushing what it holds first.
+fn pump_until(chunks: &Receiver<String>, mut emit: impl FnMut(String), ended: &dyn Fn() -> Option<Instant>) {
     let mut pending = String::new();
     // Set while `pending` holds something; the moment it must go out.
     let mut deadline: Option<Instant> = None;
@@ -1275,8 +1308,12 @@ fn pump(chunks: &Receiver<String>, mut emit: impl FnMut(String)) {
     };
 
     loop {
+        if matches!(ended(), Some(at) if Instant::now() >= at) {
+            flush(&mut pending, &mut deadline);
+            return;
+        }
         let received = match deadline {
-            None => chunks.recv().map_err(|_| RecvTimeoutError::Disconnected),
+            None => chunks.recv_timeout(IDLE_POLL),
             Some(at) => chunks.recv_timeout(at.saturating_duration_since(Instant::now())),
         };
         match received {
@@ -1997,6 +2034,7 @@ mod tests {
             |data| log.borrow_mut().push(format!("data:{}", data.trim_end())),
             || None,
             &exit_rx,
+            Duration::from_millis(50),
             |code| log.borrow_mut().push(format!("exit:{code:?}")),
         );
         assert_eq!(log.into_inner(), vec!["data:last line".to_string(), "exit:Some(0)".to_string()]);
@@ -2009,7 +2047,7 @@ mod tests {
         tx.send("x".to_string()).unwrap();
         drop(tx);
         let mut exits = Vec::new();
-        drain_then_exit(&rx, |_| {}, || Some(Some(3)), &exit_rx, |code| exits.push(code));
+        drain_then_exit(&rx, |_| {}, || Some(Some(3)), &exit_rx, Duration::from_millis(50), |code| exits.push(code));
         assert_eq!(exits, vec![Some(3)]);
     }
 
@@ -2021,8 +2059,55 @@ mod tests {
         // The waiter found the session gone and ended without sending.
         drop(exit_tx);
         let mut exits = Vec::new();
-        drain_then_exit(&rx, |_| {}, || None, &exit_rx, |code| exits.push(code));
+        drain_then_exit(&rx, |_| {}, || None, &exit_rx, Duration::from_millis(50), |code| exits.push(code));
         assert!(exits.is_empty());
+    }
+
+    // Architect's review of F6a, O2: the exit does not wait for an EOF that never comes.
+    #[test]
+    fn the_exit_is_said_after_the_grace_even_when_the_output_never_ends() {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let (exit_tx, exit_rx) = std::sync::mpsc::channel::<Option<i32>>();
+        // The code has arrived, the last line is queued, and the channel is never closed: `tx` stays alive.
+        exit_tx.send(Some(7)).unwrap();
+        tx.send("last line\n".to_string()).unwrap();
+        let log = std::cell::RefCell::new(Vec::<String>::new());
+        let started = Instant::now();
+        drain_then_exit(
+            &rx,
+            |data| log.borrow_mut().push(format!("data:{}", data.trim_end())),
+            || None,
+            &exit_rx,
+            Duration::from_millis(100),
+            |code| log.borrow_mut().push(format!("exit:{code:?}")),
+        );
+        assert_eq!(log.into_inner(), vec!["data:last line".to_string(), "exit:Some(7)".to_string()]);
+        // Neither the idle poll nor the grace is anywhere near the five seconds of the old net.
+        assert!(started.elapsed() < Duration::from_millis(1500), "took {:?}", started.elapsed());
+        drop(tx);
+    }
+
+    #[test]
+    fn output_that_keeps_coming_does_not_hold_the_exit_past_the_grace() {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let (exit_tx, exit_rx) = std::sync::mpsc::channel::<Option<i32>>();
+        exit_tx.send(Some(0)).unwrap();
+        // A grandchild that never stops writing: a line every few milliseconds, for longer than the grace.
+        let writer = std::thread::spawn(move || {
+            for _ in 0..200 {
+                if tx.send("x".to_string()).is_err() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        });
+        let mut said = false;
+        let started = Instant::now();
+        drain_then_exit(&rx, |_| {}, || None, &exit_rx, Duration::from_millis(100), |_| said = true);
+        assert!(said);
+        assert!(started.elapsed() < Duration::from_millis(900), "took {:?}", started.elapsed());
+        drop(rx);
+        let _ = writer.join();
     }
 
     #[test]
