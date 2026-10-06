@@ -103,6 +103,43 @@ describe("the design register and the hub", () => {
   })
 })
 
+// Full review 2026-10-06, nikverse B7: `isDesignKey` accepts `constructor` and `toString`, and the hub keeps drafts and problems in
+// plain objects indexed by the key.
+describe("a proposal whose key is a name of Object", () => {
+  test("it has an empty draft and no problem, like any other", () => {
+    const register = {
+      path: () => "C:\\project\\.ade\\design.jsonl",
+      loaded: () => undefined,
+      state: () => undefined,
+      error: () => undefined,
+      refresh: async () => {},
+      append: async () => {},
+      tick: async () => {},
+      watch: () => () => {},
+    } as unknown as DesignRegister
+    createRoot((disposeRoot) => {
+      const hub = createDesignHub({
+        register,
+        recipient: () => ({ state: "non scelta" }),
+        sessions: () => [],
+        choose: () => {},
+        delivery: () => ({ state: "in coda" }),
+        onAnswered: () => {},
+      })
+      for (const k of ["constructor", "toString", "hasOwnProperty", "__proto__"]) {
+        expect(hub.draft(k)).toEqual({ note: "" })
+        expect(hub.problem(k)).toBeUndefined()
+        expect(hub.busy(k)).toBe(false)
+        hub.setDraft(k, { note: "mia nota" })
+        expect(hub.draft(k)).toEqual({ note: "mia nota" })
+      }
+      // The ordinary key next to them is untouched.
+      expect(hub.draft("DS1")).toEqual({ note: "" })
+      disposeRoot()
+    })
+  })
+})
+
 describe("«Altro giro» in the hub", () => {
   const setup = () => {
     const appended: DesignEvent[] = []
