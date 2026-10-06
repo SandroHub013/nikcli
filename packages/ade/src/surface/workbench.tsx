@@ -347,7 +347,8 @@ import {
   HELD_BY_LINE,
   formatUnread,
   formatWedged,
-  interruptKeys,
+  INTERRUPT_GAP_MS,
+  interruptPlan,
   shellRefusal,
   typesMailInto,
   WEDGE_MS,
@@ -4231,7 +4232,17 @@ export function Workbench() {
         return true
       }
       const pane = wb().panes.find((candidate) => candidate.id === target.pane.id)
-      session.write(interruptKeys(pane?.agent ?? pane?.model))
+      const plan = interruptPlan(pane?.agent ?? pane?.model)
+      if ("refusal" in plan) {
+        await answer(plan.refusal)
+        return true
+      }
+      for (const [index, keys] of plan.keys.entries()) {
+        if (index > 0) await new Promise((resolve) => setTimeout(resolve, INTERRUPT_GAP_MS))
+        // The session may have gone while the gap ran: nothing is written to a closed one.
+        if (running.get(target.pane.id) !== session) break
+        session.write(keys)
+      }
       interrupted(target.pane.id)
       // The TUI drops whatever was in the line with the work: so does the count.
       records.typed.forget(target.pane.id)
