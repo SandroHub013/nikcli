@@ -294,28 +294,85 @@ const statusError =
       })
     })
 
+const CAUSE_LIMIT = 500
+
+const errorChain = (error: unknown) => {
+  const chain: unknown[] = []
+  for (let current = error; current !== undefined && current !== null && chain.length < 4; ) {
+    chain.push(current)
+    current = typeof current === "object" && "cause" in current ? current.cause : undefined
+  }
+  return chain
+}
+
+const errorLabel = (error: unknown) => {
+  if (error instanceof Error) {
+    const code = "code" in error && (typeof error.code === "string" || typeof error.code === "number") ? error.code : ""
+    return [code, error.name === "Error" ? "" : error.name, error.message].filter((part) => part !== "").join(" ")
+  }
+  return typeof error === "string" ? error : ""
+}
+
+// The text of the failure behind a transport error, walking `cause` links. Bun and undici put the
+// real reason (`ECONNRESET`, "socket closed unexpectedly", ...) there, and URLs inside it can carry
+// the API key, so they go through the same redaction as the request URL.
+const describeCause = (error: unknown, request?: HttpClientRequest.HttpClientRequest) => {
+  const text = errorChain(error)
+    .map(errorLabel)
+    .filter((part, index, parts) => part !== "" && parts.indexOf(part) === index)
+    .join(": ")
+  if (text === "") return undefined
+  const redacted = (request ? redactBody(text, request) : text).replace(/https?:\/\/[^\s"')]+/g, (url) =>
+    URL.canParse(url) ? redactUrl(url) : REDACTED,
+  )
+  return redacted.length <= CAUSE_LIMIT ? redacted : `${redacted.slice(0, CAUSE_LIMIT)}...`
+}
+
+// Aborts and timeouts are decisions (the user cancelled, a configured deadline passed), not a flaky
+// network. The embedding app's own deadline errors (`ProviderHeaderTimeout`, `SSE read timed out`)
+// are not known here, so they are recognised by what they say, never retried.
+const DELIBERATE = /abort|time[-_\s]?out|timed[-_\s]?out/i
+
+const isDeliberate = (error: unknown) =>
+  Cause.isTimeoutError(error) ||
+  errorChain(error).some((item) => {
+    if (typeof item !== "object" || item === null) return false
+    const named = [
+      "name" in item ? item.name : undefined,
+      "_tag" in item ? item._tag : undefined,
+      "message" in item ? item.message : undefined,
+    ]
+    return named.some((value) => typeof value === "string" && DELIBERATE.test(value))
+  })
+
 const toHttpError = (redactedNames: ReadonlyArray<string | RegExp>) => (error: unknown) => {
   const transportError = (input: {
     readonly message: string
     readonly kind?: string | undefined
     readonly request?: HttpClientRequest.HttpClientRequest | undefined
-  }) =>
-    new LLMError({
+    readonly cause?: unknown
+    readonly transient?: boolean
+  }) => {
+    const cause = describeCause(input.cause, input.request)
+    return new LLMError({
       module: "RequestExecutor",
       method: "execute",
       reason: new TransportReason({
-        message: input.message,
+        message: cause && !input.message.includes(cause) ? `${input.message}: ${cause}` : input.message,
         kind: input.kind,
         url: input.request ? redactUrl(input.request.url) : undefined,
+        cause,
+        transient: input.transient,
         http: input.request ? new HttpContext({ request: requestDetails(input.request, redactedNames) }) : undefined,
       }),
     })
+  }
 
   if (Cause.isTimeoutError(error)) {
     return transportError({ message: error.message, kind: "Timeout" })
   }
   if (!HttpClientError.isHttpClientError(error)) {
-    return transportError({ message: "HTTP transport failed" })
+    return transportError({ message: "HTTP transport failed", cause: error })
   }
   const request = "request" in error ? error.request : undefined
   if (error.reason._tag === "TransportError") {
@@ -323,12 +380,15 @@ const toHttpError = (redactedNames: ReadonlyArray<string | RegExp>) => (error: u
       message: error.reason.description ?? "HTTP transport failed",
       kind: error.reason._tag,
       request,
+      cause: error.reason.cause,
+      transient: !isDeliberate(error.reason.cause),
     })
   }
   return transportError({
     message: `HTTP transport failed: ${error.reason._tag}`,
     kind: error.reason._tag,
     request,
+    cause: error.reason,
   })
 }
 

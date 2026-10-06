@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, Random, Ref } from "effect"
 import * as TestClock from "effect/testing/TestClock"
-import { Headers, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { Headers, HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { LLM, LLMError } from "../src"
 import { LLMClient, RequestExecutor } from "../src/route"
 import * as OpenAIChat from "../src/protocols/openai-chat"
@@ -58,6 +58,29 @@ const countedResponsesLayer = (attempts: Ref.Ref<number>, responses: ReadonlyArr
       ),
     ),
   )
+
+// Each entry is either a Response or the error `fetch` rejected with, in order.
+const scriptedLayer = (attempts: Ref.Ref<number>, script: ReadonlyArray<Response | Error>) =>
+  RequestExecutor.layer.pipe(
+    Layer.provide(
+      Layer.succeed(
+        HttpClient.HttpClient,
+        HttpClient.make((request) =>
+          Effect.gen(function* () {
+            const index = yield* Ref.getAndUpdate(attempts, (value) => value + 1)
+            const step = script[Math.min(index, script.length - 1)]
+            if (step instanceof Response) return HttpClientResponse.fromWeb(request, step)
+            return yield* new HttpClientError.HttpClientError({
+              reason: new HttpClientError.TransportError({ request, cause: step }),
+            })
+          }),
+        ),
+      ),
+    ),
+  )
+
+const socketClosed = () =>
+  Object.assign(new Error("The socket connection was closed unexpectedly"), { code: "ECONNRESET" })
 
 const randomMidpoint = {
   nextDoubleUnsafe: () => 0.5,
@@ -409,6 +432,104 @@ describe("RequestExecutor", () => {
             new Response("busy", { status: 503 }),
             new Response("still busy", { status: 503 }),
             new Response("done retrying", { status: 503 }),
+          ]),
+        ),
+      )
+    }).pipe(Effect.provideService(Random.Random, randomMidpoint)),
+  )
+
+  it.effect("retries a connection reset before the response and keeps going", () =>
+    Effect.gen(function* () {
+      const attempts = yield* Ref.make(0)
+      return yield* Effect.gen(function* () {
+        const executor = yield* RequestExecutor.Service
+        const fiber = yield* executor.execute(request).pipe(Effect.forkChild)
+
+        yield* Effect.yieldNow
+        expect(yield* Ref.get(attempts)).toBe(1)
+        yield* TestClock.adjust(500)
+        yield* Effect.yieldNow
+        expect(yield* Ref.get(attempts)).toBe(2)
+        yield* TestClock.adjust(1000)
+
+        const response = yield* Fiber.join(fiber)
+        expect(response.status).toBe(200)
+        expect(yield* Ref.get(attempts)).toBe(3)
+      }).pipe(
+        Effect.provide(scriptedLayer(attempts, [socketClosed(), socketClosed(), new Response("ok", { status: 200 })])),
+      )
+    }).pipe(Effect.provideService(Random.Random, randomMidpoint)),
+  )
+
+  it.effect("surfaces the underlying cause once transport retries run out", () =>
+    Effect.gen(function* () {
+      const attempts = yield* Ref.make(0)
+      return yield* Effect.gen(function* () {
+        const executor = yield* RequestExecutor.Service
+        const fiber = yield* executor.execute(request).pipe(Effect.flip, Effect.forkChild)
+        yield* Effect.yieldNow
+        yield* TestClock.adjust(500)
+        yield* Effect.yieldNow
+        yield* TestClock.adjust(1000)
+        const error = yield* Fiber.join(fiber)
+
+        expectLLMError(error)
+        expect(error.reason).toMatchObject({
+          _tag: "Transport",
+          transient: true,
+          cause: expect.stringContaining("ECONNRESET"),
+        })
+        expect(error.message).toContain("The socket connection was closed unexpectedly")
+        expect(yield* Ref.get(attempts)).toBe(3)
+      }).pipe(Effect.provide(scriptedLayer(attempts, [socketClosed()])))
+    }).pipe(Effect.provideService(Random.Random, randomMidpoint)),
+  )
+
+  it.effect("does not retry aborts or timeouts", () =>
+    Effect.gen(function* () {
+      const abort = new DOMException("The operation was aborted", "AbortError")
+      const timeout = new DOMException("The operation timed out", "TimeoutError")
+      const headerTimeout = Object.assign(new Error("Provider took too long to respond"), {
+        name: "ProviderHeaderTimeout",
+      })
+      const chunkTimeout = new Error("SSE read timed out")
+      for (const cause of [abort, timeout, headerTimeout, chunkTimeout]) {
+        const attempts = yield* Ref.make(0)
+        const error = yield* Effect.gen(function* () {
+          const executor = yield* RequestExecutor.Service
+          return yield* executor.execute(request).pipe(Effect.flip)
+        }).pipe(Effect.provide(scriptedLayer(attempts, [cause as unknown as Error])))
+
+        expectLLMError(error)
+        expect(error.retryable).toBe(false)
+        expect(error.reason).toMatchObject({ _tag: "Transport" })
+        expect(yield* Ref.get(attempts)).toBe(1)
+      }
+    }),
+  )
+
+  it.effect("redacts secrets inside the transport cause", () =>
+    Effect.gen(function* () {
+      const attempts = yield* Ref.make(0)
+      return yield* Effect.gen(function* () {
+        const executor = yield* RequestExecutor.Service
+        const fiber = yield* executor.execute(secretRequest).pipe(Effect.flip, Effect.forkChild)
+        yield* Effect.yieldNow
+        yield* TestClock.adjust(500)
+        yield* Effect.yieldNow
+        yield* TestClock.adjust(1000)
+        const error = yield* Fiber.join(fiber)
+
+        expectLLMError(error)
+        expect(error.message).toContain("fetch failed for")
+        expect(JSON.stringify(error.reason)).not.toContain("query-secret-123")
+        expect(JSON.stringify(error.reason)).not.toContain("header-secret-456")
+      }).pipe(
+        Effect.provide(
+          scriptedLayer(attempts, [
+            new Error(
+              "fetch failed for https://provider.test/v1/chat?api_key=query-secret-123 with Bearer header-secret-456",
+            ),
           ]),
         ),
       )
