@@ -42,19 +42,33 @@ export interface LearnLink {
   receive: (data: unknown) => void
   /** The port is gone with the frame: nothing said by the old document may speak for a new one. */
   close: () => void
+  /** Resolves when every write this link started has finished, so something else may write the file after it. */
+  settled: () => Promise<void>
 }
 
 export function createLearnLink(deps: {
   port: MessagePort
-  /** The progress as it is on disk. Rejected, the page opens with the empty one and says why. */
+  /** The progress as it is on disk: `null` for a learner with no file yet. Rejected, nothing is written until the panel is opened again. */
   load: () => Promise<unknown>
   /** Writes a progress the page sent, after its shape has been checked. */
   save: (json: string) => Promise<void>
   /** Something the page said that ADE is not doing, and why. */
   ignored: (reason: string) => void
+  /** The file on disk could not be read as a progress, so it is left alone: the user is told, the console gets the reason. */
+  unreadable?: () => void
 }): LearnLink {
   let closed = false
   let given = false
+  /*
+   * Whether the page may write: decided once, by the read. Only a first day (no file) or a progress ADE understands lets it. A read that
+   * failed or a document of another version leaves the file as it is, because the page would be saving over something it never saw.
+   */
+  let resolveWritable: (writable: boolean) => void = () => {}
+  const writable = new Promise<boolean>((resolve) => {
+    resolveWritable = resolve
+  })
+  /** The writes, one after the other and in the order they were said: two in flight at once can finish backwards. */
+  let chain: Promise<void> = Promise.resolve()
   const send = (message: ToPage) => {
     if (closed) return
     try {
@@ -63,6 +77,11 @@ export function createLearnLink(deps: {
       deps.ignored(`non riesco a mandare il progresso: ${String((error as Error)?.message ?? error)}`)
     }
   }
+  const refuse = (reason: string) => {
+    resolveWritable(false)
+    deps.ignored(reason)
+    deps.unreadable?.()
+  }
   return {
     onReady() {
       // Once: a `ready` replayed on a port that is already open must not read the file again.
@@ -70,8 +89,18 @@ export function createLearnLink(deps: {
       given = true
       void deps
         .load()
-        .then((progress) => send({ type: "progress", progress }))
-        .catch((error) => deps.ignored(`non riesco a leggere i progressi: ${String(error?.message ?? error)}`))
+        .then((raw) => {
+          if (raw === null || raw === undefined) {
+            resolveWritable(true)
+            send({ type: "progress", progress: null })
+            return
+          }
+          const parsed = parseProgress(raw)
+          if (!parsed.ok) return refuse(`non scrivo sopra i progressi: ${parsed.reason}`)
+          resolveWritable(true)
+          send({ type: "progress", progress: parsed.progress })
+        })
+        .catch((error) => refuse(`non riesco a leggere i progressi, non scrivo sopra: ${String(error?.message ?? error)}`))
     },
     receive(data) {
       const message = readFromPage(data)
@@ -88,9 +117,17 @@ export function createLearnLink(deps: {
         deps.ignored(ignoredReason(data, parsed.reason))
         return
       }
-      void deps
-        .save(JSON.stringify(parsed.progress))
-        .catch((error) => deps.ignored(`non riesco a scrivere i progressi: ${String(error?.message ?? error)}`))
+      const json = JSON.stringify(parsed.progress)
+      chain = chain.then(async () => {
+        // A save said before the read finished waits for it; one that cannot be written is dropped with its reason.
+        if (!(await writable)) return deps.ignored("progresso non scritto: il file su disco non si è potuto leggere")
+        if (closed) return
+        try {
+          await deps.save(json)
+        } catch (error) {
+          deps.ignored(`non riesco a scrivere i progressi: ${String((error as Error)?.message ?? error)}`)
+        }
+      })
     },
     close() {
       closed = true
@@ -100,5 +137,6 @@ export function createLearnLink(deps: {
         // A port of a document that is already gone has nothing to close.
       }
     },
+    settled: () => chain,
   }
 }

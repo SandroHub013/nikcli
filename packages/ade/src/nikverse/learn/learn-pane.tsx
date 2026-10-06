@@ -7,9 +7,9 @@ import "./learn-pane.css"
 import { t } from "../../i18n"
 
 /**
- * The Â«ImparaÂ» panel: the lesson page in a frame, and ADE's end of the channel.
+ * The «Impara» panel: the lesson page in a frame, and ADE's end of the channel.
  *
- * It is the world's own arrangement â€” an origin of its own, a nonce in the address, one `MessageChannel` port and nothing else on it â€”
+ * It is the world's own arrangement — an origin of its own, a nonce in the address, one `MessageChannel` port and nothing else on it —
  * with everything the world needs and this does not: no snapshot of the workbench, no commands, no chords, no GPU. Which is why it opens
  * and works with NikVerse switched off, and on a machine with no WebGPU: what is inside the frame is text and a few buttons.
  *
@@ -89,16 +89,30 @@ export function LearnPane(props: {
   const importProgress = async (chosen: File | undefined) => {
     const commands = await host()
     if (!chosen || !commands) return
+    let json: string
     try {
       const parsed = parseProgress(JSON.parse(await chosen.text()))
       if (!parsed.ok) return setNotice(t("learn.importRefused", parsed.reason))
-      await commands.save(JSON.stringify(parsed.progress))
+      json = JSON.stringify(parsed.progress)
+    } catch (error) {
+      return setNotice(t("learn.importFailed", String((error as Error)?.message ?? error).slice(0, 80)))
+    }
+    /*
+     * The old page's door shuts before the file is written, and the writes it already started finish first: an answer given a moment
+     * ago must not land on top of the progress that was just imported.
+     */
+    const old = link
+    link = undefined
+    old?.close()
+    try {
+      await old?.settled()
+      await commands.save(json)
       setNotice(t("learn.imported"))
-      // The page reads the progress when it opens, so an import is handed to it by opening the page again.
-      reload()
     } catch (error) {
       setNotice(t("learn.importFailed", String((error as Error)?.message ?? error).slice(0, 80)))
     }
+    // The page reads the progress when it opens, so an import is handed to it by opening the page again, whether or not it was written.
+    reload()
   }
 
   /** The page proved it is the page: a new port for its window, in place of any older one. */
@@ -111,6 +125,7 @@ export function LearnPane(props: {
       load: () => commands?.load() ?? Promise.resolve(null),
       save: (json) => commands?.save(json) ?? Promise.resolve(),
       ignored: (reason) => props.onIgnored?.(reason),
+      unreadable: () => setNotice(t("learn.progressUnreadable")),
     })
     link = current
     channel.port1.onmessage = (event) => current.receive(event.data)
