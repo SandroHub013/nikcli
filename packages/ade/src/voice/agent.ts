@@ -271,7 +271,10 @@ function textFollower(onText: (soFar: string) => void): (talk: Talk) => void {
 /** Whether a turn's outcome indicates Claude reached the plan's usage/quota limit. */
 function isLimitTurn(result: TurnResult): boolean {
   if (result.limited || result.talk?.limited) return true
-  // A thread saved before the flag, or a CLI line that names the limit itself.
+  // A turn that finished is not one the limit ended, whatever its words: Claude may well report that another session
+  // "had a 429" (full review 2026-10-06, ui 10). The words are for an `error`, from a thread saved before the flag or a
+  // CLI line that names the limit itself.
+  if (result.status === "done") return false
   const check = (s?: string) => {
     if (!s) return false
     return (
