@@ -1006,7 +1006,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const setPermissionPreset = (preset: PermissionPreset) => {
     const before = globalSync.data.config.permission
     const beforeMode = globalSync.data.config.permission_mode
-    const patch = permissionPresetPatch(preset)
+    // The server merges the patch into the map it already has, so the preset
+    // needs to see it: the keys it must rewrite are the ones already there.
+    const patch = permissionPresetPatch(preset, toPermissionMap(before))
     const mode = presetPermissionMode(preset)
 
     globalSync.set("config", "permission", { ...toPermissionMap(before), ...patch })

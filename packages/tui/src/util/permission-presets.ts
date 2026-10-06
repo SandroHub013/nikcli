@@ -11,7 +11,12 @@ export const PERMISSION_PRESETS = ["require_approval", "approve_for_me", "auto",
 /** The server-side permission mode (`permission_mode` in nikcli.json). */
 export type PermissionModeSetting = "default" | "auto"
 
-const PERMISSION_TOOL_KEYS = [
+/**
+ * Every permission a tool key may carry. Exported so the guard in
+ * `test/tool/permission-surface.test.ts` can derive the keys each preset owes
+ * from the tool list rather than repeating them by hand.
+ */
+export const PERMISSION_TOOL_KEYS = [
   "read",
   "edit",
   "glob",
@@ -236,6 +241,31 @@ function uniformPermissionPatch(action: PermissionAction): PermissionMap {
   return patch
 }
 
+/**
+ * The preset map plus a rewrite of every per-tool key the agent's map already
+ * has. `config.update` writes with `mergeDeep`
+ * (`packages/nikcli/src/config/config.ts`, `updateImpl` and
+ * `updateGlobalImpl`), and a patch cannot delete a key: `undefined` is dropped
+ * by `JSON.stringify` on the way out, and `null` fails the config schema
+ * (`Permission` is the three actions, or a map of them). So a patch that wrote
+ * only `*` would leave the previous preset's per-tool keys in place —
+ * "Approve for me" then "Require approval" kept `edit: "allow"`, and the map
+ * read back as `custom`.
+ *
+ * Keys the map does not have stay absent: absent is covered by `*`, and unlike
+ * a named `allow` it does not count as a request for a deferred tool.
+ */
+function presetPatch(presetMap: PermissionMap, current?: PermissionMap): PermissionMap {
+  const patch = clonePermissionMap(presetMap)
+  if (!current) return patch
+  for (const key of PERMISSION_TOOL_KEYS) {
+    if (Object.hasOwn(patch, key)) continue
+    if (!Object.hasOwn(current, key)) continue
+    patch[key] = getPermissionActionFor(presetMap, key)
+  }
+  return patch
+}
+
 function clonePermissionMap(map: PermissionMap): PermissionMap {
   return Object.fromEntries(
     Object.entries(map).map(([key, value]) => [
@@ -256,11 +286,19 @@ export function presetPermissionMode(preset: PermissionPreset): PermissionModeSe
   return preset === "auto" ? "auto" : "default"
 }
 
-export function permissionPresetPatch(preset: PermissionPreset): PermissionMap {
+/**
+ * The patch to send for `preset`, over the map the agent currently has.
+ *
+ * `current` is what the server will merge this into, so the rewrite of
+ * already-present keys only happens when the caller knows it. Without it the
+ * patch is the wildcard-only shape, which is correct on a config that has no
+ * per-tool keys — and wrong on one that does.
+ */
+export function permissionPresetPatch(preset: PermissionPreset, current?: PermissionMap): PermissionMap {
   if (preset === "auto") return {}
-  if (preset === "require_approval") return uniformPermissionPatch("ask")
-  if (preset === "full_access") return uniformPermissionPatch("allow")
-  return clonePermissionMap(APPROVE_FOR_ME_PERMISSIONS)
+  if (preset === "require_approval") return presetPatch(uniformPermissionPatch("ask"), current)
+  if (preset === "full_access") return presetPatch(uniformPermissionPatch("allow"), current)
+  return presetPatch(APPROVE_FOR_ME_PERMISSIONS, current)
 }
 
 export function detectPermissionMode(value: unknown, permissionMode?: unknown): PermissionMode {

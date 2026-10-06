@@ -234,8 +234,10 @@ export function DialogPermissionMode() {
   }
 
   async function applyPreset(preset: PermissionPreset) {
+    // The server merges the patch into the map it already has, so the preset
+    // needs to see it: the keys it must rewrite are the ones already there.
     await writeAgentPermission(
-      permissionPresetPatch(preset),
+      permissionPresetPatch(preset, permissionMap()),
       `${Locale.titlecase(agentName())}: ${permissionModeTitle(preset)}`,
       presetPermissionMode(preset),
     )
