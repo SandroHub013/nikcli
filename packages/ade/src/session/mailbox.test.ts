@@ -230,10 +230,14 @@ describe("ade-msg design proponi and attendi", () => {
   test("attendi carries the key; a timeout out of range is the default", () => {
     const parsed = parseMessage(JSON.stringify({ kind: "design", op: "attendi", from: "n1-0", key: "DS-t2" }))
     expect(parsed).toMatchObject({ kind: "design-attendi", key: "DS-t2", timeout: 1800 })
-    for (const timeout of [0, -1, 1.5, "60", 86_401])
+    for (const timeout of [0, -1, 1.5, "60"])
       expect(
         parseMessage(JSON.stringify({ kind: "design", op: "attendi", from: "n1-0", key: "DS-t2", timeout })),
       ).toMatchObject({ timeout: 1800 })
+    // Longer than a day is a day, as the scripts hold it: ADE never stops counting on a script still waiting.
+    expect(
+      parseMessage(JSON.stringify({ kind: "design", op: "attendi", from: "n1-0", key: "DS-t2", timeout: 200_000 })),
+    ).toMatchObject({ timeout: 86_400 })
     expect(parseMessage(JSON.stringify({ kind: "design", op: "attendi", from: "n1-0" }))).toBeUndefined()
   })
 

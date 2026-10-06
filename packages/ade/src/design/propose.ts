@@ -14,6 +14,7 @@
  */
 
 import { asOneLine } from "../session/typing"
+import { USER } from "./answer"
 import type { AnsweredDesignEvent } from "./log"
 import type { DesignProposal, DesignState } from "./state"
 
@@ -72,6 +73,11 @@ export function proposalEvent(
     }
   if (current?.status === "chiusa")
     return { error: `${read.k} è chiusa: per una proposta nuova usa un'altra cartella, con un'altra chiave` }
+  // Only «Altro giro» asks for new pages: a choice already made is never reopened by proposing again.
+  if (current?.status === "risposta")
+    return {
+      error: `${read.k} ha già una scelta: leggila con ade-msg design attendi ${read.k}, oppure usa un'altra cartella per una proposta nuova`,
+    }
   if (current) {
     const reason = typeof record.reason === "string" ? record.reason : undefined
     return { op: "riaperta", text: JSON.stringify({ k: read.k, ...(reason ? { reason } : {}), variants }) }
@@ -96,6 +102,32 @@ export function answered(proposal: DesignProposal, event: AnsweredDesignEvent): 
       ...(event.again ? { again: true as const } : {}),
     },
   }
+}
+
+/**
+ * Whether the answer on `proposal` was given in ADE, by the user, and not
+ * written into the register by someone else.
+ *
+ * Any session can append a `risposta` with `ade-msg registro design
+ * risposta`, and any agent can edit `.ade/design.jsonl`: what `attendi`
+ * prints as the user's choice must come from ADE's own buttons. Those
+ * answers are the ones in the answers' outbox, delivered or not (an entry is
+ * made only by `onAnswered`); one no longer there, because the outbox was
+ * pruned, still counts when it is the user's and no pane wrote it.
+ */
+export function answeredInAde(
+  proposal: DesignProposal,
+  path: string,
+  outbox: readonly { readonly path: string; readonly k: string; readonly answeredAt: string; readonly kind?: string }[],
+): boolean {
+  const answer = proposal.answer
+  if (!answer) return false
+  const queued = outbox.some(
+    (item) => item.path === path && item.k === proposal.k && item.answeredAt === answer.at && item.kind !== "riaperta",
+  )
+  if (queued) return true
+  const event = [...proposal.history].reverse().find((item) => item.type === "risposta" && item.at === answer.at)
+  return answer.by === USER && event !== undefined && !event.fromPane
 }
 
 /** A field on one line, whatever the register holds: no line break or control character reaches a terminal. */

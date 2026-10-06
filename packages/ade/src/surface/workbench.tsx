@@ -529,7 +529,7 @@ import { watchRegisters } from "../host/register-watch"
 import { designPath } from "../design/store"
 import { foldProposals, type DesignProposal } from "../design/state"
 import { parseDesignLog } from "../design/log"
-import { answered as answeredProposal, choiceLine, proposalEvent } from "../design/propose"
+import { answered as answeredProposal, answeredInAde, choiceLine, proposalEvent } from "../design/propose"
 import {
   WAITERS_KEY as DESIGN_WAITERS_KEY,
   addWaiter as addDesignWaiter,
@@ -4193,10 +4193,15 @@ export function Workbench() {
         const folder = `${owner.root}/.ade/design/${found.k}`
         waitFor(found.k, folder, message.timeout)
         // Chosen already: written now, and the typed line, if still queued, waits for this claim like any other.
-        if (found.answer) {
+        // Only an answer given in ADE is printed as the user's choice: one written into the register is not one.
+        if (found.answer && answeredInAde(found, path, designOutbox())) {
           answerDesignWaiters(path, found)
           await answer(`ok: ${found.k} ha già una scelta (progetto ${owner.name})`)
-        } else await answer(`ok: in attesa della scelta su ${found.k} (progetto ${owner.name})`)
+        } else if (found.answer)
+          await answer(
+            `ok: in attesa della scelta su ${found.k} (progetto ${owner.name}); la risposta nel registro non viene da una scelta in ADE e non conta`,
+          )
+        else await answer(`ok: in attesa della scelta su ${found.k} (progetto ${owner.name})`)
         return true
       }
 

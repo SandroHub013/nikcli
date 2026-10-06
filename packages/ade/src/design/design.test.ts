@@ -311,9 +311,9 @@ describe("another round (S75 point 2)", () => {
     const { proposals } = foldProposals([opened("DS1"), again("DS1")])
     const message = resolvedMessage(proposals[0]!)
     expect(message).toContain("ALTRO GIRO")
-    expect(message).toContain("riaperta")
+    expect(message).toContain("ade-msg design proponi")
     expect(message).toBe(
-      'design [k=DS1] Titolo DS1 — ALTRO GIRO, non una scelta — parole: "più contrasto, meno vetro" — rifai le varianti e riapri con: ade-msg registro design riaperta',
+      'design [k=DS1] Titolo DS1 — ALTRO GIRO, non una scelta — parole: "più contrasto, meno vetro" — rifai le varianti e rilancia ade-msg design proponi sulla stessa cartella --attendi',
     )
   })
 

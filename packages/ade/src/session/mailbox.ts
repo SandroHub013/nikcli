@@ -140,11 +140,14 @@ export function budgetOf(value: unknown): number | undefined {
 export const DESIGN_WAIT_DEFAULT = 1800
 export const DESIGN_WAIT_MAX = 86_400
 
-/** The seconds a design wait gives: a whole number from one second to a day, otherwise the default. */
+/**
+ * The seconds a design wait gives: a whole number from one second to a day.
+ * Longer is a day, as the scripts hold it too, so ADE never stops counting
+ * on a script still waiting; anything else is the default.
+ */
 export function designWaitOf(value: unknown): number {
-  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= DESIGN_WAIT_MAX
-    ? value
-    : DESIGN_WAIT_DEFAULT
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) return DESIGN_WAIT_DEFAULT
+  return Math.min(value, DESIGN_WAIT_MAX)
 }
 
 export function parseMessage(body: string): Message | undefined {

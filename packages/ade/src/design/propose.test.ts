@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { registerWrite, type RegisterWriteDeps } from "../session/register-write"
 import { parseDesignLog, type AnsweredDesignEvent } from "./log"
-import { answered, choiceLine, proposalEvent, type ReadProposal } from "./propose"
+import { answered, answeredInAde, choiceLine, proposalEvent, type ReadProposal } from "./propose"
 import { foldProposals, resolvedMessage, type DesignProposal } from "./state"
 
 const NOW = new Date("2026-10-07T10:00:00.000Z")
@@ -108,6 +108,87 @@ describe("proposalEvent", () => {
     expect(open).toEqual({ error: expect.stringContaining("ade-msg design attendi DS-tasti") })
     const closed = proposalEvent(read(), state("chiusa"))
     expect(closed).toEqual({ error: expect.stringContaining("è chiusa") })
+  })
+
+  /*
+   * Review T2, O2: the script dies on its shell's timeout, the user chooses,
+   * and the agent runs proponi again instead of attendi. The choice already
+   * made must not be reopened: only «Altro giro» asks for new pages.
+   */
+  test("a key already chosen is not reopened by proposing again: attendi reads the choice", async () => {
+    const file = register()
+    const first = proposalEvent(read(), file.state())
+    if ("error" in first) throw new Error(first.error)
+    await registerWrite(file.deps, { register: "design", op: first.op, text: first.text })
+    await registerWrite(file.deps, {
+      register: "design",
+      op: "risposta",
+      text: JSON.stringify({ k: "DS-tasti", choice: "2 · Carta", words: "questa" }),
+    })
+    expect(file.state().proposals[0]!.status).toBe("risposta")
+    expect(proposalEvent(read(), file.state())).toEqual({
+      error:
+        "DS-tasti ha già una scelta: leggila con ade-msg design attendi DS-tasti, oppure usa un'altra cartella per una proposta nuova",
+    })
+  })
+})
+
+/*
+ * Review T2, O1: any session can append a `risposta` with `ade-msg registro
+ * design risposta`, and an agent can edit the file. `attendi` prints only a
+ * choice made with ADE's buttons.
+ */
+describe("answeredInAde", () => {
+  const PATH = "C:/p/.ade/design.jsonl"
+  const opened = async () => {
+    const file = register()
+    const first = proposalEvent(read(), file.state())
+    if ("error" in first) throw new Error(first.error)
+    await registerWrite(file.deps, { register: "design", op: first.op, text: first.text })
+    return file
+  }
+
+  test("an answer a session wrote with registro design risposta is not the user's choice", async () => {
+    const file = await opened()
+    await registerWrite(file.deps, {
+      register: "design",
+      op: "risposta",
+      text: JSON.stringify({ k: "DS-tasti", choice: "1 · Scura", words: "scelgo io", by: "utente" }),
+    })
+    const proposal = file.state().proposals[0]!
+    expect(proposal.answer?.by).toBe("Dario")
+    expect(answeredInAde(proposal, PATH, [])).toBe(false)
+  })
+
+  test("a line written by hand as the user, but from a pane, is not either", () => {
+    const at = NOW.toISOString()
+    const lines = [
+      { type: "aperta", k: "DS1", at, by: "Dario", title: "T", variants: [{ name: "A" }, { name: "B" }] },
+      { type: "risposta", k: "DS1", at, by: "utente", fromPane: "n1-0", choice: "A", words: "a" },
+    ]
+    const proposal = foldProposals(parseDesignLog(lines.map((line) => JSON.stringify(line)).join("\n")).events)
+      .proposals[0]!
+    expect(answeredInAde(proposal, PATH, [])).toBe(false)
+  })
+
+  test("an answer given in ADE counts: in the answers' outbox, or the user's with no pane once the outbox moved on", async () => {
+    const file = await opened()
+    // What the sheet appends (`answerEvent`): by the user, no pane.
+    file.deps.sender = "utente"
+    file.deps.fromPane = undefined
+    await registerWrite(file.deps, {
+      register: "design",
+      op: "risposta",
+      text: JSON.stringify({ k: "DS-tasti", choice: "2 · Carta", words: "questa" }),
+    })
+    const proposal = file.state().proposals[0]!
+    const at = proposal.answer!.at
+    expect(answeredInAde(proposal, PATH, [{ path: PATH, k: "DS-tasti", answeredAt: at }])).toBe(true)
+    expect(answeredInAde(proposal, PATH, [])).toBe(true)
+    // The outbox vouches only for its own register and its own answer.
+    const forged = { ...proposal, answer: { ...proposal.answer!, by: "Dario" } }
+    expect(answeredInAde(forged, PATH, [{ path: "C:/q/.ade/design.jsonl", k: "DS-tasti", answeredAt: at }])).toBe(false)
+    expect(answeredInAde(forged, PATH, [{ path: PATH, k: "DS-tasti", answeredAt: at }])).toBe(true)
   })
 
   test("a json that does not read, or names another key, is refused", () => {

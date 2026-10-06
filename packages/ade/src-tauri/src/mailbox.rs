@@ -678,6 +678,8 @@ switch ($cmd) {
       if (-not $second) { Usage }
       $t = if ($timeoutSet) { $timeout } else { 1800 }
       if ($t -lt 1) { Usage }
+      # A day at most, as ADE counts it: past that ADE would type the choice while this still waited.
+      if ($t -gt 86400) { $t = 86400 }
       if ($head -eq 'proponi') {
         $k = Split-Path -Leaf $second.TrimEnd('\', '/')
         $fields = [ordered]@{ kind = 'design'; op = 'proponi'; folder = $second; cwd = (Get-Location).ProviderPath; attendi = $attendi; timeout = $t }
@@ -983,6 +985,8 @@ case "$cmd" in
       [ -n "$second" ] || usage
       t="$timeout"; [ "$timeout_set" = 0 ] && t=1800
       case "$t" in ''|0|*[!0-9]*) usage ;; esac
+      # A day at most, as ADE counts it: past that ADE would type the choice while this still waited.
+      [ ${#t} -gt 5 ] || [ "$t" -gt 86400 ] && t=86400
       if [ "$head" = proponi ]; then
         k="$(basename "$second")"
         a=false; [ "$attendi" = 1 ] && a=true
@@ -1377,6 +1381,11 @@ mod tests {
         assert_eq!(again["key"], "DS-t2");
         assert_eq!(again["timeout"], 1);
         assert!(PS1.contains("$t = if ($timeoutSet) { $timeout } else { 1800 }"));
+
+        // A day at most, as ADE counts it (without --attendi, so the helper's wait ends at once).
+        let long = posted_by_ps1("prop-long", &["design", "proponi", r".ade\design\DS-t2", "--timeout", "200000"], None);
+        assert_eq!(long["timeout"], 86400);
+        assert!(SH.contains(r#"[ ${#t} -gt 5 ] || [ "$t" -gt 86400 ] && t=86400"#));
 
         // The sheet with notes still works: told apart by its first argument.
         let dir = Scratch::new("design-sheet");
