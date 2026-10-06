@@ -6200,6 +6200,16 @@ export function Workbench() {
       void import("@tauri-apps/api/event").then(({ listen }) => {
         listen<{ requestId?: number }>("ade-window-close-requested", async (event) => {
           const requestId = event.payload?.requestId
+          /*
+           * Acknowledged before anything else, even when a question is already open: Rust asks the same question
+           * again when a click finds it acknowledged and unanswered, and the page answering the ack in a few ms is
+           * what disarms that timer. Behind the guard below the second ask went unanswered and closed the window
+           * with the agents at work (Architect's review of F6a, O1).
+           */
+          try {
+            const { invoke } = await import("@tauri-apps/api/core")
+            await invoke("ade_close_ack", { requestId })
+          } catch {}
           if (isHandlingClose) return
           isHandlingClose = true
           const closeForGood = () =>
@@ -6217,13 +6227,6 @@ export function Workbench() {
             })
 
           try {
-            // Acknowledge receipt to Rust to disarm the safety timeout while
-            // prompting the user, or while the workbench reaches the disk.
-            try {
-              const { invoke } = await import("@tauri-apps/api/core")
-              await invoke("ade_close_ack", { requestId })
-            } catch {}
-
             const working = countWorkingSessions(wb().panes, running)
             if (!shouldConfirmWindowClose({ working })) {
               closingConfirmed = true

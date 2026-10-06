@@ -1766,6 +1766,9 @@ pub(crate) enum CloseAction {
     /// A question is already open (asked, or waiting for its first answer): this request is the same one.
     /// The window stays, no second question is asked and no second timer starts.
     AlreadyAsking(u64),
+    /// The page had acknowledged the question and has not answered it: asked again, with the same id, and with a
+    /// timer of its own (`epoch`) that the older one cannot cut short.
+    AskAgain { id: u64, epoch: u32 },
     AllowClose,
 }
 
@@ -1780,7 +1783,8 @@ enum CloseRequestStatus {
 #[derive(Debug)]
 pub(crate) struct CloseManager {
     confirmed: std::sync::atomic::AtomicBool,
-    active_request: Mutex<Option<(u64, CloseRequestStatus)>>,
+    /// The open question: its id, where it stands, and how many times it was asked again (the `epoch` of its timer).
+    active_request: Mutex<Option<(u64, CloseRequestStatus, u32)>>,
     request_counter: std::sync::atomic::AtomicU64,
     default_timeout: std::time::Duration,
 }
@@ -1813,18 +1817,31 @@ impl CloseManager {
             // a timer of its own, which the page ignored and never acknowledged: 4 s later it closed the window with
             // the agents still at work, and a «No» cancelled N, which was no longer the active one (full review
             // 2026-10-06, Rust 7). The open question keeps its id and its one timer.
-            if let Some((id, CloseRequestStatus::Pending | CloseRequestStatus::Acked)) = *guard {
-                return CloseAction::AlreadyAsking(id);
+            match *guard {
+                Some((id, CloseRequestStatus::Pending, _)) => return CloseAction::AlreadyAsking(id),
+                /*
+                 * Acknowledged and not answered: the page may be gone (reloaded, its handler ended on an error,
+                 * `askYesNo` refused) and nothing disarms an `Acked` question, so a window that only ever said
+                 * «already asking» could not be closed at all (Architect's review of F6a, O1). The click asks
+                 * again, same id: a live page acknowledges in a few ms and the timer is disarmed; one that is
+                 * stuck is closed by this timer, as it was before the dedup.
+                 */
+                Some((id, CloseRequestStatus::Acked, epoch)) => {
+                    let epoch = epoch + 1;
+                    *guard = Some((id, CloseRequestStatus::Pending, epoch));
+                    return CloseAction::AskAgain { id, epoch };
+                }
+                _ => {}
             }
             let req_id = self.request_counter.fetch_add(1, Ordering::SeqCst) + 1;
-            *guard = Some((req_id, CloseRequestStatus::Pending));
+            *guard = Some((req_id, CloseRequestStatus::Pending, 0));
             CloseAction::PreventAndAsk(req_id)
         }
     }
 
     pub(crate) fn ack(&self, request_id: u64) -> bool {
         if let Ok(mut guard) = self.active_request.lock() {
-            if let Some((id, status)) = &mut *guard {
+            if let Some((id, status, _)) = &mut *guard {
                 if *id == request_id && *status == CloseRequestStatus::Pending {
                     *status = CloseRequestStatus::Acked;
                     return true;
@@ -1838,7 +1855,7 @@ impl CloseManager {
         use std::sync::atomic::Ordering;
         let mut confirmed = false;
         if let Ok(mut guard) = self.active_request.lock() {
-            if let Some((id, status)) = &mut *guard {
+            if let Some((id, status, _)) = &mut *guard {
                 if request_id.is_none() || request_id == Some(*id) {
                     *status = CloseRequestStatus::Confirmed;
                     confirmed = true;
@@ -1855,7 +1872,7 @@ impl CloseManager {
 
     pub(crate) fn cancel(&self, request_id: Option<u64>) -> bool {
         if let Ok(mut guard) = self.active_request.lock() {
-            if let Some((id, status)) = &mut *guard {
+            if let Some((id, status, _)) = &mut *guard {
                 if request_id.is_none() || request_id == Some(*id) {
                     *status = CloseRequestStatus::Cancelled;
                     return true;
@@ -1865,12 +1882,14 @@ impl CloseManager {
         false
     }
 
-    pub(crate) fn on_timeout(&self, request_id: u64) -> bool {
+    /// The timer of question `request_id`, asked for the `epoch`-th time: it closes the window only if that ask is the
+    /// latest and still unacknowledged. An older timer of the same question finds a newer epoch and does nothing.
+    pub(crate) fn on_timeout(&self, request_id: u64, epoch: u32) -> bool {
         use std::sync::atomic::Ordering;
         let mut force_close = false;
         if let Ok(mut guard) = self.active_request.lock() {
-            if let Some((id, status)) = &mut *guard {
-                if *id == request_id && *status == CloseRequestStatus::Pending {
+            if let Some((id, status, current)) = &mut *guard {
+                if *id == request_id && *current == epoch && *status == CloseRequestStatus::Pending {
                     *status = CloseRequestStatus::Confirmed;
                     force_close = true;
                 }
@@ -1912,8 +1931,13 @@ fn attach_close_handler(window: &tauri::WebviewWindow, manager: std::sync::Arc<C
                 CloseAction::AllowClose => {}
                 // The question is open: the window stays, and nothing else is started.
                 CloseAction::AlreadyAsking(_) => api.prevent_close(),
-                CloseAction::PreventAndAsk(request_id) => {
+                action @ (CloseAction::PreventAndAsk(_) | CloseAction::AskAgain { .. }) => {
                     api.prevent_close();
+                    let (request_id, epoch) = match action {
+                        CloseAction::AskAgain { id, epoch } => (id, epoch),
+                        CloseAction::PreventAndAsk(id) => (id, 0),
+                        _ => unreachable!(),
+                    };
                     if let Err(err) = target.emit(
                         "ade-window-close-requested",
                         CloseRequestPayload { request_id },
@@ -1925,7 +1949,7 @@ fn attach_close_handler(window: &tauri::WebviewWindow, manager: std::sync::Arc<C
                     let win = target.clone();
                     std::thread::spawn(move || {
                         std::thread::sleep(timeout);
-                        if mgr.on_timeout(request_id) {
+                        if mgr.on_timeout(request_id, epoch) {
                             eprintln!(
                                 "ADE: la pagina non ha risposto entro {timeout:?}, chiusura finestra forzata"
                             );
@@ -3650,7 +3674,7 @@ mod tests {
             panic!("expected PreventAndAsk, got {action:?}");
         };
         std::thread::sleep(Duration::from_millis(60));
-        assert!(manager.on_timeout(req_id));
+        assert!(manager.on_timeout(req_id, 0));
         assert_eq!(manager.on_close_requested(), CloseAction::AllowClose);
     }
 
@@ -3664,7 +3688,7 @@ mod tests {
         };
         assert!(manager.ack(req_id));
         std::thread::sleep(Duration::from_millis(60));
-        assert!(!manager.on_timeout(req_id));
+        assert!(!manager.on_timeout(req_id, 0));
     }
 
     #[test]
@@ -3677,7 +3701,7 @@ mod tests {
         };
         assert!(manager.cancel(Some(req_id)));
         std::thread::sleep(Duration::from_millis(60));
-        assert!(!manager.on_timeout(req_id));
+        assert!(!manager.on_timeout(req_id, 0));
         let action2 = manager.on_close_requested();
         assert!(matches!(action2, CloseAction::PreventAndAsk(_)));
     }
@@ -3690,13 +3714,12 @@ mod tests {
         let CloseAction::PreventAndAsk(first) = manager.on_close_requested() else {
             panic!("the first click asks");
         };
-        // Waiting for the page's first answer, and again once it has acknowledged: the same question.
-        assert_eq!(manager.on_close_requested(), CloseAction::AlreadyAsking(first));
-        assert!(manager.ack(first));
+        // Waiting for the page's first answer: the same question.
         assert_eq!(manager.on_close_requested(), CloseAction::AlreadyAsking(first));
         // No request N+1 exists to be forced shut by a timer, and the open one is not forced either.
-        assert!(!manager.on_timeout(first + 1));
-        assert!(!manager.on_timeout(first));
+        assert!(!manager.on_timeout(first + 1, 0));
+        assert!(manager.ack(first));
+        assert!(!manager.on_timeout(first, 0));
         // A «No» reaches the question that is open.
         assert!(manager.cancel(Some(first)));
         // Once answered, the next click is a new question with a new id.
@@ -3715,8 +3738,46 @@ mod tests {
         };
         assert_eq!(manager.on_close_requested(), CloseAction::AlreadyAsking(first));
         // The one timer of the first request is what closes a window whose page never answers.
-        assert!(manager.on_timeout(first));
+        assert!(manager.on_timeout(first, 0));
         assert_eq!(manager.on_close_requested(), CloseAction::AllowClose);
+    }
+
+    /// Architect's review of F6a, O1: an acknowledged question that is never answered must not shut the X for good.
+    #[test]
+    fn a_click_on_an_acknowledged_question_asks_again_with_the_same_id_and_a_timer_of_its_own() {
+        use std::time::Duration;
+        let manager = CloseManager::new(Duration::from_millis(50));
+        let CloseAction::PreventAndAsk(first) = manager.on_close_requested() else {
+            panic!("the first click asks");
+        };
+        assert!(manager.ack(first));
+        // The page acknowledged and went quiet (reloaded, or its handler ended): the next click asks again.
+        assert_eq!(manager.on_close_requested(), CloseAction::AskAgain { id: first, epoch: 1 });
+        // The first timer, armed for the first ask, is not the one that counts any more.
+        assert!(!manager.on_timeout(first, 0));
+        // A page that is alive acknowledges again, and the new timer finds nothing to force.
+        assert!(manager.ack(first));
+        assert!(!manager.on_timeout(first, 1));
+        // And once more.
+        assert_eq!(manager.on_close_requested(), CloseAction::AskAgain { id: first, epoch: 2 });
+        // A page that never acknowledges is closed by the timer of the latest ask.
+        assert!(manager.on_timeout(first, 2));
+        assert_eq!(manager.on_close_requested(), CloseAction::AllowClose);
+    }
+
+    #[test]
+    fn a_page_that_answers_the_second_ask_is_not_forced() {
+        use std::time::Duration;
+        let manager = CloseManager::new(Duration::from_millis(50));
+        let CloseAction::PreventAndAsk(first) = manager.on_close_requested() else {
+            panic!("the first click asks");
+        };
+        assert!(manager.ack(first));
+        assert_eq!(manager.on_close_requested(), CloseAction::AskAgain { id: first, epoch: 1 });
+        assert!(manager.cancel(Some(first)));
+        assert!(!manager.on_timeout(first, 1));
+        // Answered: the next click is a new question.
+        assert!(matches!(manager.on_close_requested(), CloseAction::PreventAndAsk(next) if next == first + 1));
     }
 
     #[test]
