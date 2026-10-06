@@ -33,8 +33,8 @@ const snapshot: Snapshot = {
 }
 
 describe("the commands the world may ask for", () => {
-  test("the allowlist is exactly the four of this piece, and none of them asks yet", () => {
-    expect(Object.keys(ALLOWLIST).sort()).toEqual(["chord", "focus-project", "open-session", "release-focus"])
+  test("the allowlist is exactly these five, and none of them asks yet", () => {
+    expect(Object.keys(ALLOWLIST).sort()).toEqual(["chord", "focus-project", "open-learn", "open-session", "release-focus"])
     for (const name of Object.keys(ALLOWLIST) as (keyof typeof ALLOWLIST)[]) expect(ALLOWLIST[name].confirm).toBe(false)
   })
 
@@ -50,6 +50,25 @@ describe("the commands the world may ask for", () => {
     expect(parseCommand({ cmd: "release-focus", anything: 1 })).toEqual({ ok: true, command: { cmd: "release-focus" } })
     const chord = { cmd: "chord" as const, key: "k", ctrl: true, alt: false, shift: false, meta: false }
     expect(parseCommand({ ...chord, sneaky: true })).toEqual({ ok: true, command: chord })
+  })
+
+  test("open-learn is read for the lighthouse and the kiosk, and for nothing else", () => {
+    expect(parseCommand({ cmd: "open-learn", place: "faro", extra: 1 })).toEqual({ ok: true, command: { cmd: "open-learn", place: "faro" } })
+    expect(parseCommand({ cmd: "open-learn", place: "gioco" })).toEqual({ ok: true, command: { cmd: "open-learn", place: "gioco" } })
+    // A missing place, another word, another type, a case that is not the allowlist's, a prototype name.
+    for (const place of [undefined, null, "", "Faro", "faro ", "percorsi", "chiosco", 0, true, ["faro"], { place: "faro" }, "constructor", "__proto__"]) {
+      const parsed = parseCommand({ cmd: "open-learn", place })
+      expect(parsed.ok).toBe(false)
+      if (!parsed.ok) expect(parsed.reason).toContain("open-learn")
+    }
+    expect(parseCommand({ cmd: "open-learn" }).ok).toBe(false)
+    // Nothing of ADE's is named, so the snapshot does not matter.
+    expect(vet({ cmd: "open-learn", place: "faro" }, undefined)).toEqual({ ok: true })
+    // And it comes through the message reader as a command, like the others.
+    expect(readFromWorld({ type: "command", command: { cmd: "open-learn", place: "gioco" } })).toEqual({
+      type: "command",
+      command: { cmd: "open-learn", place: "gioco" },
+    })
   })
 
   test("a command that is not on the allowlist is ignored, with the reason", () => {
@@ -101,8 +120,9 @@ describe("the commands the world may ask for", () => {
     expect(vet({ cmd: "release-focus" }, undefined)).toEqual({ ok: true })
   })
 
-  test("a command that would change something asks first; the four of this piece run", () => {
+  test("a command that would change something asks first; the five of this piece run", () => {
     expect(decide({ cmd: "open-session", paneId: "n1-0" })).toBe("run")
+    expect(decide({ cmd: "open-learn", place: "faro" })).toBe("run")
     expect(decide({ cmd: "release-focus" })).toBe("run")
     const original = ALLOWLIST["focus-project"].confirm
     ;(ALLOWLIST["focus-project"] as { confirm: boolean }).confirm = true

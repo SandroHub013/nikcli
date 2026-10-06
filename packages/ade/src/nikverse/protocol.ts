@@ -82,11 +82,17 @@ export type FromWorld =
   /** The frames stayed too slow at this level: ADE opens the world at Bassa from now on. */
   | { type: "slow" }
 
+/** Where in the lessons a place of the world leads: the lighthouse opens the paths, the kiosk the game. */
+export const LEARN_PLACES = ["faro", "gioco"] as const
+export type LearnPlace = (typeof LEARN_PLACES)[number]
+
 export type Command =
   | { cmd: "open-session"; paneId: string }
   | { cmd: "focus-project"; project: string }
   | { cmd: "chord"; key: string; ctrl: boolean; alt: boolean; shift: boolean; meta: boolean }
   | { cmd: "release-focus" }
+  /** The lessons open over the world (`faro`) or the game does (`gioco`); ADE draws them in its own DOM, not in the frame. */
+  | { cmd: "open-learn"; place: LearnPlace }
 
 export type CommandName = Command["cmd"]
 
@@ -105,6 +111,8 @@ export const ALLOWLIST: Readonly<Record<CommandName, { confirm: boolean }>> = {
   // it as one of its own bindings and runs the command only if it is navigation (`chords.ts`).
   chord: { confirm: false },
   "release-focus": { confirm: false },
+  // Opening a page of ADE's own that shows the user's lessons: nothing is changed, so no yes is asked.
+  "open-learn": { confirm: false },
 }
 
 const MAX_ID = 200
@@ -134,6 +142,10 @@ export function parseCommand(raw: unknown): Parsed {
         : { ok: false, reason: "focus-project senza un progetto valido" }
     case "release-focus":
       return { ok: true, command: { cmd: "release-focus" } }
+    case "open-learn":
+      return (LEARN_PLACES as readonly unknown[]).includes(body.place)
+        ? { ok: true, command: { cmd: "open-learn", place: body.place as LearnPlace } }
+        : { ok: false, reason: "open-learn senza un luogo valido (faro o gioco)" }
     case "chord": {
       const flags = [body.ctrl, body.alt, body.shift, body.meta]
       if (!text(body.key, MAX_KEY) || flags.some((flag) => typeof flag !== "boolean"))
