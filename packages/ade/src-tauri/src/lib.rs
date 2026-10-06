@@ -1329,17 +1329,24 @@ const GIT_WRITING_FLAGS: &[&str] = &["--output", "--output-directory"];
 /// into, so the user's real index is never touched.
 const GIT_ENV_KEYS: &[&str] = &["GIT_INDEX_FILE"];
 
-/// What every git call of ADE runs with, before the page's own variables.
+/// What every git call of ADE runs with, before the page's own variables, given the `GIT_CONFIG_COUNT` ADE itself was started
+/// with.
+///
+/// The count is read and added to, not set to 1: a user who launched ADE with their own `GIT_CONFIG_COUNT`/`KEY_n` would have
+/// had them replaced (review of F7c, B4). Ours takes the next index, so it also wins over a setting of the same key.
 ///
 /// A repository with `core.fsmonitor=true` starts a daemon on its first `git status`; started from a call that runs in a job that ends
 /// with the call, it died with it and was started again by the next one. `GIT_OPTIONAL_LOCKS=0` keeps a `status` that a timeout killed
 /// from leaving `index.lock`, and from taking the lock the user's own git wants (full review 2026-10-06, review of F6a, B1).
-const GIT_BASE_ENV: [(&str, &str); 4] = [
-    ("GIT_OPTIONAL_LOCKS", "0"),
-    ("GIT_CONFIG_COUNT", "1"),
-    ("GIT_CONFIG_KEY_0", "core.fsmonitor"),
-    ("GIT_CONFIG_VALUE_0", "false"),
-];
+fn git_base_env(inherited_count: Option<&str>) -> Vec<(String, String)> {
+    let next = inherited_count.and_then(|count| count.trim().parse::<usize>().ok()).unwrap_or(0);
+    vec![
+        ("GIT_OPTIONAL_LOCKS".to_string(), "0".to_string()),
+        ("GIT_CONFIG_COUNT".to_string(), (next + 1).to_string()),
+        (format!("GIT_CONFIG_KEY_{next}"), "core.fsmonitor".to_string()),
+        (format!("GIT_CONFIG_VALUE_{next}"), "false".to_string()),
+    ]
+}
 
 #[derive(Serialize, Clone, Debug)]
 struct ShellOutput {
@@ -1498,7 +1505,7 @@ async fn git_run(
 
     let mut command = std::process::Command::new("git");
     command.args(&args);
-    command.envs(GIT_BASE_ENV);
+    command.envs(git_base_env(std::env::var("GIT_CONFIG_COUNT").ok().as_deref()));
     if let Some(dir) = cwd.as_ref().filter(|d| !d.is_empty()) {
         command.current_dir(dir);
     }
@@ -3016,19 +3023,55 @@ mod tests {
         }
         let repo = TempDir::new("git-base-env");
         let git = |args: &[&str]| {
-            std::process::Command::new("git").args(args).current_dir(&repo.0).envs(GIT_BASE_ENV).output().expect("git")
+            std::process::Command::new("git").args(args).current_dir(&repo.0).envs(git_base_env(None)).output().expect("git")
         };
         assert!(git(&["init", "-q"]).status.success());
         // The repository asks for the daemon; the call's own environment wins over the repository.
         assert!(git(&["config", "--local", "core.fsmonitor", "true"]).status.success());
         let asked = git(&["config", "--get", "core.fsmonitor"]);
         assert_eq!(String::from_utf8_lossy(&asked.stdout).trim(), "false");
-        assert!(GIT_BASE_ENV.contains(&("GIT_OPTIONAL_LOCKS", "0")));
+        assert!(git_base_env(None).contains(&("GIT_OPTIONAL_LOCKS".to_string(), "0".to_string())));
         // And it is what `git_run` sets, before the page's variables.
         let source = include_str!("lib.rs");
         let start = source.find("async fn git_run(").expect("git_run");
         let body = &source[start..source[start..].find("async fn current_dir").map(|end| start + end).expect("fine")];
-        assert!(body.contains("command.envs(GIT_BASE_ENV)"));
+        assert!(body.contains("command.envs(git_base_env("));
+    }
+
+    // Review of F7c, B4: the user's own `GIT_CONFIG_COUNT`/`KEY_n` stay, ours comes after them.
+    #[test]
+    fn the_git_environment_is_added_to_the_users_not_written_over_it() {
+        let env = |inherited: Option<&str>| git_base_env(inherited).into_iter().collect::<std::collections::HashMap<_, _>>();
+        let alone = env(None);
+        assert_eq!(alone["GIT_CONFIG_COUNT"], "1");
+        assert_eq!(alone["GIT_CONFIG_KEY_0"], "core.fsmonitor");
+        let after_two = env(Some("2"));
+        assert_eq!(after_two["GIT_CONFIG_COUNT"], "3");
+        assert_eq!(after_two["GIT_CONFIG_KEY_2"], "core.fsmonitor");
+        assert_eq!(after_two["GIT_CONFIG_VALUE_2"], "false");
+        assert!(!after_two.contains_key("GIT_CONFIG_KEY_0") && !after_two.contains_key("GIT_CONFIG_KEY_1"));
+        // Nonsense counts as none.
+        assert_eq!(env(Some("abc"))["GIT_CONFIG_COUNT"], "1");
+        // With real git: a setting the user passed in the environment survives, and ours is added.
+        if std::process::Command::new("git").arg("--version").output().is_err() {
+            return;
+        }
+        let repo = TempDir::new("git-user-env");
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&repo.0)
+                .env("GIT_CONFIG_COUNT", "1")
+                .env("GIT_CONFIG_KEY_0", "user.name")
+                .env("GIT_CONFIG_VALUE_0", "Chi Lancia ADE")
+                .envs(git_base_env(Some("1")))
+                .output()
+                .expect("git")
+        };
+        assert!(git(&["init", "-q"]).status.success());
+        assert_eq!(String::from_utf8_lossy(&git(&["config", "--get", "user.name"]).stdout).trim(), "Chi Lancia ADE");
+        assert!(git(&["config", "--local", "core.fsmonitor", "true"]).status.success());
+        assert_eq!(String::from_utf8_lossy(&git(&["config", "--get", "core.fsmonitor"]).stdout).trim(), "false");
     }
 
     // Full review 2026-10-06, rust 14: `git_run` ran `output()` with no limit on the async runtime. The command
