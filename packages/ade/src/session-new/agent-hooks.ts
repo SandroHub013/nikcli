@@ -519,16 +519,29 @@ export interface HookStatus {
  * that does nothing, or an earlier ADE's). A program whose state is not read
  * yet counts as off; one that could not be read counts for neither.
  */
-export function hooksSummary(states: Record<string, HookStatus>): { on: number; total: number; attention: number } {
+export function hooksSummary(
+  states: Record<string, HookStatus>,
+  targets: readonly HookTarget[] = HOOK_TARGETS,
+): { on: number; total: number; attention: number } {
   let on = 0
   let attention = 0
-  for (const target of HOOK_TARGETS) {
+  for (const target of targets) {
     const state = states[target.id]
     if (!state || state.error) continue
     if (state.installed) on++
     if (state.broken || state.outdated) attention++
   }
-  return { on, total: HOOK_TARGETS.length, attention }
+  return { on, total: targets.length, attention }
+}
+
+/**
+ * The hooks that can be installed on this system. Claude Code's and Codex's are a PowerShell script run by
+ * `powershell -File`, so off Windows they would fail at every event of every session of the machine, ADE's or not, and
+ * `--unlink-agents` is only in the Windows installer (full review 2026-10-06, sessions 6). Only the TUI plugin, which is
+ * a TypeScript file, is left. Rust refuses the same install (`agent_hook_write`).
+ */
+export function hookTargetsFor(windows: boolean): readonly HookTarget[] {
+  return windows ? HOOK_TARGETS : HOOK_TARGETS.filter((target) => target.kind === "tui-plugin")
 }
 
 /**

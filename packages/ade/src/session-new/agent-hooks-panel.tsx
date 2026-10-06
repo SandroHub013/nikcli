@@ -1,6 +1,7 @@
 import { For, Show, createSignal } from "solid-js"
 import { HowItWorks } from "@nikcli-ai/voice"
-import { HOOK_TARGETS, hooksSummary, type HookStatus, type HookHost, setHook } from "./agent-hooks"
+import { HOOK_TARGETS, hookTargetsFor, hooksSummary, type HookStatus, type HookHost, setHook } from "./agent-hooks"
+import { isWindowsRuntime } from "@nikcli-ai/voice/core"
 import { t } from "../i18n"
 
 /**
@@ -32,7 +33,9 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
   const [busy, setBusy] = createSignal<string | undefined>()
   const [failure, setFailure] = createSignal<string | undefined>()
 
-  const summary = () => hooksSummary(props.states)
+  // The rows this system can install: off Windows, the PowerShell hooks of Claude Code and Codex are not offered.
+  const targets = hookTargetsFor(isWindowsRuntime())
+  const summary = () => hooksSummary(props.states, targets)
 
   const apply = async (id: string, install: boolean) => {
     const target = HOOK_TARGETS.find((entry) => entry.id === id)
@@ -65,8 +68,14 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
         <p data-slot="section-desc">{t("hooks.outside")}</p>
       </HowItWorks>
 
+      <Show when={targets.length < HOOK_TARGETS.length}>
+        <p data-slot="section-desc" data-hooks-windows-only>
+          {t("hooks.windowsOnly")}
+        </p>
+      </Show>
+
       <ul data-slot="hook-list">
-        <For each={HOOK_TARGETS}>
+        <For each={targets}>
           {(target) => {
             const state = () => props.states[target.id]
             const working = () => busy() === target.id
