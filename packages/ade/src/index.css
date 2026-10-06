@@ -830,7 +830,7 @@ body,
   [data-status="working"] [data-slot="session-dot"],
   [data-status="provisioning"] [data-slot="pane-dot"],
   [data-status="provisioning"] [data-slot="session-dot"] {
-    animation: ade-dot-breathe 2.4s ease-in-out infinite;
+    animation: ade-dot-breathe 2.4s ease-in-out infinite var(--ade-loops, running);
   }
 }
 
@@ -1267,7 +1267,7 @@ body,
   height: 8px;
   border-radius: 50%;
   background: red;
-  animation: ade-rec-pulse 1.4s ease-in-out infinite;
+  animation: ade-rec-pulse 1.4s ease-in-out infinite var(--ade-loops, running);
 }
 
 [data-slot="ade-rec"][data-stopping] [data-slot="ade-rec-dot"] {
@@ -1375,7 +1375,7 @@ body,
 }
 [data-component="update-dialog"] [data-slot="update-dialog-fill"][data-indeterminate] {
   width: 40% !important;
-  animation: ade-notice-progress-slide 1.2s var(--ade-ease-out) infinite;
+  animation: ade-notice-progress-slide 1.2s var(--ade-ease-out) infinite var(--ade-loops, running);
 }
 [data-component="update-dialog"] [data-slot="update-dialog-actions"] {
   display: flex;
@@ -1811,4 +1811,18 @@ html[data-ade-recording] [data-theme="glass"] [data-slot="browser-record-veil"] 
 
 html[data-ade-recording] [data-slot="browser-frame"] {
   visibility: hidden;
+}
+
+/* ADE out of sight (minimised or hidden): the loops stand still. The page learns it from `visibilitychange`, which the Rust
+   side raises for WebView2 (`follow_window_visibility`); surface/window-idle.ts sets the attribute. Only the loops: every
+   infinite animation takes `--ade-loops` (a test reads the sheets for it), while an entrance or an exit is left alone, since
+   one that started while paused would stay at its first frame, invisible, and an exit a dialog waits on (`animationend`)
+   would never end. Not for a window that merely has no focus: on a second monitor the sweep of a working pane and the
+   blink of a permission waiting are for whoever is looking. A paused animation costs no frames and goes on from where it was. */
+:root {
+  --ade-loops: running;
+}
+
+:root[data-window-idle] {
+  --ade-loops: paused;
 }

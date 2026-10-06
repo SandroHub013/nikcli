@@ -322,6 +322,22 @@ describe("voice/agent", () => {
       })
     })
 
+    // Full review 2026-10-06, ui 10: a good answer that talks about a 429 is not a limit.
+    test("a finished turn whose text mentions a 429 is not rerouted to Codex", async () => {
+      const runner = fakeRunner([{ status: "done", text: "La sessione nikcli-2 ha avuto un 429 Too Many Requests, rate limit del provider." }])
+      const agent = createVoiceAgent({
+        runTurn: runner.runTurn,
+        statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
+        cwd: () => "C:/p",
+        codexFallback: () => true,
+      })
+
+      const answer = await agent.ask({ text: "cosa è successo alla sessione 2?", engine: "auto" })
+      expect(runner.requests).toHaveLength(1)
+      expect(answer.ok).toBe(true)
+      expect(answer.text).toContain("429")
+    })
+
     test("in auto mode when Claude hits limit and Codex is missing, says so clearly without retrying", async () => {
       const runner = fakeRunner([{ status: "error", problem: "Claude AI usage limit reached|1757880000" }])
       const agent = createVoiceAgent({

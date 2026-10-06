@@ -13,6 +13,8 @@ import {
   hookScript,
   hookTarget,
   hooksSummary,
+  hookTargetsFor,
+  removeOnly,
   installHook,
   installedCommand,
   isAdeCommand,
@@ -22,6 +24,7 @@ import {
   removeHook,
   setHook,
   usesExecForm,
+  type HookStatus,
 } from "./agent-hooks"
 import { NIKCLI_PLUGIN_NAME, NIKCLI_PLUGIN_SOURCE } from "./nikcli-plugin"
 import { codeOf } from "../test-support/source-text"
@@ -906,5 +909,46 @@ describe("the line the resume page opens with", () => {
   test("a state that could not be read counts for neither", () => {
     const states = { "claude-code": status("claude-code", { installed: true, error: "boom" }) }
     expect(hooksSummary(states as never)).toEqual({ on: 0, total: HOOK_TARGETS.length, attention: 0 })
+  })
+})
+
+// Full review 2026-10-06, sessions 6: PowerShell hooks are not installed where there is no PowerShell to run them.
+describe("the hooks offered on this system", () => {
+  test("off Windows only the TUI plugin is offered, on Windows every target", () => {
+    expect(hookTargetsFor(true)).toEqual(HOOK_TARGETS)
+    const elsewhere = hookTargetsFor(false)
+    expect(elsewhere.map((target) => target.id)).toEqual(HOOK_TARGETS.filter((t) => t.kind === "tui-plugin").map((t) => t.id))
+    expect(elsewhere.some((target) => target.id === "claude-code" || target.id === "codex")).toBe(false)
+  })
+
+  test("the summary counts the rows that are shown", () => {
+    const elsewhere = hookTargetsFor(false)
+    expect(hooksSummary({}, elsewhere).total).toBe(elsewhere.length)
+    expect(hooksSummary({}).total).toBe(HOOK_TARGETS.length)
+  })
+
+  test("the panel shows the targets of this system and says why the others are not there", () => {
+    const panel = readFileSync(new URL("./agent-hooks-panel.tsx", import.meta.url), "utf8")
+    expect(panel).toContain("hookTargetsFor(windows, props.states)")
+    expect(panel).toContain("<For each={targets()}>")
+    expect(panel).not.toContain("<For each={HOOK_TARGETS}>")
+    expect(panel).toContain('t("hooks.windowsOnly")')
+  })
+
+  // Review of F6c, O2: whoever already has a PowerShell hook off Windows must be able to take it out.
+  test("off Windows a PowerShell hook that is there stays on the list, to be removed and not installed", () => {
+    const states = {
+      "claude-code": { installed: true },
+      codex: { installed: false, broken: true },
+    } as never as Record<string, HookStatus>
+    const ids = hookTargetsFor(false, states).map((target) => target.id)
+    expect(ids).toContain("claude-code")
+    expect(ids).toContain("codex")
+    // Not there, not shown.
+    expect(hookTargetsFor(false, { "claude-code": { installed: false } } as never as Record<string, HookStatus>).map((t) => t.id)).not.toContain("claude-code")
+    const claude = HOOK_TARGETS.find((target) => target.id === "claude-code")!
+    expect(removeOnly(claude, false)).toBe(true)
+    expect(removeOnly(claude, true)).toBe(false)
+    expect(removeOnly(HOOK_TARGETS.find((target) => target.kind === "tui-plugin")!, false)).toBe(false)
   })
 })

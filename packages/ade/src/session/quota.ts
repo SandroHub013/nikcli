@@ -65,6 +65,30 @@ export function cooldownRemainingMs(metric: QuotaMetric, now: number): number {
 }
 
 /**
+ * Una finestra il cui reset è già passato non dice più niente: la lettura è di prima del reset (le sessioni ferme non
+ * riscrivono il file) e «0% rimasto» era vero allora. Trattata come sconosciuta, non come esaurita (full review
+ * 2026-10-06, sessions 8).
+ */
+export function metricReset(metric: QuotaMetric, now: number): boolean {
+  if (!metric.resetAt) return false
+  const resetEpoch = Date.parse(metric.resetAt)
+  return Number.isFinite(resetEpoch) && resetEpoch <= now
+}
+
+/** La percentuale rimasta di una metrica, 0-100, o sconosciuta. */
+function remainingPct(m: QuotaMetric): number | undefined {
+  let remaining = m.remaining
+  if (typeof remaining === "number") {
+    return Number.isNaN(remaining) ? 0 : Math.max(0, Math.min(100, remaining))
+  }
+  if (m.used !== undefined && m.limit && m.limit > 0) {
+    const calc = Math.round(100 - (m.used / m.limit) * 100)
+    remaining = Math.max(0, Math.min(100, Number.isNaN(calc) ? 0 : calc))
+  }
+  return remaining
+}
+
+/**
  * Calcola il punteggio di disponibilità (0.0 - 1.0) per un provider.
  *
  * Regole:
@@ -74,7 +98,13 @@ export function cooldownRemainingMs(metric: QuotaMetric, now: number): number {
  * - Se non ci sono percentuali misurabili ma status è "ok" o "partial", assume disponibilità nominale (1.0 o 0.5).
  */
 export function calculateReadiness(quota: ProviderQuota, now: number): ProviderReadiness {
-  if (quota.status === "rate_limited") {
+  /*
+   * Lo stato «rate limited» nasce da una finestra esaurita (anche il lettore del file lo ricava così). Se le finestre
+   * esaurite hanno già fatto il reset e nessuna di quelle ancora aperte lo è, il blocco è finito con loro.
+   */
+  const resetSince = quota.metrics.some((m) => metricReset(m, now))
+  const stillSpent = quota.metrics.some((m) => !metricReset(m, now) && (m.isRateLimited || (remainingPct(m) ?? 1) <= 0))
+  if (quota.status === "rate_limited" && !(resetSince && !stillSpent)) {
     const nextReset = quota.metrics
       .map((m) => ({ metric: m, ms: cooldownRemainingMs(m, now) }))
       .filter((item) => item.ms > 0)
@@ -108,17 +138,9 @@ export function calculateReadiness(quota: ProviderQuota, now: number): ProviderR
   let hasExhausted = false
 
   for (const m of quota.metrics) {
-    let remaining = m.remaining
-    if (typeof remaining === "number") {
-      if (Number.isNaN(remaining)) {
-        remaining = 0
-      } else {
-        remaining = Math.max(0, Math.min(100, remaining))
-      }
-    } else if (m.used !== undefined && m.limit && m.limit > 0) {
-      const calc = Math.round(100 - (m.used / m.limit) * 100)
-      remaining = Math.max(0, Math.min(100, Number.isNaN(calc) ? 0 : calc))
-    }
+    // Reset passato: la finestra è ricominciata, quello che c'è scritto non vale più.
+    if (metricReset(m, now)) continue
+    const remaining = remainingPct(m)
 
     if (remaining !== undefined) {
       if (worstRemaining === undefined || remaining < worstRemaining) {
@@ -483,6 +505,8 @@ export function formatSessionQuota(quota: ProviderQuota, now = Date.now()): Sess
   const isLimit = !readiness.isAvailable && quota.status === "rate_limited"
 
   const windows: SessionQuotaWindow[] = quota.metrics.map((m) => {
+    // Una finestra già resettata non ha una percentuale né una data da mostrare: piena, senza reset.
+    if (metricReset(m, now)) return { key: m.label, label: m.label, ratio: 1.0, val: undefined, resetText: undefined }
     let ratio = 1.0
     if (m.remaining !== undefined) {
       ratio = Math.max(0, Math.min(1.0, m.remaining / 100))

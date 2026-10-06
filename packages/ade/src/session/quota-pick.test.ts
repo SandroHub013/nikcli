@@ -32,6 +32,20 @@ describe("pickByQuota", () => {
     })
   })
 
+  // Full review 2026-10-06, sessions 8: the reading is fresh, but the window it describes has reset.
+  test("a window that reset after a fresh reading does not reroute the spawn", () => {
+    const fresh = readQuotaAxiSnapshot({
+      generatedAt: "2026-09-15T22:30:00Z",
+      providers: [claude(0), codex(80)],
+    })
+    // 22:40 was the five-hour reset; at 22:45 the reading is 15 minutes old, so it is not stale.
+    const afterReset = Date.parse("2026-09-15T22:45:00Z")
+    expect(pickByQuota({ agent: "claude-code", from: "m" }, fresh, afterReset)).toEqual({ agent: "claude-code" })
+    // Before the reset it does reroute: the test would pass for the wrong reason otherwise.
+    const beforeReset = Date.parse("2026-09-15T22:35:00Z")
+    expect(pickByQuota({ agent: "claude-code", from: "m" }, fresh, beforeReset).agent).toBe("codex")
+  })
+
   test("an agent with quota left is started as asked, with nothing to explain", () => {
     expect(pickByQuota({ agent: "claude-code", from: "m" }, report(claude(60), codex(0)), now)).toEqual({
       agent: "claude-code",

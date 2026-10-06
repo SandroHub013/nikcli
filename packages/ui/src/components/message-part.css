@@ -517,7 +517,7 @@
             var(--border-warning-base) 360deg
           )
           border-box;
-      animation: chase-border 2.5s linear infinite;
+      animation: chase-border 2.5s linear infinite var(--ade-loops, running);
       pointer-events: none;
       z-index: -1;
     }

@@ -519,16 +519,40 @@ export interface HookStatus {
  * that does nothing, or an earlier ADE's). A program whose state is not read
  * yet counts as off; one that could not be read counts for neither.
  */
-export function hooksSummary(states: Record<string, HookStatus>): { on: number; total: number; attention: number } {
+export function hooksSummary(
+  states: Record<string, HookStatus>,
+  targets: readonly HookTarget[] = HOOK_TARGETS,
+): { on: number; total: number; attention: number } {
   let on = 0
   let attention = 0
-  for (const target of HOOK_TARGETS) {
+  for (const target of targets) {
     const state = states[target.id]
     if (!state || state.error) continue
     if (state.installed) on++
     if (state.broken || state.outdated) attention++
   }
-  return { on, total: HOOK_TARGETS.length, attention }
+  return { on, total: targets.length, attention }
+}
+
+/**
+ * The hooks that can be installed on this system. Claude Code's and Codex's are a PowerShell script run by
+ * `powershell -File`, so off Windows they would fail at every event of every session of the machine, ADE's or not, and
+ * `--unlink-agents` is only in the Windows installer (full review 2026-10-06, sessions 6). Only the TUI plugin, which is
+ * a TypeScript file, is left. Rust refuses the same install (`agent_hook_write`).
+ *
+ * A PowerShell hook that is already there (an earlier ADE put it, or it is broken) stays on the list, so it can be taken
+ * out: without that the user who has it is the one it fails for, at every event of every session, with no button
+ * (review of F6c, O2). The panel offers only «Rimuovi» for it (`removeOnly`).
+ */
+export function hookTargetsFor(windows: boolean, states: Record<string, HookStatus> = {}): readonly HookTarget[] {
+  return windows
+    ? HOOK_TARGETS
+    : HOOK_TARGETS.filter((target) => target.kind === "tui-plugin" || states[target.id]?.installed || states[target.id]?.broken)
+}
+
+/** A row that can only be removed: a PowerShell hook on a system that cannot run it. */
+export function removeOnly(target: HookTarget, windows: boolean): boolean {
+  return !windows && target.kind !== "tui-plugin"
 }
 
 /**
@@ -746,7 +770,11 @@ if ([string]::IsNullOrWhiteSpace($env:ADE_PANE_ID)) { exit 0 }
 if ([string]::IsNullOrWhiteSpace($env:ADE_SESSION_DIR)) { exit 0 }
 if (-not (Test-Path -LiteralPath $env:ADE_SESSION_DIR)) { exit 0 }
 
-$raw = [Console]::In.ReadToEnd()
+# The bytes, as UTF-8: [Console]::In decodes with the console's code page (850 under ConPTY on an Italian machine),
+# and a cwd with accents reached the activity file as mojibake.
+$buffer = New-Object IO.MemoryStream
+[Console]::OpenStandardInput().CopyTo($buffer)
+$raw = (New-Object Text.UTF8Encoding $false).GetString($buffer.ToArray())
 if ([string]::IsNullOrWhiteSpace($raw)) { exit 0 }
 try { $payload = $raw | ConvertFrom-Json } catch { exit 0 }
 

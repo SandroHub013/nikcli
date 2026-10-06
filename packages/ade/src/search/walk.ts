@@ -69,15 +69,17 @@ export async function walkProject(input: { host: Host; root: string; options?: W
   // Fast path: use git ls-files if available and not explicitly using custom skipDirs/maxDepth
   if (host.run && !input.options?.skipDirs && maxDepth === undefined) {
     try {
-      const res = await host.run("git", ["ls-files", "-co", "--exclude-standard"], root)
+      // `-z`: NUL-separated and never quoted. Without it git writes `città.md` as `"citt\303\240.md"` (core.quotepath), a
+      // path that does not exist (full review 2026-10-06, ui 8). `git_run` does not allow `-c core.quotepath=false`.
+      const res = await host.run("git", ["ls-files", "-z", "-co", "--exclude-standard"], root)
       if (res.code === 0 && res.stdout.trim().length > 0) {
-        const rawLines = res.stdout.split(/\r?\n/)
+        const rawLines = res.stdout.split("\0")
         const files: string[] = []
         const dirSet = new Set<string>()
         for (const line of rawLines) {
-          const trimmed = line.trim()
-          if (!trimmed) continue
-          const filePath = joinPath(root, trimmed)
+          // Not trimmed: a name may begin or end with a space.
+          if (!line) continue
+          const filePath = joinPath(root, line)
           files.push(filePath)
 
           // Collect all ancestor directories under root

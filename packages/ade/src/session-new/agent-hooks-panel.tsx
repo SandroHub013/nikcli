@@ -1,6 +1,15 @@
 import { For, Show, createSignal } from "solid-js"
 import { HowItWorks } from "@nikcli-ai/voice"
-import { HOOK_TARGETS, hooksSummary, type HookStatus, type HookHost, setHook } from "./agent-hooks"
+import {
+  HOOK_TARGETS,
+  hookTargetsFor,
+  hooksSummary,
+  removeOnly,
+  type HookStatus,
+  type HookHost,
+  setHook,
+} from "./agent-hooks"
+import { isWindowsRuntime } from "@nikcli-ai/voice/core"
 import { t } from "../i18n"
 
 /**
@@ -32,7 +41,11 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
   const [busy, setBusy] = createSignal<string | undefined>()
   const [failure, setFailure] = createSignal<string | undefined>()
 
-  const summary = () => hooksSummary(props.states)
+  // The rows this system can install: off Windows, the PowerShell hooks of Claude Code and Codex are not offered, unless
+  // they are already there, and then only to be removed.
+  const windows = isWindowsRuntime()
+  const targets = () => hookTargetsFor(windows, props.states)
+  const summary = () => hooksSummary(props.states, targets())
 
   const apply = async (id: string, install: boolean) => {
     const target = HOOK_TARGETS.find((entry) => entry.id === id)
@@ -65,11 +78,18 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
         <p data-slot="section-desc">{t("hooks.outside")}</p>
       </HowItWorks>
 
+      <Show when={!windows}>
+        <p data-slot="section-desc" data-hooks-windows-only>
+          {t("hooks.windowsOnly")}
+        </p>
+      </Show>
+
       <ul data-slot="hook-list">
-        <For each={HOOK_TARGETS}>
+        <For each={targets()}>
           {(target) => {
             const state = () => props.states[target.id]
             const working = () => busy() === target.id
+            const takeOutOnly = removeOnly(target, windows)
             return (
               <li data-slot="hook-row">
                 <div data-slot="hook-row-head">
@@ -95,6 +115,12 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
 
                 <Show when={target.kind === "tui-plugin"}>
                   <p data-slot="hook-note">{t("hooks.plugin")}</p>
+                </Show>
+
+                <Show when={takeOutOnly}>
+                  <p data-slot="hook-note" data-hook-remove-only>
+                    {t("hooks.removeOnly")}
+                  </p>
                 </Show>
 
                 <Show when={state()?.foreign}>
@@ -126,18 +152,20 @@ export function AgentHooksSection(props: AgentHooksSectionProps) {
                     on a test build that would rewrite the official ADE's hooks. */}
                 <Show when={!state()?.foreign}>
                   <div data-slot="hook-actions">
-                    <button
-                      type="button"
-                      data-slot="hook-action"
-                      disabled={working() || Boolean(state()?.error)}
-                      onClick={() => void apply(target.id, true)}
-                    >
-                      {state()?.outdated
-                        ? t("hooks.update")
-                        : state()?.installed
-                          ? t("hooks.reinstall")
-                          : t("hooks.install")}
-                    </button>
+                    <Show when={!takeOutOnly}>
+                      <button
+                        type="button"
+                        data-slot="hook-action"
+                        disabled={working() || Boolean(state()?.error)}
+                        onClick={() => void apply(target.id, true)}
+                      >
+                        {state()?.outdated
+                          ? t("hooks.update")
+                          : state()?.installed
+                            ? t("hooks.reinstall")
+                            : t("hooks.install")}
+                      </button>
+                    </Show>
                     <Show when={state()?.installed || state()?.broken}>
                       <button
                         type="button"
