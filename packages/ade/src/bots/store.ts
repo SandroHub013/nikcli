@@ -276,7 +276,7 @@ function identifierFromCreated(path: string): string {
   return name.replace(/\.md$/i, "")
 }
 
-async function writeBot(
+export async function writeBot(
   input: CreateBotInput & { home: string; base: string; mode: AgentMode },
   host: Host,
 ): Promise<CreateBotResult> {
@@ -299,7 +299,15 @@ async function writeBot(
    * because two names collapsed to the same identifier is the kind of loss
    * nobody notices until the bot answers differently.
    */
-  if (await host.exists?.(path)) {
+  let there: boolean | undefined
+  try {
+    there = await host.exists?.(path)
+  } catch (error) {
+    // `path_exists` rejects when the check itself fails (a drive that does not answer, access denied). Not «absent»: that
+    // would let the write below go over a file that may be there. Said, so the form does not stay busy for good (review of F7d, O1).
+    return { ok: false, problem: error instanceof Error ? error.message : String(error) }
+  }
+  if (there) {
     return { ok: false, problem: t("bots.alreadyExists", identifier) }
   }
 
