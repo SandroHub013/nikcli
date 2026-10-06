@@ -187,12 +187,19 @@ describe("BashTool", () => {
 
   it("reports output was not saved if writing spool file fails", async () => {
     const { Truncate } = await import("@/tool/truncation")
-    const result = Truncate.truncateHeadTail("START_" + "X".repeat(12000) + "_END", {
-      dir: "Z:\\non-existent-drive\\truncation-test",
-    })
-    expect(result.content).toContain("The tool call succeeded but the output was truncated")
-    expect(result.content).toContain("Full output was not saved to disk.")
-    expect(result.content).not.toContain("Full output saved to:")
-    expect(result.outputPath).toBeUndefined()
+    const tempFile = path.join(projectDir, "temp-file-blocking-dir")
+    await fs.writeFile(tempFile, "blocking")
+    const unwritableDir = path.join(tempFile, "sub")
+    try {
+      const result = Truncate.truncateHeadTail("START_" + "X".repeat(12000) + "_END", {
+        dir: unwritableDir,
+      })
+      expect(result.content).toContain("The tool call succeeded but the output was truncated")
+      expect(result.content).toContain("Full output was not saved to disk.")
+      expect(result.content).not.toContain("Full output saved to:")
+      expect(result.outputPath).toBeUndefined()
+    } finally {
+      await fs.unlink(tempFile).catch(() => {})
+    }
   })
 })

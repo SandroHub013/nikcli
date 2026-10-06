@@ -75,8 +75,8 @@ export namespace Truncate {
     }
 
     const head = text.slice(0, headChars)
-    const tail = text.slice(-tailChars)
-    const omitted = text.length - head.length - tail.length
+    const tail = tailChars > 0 ? text.slice(-tailChars) : ""
+    const omitted = Math.max(0, text.length - head.length - tail.length)
 
     const saveMsg =
       saved && filepath

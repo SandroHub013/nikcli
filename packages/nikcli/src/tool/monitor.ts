@@ -106,7 +106,21 @@ export const MonitorTool = Tool.define<typeof parameters, MonitorMetadata>("moni
       const seconds = ((finished.time.completed ?? Date.now()) - finished.time.created) / 1000
       let logOutput = snapshot.output.trimEnd() || "(no output)"
       let headTailTruncated = false
-      if (logOutput.length > Truncate.HEAD_TAIL_THRESHOLD) {
+
+      if (snapshot.truncated) {
+        headTailTruncated = true
+        let tailChars = Truncate.TAIL_CHARS
+        if (tailChars > 0 && tailChars < logOutput.length) {
+          const tailIndex = logOutput.length - tailChars
+          const prev = logOutput.charCodeAt(tailIndex - 1)
+          const curr = logOutput.charCodeAt(tailIndex)
+          if (prev >= 0xd800 && prev <= 0xdbff && curr >= 0xdc00 && curr <= 0xdfff) {
+            tailChars -= 1
+          }
+        }
+        const tail = tailChars > 0 ? logOutput.slice(-tailChars) : ""
+        logOutput = `... [The tool call succeeded but initial output was omitted. Full log: ${finished.logPath}. Use Grep or Read with offset/limit to see more.] ...\n\n${tail}`
+      } else if (logOutput.length > Truncate.HEAD_TAIL_THRESHOLD) {
         const trunc = Truncate.truncateHeadTail(logOutput, {
           existingPath: finished.logPath,
           toolName: "monitor",
@@ -114,6 +128,7 @@ export const MonitorTool = Tool.define<typeof parameters, MonitorMetadata>("moni
         logOutput = trunc.content
         headTailTruncated = true
       }
+
       return {
         title,
         metadata: {
@@ -125,7 +140,6 @@ export const MonitorTool = Tool.define<typeof parameters, MonitorMetadata>("moni
           `Command: ${params.command}`,
           "",
           logOutput,
-          ...(snapshot.truncated ? ["", `Output truncated; full log: ${finished.logPath}`] : []),
         ].join("\n"),
       }
     }

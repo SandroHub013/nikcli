@@ -151,4 +151,31 @@ describe("MonitorTool", () => {
     expect(full).toContain("_MON_END")
     expect(full.length).toBe(12018)
   })
+
+  it("handles log already truncated by monitor capture keeping only tail and avoiding false character count", async () => {
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync(
+        {
+          command:
+            "node -e \"process.stdout.write(String.fromCharCode(66,73,71,95,83,84,65,82,84,95) + 'W'.repeat(100000) + '_BIG_END')\"",
+          title: "huge output test",
+          wake: false,
+        },
+        ctx,
+      ),
+    )
+    expect(result.output).toContain("_BIG_END")
+    expect(result.output).not.toContain("BIG_START_")
+    expect(result.output).toContain("initial output was omitted")
+    expect(result.output).toContain("Full log:")
+    expect(result.output).not.toContain("characters omitted")
+    expect(result.output.length).toBeLessThan(10000)
+    expect(result.metadata.truncated).toBe(true)
+    expect(result.metadata.outputPath).toBeDefined()
+    const full = await fs.readFile(result.metadata.outputPath as string, "utf8")
+    expect(full).toContain("BIG_START_")
+    expect(full).toContain("_BIG_END")
+    expect(full.length).toBe(100018)
+  })
 })
