@@ -221,6 +221,7 @@ import {
   type Pane,
   addPane,
   closePane,
+  focusInProject,
   updatePane,
   withPaneNotice,
   isPanelPane,
@@ -5966,7 +5967,7 @@ export function Workbench() {
       setRecents(newRecents)
       localStorage.setItem("ade.recents", serializeRecents(newRecents))
 
-      setWb((w) => ({ ...w, projectPath: p.root }))
+      setWb((w) => ({ ...w, projectPath: p.root, focusedId: focusInProject(w, p) }))
 
       /*
        * Restarting what was running when the app went away.
@@ -6454,7 +6455,7 @@ export function Workbench() {
         if (p) {
           setProject(p)
           // The panes of the project being left stay: their sessions keep running, and keep talking to the others.
-          setWb((w) => ({ ...w, projectPath: p.root, expandedId: undefined }))
+          setWb((w) => ({ ...w, projectPath: p.root, expandedId: undefined, focusedId: focusInProject(w, p) }))
           const newRecents = addRecent(recents(), { root: p.root, name: p.name })
           setRecents(newRecents)
           localStorage.setItem("ade.recents", serializeRecents(newRecents))
@@ -6644,7 +6645,7 @@ export function Workbench() {
       if (host && !(await refuseMissingRoot(host, root))) {
         const p = await discoverProject(host, root)
         setProject(p)
-        setWb((w) => ({ ...w, projectPath: p.root, expandedId: undefined }))
+        setWb((w) => ({ ...w, projectPath: p.root, expandedId: undefined, focusedId: focusInProject(w, p) }))
         const newRecents = addRecent(recents(), { root: p.root, name: p.name })
         setRecents(newRecents)
         localStorage.setItem("ade.recents", serializeRecents(newRecents))
@@ -6835,7 +6836,7 @@ export function Workbench() {
     setProject(picked)
     // Same reason as switchProject: an expansion made in another project
     // narrows this one's grid to nothing.
-    setWb((w) => ({ ...w, projectPath: picked.root, expandedId: undefined }))
+    setWb((w) => ({ ...w, projectPath: picked.root, expandedId: undefined, focusedId: focusInProject(w, picked) }))
     setStarting(false)
   }
 
@@ -6866,7 +6867,7 @@ export function Workbench() {
      * screen however many sessions it had running, with no visible control to
      * get out of an expansion the user could not see.
      */
-    setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined }))
+    setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined, focusedId: focusInProject(w, opened) }))
     setStarting(false)
   }
 
@@ -8433,7 +8434,7 @@ export function Workbench() {
     setRecents(newRecents)
     localStorage.setItem("ade.recents", serializeRecents(newRecents))
     setProject(opened)
-    setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined }))
+    setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined, focusedId: focusInProject(w, opened) }))
     setRemoteOpen(false)
     if (!wb().panes.some((pane) => belongsTo(pane, opened))) {
       addAgent(

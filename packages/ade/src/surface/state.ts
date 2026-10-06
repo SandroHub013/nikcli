@@ -2,6 +2,7 @@ import { redactHistory, redactUrl, type BrowserHistory } from "../browser/histor
 import type { PaneSheet } from "../design/sheet"
 import { type Span, applyOrder } from "../grid/arrange"
 import { focusAfterClose } from "../grid/focus"
+import { belongsTo, sameProject } from "./pane-project"
 import { normalizePath, pathEquals, isAbsolutePath } from "../host/path"
 import { CURRENT_VERSION, type WorkspaceState, type PaneState } from "../session/persist"
 import { boundPaneTranscript, boundWorkspaceTranscripts } from "../session/transcript-budget"
@@ -311,11 +312,18 @@ export function addPane(workbench: Workbench, pane: Pane): Workbench {
 }
 
 export function closePane(workbench: Workbench, paneId: string): Workbench {
-  const nextFocused = focusAfterClose({
-    panes: workbench.panes.map((p) => p.id),
-    focused: workbench.focusedId,
-    closing: paneId,
-  })
+  const closing = workbench.panes.find((p) => p.id === paneId)
+  // Focus passes to a neighbour of the same project: a pane of another project is not drawn, and
+  // the next Ctrl+W or «Termina processo» would reach it unseen (full review 2026-10-06, sessioni 4).
+  const neighbours = closing ? workbench.panes.filter((p) => sameProject(p, closing)) : workbench.panes
+  const nextFocused =
+    workbench.focusedId !== paneId
+      ? workbench.focusedId
+      : focusAfterClose({
+          panes: neighbours.map((p) => p.id),
+          focused: workbench.focusedId,
+          closing: paneId,
+        })
 
   return {
     ...workbench,
@@ -323,6 +331,20 @@ export function closePane(workbench: Workbench, paneId: string): Workbench {
     focusedId: nextFocused,
     expandedId: workbench.expandedId === paneId ? undefined : workbench.expandedId,
   }
+}
+
+/**
+ * The pane that holds focus once `project` is the open one: the focused pane when it is the
+ * project's, else the project's first, else none. Focus left on a pane of the project just left
+ * is on nothing drawn, and «Termina processo» or Ctrl+W would act on it (sessioni 4, scenario B).
+ */
+export function focusInProject(
+  workbench: Pick<Workbench, "panes" | "focusedId">,
+  project: { readonly name: string; readonly root: string },
+): string | undefined {
+  const mine = workbench.panes.filter((p) => belongsTo(p, project))
+  if (workbench.focusedId && mine.some((p) => p.id === workbench.focusedId)) return workbench.focusedId
+  return mine[0]?.id
 }
 
 /** How many notes stay over a terminal at once: the latest ones. */
