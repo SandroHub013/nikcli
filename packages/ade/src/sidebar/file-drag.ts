@@ -64,6 +64,25 @@ export function writeDraggedPaths(data: DragData, paths: readonly string[]): voi
  * filename.
  */
 export function readDraggedPaths(data: DragData): string[] {
+  return readAnyDraggedPaths(data).filter(isTypeablePath)
+}
+
+/**
+ * A path that can be typed into a terminal as one word.
+ *
+ * A dropped path ends up in a session's input as raw keystrokes. `fromFileUri`
+ * decodes `%0D` and `%1B` into a real carriage return and escape, ADE's own
+ * type is split only on line ends, and a file name on Linux or macOS may hold
+ * a newline or a quote: any of them is a command the user never typed (full
+ * review 2026-10-06, sessioni 1). No path of a real file needs a control
+ * character, and `quoteIfNeeded` cannot escape a `"`, so those are refused,
+ * not mended.
+ */
+export function isTypeablePath(path: string): boolean {
+  return !/[\u0000-\u001f\u007f"]/.test(path)
+}
+
+function readAnyDraggedPaths(data: DragData): string[] {
   const own = safeGet(data, ADE_FILE_MIME)
   if (own) return dedupe(own.split(/\r?\n/).map(normalizeDropped))
 
@@ -117,6 +136,7 @@ export function dragCarriesPaths(data: DragData): boolean {
  */
 export function formatDroppedPaths(paths: readonly string[], projectRoot?: string): string {
   return paths
+    .filter(isTypeablePath)
     .slice(0, MAX_DRAGGED_PATHS)
     .map((path) => quoteIfNeeded(relativize(path, projectRoot)))
     .join(" ")
