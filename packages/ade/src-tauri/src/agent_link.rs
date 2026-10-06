@@ -376,6 +376,23 @@ pub(crate) fn dirs_home() -> Option<PathBuf> {
     None
 }
 
+/// Whether the hook scripts can be installed on this system.
+///
+/// Claude Code's and Codex's hooks are a PowerShell script that the CLI runs as `powershell -File`: off Windows it
+/// would fail at every event of every session on the machine, ADE's or not, and `--unlink-agents` exists only in the
+/// Windows installer, so it would stay after ADE was removed (full review 2026-10-06, sessions 6). `windows` is an
+/// argument so both answers are tested on either system.
+pub(crate) fn hooks_installable(windows: bool, agent: &str) -> Result<(), String> {
+    if windows {
+        Ok(())
+    } else {
+        Err(format!(
+            "gli hook di {agent} sono script PowerShell: {} li installa solo su Windows",
+            crate::brand::name()
+        ))
+    }
+}
+
 /// Reads one CLI's hook configuration so the frontend can decide what to write.
 #[tauri::command]
 pub async fn agent_hook_read(agent: String) -> Result<HookFiles, String> {
@@ -446,6 +463,10 @@ pub async fn agent_hook_write(
         })
         .await
         .map_err(|e| e.to_string())?;
+    }
+    // An install is refused where the script cannot run; a removal is not, so an earlier install can be taken back.
+    if script.is_some() {
+        hooks_installable(cfg!(windows), &agent)?;
     }
     let config = under_base(target.base, target.config)?;
     // Install or refresh is the page's say; what is installed is ADE's own text.
@@ -940,6 +961,25 @@ pub fn unlink_from_env() -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Full review 2026-10-06, sessions 6: no PowerShell hook off Windows.
+    #[test]
+    fn a_powershell_hook_is_installed_only_on_windows() {
+        assert!(hooks_installable(true, "claude-code").is_ok());
+        let refused = hooks_installable(false, "claude-code").unwrap_err();
+        assert!(refused.contains("claude-code") && refused.contains("Windows"), "{refused}");
+        assert!(hooks_installable(false, "codex").is_err());
+    }
+
+    #[test]
+    fn the_write_command_checks_before_it_installs_and_not_before_it_removes() {
+        let source = include_str!("agent_link.rs");
+        let body = &source[source.find("pub async fn agent_hook_write").unwrap()..];
+        let body = &body[..body.find("fn write_hook_files").unwrap()];
+        let check = body.find("hooks_installable(cfg!(windows), &agent)").expect("agent_hook_write must check the system");
+        assert!(body[..check].contains("if script.is_some()"), "only an install is refused, a removal still goes through");
+        assert!(check < body.find("write_hook_files(").unwrap(), "the check comes before anything is written");
+    }
 
     #[test]
     fn a_hook_write_may_only_touch_ade_entries() {

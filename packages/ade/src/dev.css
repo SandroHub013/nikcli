@@ -433,7 +433,7 @@
 }
 
 [data-slot="ade-notice-progress-fill"][data-indeterminate] {
-  animation: ade-notice-progress-slide 1.2s var(--ade-ease-out) infinite;
+  animation: ade-notice-progress-slide 1.2s var(--ade-ease-out) infinite var(--ade-loops, running);
   width: 40% !important;
 }
 

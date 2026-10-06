@@ -1,5 +1,5 @@
 :root {
-  --animate-pulse: pulse-opacity 2s ease-in-out infinite;
+  --animate-pulse: pulse-opacity 2s ease-in-out infinite var(--ade-loops, running);
 }
 
 @keyframes pulse-opacity {

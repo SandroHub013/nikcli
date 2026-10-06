@@ -3,6 +3,7 @@ import {
   detectPermission,
   followPermission,
   isResolved,
+  permissionIdentity,
   permissionSpeechLabel,
   type PermissionRequest,
 } from "./permission"
@@ -372,4 +373,19 @@ test("lint: the pane follows a pending request with followPermission", () => {
     "utf8",
   )
   expect(source).toContain("const still = followPermission(pending, recent, agent)")
+})
+
+// Full review 2026-10-06, ui 4: the voice and the alerts are handed the request's identity, not its heading alone.
+test("a request is told by its heading and its target, and the workbench hands that to the voice and the alerts", () => {
+  expect(permissionIdentity({ what: "Do you want to proceed?", target: "rm -rf ~" })).not.toBe(
+    permissionIdentity({ what: "Do you want to proceed?", target: "cat README" }),
+  )
+  expect(permissionIdentity({ what: "run command" })).toBe("run command")
+  const source = require("node:fs").readFileSync(
+    require("node:path").join(import.meta.dir, "../surface/workbench.tsx"),
+    "utf8",
+  )
+  expect(source).toContain("handlePermissionRequest(paneId, permissionIdentity(request)")
+  expect(source).toContain("permissionIdentity(request), request.kind)")
+  expect(source).not.toContain("handlePermissionRequest(paneId, request.what")
 })

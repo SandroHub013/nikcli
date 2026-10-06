@@ -293,6 +293,10 @@ export const it = {
   "hooks.details": "Dettagli",
   "hooks.outside":
     "Lo script non fa niente fuori da ADE: esce alla prima variabile d'ambiente che non trova, quindi la stessa CLI avviata da un terminale qualunque si comporta esattamente come prima.",
+  "hooks.removeOnly":
+    "Gli hook PowerShell non funzionano su questo sistema, e questo fallisce a ogni evento di ogni sessione di Claude Code o Codex. Si può solo rimuovere.",
+  "hooks.windowsOnly":
+    "Gli hook di Claude Code e Codex sono script PowerShell, quindi ADE li installa solo su Windows. Su questo sistema si offre solo il plugin di nikcli.",
   "agent.mic.start": "Avvia il microfono",
   "agent.mic.stop": "Ferma il microfono",
   "agent.settings": "Impostazioni",
