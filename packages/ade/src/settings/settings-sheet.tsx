@@ -49,9 +49,6 @@ import type { CategoryId } from "./categories"
 const SpaceSection = lazy(() =>
   import("../space/space-section").then((module) => ({ default: module.SpaceSectionLoader })),
 )
-const FramePluginRows = lazy(() =>
-  import("../plugin-frame/plugin-rows").then((module) => ({ default: module.FramePluginRows })),
-)
 
 export interface SettingsSheetProps {
   onClose: () => void
@@ -111,7 +108,6 @@ export interface SettingsSheetProps {
   extensionsIo: () => McpConfigIO | undefined
   pluginRuntime: ReturnType<typeof createAdePluginRuntime>
   openGuide: (url: string) => void
-  openFramePluginPane: (id: string) => void
   askYesNo: (message: string, labels?: { ok?: string; cancel?: string }) => Promise<boolean>
 
   /** Registrazione: the same workbench functions the `record.*` commands run. */
@@ -312,19 +308,14 @@ export function SettingsSheet(props: SettingsSheetProps): JSX.Element {
             pluginCount={props.pluginRuntime.registry.sections().length}
             onOpenGuide={(url: string) => props.openGuide(url)}
             plugins={() => (
-              <>
-                <Show
-                  when={props.pluginRuntime.registry.sections().length > 0}
-                  fallback={<p data-slot="section-desc">{t("settings.noPlugins")}</p>}
-                >
-                  <For each={props.pluginRuntime.registry.sections()}>
-                    {(section) => <PluginSection title={section.title} render={() => section.render({})} />}
-                  </For>
-                </Show>
-                <Suspense>
-                  <FramePluginRows host={getHost} onOpen={(id: string) => void props.openFramePluginPane(id)} />
-                </Suspense>
-              </>
+              <Show
+                when={props.pluginRuntime.registry.sections().length > 0}
+                fallback={<p data-slot="section-desc">{t("settings.noPlugins")}</p>}
+              >
+                <For each={props.pluginRuntime.registry.sections()}>
+                  {(section) => <PluginSection title={section.title} render={() => section.render({})} />}
+                </For>
+              </Show>
             )}
           />
         )

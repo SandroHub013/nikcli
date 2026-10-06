@@ -164,11 +164,6 @@ export interface UpdateWatchOptions {
    * costs one call.
    */
   readonly memory?: UpdateMemoryStore
-  /**
-   * A background check ran (it was not skipped): whatever else looks for something new on the same schedule does it now. The plugins in a
-   * frame ask their own index here (`plugin-frame/update-runner.ts`), and decide for themselves how often that is worth a call.
-   */
-  readonly onChecked?: () => void
 }
 
 /**
@@ -385,12 +380,7 @@ export function createUpdateWatch(options: UpdateWatchOptions): UpdateWatch {
     }
   }
 
-  const background = () =>
-    void check()
-      .then((result) => {
-        if (result.status !== "skipped") options.onChecked?.()
-      })
-      .catch(() => {})
+  const background = () => void check().catch(() => {})
 
   return {
     start() {
