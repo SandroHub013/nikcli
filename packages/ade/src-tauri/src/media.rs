@@ -132,7 +132,8 @@ fn parse_range(header: &str, length: u64) -> Option<(u64, u64)> {
         if count == 0 || length == 0 {
             return None;
         }
-        let start = length.saturating_sub(count);
+        // The last bytes asked for, at most one chunk of them: `bytes=-4000000000` must not allocate the file.
+        let start = length.saturating_sub(count.min(MAX_CHUNK));
         return Some((start, length - 1));
     }
 
@@ -401,6 +402,29 @@ pub fn respond(roots: &[PathBuf], opened: &[String], request: &Request<Vec<u8>>,
     };
     let length = meta.len();
 
+    let allowed = request
+        .headers()
+        .get("origin")
+        .and_then(|value| value.to_str().ok())
+        .filter(|origin| *origin != "null" && Some(*origin) == app_origin);
+
+    // An empty file has no byte to serve and no range to satisfy: `0 - 1` below would underflow and panic the
+    // handler. It is a plain 200 with no body.
+    if length == 0 {
+        let mut response = hardened(Response::builder())
+            .status(StatusCode::OK)
+            .header("Content-Type", mime_of(&path))
+            .header("Accept-Ranges", "bytes")
+            .header("Content-Length", "0")
+            .header("Vary", "Origin");
+        if let Some(origin) = allowed {
+            response = response.header("Access-Control-Allow-Origin", origin);
+        }
+        return response
+            .body(Vec::new())
+            .unwrap_or_else(|_| deny(StatusCode::INTERNAL_SERVER_ERROR));
+    }
+
     let range = request
         .headers()
         .get("range")
@@ -424,13 +448,15 @@ pub fn respond(roots: &[PathBuf], opened: &[String], request: &Request<Vec<u8>>,
         Err(_) => return deny(StatusCode::INTERNAL_SERVER_ERROR),
     };
     body.truncate(read);
+    // The file shrank between `metadata` and `read`: nothing at that offset any more, and `read - 1` would underflow.
+    if read == 0 {
+        return hardened(Response::builder())
+            .status(StatusCode::RANGE_NOT_SATISFIABLE)
+            .header("Content-Range", format!("bytes */{length}"))
+            .body(Vec::new())
+            .unwrap_or_else(|_| deny(StatusCode::INTERNAL_SERVER_ERROR));
+    }
     let last = start + read as u64 - 1;
-
-    let allowed = request
-        .headers()
-        .get("origin")
-        .and_then(|value| value.to_str().ok())
-        .filter(|origin| *origin != "null" && Some(*origin) == app_origin);
 
     let mut response = hardened(Response::builder())
         .status(StatusCode::PARTIAL_CONTENT)
@@ -713,6 +739,29 @@ mod tests {
         assert_eq!(mime_of(Path::new("a.oga")), "audio/ogg");
         assert_eq!(mime_of(Path::new("a.opus")), "audio/ogg");
         assert_eq!(mime_of(Path::new("a.txt")), "application/octet-stream");
+    }
+
+    // Full review 2026-10-06, rust 12: an empty file used to panic the handler (`0 - 1` on a u64).
+    #[test]
+    fn an_empty_file_is_a_200_with_no_body_not_a_panic() {
+        let (dir, path) = fixture(b"");
+        let roots = vec![dir.path().canonicalize().expect("radice")];
+        for range in [None, Some("bytes=0-"), Some("bytes=-3")] {
+            let response = respond(&roots, &[], &request(&url_for(&path.to_string_lossy()), range), None);
+            assert_eq!(response.status(), StatusCode::OK, "range {range:?}");
+            assert!(response.body().is_empty());
+            assert_eq!(response.headers().get("Content-Length").unwrap(), "0");
+        }
+    }
+
+    #[test]
+    fn a_suffix_range_is_capped_to_one_chunk() {
+        let length = 100 * 1024 * 1024;
+        let (start, end) = parse_range("bytes=-99999999", length).expect("intervallo");
+        assert_eq!(end, length - 1);
+        assert_eq!(end - start + 1, MAX_CHUNK);
+        // A small one is untouched.
+        assert_eq!(parse_range("bytes=-500", length), Some((length - 500, length - 1)));
     }
 
     #[test]
