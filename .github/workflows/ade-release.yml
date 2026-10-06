@@ -73,7 +73,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ env.TAG }}
           fetch-depth: 0
@@ -120,7 +120,10 @@ jobs:
             echo "release $TAG already exists; builds will upload into it"
             exit 0
           fi
-          PREVIOUS="$(git tag --list 'ade-v*' --sort=-v:refname | grep -vx "$TAG" | head -1 || true)"
+          # The previous release is the newest PUBLIC one: a tag left by a build that failed is not a release,
+          # and notes counted from it would leave out what that release was to carry.
+          gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --limit 1000 --json tagName --jq '.[].tagName' > published-tags.txt
+          PREVIOUS="$(git tag --list 'ade-v*' --sort=-v:refname | grep -vx "$TAG" | grep -Fx -f published-tags.txt | head -1 || true)"
           if [ -n "$PREVIOUS" ]; then
             NOTES="$(bun packages/ade/script/release-plan.ts notes "$PREVIOUS" "$TAG")"
           else
@@ -195,7 +198,7 @@ jobs:
             bundles: deb,rpm
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ env.TAG }}
 
@@ -215,12 +218,12 @@ jobs:
       - uses: ./.github/actions/setup-bun
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
         with:
           targets: ${{ matrix.target }}
 
       - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: packages/ade/src-tauri -> target
           key: release-${{ matrix.target }}
@@ -310,7 +313,7 @@ jobs:
       - name: Upload the Windows setup for signing
         id: unsigned
         if: runner.os == 'Windows' && env.SIGNPATH_ENABLED == 'true'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ade-unsigned-${{ matrix.target }}
           path: packages/ade/src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe
@@ -319,7 +322,7 @@ jobs:
 
       - name: Authenticode signing (SignPath)
         if: steps.unsigned.outcome == 'success'
-        uses: signpath/github-action-submit-signing-request@v1
+        uses: signpath/github-action-submit-signing-request@ced31329c0317e779dad2eec2a7c3bb46ea1343e # v1
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
           organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -395,11 +398,18 @@ jobs:
     if: ${{ !inputs.attach_only }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ env.TAG }}
-          sparse-checkout: packages/ade/brand.json
+          sparse-checkout: |
+            packages/ade/brand.json
+            packages/ade/script/feed-guard.ts
+            /package.json
           sparse-checkout-cone-mode: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
 
       # The page a person downloads from says what Windows will say to them,
       # and gives them a way to check the file. Both are written while the
@@ -529,4 +539,20 @@ jobs:
             gh release create ade-updater --repo "$GITHUB_REPOSITORY" --target feat/ade --prerelease --latest=false \
               --title "$NAME updater" --notes "Manifest read by installed copies of $NAME to update themselves. Not a release: see the ade-v* releases."
           fi
-          gh release upload ade-updater latest.json --clobber --repo "$GITHUB_REPOSITORY"
+          # The fixed feed is never moved back: a rerun of an old tag, a manual dispatch or two tags building side by
+          # side would otherwise take the update away from installed copies until the next release.
+          # A feed that exists and cannot be fetched fails the step instead of being overwritten unseen.
+          # (Two tags publishing in the same seconds can still cross; the window is as long as this step.)
+          CURRENT=-
+          if gh release view ade-updater --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' | grep -qx latest.json; then
+            mkdir -p current
+            gh release download ade-updater --repo "$GITHUB_REPOSITORY" --pattern latest.json --dir current --clobber
+            CURRENT=current/latest.json
+          fi
+          DECISION="$(bun "$GITHUB_WORKSPACE/packages/ade/script/feed-guard.ts" "$CURRENT" "$VERSION")"
+          echo "ade-updater feed: $DECISION"
+          case "$DECISION" in
+            write) gh release upload ade-updater latest.json --clobber --repo "$GITHUB_REPOSITORY" ;;
+            skip*) echo "::warning::ade-updater/latest.json left as it is: ${DECISION#skip }" ;;
+            *) echo "unexpected answer from feed-guard: $DECISION"; exit 1 ;;
+          esac

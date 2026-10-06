@@ -52,7 +52,7 @@ jobs:
       tag: ${{ steps.plan.outputs.tag }}
       sha: ${{ steps.sha.outputs.sha }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: feat/ade
           fetch-depth: 0
@@ -97,6 +97,19 @@ jobs:
           done
           echo "drafts=$BUSY" >> "$GITHUB_OUTPUT"
 
+      # The base of the plan is the newest tag whose release is public. The tag is pushed before the
+      # release is built, so one whose build failed is still there, with a draft: counted as the base,
+      # the next plan said "nothing to release" and the lost commits never went out. A listing that
+      # fails fails the step: the plan must not fall back to counting every tag.
+      - name: Public releases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --limit 1000 --json tagName --jq '.[].tagName' > published-tags.txt
+          echo "public releases: $(grep -c '^ade-v' published-tags.txt || true) ade-v*"
+
       - name: Plan
         id: plan
         shell: bash
@@ -111,7 +124,7 @@ jobs:
             exit 0
           fi
           bun packages/ade/script/release-plan.ts plan --min-age-hours "$MIN_AGE" \
-            --skip-shas skip-shas.txt --major-shas major-shas.txt | tee plan.txt
+            --skip-shas skip-shas.txt --major-shas major-shas.txt --published-tags published-tags.txt | tee plan.txt
           {
             echo "### ADE auto-release"
             echo
@@ -135,7 +148,7 @@ jobs:
     outputs:
       tagged: ${{ steps.tag.outputs.tagged }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ needs.plan.outputs.sha }}
 
@@ -149,6 +162,7 @@ jobs:
         env:
           TAG: ${{ needs.plan.outputs.tag }}
           SHA: ${{ needs.plan.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           HEAD="$(git ls-remote origin refs/heads/feat/ade | cut -f1)"
@@ -156,6 +170,19 @@ jobs:
             echo "feat/ade moved from $SHA to $HEAD during the checks; releasing next time" | tee -a "$GITHUB_STEP_SUMMARY"
             echo "tagged=false" >> "$GITHUB_OUTPUT"
             exit 0
+          fi
+          # The plan counted only public releases, so a tag with this name that is already there belongs to
+          # a release that never went public (a failed build): it and its draft are cleared, and the tag is
+          # made again on the commit that was checked. A public release is never touched.
+          if [ -n "$(git ls-remote --tags origin "refs/tags/$TAG")" ]; then
+            STATE="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' 2>/dev/null || echo none)"
+            if [ "$STATE" = "false" ]; then
+              echo "$TAG is a public release already; not touching it" | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            if [ "$STATE" = "true" ]; then gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes; fi
+            git push origin ":refs/tags/$TAG"
+            echo "cleared $TAG, left by a release that never went public" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"

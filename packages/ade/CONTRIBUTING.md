@@ -80,13 +80,15 @@ from the changed paths; two labels are set by hand and read at release time:
 
 ## Releases
 
-The maintainer decides when ADE is released. The scheduled
-`.github/workflows/ade-auto-release.yml` is **disabled** on the fork, so a push
-to `feat/ade` publishes nothing by itself. Run by hand, or re-enabled by the
-maintainer, it releases when all of these hold:
+The scheduled `.github/workflows/ade-auto-release.yml` is **enabled** on the
+fork and runs every 12 hours: a push to `feat/ade` that holds something a user
+would notice is released by itself, without anyone pressing a button (the
+maintainer can also run it by hand, or turn the schedule off in the Actions
+tab). It releases when all of these hold:
 
 1. at least one releasable commit (table above) since the last `ade-v*` tag
-   touches ADE;
+   **with a public release** touches ADE (a tag left by a build that failed is
+   not a base: it is cleared and made again on the next run);
 2. the newest commit on `feat/ade` is at least 2 hours old, so a series being
    pushed is not caught halfway;
 3. `ade-checks` passes on that exact commit;
@@ -97,7 +99,7 @@ Windows and Linux and publishes only if every platform succeeds. Installed
 copies of ADE then show the update in their notification bell. Release notes
 are the `feat`, `fix`/`revert` and `perf` subjects, grouped.
 
-To release, the maintainer runs **ade-auto-release** from the Actions tab
+To release sooner, the maintainer runs **ade-auto-release** from the Actions tab
 (`min_age_hours: 0`; `dry_run` shows the plan without tagging), or pushes a
 tag: `git tag -a ade-vX.Y.Z -m "ADE X.Y.Z" && git push origin ade-vX.Y.Z`.
 
