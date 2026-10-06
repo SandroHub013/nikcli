@@ -1326,6 +1326,17 @@ const GIT_WRITING_FLAGS: &[&str] = &["--output", "--output-directory"];
 /// The only variable ADE sets for git: the throwaway index a snapshot stages
 /// into, so the user's real index is never touched.
 const GIT_ENV_KEYS: &[&str] = &["GIT_INDEX_FILE"];
+/// What every git call of ADE runs with, before the page's own variables.
+///
+/// A repository with `core.fsmonitor=true` starts a daemon on its first `git status`; started from a call that runs in a job that ends
+/// with the call, it died with it and was started again by the next one. `GIT_OPTIONAL_LOCKS=0` keeps a `status` that a timeout killed
+/// from leaving `index.lock`, and from taking the lock the user's own git wants (full review 2026-10-06, review of F6a, B1).
+const GIT_BASE_ENV: [(&str, &str); 4] = [
+    ("GIT_OPTIONAL_LOCKS", "0"),
+    ("GIT_CONFIG_COUNT", "1"),
+    ("GIT_CONFIG_KEY_0", "core.fsmonitor"),
+    ("GIT_CONFIG_VALUE_0", "false"),
+];
 
 #[derive(Serialize, Clone, Debug)]
 struct ShellOutput {
@@ -1484,6 +1495,7 @@ async fn git_run(
 
     let mut command = std::process::Command::new("git");
     command.args(&args);
+    command.envs(GIT_BASE_ENV);
     if let Some(dir) = cwd.as_ref().filter(|d| !d.is_empty()) {
         command.current_dir(dir);
     }
@@ -2969,6 +2981,30 @@ mod tests {
         let took = started.elapsed();
         assert_eq!(answer.as_deref(), Some("/usr/local/bin"), "la riga arrivata e' la risposta");
         assert!(took < Duration::from_secs(3), "ha aspettato il lettore: {took:?}");
+    }
+
+    // Review of F6a, B1: git is told not to start a file-system monitor inside the call's job, and not to take optional locks.
+    #[test]
+    fn git_is_run_without_an_fsmonitor_daemon_and_without_optional_locks() {
+        if std::process::Command::new("git").arg("--version").output().is_err() {
+            eprintln!("git non c'è: prova saltata");
+            return;
+        }
+        let repo = TempDir::new("git-base-env");
+        let git = |args: &[&str]| {
+            std::process::Command::new("git").args(args).current_dir(&repo.0).envs(GIT_BASE_ENV).output().expect("git")
+        };
+        assert!(git(&["init", "-q"]).status.success());
+        // The repository asks for the daemon; the call's own environment wins over the repository.
+        assert!(git(&["config", "--local", "core.fsmonitor", "true"]).status.success());
+        let asked = git(&["config", "--get", "core.fsmonitor"]);
+        assert_eq!(String::from_utf8_lossy(&asked.stdout).trim(), "false");
+        assert!(GIT_BASE_ENV.contains(&("GIT_OPTIONAL_LOCKS", "0")));
+        // And it is what `git_run` sets, before the page's variables.
+        let source = include_str!("lib.rs");
+        let start = source.find("async fn git_run(").expect("git_run");
+        let body = &source[start..source[start..].find("async fn current_dir").map(|end| start + end).expect("fine")];
+        assert!(body.contains("command.envs(GIT_BASE_ENV)"));
     }
 
     // Full review 2026-10-06, rust 14: `git_run` ran `output()` with no limit on the async runtime. The command
