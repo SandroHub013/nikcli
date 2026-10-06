@@ -88,6 +88,7 @@ pub struct WriteRoots(Mutex<Vec<PathBuf>>, Mutex<Vec<String>>);
 /// Adds a directory to the set this window may write inside.
 #[tauri::command]
 async fn allow_write_root(roots: tauri::State<'_, WriteRoots>, path: String) -> Result<(), String> {
+    refuse_network_path(&path)?;
     let resolved = Path::new(&path)
         .canonicalize()
         .map_err(|e| format!("{path}: {e}"))?;
@@ -195,6 +196,67 @@ fn is_git_executable_path(path: &Path) -> bool {
     })
 }
 
+/// Whether `path` names a file on another machine: `\\host\share`, `//host/share`,
+/// `\\?\UNC\host\share` or a device path (`\\.\`).
+///
+/// Asking Windows about such a path (`exists`, `open`, `canonicalize`) opens an
+/// SMB connection to the host and sends the user's NTLM hash with it, so the
+/// answer has to come from the text, before the file system is touched. A
+/// project's own `.nikcli/tui.json`, written by whoever cloned it, could name
+/// one and ADE looked at it on opening the project (full review 2026-10-06,
+/// Rust ALTO 2). `\\?\C:\x` is the extended spelling of a local path and stays.
+/// A mapped drive letter cannot be told from a local one by its text.
+fn is_network_path(path: &str) -> bool {
+    let normal = path.trim().replace('/', "\\");
+    let Some(rest) = normal.strip_prefix("\\\\") else {
+        return false;
+    };
+    match rest.strip_prefix("?\\") {
+        Some(inner) => {
+            let mut chars = inner.chars();
+            !matches!((chars.next(), chars.next()), (Some(drive), Some(':')) if drive.is_ascii_alphabetic())
+        }
+        None => true,
+    }
+}
+
+fn refuse_network_path(path: &str) -> Result<(), String> {
+    if is_network_path(path) {
+        return Err(format!("percorso di rete non consentito: {path}"));
+    }
+    Ok(())
+}
+
+/// Folders and files of the user's credentials, which the page has no reason to
+/// read through `read_text_file`, which otherwise opens any path.
+///
+/// Not the whole home: the sidebar opens files anywhere, plugin discovery reads
+/// `~/.config/nikcli`, and the OpenRouter key sync reads nikcli's own `auth.json`.
+/// What is listed is what no ADE feature reads.
+fn is_credential_path(path: &Path, home: Option<&Path>) -> bool {
+    let Some(home) = home.and_then(|h| h.canonicalize().ok()) else {
+        return false;
+    };
+    let Ok(resolved) = path.canonicalize() else {
+        // It does not exist, so it cannot be read either.
+        return false;
+    };
+    let lowered = |p: &Path| -> Vec<String> {
+        p.components()
+            .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
+            .collect()
+    };
+    let (target, base) = (lowered(&resolved), lowered(&home));
+    if !target.starts_with(&base) {
+        return false;
+    }
+    match &target[base.len()..] {
+        [first, ..] if [".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker"].contains(&first.as_str()) => true,
+        [only] => [".netrc", "_netrc", ".git-credentials", ".pgpass"].contains(&only.as_str()),
+        _ => false,
+    }
+}
+
 /// Resolves `path` to a form that can be compared against a root, without
 /// requiring it to exist yet.
 ///
@@ -206,6 +268,7 @@ fn is_git_executable_path(path: &Path) -> bool {
 /// appended — with `..` refused rather than resolved, since a `..` that climbs
 /// out of the root is exactly what this is here to stop.
 fn resolve_for_check(path: &Path) -> Result<PathBuf, String> {
+    refuse_network_path(&path.to_string_lossy())?;
     let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -326,6 +389,7 @@ struct DirEntry {
 /// silently skipped instead of aborting the whole listing.
 #[tauri::command]
 async fn read_dir(path: String) -> Result<Vec<DirEntry>, String> {
+    refuse_network_path(&path)?;
     let rd = std::fs::read_dir(&path).map_err(|e| format!("{path}: {e}"))?;
     let mut dirs: Vec<DirEntry> = Vec::new();
     let mut files: Vec<DirEntry> = Vec::new();
@@ -378,6 +442,10 @@ async fn read_text_file(path: String, max_bytes: usize) -> Result<FileRead, Stri
 
 /// The reading itself, as a plain function so the tests below can call it.
 fn read_text(path: &str, max_bytes: usize) -> Result<FileRead, String> {
+    refuse_network_path(path)?;
+    if is_credential_path(Path::new(path), dirs::home_dir().as_deref()) {
+        return Err(format!("credenziali dell'utente: lettura non consentita: {path}"));
+    }
     /*
      * One byte past the cap, rather than the whole file. The sidebar makes it
      * one click to open a 2 GB pack file, and reading it whole would allocate
@@ -1459,7 +1527,7 @@ async fn home_dir() -> Result<String, String> {
 
 #[tauri::command]
 async fn path_exists(path: String) -> bool {
-    Path::new(&path).exists()
+    !is_network_path(&path) && Path::new(&path).exists()
 }
 
 /// Opens an ADE release page in the default browser.
@@ -3106,6 +3174,94 @@ mod tests {
         assert_eq!(check(&["add", "-A"], &index(&main.join("ade-review-index").to_string_lossy())), Ok(()));
         assert!(check(&["add", "-A"], &index(&format!("{elsewhere}/profile.ps1"))).is_err());
         assert!(check(&["add", "-A"], &index(&format!("{elsewhere}/ade-review-index"))).is_err());
+    }
+
+    /// Full review 2026-10-06, Rust ALTO 2: a path on another machine is refused from its text,
+    /// before the file system is asked, so Windows never opens SMB (and sends the NTLM hash).
+    #[test]
+    fn a_path_on_another_machine_is_refused_before_the_disk_is_asked() {
+        for unc in [
+            "\\\\attacker.example\\s\\p",
+            "//attacker.example/s/p",
+            "\\\\attacker.example/s/p",
+            "/\\attacker.example\\s",
+            "\\\\?\\UNC\\attacker.example\\s\\p",
+            "//?/UNC/attacker.example/s/p",
+            "\\\\.\\pipe\\x",
+            "\\\\?\\Volume{01234567-89ab-cdef-0123-456789abcdef}\\x",
+            "  //attacker.example/s/p/package.json",
+        ] {
+            assert!(is_network_path(unc), "{unc}");
+            assert!(refuse_network_path(unc).is_err(), "{unc}");
+            assert!(read_text(unc, 10).is_err_and(|e| e.contains("percorso di rete non consentito")), "{unc}");
+            assert!(resolve_for_check(Path::new(unc)).is_err_and(|e| e.contains("percorso di rete non consentito")), "{unc}");
+        }
+        for local in [
+            "C:\\Users\\u\\p",
+            "C:/Users/u/p",
+            "\\\\?\\C:\\Users\\u\\p",
+            "/home/u/p",
+            "relative/p",
+            "./p",
+            "",
+        ] {
+            assert!(!is_network_path(local), "{local}");
+        }
+    }
+
+    #[test]
+    fn a_network_path_is_not_listed_or_checked_for_existence() {
+        let dir = tauri::async_runtime::block_on(read_dir("//attacker.example/s".to_string()));
+        assert!(dir.is_err_and(|e| e.contains("percorso di rete non consentito")));
+        assert!(!tauri::async_runtime::block_on(path_exists("//attacker.example/s/p/package.json".to_string())));
+    }
+
+    /// The credential folders of the user's home are not read through `read_text_file`;
+    /// the rest of the home, and what ADE features read there, still are.
+    #[test]
+    fn credential_stores_in_the_home_are_not_readable_by_the_page() {
+        let home = TempDir::new("credhome");
+        let put = |relative: &str| {
+            let path = home.0.join(relative);
+            std::fs::create_dir_all(path.parent().expect("parent")).expect("dirs");
+            std::fs::write(&path, "x").expect("write");
+            path
+        };
+        let secret = [
+            ".ssh/id_ed25519",
+            ".SSH/config",
+            ".gnupg/private-keys-v1.d/k.key",
+            ".aws/credentials",
+            ".azure/accessTokens.json",
+            ".kube/config",
+            ".docker/config.json",
+            ".netrc",
+            ".git-credentials",
+        ];
+        for relative in secret {
+            let path = put(relative);
+            assert!(is_credential_path(&path, Some(&home.0)), "{relative}");
+        }
+        for relative in [
+            "notes.txt",
+            "project/.ssh-notes.md",
+            "project/.aws/readme.md",
+            ".config/nikcli/auth.json",
+            ".config/nikcli/tui.json",
+            ".claude/settings.json",
+            "AppData/Local/nikcli/auth.json",
+        ] {
+            let path = put(relative);
+            assert!(!is_credential_path(&path, Some(&home.0)), "{relative}");
+        }
+        // Not the home at all, a missing file, and no home to compare with.
+        let outside = TempDir::new("credoutside");
+        let elsewhere = outside.join(".ssh");
+        std::fs::create_dir_all(&elsewhere).expect("dir");
+        std::fs::write(elsewhere.join("id"), "x").expect("write");
+        assert!(!is_credential_path(&elsewhere.join("id"), Some(&home.0)));
+        assert!(!is_credential_path(&home.0.join(".ssh/missing"), Some(&home.0)));
+        assert!(!is_credential_path(&home.0.join(".ssh/id_ed25519"), None));
     }
 
     #[test]
