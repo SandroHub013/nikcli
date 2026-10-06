@@ -13,9 +13,13 @@
  *
  * `check` fails when a commit in the range that touches ADE breaks the
  * subject format. `notes` prints the grouped notes for a range.
+ *
+ * None of the three sees a commit reachable from `release/upstream-bases.txt`:
+ * those are nikcli/nikcli releases merged into feat/ade, Nik's commits, not ADE's.
  */
 
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs"
+import { join } from "node:path"
 import {
   COMMIT_TYPES,
   SKIP_MARKER,
@@ -34,8 +38,31 @@ function git(...args: string[]): string {
   return result.stdout.toString()
 }
 
+/** Commits of nikcli/nikcli already merged into feat/ade; `RELEASE_UPSTREAM_BASES` overrides the file (tests). */
+const UPSTREAM_BASES =
+  process.env.RELEASE_UPSTREAM_BASES ?? join(import.meta.dir, "..", "release", "upstream-bases.txt")
+
+/**
+ * The upstream commits to leave out of every range. A sha this clone does not have is ignored:
+ * a shallow clone, or one that never fetched upstream, must not break the check.
+ */
+function upstreamBases(): string[] {
+  if (!existsSync(UPSTREAM_BASES)) return []
+  return readFileSync(UPSTREAM_BASES, "utf8")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/#.*/, "").trim())
+    .filter((sha) => /^[0-9a-f]{40}$/i.test(sha))
+    .filter((sha) => {
+      const probe = Bun.spawnSync(["git", "cat-file", "-e", `${sha}^{commit}`], { stdout: "ignore", stderr: "ignore" })
+      return probe.exitCode === 0
+    })
+}
+
 function commits(range: string): Commit[] {
-  const out = git("log", "--no-merges", "--format=%H%x1f%s%x1f%b%x1e", range, "--", ...RELEASE_PATHS)
+  /* `--not` has to come before `--`, or git reads the shas as paths. */
+  const bases = upstreamBases()
+  const exclude = bases.length > 0 ? ["--not", ...bases] : []
+  const out = git("log", "--no-merges", "--format=%H%x1f%s%x1f%b%x1e", range, ...exclude, "--", ...RELEASE_PATHS)
   return out
     .split("\x1e")
     .map((record) => record.replace(/^\n/, ""))
