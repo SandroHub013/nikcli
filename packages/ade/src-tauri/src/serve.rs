@@ -124,6 +124,10 @@ pub(crate) struct Serving {
     pub(crate) version: Option<String>,
     /// ADE's own server: always one it started, and ends.
     child: Child,
+    /// On Windows, the job the server and everything it starts live in: closed with ADE, however ADE goes, it
+    /// takes them with it. See `spawn_guarded`.
+    #[allow(dead_code)]
+    guard: Option<crate::ChildTreeGuard>,
 }
 
 impl Serving {
@@ -696,14 +700,48 @@ fn replace_when_ready(serving: Serving, relaunch: impl FnOnce() -> Result<Servin
     }
 }
 
+/// Spawns `command` so that, on Windows, the process and what it starts end when ADE's last handle to the job
+/// closes: `app.restart()` skips `RunEvent::Exit` and the updater ends the process with `exit(0)`, and neither
+/// ran `Serving::end`, so every update left a `nikcli serve` with its LSP and MCP children behind (full review
+/// 2026-10-06, Rust 9). The kernel closes the job when the process goes, whichever way.
+///
+/// The process starts suspended and is resumed once in the job, so it cannot make a child outside it. A job
+/// that cannot be made or joined is not a reason to have no chat: the server runs unguarded, as before.
+/// Elsewhere there is no job and no guard (a restart there leaves the server to `RunEvent::Exit` as before).
+fn spawn_guarded(command: &mut Command) -> std::io::Result<(Child, Option<crate::ChildTreeGuard>)> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let guard = crate::ChildTreeGuard::new().ok();
+        if guard.is_some() {
+            // No console window, and not running yet.
+            command.creation_flags(0x0800_0004);
+        }
+        let mut child = command.spawn()?;
+        if guard.is_none() {
+            return Ok((child, None));
+        }
+        let joined = guard.as_ref().is_some_and(|guard| guard.assign_pid(child.id()).is_ok());
+        if let Err(error) = crate::resume_child(&child) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(std::io::Error::other(error));
+        }
+        Ok((child, if joined { guard } else { None }))
+    }
+    #[cfg(not(windows))]
+    {
+        command.spawn().map(|child| (child, None))
+    }
+}
+
 /// Starts one `nikcli serve` and waits for it to say where it listens.
 fn launch(program: &str, directory: Option<&str>, content: Option<&str>) -> Result<Serving, String> {
     let password = random_password()?;
     let mut command = serve_command(program, directory, &password, content);
 
-    let mut child = command
-        .spawn()
-        .map_err(|error| format!("nikcli serve non è partito: {error}"))?;
+    let (mut child, guard) =
+        spawn_guarded(&mut command).map_err(|error| format!("nikcli serve non è partito: {error}"))?;
 
     let stdout = child
         .stdout
@@ -761,6 +799,7 @@ fn launch(program: &str, directory: Option<&str>, content: Option<&str>) -> Resu
             auth: Some((USERNAME.to_string(), password)),
             version: None,
             child,
+            guard,
         }),
         Ok(Err(reason)) => {
             crate::pty::kill_tree(child.id());
@@ -891,7 +930,45 @@ mod tests {
             auth: Some(("nikcli".into(), "finta".into())),
             version: None,
             child,
+            guard: None,
         }
+    }
+
+    /// Full review 2026-10-06, Rust 9: the server lives in a job that ends with ADE's last handle to it.
+    #[cfg(windows)]
+    #[test]
+    fn the_server_and_its_children_end_when_the_guard_does() {
+        let mut command = Command::new("cmd");
+        command
+            .args(["/C", "ping -n 30 127.0.0.1"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        let (mut child, guard) = super::spawn_guarded(&mut command).expect("the process did not start");
+        let guard = guard.expect("the process was not put in a job");
+        // Resumed, and running: a process left suspended would hang the chat for good.
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(child.try_wait().unwrap().is_none(), "the process ended by itself");
+        // ADE goes (an update, a restart, a crash): its handle to the job closes with it.
+        drop(guard);
+        let mut ended = false;
+        for _ in 0..100 {
+            if child.try_wait().unwrap().is_some() {
+                ended = true;
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        if !ended {
+            let _ = child.kill();
+        }
+        assert!(ended, "the server outlived the guard");
+    }
+
+    #[test]
+    fn a_program_that_does_not_exist_is_an_error_not_a_hang() {
+        let mut command = Command::new("nikcli-che-non-esiste-12345");
+        assert!(super::spawn_guarded(&mut command).is_err());
     }
 
     fn info(url: &str) -> ServerInfo {

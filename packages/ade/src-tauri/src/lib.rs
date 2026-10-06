@@ -823,7 +823,7 @@ extern "system" {
 }
 
 #[cfg(windows)]
-fn resume_child(child: &std::process::Child) -> Result<(), String> {
+pub(crate) fn resume_child(child: &std::process::Child) -> Result<(), String> {
     use std::os::windows::io::AsRawHandle;
     /*
      * The child starts suspended so it cannot create descendants before entering the job.
@@ -839,11 +839,17 @@ fn resume_child(child: &std::process::Child) -> Result<(), String> {
 }
 
 #[cfg(windows)]
-struct ChildTreeGuard(windows::Win32::Foundation::HANDLE);
+pub(crate) struct ChildTreeGuard(windows::Win32::Foundation::HANDLE);
+
+// A job handle is a kernel handle, valid from any thread; the server's guard lives in the shared slot.
+#[cfg(windows)]
+unsafe impl Send for ChildTreeGuard {}
+#[cfg(windows)]
+unsafe impl Sync for ChildTreeGuard {}
 
 #[cfg(windows)]
 impl ChildTreeGuard {
-    fn new() -> Result<Self, String> {
+    pub(crate) fn new() -> Result<Self, String> {
         use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::System::JobObjects::{
             CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
@@ -870,7 +876,7 @@ impl ChildTreeGuard {
         Ok(Self(handle))
     }
 
-    fn assign_pid(&self, pid: u32) -> Result<(), String> {
+    pub(crate) fn assign_pid(&self, pid: u32) -> Result<(), String> {
         use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::System::JobObjects::AssignProcessToJobObject;
         use windows::Win32::System::Threading::{
@@ -893,15 +899,15 @@ impl Drop for ChildTreeGuard {
 }
 
 #[cfg(not(windows))]
-struct ChildTreeGuard;
+pub(crate) struct ChildTreeGuard;
 
 #[cfg(not(windows))]
 impl ChildTreeGuard {
-    fn new() -> Result<Self, String> {
+    pub(crate) fn new() -> Result<Self, String> {
         Ok(Self)
     }
 
-    fn assign_pid(&self, _pid: u32) -> Result<(), String> {
+    pub(crate) fn assign_pid(&self, _pid: u32) -> Result<(), String> {
         Ok(())
     }
 }
@@ -1442,6 +1448,23 @@ fn check_git_args(args: &[String]) -> Result<(), String> {
     Ok(())
 }
 
+/// How long one git command may take. They are all local (status, diff, worktree, ...), so a git that has not
+/// answered by then is stuck (a lock, a dead network share) and holds a blocking thread for good.
+const GIT_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// `worktree add` is a whole checkout: the repository's `post-checkout` hook runs (husky and the like, sometimes an
+/// install) and with LFS the smudge downloads from the network. Cut at two minutes it left a half-made worktree and a
+/// branch already created, and ADE said it had failed (Architect's review of F6a, O3).
+const GIT_WORKTREE_ADD_TIMEOUT: Duration = Duration::from_secs(10 * 60);
+
+/// The deadline of one git command of `git_run`.
+fn git_timeout(args: &[String]) -> Duration {
+    match args {
+        [worktree, add, ..] if worktree == "worktree" && add == "add" => GIT_WORKTREE_ADD_TIMEOUT,
+        _ => GIT_TIMEOUT,
+    }
+}
+
 /// Runs one git command and hands back what it printed.
 #[tauri::command]
 async fn git_run(
@@ -1478,15 +1501,16 @@ async fn git_run(
         command.creation_flags(CREATE_NO_WINDOW);
     }
 
-    let output = command
-        .output()
-        .map_err(|e| format!("git non eseguibile: {e}"))?;
-
-    Ok(ShellOutput {
-        code: output.status.code(),
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-    })
+    /*
+     * Off the async worker, and bounded: `output()` here blocked a runtime thread until git was done, with no
+     * limit, so a git stuck on a lock took one worker for good and a few of them stopped every command.
+     * Same runner as `nikcli_bot` and `claude_agents`: a job that ends the tree, a deadline, the output read
+     * on its own threads.
+     */
+    let timeout = git_timeout(&args);
+    tauri::async_runtime::spawn_blocking(move || run_bounded_output(command, timeout, "git"))
+        .await
+        .map_err(|_| "avvio di git interrotto".to_string())?
 }
 
 #[tauri::command]
@@ -1753,6 +1777,12 @@ fn ade_window_close(window: tauri::WebviewWindow) -> Result<(), String> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CloseAction {
     PreventAndAsk(u64),
+    /// A question is already open (asked, or waiting for its first answer): this request is the same one.
+    /// The window stays, no second question is asked and no second timer starts.
+    AlreadyAsking(u64),
+    /// The page had acknowledged the question and has not answered it: asked again, with the same id, and with a
+    /// timer of its own (`epoch`) that the older one cannot cut short.
+    AskAgain { id: u64, epoch: u32 },
     AllowClose,
 }
 
@@ -1767,7 +1797,8 @@ enum CloseRequestStatus {
 #[derive(Debug)]
 pub(crate) struct CloseManager {
     confirmed: std::sync::atomic::AtomicBool,
-    active_request: Mutex<Option<(u64, CloseRequestStatus)>>,
+    /// The open question: its id, where it stands, and how many times it was asked again (the `epoch` of its timer).
+    active_request: Mutex<Option<(u64, CloseRequestStatus, u32)>>,
     request_counter: std::sync::atomic::AtomicU64,
     default_timeout: std::time::Duration,
 }
@@ -1791,17 +1822,40 @@ impl CloseManager {
         if self.confirmed.swap(false, Ordering::SeqCst) {
             CloseAction::AllowClose
         } else {
-            let req_id = self.request_counter.fetch_add(1, Ordering::SeqCst) + 1;
-            if let Ok(mut guard) = self.active_request.lock() {
-                *guard = Some((req_id, CloseRequestStatus::Pending));
+            let Ok(mut guard) = self.active_request.lock() else {
+                // A poisoned lock cannot tell whether a question is open: ask again, as before.
+                let req_id = self.request_counter.fetch_add(1, Ordering::SeqCst) + 1;
+                return CloseAction::PreventAndAsk(req_id);
+            };
+            // A second click on X (or «Esci» in the tray) while the question is open used to start request N+1 with
+            // a timer of its own, which the page ignored and never acknowledged: 4 s later it closed the window with
+            // the agents still at work, and a «No» cancelled N, which was no longer the active one (full review
+            // 2026-10-06, Rust 7). The open question keeps its id and its one timer.
+            match *guard {
+                Some((id, CloseRequestStatus::Pending, _)) => return CloseAction::AlreadyAsking(id),
+                /*
+                 * Acknowledged and not answered: the page may be gone (reloaded, its handler ended on an error,
+                 * `askYesNo` refused) and nothing disarms an `Acked` question, so a window that only ever said
+                 * «already asking» could not be closed at all (Architect's review of F6a, O1). The click asks
+                 * again, same id: a live page acknowledges in a few ms and the timer is disarmed; one that is
+                 * stuck is closed by this timer, as it was before the dedup.
+                 */
+                Some((id, CloseRequestStatus::Acked, epoch)) => {
+                    let epoch = epoch + 1;
+                    *guard = Some((id, CloseRequestStatus::Pending, epoch));
+                    return CloseAction::AskAgain { id, epoch };
+                }
+                _ => {}
             }
+            let req_id = self.request_counter.fetch_add(1, Ordering::SeqCst) + 1;
+            *guard = Some((req_id, CloseRequestStatus::Pending, 0));
             CloseAction::PreventAndAsk(req_id)
         }
     }
 
     pub(crate) fn ack(&self, request_id: u64) -> bool {
         if let Ok(mut guard) = self.active_request.lock() {
-            if let Some((id, status)) = &mut *guard {
+            if let Some((id, status, _)) = &mut *guard {
                 if *id == request_id && *status == CloseRequestStatus::Pending {
                     *status = CloseRequestStatus::Acked;
                     return true;
@@ -1815,7 +1869,7 @@ impl CloseManager {
         use std::sync::atomic::Ordering;
         let mut confirmed = false;
         if let Ok(mut guard) = self.active_request.lock() {
-            if let Some((id, status)) = &mut *guard {
+            if let Some((id, status, _)) = &mut *guard {
                 if request_id.is_none() || request_id == Some(*id) {
                     *status = CloseRequestStatus::Confirmed;
                     confirmed = true;
@@ -1832,7 +1886,7 @@ impl CloseManager {
 
     pub(crate) fn cancel(&self, request_id: Option<u64>) -> bool {
         if let Ok(mut guard) = self.active_request.lock() {
-            if let Some((id, status)) = &mut *guard {
+            if let Some((id, status, _)) = &mut *guard {
                 if request_id.is_none() || request_id == Some(*id) {
                     *status = CloseRequestStatus::Cancelled;
                     return true;
@@ -1842,12 +1896,14 @@ impl CloseManager {
         false
     }
 
-    pub(crate) fn on_timeout(&self, request_id: u64) -> bool {
+    /// The timer of question `request_id`, asked for the `epoch`-th time: it closes the window only if that ask is the
+    /// latest and still unacknowledged. An older timer of the same question finds a newer epoch and does nothing.
+    pub(crate) fn on_timeout(&self, request_id: u64, epoch: u32) -> bool {
         use std::sync::atomic::Ordering;
         let mut force_close = false;
         if let Ok(mut guard) = self.active_request.lock() {
-            if let Some((id, status)) = &mut *guard {
-                if *id == request_id && *status == CloseRequestStatus::Pending {
+            if let Some((id, status, current)) = &mut *guard {
+                if *id == request_id && *current == epoch && *status == CloseRequestStatus::Pending {
                     *status = CloseRequestStatus::Confirmed;
                     force_close = true;
                 }
@@ -1887,8 +1943,15 @@ fn attach_close_handler(window: &tauri::WebviewWindow, manager: std::sync::Arc<C
             }
             match manager.on_close_requested() {
                 CloseAction::AllowClose => {}
-                CloseAction::PreventAndAsk(request_id) => {
+                // The question is open: the window stays, and nothing else is started.
+                CloseAction::AlreadyAsking(_) => api.prevent_close(),
+                action @ (CloseAction::PreventAndAsk(_) | CloseAction::AskAgain { .. }) => {
                     api.prevent_close();
+                    let (request_id, epoch) = match action {
+                        CloseAction::AskAgain { id, epoch } => (id, epoch),
+                        CloseAction::PreventAndAsk(id) => (id, 0),
+                        _ => unreachable!(),
+                    };
                     if let Err(err) = target.emit(
                         "ade-window-close-requested",
                         CloseRequestPayload { request_id },
@@ -1900,7 +1963,7 @@ fn attach_close_handler(window: &tauri::WebviewWindow, manager: std::sync::Arc<C
                     let win = target.clone();
                     std::thread::spawn(move || {
                         std::thread::sleep(timeout);
-                        if mgr.on_timeout(request_id) {
+                        if mgr.on_timeout(request_id, epoch) {
                             eprintln!(
                                 "ADE: la pagina non ha risposto entro {timeout:?}, chiusura finestra forzata"
                             );
@@ -2065,6 +2128,8 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
                 window.state::<pty::Registry>().end_all_in_background();
                 // Nor any listener for the chats' messages: they wait for the new page.
                 window.state::<gateway::Gateway>().page_loading();
+                // Nor the chat's streams to `nikcli serve`: their channels are gone with the old page.
+                window.state::<serve_proxy::Requests>().abort_all();
             }
         })
         .inner_size(1440.0, 900.0)
@@ -2901,6 +2966,30 @@ mod tests {
         assert!(took < Duration::from_secs(3), "ha aspettato il lettore: {took:?}");
     }
 
+    // Full review 2026-10-06, rust 14: `git_run` ran `output()` with no limit on the async runtime. The command
+    // needs a window to be called, so what is checked is the shape: it goes through the bounded runner, off the worker.
+    #[test]
+    fn git_run_is_bounded_and_off_the_async_worker() {
+        let source = include_str!("lib.rs");
+        let start = source.find("async fn git_run(").expect("git_run");
+        let body = &source[start..source[start..].find("async fn current_dir").map(|end| start + end).expect("fine")];
+        assert!(body.contains("spawn_blocking"), "git_run must leave the async worker");
+        assert!(body.contains("run_bounded_output(command, timeout"), "git_run must have a deadline");
+        assert!(body.contains("git_timeout(&args)"), "the deadline is chosen by the command");
+        assert!(!body.contains(".output()"), "git_run must not block on `output()`");
+        assert!(GIT_TIMEOUT >= Duration::from_secs(30), "a slow worktree add must fit");
+    }
+
+    // Architect's review of F6a, O3: a checkout needs far more than the two minutes of the local commands.
+    #[test]
+    fn a_worktree_add_gets_ten_minutes_and_the_other_commands_two() {
+        let args = |parts: &[&str]| parts.iter().map(|part| part.to_string()).collect::<Vec<_>>();
+        assert_eq!(git_timeout(&args(&["worktree", "add", "-b", "x", "../x"])), Duration::from_secs(600));
+        for other in [&["worktree", "list"][..], &["worktree", "remove", "../x"], &["status", "--porcelain"], &["diff"], &[]] {
+            assert_eq!(git_timeout(&args(other)), Duration::from_secs(120), "{other:?}");
+        }
+    }
+
     #[test]
     fn bounded_nikcli_output_kills_and_reaps_a_command_that_does_not_finish() {
         let started = Instant::now();
@@ -3610,7 +3699,7 @@ mod tests {
             panic!("expected PreventAndAsk, got {action:?}");
         };
         std::thread::sleep(Duration::from_millis(60));
-        assert!(manager.on_timeout(req_id));
+        assert!(manager.on_timeout(req_id, 0));
         assert_eq!(manager.on_close_requested(), CloseAction::AllowClose);
     }
 
@@ -3624,7 +3713,7 @@ mod tests {
         };
         assert!(manager.ack(req_id));
         std::thread::sleep(Duration::from_millis(60));
-        assert!(!manager.on_timeout(req_id));
+        assert!(!manager.on_timeout(req_id, 0));
     }
 
     #[test]
@@ -3637,9 +3726,83 @@ mod tests {
         };
         assert!(manager.cancel(Some(req_id)));
         std::thread::sleep(Duration::from_millis(60));
-        assert!(!manager.on_timeout(req_id));
+        assert!(!manager.on_timeout(req_id, 0));
         let action2 = manager.on_close_requested();
         assert!(matches!(action2, CloseAction::PreventAndAsk(_)));
+    }
+
+    /// Full review 2026-10-06, Rust 7: a second click on close while the question is open.
+    #[test]
+    fn a_second_click_while_the_question_is_open_asks_nothing_and_arms_no_second_timer() {
+        use std::time::Duration;
+        let manager = CloseManager::new(Duration::from_millis(50));
+        let CloseAction::PreventAndAsk(first) = manager.on_close_requested() else {
+            panic!("the first click asks");
+        };
+        // Waiting for the page's first answer: the same question.
+        assert_eq!(manager.on_close_requested(), CloseAction::AlreadyAsking(first));
+        // No request N+1 exists to be forced shut by a timer, and the open one is not forced either.
+        assert!(!manager.on_timeout(first + 1, 0));
+        assert!(manager.ack(first));
+        assert!(!manager.on_timeout(first, 0));
+        // A «No» reaches the question that is open.
+        assert!(manager.cancel(Some(first)));
+        // Once answered, the next click is a new question with a new id.
+        let CloseAction::PreventAndAsk(next) = manager.on_close_requested() else {
+            panic!("after a «No» the next click asks again");
+        };
+        assert_eq!(next, first + 1);
+    }
+
+    #[test]
+    fn the_unanswered_question_still_closes_after_its_one_timeout() {
+        use std::time::Duration;
+        let manager = CloseManager::new(Duration::from_millis(50));
+        let CloseAction::PreventAndAsk(first) = manager.on_close_requested() else {
+            panic!("the first click asks");
+        };
+        assert_eq!(manager.on_close_requested(), CloseAction::AlreadyAsking(first));
+        // The one timer of the first request is what closes a window whose page never answers.
+        assert!(manager.on_timeout(first, 0));
+        assert_eq!(manager.on_close_requested(), CloseAction::AllowClose);
+    }
+
+    /// Architect's review of F6a, O1: an acknowledged question that is never answered must not shut the X for good.
+    #[test]
+    fn a_click_on_an_acknowledged_question_asks_again_with_the_same_id_and_a_timer_of_its_own() {
+        use std::time::Duration;
+        let manager = CloseManager::new(Duration::from_millis(50));
+        let CloseAction::PreventAndAsk(first) = manager.on_close_requested() else {
+            panic!("the first click asks");
+        };
+        assert!(manager.ack(first));
+        // The page acknowledged and went quiet (reloaded, or its handler ended): the next click asks again.
+        assert_eq!(manager.on_close_requested(), CloseAction::AskAgain { id: first, epoch: 1 });
+        // The first timer, armed for the first ask, is not the one that counts any more.
+        assert!(!manager.on_timeout(first, 0));
+        // A page that is alive acknowledges again, and the new timer finds nothing to force.
+        assert!(manager.ack(first));
+        assert!(!manager.on_timeout(first, 1));
+        // And once more.
+        assert_eq!(manager.on_close_requested(), CloseAction::AskAgain { id: first, epoch: 2 });
+        // A page that never acknowledges is closed by the timer of the latest ask.
+        assert!(manager.on_timeout(first, 2));
+        assert_eq!(manager.on_close_requested(), CloseAction::AllowClose);
+    }
+
+    #[test]
+    fn a_page_that_answers_the_second_ask_is_not_forced() {
+        use std::time::Duration;
+        let manager = CloseManager::new(Duration::from_millis(50));
+        let CloseAction::PreventAndAsk(first) = manager.on_close_requested() else {
+            panic!("the first click asks");
+        };
+        assert!(manager.ack(first));
+        assert_eq!(manager.on_close_requested(), CloseAction::AskAgain { id: first, epoch: 1 });
+        assert!(manager.cancel(Some(first)));
+        assert!(!manager.on_timeout(first, 1));
+        // Answered: the next click is a new question.
+        assert!(matches!(manager.on_close_requested(), CloseAction::PreventAndAsk(next) if next == first + 1));
     }
 
     #[test]

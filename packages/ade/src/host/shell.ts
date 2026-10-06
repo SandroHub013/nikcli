@@ -959,7 +959,9 @@ export async function getHost(): Promise<Host | undefined> {
 
     async recordWrite(path, contents) {
       const { invoke } = await import("@tauri-apps/api/core")
-      await invoke("record_write", { path, contents: Array.from(contents) })
+      // The bytes are the body, raw: as a JSON array of numbers a long recording is past what a string can hold.
+      // The path rides in a header, percent-encoded (a header is ASCII).
+      await invoke("record_write", contents, { headers: { "x-record-path": encodeURIComponent(path) } })
     },
 
     async recordStop() {

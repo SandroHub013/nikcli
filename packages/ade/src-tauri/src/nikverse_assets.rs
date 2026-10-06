@@ -31,6 +31,8 @@ pub fn url_of(entry: &ManifestEntry) -> String {
 
 const ATTEMPTS: usize = 3;
 const RENAME_WAIT: std::time::Duration = std::time::Duration::from_millis(200);
+/// How often a second request looks whether the running one is over.
+const TURN_POLL: std::time::Duration = std::time::Duration::from_millis(50);
 
 const BROKEN: &str = "Il download si è interrotto prima del file atteso: scartato.";
 const WRONG: &str = "Il file scaricato non corrisponde a quello atteso: scartato.";
@@ -85,6 +87,20 @@ impl Assets {
         *progress = Progress { running: true, files_total: files, bytes_total: bytes, ..Progress::default() };
         true
     }
+
+    /// Waits for whoever has the turn to give it back, and says why that one ended (`None`: well). `Err` when `stop` ends the wait first.
+    fn wait_turn(&self, stop: &dyn Fn() -> Option<String>) -> Result<Option<String>, String> {
+        loop {
+            let progress = self.read();
+            if !progress.running {
+                return Ok(progress.error);
+            }
+            if let Some(reason) = stop() {
+                return Err(reason);
+            }
+            std::thread::sleep(TURN_POLL);
+        }
+    }
 }
 
 /// Whether the file of `entry` is in `root` with the size and the hash the list says. Anything else, missing or not, is missing.
@@ -131,6 +147,10 @@ fn rename_into_place(from: &Path, dest: &Path) -> Result<(), String> {
 ///
 /// `url` names where an entry is fetched from, `fetcher` does the fetching (a test hands one that never touches the network), `stop` is asked
 /// while a transfer waits: `Some(reason)` ends it. Returns the first failure, and leaves nothing half-written behind it.
+///
+/// When another fetch (or a removal) has the turn this does not answer «done» at once, which is what it did and what made the panel say
+/// «ready» while the first was still downloading: it waits for that one to end, and answers with how that one ended. If it failed, that is
+/// this call's failure too; if it went well, what is still missing is looked at again (a removal leaves files to fetch) and fetched.
 pub fn install_into(
     root: &Path,
     manifest: &[ManifestEntry],
@@ -139,17 +159,21 @@ pub fn install_into(
     assets: &Assets,
     stop: &dyn Fn() -> Option<String>,
 ) -> Result<(), String> {
-    let todo = missing(root, manifest);
-    let bytes: u64 = todo.iter().map(|entry| entry.size).sum();
-    if !assets.begin(todo.len() as u32, bytes) {
-        return Ok(());
+    loop {
+        let todo = missing(root, manifest);
+        let bytes: u64 = todo.iter().map(|entry| entry.size).sum();
+        if assets.begin(todo.len() as u32, bytes) {
+            let outcome = fetch_all(root, &todo, url, fetcher, assets, stop);
+            assets.update(|progress| {
+                progress.running = false;
+                progress.error = outcome.as_ref().err().cloned();
+            });
+            return outcome;
+        }
+        if let Some(error) = assets.wait_turn(stop)? {
+            return Err(error);
+        }
     }
-    let outcome = fetch_all(root, &todo, url, fetcher, assets, stop);
-    assets.update(|progress| {
-        progress.running = false;
-        progress.error = outcome.as_ref().err().cloned();
-    });
-    outcome
 }
 
 fn fetch_all(
@@ -570,6 +594,69 @@ mod tests {
         let error = install_into(&root.0, &manifest, &url_of, &fetcher, &Assets::default(), &|| Some("annullato".to_string())).unwrap_err();
         assert_eq!(error, "annullato");
         assert!(fetcher.asked.borrow().is_empty());
+    }
+
+    // Full review 2026-10-06, rust 15: a second install while the first downloads answered Ok at once.
+    #[test]
+    fn a_second_install_waits_for_the_running_one_and_fails_with_its_error() {
+        let root = Scratch::new();
+        let manifest = [entry("a.txt", b"alpha")];
+        let assets = Assets::default();
+        assert!(assets.begin(1, 5), "the first fetch has the turn");
+        std::thread::scope(|scope| {
+            let second = scope.spawn(|| {
+                let fetcher = table(&manifest, &[b"alpha"]);
+                let giveup = std::time::Instant::now() + std::time::Duration::from_secs(10);
+                let stop = move || (std::time::Instant::now() > giveup).then(|| "scaduto".to_string());
+                let outcome = install_into(&root.0, &manifest, &url_of, &fetcher, &assets, &stop);
+                let asked = fetcher.asked.borrow().len();
+                (outcome, asked)
+            });
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            assert!(!second.is_finished(), "the second request must wait, not answer while the first downloads");
+            assets.update(|progress| {
+                progress.running = false;
+                progress.error = Some("rete caduta".to_string());
+            });
+            let (outcome, asked) = second.join().unwrap();
+            assert_eq!(outcome, Err("rete caduta".to_string()));
+            assert_eq!(asked, 0, "it did not start a fetch of its own");
+        });
+    }
+
+    #[test]
+    fn a_second_install_after_a_good_first_one_finds_everything_in_place() {
+        let root = Scratch::new();
+        let manifest = [entry("a.txt", b"alpha")];
+        let assets = Assets::default();
+        assert!(assets.begin(1, 5));
+        std::thread::scope(|scope| {
+            let second = scope.spawn(|| {
+                let fetcher = table(&manifest, &[b"alpha"]);
+                let outcome = install_into(&root.0, &manifest, &url_of, &fetcher, &assets, &never);
+                let asked = fetcher.asked.borrow().len();
+                (outcome, asked)
+            });
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            assert!(!second.is_finished());
+            std::fs::write(root.0.join("a.txt"), b"alpha").unwrap();
+            assets.update(|progress| progress.running = false);
+            let (outcome, asked) = second.join().unwrap();
+            assert_eq!(outcome, Ok(()));
+            assert_eq!(asked, 0, "the first one's files are not fetched again");
+        });
+    }
+
+    #[test]
+    fn a_second_install_that_is_told_to_stop_stops_waiting() {
+        let root = Scratch::new();
+        let manifest = [entry("a.txt", b"alpha")];
+        let assets = Assets::default();
+        assert!(assets.begin(1, 5));
+        let fetcher = table(&manifest, &[b"alpha"]);
+        let outcome = install_into(&root.0, &manifest, &url_of, &fetcher, &assets, &|| Some("annullato".to_string()));
+        assert_eq!(outcome, Err("annullato".to_string()));
+        assert!(assets.read().running, "the first one's turn is still its own");
     }
 
     #[test]
