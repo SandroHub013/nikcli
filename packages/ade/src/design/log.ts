@@ -182,13 +182,13 @@ export function toEvent(value: unknown): DesignEvent | string {
   if (!k || !isDesignKey(k)) return t("design.log.key")
   const at = text(record.at)
   if (!at || Number.isNaN(Date.parse(at))) return t("design.log.date")
-  const by = text(record.by)
+  const by = line(record.by)
   if (!by) return t("design.log.author")
   const base = { k, at, by, fromPane: text(record.fromPane), agent: text(record.agent) }
 
   switch (type as DesignEventType) {
     case "aperta": {
-      const title = text(record.title)
+      const title = line(record.title)
       if (!title) return t("design.log.title")
       const variants = variantsOf(record.variants)
       if (typeof variants === "string") return variants
@@ -203,7 +203,7 @@ export function toEvent(value: unknown): DesignEvent | string {
       if (recommend && "error" in recommend) return t("design.log.recommend")
       if (recommend && !variants.some((variant) => variant.name === recommend.option))
         return t("design.log.recommendOption", recommend.option)
-      const question = text(record.question)
+      const question = line(record.question)
       const why = text(record.why)
       const context = text(record.context)
       const newFormat = Boolean(question || why || keeps || recommend || variants.some((variant) => variant.changes))
@@ -239,7 +239,7 @@ export function toEvent(value: unknown): DesignEvent | string {
         type: "risposta",
         ...base,
         words,
-        choice: text(record.choice),
+        choice: line(record.choice),
         choices,
         note: text(record.note),
         again: again ? true : undefined,
@@ -269,9 +269,27 @@ export function toEvent(value: unknown): DesignEvent | string {
   }
 }
 
+/*
+ * What a register field may not carry: C0 and C1 control characters, which a
+ * terminal executes rather than prints (ESC opens a sequence, a CR submits).
+ * A name, a title or a choice ends up typed into a session or printed by
+ * `ade-msg`; each becomes a space. Built from strings, so the file holds no
+ * invisible character (as in `session/typing.ts`).
+ */
+const CONTROL = new RegExp("[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]", "g")
+const CONTROL_BUT_NEWLINE = new RegExp("[\\u0000-\\u0009\\u000b-\\u001f\\u007f-\\u009f]", "g")
+
+/** A text field: control characters become spaces, line breaks stay. */
 function text(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined
-  const trimmed = value.trim()
+  const trimmed = value.replace(CONTROL_BUT_NEWLINE, " ").trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+/** A name, a title, a choice: one line, every control character and line break a space. */
+function line(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined
+  const trimmed = value.replace(CONTROL, " ").replace(/ {2,}/g, " ").trim()
   return trimmed.length > 0 ? trimmed : undefined
 }
 
@@ -284,7 +302,7 @@ function choicesOf(value: unknown, bad: string): string[] | undefined | { error:
   if (!Array.isArray(value) || value.length === 0) return { error: bad }
   const seen = new Set<string>()
   for (const item of value) {
-    const label = text(item)
+    const label = line(item)
     if (!label || seen.has(label)) return { error: bad }
     seen.add(label)
   }
@@ -297,7 +315,7 @@ function variantsOf(value: unknown): DesignVariant[] | string {
   for (const item of value) {
     if (!item || typeof item !== "object") return t("design.log.variants")
     const rec = item as Record<string, unknown>
-    const name = text(rec.name)
+    const name = line(rec.name)
     if (!name) return t("design.log.variantName")
     const description = text(rec.description) ?? ""
     const preview = text(rec.preview) ?? ""
@@ -326,7 +344,7 @@ function recommendationOf(value: unknown): DesignRecommendation | undefined | { 
   if (value === undefined) return undefined
   if (!value || typeof value !== "object" || Array.isArray(value)) return { error: true }
   const record = value as Record<string, unknown>
-  const option = text(record.option)
+  const option = line(record.option)
   if (!option) return { error: true }
   return compact({ option, because: text(record.because) }) as DesignRecommendation
 }
