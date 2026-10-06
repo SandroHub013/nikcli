@@ -163,6 +163,8 @@ export function createRecorder(deps: RecorderDeps): Recorder {
         if (frame) log.add({ kind: "frame", at: startedAt, ...frame })
         // The microphone is extra: a refusal records the take without it.
         mic = options.mic ? await deps.startMic?.().catch(() => undefined) : undefined
+        // Its file begins now, not at the start of the video: the export plays it from this moment (M3).
+        if (mic) log.add({ kind: "mic", at: deps.now() })
         settle({
           status: "recording",
           recording: { target, path: started.path ?? `${dir}/${name}.mp4`, startedAt, mic: mic !== undefined },

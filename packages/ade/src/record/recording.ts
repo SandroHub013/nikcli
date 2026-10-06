@@ -62,6 +62,11 @@ export type RecordEvent =
   | { readonly kind: "command"; readonly at: number; readonly id: string }
   /** Said by the assistant, for subtitles on the voice track. */
   | { readonly kind: "said"; readonly at: number; readonly text: string }
+  /**
+   * The microphone's own recording began here. It starts after the capture does, so its file is shorter
+   * than the video by this much at the front; the export begins it at this moment, not at 0.
+   */
+  | { readonly kind: "mic"; readonly at: number }
 
 export interface Recording {
   readonly target: RecordTarget
