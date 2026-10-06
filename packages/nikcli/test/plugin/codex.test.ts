@@ -1,11 +1,14 @@
-import { describe, expect, it } from "bun:test"
+import { afterEach, describe, expect, it } from "bun:test"
 import {
+  CodexAuthPlugin,
+  codexEndpoint,
   filterCodexOAuthModels,
   isUsageLimitResponse,
   readRequestModel,
   usageLimitResetAt,
   withReserveModel,
 } from "@/plugin/codex"
+import { OpenAIWebSocket } from "@/plugin/openai/ws"
 
 // `filterCodexOAuthModels` trims the OpenAI catalog down to what a ChatGPT
 // Pro/Plus OAuth session can actually call through the Codex backend. Anything
@@ -119,5 +122,62 @@ describe("gpt-reserve fallback", () => {
 
     // A bogus reset cannot pin the session to the reserve indefinitely.
     expect(usageLimitResetAt(new Headers({ "retry-after": "99999999" }), "", now)).toBe(now + 7 * 24 * 60 * 60 * 1000)
+  })
+})
+
+describe("NIKCLI_CODEX_ENDPOINT", () => {
+  const DEFAULT = "https://chatgpt.com/backend-api/codex/responses"
+  const saved = process.env.NIKCLI_CODEX_ENDPOINT
+  afterEach(() => {
+    if (saved === undefined) delete process.env.NIKCLI_CODEX_ENDPOINT
+    else process.env.NIKCLI_CODEX_ENDPOINT = saved
+  })
+
+  it("is the ChatGPT backend when unset, blank or not a URL", () => {
+    delete process.env.NIKCLI_CODEX_ENDPOINT
+    expect(codexEndpoint()).toBe(DEFAULT)
+    process.env.NIKCLI_CODEX_ENDPOINT = "   "
+    expect(codexEndpoint()).toBe(DEFAULT)
+    process.env.NIKCLI_CODEX_ENDPOINT = "not a url"
+    expect(codexEndpoint()).toBe(DEFAULT)
+  })
+
+  it("is the given URL when set, and the WebSocket URL follows it", () => {
+    process.env.NIKCLI_CODEX_ENDPOINT = "http://127.0.0.1:5123/backend-api/codex/responses"
+    expect(codexEndpoint()).toBe("http://127.0.0.1:5123/backend-api/codex/responses")
+    expect(OpenAIWebSocket.toWebSocketUrl(codexEndpoint())).toBe("ws://127.0.0.1:5123/backend-api/codex/responses")
+    process.env.NIKCLI_CODEX_ENDPOINT = "https://mirror.example/backend-api/codex/responses"
+    expect(OpenAIWebSocket.toWebSocketUrl(codexEndpoint())).toBe("wss://mirror.example/backend-api/codex/responses")
+  })
+
+  it("sends the plan's model calls to the given host, with the ChatGPT credentials", async () => {
+    const seen: { url: string; authorization: string | null; account: string | null }[] = []
+    const server = Bun.serve({
+      port: 0,
+      fetch(req) {
+        seen.push({ url: req.url, authorization: req.headers.get("authorization"), account: req.headers.get("chatgpt-account-id") })
+        return Response.json({ ok: true })
+      },
+    })
+    try {
+      process.env.NIKCLI_CODEX_ENDPOINT = `http://127.0.0.1:${server.port}/backend-api/codex/responses`
+      const hooks = await CodexAuthPlugin({ client: { auth: { set: async () => ({}) } } } as never, {})
+      const loader = await hooks.auth!.loader!(
+        async () => ({ type: "oauth", refresh: "r", access: "access-token", expires: Date.now() + 86_400_000, accountId: "acc-1" }) as never,
+        { models: {} } as never,
+      )
+      const response = await loader.fetch!("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "gpt-6-luna", input: [] }),
+      })
+      expect(response.status).toBe(200)
+      expect(seen).toHaveLength(1)
+      expect(seen[0].url).toBe(`http://127.0.0.1:${server.port}/backend-api/codex/responses`)
+      expect(seen[0].authorization).toBe("Bearer access-token")
+      expect(seen[0].account).toBe("acc-1")
+    } finally {
+      await server.stop(true)
+    }
   })
 })

@@ -26,6 +26,21 @@ const CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
 export const RESERVE_MODEL_ID = "gpt-reserve"
 const ISSUER = "https://auth.openai.com"
 const CODEX_API_ENDPOINT = "https://chatgpt.com/backend-api/codex/responses"
+
+/**
+ * Where model calls go: the ChatGPT backend, or `NIKCLI_CODEX_ENDPOINT` when set (a measuring proxy,
+ * a mirror). One value for both transports: the WebSocket pool derives its `ws(s)://` URL from the
+ * URL the plugin hands it, so the override moves HTTP and WebSocket together. Blank or not a URL: ignored.
+ */
+export function codexEndpoint(): string {
+  const override = Flag.NIKCLI_CODEX_ENDPOINT?.trim()
+  if (!override) return CODEX_API_ENDPOINT
+  try {
+    return new URL(override).href
+  } catch {
+    return CODEX_API_ENDPOINT
+  }
+}
 const OAUTH_PORT = 1455
 
 interface PkceCodes {
@@ -629,7 +644,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
                 : new URL(typeof requestInput === "string" ? requestInput : requestInput.url)
             const url =
               parsed.pathname.includes("/v1/responses") || parsed.pathname.includes("/chat/completions")
-                ? new URL(CODEX_API_ENDPOINT)
+                ? new URL(codexEndpoint())
                 : parsed
 
             const requestInit: RequestInit = {
@@ -665,7 +680,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
             // Only model calls can fall back, and only when we can read the
             // model out of the body to rewrite it.
             const body = requestInit.body
-            if (!reserveFallback || url.href !== CODEX_API_ENDPOINT || typeof body !== "string") return send()
+            if (!reserveFallback || url.href !== codexEndpoint() || typeof body !== "string") return send()
 
             const requested = readRequestModel(body)
             if (!requested || requested === RESERVE_MODEL_ID) return send()
