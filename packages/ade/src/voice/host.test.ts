@@ -634,6 +634,30 @@ describe("createAdeVoiceHost", () => {
     expect(seen).toEqual([request])
   })
 
+  // Full review 2026-10-06, ui 20: a rejected start was kept for good.
+  test("a voice agent that failed to start is started again at the next sentence", async () => {
+    let starts = 0
+    const agent: VoiceAgent = {
+      ask: async () => ({ ok: true, text: "fatto", ran: true }),
+      plan: async () => "[]",
+      prepare: () => {},
+      forget: () => {},
+      release: () => {},
+    }
+    const { deps } = createMockDeps({
+      voiceAgentFactory: async () => {
+        starts++
+        if (starts === 1) throw new Error("import fallito")
+        return agent
+      },
+    })
+    const host = createAdeVoiceHost(deps)
+    const request = { engine: "claude" as const } as Parameters<typeof host.askAgent>[0]
+    await expect(host.askAgent(request)).rejects.toThrow("import fallito")
+    expect((await host.askAgent(request)).text).toBe("fatto")
+    expect(starts).toBe(2)
+  })
+
   test("releasing the voice cancels a prepare waiting for a project", async () => {
     let project: Project | undefined
     let prepares = 0
