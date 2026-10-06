@@ -643,7 +643,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
           }
           if (waitingSessions > 0) {
             details.push(
-              `${waitingSessions === 1 ? "una" : (ITALIAN_NUMBERS[waitingSessions] ?? workingSessions)} in attesa`,
+              `${waitingSessions === 1 ? "una" : (ITALIAN_NUMBERS[waitingSessions] ?? waitingSessions)} in attesa`,
             )
           }
           if (doneSessions > 0) {

@@ -532,6 +532,21 @@ describe("createAdeVoiceHost", () => {
     expect(state3.spokenSummary).toContain("completata")
   })
 
+  // Full review 2026-10-06, ui 15: the waiting count past the table of words fell back to the working one.
+  test("describeState says the waiting count, not the working one, when it has no word", () => {
+    const { deps } = createMockDeps()
+    deps.setWb((w) => ({
+      ...w,
+      panes: [
+        makePane({ id: "w1", status: "working" }),
+        ...Array.from({ length: 11 }, (_, i) => makePane({ id: `a${i}`, status: "waiting" })),
+      ],
+    }))
+    const summary = createAdeVoiceHost(deps).describeState().spokenSummary
+    expect(summary).toContain("11 in attesa")
+    expect(summary).not.toMatch(/(?<!\d)1 in attesa/)
+  })
+
   test("describeState produces correct English grammatical number for 0, 1 and 3 sessions", () => {
     // 0 sessions
     const { deps: deps0 } = createMockDeps({ locale: () => "en" })
