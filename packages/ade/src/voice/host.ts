@@ -136,7 +136,7 @@ const REFUSAL_ANSWER = /^(?:no|nega|rifiuta|deny|reject|annulla|cancel)/i
 
 /** An answer that grants more than the request on screen: for always, for the session, without asking again. */
 const PERMANENT_ANSWER =
-  /always|sempre|non chiedere|non chiederlo|don'?t ask|do not ask|never ask|for (?:this|the) session|per (?:questa )?sessione|tutta la sessione/i
+  /always|sempre|non chiedere|non chiederlo|don'?t ask|do not ask|never ask|(?:for|during) (?:this|the) session|allow all|per (?:questa )?sessione|tutta la sessione/i
 
 export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
   /*

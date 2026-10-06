@@ -354,6 +354,16 @@ describe("createAdeVoiceHost", () => {
       expect(answered.map((answer) => answer.send)).toEqual(["2"])
     })
 
+    // Review of F6c, N1: Claude Code's edit permission offers «Yes, allow all edits during this session» as its second option.
+    test("«allow all edits during this session» is not the single yes", () => {
+      const { answered } = grant([
+        { label: "Yes, allow all edits during this session", send: "2", tone: "primary" },
+        { label: "Yes", send: "1", tone: "secondary" },
+        { label: "No", send: "3", tone: "secondary" },
+      ])
+      expect(answered.map((answer) => answer.send)).toEqual(["1"])
+    })
+
     test("with only the permanent answer and a refusal, nothing is sent", () => {
       const { answered, sent } = grant([
         { label: "Allow always", send: "1", tone: "primary" },
