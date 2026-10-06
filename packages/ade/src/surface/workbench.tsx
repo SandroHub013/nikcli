@@ -313,6 +313,8 @@ import { createProjectWalk } from "./project-walk"
 import {
   DEFAULT_MAX_SPAWNED,
   USAGE,
+  USAGE_DECISIONI,
+  USAGE_DESIGN,
   agentsTable,
   briefOf,
   byProject,
@@ -525,7 +527,22 @@ import { createDesignHub } from "../design/hub"
 import { createDesignRegister } from "../design/register"
 import { watchRegisters } from "../host/register-watch"
 import { designPath } from "../design/store"
-import type { DesignProposal } from "../design/state"
+import { foldProposals, type DesignProposal } from "../design/state"
+import { parseDesignLog } from "../design/log"
+import { answered as answeredProposal, choiceLine, proposalEvent } from "../design/propose"
+import {
+  WAITERS_KEY as DESIGN_WAITERS_KEY,
+  addWaiter as addDesignWaiter,
+  dropWaiters as dropDesignWaiters,
+  dueWaiters as dueDesignWaiters,
+  holdsDelivery as holdsDesignDelivery,
+  markWritten as markDesignWaitersWritten,
+  parseWaiters as parseDesignWaiters,
+  pruneWaiters as pruneDesignWaiters,
+  waiterFor as designWaiterFor,
+  waitingFor as designWaitingFor,
+  type DesignWaiter,
+} from "../design/waiters"
 import { mediaUrl } from "../video/video"
 import { createSheetWatch, sheetLabel, sheetPaneFor, sheetTitle, sheetUrl, type PaneSheet } from "../design/sheet"
 import { formatNotesFile, formatNotesLine, notesFilePath, notesFileRelative } from "../design/notes"
@@ -1679,6 +1696,101 @@ export function Workbench() {
     void deliverDesign()
   }
 
+  /*
+   * The sessions waiting in `ade-msg design proponi --attendi` or `design
+   * attendi`: each a request id the choice is written to (`design/waiters.ts`).
+   * Kept like the outbox, so a reload neither forgets one nor types twice.
+   */
+  const [designWaiters, setDesignWaiters] = createSignal<DesignWaiter[]>(
+    (() => {
+      try {
+        return pruneDesignWaiters(parseDesignWaiters(localStorage.getItem(DESIGN_WAITERS_KEY)), Date.now())
+      } catch {
+        return []
+      }
+    })(),
+  )
+  const saveDesignWaiters = (items: DesignWaiter[]) => {
+    setDesignWaiters(items)
+    try {
+      localStorage.setItem(DESIGN_WAITERS_KEY, JSON.stringify(items))
+    } catch {}
+  }
+
+  /*
+   * The choice, to every script waiting for it. Marked written before
+   * anything else, so the delivery pass that follows holds the typed line
+   * (`holdsDelivery`); the file itself is written after, and a failure frees
+   * the line again.
+   */
+  const answerDesignWaiters = (path: string, proposal: DesignProposal) => {
+    const answer = proposal.answer
+    if (!answer) return
+    const now = Date.now()
+    const waiting = designWaitingFor(designWaiters(), path, proposal.k, now)
+    if (waiting.length === 0) return
+    saveDesignWaiters(
+      markDesignWaitersWritten(
+        designWaiters(),
+        waiting.map((waiter) => waiter.id),
+        answer.at,
+        now,
+      ),
+    )
+    void getHost().then(async (host) => {
+      for (const waiter of waiting) {
+        const line = choiceLine(proposal, waiter.folder)
+        const written =
+          line !== undefined && host?.mailboxResult
+            ? await host.mailboxResult(waiter.id, line).then(
+                () => true,
+                () => false,
+              )
+            : false
+        if (!written) saveDesignWaiters(dropDesignWaiters(designWaiters(), [waiter.id]))
+      }
+      void deliverDesign()
+    })
+  }
+
+  /*
+   * After `CLAIM_MS`, whether each script took its answer. Taken: the answer
+   * is delivered, to the pane that waited, and its line is never typed. Not
+   * taken: ADE has it back (kept as `.closed` for a script that returns), and
+   * the line goes out as it always did.
+   */
+  let settlingDesignWaiters = false
+  const settleDesignWaiters = async () => {
+    const due = dueDesignWaiters(designWaiters(), Date.now())
+    if (due.length === 0 || settlingDesignWaiters) return
+    const host = await getHost()
+    if (!host?.mailboxResultReclaim) return
+    settlingDesignWaiters = true
+    try {
+      for (const waiter of due) {
+        const back = await host.mailboxResultReclaim(waiter.id).catch(() => undefined)
+        // A failed check proves nothing: asked again on the next pass.
+        if (back === undefined) continue
+        saveDesignWaiters(dropDesignWaiters(designWaiters(), [waiter.id]))
+        if (back !== null) continue
+        const item = designOutbox().find(
+          (entry) =>
+            entry.path === waiter.path &&
+            entry.k === waiter.k &&
+            entry.answeredAt === waiter.answeredAt &&
+            entry.deliveredAt === undefined,
+        )
+        const pane = wb().panes.find((candidate) => candidate.id === waiter.from)
+        const title = paneNames().get(waiter.from) ?? pane?.title ?? waiter.from
+        if (item) saveDesignOutbox(markDesignDelivered(designOutbox(), item, { id: waiter.from, title }, Date.now()))
+        if (pane) appendLine(pane.id, t("design.waiter.taken", waiter.k), "note", "ade")
+      }
+    } finally {
+      settlingDesignWaiters = false
+    }
+    void deliverDesign()
+  }
+
   let deliveringDesign = false
   const deliverDesign = async () => {
     const path = designRegister.path()
@@ -1686,7 +1798,10 @@ export function Workbench() {
     if (!path || !state || deliveringDesign) return
     const kept = pruneDesignOutbox(designOutbox(), path, state.proposals)
     if (kept.length !== designOutbox().length) saveDesignOutbox(kept)
-    const pending = pendingForDesign(kept, path)
+    // An answer a waiting script may be taking is not typed while it can (`design/waiters.ts`).
+    const pending = pendingForDesign(kept, path).filter(
+      (item) => item.kind === "riaperta" || !holdsDesignDelivery(designWaiters(), item, Date.now()),
+    )
     if (pending.length === 0) return
     const currentTarget = designRecipient()
     const candidates = designCandidates()
@@ -1739,6 +1854,8 @@ export function Workbench() {
       const path = designRegister.path()
       if (!path) return
       saveDesignOutbox(enqueueDesign(designOutbox(), designAnswerItem(path, proposal, event.at, Date.now())))
+      // Before the delivery pass: a script waiting for this choice gets it, and the line waits for its claim.
+      answerDesignWaiters(path, answeredProposal(proposal, event))
       void deliverDesign()
     },
     onReopened: (proposal, deliveredTo, deliveredToId) => {
@@ -1868,6 +1985,7 @@ export function Workbench() {
         3000,
         () => {
           void deliverDecisions()
+          void settleDesignWaiters()
           void deliverDesign()
         },
         { whenHidden: 15_000 },
@@ -4023,6 +4141,114 @@ export function Workbench() {
       return true
     }
 
+    /*
+     * `ade-msg design proponi <cartella>` and `design attendi <k>`: a proposal
+     * handed over as a folder, and the wait for the user's choice. Rust reads
+     * and confines the folder to `.ade/design/<k>/` of the sender's project
+     * (`media.rs`, `design_proposal`); the event goes through `registerWrite`
+     * like any `registro`, so the same checks and the same `ok …` apply; the
+     * wait is a request id the choice is written to (`design/waiters.ts`).
+     */
+    if (message.kind === "design-proponi" || message.kind === "design-attendi") {
+      const pane = wb().panes.find((candidate) => candidate.id === message.from)
+      if (!sender || !pane || isPanelPane(pane)) {
+        await answer("errore: design proponi e attendi richiedono una sessione avviata da ADE")
+        return true
+      }
+      const owner = await projectOfPane(host, message.from)
+      if (!owner || owner.remote || !host.readTextFile) {
+        await answer("errore: le proposte di design esistono solo per i progetti locali")
+        return true
+      }
+      const path = designPath(owner.root)
+      const readRegister = async () => {
+        try {
+          return (await host.readTextFile!(path)).text
+        } catch (error) {
+          if (/not found|no such file|os error 2|impossibile trovare/i.test(String(error))) return ""
+          throw error
+        }
+      }
+      const proposals = async () => foldProposals(parseDesignLog(await readRegister()).events).proposals
+      const waitFor = (k: string, folder: string, timeout: number) =>
+        saveDesignWaiters(
+          addDesignWaiter(
+            pruneDesignWaiters(designWaiters(), Date.now()),
+            designWaiterFor({ id, path, k, from: message.from, folder }, timeout, Date.now()),
+          ),
+        )
+
+      if (message.kind === "design-attendi") {
+        let found: DesignProposal | undefined
+        try {
+          found = (await proposals()).find((proposal) => proposal.k === message.key)
+        } catch (error) {
+          await answer(`errore: il registro design non si legge: ${error instanceof Error ? error.message : String(error)}`)
+          return true
+        }
+        if (!found) {
+          await answer(`errore: nessuna proposta ${message.key} nel registro design del progetto ${owner.name}`)
+          return true
+        }
+        const folder = `${owner.root}/.ade/design/${found.k}`
+        waitFor(found.k, folder, message.timeout)
+        // Chosen already: written now, and the typed line, if still queued, waits for this claim like any other.
+        if (found.answer) {
+          answerDesignWaiters(path, found)
+          await answer(`ok: ${found.k} ha già una scelta (progetto ${owner.name})`)
+        } else await answer(`ok: in attesa della scelta su ${found.k} (progetto ${owner.name})`)
+        return true
+      }
+
+      if (!host.designProposal) {
+        await answer("errore: questa versione di ADE non legge le proposte")
+        return true
+      }
+      const cwd = message.cwd || activityOf.get(pane.id)?.cwd || pane.cwd || owner.root
+      let read: Awaited<ReturnType<NonNullable<typeof host.designProposal>>>
+      try {
+        read = await host.designProposal(message.folder, cwd, owner.root)
+      } catch (err) {
+        await answer(`errore: ${typeof err === "string" ? err : err instanceof Error ? err.message : String(err)}`)
+        return true
+      }
+      let event: ReturnType<typeof proposalEvent>
+      try {
+        event = proposalEvent(read, { proposals: await proposals() })
+      } catch (error) {
+        await answer(`errore: il registro design non si legge: ${error instanceof Error ? error.message : String(error)}`)
+        return true
+      }
+      if ("error" in event) {
+        await answer(`errore: ${event.error}`)
+        return true
+      }
+      const reply = await registerWrite(
+        {
+          read: readRegister,
+          append: async (text) =>
+            host.appendTextFile
+              ? host.appendTextFile(path, text)
+              : host.writeTextFile
+                ? host.writeTextFile(path, `${await readRegister()}${text}`)
+                : "scrittura non disponibile",
+          now: () => new Date(),
+          sender: registerAuthor(sender.title, message.from),
+          fromPane: message.from,
+          agent: pane.agent,
+          remember: (k, at) => askers.remember(path, k, at, message.from),
+        },
+        { register: "design", op: event.op, text: event.text },
+      )
+      if (reply.startsWith("ok")) {
+        void designRegister.refresh()
+        if (message.wait) waitFor(read.k, read.folder, message.timeout)
+      }
+      const shown = project()
+      await answer(withPlace(reply, "design", { written: owner, ...(shown ? { shown } : {}), asked: pane }))
+      return true
+    }
+
     if (message.kind === "spawn") {
       const asked = resolveAgent(SPAWNABLE, message.agent)
       if ("error" in asked) {
@@ -4980,6 +5206,8 @@ export function Workbench() {
         { panel: "browser", verbs: BROWSER_VERBS },
       ]
       void host?.mailboxPublish?.(`${USAGE}${panelsHelp(panelVerbs)}`, "usage").catch(() => {})
+      void host?.mailboxPublish?.(`${USAGE_DESIGN}\n`, "usage-design").catch(() => {})
+      void host?.mailboxPublish?.(`${USAGE_DECISIONI}\n`, "usage-decisioni").catch(() => {})
     })
   })
 
