@@ -400,6 +400,31 @@ describe("B8d: an answer is for its own question only", () => {
     })
   }
 
+  // Full review 2026-10-06, bots 5: two questions at once, the first answered: the second stays on screen and expires.
+  test("answering the first of two waiting questions leaves the second on screen, with its own expiry", async () => {
+    const fake = server()
+    const view = panel(fake)
+    view.turns.send(BOT, "ciao", "C:/progetto")
+    await until(() => fake.prompts.length === 1)
+    fake.push(status("busy"), asked("per_A", "git push --force"), asked("per_B", "git push -f origin main"))
+    await until(() => view.talk().permission?.requestID === "per_A")
+    const armed = view.timers.filter((timer) => !timer.cancelled).length
+    view.turns.answer(BOT, "once", "per_A")
+    await until(() => fake.replies.length === 1)
+    expect(fake.replies).toEqual([["per_A", "once"]])
+    // B is the card on screen, waiting for the user.
+    expect(view.talk().permission?.requestID).toBe("per_B")
+    expect(view.talk().status).toBe("waiting")
+    // And it expires as a Nega, to its own id, if nobody answers.
+    const live = view.timers.filter((timer) => !timer.cancelled)
+    expect(live.length).toBeGreaterThanOrEqual(1)
+    expect(live.length).toBeLessThanOrEqual(armed)
+    live.at(-1)!.run()
+    await until(() => fake.replies.length === 2)
+    expect(fake.replies[1]).toEqual(["per_B", "reject"])
+    view.turns.stop(BOT)
+  })
+
   test("the phone: a «Sì» to a question settled meanwhile does not approve the next one", async () => {
     const fake = server()
     const phone: { question: string; answer: (value: string | undefined) => void }[] = []
