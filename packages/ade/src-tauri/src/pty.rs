@@ -1065,6 +1065,15 @@ pub async fn pty_spawn(
      * such problem: the wait ends on its own.
      */
     let (chunk_tx, chunk_rx) = std::sync::mpsc::channel::<String>();
+    /*
+     * How the waiter wakes the sender when the child has exited: an empty chunk, which the readers never send. It is
+     * kept in a slot, not held by the waiter, so that the channel still counts as closed when the readers are done:
+     * the main reader empties the slot when it ends, and only then does the sender see the hang-up. Held by the
+     * waiter, which lives until the child exits, it would have delayed every exit that EOF announces first.
+     */
+    let wake: std::sync::Arc<Mutex<Option<std::sync::mpsc::Sender<String>>>> =
+        std::sync::Arc::new(Mutex::new(Some(chunk_tx.clone())));
+    let wake_reader = std::sync::Arc::clone(&wake);
     // A piped process's errors go to the same stream: that is where a terminal would have shown them.
     if let Some(mut errors) = errors {
         let error_tx = chunk_tx.clone();
@@ -1122,7 +1131,10 @@ pub async fn pty_spawn(
             }
         }
         // Dropping `chunk_tx` here is what tells the sender the pty reached
-        // EOF, so it can flush the last frame and report the exit.
+        // EOF, so it can flush the last frame and report the exit: the waiter's way in goes with it.
+        if let Ok(mut slot) = wake_reader.lock() {
+            slot.take();
+        }
     });
 
     // For the waiter thread below; taken before `app` moves into the sender.
@@ -1206,6 +1218,12 @@ pub async fn pty_spawn(
         };
         // Not said from here: the sender may still have output queued, and the page stops listening at the exit.
         let _ = exit_tx.send(code);
+        // The sender may be waiting for output that will never come (no EOF): it looks at the code when it is woken.
+        if let Ok(slot) = wake.lock() {
+            if let Some(tx) = slot.as_ref() {
+                let _ = tx.send(String::new());
+            }
+        }
         break;
     });
 
@@ -1287,14 +1305,13 @@ fn pump(chunks: &Receiver<String>, emit: impl FnMut(String)) {
     pump_until(chunks, emit, &|| None)
 }
 
-/// How often a sender with nothing to send looks whether the end of its wait has come (`ended`): a few times a second,
-/// not the sixty a frame would be.
-const IDLE_POLL: Duration = Duration::from_millis(250);
-
 /// How long the sender goes on draining once the child's exit is known, before the exit is said without the EOF.
 const EXIT_DRAIN: Duration = Duration::from_secs(1);
 
 /// `pump`, which also ends when `ended` gives a moment that has passed, flushing what it holds first.
+///
+/// With a live, silent process there is no deadline at all: the wait is a plain `recv()`, which is zero work until
+/// something arrives. `ended` is asked once per message, and the waiter sends an empty one when the child exits.
 fn pump_until(chunks: &Receiver<String>, mut emit: impl FnMut(String), ended: &dyn Fn() -> Option<Instant>) {
     let mut pending = String::new();
     // Set while `pending` holds something; the moment it must go out.
@@ -1308,15 +1325,20 @@ fn pump_until(chunks: &Receiver<String>, mut emit: impl FnMut(String), ended: &d
     };
 
     loop {
-        if matches!(ended(), Some(at) if Instant::now() >= at) {
+        let end = ended();
+        if matches!(end, Some(at) if Instant::now() >= at) {
             flush(&mut pending, &mut deadline);
             return;
         }
-        let received = match deadline {
-            None => chunks.recv_timeout(IDLE_POLL),
+        // The nearer of the frame's deadline and the end of the wait for the exit, when either is set.
+        let limit = [deadline, end].into_iter().flatten().min();
+        let received = match limit {
+            None => chunks.recv().map_err(|_| RecvTimeoutError::Disconnected),
             Some(at) => chunks.recv_timeout(at.saturating_duration_since(Instant::now())),
         };
         match received {
+            // A wake-up from the waiter: the top of the loop looks at the exit.
+            Ok(text) if text.is_empty() => {}
             Ok(text) => {
                 pending.push_str(&text);
                 // A burst larger than the cap goes out without waiting:
@@ -2071,6 +2093,8 @@ mod tests {
         // The code has arrived, the last line is queued, and the channel is never closed: `tx` stays alive.
         exit_tx.send(Some(7)).unwrap();
         tx.send("last line\n".to_string()).unwrap();
+        // As the waiter does after sending the code: the empty chunk that wakes a sender blocked in `recv()`.
+        tx.send(String::new()).unwrap();
         let log = std::cell::RefCell::new(Vec::<String>::new());
         let started = Instant::now();
         drain_then_exit(
@@ -2084,6 +2108,35 @@ mod tests {
         assert_eq!(log.into_inner(), vec!["data:last line".to_string(), "exit:Some(7)".to_string()]);
         // Neither the idle poll nor the grace is anywhere near the five seconds of the old net.
         assert!(started.elapsed() < Duration::from_millis(1500), "took {:?}", started.elapsed());
+        drop(tx);
+    }
+
+    // Master, on O2: a live, silent process costs no wake-ups at all.
+    #[test]
+    fn a_silent_session_wakes_the_sender_never_until_the_exit_is_known() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::{Arc, Mutex};
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let asked = Arc::new(AtomicUsize::new(0));
+        let end: Arc<Mutex<Option<Instant>>> = Arc::new(Mutex::new(None));
+        let (asked_in, end_in) = (Arc::clone(&asked), Arc::clone(&end));
+        let sender = std::thread::spawn(move || {
+            let ended = move || {
+                asked_in.fetch_add(1, Ordering::SeqCst);
+                *end_in.lock().unwrap()
+            };
+            pump_until(&rx, |_| {}, &ended);
+        });
+        // Longer than a periodic poll would need to show itself several times over.
+        std::thread::sleep(Duration::from_millis(900));
+        assert_eq!(asked.load(Ordering::SeqCst), 1, "a silent live process must not wake the sender");
+        assert!(!sender.is_finished());
+        // The exit becomes known and the waiter wakes the sender: it ends at the end of the grace.
+        *end.lock().unwrap() = Some(Instant::now() + Duration::from_millis(100));
+        tx.send(String::new()).unwrap();
+        let started = Instant::now();
+        sender.join().unwrap();
+        assert!(started.elapsed() < Duration::from_millis(600), "took {:?}", started.elapsed());
         drop(tx);
     }
 
