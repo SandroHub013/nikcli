@@ -41,12 +41,19 @@ export function sheetKey(
    * (audit 0.7.7, MEDIO 7).
    */
   inField = false,
+  /**
+   * The key is aimed at a button that is not the answer's own — «Rimanda», «Registra senza
+   * inviare», a chip, the ×. Enter on it is that button's click, not the answer: without this a
+   * Tab to «Rimanda» and Enter sent the picked option to the agent (full review 2026-10-06, ui 3).
+   * Ctrl/Cmd+Enter still submits: it is chosen on purpose.
+   */
+  onOwnButton = false,
 ): SheetKey | undefined {
   if (event.key === "Escape") return { kind: "close" }
   if (inField) return undefined
   if (event.key === "Enter") {
     if (event.ctrlKey || event.metaKey) return { kind: "submit" }
-    if (inText) return undefined
+    if (inText || onOwnButton) return undefined
     return picked ? { kind: "submit" } : { kind: "need-choice" }
   }
   if (inText || event.ctrlKey || event.metaKey || event.altKey) return undefined
@@ -212,6 +219,17 @@ export function countLabel(count: number): string {
 export function isFormField(target: unknown): boolean {
   const tag = (target as { tagName?: unknown } | null)?.tagName
   return tag === "SELECT" || tag === "INPUT" || tag === "TEXTAREA"
+}
+
+/**
+ * Whether a key's target is a button whose Enter is its own: any button of the window but the
+ * options (Enter after clicking one submits the answer) and «Invia» itself.
+ */
+export function isOwnButton(target: unknown): boolean {
+  const element = target as { tagName?: unknown; dataset?: { slot?: string } } | null
+  if (element?.tagName !== "BUTTON") return false
+  const slot = element.dataset?.slot
+  return slot !== "decision-option" && slot !== "decision-submit"
 }
 
 /** «D1: rimandata · domani»: what the sheet says after Rimanda, and the toast after it (rifiniture 2). */

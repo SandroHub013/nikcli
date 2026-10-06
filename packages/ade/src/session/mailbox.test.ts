@@ -18,7 +18,7 @@ import {
   WEDGE_MS,
   formatWedged,
   relaunchRefusal,
-  interruptKeys,
+  interruptPlan,
   openDecisions,
   INLINE_MAX,
   MAX_REBELLS,
@@ -861,10 +861,31 @@ describe("stuck sessions, interrupts and relaunch notes", () => {
     expect(formatWedged(request, { id: "b", title: "Fabio" }, now)).toContain("ade-msg interrupt b")
   })
 
-  test("interrupt sends Esc to the agents that cancel a turn on it, Ctrl-C to the rest", () => {
-    expect(interruptKeys("claude-code")).toBe(String.fromCharCode(27))
-    expect(interruptKeys("codex")).toBe(String.fromCharCode(27))
-    expect(interruptKeys("nikcli")).toBe(String.fromCharCode(3))
+  /*
+   * Full review 2026-10-06, sessioni 5: Ctrl-C to OpenCode or nikcli is `app_exit`; it closed Mimo 2.6.
+   * Each agent is interrupted its own way, or the sender is told it cannot be.
+   */
+  test("interrupt: one Esc for Claude Code, codex and agy; Esc twice for nikcli and OpenCode; Ctrl-C only for the shell", () => {
+    const esc = String.fromCharCode(27)
+    const ctrlC = String.fromCharCode(3)
+    expect(interruptPlan("claude-code")).toEqual({ keys: [esc] })
+    expect(interruptPlan("codex")).toEqual({ keys: [esc] })
+    expect(interruptPlan("agy")).toEqual({ keys: [esc] })
+    expect(interruptPlan("nikcli")).toEqual({ keys: [esc, esc] })
+    expect(interruptPlan("opencode")).toEqual({ keys: [esc, esc] })
+    expect(interruptPlan("terminal")).toEqual({ keys: [ctrlC] })
+  })
+
+  test("interrupt never sends Ctrl-C to an agent: an unknown one is refused with the way out", () => {
+    for (const agent of ["grok", "kimi", "cline", "kilo", "crush", "goose", "somethingnew", undefined]) {
+      const plan = interruptPlan(agent)
+      expect("refusal" in plan).toBe(true)
+      if ("refusal" in plan) expect(plan.refusal).toContain("ade-msg send")
+    }
+    for (const agent of ["claude-code", "codex", "agy", "nikcli", "opencode"]) {
+      const plan = interruptPlan(agent)
+      expect("keys" in plan && plan.keys.includes(String.fromCharCode(3))).toBe(false)
+    }
   })
 
   test("relaunch without --note, or of a session somebody else spawned, is refused with the reason", () => {

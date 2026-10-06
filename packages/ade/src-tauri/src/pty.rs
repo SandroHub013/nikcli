@@ -1388,6 +1388,24 @@ fn tree_of(root: u32, rows: &[ProcRow]) -> Vec<u32> {
 /// `ade-msg ask` waiting, a node process — and killing only the CLI leaves them
 /// running, holding the turn's mailbox identity and its files.
 pub(crate) fn kill_tree(pid: u32) {
+    kill_tree_keeping(pid, true);
+}
+
+/// The processes to kill for `root`: its tree, children first, with or without `root` itself.
+fn victims(root: u32, rows: &[ProcRow], include_root: bool) -> Vec<u32> {
+    let mut members = tree_of(root, rows);
+    if !include_root {
+        members.retain(|pid| *pid != root);
+    }
+    members
+}
+
+/// `kill_tree`, with the choice of leaving the root to its owner.
+///
+/// A pane's own child is ended afterwards by `portable-pty`, which on unix sends SIGHUP and waits up to
+/// 200 ms before SIGKILL: the agent gets to close its files. Killing the whole tree first, root included,
+/// took that away (Dario's review of F3, N1), so there only the descendants go here.
+fn kill_tree_keeping(pid: u32, include_root: bool) {
     use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
     let mut sys = System::new();
     sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
@@ -1400,7 +1418,7 @@ pub(crate) fn kill_tree(pid: u32) {
             started: process.start_time(),
         })
         .collect();
-    for member in tree_of(pid, &rows) {
+    for member in victims(pid, &rows, include_root) {
         if let Some(process) = sys.process(Pid::from_u32(member)) {
             process.kill();
         }
@@ -1410,8 +1428,11 @@ pub(crate) fn kill_tree(pid: u32) {
 /// Ends the session. Safe to call on one that already ended.
 ///
 /// With `tree`, the processes the child started go too (see `kill_tree`).
-/// Panes do not ask for it: closing a pane has always ended the agent, not a
-/// dev server it left running on purpose.
+/// Panes ask for it, in every place a pane's process ends (closing it, «Termina
+/// processo», a relaunch, the voice): closing a pane ends what the agent started
+/// along with it, a dev server it left running included. Before the 2026-10-06
+/// review they did not, and the agent's MCP servers and shells outlived the pane
+/// with nothing left in the registry to find them.
 ///
 /// `async` because `wait()` below is exactly as blocking as the write is: a
 /// child that takes its time dying would otherwise take the window with it.
@@ -1425,7 +1446,8 @@ pub async fn pty_kill(registry: tauri::State<'_, Registry>, id: String, tree: Op
         if tree == Some(true) {
             if let Some(pid) = session.child.process_id() {
                 // Reading the process table takes a moment: off the async worker.
-                let _ = tauri::async_runtime::spawn_blocking(move || kill_tree(pid)).await;
+                // On unix the root is left to `child.kill()` below (SIGHUP, a short wait, SIGKILL).
+                let _ = tauri::async_runtime::spawn_blocking(move || kill_tree_keeping(pid, cfg!(windows))).await;
             }
         }
         let _ = session.child.kill();
@@ -2130,6 +2152,19 @@ mod tests {
         let at = |pid| tree.iter().position(|p| *p == pid).unwrap();
         assert!(at(111) < at(110) && at(110) < at(100) && at(120) < at(100));
         assert!(tree_of(999, &rows).is_empty());
+    }
+
+    #[test]
+    fn a_pane_leaves_its_root_to_the_gentle_kill_but_the_tree_below_it_goes() {
+        let row = |pid, parent, started| ProcRow { pid, parent, started };
+        let rows = [row(100, Some(1), 1_000), row(110, Some(100), 1_001), row(111, Some(110), 1_002)];
+        // Descendants only, deepest first: the root is left for `child.kill()`.
+        assert_eq!(victims(100, &rows, false), vec![111, 110]);
+        // The whole tree, root last, as `kill_tree` always did.
+        assert_eq!(victims(100, &rows, true), vec![111, 110, 100]);
+        // A root that is not in the table has nothing to kill, with or without it.
+        assert!(victims(999, &rows, false).is_empty());
+        assert!(victims(999, &rows, true).is_empty());
     }
 
     /// B8d: nikcli's bot turns run on ADE's server; no spawn sets a variable by name any more.

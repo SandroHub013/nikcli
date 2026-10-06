@@ -221,6 +221,8 @@ import {
   type Pane,
   addPane,
   closePane,
+  focusInProject,
+  focusedInOpenProject,
   updatePane,
   withPaneNotice,
   isPanelPane,
@@ -286,7 +288,7 @@ import { parseCommandId } from "../plugin/trust"
 import { CONSENT_KEY, consentQuestion, hasConsent, withConsent } from "../plugin/consent"
 import { toPluginSession } from "../plugin/session"
 import type { DiscoveryIO } from "../plugin/discovery"
-import { markSaved, openBuffer, saveBlockedReason } from "../editor"
+import { markSaved, openBuffer, saveBlockedReason, toLf, withEol } from "../editor"
 import { detectPermission, followPermission, type PermissionAnswer } from "../session/permission"
 import { readReportLine } from "../session/report"
 import { asOneLine, asSubmittedLine, confirmDeadline, pasteSettled, submitCheck } from "../session/typing"
@@ -346,7 +348,8 @@ import {
   HELD_BY_LINE,
   formatUnread,
   formatWedged,
-  interruptKeys,
+  INTERRUPT_GAP_MS,
+  interruptPlan,
   shellRefusal,
   typesMailInto,
   WEDGE_MS,
@@ -379,6 +382,7 @@ import {
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
 import {
   canSuspend,
+  closeSuspendedTree,
   stopForSuspend,
   offersSuspend,
   parseSuspendedMail,
@@ -4229,7 +4233,17 @@ export function Workbench() {
         return true
       }
       const pane = wb().panes.find((candidate) => candidate.id === target.pane.id)
-      session.write(interruptKeys(pane?.agent ?? pane?.model))
+      const plan = interruptPlan(pane?.agent ?? pane?.model)
+      if ("refusal" in plan) {
+        await answer(plan.refusal)
+        return true
+      }
+      for (const [index, keys] of plan.keys.entries()) {
+        if (index > 0) await new Promise((resolve) => setTimeout(resolve, INTERRUPT_GAP_MS))
+        // The session may have gone while the gap ran: nothing is written to a closed one.
+        if (running.get(target.pane.id) !== session) break
+        session.write(keys)
+      }
       interrupted(target.pane.id)
       // The TUI drops whatever was in the line with the work: so does the count.
       records.typed.forget(target.pane.id)
@@ -4281,7 +4295,7 @@ export function Workbench() {
       const old = running.get(pane.id)
       running.delete(pane.id)
       touchRunning()
-      old?.kill()
+      void closeSuspendedTree(old)
       setWb((w) => updatePane(w, pane.id, { spawnArgs, ...(message.fresh ? { resumeId: undefined } : {}) }))
       if (message.fresh) {
         for (const request of [...openRequests.values()]) {
@@ -5056,7 +5070,7 @@ export function Workbench() {
     // Dictated text goes into the line and is not submitted: it counts as typed.
     getRunningSession: (id) => {
       const session = running.get(id)
-      return session && { write: (text: string) => typeAsUser(id, text), kill: () => session.kill() }
+      return session && { write: (text: string) => typeAsUser(id, text), kill: () => void closeSuspendedTree(session) }
     },
     openFile: (path) => openFile(path),
     appendLine: (id, text, kind) => appendLine(id, text, kind),
@@ -5965,7 +5979,7 @@ export function Workbench() {
       setRecents(newRecents)
       localStorage.setItem("ade.recents", serializeRecents(newRecents))
 
-      setWb((w) => ({ ...w, projectPath: p.root }))
+      setWb((w) => ({ ...w, projectPath: p.root, focusedId: focusInProject(w, p) }))
 
       /*
        * Restarting what was running when the app went away.
@@ -6407,6 +6421,9 @@ export function Workbench() {
 
   // Commands
   // Behind an open sheet, what opens something to type into would open it under the sheet's focus trap.
+  /** The focused pane, when it is one of the open project's: what close, suspend and kill act on. */
+  const focusedHere = () => focusedInOpenProject(wb(), project())
+
   const runCommand = guardedBySheet(sheetOpen, async (id: string) => {
     // Returns, because the last line of this function closes the palette.
     // See `keepsPaletteOpen` for why that is not a detail.
@@ -6453,7 +6470,7 @@ export function Workbench() {
         if (p) {
           setProject(p)
           // The panes of the project being left stay: their sessions keep running, and keep talking to the others.
-          setWb((w) => ({ ...w, projectPath: p.root, expandedId: undefined }))
+          setWb((w) => ({ ...w, projectPath: p.root, expandedId: undefined, focusedId: focusInProject(w, p) }))
           const newRecents = addRecent(recents(), { root: p.root, name: p.name })
           setRecents(newRecents)
           localStorage.setItem("ade.recents", serializeRecents(newRecents))
@@ -6461,7 +6478,8 @@ export function Workbench() {
       }
     } else if (id === "pane.close") {
       // A shortcut or the palette: an agent at work is ended only on a yes (ALTO 6).
-      if (wb().focusedId) closer.close(wb().focusedId!, { confirmRunning: true })
+      const target = focusedHere()
+      if (target) closer.close(target, { confirmRunning: true })
     } else if (id === "pane.expand") {
       if (wb().focusedId) setWb((w) => expandPane(w, w.focusedId!))
     } else if (id === "pane.rename") {
@@ -6562,18 +6580,20 @@ export function Workbench() {
         }),
       )
     } else if (id === "session.suspend") {
-      if (wb().focusedId) void suspendSession(wb().focusedId!)
+      const target = focusedHere()
+      if (target) void suspendSession(target)
     } else if (id === "process.kill") {
-      if (wb().focusedId && isRunning(wb().focusedId!)) {
-        running.get(wb().focusedId!)?.kill()
-        running.delete(wb().focusedId!)
+      const target = focusedHere()
+      if (target && isRunning(target)) {
+        void closeSuspendedTree(running.get(target))
+        running.delete(target)
         touchRunning()
         setWb((w) =>
-          updatePane(w, w.focusedId!, {
+          updatePane(w, target, {
             status: "error",
             activity: "killed",
             lines: [
-              ...(w.panes.find((p) => p.id === w.focusedId)?.lines || []),
+              ...(w.panes.find((p) => p.id === target)?.lines || []),
               { kind: "note", text: t("pane.killed") },
             ],
           }),
@@ -6643,7 +6663,7 @@ export function Workbench() {
       if (host && !(await refuseMissingRoot(host, root))) {
         const p = await discoverProject(host, root)
         setProject(p)
-        setWb((w) => ({ ...w, projectPath: p.root, expandedId: undefined }))
+        setWb((w) => ({ ...w, projectPath: p.root, expandedId: undefined, focusedId: focusInProject(w, p) }))
         const newRecents = addRecent(recents(), { root: p.root, name: p.name })
         setRecents(newRecents)
         localStorage.setItem("ade.recents", serializeRecents(newRecents))
@@ -6834,7 +6854,7 @@ export function Workbench() {
     setProject(picked)
     // Same reason as switchProject: an expansion made in another project
     // narrows this one's grid to nothing.
-    setWb((w) => ({ ...w, projectPath: picked.root, expandedId: undefined }))
+    setWb((w) => ({ ...w, projectPath: picked.root, expandedId: undefined, focusedId: focusInProject(w, picked) }))
     setStarting(false)
   }
 
@@ -6865,7 +6885,7 @@ export function Workbench() {
      * screen however many sessions it had running, with no visible control to
      * get out of an expansion the user could not see.
      */
-    setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined }))
+    setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined, focusedId: focusInProject(w, opened) }))
     setStarting(false)
   }
 
@@ -7022,7 +7042,7 @@ export function Workbench() {
   const closeNow = (id: string) => {
     const closing = wb().panes.find((candidate) => candidate.id === id)
     if (closing?.worktree) giveBackWorktree(closing, closing.worktree)
-    running.get(id)?.kill()
+    void closeSuspendedTree(running.get(id))
     running.delete(id)
     touchRunning()
     // A question the voice is asking about this pane has nobody left to answer it.
@@ -7255,7 +7275,7 @@ export function Workbench() {
           report(t("editor.saveCancelled.unreadable", String(unreadable)), "warning")
           return
         }
-      } else if (onDisk && !onDisk.truncated && onDisk.text !== buffer.saved) {
+      } else if (onDisk && !onDisk.truncated && toLf(onDisk.text) !== buffer.saved) {
         const overwrite = await askYesNo(t("editor.saveChanged", buffer.path))
         if (!overwrite) {
           report(t("editor.saveCancelled.changed"), "warning")
@@ -7268,7 +7288,8 @@ export function Workbench() {
     // as written are the same string.
     const written = buffer.draft
 
-    const error = await host.writeTextFile(buffer.path, written)
+    // The file keeps the line ending it had: the editor holds LF, the disk gets CRLF back.
+    const error = await host.writeTextFile(buffer.path, withEol(written, buffer.eol))
     if (error) {
       report(t("editor.saveFailed", String(error)))
       return
@@ -8432,7 +8453,7 @@ export function Workbench() {
     setRecents(newRecents)
     localStorage.setItem("ade.recents", serializeRecents(newRecents))
     setProject(opened)
-    setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined }))
+    setWb((w) => ({ ...w, projectPath: opened.root, expandedId: undefined, focusedId: focusInProject(w, opened) }))
     setRemoteOpen(false)
     if (!wb().panes.some((pane) => belongsTo(pane, opened))) {
       addAgent(

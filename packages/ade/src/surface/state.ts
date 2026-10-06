@@ -2,6 +2,7 @@ import { redactHistory, redactUrl, type BrowserHistory } from "../browser/histor
 import type { PaneSheet } from "../design/sheet"
 import { type Span, applyOrder } from "../grid/arrange"
 import { focusAfterClose } from "../grid/focus"
+import { belongsTo, sameProject } from "./pane-project"
 import { normalizePath, pathEquals, isAbsolutePath } from "../host/path"
 import { CURRENT_VERSION, type WorkspaceState, type PaneState } from "../session/persist"
 import { boundPaneTranscript, boundWorkspaceTranscripts } from "../session/transcript-budget"
@@ -303,19 +304,32 @@ export function createWorkbench(): Workbench {
 }
 
 export function addPane(workbench: Workbench, pane: Pane): Workbench {
+  // A pane of another project than the open one — a subagent spawned from a session there, a dev browser
+  // that session owns — is not drawn, so it must not take focus: the next Ctrl+W or «Termina processo»
+  // would close or kill it unseen (full review 2026-10-06, sessioni 4, scenario C).
+  const elsewhere = Boolean(
+    workbench.projectPath && pane.projectRoot && !pathEquals(pane.projectRoot, workbench.projectPath),
+  )
   return {
     ...workbench,
     panes: [...workbench.panes, pane],
-    focusedId: pane.id,
+    focusedId: elsewhere ? workbench.focusedId : pane.id,
   }
 }
 
 export function closePane(workbench: Workbench, paneId: string): Workbench {
-  const nextFocused = focusAfterClose({
-    panes: workbench.panes.map((p) => p.id),
-    focused: workbench.focusedId,
-    closing: paneId,
-  })
+  const closing = workbench.panes.find((p) => p.id === paneId)
+  // Focus passes to a neighbour of the same project: a pane of another project is not drawn, and
+  // the next Ctrl+W or «Termina processo» would reach it unseen (full review 2026-10-06, sessioni 4).
+  const neighbours = closing ? workbench.panes.filter((p) => sameProject(p, closing)) : workbench.panes
+  const nextFocused =
+    workbench.focusedId !== paneId
+      ? workbench.focusedId
+      : focusAfterClose({
+          panes: neighbours.map((p) => p.id),
+          focused: workbench.focusedId,
+          closing: paneId,
+        })
 
   return {
     ...workbench,
@@ -323,6 +337,38 @@ export function closePane(workbench: Workbench, paneId: string): Workbench {
     focusedId: nextFocused,
     expandedId: workbench.expandedId === paneId ? undefined : workbench.expandedId,
   }
+}
+
+/**
+ * The focused pane's id when it is a pane of the open project, else none.
+ *
+ * Closing, suspending and killing act on the focused pane, and the user can only see the open project's
+ * panes: a focus left elsewhere (a pane added by a session of another project, an old id) must not be acted on
+ * unseen. With no project open, or no focus, there is nothing to guard.
+ */
+export function focusedInOpenProject(
+  workbench: Pick<Workbench, "panes" | "focusedId">,
+  open: { readonly name: string; readonly root: string } | undefined,
+): string | undefined {
+  const id = workbench.focusedId
+  if (!id) return undefined
+  const pane = workbench.panes.find((p) => p.id === id)
+  if (!pane) return undefined
+  return !open || belongsTo(pane, open) ? id : undefined
+}
+
+/**
+ * The pane that holds focus once `project` is the open one: the focused pane when it is the
+ * project's, else the project's first, else none. Focus left on a pane of the project just left
+ * is on nothing drawn, and «Termina processo» or Ctrl+W would act on it (sessioni 4, scenario B).
+ */
+export function focusInProject(
+  workbench: Pick<Workbench, "panes" | "focusedId">,
+  project: { readonly name: string; readonly root: string },
+): string | undefined {
+  const mine = workbench.panes.filter((p) => belongsTo(p, project))
+  if (workbench.focusedId && mine.some((p) => p.id === workbench.focusedId)) return workbench.focusedId
+  return mine[0]?.id
 }
 
 /** How many notes stay over a terminal at once: the latest ones. */

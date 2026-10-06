@@ -1,6 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js"
 import { Sheet, SheetTitle } from "../ui/sheet"
-import { deferredStatus, enterReady, isFormField, sheetKey, togglePick } from "./answer"
+import { deferredStatus, enterReady, isFormField, isOwnButton, sheetKey, togglePick } from "./answer"
 import { submitControl } from "./card"
 import { DecisionCard } from "./decision-card"
 import { answeredStatus, type RecipientStatus } from "./delivery"
@@ -106,7 +106,14 @@ export function DecisionsSheet(props: {
       decision && draft && enterReady(Boolean(decision.multi), draft.picked, draft.note, chosenHere().has(decision.k)),
     )
     const inText = event.target === note
-    const action = sheetKey(event, decision?.options.length ?? 0, inText, picked, !inText && isFormField(event.target))
+    const action = sheetKey(
+      event,
+      decision?.options.length ?? 0,
+      inText,
+      picked,
+      !inText && isFormField(event.target),
+      isOwnButton(event.target),
+    )
     if (!action) return
     event.preventDefault()
     event.stopPropagation()

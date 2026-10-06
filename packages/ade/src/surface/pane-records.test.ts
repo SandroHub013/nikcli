@@ -68,6 +68,7 @@ describe("createPaneRecords", () => {
         draft: "b",
         dirty: true,
         truncated: false,
+        eol: "\n",
       })
       records.bufferLoading.set("p1", true)
       records.permissions.set("p1", { what: "scrivere", kind: "write", answers: [] })
