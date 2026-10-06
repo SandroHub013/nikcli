@@ -2080,6 +2080,8 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
                 window.state::<pty::Registry>().end_all_in_background();
                 // Nor any listener for the chats' messages: they wait for the new page.
                 window.state::<gateway::Gateway>().page_loading();
+                // Nor the chat's streams to `nikcli serve`: their channels are gone with the old page.
+                window.state::<serve_proxy::Requests>().abort_all();
             }
         })
         .inner_size(1440.0, 900.0)
