@@ -381,6 +381,12 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       keywords: ["nikverse", "città", "mondo", "gioco", "3d", "sessioni", "negozi", "city", "world", "game", "sessions"],
     },
     {
+      id: "learn.pane",
+      title: t("palette.learn.pane"),
+      group: t("palette.group.pane"),
+      keywords: ["impara", "lezioni", "esercizi", "corso", "ripasso", "learn", "lessons", "exercises", "course"],
+    },
+    {
       id: "update.check",
       title: t("palette.update.check"),
       group: BRAND.name,

@@ -30,6 +30,7 @@ import { DecisionsPane } from "../decisions/decisions-pane"
 import type { DecisionsHub } from "../decisions/hub"
 import { DesignPane } from "../design/design-pane"
 import { NikversePane } from "../nikverse/nikverse-pane"
+import { LearnPane, type LearnProgressHost } from "../nikverse/learn/learn-pane"
 import type { AssetsHost } from "../nikverse/assets"
 import type { Snapshot } from "../nikverse/protocol"
 import type { ForwardedChord } from "../nikverse/chords"
@@ -122,6 +123,13 @@ export interface PaneRendererDeps {
     ignored: (reason: string) => void
     /** The host's commands for NikVerse's assets (fetched the first time the world opens); absent where there is no host. */
     assets: () => Promise<AssetsHost | undefined>
+  }
+  /** What the Learn panel needs from ADE: the learner's progress, and the few things it may ask for. */
+  learn: {
+    /** ADE's commands for the progress; absent where there is no host, and then the panel only shows the page. */
+    progress: () => Promise<LearnProgressHost | undefined>
+    /** A message the lesson page sent that ADE ignored, and why. */
+    ignored: (reason: string) => void
   }
   /** What a plugin's panel needs from ADE: the workbench it is shown a picture of, and the few things it may ask for. */
   framePlugin: {
@@ -411,6 +419,17 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
       />
     )
 
+    const learnPane = () => (
+      <LearnPane
+        focused={isFocused()}
+        progress={deps.learn.progress}
+        onIgnored={deps.learn.ignored}
+        onFocus={focus}
+        onClose={() => deps.close(current().id)}
+        onExpand={expand}
+      />
+    )
+
     const framePluginPane = () => (
       <PluginFramePane
         pluginId={current().framePlugin?.id ?? ""}
@@ -668,8 +687,15 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                                       <Show
                                         when={current().mode === "nikverse"}
                                         fallback={
-                                          <Show when={current().framePlugin} fallback={sessionPane()}>
-                                            <Suspense>{framePluginPane()}</Suspense>
+                                          <Show
+                                            when={current().mode === "learn"}
+                                            fallback={
+                                              <Show when={current().framePlugin} fallback={sessionPane()}>
+                                                <Suspense>{framePluginPane()}</Suspense>
+                                              </Show>
+                                            }
+                                          >
+                                            {learnPane()}
                                           </Show>
                                         }
                                       >

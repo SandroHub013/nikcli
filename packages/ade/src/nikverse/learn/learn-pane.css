@@ -1,0 +1,58 @@
+[data-component="learn-pane"] {
+  --ade-pane-ground: var(--ade-bg);
+}
+
+[data-slot="learn-body"] {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The progress of the learner is ADE's to keep: it is exported and imported from here, in ADE's own DOM. */
+[data-slot="learn-progress"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--ade-line, currentColor);
+}
+
+[data-slot="learn-progress"] button {
+  padding: var(--ade-space-2, 4px) var(--ade-space-5, 10px);
+  border-radius: var(--ade-radius-sm, 5px);
+  font-size: var(--ade-font-xs);
+  font-weight: var(--ade-weight-medium);
+  background: var(--ade-active, transparent);
+  color: var(--ade-text, currentColor);
+  border: 1px solid var(--ade-border, currentColor);
+  cursor: pointer;
+}
+
+[data-slot="learn-progress"] button:hover:not([disabled]) {
+  background: var(--ade-hover, transparent);
+  border-color: var(--ade-text-weak, currentColor);
+}
+
+[data-slot="learn-progress"] button[disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+[data-slot="learn-notice"] {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text-dim, currentColor);
+}
+
+[data-slot="learn-frame"] {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: var(--ade-bg, canvas);
+}

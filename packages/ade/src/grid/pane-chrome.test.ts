@@ -54,6 +54,7 @@ describe("pane chrome", () => {
         "designPane",
         "filePane",
         "framePluginPane",
+        "learnPane",
         "modelPane",
         "nikversePane",
         "pluginPane",

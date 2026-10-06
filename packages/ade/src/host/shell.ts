@@ -273,6 +273,13 @@ export interface Host {
   /** Takes the fetched assets off the disk; the bytes freed. They are fetched again when the world next opens. Refused while a fetch runs. */
   nikverseAssetsRemove?: () => Promise<number>
   /**
+   * The learner's progress for «Impara» (`learn.rs`): one JSON in the app's local data, `null` when there is none yet. The shape is
+   * checked by the caller before anything is written, and the file itself refuses what is not JSON or is over its ceiling.
+   */
+  learnProgressGet?: () => Promise<unknown>
+  /** Replaces the progress with this JSON, written to a staging file and renamed over the old one. */
+  learnProgressSet?: (json: string) => Promise<void>
+  /**
    * Plugins in a frame (`plugin_install.rs`, `plugin_scheme.rs`): what is installed, and the commands that check, download, switch on, take
    * back and remove a version. All of them answer to the main window only.
    */
@@ -858,6 +865,16 @@ export async function getHost(): Promise<Host | undefined> {
     async nikverseAssetsRemove() {
       const { invoke } = await import("@tauri-apps/api/core")
       return await invoke<number>("nikverse_assets_remove")
+    },
+
+    async learnProgressGet() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<unknown>("learn_progress_get")
+    },
+
+    async learnProgressSet(json: string) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("learn_progress_set", { json })
     },
 
     async pluginList() {

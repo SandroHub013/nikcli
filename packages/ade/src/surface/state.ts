@@ -285,6 +285,7 @@ export function isPanelPane(
     pane.mode === "decisions" ||
     pane.mode === "design" ||
     pane.mode === "nikverse" ||
+    pane.mode === "learn" ||
     pane.mode === "plugin-frame",
   )
 }
@@ -615,11 +616,30 @@ export function toWorkspaceState(workbench: Workbench): WorkspaceState {
       ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
     }))
 
+  /*
+   * The «Impara» panel is saved, and only the one there is.
+   *
+   * Every other panel is dropped here (see above), because what it showed belongs to whatever it was showing. The lessons do not: they
+   * are the app's own, and the progress is one file, so a restored panel is the same panel with the same lessons and the same progress,
+   * which is exactly what the user left open.
+   */
+  const learns = workbench.panes
+    .filter((p) => p.mode === "learn")
+    .slice(0, 1)
+    .map((p) => ({
+      id: p.id,
+      title: p.title,
+      ...(p.workspaceId ? { project: p.workspaceId } : {}),
+      ...(p.projectRoot ? { projectRoot: p.projectRoot } : {}),
+      ...(p.span ? { span: { columns: p.span.columns, rows: p.span.rows } } : {}),
+    }))
+
   return {
     version: CURRENT_VERSION,
     panes: boundWorkspaceTranscripts(saved, workbench.focusedId),
     ...(browsers.length ? { browsers } : {}),
     ...(framePlugins.length ? { framePlugins } : {}),
+    ...(learns.length ? { learns } : {}),
     focusedPaneId: workbench.focusedId,
     pinnedColumns: workbench.pinnedColumns,
     currentView: workbench.view,
@@ -809,6 +829,22 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
             workspaceId: f.project || owner,
             ...(f.projectRoot ? { projectRoot: f.projectRoot } : {}),
             ...(f.span ? { span: { columns: f.span.columns, rows: f.span.rows } } : {}),
+            lines: [],
+          }),
+        ),
+      )
+      .concat(
+        (state.learns ?? []).map(
+          (l): Pane => ({
+            id: l.id,
+            title: l.title,
+            // As `openLearnPane` creates it: a panel is never a finished session.
+            status: "working",
+            model: "—",
+            mode: "learn",
+            workspaceId: l.project || owner,
+            ...(l.projectRoot ? { projectRoot: l.projectRoot } : {}),
+            ...(l.span ? { span: { columns: l.span.columns, rows: l.span.rows } } : {}),
             lines: [],
           }),
         ),
