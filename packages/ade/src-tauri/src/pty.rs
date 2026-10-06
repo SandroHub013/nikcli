@@ -1128,45 +1128,39 @@ pub async fn pty_spawn(
     // For the waiter thread below; taken before `app` moves into the sender.
     let waiter = app.clone();
     let waited_id = id.clone();
+    // The waiter hands the exit it saw to the sender, which says it after the last output: see `drain_then_exit`.
+    let (exit_tx, exit_rx) = std::sync::mpsc::channel::<Option<i32>>();
 
     let emitter = app.clone();
     let stream_id = id.clone();
     std::thread::spawn(move || {
         let topic = data_topic(&stream_id);
+        let exit_id = stream_id.clone();
+        let exit_emitter = emitter.clone();
 
-        // Returns once the reader has hung up and the last frame is out.
-        pump(&chunk_rx, |data| {
-            let _ = emitter.emit(
-                &topic,
-                Chunk {
-                    id: stream_id.clone(),
-                    data,
-                },
-            );
-        });
-
-        let taken = app
-            .state::<Registry>()
-            .0
-            .lock()
-            .ok()
-            .and_then(|mut sessions| sessions.remove(&stream_id));
-
-        /*
-         * Nothing left to report: the waiter below already took the session
-         * and said the exit — that is what let this reader reach EOF at all —
-         * or `pty_kill` did. One exit per session, from whoever saw it first.
-         */
-        let Some(mut session) = taken else {
-            return;
-        };
-        let code = session.child.wait().ok().map(|status| status.exit_code() as i32);
-
-        let _ = emitter.emit(
-            "pty:exit",
-            Exit {
-                id: stream_id,
-                code,
+        drain_then_exit(
+            &chunk_rx,
+            |data| {
+                let _ = emitter.emit(
+                    &topic,
+                    Chunk {
+                        id: stream_id.clone(),
+                        data,
+                    },
+                );
+            },
+            || {
+                let taken = app
+                    .state::<Registry>()
+                    .0
+                    .lock()
+                    .ok()
+                    .and_then(|mut sessions| sessions.remove(&stream_id));
+                taken.map(|mut session| session.child.wait().ok().map(|status| status.exit_code() as i32))
+            },
+            &exit_rx,
+            |code| {
+                let _ = exit_emitter.emit("pty:exit", Exit { id: exit_id, code });
             },
         );
     });
@@ -1182,7 +1176,8 @@ pub async fn pty_spawn(
      * exited left a pane that said "working" forever, with an OpenConsole
      * process for every turn. So the child is asked directly, twice a second;
      * once it has gone the session is dropped — which is what lets the
-     * reader finish — and the exit is reported from here with the real code.
+     * reader finish — and the real code is handed to the sender, which
+     * reports the exit once the last output is out.
      * On unix this is merely redundant: EOF arrives first, the reader takes
      * the session, and this thread finds nothing and stops.
      */
@@ -1208,17 +1203,43 @@ pub async fn pty_spawn(
                 }
             }
         };
-        let _ = waiter.emit(
-            "pty:exit",
-            Exit {
-                id: waited_id,
-                code,
-            },
-        );
+        // Not said from here: the sender may still have output queued, and the page stops listening at the exit.
+        let _ = exit_tx.send(code);
         break;
     });
 
     Ok(())
+}
+
+/*
+ * What the sender does from start to end: the output, then the exit, in that order.
+ *
+ * The exit used to be said by whichever thread saw it first. On Windows that is the waiter, which notices the
+ * process is gone up to half a second late and drops the session while the sender still holds up to a frame
+ * (16 ms, 256 KB) of the command's last output; the page stops listening at `pty:exit`, so a short command's
+ * final lines were lost. Now the exit is only ever said here, after `pump` has returned and the last frame is out.
+ *
+ * `take_session` removes the session if it is still registered and returns the exit code of its child (the
+ * unix case: EOF came first). If it is gone, the waiter took it and `late` carries the code it saw; if `pty_kill`
+ * took it, the waiter ends without sending and nothing is said, as before.
+ */
+fn drain_then_exit(
+    chunks: &Receiver<String>,
+    emit: impl FnMut(String),
+    take_session: impl FnOnce() -> Option<Option<i32>>,
+    late: &Receiver<Option<i32>>,
+    emit_exit: impl FnOnce(Option<i32>),
+) {
+    pump(chunks, emit);
+    let code = match take_session() {
+        Some(code) => code,
+        // The waiter ends, with or without sending, within a tick of the session being gone: the cap is only a net.
+        None => match late.recv_timeout(Duration::from_secs(5)) {
+            Ok(code) => code,
+            Err(_) => return,
+        },
+    };
+    emit_exit(code);
 }
 
 /*
@@ -1959,6 +1980,49 @@ mod tests {
         let mut emitted = Vec::new();
         pump(&rx, |data| emitted.push(data));
         emitted
+    }
+
+    // Full review 2026-10-06, rust 11: the exit is said after the last output, even when the waiter saw it first.
+    #[test]
+    fn the_exit_comes_after_the_last_output_even_when_the_waiter_saw_it_first() {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let (exit_tx, exit_rx) = std::sync::mpsc::channel::<Option<i32>>();
+        // The waiter has already reported (code 0) and the session is gone; the output is still queued.
+        exit_tx.send(Some(0)).unwrap();
+        tx.send("last line\n".to_string()).unwrap();
+        drop(tx);
+        let log = std::cell::RefCell::new(Vec::<String>::new());
+        drain_then_exit(
+            &rx,
+            |data| log.borrow_mut().push(format!("data:{}", data.trim_end())),
+            || None,
+            &exit_rx,
+            |code| log.borrow_mut().push(format!("exit:{code:?}")),
+        );
+        assert_eq!(log.into_inner(), vec!["data:last line".to_string(), "exit:Some(0)".to_string()]);
+    }
+
+    #[test]
+    fn a_session_the_sender_takes_itself_reports_the_code_it_waited_for() {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let (_exit_tx, exit_rx) = std::sync::mpsc::channel::<Option<i32>>();
+        tx.send("x".to_string()).unwrap();
+        drop(tx);
+        let mut exits = Vec::new();
+        drain_then_exit(&rx, |_| {}, || Some(Some(3)), &exit_rx, |code| exits.push(code));
+        assert_eq!(exits, vec![Some(3)]);
+    }
+
+    #[test]
+    fn a_session_killed_by_pty_kill_says_no_exit() {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let (exit_tx, exit_rx) = std::sync::mpsc::channel::<Option<i32>>();
+        drop(tx);
+        // The waiter found the session gone and ended without sending.
+        drop(exit_tx);
+        let mut exits = Vec::new();
+        drain_then_exit(&rx, |_| {}, || None, &exit_rx, |code| exits.push(code));
+        assert!(exits.is_empty());
     }
 
     #[test]
