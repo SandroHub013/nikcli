@@ -163,8 +163,8 @@ import { requestRename } from "../grid/rename"
 import { EmptyProject } from "./empty-project"
 import { ProjectBar } from "./project-bar"
 import { SidebarToggle, readSidebarHidden, writeSidebarHidden } from "./sidebar-toggle"
-import { BarQueueButton } from "./bar-queue-button"
-import { queueShown } from "./bar-queue"
+import { PillTabs, type PillTabItem } from "../ui/pill-tabs"
+import { queueItemLabel } from "./bar-queue"
 import { NikChromeLogo } from "./nik-chrome-logo"
 const isTauriDesktop = () => typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)
 
@@ -248,6 +248,7 @@ import {
   ADE_VIEW_LABELS,
   VISIBLE_VIEWS,
   isViewVisible,
+  type AdeView,
   type Workbench as WorkbenchState,
 } from "./state"
 import { AgentConsole } from "../agent/agent-console"
@@ -467,8 +468,7 @@ import {
 } from "./open-route"
 import { guessDevServers } from "../simulator/simulator"
 import { DecisionsSheet } from "../decisions/decisions-sheet"
-import { ChoicesSheet } from "../choices/choices-sheet"
-import { choiceCounts, choiceItems, distinctNames, type ChoiceItem } from "../choices/list"
+import { choiceCounts, distinctNames } from "../choices/list"
 import { createToast } from "./toast"
 import { createSettled } from "./settled"
 import {
@@ -1769,7 +1769,6 @@ export function Workbench() {
    * decisions and design alike (notifiche-design). An entry opens its own
    * window at that entry.
    */
-  const [choicesOpen, setChoicesOpen] = createSignal(false)
   const [choiceStart, setChoiceStart] = createSignal<string>()
   const [decisionsOpen, setDecisionsOpen] = createSignal(false)
   const decisionsWaiting = createMemo(
@@ -1808,6 +1807,8 @@ export function Workbench() {
   )
   // An answer on its way to the pane that asked is queued for half a second: not «0» on the button (`createSettled`).
   const settledQueued = createSettled(() => decisionsQueued() + designQueued())
+  const settledDecisionsQueued = createSettled(() => decisionsQueued())
+  const settledDesignQueued = createSettled(() => designQueued())
   const choicesCounts = createMemo(() => ({
     ...choiceCounts(
       { waiting: decisionsWaiting(), queued: decisionsQueued(), discarded: decisionsDiscarded() },
@@ -1815,16 +1816,58 @@ export function Workbench() {
     ),
     queued: settledQueued(),
   }))
-  // Not a memo: it reads the panes (`mailPanes`), defined further down, and a memo runs at once.
-  const choices = () =>
-    choiceItems(decisionsRegister.state()?.decisions ?? [], designRegister.state()?.proposals ?? [], paneNames())
-  /** An entry of «Da scegliere» opens its own window, at that entry. */
-  const pickChoice = (item: ChoiceItem) => {
-    setChoicesOpen(false)
-    setChoiceStart(item.k)
-    if (item.kind === "decision") setDecisionsOpen(true)
-    else setDesignOpen(true)
-  }
+
+  const [decisionsAttention, setDecisionsAttention] = createSignal(false)
+  const [designAttention, setDesignAttention] = createSignal(false)
+
+  let prevDecisionsCount = -1
+  createEffect(() => {
+    const current = decisionsWaiting()
+    const list = decisionsRegister.state()?.decisions ?? []
+    if (prevDecisionsCount === -1) {
+      prevDecisionsCount = current
+      return
+    }
+    if (current > prevDecisionsCount) {
+      setDecisionsAttention(true)
+      const openItems = list.filter((d) => d.status === "aperta")
+      const latest = openItems[openItems.length - 1]
+      if (latest) {
+        toast.show(t("decisions.notice.toTake", latest.title))
+      }
+    } else if (current === 0) {
+      setDecisionsAttention(false)
+    }
+    prevDecisionsCount = current
+  })
+
+  let prevDesignCount = -1
+  createEffect(() => {
+    const current = designWaiting()
+    const list = designRegister.state()?.proposals ?? []
+    if (prevDesignCount === -1) {
+      prevDesignCount = current
+      return
+    }
+    if (current > prevDesignCount) {
+      setDesignAttention(true)
+      const openItems = list.filter((p) => p.status === "aperta")
+      const latest = openItems[openItems.length - 1]
+      if (latest) {
+        toast.show(t("design.notice.toChoose", latest.title))
+      }
+    } else if (current === 0) {
+      setDesignAttention(false)
+    }
+    prevDesignCount = current
+  })
+
+  createEffect(() => {
+    if (decisionsOpen()) setDecisionsAttention(false)
+  })
+  createEffect(() => {
+    if (designOpen()) setDesignAttention(false)
+  })
 
   onMount(() => {
     // One pass and one listing of `.ade/` for both registers (P1-C2c).
@@ -1913,6 +1956,73 @@ export function Workbench() {
       }),
       view: "code",
     }))
+  }
+
+  const handleOpenDecisions = () => {
+    setDecisionsAttention(false)
+    if (decisionsOpen()) {
+      setDecisionsOpen(false)
+      return
+    }
+    const first = decisionsRegister.state()?.decisions.find((d) => d.status === "aperta")
+    if (first) {
+      setChoiceStart(first.k)
+      setDecisionsOpen(true)
+    } else {
+      openDecisionsPane()
+    }
+  }
+
+  const handleOpenDesign = () => {
+    setDesignAttention(false)
+    if (designOpen()) {
+      setDesignOpen(false)
+      return
+    }
+    const first = designRegister.state()?.proposals.find((p) => p.status === "aperta")
+    if (first) {
+      setChoiceStart(first.k)
+      setDesignOpen(true)
+    } else {
+      openDesignPane()
+    }
+  }
+
+  const queueItems = createMemo<PillTabItem[]>(() => {
+    const decWaiting = decisionsWaiting()
+    const decQueued = settledDecisionsQueued()
+    const desWaiting = designWaiting()
+    const desQueued = settledDesignQueued()
+
+    return [
+      {
+        id: "decisions",
+        family: "decisions",
+        label: t("decisions.title"),
+        shortLabel: t("decisions.shortTitle"),
+        badge: decWaiting > 0 ? decWaiting : undefined,
+        attention: decisionsAttention(),
+        active: decisionsOpen() || wb().panes.some((p) => p.mode === "decisions"),
+        title: queueItemLabel("decisions", decWaiting, decQueued),
+        ariaLabel: queueItemLabel("decisions", decWaiting, decQueued),
+      },
+      {
+        id: "design",
+        family: "design",
+        label: t("design.title"),
+        shortLabel: t("design.shortTitle"),
+        badge: desWaiting > 0 ? desWaiting : undefined,
+        attention: designAttention(),
+        active: designOpen() || wb().panes.some((p) => p.mode === "design"),
+        title: queueItemLabel("design", desWaiting, desQueued),
+        ariaLabel: queueItemLabel("design", desWaiting, desQueued),
+      },
+    ]
+  })
+
+  const onSelectQueue = (id: string) => {
+    if (id === "decisions") handleOpenDecisions()
+    else if (id === "design") handleOpenDesign()
   }
 
   /**
@@ -4942,7 +5052,6 @@ export function Workbench() {
   }
   /** One of the sheets on `Sheet` is open: modal, with a focus trap (see `waitsForSheet`). */
   const sheetOpen = () =>
-    choicesOpen() ||
     decisionsOpen() ||
     designOpen() ||
     voiceSettingsOpen() ||
@@ -6539,9 +6648,10 @@ export function Workbench() {
       )
     } else if (id === "update.check") {
       void checkForUpdates()
-    } else if (id === "decisions.open" || id === "design.open") {
-      // Both open the one list; the voice's «apri le decisioni» comes here too.
-      setChoicesOpen(true)
+    } else if (id === "decisions.open") {
+      handleOpenDecisions()
+    } else if (id === "design.open") {
+      handleOpenDesign()
     } else if (id === "decisions.pane") {
       openDecisionsPane()
     } else if (id === "design.pane") {
@@ -8859,22 +8969,16 @@ export function Workbench() {
           {/* A segmented control rather than loose chips: with four sections
             the set is the navigation, and it has to read as one object with
             one selection — not as four independent toggles. */}
-          <div data-slot="ade-views" role="tablist" aria-label={t("bar.sections")}>
-            <For each={VISIBLE_VIEWS}>
-              {(view) => (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={wb().view === view}
-                  data-slot="ade-view-tab"
-                  data-active={wb().view === view ? "true" : undefined}
-                  onClick={() => setWb((w) => ({ ...w, view }))}
-                >
-                  {ADE_VIEW_LABELS[view]}
-                </button>
-              )}
-            </For>
-          </div>
+          <PillTabs
+            role="tab"
+            ariaLabel={t("bar.sections")}
+            items={VISIBLE_VIEWS.map((view) => ({
+              id: view,
+              label: ADE_VIEW_LABELS[view],
+            }))}
+            active={wb().view}
+            onSelect={(id) => setWb((w) => ({ ...w, view: id as AdeView }))}
+          />
           {/* The palette, next to the sections rather than in the middle of the
             bar: it is navigation too — the way to reach what the four tabs do
             not show — and it belongs with the thing it extends. Reduced to its
@@ -8901,18 +9005,14 @@ export function Workbench() {
               <path d="M10.2 10.2L14 14" stroke-linecap="round" />
             </svg>
           </button>
-          {/* Decisions and design proposals waiting for the user: one button
-            for both, «Da scegliere» (notifiche-design; it was one each).
-            Hidden at zero; it opens its list only when pressed. */}
-          <Show when={queueShown(choicesCounts())}>
-            <BarQueueButton
-              family="choices"
-              counts={choicesCounts()}
-              open={choicesOpen() || decisionsOpen() || designOpen()}
-              theme={theme()}
-              onOpen={() => setChoicesOpen(true)}
-            />
-          </Show>
+          {/* Decisions and design proposals: segmented pill buttons (T1).
+            Always visible, with badges for open items (> 0) and queue info in tooltip. */}
+          <PillTabs
+            role="button"
+            ariaLabel={`${t("decisions.title")} · ${t("design.title")}`}
+            items={queueItems()}
+            onSelect={onSelectQueue}
+          />
         </div>
 
         <div data-slot="ade-bar-side" data-side="end">
@@ -9585,27 +9685,13 @@ export function Workbench() {
         )}
       </Show>
 
-      <Show when={choicesOpen()}>
-        <ChoicesSheet
-          items={choices()}
-          onPick={pickChoice}
-          onClose={() => setChoicesOpen(false)}
-          onOpenPanels={() => {
-            setChoicesOpen(false)
-            openDecisionsPane()
-            openDesignPane()
-          }}
-        />
-      </Show>
-
       <Show when={decisionsOpen()}>
         <DecisionsSheet
           hub={decisionsHub}
           start={choiceStart()}
-          waiting={() => choices().length}
-          onDone={(next, said) => {
+          waiting={() => decisionsWaiting()}
+          onDone={(_next, said) => {
             setDecisionsOpen(false)
-            if (next === "list") setChoicesOpen(true)
             if (said) toast.show(said)
           }}
           onClose={() => setDecisionsOpen(false)}
@@ -9620,10 +9706,9 @@ export function Workbench() {
         <DesignSheet
           hub={designHub}
           start={choiceStart()}
-          waiting={() => choices().length}
-          onDone={(next, said) => {
+          waiting={() => designWaiting()}
+          onDone={(_next, said) => {
             setDesignOpen(false)
-            if (next === "list") setChoicesOpen(true)
             if (said) toast.show(said)
           }}
           onClose={() => setDesignOpen(false)}

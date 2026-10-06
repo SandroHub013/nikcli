@@ -78,18 +78,10 @@ describe("«Da scegliere»", () => {
     expect(waitedFor("2026-09-26T11:00:00.000Z", NOW)).toBe("1 giorno fa")
   })
 
-  test("lint: the sheet lists every entry with its kind, its asker and its age, and opens it on a press", () => {
-    const sheet = readFileSync(join(import.meta.dir, "choices-sheet.tsx"), "utf8")
-    expect(sheet).toContain('<Sheet component="choices-sheet"')
-    expect(sheet).toContain('t("choices.asked", item.by, waitedFor(item.openedAt, now()))')
-    expect(sheet).toContain("onClick={() => props.onPick(item)}")
-  })
-
-  test("lint: the palette's two commands and the voice's «apri le decisioni» open the one list", () => {
+  test("lint: the palette commands and voice open the sheets directly", () => {
     const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
-    expect(workbench).toContain('} else if (id === "decisions.open" || id === "design.open") {')
-    const opened = workbench.slice(workbench.indexOf('id === "decisions.open" || id === "design.open"'))
-    expect(opened.slice(0, 200)).toContain("setChoicesOpen(true)")
+    expect(workbench).toContain('} else if (id === "decisions.open") {')
+    expect(workbench).toContain('} else if (id === "design.open") {')
     expect(workbench).toContain("start={choiceStart()}")
   })
 })

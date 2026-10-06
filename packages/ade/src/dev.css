@@ -75,6 +75,7 @@
 [data-tauri-drag-region] input,
 [data-tauri-drag-region] a,
 [data-tauri-drag-region] [data-slot="ade-views"],
+[data-tauri-drag-region] [data-slot="ade-pill-tabs"],
 [data-tauri-drag-region] [data-slot="ade-menu-anchor"],
 [data-tauri-drag-region] [data-slot="ade-window-controls"],
 [data-tauri-drag-region] [data-slot="ade-voice-controls"] {
@@ -672,53 +673,7 @@
  * bar rather than on it, which is what keeps it from competing with the
  * command field beside it.
  */
-[data-slot="ade-views"] {
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-  flex: 0 0 auto;
-  padding: 2px;
-  border: 1px solid var(--ade-border-subtle);
-  border-radius: var(--ade-radius-md);
-  background: var(--ade-sunken);
-}
-
-[data-slot="ade-view-tab"] {
-  height: 22px;
-  padding: 0 var(--ade-space-5);
-  border: 1px solid transparent;
-  border-radius: var(--ade-radius-sm);
-  background: transparent;
-  /* `soft` on the sunken track: 5.5:1 in light, where `weak` was 4.2 (closure 3). */
-  color: var(--ade-text-soft);
-  font-family: var(--ade-sans);
-  font-size: var(--ade-font-md);
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  transition:
-    background var(--ade-dur-fast) var(--ade-ease),
-    color var(--ade-dur-fast) var(--ade-ease),
-    box-shadow var(--ade-dur-fast) var(--ade-ease);
-}
-
-[data-slot="ade-view-tab"]:hover {
-  color: var(--ade-text);
-}
-
-/* Raised, not tinted: the selected cell should look like it sits above the
-   track. An accent fill here would shout over the primary action in the bar. */
-[data-slot="ade-view-tab"][data-active] {
-  background: var(--ade-raised);
-  border-color: var(--ade-border);
-  color: var(--ade-text);
-  box-shadow: var(--ade-shadow-sm);
-}
-
-[data-slot="ade-view-tab"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
-  color: var(--ade-text);
-}
+/* Styles moved to ui/pill-tabs.css (T1) */
 
 @media (max-width: 640px) {
   [data-slot="ade-bar"] {

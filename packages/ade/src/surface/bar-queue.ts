@@ -9,8 +9,8 @@
  */
 import { t } from "../i18n"
 
-/** `choices` is the one button of both (notifiche-design); the other two name its halves. */
-export type QueueFamily = "choices" | "decisions" | "design"
+/** The two queue families in the bar (Decisioni and Design). */
+export type QueueFamily = "decisions" | "design"
 
 export interface QueueCounts {
   /** Waiting for the user: the pill. */
@@ -56,7 +56,7 @@ export function queueShown(counts: QueueCounts): boolean {
 }
 
 export function queueText(family: QueueFamily, counts: QueueCounts): QueueText {
-  const name = t(family === "choices" ? "choices.title" : family === "decisions" ? "decisions.title" : "design.title")
+  const name = t(family === "decisions" ? "decisions.title" : "design.title")
   const queued = counts.queued > 0 ? t("bar.queue.queued", counts.queued) : undefined
   const discarded = counts.discarded > 0 ? t("bar.queue.discarded", counts.discarded) : undefined
   const label = [name, t("bar.queue.forYou", counts.waiting), queued, discarded].filter(Boolean).join(", ")
@@ -67,4 +67,12 @@ export function queueText(family: QueueFamily, counts: QueueCounts): QueueText {
     ...(discarded ? { discarded } : {}),
     label,
   }
+}
+
+/** Accessible label and tooltip for a pill queue button item in the bar (T1). */
+export function queueItemLabel(family: "decisions" | "design", waiting: number, queued = 0): string {
+  const name = t(family === "decisions" ? "decisions.title" : "design.title")
+  const forYou = waiting > 0 ? t("bar.queue.forYou", waiting) : undefined
+  const queuedText = queued > 0 ? t("bar.queue.queued", queued) : undefined
+  return [name, forYou, queuedText].filter(Boolean).join(", ")
 }

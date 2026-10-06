@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { localePreference, setLocalePreference } from "../i18n"
-import { NARROW_BAR, queueShown, queueText, queueTitle } from "./bar-queue"
+import { NARROW_BAR, queueItemLabel, queueShown, queueText, queueTitle } from "./bar-queue"
 import { codeOf } from "../test-support/source-text"
 
 /*
@@ -45,24 +45,43 @@ describe("the queue buttons' words", () => {
     expect(queueShown({ waiting: 0, queued: 1, discarded: 0 })).toBe(true)
   })
 
-  test("one component, with the open state and no title in place of the name", () => {
-    const button = read("surface", "bar-queue-button.tsx")
-    expect(button).toContain("aria-label={text().label}")
-    expect(button).toContain("aria-expanded={props.open}")
-    // The only title is the narrow one: with the name on the button it would repeat it.
-    expect(button.match(/title=/g)).toEqual(["title="])
-    expect(button).toContain("title={queueTitle(text(), narrow())}")
-    expect(button).toContain("matchMedia(NARROW_BAR)")
+  test("the queue buttons group uses PillTabs with role button, always rendered in the bar", () => {
     const workbench = read("surface", "workbench.tsx")
-    // notifiche-design: one button for decisions and design, «Da scegliere», not one each.
-    expect(workbench.match(/<BarQueueButton/g)).toEqual(["<BarQueueButton"])
-    expect(workbench).toContain('family="choices"')
-    expect(workbench).not.toContain('family="decisions"')
-    expect(workbench).not.toContain('family="design"')
-    expect(workbench).toContain("counts={choicesCounts()}")
-    expect(workbench).toContain("onOpen={() => setChoicesOpen(true)}")
-    expect(workbench).not.toContain('data-slot="decisions-badge"')
-    expect(workbench).not.toContain('data-slot="design-badge"')
+    expect(workbench).not.toContain("<BarQueueButton")
+    expect(workbench).toContain('role="button"')
+    expect(workbench).toContain("items={queueItems()}")
+    expect(workbench).toContain("onSelect={onSelectQueue}")
+    // The group is always rendered, never conditionally hidden behind queueShown
+    expect(workbench).not.toContain("<Show when={queueShown(")
+  })
+
+  test("queueItemLabel builds accessible name and title without discarded counts", () => {
+    const before = localePreference()
+    setLocalePreference("it")
+    expect(queueItemLabel("decisions", 0, 0)).toBe("Decisioni")
+    expect(queueItemLabel("decisions", 2, 0)).toBe("Decisioni, 2 per te")
+    expect(queueItemLabel("decisions", 1, 3)).toBe("Decisioni, 1 per te, 3 in coda")
+    expect(queueItemLabel("design", 0, 2)).toBe("Design, 2 in coda")
+    setLocalePreference("en")
+    expect(queueItemLabel("decisions", 2, 0)).toBe("Decisions, 2 for you")
+    expect(queueItemLabel("design", 1, 2)).toBe("Design, 1 for you, 2 queued")
+    setLocalePreference(before)
+  })
+
+  test("discarded lines do not turn on any badge: badge only reflects waiting items", () => {
+    const workbench = read("surface", "workbench.tsx")
+    expect(workbench).toContain("badge: decWaiting > 0 ? decWaiting : undefined")
+    expect(workbench).toContain("badge: desWaiting > 0 ? desWaiting : undefined")
+  })
+
+  test("clicking Decisioni or Design opens the respective sheet or pane", () => {
+    const workbench = read("surface", "workbench.tsx")
+    expect(workbench).toContain('if (id === "decisions") handleOpenDecisions()')
+    expect(workbench).toContain('else if (id === "design") handleOpenDesign()')
+    expect(workbench).toContain("setDecisionsOpen(true)")
+    expect(workbench).toContain("openDecisionsPane()")
+    expect(workbench).toContain("setDesignOpen(true)")
+    expect(workbench).toContain("openDesignPane()")
   })
 })
 
