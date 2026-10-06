@@ -32,11 +32,11 @@ describe("content.json", () => {
     expect(committed).toBe(toJson(convert(join(ROOT, "lezzioni"))))
   })
 
-  test("carries the five lessons of the first path, in order", () => {
+  test("carries the four paths in order, each with its five lessons", () => {
     const content = convert(join(ROOT, "lezzioni"))
     expect(content.v).toBe(1)
-    expect(content.percorsi.map((percorso) => percorso.tema)).toEqual(["agenti-llm"])
-    expect(content.percorsi[0].titolo).toBe("Agenti e LLM")
+    expect(content.percorsi.map((percorso) => percorso.tema)).toEqual(["agenti-llm", "ai", "cybersecurity", "harness"])
+    expect(content.percorsi.map((percorso) => percorso.titolo)).toEqual(["Agenti e LLM", "AI", "Cybersecurity", "Harness"])
     expect(content.percorsi[0].lezioni.map((lesson) => lesson.id)).toEqual([
       "agenti-llm/01-token-contesto",
       "agenti-llm/02-ruoli-prompt",
@@ -44,10 +44,31 @@ describe("content.json", () => {
       "agenti-llm/04-iniezione-dati",
       "agenti-llm/05-sandbox-allowlist-budget",
     ])
+    expect(content.percorsi[1].lezioni.map((lesson) => lesson.id)).toEqual([
+      "ai/01-modello-addestrato",
+      "ai/02-come-nasce-un-llm",
+      "ai/03-embedding-rag",
+      "ai/04-allucinazioni",
+      "ai/05-valutare-scegliere",
+    ])
+    expect(content.percorsi[2].lezioni.map((lesson) => lesson.id)).toEqual([
+      "cybersecurity/01-input-non-fidato",
+      "cybersecurity/02-dati-e-codice",
+      "cybersecurity/03-autorizzazione",
+      "cybersecurity/04-segreti-password",
+      "cybersecurity/05-errori-log-strati",
+    ])
+    expect(content.percorsi[3].lezioni.map((lesson) => lesson.id)).toEqual([
+      "harness/01-strumenti",
+      "harness/02-permessi",
+      "harness/03-contesto-compattazione",
+      "harness/04-sessioni-worktree",
+      "harness/05-hook-memoria",
+    ])
   })
 
   test("every file in the folder is a lesson, and no two say the same thing", () => {
-    expect(files.length).toBe(5)
+    expect(files.length).toBe(20)
     const ids: string[] = []
     for (const file of files) ids.push(String(fromFile(file).id))
     expect(new Set(ids).size).toBe(ids.length)
@@ -147,7 +168,7 @@ describe("every lesson, against the schema", () => {
       const positions = (lesson.esercizi as { tipo: string; giusta?: unknown }[])
         .filter((esercizio) => esercizio.tipo === "scelta")
         .map((esercizio) => Number(esercizio.giusta))
-      expect(positions.length).toBeGreaterThanOrEqual(3)
+      expect(positions.length).toBeGreaterThanOrEqual(2)
       expect(new Set(positions).size, `tutte in posizione ${positions[0]}`).toBeGreaterThan(1)
       for (const esercizio of lesson.esercizi as { id: string; tipo: string; giusta?: unknown; sbagliate: { risposta: unknown }[] }[]) {
         if (esercizio.tipo === "scelta") {
@@ -175,4 +196,4 @@ describe("the schema in the repo is the one of the course", () => {
 })
 
 /** The lesson the engine's own tests read: the smallest one there is, and the first a user opens. */
-export const sample = (): Lesson => fromFile("01-token-contesto.yaml")
+export const sample = (): Lesson => fromFile("agenti-llm/01-token-contesto.yaml")

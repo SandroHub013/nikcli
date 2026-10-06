@@ -1,0 +1,320 @@
+id: harness/03-contesto-compattazione
+versione: 1.0.0
+lingua: it
+tema: harness
+unita: 1
+numero: 3
+titolo: "Che cosa riempie il contesto"
+durata_min: 4
+livello: 2
+prerequisiti:
+  - harness/02-permessi
+stato: rivista
+autori:
+  bozza: agy
+  revisione: Architetto
+
+obiettivi:
+  - id: O1
+    testo: "Elencare che cosa manda l'harness a ogni turno: istruzioni di sistema, definizioni degli strumenti, file di memoria, cronologia e risultati degli strumenti."
+  - id: O2
+    testo: "Spiegare che cos'è la compattazione come riassunto della cronologia vecchia per fare spazio e riconoscere che i dettagli esatti possono perdersi."
+  - id: O3
+    testo: "Scegliere strategie preventive prima della compattazione come salvare note su file o aprire una sessione nuova per un compito nuovo."
+  - id: O4
+    testo: "Spiegare perché un sotto-agente aiuta lavorando in un contesto separato e restituendo solo una sintesi per non saturare la sessione principale."
+  - id: O5
+    testo: "Riconoscere i sintomi di un contesto saturo come ripetizione di domande già chiarite, perdita di decisioni e rilettura circolare di file."
+
+fonti:
+  - id: F1
+    titolo: "Building Effective AI Agents"
+    url: "https://www.anthropic.com/engineering/building-effective-agents"
+  - id: F7
+    titolo: "Context windows"
+    url: "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+  - id: F8
+    titolo: "Compaction overview"
+    url: "https://platform.claude.com/docs/en/build-with-claude/compaction"
+  - id: F9
+    titolo: "Create custom subagents"
+    url: "https://code.claude.com/docs/en/sub-agents"
+
+teoria:
+  - id: T1
+    obiettivi: [O1, O2]
+    fonti: [F1, F7, F8]
+    testo: >-
+      A ogni turno della conversazione l'harness compone il prompt inviando al modello: le istruzioni di sistema,
+      le definizioni degli strumenti, i file di memoria del progetto e la cronologia dei messaggi con i risultati
+      delle azioni. In una sessione lunga l'harness può attivare, da solo o su richiesta, la **compattazione**
+      (*compaction*): riassume i turni più vecchi per fare spazio. I dettagli minuti (nomi di funzioni,
+      percorsi, numeri di porta) possono andare perduti.
+  - id: T2
+    obiettivi: [O3, O4]
+    fonti: [F1, F9]
+    testo: >-
+      Per evitare amnesie critiche, le decisioni importanti vanno salvate tempestivamente in **file di progetto**
+      anziché lasciate nella cronologia volatile. Inoltre, per compiti di ricerca pesante o analisi di decine di
+      documenti, conviene delegare il lavoro a un **sotto-agente** (*sub-agent*). Il sotto-agente normale opera
+      in un contesto separato e riceve solo il mandato specifico: restituisce una sintesi finale senza riempire il
+      contesto dell'agente principale con letture intermedie.
+  - id: T3
+    obiettivi: [O5]
+    fonti: [F7, F8]
+    testo: >-
+      Un contesto sovraccarico o compattato male produce sintomi tipici: l'agente dimentica decisioni
+      precedenti, ripete domande a cui si era già risposto, rilegge in circolo gli stessi file o confonde vincoli
+      architetturali. Quando compaiono questi segnali, insistere nella medesima sessione peggiora le risposte: il
+      rimedio più efficace è salvare lo stato del lavoro e **aprire una sessione pulita** per il compito
+      successivo.
+
+esercizi:
+  - id: l03-e01
+    tipo: trova-riga
+    obiettivo: O2
+    difficolta: 1
+    fonte: F8
+    consegna: "Nella consegna l'utente ha chiesto: «Usa la porta 8443 e il file cert-faro.pem per il server meteo». Quale riga del sommario di compattazione ha perso il dettaglio esatto della porta e del certificato?"
+    etichetta: "sommario-compattazione.md"
+    righe:
+      - "## Riepilogo turni precedenti"
+      - "- Configurato l'ambiente di sviluppo per il servizio meteo"
+      - "- L'utente ha richiesto di avviare il server HTTPS con parametri personalizzati"
+      - "- Verificati i file sorgente nella cartella src/"
+    giuste: [2]
+    spiegazione: >-
+      La riga che menziona «parametri personalizzati» ha sostituito i valori precisi (`porta 8443` e
+      `cert-faro.pem`) con una descrizione generica, mostrando come la compattazione perda i dettagli puntuali.
+    sbagliate:
+      - risposta: 1
+        perche: "La riga sull'ambiente di sviluppo riassume correttamente le attività iniziali senza omettere vincoli specificati dall'utente."
+      - risposta: 3
+        perche: "La riga sulla verifica dei sorgenti descrive l'ispezione dei file senza alterare istruzioni operative."
+
+  - id: l03-e02
+    tipo: trova-riga
+    obiettivo: O5
+    difficolta: 2
+    fonte: F7
+    consegna: "In questo estratto di log della sessione, quale riga evidenzia che il contesto dell'agente è saturo e sta dimenticando decisioni già prese?"
+    etichetta: "dialogo-sessione.log"
+    righe:
+      - "[TURNO 12] Utente: «Usa il formato JSON per i dati del chiringuito, come stabilito prima.»"
+      - "[TURNO 13] Agente: Modifico il file ordini.json applicando lo schema stabilito."
+      - "[TURNO 18] Agente: «Quale formato preferisci per i dati del chiringuito: XML o testo semplice?»"
+      - "[TURNO 19] Utente: «Te l'ho già detto due volte, dobbiamo usare JSON!»"
+    giuste: [2]
+    spiegazione: >-
+      La riga in cui l'agente chiede nuovamente se preferire XML o testo semplice dimostra amnesia da contesto
+      saturo, avendo rimosso la decisione iniziale concordata con l'utente.
+    sbagliate:
+      - risposta: 0
+        perche: "La riga del turno 12 riporta il promemoria dell'utente che ribadisce la scelta di progetto."
+      - risposta: 1
+        perche: "La riga del turno 13 mostra l'agente che esegue correttamente il lavoro in conformità alla decisione."
+
+  - id: l03-e03
+    tipo: scelta
+    obiettivo: O1
+    difficolta: 1
+    fonte: F7
+    consegna: "Quale di questi elementi NON entra nel contesto che l'harness manda al modello a ogni turno?"
+    opzioni:
+      - "Le istruzioni di sistema dell'agente"
+      - "Le definizioni degli strumenti disponibili"
+      - "I file del progetto che l'agente non ha mai aperto"
+      - "La cronologia dei messaggi e i risultati degli strumenti"
+    giusta: 2
+    spiegazione: >-
+      Il modello vede solo ciò che l'harness mette nel contesto: un file entra solo se l'agente lo legge con uno
+      strumento, o se è un file di memoria che l'harness carica da sé.
+    sbagliate:
+      - risposta: 0
+        perche: "Le istruzioni di sistema accompagnano ogni turno: sono la base del comportamento dell'agente."
+      - risposta: 1
+        perche: "Le definizioni degli strumenti entrano a ogni turno, ed è per questo che molti strumenti costano token."
+      - risposta: 3
+        perche: "La cronologia e i risultati degli strumenti sono la parte che cresce a ogni turno."
+
+  - id: l03-e04
+    tipo: ordina
+    obiettivo: O4
+    difficolta: 2
+    fonte: F9
+    consegna: "Metti in ordine i passaggi con cui l'harness gestisce il ciclo di vita e il contesto di un sotto-agente delegato."
+    elementi:
+      - "L'agente principale lancia il sotto-agente passando solo l'istruzione del compito"
+      - "Il sotto-agente esegue le analisi nel proprio contesto isolato leggendo file e strumenti"
+      - "Il sotto-agente produce un riassunto finale sintetico e termina la propria sessione"
+      - "L'harness inserisce solo la sintesi nel contesto principale liberando i dettagli intermedi"
+    spiegazione: >-
+      Il sotto-agente nasce con un prompt pulito, accumula i dettagli pesanti nel suo contesto temporaneo e
+      restituisce alla sessione madre solo il distillato utile.
+    sbagliate:
+      - risposta: [1, 0, 2, 3]
+        perche: "Il sotto-agente non può analizzare file prima che l'agente principale abbia formulato il mandato e avviato l'incarico."
+      - risposta: [0, 2, 1, 3]
+        perche: "La sintesi finale viene redatta dal sotto-agente al termine delle sue letture, non prima di aver eseguito le analisi."
+
+  - id: l03-e05
+    tipo: abbina
+    obiettivo: O3
+    difficolta: 1
+    fonte: F1
+    consegna: "Abbina ciascuna situazione alla contromisura preventiva più adatta per preservare il contesto."
+    coppie:
+      - sinistra: "conclusione di una grande funzionalità e inizio di un compito scorrelato"
+        destra: "aprire una nuova sessione per ripartire con un contesto pulito"
+      - sinistra: "decisione architetturale critica con valori precisi che non devono perdersi"
+        destra: "scrivere la decisione in un file di progetto prima che arrivi la compattazione"
+      - sinistra: "ricerca approfondita in decine di file di log e documentazione"
+        destra: "delegare l'indagine a un sotto-agente per non intasare la sessione principale"
+    spiegazione: >-
+      Sotto-agenti, salvataggio su file e nuove sessioni sono strumenti complementari per mantenere il contesto
+      snello, focalizzato e privo di amnesie.
+    sbagliate:
+      - risposta:
+          sinistra: "decisione architetturale critica con valori precisi che non devono perdersi"
+          destra: "aprire una nuova sessione per ripartire con un contesto pulito"
+        perche: "Aprire una nuova sessione senza aver salvato la decisione su file causerebbe la perdita immediata del dato."
+      - risposta:
+          sinistra: "ricerca approfondita in decine di file di log e documentazione"
+          destra: "scrivere la decisione in un file di progetto prima che arrivi la compattazione"
+        perche: "Scrivere decine di log su un file non evita che l'agente principale li legga tutti riempiendo il proprio contesto."
+
+  - id: l03-e06
+    tipo: abbina
+    obiettivo: O5
+    difficolta: 2
+    fonte: F7
+    consegna: "Abbina ogni comportamento anomalo dell'agente alla causa corrispondente legata al contesto."
+    coppie:
+      - sinistra: "l'agente rilegge più volte lo stesso file senza compiere progressi"
+        destra: "saturazione del contesto: loop cognitivo dovuto a cronologia eccessiva"
+      - sinistra: "l'agente confonde i percorsi precisi stabiliti venti turni prima"
+        destra: "perdita per compattazione: il riassunto ha omesso i dettagli specifici"
+      - sinistra: "l'agente ignora un vincolo presente solo nella sessione principale"
+        destra: "isolamento del sotto-agente: riceve solo il prompt del compito delegato"
+    spiegazione: >-
+      Comprendere le cause delle anomalie (sovraccarico, riassunti imperfetti o contesti isolati) permette di
+      scegliere la giusta strategia correttiva.
+    sbagliate:
+      - risposta:
+          sinistra: "l'agente confonde i percorsi precisi stabiliti venti turni prima"
+          destra: "isolamento del sotto-agente: riceve solo il prompt del compito delegato"
+        perche: "Dimenticare dettagli della cronologia passata è effetto della compattazione, non dell'isolamento di un sotto-agente."
+      - risposta:
+          sinistra: "l'agente ignora un vincolo presente solo nella sessione principale"
+          destra: "saturazione del contesto: loop cognitivo dovuto a cronologia eccessiva"
+        perche: "Il sotto-agente non dimentica il vincolo principale: semplicemente non lo riceve nel proprio prompt separato."
+
+  - id: l03-e07
+    tipo: scelta
+    obiettivo: O2
+    difficolta: 1
+    fonte: F8
+    consegna: "Cosa accade quando l'harness attiva la procedura di compattazione (compaction) della sessione?"
+    opzioni:
+      - "Riassume la porzione iniziale della cronologia per recuperare spazio, rischiando di perdere dettagli precisi"
+      - "Comprime i file del disco in formato zip e invia l'archivio al repository git"
+      - "Raddoppia istantaneamente la memoria fisica della scheda grafica del server"
+      - "Cancella tutti i permessi configurati obbligando l'utente a reinserirli"
+    giusta: 0
+    spiegazione: >-
+      La compattazione sostituisce blocchi di messaggi passati con un riassunto sintetico: riduce l'occupazione
+      di token ma può cancellare numeri di porta, percorsi o formule.
+    sbagliate:
+      - risposta: 1
+        perche: "La compattazione agisce sui messaggi nel contesto del modello e non sui file fisici presenti sul disco."
+      - risposta: 2
+        perche: "Il processo è una gestione algoritmica del prompt e non ha effetto sull'hardware della macchina."
+      - risposta: 3
+        perche: "Le policy di sicurezza e le regole dei permessi restano inalterate durante la compattazione."
+
+  - id: l03-e08
+    tipo: scelta
+    obiettivo: O4
+    difficolta: 2
+    fonte: F9
+    consegna: "Quali informazioni riceve un sotto-agente normale (non una biforcazione) quando viene invocato dall'agente principale?"
+    opzioni:
+      - "L'intera cronologia di tutti i turni precedenti della sessione principale fin dal primo messaggio"
+      - "Unicamente l'istruzione del compito assegnato, gli strumenti abilitati e il contesto pulito iniziale"
+      - "Tutte le password salvate nel gestore credenziali del sistema operativo"
+      - "Il log binario dei tasti premuti dall'utente durante l'intera giornata"
+    giusta: 1
+    spiegazione: >-
+      Il sotto-agente normale parte con un contesto indipendente e riceve solo l'incarico trasmesso: non vede la
+      conversazione principale (F9). Fa eccezione la biforcazione (*fork*), che la eredita per scelta.
+    sbagliate:
+      - risposta: 0
+        perche: "Un sotto-agente normale non eredita la cronologia dell'agente principale: lo fa solo una biforcazione (fork), scelta apposta."
+      - risposta: 2
+        perche: "I sotto-agenti non hanno accesso a credenziali protette di sistema salvo configurazione esplicita."
+      - risposta: 3
+        perche: "La delega all'agente riguarda esclusivamente il prompt operativo definito dall'harness."
+
+  - id: l03-e09
+    tipo: scelta
+    obiettivo: O3
+    difficolta: 2
+    fonte: F1
+    consegna: "Perché è buona norma salvare decisioni critiche in file di documentazione (es. note o spec) anziché affidarsi alla chat?"
+    opzioni:
+      - "Perché il modello linguistico non è in grado di leggere i messaggi scritti dall'utente nella chat"
+      - "Perché il controllo di versione git rifiuta di memorizzare file che contengono righe di testo"
+      - "Perché i file su disco sono permanenti e rimangono intatti anche se la conversazione viene compattata o chiusa"
+      - "Perché i file di documentazione consumano un numero negativo di token nel contesto"
+    giusta: 2
+    spiegazione: >-
+      Scrivere le specifiche su file crea una fonte di verità durevole, immune alle amnesie generate dalla
+      compattazione o dall'avvio di nuove sessioni.
+    sbagliate:
+      - risposta: 0
+        perche: "Il modello legge regolarmente i messaggi della chat finché risiedono nella finestra di contesto attiva."
+      - risposta: 1
+        perche: "Git è progettato principalmente per tracciare e versionare file di testo e codice sorgente."
+      - risposta: 3
+        perche: "Qualsiasi testo inserito nel prompt occupa token positivi."
+
+  - id: l03-e10
+    tipo: completa
+    obiettivo: O1
+    difficolta: 1
+    fonte: F7
+    consegna: "Completa la frase."
+    testo: "L'harness alimenta il modello a ogni turno con istruzioni di sistema, definizioni degli [[1]] e la [[2]] recente."
+    banca: ["strumenti", "cronologia", "processi", "backup", "server"]
+    giusta: ["strumenti", "cronologia"]
+    spiegazione: >-
+      Il prompt di ciascun turno unisce le funzionalità disponibili (strumenti) e l'evoluzione temporale del
+      dialogo (cronologia).
+    sbagliate:
+      - risposta: ["processi", "cronologia"]
+        perche: "L'harness descrive gli strumenti invocabili, non l'elenco dei processi di sistema."
+      - risposta: ["strumenti", "backup"]
+        perche: "Nel contesto entra la cronologia dei messaggi, non un archivio di backup."
+
+  - id: l03-e11
+    tipo: completa
+    obiettivo: O2
+    difficolta: 1
+    fonte: F8
+    consegna: "Completa la frase."
+    testo: "La compattazione serve a creare [[1]] nella finestra di contesto, ma i dettagli specifici possono andare [[2]]."
+    banca: ["spazio", "persi", "token", "bloccati", "confermati"]
+    giusta: ["spazio", "persi"]
+    spiegazione: >-
+      La compattazione riassume i turni precedenti per liberare spazio token, ma non garantisce la conservazione
+      fedele di parametri minuti.
+    sbagliate:
+      - risposta: ["token", "persi"]
+        perche: "La compattazione libera spazio riducendo il conteggio dei token occupati."
+      - risposta: ["spazio", "confermati"]
+        perche: "L'effetto collaterale critico della sintesi è la potenziale perdita di dettagli, non la loro conferma."
+
+# Dubbi e note:
+# - Nessun numero esatto di token citato.
+# - Esplicitato che la compattazione non è priva di perdite.
+# - Rispettate le regole su trova-riga: riferimenti solo per contenuto.

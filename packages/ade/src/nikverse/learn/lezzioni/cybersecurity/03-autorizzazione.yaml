@@ -1,0 +1,324 @@
+id: cybersecurity/03-autorizzazione
+versione: 1.0.0
+lingua: it
+tema: cybersecurity
+unita: 1
+numero: 3
+titolo: "Chi può fare che cosa"
+durata_min: 4
+livello: 2
+prerequisiti:
+  - cybersecurity/02-dati-e-codice
+stato: rivista
+autori:
+  bozza: agy
+  revisione: Architetto
+
+obiettivi:
+  - id: O1
+    testo: "Distinguere l'autenticazione (verifica dell'identità) dall'autorizzazione (definizione dei permessi operativi)."
+  - id: O2
+    testo: "Individuare endpoint che verificano l'accesso ma non la proprietà effettiva della risorsa richiesta."
+  - id: O3
+    testo: "Spiegare perché i controlli di sicurezza devono avvenire sul server a ogni richiesta e non nell'interfaccia."
+  - id: O4
+    testo: "Applicare il principio del minimo privilegio a utenti, servizi e agenti software assegnando solo i permessi necessari."
+  - id: O5
+    testo: "Riconoscere perché le falle di autorizzazione sono diffuse e come individuarle provando con ruoli e account differenti."
+
+fonti:
+  - id: F1
+    titolo: "OWASP Top 10"
+    url: "https://owasp.org/Top10/"
+  - id: F2
+    titolo: "MITRE, CWE Top 25 Most Dangerous Software Weaknesses"
+    url: "https://cwe.mitre.org/top25/"
+  - id: F6
+    titolo: "OWASP Cheat Sheet, Authorization"
+    url: "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html"
+  - id: F7
+    titolo: "NIST CSRC, glossario, least privilege"
+    url: "https://csrc.nist.gov/glossary/term/least_privilege"
+
+teoria:
+  - id: T1
+    obiettivi: [O1, O2]
+    fonti: [F1, F6]
+    testo: >-
+      L'**autenticazione** risponde alla domanda «chi sei?», accertando l'identità dichiarata. L'**autorizzazione**
+      risponde a «cosa puoi fare?», controllando se quell'utente ha il diritto di compiere una specifica azione.
+      Un difetto frequentissimo è verificare l'accesso generale ma non la proprietà del dato: se un utente
+      autenticato può leggere i dati di un altro solo modificando l'identificativo nell'URL, manca
+      l'autorizzazione sulla risorsa specifica.
+  - id: T2
+    obiettivi: [O3, O5]
+    fonti: [F6]
+    testo: >-
+      Nascondere un pulsante nell'interfaccia grafica non protegge una funzione: qualunque richiesta può essere
+      inviata direttamente al server. Ogni verifica deve avvenire **sul server a ogni singola richiesta**. Le
+      falle di autorizzazione sono diffusissime perché il software sembra funzionare benissimo nei collaudi
+      ordinari: l'omissione si nota solo eseguendo test incrociati con account diversi.
+  - id: T3
+    obiettivi: [O4]
+    fonti: [F7]
+    testo: >-
+      Il principio del **minimo privilegio** stabilisce che ogni persona, servizio o agente software deve avere
+      unicamente i permessi indispensabili al suo compito attuale. Se un agente deve analizzare un diff di
+      codice, gli bastano i permessi di lettura sul repository: concedergli permessi di scrittura o accesso di
+      rete allarga la superficie di attacco senza alcuna reale necessità tecnica.
+
+esercizi:
+  - id: l03-e01
+    tipo: trova-riga
+    obiettivo: O2
+    difficolta: 2
+    fonte: F6
+    consegna: "In questo endpoint per consultare le prenotazioni dell'hotel, quale riga restituisce i dati senza che nessuno abbia controllato il proprietario?"
+    etichetta: "gestione-prenotazioni.ts"
+    righe:
+      - "app.get('/api/prenotazioni/:id', async (req, res) => {"
+      - "  const utente = autenticaSessione(req);"
+      - "  const prenotazione = await db.cercaPerId(req.params.id);"
+      - "  return res.json(prenotazione);"
+      - "});"
+    giuste: [3]
+    spiegazione: >-
+      La riga con `return res.json(prenotazione)` restituisce la prenotazione a chiunque ne conosca l'id, senza
+      verificare che appartenga all'utente autenticato. La correzione è verificare che `prenotazione.utenteId ===
+      utente.id` prima di inviare i dati.
+    sbagliate:
+      - risposta: 1
+        perche: "La riga con `autenticaSessione(req)` accerta solo l'identità di chi chiama, non i diritti sulla specifica risorsa."
+      - risposta: 2
+        perche: "Leggere per id va bene se subito dopo si controlla il proprietario, o se la ricerca usa anche l'id dell'utente. Qui il controllo manca proprio prima di restituire."
+
+  - id: l03-e02
+    tipo: trova-riga
+    obiettivo: O2
+    difficolta: 2
+    fonte: F6
+    consegna: "In questa funzione per aggiornare il profilo, quale riga prende il nuovo ruolo da ciò che manda l'utente?"
+    etichetta: "aggiorna-profilo.ts"
+    righe:
+      - "app.post('/api/profilo', async (req, res) => {"
+      - "  const utente = autenticaSessione(req);"
+      - "  const nuovoRuolo = req.body.ruolo;"
+      - "  await db.impostaRuolo(utente.id, nuovoRuolo);"
+      - "  return res.send({ aggiornato: true });"
+      - "});"
+    giuste: [2]
+    spiegazione: >-
+      La riga con `const nuovoRuolo = req.body.ruolo` prende il valore direttamente dal messaggio inviato dal
+      client. La correzione è gestire i ruoli solo sul server tramite logica protetta o autorizzazioni già
+      assegnate.
+    sbagliate:
+      - risposta: 1
+        perche: "La riga con `autenticaSessione` si limita a identificare l'utente collegato tramite la sessione corrente."
+      - risposta: 3
+        perche: "La riga con `impostaRuolo` esegue l'aggiornamento sul database, ma il dato non fidato è stato preso alla riga precedente."
+
+  - id: l03-e03
+    tipo: trova-riga
+    obiettivo: O3
+    difficolta: 1
+    fonte: F6
+    consegna: "In questa route per cancellare una camera, quale riga omette il controllo sul server fidandosi della visibilità del pulsante nel client?"
+    etichetta: "cancella-camera.ts"
+    righe:
+      - "app.delete('/api/camere/:id', async (req, res) => {"
+      - "  // Il pulsante cancella è visibile solo agli amministratori nel pannello web"
+      - "  await db.eliminaCamera(req.params.id);"
+      - "  return res.send({ eliminata: true });"
+      - "});"
+    giuste: [1]
+    spiegazione: >-
+      Il commento che fa affidamento sulla visibilità del pulsante nel client rinuncia al controllo sul server.
+      Chiunque può inviare una chiamata HTTP DELETE diretta. La correzione consiste nel verificare il ruolo di
+      amministratore sul server prima di cancellare.
+    sbagliate:
+      - risposta: 0
+        perche: "La dichiarazione dell'endpoint definisce il metodo HTTP e il percorso della risorsa sul server."
+      - risposta: 2
+        perche: "La chiamata a `eliminaCamera` cancella il record sul database, subendo l'assenza del controllo preventivo."
+
+  - id: l03-e04
+    tipo: abbina
+    obiettivo: O1
+    difficolta: 1
+    fonte: F6
+    consegna: "Abbina ogni domanda alla fase di sicurezza corrispondente."
+    coppie:
+      - sinistra: "«Lia, la guardiana del faro, è davvero chi dice di essere?»"
+        destra: "autenticazione: verifica l'identità dichiarata da chi accede"
+      - sinistra: "«Lia ha il permesso di modificare il registro del faro?»"
+        destra: "autorizzazione: stabilisce se un'identità può compiere un'azione"
+      - sinistra: "«Quali file può leggere questo token API di sola consultazione?»"
+        destra: "autorizzazione: delimita il perimetro di accesso consentito al token"
+    spiegazione: >-
+      L'autenticazione verifica chi sta parlando; l'autorizzazione stabilisce quali operazioni e risorse siano
+      consentite a quell'identità verificata.
+    sbagliate:
+      - risposta:
+          sinistra: "«Lia, la guardiana del faro, è davvero chi dice di essere?»"
+          destra: "autorizzazione: stabilisce se un'identità può compiere un'azione"
+        perche: "Accertare l'identità di una persona tramite credenziali è il compito specifico dell'autenticazione."
+      - risposta:
+          sinistra: "«Lia ha il permesso di modificare il registro del faro?»"
+          destra: "autenticazione: verifica l'identità dichiarata da chi accede"
+        perche: "Verificare se un utente noto può eseguire una modifica è una decisione di autorizzazione sui permessi."
+
+  - id: l03-e05
+    tipo: abbina
+    obiettivo: O4
+    difficolta: 1
+    fonte: F7
+    consegna: "Abbina ogni ruolo al profilo conforme al principio del minimo privilegio."
+    coppie:
+      - sinistra: "agente incaricato di fare la code review di una pull request"
+        destra: "lettura dei file del repository e del diff di commit"
+      - sinistra: "servizio di generazione delle miniature delle immagini"
+        destra: "lettura della cartella caricamenti e scrittura nella sola cartella anteprime"
+      - sinistra: "amministratore delle vendite del chiringuito"
+        destra: "accesso alle sole transazioni del chiringuito"
+    spiegazione: >-
+      Ogni entità operativa deve ricevere esclusivamente i diritti indispensabili per compiere le mansioni
+      assegnate, senza privilegi eccedenti.
+    sbagliate:
+      - risposta:
+          sinistra: "agente incaricato di fare la code review di una pull request"
+          destra: "accesso alle sole transazioni del chiringuito"
+        perche: "Un agente per la revisione del codice non deve avere alcun accesso a sistemi finanziari o di pagamento."
+      - risposta:
+          sinistra: "servizio di generazione delle miniature delle immagini"
+          destra: "lettura dei file del repository e del diff di commit"
+        perche: "Il servizio di elaborazione grafica necessita di accedere alle immagini, non al codice sorgente dell'applicazione."
+
+  - id: l03-e06
+    tipo: scelta
+    obiettivo: O4
+    difficolta: 2
+    fonte: F7
+    consegna: "Devi configurare un agente AI per analizzare un bug e proporre una correzione. Quale configurazione applica il minimo privilegio?"
+    opzioni:
+      - "Accesso di amministratore al sistema operativo con permesso di avviare comandi shell arbitrari"
+      - "Permesso di scrittura globale su tutto il disco rigido e connessione di rete aperta verso qualunque destinazione"
+      - "Permesso di lettura sul repository, permesso di scrittura limitato alla cartella di lavoro e divieto di inviare dati all'esterno"
+      - "Permesso esclusivo di arrestare i servizi di rete del server in caso di anomalie riscontrate"
+    giusta: 2
+    spiegazione: >-
+      L'agente deve poter leggere i file del progetto e scrivere solo nella propria area di lavoro delimitata,
+      senza disporre di privilegi di amministrazione o canali di esfiltrazione non necessari.
+    sbagliate:
+      - risposta: 0
+        perche: "Concedere privilegi di root allarga drasticamente i rischi in caso di istruzioni manipolate o comportamenti imprevisti."
+      - risposta: 1
+        perche: "La scrittura globale e la rete aperta violano apertamente il principio di limitazione dei permessi."
+      - risposta: 3
+        perche: "L'arresto dei servizi di rete non è un compito dell'agente e può causare interruzioni di servizio indesiderate."
+
+  - id: l03-e07
+    tipo: scelta
+    obiettivo: O5
+    difficolta: 2
+    fonte: F6
+    consegna: "Perché la mancanza di controlli di autorizzazione sulle risorse è tra i difetti più diffusi e difficili da notare?"
+    opzioni:
+      - "Perché il compilatore del codice interrompe l'esecuzione se manca una verifica di autorizzazione"
+      - "Perché nei test ordinari ogni utente accede solo alle proprie risorse e tutto appare perfettamente funzionante"
+      - "Perché le normative di sicurezza impongono di non eseguire collaudi sui permessi prima del rilascio"
+      - "Perché i sistemi di database generano automaticamente tutte le regole di accesso necessarie"
+    giusta: 1
+    spiegazione: >-
+      Un controllo mancante non genera errori nei percorsi di prova standard: l'applicazione funziona senza
+      intoppi finché un utente non tenta intenzionalmente di accedere alle risorse di altri.
+    sbagliate:
+      - risposta: 0
+        perche: "Il compilatore verifica la sintassi e i tipi, ma non può sapere quali regole di business definiscono la proprietà dei dati."
+      - risposta: 2
+        perche: "Al contrario, le buone pratiche raccomandano test rigorosi sui confini tra diversi account utente."
+      - risposta: 3
+        perche: "I database memorizzano i dati ma non applicano automaticamente le regole di autorizzazione a livello applicativo."
+
+  - id: l03-e08
+    tipo: completa
+    obiettivo: O1
+    difficolta: 1
+    fonte: F6
+    consegna: "Completa la frase."
+    testo: "L'[[1]] accerta chi è l'utente che sta chiamando il servizio, mentre l'[[2]] stabilisce quali risorse e azioni gli sono consentite."
+    banca: ["autenticazione", "autorizzazione", "esecuzione", "connessione", "chiusura"]
+    giusta: ["autenticazione", "autorizzazione"]
+    spiegazione: >-
+      Autenticare significa convalidare l'identità dichiarata; autorizzare significa verificare quali diritti e
+      permessi spettano a tale identità.
+    sbagliate:
+      - risposta: ["autorizzazione", "autenticazione"]
+        perche: "Sono scambiate: verificare chi sei è l'autenticazione, decidere che cosa puoi fare è l'autorizzazione."
+      - risposta: ["connessione", "autorizzazione"]
+        perche: "La connessione è solo il canale di rete, non la verifica dell'identità."
+
+  - id: l03-e09
+    tipo: completa
+    obiettivo: O3
+    difficolta: 1
+    fonte: F6
+    consegna: "Completa la frase."
+    testo: "I controlli sui permessi devono essere verificati sul [[1]] a ogni [[2]], senza affidarsi alla presenza o assenza di elementi nell'interfaccia."
+    banca: ["server", "richiesta", "browser", "giornata", "sessione"]
+    giusta: ["server", "richiesta"]
+    spiegazione: >-
+      La verifica di autorizzazione deve essere ripetuta dal server per ogni singola richiesta, perché
+      l'interfaccia grafica è facilmente aggirabile da client non ufficiali.
+    sbagliate:
+      - risposta: ["browser", "richiesta"]
+        perche: "I controlli di autorizzazione non possono risiedere nel browser, che è un ambiente sotto il controllo dell'utente."
+      - risposta: ["server", "giornata"]
+        perche: "La verifica deve avvenire per ogni singola operazione, non una volta al giorno."
+
+  - id: l03-e10
+    tipo: ordina
+    obiettivo: O1
+    difficolta: 1
+    fonte: F6
+    consegna: "Metti in ordine logico le verifiche che un server deve compiere quando riceve una richiesta di modifica dati."
+    elementi:
+      - "Identificazione dell'utente tramite credenziali o token di sessione (autenticazione)"
+      - "Controllo dei permessi generali dell'utente sul tipo di operazione (autorizzazione di ruolo)"
+      - "Verifica che la specifica risorsa appartenga all'utente o sia a lui assegnata (autorizzazione di oggetto)"
+      - "Esecuzione della modifica e salvataggio sul database"
+    spiegazione: >-
+      Prima si autentica l'identità, poi si controllano i ruoli generali, quindi si verifica la titolarità della
+      specifica risorsa, e infine si procede all'elaborazione.
+    sbagliate:
+      - risposta: [0, 3, 1, 2]
+        perche: "Non si può eseguire la modifica prima di aver verificato i permessi di ruolo e di oggetto."
+      - risposta: [1, 0, 2, 3]
+        perche: "Prima di verificare i permessi di ruolo è indispensabile autenticare l'identità dell'utente."
+
+  - id: l03-e11
+    tipo: scelta
+    obiettivo: O5
+    difficolta: 2
+    fonte: F6
+    consegna: "Durante la verifica di una funzionalità, come si può accertare efficacemente che i controlli di autorizzazione funzionino?"
+    opzioni:
+      - "Provando a richiedere o modificare le risorse di un utente usando la sessione di un altro utente"
+      - "Controllando unicamente che il database risponda entro un tempo inferiore a cento millisecondi"
+      - "Verificando che la pagina web si impagini correttamente su schermi per dispositivi mobili"
+      - "Riavviando il server di sviluppo per verificare che la memoria interna risulti pulita"
+    giusta: 0
+    spiegazione: >-
+      Il test fondamentale per l'autorizzazione consiste nel tentare l'accesso incrociato: verificare che
+      l'utente A non possa visualizzare né alterare i dati appartenenti all'utente B.
+    sbagliate:
+      - risposta: 1
+        perche: "La velocità di risposta del database non dimostra la presenza di barriere di autorizzazione."
+      - risposta: 2
+        perche: "L'adattamento grafico dell'interfaccia non ha alcuna relazione con la sicurezza dei permessi applicativi."
+      - risposta: 3
+        perche: "Riavviare il server ripulisce lo stato locale ma non verifica la logica di controllo degli accessi."
+
+# Dubbi e note:
+# - Rispettate le regole di sicurezza: nessun payload reale, pseudo-TypeScript per prenotazioni e profili.
+# - Presenti 3 esercizi di tipo trova-riga su codice con righe indicate per contenuto.
+# - Fonti usate: F1 (OWASP Top 10), F2 (CWE Top 25), F6 (Authorization Cheat Sheet), F7 (NIST least privilege).

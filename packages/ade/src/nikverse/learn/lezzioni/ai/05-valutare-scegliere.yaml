@@ -1,0 +1,315 @@
+id: ai/05-valutare-scegliere
+versione: 1.0.0
+lingua: it
+tema: ai
+unita: 1
+numero: 5
+titolo: "Valutare e scegliere un modello"
+durata_min: 4
+livello: 2
+prerequisiti:
+  - ai/04-allucinazioni
+stato: rivista
+autori:
+  bozza: agy
+  revisione: Architetto
+
+obiettivi:
+  - id: O1
+    testo: "Definire che cos'è un benchmark e spiegare i suoi limiti metodologici come mancata aderenza e contaminazione dei dati."
+  - id: O2
+    testo: "Costruire una prova di valutazione sul proprio compito con esempi reali, criteri preventivi e condizioni uniformi."
+  - id: O3
+    testo: "Bilanciare qualità delle risposte, costo, velocità di elaborazione, finestra di contesto e tutela della privacy."
+  - id: O4
+    testo: "Distinguere tra modelli a pesi aperti e servizi via API, e tra esecuzione locale e cloud, con i relativi impatti sui dati."
+  - id: O5
+    testo: "Riconoscere quando un modello piccolo e veloce è sufficiente e quando è necessario ricorrere a un modello grande."
+
+fonti:
+  - id: F1
+    titolo: "Google, Machine Learning Crash Course"
+    url: "https://developers.google.com/machine-learning/crash-course"
+  - id: F7
+    titolo: "NIST, AI Risk Management Framework"
+    url: "https://www.nist.gov/itl/ai-risk-management-framework"
+
+teoria:
+  - id: T1
+    obiettivi: [O1, O2]
+    fonti: [F1]
+    testo: >-
+      Un **benchmark** è una batteria di test standardizzata usata per misurare le prestazioni dei modelli.
+      Presenta due limiti: i test sintetici spesso non somigliano al tuo caso d'uso reale, e le domande
+      possono essere finite nei testi di addestramento (*contaminazione*), gonfiando i punteggi. La valutazione
+      più affidabile è una **prova su misura**: raccogli 10-20 esempi reali del tuo lavoro, stabilisci in
+      anticipo i criteri di successo e sottoponi lo stesso materiale a ogni modello.
+  - id: T2
+    obiettivi: [O3, O5]
+    fonti: [F1, F7]
+    testo: >-
+      Non esiste un modello migliore in assoluto: la scelta è un compromesso tra **qualità, costo, velocità,
+      finestra di contesto e riservatezza**. Per compiti frequenti e ben delimitati (classificare messaggi,
+      estrarre date o formattare dati), un modello **piccolo e veloce** è preferibile: risponde più in fretta
+      e riduce la spesa. I modelli più grandi servono quando occorre risolvere ragionamenti sfumati o
+      lavorare su codice molto esteso.
+  - id: T3
+    obiettivi: [O4]
+    fonti: [F7]
+    testo: >-
+      I modelli differiscono per distribuzione e controllo. Un servizio **via API** non richiede hardware
+      dedicato ma invia i dati sui server del fornitore. Un modello a **pesi aperti** può essere eseguito in
+      locale o su server propri: i dati restano sulle tue macchine, ma richiede macchine potenti e gestione
+      tecnica. Nota bene: eseguire in locale non assicura da solo la sicurezza, che dipende da come la macchina
+      è protetta e configurata.
+
+esercizi:
+  - id: l05-e01
+    tipo: scelta
+    obiettivo: O1
+    difficolta: 1
+    fonte: F1
+    consegna: "Che cos'è la «contaminazione» dei dati in un benchmark per modelli linguistici?"
+    opzioni:
+      - "La presenza di virus informatici o malware all'interno del file del modello"
+      - "L'inclusione involontaria delle domande del test nei testi usati per l'addestramento"
+      - "Un guasto all'hardware che altera i calcoli delle matrici durante l'inferenza"
+      - "La sovrapposizione tra le licenze d'uso del codice e i diritti dei dati"
+    giusta: 1
+    spiegazione: >-
+      La contaminazione si verifica quando i quesiti di un benchmark sono presenti nei dati di addestramento.
+      In questo caso il modello ottiene punteggi elevati perché ha già visto quelle risposte, non per
+      capacità generale.
+    sbagliate:
+      - risposta: 0
+        perche: "La contaminazione riguarda la validità statistica del test, non la presenza di infezioni malware."
+      - risposta: 2
+        perche: "Non si tratta di un danno fisico ai componenti del server ma di una sovrapposizione nei dati di testo."
+      - risposta: 3
+        perche: "Il problema riguarda l'indipendenza delle domande d'esame rispetto ai testi studiati dal modello."
+
+  - id: l05-e02
+    tipo: completa
+    obiettivo: O1
+    difficolta: 2
+    fonte: F1
+    consegna: "Completa la frase."
+    testo: "I benchmark pubblici possono ingannare perché le prove spesso non somigliano al tuo [[1]] reale e le soluzioni possono essere già presenti nei dati di [[2]]."
+    banca: ["compito", "addestramento", "prezzo", "licenza", "dispositivo"]
+    giusta: ["compito", "addestramento"]
+    spiegazione: >-
+      Un modello in cima alle classifiche pubbliche potrebbe faticare sul tuo compito concreto se i benchmark
+      misuravano abilità diverse o se erano stati memorizzati durante l'addestramento.
+    sbagliate:
+      - risposta: ["prezzo", "addestramento"]
+        perche: "Il limite metodologico riguarda la natura del compito da svolgere, non il prezzo del modello."
+      - risposta: ["compito", "dispositivo"]
+        perche: "Il fattore di contaminazione risiede nei dati di addestramento su cui il modello si è preparato."
+
+  - id: l05-e03
+    tipo: ordina
+    obiettivo: O2
+    difficolta: 1
+    fonte: F7
+    consegna: "Metti in ordine i passi per allestire una prova di valutazione su misura per il tuo progetto."
+    elementi:
+      - "Raccogli da dieci a venti esempi reali e rappresentativi del tuo compito"
+      - "Definisci in anticipo i criteri oggettivi con cui giudicare le risposte"
+      - "Sottoponi lo stesso identico insieme di esempi a ciascun modello in gara"
+      - "Confronta i risultati applicando i criteri stabiliti prima della prova"
+    spiegazione: >-
+      Una valutazione corretta parte da esempi autentici, fissa i criteri prima di vedere gli output, applica
+      le stesse richieste a tutti i candidati e infine misura le prestazioni in modo imparziale.
+    sbagliate:
+      - risposta: [0, 1, 3, 2]
+        perche: "Non puoi confrontare i risultati prima di aver sottoposto gli esempi ai modelli: i risultati ancora non ci sono."
+      - risposta: [0, 2, 1, 3]
+        perche: "I criteri di giudizio vanno stabiliti prima di vedere le risposte dei modelli, mai dopo."
+
+  - id: l05-e04
+    tipo: trova-riga
+    obiettivo: O2
+    difficolta: 2
+    fonte: F7
+    consegna: "In questa proposta di valutazione comparativa, quale riga introduce un errore metodologico sui criteri di giudizio?"
+    etichetta: "piano-valutazione-a.txt"
+    righe:
+      - "1. Selezionare quindici richieste tipiche inviate dagli utenti del servizio."
+      - "2. Eseguire le prove inviando i messaggi ai tre modelli candidati."
+      - "3. Esaminare le risposte ottenute e decidere solo adesso quali difetti considerare penalizzanti."
+      - "4. Calcolare il tasso di successo finale in base ai requisiti individuati."
+    giuste: [2]
+    spiegazione: >-
+      La riga 3 introduce un grave vizio metodologico: stabilire cosa penalizzare solo dopo aver guardato le
+      risposte porta a favorire inconsapevolmente un modello rispetto agli altri.
+    sbagliate:
+      - risposta: 0
+        perche: "Scegliere quindici casi reali e rappresentativi è un'ottima pratica per una valutazione empirica."
+      - risposta: 1
+        perche: "Inviare le richieste ai modelli candidati fa parte della normale fase di raccolta dei risultati."
+
+  - id: l05-e05
+    tipo: trova-riga
+    obiettivo: O2
+    difficolta: 2
+    fonte: F7
+    consegna: "In questa seconda bozza di piano di confronto, quale riga rende inattendibile il confronto tra i modelli?"
+    etichetta: "piano-valutazione-b.txt"
+    righe:
+      - "1. Fissare come criterio di successo la correttezza del formato JSON prodotto."
+      - "2. Assegnare al modello A dieci domande semplici e al modello B dieci quesiti complessi."
+      - "3. Registrare i tempi di risposta e i token consumati da ciascun sistema."
+      - "4. Verificare che le risposte rispettino i vincoli di riservatezza previsti."
+    giuste: [1]
+    spiegazione: >-
+      La riga 2 altera il confronto: per valutare equamente due modelli è indispensabile testarli sullo stesso
+      identico campione di domande.
+    sbagliate:
+      - risposta: 0
+        perche: "Stabilire un criterio formale chiaro (JSON valido) prima della prova è una procedura corretta."
+      - risposta: 2
+        perche: "Misurare latenza e token consumati è una pratica raccomandata per valutare l'efficienza."
+
+  - id: l05-e06
+    tipo: abbina
+    obiettivo: O3
+    difficolta: 1
+    fonte: F7
+    consegna: "Abbina ogni esigenza aziendale al criterio di scelta prioritario."
+    coppie:
+      - sinistra: "elaborazione di un milione di commenti al giorno"
+        destra: "costo per token contenuto e velocità di generazione elevata"
+      - sinistra: "analisi di contratti legali lunghi decine di pagine"
+        destra: "ampiezza della finestra di contesto e accuratezza logica"
+      - sinistra: "gestione di dati anagrafici che non possono uscire dall'isola"
+        destra: "gestione autonoma dell'infrastruttura e privacy dei dati"
+    spiegazione: >-
+      La scelta del modello varia a seconda dei vincoli del progetto: grandi volumi richiedono efficienza
+      economica, documenti ampi esigono contesti capienti, dati sensibili impongono controllo infrastrutturale.
+    sbagliate:
+      - risposta:
+          sinistra: "elaborazione di un milione di commenti al giorno"
+          destra: "ampiezza della finestra di contesto e accuratezza logica"
+        perche: "Per volumi enormi di testi brevi contano soprattutto il costo unitario e la rapidità di calcolo."
+      - risposta:
+          sinistra: "analisi di contratti legali lunghi decine di pagine"
+          destra: "costo per token contenuto e velocità di generazione elevata"
+        perche: "I documenti contrattuali richiedono finestre ampie e massima precisione, non solo velocità."
+
+  - id: l05-e07
+    tipo: scelta
+    obiettivo: O3
+    difficolta: 2
+    fonte: F7
+    consegna: "Quale compromesso bisogna valutare quando si sceglie un modello per un'applicazione interattiva rivolta al pubblico?"
+    opzioni:
+      - "Il bilanciamento tra qualità del testo, tempo di risposta (latenza) e costo operativo per richiesta"
+      - "La certezza che il modello più costoso sul mercato offra sempre la risposta migliore per ogni caso"
+      - "L'obbligo di scegliere modelli che abbiano superato il 99% in tutti i benchmark generali"
+      - "L'esclusione di qualsiasi modello che usi meno di trecento miliardi di parametri"
+    giusta: 0
+    spiegazione: >-
+      Nelle applicazioni reali la scelta migliore scaturisce dall'equilibrio tra rapidità percepita
+      dall'utente, qualità della risposta generata e sostenibilità economica dell'infrastruttura.
+    sbagliate:
+      - risposta: 1
+        perche: "Un modello costoso non è sempre il migliore: spesso è più lento o sovradimensionato per compiti semplici."
+      - risposta: 2
+        perche: "I benchmark generali non rispecchiano le esigenze specifiche di una singola applicazione interattiva."
+      - risposta: 3
+        perche: "Le dimensioni non sono garanzia di idoneità: modelli compatti sono spesso più rapidi ed economici."
+
+  - id: l05-e08
+    tipo: scelta
+    obiettivo: O4
+    difficolta: 2
+    fonte: F7
+    consegna: "Qual è la differenza principale tra un modello a pesi aperti in locale e un servizio via API remota?"
+    opzioni:
+      - "I modelli a pesi aperti non consumano token durante il calcolo delle risposte"
+      - "Il modello via API si aggiorna continuamente mentre parli, quello locale è fisso"
+      - "Il modello via API delega l'hardware al fornitore trasmettendo i dati fuori; quello a pesi aperti gira su macchine proprie ma richiede risorse di calcolo"
+      - "Eseguire un modello in locale rende automaticamente il sistema immune da qualsiasi attacco o vulnerabilità"
+    giusta: 2
+    spiegazione: >-
+      I servizi via API semplificano l'avvio perché non richiedono GPU proprietarie, ma comportano il transito
+      dei dati sui server del fornitore. I pesi aperti offrono sovranità sui dati ma impongono costi di hardware.
+    sbagliate:
+      - risposta: 0
+        perche: "Tutti i modelli linguistici operano su token, indipendentemente da dove vengano eseguiti."
+      - risposta: 1
+        perche: "Entrambi i tipi operano a parametri congelati durante l'inferenza e non cambiano durante la chat."
+      - risposta: 3
+        perche: "La sicurezza in locale dipende da chi accede alla macchina, dalla configurazione dei permessi e dalla sandbox."
+
+  - id: l05-e09
+    tipo: completa
+    obiettivo: O4
+    difficolta: 1
+    fonte: F7
+    consegna: "Completa la frase."
+    testo: "Un modello con [[1]] può essere installato sui propri server garantendo il controllo sui dati, mentre un servizio via [[2]] non richiede l'acquisto di macchine dedicate."
+    banca: ["pesi aperti", "API", "token", "benchmark", "chiusura"]
+    giusta: ["pesi aperti", "API"]
+    spiegazione: >-
+      I modelli a pesi aperti permettono l'esecuzione locale senza dipendere da terzi; le API evitano gli
+      investimenti in infrastruttura delegando l'elaborazione al fornitore cloud.
+    sbagliate:
+      - risposta: ["benchmark", "API"]
+        perche: "Un benchmark è un test di valutazione e non definisce il tipo di distribuzione del software."
+      - risposta: ["pesi aperti", "token"]
+        perche: "Il servizio remoto viene fornito tramite interfaccia di programmazione (API), non tramite token."
+
+  - id: l05-e10
+    tipo: abbina
+    obiettivo: O5
+    difficolta: 1
+    fonte: F1
+    consegna: "Abbina ogni compito alla classe di modello più idonea."
+    coppie:
+      - sinistra: "classificare le email in arrivo tra reclami, informazioni e ordini"
+        destra: "modello piccolo e veloce: compito delimitato e richiesta di bassa latenza"
+      - sinistra: "riscrittura e refactoring di una libreria software complessa"
+        destra: "modello grande: richiede capacità di ragionamento articolato e coerenza globale"
+      - sinistra: "rispondere ai turisti sul faro, senza sapere se un modello piccolo basta"
+        destra: "prova sugli esempi veri: si parte dal piccolo e si passa al grande solo se non basta"
+    spiegazione: >-
+      Compiti di smistamento si risolvono bene con modelli piccoli ed economici; il ragionamento su codice o
+      testi complessi richiede modelli grandi; quando non è chiaro, decide una prova sul tuo compito.
+    sbagliate:
+      - risposta:
+          sinistra: "classificare le email in arrivo tra reclami, informazioni e ordini"
+          destra: "modello grande: richiede capacità di ragionamento articolato e coerenza globale"
+        perche: "Per una classificazione a categorie note un modello grande è uno spreco di risorse e tempo."
+      - risposta:
+          sinistra: "riscrittura e refactoring di una libreria software complessa"
+          destra: "prova sugli esempi veri: si parte dal piccolo e si passa al grande solo se non basta"
+        perche: "Per un refactoring esteso di una libreria complessa la scelta è già chiara: serve un modello grande, e la prova serve nei casi incerti."
+
+  - id: l05-e11
+    tipo: scelta
+    obiettivo: O5
+    difficolta: 2
+    fonte: F1
+    consegna: "Quando conviene impiegare un modello linguistico piccolo e compatto anziché il modello più potente disponibile?"
+    opzioni:
+      - "Quando il compito richiede deduzioni logiche a più passaggi in condizioni di alta incertezza"
+      - "Quando il compito è frequente e ben strutturato, e contano velocità di esecuzione e controllo dei costi"
+      - "Solo ed esclusivamente quando non si dispone di una connessione a internet attiva"
+      - "Quando si vuole la garanzia assoluta di non avere allucinazioni nel testo prodotto"
+    giusta: 1
+    spiegazione: >-
+      Se il compito è semplice e ripetitivo, un modello piccolo offre risposte quasi istantanee e consumi
+      ridottissimi, risultando molto più efficiente di un modello gigante.
+    sbagliate:
+      - risposta: 0
+        perche: "Deduzioni articolate e problemi aperti richiedono la maggiore capacità di calcolo dei modelli grandi."
+      - risposta: 2
+        perche: "I modelli compatti possono girare anche nel cloud via API veloce per risparmiare tempo e risorse."
+      - risposta: 3
+        perche: "La dimensione del modello non azzera le allucinazioni: anche i modelli piccoli possono inventare fatti."
+
+# Dubbi e note:
+# - F1 per concetti di ML, benchmark e trade-off tra modelli compatti e grandi.
+# - F7 per gestione dei rischi, privacy dei dati, API vs pesi aperti.
+# - Rispettate le cose da non dire: nessuna classifica con nomi commerciali di modelli, nessun prezzo in denaro, nessuna falsa affermazione che 'in locale è sempre sicuro'.

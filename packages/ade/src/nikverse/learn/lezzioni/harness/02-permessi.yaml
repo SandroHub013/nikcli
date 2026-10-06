@@ -1,0 +1,317 @@
+id: harness/02-permessi
+versione: 1.0.0
+lingua: it
+tema: harness
+unita: 1
+numero: 2
+titolo: "Scrivere le regole dei permessi"
+durata_min: 4
+livello: 2
+prerequisiti:
+  - agenti-llm/05-sandbox-allowlist-budget
+stato: rivista
+autori:
+  bozza: agy
+  revisione: Architetto
+
+obiettivi:
+  - id: O1
+    testo: "Distinguere le tre risposte di una regola: permetti, chiedi conferma e vieta."
+  - id: O2
+    testo: "Leggere una regola con il carattere jolly su comandi o percorsi e riconoscere che cosa include involontariamente."
+  - id: O3
+    testo: "Applicare l'ordine di valutazione del proprio harness a una configurazione confrontando regole in ordine sequenziale o per severità."
+  - id: O4
+    testo: "Spiegare come una regola definita per un singolo agente possa prevalere sulla configurazione globale dell'harness."
+  - id: O5
+    testo: "Riconoscere la fatica da conferma quando richieste eccessive inducono ad approvare senza verificare e applicare permessi mirati."
+
+fonti:
+  - id: F5
+    titolo: "nikcli docs, Permissions"
+    url: "https://github.com/nikcli/nikcli/blob/live-main/packages/web/src/pages/docs/permissions.astro"
+  - id: F6
+    titolo: "Configure permissions"
+    url: "https://code.claude.com/docs/en/permissions"
+
+teoria:
+  - id: T1
+    obiettivi: [O1, O2]
+    fonti: [F5, F6]
+    testo: >-
+      Le regole dei permessi controllano l'accesso a comandi, file e strumenti. Ogni regola stabilisce uno dei
+      tre esiti previsti: **permetti** (*allow*), **chiedi conferma** (*ask*) o **vieta** (*deny*). Un jolly
+      come `*` o `**` può comprendere senza volerlo file riservati come `.env` o comandi distruttivi. Gli
+      esempi di questa lezione usano una forma semplificata: la sintassi vera cambia da un harness all'altro.
+  - id: T2
+    obiettivi: [O3, O4]
+    fonti: [F5, F6]
+    testo: >-
+      Non esiste un solo ordine di valutazione valido per tutti gli ambienti. In alcuni harness come nikcli (F5)
+      le regole vengono lette dall'alto in basso e **vince l'ultima regola** che corrisponde. In altri come
+      Claude Code (F6) la precedenza è fissa: si valutano **prima i divieti**, poi le richieste di conferma e
+      infine i permessi. In nikcli, inoltre, le regole di un singolo agente prevalgono su quelle globali, e se
+      nessuna regola corrisponde l'harness chiede conferma (F5).
+  - id: T3
+    obiettivi: [O5]
+    fonti: [F5, F6]
+    testo: >-
+      Chiedere conferma per qualsiasi operazione non accresce la sicurezza: innesca la **fatica da conferma**. Se
+      l'utente viene interrotto continuamente, finirà per approvare le richieste senza leggerle. La vera tutela
+      sta nell'autorizzare in silenzio le sole operazioni sicure e circoscritte, bloccando quelle dannose e
+      riservando la richiesta di conferma a poche azioni critiche e irreversibili.
+
+esercizi:
+  - id: l02-e01
+    tipo: trova-riga
+    obiettivo: O2
+    difficolta: 1
+    fonte: F5
+    consegna: "In un harness dove vince l'ultima regola che corrisponde, quale riga rende inutili tutte le regole scritte sopra di lei?"
+    etichetta: "permessi-generali.json"
+    righe:
+      - '  "permissions": {'
+      - '    "bash": "ask",'
+      - '    "edit:src/**": "allow",'
+      - '    "read:.env": "deny",'
+      - '    "*": "allow"'
+      - "  }"
+    giuste: [4]
+    spiegazione: >-
+      La regola `"*": "allow"` corrisponde a qualunque azione ed è scritta per ultima: in un harness dove vince
+      l'ultima regola prevale su tutte, anche sul divieto per `.env`. In un harness che valuta prima i divieti
+      quel divieto reggerebbe: per questo si legge l'ordine di valutazione del proprio harness.
+    sbagliate:
+      - risposta: 1
+        perche: "La regola per `bash` chiede conferma per i comandi di terminale, ma il jolly scritto dopo la annulla."
+      - risposta: 3
+        perche: "La regola per `.env` vieta la lettura del file dei segreti: è proprio una delle regole che il jolly finale rende inutili."
+
+  - id: l02-e02
+    tipo: trova-riga
+    obiettivo: O3
+    difficolta: 2
+    fonte: F5
+    consegna: "In un harness dove vince l'ultima regola corrispondente, quale riga annulla involontariamente il divieto precedente di eseguire comandi sul server del faro?"
+    etichetta: "permessi-faro.json"
+    righe:
+      - '  "regole": {'
+      - '    "bash:deploy-faro.sh": "deny",'
+      - '    "read:**": "allow",'
+      - '    "bash:*": "allow"'
+      - "  }"
+    giuste: [3]
+    spiegazione: >-
+      La regola `"bash:*": "allow"`, comparendo dopo il divieto specifico su `deploy-faro.sh`, nell'ordine
+      sequenziale dell'harness prevale e autorizza anche lo script che si voleva proibire.
+    sbagliate:
+      - risposta: 1
+        perche: "La regola con `deploy-faro.sh` introduce correttamente il divieto esplicito per il comando critico."
+      - risposta: 2
+        perche: "La regola con `read:**` concede la lettura dei file del progetto senza interferire con l'esecuzione bash."
+
+  - id: l02-e03
+    tipo: trova-riga
+    obiettivo: O2
+    difficolta: 2
+    fonte: F6
+    consegna: "In questa policy per la lettura dei file dell'archivio, quale pattern con carattere jolly include involontariamente il file dei segreti .env?"
+    etichetta: "permessi-lettura.json"
+    righe:
+      - '  "allowed_reads": ['
+      - '    "docs/*.md",'
+      - '    "src/**/*.ts",'
+      - '    ".*"'
+      - "  ]"
+    giuste: [3]
+    spiegazione: >-
+      Il pattern `".*"` include tutti i file e le cartelle nascoste nella radice del progetto, esponendo file
+      delicati e riservati come `.env`.
+    sbagliate:
+      - risposta: 1
+        perche: "Il pattern `\"docs/*.md\"` seleziona unicamente la documentazione Markdown nella cartella dedicata."
+      - risposta: 2
+        perche: "Il pattern `\"src/**/*.ts\"` autorizza la lettura del solo codice sorgente TypeScript del progetto."
+
+  - id: l02-e04
+    tipo: trova-riga
+    obiettivo: O5
+    difficolta: 1
+    fonte: F6
+    consegna: "In questa configurazione ben strutturata del chiringuito, quale riga rappresenta la protezione critica che richiede conferma umana prima di una pubblicazione remota?"
+    etichetta: "permessi-chiringuito.json"
+    righe:
+      - '  "permissions": {'
+      - '    "read:**": "allow",'
+      - '    "edit:src/**": "allow",'
+      - '    "git:push": "ask",'
+      - '    "bash:rm -rf *": "deny"'
+      - "  }"
+    giuste: [3]
+    spiegazione: >-
+      La regola `"git:push": "ask"` richiede espressamente conferma all'utente prima di sincronizzare le
+      modifiche sul server remoto, prevenendo rilasci involontari senza bloccare il flusso locale.
+    sbagliate:
+      - risposta: 1
+        perche: "La regola con `read:**` permette la lettura ordinaria del repository per consentire l'analisi del codice."
+      - risposta: 4
+        perche: "La regola con `bash:rm -rf *` vieta categoricamente la cancellazione massiva senza possibilità di richiesta."
+
+  - id: l02-e05
+    tipo: abbina
+    obiettivo: O1
+    difficolta: 1
+    fonte: F5
+    consegna: "Abbina ogni risposta dell'harness all'effetto operativo che produce sull'azione richiesta."
+    coppie:
+      - sinistra: "permetti (allow)"
+        destra: "l'azione viene eseguita subito senza interruzioni per l'utente"
+      - sinistra: "chiedi conferma (ask)"
+        destra: "l'harness attende l'approvazione esplicita dell'utente prima di procedere"
+      - sinistra: "vieta (deny)"
+        destra: "l'azione viene bloccata a priori e viene segnalato un errore all'agente"
+    spiegazione: >-
+      Le policy dell'harness smistano ogni chiamata tra esecuzione autonoma, approvazione presidiata o blocco
+      preventivo immediato.
+    sbagliate:
+      - risposta:
+          sinistra: "chiedi conferma (ask)"
+          destra: "l'azione viene bloccata a priori e viene segnalato un errore all'agente"
+        perche: "Chiedere conferma non blocca l'azione ma delega la scelta finale all'approvazione umana."
+      - risposta:
+          sinistra: "vieta (deny)"
+          destra: "l'azione viene eseguita subito senza interruzioni per l'utente"
+        perche: "Il divieto impedisce categoricamente l'avvio del comando nel sistema."
+
+  - id: l02-e06
+    tipo: ordina
+    obiettivo: O4
+    difficolta: 2
+    fonte: F5
+    consegna: "In nikcli (F5) vince l'ultima regola che corrisponde. Metti in ordine come l'harness decide su un'azione di un agente."
+    elementi:
+      - "Mette in fila le regole globali"
+      - "Aggiunge in coda le regole dell'agente"
+      - "Cerca l'ultima regola che corrisponde all'azione"
+      - "Applica il suo esito, oppure chiede conferma se nessuna regola corrisponde"
+    spiegazione: >-
+      Le regole dell'agente vengono dopo quelle globali: siccome vince l'ultima che corrisponde, prevalgono. Se
+      nessuna regola corrisponde, nikcli chiede conferma.
+    sbagliate:
+      - risposta: [1, 0, 2, 3]
+        perche: "Se le regole dell'agente stessero prima, quelle globali scritte dopo le sovrascriverebbero: prevalgono proprio perché vengono dopo."
+      - risposta: [0, 1, 3, 2]
+        perche: "L'esito si conosce solo dopo aver trovato la regola che corrisponde all'azione."
+
+  - id: l02-e07
+    tipo: scelta
+    obiettivo: O3
+    difficolta: 1
+    fonte: F5
+    consegna: "Una configurazione contiene in sequenza: \"bash:deploy.sh\": \"deny\" e poi \"bash:*\": \"allow\". Cosa accade eseguendo deploy.sh in un harness dove vince l'ultima regola (come nikcli, F5)?"
+    opzioni:
+      - "Il comando viene eseguito senza chiedere conferma perché la regola successiva sovrascrive il divieto"
+      - "Il comando viene rifiutato perché qualsiasi divieto ha sempre la precedenza assoluta"
+      - "L'harness chiede sempre conferma all'utente inviando una notifica sonora"
+      - "Il repository viene clonato automaticamente in una directory temporanea"
+    giusta: 0
+    spiegazione: >-
+      Negli ambienti dove vince l'ultima corrispondenza, la regola jolly successiva `bash:*` cancella l'effetto del
+      divieto precedente autorizzando il comando.
+    sbagliate:
+      - risposta: 1
+        perche: "In nikcli (F5) la valutazione è sequenziale: non esiste priorità implicita del divieto sull'ultima regola corrispondente."
+      - risposta: 2
+        perche: "L'harness applica la regola risolta (`allow`) ed esegue il comando direttamente."
+      - risposta: 3
+        perche: "La valutazione dei permessi non altera la struttura dei repository su disco."
+
+  - id: l02-e08
+    tipo: scelta
+    obiettivo: O3
+    difficolta: 2
+    fonte: F6
+    consegna: "Data la stessa sequenza (\"bash:deploy.sh\": \"deny\" e \"bash:*\": \"allow\"), cosa accade invece in un harness che valuta prima i divieti (come Claude Code, F6)?"
+    opzioni:
+      - "L'harness chiede all'utente una password di amministratore a ogni riga di log"
+      - "Il comando deploy.sh viene bloccato perché i divieti sono esaminati prima dei permessi generali"
+      - "L'harness esegue il comando deploy.sh ignorando del tutto il divieto specificato"
+      - "Il comando viene convertito in uno script PowerShell e inviato via email"
+    giusta: 1
+    spiegazione: >-
+      In Claude Code (F6) l'ordine delle righe nel file non conta: i divieti vengono valutati a priori, bloccando
+      `deploy.sh` a prescindere dal jolly di permesso.
+    sbagliate:
+      - risposta: 0
+        perche: "L'harness gestisce il diniego direttamente senza richiedere credenziali di amministrazione."
+      - risposta: 2
+        perche: "Nel modello a priorità di severità i divieti battono sempre i permessi, anche se scritti prima nel file."
+      - risposta: 3
+        perche: "L'elaborazione delle policy si limita a consentire o negare l'esecuzione del comando richiesto."
+
+  - id: l02-e09
+    tipo: abbina
+    obiettivo: O5
+    difficolta: 2
+    fonte: F6
+    consegna: "Abbina ciascuna strategia di configurazione alla conseguenza corrispondente sulla sicurezza."
+    coppie:
+      - sinistra: "richiedere conferma per qualsiasi lettura o modifica di file"
+        destra: "fatica da conferma: l'utente approva tutto senza prestare attenzione"
+      - sinistra: "autorizzare letture non rischiose e chiedere conferma per azioni distruttive"
+        destra: "equilibrio efficace: l'utente legge con attenzione solo gli avvisi critici"
+      - sinistra: "impostare allow indiscriminato su tutti i comandi di sistema"
+        destra: "assenza di protezione: comandi dannosi possono colpire senza controllo"
+    spiegazione: >-
+      Un numero eccessivo di richieste svilisce il controllo umano; autorizzare le azioni innocue e vigilare solo
+      sulle criticità preserva l'attenzione dell'utente.
+    sbagliate:
+      - risposta:
+          sinistra: "richiedere conferma per qualsiasi lettura o modifica di file"
+          destra: "assenza di protezione: comandi dannosi possono colpire senza controllo"
+        perche: "Chiedere sempre conferma non azzera la configurazione, ma induce l'utente ad approvare senza riflettere."
+      - risposta:
+          sinistra: "impostare allow indiscriminato su tutti i comandi di sistema"
+          destra: "equilibrio efficace: l'utente legge con attenzione solo gli avvisi critici"
+        perche: "Permettere qualsiasi comando toglie ogni filtro preventivo aprendo il sistema a ogni rischio."
+
+  - id: l02-e10
+    tipo: completa
+    obiettivo: O1
+    difficolta: 1
+    fonte: F5
+    consegna: "Completa la frase."
+    testo: "Una regola di permesso può restituire tre risposte: [[1]] per eseguire subito, chiedi conferma oppure [[2]] per bloccare l'azione."
+    banca: ["permetti", "vieta", "rileggi", "ignora", "esporta"]
+    giusta: ["permetti", "vieta"]
+    spiegazione: >-
+      Le policy dell'harness si articolano nella triade essenziale: esecuzione diretta (permetti), controllo umano
+      (chiedi conferma) e blocco (vieta).
+    sbagliate:
+      - risposta: ["ignora", "vieta"]
+        perche: "Il termine per l'autorizzazione diretta è permetti (allow), non ignora."
+      - risposta: ["permetti", "rileggi"]
+        perche: "L'esito di blocco preventivo viene definito con il divieto (deny), non con una rilettura."
+
+  - id: l02-e11
+    tipo: completa
+    obiettivo: O4
+    difficolta: 1
+    fonte: F5
+    consegna: "Completa la frase."
+    testo: "In nikcli (F5), le regole configurate per un singolo [[1]] prevalgono su quelle della configurazione [[2]]."
+    banca: ["agente", "globale", "remoto", "chiuso", "server"]
+    giusta: ["agente", "globale"]
+    spiegazione: >-
+      I permessi specialistici assegnati a un agente delimitato hanno la precedenza sulle direttive generiche
+      condivise dall'intero progetto.
+    sbagliate:
+      - risposta: ["server", "globale"]
+        perche: "La gerarchia dei permessi interni confronta l'agente individuale con la policy globale dell'harness."
+      - risposta: ["agente", "chiuso"]
+        perche: "La contrapposizione corretta è tra la regola per l'agente specifico e il profilo globale del sistema."
+
+# Dubbi e note:
+# - Spiegati entrambi gli ordini di valutazione: F5 (nikcli, ultima vince) e F6 (Claude Code, prima i divieti).
+# - Rispettate le regole su trova-riga: riferimenti solo per contenuto, mai numeri.
+# - Esplicitato il rischio della fatica da conferma (approval fatigue).

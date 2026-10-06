@@ -1,0 +1,326 @@
+id: cybersecurity/05-errori-log-strati
+versione: 1.0.0
+lingua: it
+tema: cybersecurity
+unita: 1
+numero: 5
+titolo: "Errori, log e difese a strati"
+durata_min: 4
+livello: 2
+prerequisiti:
+  - cybersecurity/04-segreti-password
+stato: rivista
+autori:
+  bozza: agy
+  revisione: Architetto
+
+obiettivi:
+  - id: O1
+    testo: "Riconoscere messaggi di errore che espongono dettagli tecnici interni e applicare la separazione tra log e avvisi utente."
+  - id: O2
+    testo: "Identificare quali informazioni devono comparire nei log di sicurezza e quali dati riservati non devono mai esservi inclusi."
+  - id: O3
+    testo: "Spiegare il principio di fallire chiusi garantendo che un'eccezione imprevista provochi il diniego dell'accesso."
+  - id: O4
+    testo: "Descrivere il principio della difesa a strati per assicurare che il cedimento di una barriera non comprometta l'intero sistema."
+  - id: O5
+    testo: "Applicare le quattro domande della modellazione delle minacce per individuare e mitigare i rischi nei servizi del progetto."
+
+fonti:
+  - id: F1
+    titolo: "OWASP Top 10"
+    url: "https://owasp.org/Top10/"
+  - id: F11
+    titolo: "OWASP Cheat Sheet, Error Handling"
+    url: "https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html"
+  - id: F12
+    titolo: "OWASP Cheat Sheet, Logging"
+    url: "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+  - id: F13
+    titolo: "OWASP, Threat Modeling"
+    url: "https://owasp.org/www-community/Threat_Modeling"
+
+teoria:
+  - id: T1
+    obiettivi: [O1, O2]
+    fonti: [F1, F11, F12]
+    testo: >-
+      I messaggi mostrati agli utenti finali devono essere generici: rivelare stack trace, frammenti di query o
+      percorsi di sistema fornisce dettagli preziosi a un attaccante. La diagnostica dettagliata va destinata ai
+      **log di sicurezza** interni. Un log ben strutturato registra: chi ha agito, quale azione è stata
+      tentata, la data-ora e l'esito; non deve invece **mai registrare password**, token o dati personali
+      riservati.
+  - id: T2
+    obiettivi: [O3, O4]
+    fonti: [F1, F11]
+    testo: >-
+      Il principio di **fallire chiusi** prescrive che, se un controllo fallisce per un'eccezione imprevista, il
+      sistema deve negare l'accesso. Nessuna protezione singola è infallibile: per questo si adottano
+      **difese a strati**. Per un agente AI, i permessi minimi, l'isolamento in sandbox, la conferma umana per
+      azioni critiche e il monitoraggio collaborano: se una barriera cede, le altre limitano il danno.
+  - id: T3
+    obiettivi: [O5]
+    fonti: [F13]
+    testo: >-
+      La **modellazione delle minacce** (*threat modeling*) anticipa i problemi prima di scrivere il codice. Si
+      fonda su quattro domande essenziali: su che cosa stiamo lavorando? Che cosa può andare storto? Che cosa
+      facciamo per rimediare? Abbiamo fatto un buon lavoro di verifica? Applicare queste domande a ogni nuovo
+      servizio permette di prevenire le criticità invece di inseguirle dopo il rilascio.
+
+esercizi:
+  - id: l05-e01
+    tipo: trova-riga
+    obiettivo: O1
+    difficolta: 1
+    fonte: F11
+    consegna: "In questa route per gli ordini del chiringuito, quale riga restituisce al client lo stack trace e i dettagli della query SQL interna?"
+    etichetta: "gestione-ordini.ts"
+    righe:
+      - "app.post('/api/ordini', async (req, res) => {"
+      - "  try {"
+      - "    await processaPagamento(req.body);"
+      - "    res.json({ completato: true });"
+      - "  } catch (errore) {"
+      - "    res.status(500).json({ errore: errore.stack, query: errore.sql });"
+      - "  }"
+      - "});"
+    giuste: [5]
+    spiegazione: >-
+      La riga con `res.status(500).json` trasmette all'esterno lo stack trace e la query SQL, esponendo nomi di
+      tabelle e percorsi interni del server. La correzione è registrare l'errore nel log del server e rispondere
+      al client con un messaggio generico.
+    sbagliate:
+      - risposta: 3
+        perche: "La riga con `res.json({ completato: true })` restituisce la conferma di successo al client in assenza di eccezioni."
+      - risposta: 4
+        perche: "Il blocco `catch (errore)` intercetta l'eccezione ed è corretto catturarla: il difetto risiede nella riga successiva che espone i dettagli tecnici al client."
+
+  - id: l05-e02
+    tipo: trova-riga
+    obiettivo: O3
+    difficolta: 2
+    fonte: F11
+    consegna: "In questa funzione per l'accesso al faro, quale riga concede l'accesso in caso di eccezione violando il principio di fallire chiusi?"
+    etichetta: "controllo-accesso.ts"
+    righe:
+      - "export async function verificaAccessoFaro(utenteId: string): Promise<boolean> {"
+      - "  try {"
+      - "    return await servizioPermessi.haAutorizzazione(utenteId);"
+      - "  } catch (eccezione) {"
+      - "    console.warn('Servizio permessi non raggiungibile');"
+      - "    return true;"
+      - "  }"
+      - "}"
+    giuste: [5]
+    spiegazione: >-
+      La riga con `return true` restituisce `true` quando il servizio permessi lancia un'eccezione, aprendo
+      l'accesso in caso di guasto. Il principio di «fallire chiusi» impone di negare l'accesso (restituendo
+      `false`) ogni volta che la verifica non può concludersi con successo.
+    sbagliate:
+      - risposta: 2
+        perche: "La riga con `servizioPermessi.haAutorizzazione` effettua la verifica autorizzativa ordinaria interrogando il servizio dedicato."
+      - risposta: 4
+        perche: "La riga con `console.warn` registra l'avviso di mancata raggiungibilità, operazione corretta dal punto di vista diagnostico."
+
+  - id: l05-e03
+    tipo: trova-riga
+    obiettivo: O2
+    difficolta: 1
+    fonte: F12
+    consegna: "In questa procedura di login, quale riga scrive la password in chiaro nei log del server?"
+    etichetta: "login-servizio.ts"
+    righe:
+      - "export async function eseguiAccesso(email: string, pass: string) {"
+      - "  const utente = await db.trovaPerEmail(email);"
+      - "  console.log('[TENTATIVO LOGIN]', email, 'con password:', pass);"
+      - "  const valida = await confrontaHash(pass, utente.hash);"
+      - "  return valida;"
+      - "}"
+    giuste: [2]
+    spiegazione: >-
+      La riga con `console.log` stampa la password dell'utente nel file di log. Le credenziali non devono mai
+      comparire nei registri. La correzione è registrare solo il tentativo di login con l'indirizzo email e
+      l'esito, omettendo la password.
+    sbagliate:
+      - risposta: 1
+        perche: "La riga con `db.trovaPerEmail` cerca il record dell'utente sul database a partire dall'indirizzo email fornito."
+      - risposta: 3
+        perche: "La riga con `confrontaHash` confronta la password inserita con l'hash salvato tramite una funzione sicura."
+
+  - id: l05-e04
+    tipo: ordina
+    obiettivo: O5
+    difficolta: 1
+    fonte: F13
+    consegna: "Metti in ordine le quattro domande fondamentali della modellazione delle minacce (Threat Modeling)."
+    elementi:
+      - "Su che cosa stiamo lavorando?"
+      - "Che cosa può andare storto?"
+      - "Che cosa facciamo per mitigare i rischi?"
+      - "Abbiamo fatto un buon lavoro di verifica?"
+    spiegazione: >-
+      Si definisce l'ambito di lavoro, si analizzano le minacce potenziali, si stabiliscono le contromisure
+      adeguate e infine si valida l'efficacia del risultato ottenuto.
+    sbagliate:
+      - risposta: [1, 0, 2, 3]
+        perche: "Prima di identificare cosa può andare storto occorre definire con esattezza il sistema su cui si sta lavorando."
+      - risposta: [0, 2, 1, 3]
+        perche: "Non si possono definire le contromisure prima di aver analizzato i possibili scenari di fallimento o rischio."
+
+  - id: l05-e05
+    tipo: ordina
+    obiettivo: O4
+    difficolta: 2
+    fonte: F1
+    consegna: "Metti in ordine quando interviene ciascuna difesa durante un compito dell'agente: prima di iniziare, mentre esegue, prima di un'azione critica, dopo."
+    elementi:
+      - "Assegnazione preventiva dei soli permessi minimi necessari al compito"
+      - "Isolamento dell'esecuzione del codice all'interno di una sandbox"
+      - "Richiesta di conferma umana prima di azioni distruttive o pagamenti"
+      - "Registrazione delle operazioni nei log di controllo per l'ispezione successiva"
+    spiegazione: >-
+      La sequenza temporale corretta parte dai permessi minimi prima di avviare il compito, prosegue con
+      l'isolamento in sandbox durante l'esecuzione, richiede conferma umana prima di un'azione critica e termina
+      registrando l'audit nei log.
+    sbagliate:
+      - risposta: [3, 0, 1, 2]
+        perche: "Il registro raccoglie ciò che è successo: interviene durante e dopo, non prima di assegnare i permessi."
+      - risposta: [0, 2, 1, 3]
+        perche: "La sandbox è attiva per tutta l'esecuzione, mentre la conferma umana interviene solo davanti a una specifica azione critica."
+
+  - id: l05-e06
+    tipo: abbina
+    obiettivo: O2
+    difficolta: 1
+    fonte: F12
+    consegna: "Abbina ogni dato alla sua corretta destinazione nei log di sistema."
+    coppie:
+      - sinistra: "codice di stato HTTP della risposta ed esito dell'azione"
+        destra: "nel log: indispensabile per monitoraggio e diagnostica degli accessi"
+      - sinistra: "codice di sicurezza CVV o password digitata dall'utente"
+        destra: "mai nel log: dato altamente riservato che non deve comparire nei registri"
+      - sinistra: "identificativo dell'account utente e data-ora della richiesta"
+        destra: "nel log: essenziale per stabilire chi e quando ha svolto l'operazione"
+    spiegazione: >-
+      I log devono contenere metadati sufficienti per la verifica degli eventi (chi, quando, cosa, esito), ma
+      non devono mai raccogliere credenziali o dati protetti.
+    sbagliate:
+      - risposta:
+          sinistra: "codice di sicurezza CVV o password digitata dall'utente"
+          destra: "nel log: indispensabile per monitoraggio e diagnostica degli accessi"
+        perche: "Le credenziali e i codici di sicurezza bancari non devono mai essere trascritti nei registri di log."
+      - risposta:
+          sinistra: "codice di stato HTTP della risposta ed esito dell'azione"
+          destra: "mai nel log: dato altamente riservato che non deve comparire nei registri"
+        perche: "Il codice di stato HTTP è un dato diagnostico standard essenziale per individuare anomalie di funzionamento."
+
+  - id: l05-e07
+    tipo: scelta
+    obiettivo: O1
+    difficolta: 1
+    fonte: F11
+    consegna: "Perché mostrare un errore con stack trace e dettagli interni a un utente esterno è considerato un rischio?"
+    opzioni:
+      - "Perché rivela dettagli tecnici interni su file, percorsi e librerie utili per pianificare attacchi mirati"
+      - "Perché costringe il server a riavviarsi a ogni segnalazione di errore"
+      - "Perché il browser blocca automaticamente la connessione se riceve testi lunghi"
+      - "Perché l'utente finale potrebbe cancellare autonomamente il database dal browser"
+    giusta: 0
+    spiegazione: >-
+      Mostrare lo stack trace fornisce all'esterno una mappa precisa del server: percorsi del file system,
+      nomi di moduli, query SQL e versioni software facilitano attacchi mirati.
+    sbagliate:
+      - risposta: 1
+        perche: "Inviare un messaggio di errore è una normale risposta HTTP e non provoca il riavvio del server."
+      - risposta: 2
+        perche: "I browser gestiscono normalmente corpi di risposta di qualsiasi dimensione senza interrompere la connessione."
+      - risposta: 3
+        perche: "Un utente remoto non può interagire direttamente con i file fisici del database attraverso la schermata di errore."
+
+  - id: l05-e08
+    tipo: scelta
+    obiettivo: O4
+    difficolta: 2
+    fonte: F1
+    consegna: "Cosa significa il principio delle difese a strati (defense in depth) applicato alla sicurezza informatica?"
+    opzioni:
+      - "Affidarsi a un singolo componente di sicurezza purché sia certificato a livello internazionale"
+      - "Installare tre antivirus identici sulla stessa macchina per raddoppiare la velocità di scansione"
+      - "Prevedere molteplici barriere di protezione indipendenti, in modo che se una cede le altre limitino l'impatto"
+      - "Disattivare tutti i controlli software per affidarsi unicamente alla protezione fisica della sede"
+    giusta: 2
+    spiegazione: >-
+      Nessun controllo è infallibile: progettare barriere successive e coordinate fa sì che l'eventuale
+      aggiramento di una difesa venga comunque bloccato o circoscritto dagli strati successivi.
+    sbagliate:
+      - risposta: 0
+        perche: "Affidarsi a un solo controllo crea un singolo punto di fallimento critico per l'intera infrastruttura."
+      - risposta: 1
+        perche: "Replicare lo stesso identico strumento non crea difese diversificate e può causare conflitti software."
+      - risposta: 3
+        perche: "La sicurezza fisica è solo uno dei tanti strati e non può sostituire le protezioni logiche e applicative."
+
+  - id: l05-e09
+    tipo: scelta
+    obiettivo: O3
+    difficolta: 2
+    fonte: F11
+    consegna: "Un servizio di controllo autorizzazioni va in errore. Come deve comportarsi un'applicazione che applica il principio di «fallire chiusi»?"
+    opzioni:
+      - "Consentire l'accesso provvisoriamente per non scontentare gli utenti connessi"
+      - "Rifiutare l'accesso, registrare l'errore nei log interni e mostrare un avviso di servizio non disponibile"
+      - "Assegnare all'utente i privilegi di amministratore fino al ripristino del servizio"
+      - "Cancellare tutti i record di prenotazione per preservare l'integrità del database"
+    giusta: 1
+    spiegazione: >-
+      Nel dubbio o in presenza di guasti ai moduli di verifica, lo stato sicuro di default è sempre il blocco
+      preventivo dell'azione, accompagnato dalla notifica ai tecnici tramite i log.
+    sbagliate:
+      - risposta: 0
+        perche: "Aprire l'accesso in caso di guasto viola il principio di sicurezza, esponendo le risorse a qualsiasi utente."
+      - risposta: 2
+        perche: "Elevare i privilegi durante un malfunzionamento amplifica drasticamente i rischi di compromissione."
+      - risposta: 3
+        perche: "Cancellare i dati provoca una perdita irreversibile e non costituisce una gestione corretta delle eccezioni."
+
+  - id: l05-e10
+    tipo: completa
+    obiettivo: O1
+    difficolta: 1
+    fonte: F11
+    consegna: "Completa la frase."
+    testo: "I dettagli tecnici e lo stack trace devono essere inviati solo ai [[1]] interni, mentre all'utente esterno va mostrato un avviso [[2]]."
+    banca: ["log", "generico", "browser", "dettagliato", "comandi"]
+    giusta: ["log", "generico"]
+    spiegazione: >-
+      La diagnostica completa serve a chi sviluppa e amministra il sistema e va archiviata nei registri protetti;
+      l'interfaccia deve presentare un messaggio semplice che non sveli dettagli architetturali.
+    sbagliate:
+      - risposta: ["browser", "dettagliato"]
+        perche: "Mostrare lo stack trace nel browser espone la configurazione interna a potenziali attaccanti."
+      - risposta: ["log", "dettagliato"]
+        perche: "All'utente esterno non deve essere mostrato un avviso dettagliato contenente informazioni di sistema."
+
+  - id: l05-e11
+    tipo: completa
+    obiettivo: O5
+    difficolta: 2
+    fonte: F13
+    consegna: "Completa la frase."
+    testo: "Nella modellazione delle minacce prima si analizza cosa può andare [[1]], poi si pianificano le misure per [[2]] il rischio."
+    banca: ["storto", "mitigare", "bene", "cancellare", "chiudere"]
+    giusta: ["storto", "mitigare"]
+    spiegazione: >-
+      Il processo di threat modeling parte dall'identificazione delle potenziali minacce e prosegue con la
+      scelta delle adeguate misure di mitigazione e contenimento del rischio.
+    sbagliate:
+      - risposta: ["bene", "mitigare"]
+        perche: "L'analisi dei rischi non si sofferma su ciò che va bene, ma esamina specificamente gli scenari di fallimento."
+      - risposta: ["storto", "cancellare"]
+        perche: "In sicurezza i rischi non si possono cancellare magicamente, ma si mitigano e si gestiscono con controlli mirati."
+
+# Dubbi e note:
+# - Rispettate le regole di sicurezza: nessun payload o exploit, pseudo-TypeScript per gestione errori e log.
+# - Presenti 3 esercizi trova-riga su codice (stack trace in risposta, fail open in catch, logging password in chiaro).
+# - Fonti usate: F1 (OWASP Top 10), F11 (Error Handling), F12 (Logging), F13 (Threat Modeling).
+# - Cose da non dire: nessun cenno a log usati solo per debug, nessun cenno a difese singole autosufficienti.

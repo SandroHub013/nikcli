@@ -1,3 +1,8 @@
+if (typeof document === "undefined") {
+  const { GlobalRegistrator } = await import("@happy-dom/global-registrator")
+  GlobalRegistrator.register()
+}
+
 import { describe, expect, mock, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -58,6 +63,7 @@ interface Lesson {
 }
 const content = JSON.parse(readFileSync(join(import.meta.dir, "content.json"), "utf8")) as Content
 const lezioni: Lesson[] = content.percorsi.flatMap((percorso) => percorso.lezioni)
+const primoPercorso = content.percorsi[0].lezioni
 const esercizi: Exercise[] = lezioni.flatMap((lezione) => lezione.esercizi)
 
 /** The answer the lesson says is right. */
@@ -182,11 +188,11 @@ describe("what an answer is worth", () => {
   })
 
   test("the ripasso is the exercises whose day has come, and nothing that is not there", () => {
-    const esercizio = esercizi[0]
+    const esercizio = primoPercorso[0].esercizi[0]
     const progress = recordAnswer(emptyProgress(), esercizio, true, "2026-10-01")
-    expect(dueReview(progress, lezioni, "2026-10-01")).toEqual([])
-    expect(dueReview(progress, lezioni, "2026-10-02")).toEqual([{ lezione: lezioni[0], esercizio }])
-    expect(dueReview(progress, lezioni, "2026-11-01")).toEqual([{ lezione: lezioni[0], esercizio }])
+    expect(dueReview(progress, primoPercorso, "2026-10-01")).toEqual([])
+    expect(dueReview(progress, primoPercorso, "2026-10-02")).toEqual([{ lezione: primoPercorso[0], esercizio }])
+    expect(dueReview(progress, primoPercorso, "2026-11-01")).toEqual([{ lezione: primoPercorso[0], esercizio }])
   })
 })
 
@@ -254,7 +260,7 @@ describe("the presentation is mixed from a seed, not from luck", () => {
     expect(shuffle(lezione.esercizi, seedOf(lezione.id))).toEqual(primo)
     expect(shuffle(lezione.esercizi, seedOf(lezione.id) + 1)).not.toEqual(primo)
     // And the real ids give different orders, so the path is not a page that always looks the same.
-    expect(new Set(lezioni.map((voce) => shuffle(voce.esercizi, seedOf(voce.id))[0].id)).size).toBe(lezioni.length)
+    expect(new Set(primoPercorso.map((voce) => shuffle(voce.esercizi, seedOf(voce.id))[0].id)).size).toBe(primoPercorso.length)
   })
 })
 
@@ -371,8 +377,8 @@ describe("the page and ADE, over one port", () => {
     const via = port()
     offer(parent, [via])
     const lista = document.querySelectorAll(".lesson")
-    expect(lista).toHaveLength(lezioni.length)
-    expect(lista[0]?.querySelector(".testo span")?.textContent).toBe(lezioni[0].titolo)
+    expect(lista).toHaveLength(primoPercorso.length)
+    expect(lista[0]?.querySelector(".testo span")?.textContent).toBe(primoPercorso[0].titolo)
     const invia = (data: unknown) => (via.onmessage as (event: unknown) => void)({ data })
     invia({ type: "progress", progress: { v: 1, xp: 90, giorni: ["2026-10-06"], esercizi: {} } })
     expect(document.getElementById("summary")?.textContent).toContain("90 XP")
@@ -400,10 +406,10 @@ describe("the page and ADE, over one port", () => {
     offer(parent, [via])
     // The first lesson: its theory, then all of its exercises.
     document.querySelector<HTMLButtonElement>(".lesson")!.click()
-    const teoria = lezioni[0].teoria.length
+    const teoria = primoPercorso[0].teoria.length
     for (let i = 0; i < teoria; i += 1) document.querySelector<HTMLButtonElement>(".azioni button.principale")!.click()
     const visti = new Set<string>()
-    for (let n = 0; n < lezioni[0].esercizi.length + 1; n += 1) {
+    for (let n = 0; n < primoPercorso[0].esercizi.length + 1; n += 1) {
       const box = document.querySelector<HTMLElement>(".esercizio[data-esercizio]")
       if (!box) break
       visti.add(box.dataset.esercizio!)
@@ -417,18 +423,18 @@ describe("the page and ADE, over one port", () => {
       expect(salvati(via)).toHaveLength(n + 1)
       document.querySelector<HTMLButtonElement>('[data-slot="prossima"]')!.click()
     }
-    expect(visti.size).toBe(lezioni[0].esercizi.length)
+    expect(visti.size).toBe(primoPercorso[0].esercizi.length)
     const salvato = salvati(via).at(-1) as { progress: { v: number; xp: number; giorni: string[]; esercizi: Record<string, unknown> } }
     expect(salvato.progress.v).toBe(1)
     // A wrong answer is worth something too: two XP for having read why.
-    expect(salvato.progress.xp).toBe(lezioni[0].esercizi.length * 2)
+    expect(salvato.progress.xp).toBe(primoPercorso[0].esercizi.length * 2)
     expect(salvato.progress.giorni).toHaveLength(1)
     expect(Object.keys(salvato.progress.esercizi)).toEqual([...visti])
     // The end of the lesson, and back to the list.
-    expect(document.querySelector(".esercizio h2")?.textContent).toBe(`Fine di ${lezioni[0].titolo}`)
+    expect(document.querySelector(".esercizio h2")?.textContent).toBe(`Fine di ${primoPercorso[0].titolo}`)
     expect(document.querySelector(".cifre")?.textContent).toContain("11")
     document.querySelector<HTMLButtonElement>('[data-slot="torna"]')!.click()
-    expect(document.querySelectorAll(".lesson")).toHaveLength(lezioni.length)
+    expect(document.querySelectorAll(".lesson")).toHaveLength(primoPercorso.length)
   })
 })
 

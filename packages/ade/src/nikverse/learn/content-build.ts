@@ -16,6 +16,10 @@ import { join } from "node:path"
 /** The theme's name as the user reads it. The YAML carries the key, not the title. */
 export const THEMES: Readonly<Record<string, string>> = {
   "agenti-llm": "Agenti e LLM",
+  ai: "AI",
+  cyber: "Cybersecurity",
+  cybersecurity: "Cybersecurity",
+  harness: "Harness",
 }
 
 /** What the JSON says it is, so a page served from an older ADE can say so instead of guessing. */

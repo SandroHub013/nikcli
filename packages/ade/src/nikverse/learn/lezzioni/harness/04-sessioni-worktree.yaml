@@ -1,0 +1,288 @@
+id: harness/04-sessioni-worktree
+versione: 1.0.0
+lingua: it
+tema: harness
+unita: 1
+numero: 4
+titolo: "Sessioni e lavoro in parallelo"
+durata_min: 4
+livello: 2
+prerequisiti:
+  - harness/03-contesto-compattazione
+stato: rivista
+autori:
+  bozza: agy
+  revisione: Architetto
+
+obiettivi:
+  - id: O1
+    testo: "Distinguere continuare una sessione, riprenderne una vecchia e biforcarla (fork), con che cosa si porta dietro ciascuna."
+  - id: O2
+    testo: "Spiegare perché due agenti nella stessa cartella si pestano i piedi con modifiche sovrascritte, test su file a metà e commit mescolati."
+  - id: O3
+    testo: "Descrivere che cos'è un worktree di git come cartella separata collegata a un branch distinto dello stesso repository."
+  - id: O4
+    testo: "Riconoscere che cosa i worktree condividono comunque (branch, cronologia e stash) e ricordare che git stash è visibile ovunque."
+  - id: O5
+    testo: "Applicare la regola «un compito, un branch, una cartella» ed evitare comandi distruttivi o reset nella cartella condivisa."
+
+fonti:
+  - id: F10
+    titolo: "nikcli docs, Sessions"
+    url: "https://github.com/nikcli/nikcli/blob/live-main/packages/web/src/pages/docs/sessions.astro"
+  - id: F11
+    titolo: "git-worktree"
+    url: "https://git-scm.com/docs/git-worktree"
+  - id: F12
+    titolo: "Common workflows"
+    url: "https://code.claude.com/docs/en/common-workflows"
+
+teoria:
+  - id: T1
+    obiettivi: [O1]
+    fonti: [F10]
+    testo: >-
+      L'harness consente diverse modalità di gestione delle sessioni (F10). Si può **continuare** la conversazione
+      corrente mantenendo la memoria recente, **riprendere** una sessione archiviata ripartendo dal suo ultimo stato,
+      oppure **biforcare** (*fork*) una sessione per esplorare un'ipotesi alternativa senza alterare la cronologia
+      originale. La biforcazione eredita il contesto fino a quel punto ma crea una linea di dialogo indipendente.
+  - id: T2
+    obiettivi: [O2, O3]
+    fonti: [F11, F12]
+    testo: >-
+      Far lavorare due agenti contemporaneamente nella stessa cartella di lavoro causa disastri: file sovrascritti,
+      test eseguiti su codice a metà e commit disordinati. La soluzione offerta da git è il **worktree** (F11):
+      creare una cartella separata associata a un branch dedicato dello stesso repository. Ogni agente opera così
+      nel proprio spazio di lavoro, con la regola: «**un compito, un branch, una cartella**».
+  - id: T3
+    obiettivi: [O4, O5]
+    fonti: [F11, F12]
+    testo: >-
+      Un worktree non è un archivio isolato: fa capo allo stesso database di git e **condivide** con gli altri
+      worktree la cronologia dei commit, l'elenco dei branch e soprattutto lo **stash** (`git stash`). Salvare
+      modifiche in stash in un worktree le rende visibili anche negli altri. Per questo non si usano mai reset
+      distruttivi e ogni agente si limita al proprio branch, lasciando la fusione (*merge*) finale a chi coordina.
+
+esercizi:
+  - id: l04-e01
+    tipo: trova-riga
+    obiettivo: O2
+    difficolta: 1
+    fonte: F12
+    consegna: "In questo log operativo di due agenti che lavorano contemporaneamente nella stessa cartella del faro, quale riga evidenzia la perdita del lavoro svolto dal primo agente?"
+    etichetta: "conflitto-cartella.log"
+    righe:
+      - "[10:02:00] Agente-A: scrive la funzione di calcolo rotta in src/navigazione.ts"
+      - "[10:02:15] Agente-B: apre il proprio file src/meteo.ts"
+      - "[10:02:30] Agente-B: sovrascrive src/navigazione.ts con la versione precedente del repository"
+      - "[10:02:45] Agente-A: esegue i test e fallisce perché le modifiche sono scomparse"
+    giuste: [2]
+    spiegazione: >-
+      La riga in cui `Agente-B` sovrascrive `src/navigazione.ts` mostra la cancellazione del codice scritto pochi secondi
+      prima da `Agente-A`, causata dalla condivisione della medesima cartella di lavoro.
+    sbagliate:
+      - risposta: 0
+        perche: "La riga con la prima scrittura di `Agente-A` descrive la legittima creazione della funzionalità richiesta."
+      - risposta: 3
+        perche: "La riga con il fallimento dei test subisce l'effetto del conflitto ma è la riga di sovrascrittura a causare la perdita."
+
+  - id: l04-e02
+    tipo: trova-riga
+    obiettivo: O4
+    difficolta: 2
+    fonte: F11
+    consegna: "In questo piano per coordinare due agenti su branch distinti tramite worktree, quale passaggio usa erroneamente git stash come se fosse uno spazio privato e isolato?"
+    etichetta: "piano-parallelo.md"
+    righe:
+      - "- Creare due worktree separati per il servizio meteo e il servizio ordini"
+      - "- Eseguire l'analisi del codice ciascuno nel proprio branch"
+      - "- Salvare le bozze provvisorie nello stash, per tenerle lontane dall'altro agente"
+      - "- Eseguire i test di regressione locali prima di aprire la pull request"
+    giuste: [2]
+    spiegazione: >-
+      La riga che suggerisce di «salvare le bozze provvisorie nello stash» commette un errore grave: lo stash di
+      git è globale e condiviso da tutti i worktree del repository, rischiando collisioni tra agenti.
+    sbagliate:
+      - risposta: 0
+        perche: "La creazione di due worktree distinti garantisce l'isolamento delle cartelle di lavoro per ciascun compito."
+      - risposta: 3
+        perche: "Eseguire i test locali nel proprio branch è una prassi corretta e sicura prima della consegna."
+
+  - id: l04-e03
+    tipo: abbina
+    obiettivo: O1
+    difficolta: 1
+    fonte: F10
+    consegna: "Abbina ciascuna operazione sulla sessione alla sua caratteristica operativa."
+    coppie:
+      - sinistra: "continuare una sessione"
+        destra: "proseguire il dialogo corrente mantenendo la memoria recente intatta"
+      - sinistra: "riprendere una sessione passata"
+        destra: "riaprire un dialogo archiviato ripartendo dal suo ultimo turno salvato"
+      - sinistra: "biforcare (fork) una sessione"
+        destra: "creare una copia indipendente ereditando il contesto fino al turno scelto"
+    spiegazione: >-
+      Continuare estende la sequenza attiva, riprendere risveglia un archivio, mentre biforcare permette di
+      esplorare direzioni alternative senza intaccare il passato.
+    sbagliate:
+      - risposta:
+          sinistra: "riprendere una sessione passata"
+          destra: "creare una copia indipendente ereditando il contesto fino al turno scelto"
+        perche: "Riaprire una sessione passata ne riprende la linea storica originale senza duplicarla in un nuovo ramo."
+      - risposta:
+          sinistra: "biforcare (fork) una sessione"
+          destra: "proseguire il dialogo corrente mantenendo la memoria recente intatta"
+        perche: "Biforcare genera una derivazione separata anziché limitarsi a prolungare la conversazione attiva."
+
+  - id: l04-e04
+    tipo: abbina
+    obiettivo: O1
+    difficolta: 2
+    fonte: F10
+    consegna: "Abbina ogni esigenza di lavoro all'azione più appropriata sulla sessione."
+    coppie:
+      - sinistra: "provare un refactoring rischioso senza perdere la discussione principale"
+        destra: "biforcare (fork) la sessione su un ramo esplorativo autonomo"
+      - sinistra: "aggiungere un piccolo ritocco alla funzione appena completata"
+        destra: "continuare la sessione attiva con il contesto ancora caldo"
+      - sinistra: "verificare un bug segnalato su un'attività conclusa ieri"
+        destra: "riprendere la sessione specifica dedicata a quel compito"
+    spiegazione: >-
+      Scegliere la corretta modalità di sessione preserva il contesto utile evitando di inquinare cronologie
+      pulite con tentativi sperimentali.
+    sbagliate:
+      - risposta:
+          sinistra: "provare un refactoring rischioso senza perdere la discussione principale"
+          destra: "continuare la sessione attiva con il contesto ancora caldo"
+        perche: "Continuare nella sessione principale inquinerebbe la cronologia in caso di esperimento fallito."
+      - risposta:
+          sinistra: "verificare un bug segnalato su un'attività conclusa ieri"
+          destra: "biforcare (fork) la sessione su un ramo esplorativo autonomo"
+        perche: "Per riesaminare un'attività terminata è sufficiente riprendere la sessione salvata anziché duplicarla."
+
+  - id: l04-e05
+    tipo: ordina
+    obiettivo: O3
+    difficolta: 1
+    fonte: F11
+    consegna: "Metti in ordine i comandi necessari per allestire un ambiente di lavoro parallelo pulito tramite git worktree."
+    elementi:
+      - "Verificare di trovarsi nella cartella principale del repository git"
+      - "Creare un nuovo branch dedicato al compito specifico"
+      - "Aggiungere un nuovo worktree associato al nuovo branch in una cartella parallela"
+      - "Avviare la sessione dell'agente indirizzandola nella cartella del worktree"
+    spiegazione: >-
+      Si prepara il branch a monte, si genera la cartella separata con git worktree e vi si indirizza l'agente
+      per garantire perfetto isolamento del filesystem.
+    sbagliate:
+      - risposta: [2, 0, 1, 3]
+        perche: "La creazione del worktree richiede di specificare il branch dedicato e la cartella del repository madre."
+      - risposta: [0, 3, 1, 2]
+        perche: "Non si può avviare l'agente nella cartella del worktree prima che quest'ultimo sia stato creato sul disco."
+
+  - id: l04-e06
+    tipo: ordina
+    obiettivo: O5
+    difficolta: 2
+    fonte: F12
+    consegna: "Metti in ordine i passaggi con cui un compito svolto in parallelo su un worktree viene verificato e integrato."
+    elementi:
+      - "L'agente completa le modifiche ed esegue i test nella cartella del proprio worktree"
+      - "L'agente esegue il commit e notifica il completamento dell'attività"
+      - "Il coordinatore esamina le modifiche ed esegue il merge nel branch principale"
+      - "Rimozione del worktree completato e pulizia ordinata del branch"
+    spiegazione: >-
+      L'agente non deve mai forzare modifiche sul ramo comune: testa e committa nel proprio spazio, lasciando la
+      fusione e la bonifica al supervisore.
+    sbagliate:
+      - risposta: [2, 0, 1, 3]
+        perche: "Il coordinatore non può integrare il lavoro prima che l'agente abbia testato e salvato le modifiche."
+      - risposta: [0, 3, 1, 2]
+        perche: "Non si elimina il worktree prima che il branch sia stato approvato e unito nel ramo principale."
+
+  - id: l04-e07
+    tipo: scelta
+    obiettivo: O2
+    difficolta: 1
+    fonte: F12
+    consegna: "Qual è la principale conseguenza dannosa se due agenti operano contemporaneamente all'interno della stessa cartella di lavoro?"
+    opzioni:
+      - "Il compilatore TypeScript rifiuta di salvare file che contengono più di dieci variabili"
+      - "Gli agenti rischiano di sovrascrivere file a vicenda, eseguire test su stati inconsistenti e mescolare i commit"
+      - "Il computer perde istantaneamente la connessione Wi-Fi per evitare sovraccarichi termici"
+      - "L'editor di testo cancella automaticamente tutte le chiavi SSH memorizzate nel sistema"
+    giusta: 1
+    spiegazione: >-
+      Condividere il medesimo filesystem genera conflitti distruttivi in tempo reale: un agente cancella o
+      modifica ciò che l'altro sta esaminando o testando.
+    sbagliate:
+      - risposta: 0
+        perche: "Il compilatore elabora il codice sorgente indipendentemente dal numero di sessioni aperte."
+      - risposta: 2
+        perche: "I conflitti tra processi locali riguardano file su disco e non alterano l'hardware di rete."
+      - risposta: 3
+        perche: "I file del filesystem vengono toccati solo all'interno del progetto senza impatto sulle chiavi utente."
+
+  - id: l04-e08
+    tipo: scelta
+    obiettivo: O4
+    difficolta: 2
+    fonte: F11
+    consegna: "Cosa condividono tra loro i diversi worktree collegati allo stesso repository git?"
+    opzioni:
+      - "La cronologia dei commit, l'elenco dei branch e il deposito comune dello stash"
+      - "Solo i file di immagine PNG, mentre i sorgenti JavaScript vengono cancellati"
+      - "La cartella dei download personali dell'utente nel sistema operativo"
+      - "Unicamente la stampante predefinita configurata sul computer"
+    giusta: 0
+    spiegazione: >-
+      I worktree condividono l'intero database `.git`: la storia dei commit, i puntatori ai branch e lo stash sono
+      comuni a tutti gli alberi di lavoro.
+    sbagliate:
+      - risposta: 1
+        perche: "Git gestisce uniformemente qualsiasi tipo di file tracciato senza discriminare per estensione."
+      - risposta: 2
+        perche: "I worktree risiedono nelle posizioni indicate dall'utente e non interagiscono con la cartella download."
+      - risposta: 3
+        perche: "La configurazione di git non ha alcuna relazione con le periferiche fisiche di stampa."
+
+  - id: l04-e09
+    tipo: completa
+    obiettivo: O3
+    difficolta: 1
+    fonte: F11
+    consegna: "Completa la frase."
+    testo: "Un worktree di git crea una cartella [[1]] associata a un [[2]] dedicato dello stesso archivio."
+    banca: ["separata", "branch", "compressa", "remoto", "blocco"]
+    giusta: ["separata", "branch"]
+    spiegazione: >-
+      La funzionalità worktree consente di avere multiple copie di lavoro collegate ciascuna a un ramo
+      indipendente del repository.
+    sbagliate:
+      - risposta: ["compressa", "branch"]
+        perche: "Il worktree genera una normale cartella di lavoro sul filesystem, non un archivio compresso."
+      - risposta: ["separata", "remoto"]
+        perche: "Ogni worktree fa capo a un branch locale o di tracciamento, non direttamente a un server remoto."
+
+  - id: l04-e10
+    tipo: completa
+    obiettivo: O5
+    difficolta: 1
+    fonte: F12
+    consegna: "Completa la frase."
+    testo: "La regola per il lavoro in parallelo sicuro è un [[1]], un branch e una [[2]] dedicata."
+    banca: ["compito", "cartella", "token", "server", "finestra"]
+    giusta: ["compito", "cartella"]
+    spiegazione: >-
+      Isolare ogni obiettivo in un proprio branch e in una propria cartella previene conflitti e garantisce
+      pulizia nell'integrazione.
+    sbagliate:
+      - risposta: ["token", "cartella"]
+        perche: "La triade metodologica di isolamento si basa su: compito, branch e cartella."
+      - risposta: ["compito", "finestra"]
+        perche: "La protezione richiede una cartella fisica distinta su disco tramite worktree, non una finestra dell'interfaccia."
+
+# Dubbi e note:
+# - Sottolineato che git stash è globale tra tutti i worktree.
+# - Esplicitata la regola: un compito, un branch, una cartella.
+# - Nessun comando distruttivo suggerito.

@@ -1,0 +1,323 @@
+id: cybersecurity/01-input-non-fidato
+versione: 1.0.0
+lingua: it
+tema: cybersecurity
+unita: 1
+numero: 1
+titolo: "Non fidarsi dell'input"
+durata_min: 4
+livello: 1
+prerequisiti: []
+stato: rivista
+autori:
+  bozza: agy
+  revisione: Architetto
+
+obiettivi:
+  - id: O1
+    testo: "Riconoscere le origini di un input non fidato: moduli web, parametri, intestazioni, file e risposte esterne."
+  - id: O2
+    testo: "Spiegare il concetto di confine di fiducia e la necessità di eseguire la validazione sul server."
+  - id: O3
+    testo: "Distinguere una lista di valori ammessi da una lista di valori vietati, motivando la superiorità della prima."
+  - id: O4
+    testo: "Individuare nel codice sorgente l'uso diretto di dati in ingresso senza preventiva convalida di tipo e limiti."
+  - id: O5
+    testo: "Collegare la mancata convalida dei dati alle iniezioni nei prompt degli agenti basati su modelli linguistici."
+
+fonti:
+  - id: F1
+    titolo: "OWASP Top 10"
+    url: "https://owasp.org/Top10/"
+  - id: F2
+    titolo: "MITRE, CWE Top 25 Most Dangerous Software Weaknesses"
+    url: "https://cwe.mitre.org/top25/"
+  - id: F3
+    titolo: "OWASP Cheat Sheet, Input Validation"
+    url: "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html"
+
+teoria:
+  - id: T1
+    obiettivi: [O1, O2]
+    fonti: [F1, F3]
+    testo: >-
+      In informatica, ogni dato esterno è **non fidato**: parametri nell'URL, campi di form, intestazioni HTTP,
+      file caricati e risposte di API terze. Il **confine di fiducia** separa l'esterno dal nucleo
+      dell'applicazione. I controlli nel browser servono alla comodità dell'utente ma si aggirano facilmente: la
+      convalida di sicurezza deve avvenire sempre **sul server**, nel punto esatto di ingresso.
+  - id: T2
+    obiettivi: [O3, O4]
+    fonti: [F2, F3]
+    testo: >-
+      Una lista di valori vietati (*denylist*) cerca di bloccare caratteri o schemi rischiosi, ma fallisce
+      spesso perché le varianti possibili sono infinite. Una **lista di valori ammessi** (*allowlist*) è molto
+      più robusta: stabilisce il tipo atteso, la lunghezza massima e l'intervallo consentito, rifiutando tutto il
+      resto prima che il dato raggiunga la logica applicativa.
+  - id: T3
+    obiettivi: [O5]
+    fonti: [F1]
+    testo: >-
+      Quando un agente software legge un file o un messaggio esterno, si trova nella stessa situazione di un
+      server: riceve dati non fidati. Se il programma inserisce questi testi direttamente nel prompt senza
+      separazione, il modello linguistico può interpretarli come ordini operativi anziché come semplici dati da
+      analizzare. Questa è l'**iniezione nei prompt**: l'equivalente per i modelli linguistici della mancata
+      convalida degli input nel software tradizionale.
+
+esercizi:
+  - id: l01-e01
+    tipo: trova-riga
+    obiettivo: O4
+    difficolta: 1
+    fonte: F3
+    consegna: "In questa funzione per ordinare succhi al chiringuito, quale riga usa la quantità senza verificare che sia un numero positivo e ragionevole?"
+    etichetta: "ordini-chiringuito.ts"
+    righe:
+      - "export async function creaOrdine(richiesta: Request) {"
+      - "  const dati = await richiesta.json();"
+      - "  const quantita = dati.quantita;"
+      - "  const totale = calcolaPrezzo(dati.bevanda) * quantita;"
+      - "  return salvaNelCarrello(dati.tavolo, totale);"
+      - "}"
+    giuste: [3]
+    spiegazione: >-
+      La riga con `calcolaPrezzo(...) * quantita` moltiplica direttamente per `quantita` senza verificare che
+      sia un intero positivo entro un limite consentito (per esempio tra 1 e 50). La correzione consiste nel
+      convalidare tipo e intervallo prima del calcolo.
+    sbagliate:
+      - risposta: 1
+        perche: "La riga con `await richiesta.json()` si limita a estrarre i dati in formato JSON dalla richiesta in arrivo."
+      - risposta: 4
+        perche: "La riga con `salvaNelCarrello` interviene dopo che il calcolo è già stato eseguito con il valore non verificato."
+
+  - id: l01-e02
+    tipo: trova-riga
+    obiettivo: O2
+    difficolta: 2
+    fonte: F3
+    consegna: "In questo endpoint per i visitatori del faro, quale riga si affida a un controllo eseguito unicamente nel browser?"
+    etichetta: "registrazione-faro.ts"
+    righe:
+      - "app.post('/api/visitatori', async (req, res) => {"
+      - "  // Controllo validità email già effettuato nel browser dall'utente"
+      - "  const email = req.body.email;"
+      - "  await db.salvaVisitatore({ email, data: new Date() });"
+      - "  res.status(201).send({ ok: true });"
+      - "});"
+    giuste: [1]
+    spiegazione: >-
+      Il commento che dà per buona la validità nel browser salta il controllo sul server. Qualsiasi utente può
+      inviare richieste dirette al server tramite script o riga di comando. La correzione è ripetere la convalida
+      sul server.
+    sbagliate:
+      - risposta: 2
+        perche: "La riga che legge `req.body.email` estrae il valore: il difetto è dare per scontata la validità dichiarata nel commento precedente."
+      - risposta: 3
+        perche: "La riga con `salvaVisitatore` esegue l'inserimento nel database, subendo l'assenza del controllo preventivo."
+
+  - id: l01-e03
+    tipo: trova-riga
+    obiettivo: O4
+    difficolta: 2
+    fonte: F3
+    consegna: "In questo servizio di archivio, quale riga compone il percorso del file da aprire concatenando il parametro senza convalida?"
+    etichetta: "archivio-referti.ts"
+    righe:
+      - "app.get('/download', (req, res) => {"
+      - "  const nomeFile = req.query.file;"
+      - "  const percorso = '/var/dati/referti/' + nomeFile;"
+      - "  const contenuto = fs.readFileSync(percorso);"
+      - "  res.send(contenuto);"
+      - "});"
+    giuste: [2]
+    spiegazione: >-
+      La riga che compone `percorso` unisce direttamente la stringa della richiesta al percorso cartella senza
+      verificare che il file faccia parte di una lista consentita. La correzione è verificare il nome contro una
+      lista di file ammessi, oppure ricavare il percorso completo e controllare che resti dentro la cartella dei
+      referti.
+    sbagliate:
+      - risposta: 1
+        perche: "La riga che estrae `req.query.file` riceve il parametro: il difetto si manifesta quando viene concatenato senza validazione per comporre il percorso."
+      - risposta: 3
+        perche: "La riga con `readFileSync` legge dal disco, subendo il problema alla radice presente nella composizione del percorso."
+
+  - id: l01-e04
+    tipo: abbina
+    obiettivo: O1
+    difficolta: 1
+    fonte: F1
+    consegna: "Abbina ogni origine di dati alla sua classificazione corretta di sicurezza."
+    coppie:
+      - sinistra: "valore di un cookie inviato dal browser"
+        destra: "non fidato: l'utente o uno script può modificarlo liberamente"
+      - sinistra: "costante definita nel codice sorgente del server"
+        destra: "fidata: stabilita direttamente dallo sviluppatore dell'applicazione"
+      - sinistra: "testo restituito da una chiamata API verso un servizio terzo"
+        destra: "non fidato: può contenere dati imprevisti, alterati o malevoli"
+    spiegazione: >-
+      Solo le costanti interne definite dal programma sono fidate; ogni dato proveniente dall'esterno, anche da
+      altri server o dai cookie, deve essere trattato come non verificato.
+    sbagliate:
+      - risposta:
+          sinistra: "valore di un cookie inviato dal browser"
+          destra: "fidata: stabilita direttamente dallo sviluppatore dell'applicazione"
+        perche: "I cookie viaggiano sulla macchina dell'utente e possono essere alterati a piacimento tramite gli strumenti di sviluppo."
+      - risposta:
+          sinistra: "testo restituito da una chiamata API verso un servizio terzo"
+          destra: "fidata: stabilita direttamente dallo sviluppatore dell'applicazione"
+        perche: "I servizi esterni possono essere compromessi o restituire formati errati: le loro risposte vanno sempre verificate."
+
+  - id: l01-e05
+    tipo: abbina
+    obiettivo: O1
+    difficolta: 1
+    fonte: F1
+    consegna: "Abbina ogni elemento della richiesta al motivo per cui non è sicuro considerarlo fidato a priori."
+    coppie:
+      - sinistra: "intestazione User-Agent"
+        destra: "può essere impostata su qualunque stringa arbitraria dal client HTTP"
+      - sinistra: "campo nascosto in un modulo web"
+        destra: "è visibile e modificabile nel codice della pagina prima dell'invio"
+      - sinistra: "testo generato da un modello linguistico"
+        destra: "può contenere allucinazioni o istruzioni copiate da documenti esterni che ha letto"
+    spiegazione: >-
+      Nessun parametro proveniente dal client o generato da sistemi probabilistici può essere considerato
+      sicuro senza controlli applicativi sul server.
+    sbagliate:
+      - risposta:
+          sinistra: "intestazione User-Agent"
+          destra: "è visibile e modificabile nel codice della pagina prima dell'invio"
+        perche: "Lo User-Agent viene trasmesso nelle intestazioni della richiesta, non all'interno del codice HTML del modulo."
+      - risposta:
+          sinistra: "campo nascosto in un modulo web"
+          destra: "può essere impostata su qualunque stringa arbitraria dal client HTTP"
+        perche: "Il campo nascosto fa parte del form HTML: non è un'intestazione HTTP, ma si modifica facilmente ispezionando la pagina."
+
+  - id: l01-e06
+    tipo: scelta
+    obiettivo: O2
+    difficolta: 1
+    fonte: F3
+    consegna: "Perché un controllo di validità eseguito solo tramite script nel browser non costituisce una difesa sufficiente?"
+    opzioni:
+      - "Perché chiunque può disabilitare gli script o inviare richieste HTTP modificate direttamente al server"
+      - "Perché il browser è sempre più lento del server nell'eseguire controlli di convalida"
+      - "Perché i controlli nel browser funzionano unicamente in assenza di certificati HTTPS"
+      - "Perché il server rifiuta automaticamente ogni dato che sia già stato esaminato dal client"
+    giusta: 0
+    spiegazione: >-
+      I controlli nel client servono per la comodità d'uso, ma non proteggono il sistema: qualsiasi richiesta
+      può essere confezionata direttamente senza passare dall'interfaccia grafica.
+    sbagliate:
+      - risposta: 1
+        perche: "La velocità di esecuzione non ha attinenza con la robustezza del controllo di sicurezza."
+      - risposta: 2
+        perche: "I controlli nel browser funzionano identicamente sia su connessioni HTTP sia su connessioni HTTPS."
+      - risposta: 3
+        perche: "Il server non sa se il client ha eseguito validazioni locali: riceve solo i byte della richiesta HTTP."
+
+  - id: l01-e07
+    tipo: scelta
+    obiettivo: O3
+    difficolta: 2
+    fonte: F3
+    consegna: "Qual è il limite strutturale di una convalida basata esclusivamente su una lista di valori vietati (denylist)?"
+    opzioni:
+      - "Impedisce di usare caratteri numerici all'interno delle stringhe di testo"
+      - "Aumenta la dimensione del database dell'applicazione in modo incontrollato"
+      - "È quasi impossibile prevedere in anticipo tutte le varianti, codifiche e combinazioni dei dati pericolosi"
+      - "Richiede necessariamente l'impiego di una sandbox hardware per ogni controllo"
+    giusta: 2
+    spiegazione: >-
+      Una lista di valori vietati cerca di inseguire tutti i possibili attacchi, ma basta una codifica imprevista
+      per aggirarla. Un'allowlist, che accetta solo formati noti, è più robusta.
+    sbagliate:
+      - risposta: 0
+        perche: "Una denylist può contenere qualsiasi regola sui caratteri, inclusi o esclusi i numeri."
+      - risposta: 1
+        perche: "La convalida dell'input avviene in memoria durante l'elaborazione e non incide sulla capienza del database."
+      - risposta: 3
+        perche: "La validazione dell'input è un controllo software nella logica applicativa e non richiede hardware dedicato."
+
+  - id: l01-e08
+    tipo: completa
+    obiettivo: O3
+    difficolta: 1
+    fonte: F3
+    consegna: "Completa la frase."
+    testo: "Una lista di valori [[1]] definisce con precisione cosa è consentito, risultando più robusta di una lista di valori [[2]]."
+    banca: ["ammessi", "vietati", "casuali", "lunghi", "cancellati"]
+    giusta: ["ammessi", "vietati"]
+    spiegazione: >-
+      L'approccio allowlist autorizza unicamente i formati noti e legittimi; inseguire i valori vietati lascia
+      sempre scoperte varianti non previste da chi ha scritto la regola.
+    sbagliate:
+      - risposta: ["casuali", "vietati"]
+        perche: "La sicurezza non si fonda su liste casuali ma su specifiche formali rigorose dei dati attesi."
+      - risposta: ["ammessi", "lunghi"]
+        perche: "La contrapposizione concettuale e tecnica è tra valori ammessi (allowlist) e valori vietati (denylist)."
+
+  - id: l01-e09
+    tipo: ordina
+    obiettivo: O2
+    difficolta: 1
+    fonte: F3
+    consegna: "Metti in ordine i passaggi corretti nella gestione di un dato ricevuto dal server."
+    elementi:
+      - "Ricezione del dato grezzo al confine di fiducia del server"
+      - "Convalida formale di tipo, lunghezza consentita e intervallo ammesso"
+      - "Rifiuto immediato della richiesta se la convalida non ha esito positivo"
+      - "Uso del dato validato all'interno della logica applicativa del sistema"
+    spiegazione: >-
+      Il dato va ricevuto, analizzato subito prima di qualsiasi operazione, respinto se difforme e utilizzato
+      soltanto se conforme a tutti i vincoli stabiliti.
+    sbagliate:
+      - risposta: [0, 3, 1, 2]
+        perche: "Non si deve mai usare il dato nella logica applicativa prima di aver completato la convalida formale."
+      - risposta: [1, 0, 2, 3]
+        perche: "Non è possibile convalidare un dato prima di averlo ricevuto dal punto di ingresso del server."
+
+  - id: l01-e10
+    tipo: completa
+    obiettivo: O5
+    difficolta: 2
+    fonte: F1
+    consegna: "Completa la frase."
+    testo: "Nel software classico l'input non controllato altera la logica del codice, mentre negli agenti un testo esterno non isolato può provocare un'[[1]] nei [[2]]."
+    banca: ["iniezione", "prompt", "interruzione", "funzioni", "regole"]
+    giusta: ["iniezione", "prompt"]
+    spiegazione: >-
+      L'iniezione nei prompt è la trasposizione nei sistemi AI del mancato controllo degli input: il dato non
+      fidato viene interpretato dal modello come parte delle istruzioni di guida.
+    sbagliate:
+      - risposta: ["interruzione", "funzioni"]
+        perche: "L'errore concettuale analogo non è un semplice crash di funzione ma la deviazione delle istruzioni nel prompt."
+      - risposta: ["iniezione", "regole"]
+        perche: "Nei modelli linguistici l'attacco prende di mira il contesto del prompt, non un file statico di regole."
+
+  - id: l01-e11
+    tipo: scelta
+    obiettivo: O5
+    difficolta: 2
+    fonte: F1
+    consegna: "In che modo l'iniezione indiretta nei prompt assomiglia a una vulnerabilità da input non controllato nel software tradizionale?"
+    opzioni:
+      - "In entrambi i casi i dati vengono cifrati prima di essere analizzati"
+      - "In entrambi i casi dati esterni non fidati vengono trattati dal sistema come istruzioni da eseguire"
+      - "In entrambi i casi il sistema operativo va sempre in arresto anomalo immediato"
+      - "In entrambi i casi l'unica soluzione possibile è spegnere il server"
+    giusta: 1
+    spiegazione: >-
+      La radice comune è l'assenza di separazione rigida tra dati e comandi: nel software convenzionale il
+      dato altera la query o il comando di sistema, nell'agente il dato altera l'intento del prompt.
+    sbagliate:
+      - risposta: 0
+        perche: "Il problema non riguarda la cifratura ma l'interpretazione del contenuto non verificato."
+      - risposta: 2
+        perche: "L'attacco punta a manipolare l'esecuzione o l'agente per scopi non autorizzati, non a causare un crash banale."
+      - risposta: 3
+        perche: "La difesa consiste nella corretta architettura e validazione degli input, non nello spegnimento dei sistemi."
+
+# Dubbi e note:
+# - Rispettate le regole di sicurezza: nessun payload reale, pseudo-TypeScript con difetto evidente e correzione spiegata.
+# - Rispettate le cose da non dire: nessun cenno a formule 'sicuro al 100%', nessun sanitize miracoloso, nessun dato interno ritenuto fidato per fede.
+# - Presenti 3 esercizi di tipo trova-riga su codice con riferimenti per contenuto.

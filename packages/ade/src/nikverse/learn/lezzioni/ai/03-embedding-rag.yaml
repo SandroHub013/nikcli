@@ -1,0 +1,313 @@
+id: ai/03-embedding-rag
+versione: 1.0.0
+lingua: it
+tema: ai
+unita: 1
+numero: 3
+titolo: "Embedding e ricerca per significato"
+durata_min: 4
+livello: 2
+prerequisiti:
+  - ai/02-come-nasce-un-llm
+stato: rivista
+autori:
+  bozza: agy
+  revisione: Architetto
+
+obiettivi:
+  - id: O1
+    testo: "Spiegare che un embedding trasforma un testo in una lista di numeri e che testi simili hanno numeri vicini."
+  - id: O2
+    testo: "Distinguere la ricerca per parole identiche dalla ricerca per significato basata su embedding semantici."
+  - id: O3
+    testo: "Mettere in ordine il flusso del RAG: domanda, ricerca per vicinanza, inserimento nel contesto e risposta."
+  - id: O4
+    testo: "Spiegare perché il RAG riduce le risposte inventate e identificare le cause tipiche di errore residuo."
+  - id: O5
+    testo: "Collegare il recupero di documenti al consumo di token e ai limiti della finestra di contesto."
+
+fonti:
+  - id: F1
+    titolo: "Google, Machine Learning Crash Course"
+    url: "https://developers.google.com/machine-learning/crash-course"
+  - id: F4
+    titolo: "Mikolov e altri, Efficient Estimation of Word Representations in Vector Space (2013)"
+    url: "https://arxiv.org/abs/1301.3781"
+  - id: F5
+    titolo: "Lewis e altri, Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks (2020)"
+    url: "https://arxiv.org/abs/2005.11401"
+
+teoria:
+  - id: T1
+    obiettivi: [O1, O2]
+    fonti: [F4]
+    testo: >-
+      Un **embedding** converte una frase o un termine in una lista di numeri (un vettore). Questa
+      rappresentazione non "capisce" il significato delle parole, ma riflette come le parole vengono usate
+      insieme nei testi: testi con significati affini producono numeri vicini nello spazio numerico. La
+      **ricerca semantica** sfrutta questa vicinanza: se cerchi «auto», trova anche documenti che dicono
+      «macchina» o «veicolo», che una ricerca per parole uguali non trova.
+  - id: T2
+    obiettivi: [O3, O4]
+    fonti: [F5]
+    testo: >-
+      Il **RAG** (*Retrieval-Augmented Generation*) unisce ricerca e generazione. Davanti a una domanda, il
+      sistema cerca i frammenti di testo più vicini nello spazio degli embedding, li inserisce nel contesto e
+      chiede al modello di rispondere basandosi su di essi. Il RAG **riduce le risposte inventate** perché
+      ancora il testo a fonti fornite, ma non le elimina: può sbagliare se recupera un brano irrilevante, se il
+      documento originale è vecchio o se il testo è stato spezzato a metà.
+  - id: T3
+    obiettivi: [O5]
+    fonti: [F1, F5]
+    testo: >-
+      I documenti recuperati dal RAG finiscono direttamente nella finestra di contesto: **occupano token e
+      costano** a ogni turno. Inserire troppi frammenti riempie la finestra, aumenta la spesa e può disperdere
+      l'attenzione del modello tra dettagli secondari. Per un sistema efficace è fondamentale dividere bene i
+      documenti e selezionare solo i brani strettamente necessari per rispondere alla richiesta.
+
+esercizi:
+  - id: l03-e01
+    tipo: scelta
+    obiettivo: O1
+    difficolta: 1
+    fonte: F4
+    consegna: "Che cos'è un embedding nel trattamento del testo?"
+    opzioni:
+      - "Un programma che corregge la grammatica prima dell'inferenza"
+      - "Una lista di numeri che riflette come le parole sono usate insieme nei testi"
+      - "Un algoritmo che comprende il pensiero dell'autore del documento"
+      - "Un archivio compresso di file di testo salvato su disco"
+    giusta: 1
+    spiegazione: >-
+      Un embedding trasforma una sequenza di parole in una serie ordinata di valori numerici. Posizioni vicine
+      nello spazio matematico corrispondono a concetti usati in contesti analoghi nei testi.
+    sbagliate:
+      - risposta: 0
+        perche: "L'embedding trasforma il testo in numeri, non è un correttore ortografico o grammaticale."
+      - risposta: 2
+        perche: "Gli embedding non comprendono pensieri o intenzioni: codificano solo regolarità statistiche tra termini."
+      - risposta: 3
+        perche: "Non è un file compresso: è un vettore numerico calcolato per rappresentare la somiglianza tra testi."
+
+  - id: l03-e02
+    tipo: abbina
+    obiettivo: O1
+    difficolta: 1
+    fonte: F4
+    consegna: "Abbina ogni coppia di frasi alla relazione tra i loro embedding."
+    coppie:
+      - sinistra: "«il treno è in ritardo» e «il convoglio non è puntuale»"
+        destra: "embedding vicini, perché esprimono concetti molto affini"
+      - sinistra: "«la ricetta della torta» e «la pressione atmosferica»"
+        destra: "embedding lontani, perché appartengono ad ambiti del tutto diversi"
+      - sinistra: "«la spiaggia dell'isola» e «la riva del mare»"
+        destra: "embedding vicini, perché i termini ricorrono in contesti analoghi"
+    spiegazione: >-
+      Frasi che esprimono concetti affini o usano vocaboli in contesti sovrapponibili si traducono in vettori
+      vicini tra loro, anche quando usano parole differenti.
+    sbagliate:
+      - risposta:
+          sinistra: "«il treno è in ritardo» e «il convoglio non è puntuale»"
+          destra: "embedding lontani, perché appartengono ad ambiti del tutto diversi"
+        perche: "Pur usando parole diverse, le due frasi descrivono la stessa situazione e hanno embedding molto vicini."
+      - risposta:
+          sinistra: "«la ricetta della torta» e «la pressione atmosferica»"
+          destra: "embedding vicini, perché esprimono concetti molto affini"
+        perche: "I due argomenti non condividono contesti d'uso né vocaboli correlati, quindi i loro vettori saranno distanti."
+
+  - id: l03-e03
+    tipo: scelta
+    obiettivo: O2
+    difficolta: 1
+    fonte: F1
+    consegna: "Un utente cerca «guasto all'automobile». Un documento contiene «la vettura è ferma per un'avaria». Che cosa accade?"
+    opzioni:
+      - "Una ricerca per parole uguali trova il documento, la ricerca per embedding no"
+      - "Entrambi i metodi falliscono perché mancano le virgolette esatte"
+      - "La ricerca semantica trova il documento anche senza parole identiche, quella per parole esatte fallisce"
+      - "I due metodi restituiscono sempre lo stesso identico elenco di risultati"
+    giusta: 2
+    spiegazione: >-
+      La ricerca semantica rileva che «automobile» e «vettura», così come «guasto» e «avaria», sono concetti
+      vicini nello spazio vettoriale, trovando il testo anche in assenza di parole esatte.
+    sbagliate:
+      - risposta: 0
+        perche: "La ricerca per parole esatte fallisce perché i termini non coincidono lettera per lettera."
+      - risposta: 1
+        perche: "Gli embedding catturano le correlazioni d'uso tra 'automobile/vettura' e 'guasto/avaria' senza bisogno di virgolette."
+      - risposta: 3
+        perche: "I due sistemi operano su principi differenti: uno cerca caratteri identici, l'altro vicinanza vettoriale."
+
+  - id: l03-e04
+    tipo: completa
+    obiettivo: O2
+    difficolta: 2
+    fonte: F4
+    consegna: "Completa la frase."
+    testo: "La ricerca tradizionale confronta le [[1]] esatte, mentre la ricerca tramite embedding confronta la [[2]] nello spazio numerico."
+    banca: ["parole", "vicinanza", "lunghezza", "domande", "licenze"]
+    giusta: ["parole", "vicinanza"]
+    spiegazione: >-
+      I motori di ricerca tradizionali cercano la presenza dei caratteri identici, mentre i modelli di embedding
+      misurano la distanza geometrica tra i vettori associati ai testi.
+    sbagliate:
+      - risposta: ["lunghezza", "vicinanza"]
+        perche: "La ricerca tradizionale non si basa sulla lunghezza delle frasi ma sulla corrispondenza letterale dei termini."
+      - risposta: ["parole", "lunghezza"]
+        perche: "Gli embedding non valutano la lunghezza del testo ma la prossimità vettoriale delle rappresentazioni."
+
+  - id: l03-e05
+    tipo: ordina
+    obiettivo: O3
+    difficolta: 1
+    fonte: F5
+    consegna: "Metti in ordine i passaggi dell'indicizzazione dei documenti prima del loro utilizzo in un RAG."
+    elementi:
+      - "Divisione dei documenti originali in frammenti (chunk)"
+      - "Calcolo degli embedding numerici per ciascun frammento"
+      - "Memorizzazione dei vettori e dei testi per la ricerca rapida"
+    spiegazione: >-
+      Prima di poter cercare, i documenti vengono spezzati in porzioni gestibili, ciascuna convertita in vettore
+      e archiviata per permettere il confronto istantaneo con le future domande.
+    sbagliate:
+      - risposta: [1, 0, 2]
+        perche: "Non si possono calcolare gli embedding dei frammenti prima di aver suddiviso i documenti."
+      - risposta: [0, 2, 1]
+        perche: "La memorizzazione avviene dopo aver calcolato i vettori di ciascun blocco di testo."
+
+  - id: l03-e06
+    tipo: ordina
+    obiettivo: O3
+    difficolta: 2
+    fonte: F5
+    consegna: "Metti in ordine i passaggi con cui un sistema RAG risponde a una domanda."
+    elementi:
+      - "L'utente invia la propria domanda al sistema"
+      - "Il sistema calcola l'embedding della domanda e recupera i frammenti più vicini"
+      - "I frammenti recuperati vengono inseriti nel contesto insieme alla domanda"
+      - "Il modello genera la risposta basandosi sulle informazioni nel contesto"
+    spiegazione: >-
+      La domanda viene vettorizzata per trovare i brani più attinenti; questi vengono inseriti nel contesto e
+      guidano la generazione del testo finale.
+    sbagliate:
+      - risposta: [0, 2, 1, 3]
+        perche: "Non è possibile inserire frammenti nel contesto prima di averli ricercati tramite gli embedding."
+      - risposta: [1, 0, 2, 3]
+        perche: "La ricerca dei frammenti pertinenti parte solo dopo che l'utente ha formulato la sua domanda."
+
+  - id: l03-e07
+    tipo: scelta
+    obiettivo: O4
+    difficolta: 2
+    fonte: F5
+    consegna: "Perché l'uso del RAG riduce il rischio di risposte inventate rispetto a un modello senza documenti?"
+    opzioni:
+      - "Perché impedisce al modello di commettere qualsiasi errore di calcolo o sintassi"
+      - "Perché mette nel contesto brani dei documenti a cui ancorare la risposta"
+      - "Perché cancella i parametri vecchi del modello e li sostituisce con i testi nuovi"
+      - "Perché costringe il modello a effettuare una ricerca sull'intero web aperto"
+    giusta: 1
+    spiegazione: >-
+      Fornire estratti documentali pertinenti permette al modello di citare e sintetizzare fatti concreti
+      presenti nel contesto, riducendo la necessità di affidarsi solo alla memoria statistica dei pesi.
+    sbagliate:
+      - risposta: 0
+        perche: "Il RAG fornisce informazioni di supporto ma il modello può comunque fraintendere o sbagliare calcoli."
+      - risposta: 2
+        perche: "I parametri del modello non vengono modificati né cancellati: i documenti entrano nel contesto del turno."
+      - risposta: 3
+        perche: "Il RAG consulta la raccolta di documenti indicizzati nel sistema, non naviga autonomamente sul web aperto."
+
+  - id: l03-e08
+    tipo: trova-riga
+    obiettivo: O4
+    difficolta: 2
+    fonte: F5
+    consegna: "Un RAG deve rispondere a «Quali sono gli orari del faro?». Quale frammento recuperato nel contesto non c'entra con la domanda?"
+    etichetta: "frammenti-recuperati.txt"
+    righe:
+      - "[frammento 1] Il faro dell'isola principale è aperto alle visite dalle 09:00 alle 18:00 nei giorni feriali."
+      - "[frammento 2] La manutenzione della lanterna del faro si svolge ogni martedì alle ore 07:00."
+      - "[frammento 3] La ricetta tradizionale della torta di fichi prevede l'uso di farina di grano antico."
+      - "[frammento 4] Nei giorni festivi l'accesso alla torre del faro è consentito solo su prenotazione dalle 10:00."
+    giuste: [2]
+    spiegazione: >-
+      Il frammento 3 parla di cucina ed è stato recuperato per errore (o per imperfezione dell'indice), quindi
+      non ha alcuna pertinenza con gli orari di apertura del faro.
+    sbagliate:
+      - risposta: 0
+        perche: "Il frammento 1 contiene esattamente gli orari feriali richiesti dall'utente."
+      - risposta: 3
+        perche: "Il frammento 4 descrive le modalità di accesso e gli orari festivi del faro."
+
+  - id: l03-e09
+    tipo: trova-riga
+    obiettivo: O4
+    difficolta: 2
+    fonte: F5
+    consegna: "Il contesto contiene solo la frase «Il porto fu costruito nel 1740 da maestranze locali». Quale riga della risposta inventa un fatto non sostenuto dal contesto?"
+    etichetta: "risposta-generata.txt"
+    righe:
+      - "1. Il porto antico dell'isola risale all'anno 1740."
+      - "2. L'opera fu realizzata interamente da maestranze del luogo."
+      - "3. Il porto dispone di una capienza per oltre trecento imbarcazioni a vela."
+      - "4. In sintesi: il porto ha origini settecentesche."
+    giuste: [2]
+    spiegazione: >-
+      La riga 3 inventa una capacità di trecento imbarcazioni che non è presente né deducibile dal frammento
+      fornito nel contesto.
+    sbagliate:
+      - risposta: 0
+        perche: "La data 1740 è espressamente menzionata nel testo originale."
+      - risposta: 1
+        perche: "La costruzione da parte di maestranze locali è confermata dal documento di origine."
+
+  - id: l03-e10
+    tipo: completa
+    obiettivo: O5
+    difficolta: 2
+    fonte: F1
+    consegna: "Completa la frase."
+    testo: "I testi recuperati dal RAG entrano nella finestra di [[1]], occupando [[2]] che si pagano a ogni turno."
+    banca: ["contesto", "token", "connessione", "memoria", "regole"]
+    giusta: ["contesto", "token"]
+    spiegazione: >-
+      I passaggi estratti dai documenti non agiscono dietro le quinte: diventano testo che occupa spazio nella
+      finestra di contesto, consumando token e aumentando il costo della richiesta.
+    sbagliate:
+      - risposta: ["memoria", "token"]
+        perche: "I frammenti non finiscono in una memoria permanente del modello ma nella finestra di contesto del turno."
+      - risposta: ["contesto", "regole"]
+        perche: "Lo spazio nella finestra viene misurato e tariffato in token, non in regole."
+
+  - id: l03-e11
+    tipo: abbina
+    obiettivo: O5
+    difficolta: 2
+    fonte: F1
+    consegna: "Abbina la gestione dei frammenti RAG alla sua conseguenza pratica."
+    coppie:
+      - sinistra: "recuperare 20 pagine per ogni domanda"
+        destra: "riempie la finestra di contesto, alza i costi in token e può disperdere l'attenzione"
+      - sinistra: "selezionare solo i 2 o 3 brani più pertinenti"
+        destra: "lascia spazio per il dialogo, contiene i consumi e focalizza la generazione"
+      - sinistra: "frammentare i testi tagliando le frasi a metà"
+        destra: "rischia di privare il modello del contesto logico necessario per capire il senso"
+    spiegazione: >-
+      La dimensione e il numero dei frammenti determinano l'equilibrio tra completezza dell'informazione e
+      consumo di token nel contesto.
+    sbagliate:
+      - risposta:
+          sinistra: "recuperare 20 pagine per ogni domanda"
+          destra: "lascia spazio per il dialogo, contiene i consumi e focalizza la generazione"
+        perche: "Inserire troppe pagine appesantisce il contesto invece di contenerne i costi e la dimensione."
+      - risposta:
+          sinistra: "selezionare solo i 2 o 3 brani più pertinenti"
+          destra: "riempie la finestra di contesto, alza i costi in token e può disperdere l'attenzione"
+        perche: "Un numero ridotto di brani selezionati mantiene leggero il contesto e aiuta il modello a concentrarsi."
+
+# Dubbi e note:
+# - F4 per Word2Vec ed embedding semantici.
+# - F5 per RAG e mitigazione delle allucinazioni.
+# - F1 per la gestione del contesto e il costo in token.
+# - Rispettate le cose da non dire: nessun nome di database vettoriale o marchio commerciale.

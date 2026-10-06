@@ -1,0 +1,331 @@
+id: cybersecurity/02-dati-e-codice
+versione: 1.0.0
+lingua: it
+tema: cybersecurity
+unita: 1
+numero: 2
+titolo: "Dati mescolati al codice"
+durata_min: 4
+livello: 2
+prerequisiti:
+  - cybersecurity/01-input-non-fidato
+stato: rivista
+autori:
+  bozza: agy
+  revisione: Architetto
+
+obiettivi:
+  - id: O1
+    testo: "Spiegare il principio comune delle iniezioni: un dato esterno finisce in un interprete e diventa codice eseguibile."
+  - id: O2
+    testo: "Riconoscere query SQL create incollando stringhe e spiegare perché la query parametrizzata è la correzione adeguata."
+  - id: O3
+    testo: "Identificare valori utente inseriti nell'HTML senza codifica contestuale e illustrare il rimedio tramite escape."
+  - id: O4
+    testo: "Riconoscere comandi di sistema composti con stringhe esterne e spiegare la correzione con argomenti separati."
+  - id: O5
+    testo: "Collegare il problema all'iniezione nei prompt evidenziando perché nell'AI non esiste ancora una barriera rigida."
+
+fonti:
+  - id: F1
+    titolo: "OWASP Top 10"
+    url: "https://owasp.org/Top10/"
+  - id: F2
+    titolo: "MITRE, CWE Top 25 Most Dangerous Software Weaknesses"
+    url: "https://cwe.mitre.org/top25/"
+  - id: F4
+    titolo: "OWASP Cheat Sheet, SQL Injection Prevention"
+    url: "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+  - id: F5
+    titolo: "OWASP Cheat Sheet, Cross Site Scripting Prevention"
+    url: "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
+
+teoria:
+  - id: T1
+    obiettivi: [O1, O2]
+    fonti: [F1, F4]
+    testo: >-
+      L'iniezione avviene quando dati esterni vengono incollati direttamente dentro un testo che sarà
+      interpretato come codice. Nelle query SQL, unire stringhe con la concatenazione permette a valori
+      imprevisti di alterare la logica del comando. La correzione principale consiste nell'usare **query
+      parametrizzate**: il database compila prima la struttura del comando e tratta i valori sempre come meri
+      dati letterali, senza mai reinterpretarli.
+  - id: T2
+    obiettivi: [O3, O4]
+    fonti: [F2, F5]
+    testo: >-
+      Lo stesso principio riguarda le pagine web e i comandi di sistema. Se inserisci testo utente in una pagina
+      senza **codifica per il contesto** (*escaping*), il browser può eseguirlo come codice di script. Se
+      assembli un comando shell unendo stringhe, caratteri speciali possono alterare l'azione avviata. La difesa
+      è non usare la shell e passare gli argomenti come **vettore di stringhe separate**, senza
+      interpretazione intermedia.
+  - id: T3
+    obiettivi: [O5]
+    fonti: [F1]
+    testo: >-
+      L'iniezione nei prompt dei modelli linguistici condivide la stessa radice: le istruzioni del sistema e i
+      testi esterni viaggiano insieme come flusso di token. Nel software tradizionale la query parametrizzata
+      separa nettamente comandi e dati a livello di protocollo. Nei modelli linguistici questa barriera rigida
+      non esiste ancora, poiché comandi e contenuti informativi condividono lo stesso canale di elaborazione.
+
+esercizi:
+  - id: l02-e01
+    tipo: trova-riga
+    obiettivo: O2
+    difficolta: 1
+    fonte: F4
+    consegna: "In questa funzione di ricerca per il negozio del porto, quale riga assembla la query concatenando la stringa direttamente nel testo SQL?"
+    etichetta: "ricerca-prodotti.ts"
+    righe:
+      - "export async function cercaProdotto(nome: string) {"
+      - "  const connessione = await ottieniConnessione();"
+      - "  const query = 'SELECT * FROM prodotti WHERE nome = ' + nome;"
+      - "  const risultati = await connessione.esegui(query);"
+      - "  return risultati;"
+      - "}"
+    giuste: [2]
+    spiegazione: >-
+      La riga con `'SELECT * FROM prodotti WHERE nome = ' + nome` concatena direttamente la variabile nella
+      query SQL. Se la variabile contiene frammenti di sintassi SQL, può alterare la logica
+      dell'interrogazione. La correzione è usare una query parametrizzata con segnaposto dedicati.
+    sbagliate:
+      - risposta: 1
+        perche: "La riga con `await ottieniConnessione()` ottiene la connessione al database e non manipola alcuna stringa di interrogazione."
+      - risposta: 3
+        perche: "La riga con `connessione.esegui(query)` esegue la query già assemblata in modo insicuro."
+
+  - id: l02-e02
+    tipo: trova-riga
+    obiettivo: O3
+    difficolta: 2
+    fonte: F5
+    consegna: "In questa funzione che prepara una scheda informativa, quale riga inserisce il commento nell'HTML senza applicare la codifica dei caratteri?"
+    etichetta: "scheda-recensione.ts"
+    righe:
+      - "export function renderRecensione(commento: string) {"
+      - "  const intestazione = '<article class=\"recensione\">';"
+      - "  const contenuto = '<p class=\"testo\">' + commento + '</p>';"
+      - "  const chiusura = '</article>';"
+      - "  return intestazione + contenuto + chiusura;"
+      - "}"
+    giuste: [2]
+    spiegazione: >-
+      La riga con `'<p class=\"testo\">' + commento` inserisce il testo del commento direttamente tra i tag
+      HTML senza codifica. Se il testo contiene caratteri speciali o tag di script, il browser li eseguirà. La
+      correzione è codificare i caratteri (escaping) prima dell'inserimento.
+    sbagliate:
+      - risposta: 1
+        perche: "È testo fisso scritto nel codice: non contiene dati dell'utente."
+      - risposta: 3
+        perche: "La riga con `chiusura` definisce unicamente il tag statico dell'elemento article."
+
+  - id: l02-e03
+    tipo: trova-riga
+    obiettivo: O4
+    difficolta: 2
+    fonte: F2
+    consegna: "In questo script di utilità, quale riga compone il comando concatenando il nome del file passato dall'utente?"
+    etichetta: "converti-anteprima.ts"
+    righe:
+      - "import { exec } from 'node:child_process';"
+      - "export function creaMiniatura(nomeFile: string) {"
+      - "  const comando = 'converti-anteprima /var/immagini/' + nomeFile + ' /var/miniature/out.png';"
+      - "  exec(comando, (err, stdout) => {"
+      - "    if (err) console.error('Errore conversione');"
+      - "  });"
+      - "}"
+    giuste: [2]
+    spiegazione: >-
+      La riga che compone `comando` unendo `nomeFile` concatena il valore in una stringa di comando passata alla
+      shell. La correzione consiste nell'usare funzioni che avviano il programma senza shell, passando gli
+      argomenti come array di stringhe distinte.
+    sbagliate:
+      - risposta: 1
+        perche: "La dichiarazione della funzione riceve l'argomento ma non avvia alcun comando."
+      - risposta: 3
+        perche: "La chiamata a `exec` esegue la stringa: il difetto risiede nella composizione non protetta del comando."
+
+  - id: l02-e04
+    tipo: trova-riga
+    obiettivo: O2
+    difficolta: 2
+    fonte: F4
+    consegna: "Questo codice usa correttamente una query parametrizzata. Quale riga passa il valore al database come parametro separato e protetto?"
+    etichetta: "prenotazioni-porto.ts"
+    righe:
+      - "export async function cercaPrenotazione(db: Database, idUtente: string) {"
+      - "  // ATTENZIONE: query sensibile eseguita sul database centrale"
+      - "  const sql = 'SELECT id, data_arrivo FROM ormeggi WHERE utente_id = $1';"
+      - "  const risposta = await db.query(sql, [idUtente]);"
+      - "  return risposta.righe;"
+      - "}"
+    giuste: [3]
+    spiegazione: >-
+      La riga con `db.query(sql, [idUtente])` passa il valore dentro l'array `[idUtente]`. Il motore del database
+      compila prima l'istruzione SQL con il segnaposto `$1` e tratta il valore strettamente come dato letterale,
+      così il valore non può cambiare la struttura della query.
+    sbagliate:
+      - risposta: 1
+        perche: "Il commento è solo un avviso per gli sviluppatori e non ha alcun effetto operativo sul flusso dati."
+      - risposta: 2
+        perche: "La riga che definisce `sql` imposta la query con il segnaposto: la protezione effettiva avviene con il passaggio dell'array alla riga successiva."
+
+  - id: l02-e05
+    tipo: abbina
+    obiettivo: O1
+    difficolta: 1
+    fonte: F1
+    consegna: "Abbina ogni contesto di esecuzione al meccanismo di protezione raccomandato."
+    coppie:
+      - sinistra: "interrogazione a un database relazionale"
+        destra: "query parametrizzata con segnaposti separati per i dati"
+      - sinistra: "inserimento di testo utente in una pagina web"
+        destra: "codifica dei caratteri speciali specifica per il contesto HTML"
+      - sinistra: "avvio di un programma di utilità dal server"
+        destra: "passaggio degli argomenti come vettore separato senza shell"
+    spiegazione: >-
+      Ogni contesto richiede la corretta separazione tra sintassi e dati: parametri per i database, escaping
+      per il web e vettori di argomenti per i comandi di sistema.
+    sbagliate:
+      - risposta:
+          sinistra: "interrogazione a un database relazionale"
+          destra: "codifica dei caratteri speciali specifica per il contesto HTML"
+        perche: "La codifica HTML serve per il rendering nel browser, mentre per i database la difesa corretta è la query parametrizzata."
+      - risposta:
+          sinistra: "inserimento di testo utente in una pagina web"
+          destra: "passaggio degli argomenti come vettore separato senza shell"
+        perche: "Passare argomenti separati è la tecnica per i comandi di sistema, non per l'incorporamento in pagine web."
+
+  - id: l02-e06
+    tipo: abbina
+    obiettivo: O4
+    difficolta: 2
+    fonte: F2
+    consegna: "Abbina la modalità di esecuzione di un comando alla sua caratteristica di sicurezza."
+    coppie:
+      - sinistra: "esecuzione con stringa passata a una shell di sistema"
+        destra: "pericolosa: la shell interpreta caratteri speciali e separatori"
+      - sinistra: "esecuzione diretta del binario con argomenti in lista"
+        destra: "robusta: gli argomenti vengono trattati come dati senza interpretazione"
+      - sinistra: "convalida del nome del programma contro una allowlist"
+        destra: "preventiva: assicura che vengano avviati solo strumenti autorizzati"
+    spiegazione: >-
+      Evitare la shell elimina l'interpretazione dei metacaratteri; combinare argomenti separati e allowlist dei
+      binari offre la massima robustezza.
+    sbagliate:
+      - risposta:
+          sinistra: "esecuzione con stringa passata a una shell di sistema"
+          destra: "robusta: gli argomenti vengono trattati come dati senza interpretazione"
+        perche: "La shell interpreta i metacaratteri ed è proprio l'origine delle vulnerabilità da iniezione di comandi."
+      - risposta:
+          sinistra: "esecuzione diretta del binario con argomenti in lista"
+          destra: "pericolosa: la shell interpreta caratteri speciali e separatori"
+        perche: "Passare gli argomenti come lista evita la shell e costituisce la prassi sicura raccomandata."
+
+  - id: l02-e07
+    tipo: scelta
+    obiettivo: O1
+    difficolta: 1
+    fonte: F1
+    consegna: "Qual è la causa comune a tutte le vulnerabilità della famiglia injection?"
+    opzioni:
+      - "I dati forniti dall'esterno vengono mescolati alle istruzioni del linguaggio senza una separazione strutturale"
+      - "I server non utilizzano certificati digitali aggiornati per le connessioni di rete"
+      - "Il linguaggio di programmazione non supporta le funzioni asincrone"
+      - "La memoria RAM del computer si satura durante l'elaborazione dei caratteri"
+    giusta: 0
+    spiegazione: >-
+      Qualsiasi iniezione nasce quando un dato esterno finisce dentro una stringa di controllo e viene
+      interpretato dall'interprete (SQL, shell, HTML o LLM) come se facesse parte delle istruzioni di comando.
+    sbagliate:
+      - risposta: 1
+        perche: "I certificati proteggono il canale di trasmissione cifrato ma non impediscono le iniezioni applicative."
+      - risposta: 2
+        perche: "La gestione asincrona riguarda la concorrenza e il flusso di esecuzione, non la separazione tra dati e codice."
+      - risposta: 3
+        perche: "L'iniezione manipola la logica di controllo del linguaggio, non dipende dall'esaurimento della memoria."
+
+  - id: l02-e08
+    tipo: scelta
+    obiettivo: O5
+    difficolta: 2
+    fonte: F1
+    consegna: "Perché con i modelli linguistici è molto più difficile separare dati e istruzioni rispetto a una query SQL?"
+    opzioni:
+      - "Perché i modelli linguistici non accettano testo in lingua italiana"
+      - "Perché nel prompt le istruzioni e i testi esterni viaggiano nello stesso canale di token senza un protocollo rigido"
+      - "Perché i database relazionali costano meno dei modelli linguistici"
+      - "Perché l'hardware delle schede video disattiva i controlli di sicurezza logica"
+    giusta: 1
+    spiegazione: >-
+      In SQL esiste un protocollo binario che separa il comando compilato dai parametri letterali. Nei modelli
+      linguistici attuali tutto il contesto entra come sequenza unificata di token, rendendo permeabile il
+      confine.
+    sbagliate:
+      - risposta: 0
+        perche: "La lingua usata non incide sulla separazione strutturale tra istruzioni e dati nel modello."
+      - risposta: 2
+        perche: "I costi operativi non determinano l'architettura logica di interpretazione dei messaggi."
+      - risposta: 3
+        perche: "L'elaborazione hardware esegue fedelmente i pesi della rete neurale senza alterare regole di sicurezza."
+
+  - id: l02-e09
+    tipo: completa
+    obiettivo: O2
+    difficolta: 1
+    fonte: F4
+    consegna: "Completa la frase."
+    testo: "Invece di unire stringhe per costruire comandi SQL, bisogna usare query [[1]], dove i dati sono passati come [[2]] separati."
+    banca: ["parametrizzate", "parametri", "veloci", "statiche", "cifrati"]
+    giusta: ["parametrizzate", "parametri"]
+    spiegazione: >-
+      Le query parametrizzate garantiscono che i valori esterni siano trattati solo come dati letterali dal
+      motore del database, impedendo qualsiasi alterazione della struttura logica della query.
+    sbagliate:
+      - risposta: ["statiche", "parametri"]
+        perche: "Una query statica non ammette variazioni; la soluzione corretta è la query parametrizzata."
+      - risposta: ["parametrizzate", "cifrati"]
+        perche: "I parametri non richiedono cifratura per prevenire l'iniezione: basta la separazione sintattica."
+
+  - id: l02-e10
+    tipo: completa
+    obiettivo: O3
+    difficolta: 2
+    fonte: F5
+    consegna: "Completa la frase."
+    testo: "Prima di inserire un valore dell'utente in una pagina web, occorre applicare la [[1]] per impedire che i caratteri speciali diventino [[2]]."
+    banca: ["codifica", "codice", "chiusura", "misura", "memoria"]
+    giusta: ["codifica", "codice"]
+    spiegazione: >-
+      L'escaping contestuale trasforma i caratteri con significato speciale in entità innocue, impedendo al
+      browser di eseguirli come markup o script.
+    sbagliate:
+      - risposta: ["chiusura", "codice"]
+        perche: "La tecnica di sicurezza non è la chiusura ma la codifica contestuale (escaping) dei caratteri."
+      - risposta: ["codifica", "memoria"]
+        perche: "L'obiettivo è evitare che il dato sia interpretato come codice eseguibile, non proteggere la memoria."
+
+  - id: l02-e11
+    tipo: ordina
+    obiettivo: O5
+    difficolta: 2
+    fonte: F1
+    consegna: "Metti in ordine i passaggi con cui un dato non fidato può deviare l'esecuzione in un'iniezione."
+    elementi:
+      - "Il sistema riceve un testo dall'esterno contenente formulazioni ambigue"
+      - "Il testo esterno viene accodato direttamente alle istruzioni del programma o dell'agente"
+      - "L'interprete o il modello esamina il flusso unificato senza distinguere l'origine"
+      - "Le direttive contenute nel dato vengono eseguite come se fossero comandi legittimi"
+    spiegazione: >-
+      Senza una barriera strutturale, il testo esterno si fonde con i comandi del sistema e finisce per guidare
+      l'azione dell'interprete o del modello linguistico.
+    sbagliate:
+      - risposta: [1, 0, 2, 3]
+        perche: "Il dato esterno deve prima essere ricevuto dal sistema prima di poter essere inserito nel flusso."
+      - risposta: [0, 2, 1, 3]
+        perche: "L'interprete esamina il flusso solo dopo che il testo esterno vi è stato inserito senza separazione."
+
+# Dubbi e note:
+# - Rispettate le regole di sicurezza: nessuna stringa o payload d'attacco nel codice o nei testi.
+# - Presenti 4 trova-riga su codice con indicazione delle righe per contenuto, incluso il livello pulito.
+# - Fonti: F1 (OWASP Top 10), F2 (CWE Top 25), F4 (SQLi Cheat Sheet), F5 (XSS Cheat Sheet).
