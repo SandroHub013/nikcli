@@ -203,6 +203,54 @@ test("an unverified design is refused: a page opens beside a session only for th
   expect(unverifiedSenderRefusal(verifySender(parseMessage(verified)!, tokenOf))).toBeUndefined()
 })
 
+describe("ade-msg design proponi and attendi", () => {
+  test("proponi carries the folder as written, the shell's folder, whether it waits and for how long", () => {
+    const body = JSON.stringify({
+      kind: "design",
+      op: "proponi",
+      from: "n1-0",
+      folder: ".ade\\design\\DS-t2",
+      cwd: "C:\\p",
+      attendi: true,
+      timeout: 90,
+    })
+    expect(parseMessage(body)).toEqual({
+      kind: "design-proponi",
+      from: "n1-0",
+      token: undefined,
+      folder: ".ade\\design\\DS-t2",
+      cwd: "C:\\p",
+      wait: true,
+      timeout: 90,
+      text: "",
+    })
+    expect(parseMessage(JSON.stringify({ kind: "design", op: "proponi", from: "n1-0" }))).toBeUndefined()
+  })
+
+  test("attendi carries the key; a timeout out of range is the default", () => {
+    const parsed = parseMessage(JSON.stringify({ kind: "design", op: "attendi", from: "n1-0", key: "DS-t2" }))
+    expect(parsed).toMatchObject({ kind: "design-attendi", key: "DS-t2", timeout: 1800 })
+    for (const timeout of [0, -1, 1.5, "60", 86_401])
+      expect(
+        parseMessage(JSON.stringify({ kind: "design", op: "attendi", from: "n1-0", key: "DS-t2", timeout })),
+      ).toMatchObject({ timeout: 1800 })
+    expect(parseMessage(JSON.stringify({ kind: "design", op: "attendi", from: "n1-0" }))).toBeUndefined()
+  })
+
+  test("the sheet with notes is still the plain design", () => {
+    const sheet = parseMessage(JSON.stringify({ kind: "design", from: "n1-0", path: "C:/p/.ade/design/a.html" }))
+    expect(sheet).toMatchObject({ kind: "design", path: "C:/p/.ade/design/a.html" })
+  })
+
+  test("an unverified sender cannot propose nor wait", () => {
+    for (const body of [
+      '{"kind":"design","op":"proponi","from":"","folder":".ade/design/DS1"}',
+      '{"kind":"design","op":"attendi","from":"","key":"DS1"}',
+    ])
+      expect(unverifiedSenderRefusal(parseMessage(body)!)).toStartWith("Rifiutato")
+  })
+})
+
 describe("a terminal pane runs a shell: mail is never typed into it", () => {
   const shell = { id: "n4-3", title: "Terminale", agent: "terminal", status: "idle" }
   const all = [...panes, shell]

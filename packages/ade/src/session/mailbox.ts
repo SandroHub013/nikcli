@@ -83,6 +83,15 @@ export type Message = { from: string; token?: string; text: string } &
      * ADE checks it again (`media.rs`, `design_sheet`). `text` is empty.
      */
     | { kind: "design"; path: string; title?: string }
+    /**
+     * `ade-msg design proponi <cartella>`: a proposal's folder, `.ade/design/<k>/`
+     * of the sender's project, for ADE to read, check and open (`design/propose.ts`).
+     * `folder` as the sender wrote it, `cwd` where its shell was; with `wait`
+     * the sender then waits `timeout` seconds for the user's choice. `text` is empty.
+     */
+    | { kind: "design-proponi"; folder: string; cwd: string; wait: boolean; timeout: number }
+    /** `ade-msg design attendi <k>`: the choice on proposal `key`, now if made, or when it is. `text` is empty. */
+    | { kind: "design-attendi"; key: string; timeout: number }
     /** Withdraws a request the sender made. `text` is empty. */
     | { kind: "cancel"; ref: string }
     /** The sender's word on a native handoff: sent (`ok`), or not, with why in `text`. */
@@ -127,6 +136,17 @@ export function budgetOf(value: unknown): number | undefined {
     : undefined
 }
 
+/** How long `ade-msg design` waits for a choice by default, in seconds, and the longest it may. */
+export const DESIGN_WAIT_DEFAULT = 1800
+export const DESIGN_WAIT_MAX = 86_400
+
+/** The seconds a design wait gives: a whole number from one second to a day, otherwise the default. */
+export function designWaitOf(value: unknown): number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 1 && value <= DESIGN_WAIT_MAX
+    ? value
+    : DESIGN_WAIT_DEFAULT
+}
+
 export function parseMessage(body: string): Message | undefined {
   let raw: unknown
   try {
@@ -168,6 +188,28 @@ export function parseMessage(body: string): Message | undefined {
   if (kind === "interrupt") {
     const to = str("to")
     return to ? { kind, from, token, to, text: "" } : undefined
+  }
+  if (kind === "design" && str("op") === "proponi") {
+    const folder = str("folder")
+    const timeout = designWaitOf(record.timeout)
+    return folder
+      ? {
+          kind: "design-proponi",
+          from,
+          token,
+          folder,
+          cwd: str("cwd"),
+          wait: record.attendi === true,
+          timeout,
+          text: "",
+        }
+      : undefined
+  }
+  if (kind === "design" && str("op") === "attendi") {
+    const key = str("key")
+    return key
+      ? { kind: "design-attendi", from, token, key, timeout: designWaitOf(record.timeout), text: "" }
+      : undefined
   }
   if (kind === "design") {
     const path = str("path")
@@ -283,6 +325,8 @@ const UNVERIFIED_ACTING: ReadonlySet<Message["kind"]> = new Set([
   "interrupt",
   "close",
   "design",
+  "design-proponi",
+  "design-attendi",
 ])
 
 export function unverifiedSenderRefusal(message: Message): string | undefined {

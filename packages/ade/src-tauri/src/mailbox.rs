@@ -335,7 +335,8 @@ pub async fn mailbox_inbox_read(app: tauri::AppHandle, pane: String, name: Strin
 }
 
 /// Publishes a list `ade-msg` prints: `sessions` for `list`, `agents` for
-/// `agents`, `requests` for `status`, `usage` for the help text.
+/// `agents`, `requests` for `status`, `usage` for the help text (`usage-design`,
+/// `usage-decisioni` for `help design` and `help decisioni`).
 #[tauri::command]
 pub async fn mailbox_publish(app: tauri::AppHandle, name: Option<String>, text: String) -> Result<(), String> {
     let name = match name.as_deref() {
@@ -343,6 +344,8 @@ pub async fn mailbox_publish(app: tauri::AppHandle, name: Option<String>, text: 
         Some("agents") => "agents",
         Some("requests") => "requests",
         Some("usage") => "usage",
+        Some("usage-design") => "usage-design",
+        Some("usage-decisioni") => "usage-decisioni",
         Some("stats") => "stats",
         Some(_) => return Err("elenco sconosciuto".into()),
     };
@@ -363,7 +366,7 @@ if (-not $box -or -not (Test-Path $box)) { [Console]::Error.WriteLine('ade-msg: 
 
 function Usage {
   $f = Join-Path $box 'usage.txt'
-  if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami' }
+  if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami | registro | design proponi' }
   exit 1
 }
 function Fail($message) { [Console]::Error.WriteLine("ade-msg: $message"); exit 1 }
@@ -374,6 +377,8 @@ function Has($path) { try { return [IO.File]::Exists($path) } catch { return $fa
 $all = @($args | ForEach-Object { [string]$_ })
 $cmd = if ($all.Count -gt 0) { $all[0] } else { '' }
 $timeout = 110
+$timeoutSet = $false
+$attendi = $false
 $noWait = $false
 $any = $false
 $close = $false
@@ -402,7 +407,7 @@ for ($i = 1; $i -lt $all.Count; $i++) {
   # Options anywhere: agents write them after the text as often as before it.
   if ($true) {
     $hasNext = ($i + 1) -lt $all.Count
-    if ($a -eq '--timeout' -and $hasNext) { try { $timeout = [int]$all[$i + 1] } catch { Usage }; $i++; continue }
+    if ($a -eq '--timeout' -and $hasNext) { try { $timeout = [int]$all[$i + 1]; $timeoutSet = $true } catch { Usage }; $i++; continue }
     elseif ($a -eq '--file' -and $hasNext) { $file = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--name' -and $hasNext) { $name = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--model' -and $hasNext) { $model = $all[$i + 1]; $i++; continue }
@@ -413,6 +418,7 @@ for ($i = 1; $i -lt $all.Count; $i++) {
     elseif ($a -eq '--title' -and $hasNext) { $title = $all[$i + 1]; $i++; continue }
     # D73: seconds, a whole number from 60 to 14400; anything else is a usage error.
     elseif ($a -eq '--budget' -and $hasNext) { $b = 0; if ($all[$i + 1] -notmatch '^[1-9][0-9]*$' -or -not [int]::TryParse($all[$i + 1], [ref]$b) -or $b -lt 60 -or $b -gt 14400) { Usage }; $budget = $b; $i++; continue }
+    elseif ($a -eq '--attendi') { $attendi = $true; continue }
     elseif ($a -eq '--no-wait') { $noWait = $true; continue }
     elseif ($a -eq '--any') { $any = $true; continue }
     elseif ($a -eq '--close') { $close = $true; continue }
@@ -585,7 +591,13 @@ function AwaitIds([string[]]$ids) {
 switch ($cmd) {
   'list' { $f = Join-Path $box 'sessions.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessuna sessione pubblicata' }; exit 0 }
   'agents' { $f = Join-Path $box 'agents.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessun agente pubblicato' }; exit 0 }
-  'help' { $f = Join-Path $box 'usage.txt'; if (Has $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami' }; exit 0 }
+  'help' {
+    # help design, help decisioni: the formats, kept out of the general help that every session reads.
+    $name = if ($head -eq 'design' -or $head -eq 'decisioni') { "usage-$head.txt" } else { 'usage.txt' }
+    $f = Join-Path $box $name
+    if (Has $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami | registro | design proponi' }
+    exit 0
+  }
   'status' { $f = Join-Path $box 'requests.txt'; if (Test-Path $f) { [IO.File]::ReadAllText($f, $utf8) } else { Write-Output 'nessuna richiesta in corso' }; exit 0 }
   'whoami' { Write-Output $env:ADE_PANE_ID; exit 0 }
   'inbox' {
@@ -660,12 +672,51 @@ switch ($cmd) {
     PostAndConfirm ([ordered]@{ kind = 'interrupt'; to = $head })
   }
   'design' {
-    if (-not $head) { Usage }
-    $sheet = if ([IO.Path]::IsPathRooted($head)) { [IO.Path]::GetFullPath($head) } else { [IO.Path]::GetFullPath((Join-Path (Get-Location).ProviderPath $head)) }
-    if (-not (Test-Path -LiteralPath $sheet -PathType Leaf)) { Fail "file non trovato: $head" }
-    $fields = [ordered]@{ kind = 'design'; path = $sheet }
-    if ($title) { $fields['title'] = $title }
-    PostAndConfirm $fields
+    # proponi: ADE reads the folder, checks it and opens the proposal; with --attendi, and with attendi,
+    # this waits for the user's choice as ask waits for an answer, and prints it. Exit 2: no choice yet.
+    if ($head -eq 'proponi' -or $head -eq 'attendi') {
+      if (-not $second) { Usage }
+      $t = if ($timeoutSet) { $timeout } else { 1800 }
+      if ($t -lt 1) { Usage }
+      if ($head -eq 'proponi') {
+        $k = Split-Path -Leaf $second.TrimEnd('\', '/')
+        $fields = [ordered]@{ kind = 'design'; op = 'proponi'; folder = $second; cwd = (Get-Location).ProviderPath; attendi = $attendi; timeout = $t }
+      } else {
+        $k = $second
+        $fields = [ordered]@{ kind = 'design'; op = 'attendi'; key = $k; timeout = $t }
+      }
+      $id = Post $fields
+      $r = Receipt $id
+      if ($null -ne $r -and -not $r.StartsWith('ok')) { Write-Output $r; exit 1 }
+      if ($head -eq 'proponi' -and -not $attendi) {
+        if ($null -eq $r) { Write-Output 'in coda: ADE non ha ancora confermato' } else { Write-Output $r }
+        exit 0
+      }
+      $said = if ($null -eq $r) { 'in coda, ADE non ha ancora confermato' } else { $r }
+      [Console]::Error.WriteLine("ade-msg: $said (richiesta $id), in attesa della scelta...")
+      $late = Join-Path (Join-Path $box 'receipts') "$id.txt"
+      $deadline = [DateTime]::UtcNow.AddSeconds($t)
+      while ([DateTime]::UtcNow -lt $deadline) {
+        # A receipt later than Receipt waited for: a refusal ends the wait instead of sitting it out.
+        if ($null -eq $r -and (Has $late)) {
+          $r = ([IO.File]::ReadAllText($late, $utf8)).Trim()
+          Remove-Item -LiteralPath $late -ErrorAction SilentlyContinue
+          if (-not $r.StartsWith('ok')) { Write-Output $r; exit 1 }
+        }
+        $res = TakeResult $id
+        if ($null -ne $res) { Write-Output $res.Trim(); exit 0 }
+        Start-Sleep -Milliseconds 250
+      }
+      Write-Output "ancora nessuna scelta su $k; riprendi con: ade-msg design attendi $k"
+      exit 2
+    } else {
+      if (-not $head) { Usage }
+      $sheet = if ([IO.Path]::IsPathRooted($head)) { [IO.Path]::GetFullPath($head) } else { [IO.Path]::GetFullPath((Join-Path (Get-Location).ProviderPath $head)) }
+      if (-not (Test-Path -LiteralPath $sheet -PathType Leaf)) { Fail "file non trovato: $head" }
+      $fields = [ordered]@{ kind = 'design'; path = $sheet }
+      if ($title) { $fields['title'] = $title }
+      PostAndConfirm $fields
+    }
   }
   'close' {
     if (-not $head) { Usage }
@@ -727,21 +778,22 @@ case "$(uname -s 2>/dev/null)" in
 esac
 box="$ADE_MAILBOX"
 if [ -z "$box" ] || [ ! -d "$box" ]; then echo "ade-msg: questa shell non e' una sessione avviata da ADE (ADE_MAILBOX mancante)." >&2; exit 2; fi
-usage() { if [ -f "$box/usage.txt" ]; then cat "$box/usage.txt"; else echo "uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami"; fi; exit 1; }
+usage() { if [ -f "$box/usage.txt" ]; then cat "$box/usage.txt"; else echo "uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami | registro | design proponi"; fi; exit 1; }
 fail() { echo "ade-msg: $1" >&2; exit 1; }
 esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -e 's/\r/\\r/g' | awk 'BEGIN{ORS="\\n"} {print}' | sed 's/\\n$//'; }
 valid_id() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac; return 0; }
 
 cmd="$1"; [ $# -gt 0 ] && shift
-timeout=110; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; stdin=0; ttl=0; name=""; model=""; base=""; note=""; effort=""; profile=""; file=""; via=""; budget=""; title=""
-lead=1; case "$cmd" in update|kv|memory|registro) lead=2 ;; esac
+timeout=110; timeout_set=0; attendi=0; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; stdin=0; ttl=0; name=""; model=""; base=""; note=""; effort=""; profile=""; file=""; via=""; budget=""; title=""
+lead=1; case "$cmd" in update|kv|memory|registro|design) lead=2 ;; esac
 n=0; head=""; second=""; text=""; ids=""
 while [ $# -gt 0 ]; do
   a="$1"
   # Options anywhere: agents write them after the text as often as before it.
   if true; then
     case "$a" in
-      --timeout) [ $# -ge 2 ] && { timeout="$2"; shift 2; continue; } ;;
+      --timeout) [ $# -ge 2 ] && { timeout="$2"; timeout_set=1; shift 2; continue; } ;;
+      --attendi) attendi=1; shift; continue ;;
       --file) [ $# -ge 2 ] && { file="$2"; shift 2; continue; } ;;
       --name) [ $# -ge 2 ] && { name="$2"; shift 2; continue; } ;;
       --model) [ $# -ge 2 ] && { model="$2"; shift 2; continue; } ;;
@@ -872,7 +924,10 @@ await() {
 case "$cmd" in
   list) if [ -f "$box/sessions.txt" ]; then cat "$box/sessions.txt"; else echo "nessuna sessione pubblicata"; fi ;;
   agents) if [ -f "$box/agents.txt" ]; then cat "$box/agents.txt"; else echo "nessun agente pubblicato"; fi ;;
-  help) if [ -f "$box/usage.txt" ]; then cat "$box/usage.txt"; else echo "uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami"; fi ;;
+  help)
+    # help design, help decisioni: the formats, kept out of the general help that every session reads.
+    f="$box/usage.txt"; case "$head" in design|decisioni) f="$box/usage-$head.txt" ;; esac
+    if [ -f "$f" ]; then cat "$f"; else echo "uso: ade-msg list | send | ask | spawn | reply | wait | status | cancel | close | agents | whoami | registro | design proponi"; fi ;;
   status) if [ -f "$box/requests.txt" ]; then cat "$box/requests.txt"; else echo "nessuna richiesta in corso"; fi ;;
   whoami) echo "$ADE_PANE_ID" ;;
   inbox)
@@ -922,10 +977,41 @@ case "$cmd" in
     confirm "\"kind\":\"update\",\"ref\":\"$head\",\"state\":\"$second\"" ;;
   interrupt) [ -n "$head" ] || usage; confirm "\"kind\":\"interrupt\",\"to\":\"$(esc "$head")\"" ;;
   design)
-    [ -n "$head" ] || usage
-    [ -f "$head" ] || fail "file non trovato: $head"
-    sheet="$(cd "$(dirname "$head")" && { pwd -W 2>/dev/null || pwd; })/$(basename "$head")"
-    confirm "\"kind\":\"design\",\"path\":\"$(esc "$sheet")\",\"title\":\"$(esc "$title")\"" ;;
+    # proponi: ADE reads the folder, checks it and opens the proposal; with --attendi, and with attendi,
+    # this waits for the user's choice as ask waits for an answer, and prints it. Exit 2: no choice yet.
+    if [ "$head" = proponi ] || [ "$head" = attendi ]; then
+      [ -n "$second" ] || usage
+      t="$timeout"; [ "$timeout_set" = 0 ] && t=1800
+      case "$t" in ''|0|*[!0-9]*) usage ;; esac
+      if [ "$head" = proponi ]; then
+        k="$(basename "$second")"
+        a=false; [ "$attendi" = 1 ] && a=true
+        post "\"kind\":\"design\",\"op\":\"proponi\",\"folder\":\"$(esc "$second")\",\"cwd\":\"$(esc "$(pwd -W 2>/dev/null || pwd)")\",\"attendi\":$a,\"timeout\":$t"
+      else
+        k="$second"
+        post "\"kind\":\"design\",\"op\":\"attendi\",\"key\":\"$(esc "$k")\",\"timeout\":$t"
+      fi
+      if receipt; then case "$r" in ok*) ;; *) echo "$r"; exit 1 ;; esac; else r=""; fi
+      if [ "$head" = proponi ] && [ "$attendi" = 0 ]; then echo "${r:-in coda: ADE non ha ancora confermato}"; exit 0; fi
+      echo "ade-msg: ${r:-in coda, ADE non ha ancora confermato} (richiesta $id), in attesa della scelta..." >&2
+      end=$(( $(date +%s) + t ))
+      while [ "$(date +%s)" -lt "$end" ]; do
+        # A receipt later than receipt() waited for: a refusal ends the wait instead of sitting it out.
+        if [ -z "$r" ] && [ -f "$box/receipts/$id.txt" ]; then
+          r="$(cat "$box/receipts/$id.txt")"; rm -f "$box/receipts/$id.txt"
+          case "$r" in ok*) ;; *) echo "$r"; exit 1 ;; esac
+        fi
+        if take "$id"; then printf '%s\n' "$got"; exit 0; fi
+        sleep 0.25
+      done
+      echo "ancora nessuna scelta su $k; riprendi con: ade-msg design attendi $k"
+      exit 2
+    else
+      [ -n "$head" ] || usage
+      [ -f "$head" ] || fail "file non trovato: $head"
+      sheet="$(cd "$(dirname "$head")" && { pwd -W 2>/dev/null || pwd; })/$(basename "$head")"
+      confirm "\"kind\":\"design\",\"path\":\"$(esc "$sheet")\",\"title\":\"$(esc "$title")\""
+    fi ;;
   close) [ -n "$head" ] || usage; confirm "\"kind\":\"close\",\"to\":\"$(esc "$head")\",\"force\":$force" ;;
   relaunch)
     [ -n "$head" ] || usage
@@ -1266,6 +1352,174 @@ mod tests {
         assert!(valid_id("1757860000000-4242"));
         for bad in ["", "../x", "a/b", "a\\b", "a.json", &"1".repeat(81)] {
             assert!(!valid_id(bad), "{bad} was accepted");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn design_proponi_and_attendi_post_the_folder_the_cwd_and_the_timeout() {
+        let posted = posted_by_ps1("prop", &["design", "proponi", r".ade\design\DS-t2"], None);
+        assert_eq!(posted["kind"], "design");
+        assert_eq!(posted["op"], "proponi");
+        assert_eq!(posted["folder"], r".ade\design\DS-t2");
+        assert_eq!(posted["attendi"], false);
+        assert_eq!(posted["timeout"], 1800);
+        // The folder is judged by ADE against the project: the script resolves nothing, it says where it is.
+        assert!(posted["cwd"].as_str().is_some_and(|cwd| std::path::Path::new(cwd).is_absolute()), "{posted}");
+
+        // These two wait for a choice that never comes here: a short timeout, so the helper's wait ends.
+        let waiting = posted_by_ps1("prop-wait", &["design", "proponi", r".ade\design\DS-t2", "--attendi", "--timeout", "2"], None);
+        assert_eq!(waiting["attendi"], true);
+        assert_eq!(waiting["timeout"], 2);
+
+        let again = posted_by_ps1("att", &["design", "attendi", "DS-t2", "--timeout", "1"], None);
+        assert_eq!(again["op"], "attendi");
+        assert_eq!(again["key"], "DS-t2");
+        assert_eq!(again["timeout"], 1);
+        assert!(PS1.contains("$t = if ($timeoutSet) { $timeout } else { 1800 }"));
+
+        // The sheet with notes still works: told apart by its first argument.
+        let dir = Scratch::new("design-sheet");
+        let sheet = dir.0.join("menu.html");
+        fs::write(&sheet, "<p>menu</p>").unwrap();
+        let shown = posted_by_ps1("sheet", &["design", sheet.to_str().unwrap()], None);
+        assert_eq!(shown["path"], sheet.to_str().unwrap());
+        assert!(shown.get("op").is_none());
+    }
+
+    /// Runs the real `ade-msg.ps1` in `base`: what it printed, how long it took, its exit code.
+    #[cfg(windows)]
+    fn run_ps1_status(base: &std::path::Path, args: &[&str]) -> (String, Duration, Option<i32>) {
+        use std::process::{Command, Stdio};
+        let script = base.join("bin").join("ade-msg.ps1");
+        fs::create_dir_all(base.join("bin")).unwrap();
+        fs::write(&script, PS1).unwrap();
+        let started = std::time::Instant::now();
+        let out = Command::new("powershell.exe")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(&script)
+            .args(args)
+            .current_dir(base)
+            .env("ADE_MAILBOX", base)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        (String::from_utf8_lossy(&out.stdout).into_owned(), started.elapsed(), out.status.code())
+    }
+
+    /// ADE's part for the one message posted: its receipt, then, after a pause, the answer if there is one.
+    #[cfg(windows)]
+    fn answer_design(
+        base: PathBuf,
+        receipt: &'static str,
+        answer: Option<(&'static str, Duration)>,
+    ) -> std::thread::JoinHandle<Option<String>> {
+        std::thread::spawn(move || {
+            let started = std::time::Instant::now();
+            while started.elapsed() < Duration::from_secs(20) {
+                let found = fs::read_dir(base.join("outbox"))
+                    .ok()?
+                    .flatten()
+                    .map(|e| e.path())
+                    .find(|p| p.extension().is_some_and(|x| x == "json"));
+                if let Some(path) = found {
+                    let id = path.file_stem().unwrap().to_string_lossy().into_owned();
+                    let _ = fs::remove_file(&path);
+                    fs::write(base.join("receipts").join(format!("{id}.txt")), receipt).unwrap();
+                    if let Some((text, after)) = answer {
+                        std::thread::sleep(after);
+                        fs::write(base.join("results").join(format!("{id}.txt")), text).unwrap();
+                    }
+                    return Some(id);
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            None
+        })
+    }
+
+    #[cfg(windows)]
+    fn mailbox_scratch(tag: &str) -> Scratch {
+        let scratch = Scratch::new(tag);
+        for dir in ["outbox", "receipts", "results", "bin"] {
+            fs::create_dir_all(scratch.0.join(dir)).unwrap();
+        }
+        scratch
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn design_proponi_attendi_prints_the_choice_when_it_comes_and_leaves_it_claimed() {
+        let scratch = mailbox_scratch("des-answer");
+        let line = "scelta: 2 · Carta — parole: \"ottima\"";
+        let ade = answer_design(scratch.0.clone(), "ok: DS-t2 aperta", Some((line, Duration::from_millis(1500))));
+        let (out, took, code) =
+            run_ps1_status(&scratch.0, &["design", "proponi", r".ade\design\DS-t2", "--attendi", "--timeout", "15"]);
+        let id = ade.join().unwrap().expect("posted");
+        assert_eq!(code, Some(0), "{out}");
+        assert!(took < Duration::from_secs(12), "took too long: {took:?}");
+        assert_eq!(out.trim(), line);
+        // Claimed: nothing left for ADE to take back and type into the terminal.
+        let results = scratch.0.join("results");
+        assert!(!results.join(format!("{id}.txt")).exists());
+        assert_eq!(reclaim_result(&results, &id), None);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn design_without_a_choice_in_time_exits_2_and_says_how_to_resume() {
+        let scratch = mailbox_scratch("des-timeout");
+        let ade = answer_design(scratch.0.clone(), "ok: in attesa della scelta su DS-t2", None);
+        let (out, took, code) = run_ps1_status(&scratch.0, &["design", "attendi", "DS-t2", "--timeout", "2"]);
+        let id = ade.join().unwrap().expect("posted");
+        assert_eq!(code, Some(2), "{out}");
+        assert!(took >= Duration::from_millis(1800), "finished too early: {took:?}");
+        assert!(out.contains("ancora nessuna scelta su DS-t2; riprendi con: ade-msg design attendi DS-t2"), "{out}");
+        // A choice made afterwards is not lost: nobody took it, so ADE takes it back to type it.
+        let results = scratch.0.join("results");
+        fs::write(results.join(format!("{id}.txt")), "scelta: 1 · Scura").unwrap();
+        assert_eq!(reclaim_result(&results, &id).as_deref(), Some("scelta: 1 · Scura"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn design_refused_by_ade_prints_why_and_exits_1() {
+        let scratch = mailbox_scratch("des-refused");
+        let ade = answer_design(scratch.0.clone(), "errore: 1.html: riga 3: src= carica dalla rete", None);
+        let (out, took, code) = run_ps1_status(&scratch.0, &["design", "proponi", r".ade\design\DS-t2", "--attendi"]);
+        let _ = ade.join();
+        assert_eq!(code, Some(1), "{out}");
+        assert!(took < Duration::from_secs(8), "{took:?}");
+        assert!(out.contains("errore: 1.html: riga 3"), "{out}");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn help_design_and_help_decisioni_print_their_own_text() {
+        let scratch = mailbox_scratch("help");
+        fs::write(scratch.0.join("usage.txt"), "generale").unwrap();
+        fs::write(scratch.0.join("usage-design.txt"), "formato design").unwrap();
+        fs::write(scratch.0.join("usage-decisioni.txt"), "regole decisioni").unwrap();
+        assert_eq!(run_ps1_status(&scratch.0, &["help"]).0.trim(), "generale");
+        assert_eq!(run_ps1_status(&scratch.0, &["help", "design"]).0.trim(), "formato design");
+        assert_eq!(run_ps1_status(&scratch.0, &["help", "decisioni"]).0.trim(), "regole decisioni");
+        assert_eq!(run_ps1_status(&scratch.0, &["help", "altro"]).0.trim(), "generale");
+    }
+
+    #[test]
+    fn the_sh_script_has_the_same_design_commands() {
+        // The ps1 is run above; the sh, where no shell can be assumed, is read.
+        assert!(SH.contains(r#"if [ "$head" = proponi ] || [ "$head" = attendi ]; then"#));
+        assert!(SH.contains(r#"\"op\":\"proponi\",\"folder\":\"$(esc "$second")\",\"cwd\":\"$(esc "$(pwd -W 2>/dev/null || pwd)")\",\"attendi\":$a,\"timeout\":$t"#));
+        assert!(SH.contains(r#"\"op\":\"attendi\",\"key\":\"$(esc "$k")\",\"timeout\":$t"#));
+        assert!(SH.contains(r#"t="$timeout"; [ "$timeout_set" = 0 ] && t=1800"#));
+        assert!(SH.contains("echo \"ancora nessuna scelta su $k; riprendi con: ade-msg design attendi $k\"\n      exit 2"));
+        assert!(SH.contains(r#"if take "$id"; then printf '%s\n' "$got"; exit 0; fi"#));
+        assert!(SH.contains("--attendi) attendi=1; shift; continue ;;"));
+        assert!(SH.contains(r#"case "$head" in design|decisioni) f="$box/usage-$head.txt" ;; esac"#));
+        // Both fallbacks of both scripts name the commands an agent needs most.
+        for script in [PS1, SH] {
+            assert_eq!(script.matches("| registro | design proponi").count(), 2);
         }
     }
 }
