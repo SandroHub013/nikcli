@@ -930,7 +930,7 @@ export function Workbench() {
   const withKeys = async () => {
     const host = await getHost()
     if (!host?.listSecrets || !host.saveSecret || !host.deleteSecret || !host.copySecret) {
-      throw new Error("questa versione di ADE non ha il portachiavi")
+      throw new Error(t("keys.error.noKeyring"))
     }
     return host as Required<Pick<typeof host, "listSecrets" | "saveSecret" | "deleteSecret" | "copySecret">>
   }
@@ -1932,7 +1932,7 @@ export function Workbench() {
   const captureFrame = async (name: string, png: Uint8Array): Promise<string> => {
     const host = await getHost()
     const root = project()?.root
-    if (!host?.writeBytes || !root) throw new Error("nessun progetto aperto in cui salvare")
+    if (!host?.writeBytes || !root) throw new Error(t("workbench.error.noOpenProject"))
     const path = `${root.replace(/[/\\]+$/, "")}/.ade/frames/${name}`
     const failure = await host.writeBytes(path, png)
     if (failure) throw new Error(failure)
@@ -3253,7 +3253,7 @@ export function Workbench() {
     }
     if (blocked.size > 0 && !force) {
       return {
-        error: `non chiudo: ${[...blocked.values()].join("; ")}. Integra o committa prima, oppure usa --force (la worktree resta su disco)`,
+        error: t("session.cannotClose", [...blocked.values()].join("; ")),
       }
     }
     const closed: string[] = []
@@ -5835,7 +5835,7 @@ export function Workbench() {
   const pluginIO: DiscoveryIO = {
     async readTextFile(path, maxBytes) {
       const host = await getHost()
-      if (!host?.readTextFile) throw new Error("nessun host desktop")
+      if (!host?.readTextFile) throw new Error(t("plugins.error.noDesktopHost"))
       return host.readTextFile(path, maxBytes)
     },
     async exists(path) {
@@ -8764,7 +8764,7 @@ export function Workbench() {
     pickModel,
     readBytes: (path, maxBytes) =>
       getHost().then((host) => {
-        if (!host?.readBytes) throw new Error("questo host non può leggere file binari")
+        if (!host?.readBytes) throw new Error(t("host.error.cannotReadBinary"))
         return host.readBytes(path, maxBytes)
       }),
     readDir: (path) => getHost().then((host) => (host?.readDir ? host.readDir(path) : [])),

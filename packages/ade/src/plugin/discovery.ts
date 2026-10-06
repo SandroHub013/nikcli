@@ -40,6 +40,7 @@
  * carries a reason so it can be shown rather than guessed at.
  */
 import { pluginOptions, pluginSpecifier, pluginExportEntry, type PluginSpecValue } from "@nikcli-ai/util/plugin-read"
+import { t } from "../i18n"
 
 /** Which surface this discovery is for. The TUI passes `"tui"` for its own. */
 export const ADE_EXPORT_KIND = "ade"
@@ -189,24 +190,24 @@ export function resolveManifestEntry(
   try {
     json = JSON.parse(manifestText)
   } catch {
-    return { reason: "package.json non è JSON valido" }
+    return { reason: t("plugins.error.manifestNotJson") }
   }
-  if (typeof json !== "object" || json === null) return { reason: "package.json non è un oggetto" }
+  if (typeof json !== "object" || json === null) return { reason: t("plugins.error.manifestNotObject") }
 
   const raw = pluginExportEntry(json as Record<string, unknown>, ADE_EXPORT_KIND)
-  if (!raw) return { reason: `il pacchetto non dichiara exports["./${ADE_EXPORT_KIND}"]` }
+  if (!raw) return { reason: t("plugins.error.noExportKind", ADE_EXPORT_KIND) }
 
   const base = directoryOf(manifestUrl)
   let resolved: string
   try {
     resolved = new URL(raw, base).href
   } catch {
-    return { reason: `exports["./${ADE_EXPORT_KIND}"] non è un percorso valido` }
+    return { reason: t("plugins.error.invalidExportPath", ADE_EXPORT_KIND) }
   }
   // The same rule `resolvePluginEntrypoint` enforces with `Filesystem.contains`:
   // a plugin may not point its entrypoint at a file outside its own directory.
   if (!resolved.startsWith(base)) {
-    return { reason: "l'entrypoint del plugin esce dalla cartella del pacchetto" }
+    return { reason: t("plugins.error.escapesPackage") }
   }
   return { entry: resolved }
 }
@@ -225,36 +226,36 @@ export async function resolveDeclaredPlugin(
   if (!isPathSpec(declared.spec)) {
     return {
       ...declared,
-      reason: "i plugin npm non si possono installare dalla finestra desktop: aggiungilo dal terminale, poi riapri ADE",
+      reason: t("plugins.error.npmDesktopNotSupported"),
     }
   }
 
   if (isUncSpec(declared.spec)) {
-    return { ...declared, reason: "i percorsi di rete (UNC) non sono consentiti per i plugin" }
+    return { ...declared, reason: t("plugins.error.uncNotAllowed") }
   }
 
   const url = specToUrl(declared.spec, projectRoot)
-  if (!url) return { ...declared, reason: "percorso del plugin non valido" }
+  if (!url) return { ...declared, reason: t("plugins.error.invalidPluginPath") }
 
   if (/\.(m?js|mjs|jsx)$/i.test(url)) {
-    if (!(await there(io, urlToPath(url)))) return { ...declared, reason: "il file del plugin non esiste" }
+    if (!(await there(io, urlToPath(url)))) return { ...declared, reason: t("plugins.error.fileNotFound") }
     return { ...declared, entry: url }
   }
 
   const manifestUrl = new URL("package.json", url.endsWith("/") ? url : `${url}/`).href
   const manifestPath = urlToPath(manifestUrl)
   if (!(await there(io, manifestPath))) {
-    return { ...declared, reason: "la cartella del plugin non contiene un package.json" }
+    return { ...declared, reason: t("plugins.error.noManifest") }
   }
 
   const manifest = await io.readTextFile(manifestPath).catch(() => undefined)
-  if (!manifest) return { ...declared, reason: "package.json non è leggibile" }
+  if (!manifest) return { ...declared, reason: t("plugins.error.manifestUnreadable") }
 
   const outcome = resolveManifestEntry(manifestUrl, manifest.text)
   if ("reason" in outcome) return { ...declared, reason: outcome.reason }
 
   if (!(await there(io, urlToPath(outcome.entry)))) {
-    return { ...declared, reason: "l'entrypoint dichiarato non esiste" }
+    return { ...declared, reason: t("plugins.error.entrypointNotFound") }
   }
   return { ...declared, entry: outcome.entry }
 }

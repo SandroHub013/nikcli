@@ -108,15 +108,15 @@ export function VideoPane(props: VideoPaneProps) {
   const frameBytes = (): Promise<Uint8Array> =>
     new Promise((resolve, reject) => {
       const video = element
-      if (!video || !video.videoWidth) return reject(new Error("nessun fotogramma disponibile"))
+      if (!video || !video.videoWidth) return reject(new Error(t("video.error.noFrame")))
       const canvas = document.createElement("canvas")
       canvas.width = video.videoWidth
       canvas.height = video.videoHeight
       const context = canvas.getContext("2d")
-      if (!context) return reject(new Error("canvas non disponibile"))
+      if (!context) return reject(new Error(t("video.error.noCanvas")))
       context.drawImage(video, 0, 0, canvas.width, canvas.height)
       canvas.toBlob((blob) => {
-        if (!blob) return reject(new Error("codifica del fotogramma fallita"))
+        if (!blob) return reject(new Error(t("video.error.encodingFailed")))
         void blob.arrayBuffer().then((buffer) => resolve(new Uint8Array(buffer)), reject)
       }, "image/png")
     })
@@ -125,7 +125,7 @@ export function VideoPane(props: VideoPaneProps) {
     state,
     async open(path) {
       if (!isPlayable(path)) {
-        throw new Error(`formato non riproducibile; supportati: ${PLAYABLE_EXTENSIONS.join(", ")}`)
+        throw new Error(t("video.error.unsupportedFormat", PLAYABLE_EXTENSIONS.join(", ")))
       }
       setNote(undefined)
       props.onOpen(path)
@@ -146,7 +146,7 @@ export function VideoPane(props: VideoPaneProps) {
           }
           const failed = () => {
             cleanup()
-            reject(new Error("il file non è leggibile o il formato non è supportato"))
+            reject(new Error(t("video.error.unreadableOrUnsupported")))
           }
           const cleanup = () => {
             video.removeEventListener("loadedmetadata", ready)
@@ -160,7 +160,7 @@ export function VideoPane(props: VideoPaneProps) {
     },
     async play() {
       const video = element
-      if (!video) throw new Error("nessun riproduttore")
+      if (!video) throw new Error(t("video.error.noPlayer"))
       // Rethrown rather than swallowed: a webview refuses to play without a
       // gesture from the user, and it refuses by rejecting. Reported as a
       // success, the agent would capture frames that never move.
@@ -176,7 +176,7 @@ export function VideoPane(props: VideoPaneProps) {
       setRate(next)
     },
     async capture() {
-      if (!props.onCapture) throw new Error("questo host non può scrivere file")
+      if (!props.onCapture) throw new Error(t("video.error.cannotWrite"))
       const bytes = await frameBytes()
       return props.onCapture(frameFileName(props.path, position()), bytes)
     },

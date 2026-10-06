@@ -102,6 +102,71 @@ function sinkTexts(node: ts.Expression, into: string[]): void {
   }
 }
 
+const PROSE_PROPERTIES = new Set(["reason", "problem", "detail", "note", "error"])
+
+/** Files excluded from non-JSX object title property checks (matching pre-F7a2 baseline). */
+function isExcludedTitle(path: string): boolean {
+  const norm = path.replaceAll("\\", "/")
+  return norm.endsWith("release-plan.ts") || norm.includes("nikverse/city/") || norm.includes("/voice/")
+}
+
+/**
+ * Files and zones excluded per-file from the hardcoded prose ratchet (F7a2 review O1).
+ * Never exclude whole folders (session/, bots/, design/, decisions/) so translated
+ * files like worktree-close, metrics, and bots/ remain guarded at 0.
+ */
+const EXCLUDED_PROSE_FILES = new Set([
+  // Excluded zones (per F7a/F7a2 specification):
+  "update/release-plan.ts", // Changelog and release plan generator CLI script
+  "session/permission.ts", // Voice regex dependencies (mapChoiceLabelToItalian)
+
+  // Internal CLI / IPC protocol implementation (ade-msg terminal stdout/stderr, not UI):
+  "session/mailbox.ts", // ade-msg terminal mailbox commands and status formatting
+  "session/orchestra.ts", // Orchestra conductor CLI protocol
+  "session/native-mail.ts", // Native mailbox IPC protocol
+  "session/register-write.ts", // Session registration IPC protocol
+  "session/shared.ts", // Shared session protocol messages
+  "session/quota.ts", // Session quota management CLI protocol
+  "session/quota-pick.ts", // Quota picker CLI protocol
+  "session/senders.ts", // Sender identity resolution protocol
+
+  // Panel IPC handlers (@ade command line terminal reply formatting, not UI components):
+  "panels/router.ts", // @ade command routing
+  "record/record-panel.ts", // @ade record command replies
+  "secrets/keys.ts", // @ade keys CLI command replies
+  "simulator/commands.ts", // @ade simulator terminal commands
+  "video/commands.ts", // @ade video terminal commands
+  "video/video.ts", // Internal video pipeline error formatters
+  "model3d/commands.ts", // @ade model3d terminal commands
+  "browser/request.ts", // @ade browser IPC request handling
+
+  // Dev scripts, test tools and CI guards (never shown in user window):
+  "host/drive-test-app.ts", // Dev test driver script
+  "host/stt-stream.ts", // Speech-to-text audio streaming protocol
+  "update/feed-guard.ts", // CI feed integrity checker script
+  "brand.ts", // Branding CLI tool
+  "plugin/registry.ts", // Internal plugin registry errors
+
+  // Internal data/type mappings:
+  "sidebar/workspace-tree.ts", // AgentDisplayStatus type union mapped via t() in sidebar.tsx
+
+  // Decision, design and bot terminal queue dispatching:
+  "decisions/delivery.ts", // @ade decisions delivery protocol
+  "design/delivery.ts", // @ade design delivery protocol
+  "design/notes.ts", // @ade design notes protocol
+  "bots/runners.ts", // Bot runner execution wrapper
+  "bots/gateway/policy.ts", // Bot gateway access policy check
+])
+
+function isExcludedProse(path: string): boolean {
+  const norm = path.replaceAll("\\", "/")
+  if (norm.includes("nikverse/") || norm.includes("/voice/") || norm.startsWith("voice/")) return true
+  for (const file of EXCLUDED_PROSE_FILES) {
+    if (norm.endsWith(file)) return true
+  }
+  return false
+}
+
 function count(path: string): number {
   const file = ts.createSourceFile(
     path,
@@ -139,13 +204,38 @@ function count(path: string): number {
       ts.isPropertyAssignment(node) &&
       node.name.getText() === "title" &&
       !ts.isJsxAttribute(node.parent) &&
-      !path.replace(/\\/g, "/").endsWith("release-plan.ts") &&
-      !path.replace(/\\/g, "/").includes("nikverse/city/") &&
-      !path.replace(/\\/g, "/").includes("/voice/")
+      !isExcludedTitle(path)
     ) {
       const texts: string[] = []
       sinkTexts(node.initializer, texts)
       found += texts.filter((text) => isText(text.trim())).length
+    } else if (
+      ts.isPropertyAssignment(node) &&
+      PROSE_PROPERTIES.has(node.name.getText()) &&
+      !ts.isJsxAttribute(node.parent) &&
+      !isExcludedProse(path)
+    ) {
+      const texts: string[] = []
+      sinkTexts(node.initializer, texts)
+      found += texts.filter((text) => isProse(text)).length
+    } else if (
+      (ts.isNewExpression(node) ||
+        (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "Error")) &&
+      node.expression.getText() === "Error" &&
+      node.arguments &&
+      !isExcludedProse(path)
+    ) {
+      const texts: string[] = []
+      for (const argument of node.arguments) sinkTexts(argument, texts)
+      found += texts.filter((text) => isProse(text)).length
+    } else if (
+      ts.isReturnStatement(node) &&
+      node.expression &&
+      !isExcludedProse(path)
+    ) {
+      const texts: string[] = []
+      sinkTexts(node.expression, texts)
+      found += texts.filter((text) => isProse(text)).length
     }
     ts.forEachChild(node, visit)
   }
@@ -210,6 +300,39 @@ describe("fixed text in JSX", () => {
     )
     try {
       expect(count(fixtureTs)).toBe(2)
+    } finally {
+      require("node:fs").rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("catches hardcoded prose in reason, problem, detail, note, error, new Error, and return statements", () => {
+    const dir = join(require("node:os").tmpdir(), `ade-hardcoded-props-${process.pid}`)
+    require("node:fs").mkdirSync(dir, { recursive: true })
+    const fixtureTs = join(dir, "fixture.ts")
+    writeFileSync(
+      fixtureTs,
+      [
+        'export const r = { reason: "Nessun dato trovato nel sistema" }',
+        'export const p = { problem: "Impossibile caricare il file selezionato" }',
+        'export const d = { detail: "La connessione è caduta improvvisamente" }',
+        'export const n = { note: "Attenzione alle modifiche non salvate" }',
+        'export const e = { error: "Errore durante il salvataggio dei file" }',
+        'export const err = () => { throw new Error("Questo indirizzo non è valido") }',
+        'export const errNoNew = () => { throw Error("Indirizzo non valido nel modulo") }',
+        'export function askUser() { return "Vuoi procedere con l operazione richiesta?" }',
+        'export const okR = { reason: t("some.reason") }',
+        'export const okP = { problem: t("some.problem") }',
+        'export const okD = { detail: t("some.detail") }',
+        'export const okN = { note: t("some.note") }',
+        'export const okE = { error: t("some.error") }',
+        'export const okErr = () => { throw new Error(t("some.error")) }',
+        'export const okErrNoNew = () => { throw Error(t("some.error")) }',
+        'export function okAsk() { return t("some.question") }',
+        'export const machineCodes = { reason: "timeout", problem: "busy", error: "ENOENT" }',
+      ].join("\n"),
+    )
+    try {
+      expect(count(fixtureTs)).toBe(8)
     } finally {
       require("node:fs").rmSync(dir, { recursive: true, force: true })
     }
