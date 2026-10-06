@@ -216,16 +216,53 @@ pub fn record_start(
     Ok(RecordState { recording: true, path: Some(shown), minimized: false })
 }
 
+/// The header that carries the path of a `record_write`, percent-encoded: a header is ASCII, a path is not.
+const PATH_HEADER: &str = "x-record-path";
+
+/// `%XX` escapes back to bytes, and the bytes to text; anything that is not valid UTF-8 afterwards is refused.
+fn percent_decode(text: &str) -> Result<String, String> {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            let hex = text.get(i + 1..i + 3).ok_or_else(|| "percorso non valido".to_string())?;
+            out.push(u8::from_str_radix(hex, 16).map_err(|_| "percorso non valido".to_string())?);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).map_err(|_| "percorso non valido".to_string())
+}
+
+/// The path and the bytes of a `record_write`: the body is the file, raw, and the path rides in a header.
+///
+/// The bytes used to travel as a JSON array of numbers, about 3.6 characters a byte: an export of 150 MB made a
+/// string past what V8 can hold and the call failed, which is every long recording.
+fn write_request<'a>(body: &'a tauri::ipc::InvokeBody, header: Option<&str>) -> Result<(String, &'a [u8]), String> {
+    match body {
+        tauri::ipc::InvokeBody::Raw(bytes) => {
+            let path = percent_decode(header.ok_or_else(|| "manca il percorso".to_string())?)?;
+            Ok((path, bytes))
+        }
+        tauri::ipc::InvokeBody::Json(_) => Err("il contenuto deve arrivare come byte grezzi".to_string()),
+    }
+}
+
 /// Writes one track of a recent take: the only writing ADE does in that folder.
 #[tauri::command]
-pub async fn record_write(recorder: tauri::State<'_, Recorder>, path: String, contents: Vec<u8>) -> Result<(), String> {
+pub async fn record_write(request: tauri::ipc::Request<'_>, recorder: tauri::State<'_, Recorder>) -> Result<(), String> {
+    let header = request.headers().get(PATH_HEADER).and_then(|value| value.to_str().ok());
+    let (path, contents) = write_request(request.body(), header)?;
     let known = recorder.takes.lock().map_err(|_| "registratore occupato".to_string())?.clone();
     if !known.iter().any(|video| is_track_of(video, &path)) {
         return Err(format!("non è un file di una registrazione recente: {path}"));
     }
     let target = Path::new(&path);
     let temp = PathBuf::from(format!("{path}.tmp_{}", std::process::id()));
-    std::fs::write(&temp, &contents).map_err(|error| format!("{path}: {error}"))?;
+    std::fs::write(&temp, contents).map_err(|error| format!("{path}: {error}"))?;
     std::fs::rename(&temp, target).map_err(|error| {
         let _ = std::fs::remove_file(&temp);
         format!("{path}: {error}")
@@ -287,6 +324,35 @@ pub fn compose(raw: &[u8], width: u32, height: u32, row_pitch: u32, out: &mut Ve
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Full review 2026-10-06, rust 13: the file arrives as the raw body, the path in a header.
+    #[test]
+    fn a_write_is_the_raw_body_and_a_percent_encoded_path() {
+        let body = tauri::ipc::InvokeBody::Raw(vec![0, 255, 16]);
+        let (path, bytes) = write_request(&body, Some("C%3A%2FVideo%2Fclip%20finale%20%C3%A8.microfono.webm")).expect("richiesta");
+        assert_eq!(path, "C:/Video/clip finale è.microfono.webm");
+        assert_eq!(bytes, &[0, 255, 16]);
+    }
+
+    #[test]
+    fn a_write_without_a_path_or_with_a_json_body_is_refused() {
+        let raw = tauri::ipc::InvokeBody::Raw(vec![1]);
+        assert!(write_request(&raw, None).is_err());
+        assert!(write_request(&raw, Some("%ZZ")).is_err());
+        assert!(write_request(&raw, Some("%C3")).is_err());
+        assert!(write_request(&raw, Some("abc%2")).is_err());
+        let json = tauri::ipc::InvokeBody::Json(serde_json::json!({ "path": "a", "contents": [1] }));
+        assert!(write_request(&json, Some("a")).is_err());
+    }
+
+    #[test]
+    fn a_large_body_is_not_copied_into_a_number_list() {
+        // 20 MB: as a JSON array it would be ~72 MB of text; raw, it is the bytes themselves.
+        let big = vec![7u8; 20 * 1024 * 1024];
+        let body = tauri::ipc::InvokeBody::Raw(big);
+        let (_, bytes) = write_request(&body, Some("a")).expect("richiesta");
+        assert_eq!(bytes.len(), 20 * 1024 * 1024);
+    }
 
     #[test]
     fn a_capture_size_is_always_even() {
