@@ -539,9 +539,20 @@ export function hooksSummary(
  * `powershell -File`, so off Windows they would fail at every event of every session of the machine, ADE's or not, and
  * `--unlink-agents` is only in the Windows installer (full review 2026-10-06, sessions 6). Only the TUI plugin, which is
  * a TypeScript file, is left. Rust refuses the same install (`agent_hook_write`).
+ *
+ * A PowerShell hook that is already there (an earlier ADE put it, or it is broken) stays on the list, so it can be taken
+ * out: without that the user who has it is the one it fails for, at every event of every session, with no button
+ * (review of F6c, O2). The panel offers only «Rimuovi» for it (`removeOnly`).
  */
-export function hookTargetsFor(windows: boolean): readonly HookTarget[] {
-  return windows ? HOOK_TARGETS : HOOK_TARGETS.filter((target) => target.kind === "tui-plugin")
+export function hookTargetsFor(windows: boolean, states: Record<string, HookStatus> = {}): readonly HookTarget[] {
+  return windows
+    ? HOOK_TARGETS
+    : HOOK_TARGETS.filter((target) => target.kind === "tui-plugin" || states[target.id]?.installed || states[target.id]?.broken)
+}
+
+/** A row that can only be removed: a PowerShell hook on a system that cannot run it. */
+export function removeOnly(target: HookTarget, windows: boolean): boolean {
+  return !windows && target.kind !== "tui-plugin"
 }
 
 /**

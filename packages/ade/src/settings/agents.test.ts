@@ -449,6 +449,27 @@ describe("Agenti e account › Ripresa delle sessioni", () => {
     expect(document.body.querySelector("[data-hooks-windows-only]")?.textContent).toContain("solo su Windows")
   })
 
+  // Review of F6c, O2.
+  test("fuori da Windows un hook PowerShell già installato resta in elenco, con il solo Rimuovi", async () => {
+    runOn("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15")
+    hookStates = {
+      "claude-code": state("claude-code", { installed: true }),
+      codex: state("codex", {}),
+      nikcli: state("nikcli", {}),
+    }
+    renderTab("agents/resume")
+    await settle()
+
+    const rows = Array.from(document.body.querySelectorAll('[data-slot="hook-row"]'))
+    expect(rows.map((row) => row.querySelector('[data-slot="hook-name"]')?.textContent)).toEqual(["Claude Code", "nikcli"])
+    const claude = rows[0]!
+    expect(claude.querySelector("[data-hook-remove-only]")).not.toBeNull()
+    const buttons = Array.from(claude.querySelectorAll('[data-slot="hook-action"]')).map((button) => button.textContent)
+    expect(buttons).toEqual(["Rimuovi"])
+    // The plugin row still offers its install.
+    expect(rows[1]!.querySelector("[data-hook-remove-only]")).toBeNull()
+  })
+
   test("se uno è da reinstallare la riga lo dice", async () => {
     hookStates = {
       "claude-code": state("claude-code", { installed: true }),

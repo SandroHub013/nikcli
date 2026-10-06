@@ -285,6 +285,8 @@ export const en: Messages = {
   "hooks.details": "Details",
   "hooks.outside":
     "The script does nothing outside ADE: it exits at the first environment variable it can't find, so the same CLI started from any other terminal behaves exactly as before.",
+  "hooks.removeOnly":
+    "PowerShell hooks do not work on this system, and this one fails at every event of every Claude Code or Codex session. It can only be removed.",
   "hooks.windowsOnly":
     "The Claude Code and Codex hooks are PowerShell scripts, so ADE installs them only on Windows. On this system only the nikcli plugin is offered.",
   "agent.mic.start": "Turn on microphone",

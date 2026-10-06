@@ -14,6 +14,7 @@ import {
   hookTarget,
   hooksSummary,
   hookTargetsFor,
+  removeOnly,
   installHook,
   installedCommand,
   isAdeCommand,
@@ -927,9 +928,26 @@ describe("the hooks offered on this system", () => {
 
   test("the panel shows the targets of this system and says why the others are not there", () => {
     const panel = readFileSync(new URL("./agent-hooks-panel.tsx", import.meta.url), "utf8")
-    expect(panel).toContain("hookTargetsFor(isWindowsRuntime())")
-    expect(panel).toContain("<For each={targets}>")
+    expect(panel).toContain("hookTargetsFor(windows, props.states)")
+    expect(panel).toContain("<For each={targets()}>")
     expect(panel).not.toContain("<For each={HOOK_TARGETS}>")
     expect(panel).toContain('t("hooks.windowsOnly")')
+  })
+
+  // Review of F6c, O2: whoever already has a PowerShell hook off Windows must be able to take it out.
+  test("off Windows a PowerShell hook that is there stays on the list, to be removed and not installed", () => {
+    const states = {
+      "claude-code": { installed: true },
+      codex: { installed: false, broken: true },
+    } as never as Record<string, HookStatus>
+    const ids = hookTargetsFor(false, states).map((target) => target.id)
+    expect(ids).toContain("claude-code")
+    expect(ids).toContain("codex")
+    // Not there, not shown.
+    expect(hookTargetsFor(false, { "claude-code": { installed: false } } as never as Record<string, HookStatus>).map((t) => t.id)).not.toContain("claude-code")
+    const claude = HOOK_TARGETS.find((target) => target.id === "claude-code")!
+    expect(removeOnly(claude, false)).toBe(true)
+    expect(removeOnly(claude, true)).toBe(false)
+    expect(removeOnly(HOOK_TARGETS.find((target) => target.kind === "tui-plugin")!, false)).toBe(false)
   })
 })
