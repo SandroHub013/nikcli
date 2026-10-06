@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
-import { createCleanup, exportPromo, micOffsetMs, pickExportMime, quietWav, readEvents, startDue } from "./export"
+import {
+  createCleanup,
+  exportPromo,
+  micOffsetMs,
+  pickExportMime,
+  quietWav,
+  readEvents,
+  startDue,
+  waitAtMost,
+} from "./export"
 
 describe("record/export", () => {
   test("MP4 when the webview can write it, WebM otherwise", () => {
@@ -168,6 +177,21 @@ describe("record/export, a playback that is refused", () => {
       expect(fake.frames.length).toBe(scheduled)
     })
   }
+})
+
+describe("record/export, a recorder that never stops", () => {
+  test("the wait ends at the cap, and an answer that comes first ends it at once", async () => {
+    const started = Date.now()
+    await waitAtMost(new Promise(() => {}), 30)
+    expect(Date.now() - started).toBeGreaterThanOrEqual(25)
+    const quick = Date.now()
+    await waitAtMost(Promise.resolve(), 5000)
+    expect(Date.now() - quick).toBeLessThan(1000)
+  })
+
+  test("a rejecting wait is not hidden: the cap does not swallow what the promise says", async () => {
+    await expect(waitAtMost(Promise.reject(new Error("boom")), 1000)).rejects.toThrow("boom")
+  })
 })
 
 describe("record/export, the microphone's own start", () => {

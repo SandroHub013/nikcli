@@ -133,6 +133,24 @@ export function startDue(waiting: readonly LatePlayer[], nowMs: number): LatePla
   return later
 }
 
+/** How long the recorder may take to say it has stopped before the export goes on without it. */
+export const STOP_WAIT_MS = 5000
+
+/** `promise`, or nothing once `ms` have passed: a wait that cannot hang what comes after it. */
+export async function waitAtMost(promise: Promise<unknown>, ms: number): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      promise,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, ms)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 export async function exportPromo(input: ExportInput): Promise<ExportResult> {
   const cleanup = createCleanup()
   try {
@@ -228,7 +246,8 @@ async function render(input: ExportInput, cleanup: ReturnType<typeof createClean
       if (recorder.state === "inactive") return
       const stopped = new Promise<void>((resolve) => recorder.addEventListener("stop", () => resolve(), { once: true }))
       recorder.stop()
-      await stopped
+      // A recorder that never says `stop` must not keep the tracks and the audio open, nor hang the export.
+      await waitAtMost(stopped, STOP_WAIT_MS)
     })()
     return stopping
   }

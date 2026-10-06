@@ -126,12 +126,19 @@ describe("record/recorder tracks", () => {
     return buffer
   }
 
-  function withTracks(mic?: { extension: string; bytes?: Uint8Array; refuse?: boolean; startsAfterMs?: number }) {
+  function withTracks(
+    mic?: { extension: string; bytes?: Uint8Array; refuse?: boolean; startsAfterMs?: number },
+    captureStartsAfterMs = 0,
+  ) {
     const bytes: { path: string; size: number }[] = []
     const texts: { path: string; text: string }[] = []
     let now = T0
     const recorder = createRecorder({
-      start: async (_target, dir, name) => ({ path: `${dir}/${name}.mp4` }),
+      start: async (_target, dir, name) => {
+        // The capture takes its time to come up: the video's zero is later than the take's.
+        now += captureStartsAfterMs
+        return { path: `${dir}/${name}.mp4` }
+      },
       stop: async () => ({ path: "C:/video/ADE.mp4" }),
       writeText: async (path, text) => {
         texts.push({ path, text })
@@ -187,6 +194,19 @@ describe("record/recorder tracks", () => {
       .split("\n")
       .map((line) => JSON.parse(line))
     expect(lines.find((line) => line.kind === "mic")).toEqual({ kind: "mic", at: 640 })
+  })
+
+  // Verifiche's review of F5, M3: the event is the microphone's own start-up time, whatever the capture's.
+  test("the mic event does not include the time the capture took to come up", async () => {
+    const { recorder, texts } = withTracks({ extension: "webm", bytes: new Uint8Array([1]), startsAfterMs: 200 }, 900)
+    await recorder.start({ kind: "window" }, { mic: true })
+    await recorder.stop()
+    const lines = texts[0]!.text
+      .trimEnd()
+      .split("\n")
+      .map((line) => JSON.parse(line))
+    // 900 ms for the capture, 200 for the microphone: the track begins 200 ms into the video.
+    expect(lines.find((line) => line.kind === "mic")).toEqual({ kind: "mic", at: 200 })
   })
 
   test("a take with no microphone writes no mic event", async () => {

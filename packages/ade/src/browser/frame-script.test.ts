@@ -486,6 +486,22 @@ describe("FrameGate", () => {
     expect(flood.filter((ask) => ask.state.hello !== undefined).length).toBe(1)
   })
 
+  // Verifiche's review of F5, M4. A full list drops the NEWEST ask, not the oldest, on purpose: the script's ask is
+  // the first of a document, and a page that could push it out with a flood of its own would win the secret.
+  test("a page's flood cannot push the script's ask out and take the secret", async () => {
+    const { g } = gate()
+    const old = asker()
+    g.ask(old.pane)
+    old.state.live = false
+    const script = asker()
+    g.ask(script.pane)
+    const page = Array.from({ length: 200 }, () => asker())
+    for (const ask of page) g.ask(ask.pane)
+    await tick()
+    expect(script.state.hello).toBeDefined()
+    expect(page.every((ask) => ask.state.hello === undefined)).toBe(true)
+  })
+
   test("after the verdict the room is free again", async () => {
     const { g } = gate()
     const script = asker()

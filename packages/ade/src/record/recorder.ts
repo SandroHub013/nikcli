@@ -162,9 +162,16 @@ export function createRecorder(deps: RecorderDeps): Recorder {
         const frame = deps.frame?.(target)
         if (frame) log.add({ kind: "frame", at: startedAt, ...frame })
         // The microphone is extra: a refusal records the take without it.
+        const micFrom = deps.now()
         mic = options.mic ? await deps.startMic?.().catch(() => undefined) : undefined
-        // Its file begins now, not at the start of the video: the export plays it from this moment (M3).
-        if (mic) log.add({ kind: "mic", at: deps.now() })
+        /*
+         * The microphone's file begins when its recorder did, which is `startMic`'s duration after the capture
+         * came up: that is where it sits in the VIDEO's time. Not `now - startedAt`: `startedAt` is taken before
+         * `deps.start`, and the video's zero is the moment the capture began, later by however long that took, so
+         * the track would be played late by that much (Verifiche's review of F5, M3). The log subtracts
+         * `startedAt` from every event, hence it is added back here.
+         */
+        if (mic) log.add({ kind: "mic", at: startedAt + (deps.now() - micFrom) })
         settle({
           status: "recording",
           recording: { target, path: started.path ?? `${dir}/${name}.mp4`, startedAt, mic: mic !== undefined },

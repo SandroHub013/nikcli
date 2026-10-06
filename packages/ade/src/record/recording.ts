@@ -63,8 +63,9 @@ export type RecordEvent =
   /** Said by the assistant, for subtitles on the voice track. */
   | { readonly kind: "said"; readonly at: number; readonly text: string }
   /**
-   * The microphone's own recording began here. It starts after the capture does, so its file is shorter
-   * than the video by this much at the front; the export begins it at this moment, not at 0.
+   * How long after the video's first frame the microphone's own recording began: its file starts after the
+   * capture does, so the export begins it this far into the video, not at 0. Not the time since the take was
+   * asked for: the video's zero is the capture's start, which comes later than that.
    */
   | { readonly kind: "mic"; readonly at: number }
 
