@@ -129,6 +129,22 @@ async fn design_sheet_path(roots: tauri::State<'_, WriteRoots>, path: String, cw
 /// a folder the user works in; a directory holding the user's whole profile, a
 /// system directory or ADE's own configuration is not one, whoever asks.
 fn too_broad_root(dir: &Path, home: Option<&Path>) -> Option<&'static str> {
+    let path_dirs: Vec<PathBuf> = std::env::var_os("PATH")
+        .map(|value| std::env::split_paths(&value).collect())
+        .unwrap_or_default();
+    too_broad_root_in(dir, home, &path_dirs)
+}
+
+/// The same rule with the `PATH` entries given, so a test can name them.
+///
+/// Beyond the whole profile, a root may not be a place where what is written
+/// runs by itself later (full review 2026-10-06, Rust 4). `Documents` as a root
+/// let the page write `Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1`,
+/// which every PowerShell opens in ADE's terminal; a folder on `PATH`
+/// (`~/.nikcli/bin`, `~/.bun/bin`, `~/.local/bin`) is where the next `nikcli` or
+/// `bun` comes from. The well-known folders of the profile are not projects
+/// either, only what is inside them.
+fn too_broad_root_in(dir: &Path, home: Option<&Path>, path_dirs: &[PathBuf]) -> Option<&'static str> {
     if dir.parent().is_none() {
         return Some("la radice del disco non è un progetto");
     }
@@ -145,6 +161,54 @@ fn too_broad_root(dir: &Path, home: Option<&Path>) -> Option<&'static str> {
             if dir.starts_with(home.join(private)) {
                 return Some("cartella di configurazione dell'utente");
             }
+        }
+        // A folder the shell or the system looks in by itself: the root or anything above it.
+        for bin in [
+            ".nikcli/bin",
+            ".bun/bin",
+            ".local/bin",
+            ".cargo/bin",
+            ".deno/bin",
+            ".volta/bin",
+            "go/bin",
+            "bin",
+        ] {
+            if home.join(bin).starts_with(dir) || dir.starts_with(home.join(bin)) {
+                return Some("cartella dei programmi dell'utente (PATH)");
+            }
+        }
+        // The profile's own folders, which hold everything and are nobody's project.
+        let lowered = |p: &Path| -> Vec<String> {
+            p.components()
+                .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
+                .collect()
+        };
+        let (target, base) = (lowered(dir), lowered(&home));
+        if let Some(below) = target.strip_prefix(base.as_slice()) {
+            // `Documents` may sit under OneDrive when the folder is redirected.
+            let below = match below {
+                [first, rest @ ..] if first.starts_with("onedrive") => rest,
+                other => other,
+            };
+            if let [only] = below {
+                if ["documents", "desktop", "downloads", "pictures", "videos", "music"].contains(&only.as_str()) {
+                    return Some("una cartella del profilo non è un progetto");
+                }
+            }
+            // PowerShell reads its profile from `Documents\WindowsPowerShell` and `Documents\PowerShell`.
+            if let [parent, name, ..] = below {
+                if parent == "documents" && (name == "windowspowershell" || name == "powershell") {
+                    return Some("cartella dei profili di PowerShell");
+                }
+            }
+        }
+    }
+    for entry in path_dirs {
+        let entry = entry.canonicalize().unwrap_or_else(|_| entry.clone());
+        // A drive root on PATH would make every folder on the drive a PATH folder.
+        let broad = entry.parent().is_none() || entry.components().count() <= 2;
+        if !broad && dir.starts_with(&entry) {
+            return Some("cartella in PATH");
         }
     }
     let lowered = dir.to_string_lossy().to_lowercase().replace('\\', "/");
@@ -2973,6 +3037,58 @@ mod tests {
         let project = TempDir::new("project");
         let project_path = project.0.canonicalize().expect("canonical");
         assert!(too_broad_root(&project_path, Some(&home)).is_none());
+    }
+
+    /// Full review 2026-10-06, Rust 4: a root where what is written runs by itself later is refused.
+    #[test]
+    fn a_root_where_written_files_run_by_themselves_is_refused() {
+        let home = TempDir::new("rootshome");
+        let home = home.0.canonicalize().expect("canonical home");
+        let at = |relative: &str| home.join(relative);
+        let path_dirs = vec![at("tools/bin")];
+        let refused = |dir: PathBuf| too_broad_root_in(&dir, Some(&home), &path_dirs).is_some();
+
+        for relative in [
+            "Documents",
+            "documents",
+            "Desktop",
+            "Downloads",
+            "OneDrive/Documents",
+            "OneDrive - Acme/Documents",
+            "Documents/WindowsPowerShell",
+            "Documents/WindowsPowerShell/Modules",
+            "Documents/PowerShell",
+            "OneDrive/Documents/WindowsPowerShell",
+            ".nikcli",
+            ".nikcli/bin",
+            ".nikcli/bin/x",
+            ".bun",
+            ".bun/bin",
+            ".local",
+            ".local/bin",
+            ".cargo/bin",
+            "tools/bin",
+            "tools/bin/sub",
+        ] {
+            assert!(refused(at(relative)), "{relative}");
+        }
+        // What is inside them is a project; so is a project that merely sits near.
+        for relative in [
+            "Documents/GitHub/app",
+            "Documents/app",
+            "Desktop/app",
+            "OneDrive/Documents/app",
+            "code/app",
+            ".nikcli/projects/app",
+            "tools/app",
+            "tools",
+            "go/src/app",
+        ] {
+            assert!(!refused(at(relative)), "{relative}");
+        }
+        // A drive root among the PATH entries refuses nothing by itself.
+        let broad = vec![PathBuf::from("C:\\"), PathBuf::from("/")];
+        assert!(too_broad_root_in(&at("code/app"), Some(&home), &broad).is_none());
     }
 
     #[test]
