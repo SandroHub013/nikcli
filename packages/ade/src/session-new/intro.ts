@@ -44,6 +44,7 @@ export const INTRO_TEXT =
   "Delega compiti grandi, non piccoli, e chiedi sintesi brevi con i dettagli su file. " +
   "A ogni [Richiesta ID ...] rispondi con ade-msg reply ID seguito dalla sintesi; se sei bloccata usa ade-msg update ID bloccata seguito dal motivo. " +
   "Se esiste .ade/memory.md del progetto leggilo prima di esplorare. Un avviso che dice ade-msg inbox si legge con quel comando. Tutti gli altri comandi: ade-msg help. " +
+  "Per far scegliere un design all'utente: ade-msg design proponi CARTELLA --attendi; il formato con ade-msg help design. " +
   "Usalo quando l'utente lo chiede o quando coordinarti serve al compito."
 
 /*
