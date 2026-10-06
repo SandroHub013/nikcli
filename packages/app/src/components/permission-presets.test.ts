@@ -1,5 +1,12 @@
 import { describe, expect, it } from "bun:test"
-import { detectPermissionMode, permissionPresetPatch, presetPermissionMode } from "./permission-presets"
+import { mergeDeep } from "remeda"
+import {
+  detectPermissionMode,
+  getPermissionActionFor,
+  permissionPresetPatch,
+  presetPermissionMode,
+  type PermissionMap,
+} from "./permission-presets"
 
 /**
  * Allow rules in "approve for me" that the wildcard already grants. Keeping
@@ -53,5 +60,134 @@ describe("permission presets", () => {
     expect(detectPermissionMode(permissionPresetPatch("approve_for_me"))).toBe("approve_for_me")
     expect(detectPermissionMode(permissionPresetPatch("full_access"))).toBe("full_access")
     expect(detectPermissionMode(permissionPresetPatch("auto"), presetPermissionMode("auto"))).toBe("auto")
+  })
+})
+
+/**
+ * What the user ends up with, not what the client sends.
+ *
+ * The server does not apply the patch: `Config.update` writes
+ * `mergeDeep(existing, config)` (`packages/nikcli/src/config/config.ts`), so
+ * every per-tool key a previous preset wrote survives the next one. That is how
+ * "Approve for me" then "Require approval" could keep `edit: "allow"` — file
+ * edits, reads and searches ran without asking while the UI read "Custom".
+ * These tests start from the config, not the patch, and run the real
+ * `mergeDeep`. (`packages/nikcli/test/tool/permission-surface.test.ts` is the
+ * same test on the TUI copy, with the real `PermissionRuleset.evaluate`.)
+ */
+describe("permission presets on the merged config", () => {
+  /** What the server writes: `mergeDeep(existing, { permission: patch })`. */
+  function applyPreset(existing: PermissionMap, preset: Parameters<typeof permissionPresetPatch>[0]) {
+    const patch = permissionPresetPatch(preset, existing)
+    const merged = mergeDeep({ permission: existing }, { permission: patch }) as { permission: PermissionMap }
+    return { permission: merged.permission, action: (key: string) => getPermissionActionFor(merged.permission, key) }
+  }
+
+  /**
+   * The "full access" shape written before the presets stopped enumerating every
+   * tool: wildcard first, then all the tool keys, then the internal denies.
+   * Still the config of anyone who picked it before that change. Order matters
+   * because the evaluator takes the *last* matching rule.
+   */
+  const OLD_FULL_ACCESS: PermissionMap = {
+    "*": "allow",
+    read: "allow",
+    edit: "allow",
+    glob: "allow",
+    grep: "allow",
+    list: "allow",
+    tree: "allow",
+    bash: "allow",
+    task: "allow",
+    skill: "allow",
+    lsp: "allow",
+    todoread: "allow",
+    todowrite: "allow",
+    webfetch: "allow",
+    websearch: "allow",
+    codesearch: "allow",
+    external_directory: "allow",
+    doom_loop: "allow",
+    browser_control: "allow",
+    computer: "allow",
+    repo_clone: "allow",
+    repo_overview: "allow",
+    generate_image: "allow",
+    memory_search: "allow",
+    context_collect: "allow",
+    context_search: "allow",
+    context_related: "allow",
+    context_diagnostics: "allow",
+    rag_index: "allow",
+    rag_search: "allow",
+    rag_status: "allow",
+    rag_reset: "allow",
+    speak: "allow",
+    plugin: "allow",
+    question: "deny",
+    plan_enter: "deny",
+    plan_exit: "deny",
+  }
+
+  it("approve for me then require approval asks for edits, reads and searches", () => {
+    const first = applyPreset({}, "approve_for_me")
+    expect(first.action("edit")).toBe("allow")
+
+    const second = applyPreset(first.permission, "require_approval")
+    for (const key of ["edit", "read", "grep", "bash", "webfetch"]) {
+      expect(second.action(key)).toBe("ask")
+    }
+    expect(detectPermissionMode(second.permission)).toBe("require_approval")
+  })
+
+  it("an old full access config then require approval asks for everything", () => {
+    const { action, permission } = applyPreset(OLD_FULL_ACCESS, "require_approval")
+    for (const key of Object.keys(OLD_FULL_ACCESS)) {
+      if (key === "question" || key === "plan_enter" || key === "plan_exit") continue
+      expect(action(key)).toBe("ask")
+    }
+    expect(detectPermissionMode(permission)).toBe("require_approval")
+    expect(action("question")).toBe("deny")
+  })
+
+  it("an old full access config then full access allows everything and reads as full access", () => {
+    const { action, permission } = applyPreset(OLD_FULL_ACCESS, "full_access")
+    for (const key of Object.keys(OLD_FULL_ACCESS)) {
+      if (key === "question" || key === "plan_enter" || key === "plan_exit") continue
+      expect(action(key)).toBe("allow")
+    }
+    expect(detectPermissionMode(permission)).toBe("full_access")
+    expect(action("question")).toBe("deny")
+  })
+
+  it("switching between the presets moves both directions", () => {
+    const guards = ["bash", "webfetch", "websearch", "external_directory", "plugin"] as const
+    const approveForMe = applyPreset({}, "approve_for_me")
+    const fullAccess = applyPreset(approveForMe.permission, "full_access")
+    for (const key of guards) {
+      expect(approveForMe.action(key)).toBe("ask")
+      expect(fullAccess.action(key)).toBe("allow")
+    }
+
+    const backToAsking = applyPreset(fullAccess.permission, "approve_for_me")
+    for (const key of guards) {
+      expect(backToAsking.action(key)).toBe("ask")
+    }
+    expect(detectPermissionMode(backToAsking.permission)).toBe("approve_for_me")
+  })
+
+  it("a rule the presets do not own survives the switch", () => {
+    // A hand-written rule on an MCP tool is not theirs to overwrite.
+    const { action } = applyPreset({ ...OLD_FULL_ACCESS, mcp_weather: "deny" }, "require_approval")
+    expect(action("mcp_weather")).toBe("deny")
+  })
+
+  it("auto writes nothing, so the map is untouched", () => {
+    const existing: PermissionMap = { "*": "allow", edit: "allow" }
+    expect(permissionPresetPatch("auto", existing)).toEqual({})
+    const merged = mergeDeep({ permission: existing }, { permission: permissionPresetPatch("auto", existing) }) as {
+      permission: PermissionMap
+    }
+    expect(merged.permission).toEqual(existing)
   })
 })
