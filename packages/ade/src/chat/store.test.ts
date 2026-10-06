@@ -49,6 +49,8 @@ function fakeServer() {
     status: {} as Record<string, object>,
     /** Holds the answer to GET /session/status until it settles. */
     statusGate: undefined as Promise<void> | undefined,
+    /** Holds the answers to GET /session/:id/message until it settles. */
+    messageGate: undefined as Promise<void> | undefined,
     /** The catalog (`/config/providers`): the free model the tests send, on OpenRouter, which the server can run. */
     providers: {
       providers: [
@@ -115,7 +117,8 @@ function fakeServer() {
       else if (request.method === "POST" && /^\/(permission|question)\/[^/]+\/(reply|reject)$/.test(path))
         reply(onEvent, 200, true)
       else if (request.method === "GET" && /^\/session\/[^/]+\/message$/.test(path)) {
-        reply(onEvent, 200, routes.messages[path.split("/")[2]!] ?? [])
+        const listed = routes.messages[path.split("/")[2]!] ?? []
+        void (routes.messageGate ?? Promise.resolve()).then(() => reply(onEvent, 200, listed))
       } else if (request.method === "POST" && path === "/session") {
         // As the server does: the session keeps the rules it was made with.
         reply(onEvent, 200, { ...session("ses_nuova"), permission: JSON.parse(request.body ?? "{}").permission })
@@ -302,6 +305,24 @@ describe("the chat's store", () => {
       decodeURIComponent(request.headers.find(([name]) => name.toLowerCase() === "x-nikcli-directory")?.[1] ?? "")
     expect(server.calls("POST", /\/prompt_async$/).map(on)).toEqual([A])
     expect(server.calls("GET", /^\/session\/ses_nuova\/message$/).filter((r) => on(r) === B)).toEqual([])
+  })
+
+  // Full review 2026-10-06, bots 14: an event that comes while the messages are being fetched is not undone by them.
+  test("a message that arrives while the session's messages are being fetched is still there when they land", async () => {
+    const server = fakeServer()
+    const { store } = storeOn(server)
+    await store.open(A)
+    await live(server, store)
+    let release!: () => void
+    server.routes.messageGate = new Promise<void>((resolve) => (release = resolve))
+    // The server lists nothing yet: the fetch was answered before the answer began.
+    const loading = store.loadMessages("ses_1")
+    await tick(10)
+    server.stream().push({ type: "message.updated", properties: { info: assistant("msg_new") } })
+    await until("il messaggio dell'evento", () => (store.state.data.message.ses_1 ?? []).some((m) => m.id === "msg_new"))
+    release()
+    await loading
+    expect((store.state.data.message.ses_1 ?? []).map((m) => m.id)).toEqual(["msg_new"])
   })
 
   test("opening the folder already open changes nothing", async () => {
