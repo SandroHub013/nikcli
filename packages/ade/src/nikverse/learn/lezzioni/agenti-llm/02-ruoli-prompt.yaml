@@ -1,0 +1,310 @@
+# Bozza della lezione 2 del percorso «Agenti e LLM»
+id: agenti-llm/02-ruoli-prompt
+versione: 1.0.0
+lingua: it
+tema: agenti-llm
+unita: 1
+numero: 2
+titolo: Ruoli e prompt
+durata_min: 4
+livello: 1
+prerequisiti:
+  - agenti-llm/01-token-contesto
+stato: rivista
+autori:
+  bozza: agy
+  revisione: Architetto
+
+obiettivi:
+  - id: O1
+    testo: "Riconoscere i ruoli di un messaggio (system, user, assistant, tool) e chi li scrive."
+  - id: O2
+    testo: "Spiegare che le istruzioni di sistema guidano, ma non sono un muro né un segreto."
+  - id: O3
+    testo: "Scrivere una richiesta chiara: compito, contesto, formato atteso, criteri per dire «fatto»."
+  - id: O4
+    testo: "Riconoscere quando un esempio nel prompt aiuta e quando confonde."
+  - id: O5
+    testo: "Spiegare perché la stessa domanda può avere risposte diverse."
+
+fonti:
+  - id: F1
+    titolo: "Documentazione ufficiale di Anthropic: ruoli dei messaggi e prompt engineering"
+    url: https://docs.claude.com
+  - id: F2
+    titolo: "Documentazione ufficiale di OpenAI: ruoli dei messaggi e prompt engineering"
+    url: https://platform.openai.com/docs
+
+teoria:
+  - id: T1
+    obiettivi: [O1, O2]
+    fonti: [F1, F2]
+    testo: >-
+      Nel contesto ogni messaggio ha un **ruolo**. `system` contiene le istruzioni di base dell'applicazione;
+      `user` è ciò che scrivi tu; `assistant` è ciò che risponde il modello; `tool` riporta i risultati degli
+      strumenti. I nomi cambiano un po' da un'API all'altra, ma il concetto è lo stesso. Le istruzioni di
+      sistema guidano il comportamento del modello, ma non sono una barriera invalicabile né un segreto:
+      spesso si possono far ripetere o aggirare.
+  - id: T2
+    obiettivi: [O3, O4]
+    fonti: [F1]
+    testo: >-
+      Un buon prompt evita ambiguità specificando quattro elementi: il **compito** chiaro, il **contesto**
+      rilevante, il **formato** atteso e i **criteri di verifica**. Aggiungere esempi aiuta a mostrare lo stile
+      o la struttura desiderata, ma esempi contraddittori o troppo rigidi rischiano di vincolare la risposta
+      a dettagli non richiesti.
+  - id: T3
+    obiettivi: [O5]
+    fonti: [F1, F2]
+    testo: >-
+      I modelli linguistici non cercano risposte fisse: calcolano probabilità per ogni token successivo.
+      Abbassare la temperatura riduce la varietà, ma non garantisce risposte identiche: anche a temperatura
+      zero le risposte possono variare un poco. Per questo la stessa richiesta può produrre formulazioni
+      diverse a ogni esecuzione.
+
+esercizi:
+  - id: l02-e01
+    tipo: abbina
+    obiettivo: O1
+    difficolta: 1
+    fonte: F2
+    consegna: "Abbina ogni ruolo al soggetto che lo scrive."
+    coppie:
+      - sinistra: "system"
+        destra: "chi sviluppa l'applicazione o l'harness"
+      - sinistra: "user"
+        destra: "la persona che scrive al terminale o nella chat"
+      - sinistra: "assistant"
+        destra: "il modello linguistico durante la generazione"
+      - sinistra: "tool"
+        destra: "l'harness che restituisce l'output di un comando"
+    spiegazione: >-
+      Ogni ruolo identifica l'origine del messaggio nel contesto: l'harness imposta il sistema e i dati degli
+      strumenti, l'utente invia i comandi e il modello genera le risposte.
+    sbagliate:
+      - risposta:
+          sinistra: "assistant"
+          destra: "la persona che scrive al terminale o nella chat"
+        perche: "La persona scrive con il ruolo user; assistant raccoglie i messaggi generati dal modello."
+      - risposta:
+          sinistra: "system"
+          destra: "il modello linguistico durante la generazione"
+        perche: "Il modello risponde con il ruolo assistant; system definisce le istruzioni generali impostate prima."
+
+  - id: l02-e02
+    tipo: abbina
+    obiettivo: O1
+    difficolta: 1
+    fonte: F1
+    consegna: "Abbina ogni ruolo al relativo esempio di messaggio."
+    coppie:
+      - sinistra: "system"
+        destra: "Rispondi sempre in formato JSON valido e senza commenti."
+      - sinistra: "user"
+        destra: "Riassumi il file di configurazione rete.isola.test."
+      - sinistra: "assistant"
+        destra: "Ho controllato la porta: il servizio è attivo."
+      - sinistra: "risultato di uno strumento (in alcune API, ruolo tool)"
+        destra: "stato 0: ascolto attivo su porta 8080"
+    spiegazione: >-
+      Le regole di base appartengono a system, le domande a user, le sintesi del modello ad assistant e le
+      risposte dei comandi al ruolo tool (o blocco equivalente).
+    sbagliate:
+      - risposta:
+          sinistra: "user"
+          destra: "Rispondi sempre in formato JSON valido e senza commenti."
+        perche: "Questa è una regola di comportamento dell'applicazione, tipica del ruolo system."
+      - risposta:
+          sinistra: "risultato di uno strumento (in alcune API, ruolo tool)"
+          destra: "Ho controllato la porta: il servizio è attivo."
+        perche: "Questa è la frase generata dal modello (assistant), non l'output grezzo restituito dal comando."
+
+  - id: l02-e03
+    tipo: scelta
+    obiettivo: O2
+    difficolta: 1
+    fonte: F1
+    consegna: "Che cosa rappresentano le istruzioni di sistema (system prompt)?"
+    opzioni:
+      - "Un blocco segreto e invalicabile che il modello non può mai rivelare né disattendere"
+      - "Istruzioni che guidano tono e regole del modello, ma che possono essere aggirate o rivelate"
+      - "Un programma compilato che controlla direttamente la memoria del server"
+    giusta: 1
+    spiegazione: >-
+      Il system prompt orienta il comportamento del modello, ma fa parte del contesto testuale e non costituisce
+      un confine di sicurezza impenetrabile.
+    sbagliate:
+      - risposta: 0
+        perche: "Il system prompt fa parte del contesto: con richieste mirate può essere ripetuto o contraddetto dal modello."
+      - risposta: 2
+        perche: "Il prompt di sistema è solo testo inviato al modello, non codice eseguibile o compilato."
+
+  - id: l02-e04
+    tipo: completa
+    obiettivo: O2
+    difficolta: 2
+    fonte: F1
+    consegna: "Completa la frase."
+    testo: "Il system prompt serve a [[1]] il modello, ma non garantisce una protezione [[2]] contro richieste contrastanti."
+    banca: ["guidare", "assoluta", "spegnere", "hardware", "cancellare"]
+    giusta: ["guidare", "assoluta"]
+    spiegazione: >-
+      Le istruzioni di sistema indicano come comportarsi, ma il modello può comunque essere deviato da input
+      successivi presenti nel contesto.
+    sbagliate:
+      - risposta: ["spegnere", "assoluta"]
+        perche: "Il system prompt orienta il comportamento del modello, non serve a spegnerlo."
+      - risposta: ["guidare", "hardware"]
+        perche: "La protezione riguarda la coerenza delle istruzioni nel contesto, non la sicurezza dell'hardware."
+
+  - id: l02-e05
+    tipo: abbina
+    obiettivo: O3
+    difficolta: 2
+    fonte: F1
+    consegna: "Abbina ogni parte di una richiesta ben strutturata al relativo esempio."
+    coppie:
+      - sinistra: "Compito"
+        destra: "Aggiungi un test per la funzione somma"
+      - sinistra: "Contesto"
+        destra: "Il progetto usa bun test, i test stanno in test/"
+      - sinistra: "Formato"
+        destra: "Rispondi con il solo file di test"
+      - sinistra: "Criteri"
+        destra: "Fatto quando bun test passa"
+    spiegazione: >-
+      Definire compito, contesto tecnico, formato della risposta e criterio di verifica riduce le ambiguità
+      e guida l'agente verso il risultato voluto.
+    sbagliate:
+      - risposta:
+          sinistra: "Compito"
+          destra: "Rispondi con il solo file di test"
+        perche: "Questo indica la forma attesa del file di output (formato), non l'azione principale da compiere."
+      - risposta:
+          sinistra: "Criteri"
+          destra: "Il progetto usa bun test, i test stanno in test/"
+        perche: "I percorsi e l'ambiente descrivono il contesto del progetto, non la condizione per dire fatto."
+
+  - id: l02-e06
+    tipo: trova-riga
+    obiettivo: O3
+    difficolta: 2
+    consegna: "Quale riga di questa richiesta è troppo vaga per permettere un lavoro affidabile?"
+    etichetta: "prompt inviato all'agente"
+    righe:
+      - "Leggi il file di configurazione server.isola.test."
+      - "Estrai tutti gli indirizzi IP assegnati ai nodi secondari."
+      - "Fai le modifiche necessarie per sistemare la rete."
+      - "Restituisci l'elenco in una tabella con colonne IP e Nome."
+    giuste: [2]
+    spiegazione: >-
+      «Sistemare la rete» non specifica quale problema risolvere né quali parametri modificare, lasciando
+      spazio a interpretazioni arbitrarie.
+    sbagliate:
+      - risposta: 1
+        perche: "Questa riga è specifica: richiede un'operazione precisa di estrazione dati."
+      - risposta: 3
+        perche: "Questa riga definisce con esattezza il formato della tabella desiderata."
+
+  - id: l02-e07
+    tipo: trova-riga
+    obiettivo: O3
+    difficolta: 2
+    consegna: "Quali due righe si contraddicono all'interno di questa richiesta?"
+    etichetta: "richiesta di sintesi"
+    righe:
+      - "Analizza la funzione calcola_tariffe nel modulo pagamenti.isola.test."
+      - "Spiega il funzionamento in modo esaustivo includendo ogni dettaglio tecnico."
+      - "Limita la spiegazione a due frasi brevissime evitando ogni tecnicismo."
+      - "Evidenzia i valori di ritorno principali."
+    giuste: [1, 2]
+    spiegazione: >-
+      «Spiega in modo esaustivo, con ogni dettaglio tecnico» e «limita la spiegazione a due frasi, senza
+      tecnicismi» chiedono due cose opposte: il modello non può soddisfarle insieme.
+    sbagliate:
+      - risposta: 0
+        perche: "La prima riga indica solo che cosa analizzare: non è in contrasto con le altre istruzioni."
+      - risposta: 3
+        perche: "Chiedere di evidenziare i valori di ritorno è compatibile con una spiegazione tecnica."
+
+  - id: l02-e08
+    tipo: scelta
+    obiettivo: O4
+    difficolta: 2
+    fonte: F1
+    consegna: "In quale situazione un esempio inserito nel prompt rischia di peggiorare la risposta?"
+    opzioni:
+      - "Quando contiene dettagli accessori che il modello finisce per copiare anche se non richiesti"
+      - "Quando mostra con esattezza lo schema JSON atteso"
+      - "Quando illustra una risposta breve e pertinente"
+    giusta: 0
+    spiegazione: >-
+      Gli esempi guidano fortemente lo stile: se includono campi o ipotesi non universali, il modello tende a
+      riprodurli anche quando il caso reale è diverso.
+    sbagliate:
+      - risposta: 1
+        perche: "Mostrare lo schema esatto è proprio uno degli usi più efficaci e raccomandati degli esempi."
+      - risposta: 2
+        perche: "Un esempio breve e pertinente aiuta il modello a calibrare la lunghezza della risposta."
+
+  - id: l02-e09
+    tipo: scelta
+    obiettivo: O4
+    difficolta: 1
+    fonte: F1
+    consegna: "A cosa serve principalmente mostrare un esempio (few-shot) nel prompt?"
+    opzioni:
+      - "A modificare i parametri interni del modello prima della generazione"
+      - "A rendere impossibile qualunque errore di ragionamento"
+      - "A chiarire lo stile, la struttura e il livello di dettaglio atteso"
+    giusta: 2
+    spiegazione: >-
+      Gli esempi offrono un modello concreto di formato e tono, riducendo l'ambiguità delle istruzioni
+      puramente descrittive.
+    sbagliate:
+      - risposta: 0
+        perche: "Gli esempi nel contesto non alterano i parametri del modello: agiscono solo come guida testuale per il turno."
+      - risposta: 1
+        perche: "Un esempio non elimina la possibilità di errori o risposte inventate nei compiti complessi."
+
+  - id: l02-e10
+    tipo: scelta
+    obiettivo: O5
+    difficolta: 2
+    fonte: F2
+    consegna: "Perché la stessa richiesta mandata due volte, in due sessioni nuove, può ricevere risposte con parole diverse?"
+    opzioni:
+      - "Perché il modello impara dalla prima sessione e adatta la seconda"
+      - "Perché la generazione seleziona i token successivi campionando tra probabilità diverse"
+      - "Perché l'harness altera segretamente il testo del prompt a ogni invio"
+    giusta: 1
+    spiegazione: >-
+      Il modello calcola una distribuzione di probabilità sui token: i meccanismi di campionamento introducono
+      variabilità controllata ad ogni generazione.
+    sbagliate:
+      - risposta: 0
+        perche: "Il modello non impara tra una sessione e l'altra: ogni nuova sessione parte da zero con gli stessi parametri fissi."
+      - risposta: 2
+        perche: "Anche se l'harness aggiunge istruzioni, con lo stesso identico input le risposte cambiano lo stesso: viene dal campionamento."
+
+  - id: l02-e11
+    tipo: completa
+    obiettivo: O5
+    difficolta: 2
+    fonte: F2
+    consegna: "Completa la frase sulla variabilità delle risposte."
+    testo: "La generazione sceglie ogni token [[1]] fra quelli probabili; abbassare la temperatura rende le risposte [[2]] varie, ma non sempre identiche."
+    banca: ["campionando", "contando", "più", "meno", "sempre"]
+    giusta: ["campionando", "meno"]
+    spiegazione: >-
+      Abbassando la temperatura il modello seleziona token a probabilità più alta riducendo la varietà delle
+      risposte, senza renderle del tutto identiche a ogni giro.
+    sbagliate:
+      - risposta: ["campionando", "più"]
+        perche: "Alzarla aumenta la varietà; abbassarla concentra la probabilità sui token più frequenti rendendo le risposte meno varie."
+      - risposta: ["contando", "meno"]
+        perche: "Il modello non conta le parole, sceglie fra probabilità calcolate per ciascun token."
+
+# Dubbi e verifiche:
+# - Applicata nota C1 sulla variabilità della denominazione dei ruoli tra API differenti (Anthropic vs OpenAI).
+# - Chiarito che abbassare la temperatura riduce la varietà ma non garantisce determinismo assoluto.

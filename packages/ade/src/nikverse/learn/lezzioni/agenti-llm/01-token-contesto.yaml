@@ -1,0 +1,297 @@
+# Lezione campione, scritta dall'Architetto: le bozze delle agy imitano questa.
+# Percorso definitivo, dopo T3: packages/nikverse/learn/agenti-llm/01-token-contesto.yaml
+id: agenti-llm/01-token-contesto
+versione: 1.0.0
+lingua: it
+tema: agenti-llm
+unita: 1
+numero: 1
+titolo: Token e contesto
+durata_min: 4
+livello: 1
+prerequisiti: []
+stato: rivista
+autori:
+  bozza: Architetto
+  revisione: Architetto
+
+obiettivi:
+  - id: O1
+    testo: "Dire che cos'è un token, e perché non è né una parola né una lettera."
+  - id: O2
+    testo: "Prevedere quale testo costa più token: parole rare, codice, lingue diverse dall'inglese."
+  - id: O3
+    testo: "Elencare che cosa entra nella finestra di contesto di un agente."
+  - id: O4
+    testo: "Spiegare che si paga, o si consuma quota, per i token in entrata e in uscita."
+  - id: O5
+    testo: "Spiegare perché il modello non ricorda nulla che non sia nel contesto."
+
+fonti:
+  - id: F1
+    titolo: "Documentazione ufficiale di Anthropic: token e finestra di contesto"
+    url: https://docs.claude.com
+  - id: F2
+    titolo: "Documentazione ufficiale di OpenAI: token"
+    url: https://platform.openai.com/docs
+  - id: F5
+    titolo: "Sennrich, Haddow, Birch, Neural Machine Translation of Rare Words with Subword Units (2016)"
+    url: https://arxiv.org/abs/1508.07909
+
+teoria:
+  - id: T1
+    obiettivi: [O1, O2]
+    fonti: [F5, F1]
+    testo: >-
+      Un **token** è un pezzo di testo: spesso una parola corta intera, a volte solo un pezzo di una parola
+      lunga o rara, a volte uno spazio o un segno di punteggiatura. Il modello non legge lettere né parole:
+      legge e scrive token. Le parole comuni costano poco; le parole rare, i nomi, il codice e molte lingue
+      diverse dall'inglese si spezzano in più token.
+  - id: T2
+    obiettivi: [O3]
+    fonti: [F1]
+    testo: >-
+      La **finestra di contesto** è tutto ciò che il modello vede in un turno: le istruzioni di sistema, la
+      conversazione, i file letti, i risultati degli strumenti. Ha un limite in token, che cambia da modello
+      a modello. Quando è piena, l'harness deve togliere o riassumere qualcosa: ciò che resta fuori, per il
+      modello, non esiste.
+  - id: T3
+    obiettivi: [O4, O5]
+    fonti: [F1, F2]
+    testo: >-
+      Si paga, o si consuma quota, per i token **in entrata** (tutto il contesto, a ogni turno) e per quelli
+      **in uscita** (la risposta); di solito quelli in uscita costano di più. Il modello non ricorda nulla fra
+      una chiamata e l'altra: se un prodotto «si ricorda» di te, è perché rimette quelle informazioni nel
+      contesto.
+
+esercizi:
+  - id: l01-e01
+    tipo: scelta
+    obiettivo: O1
+    difficolta: 1
+    fonte: F1
+    consegna: "Che cos'è un token?"
+    opzioni:
+      - "Una parola intera, sempre"
+      - "Un pezzo di testo: a volte una parola, a volte una parte di parola o un segno"
+      - "Una singola lettera"
+      - "Un'unità di prezzo fissa, uguale per tutti i modelli"
+    giusta: 1
+    spiegazione: >-
+      Il testo viene diviso in pezzi che il modello conosce: le parole comuni restano intere, quelle lunghe o
+      rare si spezzano, e anche spazi e punteggiatura contano.
+    sbagliate:
+      - risposta: 0
+        perche: "Le parole lunghe o rare vengono spezzate in più token, e anche spazi e punteggiatura ne usano."
+      - risposta: 2
+        perche: "È un pezzo troppo piccolo: la maggior parte dei token unisce più caratteri, spesso una parola intera."
+      - risposta: 3
+        perche: "Il prezzo si conta in token, ma il token non è un prezzo: ogni modello ha i suoi prezzi e il suo modo di dividere il testo."
+
+  - id: l01-e02
+    tipo: scelta
+    obiettivo: O2
+    difficolta: 1
+    consegna: "Quale di questi testi usa probabilmente più token?"
+    opzioni:
+      - "casa"
+      - "il gatto"
+      - "ok"
+      - "precipitevolissimevolmente"
+    giusta: 3
+    spiegazione: >-
+      Una parola lunga e rara non è nel vocabolario del modello come pezzo unico: viene spezzata in molti
+      token. Le altre sono parole corte e comuni.
+    sbagliate:
+      - risposta: 1
+        perche: "Sono due parole, ma corte e comunissime: di solito bastano pochi token, uno per parola o quasi."
+      - risposta: 0
+        perche: "È una parola comune e corta: spesso è un solo token, o due."
+
+  - id: l01-e03
+    tipo: abbina
+    obiettivo: O1
+    difficolta: 1
+    consegna: "Abbina ogni termine alla sua descrizione."
+    coppie:
+      - sinistra: "token"
+        destra: "il pezzo di testo che il modello legge e scrive"
+      - sinistra: "finestra di contesto"
+        destra: "tutto ciò che il modello vede in un turno, con un limite in token"
+      - sinistra: "token in uscita"
+        destra: "i pezzi della risposta, generati uno alla volta"
+      - sinistra: "token in entrata"
+        destra: "istruzioni, conversazione, file e risultati mandati al modello"
+    spiegazione: >-
+      Il modello vive di token: quelli che riceve (il contesto) e quelli che produce (la risposta), dentro un
+      limite che è la finestra.
+    sbagliate:
+      - risposta:
+          sinistra: "finestra di contesto"
+          destra: "i pezzi della risposta, generati uno alla volta"
+        perche: "La risposta sta dentro la finestra, ma la finestra è tutto ciò che il modello vede: istruzioni, conversazione, file e risposta."
+      - risposta:
+          sinistra: "token"
+          destra: "tutto ciò che il modello vede in un turno, con un limite in token"
+        perche: "Un token è un pezzo solo; quello che il modello vede in un turno è fatto di moltissimi token, ed è la finestra di contesto."
+
+  - id: l01-e04
+    tipo: scelta
+    obiettivo: O3
+    difficolta: 2
+    fonte: F1
+    consegna: "Un agente sta correggendo un bug. Che cosa occupa la sua finestra di contesto?"
+    opzioni:
+      - "Solo l'ultimo messaggio che hai scritto"
+      - "Solo le istruzioni di sistema"
+      - "Istruzioni, conversazione, file letti e risultati degli strumenti"
+      - "Tutti i file del tuo disco"
+    giusta: 2
+    spiegazione: >-
+      A ogni turno l'harness rimanda al modello tutto il necessario: istruzioni, conversazione fin lì, file
+      letti e output degli strumenti. Per questo il contesto di un agente cresce in fretta.
+    sbagliate:
+      - risposta: 0
+        perche: "Il modello non ha memoria fra le chiamate: se ricevesse solo l'ultimo messaggio, non saprebbe nulla di quello che è successo prima."
+      - risposta: 3
+        perche: "Vede solo ciò che l'harness gli manda: un file che non è stato letto non è nel contesto."
+      - risposta: 1
+        perche: "Le istruzioni ci sono, ma anche la conversazione, i file e i risultati degli strumenti."
+
+  - id: l01-e05
+    tipo: completa
+    obiettivo: O5
+    difficolta: 2
+    consegna: "Completa la frase."
+    testo: "Quando la conversazione supera la finestra di contesto, l'harness deve [[1]] o [[2]] la parte più vecchia."
+    banca: ["togliere", "riassumere", "ingrandire", "memorizzare", "colorare"]
+    giusta: ["togliere", "riassumere"]
+    spiegazione: >-
+      La finestra ha un limite fisso per ogni modello: si può solo far spazio, togliendo o riassumendo. Ciò
+      che resta fuori, il modello non lo vede più.
+    sbagliate:
+      - risposta: ["ingrandire", "riassumere"]
+        perche: "La finestra è una caratteristica del modello: l'harness non la può allargare, può solo scegliere che cosa metterci."
+      - risposta: ["togliere", "memorizzare"]
+        perche: "Il modello non ha una memoria dove mettere da parte le cose: se escono dalla finestra, per lui non ci sono più."
+
+  - id: l01-e06
+    tipo: ordina
+    obiettivo: O1
+    difficolta: 2
+    consegna: "Metti in ordine che cosa succede quando mandi un messaggio a un modello."
+    elementi:
+      - "Il testo del contesto viene diviso in token"
+      - "Il modello legge tutti i token del contesto"
+      - "Il modello genera la risposta, un token alla volta"
+      - "I token della risposta tornano a essere testo"
+    spiegazione: >-
+      Testo in token, lettura del contesto, risposta generata pezzo per pezzo, di nuovo testo. Per questo
+      una risposta lunga costa più token in uscita.
+    sbagliate:
+      - risposta: [1, 0, 2, 3]
+        perche: "Il modello non legge il testo così com'è: prima deve essere diviso in token."
+      - risposta: [0, 2, 1, 3]
+        perche: "La risposta dipende da tutto il contesto: il modello lo legge prima di generare."
+
+  - id: l01-e07
+    tipo: scelta
+    obiettivo: O4
+    difficolta: 1
+    fonte: F1
+    consegna: "Per che cosa si paga, o si consuma quota, quando usi un modello?"
+    opzioni:
+      - "Per i token in entrata e per quelli in uscita"
+      - "Solo per i token della risposta"
+      - "Un prezzo fisso per ogni messaggio, lungo o corto"
+      - "Solo quando la risposta è giusta"
+    giusta: 0
+    spiegazione: >-
+      Si contano i token che il modello riceve (tutto il contesto) e quelli che produce. Un contesto lungo
+      costa anche se la risposta è corta.
+    sbagliate:
+      - risposta: 1
+        perche: "Anche tutto quello che mandi si conta: in un agente, il contesto rimandato a ogni turno spesso pesa più della risposta."
+      - risposta: 2
+        perche: "Il costo cresce con la lunghezza: un messaggio con un file allegato costa molto più di un saluto."
+      - risposta: 3
+        perche: "Il modello non sa se la sua risposta è giusta: i token si contano comunque."
+
+  - id: l01-e08
+    tipo: scelta
+    obiettivo: O5
+    difficolta: 2
+    consegna: "Ieri hai spiegato il tuo progetto a un agente. Oggi apri una sessione nuova. Che cosa sa del progetto?"
+    opzioni:
+      - "Tutto, perché il modello impara da ogni conversazione"
+      - "Solo i punti più importanti"
+      - "Niente, a meno che l'harness rimetta quelle informazioni nel contesto, per esempio da un file di note"
+    giusta: 2
+    spiegazione: >-
+      Ogni chiamata parte da zero: il modello sa solo ciò che è nel contesto. Un file di note, o una memoria
+      del prodotto, funziona perché viene rimesso nel contesto.
+    sbagliate:
+      - risposta: 0
+        perche: "Il modello non cambia mentre parli con lui: non impara dalle tue conversazioni, legge solo il contesto che riceve."
+      - risposta: 1
+        perche: "Non c'è una memoria che sceglie i punti importanti: ciò che non è nel contesto, il modello non lo vede."
+
+  - id: l01-e09
+    tipo: trova-riga
+    obiettivo: O3
+    difficolta: 2
+    consegna: "Il compito è «correggi il bug in somma.ts». Quale riga del contesto spreca più token senza servire al compito?"
+    etichetta: "contesto del turno"
+    righe:
+      - "[sistema] Sei un agente di sviluppo. Modifica solo i file necessari."
+      - "[utente] Correggi il bug in somma.ts: 2 + 2 dà 5."
+      - "[file] somma.ts, 12 righe"
+      - "[strumento] log completo della build di ieri, 48.000 righe"
+      - "[file] somma.test.ts, 20 righe"
+    giuste: [3]
+    spiegazione: >-
+      Un log enorme e vecchio riempie la finestra, costa a ogni turno e distrae il modello. Bastava cercarci
+      dentro la riga dell'errore, o non leggerlo affatto.
+    sbagliate:
+      - risposta: 0
+        perche: "Le istruzioni di sistema sono corte e servono: dicono all'agente come lavorare."
+      - risposta: 4
+        perche: "Il test è corto e serve: è il modo per verificare che il bug sia corretto."
+
+  - id: l01-e10
+    tipo: scelta
+    obiettivo: O2
+    difficolta: 2
+    fonte: F5
+    consegna: "Lo stesso compito, scritto in italiano invece che in inglese, spesso usa più token. Perché?"
+    opzioni:
+      - "Il modello traduce tutto in inglese prima di leggere"
+      - "L'italiano ha un prezzo per token più alto"
+      - "Il modo di dividere il testo è costruito soprattutto su testi in inglese, quindi l'italiano si spezza in più pezzi"
+    giusta: 2
+    spiegazione: >-
+      I pezzi che il modello conosce vengono scelti guardando molto testo, e quel testo è in gran parte in
+      inglese: le parole inglesi restano più spesso intere, quelle italiane si spezzano di più.
+    sbagliate:
+      - risposta: 0
+        perche: "Non c'è una traduzione nascosta: il modello legge i token dell'italiano direttamente."
+      - risposta: 1
+        perche: "Il prezzo di un token non dipende dalla lingua: cambia il numero di token, non il loro prezzo."
+
+  - id: l01-e11
+    tipo: completa
+    obiettivo: O4
+    difficolta: 3
+    consegna: "Completa la frase."
+    testo: "In un agente, a ogni turno si riparte da tutto il [[1]], quindi un file enorme letto all'inizio si paga [[2]]."
+    banca: ["contesto", "a ogni turno", "una volta sola", "modello", "mai"]
+    giusta: ["contesto", "a ogni turno"]
+    spiegazione: >-
+      Il contesto viene rimandato a ogni chiamata, file compresi, finché resta nella finestra. Alcuni
+      fornitori fanno pagare meno la parte ripetuta (la cache), ma si conta comunque. Per questo conviene
+      leggere solo le parti che servono.
+    sbagliate:
+      - risposta: ["contesto", "una volta sola"]
+        perche: "Il modello non tiene niente da parte: finché il file è nella finestra, viene rimandato e contato a ogni turno."
+      - risposta: ["modello", "a ogni turno"]
+        perche: "Il modello è sempre lo stesso; quello che viene rimandato a ogni turno è il contesto."
