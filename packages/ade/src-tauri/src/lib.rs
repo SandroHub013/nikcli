@@ -24,9 +24,6 @@ mod gateway;
 mod media;
 mod nikverse;
 mod nikverse_assets;
-mod plugin_install;
-mod plugin_scheme;
-mod plugin_storage;
 mod project_bytes;
 mod pty;
 mod record;
@@ -2191,7 +2188,6 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(pty::Registry::default())
         .manage(nikverse_assets::Assets::default())
-        .manage(plugin_install::Installer::default())
         .manage(record::Recorder::default())
         .manage(frontend::DevServer::default())
         .manage(serve::Server::default())
@@ -2232,13 +2228,6 @@ pub fn run() {
                 .map(|url| url.origin().ascii_serialization());
             let opened = state.1.lock().map(|guard| guard.clone()).unwrap_or_default();
             media::respond(&roots, &opened, &request, origin.as_deref())
-        })
-        /*
-         * A plugin's files, in an origin of its own: only what its installed, verified manifest
-         * lists (`plugin_scheme.rs`). The frame that shows it is sandboxed, so two plugins share nothing.
-         */
-        .register_uri_scheme_protocol(plugin_scheme::SCHEME, |ctx, request| {
-            plugin_scheme::respond(&request, plugin_scheme::store(ctx.app_handle()))
         })
         /*
          * NikVerse's world: the package's own files, in an origin of its own.
@@ -2318,15 +2307,6 @@ pub fn run() {
             nikverse_assets::nikverse_assets_install,
             nikverse_assets::nikverse_assets_bytes,
             nikverse_assets::nikverse_assets_remove,
-            plugin_install::plugin_list,
-            plugin_install::plugin_check,
-            plugin_install::plugin_install,
-            plugin_install::plugin_status,
-            plugin_install::plugin_commit,
-            plugin_install::plugin_rollback,
-            plugin_install::plugin_uninstall,
-            plugin_storage::plugin_storage_get,
-            plugin_storage::plugin_storage_set,
             mailbox::mailbox_receipt,
             mailbox::mailbox_publish,
             mailbox::mailbox_result,

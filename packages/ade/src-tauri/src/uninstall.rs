@@ -139,7 +139,8 @@ impl AppDirs {
 /// The folders of the app's local data that are only downloads and caches, whole.
 const WHOLE: [&str; 2] = ["tts", "nikverse-assets"];
 
-/// The file of a plugin's folder that is the user's: what the plugin saved (`plugin_storage.rs`), which reinstalling the plugin finds again.
+/// The file of a plugin's folder that is the user's: what the plugin saved, which reinstalling the plugin finds again. The plugins in a frame
+/// (A1) were removed on 2026-10-06; this cleanup stays for whoever had them.
 const PLUGIN_KEPT: &str = "storage.json";
 
 /// The caches of the WebView2 profile (`EBWebView/Default/...`): what Chromium makes again at the next start. Its cookies, its local storage
@@ -217,6 +218,7 @@ pub fn clean_caches(local: &Path) -> Cleaned {
     for name in WHOLE {
         remove_whole(&local.join(name), &mut done);
     }
+    // The folder of the plugins in a frame (A1), removed on 2026-10-06: the cleanup stays for whoever had them.
     let plugins = local.join("plugins");
     if plain_dir(&plugins) {
         if let Ok(entries) = std::fs::read_dir(&plugins) {
