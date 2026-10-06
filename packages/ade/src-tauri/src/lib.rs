@@ -272,14 +272,20 @@ fn is_git_executable_path(path: &Path) -> bool {
 /// A mapped drive letter cannot be told from a local one by its text.
 fn is_network_path(path: &str) -> bool {
     let normal = path.trim().replace('/', "\\");
+    // After `\\?\` or `\??\`, only a drive letter is a local path; a server, a volume or a device is not.
+    let local_after_prefix = |inner: &str| {
+        let mut chars = inner.chars();
+        matches!((chars.next(), chars.next()), (Some(drive), Some(':')) if drive.is_ascii_alphabetic())
+    };
+    // The NT object-manager spelling `\??\` reaches the SMB redirector exactly as `\\?\` does.
+    if let Some(inner) = normal.strip_prefix("\\??\\") {
+        return !local_after_prefix(inner);
+    }
     let Some(rest) = normal.strip_prefix("\\\\") else {
         return false;
     };
     match rest.strip_prefix("?\\") {
-        Some(inner) => {
-            let mut chars = inner.chars();
-            !matches!((chars.next(), chars.next()), (Some(drive), Some(':')) if drive.is_ascii_alphabetic())
-        }
+        Some(inner) => !local_after_prefix(inner),
         None => true,
     }
 }
@@ -3306,6 +3312,13 @@ mod tests {
             "\\\\.\\pipe\\x",
             "\\\\?\\Volume{01234567-89ab-cdef-0123-456789abcdef}\\x",
             "  //attacker.example/s/p/package.json",
+            // The NT object-manager prefix `\??\` is `\\?\` for the redirector: provably sent to SMB
+            // (review of F1, O1: `\??\UNC\127.0.0.1\C$\…` answers "network access denied", error 65).
+            "\\??\\UNC\\attacker.example\\s\\p",
+            "\\??\\UNC\\127.0.0.1\\C$\\Windows\\win.ini",
+            "\\??\\GLOBALROOT\\Device\\Mup\\attacker.example\\s",
+            "\\??\\Volume{01234567-89ab-cdef-0123-456789abcdef}\\x",
+            "/??/UNC/attacker.example/s/p",
         ] {
             assert!(is_network_path(unc), "{unc}");
             assert!(refuse_network_path(unc).is_err(), "{unc}");
@@ -3316,6 +3329,7 @@ mod tests {
             "C:\\Users\\u\\p",
             "C:/Users/u/p",
             "\\\\?\\C:\\Users\\u\\p",
+            "\\??\\C:\\Users\\u\\p",
             "/home/u/p",
             "relative/p",
             "./p",
