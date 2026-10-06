@@ -287,7 +287,7 @@ import { parseCommandId } from "../plugin/trust"
 import { CONSENT_KEY, consentQuestion, hasConsent, withConsent } from "../plugin/consent"
 import { toPluginSession } from "../plugin/session"
 import type { DiscoveryIO } from "../plugin/discovery"
-import { markSaved, openBuffer, saveBlockedReason } from "../editor"
+import { markSaved, openBuffer, saveBlockedReason, toLf, withEol } from "../editor"
 import { detectPermission, followPermission, type PermissionAnswer } from "../session/permission"
 import { readReportLine } from "../session/report"
 import { asOneLine, asSubmittedLine, confirmDeadline, pasteSettled, submitCheck } from "../session/typing"
@@ -7268,7 +7268,7 @@ export function Workbench() {
           report(t("editor.saveCancelled.unreadable", String(unreadable)), "warning")
           return
         }
-      } else if (onDisk && !onDisk.truncated && onDisk.text !== buffer.saved) {
+      } else if (onDisk && !onDisk.truncated && toLf(onDisk.text) !== buffer.saved) {
         const overwrite = await askYesNo(t("editor.saveChanged", buffer.path))
         if (!overwrite) {
           report(t("editor.saveCancelled.changed"), "warning")
@@ -7281,7 +7281,8 @@ export function Workbench() {
     // as written are the same string.
     const written = buffer.draft
 
-    const error = await host.writeTextFile(buffer.path, written)
+    // The file keeps the line ending it had: the editor holds LF, the disk gets CRLF back.
+    const error = await host.writeTextFile(buffer.path, withEol(written, buffer.eol))
     if (error) {
       report(t("editor.saveFailed", String(error)))
       return

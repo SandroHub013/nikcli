@@ -17,6 +17,30 @@ export interface Buffer {
   dirty: boolean
   /** Il file era troncato in lettura: salvarlo distruggerebbe il resto. */
   truncated: boolean
+  /**
+   * Il fine-riga del file com'era su disco. `saved` e `draft` sono sempre con LF, come li
+   * restituisce la textarea; il fine-riga si rimette solo scrivendo (`withEol`).
+   */
+  eol: Eol
+}
+
+export type Eol = "\n" | "\r\n"
+
+/** Il testo con tutti i fine-riga a LF: com'è nella textarea, qualunque fosse su disco. */
+export function toLf(text: string): string {
+  return text.replace(/\r\n?/g, "\n")
+}
+
+/** CRLF quando prevale nel file, altrimenti LF. Un file misto prende il fine-riga più frequente. */
+export function eolOf(text: string): Eol {
+  const crlf = (text.match(/\r\n/g) ?? []).length
+  const lf = (text.match(/\n/g) ?? []).length - crlf
+  return crlf > lf ? "\r\n" : "\n"
+}
+
+/** Il testo con LF riscritto nel fine-riga del file. */
+export function withEol(text: string, eol: Eol): string {
+  return eol === "\r\n" ? text.replace(/\n/g, "\r\n") : text
 }
 
 export interface Position {
@@ -28,12 +52,16 @@ export interface Position {
  * Inizializza un nuovo buffer a partire da un file letto da disco.
  */
 export function openBuffer(input: { path: string; text: string; truncated: boolean }): Buffer {
+  // Un file CRLF si apre con LF e si salva con CRLF: senza questo la prima modifica riscriveva ogni
+  // riga e il diff di git le copriva tutte (revisione completa 2026-10-06, ui 1).
+  const text = toLf(input.text)
   return {
     path: input.path,
-    saved: input.text,
-    draft: input.text,
+    saved: text,
+    draft: text,
     dirty: false,
     truncated: input.truncated,
+    eol: eolOf(input.text),
   }
 }
 
