@@ -27,8 +27,8 @@ const host: KeysHost = {
   copy: async () => 0,
 }
 const agents = [
-  { id: "a1", label: "Agente uno" },
-  { id: "a2", label: "Agente due" },
+  { id: "a1", label: "Agente uno", command: "uno" },
+  { id: "a2", label: "Agente due", command: "due" },
 ]
 
 describe("a second key request while the dialog is open", () => {
