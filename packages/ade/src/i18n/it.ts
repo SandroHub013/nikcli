@@ -169,6 +169,7 @@ export const it = {
   "nikverse.late": "Il mondo non si è aperto: riprova, oppure apri la lista.",
   "nikverse.late.retry": "Riprova",
   "nikverse.late.list": "Apri la lista",
+  "nikverse.lowered.retry": "Riprova a qualità piena",
   "restore.note": "Sessione ripristinata.",
   "restore.note.gone": "Il processo non è più attivo.",
   "restore.note.reopen": "Riapro la conversazione dell'agente dov'era rimasta.",

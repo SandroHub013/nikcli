@@ -190,9 +190,12 @@ export function githubReleaseFeed(doFetch: typeof fetch = fetch, initialEtag?: s
       if (response.status === 304) return { notModified: true }
       if (!response.ok) throw new ReleaseFeedError(`GitHub ${response.status}`, retryAfter(response, Date.now()))
       const tag = response.headers.get("etag")
+      // The list first, the tag after: a body that cannot be read (cut short, not JSON) must not leave the tag of a list ADE
+      // never saw, or the next look would be told «not modified» and a release would be missed (full review 2026-10-06, ui 13).
+      const releases = (await response.json()) as GithubRelease[]
       if (tag) etag = tag
       return {
-        releases: (await response.json()) as GithubRelease[],
+        releases,
         notModified: false,
         ...(tag ? { etag: tag } : {}),
       }

@@ -163,6 +163,7 @@ export const en: Messages = {
   "nikverse.late": "The world did not open: try again, or open the list.",
   "nikverse.late.retry": "Try again",
   "nikverse.late.list": "Open the list",
+  "nikverse.lowered.retry": "Try at full quality",
   "restore.note": "Session restored.",
   "restore.note.gone": "The process is no longer running.",
   "restore.note.reopen": "Reopening the agent's conversation where it left off.",

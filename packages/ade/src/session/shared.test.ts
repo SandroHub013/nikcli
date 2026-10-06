@@ -168,6 +168,29 @@ describe("messages and forks", () => {
     ).toMatchObject({ fork: true })
   })
 
+  // Full review 2026-10-06, sessions 17: `isKvKey` accepts the names of Object.prototype.
+  test("a key named like a property of Object is an ordinary key", () => {
+    for (const key of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
+      const empty = emptySpace()
+      expect(applyKv(empty, req("get", key), alice, 0, everyoneAlive).reply).toMatch(/^errore: nessun valore/)
+      expect(applyKv(empty, req("del", key), alice, 0, everyoneAlive).reply).toMatch(/non c'era/)
+      expect(applyKv(empty, req("unlock", key), alice, 0, everyoneAlive).reply).toMatch(/non era bloccata/)
+      expect(applyKv(empty, req("lock", key), bob, 0, everyoneAlive).reply).toMatch(/^ok/)
+      const stored = applyKv(empty, req("set", key, "v"), alice, 0, everyoneAlive)
+      expect(stored.reply).toMatch(/^ok/)
+      expect(Object.keys(stored.space.entries)).toEqual([key])
+      expect(applyKv(stored.space, req("get", key), alice, 0, everyoneAlive).reply).toContain("v")
+    }
+  })
+
+  test("a saved store with those keys comes back with them as own keys, not as the prototype", () => {
+    const raw = '{"p":{"entries":{"__proto__":{"value":"v","by":"a","at":1},"constructor":{"value":"c","by":"a","at":2}},"locks":{}}}'
+    const space = parseKvStore(raw).p!
+    expect(Object.keys(space.entries).sort()).toEqual(["__proto__", "constructor"])
+    expect(({} as Record<string, unknown>).value).toBeUndefined()
+    expect(space.entries["constructor"]?.value).toBe("c")
+  })
+
   test("a fork plan for the CLIs that can fork", () => {
     expect(planFork("claude-code", "parent", "child")).toEqual({
       args: ["--resume", "parent", "--fork-session", "--session-id", "child"],

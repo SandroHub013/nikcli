@@ -13,6 +13,16 @@ describe("proactive-alerts", () => {
     expect(summarizeCompletion([])).toBeUndefined()
   })
 
+  // Full review 2026-10-06, ui 14.
+  test("summarizeCompletion does not hide failures behind passes, and ignores a zero count", () => {
+    expect(summarizeCompletion([{ text: "5 passed, 2 failed" }])).toBe("due test falliti")
+    // The usual last line of a green run.
+    expect(summarizeCompletion([{ text: "12 pass" }, { text: "0 fail" }])).toBe("12 test verdi")
+    expect(summarizeCompletion([{ text: "0 failed" }])).toBeUndefined()
+    expect(summarizeCompletion([{ text: "0 passed" }])).toBeUndefined()
+    expect(summarizeCompletion([{ text: "7 passed, 0 failed" }], "en")).toBe("seven passed tests")
+  })
+
   test("does nothing when proactive alerts are disabled", async () => {
     const spoken: string[] = []
     const windows: any[] = []

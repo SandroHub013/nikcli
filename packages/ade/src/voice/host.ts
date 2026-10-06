@@ -169,8 +169,19 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
     if (typeof window !== "undefined") window.addEventListener("pagehide", () => warm.close())
     return warm
   }
-  const voiceAgent = () =>
-    (agent ??= deps.voiceAgentFactory
+  const voiceAgent = () => {
+    if (agent) return agent
+    const made = makeVoiceAgent()
+    agent = made
+    // A start that failed is not kept: the next sentence tries again, instead of every one getting the same rejection until the
+    // window is reloaded (full review 2026-10-06, ui 20).
+    made.catch(() => {
+      if (agent === made) agent = undefined
+    })
+    return made
+  }
+  const makeVoiceAgent = (): Promise<VoiceAgent> =>
+    deps.voiceAgentFactory
       ? deps.voiceAgentFactory()
       : Promise.all([import("../bots/serve-turn"), import("../bots/warm")]).then(
           ([{ runBotTurn }, { createWarmClaude }]) =>
@@ -183,7 +194,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
               cwd: () => deps.project()?.root,
               codexFallback: () => deps.codexFallback?.() ?? false,
             }),
-        ))
+        )
 
   return {
     async askAgent(request) {
@@ -643,7 +654,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
           }
           if (waitingSessions > 0) {
             details.push(
-              `${waitingSessions === 1 ? "una" : (ITALIAN_NUMBERS[waitingSessions] ?? workingSessions)} in attesa`,
+              `${waitingSessions === 1 ? "una" : (ITALIAN_NUMBERS[waitingSessions] ?? waitingSessions)} in attesa`,
             )
           }
           if (doneSessions > 0) {

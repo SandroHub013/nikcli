@@ -67,6 +67,9 @@ export type DiscoveryResult = {
   readonly rejected: RejectedPlugin[]
 }
 
+/** A check that fails is a file that is not there for discovery: one plugin must not take the whole list down (`path_exists` rejects). */
+const there = (io: DiscoveryIO, path: string) => io.exists(path).catch(() => false)
+
 /** The slice of `host/shell.ts` discovery needs. Injected, so tests need no Tauri. */
 export interface DiscoveryIO {
   readTextFile: (path: string, maxBytes?: number) => Promise<{ text: string }>
@@ -158,7 +161,15 @@ function directoryOf(url: string): string {
 
 /** A `file://` URL back to something `read_text_file` will accept. */
 export function urlToPath(url: string): string {
-  const raw = decodeURIComponent(url.replace(/^file:\/\//, ""))
+  const encoded = url.replace(/^file:\/\//, "")
+  // A `%` that is not an escape (`100%/plugin.js`) makes `decodeURIComponent` throw, and with it the whole project's rows
+  // (full review 2026-10-06, bots): such a path is taken as it is written.
+  let raw = encoded
+  try {
+    raw = decodeURIComponent(encoded)
+  } catch {
+    // Not an escape: as written.
+  }
   // `file:///C:/x` leaves a leading slash in front of the drive letter, which
   // Windows will not open.
   return /^\/[A-Za-z]:/.test(raw) ? raw.slice(1) : raw
@@ -226,13 +237,13 @@ export async function resolveDeclaredPlugin(
   if (!url) return { ...declared, reason: "percorso del plugin non valido" }
 
   if (/\.(m?js|mjs|jsx)$/i.test(url)) {
-    if (!(await io.exists(urlToPath(url)))) return { ...declared, reason: "il file del plugin non esiste" }
+    if (!(await there(io, urlToPath(url)))) return { ...declared, reason: "il file del plugin non esiste" }
     return { ...declared, entry: url }
   }
 
   const manifestUrl = new URL("package.json", url.endsWith("/") ? url : `${url}/`).href
   const manifestPath = urlToPath(manifestUrl)
-  if (!(await io.exists(manifestPath))) {
+  if (!(await there(io, manifestPath))) {
     return { ...declared, reason: "la cartella del plugin non contiene un package.json" }
   }
 
@@ -242,7 +253,7 @@ export async function resolveDeclaredPlugin(
   const outcome = resolveManifestEntry(manifestUrl, manifest.text)
   if ("reason" in outcome) return { ...declared, reason: outcome.reason }
 
-  if (!(await io.exists(urlToPath(outcome.entry)))) {
+  if (!(await there(io, urlToPath(outcome.entry)))) {
     return { ...declared, reason: "l'entrypoint dichiarato non esiste" }
   }
   return { ...declared, entry: outcome.entry }
@@ -251,7 +262,7 @@ export async function resolveDeclaredPlugin(
 /** Everything the project declares, sorted into what loads and what does not. */
 export async function discoverPlugins(projectRoot: string, io: DiscoveryIO): Promise<DiscoveryResult> {
   const configPath = urlToPath(specToUrl(CONFIG_RELATIVE_PATH, projectRoot) ?? "")
-  if (!configPath || !(await io.exists(configPath))) return { resolved: [], rejected: [] }
+  if (!configPath || !(await there(io, configPath))) return { resolved: [], rejected: [] }
 
   const config = await io.readTextFile(configPath).catch(() => undefined)
   if (!config) return { resolved: [], rejected: [] }

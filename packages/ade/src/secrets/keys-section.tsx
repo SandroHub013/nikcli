@@ -295,7 +295,8 @@ function XaiKeyBlock(props: {
 
   const save = async (event: Event) => {
     event.preventDefault()
-    const value = field?.value ?? ""
+    // Trimmed like the form's key (review of F7d): a pasted space or line break is not part of the key.
+    const value = (field?.value ?? "").trim()
     const wrong = valueProblem(value)
     if (wrong) {
       setProblem(wrong)
@@ -454,7 +455,9 @@ export function KeyForm(props: {
 
   const submit = async (event: Event) => {
     event.preventDefault()
-    const value = valueField?.value ?? ""
+    // A key pasted with a space or a line break at its end is that key (full review 2026-10-06, bots): saved as it was it would
+    // fail at the provider with nothing to show why.
+    const value = (valueField?.value ?? "").trim()
     const problems = [
       props.existing ? undefined : nameProblem(name()),
       envProblem(effectiveEnv(), props.others, props.existing?.name ?? name()),

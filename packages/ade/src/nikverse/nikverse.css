@@ -66,6 +66,22 @@
   transition: width 200ms linear;
 }
 
+/* The world was lowered to Bassa: a small way back to the machine's own level, over the frame's corner. */
+[data-slot="nikverse-lowered-retry"] {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1;
+  padding: var(--ade-space-2, 4px) var(--ade-space-5, 10px);
+  border-radius: var(--ade-radius-sm, 5px);
+  font-size: var(--ade-font-xs);
+  font-weight: var(--ade-weight-medium);
+  background: var(--ade-sunken, canvas);
+  color: var(--ade-text, currentColor);
+  border: 1px solid var(--ade-border, currentColor);
+  cursor: pointer;
+}
+
 /* An opening that did not come (`opening.ts`): one line over the frame, the reason and the two ways on. */
 [data-slot="nikverse-late"] {
   position: absolute;

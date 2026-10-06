@@ -68,11 +68,19 @@ export function matchCatalog(
     const theirs = entry.installation.config.server
     if (config.url && theirs.url) return config.url === theirs.url
     if (config.command && theirs.command && config.command === theirs.command) {
-      const pkg = (args: readonly string[] | undefined) => args?.find((arg) => !arg.startsWith("-"))
+      const pkg = (args: unknown) => stringArgs(args).find((arg) => !arg.startsWith("-"))
       return pkg(config.args) !== undefined && pkg(config.args) === pkg(theirs.args)
     }
     return false
   })
+}
+
+/**
+ * The arguments of a hand-written server, as strings. A file that says `"args": "x"` or `"args": 5` is what the user wrote:
+ * the list shows it as it can instead of failing on the page (full review 2026-10-06, bots).
+ */
+function stringArgs(args: unknown): string[] {
+  return Array.isArray(args) ? args.filter((arg): arg is string => typeof arg === "string") : []
 }
 
 /** The servers in the project's `.mcp.json`, in file order. Throws the parser's error for a broken file. */
@@ -88,7 +96,7 @@ export function installedServers(
     const entry = matchCatalog(name, config, catalog)
     return {
       name,
-      detail: config.url ?? [config.command, ...(config.args ?? [])].filter(Boolean).join(" "),
+      detail: config.url ?? [config.command, ...stringArgs(config.args)].filter(Boolean).join(" "),
       transport: config.url ? "remote" : config.command ? "stdio" : "sconosciuto",
       variables: [...variables].sort(),
       ...(entry ? { entry } : {}),

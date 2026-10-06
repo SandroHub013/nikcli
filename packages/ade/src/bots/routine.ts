@@ -632,6 +632,17 @@ export function removeRoutine(book: RoutineBook, id: string): RoutineBook {
   return { ...book, routines: book.routines.filter((routine) => routine.id !== id), logs }
 }
 
+/** Every routine of a bot, with their logs: the bot's file is gone. */
+export function removeRoutinesOf(book: RoutineBook, bot: string): RoutineBook {
+  const gone = new Set(book.routines.filter((routine) => routine.bot === bot).map((routine) => routine.id))
+  if (gone.size === 0) return book
+  return {
+    ...book,
+    routines: book.routines.filter((routine) => !gone.has(routine.id)),
+    logs: Object.fromEntries(Object.entries(book.logs).filter(([id]) => !gone.has(id))),
+  }
+}
+
 export function pauseRoutine(book: RoutineBook, id: string, paused: boolean): RoutineBook {
   return {
     ...book,
