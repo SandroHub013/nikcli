@@ -1,0 +1,283 @@
+# Bozza della lezione 3 del percorso «Agenti e LLM»
+id: agenti-llm/03-ciclo-agente
+versione: 1.0.0
+lingua: it
+tema: agenti-llm
+unita: 1
+numero: 3
+titolo: Il ciclo dell'agente
+durata_min: 4
+livello: 1
+prerequisiti:
+  - agenti-llm/01-token-contesto
+  - agenti-llm/02-ruoli-prompt
+stato: rivista
+autori:
+  bozza: agy
+  revisione: Architetto
+
+obiettivi:
+  - id: O1
+    testo: "Mettere in ordine un giro dell'agente: richiesta, tool call proposta, controllo ed esecuzione, risultato nel contesto, continuazione."
+  - id: O2
+    testo: "Spiegare che il modello non esegue nulla da sé: esegue l'harness."
+  - id: O3
+    testo: "Spiegare che ogni risultato di strumento allunga il contesto, e che cosa ne segue per costo e attenzione."
+  - id: O4
+    testo: "Riconoscere quando un agente deve fermarsi: compito finito, permesso negato, limite raggiunto."
+  - id: O5
+    testo: "Distinguere uno strumento che legge da uno che cambia qualcosa."
+
+fonti:
+  - id: F1
+    titolo: "Documentazione ufficiale di Anthropic: uso degli strumenti e ciclo dell'agente"
+    url: https://docs.claude.com
+  - id: F2
+    titolo: "Documentazione ufficiale di OpenAI: function calling e ciclo dell'agente"
+    url: https://platform.openai.com/docs
+
+teoria:
+  - id: T1
+    obiettivi: [O1, O2]
+    fonti: [F1, F2]
+    testo: >-
+      Un agente non agisce da solo sul computer. Il modello linguistico genera solo testo, inclusa la
+      proposta di chiamare uno strumento (`tool call`). È l'**harness** (il programma che gestisce l'agente)
+      a verificare i permessi ed eseguire davvero il comando sul sistema operativo. Nessun comando parte
+      senza passare dal controllo dell'harness.
+  - id: T2
+    obiettivi: [O1, O3]
+    fonti: [F1]
+    testo: >-
+      Il ciclo operativo si ripete in passaggi precisi: richiesta dell'utente, proposta di tool call da
+      parte del modello, controllo ed esecuzione dell'harness, inserimento del dato nel contesto come
+      risultato dello strumento, e nuova generazione del modello. Ogni output allunga la finestra di
+      contesto: risultati enormi aumentano i costi e rischiano di disperdere l'attenzione del modello.
+  - id: T3
+    obiettivi: [O4, O5]
+    fonti: [F1, F2]
+    testo: >-
+      Gli strumenti si dividono in due categorie: quelli che **leggono** dati (osservano senza modificare) e
+      quelli che **cambiano** lo stato (creano file, inviano richieste o eseguono comandi). Il ciclo
+      dell'agente non dura all'infinito: si arresta quando il compito è concluso, quando un permesso
+      indispensabile viene negato o quando si raggiunge il limite massimo di turni consentiti.
+
+esercizi:
+  - id: l03-e01
+    tipo: ordina
+    obiettivo: O1
+    difficolta: 2
+    fonte: F1
+    consegna: "Metti in ordine i passaggi di un ciclo completo dell'agente."
+    elementi:
+      - "L'utente invia una richiesta all'agente"
+      - "Il modello risponde proponendo una tool call con i parametri"
+      - "L'harness controlla i permessi ed esegue lo strumento"
+      - "Il risultato dell'esecuzione viene aggiunto al contesto come risultato dello strumento"
+      - "Il modello legge il risultato e decide come proseguire"
+    spiegazione: >-
+      Il ciclo segue una sequenza rigorosa: richiesta, proposta strutturata del modello, esecuzione verificata
+      dall'harness, rientro del risultato nel contesto e nuova valutazione.
+    sbagliate:
+      - risposta: [0, 2, 1, 3, 4]
+        perche: "L'harness non può eseguire lo strumento prima che il modello abbia formulato la proposta di tool call."
+      - risposta: [1, 0, 2, 3, 4]
+        perche: "Il ciclo si avvia sempre in risposta alla richiesta iniziale presente nel contesto."
+
+  - id: l03-e02
+    tipo: ordina
+    obiettivo: O1
+    difficolta: 2
+    fonte: F1
+    consegna: "Metti in ordine i passaggi di un ciclo in cui un'azione viene rifiutata dall'utente."
+    elementi:
+      - "Il modello propone di cancellare un file di configurazione"
+      - "L'harness intercetta l'azione e chiede conferma alla persona"
+      - "La persona nega l'autorizzazione all'operazione"
+      - "L'harness inserisce nel contesto un messaggio di errore o diniego"
+      - "Il modello riceve la notifica del rifiuto e propone una soluzione alternativa"
+    spiegazione: >-
+      Quando un'azione richiede conferma, l'harness attende la scelta dell'utente prima di procedere. Se negata,
+      restituisce l'esito negativo al modello affinché possa orientarsi su un'altra via.
+    sbagliate:
+      - risposta: [0, 1, 3, 2, 4]
+        perche: "L'harness notifica il rifiuto nel contesto solo dopo che la persona ha espresso la sua decisione."
+      - risposta: [1, 0, 2, 3, 4]
+        perche: "La richiesta di conferma interviene a seguito della proposta del modello, non all'inizio del turno."
+
+  - id: l03-e03
+    tipo: scelta
+    obiettivo: O2
+    difficolta: 1
+    fonte: F1
+    consegna: "Chi esegue concretamente le operazioni sul tuo computer durante una sessione con un agente?"
+    opzioni:
+      - "Il modello linguistico, accedendo in autonomia a disco e rete locali"
+      - "L'harness locale, che riceve la proposta dal modello ed esegue il comando se autorizzato"
+      - "Il server cloud dove risiede il modello tramite connessione remota diretta al tuo disco"
+    giusta: 1
+    spiegazione: >-
+      I modelli generano soltanto testo strutturato: ogni reale operazione sul sistema operativo è effettuata
+      esclusivamente dall'harness dopo aver controllato le policy.
+    sbagliate:
+      - risposta: 0
+        perche: "Il modello non possiede socket di rete o permessi di sistema: genera unicamente token testuali."
+      - risposta: 2
+        perche: "I comandi sul tuo computer li avvia l'harness; alcuni fornitori hanno strumenti che girano sui loro server, ma non toccano il tuo computer."
+
+  - id: l03-e04
+    tipo: trova-riga
+    obiettivo: O2
+    difficolta: 2
+    consegna: "In questa traccia di esecuzione, quale riga rappresenta la proposta emessa dal modello?"
+    etichetta: "traccia di log dell'harness"
+    righe:
+      - "[utente] Verifica se il file server.conf esiste."
+      - "[modello] Proposta tool call: fs_stat(percorso='server.conf')"
+      - "[harness] Controllo permessi: lettura consentita sulla cartella"
+      - "[harness] Esecuzione di fs_stat su server.conf"
+      - "[tool] Risultato: presente, dimensione 420 byte"
+    giuste: [1]
+    spiegazione: >-
+      La proposta di tool call indica lo strumento richiesto e i parametri decisi dal modello; non è
+      ancora un comando eseguito finché l'harness non interviene.
+    sbagliate:
+      - risposta: 3
+        perche: "Questa riga descrive l'effettiva esecuzione del comando svolta dall'harness."
+      - risposta: 4
+        perche: "Questo è l'output dello strumento reiniettato nel contesto, non la richiesta generata dal modello."
+
+  - id: l03-e05
+    tipo: scelta
+    obiettivo: O3
+    difficolta: 2
+    fonte: F1
+    consegna: "Qual è l'impatto principale se uno strumento carica nel contesto un file di log enorme?"
+    opzioni:
+      - "La finestra si riempie in fretta, moltiplicando i token da pagare e disperdendo l'attenzione sui punti chiave"
+      - "Il modello elimina in automatico tutti i file presenti nella cartella di lavoro"
+      - "L'elaborazione del turno successivo diventa istantanea perché ci sono più dati"
+    giusta: 0
+    spiegazione: >-
+      Inserire dati ponderosi nel contesto aumenta il costo a ogni turno successivo e rende più difficile per
+      il modello individuare le informazioni rilevanti per il compito.
+    sbagliate:
+      - risposta: 1
+        perche: "La dimensione del contesto non innesca cancellazioni arbitrarie sul filesystem."
+      - risposta: 2
+        perche: "Una finestra più estesa richiede maggiore calcolo computazionale e rallenta la generazione dei token."
+
+  - id: l03-e06
+    tipo: completa
+    obiettivo: O3
+    difficolta: 2
+    fonte: F1
+    consegna: "Completa la frase sul consumo di risorse nel ciclo dell'agente."
+    testo: "I risultati restituiti dagli strumenti entrano nel [[1]], aumentando il [[2]] e il rischio di distrazione."
+    banca: ["contesto", "costo", "disco", "server", "numero di file"]
+    giusta: ["contesto", "costo"]
+    spiegazione: >-
+      I messaggi restituibili dagli strumenti arricchiscono il contesto: più è lungo, più token in entrata si
+      consumano per ciascun turno successivo.
+    sbagliate:
+      - risposta: ["disco", "costo"]
+        perche: "I dati dello strumento vanno a occupare la memoria attiva del contesto, non primariamente il disco."
+      - risposta: ["contesto", "numero di file"]
+        perche: "I risultati entrano nel contesto come testo, non creano file."
+
+  - id: l03-e07
+    tipo: scelta
+    obiettivo: O4
+    difficolta: 1
+    consegna: "Quando è corretto che un agente termini il proprio ciclo di esecuzione?"
+    opzioni:
+      - "Soltanto se l'utente spegne l'alimentazione del computer"
+      - "Appena riscontra un file scritto in un formato o estensione poco nota"
+      - "Quando tutti i criteri stabiliti sono stati soddisfatti, quando un permesso indispensabile viene negato o a un limite"
+    giusta: 2
+    spiegazione: >-
+      L'agente deve fermarsi quando l'obiettivo dichiarato è completo, oppure quando interviene un blocco di
+      sicurezza o un tetto di risorse (turni o budget).
+    sbagliate:
+      - risposta: 0
+        perche: "Un agente ben fatto si ferma da solo: quando ha finito, quando gli manca un permesso, o a un limite."
+      - risposta: 1
+        perche: "Tipi di file diversi possono essere analizzati se coerenti con la consegna iniziale."
+
+  - id: l03-e08
+    tipo: completa
+    obiettivo: O4
+    difficolta: 2
+    fonte: F1
+    consegna: "Completa la frase sulle condizioni di arresto."
+    testo: "L'agente deve interrompere il ciclo quando l'obiettivo è [[1]] oppure quando raggiunge il limite massimo di [[2]]."
+    banca: ["completato", "turni", "segreto", "colori", "parole"]
+    giusta: ["completato", "turni"]
+    spiegazione: >-
+      Avere condizioni di uscita ben definite per fine compito o raggiungimento del tetto di turni impedisce
+      spese incontrollate o loop ricorsivi.
+    sbagliate:
+      - risposta: ["segreto", "turni"]
+        perche: "Un obiettivo segreto non è una condizione d'arresto: l'agente si ferma quando ha finito o quando incontra un limite."
+      - risposta: ["completato", "colori"]
+        perche: "I colori non c'entrano: i vincoli dell'harness si impostano sul numero di turni o su budget di spesa, non sui colori."
+
+  - id: l03-e09
+    tipo: abbina
+    obiettivo: O5
+    difficolta: 1
+    fonte: F1
+    consegna: "Abbina ogni chiamata di strumento al tipo di operazione: lettura o modifica."
+    coppie:
+      - sinistra: "read_file(percorso='report.txt')"
+        destra: "lettura: osserva i dati senza alterare lo stato"
+      - sinistra: "write_file(percorso='output.txt', contenuto='dati')"
+        destra: "modifica: cambia il filesystem creando o aggiornando file"
+      - sinistra: "list_directory(cartella='src/')"
+        destra: "lettura: elenca le voci presenti sul disco"
+      - sinistra: "delete_file(percorso='vecchio.log')"
+        destra: "modifica: rimuove una risorsa dal disco"
+    spiegazione: >-
+      Distinguere le operazioni di consultazione da quelle che producono modifiche o cancellazioni permette
+      all'harness di proteggere l'ambiente di lavoro.
+    sbagliate:
+      - risposta:
+          sinistra: "read_file(percorso='report.txt')"
+          destra: "modifica: cambia il filesystem creando o aggiornando file"
+        perche: "Leggere un file è un'azione non distruttiva che non altera i dati sul disco."
+      - risposta:
+          sinistra: "delete_file(percorso='vecchio.log')"
+          destra: "lettura: osserva i dati senza alterare lo stato"
+        perche: "La cancellazione modifica lo stato del filesystem ed è un'operazione distruttiva."
+
+  - id: l03-e10
+    tipo: abbina
+    obiettivo: O5
+    difficolta: 2
+    fonte: F1
+    consegna: "Abbina ciascuna operazione al rispettivo livello di impatto sul sistema."
+    coppie:
+      - sinistra: "Ispezionare la versione di un pacchetto installato"
+        destra: "basso impatto: consulta metadati senza modificare l'ambiente"
+      - sinistra: "Inviare dati con HTTP POST a un endpoint esterno"
+        destra: "impatto esterno: trasmette informazioni fuori dal perimetro locale"
+      - sinistra: "Eseguire una query SELECT sul database locale"
+        destra: "basso impatto: legge tabelle senza alterare i dati memorizzati"
+      - sinistra: "Eseguire uno script bash che rimuove tabelle sul database"
+        destra: "alto impatto: altera o distrugge informazioni in modo permanente"
+    spiegazione: >-
+      Le consultazioni locali presentano rischi minimi, mentre comunicazioni esterne o istruzioni distruttive
+      necessitano di verifiche stringenti.
+    sbagliate:
+      - risposta:
+          sinistra: "Inviare dati con HTTP POST a un endpoint esterno"
+          destra: "basso impatto: consulta metadati senza modificare l'ambiente"
+        perche: "Inviare dati a server remoti comporta potenziali fughe di informazioni e alterazioni dello stato remoto."
+      - risposta:
+          sinistra: "Eseguire una query SELECT sul database locale"
+          destra: "alto impatto: altera o distrugge informazioni in modo permanente"
+        perche: "La clausola SELECT estrae dati senza modificare o cancellare le tabelle del database."
+
+# Dubbi e verifiche:
+# - Applicata nota C1 sul risultato degli strumenti ("come risultato dello strumento").
+# - Chiarita la distinzione tra esecuzione locale guidata dall'harness e strumenti eseguiti lato server dal fornitore.

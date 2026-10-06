@@ -272,6 +272,13 @@ export interface Host {
   nikverseAssetsBytes?: () => Promise<number>
   /** Takes the fetched assets off the disk; the bytes freed. They are fetched again when the world next opens. Refused while a fetch runs. */
   nikverseAssetsRemove?: () => Promise<number>
+  /**
+   * The learner's progress for «Impara» (`learn.rs`): one JSON in the app's local data, `null` when there is none yet. The shape is
+   * checked by the caller before anything is written, and the file itself refuses what is not JSON or is over its ceiling.
+   */
+  learnProgressGet?: () => Promise<unknown>
+  /** Replaces the progress with this JSON, written to a staging file and renamed over the old one. */
+  learnProgressSet?: (json: string) => Promise<void>
 
   // -- Filesystem access (backed by dedicated Tauri commands) ---------------
   readDir?: (path: string) => Promise<DirEntry[]>
@@ -841,6 +848,15 @@ export async function getHost(): Promise<Host | undefined> {
       return await invoke<number>("nikverse_assets_remove")
     },
 
+    async learnProgressGet() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<unknown>("learn_progress_get")
+    },
+
+    async learnProgressSet(json: string) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("learn_progress_set", { json })
+    },
     /*
      * The names are K4b's: `tts_local_*` with the provider as a parameter
      * (Kokoro plan, K4). Until that is in the build the command is missing,

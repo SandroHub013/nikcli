@@ -75,10 +75,38 @@ const PACKAGE: &[PackageFile] = &[
         mime: "text/css; charset=utf-8",
         body: include_bytes!("../../src/nikverse/world/world.css"),
     },
+    // The lesson page, «Impara». It is a page of its own under the same scheme and the same policy: it is not a page of the world, so
+    // it is not under the world's files and the world's files are not under it.
+    PackageFile {
+        path: "learn/index.html",
+        mime: "text/html; charset=utf-8",
+        body: include_bytes!("../../src/nikverse/learn/page/index.html"),
+    },
+    PackageFile {
+        path: "learn/learn.js",
+        mime: "text/javascript; charset=utf-8",
+        body: include_bytes!("../../src/nikverse/learn/page/learn.js"),
+    },
+    PackageFile {
+        path: "learn/learn.css",
+        mime: "text/css; charset=utf-8",
+        body: include_bytes!("../../src/nikverse/learn/page/learn.css"),
+    },
+    PackageFile {
+        path: "learn/content.json",
+        mime: "application/json; charset=utf-8",
+        body: include_bytes!("../../src/nikverse/learn/content.json"),
+    },
 ];
 
 /// The file served for `/`.
 const INDEX: &str = "index.html";
+
+/// The folder the lesson page is under: `/learn/` is its index, and nothing above it is in the package.
+const LEARN_PREFIX: &str = "learn/";
+
+/// The file `/learn/` answers with. The panel frames that address, so the folder alone is not a page.
+const LEARN_INDEX: &str = "learn/index.html";
 
 /// The folder of the assets: next to `Cargo.toml` in the sources, and under the app's local data once fetched.
 /// `build.rs` lists the same folder.
@@ -303,6 +331,24 @@ fn resolve(raw_path: &str) -> Result<Route, StatusCode> {
     if let Some(asset) = relative.strip_prefix(ASSETS_PREFIX) {
         return Ok(Route::Asset(asset.to_string()));
     }
+    // `/learn/` is the lesson page. `/learn` without the slash is not: the page's own addresses (`learn.css`, `learn.js`) are relative, so
+    // from there they would be asked of the root and the page would come up broken. Not found is better than a page that does not work.
+    if relative == LEARN_PREFIX {
+        return PACKAGE
+            .iter()
+            .find(|file| file.path == LEARN_INDEX)
+            .map(Route::Package)
+            .ok_or(StatusCode::NOT_FOUND);
+    }
+    // Under `/learn/` only its own four files: a request that names a file of the world there is not found, not silently answered
+    // with the world.
+    if let Some(within) = relative.strip_prefix(LEARN_PREFIX) {
+        return PACKAGE
+            .iter()
+            .find(|file| file.path.strip_prefix(LEARN_PREFIX) == Some(within))
+            .map(Route::Package)
+            .ok_or(StatusCode::NOT_FOUND);
+    }
     let wanted = if relative.is_empty() { INDEX } else { relative };
     PACKAGE
         .iter()
@@ -451,6 +497,78 @@ mod tests {
             "nikverse://localhost/INDEX.HTML",
         ] {
             assert_eq!(get(uri).status(), StatusCode::NOT_FOUND, "{uri}");
+        }
+    }
+
+    #[test]
+    fn the_lesson_page_is_served_under_learn_and_the_pages_do_not_mix() {
+        // The panel frames `/learn/`: the folder is that page, in both spellings of the scheme.
+        for uri in ["nikverse://localhost/learn/", "http://nikverse.localhost/learn/"] {
+            let response = get(uri);
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+            assert!(header(&response, "content-type").starts_with("text/html"), "{uri}");
+            let body = String::from_utf8_lossy(response.body()).into_owned();
+            assert!(body.contains("data-learn"), "{uri}");
+            assert_eq!(header(&response, "content-security-policy"), CSP, "{uri}");
+            assert_eq!(header(&response, "access-control-allow-origin"), "*", "{uri}");
+        }
+        // Without the slash it is not the page: its relative files would be asked of the root, so there is nothing there.
+        for uri in ["nikverse://localhost/learn", "http://nikverse.localhost/learn"] {
+            assert_eq!(get(uri).status(), StatusCode::NOT_FOUND, "{uri}");
+        }
+        // Its four files, and each with its own type.
+        for (file, mime) in [
+            ("learn/learn.js", "text/javascript"),
+            ("learn/learn.css", "text/css"),
+            ("learn/content.json", "application/json"),
+        ] {
+            let response = get(&format!("nikverse://localhost/{file}"));
+            assert_eq!(response.status(), StatusCode::OK, "{file}");
+            assert!(header(&response, "content-type").starts_with(mime), "{file}: {}", header(&response, "content-type"));
+            assert!(!response.body().is_empty(), "{file} is empty");
+        }
+        // The lesson page is not the world's page: naming the world's files under `/learn/` finds nothing, and the world at its own
+        // root does not serve the lesson page.
+        assert_eq!(get("nikverse://localhost/learn/index.html").status(), StatusCode::OK);
+        for uri in [
+            "nikverse://localhost/learn/world.js",
+            "nikverse://localhost/learn/world.css",
+            "nikverse://localhost/learn/learn.js/",
+            "nikverse://localhost/learn/learn",
+        ] {
+            assert_eq!(get(uri).status(), StatusCode::NOT_FOUND, "{uri}");
+        }
+        let mondo = get("nikverse://localhost/world.js");
+        assert_eq!(mondo.status(), StatusCode::OK);
+        assert!(!String::from_utf8_lossy(mondo.body()).contains("data-learn"));
+        // Nothing under `/learn/` is a way out: `..`, a backslash and an absolute path are refused before the list is looked at.
+        for uri in [
+            "nikverse://localhost/learn/../Cargo.toml",
+            "nikverse://localhost/learn/%2e%2e/Cargo.toml",
+            "nikverse://localhost/learn/..%5CCargo.toml",
+            "nikverse://localhost/learn/%2E%2E%5Cmain.rs",
+            "nikverse://localhost/learn/../learn/content.json",
+            "nikverse://localhost/learn/C:/Windows/win.ini",
+        ] {
+            assert_eq!(get(uri).status(), StatusCode::BAD_REQUEST, "{uri}");
+        }
+        // A path that stays under the folder but names nothing in it is not found, whatever it looks like.
+        for uri in ["nikverse://localhost/learn//etc/passwd", "nikverse://localhost/learn/learn/"] {
+            assert_eq!(get(uri).status(), StatusCode::NOT_FOUND, "{uri}");
+        }
+        // The lesson page holds nothing the policy would block, like the world's does.
+        let page = String::from_utf8_lossy(get("nikverse://localhost/learn/").body()).into_owned();
+        assert!(!page.contains("<style"), "stile in linea");
+        assert!(!page.contains(" onclick=") && !page.contains(" onload="), "gestori in linea");
+        assert!(!page.contains("http://") && !page.contains("https://"), "risorse remote");
+        for script in page.split("<script").skip(1) {
+            assert!(script.split('>').next().unwrap_or("").contains("src="), "script in linea");
+        }
+        // And the engine names no file of its own beyond the four, so a lesson cannot ask for one.
+        let engine = String::from_utf8_lossy(get("nikverse://localhost/learn/learn.js").body()).into_owned();
+        assert!(!engine.contains("innerHTML") && !engine.contains("eval("), "l'engine costruisce markup o esegue codice");
+        for chiamata in engine.match_indices("fetch") {
+            assert!(engine[chiamata.0..chiamata.0 + 40].contains("content.json"), "una richiesta che non è il contenuto");
         }
     }
 
