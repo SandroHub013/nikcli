@@ -14,6 +14,19 @@ pub fn utf16(text: &str) -> usize {
 
 const FENCE: &str = "```";
 
+/// How many sent messages' last texts an adapter remembers, to skip an edit that says the same again.
+pub const MAX_PREVIEWS: usize = 64;
+
+/// Remembers the last text of a message, keeping at most `MAX_PREVIEWS`: a map that took every message of a long session and
+/// never gave one back grew with each reply (full review 2026-10-06, rust minor). When it is full, the old ones go: the cost of
+/// forgetting one is a repeated edit that Discord or Slack answers as unchanged.
+pub fn remember(previews: &mut std::collections::HashMap<String, String>, key: String, text: String) {
+    if previews.len() >= MAX_PREVIEWS && !previews.contains_key(&key) {
+        previews.clear();
+    }
+    previews.insert(key, text);
+}
+
 /// `text` in pieces of at most `max` units, blank pieces left out.
 pub fn split(text: &str, max: usize, units: Units) -> Vec<String> {
     if units(text) <= max {
@@ -99,6 +112,20 @@ fn cut(text: &str, room: usize, units: Units) -> (&str, &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_remembered_previews_stay_bounded_and_the_latest_is_kept() {
+        let mut previews = std::collections::HashMap::new();
+        for n in 0..MAX_PREVIEWS * 5 {
+            remember(&mut previews, format!("chat/{n}"), format!("testo {n}"));
+            assert!(previews.len() <= MAX_PREVIEWS, "{} anteprime", previews.len());
+        }
+        let last = MAX_PREVIEWS * 5 - 1;
+        assert_eq!(previews.get(&format!("chat/{last}")).map(String::as_str), Some(format!("testo {last}").as_str()));
+        // The same message edited again replaces its text, however full the map is.
+        remember(&mut previews, format!("chat/{last}"), "nuovo".into());
+        assert_eq!(previews.get(&format!("chat/{last}")).map(String::as_str), Some("nuovo"));
+    }
 
     fn chars(text: &str) -> usize {
         text.chars().count()

@@ -143,6 +143,9 @@ impl Store {
             None if self.path.exists() => return Err("lo stato del gateway su disco non si legge: non lo sovrascrivo".into()),
             None => State::default(),
         };
+        // What is on disk, to see whether the change made any difference: every message of a stranger came through here
+        // and rewrote the file whether or not it had (full review 2026-10-06, rust minor).
+        let before = serde_json::to_string(&state).ok();
         let index = match state.links.iter().position(|link| link.bot == bot && link.platform == platform) {
             Some(index) => index,
             None => {
@@ -154,6 +157,9 @@ impl Store {
         let result = change(&mut link, &state.links);
         state.links.insert(index, link);
         let value = result?;
+        if before.is_some() && serde_json::to_string(&state).ok() == before {
+            return Ok(value);
+        }
         write_file(&self.path, &state)?;
         Ok(value)
     }
@@ -201,6 +207,30 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("ade-gateway-store-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir.join("gateway").join("state.json")
+    }
+
+    // Full review 2026-10-06, rust (minor): every message of a stranger rewrote state.json, changed or not.
+    #[test]
+    fn an_update_that_changes_nothing_writes_nothing() {
+        let path = temp_path("unchanged");
+        let store = Store::new(path.clone());
+        store.update("C:/p/.nikcli/agent/a.md", Platform::Fake, |link, _| {
+            link.enabled = true;
+            Ok(())
+        })
+        .unwrap();
+        let written = std::fs::metadata(&path).unwrap().modified().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(60));
+        store.update("C:/p/.nikcli/agent/a.md", Platform::Fake, |_, _| Ok(())).unwrap();
+        assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), written, "il file è stato riscritto");
+        // A real change is still written.
+        store
+            .update("C:/p/.nikcli/agent/a.md", Platform::Fake, |link, _| {
+                link.enabled = false;
+                Ok(())
+            })
+            .unwrap();
+        assert!(!Store::new(path).link("C:/p/.nikcli/agent/a.md", Platform::Fake).unwrap().enabled);
     }
 
     #[test]

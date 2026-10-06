@@ -303,13 +303,15 @@ export function createWorkbench(): Workbench {
   }
 }
 
-export function addPane(workbench: Workbench, pane: Pane): Workbench {
+export function addPane(workbench: Workbench, pane: Pane, open?: { name: string; root: string }): Workbench {
   // A pane of another project than the open one — a subagent spawned from a session there, a dev browser
   // that session owns — is not drawn, so it must not take focus: the next Ctrl+W or «Termina processo»
   // would close or kill it unseen (full review 2026-10-06, sessioni 4, scenario C).
-  const elsewhere = Boolean(
-    workbench.projectPath && pane.projectRoot && !pathEquals(pane.projectRoot, workbench.projectPath),
-  )
+  // With the open project given, a pane that knows only its project's name (its root is found when it starts) is
+  // judged by that name too (Dario's note on F3): `workbench.projectPath` alone cannot tell it.
+  const elsewhere = open
+    ? !belongsTo(pane, open)
+    : Boolean(workbench.projectPath && pane.projectRoot && !pathEquals(pane.projectRoot, workbench.projectPath))
   return {
     ...workbench,
     panes: [...workbench.panes, pane],

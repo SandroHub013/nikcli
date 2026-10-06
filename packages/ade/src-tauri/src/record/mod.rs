@@ -262,7 +262,11 @@ pub async fn record_write(request: tauri::ipc::Request<'_>, recorder: tauri::Sta
     }
     let target = Path::new(&path);
     let temp = PathBuf::from(format!("{path}.tmp_{}", std::process::id()));
-    std::fs::write(&temp, contents).map_err(|error| format!("{path}: {error}"))?;
+    std::fs::write(&temp, contents).map_err(|error| {
+        // A write that stopped half way (a full disk) leaves a partial file: not in the folder of the videos (full review 2026-10-06, rust minor).
+        let _ = std::fs::remove_file(&temp);
+        format!("{path}: {error}")
+    })?;
     std::fs::rename(&temp, target).map_err(|error| {
         let _ = std::fs::remove_file(&temp);
         format!("{path}: {error}")

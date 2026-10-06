@@ -34,6 +34,8 @@ const POLL_SECS: u64 = 30;
 pub const MAX_LEN: usize = 4096;
 /// The longest a `retry_after` is waited: beyond that the send fails and says so.
 const MAX_WAIT: Duration = Duration::from_secs(60);
+/// The most messages one answer becomes, as on Discord and Slack: past it the last one says how much stayed in ADE.
+const MAX_PIECES: usize = 8;
 const RETRIES: usize = 3;
 const CALL_TIMEOUT: Duration = Duration::from_secs(20);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -154,6 +156,19 @@ fn inbound(update: &Value) -> Option<Inbound> {
     })
 }
 
+/// `text` in the messages Telegram takes, at most `MAX_PIECES` of them (full review 2026-10-06, rust minor): a very long answer
+/// was sent whole, one message after another with no end. Past the ceiling the last says how many characters stayed in ADE.
+fn pieces(text: &str) -> Vec<String> {
+    let all = split(text, MAX_LEN, utf16);
+    if all.len() <= MAX_PIECES {
+        return all;
+    }
+    let dropped: usize = all.iter().skip(MAX_PIECES - 1).map(|piece| piece.chars().count()).sum();
+    let mut kept: Vec<String> = all.into_iter().take(MAX_PIECES - 1).collect();
+    kept.push(format!("(il resto, {dropped} caratteri, è in ADE: la risposta si è fermata a {MAX_PIECES} messaggi)"));
+    kept
+}
+
 fn is_loopback(api: &str) -> bool {
     api.starts_with("http://127.0.0.1") || api.starts_with("http://localhost")
 }
@@ -251,7 +266,7 @@ impl Telegram {
     }
 
     async fn send_all(&self, chat: &str, text: &str, markup: Option<Value>) -> Result<String, AdapterError> {
-        let pieces = split(text, MAX_LEN, utf16);
+        let pieces = pieces(text);
         let Some(last) = pieces.len().checked_sub(1) else {
             return Err(AdapterError::Fatal("il messaggio è vuoto".into()));
         };
@@ -323,7 +338,7 @@ impl Adapter for Telegram {
 
     async fn edit(&self, chat: &str, message: &str, text: &str) -> Result<String, AdapterError> {
         let message_id: i64 = message.parse().map_err(|_| AdapterError::Fatal("id del messaggio non valido".into()))?;
-        let mut pieces = split(text, MAX_LEN, utf16).into_iter();
+        let mut pieces = pieces(text).into_iter();
         let piece = pieces.next().ok_or_else(|| AdapterError::Fatal("il messaggio è vuoto".into()))?;
         let mut body = json!({ "chat_id": chat_id(chat), "message_id": message_id, "text": to_markdown_v2(&piece), "parse_mode": "MarkdownV2", "link_preview_options": no_preview() });
         let edited = match self.call_patiently("editMessageText", &body).await {
@@ -375,6 +390,16 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::sync::Arc;
+
+    #[test]
+    fn a_very_long_answer_is_cut_at_eight_messages_with_a_notice() {
+        let long = "una riga di prova abbastanza lunga\n".repeat(4000);
+        let all = pieces(&long);
+        assert_eq!(all.len(), MAX_PIECES);
+        assert!(all.last().unwrap().contains("è in ADE"), "{:?}", all.last());
+        assert!(all[..MAX_PIECES - 1].iter().all(|piece| !piece.contains("è in ADE")));
+        assert_eq!(pieces("breve"), vec!["breve".to_string()]);
+    }
 
     /* A fake Bot API on localhost: no token of any real bot, no network. */
 

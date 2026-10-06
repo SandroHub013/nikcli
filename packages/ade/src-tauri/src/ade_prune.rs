@@ -78,6 +78,43 @@ pub fn prune_files(paths: &[std::path::PathBuf]) -> u64 {
     freed
 }
 
+/// Where the page's path points, for pruning: the folder resolved and checked against the open roots, the name left as it is.
+///
+/// `within_roots` canonicalises the whole path, so a link `.ade/results/a.md` to a file of another open project became that file, which
+/// passed `prunable` on its own path and was removed, against what this file says about links (full review 2026-10-06, rust 18). The
+/// folder is resolved, the name is not: a link stays a link, and `prune_files` leaves it alone.
+pub fn prune_target(roots: &WriteRoots, path: &str) -> Result<std::path::PathBuf, String> {
+    let given = Path::new(path);
+    let (Some(parent), Some(name)) = (given.parent(), given.file_name()) else {
+        return Err("percorso senza cartella".into());
+    };
+    let folder = crate::within_roots(roots, &parent.to_string_lossy())?;
+    // The folder itself may be the link: `.ade/results` as a junction into another open project resolves there and passes
+    // `within_roots` as that project's. It must come out in the root it was asked in (review of F7c, B1). Judged on the text
+    // as given, compared the same way on both sides; a path no root contains as text is left to `within_roots` as before.
+    let asked_in = {
+        let given = plain(parent);
+        let open = roots.0.lock().map_err(|_| "radici bloccate".to_string())?;
+        open.iter().find(|root| inside(&given, &plain(root))).cloned()
+    };
+    if let Some(root) = asked_in {
+        if !inside(&plain(&folder), &plain(&root)) {
+            return Err(format!("la cartella punta fuori dal progetto: {}", parent.display()));
+        }
+    }
+    Ok(folder.join(name))
+}
+
+/// A path as text, to compare two of them: `/`, no `\\?\` prefix, no case.
+fn plain(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/").trim_start_matches("//?/").trim_end_matches('/').to_lowercase()
+}
+
+/// Whether `path` is `root` or below it, both as `plain` made them.
+fn inside(path: &str, root: &str) -> bool {
+    path == root || path.strip_prefix(root).is_some_and(|rest| rest.starts_with('/'))
+}
+
 /// Removes the listed files of a project's `.ade/` that are old; the bytes freed. Only inside an open project (the same roots the window
 /// may write in), only the shapes of `prunable`.
 #[tauri::command]
@@ -86,8 +123,8 @@ pub async fn ade_prune(window: tauri::WebviewWindow, roots: tauri::State<'_, Wri
     let mut inside = Vec::new();
     for path in paths.iter().take(MAX_PATHS) {
         // The refusals are skipped, not errors: one path outside the project does not stop the others.
-        if let Ok(resolved) = crate::within_roots(&roots, path) {
-            inside.push(resolved);
+        if let Ok(target) = prune_target(&roots, path) {
+            inside.push(target);
         }
     }
     tauri::async_runtime::spawn_blocking(move || prune_files(&inside)).await.map_err(|e| e.to_string())
@@ -248,6 +285,95 @@ mod tests {
 
     fn sep(path: &str) -> PathBuf {
         PathBuf::from(path)
+    }
+
+    /// A folder of our own, as the open roots hold it: canonical.
+    fn canonical_scratch(tag: &str) -> PathBuf {
+        scratch(tag).canonicalize().expect("canonica")
+    }
+
+    fn roots_at(dirs: &[&Path]) -> WriteRoots {
+        let roots = WriteRoots::default();
+        roots.0.lock().unwrap().extend(dirs.iter().map(|dir| dir.to_path_buf()));
+        roots
+    }
+
+    // Full review 2026-10-06, rust 18.
+    #[test]
+    fn the_folder_is_resolved_and_the_name_is_left_as_it_is() {
+        let project = canonical_scratch("target");
+        let results = project.join(".ade").join("results");
+        std::fs::create_dir_all(&results).unwrap();
+        std::fs::write(results.join("a.md"), "x").unwrap();
+        let roots = roots_at(&[&project]);
+
+        let target = prune_target(&roots, &results.join("a.md").to_string_lossy()).unwrap();
+        assert_eq!(target, results.join("a.md"));
+        // A path outside every open root is refused, and so is one with no folder.
+        let elsewhere = canonical_scratch("target-elsewhere");
+        assert!(prune_target(&roots, &elsewhere.join("a.md").to_string_lossy()).is_err());
+        assert!(prune_target(&roots, "").is_err());
+        let _ = std::fs::remove_dir_all(&project);
+        let _ = std::fs::remove_dir_all(&elsewhere);
+    }
+
+    // Review of F7c, B1: a junction that is the whole folder `.ade/results`, pointing into another open project.
+    #[cfg(windows)]
+    #[test]
+    fn a_folder_that_is_a_junction_into_another_open_project_is_not_followed() {
+        let one = canonical_scratch("junction-one");
+        let two = canonical_scratch("junction-two");
+        std::fs::create_dir_all(one.join(".ade")).unwrap();
+        std::fs::create_dir_all(two.join(".ade").join("results")).unwrap();
+        let real = two.join(".ade").join("results").join("x.md");
+        std::fs::write(&real, "the other project's note").unwrap();
+        let junction = one.join(".ade").join("results");
+        // A junction needs no privilege, unlike a symbolic link.
+        let made = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&junction)
+            .arg(two.join(".ade").join("results"))
+            .output()
+            .expect("cmd");
+        assert!(made.status.success(), "{}", String::from_utf8_lossy(&made.stdout));
+        let roots = roots_at(&[&one, &two]);
+        let asked = junction.join("x.md");
+        assert!(prune_target(&roots, &asked.to_string_lossy()).is_err(), "la cartella collegata è stata seguita");
+        assert!(real.exists());
+        // Taking the junction away does not touch what it pointed at.
+        let _ = std::process::Command::new("cmd").args(["/C", "rmdir"]).arg(&junction).output();
+        let _ = std::fs::remove_dir_all(&one);
+        let _ = std::fs::remove_dir_all(&two);
+    }
+
+    #[test]
+    fn a_link_to_a_note_of_another_open_project_is_not_followed() {
+        let one = canonical_scratch("link-one");
+        let two = canonical_scratch("link-two");
+        for project in [&one, &two] {
+            std::fs::create_dir_all(project.join(".ade").join("results")).unwrap();
+        }
+        let real = two.join(".ade").join("results").join("x.md");
+        std::fs::write(&real, "the other project's note").unwrap();
+        let link = one.join(".ade").join("results").join("a.md");
+        // Making a link needs a privilege on Windows that not every machine gives: without it there is nothing to prove here.
+        #[cfg(windows)]
+        let made = std::os::windows::fs::symlink_file(&real, &link);
+        #[cfg(not(windows))]
+        let made = std::os::unix::fs::symlink(&real, &link);
+        if let Err(error) = made {
+            eprintln!("collegamento non creabile qui ({error}): prova saltata");
+            let _ = std::fs::remove_dir_all(&one);
+            let _ = std::fs::remove_dir_all(&two);
+            return;
+        }
+        let roots = roots_at(&[&one, &two]);
+        let target = prune_target(&roots, &link.to_string_lossy()).unwrap();
+        assert_eq!(target, link, "il collegamento resta il collegamento");
+        assert_eq!(prune_files(&[target]), 0);
+        assert!(real.exists(), "il file dell'altro progetto è stato cancellato");
+        let _ = std::fs::remove_dir_all(&one);
+        let _ = std::fs::remove_dir_all(&two);
     }
 
     #[test]

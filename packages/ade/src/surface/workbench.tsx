@@ -8543,29 +8543,34 @@ export function Workbench() {
         ? undefined
         : open
     setWb((w) =>
-      addPane(w, {
-        id,
-        title,
-        // If there is an initial task, provisioning begins; otherwise idle ("disponibile")
-        status: hasInitialTask ? "provisioning" : "idle",
-        activity: hasInitialTask ? "starting" : "ready",
-        model: entry.agentId,
-        agent: entry.agentId,
-        mode: input.preset ?? "custom",
-        task,
-        lines: [{ kind: "note", text: task || t("task.none") }],
-        workspaceId: input.workspaceId || currentProj?.name || "workspace",
-        ...((input.projectRoot ?? currentProj?.root) ? { projectRoot: input.projectRoot ?? currentProj!.root } : {}),
-        cwd: input.worktree?.path ?? currentProj?.root,
-        tree: input.worktree
-          ? { branch: input.worktree.branch, fidelity: "full", note: `Worktree ${input.worktree.path}` }
-          : currentProj?.branch
-            ? { branch: currentProj.branch, fidelity: "project" }
-            : undefined,
-        ...(input.worktree ? { worktree: input.worktree.path } : {}),
-        ...(input.spawnArgs?.length ? { spawnArgs: input.spawnArgs } : {}),
-        ...(input.fork?.resumeId ? { resumeId: input.fork.resumeId } : {}),
-      }),
+      addPane(
+        w,
+        {
+          id,
+          title,
+          // If there is an initial task, provisioning begins; otherwise idle ("disponibile")
+          status: hasInitialTask ? "provisioning" : "idle",
+          activity: hasInitialTask ? "starting" : "ready",
+          model: entry.agentId,
+          agent: entry.agentId,
+          mode: input.preset ?? "custom",
+          task,
+          lines: [{ kind: "note", text: task || t("task.none") }],
+          workspaceId: input.workspaceId || currentProj?.name || "workspace",
+          ...((input.projectRoot ?? currentProj?.root) ? { projectRoot: input.projectRoot ?? currentProj!.root } : {}),
+          cwd: input.worktree?.path ?? currentProj?.root,
+          tree: input.worktree
+            ? { branch: input.worktree.branch, fidelity: "full", note: `Worktree ${input.worktree.path}` }
+            : currentProj?.branch
+              ? { branch: currentProj.branch, fidelity: "project" }
+              : undefined,
+          ...(input.worktree ? { worktree: input.worktree.path } : {}),
+          ...(input.spawnArgs?.length ? { spawnArgs: input.spawnArgs } : {}),
+          ...(input.fork?.resumeId ? { resumeId: input.fork.resumeId } : {}),
+        },
+        // The open project, so a session named for another one does not take the focus unseen.
+        open,
+      ),
     )
     setStarting(false)
     // A fork opens as a resumed conversation, and the task is typed into it all the same.

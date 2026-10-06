@@ -214,7 +214,12 @@ fn io_status(error: std::io::Error) -> StatusCode {
 /// `http://nikverse.localhost` is the scheme as Windows answers it, `nikverse:` as the others do.
 /// `connect-src` lets the world load its own assets and nothing else; the data it needs from ADE
 /// arrives on the channel, which is not a request.
-pub const CSP: &str = "default-src http://nikverse.localhost nikverse:; script-src http://nikverse.localhost nikverse: 'wasm-unsafe-eval'; img-src http://nikverse.localhost nikverse: data: blob:; connect-src http://nikverse.localhost nikverse:";
+///
+/// `sandbox allow-scripts` is what the panel's `sandbox="allow-scripts"` already says, said by the answer itself: a
+/// frame nested in a site of the browser pane can load the world too, and there it would not have had the attribute
+/// (full review 2026-10-06, rust 17). `is_ade_origin` cannot refuse the two hosts instead: the navigation event of a
+/// frame does not say whose frame it is, and ADE's own panel frames both (the world, the design sheets).
+pub const CSP: &str = "default-src http://nikverse.localhost nikverse:; script-src http://nikverse.localhost nikverse: 'wasm-unsafe-eval'; img-src http://nikverse.localhost nikverse: data: blob:; connect-src http://nikverse.localhost nikverse:; sandbox allow-scripts";
 
 const HEADERS: [(&str, &str); 4] = [
     ("Content-Security-Policy", CSP),
@@ -338,6 +343,13 @@ fn respond_with(request: &Request<Vec<u8>>, source: &Source, manifest: &[Manifes
 
 #[cfg(test)]
 mod tests {
+    // Full review 2026-10-06, rust 17: framed anywhere, the world is the same opaque origin the panel gives it.
+    #[test]
+    fn the_policy_sandboxes_the_world_whoever_frames_it() {
+        assert!(super::CSP.contains("sandbox allow-scripts;") || super::CSP.ends_with("sandbox allow-scripts"), "{}", super::CSP);
+        assert!(!super::CSP.contains("allow-same-origin"));
+    }
+
     use super::*;
 
     fn get(uri: &str) -> Response<Vec<u8>> {

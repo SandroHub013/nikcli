@@ -493,12 +493,17 @@ fn is_env_file(path: &Path) -> bool {
 }
 
 /// `"ok"`, or why the chat may not attach `path` (`attachment_inside`).
+///
+/// Off the window's thread, and off the async worker too: `canonicalize` on a OneDrive file that is only online can wait, and
+/// that would hold a worker of the runtime instead (full review 2026-10-06, rust minor; review of F7c, B5).
 #[tauri::command]
-fn chat_attachment_inside(root: String, path: String) -> String {
-    match attachment_inside(Path::new(&root), Path::new(&path)) {
+async fn chat_attachment_inside(root: String, path: String) -> String {
+    tauri::async_runtime::spawn_blocking(move || match attachment_inside(Path::new(&root), Path::new(&path)) {
         Ok(_) => "ok".to_string(),
         Err(reason) => reason.to_string(),
-    }
+    })
+    .await
+    .unwrap_or_else(|_| "controllo interrotto".to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -789,6 +794,11 @@ fn check_nikcli_args(roots: &WriteRoots, args: &[String]) -> Result<(), String> 
                 }
                 seen.push(flag);
                 if flag == "--path" {
+                    // Read against ADE's folder here and against `cwd` by nikcli: only an absolute path means one place
+                    // (full review 2026-10-06, rust 20).
+                    if !Path::new(value).is_absolute() {
+                        return Err(format!("--path deve essere un percorso assoluto: {value}"));
+                    }
                     let resolved = resolve_for_check(Path::new(value))?;
                     let global = nikcli_global_dir().map(|d| d.canonicalize().unwrap_or(d));
                     let in_project = within_roots(roots, value).is_ok();
@@ -1322,6 +1332,25 @@ const GIT_WRITING_FLAGS: &[&str] = &["--output", "--output-directory"];
 /// into, so the user's real index is never touched.
 const GIT_ENV_KEYS: &[&str] = &["GIT_INDEX_FILE"];
 
+/// What every git call of ADE runs with, before the page's own variables, given the `GIT_CONFIG_COUNT` ADE itself was started
+/// with.
+///
+/// The count is read and added to, not set to 1: a user who launched ADE with their own `GIT_CONFIG_COUNT`/`KEY_n` would have
+/// had them replaced (review of F7c, B4). Ours takes the next index, so it also wins over a setting of the same key.
+///
+/// A repository with `core.fsmonitor=true` starts a daemon on its first `git status`; started from a call that runs in a job that ends
+/// with the call, it died with it and was started again by the next one. `GIT_OPTIONAL_LOCKS=0` keeps a `status` that a timeout killed
+/// from leaving `index.lock`, and from taking the lock the user's own git wants (full review 2026-10-06, review of F6a, B1).
+fn git_base_env(inherited_count: Option<&str>) -> Vec<(String, String)> {
+    let next = inherited_count.and_then(|count| count.trim().parse::<usize>().ok()).unwrap_or(0);
+    vec![
+        ("GIT_OPTIONAL_LOCKS".to_string(), "0".to_string()),
+        ("GIT_CONFIG_COUNT".to_string(), (next + 1).to_string()),
+        (format!("GIT_CONFIG_KEY_{next}"), "core.fsmonitor".to_string()),
+        (format!("GIT_CONFIG_VALUE_{next}"), "false".to_string()),
+    ]
+}
+
 #[derive(Serialize, Clone, Debug)]
 struct ShellOutput {
     code: Option<i32>,
@@ -1479,6 +1508,7 @@ async fn git_run(
 
     let mut command = std::process::Command::new("git");
     command.args(&args);
+    command.envs(git_base_env(std::env::var("GIT_CONFIG_COUNT").ok().as_deref()));
     if let Some(dir) = cwd.as_ref().filter(|d| !d.is_empty()) {
         command.current_dir(dir);
     }
@@ -2491,7 +2521,7 @@ pub fn run() {
          * that served an arbitrary path would let anything in the browser
          * pane's frame read the disk through a `<video>` tag.
          */
-        .register_uri_scheme_protocol(media::SCHEME, |ctx, request| {
+        .register_asynchronous_uri_scheme_protocol(media::SCHEME, |ctx, request, responder| {
             use tauri::Manager;
             let state = ctx.app_handle().state::<WriteRoots>();
             let mut roots = match state.0.lock() {
@@ -2508,14 +2538,19 @@ pub fn run() {
                 .and_then(|webview| webview.url().ok())
                 .map(|url| url.origin().ascii_serialization());
             let opened = state.1.lock().map(|guard| guard.clone()).unwrap_or_default();
-            media::respond(&roots, &opened, &request, origin.as_deref())
+            // Off the thread that took the request: the window's own, which a seek on a network drive or OneDrive stopped for
+            // every panel (full review 2026-10-06, rust minor).
+            tauri::async_runtime::spawn_blocking(move || {
+                responder.respond(media::respond(&roots, &opened, &request, origin.as_deref()));
+            });
         })
         /*
          * NikVerse's world: the package's own files, in an origin of its own.
          * Nothing on disk is reachable through it (`nikverse.rs`).
          */
-        .register_uri_scheme_protocol(nikverse::SCHEME, |ctx, request| {
-            nikverse::respond(&request, nikverse::source(ctx.app_handle()))
+        .register_asynchronous_uri_scheme_protocol(nikverse::SCHEME, |ctx, request, responder| {
+            let source = nikverse::source(ctx.app_handle());
+            tauri::async_runtime::spawn_blocking(move || responder.respond(nikverse::respond(&request, source)));
         })
         .setup(|app| {
             // Before the window, not after: a webview pointed at a port that
@@ -2966,6 +3001,83 @@ mod tests {
         assert!(took < Duration::from_secs(3), "ha aspettato il lettore: {took:?}");
     }
 
+    // Full review 2026-10-06, rust (minor): the two schemes read the disk and the two commands stat it, none of it on the window's thread.
+    #[test]
+    fn what_reads_the_disk_does_not_run_on_the_window_thread() {
+        let source = include_str!("lib.rs");
+        let sync_scheme = [".register_uri", "_scheme_protocol("].concat();
+        assert!(!source.contains(&sync_scheme), "a scheme that answers on the window's thread");
+        for scheme in ["media::SCHEME", "nikverse::SCHEME"] {
+            assert!(source.contains(&format!("register_asynchronous_uri_scheme_protocol({scheme}")), "{scheme}");
+        }
+        let at = source.find("async fn chat_attachment_inside(").expect("chat_attachment_inside");
+        let body = &source[at..source[at..].find("\n}\n").map(|end| at + end).expect("fine")];
+        assert!(body.contains("spawn_blocking"), "the check leaves the async worker");
+        let stats = include_str!("stats.rs");
+        let at = stats.find("pub fn system_stats(").expect("system_stats");
+        assert!(stats[..at].trim_end().ends_with("#[tauri::command(async)]"));
+    }
+
+    // Review of F6a, B1: git is told not to start a file-system monitor inside the call's job, and not to take optional locks.
+    #[test]
+    fn git_is_run_without_an_fsmonitor_daemon_and_without_optional_locks() {
+        if std::process::Command::new("git").arg("--version").output().is_err() {
+            eprintln!("git non c'è: prova saltata");
+            return;
+        }
+        let repo = TempDir::new("git-base-env");
+        let git = |args: &[&str]| {
+            std::process::Command::new("git").args(args).current_dir(&repo.0).envs(git_base_env(None)).output().expect("git")
+        };
+        assert!(git(&["init", "-q"]).status.success());
+        // The repository asks for the daemon; the call's own environment wins over the repository.
+        assert!(git(&["config", "--local", "core.fsmonitor", "true"]).status.success());
+        let asked = git(&["config", "--get", "core.fsmonitor"]);
+        assert_eq!(String::from_utf8_lossy(&asked.stdout).trim(), "false");
+        assert!(git_base_env(None).contains(&("GIT_OPTIONAL_LOCKS".to_string(), "0".to_string())));
+        // And it is what `git_run` sets, before the page's variables.
+        let source = include_str!("lib.rs");
+        let start = source.find("async fn git_run(").expect("git_run");
+        let body = &source[start..source[start..].find("async fn current_dir").map(|end| start + end).expect("fine")];
+        assert!(body.contains("command.envs(git_base_env("));
+    }
+
+    // Review of F7c, B4: the user's own `GIT_CONFIG_COUNT`/`KEY_n` stay, ours comes after them.
+    #[test]
+    fn the_git_environment_is_added_to_the_users_not_written_over_it() {
+        let env = |inherited: Option<&str>| git_base_env(inherited).into_iter().collect::<std::collections::HashMap<_, _>>();
+        let alone = env(None);
+        assert_eq!(alone["GIT_CONFIG_COUNT"], "1");
+        assert_eq!(alone["GIT_CONFIG_KEY_0"], "core.fsmonitor");
+        let after_two = env(Some("2"));
+        assert_eq!(after_two["GIT_CONFIG_COUNT"], "3");
+        assert_eq!(after_two["GIT_CONFIG_KEY_2"], "core.fsmonitor");
+        assert_eq!(after_two["GIT_CONFIG_VALUE_2"], "false");
+        assert!(!after_two.contains_key("GIT_CONFIG_KEY_0") && !after_two.contains_key("GIT_CONFIG_KEY_1"));
+        // Nonsense counts as none.
+        assert_eq!(env(Some("abc"))["GIT_CONFIG_COUNT"], "1");
+        // With real git: a setting the user passed in the environment survives, and ours is added.
+        if std::process::Command::new("git").arg("--version").output().is_err() {
+            return;
+        }
+        let repo = TempDir::new("git-user-env");
+        let git = |args: &[&str]| {
+            std::process::Command::new("git")
+                .args(args)
+                .current_dir(&repo.0)
+                .env("GIT_CONFIG_COUNT", "1")
+                .env("GIT_CONFIG_KEY_0", "user.name")
+                .env("GIT_CONFIG_VALUE_0", "Chi Lancia ADE")
+                .envs(git_base_env(Some("1")))
+                .output()
+                .expect("git")
+        };
+        assert!(git(&["init", "-q"]).status.success());
+        assert_eq!(String::from_utf8_lossy(&git(&["config", "--get", "user.name"]).stdout).trim(), "Chi Lancia ADE");
+        assert!(git(&["config", "--local", "core.fsmonitor", "true"]).status.success());
+        assert_eq!(String::from_utf8_lossy(&git(&["config", "--get", "core.fsmonitor"]).stdout).trim(), "false");
+    }
+
     // Full review 2026-10-06, rust 14: `git_run` ran `output()` with no limit on the async runtime. The command
     // needs a window to be called, so what is checked is the shape: it goes through the bounded runner, off the worker.
     #[test]
@@ -3302,6 +3414,23 @@ mod tests {
         assert!(!is_bot_path(&config.join("agent").join("run.js"), config));
         assert!(!is_bot_path(&config.join("agent"), config));
         assert!(!is_bot_path(Path::new("C:\\elsewhere\\agent\\x.md"), config));
+    }
+
+    // Full review 2026-10-06, rust 20: the check read a relative path against ADE's folder, nikcli reads it against `cwd`.
+    #[test]
+    fn a_relative_config_path_is_refused_whatever_folder_it_would_land_in() {
+        let here = std::env::current_dir().expect("cartella di lavoro").canonicalize().expect("canonica");
+        let roots = WriteRoots::default();
+        roots.0.lock().unwrap().push(here);
+        let args = |path: &str| {
+            ["agent", "create", "--path", path, "--description", "a", "--mode", "primary", "--tools", ""]
+                .map(String::from)
+                .to_vec()
+        };
+        // Inside ADE's own folder, so the old check passed it; nikcli would put the file under `cwd`.
+        let error = check_nikcli_args(&roots, &args(".nikcli-rel-test")).unwrap_err();
+        assert!(error.contains("assoluto"), "{error}");
+        assert!(check_nikcli_args(&roots, &args("..\\x")).is_err());
     }
 
     #[test]

@@ -101,6 +101,25 @@ describe("adding a pane to a project that is not open", () => {
     expect(wb.focusedId).toBe("a2")
   })
 
+  // Dario's note on F3: `ade-msg spawn` from a session of another project gives the pane that project's name and no folder yet.
+  test("a pane that knows only another project's name does not take the focus when the open project is given", () => {
+    const named = (id: string, workspaceId: string): Pane => ({ ...pane(id, A.root), projectRoot: undefined, workspaceId })
+    let wb = addPane(open(A.root), pane("a1", A.root), A)
+    wb = addPane(wb, named("b1", "b"), A)
+    expect(wb.panes.map((p) => p.id)).toEqual(["a1", "b1"])
+    expect(wb.focusedId).toBe("a1")
+    // And one named for the open project does.
+    wb = addPane(wb, named("a2", "a"), A)
+    expect(wb.focusedId).toBe("a2")
+  })
+
+  test("the sessions the workbench starts hand the open project to addPane", () => {
+    const source = readFileSync(join(import.meta.dir, "workbench.tsx"), "utf-8")
+    const start = source.indexOf("// Another project's session (a subagent spawned from there)")
+    const body = source.slice(start, start + 3500)
+    expect(body).toMatch(/\n\s+open,\n\s+\),\n\s+\)\n\s+setStarting\(false\)/)
+  })
+
   test("without a project path, or a pane with no folder, the new pane is focused as before", () => {
     expect(addPane(createWorkbench(), pane("b1", B.root)).focusedId).toBe("b1")
     const old = { ...pane("x", A.root), projectRoot: undefined }
