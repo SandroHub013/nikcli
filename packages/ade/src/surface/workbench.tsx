@@ -20,7 +20,16 @@ import {
 } from "./before-unload"
 import { hideButtons, hideChoice, markTrayNoticed, planHide, trayNoticed } from "./tray-hide"
 import { NIKCLI_VERSION_EVERY_MS, parseNikcliVersion } from "../host/nikcli-version"
-import { agentMissing, isRemoteRoot, remoteRoot, sshArgs, sshAsking, type RemoteTarget } from "../remote/ssh"
+import {
+  agentMissing,
+  isRemoteRoot,
+  lastLineOf,
+  remoteRoot,
+  shellReturned,
+  sshArgs,
+  sshAsking,
+  type RemoteTarget,
+} from "../remote/ssh"
 import { RemoteSpaceDialog } from "../remote/remote-dialog"
 import { discoverProject, grantedRoots, openProject, rootMissing, type Project } from "../host/project"
 import {
@@ -8358,6 +8367,8 @@ export function Workbench() {
     let tail = ""
     // What the shell printed since the last step was typed: where «command not found» would show.
     let sinceStep = ""
+    // The shell's prompt as it was when the agent was typed: the shell coming back to it means the agent is not running.
+    let promptBefore = ""
     let spawned: SpawnedSession | undefined
     // The host refused to start it: said by `onRefused`, then the exit that follows.
     let refused = false
@@ -8374,7 +8385,8 @@ export function Workbench() {
           lastOutputAt.set(paneId, Date.now())
           noteBracketedPaste(paneId, chunk)
           tail = (tail + stripAnsi(chunk)).slice(-400)
-          sinceStep = (sinceStep + stripAnsi(chunk)).slice(-400)
+          // Whole, up to a generous cap: a PowerShell 5.1 error is 400+ characters, and what says it comes first.
+          sinceStep = (sinceStep + stripAnsi(chunk)).slice(-8000)
           feedTerminal(paneId, chunk)
         },
         onLine: (line, stream) => appendLine(paneId, line, stream === "err" ? "note" : "step"),
@@ -8428,13 +8440,14 @@ export function Workbench() {
           return
         }
         // The agent was typed and the shell answered that it has none: the task is not a command for this shell.
-        if (!shellOnly && index === 1 && agentMissing(sinceStep, command)) {
+        if (!shellOnly && index === 1 && (agentMissing(sinceStep, command) || shellReturned(sinceStep, promptBefore))) {
           stopOpeningPoll(poll)
           tellPane(paneId, t("task.agentMissing", command))
           setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
           return
         }
         const text = steps[index]!
+        if (!shellOnly && index === 0) promptBefore = lastLineOf(tail)
         index += 1
         sinceStep = ""
         void typeLine(session, text)
