@@ -78,6 +78,20 @@ pub fn prune_files(paths: &[std::path::PathBuf]) -> u64 {
     freed
 }
 
+/// Where the page's path points, for pruning: the folder resolved and checked against the open roots, the name left as it is.
+///
+/// `within_roots` canonicalises the whole path, so a link `.ade/results/a.md` to a file of another open project became that file, which
+/// passed `prunable` on its own path and was removed, against what this file says about links (full review 2026-10-06, rust 18). The
+/// folder is resolved, the name is not: a link stays a link, and `prune_files` leaves it alone.
+pub fn prune_target(roots: &WriteRoots, path: &str) -> Result<std::path::PathBuf, String> {
+    let given = Path::new(path);
+    let (Some(parent), Some(name)) = (given.parent(), given.file_name()) else {
+        return Err("percorso senza cartella".into());
+    };
+    let folder = crate::within_roots(roots, &parent.to_string_lossy())?;
+    Ok(folder.join(name))
+}
+
 /// Removes the listed files of a project's `.ade/` that are old; the bytes freed. Only inside an open project (the same roots the window
 /// may write in), only the shapes of `prunable`.
 #[tauri::command]
@@ -86,8 +100,8 @@ pub async fn ade_prune(window: tauri::WebviewWindow, roots: tauri::State<'_, Wri
     let mut inside = Vec::new();
     for path in paths.iter().take(MAX_PATHS) {
         // The refusals are skipped, not errors: one path outside the project does not stop the others.
-        if let Ok(resolved) = crate::within_roots(&roots, path) {
-            inside.push(resolved);
+        if let Ok(target) = prune_target(&roots, path) {
+            inside.push(target);
         }
     }
     tauri::async_runtime::spawn_blocking(move || prune_files(&inside)).await.map_err(|e| e.to_string())
@@ -248,6 +262,66 @@ mod tests {
 
     fn sep(path: &str) -> PathBuf {
         PathBuf::from(path)
+    }
+
+    /// A folder of our own, as the open roots hold it: canonical.
+    fn canonical_scratch(tag: &str) -> PathBuf {
+        scratch(tag).canonicalize().expect("canonica")
+    }
+
+    fn roots_at(dirs: &[&Path]) -> WriteRoots {
+        let roots = WriteRoots::default();
+        roots.0.lock().unwrap().extend(dirs.iter().map(|dir| dir.to_path_buf()));
+        roots
+    }
+
+    // Full review 2026-10-06, rust 18.
+    #[test]
+    fn the_folder_is_resolved_and_the_name_is_left_as_it_is() {
+        let project = canonical_scratch("target");
+        let results = project.join(".ade").join("results");
+        std::fs::create_dir_all(&results).unwrap();
+        std::fs::write(results.join("a.md"), "x").unwrap();
+        let roots = roots_at(&[&project]);
+
+        let target = prune_target(&roots, &results.join("a.md").to_string_lossy()).unwrap();
+        assert_eq!(target, results.join("a.md"));
+        // A path outside every open root is refused, and so is one with no folder.
+        let elsewhere = canonical_scratch("target-elsewhere");
+        assert!(prune_target(&roots, &elsewhere.join("a.md").to_string_lossy()).is_err());
+        assert!(prune_target(&roots, "").is_err());
+        let _ = std::fs::remove_dir_all(&project);
+        let _ = std::fs::remove_dir_all(&elsewhere);
+    }
+
+    #[test]
+    fn a_link_to_a_note_of_another_open_project_is_not_followed() {
+        let one = canonical_scratch("link-one");
+        let two = canonical_scratch("link-two");
+        for project in [&one, &two] {
+            std::fs::create_dir_all(project.join(".ade").join("results")).unwrap();
+        }
+        let real = two.join(".ade").join("results").join("x.md");
+        std::fs::write(&real, "the other project's note").unwrap();
+        let link = one.join(".ade").join("results").join("a.md");
+        // Making a link needs a privilege on Windows that not every machine gives: without it there is nothing to prove here.
+        #[cfg(windows)]
+        let made = std::os::windows::fs::symlink_file(&real, &link);
+        #[cfg(not(windows))]
+        let made = std::os::unix::fs::symlink(&real, &link);
+        if let Err(error) = made {
+            eprintln!("collegamento non creabile qui ({error}): prova saltata");
+            let _ = std::fs::remove_dir_all(&one);
+            let _ = std::fs::remove_dir_all(&two);
+            return;
+        }
+        let roots = roots_at(&[&one, &two]);
+        let target = prune_target(&roots, &link.to_string_lossy()).unwrap();
+        assert_eq!(target, link, "il collegamento resta il collegamento");
+        assert_eq!(prune_files(&[target]), 0);
+        assert!(real.exists(), "il file dell'altro progetto è stato cancellato");
+        let _ = std::fs::remove_dir_all(&one);
+        let _ = std::fs::remove_dir_all(&two);
     }
 
     #[test]
