@@ -145,9 +145,11 @@ export function errorKind(error: unknown): VoiceErrorKind {
     const lower = error.toLowerCase()
     if (
       lower.includes("negato") ||
+      lower.includes("denied") ||
       lower.includes("notallowed") ||
       lower.includes("permission") ||
       lower.includes("nessun microfono") ||
+      lower.includes("no microphone") ||
       lower.includes("notfound")
     ) {
       return "mic-auth"
@@ -170,9 +172,11 @@ export function errorKind(error: unknown): VoiceErrorKind {
     const lower = error.message.toLowerCase()
     if (
       lower.includes("negato") ||
+      lower.includes("denied") ||
       lower.includes("notallowed") ||
       lower.includes("permission") ||
       lower.includes("nessun microfono") ||
+      lower.includes("no microphone") ||
       lower.includes("notfound")
     ) {
       return "mic-auth"
@@ -257,13 +261,16 @@ export function spokenMessage(error: unknown, lang: "it" | "en" = "it"): string 
     const lower = msg.toLowerCase()
     if (
       lower.includes("chiave api") ||
+      lower.includes("api key") ||
       lower.includes("openrouter") ||
       lower.includes("microfono") ||
+      lower.includes("microphone") ||
       lower.includes("permesso") ||
       lower.includes("permission") ||
       lower.includes("notallowed") ||
       lower.includes("timeout") ||
-      lower.includes("credito")
+      lower.includes("credito") ||
+      lower.includes("credit")
     ) {
       return msg
     }

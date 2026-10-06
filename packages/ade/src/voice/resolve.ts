@@ -14,6 +14,7 @@
  * success over four Claude sessions nobody asked for.
  */
 
+import { t } from "../i18n"
 import type { AgentOption } from "../session-new/agents"
 import { basename, normalizePath, pathEquals } from "../host/path"
 
@@ -63,7 +64,7 @@ export function resolveAgentId(spoken: string, agents: readonly AgentOption[]): 
 
 function unknownAgent(spoken: string, agents: readonly AgentOption[]): Error {
   const options = agents.map((agent) => agent.label).join(", ")
-  return new Error(`Non conosco l'agente «${spoken.trim()}». Posso avviare: ${options}.`)
+  return new Error(t("voice.msg.resolve.unknownAgent", spoken.trim(), options))
 }
 
 export interface VoiceProject {
@@ -130,8 +131,8 @@ export function resolveProject<T extends { name: string; root: string }>(spoken:
 function unknownProject(spoken: string, projects: readonly { name: string }[]): Error {
   const said = spoken.trim()
   if (projects.length === 0) {
-    return new Error(`Non conosco il progetto «${said}»: non ho nessun progetto in elenco.`)
+    return new Error(t("voice.msg.resolve.noProjects", said))
   }
   const options = projects.map((project) => project.name).join(", ")
-  return new Error(`Non conosco il progetto «${said}». Ho in elenco: ${options}.`)
+  return new Error(t("voice.msg.resolve.unknownProject", said, options))
 }

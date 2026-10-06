@@ -90,6 +90,55 @@ export function valueProblem(value: string): string | undefined {
   return undefined
 }
 
+/**
+ * What `secrets.rs` refuses with is a code (`key.envReserved:PATH`), never a
+ * sentence: the sentence is the page's, in the interface's language. A message
+ * that is not a known code (the OS's own, a rejection of the bridge) is shown
+ * as it comes.
+ */
+export function keyError(raw: string, language: Locale = locale()): string {
+  const match = /^(key\.[A-Za-z.]+)(?::([\s\S]*))?$/.exec(raw.trim())
+  if (!match) return raw
+  const arg = match[2] ?? ""
+  const say = (key: Parameters<typeof translate>[1], ...rest: string[]) =>
+    (translate as (language: Locale, key: string, ...args: string[]) => string)(language, key, ...rest)
+  switch (match[1]) {
+    case "key.nameInvalid":
+      return say("keys.problem.nameChars")
+    case "key.envInvalid":
+      return say("keys.problem.envChars")
+    case "key.envReserved":
+      return say("keys.problem.reserved", arg)
+    case "key.envTaken":
+      return say("keys.problem.taken", arg)
+    case "key.valueEmpty":
+      return say("keys.problem.noValue")
+    case "key.valueTooLong":
+      return say("keys.problem.tooLong")
+    case "key.valueNewline":
+      return say("keys.problem.newline")
+    case "key.valueNeeded":
+      return say("keys.error.valueNeeded")
+    case "key.editCancelled":
+      return say("keys.error.editCancelled")
+    case "key.notFound":
+      return say("keys.error.notFound", arg)
+    case "key.noValue":
+      return say("keys.error.noValue", arg)
+    case "key.keychain.noAccess":
+    case "key.keychain.refused":
+    case "key.keychain.tooLong":
+    case "key.keychain.invalid":
+    case "key.keychain.ambiguous":
+    case "key.keychain.badEncoding":
+    case "key.keychain.noEntry":
+    case "key.keychain.other":
+      return say(`keys.error.${match[1].slice("key.".length)}` as Parameters<typeof translate>[1])
+    default:
+      return raw
+  }
+}
+
 /** `OpenAI key` → `OPENAI_API_KEY`: a starting point the user can change. */
 export function suggestEnv(name: string): string {
   const base = name

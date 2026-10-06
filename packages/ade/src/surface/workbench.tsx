@@ -298,7 +298,13 @@ import { CONSENT_KEY, consentQuestion, hasConsent, withConsent } from "../plugin
 import { toPluginSession } from "../plugin/session"
 import type { DiscoveryIO } from "../plugin/discovery"
 import { markSaved, openBuffer, saveBlockedReason, toLf, withEol } from "../editor"
-import { detectPermission, followPermission, permissionIdentity, type PermissionAnswer } from "../session/permission"
+import {
+  answerLabel,
+  detectPermission,
+  followPermission,
+  permissionIdentity,
+  type PermissionAnswer,
+} from "../session/permission"
 import { readReportLine } from "../session/report"
 import { asOneLine, asSubmittedLine, confirmDeadline, pasteSettled, submitCheck } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
@@ -7441,7 +7447,7 @@ export function Workbench() {
      * answered, the agent was still waiting.
      */
     session.write(asSubmittedLine(answer.send))
-    appendLine(paneId, `> ${answer.label}`, "shell")
+    appendLine(paneId, `> ${answerLabel(answer)}`, "shell")
 
     /*
      * The request is not cleared here.

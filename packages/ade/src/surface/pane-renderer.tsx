@@ -10,7 +10,7 @@ import { PluginPane } from "../plugin/pane"
 import type { AdePluginRuntime } from "../plugin/runtime"
 import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
-import type { PermissionAnswer } from "../session/permission"
+import { answerLabel, type PermissionAnswer } from "../session/permission"
 import { typedAfter } from "../session/typed-line"
 import { answersPrompt, isInterruptInput } from "../session/mailbox"
 import { showsSuspendButton, SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
@@ -541,7 +541,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
            */
           permissions()[current().id]
             ? permissions()[current().id].answers.map((answer) => ({
-                label: answer.label,
+                label: answerLabel(answer),
                 tone: answer.tone,
                 onClick: () => deps.answerPermission(current().id, answer),
               }))

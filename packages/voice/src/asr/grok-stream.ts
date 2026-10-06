@@ -18,6 +18,7 @@
 
 import { markVoice } from "../timing"
 import { plainProblem } from "../effect/errors"
+import { t as tr } from "@nikcli-ai/ade/i18n"
 import type {
   FinalTranscriptCallback,
   PartialTranscriptCallback,
@@ -436,7 +437,7 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
         capWarned = true
         errorCb(
           new Error(
-            "Oggi ho già mandato l'audio in streaming fino al limite: le frasi successive vanno a MAI-Transcribe-2.",
+            tr("voice.msg.asr.streamLimit"),
           ),
           { purpose: "turn" },
         )
@@ -461,7 +462,7 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
         tellState({ kind: "auth" })
         if (!authWarned) {
           authWarned = true
-          errorCb(new Error("La chiave xAI non funziona: trascrivo con MAI-Transcribe-2."), { purpose: "turn" })
+          errorCb(new Error(tr("voice.msg.asr.xaiKeyInvalid")), { purpose: "turn" })
         }
         break
       case "credit":
@@ -469,7 +470,7 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
         tellState({ kind: "credit", until: creditUntil })
         if (!creditWarned) {
           creditWarned = true
-          errorCb(new Error("Il credito xAI è finito: trascrivo con MAI-Transcribe-2 finché non lo ricarichi."), {
+          errorCb(new Error(tr("voice.msg.asr.xaiCreditOut")), {
             purpose: "turn",
           })
         }
@@ -797,8 +798,8 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
       await batch({ segment, deliver, purpose: "probe", gated: true, report })
       markVoice("asr-back")
     } catch (err: any) {
-      const safeMsg = sanitizeApiKey(err?.message ?? "errore sconosciuto", "")
-      errorCb(new Error(`Non sono riuscito a trascrivere la frase: ${safeMsg}`), { purpose })
+      const safeMsg = sanitizeApiKey(err?.message ?? tr("voice.msg.asr.unknownError"), "")
+      errorCb(new Error(tr("voice.msg.asr.transcribeFailed", safeMsg)), { purpose })
     } finally {
       settle(flow)
     }
@@ -894,15 +895,15 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
         if (lower.includes("negato") || lower.includes("notallowed") || lower.includes("permission")) {
           const permErr = new MicPermissionDenied({
             message:
-              "Accesso al microfono negato: consentilo nelle impostazioni di privacy del sistema (Windows: Impostazioni › Privacy e sicurezza › Microfono, per le app desktop).",
+              tr("voice.msg.asr.micDenied"),
             cause: err,
           })
           errorCb(permErr as unknown as Error, { purpose: "turn" })
           throw permErr
         }
-        if (lower.includes("nessun microfono") || lower.includes("notfound")) {
+        if (lower.includes("nessun microfono") || lower.includes("no microphone") || lower.includes("notfound")) {
           const unavailErr = new MicUnavailable({
-            message: "Nessun microfono rilevato o non accessibile. Collega un dispositivo audio e riprova.",
+            message: tr("voice.msg.asr.noMic"),
             cause: err,
           })
           errorCb(unavailErr as unknown as Error, { purpose: "turn" })
@@ -911,7 +912,8 @@ export function createGrokStreamTranscriber(options: GrokStreamTranscriberOption
         const failure = new TranscriptionFailed({
           cause: err,
           message:
-            plainProblem(err?.message) ?? `Non riesco ad aprire il microfono: ${err?.message ?? "non so perché"}`,
+            plainProblem(err?.message) ??
+            tr("voice.msg.asr.micOpenFailed", err?.message ?? tr("voice.msg.asr.unknownWhy")),
         })
         errorCb(failure as unknown as Error, { purpose: "turn" })
         throw failure

@@ -16,6 +16,7 @@
  */
 
 import { createSignal } from "solid-js"
+import { locale as uiLocale, t as tr } from "@nikcli-ai/ade/i18n"
 import { Effect, Exit, Scope, Stream } from "effect"
 import type { PermissionSpeechKind, VoiceHost } from "./bridge/host"
 import type { DispatchOutcome } from "./bridge/dispatch"
@@ -576,7 +577,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     try {
       await Effect.runPromise(Scope.close(scope, Exit.void))
     } catch (err) {
-      noteError(err, `Chiusura non riuscita (${what}). Se il microfono resta acceso, riavvia ADE.`)
+      noteError(err, tr("voice.msg.closeFailed", what))
     }
   }
 
@@ -745,12 +746,10 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       }
       const seconds = Math.max(1, Math.round(after / 1000))
       const idle =
-        after < 60_000 ? `${seconds} ${seconds === 1 ? "secondo" : "secondi"}` : `${Math.round(after / 60_000)} minuti`
-      stopListening(
-        current.alwaysListen
-          ? `Non ti sento da ${idle}, quindi ho smesso di ascoltare: tenere il microfono aperto costa. Premi «In ascolto» in alto per riprendere.`
-          : `Non ho sentito una frase per ${idle}, quindi ho spento il microfono. Aprilo per riprovare.`,
-      )
+        after < 60_000
+          ? tr("voice.msg.idle.seconds", seconds)
+          : tr("voice.msg.idle.minutes", Math.round(after / 60_000))
+      stopListening(current.alwaysListen ? tr("voice.msg.idle.always", idle) : tr("voice.msg.idle.tap", idle))
     }, after)
   }
 
@@ -777,19 +776,16 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     const credit = await (options.creditLeft ?? ((apiKey: string) => openRouterCreditLeft(apiKey)))(key)
     if (!credit) return
     if ("refused" in credit) {
-      setListenWarning(
-        "La chiave OpenRouter non viene accettata: la voce non può trascrivere niente finché non la sistemi nelle impostazioni della voce.",
-      )
+      setListenWarning(tr("voice.msg.credit.refused"))
       return
     }
     if (credit.left > (options.lowCreditUsd ?? LOW_CREDIT_USD)) return
     setListenWarning(
       credit.left <= 0
-        ? "Il credito OpenRouter è finito: finché non lo ricarichi la voce non trascrive più niente."
-        : // The sentence is Italian, so the sum in it is written the Italian way.
-          // Without the locale the machine's own decided: «1,21 USD» here and
-          // «$1.21» on CI, which is what turned this test red there and not here.
-          `Sul credito OpenRouter restano ${formatSpendCost(credit.left, "it-IT")}: ricaricalo prima che la voce si fermi a metà frase.`,
+        ? tr("voice.msg.credit.out")
+        : // The sum is written the way the sentence's language writes it. Without the locale the machine's own
+          // decided: «1,21 USD» here and «$1.21» on CI, which is what turned a test red there and not here.
+          tr("voice.msg.credit.low", formatSpendCost(credit.left, uiLocale() === "en" ? "en-US" : "it-IT")),
     )
   }
 
@@ -801,9 +797,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     const cap = options.listenRequestsPerHour ?? LISTEN_REQUESTS_PER_HOUR
     if (listenRequests.length <= cap) return
     listenRequests = []
-    stopListening(
-      `Nell'ultima ora l'ascolto ha mandato al servizio di trascrizione più di ${cap} frasi, e ognuna si paga: c'è molto parlato intorno, per esempio la televisione. Ho smesso di ascoltare; premi «In ascolto» in alto per riprendere.`,
-    )
+    stopListening(tr("voice.msg.rateCap", cap))
   }
 
   /*
@@ -978,14 +972,18 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
           onUncut: () =>
             record({
               kind: "action",
-              label: "Ignorata una frase lunga: non se ne poteva mandare solo l'inizio.",
+              label: tr("voice.msg.ignored.long"),
               ok: true,
               at: now(),
             }),
           onRejected: (text: string) =>
             record({
               kind: "action",
-              label: `Ignorata, non inizia con «${currentSettings().wakeWord}»: «${firstWords(text).replace(/…$/, "")}…».`,
+              label: tr(
+                "voice.msg.ignored.noWake",
+                currentSettings().wakeWord,
+                `${firstWords(text).replace(/…$/, "")}…`,
+              ),
               ok: true,
               at: now(),
             }),
@@ -1030,7 +1028,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
     const transcriberService = await Effect.runPromise(
       Scope.extend(
         bridgeTranscriber(transcriber, undefined, (err) => {
-          const msg = spokenMessage(err) || err.message
+          const msg = spokenMessage(err, uiLocale()) || err.message
           noteError(err, msg)
           /* A key that is refused or spent answers nothing, and listening
              would go on opening the microphone and asking for the rest of
@@ -1100,7 +1098,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
           new HostActionFailed({
             action: "speak",
             cause: err,
-            message: "Errore durante la sintesi vocale.",
+            message: tr("voice.msg.synthFailed"),
           }),
       })
     },
@@ -1113,7 +1111,7 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
           new HostActionFailed({
             action: "speak",
             cause: err,
-            message: "Errore durante la sintesi vocale.",
+            message: tr("voice.msg.synthFailed"),
           }),
       })
     },
@@ -1213,7 +1211,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       const message =
         typeof err === "string"
           ? err
-          : spokenMessage(err) || (err && typeof err === "object" && err instanceof Error ? err.message : undefined)
+          : spokenMessage(err, uiLocale()) ||
+            (err && typeof err === "object" && err instanceof Error ? err.message : undefined)
       noteError(err, message)
       if (message) record({ kind: "error", text: message, at: now() })
       if (activeMode() !== "agent" && pressHolds() && !chordHeld && !openedWithoutChord) {
@@ -1355,10 +1354,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       const message =
         typeof err === "string"
           ? err
-          : spokenMessage(err) ||
-            (err && typeof err === "object" && err instanceof Error
-              ? err.message
-              : "Non sono riuscito ad aprire il microfono: riprova.")
+          : spokenMessage(err, uiLocale()) ||
+            (err && typeof err === "object" && err instanceof Error ? err.message : tr("voice.msg.micOpenFailed"))
       noteError(err, message)
       await stopNow()
       if (!startOptions?.waitForName && activeMode() !== "transcription" && currentSettings().speakReplies !== false) {
@@ -1426,10 +1423,8 @@ export function createVoiceEngine(options: VoiceEngineOptions): VoiceEngine {
       const message =
         typeof err === "string"
           ? err
-          : spokenMessage(err) ||
-            (err && typeof err === "object" && err instanceof Error
-              ? err.message
-              : "Le nuove impostazioni vocali non sono state applicate.")
+          : spokenMessage(err, uiLocale()) ||
+            (err && typeof err === "object" && err instanceof Error ? err.message : tr("voice.msg.settingsNotApplied"))
       noteError(err, message)
       await stopNow()
     }
