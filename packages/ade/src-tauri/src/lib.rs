@@ -88,6 +88,7 @@ pub struct WriteRoots(Mutex<Vec<PathBuf>>, Mutex<Vec<String>>);
 /// Adds a directory to the set this window may write inside.
 #[tauri::command]
 async fn allow_write_root(roots: tauri::State<'_, WriteRoots>, path: String) -> Result<(), String> {
+    refuse_network_path(&path)?;
     let resolved = Path::new(&path)
         .canonicalize()
         .map_err(|e| format!("{path}: {e}"))?;
@@ -128,6 +129,74 @@ async fn design_sheet_path(roots: tauri::State<'_, WriteRoots>, path: String, cw
 /// a folder the user works in; a directory holding the user's whole profile, a
 /// system directory or ADE's own configuration is not one, whoever asks.
 fn too_broad_root(dir: &Path, home: Option<&Path>) -> Option<&'static str> {
+    too_broad_root_in(dir, home)
+}
+
+/// The `PATH` entries of this process.
+fn environment_path_dirs() -> Vec<PathBuf> {
+    std::env::var_os("PATH")
+        .map(|value| std::env::split_paths(&value).collect())
+        .unwrap_or_default()
+}
+
+/// Why the file at `resolved` must not be written, when what is written there
+/// runs by itself later (full review 2026-10-06, Rust 4; Architect's R1).
+///
+/// A root check cannot see this: a root that is a parent of a `PATH` folder, or
+/// the OneDrive folder whose `Documents` holds the PowerShell profile, is a
+/// reasonable-looking project. So the file is checked, whatever the root:
+/// a `PATH` folder (`~/.nikcli/bin`, `~/.bun/bin`, `~/.local/bin`) is where the
+/// next `nikcli` or `bun` comes from, and `Documents/WindowsPowerShell` and
+/// `Documents/PowerShell` hold the profile every PowerShell opens in ADE's terminal.
+/// Names are compared in lower case, as the file system does.
+fn runs_by_itself(resolved: &Path, home: Option<&Path>, path_dirs: &[PathBuf]) -> Option<&'static str> {
+    let lowered = |p: &Path| -> Vec<String> {
+        p.components()
+            .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
+            .collect()
+    };
+    let target = lowered(resolved);
+    for entry in path_dirs {
+        let entry = entry.canonicalize().unwrap_or_else(|_| entry.clone());
+        // A drive root on PATH would make every folder on the drive a PATH folder.
+        let broad = entry.parent().is_none() || entry.components().count() <= 2;
+        if !broad && target.starts_with(lowered(&entry).as_slice()) {
+            return Some("cartella in PATH");
+        }
+    }
+    if let Some(home) = home.and_then(|h| h.canonicalize().ok()) {
+        for bin in [
+            ".nikcli/bin",
+            ".bun/bin",
+            ".local/bin",
+            ".cargo/bin",
+            ".deno/bin",
+            ".volta/bin",
+            "go/bin",
+            "bin",
+        ] {
+            if target.starts_with(lowered(&home.join(bin)).as_slice()) {
+                return Some("cartella dei programmi dell'utente (PATH)");
+            }
+        }
+    }
+    // The profile folder may be redirected anywhere (OneDrive, another drive): the name decides.
+    for pair in target.windows(2) {
+        if pair[0] == "documents" && (pair[1] == "windowspowershell" || pair[1] == "powershell") {
+            return Some("cartella dei profili di PowerShell");
+        }
+    }
+    None
+}
+
+/// Why `dir` cannot be a write root: the profile, the system and ADE's own
+/// folders. What is written inside a root that runs by itself is refused file
+/// by file (`runs_by_itself`), not here.
+///
+/// The well-known folders of the profile are not projects either, only what is
+/// inside them; the home's own program folders (`~/.nikcli/bin` and what holds
+/// them) are not roots.
+fn too_broad_root_in(dir: &Path, home: Option<&Path>) -> Option<&'static str> {
     if dir.parent().is_none() {
         return Some("la radice del disco non è un progetto");
     }
@@ -145,7 +214,50 @@ fn too_broad_root(dir: &Path, home: Option<&Path>) -> Option<&'static str> {
                 return Some("cartella di configurazione dell'utente");
             }
         }
+        // A folder the shell or the system looks in by itself: the root or anything above it.
+        for bin in [
+            ".nikcli/bin",
+            ".bun/bin",
+            ".local/bin",
+            ".cargo/bin",
+            ".deno/bin",
+            ".volta/bin",
+            "go/bin",
+            "bin",
+        ] {
+            if home.join(bin).starts_with(dir) || dir.starts_with(home.join(bin)) {
+                return Some("cartella dei programmi dell'utente (PATH)");
+            }
+        }
+        // The profile's own folders, which hold everything and are nobody's project.
+        let lowered = |p: &Path| -> Vec<String> {
+            p.components()
+                .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
+                .collect()
+        };
+        let (target, base) = (lowered(dir), lowered(&home));
+        if let Some(below) = target.strip_prefix(base.as_slice()) {
+            // `Documents` may sit under OneDrive when the folder is redirected.
+            let below = match below {
+                [first, rest @ ..] if first.starts_with("onedrive") => rest,
+                other => other,
+            };
+            if let [only] = below {
+                if ["documents", "desktop", "downloads", "pictures", "videos", "music"].contains(&only.as_str()) {
+                    return Some("una cartella del profilo non è un progetto");
+                }
+            }
+            // PowerShell reads its profile from `Documents\WindowsPowerShell` and `Documents\PowerShell`.
+            if let [parent, name, ..] = below {
+                if parent == "documents" && (name == "windowspowershell" || name == "powershell") {
+                    return Some("cartella dei profili di PowerShell");
+                }
+            }
+        }
     }
+    // A root that contains a `PATH` entry, or sits in one, is not refused here:
+    // the file that is written is checked instead (`runs_by_itself`), which also
+    // covers a root that merely contains the folder.
     let lowered = dir.to_string_lossy().to_lowercase().replace('\\', "/");
     for system in ["/windows", "/program files", "/program files (x86)", "/programdata"] {
         if lowered.contains(&format!(":{system}")) {
@@ -195,6 +307,73 @@ fn is_git_executable_path(path: &Path) -> bool {
     })
 }
 
+/// Whether `path` names a file on another machine: `\\host\share`, `//host/share`,
+/// `\\?\UNC\host\share` or a device path (`\\.\`).
+///
+/// Asking Windows about such a path (`exists`, `open`, `canonicalize`) opens an
+/// SMB connection to the host and sends the user's NTLM hash with it, so the
+/// answer has to come from the text, before the file system is touched. A
+/// project's own `.nikcli/tui.json`, written by whoever cloned it, could name
+/// one and ADE looked at it on opening the project (full review 2026-10-06,
+/// Rust ALTO 2). `\\?\C:\x` is the extended spelling of a local path and stays.
+/// A mapped drive letter cannot be told from a local one by its text.
+fn is_network_path(path: &str) -> bool {
+    let normal = path.trim().replace('/', "\\");
+    // After `\\?\` or `\??\`, only a drive letter is a local path; a server, a volume or a device is not.
+    let local_after_prefix = |inner: &str| {
+        let mut chars = inner.chars();
+        matches!((chars.next(), chars.next()), (Some(drive), Some(':')) if drive.is_ascii_alphabetic())
+    };
+    // The NT object-manager spelling `\??\` reaches the SMB redirector exactly as `\\?\` does.
+    if let Some(inner) = normal.strip_prefix("\\??\\") {
+        return !local_after_prefix(inner);
+    }
+    let Some(rest) = normal.strip_prefix("\\\\") else {
+        return false;
+    };
+    match rest.strip_prefix("?\\") {
+        Some(inner) => !local_after_prefix(inner),
+        None => true,
+    }
+}
+
+fn refuse_network_path(path: &str) -> Result<(), String> {
+    if is_network_path(path) {
+        return Err(format!("percorso di rete non consentito: {path}"));
+    }
+    Ok(())
+}
+
+/// Folders and files of the user's credentials, which the page has no reason to
+/// read through `read_text_file`, which otherwise opens any path.
+///
+/// Not the whole home: the sidebar opens files anywhere, plugin discovery reads
+/// `~/.config/nikcli`, and the OpenRouter key sync reads nikcli's own `auth.json`.
+/// What is listed is what no ADE feature reads.
+fn is_credential_path(path: &Path, home: Option<&Path>) -> bool {
+    let Some(home) = home.and_then(|h| h.canonicalize().ok()) else {
+        return false;
+    };
+    let Ok(resolved) = path.canonicalize() else {
+        // It does not exist, so it cannot be read either.
+        return false;
+    };
+    let lowered = |p: &Path| -> Vec<String> {
+        p.components()
+            .map(|c| c.as_os_str().to_string_lossy().to_lowercase())
+            .collect()
+    };
+    let (target, base) = (lowered(&resolved), lowered(&home));
+    if !target.starts_with(&base) {
+        return false;
+    }
+    match &target[base.len()..] {
+        [first, ..] if [".ssh", ".gnupg", ".aws", ".azure", ".kube", ".docker"].contains(&first.as_str()) => true,
+        [only] => [".netrc", "_netrc", ".git-credentials", ".pgpass"].contains(&only.as_str()),
+        _ => false,
+    }
+}
+
 /// Resolves `path` to a form that can be compared against a root, without
 /// requiring it to exist yet.
 ///
@@ -206,6 +385,7 @@ fn is_git_executable_path(path: &Path) -> bool {
 /// appended — with `..` refused rather than resolved, since a `..` that climbs
 /// out of the root is exactly what this is here to stop.
 fn resolve_for_check(path: &Path) -> Result<PathBuf, String> {
+    refuse_network_path(&path.to_string_lossy())?;
     let absolute = if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -242,6 +422,16 @@ fn resolve_for_check(path: &Path) -> Result<PathBuf, String> {
 /// The resolved path, when it falls inside a registered root; an error naming
 /// the refusal otherwise.
 fn within_roots(roots: &WriteRoots, path: &str) -> Result<PathBuf, String> {
+    within_roots_with(roots, path, dirs::home_dir().as_deref(), &environment_path_dirs())
+}
+
+/// The same check with the home and the `PATH` entries given, so a test can name them.
+fn within_roots_with(
+    roots: &WriteRoots,
+    path: &str,
+    home: Option<&Path>,
+    path_dirs: &[PathBuf],
+) -> Result<PathBuf, String> {
     let resolved = resolve_for_check(Path::new(path))?;
     let allowed = roots.0.lock().map_err(|_| "radici bloccate")?;
     if allowed.is_empty() {
@@ -252,6 +442,9 @@ fn within_roots(roots: &WriteRoots, path: &str) -> Result<PathBuf, String> {
     if allowed.iter().any(|root| resolved.starts_with(root)) {
         if is_git_executable_path(&resolved) {
             return Err(format!("configurazione o hook di git: {path}"));
+        }
+        if let Some(reason) = runs_by_itself(&resolved, home, path_dirs) {
+            return Err(format!("{reason}: {path}"));
         }
         return Ok(resolved);
     }
@@ -326,6 +519,7 @@ struct DirEntry {
 /// silently skipped instead of aborting the whole listing.
 #[tauri::command]
 async fn read_dir(path: String) -> Result<Vec<DirEntry>, String> {
+    refuse_network_path(&path)?;
     let rd = std::fs::read_dir(&path).map_err(|e| format!("{path}: {e}"))?;
     let mut dirs: Vec<DirEntry> = Vec::new();
     let mut files: Vec<DirEntry> = Vec::new();
@@ -378,6 +572,10 @@ async fn read_text_file(path: String, max_bytes: usize) -> Result<FileRead, Stri
 
 /// The reading itself, as a plain function so the tests below can call it.
 fn read_text(path: &str, max_bytes: usize) -> Result<FileRead, String> {
+    refuse_network_path(path)?;
+    if is_credential_path(Path::new(path), dirs::home_dir().as_deref()) {
+        return Err(format!("credenziali dell'utente: lettura non consentita: {path}"));
+    }
     /*
      * One byte past the cap, rather than the whole file. The sidebar makes it
      * one click to open a 2 GB pack file, and reading it whole would allocate
@@ -1082,23 +1280,19 @@ fn first_line_within(child: &mut std::process::Child, timeout: std::time::Durati
  * for a `-c`; the handful of per-subcommand options that also carry a command
  * are refused wherever they appear; and the environment is narrowed to the one
  * variable ADE sets, so GIT_PAGER and friends cannot arrive that way either.
+ *
+ * The subcommands are the ones ADE sends and nothing else: `rebase`, `merge`,
+ * `cherry-pick`, `commit` and the rest were allowed "in case", and `rebase
+ * --exe=<cmd>` (git takes any unique prefix of a long option) ran the command.
+ * Full review of 2026-10-06, Rust area, ALTO 1.
  */
 const GIT_SUBCOMMANDS: &[&str] = &[
     "status",
     "worktree",
     "rev-parse",
-    "rev-list",
     "branch",
     "add",
-    "commit",
-    "commit-tree",
-    "write-tree",
-    "merge",
-    "rebase",
-    "cherry-pick",
     "diff",
-    "show",
-    "log",
     "ls-files",
 ];
 
@@ -1130,7 +1324,7 @@ struct ShellOutput {
 }
 
 /// Where a git call would write outside the index and the work tree it runs
-/// in: a `worktree add` or `move` destination, and a `GIT_INDEX_FILE`. Each
+/// in: a `worktree add` destination, and a `GIT_INDEX_FILE`. Each
 /// must be a place ADE may write, inside a project, or the
 /// `<project>-worktrees` folder beside one, where ADE puts its own checkouts
 /// (`worktreePlan`).
@@ -1165,22 +1359,11 @@ fn check_git_destinations(
             Err(format!("git scriverebbe fuori dal progetto: {raw}"))
         }
     };
-    if args.first().map(String::as_str) == Some("worktree") {
-        let sub = args.get(1).map(String::as_str);
-        if matches!(sub, Some("add" | "move")) {
-            // The positionals, past the options and the values some of them take.
-            let mut positionals = Vec::new();
-            let mut rest = args[2..].iter();
-            while let Some(arg) = rest.next() {
-                if arg == "-b" || arg == "-B" || arg == "--reason" {
-                    rest.next();
-                } else if !arg.starts_with('-') {
-                    positionals.push(arg.as_str());
-                }
-            }
-            let destination = if sub == Some("add") { positionals.first() } else { positionals.get(1) };
-            place(destination.ok_or("git worktree senza cartella di destinazione")?)?;
-        }
+    // Only the one form ADE sends is read for its destination, so there is no
+    // option left to hide a value in (`-fb x <dest>` is `-f -b x`, not `-fb`
+    // with a value: the old positional walk validated `x`, git wrote `<dest>`).
+    if let Some(destination) = worktree_form(args)? {
+        place(destination)?;
     }
     if let Some(index) = env.get("GIT_INDEX_FILE") {
         // The review's own index is in the repository's git dir, which for a
@@ -1197,6 +1380,32 @@ fn check_git_destinations(
     Ok(())
 }
 
+/// The one `git worktree` call per purpose ADE makes, and nothing else:
+///
+/// - `worktree add -b <branch> <path> [<base>]` (`worktreeAddArgs`), whose path
+///   is returned so the caller can check where it lands;
+/// - `worktree list --porcelain`;
+/// - `worktree remove <path>`.
+///
+/// Every operand is a name, never an option: git reads a short-option cluster
+/// like `-fb` as `-f -b`, so a check that skips "the value of `-b`" validates
+/// the wrong word.
+fn worktree_form(args: &[String]) -> Result<Option<&str>, String> {
+    if args.first().map(String::as_str) != Some("worktree") {
+        return Ok(None);
+    }
+    let name = |value: &String| !value.is_empty() && !value.starts_with('-');
+    let refused = || Err("forma di git worktree non consentita".to_string());
+    match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
+        ["worktree", "add", "-b", _, _] | ["worktree", "add", "-b", _, _, _] if args[3..].iter().all(name) => {
+            Ok(Some(args[4].as_str()))
+        }
+        ["worktree", "list", "--porcelain"] => Ok(None),
+        ["worktree", "remove", _] if name(&args[2]) => Ok(None),
+        _ => refused(),
+    }
+}
+
 fn check_git_args(args: &[String]) -> Result<(), String> {
     let Some(subcommand) = args.first() else {
         return Err("git senza sottocomando".to_string());
@@ -1204,6 +1413,7 @@ fn check_git_args(args: &[String]) -> Result<(), String> {
     if !GIT_SUBCOMMANDS.contains(&subcommand.as_str()) {
         return Err(format!("sottocomando git non consentito: {subcommand}"));
     }
+    worktree_form(args)?;
     for arg in &args[1..] {
         if arg == "--" {
             break;
@@ -1214,12 +1424,18 @@ fn check_git_args(args: &[String]) -> Result<(), String> {
             return Err(format!("opzione git non consentita: {arg}"));
         }
         /*
-         * `rebase -x <cmd>` is `--exec`, and git's option parser also takes it
-         * glued (`-xcmd`) or clustered (`-ix cmd`). Any short-option cluster
-         * holding an x is refused for rebase; `cherry-pick -x` only annotates
-         * the message and stays allowed.
+         * git's option parser takes any unique prefix of a long option:
+         * `--exe=calc` is `--exec=calc` and `--outp=file` is `--output=file`.
+         * A word that begins a forbidden long option is refused, so the
+         * abbreviations go the way of the full names.
          */
-        if subcommand == "rebase" && arg.starts_with('-') && !arg.starts_with("--") && arg[1..].contains('x') {
+        if head.len() > 2
+            && head.starts_with("--")
+            && GIT_EXECUTING_FLAGS
+                .iter()
+                .chain(GIT_WRITING_FLAGS)
+                .any(|flag| flag.starts_with("--") && flag.starts_with(head))
+        {
             return Err(format!("opzione git non consentita: {arg}"));
         }
     }
@@ -1441,7 +1657,7 @@ async fn home_dir() -> Result<String, String> {
 
 #[tauri::command]
 async fn path_exists(path: String) -> bool {
-    Path::new(&path).exists()
+    !is_network_path(&path) && Path::new(&path).exists()
 }
 
 /// Opens an ADE release page in the default browser.
@@ -2889,6 +3105,104 @@ mod tests {
         assert!(too_broad_root(&project_path, Some(&home)).is_none());
     }
 
+    /// Full review 2026-10-06, Rust 4: a root where what is written runs by itself later is refused.
+    #[test]
+    fn a_root_where_written_files_run_by_themselves_is_refused() {
+        let home = TempDir::new("rootshome");
+        let home = home.0.canonicalize().expect("canonical home");
+        let at = |relative: &str| home.join(relative);
+        let refused = |dir: PathBuf| too_broad_root_in(&dir, Some(&home)).is_some();
+
+        for relative in [
+            "Documents",
+            "documents",
+            "Desktop",
+            "Downloads",
+            "OneDrive/Documents",
+            "OneDrive - Acme/Documents",
+            "Documents/WindowsPowerShell",
+            "Documents/WindowsPowerShell/Modules",
+            "Documents/PowerShell",
+            "OneDrive/Documents/WindowsPowerShell",
+            ".nikcli",
+            ".nikcli/bin",
+            ".nikcli/bin/x",
+            ".bun",
+            ".bun/bin",
+            ".local",
+            ".local/bin",
+            ".cargo/bin",
+        ] {
+            assert!(refused(at(relative)), "{relative}");
+        }
+        // What is inside them is a project; so is a project that merely sits near.
+        for relative in [
+            "Documents/GitHub/app",
+            "Documents/app",
+            "Desktop/app",
+            "OneDrive/Documents/app",
+            "code/app",
+            ".nikcli/projects/app",
+            "tools/app",
+            "tools",
+            "go/src/app",
+        ] {
+            assert!(!refused(at(relative)), "{relative}");
+        }
+    }
+
+    /// Architect's R1: what runs by itself is refused on the file, whatever the root.
+    #[test]
+    fn a_file_that_runs_by_itself_is_refused_whatever_the_root() {
+        let home = TempDir::new("runshome");
+        let home = home.0.canonicalize().expect("canonical home");
+        let at = |relative: &str| home.join(relative);
+        let path_dirs = vec![at("tools/bin")];
+        let roots_at = |root: PathBuf| {
+            let roots = WriteRoots::default();
+            roots.0.lock().expect("roots").push(root);
+            roots
+        };
+        for dir in ["tools/bin", "Documents/WindowsPowerShell", "OneDrive/Documents/PowerShell", ".nikcli/bin"] {
+            std::fs::create_dir_all(at(dir)).expect("dir");
+        }
+        // The roots a page could register: the home's child that holds the folder, or the home's OneDrive.
+        for (root, file) in [
+            ("tools", "tools/bin/nikcli.cmd"),
+            ("tools", "tools/bin/sub/x.cmd"),
+            ("tools/bin", "tools/bin/nikcli.cmd"),
+            ("OneDrive", "OneDrive/Documents/PowerShell/profile.ps1"),
+            ("OneDrive", "OneDrive/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1"),
+            ("Documents/WindowsPowerShell", "Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1"),
+            ("Documents", "Documents/PowerShell/profile.ps1"),
+            ("Documents", "documents/windowspowershell/x.ps1"),
+            (".nikcli", ".nikcli/bin/nikcli.cmd"),
+        ] {
+            let roots = roots_at(at(root));
+            let error = within_roots_with(&roots, &at(file).to_string_lossy(), Some(&home), &path_dirs)
+                .expect_err(file);
+            assert!(!error.starts_with("fuori dal progetto"), "{file}: {error}");
+        }
+        // Next to them, inside the same roots, a file is written.
+        for (root, file) in [
+            ("tools", "tools/src/main.ts"),
+            ("tools", "tools/binary/x.txt"),
+            ("OneDrive", "OneDrive/Documents/app/main.ts"),
+            ("Documents", "Documents/GitHub/app/main.ts"),
+            ("Documents", "Documents/PowerShellish/x.ts"),
+        ] {
+            let roots = roots_at(at(root));
+            assert!(
+                within_roots_with(&roots, &at(file).to_string_lossy(), Some(&home), &path_dirs).is_ok(),
+                "{file}"
+            );
+        }
+        // A drive root among the PATH entries refuses nothing by itself.
+        let broad = vec![PathBuf::from("C:\\"), PathBuf::from("/")];
+        let roots = roots_at(at("code"));
+        assert!(within_roots_with(&roots, &at("code/app/x.ts").to_string_lossy(), Some(&home), &broad).is_ok());
+    }
+
     #[test]
     fn only_an_agent_file_counts_as_a_bot() {
         let config = Path::new("C:\\cfg\\nikcli");
@@ -2961,6 +3275,12 @@ mod tests {
             &["rebase", "-ix", "calc"],
             &["rebase", "-xcalc"],
             &["rebase", "--exec=calc"],
+            // Full review 2026-10-06, Rust ALTO 1: git takes any unique prefix of a long option.
+            &["rebase", "--exe=calc", "--root"],
+            &["rebase", "--ex", "calc", "--root"],
+            &["diff", "--outp=C:/evil.txt"],
+            &["diff", "--ext-d"],
+            &["diff", "--text=x"],
             &["diff", "--output=C:/evil.txt"],
             &["log", "--output", "x"],
             &["diff", "--ext-diff"],
@@ -2970,12 +3290,75 @@ mod tests {
             assert!(check_git_args(&args(bad)).is_err(), "{bad:?}");
         }
         for good in [
-            &["cherry-pick", "-x", "abc"][..],
-            &["rebase", "main"],
-            &["diff", "--cached", "HEAD"],
-            &["log", "--", "--output=x"],
+            &["diff", "--cached", "HEAD"][..],
+            &["diff", "--cached", "--name-status", "HEAD"],
+            &["diff", "--cached", "--shortstat", "main"],
+            &["diff", "--", "--output=x"],
+            &["status", "--porcelain"],
+            &["rev-parse", "--show-toplevel"],
+            &["rev-parse", "--git-path", "ade-review-index"],
+            &["add", "-A", "--", ":!.ade-trees"],
+            &["ls-files", "-co", "--exclude-standard"],
+            &["ls-files", "-z", "--", "a.md"],
+            &["branch", "--list", "ade/*", "--merged"],
+            &["branch", "-d", "ade/x"],
         ] {
             assert!(check_git_args(&args(good)).is_ok(), "{good:?}");
+        }
+    }
+
+    /// Full review 2026-10-06, Rust ALTO 1: only the subcommands ADE sends are left.
+    #[test]
+    fn git_subcommands_ade_never_sends_are_refused() {
+        let args = |list: &[&str]| list.iter().map(|a| a.to_string()).collect::<Vec<_>>();
+        for bad in [
+            &["rebase", "main"][..],
+            &["merge", "x"],
+            &["cherry-pick", "-x", "abc"],
+            &["commit", "-m", "x"],
+            &["commit-tree", "HEAD^{tree}"],
+            &["write-tree"],
+            &["log"],
+            &["show", "HEAD"],
+            &["rev-list", "HEAD"],
+            &["config", "core.pager", "calc"],
+        ] {
+            assert!(check_git_args(&args(bad)).is_err(), "{bad:?}");
+        }
+    }
+
+    /// Full review 2026-10-06, Rust 3: `worktree add` only in the form of `worktreeAddArgs`.
+    #[test]
+    fn git_worktree_is_called_only_in_the_forms_ade_uses() {
+        let args = |list: &[&str]| list.iter().map(|a| a.to_string()).collect::<Vec<_>>();
+        for good in [
+            &["worktree", "add", "-b", "ade/x", "C:/p-worktrees/x"][..],
+            &["worktree", "add", "-b", "ade/x", "C:/p-worktrees/x", "main"],
+            &["worktree", "list", "--porcelain"],
+            &["worktree", "remove", "C:/p-worktrees/x"],
+        ] {
+            assert!(check_git_args(&args(good)).is_ok(), "{good:?}");
+        }
+        for bad in [
+            // `-fb x <dest>` is `-f -b x`: the destination was never validated.
+            &["worktree", "add", "-fb", "x", "C:/Users/u/Documents/WindowsPowerShell"][..],
+            &["worktree", "add", "-f", "-b", "x", "C:/elsewhere"],
+            &["worktree", "add", "C:/elsewhere"],
+            &["worktree", "add", "--detach", "C:/elsewhere"],
+            &["worktree", "add", "-B", "x", "C:/elsewhere"],
+            &["worktree", "add", "-b", "-x", "C:/elsewhere"],
+            &["worktree", "add", "-b", "x", "-fdest"],
+            &["worktree", "add", "-b", "x", "C:/p", "-f"],
+            &["worktree", "add", "-b", "x", "C:/p", "main", "extra"],
+            &["worktree", "add", "-b", "x", ""],
+            &["worktree", "move", "a", "b"],
+            &["worktree", "remove", "-f", "C:/p-worktrees/x"],
+            &["worktree", "remove", "C:/a", "C:/b"],
+            &["worktree", "prune"],
+            &["worktree", "lock", "C:/p"],
+            &["worktree"],
+        ] {
+            assert!(check_git_args(&args(bad)).is_err(), "{bad:?}");
         }
     }
 
@@ -2997,14 +3380,17 @@ mod tests {
 
         // ADE's own: a branch, in the folder beside the project.
         assert_eq!(check(&["worktree", "add", "-b", "ade/x", &format!("{beside}/x"), "main"], &none), Ok(()));
-        assert_eq!(check(&["worktree", "add", "inside"], &none), Ok(()));
+        assert_eq!(check(&["worktree", "add", "-b", "ade/x", "inside"], &none), Ok(()));
         // Anywhere else, refused, however it is spelled.
         for bad in [
-            vec!["worktree", "add", &elsewhere],
+            vec!["worktree", "add", "-b", "ade/x", &elsewhere],
             vec!["worktree", "add", "-b", "ade/x", &elsewhere, "main"],
-            vec!["worktree", "add", "../elsewhere"],
+            vec!["worktree", "add", "-b", "ade/x", "../elsewhere"],
+            vec!["worktree", "add", "-b", "ade/x", ".git/hooks"],
+            // Not the form ADE sends: the destination cannot be told, so it is refused.
+            vec!["worktree", "add", &elsewhere],
+            vec!["worktree", "add", "-fb", "x", &elsewhere],
             vec!["worktree", "move", "inside", &elsewhere],
-            vec!["worktree", "add", ".git/hooks"],
         ] {
             assert!(check(&bad, &none).is_err(), "{bad:?}");
         }
@@ -3016,6 +3402,102 @@ mod tests {
         assert_eq!(check(&["add", "-A"], &index(&main.join("ade-review-index").to_string_lossy())), Ok(()));
         assert!(check(&["add", "-A"], &index(&format!("{elsewhere}/profile.ps1"))).is_err());
         assert!(check(&["add", "-A"], &index(&format!("{elsewhere}/ade-review-index"))).is_err());
+    }
+
+    /// Full review 2026-10-06, Rust ALTO 2: a path on another machine is refused from its text,
+    /// before the file system is asked, so Windows never opens SMB (and sends the NTLM hash).
+    #[test]
+    fn a_path_on_another_machine_is_refused_before_the_disk_is_asked() {
+        for unc in [
+            "\\\\attacker.example\\s\\p",
+            "//attacker.example/s/p",
+            "\\\\attacker.example/s/p",
+            "/\\attacker.example\\s",
+            "\\\\?\\UNC\\attacker.example\\s\\p",
+            "//?/UNC/attacker.example/s/p",
+            "\\\\.\\pipe\\x",
+            "\\\\?\\Volume{01234567-89ab-cdef-0123-456789abcdef}\\x",
+            "  //attacker.example/s/p/package.json",
+            // The NT object-manager prefix `\??\` is `\\?\` for the redirector: provably sent to SMB
+            // (review of F1, O1: `\??\UNC\127.0.0.1\C$\…` answers "network access denied", error 65).
+            "\\??\\UNC\\attacker.example\\s\\p",
+            "\\??\\UNC\\127.0.0.1\\C$\\Windows\\win.ini",
+            "\\??\\GLOBALROOT\\Device\\Mup\\attacker.example\\s",
+            "\\??\\Volume{01234567-89ab-cdef-0123-456789abcdef}\\x",
+            "/??/UNC/attacker.example/s/p",
+        ] {
+            assert!(is_network_path(unc), "{unc}");
+            assert!(refuse_network_path(unc).is_err(), "{unc}");
+            assert!(read_text(unc, 10).is_err_and(|e| e.contains("percorso di rete non consentito")), "{unc}");
+            assert!(resolve_for_check(Path::new(unc)).is_err_and(|e| e.contains("percorso di rete non consentito")), "{unc}");
+        }
+        for local in [
+            "C:\\Users\\u\\p",
+            "C:/Users/u/p",
+            "\\\\?\\C:\\Users\\u\\p",
+            "\\??\\C:\\Users\\u\\p",
+            "/home/u/p",
+            "relative/p",
+            "./p",
+            "",
+        ] {
+            assert!(!is_network_path(local), "{local}");
+        }
+    }
+
+    #[test]
+    fn a_network_path_is_not_listed_or_checked_for_existence() {
+        let dir = tauri::async_runtime::block_on(read_dir("//attacker.example/s".to_string()));
+        assert!(dir.is_err_and(|e| e.contains("percorso di rete non consentito")));
+        assert!(!tauri::async_runtime::block_on(path_exists("//attacker.example/s/p/package.json".to_string())));
+    }
+
+    /// The credential folders of the user's home are not read through `read_text_file`;
+    /// the rest of the home, and what ADE features read there, still are.
+    #[test]
+    fn credential_stores_in_the_home_are_not_readable_by_the_page() {
+        let home = TempDir::new("credhome");
+        let put = |relative: &str| {
+            let path = home.0.join(relative);
+            std::fs::create_dir_all(path.parent().expect("parent")).expect("dirs");
+            std::fs::write(&path, "x").expect("write");
+            path
+        };
+        let secret = [
+            ".ssh/id_ed25519",
+            ".SSH/config",
+            ".gnupg/private-keys-v1.d/k.key",
+            ".aws/credentials",
+            ".azure/accessTokens.json",
+            ".kube/config",
+            ".docker/config.json",
+            ".netrc",
+            ".git-credentials",
+        ];
+        for relative in secret {
+            let path = put(relative);
+            assert!(is_credential_path(&path, Some(&home.0)), "{relative}");
+        }
+        for relative in [
+            "notes.txt",
+            "project/.ssh-notes.md",
+            "project/.aws/readme.md",
+            ".config/nikcli/auth.json",
+            ".config/nikcli/tui.json",
+            ".claude/settings.json",
+            "AppData/Local/nikcli/auth.json",
+        ] {
+            let path = put(relative);
+            assert!(!is_credential_path(&path, Some(&home.0)), "{relative}");
+        }
+        // Not the home at all, a missing file, and no home to compare with.
+        let outside = TempDir::new("credoutside");
+        let elsewhere = outside.join(".ssh");
+        std::fs::create_dir_all(&elsewhere).expect("dir");
+        std::fs::write(elsewhere.join("id"), "x").expect("write");
+        assert!(!is_credential_path(&elsewhere.join("id"), Some(&home.0)));
+        assert!(!is_credential_path(&home.0.join(".ssh/missing"), Some(&home.0)));
+        assert!(!is_credential_path(&home.0.join(".ssh/id_ed25519"), None));
     }
 
     #[test]

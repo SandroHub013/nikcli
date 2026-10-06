@@ -110,6 +110,27 @@ export function isPathSpec(spec: string): boolean {
 }
 
 /**
+ * Whether a specifier names a file on another machine: `//host/share`,
+ * `\\host\share`, `\\?\UNC\host\share`, `file://host/share` or `file:////host/share`.
+ *
+ * Asking Windows whether such a path exists opens an SMB connection to the host
+ * and sends the user's NTLM hash with it. A specifier comes from the project's
+ * own `tui.json`, which a cloned repository writes, so this is decided from the
+ * text, before the disk is touched (Rust ALTO 2; the commands refuse them too).
+ */
+export function isUncSpec(spec: string): boolean {
+  const slashed = spec.trim().replace(/\\/g, "/")
+  if (slashed.startsWith("//")) return true
+  const file = /^file:(\/*)([^/]*)/i.exec(slashed)
+  if (!file) return false
+  const slashes = file[1]!.length
+  // `file:///x` has an empty host; `file://host/x` and `file:////x` do not.
+  if (slashes > 3) return true
+  if (slashes === 2) return file[2]!.toLowerCase() !== "localhost" && file[2] !== ""
+  return false
+}
+
+/**
  * A path or `file://` specifier as a URL, resolved against the project root.
  *
  * Windows backslashes are normalised first: `new URL` treats `\` as an
@@ -195,6 +216,10 @@ export async function resolveDeclaredPlugin(
       ...declared,
       reason: "i plugin npm non si possono installare dalla finestra desktop: aggiungilo dal terminale, poi riapri ADE",
     }
+  }
+
+  if (isUncSpec(declared.spec)) {
+    return { ...declared, reason: "i percorsi di rete (UNC) non sono consentiti per i plugin" }
   }
 
   const url = specToUrl(declared.spec, projectRoot)

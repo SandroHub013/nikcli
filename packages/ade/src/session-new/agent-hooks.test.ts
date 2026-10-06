@@ -129,11 +129,26 @@ describe("the targets here and the paths in Rust", () => {
     ).toBe(true)
   })
 
+  /*
+   * Full review 2026-10-06, Rust 5: the script Rust installs is its own compiled-in text, and the
+   * page's copy only serves the status ("outdated?" compares digests). The two are one text, or the
+   * panel would call a fresh install outdated forever.
+   */
+  test("the hook script is compiled into Rust, and is the text hookScript builds, per agent", () => {
+    expect(source).toContain('const HOOK_SCRIPT_TEMPLATE: &str = include_str!("../plugins/ade-agent-session.ps1.tmpl");')
+    const template = readFileSync(new URL("../../src-tauri/plugins/ade-agent-session.ps1.tmpl", import.meta.url), "utf8")
+    expect(template).toContain("@AGENT@")
+    for (const target of HOOK_TARGETS.filter((candidate) => candidate.kind !== "tui-plugin")) {
+      expect(template.replaceAll("@AGENT@", target.agent), target.id).toBe(hookScript(target.agent))
+      expect(source).toContain(`reports_as: "${target.agent}"`)
+    }
+  })
+
   test("and nikcli's plugin under the same marker, with no configuration", () => {
     expect(NIKCLI_PLUGIN_NAME).toBe(`${HOOK_MARKER}.js`)
     expect(source).toContain(`const PLUGIN_NAME: &str = "${NIKCLI_PLUGIN_NAME}";`)
     expect(source).toMatch(
-      /id: "nikcli",\s*base: Base::ConfigHome,\s*config: &\[\],\s*script: &\["nikcli", "plugin", "tui", PLUGIN_NAME\]/,
+      /id: "nikcli",\s*reports_as: "nikcli",\s*base: Base::ConfigHome,\s*config: &\[\],\s*script: &\["nikcli", "plugin", "tui", PLUGIN_NAME\]/,
     )
   })
 

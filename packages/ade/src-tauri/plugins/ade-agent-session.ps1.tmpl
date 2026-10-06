@@ -1,0 +1,70 @@
+# installed by ADE — ade-agent-session
+# ADE overwrites this file when the integration is reinstalled.
+# to add your own hook, add another entry beside this one in the config.
+
+if ([string]::IsNullOrWhiteSpace($env:ADE_SPAWN_NONCE)) { exit 0 }
+if ([string]::IsNullOrWhiteSpace($env:ADE_PANE_ID)) { exit 0 }
+if ([string]::IsNullOrWhiteSpace($env:ADE_SESSION_DIR)) { exit 0 }
+if (-not (Test-Path -LiteralPath $env:ADE_SESSION_DIR)) { exit 0 }
+
+$raw = [Console]::In.ReadToEnd()
+if ([string]::IsNullOrWhiteSpace($raw)) { exit 0 }
+try { $payload = $raw | ConvertFrom-Json } catch { exit 0 }
+
+$sessionId = $payload.session_id
+if ([string]::IsNullOrWhiteSpace($sessionId)) { exit 0 }
+
+# A turn starting or ending: whether the agent is working, for ADE to wait on or remind.
+$event = "$($payload.hook_event_name)"
+# A permission question is its own state and not a flavour of busy: typing there
+# would answer it. It is read from the hook because the hook is the CLI saying
+# so; the reading of the screen stays as the fallback for a session whose hooks
+# were never installed.
+$permission = $event -eq "Notification" -and "$($payload.notification_type)" -eq "permission_prompt"
+# Claude Code waiting at its prompt for a while: the turn is over, even one that
+# ended with no Stop — an interruption, which no hook reports.
+$waiting = $event -eq "Notification" -and "$($payload.notification_type)" -eq "idle_prompt"
+# A turn that ended on an API error ends like any other: back at the prompt.
+$failed = $event -eq "StopFailure"
+if ($event -eq "UserPromptSubmit" -or $event -eq "Stop" -or $failed -or $permission -or $waiting) {
+  $target = Join-Path $env:ADE_SESSION_DIR ("$env:ADE_SPAWN_NONCE" + ".activity")
+  # Never over a prompt: an Enter from a delivery would answer it. Only a turn
+  # starting or ending says it was answered.
+  if ($waiting -and (Test-Path -LiteralPath $target)) {
+    try { if (([IO.File]::ReadAllText($target) | ConvertFrom-Json).state -eq "permission") { exit 0 } } catch {}
+  }
+  $activity = [ordered]@{
+    state     = $(if ($event -eq "UserPromptSubmit") { "busy" } elseif ($permission) { "permission" } else { "idle" })
+    sessionId = "$sessionId"
+    cwd       = "$($payload.cwd)"
+    at        = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+  }
+  $staging = $target + ".part"
+  try {
+    [IO.File]::WriteAllText($staging, ($activity | ConvertTo-Json -Compress), (New-Object Text.UTF8Encoding $false))
+    Move-Item -LiteralPath $staging -Destination $target -Force
+  } catch {}
+  exit 0
+}
+
+if ($event -and $event -ne "SessionStart") { exit 0 }
+if (-not [string]::IsNullOrWhiteSpace($env:CODEX_THREAD_ID) -and $env:CODEX_THREAD_ID -ne $sessionId) { exit 0 }
+
+$report = [ordered]@{
+  pane      = "$env:ADE_PANE_ID"
+  nonce     = "$env:ADE_SPAWN_NONCE"
+  agent     = "@AGENT@"
+  sessionId = "$sessionId"
+  source    = "$($payload.source)"
+  at        = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+}
+
+$target = Join-Path $env:ADE_SESSION_DIR ("$env:ADE_SPAWN_NONCE" + ".json")
+$staging = $target + ".part"
+try {
+  $json = $report | ConvertTo-Json -Compress
+  [IO.File]::WriteAllText($staging, $json, (New-Object Text.UTF8Encoding $false))
+  Move-Item -LiteralPath $staging -Destination $target -Force
+} catch {
+  exit 0
+}

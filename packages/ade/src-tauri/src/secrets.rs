@@ -305,6 +305,36 @@ fn save_in(
     write_index(path, &index)
 }
 
+/// What a save with no value would change about who receives an existing key, in words;
+/// `None` when it changes nothing or the key is new.
+///
+/// The variable and the agents are the key's exposure: `env` is what the voice and the
+/// agents ask for by name, `agents` is who gets it in their environment at launch, a
+/// terminal included. Changing them without the value let the page read any key
+/// (`secret_save` the Anthropic key's `env` to `OPENROUTER_API_KEY`, then
+/// `secret_voice_key`) or put it in a shell it then typed into (full review
+/// 2026-10-06, Rust 6). Those saves now wait for a native confirmation.
+fn exposure_change(path: &std::path::Path, name: &str, env: &str, agents: &[String]) -> Option<String> {
+    let index = read_index(path);
+    let existing = index.keys.iter().find(|key| key.name == name)?;
+    let mut wanted: Vec<String> = agents.iter().filter(|a| !a.trim().is_empty()).cloned().collect();
+    wanted.sort();
+    wanted.dedup();
+    let list = |agents: &[String]| if agents.is_empty() { "nessuno".to_string() } else { agents.join(", ") };
+    let mut said = Vec::new();
+    if existing.env != env {
+        said.push(format!("variabile: {} → {env}", existing.env));
+    }
+    if existing.agents != wanted {
+        said.push(format!("la ricevono: {} → {}", list(&existing.agents), list(&wanted)));
+    }
+    if said.is_empty() {
+        None
+    } else {
+        Some(said.join("\n"))
+    }
+}
+
 fn delete_in(vault: &dyn Vault, service: &str, path: &std::path::Path, name: &str) -> Result<(), String> {
     vault.delete(service, name)?;
     let mut index = read_index(path);
@@ -473,8 +503,40 @@ pub async fn secret_save(
     agents: Vec<String>,
     value: Option<String>,
 ) -> Result<(), String> {
+    let (name, env) = (name.trim().to_string(), env.trim().to_string());
+    let path = index_path(&app)?;
+    if value.is_none() {
+        // Who gets an existing key changes only with the user's say-so, in a dialog the page cannot click.
+        let change = {
+            let _guard = lock.0.lock().map_err(|_| "chiavi bloccate")?;
+            exposure_change(&path, &name, &env, &agents)
+        };
+        if let Some(change) = change {
+            let question = format!(
+                "{} vuole cambiare chi riceve la chiave «{name}»:\n\n{change}\n\nUna pagina che cambia questo può farsi dare la chiave. Consentire?",
+                crate::brand::name()
+            );
+            let confirmed = tauri::async_runtime::spawn_blocking({
+                let app = app.clone();
+                move || {
+                    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+                    app.dialog()
+                        .message(question)
+                        .title(format!("Chiavi di {}", crate::brand::name()))
+                        .kind(MessageDialogKind::Warning)
+                        .buttons(MessageDialogButtons::OkCancelCustom("Consenti".into(), "Annulla".into()))
+                        .blocking_show()
+                }
+            })
+            .await
+            .map_err(|e| e.to_string())?;
+            if !confirmed {
+                return Err("modifica della chiave annullata".into());
+            }
+        }
+    }
     let _guard = lock.0.lock().map_err(|_| "chiavi bloccate")?;
-    save_in(&SystemVault, &service(&app), &index_path(&app)?, name.trim(), env.trim(), agents, value.as_deref(), now_ms())
+    save_in(&SystemVault, &service(&app), &path, &name, &env, agents, value.as_deref(), now_ms())
 }
 
 #[tauri::command]
@@ -574,6 +636,51 @@ mod tests {
             }
         }
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// Full review 2026-10-06, Rust 6: changing who receives a key, with no value, is a change to confirm.
+    #[test]
+    fn a_save_with_no_value_that_changes_who_gets_the_key_is_named() {
+        let vault = MemoryVault::default();
+        let path = temp_index("exposure");
+        let agents = |list: &[&str]| list.iter().map(|a| a.to_string()).collect::<Vec<_>>();
+        save_in(&vault, "svc", &path, "OpenRouter", "OPENROUTER_API_KEY", agents(&["nikcli"]), Some(FAKE), 1).unwrap();
+        save_in(&vault, "svc", &path, "anthropic", "ANTHROPIC_API_KEY", vec![], Some("sk-ant-value"), 1).unwrap();
+
+        // The attack: the Anthropic key takes the variable the page may read, or reaches a shell.
+        let took = exposure_change(&path, "anthropic", "OPENROUTER_API_KEY", &[]).expect("a new variable");
+        assert!(took.contains("ANTHROPIC_API_KEY → OPENROUTER_API_KEY"), "{took}");
+        let shell = exposure_change(&path, "anthropic", "ANTHROPIC_API_KEY", &agents(&["terminal"])).expect("a new agent");
+        assert!(shell.contains("nessuno → terminal"), "{shell}");
+        let both = exposure_change(&path, "OpenRouter", "X_KEY", &[]).expect("both");
+        assert_eq!(both.lines().count(), 2, "{both}");
+        // Nothing of the value is in what the dialog says.
+        for said in [&took, &shell, &both] {
+            for value in [FAKE, "sk-ant-value"] {
+                assert!(!said.contains(value), "{said}");
+            }
+        }
+
+        // The same exposure, in another order or spelled with blanks and repeats, asks nothing.
+        assert_eq!(exposure_change(&path, "anthropic", "ANTHROPIC_API_KEY", &[]), None);
+        assert_eq!(exposure_change(&path, "anthropic", "ANTHROPIC_API_KEY", &agents(&["", " "])), None);
+        assert_eq!(exposure_change(&path, "OpenRouter", "OPENROUTER_API_KEY", &agents(&["nikcli", "nikcli"])), None);
+        // A key that is not there is a new one, which needs its value anyway.
+        assert_eq!(exposure_change(&path, "nuova", "NUOVA_API_KEY", &agents(&["terminal"])), None);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    /// The command is where the dialog is: a save with no value asks about a change first.
+    #[test]
+    fn the_save_command_asks_about_a_change_before_it_saves() {
+        let source = include_str!("secrets.rs");
+        let start = source.find("pub async fn secret_save").unwrap();
+        let end = source[start..].find("\n}\n").unwrap() + start;
+        let body = &source[start..end];
+        let asked = body.find("exposure_change").expect("the command asks");
+        let dialog = body.find("blocking_show").expect("in a native dialog");
+        let saved = body.find("save_in(").expect("then saves");
+        assert!(asked < dialog && dialog < saved, "{body}");
     }
 
     #[test]

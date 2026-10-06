@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   discoverPlugins,
   isPathSpec,
+  isUncSpec,
   parseDeclaredPlugins,
   resolveDeclaredPlugin,
   resolveManifestEntry,
@@ -121,6 +122,59 @@ describe("resolveManifestEntry", () => {
 
   test("an unreadable manifest says so", () => {
     expect(resolveManifestEntry(manifest, "{ nope")).toEqual({ reason: "package.json non è JSON valido" })
+  })
+})
+
+/*
+ * Full review 2026-10-06, Rust ALTO 2: a repo's `.nikcli/tui.json` could name
+ * `//attacker.example/s/p`; looking for its `package.json` made Windows open SMB
+ * to that host and send the user's NTLM hash, before any trust prompt.
+ */
+describe("network paths are not plugins", () => {
+  const unc = [
+    "//attacker.example/s/p",
+    "\\\\attacker.example\\s\\p",
+    "//attacker.example/s/p.js",
+    "\\\\?\\UNC\\attacker.example\\s\\p",
+    "//?/UNC/attacker.example/s/p",
+    "file://attacker.example/s/p",
+    "file:////attacker.example/s/p",
+    "file://///attacker.example/s/p",
+  ]
+  const local = [
+    "./p",
+    "../p",
+    "/home/u/p",
+    "C:\\p",
+    "C:/p",
+    "file:///C:/p",
+    "file:///home/u/p",
+    "file://localhost/p",
+    "nikcli-plugin-foo",
+  ]
+
+  test("isUncSpec names every spelling of a remote share", () => {
+    for (const spec of unc) expect(isUncSpec(spec), spec).toBe(true)
+    for (const spec of local) expect(isUncSpec(spec), spec).toBe(false)
+  })
+
+  test("a network spec is rejected before the disk is asked about it", async () => {
+    const asked: string[] = []
+    const watching: DiscoveryIO = {
+      async exists(path) {
+        asked.push(path)
+        return true
+      },
+      async readTextFile(path) {
+        asked.push(path)
+        return { text: "{}" }
+      },
+    }
+    for (const spec of unc) {
+      const outcome = await resolveDeclaredPlugin({ spec }, "C:/repo", watching)
+      expect("reason" in outcome, spec).toBe(true)
+    }
+    expect(asked).toEqual([])
   })
 })
 
