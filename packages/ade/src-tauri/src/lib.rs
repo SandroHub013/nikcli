@@ -823,7 +823,7 @@ extern "system" {
 }
 
 #[cfg(windows)]
-fn resume_child(child: &std::process::Child) -> Result<(), String> {
+pub(crate) fn resume_child(child: &std::process::Child) -> Result<(), String> {
     use std::os::windows::io::AsRawHandle;
     /*
      * The child starts suspended so it cannot create descendants before entering the job.
@@ -839,11 +839,17 @@ fn resume_child(child: &std::process::Child) -> Result<(), String> {
 }
 
 #[cfg(windows)]
-struct ChildTreeGuard(windows::Win32::Foundation::HANDLE);
+pub(crate) struct ChildTreeGuard(windows::Win32::Foundation::HANDLE);
+
+// A job handle is a kernel handle, valid from any thread; the server's guard lives in the shared slot.
+#[cfg(windows)]
+unsafe impl Send for ChildTreeGuard {}
+#[cfg(windows)]
+unsafe impl Sync for ChildTreeGuard {}
 
 #[cfg(windows)]
 impl ChildTreeGuard {
-    fn new() -> Result<Self, String> {
+    pub(crate) fn new() -> Result<Self, String> {
         use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::System::JobObjects::{
             CreateJobObjectW, JobObjectExtendedLimitInformation, SetInformationJobObject,
@@ -870,7 +876,7 @@ impl ChildTreeGuard {
         Ok(Self(handle))
     }
 
-    fn assign_pid(&self, pid: u32) -> Result<(), String> {
+    pub(crate) fn assign_pid(&self, pid: u32) -> Result<(), String> {
         use windows::Win32::Foundation::CloseHandle;
         use windows::Win32::System::JobObjects::AssignProcessToJobObject;
         use windows::Win32::System::Threading::{
@@ -893,15 +899,15 @@ impl Drop for ChildTreeGuard {
 }
 
 #[cfg(not(windows))]
-struct ChildTreeGuard;
+pub(crate) struct ChildTreeGuard;
 
 #[cfg(not(windows))]
 impl ChildTreeGuard {
-    fn new() -> Result<Self, String> {
+    pub(crate) fn new() -> Result<Self, String> {
         Ok(Self)
     }
 
-    fn assign_pid(&self, _pid: u32) -> Result<(), String> {
+    pub(crate) fn assign_pid(&self, _pid: u32) -> Result<(), String> {
         Ok(())
     }
 }
