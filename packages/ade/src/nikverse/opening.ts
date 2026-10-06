@@ -5,7 +5,7 @@
  * instead of a panel that hangs. Only time the panel could be seen counts: a hidden window stops the world's frames
  * (Chromium holds `requestAnimationFrame`), and that is not a failed opening.
  *
- * When the frames stay too slow at Media the world says `slow`; ADE keeps that for a week and opens it at Bassa.
+ * When the frames stay too slow at Media the world says `slow`; ADE keeps that for a day and opens it at Bassa.
  */
 
 export const OPEN_TIMEOUT_MS = 30_000
@@ -60,8 +60,12 @@ export function createOpenWatch(deps: OpenWatchDeps) {
 }
 
 export const LOWERED_KEY = "ade.nikverse.lowered"
-/** How long ADE keeps a world lowered to Bassa: a week, then it tries the machine's own level again. */
-export const LOWERED_FOR_MS = 7 * 24 * 3600 * 1000
+/**
+ * How long ADE keeps a world lowered to Bassa: a day, then it tries the machine's own level again. A week was too long for
+ * what can be a burst of slow frames while an agent compiles; the panel also has «Riprova a qualità piena» (`clear`)
+ * (review of F7d, B4).
+ */
+export const LOWERED_FOR_MS = 24 * 3600 * 1000
 
 export interface LoweredStorage {
   getItem(key: string): string | null
@@ -83,10 +87,21 @@ export function createLoweredStore(storage: LoweredStorage | undefined, now: () 
     return at
   }
   return {
-    /** Whether the world opens at Bassa because it was too slow, less than a week ago. */
+    /** Whether the world opens at Bassa because it was too slow, less than a day ago. */
     lowered(): boolean {
       const when = load()
       return when !== undefined && now() >= when && now() - when < LOWERED_FOR_MS
+    },
+    /** The user wants the machine's own level again: the lowering is forgotten, here and in storage. */
+    clear(): void {
+      at = undefined
+      read = true
+      try {
+        // `null` reads back as no lowering (`load`); the storage interface has no remove.
+        storage?.setItem(LOWERED_KEY, "null")
+      } catch {
+        /* the copy in memory is already clear for this session */
+      }
     },
     lower(): void {
       at = now()
