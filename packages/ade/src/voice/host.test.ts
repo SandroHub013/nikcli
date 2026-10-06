@@ -652,9 +652,9 @@ describe("createAdeVoiceHost", () => {
       },
     })
     const host = createAdeVoiceHost(deps)
-    const request = { engine: "claude" as const } as Parameters<typeof host.askAgent>[0]
-    await expect(host.askAgent(request)).rejects.toThrow("import fallito")
-    expect((await host.askAgent(request)).text).toBe("fatto")
+    const request = { text: "ciao", engine: "claude" as const }
+    await expect(host.askAgent!(request)).rejects.toThrow("import fallito")
+    expect((await host.askAgent!(request)).text).toBe("fatto")
     expect(starts).toBe(2)
   })
 

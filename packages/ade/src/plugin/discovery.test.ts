@@ -39,7 +39,7 @@ describe("a check that fails", () => {
       },
     }
     const resolved = await resolveDeclaredPlugin({ spec: "file:///C:/p/plugin.js" }, "C:/p", broken)
-    expect(resolved.reason).toBe("il file del plugin non esiste")
+    expect("reason" in resolved ? resolved.reason : undefined).toBe("il file del plugin non esiste")
     expect(await discoverPlugins("C:/p", broken)).toEqual({ resolved: [], rejected: [] })
   })
 })
