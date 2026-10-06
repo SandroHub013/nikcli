@@ -89,7 +89,30 @@ pub fn prune_target(roots: &WriteRoots, path: &str) -> Result<std::path::PathBuf
         return Err("percorso senza cartella".into());
     };
     let folder = crate::within_roots(roots, &parent.to_string_lossy())?;
+    // The folder itself may be the link: `.ade/results` as a junction into another open project resolves there and passes
+    // `within_roots` as that project's. It must come out in the root it was asked in (review of F7c, B1). Judged on the text
+    // as given, compared the same way on both sides; a path no root contains as text is left to `within_roots` as before.
+    let asked_in = {
+        let given = plain(parent);
+        let open = roots.0.lock().map_err(|_| "radici bloccate".to_string())?;
+        open.iter().find(|root| inside(&given, &plain(root))).cloned()
+    };
+    if let Some(root) = asked_in {
+        if !inside(&plain(&folder), &plain(&root)) {
+            return Err(format!("la cartella punta fuori dal progetto: {}", parent.display()));
+        }
+    }
     Ok(folder.join(name))
+}
+
+/// A path as text, to compare two of them: `/`, no `\\?\` prefix, no case.
+fn plain(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/").trim_start_matches("//?/").trim_end_matches('/').to_lowercase()
+}
+
+/// Whether `path` is `root` or below it, both as `plain` made them.
+fn inside(path: &str, root: &str) -> bool {
+    path == root || path.strip_prefix(root).is_some_and(|rest| rest.starts_with('/'))
 }
 
 /// Removes the listed files of a project's `.ade/` that are old; the bytes freed. Only inside an open project (the same roots the window
@@ -292,6 +315,35 @@ mod tests {
         assert!(prune_target(&roots, "").is_err());
         let _ = std::fs::remove_dir_all(&project);
         let _ = std::fs::remove_dir_all(&elsewhere);
+    }
+
+    // Review of F7c, B1: a junction that is the whole folder `.ade/results`, pointing into another open project.
+    #[cfg(windows)]
+    #[test]
+    fn a_folder_that_is_a_junction_into_another_open_project_is_not_followed() {
+        let one = canonical_scratch("junction-one");
+        let two = canonical_scratch("junction-two");
+        std::fs::create_dir_all(one.join(".ade")).unwrap();
+        std::fs::create_dir_all(two.join(".ade").join("results")).unwrap();
+        let real = two.join(".ade").join("results").join("x.md");
+        std::fs::write(&real, "the other project's note").unwrap();
+        let junction = one.join(".ade").join("results");
+        // A junction needs no privilege, unlike a symbolic link.
+        let made = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&junction)
+            .arg(two.join(".ade").join("results"))
+            .output()
+            .expect("cmd");
+        assert!(made.status.success(), "{}", String::from_utf8_lossy(&made.stdout));
+        let roots = roots_at(&[&one, &two]);
+        let asked = junction.join("x.md");
+        assert!(prune_target(&roots, &asked.to_string_lossy()).is_err(), "la cartella collegata è stata seguita");
+        assert!(real.exists());
+        // Taking the junction away does not touch what it pointed at.
+        let _ = std::process::Command::new("cmd").args(["/C", "rmdir"]).arg(&junction).output();
+        let _ = std::fs::remove_dir_all(&one);
+        let _ = std::fs::remove_dir_all(&two);
     }
 
     #[test]
