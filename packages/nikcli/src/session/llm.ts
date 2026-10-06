@@ -30,6 +30,7 @@ import { CacheDiagnostics } from "@/provider/cache-diagnostics"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
+import { OpenAIWebSocketPool } from "@/plugin/openai/ws-pool"
 import { Mod } from "../mod"
 import { SystemPrompt } from "./system"
 import { Flag } from "@nikcli-ai/util/flag"
@@ -68,19 +69,23 @@ export namespace LLM {
   }
 
   // Build request headers based on provider and model configuration
-  function buildRequestHeaders(
+  export function buildRequestHeaders(
     projectID: string,
     providerID: string,
     sessionID: string,
     userID: string,
     isCodex: boolean,
     _modelHeaders?: Record<string, string>,
+    title = false,
   ): Record<string, string> | undefined {
     if (isCodex) {
       return {
         originator: "nikcli",
         "User-Agent": `nikcli/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
         session_id: sessionID,
+        // Read and removed by the WebSocket pool (OpenAIWebSocketPool): a title is one short request that
+        // should not open a socket of its own, so it goes over HTTP.
+        ...(title ? { [OpenAIWebSocketPool.TITLE_HEADER]: "true" } : {}),
       }
     }
 
@@ -482,6 +487,7 @@ export namespace LLM {
       input.user.id,
       isCodex,
       input.model.headers,
+      input.agent.name === "title",
     )
 
     const nativeStatus = LLMNativeRuntime.status({
