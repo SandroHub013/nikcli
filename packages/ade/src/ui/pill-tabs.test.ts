@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs"
 import { afterEach, describe, expect, test } from "bun:test"
 import { createComponent, render } from "solid-js/web"
 import { compileSolidJsx } from "../test-support/solid-jsx"
@@ -215,5 +216,15 @@ describe("PillTabs", () => {
     // Values inside updated reactively
     expect(updatedButtons[0].querySelector('[data-slot="ade-pill-badge"]')?.textContent).toBe("2")
     expect(updatedButtons[1].querySelector('[data-slot="ade-pill-badge"]')?.textContent).toBe("1")
+  })
+
+  test("lint: narrow responsive rules target ade-pill-tab for queue items", () => {
+    const pillCss = readFileSync(new URL("./pill-tabs.css", import.meta.url), "utf8")
+    expect(pillCss).toContain('[data-slot="ade-pill-tab"]:has([data-slot="ade-pill-label-short"]) [data-slot="ade-pill-label-full"]')
+    expect(pillCss).toContain('[data-slot="ade-pill-tab"]:has([data-slot="ade-pill-label-short"]) [data-slot="ade-pill-label-short"]')
+    expect(pillCss).not.toContain('[data-slot="ade-view-tab"]:has([data-slot="ade-pill-label-short"])')
+
+    const devCss = readFileSync(new URL("../dev.css", import.meta.url), "utf8")
+    expect(devCss).toContain('[data-slot="ade-pill-tab"]')
   })
 })

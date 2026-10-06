@@ -673,7 +673,8 @@
   [data-slot="ade-bar-center"] {
     gap: 2px;
   }
-  [data-slot="ade-view-tab"] {
+  [data-slot="ade-view-tab"],
+  [data-slot="ade-pill-tab"] {
     padding: 0 var(--ade-space-3);
     font-size: var(--ade-font-sm);
   }
