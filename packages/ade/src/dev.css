@@ -662,19 +662,6 @@
   box-shadow: var(--ade-focus-ring);
 }
 
-/* ── section tabs ─────────────────────────────────────────────────────────── */
-/*
- * The four sections, as one segmented control rather than four chips.
- *
- * With two views loose chips were fine — a pair reads as a pair. Four of them
- * read as four unrelated toggles, and the user's question at a glance is
- * "which one am I in", which a shared track with a single filled cell answers
- * and adjacent buttons do not. The track is inset so the control sits *in* the
- * bar rather than on it, which is what keeps it from competing with the
- * command field beside it.
- */
-/* Styles moved to ui/pill-tabs.css (T1) */
-
 @media (max-width: 640px) {
   [data-slot="ade-bar"] {
     padding: 0 var(--ade-space-3);

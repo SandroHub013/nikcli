@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { localePreference, setLocalePreference } from "../i18n"
-import { NARROW_BAR, createOpenKeyTracker, newlyOpened, queueItemLabel, queueShown, queueText, queueTitle } from "./bar-queue"
+import { createOpenKeyTracker, newlyOpened, queueItemLabel } from "./bar-queue"
 import { codeOf } from "../test-support/source-text"
 
 /*
@@ -14,37 +14,6 @@ import { codeOf } from "../test-support/source-text"
 const read = (...path: string[]) => readFileSync(join(import.meta.dir, "..", ...path), "utf8")
 
 describe("the queue buttons' words", () => {
-  test("the name for a screen reader is the text on the button, in its order", () => {
-    const before = localePreference()
-    setLocalePreference("it")
-    const text = queueText("decisions", { waiting: 1, queued: 0, discarded: 14 })
-    expect(text.label).toBe("Decisioni, 1 per te, 14 scartate")
-    // Every visible piece is in the name, in the order it is read.
-    let at = -1
-    for (const piece of [text.name, text.pill, text.discarded!]) {
-      const found = text.label.indexOf(piece, at + 1)
-      expect([piece, found > at]).toEqual([piece, true])
-      at = found
-    }
-    const design = queueText("design", { waiting: 3, queued: 2, discarded: 1 })
-    expect(design.label).toBe("Design, 3 per te, 2 in coda, 1 scartata")
-    expect([design.name, design.pill, design.queued, design.discarded]).toEqual([
-      "Design",
-      "3",
-      "2 in coda",
-      "1 scartata",
-    ])
-    setLocalePreference("en")
-    expect(queueText("decisions", { waiting: 2, queued: 0, discarded: 0 }).label).toBe("Decisions, 2 for you")
-    setLocalePreference(before)
-  })
-
-  test("shown when anything waits, is queued or was discarded; hidden at zero", () => {
-    expect(queueShown({ waiting: 0, queued: 0, discarded: 0 })).toBe(false)
-    expect(queueShown({ waiting: 0, queued: 0, discarded: 3 })).toBe(true)
-    expect(queueShown({ waiting: 0, queued: 1, discarded: 0 })).toBe(true)
-  })
-
   test("the queue buttons group uses PillTabs with role button, always rendered in the bar", () => {
     const workbench = read("surface", "workbench.tsx")
     expect(workbench).not.toContain("<BarQueueButton")
@@ -148,23 +117,6 @@ describe("tracking newly opened register keys (O2)", () => {
       { k: "D3", title: "Terza" },
     ])
     expect(updated).toEqual([{ k: "D3", title: "Terza" }])
-  })
-})
-
-describe("the narrow bar", () => {
-  test("a tooltip equal to the accessible name, and none when the name is on the button", () => {
-    const text = queueText("decisions", { waiting: 1, queued: 0, discarded: 14 })
-    expect(queueTitle(text, true)).toBe(text.label)
-    expect(queueTitle(text, false)).toBeUndefined()
-  })
-
-  test("the discarded get no dot: only what is queued keeps a mark", () => {
-    const css = read("dev.css")
-    const narrow = css.slice(css.indexOf(`@media ${NARROW_BAR}`))
-    expect(narrow.length).toBeLessThan(css.length)
-    const block = narrow.slice(0, narrow.indexOf("\n}\n"))
-    expect(block).not.toContain("[data-discarded]")
-    expect(block).toContain('[data-slot="bar-queue"][data-queued]::before')
   })
 })
 

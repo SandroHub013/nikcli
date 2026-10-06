@@ -1,55 +1,8 @@
 /**
- * «Da scegliere»: the decisions and the design proposals waiting for the user,
- * in one list behind one button (notifiche-design).
- *
- * There were two buttons in the bar, each opening its own window one item at
- * a time. The user asked for one: it counts both, and its list says of each
- * entry what it is, who asked and how long ago. Plain `.ts`, tested without a
- * DOM; the sheet only draws it.
+ * Helpers for decisions and design proposals waiting for the user.
+ * Plain `.ts`, tested without a DOM; the sheets only draw it.
  */
-import { bucketDecisions, type Decision } from "../decisions/state"
-import { bucketProposals, type DesignProposal } from "../design/state"
-import type { QueueCounts } from "../surface/bar-queue"
 import { t } from "../i18n"
-
-export type ChoiceKind = "decision" | "design"
-
-export interface ChoiceItem {
-  readonly kind: ChoiceKind
-  readonly k: string
-  readonly title: string
-  /** Who asked: the asking pane's title. */
-  readonly by: string
-  readonly openedAt: string
-}
-
-/** What waits for the user, the oldest first: it has waited longest. */
-export function choiceItems(
-  decisions: readonly Decision[],
-  proposals: readonly DesignProposal[],
-  /** The open panes' names (`distinctNames`): who asked, told apart from a pane of the same title. */
-  names?: ReadonlyMap<string, string>,
-): readonly ChoiceItem[] {
-  const asker = (item: { raisedBy: string; raisedFrom?: string }) =>
-    (item.raisedFrom && names?.get(item.raisedFrom)) || item.raisedBy
-  const items: ChoiceItem[] = [
-    ...bucketDecisions(decisions).forYou.map((decision) => ({
-      kind: "decision" as const,
-      k: decision.k,
-      title: decision.title,
-      by: asker(decision),
-      openedAt: decision.openedAt,
-    })),
-    ...bucketProposals(proposals).forYou.map((proposal) => ({
-      kind: "design" as const,
-      k: proposal.k,
-      title: proposal.title,
-      by: asker(proposal),
-      openedAt: proposal.openedAt,
-    })),
-  ]
-  return items.sort((a, b) => Date.parse(a.openedAt) - Date.parse(b.openedAt))
-}
 
 /**
  * Who asked, as the lists name the pane: its told-apart name while it is
@@ -69,15 +22,6 @@ export function isRecommended(recommend: { readonly option: string } | undefined
   return recommend !== undefined && recommend.option === name
 }
 
-/** The button's counts: the two registers' added up. */
-export function choiceCounts(decisions: QueueCounts, design: QueueCounts): QueueCounts {
-  return {
-    waiting: decisions.waiting + design.waiting,
-    queued: decisions.queued + design.queued,
-    discarded: decisions.discarded + design.discarded,
-  }
-}
-
 /** «12 min fa», «3 h fa», «2 giorni fa»: how long an entry has waited. */
 export function waitedFor(openedAt: string, now: Date): string {
   const minutes = Math.max(0, Math.floor((now.getTime() - Date.parse(openedAt)) / 60_000))
@@ -89,14 +33,11 @@ export function waitedFor(openedAt: string, now: Date): string {
 }
 
 /**
- * Where a sheet goes once an answer given in it leaves nothing open there
- * (Verifiche, da-scegliere, problem 3): it stayed open on «Nessuna proposta
- * di design aperta». Back to «Da scegliere» while something else waits, closed
- * when nothing does; open while its own family still has entries.
+ * Where a sheet goes once an answer given in it leaves nothing open there:
+ * stay open while its own family still has entries, closed when nothing does.
  */
-export function afterAnswer(openHere: number, waiting: number): "stay" | "list" | "close" {
-  if (openHere > 0) return "stay"
-  return waiting > 0 ? "list" : "close"
+export function afterAnswer(openHere: number): "stay" | "close" {
+  return openHere > 0 ? "stay" : "close"
 }
 
 /**

@@ -605,7 +605,6 @@ export const en: Messages = {
   "bar.sidebar.hide": "Hide the sidebar",
   "bar.queue.forYou": (count) => `${count} for you`,
   "bar.queue.queued": (count) => `${count} queued`,
-  "bar.queue.discarded": (count) => `${count} discarded`,
   "choices.samePane": (title, place) => `${title} (${place})`,
   "choices.brief.why": "Why",
   "choices.recommended": "Recommended",

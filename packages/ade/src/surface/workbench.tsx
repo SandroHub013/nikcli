@@ -474,7 +474,7 @@ import {
 } from "./open-route"
 import { guessDevServers } from "../simulator/simulator"
 import { DecisionsSheet } from "../decisions/decisions-sheet"
-import { choiceCounts, distinctNames } from "../choices/list"
+import { distinctNames } from "../choices/list"
 import { createToast } from "./toast"
 import { createSettled } from "./settled"
 import {
@@ -1771,9 +1771,7 @@ export function Workbench() {
   })
 
   /*
-   * «Da scegliere»: one button and one list for what waits for the user,
-   * decisions and design alike (notifiche-design). An entry opens its own
-   * window at that entry.
+   * The entry to start the decisions or design sheet at.
    */
   const [choiceStart, setChoiceStart] = createSignal<string>()
   const [decisionsOpen, setDecisionsOpen] = createSignal(false)
@@ -1794,13 +1792,6 @@ export function Workbench() {
           (decision) => decision.status === "risposta" && decisionsHub.delivery(decision).state === "in coda",
         ).length ?? 0,
   )
-  // Lines thrown away and events refused: the button shows them too, so a wrong line never passes unseen.
-  const decisionsDiscarded = createMemo(
-    () => (decisionsRegister.loaded()?.problems.length ?? 0) + (decisionsRegister.state()?.rejected.length ?? 0),
-  )
-  const designDiscarded = createMemo(
-    () => (designRegister.loaded()?.problems.length ?? 0) + (designRegister.state()?.rejected.length ?? 0),
-  )
   const designQueued = createMemo(
     () =>
       designRegister
@@ -1811,17 +1802,8 @@ export function Workbench() {
             designHub.delivery(proposal).state === "in coda",
         ).length ?? 0,
   )
-  // An answer on its way to the pane that asked is queued for half a second: not «0» on the button (`createSettled`).
-  const settledQueued = createSettled(() => decisionsQueued() + designQueued())
   const settledDecisionsQueued = createSettled(() => decisionsQueued())
   const settledDesignQueued = createSettled(() => designQueued())
-  const choicesCounts = createMemo(() => ({
-    ...choiceCounts(
-      { waiting: decisionsWaiting(), queued: decisionsQueued(), discarded: decisionsDiscarded() },
-      { waiting: designWaiting(), queued: designQueued(), discarded: designDiscarded() },
-    ),
-    queued: settledQueued(),
-  }))
 
   const [decisionsAttention, setDecisionsAttention] = createSignal(false)
   const [designAttention, setDesignAttention] = createSignal(false)
@@ -8832,7 +8814,7 @@ export function Workbench() {
         hasActions: Boolean(records.permissions()[pane.id]),
         quota: quotaForAgent(pane.agent ?? pane.model, quotas.snapshot(), quotas.now()),
       }),
-      decisions: choicesCounts().waiting,
+      decisions: decisionsWaiting() + designWaiting(),
       now: Date.now(),
       ...(previous ? { previous } : {}),
       slots: worldSlots,
@@ -9695,7 +9677,6 @@ export function Workbench() {
         <DecisionsSheet
           hub={decisionsHub}
           start={choiceStart()}
-          waiting={() => decisionsWaiting()}
           onDone={(_next, said) => {
             setDecisionsOpen(false)
             if (said) toast.show(said)
@@ -9712,7 +9693,6 @@ export function Workbench() {
         <DesignSheet
           hub={designHub}
           start={choiceStart()}
-          waiting={() => designWaiting()}
           onDone={(_next, said) => {
             setDesignOpen(false)
             if (said) toast.show(said)

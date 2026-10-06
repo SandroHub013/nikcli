@@ -12,7 +12,7 @@ import { parseDesignLog } from "../design/log"
 import { foldProposals } from "../design/state"
 import { fitScale, roomFor } from "../design/preview-plan"
 import { compileSolidJsx } from "../test-support/solid-jsx"
-import { afterAnswer, choiceItems, distinctNames } from "./list"
+import { afterAnswer, distinctNames } from "./list"
 
 // The cards are `.tsx`: compiled for bun as the hub tests do.
 compileSolidJsx()
@@ -112,16 +112,15 @@ describe("Verifiche, da-scegliere", () => {
   })
 
   /* 3. After the last choice the sheet stayed open on «Nessuna proposta di design aperta». */
-  test("3. after the last answer: back to «Da scegliere» while something waits, closed otherwise", () => {
-    expect(afterAnswer(1, 3)).toBe("stay")
-    expect(afterAnswer(0, 1)).toBe("list")
-    expect(afterAnswer(0, 0)).toBe("close")
+  test("3. after the last answer: stay while something waits, closed otherwise", () => {
+    expect(afterAnswer(1)).toBe("stay")
+    expect(afterAnswer(0)).toBe("close")
   })
 
   test("lint: both sheets leave through onDone, closing the sheet in the workbench", () => {
     for (const path of ["design/design-sheet.tsx", "decisions/decisions-sheet.tsx"]) {
       const sheet = read(path)
-      expect(sheet).toContain("afterAnswer(open().length, props.waiting?.() ?? 0)")
+      expect(sheet).toContain("afterAnswer(open().length)")
       expect(sheet).toContain("setAnswered(true)")
     }
     const workbench = read("surface/workbench.tsx")
@@ -141,10 +140,6 @@ describe("Verifiche, da-scegliere", () => {
       "Sessione 1 — Terminal (2)",
       "Opus",
     ])
-    const items = choiceItems([decision()], [proposal()], names)
-    expect(items.map((item) => item.by).sort()).toEqual(["Sessione 1 — Terminal (1)", "Sessione 1 — Terminal (2)"])
-    // A pane that is gone: the title the register kept.
-    expect(choiceItems([decision()], [], new Map()).map((item) => item.by)).toEqual(["Sessione 1 — Terminal"])
   })
 
   test("lint: «Risposte a» and «→» take the told-apart names", () => {

@@ -1,13 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { readFileSync } from "node:fs"
-import { join } from "node:path"
-import { createRoot, createSignal } from "solid-js"
 import { createComponent, render } from "solid-js/web"
 import { submitControl as decisionControl } from "../decisions/card"
 import { parseDecisionLog } from "../decisions/log"
 import { foldDecisions } from "../decisions/state"
-import { queueShown } from "../surface/bar-queue"
-import { createSettled } from "../surface/settled"
 import { compileSolidJsx } from "../test-support/solid-jsx"
 
 // The card is `.tsx`: compiled for bun, and imported only after it.
@@ -82,49 +77,5 @@ describe("ultimi 1: the recommended option's name", () => {
     expect(name).toContain("Sì, consigliata,")
     expect(yes!.querySelector('[data-slot="choice-recommended"]')?.textContent).toBe("Consigliata")
     expect(spoken(no!)).not.toContain("consigliata")
-  })
-})
-
-describe("ultimi 2: no «0» on the button while an answer is on its way", () => {
-  test("a queued answer delivered within the settle time never shows the button", async () => {
-    await createRoot(async (dispose) => {
-      const [queued, setQueued] = createSignal(0)
-      const settled = createSettled(queued, 60)
-      const shown: boolean[] = []
-      const look = () => shown.push(queueShown({ waiting: 0, queued: settled(), discarded: 0 }))
-      // The last answer: nothing waits, the answer is queued, and taken half a moment later.
-      setQueued(1)
-      look()
-      await wait(20)
-      look()
-      setQueued(0)
-      look()
-      await wait(80)
-      look()
-      expect(shown).toEqual([false, false, false, false])
-      dispose()
-    })
-  })
-
-  test("one that stays queued shows, and goes at once when it is taken", async () => {
-    await createRoot(async (dispose) => {
-      const [queued, setQueued] = createSignal(0)
-      const settled = createSettled(queued, 30)
-      setQueued(1)
-      expect(settled()).toBe(0)
-      await wait(50)
-      expect(settled()).toBe(1)
-      setQueued(2)
-      expect(settled()).toBe(2)
-      setQueued(0)
-      expect(settled()).toBe(0)
-      dispose()
-    })
-  })
-
-  test("lint: the button's counts take the settled queue", () => {
-    const workbench = readFileSync(join(import.meta.dir, "..", "surface", "workbench.tsx"), "utf8")
-    expect(workbench).toContain("const settledQueued = createSettled(() => decisionsQueued() + designQueued())")
-    expect(workbench).toContain("queued: settledQueued(),")
   })
 })

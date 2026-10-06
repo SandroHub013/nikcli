@@ -570,7 +570,6 @@ describe("Rimanda on the last decision (ultimi)", () => {
             hub,
             onClose: () => {},
             onOpenPanel: () => {},
-            waiting: () => 0,
             onDone: (next, said) => void done.push([next, said]),
           }),
         host,

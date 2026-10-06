@@ -620,7 +620,6 @@ export const it = {
   "bar.sidebar.hide": "Nascondi la barra laterale",
   "bar.queue.forYou": (count: number) => `${count} per te`,
   "bar.queue.queued": (count: number) => `${count} in coda`,
-  "bar.queue.discarded": (count: number) => `${count} ${count === 1 ? "scartata" : "scartate"}`,
   "choices.samePane": (title: string, place: number) => `${title} (${place})`,
   "choices.brief.why": "Perché",
   "choices.recommended": "Consigliata",

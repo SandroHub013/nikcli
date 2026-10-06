@@ -940,7 +940,6 @@ describe("«Ho scelto sul foglio» on the last proposal (ultimi)", () => {
             hub,
             onClose: () => {},
             onOpenPanel: () => {},
-            waiting: () => 0,
             onDone: (next, said) => void done.push([next, said]),
           }),
         host,
