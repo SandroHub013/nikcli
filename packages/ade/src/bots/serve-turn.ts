@@ -305,9 +305,12 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
     const timer = setTimeout(() => end({ kind: "timeout" }), timeoutMs)
     const stream = new AbortController()
     let client: ServeClient | undefined
-    /* The prompt went, or is going: from here the server has a turn to stop. */
+    /*
+     * The prompt went, or is going: from here the server has a turn to stop, and a busy → idle on the stream is the end of
+     * it. Not only after the prompt's HTTP answer: a turn that fails at once (no key, a provider error) is idle again before
+     * that comes back, and would hang until the timeout (full review 2026-10-06, bots 18).
+     */
     let sent = false
-    let prompted = false
     try {
       const connection = await Promise.race([deps.connect(cwd, request.interactive === true), ended])
       if ("kind" in connection) return settled(connection)
@@ -489,11 +492,11 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
           case "session.status": {
             const kind = record(props["status"])["type"]
             if (kind === "busy" || kind === "retry") busy = true
-            else if (kind === "idle" && busy && prompted) end({ kind: "done" })
+            else if (kind === "idle" && busy && sent) end({ kind: "done" })
             return
           }
           case "session.idle":
-            if (busy && prompted) end({ kind: "done" })
+            if (busy && sent) end({ kind: "done" })
             return
           case "message.updated": {
             const info = record(props["info"])
@@ -626,7 +629,6 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
         }),
       )
       if ("kind" in prompt) return settled(prompt)
-      prompted = true
       const how = await ended
       if (how.kind === "done") return failed !== undefined ? finish("error", failed, 1) : finish("done", undefined, 0)
       return settled(how)

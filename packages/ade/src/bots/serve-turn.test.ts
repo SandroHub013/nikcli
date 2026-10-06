@@ -222,6 +222,36 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(result.text.length).toBeGreaterThan(0)
   })
 
+  // Full review 2026-10-06, bots 18: a turn that fails at once goes busy → idle on the stream before the HTTP answer of the prompt.
+  test("a turn that goes busy and idle before the prompt's answer comes back ends there", async () => {
+    const fake = server({ session: SESSION })
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const connect = async (directory: string, interactive: boolean) => {
+      const connection = await fake.deps.connect(directory, interactive)
+      if (!connection.ok) return connection
+      return {
+        ...connection,
+        client: {
+          ...connection.client,
+          prompt: async (input: Parameters<ServeClient["prompt"]>[0]) => {
+            fake.calls.prompts.push(input)
+            fake.stream.push(busyOf(), { type: "session.status", properties: { sessionID: SESSION, status: { type: "idle" } } })
+            await gate
+          },
+        },
+      }
+    }
+    const run = runServeTurn(panel(), { ...fake.deps, connect })
+    const outcome = await Promise.race([
+      run.result.then(() => "ended"),
+      new Promise<string>((resolve) => setTimeout(() => resolve("hung"), 300)),
+    ])
+    release()
+    await run.result
+    expect(outcome).toBe("ended")
+  })
+
   test("the prompt: the bot as agent, its model and effort, never tools or a system prompt", async () => {
     const events = turnOf(fixture("conversazione"), 0)
     const fake = server({ events, session: sessionIdOf(events) })
