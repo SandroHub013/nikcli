@@ -211,8 +211,10 @@ function fromFileUri(line: string): string | undefined {
     return looksLikePath(trimmed) ? normalizeDropped(trimmed) : undefined
   }
   try {
-    const decoded = decodeURIComponent(trimmed.replace(/^file:\/\/\/?/, ""))
-    return normalizeDropped(decoded)
+    // `file:///C:/x` carries a slash in front of the drive that Windows will not open; `file:///Users/x` is the POSIX path
+    // itself, slash included (full review 2026-10-06, ui 20: it lost it and read as a relative path).
+    const decoded = decodeURIComponent(trimmed.replace(/^file:(?:\/\/)?/, ""))
+    return normalizeDropped(/^\/[A-Za-z]:/.test(decoded) ? decoded.slice(1) : decoded)
   } catch {
     return undefined
   }
