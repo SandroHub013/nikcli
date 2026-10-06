@@ -79,6 +79,48 @@ describe("the release workflows keep their guards", () => {
     expect(text).toContain('if [ "$STATE" = "false" ]')
   })
 
+  /*
+   * Verifiche's review of F4: an API error read as «no release» cleared a tag and left its draft; a pipe into
+   * `grep -q` under pipefail read a SIGPIPE as «no feed» and wrote it unseen.
+   */
+  test("the tag step stops on an API error and takes only «release not found» for no release", () => {
+    const text = read("ade-auto-release.yml")
+    expect(text).not.toContain("|| echo none")
+    expect(text).toContain("release not found")
+    expect(text).toContain("exit 1")
+  })
+
+  test("the feed check reads the asset names into a variable, not through a pipe into grep -q", () => {
+    const text = read("ade-release.yml")
+    const at = text.indexOf("ade-updater feed")
+    const step = text.slice(text.lastIndexOf("CURRENT=-", at), at)
+    expect(step).toContain('ASSETS="$(gh release view ade-updater')
+    expect(step).toContain('grep -qx latest.json <<<"$ASSETS"')
+    expect(step).not.toMatch(/\|\s*grep\s+-\w*q/)
+  })
+
+  // The same family, in the rest of ade-release: no `| grep -q` under `set -o pipefail`, anywhere in the workflows.
+  test("no step pipes into grep -q under pipefail", () => {
+    const found: string[] = []
+    for (const name of readdirSync(WORKFLOWS).filter((file) => /^ade-.*\.ya?ml$/.test(file))) {
+      read(name)
+        .split("\n")
+        .forEach((line, index) => {
+          // Comments may name the pattern; commands may not use it.
+          if (!line.trim().startsWith("#") && /\|\s*grep\s+-\w*q/.test(line)) found.push(`${name}:${index + 1} ${line.trim()}`)
+        })
+    }
+    expect(found).toEqual([])
+  })
+
+  test("the NikVerse asset checks grep a variable", () => {
+    const text = read("ade-release.yml")
+    expect(text).toContain('grep -qx "$ASSET" <<<"$HAVE"')
+    expect(text).toContain('grep -qx "$ASSET" <<<"$AFTER"')
+    expect(text).toContain('grep -qx "nikverse-$HASH" <<<"$LIVE"')
+    expect(text).toContain('grep -qx false <<<"$DRAFT"')
+  })
+
   test("the updater feed is written only when the guard says so", () => {
     const text = read("ade-release.yml")
     expect(text).toContain("script/feed-guard.ts")
