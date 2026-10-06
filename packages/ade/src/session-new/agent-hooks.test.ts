@@ -24,6 +24,7 @@ import {
   removeHook,
   setHook,
   usesExecForm,
+  type HookStatus,
 } from "./agent-hooks"
 import { NIKCLI_PLUGIN_NAME, NIKCLI_PLUGIN_SOURCE } from "./nikcli-plugin"
 import { codeOf } from "../test-support/source-text"
