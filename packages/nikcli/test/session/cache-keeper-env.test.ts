@@ -60,3 +60,32 @@ describe("CacheKeeper.settings", () => {
     })
   })
 })
+
+describe("the three-state switches", () => {
+  const SWITCHES = ["NIKCLI_CACHE_KEEPALIVE", "NIKCLI_CACHE_KEEPALIVE_COMPACT", "NIKCLI_COMPACTION_SHARED_PREFIX"]
+  afterEach(() => {
+    for (const name of SWITCHES) delete process.env[name]
+  })
+
+  it("on, off and not said", () => {
+    const read = (value: string | undefined) => {
+      if (value === undefined) delete process.env["NIKCLI_CACHE_KEEPALIVE"]
+      else process.env["NIKCLI_CACHE_KEEPALIVE"] = value
+      return Flag.cacheKeepaliveSetting()
+    }
+    expect(read("1")).toBe(true)
+    expect(read("true")).toBe(true)
+    expect(read("0")).toBe(false)
+    expect(read("False")).toBe(false)
+    expect(read(undefined)).toBeUndefined()
+    expect(read("")).toBeUndefined()
+    expect(read("maybe")).toBeUndefined()
+  })
+
+  it("the other two read the same way", () => {
+    process.env["NIKCLI_CACHE_KEEPALIVE_COMPACT"] = "0"
+    process.env["NIKCLI_COMPACTION_SHARED_PREFIX"] = "1"
+    expect(Flag.cacheKeepaliveCompactSetting()).toBe(false)
+    expect(Flag.compactionSharedPrefixSetting()).toBe(true)
+  })
+})

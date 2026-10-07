@@ -3,6 +3,14 @@ function truthy(key: string) {
   return value === "true" || value === "1"
 }
 
+/** Three states: on (`1`/`true`), off (`0`/`false`), or `undefined` when unset or anything else, so a default can tell «no» from «not said». */
+function tristate(key: string): boolean | undefined {
+  const value = process.env[key]?.trim().toLowerCase()
+  if (value === "true" || value === "1") return true
+  if (value === "false" || value === "0") return false
+  return undefined
+}
+
 export namespace Flag {
   /**
    * Whether permission prompts are auto-approved for this process.
@@ -95,6 +103,16 @@ export namespace Flag {
    */
   export function cacheKeepalive() {
     return truthy("NIKCLI_CACHE_KEEPALIVE")
+  }
+  /** `NIKCLI_CACHE_KEEPALIVE` as the user said it: `undefined` is «not said», which is on for Codex and off elsewhere (`CacheKeeper.settings`). */
+  export function cacheKeepaliveSetting() {
+    return tristate("NIKCLI_CACHE_KEEPALIVE")
+  }
+  export function cacheKeepaliveCompactSetting() {
+    return tristate("NIKCLI_CACHE_KEEPALIVE_COMPACT")
+  }
+  export function compactionSharedPrefixSetting() {
+    return tristate("NIKCLI_COMPACTION_SHARED_PREFIX")
   }
   /** Idle compaction by the keeper, instead of letting the entry die at the end of its budget. Needs `cacheKeepalive` and `compactionSharedPrefix`. */
   export function cacheKeepaliveCompact() {

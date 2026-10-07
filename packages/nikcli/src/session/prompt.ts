@@ -16,7 +16,7 @@ import { Plugin } from "../plugin"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "@nikcli-ai/util/defer"
-import { Flag } from "@nikcli-ai/util/flag"
+import { CacheKeeper } from "./cache-keeper"
 import { clone } from "remeda"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
@@ -1177,7 +1177,7 @@ export namespace SessionPrompt {
 
       if (task?.type === "compaction") {
         // Behind its own switch: the compaction sends the conversation's prefix, so the provider reads it from cache.
-        const shared = Flag.compactionSharedPrefix()
+        const shared = CacheKeeper.sharedPrefix(sessionID)
           ? await sharedCompactionPrefix({ sessionID, session, msgs, lastUser, model, lastFinished }).catch((error) => {
               log.warn("compaction shared prefix not built", { sessionID, error: String(error) })
               return undefined

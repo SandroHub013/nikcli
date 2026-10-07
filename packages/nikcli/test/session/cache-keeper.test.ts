@@ -602,3 +602,94 @@ describe("the wiring", () => {
     expect(EventFeed.attached()).toBe(before)
   })
 })
+
+/** On Codex the keeper is on without a variable; everywhere else it needs the variables, as before. Real `settings()`, fake provider. */
+describe("on by default on Codex only", () => {
+  const VARS = [
+    "NIKCLI_CACHE_KEEPALIVE",
+    "NIKCLI_CACHE_KEEPALIVE_COMPACT",
+    "NIKCLI_COMPACTION_SHARED_PREFIX",
+    "NIKCLI_CACHE_KEEPALIVE_LIFETIME_S",
+    "NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS",
+  ]
+  const clear = () => {
+    for (const name of VARS) delete process.env[name]
+  }
+  beforeEach(() => {
+    clear()
+    CacheKeeper.useDeps({ ...w.deps, settings: (codex) => CacheKeeper.settings(codex) })
+  })
+  afterEach(clear)
+
+  const codexTurn = async (request: LLMRequest, session = SESSION) => {
+    CacheKeeper.observe({ sessionID: session, request, fetch: undefined, codex: true })
+    await CacheKeeper.used(session, BIG)
+  }
+
+  it("Codex, no variables: armed with a lifetime of 2400 s, fires at the margin, compacts when the budget is spent", async () => {
+    CacheKeeper.markCodex(SESSION)
+    expect(CacheKeeper.sharedPrefix(SESSION)).toBe(true)
+    await codexTurn(realRequest(openai))
+    expect(w.events.at(-1)).toMatchObject({ state: "armed", renewals: 0, expiresAt: w.now() + 2_400_000 })
+    await w.advance(2_100_000)
+    expect(w.sent).toHaveLength(0)
+    await w.advance(100_000)
+    expect(w.sent).toHaveLength(1)
+    // The route's break-even (10 renewals), then the idle compaction.
+    await w.advance(24 * 60 * 60_000)
+    expect(w.sent).toHaveLength(10)
+    expect(w.state.compacted).toEqual([SESSION])
+    expect(w.events.at(-1)).toMatchObject({ state: "compacted", reason: "budget spent" })
+  })
+
+  it("Codex with NIKCLI_CACHE_KEEPALIVE=0: no keep-alive, nothing armed", async () => {
+    process.env["NIKCLI_CACHE_KEEPALIVE"] = "0"
+    await codexTurn(realRequest(openai))
+    await w.advance(24 * 60 * 60_000)
+    expect(w.sent).toHaveLength(0)
+    expect(w.events).toHaveLength(0)
+    expect(w.timers()).toBe(0)
+  })
+
+  it("Codex with the compaction or the shared prefix switched off: keep-alives, but no compaction", async () => {
+    process.env["NIKCLI_CACHE_KEEPALIVE_COMPACT"] = "0"
+    expect(CacheKeeper.settings(true)).toMatchObject({ enabled: true, compact: false })
+    delete process.env["NIKCLI_CACHE_KEEPALIVE_COMPACT"]
+    process.env["NIKCLI_COMPACTION_SHARED_PREFIX"] = "0"
+    expect(CacheKeeper.settings(true)).toMatchObject({ enabled: true, compact: false })
+    CacheKeeper.markCodex("ses_codex_2")
+    expect(CacheKeeper.sharedPrefix("ses_codex_2")).toBe(false)
+  })
+
+  it("variables set win over the Codex default", async () => {
+    process.env["NIKCLI_CACHE_KEEPALIVE_LIFETIME_S"] = "300"
+    process.env["NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS"] = "0"
+    expect(CacheKeeper.settings(true)).toMatchObject({ lifetimeS: 300, maxRenewals: 0 })
+    await codexTurn(realRequest(openai))
+    expect(w.events.at(-1)).toMatchObject({ state: "armed", expiresAt: w.now() + 300_000 })
+    await w.advance(24 * 60 * 60_000)
+    expect(w.sent).toHaveLength(0)
+    expect(w.state.compacted).toEqual([SESSION])
+  })
+
+  it("Anthropic and OpenAI with an API key (not Codex), no variables: no keep-alive, as before", async () => {
+    expect(CacheKeeper.settings()).toMatchObject({ enabled: false, lifetimeS: undefined, compact: false })
+    expect(CacheKeeper.active(undefined, false)).toBe(false)
+    expect(CacheKeeper.sharedPrefix("ses_plain")).toBe(false)
+    for (const model of [anthropic, openai]) {
+      CacheKeeper.observe({ sessionID: "ses_plain", request: realRequest(model), fetch: undefined })
+      await CacheKeeper.used("ses_plain", BIG)
+    }
+    await w.advance(24 * 60 * 60_000)
+    expect(w.sent).toHaveLength(0)
+    expect(w.events).toHaveLength(0)
+  })
+
+  it("the variables still turn it on for the others", async () => {
+    process.env["NIKCLI_CACHE_KEEPALIVE"] = "1"
+    expect(CacheKeeper.settings()).toMatchObject({ enabled: true, lifetimeS: undefined, compact: false })
+    process.env["NIKCLI_CACHE_KEEPALIVE_COMPACT"] = "1"
+    process.env["NIKCLI_COMPACTION_SHARED_PREFIX"] = "1"
+    expect(CacheKeeper.settings()).toMatchObject({ compact: true })
+  })
+})

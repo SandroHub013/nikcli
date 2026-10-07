@@ -223,8 +223,8 @@ export async function InstanceBootstrap(instance: InstanceContext) {
     )
   }
 
-  // The cache keeper's timers belong to the instance: they end with it. Only loaded when the keeper is on.
-  if (Flag.cacheKeepalive()) {
+  // The cache keeper's timers belong to the instance: they end with it. Not loaded only when the user turned it off (on Codex it is on by default).
+  if (Flag.cacheKeepaliveSetting() !== false) {
     const { CacheKeeper } = await import("../session/cache-keeper")
     Instance.registerDisposer(() => CacheKeeper.releaseInstance(instance))
   }
