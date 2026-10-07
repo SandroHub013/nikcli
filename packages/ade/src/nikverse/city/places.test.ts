@@ -226,6 +226,49 @@ describe("walking to the Faro", () => {
   })
 })
 
+describe("pressing the places", () => {
+  const faro = placePickables().find((p) => p.place === "faro")!
+  const gioco = placePickables().find((p) => p.place === "gioco")!
+
+  test("a click on the Faro's door from the boardwalk opens the lessons; from behind the tower it does nothing", () => {
+    const front: [number, number, number] = [FARO_DOOR.x, 1.6, FARO_DOOR.z - 6]
+    expect(pickWithRay(through(front, [faro.x, faro.y, faro.z]), placePickables(), placeWalls())?.place).toBe("faro")
+    const behind: [number, number, number] = [FARO.x, 1.6, FARO.z + 6]
+    expect(pickWithRay(through(behind, [faro.x, faro.y, faro.z]), placePickables(), placeWalls())).toBeUndefined()
+  })
+
+  test("a click on the kiosk's counter opens the game", () => {
+    const p = kioskPlacement()
+    const eye = toWorld(p, { x: 0.3, z: 5 })
+    expect(pickWithRay(through([eye.x, 1.7, eye.z], [gioco.x, gioco.y, gioco.z]), placePickables(), placeWalls())?.place).toBe("gioco")
+  })
+
+  test("E takes the nearest of a computer and a place", () => {
+    const p = kioskPlacement()
+    const counter = { x: gioco.x, z: gioco.z }
+    const beside = toWorld(p, { x: 1.9, z: 1.1 })
+    const computer: SessionPickable = { kind: "session", paneId: "pane-1", x: beside.x, y: 0.86, z: beside.z, radius: 0.6 }
+    const list = [computer, ...placePickables()]
+    const nearCounter = toWorld(p, { x: -0.2, z: 1.0 })
+    const nearComputer = toWorld(p, { x: 1.85, z: 1.45 })
+    expect(keyCommand("KeyE", nearCounter, list)).toEqual({ cmd: "open-learn", place: "gioco" })
+    expect(keyCommand("KeyE", nearComputer, list)).toEqual({ cmd: "open-session", paneId: "pane-1" })
+    expect(Math.hypot(nearCounter.x - counter.x, nearCounter.z - counter.z)).toBeLessThan(1.5)
+    expect(keyCommand("KeyQ", nearCounter, list)).toBeUndefined()
+  })
+
+  test("the command is the contract's, with the place and nothing else, and ADE's parser takes it", () => {
+    for (const item of placePickables()) {
+      const command = commandOf(item)
+      expect(Object.keys(command).sort()).toEqual(["cmd", "place"])
+      expect(command).toEqual({ cmd: "open-learn", place: item.place })
+      expect(parseCommand(command)).toEqual({ ok: true, command })
+    }
+    expect(placePickables().map((p) => p.place).sort()).toEqual(["faro", "gioco"])
+  })
+
+})
+
 describe("the hint within reach", () => {
   test("the hint says what the key does, in both languages, and the sign says it too", () => {
     expect(placeLabel("faro", "it")).toBe("E · Lezioni")

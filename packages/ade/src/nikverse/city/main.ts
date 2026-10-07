@@ -323,7 +323,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   }
 
   const pickAt = (clientX: number, clientY: number): Pickable | undefined =>
-    pickWithRay(rayAt(clientX, clientY), town.pickables(), town.walls())
+    pickWithRay(rayAt(clientX, clientY), pickables(), [...town.walls(), ...PLACE_WALLS])
 
   const busy = () =>
     town.animating || dragging || Object.values(keys).some(Boolean) || player.speed > 0.05 || !sized || !eye
@@ -471,7 +471,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   const onKeyDown = (event: KeyboardEvent) => {
     // Shortcuts with Ctrl, Alt or Meta are ADE's: the world's own handler forwards them.
     if (event.ctrlKey || event.altKey || event.metaKey) return
-    const command = event.repeat ? undefined : keyCommand(event.code, player, town.pickables())
+    const command = event.repeat ? undefined : keyCommand(event.code, player, pickables())
     if (command) {
       event.preventDefault()
       deps.send(command)
