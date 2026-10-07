@@ -28,6 +28,7 @@ import { clone, mergeDeep, pipe } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
 import { CacheDiagnostics } from "@/provider/cache-diagnostics"
 import * as CachePolicy from "@/provider/cache-policy"
+import { CacheKeeper } from "./cache-keeper"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
@@ -698,6 +699,22 @@ export namespace LLM {
         messageCount: snapshot.messages.length,
         ...comparison,
       })
+    }
+
+    // The keeper learns what this request's prefix is, so it can keep the entry alive once the session is idle. It never gets in the
+    // turn's way: a failure here is nothing the turn has to know. Not for titles, nor for subagents or the compaction (their entries
+    // are not the session's).
+    if (!input.streamInput.small && input.streamInput.agent.mode !== "subagent" && input.streamInput.agent.name !== "compaction") {
+      try {
+        CacheKeeper.observe({
+          sessionID: input.streamInput.sessionID,
+          request: llmRequest,
+          fetch: Provider.nativeFetch(input.provider),
+          ctx: CacheKeeper.instanceOf(),
+        })
+      } catch (error) {
+        log.debug("cache keeper did not observe the request", { error: String(error) })
+      }
     }
 
     const native = LLMNativeRuntime.streamRequestOnly({

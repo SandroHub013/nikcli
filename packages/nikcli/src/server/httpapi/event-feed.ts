@@ -101,6 +101,10 @@ export namespace EventFeed {
    */
   export const COALESCE_BUDGET = 256
 
+  /** Connections attached to any feed of this process: whether a client is listening at all (`CacheKeeper` asks). */
+  let attachedConnections = 0
+  export const attached = () => attachedConnections
+
   /** A single SSE connection, its lag budget, and what it has cost so far. */
   export class Connection {
     private closed = false
@@ -276,9 +280,11 @@ export namespace EventFeed {
     attach(controller: ReadableStreamDefaultController<Uint8Array>, onClosed?: () => void): Connection {
       const connection: Connection = new Connection(controller, this.envelope, () => {
         this.connections.delete(connection)
+        attachedConnections = Math.max(0, attachedConnections - 1)
         onClosed?.()
       })
       this.connections.add(connection)
+      attachedConnections += 1
       return connection
     }
 

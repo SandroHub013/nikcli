@@ -79,6 +79,27 @@ export function Footer() {
     return { hours, sessions: brainSessionsPending(), never: false }
   })
 
+  // The cache keeper's word on this session's prompt-cache entry: the time left on it, each renewal, and why it stopped. The clock
+  // runs only while there is an entry to count down, so a session without the keeper costs nothing here.
+  const cache = createMemo(() => {
+    if (route.data.type !== "session") return undefined
+    return sync.data.session_cache[route.data.sessionID]
+  })
+  const [clock, setClock] = createSignal(Date.now())
+  onMount(() => {
+    const timer = setInterval(() => {
+      const state = cache()
+      if (state && state.state !== "stopped") setClock(Date.now())
+    }, 1000)
+    onCleanup(() => clearInterval(timer))
+  })
+  const cacheLeft = createMemo(() => {
+    const state = cache()
+    if (!state || state.state === "stopped" || state.expiresAt === undefined) return undefined
+    const seconds = Math.max(0, Math.round((state.expiresAt - clock()) / 1000))
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`
+  })
+
   const activeCommand = createMemo(() => {
     if (route.data.type !== "session") return undefined
     const s = sync.session.get(route.data.sessionID)
@@ -110,6 +131,16 @@ export function Footer() {
                   <span style={{ fg: theme.status.success.fg }}> ({brainStatus()!.sessions} sessions)</span>
                 )}
               </text>
+            </Show>
+            <Show when={cache()}>
+              {(state) => (
+                <text fg={state().state === "stopped" ? theme.foreground.muted : theme.foreground.default}>
+                  <span style={{ fg: theme.foreground.muted }}>cache </span>
+                  {state().state === "stopped"
+                    ? `off${state().reason ? ` (${state().reason})` : ""}`
+                    : `${cacheLeft() ?? "…"}${state().renewals > 0 ? ` ↻${state().renewals}` : ""}`}
+                </text>
+              )}
             </Show>
             <Show when={activeCommand()}>
               <text fg={theme.accent.alt}>

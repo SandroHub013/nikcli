@@ -81,6 +81,24 @@ export namespace Flag {
   export function cacheRetention() {
     return process.env["NIKCLI_CACHE_RETENTION"]
   }
+  /**
+   * The cache keeper (`session/cache-keeper.ts`): keeps an idle session's prompt-cache entry alive with one hidden request shortly
+   * before it would expire. Off unless `NIKCLI_CACHE_KEEPALIVE=1`. Read on every use, like `cacheRetention`.
+   */
+  export function cacheKeepalive() {
+    return truthy("NIKCLI_CACHE_KEEPALIVE")
+  }
+  /** Idle compaction by the keeper, instead of letting the entry die at the end of its budget. Needs `cacheKeepalive` and `compactionSharedPrefix`. */
+  export function cacheKeepaliveCompact() {
+    return truthy("NIKCLI_CACHE_KEEPALIVE_COMPACT")
+  }
+  /** A positive number from the environment (`NIKCLI_CACHE_KEEPALIVE_*`), or `undefined` when unset or not one. */
+  export function cacheKeepaliveNumber(name: string): number | undefined {
+    const raw = process.env[name]?.trim()
+    if (!raw) return undefined
+    const value = Number(raw)
+    return Number.isFinite(value) && value > 0 ? value : undefined
+  }
   // Opt out of journaling local (non-workspace) session restore events into
   // the unified sync_event log.
   export const NIKCLI_DISABLE_SESSION_JOURNAL = truthy("NIKCLI_DISABLE_SESSION_JOURNAL")

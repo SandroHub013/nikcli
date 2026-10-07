@@ -1,0 +1,410 @@
+import { afterEach, beforeEach, describe, expect, it } from "bun:test"
+import { writeFileSync } from "node:fs"
+import { Runtime } from "@nikcli-ai/llm"
+import type { LLMRequest } from "@nikcli-ai/llm"
+import { AnthropicMessages, OpenAIResponses } from "@nikcli-ai/llm/protocols"
+import type { ModelMessage } from "@/session/llm/types"
+import { LLM } from "@/session/llm"
+import { CacheKeeper } from "@/session/cache-keeper"
+
+/**
+ * The cache keeper against a fake provider and a clock the test turns by hand, with lifetimes of seconds. What is real is the request
+ * (built the way a turn builds it) and its wire body (`prepareRequest`): the byte-for-byte claim is made on that.
+ */
+
+const anthropic = AnthropicMessages.model({
+  id: "claude-sonnet-4-5",
+  baseURL: "https://api.anthropic.test/v1/",
+  headers: { "x-api-key": "test" },
+})
+const openai = OpenAIResponses.model({
+  id: "gpt-5.6",
+  baseURL: "https://api.openai.test/v1/",
+  headers: { authorization: "Bearer test" },
+})
+
+const user = (text: string): ModelMessage => ({ role: "user", content: [{ type: "text", text }] })
+const assistant = (text: string): ModelMessage => ({ role: "assistant", content: [{ type: "text", text }] })
+const realRequest = (model: typeof anthropic) =>
+  LLM.buildLLMRequest(
+    {
+      system: ["You are the agent.", "Project instructions."],
+      messages: [user("read the repository"), assistant("done, here is the summary"), user("now fix the failing test")],
+      tools: {},
+    },
+    model,
+    { maxOutputTokens: 4096, temperature: 0 },
+  )
+
+const BIG: CacheKeeper.Usage = { input: 40, output: 300, cacheRead: 30_000, cacheWrite: 2_000 }
+const READ: CacheKeeper.Usage = { input: 30, output: 1, cacheRead: 32_000, cacheWrite: 0 }
+
+interface Sent {
+  request: LLMRequest
+  signal: AbortSignal
+  at: number
+}
+
+/** A fake world: a clock, a provider that records what it is sent, and the gates a session answers. */
+function world(settings: Partial<CacheKeeper.Settings> = {}) {
+  let now = 1_000_000
+  const timers: { id: number; at: number; run: () => void }[] = []
+  let next = 1
+  const sent: Sent[] = []
+  const events: { sessionID: string; state: string; renewals: number; reason?: string; expiresAt?: number }[] = []
+  const state = {
+    quiet: true,
+    attached: 1,
+    answers: [] as (CacheKeeper.Usage | Error | "hang")[],
+    pending: [] as ((usage: CacheKeeper.Usage | undefined) => void)[],
+    settings: {
+      enabled: true,
+      lifetimeS: 20,
+      marginPct: 10,
+      minTokens: 20_000,
+      maxRenewals: undefined as number | undefined,
+      horizonS: undefined as number | undefined,
+      ...settings,
+    } as CacheKeeper.Settings,
+  }
+  const deps: CacheKeeper.Deps = {
+    now: () => now,
+    setTimer: (run, ms) => {
+      const id = next++
+      timers.push({ id, at: now + ms, run })
+      return id
+    },
+    clearTimer: (handle) => {
+      const at = timers.findIndex((timer) => timer.id === handle)
+      if (at >= 0) timers.splice(at, 1)
+    },
+    prepare: (request) => Runtime.prepareRequest(request),
+    send: (request, _fetch, signal) => {
+      sent.push({ request, signal, at: now })
+      const answer = state.answers.shift() ?? READ
+      if (answer instanceof Error) return Promise.reject(answer)
+      if (answer === "hang") return new Promise((resolve) => state.pending.push(resolve))
+      return Promise.resolve(answer)
+    },
+    quiet: async () => state.quiet,
+    attached: () => state.attached,
+    publish: (event) => void events.push(event),
+    settings: () => state.settings,
+  }
+  const flush = async () => {
+    // Microtasks only: nothing the keeper does waits on the event loop, and a real tick costs 15 ms on Windows.
+    for (let i = 0; i < 40; i++) await Promise.resolve()
+  }
+  return {
+    deps,
+    state,
+    sent,
+    events,
+    timers: () => timers.length,
+    /** Turn the clock `ms` forward, running every timer that falls due on the way, in order. */
+    async advance(ms: number) {
+      const to = now + ms
+      for (;;) {
+        timers.sort((a, b) => a.at - b.at)
+        const due = timers[0]
+        if (!due || due.at > to) break
+        timers.shift()
+        now = Math.max(now, due.at)
+        due.run()
+        await flush()
+      }
+      now = to
+      await flush()
+    },
+    now: () => now,
+    flush,
+  }
+}
+
+const body = async (request: LLMRequest) => (await Runtime.prepareRequest(request)).body as Record<string, unknown>
+
+let w: ReturnType<typeof world>
+const SESSION = "ses_keeper_1"
+
+/** A real turn: the request goes out, and its answer arms the keeper. */
+async function turn(request: LLMRequest, usage: CacheKeeper.Usage = BIG, session = SESSION) {
+  CacheKeeper.observe({ sessionID: session, request, fetch: undefined })
+  await CacheKeeper.used(session, usage)
+}
+
+beforeEach(() => {
+  w = world()
+  CacheKeeper.useDeps(w.deps)
+})
+afterEach(() => CacheKeeper.useDeps(undefined))
+
+describe("the hidden request", () => {
+  it("has the prefix of the last real request byte for byte, and only its output cap differs", async () => {
+    const real = realRequest(anthropic)
+    await turn(real)
+    await w.advance(18_000)
+    expect(w.sent).toHaveLength(1)
+    const hidden = w.sent[0]!.request
+    const realBody = await body(real)
+    const hiddenBody = await body(hidden)
+    // The dump the report asks for: both bodies, as the provider would receive them.
+    if (process.env["KEEPER_DUMP"]) {
+      writeFileSync(process.env["KEEPER_DUMP"], JSON.stringify({ real: realBody, hidden: hiddenBody }, null, 2))
+    }
+    expect(JSON.stringify(CacheKeeper.prefixOf(hiddenBody))).toBe(JSON.stringify(CacheKeeper.prefixOf(realBody)))
+    // Tools, system and messages: the three parts of the prefix, each compared on its own as well.
+    for (const part of ["system", "messages", "tools"]) expect(JSON.stringify(hiddenBody[part])).toBe(JSON.stringify(realBody[part]))
+    expect(realBody["max_tokens"]).toBe(4096)
+    expect(hiddenBody["max_tokens"]).toBe(1)
+    // The breakpoints are still on the last blocks: that is what the read refreshes.
+    expect(JSON.stringify(hiddenBody)).toContain('"cache_control":{"type":"ephemeral"}')
+  })
+
+  it("is the real request itself: nothing is added to the conversation", async () => {
+    const real = realRequest(anthropic)
+    await turn(real)
+    await w.advance(18_000)
+    const hidden = w.sent[0]!.request
+    expect(hidden.messages).toEqual(real.messages)
+    expect(hidden.system).toEqual(real.system)
+    expect(hidden.tools).toEqual(real.tools)
+    expect(hidden.messages).toHaveLength(3)
+    expect(hidden.toolChoice).toEqual(real.toolChoice)
+  })
+
+  it("on the Responses route the cap is 16, the least the API takes", async () => {
+    w.state.settings = { ...w.state.settings, lifetimeS: 20 }
+    const real = realRequest(openai)
+    await turn(real)
+    await w.advance(18_000)
+    const hiddenBody = await body(w.sent[0]!.request)
+    expect(hiddenBody["max_output_tokens"]).toBe(16)
+    expect(JSON.stringify(CacheKeeper.prefixOf(hiddenBody))).toBe(JSON.stringify(CacheKeeper.prefixOf(await body(real))))
+  })
+})
+
+describe("when it fires", () => {
+  it("shortly before the entry would expire: with a 20 s lifetime and a 10% margin, at 18 s", async () => {
+    await turn(realRequest(anthropic))
+    expect(w.events.at(-1)).toMatchObject({ state: "armed", renewals: 0, expiresAt: w.now() + 20_000 })
+    await w.advance(17_900)
+    expect(w.sent).toHaveLength(0)
+    await w.advance(100)
+    expect(w.sent).toHaveLength(1)
+    expect(w.sent[0]!.at).toBe(1_000_000 + 18_000)
+  })
+
+  it("renews from the moment it sent, and fires again 18 s later", async () => {
+    await turn(realRequest(anthropic))
+    await w.advance(18_000)
+    expect(w.events.at(-1)).toMatchObject({ state: "renewed", renewals: 1, expiresAt: 1_000_000 + 18_000 + 20_000 })
+    await w.advance(17_900)
+    expect(w.sent).toHaveLength(1)
+    await w.advance(100)
+    expect(w.sent).toHaveLength(2)
+  })
+
+  it("reads the lifetime off the wire: the 5 minutes by default, the hour when the body asks for it", async () => {
+    w.state.settings = { ...w.state.settings, lifetimeS: undefined }
+    await turn(realRequest(anthropic))
+    expect(w.events.at(-1)?.expiresAt).toBe(w.now() + 300_000)
+    expect(CacheKeeper.anthropicLifetimeS({ system: [{ cache_control: { type: "ephemeral", ttl: "1h" } }] })).toBe(3_600)
+    expect(CacheKeeper.anthropicLifetimeS({ system: [{ cache_control: { type: "ephemeral" } }] })).toBe(300)
+    process.env["NIKCLI_CACHE_RETENTION"] = "long"
+    try {
+      const long = realRequest(anthropic)
+      CacheKeeper.useDeps(w.deps)
+      await turn(long)
+      expect(w.events.at(-1)?.expiresAt).toBe(w.now() + 3_600_000)
+    } finally {
+      delete process.env["NIKCLI_CACHE_RETENTION"]
+    }
+  })
+
+  it("OpenAI has no lifetime to read: with none configured the keeper is off for it", async () => {
+    w.state.settings = { ...w.state.settings, lifetimeS: undefined }
+    await turn(realRequest(openai))
+    expect(w.timers()).toBe(0)
+    expect(w.events.at(-1)).toMatchObject({ state: "stopped", reason: "no lifetime known for this provider" })
+  })
+})
+
+describe("when it stops", () => {
+  it("at the budget: after N renewals, never one more", async () => {
+    w.state.settings = { ...w.state.settings, maxRenewals: 3 }
+    await turn(realRequest(anthropic))
+    await w.advance(10 * 60_000)
+    expect(w.sent).toHaveLength(3)
+    expect(w.events.at(-1)).toMatchObject({ state: "stopped", reason: "budget spent", renewals: 3 })
+    expect(w.timers()).toBe(0)
+  })
+
+  it("by default at the break-even of the provider: write price over read price", async () => {
+    expect(CacheKeeper.breakEven("anthropic-messages", 3_600)).toBe(20)
+    expect(CacheKeeper.breakEven("anthropic-messages", 300)).toBe(12)
+    expect(CacheKeeper.breakEven("openai-responses", 600)).toBe(10)
+    await turn(realRequest(anthropic))
+    await w.advance(60 * 60_000)
+    // A 20 s lifetime is a short entry: 12 renewals.
+    expect(w.sent).toHaveLength(12)
+    expect(w.events.at(-1)).toMatchObject({ state: "stopped", reason: "budget spent" })
+  })
+
+  it("at the horizon, whatever the renewals", async () => {
+    w.state.settings = { ...w.state.settings, horizonS: 50 }
+    await turn(realRequest(anthropic))
+    await w.advance(10 * 60_000)
+    expect(w.sent.length).toBeGreaterThan(0)
+    expect(w.sent.length).toBeLessThan(4)
+    expect(w.events.at(-1)).toMatchObject({ state: "stopped", reason: "horizon reached" })
+  })
+
+  it("below the size threshold: a rewrite is cheap, so nothing is kept", async () => {
+    await turn(realRequest(anthropic), { input: 10, output: 5, cacheRead: 0, cacheWrite: 3_000 })
+    expect(w.timers()).toBe(0)
+    expect(w.events.at(-1)).toMatchObject({ state: "stopped", reason: "prefix below the threshold" })
+  })
+
+  it("when the provider reported no cached tokens: there is no entry to keep", async () => {
+    await turn(realRequest(anthropic), { input: 50_000, output: 5, cacheRead: 0, cacheWrite: 0 })
+    expect(w.timers()).toBe(0)
+    expect(w.events.at(-1)).toMatchObject({ state: "stopped" })
+    expect(w.events.at(-1)?.reason).toContain("no cache entry")
+  })
+
+  it("when the keep-alive finds the entry already gone (it rewrote it), instead of rewriting every time", async () => {
+    w.state.answers = [{ input: 20, output: 1, cacheRead: 0, cacheWrite: 31_000 }]
+    await turn(realRequest(anthropic))
+    await w.advance(18_000)
+    expect(w.sent).toHaveLength(1)
+    expect(w.events.at(-1)?.reason).toBe("the entry had expired: this request rewrote it")
+    expect(w.timers()).toBe(0)
+  })
+
+  it("on any failure of the provider: a stop for that session, and nothing thrown", async () => {
+    w.state.answers = [new Error("429 rate limited")]
+    await turn(realRequest(anthropic))
+    await w.advance(18_000)
+    expect(w.events.at(-1)).toMatchObject({ state: "stopped", reason: "the keep-alive request failed" })
+    expect(w.timers()).toBe(0)
+    // The next real turn arms it again.
+    await turn(realRequest(anthropic))
+    expect(w.timers()).toBe(1)
+  })
+
+  it("with no client attached it does not spend a token", async () => {
+    await turn(realRequest(anthropic))
+    w.state.attached = 0
+    await w.advance(18_000)
+    expect(w.sent).toHaveLength(0)
+    expect(w.events.at(-1)).toMatchObject({ state: "stopped", reason: "no client attached" })
+  })
+})
+
+describe("never during a turn, never in a run, never unless it is switched on", () => {
+  it("a session that is not idle is left alone, and given up on at the expiry", async () => {
+    await turn(realRequest(anthropic))
+    w.state.quiet = false
+    await w.advance(25_000)
+    expect(w.sent).toHaveLength(0)
+    expect(w.events.at(-1)).toMatchObject({ state: "stopped", reason: "the session was busy until the entry expired" })
+  })
+
+  it("a session that becomes idle before the expiry is kept after all", async () => {
+    await turn(realRequest(anthropic))
+    w.state.quiet = false
+    await w.advance(18_000)
+    expect(w.sent).toHaveLength(0)
+    w.state.quiet = true
+    await w.advance(1_000)
+    expect(w.sent).toHaveLength(1)
+  })
+
+  it("a real request takes over: the timer goes, and a keep-alive in flight is aborted and its answer ignored", async () => {
+    w.state.answers = ["hang"]
+    await turn(realRequest(anthropic))
+    await w.advance(18_000)
+    expect(w.sent).toHaveLength(1)
+    // The turn starts while the keep-alive is out.
+    CacheKeeper.observe({ sessionID: SESSION, request: realRequest(anthropic), fetch: undefined })
+    expect(w.sent[0]!.signal.aborted).toBe(true)
+    const rendered = w.events.length
+    for (const resolve of w.state.pending) resolve(READ)
+    await w.flush()
+    expect(w.events).toHaveLength(rendered)
+    // Nothing is armed until that turn's own answer: the observed request has not answered.
+    expect(w.timers()).toBe(0)
+    await w.advance(60_000)
+    expect(w.sent).toHaveLength(1)
+  })
+
+  it("an answer that is not the observed request's (a title, a compaction) arms nothing", async () => {
+    CacheKeeper.observe({ sessionID: SESSION, request: realRequest(anthropic), fetch: undefined })
+    await CacheKeeper.used(SESSION, BIG)
+    expect(w.timers()).toBe(1)
+    await w.advance(18_000)
+    const sentBefore = w.sent.length
+    await CacheKeeper.used(SESSION, { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 })
+    expect(w.sent).toHaveLength(sentBefore)
+    expect(CacheKeeper.status(SESSION)?.stopped).toBe(false)
+  })
+
+  it("`nikcli run` switches it off for its process: nothing is observed, nothing is armed", async () => {
+    CacheKeeper.disableForProcess()
+    await turn(realRequest(anthropic))
+    expect(w.timers()).toBe(0)
+    expect(CacheKeeper.status(SESSION)).toBeUndefined()
+    await w.advance(60_000)
+    expect(w.sent).toHaveLength(0)
+  })
+
+  it("is off unless the switch is on", async () => {
+    w.state.settings = { ...w.state.settings, enabled: false }
+    await turn(realRequest(anthropic))
+    expect(w.timers()).toBe(0)
+    expect(CacheKeeper.status(SESSION)).toBeUndefined()
+  })
+
+  it("only for the routes it knows: another provider is left alone", async () => {
+    const other = { ...realRequest(anthropic), model: { ...anthropic, route: "gemini" } } as unknown as LLMRequest
+    CacheKeeper.observe({ sessionID: SESSION, request: other, fetch: undefined })
+    expect(CacheKeeper.status(SESSION)).toBeUndefined()
+  })
+
+  it("keeps each session on its own", async () => {
+    await turn(realRequest(anthropic), BIG, "ses_a")
+    await w.advance(10_000)
+    await turn(realRequest(anthropic), BIG, "ses_b")
+    await w.advance(8_000)
+    expect(w.sent).toHaveLength(1)
+    await w.advance(10_000)
+    expect(w.sent).toHaveLength(2)
+  })
+})
+
+describe("the wiring", () => {
+  it("`nikcli run` switches the keeper off before it opens its session", async () => {
+    const { readFileSync } = await import("node:fs")
+    const { join } = await import("node:path")
+    const source = readFileSync(join(import.meta.dir, "..", "..", "src", "cli", "handlers", "run.ts"), "utf8")
+    const off = source.indexOf("CacheKeeper.disableForProcess()")
+    expect(off).toBeGreaterThan(0)
+    expect(off).toBeLessThan(source.indexOf("await bootstrap(process.cwd()"))
+  })
+
+  it("counts the event streams attached, and not the ones that went away", async () => {
+    const { EventFeed } = await import("@/server/httpapi/event-feed")
+    const controller = (): ReadableStreamDefaultController<Uint8Array> =>
+      ({ desiredSize: 10, enqueue() {}, close() {} }) as unknown as ReadableStreamDefaultController<Uint8Array>
+    const feed = new EventFeed.Feed((event) => event)
+    const before = EventFeed.attached()
+    const a = feed.attach(controller())
+    const b = feed.attach(controller())
+    expect(EventFeed.attached()).toBe(before + 2)
+    a.close()
+    a.close()
+    expect(EventFeed.attached()).toBe(before + 1)
+    b.abandon()
+    expect(EventFeed.attached()).toBe(before)
+  })
+})

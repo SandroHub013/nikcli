@@ -11,6 +11,7 @@ import { SessionStatus } from "./status"
 import { Plugin } from "@/plugin"
 import type { Provider } from "@/provider/provider"
 import { LLM } from "./llm"
+import { CacheKeeper } from "./cache-keeper"
 import { Config } from "@/config/config"
 import { SessionCompaction } from "./compaction"
 import { PermissionNext } from "@/permission/next"
@@ -573,6 +574,13 @@ export namespace SessionProcessor {
                   input.assistantMessage.finish = value.finishReason
                   input.assistantMessage.cost += usage.cost
                   input.assistantMessage.tokens = usage.tokens
+                  // The answer of the request the keeper observed: what it says about the cache entry arms the keep-alive.
+                  void CacheKeeper.used(input.sessionID, {
+                    input: usage.tokens.input,
+                    output: usage.tokens.output,
+                    cacheRead: usage.tokens.cache.read,
+                    cacheWrite: usage.tokens.cache.write,
+                  }).catch(() => undefined)
                   await updatePart(
                     trackPart({
                       id: Identifier.ascending("part"),
