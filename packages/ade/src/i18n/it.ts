@@ -370,6 +370,7 @@ export const it = {
   "decisions.delivered": (key: string) => `Decisione ${key} consegnata dal pannello Decisioni`,
   "decisions.reopened.delivered": (key: string) => `Riapertura di ${key} consegnata`,
   "design.reopened.delivered": (key: string) => `Riapertura di ${key} consegnata`,
+  "design.waiter.taken": (key: string) => `Scelta su ${key} consegnata al comando ade-msg che la aspettava`,
   "decisions.waiting": "Decisioni che aspettano te",
   "update.desktopOnly": "Gli aggiornamenti si controllano dall'app desktop.",
   "update.alreadyShown": (version: string) => `Già segnalato: ADE ${version} è disponibile.`,

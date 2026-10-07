@@ -550,10 +550,12 @@ describe("the page is served, not built", () => {
     }
     expect(page.includes("<style")).toBe(false)
     expect(page.includes(" onclick=")).toBe(false)
+    // The CSP has no `unsafe-inline` for styles, so a `style` attribute set from the page would be refused: the page styles with classes.
+    expect(/["'`]style["'`]\s*:|style:\s*["'`]|setAttribute\(\s*["']style["']/.test(engine)).toBe(false)
     for (const script of page.split("<script").slice(1)) expect(script.split(">")[0]).toContain("src=")
-    // The page asks for one file, and it is a file of its own: no network, and nothing of ADE's.
+    // The page asks for files of its own (the lessons and the game's levels): no network, and nothing of ADE's.
     for (const richiamo of engine.matchAll(/(?:fetch|src|href)\(?\s*["'`]([^"'`]+)/g)) {
-      expect(["content.json", "learn.js", "learn.css"]).toContain(richiamo[1])
+      expect(["content.json", "gioco.json", "learn.js", "learn.css"]).toContain(richiamo[1])
     }
   })
 })

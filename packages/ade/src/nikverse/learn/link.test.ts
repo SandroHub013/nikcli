@@ -235,6 +235,24 @@ describe("the channel with the lesson page", () => {
     expect(t.ignored).toHaveLength(2)
   })
 
+  test("a link closed before the read finished lets `settled` go, with the save that was waiting dropped", async () => {
+    const never = deferred<unknown>()
+    const t = setup(() => never.promise)
+    t.link.receive({ type: "ready" })
+    t.link.receive(answered(5))
+    await flush()
+    t.link.close()
+    let settled = false
+    void t.link.settled().then(() => void (settled = true))
+    await flush()
+    expect(settled).toBe(true)
+    expect(t.saved).toEqual([])
+    // The read that comes back after the close changes nothing.
+    never.resolve(progress(3))
+    await flush()
+    expect(t.saved).toEqual([])
+  })
+
   test("once closed, the old page writes nothing more, and `settled` waits for the write in flight", async () => {
     const first = deferred()
     const t = setup(

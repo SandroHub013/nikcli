@@ -361,6 +361,7 @@ export const en: Messages = {
   "decisions.delivered": (key) => `Decision ${key} delivered from the Decisions panel`,
   "decisions.reopened.delivered": (key) => `Reopening of ${key} delivered`,
   "design.reopened.delivered": (key) => `Reopening of ${key} delivered`,
+  "design.waiter.taken": (key) => `Choice on ${key} delivered to the ade-msg command waiting for it`,
   "decisions.waiting": "Decisions waiting for you",
   "update.desktopOnly": "Updates are checked from the desktop app.",
   "update.alreadyShown": (version) => `Already in your notifications: ADE ${version} is available.`,

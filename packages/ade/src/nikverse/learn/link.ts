@@ -140,6 +140,8 @@ export function createLearnLink(deps: {
     },
     close() {
       closed = true
+      // A save waiting for a read that has not finished must not hold `settled` for ever: a closed link writes nothing more.
+      resolveWritable(false)
       try {
         deps.port.close()
       } catch {

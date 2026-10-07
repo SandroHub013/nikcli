@@ -97,6 +97,11 @@ const PACKAGE: &[PackageFile] = &[
         mime: "application/json; charset=utf-8",
         body: include_bytes!("../../src/nikverse/learn/content.json"),
     },
+    PackageFile {
+        path: "learn/gioco.json",
+        mime: "application/json; charset=utf-8",
+        body: include_bytes!("../../src/nikverse/learn/gioco.json"),
+    },
 ];
 
 /// The file served for `/`.
@@ -516,11 +521,12 @@ mod tests {
         for uri in ["nikverse://localhost/learn", "http://nikverse.localhost/learn"] {
             assert_eq!(get(uri).status(), StatusCode::NOT_FOUND, "{uri}");
         }
-        // Its four files, and each with its own type.
+        // Its files, and each with its own type.
         for (file, mime) in [
             ("learn/learn.js", "text/javascript"),
             ("learn/learn.css", "text/css"),
             ("learn/content.json", "application/json"),
+            ("learn/gioco.json", "application/json"),
         ] {
             let response = get(&format!("nikverse://localhost/{file}"));
             assert_eq!(response.status(), StatusCode::OK, "{file}");
@@ -564,11 +570,12 @@ mod tests {
         for script in page.split("<script").skip(1) {
             assert!(script.split('>').next().unwrap_or("").contains("src="), "script in linea");
         }
-        // And the engine names no file of its own beyond the four, so a lesson cannot ask for one.
+        // And the engine names no file of its own beyond the package files, so a lesson cannot ask for one.
         let engine = String::from_utf8_lossy(get("nikverse://localhost/learn/learn.js").body()).into_owned();
         assert!(!engine.contains("innerHTML") && !engine.contains("eval("), "l'engine costruisce markup o esegue codice");
         for chiamata in engine.match_indices("fetch") {
-            assert!(engine[chiamata.0..chiamata.0 + 40].contains("content.json"), "una richiesta che non è il contenuto");
+            let call = &engine[chiamata.0..chiamata.0 + 40];
+            assert!(call.contains("content.json") || call.contains("gioco.json"), "una richiesta che non è il contenuto: {call}");
         }
     }
 
