@@ -534,6 +534,9 @@ export namespace LLM {
 
     const legacy = async () => {
       input.abort.throwIfAborted()
+      // The compaction that shares the prefix keeps the conversation's tools in the request and drops what the model calls: the AI SDK
+      // would run them. It has no fallback; the compaction falls back to the way of today (no tools) by itself.
+      if (input.noToolCalls) throw new Error("the shared-prefix compaction has no AI SDK path")
       l.debug("llm.runtime", { runtime: "ai-sdk" })
       const language = await runProvider(
         Effect.gen(function* () {
