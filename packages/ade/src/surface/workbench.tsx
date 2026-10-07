@@ -534,6 +534,7 @@ import {
   addWaiter as addDesignWaiter,
   dropWaiters as dropDesignWaiters,
   dueWaiters as dueDesignWaiters,
+  givenUp as designGivenUp,
   holdsDelivery as holdsDesignDelivery,
   markWritten as markDesignWaitersWritten,
   parseWaiters as parseDesignWaiters,
@@ -1768,8 +1769,11 @@ export function Workbench() {
     try {
       for (const waiter of due) {
         const back = await host.mailboxResultReclaim(waiter.id).catch(() => undefined)
-        // A failed check proves nothing: asked again on the next pass.
-        if (back === undefined) continue
+        // A failed check proves nothing: asked again on the next pass, until the waiter is given up and the line typed.
+        if (back === undefined) {
+          if (designGivenUp(waiter, Date.now())) saveDesignWaiters(dropDesignWaiters(designWaiters(), [waiter.id]))
+          continue
+        }
         saveDesignWaiters(dropDesignWaiters(designWaiters(), [waiter.id]))
         if (back !== null) continue
         const item = designOutbox().find(
