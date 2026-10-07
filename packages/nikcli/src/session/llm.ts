@@ -729,7 +729,7 @@ export namespace LLM {
     // The keeper learns what this request's prefix is, so it can keep the entry alive once the session is idle. It never gets in the
     // turn's way: a failure here is nothing the turn has to know. Not for titles, nor for subagents or the compaction (their entries
     // are not the session's).
-    if (!input.streamInput.small && input.streamInput.agent.mode !== "subagent" && input.streamInput.agent.name !== "compaction" && !input.streamInput.noToolCalls) {
+    if (CacheKeeper.active() && !input.streamInput.small && input.streamInput.agent.mode !== "subagent" && input.streamInput.agent.name !== "compaction" && !input.streamInput.noToolCalls) {
       try {
         CacheKeeper.observe({
           sessionID: input.streamInput.sessionID,

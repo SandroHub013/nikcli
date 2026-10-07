@@ -1,4 +1,4 @@
-import { createMemo, Match, onCleanup, onMount, Show, Switch, createSignal } from "solid-js"
+import { createEffect, createMemo, Match, onCleanup, onMount, Show, Switch, createSignal } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useSync } from "../../context/sync"
 import { useDirectory } from "../../context/directory"
@@ -86,11 +86,11 @@ export function Footer() {
     return sync.data.session_cache[route.data.sessionID]
   })
   const [clock, setClock] = createSignal(Date.now())
-  onMount(() => {
-    const timer = setInterval(() => {
-      const state = cache()
-      if (state && state.state !== "stopped") setClock(Date.now())
-    }, 1000)
+  // Ticks only while a cache entry is being counted down: no timer at all with the keeper off.
+  createEffect(() => {
+    const state = cache()
+    if (!state || state.state === "stopped") return
+    const timer = setInterval(() => setClock(Date.now()), 1000)
     onCleanup(() => clearInterval(timer))
   })
   const cacheLeft = createMemo(() => {

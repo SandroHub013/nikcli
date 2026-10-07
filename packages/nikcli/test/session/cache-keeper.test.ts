@@ -58,6 +58,8 @@ function world(settings: Partial<CacheKeeper.Settings> = {}) {
     answers: [] as (CacheKeeper.Usage | Error | "hang")[],
     /** Answers of the next `quiet` calls, before `quiet` itself. */
     quietSeq: [] as boolean[],
+    /** Holds every `quiet` call until it resolves. */
+    gate: undefined as Promise<void> | undefined,
     compacted: [] as string[],
     compactFails: undefined as Error | undefined,
     pending: [] as ((usage: CacheKeeper.Usage | undefined) => void)[],
@@ -95,7 +97,10 @@ function world(settings: Partial<CacheKeeper.Settings> = {}) {
       state.compacted.push(sessionID)
       if (state.compactFails) throw state.compactFails
     },
-    quiet: async () => (state.quietSeq.length > 0 ? state.quietSeq.shift()! : state.quiet),
+    quiet: async () => {
+      if (state.gate) await state.gate
+      return state.quietSeq.length > 0 ? state.quietSeq.shift()! : state.quiet
+    },
     attached: () => state.attached,
     publish: (event) => void events.push(event),
     settings: () => state.settings,
@@ -293,6 +298,57 @@ describe("when it stops", () => {
     await turn(realRequest(anthropic))
     await w.advance(60 * 60_000)
     expect(w.events.at(-1)).toMatchObject({ state: "stopped", reason: "the idle compaction failed" })
+  })
+
+  it("a thinking budget: Anthropic rejects an output cap of 1 below it, so the keeper stops with that reason and sends nothing", async () => {
+    const request = LLM.buildLLMRequest(
+      { system: ["You are the agent."], messages: [user("hello")], tools: {} },
+      anthropic,
+      { maxOutputTokens: 32000, providerOptions: { anthropic: { thinking: { type: "enabled", budgetTokens: 16000 } } } as never },
+    )
+    expect(CacheKeeper.thinkingBudget(request)).toBe(16000)
+    await turn(request)
+    await w.advance(10 * 60_000)
+    expect(w.sent).toHaveLength(0)
+    expect(w.timers()).toBe(0)
+    expect(w.events.at(-1)).toMatchObject({ state: "stopped" })
+    expect(w.events.at(-1)?.reason).toContain("thinking with a budget")
+    // Adaptive thinking and no thinking are not budgets.
+    expect(CacheKeeper.thinkingBudget(realRequest(anthropic))).toBeUndefined()
+  })
+
+  it("release (a deleted session): the timer is gone and nothing is sent", async () => {
+    await turn(realRequest(anthropic))
+    expect(w.timers()).toBe(1)
+    CacheKeeper.release(SESSION)
+    expect(w.timers()).toBe(0)
+    await w.advance(10 * 60_000)
+    expect(w.sent).toHaveLength(0)
+  })
+
+  it("release while the keeper is checking the session: the request is not sent", async () => {
+    await turn(realRequest(anthropic))
+    let open!: () => void
+    w.state.gate = new Promise<void>((resolve) => (open = resolve))
+    await w.advance(18_000)
+    CacheKeeper.release(SESSION)
+    open()
+    await w.flush()
+    expect(w.sent).toHaveLength(0)
+  })
+
+  it("releaseInstance: the sessions of a disposed instance end, the others go on", async () => {
+    const mine = {}
+    const other = {}
+    CacheKeeper.observe({ sessionID: "ses_a", request: realRequest(anthropic), fetch: undefined, ctx: mine })
+    await CacheKeeper.used("ses_a", BIG)
+    CacheKeeper.observe({ sessionID: "ses_b", request: realRequest(anthropic), fetch: undefined, ctx: other })
+    await CacheKeeper.used("ses_b", BIG)
+    expect(w.timers()).toBe(2)
+    CacheKeeper.releaseInstance(mine)
+    expect(w.timers()).toBe(1)
+    await w.advance(18_000)
+    expect(w.sent).toHaveLength(1)
   })
 
   it("at the horizon, whatever the renewals", async () => {

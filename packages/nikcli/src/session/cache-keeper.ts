@@ -255,6 +255,9 @@ export namespace CacheKeeper {
     const entry = entries.get(sessionID)
     if (!entry) return
     clear(entry)
+    // An asynchronous step of the keeper that is holding this entry (a gate, a request) must find it ended.
+    entry.stopped = true
+    entry.flight?.abort()
     entries.delete(sessionID)
   }
 
@@ -310,7 +313,7 @@ export namespace CacheKeeper {
       if (oldest !== undefined) forget(oldest)
     }
     const now = input.startedAt ?? d.now()
-    entries.set(input.sessionID, {
+    const entry: Entry = {
       sessionID: input.sessionID,
       ctx: input.ctx,
       request: input.request,
@@ -323,7 +326,12 @@ export namespace CacheKeeper {
       renewals: 0,
       stopped: false,
       awaiting: true,
-    })
+    }
+    entries.set(input.sessionID, entry)
+    const budget = thinkingBudget(input.request)
+    if (budget !== undefined) {
+      stop(entry, "thinking with a budget: Anthropic rejects an output cap of 1 below the budget", { budgetTokens: budget })
+    }
   }
 
   /**
@@ -353,6 +361,24 @@ export namespace CacheKeeper {
   /** The session is gone (deleted, or its instance disposed). */
   export function release(sessionID: string) {
     forget(sessionID)
+  }
+
+  /** The instance was disposed: its sessions' timers and requests end with it. */
+  export function releaseInstance(ctx: unknown) {
+    for (const entry of [...entries.values()]) if (entry.ctx === ctx) forget(entry.sessionID)
+  }
+
+  /**
+   * Anthropic wants `max_tokens` above the `budget_tokens` of a thinking budget, and the hidden request caps the output at 1: every
+   * keep-alive of such a session would be a 400. Lowering the thinking instead would change the parameters the cache is keyed on, and
+   * raising `max_tokens` would let the model think at full price. So the keeper does not start for it.
+   */
+  export function thinkingBudget(request: LLMRequestType): number | undefined {
+    if (request.model.route !== "anthropic-messages") return undefined
+    const thinking = (request.providerOptions as { anthropic?: { thinking?: Record<string, unknown> } } | undefined)?.anthropic?.thinking
+    if (!thinking || thinking["type"] !== "enabled") return undefined
+    const budget = thinking["budgetTokens"] ?? thinking["budget_tokens"]
+    return typeof budget === "number" ? budget : 0
   }
 
   // ---------------------------------------------------------------- the timer
@@ -528,6 +554,24 @@ export namespace CacheKeeper {
           ),
         )
         if (status.type !== "idle") return false
+        // A session that was deleted reads as idle: nothing to keep alive for it.
+        const { Session } = await import(".")
+        const exists = await runPromiseWithLayer(
+          Session.defaultLayer,
+          locallyInstance(
+            ctx as InstanceContext,
+            Effect.gen(function* () {
+              return yield* (yield* Session.Service).get(sessionID)
+            }),
+          ),
+        ).then(
+          () => true,
+          () => false,
+        )
+        if (!exists) {
+          release(sessionID)
+          return false
+        }
         return (
           Effect.runSync(SessionPending.list(sessionID, "steer")).length === 0 &&
           Effect.runSync(SessionPending.list(sessionID, "queue")).length === 0
