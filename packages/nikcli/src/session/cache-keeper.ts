@@ -201,6 +201,8 @@ export namespace CacheKeeper {
     lifetimeMs?: number
     prefixTokens: number
     renewals: number
+    /** Keep-alives in a row that read nothing from the cache; a hit, or a real request (a new entry), starts it again. */
+    misses: number
     timer?: unknown
     flight?: AbortController
     stopped: boolean
@@ -209,6 +211,8 @@ export namespace CacheKeeper {
   }
 
   const MAX_SESSIONS = 64
+  /** Keep-alives in a row that may miss before the keeper gives up on the session. */
+  const MAX_MISSES_IN_A_ROW = 2
   const entries = new Map<string, Entry>()
   let disabled = false
   let deps: Deps | undefined
@@ -336,6 +340,7 @@ export namespace CacheKeeper {
       lifetimeMs: undefined,
       prefixTokens: 0,
       renewals: 0,
+      misses: 0,
       stopped: false,
       awaiting: true,
     }
@@ -470,16 +475,28 @@ export namespace CacheKeeper {
         output: usage.output,
         elapsedMs: d.now() - sentAt,
       })
-      if (usage.cacheRead === 0) {
-        // The entry was already gone (or never matched): this request paid the write. Renewing now would be a rewrite every time.
-        return stop(entry, usage.cacheWrite > 0 ? "the entry had expired: this request rewrote it" : "no cached tokens read", {
-          cached: usage.cacheRead,
+      /*
+       * A miss (nothing read from the cache) still wrote the entry again, at full price, so it counts as a renewal: it uses the budget
+       * like a hit, and the next keep-alive is timed from it. OpenAI reports no cache writes (`cacheWrite` stays 0): there a miss is an
+       * implicit write too, and the rule is the same for every provider. Two in a row stop the keeper: a key that never gets the cache
+       * (routing, load) would otherwise rewrite the entry at every round. A hit starts the count again.
+       */
+      const miss = usage.cacheRead === 0
+      entry.misses = miss ? entry.misses + 1 : 0
+      if (miss) {
+        log.info("cache keepalive miss", {
+          sessionID: entry.sessionID,
+          miss: true,
           uncached: usage.input,
           written: usage.cacheWrite,
+          misses: entry.misses,
         })
       }
       entry.renewals += 1
       entry.lastTouch = sentAt
+      if (entry.misses >= MAX_MISSES_IN_A_ROW) {
+        return stop(entry, "two misses in a row", { uncached: usage.input, written: usage.cacheWrite })
+      }
       d.publish(
         {
           sessionID: entry.sessionID,
