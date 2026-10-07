@@ -83,6 +83,15 @@ export type Message = { from: string; token?: string; text: string } &
      * ADE checks it again (`media.rs`, `design_sheet`). `text` is empty.
      */
     | { kind: "design"; path: string; title?: string }
+    /**
+     * `ade-msg design proponi <cartella>`: a proposal's folder, `.ade/design/<k>/`
+     * of the sender's project, for ADE to read, check and open (`design/propose.ts`).
+     * `folder` as the sender wrote it, `cwd` where its shell was; with `wait`
+     * the sender then waits `timeout` seconds for the user's choice. `text` is empty.
+     */
+    | { kind: "design-proponi"; folder: string; cwd: string; wait: boolean; timeout: number }
+    /** `ade-msg design attendi <k>`: the choice on proposal `key`, now if made, or when it is. `text` is empty. */
+    | { kind: "design-attendi"; key: string; timeout: number }
     /** Withdraws a request the sender made. `text` is empty. */
     | { kind: "cancel"; ref: string }
     /** The sender's word on a native handoff: sent (`ok`), or not, with why in `text`. */
@@ -127,6 +136,20 @@ export function budgetOf(value: unknown): number | undefined {
     : undefined
 }
 
+/** How long `ade-msg design` waits for a choice by default, in seconds, and the longest it may. */
+export const DESIGN_WAIT_DEFAULT = 1800
+export const DESIGN_WAIT_MAX = 86_400
+
+/**
+ * The seconds a design wait gives: a whole number from one second to a day.
+ * Longer is a day, as the scripts hold it too, so ADE never stops counting
+ * on a script still waiting; anything else is the default.
+ */
+export function designWaitOf(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) return DESIGN_WAIT_DEFAULT
+  return Math.min(value, DESIGN_WAIT_MAX)
+}
+
 export function parseMessage(body: string): Message | undefined {
   let raw: unknown
   try {
@@ -168,6 +191,28 @@ export function parseMessage(body: string): Message | undefined {
   if (kind === "interrupt") {
     const to = str("to")
     return to ? { kind, from, token, to, text: "" } : undefined
+  }
+  if (kind === "design" && str("op") === "proponi") {
+    const folder = str("folder")
+    const timeout = designWaitOf(record.timeout)
+    return folder
+      ? {
+          kind: "design-proponi",
+          from,
+          token,
+          folder,
+          cwd: str("cwd"),
+          wait: record.attendi === true,
+          timeout,
+          text: "",
+        }
+      : undefined
+  }
+  if (kind === "design" && str("op") === "attendi") {
+    const key = str("key")
+    return key
+      ? { kind: "design-attendi", from, token, key, timeout: designWaitOf(record.timeout), text: "" }
+      : undefined
   }
   if (kind === "design") {
     const path = str("path")
@@ -283,6 +328,8 @@ const UNVERIFIED_ACTING: ReadonlySet<Message["kind"]> = new Set([
   "interrupt",
   "close",
   "design",
+  "design-proponi",
+  "design-attendi",
 ])
 
 export function unverifiedSenderRefusal(message: Message): string | undefined {
@@ -1535,42 +1582,16 @@ export const USAGE =
   "                                          riavvia una sessione avviata da te, stesso pane e worktree:\n" +
   "                                          riprende la sua conversazione (o da zero con --fresh) e riceve la nota\n" +
   "  ade-msg interrupt <sessione>            ferma quello che sta facendo (Esc o Ctrl-C), la sessione resta aperta\n" +
+  "  ade-msg design proponi <cartella> [--attendi] [--timeout <sec>]\n" +
+  "                                          fa scegliere un design all'utente e aspetta la scelta (ade-msg help design)\n" +
+  "  ade-msg design attendi <k> [--timeout <sec>]  aspetta la scelta su una proposta, o la stampa se c'è già\n" +
   "  ade-msg design <file.html> [--title T]  mostra una pagina di .ade/design/ accanto a te; riscrivila e si ricarica\n" +
   "                                          un file solo: CSS e JS dentro, immagini data:, niente CDN né fetch\n" +
   '  ade-msg memory add decisione|fatto|trappola|todo "<testo>"\n' +
   "                                          aggiunge una voce a .ade/memory.md, la memoria condivisa del progetto\n" +
   "  ade-msg memory show                     stampa la memoria condivisa\n" +
-  "  ade-msg registro <decisioni|design> <aperta|risposta|rimandata|riaperta|chiusa> '<json>'\n" +
-  "                                          scrive un evento nel registro Decisioni o Design: il json ha i campi\n" +
-  "                                          senza type, at e by (li mette ADE); k serve, tranne per aperta.\n" +
-  "                                          ADE controlla la riga, la scrive e dice se il tasto la mostra;\n" +
-  "                                          rimandata solo per decisioni. I registri si scrivono solo così.\n" +
-  "                                          Il json anche da file (--file <percorso>) o da stdin (--stdin, al\n" +
-  "                                          posto del json): da PowerShell 5.1 usa --file, perché le virgolette\n" +
-  "                                          dentro '<json>' si perdono e una pipe perde le lettere accentate\n" +
-  "                                          aperta, campi facoltativi: question (la domanda in una riga), why\n" +
-  "                                          (perché adesso, 1-2 frasi), recommend {option, because}; decisioni:\n" +
-  '                                          facts ["..."], ogni opzione title, effect, cost, risk; design: keeps\n' +
-  '                                          ["..."], ogni variante changes ["..."]. context resta obbligatorio con\n' +
-  "                                          questi campi: le versioni vecchie mostrano solo lui. recommend.option\n" +
-  "                                          deve essere un'opzione (o una variante), se no la riga è rifiutata;\n" +
-  "                                          per design è il nome intero della variante, per esempio «1 · Vetro».\n" +
-  "                                          Come si scrive: 1) titolo = la domanda o l'oggetto, parole dell'utente,\n" +
-  "                                          niente codici (lo spec va in spec); 2) la raccomandazione all'inizio del\n" +
-  "                                          contesto («Consigliata: B, perché…»), mai «(consigliata)» nelle opzioni;\n" +
-  "                                          si può mettere anche in recommend, ma finché la carta nuova non è in\n" +
-  "                                          release va ripetuta in una riga all'inizio di context; 3) ogni opzione\n" +
-  "                                          dice cosa cambia per l'utente (effect), cost e risk solo se aiutano a\n" +
-  "                                          scegliere; 4) niente note che scadono («nella tua ADE di oggi…», «dalla\n" +
-  "                                          release X»); 5) context al massimo 3 frasi, dettagli in facts o in un\n" +
-  "                                          file results/…; 6) scrivi con gli accenti (è, perché, più), mai e' o piu\n" +
-  "                                          al loro posto\n" +
-  "                                          design, url: se sei una sessione Claude Code, pubblica il foglio con\n" +
-  "                                          tutte le varianti come pagina artifact claude.ai, con il database per\n" +
-  "                                          salvare la scelta, e metti il link in url (https://claude.ai/…); le\n" +
-  "                                          varianti restano, con nome e descrizione. ADE apre la pagina nel\n" +
-  "                                          browser; quando l'utente preme «Ho scelto sul foglio» ti arriva la\n" +
-  "                                          risposta, e la scelta si legge con ArtifactData read_db\n" +
+  "  ade-msg registro <decisioni|design> <aperta|risposta|rimandata|riaperta|chiusa> '<json>' | --file <perc>\n" +
+  "                                          scrive un evento nel registro Decisioni o Design (ade-msg help decisioni)\n" +
   '  ade-msg kv set <chiave> "<valore>" | get <chiave> | del <chiave> | list [<prefisso>]\n' +
   "                                          stato condiviso tra le sessioni del progetto\n" +
   '  ade-msg kv lock <chiave> [--ttl <sec>] ["<nota>"] | unlock <chiave> [--force]\n' +
@@ -1599,6 +1620,49 @@ export const USAGE =
   "  --timeout <sec>  ask/spawn/wait: quanto aspettare (predefinito 110)\n" +
   "<sessione> = numero, id, titolo o nome dell'agente; progetto/nome cerca solo in quel progetto,\n" +
   "  un nome da solo preferisce le sessioni del tuo progetto.\n"
+
+/** `ade-msg help design`: the folder an agent hands over, in 15 lines at most, with an example. */
+export const USAGE_DESIGN = [
+  "ade-msg design proponi <cartella> [--attendi] [--timeout <sec>]: fa scegliere un design all'utente.",
+  "La cartella è .ade/design/<k>/ del tuo progetto, <k> la chiave (lettere, cifre, . _ -), per esempio DS-tasti:",
+  '  proposta.json (max 40 KB): {"title": "Stile dei tasti", "question": "Quale stile per i due tasti?",',
+  '    "context": "Perché si decide adesso, 1-3 frasi.", "recommend": {"option": "2 · Carta", "because": "…"},',
+  '    "keeps": ["cosa resta uguale"], "multi": false, "variants": [{"name": "1 · Scura", "description": "due righe",',
+  '    "changes": ["cosa cambia"], "file": "1.html"}, …]}',
+  "  1.html … n.html: una pagina per variante, al massimo 6 da 2 MB, CSS e JS dentro, immagini data: o SVG; niente",
+  '    rete (src, href o url( con http o //, @import); la misura in <meta name="ade-size" content="360x240">, 120-1600.',
+  'Con --attendi aspetta la scelta (predefinito 1800 s) e la stampa: «scelta: 2 · Carta — nota: … — parole: "…"»,',
+  "  «scelte: …» con multi, oppure «altro giro: <parole>»: rifai le varianti e rilancia proponi sulla stessa cartella.",
+  "Se la tua shell ferma i comandi prima, passa un --timeout più corto: con exit 2 riprendi con ade-msg design attendi <k>.",
+  "Senza --attendi la scelta ti arriva digitata nel terminale, come [Design da utente] …",
+  "Facoltativo, per Claude Code: il foglio come pagina artifact claude.ai, in url di ade-msg registro design aperta;",
+  "  la scelta si legge con ArtifactData read_db (ade-msg help decisioni).",
+].join("\n")
+
+/** `ade-msg help decisioni`: how to write in the two registers by hand. */
+export const USAGE_DECISIONI = [
+  "ade-msg registro <decisioni|design> <aperta|risposta|rimandata|riaperta|chiusa> '<json>'",
+  "  scrive un evento nel registro Decisioni o Design: il json ha i campi senza type, at e by (li mette ADE);",
+  "  k serve, tranne per aperta. ADE controlla la riga, la scrive e dice se il tasto la mostra; rimandata solo",
+  "  per decisioni. I registri si scrivono solo così. Per un design la strada semplice è ade-msg design proponi.",
+  "  Il json anche da file (--file <percorso>) o da stdin (--stdin, al posto del json): da PowerShell 5.1 usa",
+  "  --file, perché le virgolette dentro '<json>' si perdono e una pipe perde le lettere accentate.",
+  "  aperta, campi facoltativi: question (la domanda in una riga), why (perché adesso, 1-2 frasi),",
+  '  recommend {option, because}; decisioni: facts ["..."], ogni opzione title, effect, cost, risk;',
+  '  design: keeps ["..."], ogni variante changes ["..."]. context resta obbligatorio con questi campi.',
+  "  recommend.option deve essere un'opzione (o una variante), se no la riga è rifiutata; per design è",
+  "  il nome intero della variante, per esempio «1 · Vetro».",
+  "  design, url: una sessione Claude Code può pubblicare il foglio come pagina artifact claude.ai, con il",
+  "  database per la scelta, e metterne il link in url (https://claude.ai/…); ADE la apre nel browser, e dopo",
+  "  «Ho scelto sul foglio» la scelta si legge con ArtifactData read_db.",
+  "Come si scrive:",
+  "  1) titolo = la domanda o l'oggetto, parole dell'utente, niente codici (lo spec va in spec);",
+  "  2) la consigliata va in recommend, mai «(consigliata)» nelle opzioni;",
+  "  3) ogni opzione dice cosa cambia per l'utente (effect), cost e risk solo se aiutano a scegliere;",
+  "  4) niente note che scadono («nella tua ADE di oggi…», «dalla release X»);",
+  "  5) context al massimo 3 frasi, dettagli in facts o in un file results/…;",
+  "  6) scrivi con gli accenti (è, perché, più), mai e' o piu al loro posto.",
+].join("\n")
 
 /**
  * How long a session without turn hooks is believed to be still working on a

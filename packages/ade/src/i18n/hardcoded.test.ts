@@ -154,6 +154,7 @@ const EXCLUDED_PROSE_FILES = new Set([
   "decisions/delivery.ts", // @ade decisions delivery protocol
   "design/delivery.ts", // @ade design delivery protocol
   "design/notes.ts", // @ade design notes protocol
+  "design/propose.ts", // ade-msg design proponi: refusals and the choice line, printed to the agent
   "bots/runners.ts", // Bot runner execution wrapper
   "bots/gateway/policy.ts", // Bot gateway access policy check
 ])

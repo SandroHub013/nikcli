@@ -180,13 +180,13 @@ export function toEvent(value: unknown): DecisionEvent | string {
   if (!k || !isDecisionKey(k)) return t("decisions.log.key")
   const at = text(record.at)
   if (!at || Number.isNaN(Date.parse(at))) return t("decisions.log.date")
-  const by = text(record.by)
+  const by = line(record.by)
   if (!by) return t("decisions.log.author")
   const base = { k, at, by, fromPane: text(record.fromPane), agent: text(record.agent) }
 
   switch (type as DecisionEventType) {
     case "aperta": {
-      const title = text(record.title)
+      const title = line(record.title)
       if (!title) return t("decisions.log.title")
       const options = optionsOf(record.options)
       if (typeof options === "string") return options
@@ -200,7 +200,7 @@ export function toEvent(value: unknown): DecisionEvent | string {
       if (recommend && "error" in recommend) return t("decisions.log.recommend")
       if (recommend && !options.some((option) => option.label === recommend.option))
         return t("decisions.log.recommendOption", recommend.option)
-      const question = text(record.question)
+      const question = line(record.question)
       const why = text(record.why)
       const context = text(record.context)
       const newFormat = Boolean(
@@ -238,7 +238,7 @@ export function toEvent(value: unknown): DecisionEvent | string {
         type: "risposta",
         ...base,
         words,
-        choice: text(record.choice),
+        choice: line(record.choice),
         choices,
         note: text(record.note),
       }) as AnsweredEvent
@@ -255,9 +255,26 @@ export function toEvent(value: unknown): DecisionEvent | string {
   }
 }
 
+/*
+ * What a register field may not carry: C0 and C1 control characters, which a
+ * terminal executes rather than prints (ESC opens a sequence, a CR submits).
+ * A title, an option or a choice ends up typed into a session; each becomes a
+ * space. Built from strings, so the file holds no invisible character.
+ */
+const CONTROL = new RegExp("[\\u0000-\\u001f\\u007f-\\u009f\\u2028\\u2029]", "g")
+const CONTROL_BUT_NEWLINE = new RegExp("[\\u0000-\\u0009\\u000b-\\u001f\\u007f-\\u009f]", "g")
+
+/** A text field: control characters become spaces, line breaks stay. */
 function text(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined
-  const trimmed = value.trim()
+  const trimmed = value.replace(CONTROL_BUT_NEWLINE, " ").trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+/** A title, an option, a choice: one line, every control character and line break a space. */
+function line(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined
+  const trimmed = value.replace(CONTROL, " ").replace(/ {2,}/g, " ").trim()
   return trimmed.length > 0 ? trimmed : undefined
 }
 
@@ -270,7 +287,7 @@ function choicesOf(value: unknown, bad: string): string[] | undefined | { error:
   if (!Array.isArray(value) || value.length === 0) return { error: bad }
   const seen = new Set<string>()
   for (const item of value) {
-    const label = text(item)
+    const label = line(item)
     if (!label || seen.has(label)) return { error: bad }
     seen.add(label)
   }
@@ -283,12 +300,12 @@ function optionsOf(value: unknown): DecisionOption[] | string {
   const options: DecisionOption[] = []
   for (const item of value) {
     const record = item && typeof item === "object" ? (item as Record<string, unknown>) : undefined
-    const label = record ? text(record.label) : text(item)
+    const label = record ? line(record.label) : line(item)
     if (!label) return t("decisions.log.optionLabel")
     options.push(
       compact({
         label,
-        title: text(record?.title),
+        title: line(record?.title),
         detail: text(record?.detail),
         effect: text(record?.effect),
         cost: text(record?.cost),
@@ -317,7 +334,7 @@ function recommendationOf(value: unknown): Recommendation | undefined | { error:
   if (value === undefined) return undefined
   if (!value || typeof value !== "object" || Array.isArray(value)) return { error: true }
   const record = value as Record<string, unknown>
-  const option = text(record.option)
+  const option = line(record.option)
   if (!option) return { error: true }
   return compact({ option, because: text(record.because) }) as Recommendation
 }

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { registerWrite, type RegisterWriteDeps } from "../session/register-write"
-import { USAGE } from "../session/mailbox"
+import { USAGE_DECISIONI, USAGE_DESIGN } from "../session/mailbox"
 import { sheetAnswerEvent } from "./answer"
 import { parseDesignLog, serializeDesignEvent } from "./log"
 import { foldProposals, resolvedMessage } from "./state"
@@ -83,7 +83,9 @@ describe("a proposal's sheet on claude.ai", () => {
   })
 
   test("ade-msg help tells a Claude Code session how to publish the sheet", () => {
-    expect(USAGE).toContain("design, url: se sei una sessione Claude Code")
-    expect(USAGE).toContain("ArtifactData read_db")
+    expect(USAGE_DECISIONI).toContain("design, url: una sessione Claude Code")
+    expect(USAGE_DECISIONI).toContain("ArtifactData read_db")
+    // A line in the design help, not its main road.
+    expect(USAGE_DESIGN).toContain("Facoltativo, per Claude Code")
   })
 })

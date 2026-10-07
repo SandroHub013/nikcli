@@ -357,6 +357,291 @@ fn design_sheet_with(
     Ok(joined)
 }
 
+/// The file in a proposal's folder that describes it.
+pub const PROPOSAL_FILE: &str = "proposta.json";
+const MAX_PROPOSAL_BYTES: u64 = 40 * 1024;
+const MAX_VARIANT_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_VARIANTS: usize = 6;
+/// The sides `<meta name="ade-size">` may give, as the card shows them (`preview-plan.ts`).
+const SIDES: std::ops::RangeInclusive<u32> = 120..=1600;
+
+/// A proposal `ade-msg design proponi` names, read and checked: what the page builds the event from.
+#[derive(Debug, PartialEq, serde::Serialize)]
+pub struct DesignProposal {
+    /// The proposal's key: the folder's name.
+    pub k: String,
+    /// The folder, in the spelling the session's folder gave it.
+    pub folder: String,
+    /// `proposta.json` as written.
+    pub proposal: String,
+    /// Each variant's page, in the order of `variants`.
+    pub files: Vec<String>,
+}
+
+/*
+ * The folder `ade-msg design proponi <cartella>` names, and what is in it.
+ *
+ * The same rule as a sheet's, narrower: the folder is `.ade/design/<k>` of
+ * the sender's project, one level and no deeper, `<k>` a key the register
+ * takes. Its text is judged before anything is resolved — a UNC or device
+ * path never reaches the network, `..` never gets the chance to climb — and
+ * only then is it resolved, and every file in it again, so a link that leads
+ * out is caught whichever of them it is.
+ *
+ * Each page is read here, where it is already open, rather than shipped to
+ * the page: what a variant may not do (load from the network, declare a size
+ * the card cannot show) is said with the file's name and the reason.
+ */
+pub fn design_proposal(
+    roots: &[PathBuf],
+    opened: &[String],
+    folder: &str,
+    cwd: &str,
+    project: &str,
+) -> Result<DesignProposal, String> {
+    design_proposal_with(roots, opened, folder, cwd, project, |path| path.canonicalize().ok())
+}
+
+fn design_proposal_with(
+    roots: &[PathBuf],
+    opened: &[String],
+    folder: &str,
+    cwd: &str,
+    project: &str,
+    resolve: impl Fn(&Path) -> Option<PathBuf>,
+) -> Result<DesignProposal, String> {
+    let folder = folder.trim();
+    let (cwd, project) = (cwd.trim(), project.trim());
+    let usage = "ade-msg design proponi .ade/design/<chiave>";
+    if folder.is_empty() {
+        return Err(format!("manca la cartella: {usage}"));
+    }
+    if project.is_empty() {
+        return Err("non so di che progetto è la sessione: la proposta va nel suo .ade/design/".to_string());
+    }
+    for (what, text) in [("la cartella", folder), ("la cartella della sessione", cwd), ("il progetto", project)] {
+        if let Some(why) = unsafe_path_text(text) {
+            return Err(format!("{folder}: {what} {why}; la proposta sta in .ade/design/<chiave> del tuo progetto"));
+        }
+    }
+    let joined = if Path::new(folder).is_absolute() {
+        PathBuf::from(folder)
+    } else if cwd.is_empty() {
+        return Err(format!("{folder}: non so in che cartella lavori, dammi il percorso intero"));
+    } else {
+        Path::new(cwd).join(folder)
+    };
+    let design_dir = Path::new(project).join(".ade").join("design");
+    let spelled = || {
+        let root = project.trim_end_matches(['/', '\\']);
+        let sep = if root.contains('\\') { '\\' } else { '/' };
+        format!("{root}{sep}.ade{sep}design{sep}<chiave>")
+    };
+    // As text, one component under `.ade/design/` of the project: nothing is resolved for a folder elsewhere.
+    let wanted = comparable(&joined.to_string_lossy());
+    let rest = wanted.strip_prefix(&comparable(&design_dir.to_string_lossy())).unwrap_or("");
+    let one_level = rest.len() > 1 && rest.starts_with('/') && !rest[1..].contains('/');
+    if !one_level {
+        return Err(format!("{folder} non è la cartella di una proposta del tuo progetto ({})", spelled()));
+    }
+    let k = joined
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default()
+        .to_string();
+    if !is_design_key(&k) {
+        return Err(format!(
+            "{folder}: «{k}» non è una chiave valida (lettere, cifre, . _ -, al massimo 40, la prima una lettera o una cifra)"
+        ));
+    }
+    if !within_with(roots, opened, &joined, &resolve) {
+        return Err(format!("{folder} è fuori dalle cartelle aperte in ADE, o non esiste"));
+    }
+    let (Some(real), Some(real_dir)) = (resolve(&joined), resolve(&design_dir)) else {
+        return Err(format!("{folder} non esiste"));
+    };
+    if !real.starts_with(&real_dir) || real == real_dir {
+        return Err(format!("{folder} porta fuori da .ade/design/ (un collegamento)"));
+    }
+    if !real.is_dir() {
+        return Err(format!("{folder} non è una cartella"));
+    }
+
+    let proposal_bytes = read_inside(&real, PROPOSAL_FILE, MAX_PROPOSAL_BYTES, &resolve)?;
+    let proposal = String::from_utf8(proposal_bytes).map_err(|_| format!("{PROPOSAL_FILE}: non è UTF-8"))?;
+    let parsed: serde_json::Value = serde_json::from_str(proposal.trim_start_matches('\u{feff}'))
+        .map_err(|e| format!("{PROPOSAL_FILE}: il json non si legge: {e}"))?;
+    let Some(variants) = parsed.get("variants").and_then(|v| v.as_array()) else {
+        return Err(format!("{PROPOSAL_FILE}: mancano le varianti (variants, da 1 a {MAX_VARIANTS})"));
+    };
+    if variants.is_empty() || variants.len() > MAX_VARIANTS {
+        return Err(format!(
+            "{PROPOSAL_FILE}: {} varianti, ne servono da 1 a {MAX_VARIANTS}",
+            variants.len()
+        ));
+    }
+    let mut files = Vec::with_capacity(variants.len());
+    for (index, variant) in variants.iter().enumerate() {
+        let n = index + 1;
+        let Some(file) = variant.get("file").and_then(|f| f.as_str()).map(str::trim) else {
+            return Err(format!("{PROPOSAL_FILE}: la variante {n} non ha file (per esempio \"{n}.html\")"));
+        };
+        if !is_page_name(file) {
+            return Err(format!(
+                "{PROPOSAL_FILE}: variante {n}, «{file}» non è un nome di pagina: solo lettere, cifre, . _ - e .html alla fine, nella cartella della proposta"
+            ));
+        }
+        if files.iter().any(|seen: &String| seen.eq_ignore_ascii_case(file)) {
+            return Err(format!("{PROPOSAL_FILE}: due varianti con la stessa pagina ({file}): una pagina per variante"));
+        }
+        let page = read_inside(&real, file, MAX_VARIANT_BYTES, &resolve)?;
+        if let Some(why) = page_problem(&String::from_utf8_lossy(&page)) {
+            return Err(format!("{file}: {why}"));
+        }
+        files.push(file.to_string());
+    }
+    Ok(DesignProposal { k, folder: joined.to_string_lossy().into_owned(), proposal, files })
+}
+
+/// Why a path's text is refused before anything is resolved: control characters, a UNC or device path, `..`.
+fn unsafe_path_text(text: &str) -> Option<&'static str> {
+    if text.chars().any(char::is_control) {
+        return Some("contiene caratteri di controllo");
+    }
+    let mut start = text.chars();
+    let is_separator = |c: Option<char>| matches!(c, Some('/') | Some('\\'));
+    if (is_separator(start.next()) && is_separator(start.next())) || text.contains(r"\??\") || text.contains("/??/") {
+        return Some("è un percorso di rete o di dispositivo");
+    }
+    if text.split(['/', '\\']).any(|part| part == "..") {
+        return Some("contiene `..`");
+    }
+    None
+}
+
+/// The register's rule for a key (`isDesignKey`, `design/log.ts`).
+fn is_design_key(k: &str) -> bool {
+    let mut chars = k.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphanumeric())
+        && k.len() <= 40
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+}
+
+/// A variant's page name: `[A-Za-z0-9._-]+\.html`, never a path.
+fn is_page_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.len() > ".html".len()
+        && lower.ends_with(".html")
+        && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'))
+}
+
+/// `dir/name` read whole, if it is a file inside `dir` once resolved and no larger than `max`.
+fn read_inside(dir: &Path, name: &str, max: u64, resolve: &impl Fn(&Path) -> Option<PathBuf>) -> Result<Vec<u8>, String> {
+    let Some(real) = resolve(&dir.join(name)) else {
+        return Err(format!("{name} non c'è nella cartella della proposta"));
+    };
+    if !real.starts_with(dir) {
+        return Err(format!("{name} porta fuori dalla cartella della proposta (un collegamento)"));
+    }
+    let meta = std::fs::metadata(&real).map_err(|e| format!("{name} non si legge: {e}"))?;
+    if !meta.is_file() {
+        return Err(format!("{name} non è un file"));
+    }
+    if meta.len() > max {
+        return Err(format!("{name} pesa {} KB, il massimo è {} KB", meta.len().div_ceil(1024), max / 1024));
+    }
+    std::fs::read(&real).map_err(|e| format!("{name} non si legge: {e}"))
+}
+
+/*
+ * What a variant's page may not hold: anything loaded from the network, and
+ * a size the card would not show.
+ *
+ * The CSP (`DESIGN_SHEET_CSP`) already blocks every load; this says so to
+ * the session before the user sees a broken preview. It reads attributes and
+ * CSS, not script: `xmlns="http://www.w3.org/2000/svg"` in an inline SVG is
+ * a name, not a load, and is not refused.
+ */
+fn page_problem(html: &str) -> Option<String> {
+    let lower = html.to_ascii_lowercase();
+    let line_of = |at: usize| html[..at].matches('\n').count() + 1;
+    let outside = |value: &str| {
+        let value = value.trim_start();
+        value.starts_with("http:") || value.starts_with("https:") || value.starts_with("//")
+    };
+    let bytes = lower.as_bytes();
+    let is_name = |b: u8| b.is_ascii_alphanumeric() || b == b'_' || b == b'-';
+    if let Some(at) = lower.find("@import") {
+        return Some(format!("riga {}: @import, i fogli di stile vanno dentro la pagina", line_of(at)));
+    }
+    for attribute in ["src", "href", "srcset", "poster", "action", "data", "formaction"] {
+        let mut from = 0;
+        while let Some(found) = lower[from..].find(attribute) {
+            let at = from + found;
+            from = at + attribute.len();
+            if at > 0 && is_name(bytes[at - 1]) {
+                continue;
+            }
+            let after = lower[from..].trim_start();
+            let Some(value) = after.strip_prefix('=') else { continue };
+            let value = value.trim_start().trim_start_matches(['"', '\'']);
+            let end = value.find(['"', '\'', '>']).unwrap_or(value.len());
+            let hit = if attribute == "srcset" {
+                value[..end].split(',').any(outside)
+            } else {
+                outside(&value[..end])
+            };
+            if hit {
+                return Some(format!(
+                    "riga {}: {attribute}= carica dalla rete; immagini come data: o SVG dentro la pagina, niente CDN",
+                    line_of(at)
+                ));
+            }
+        }
+    }
+    let mut from = 0;
+    while let Some(found) = lower[from..].find("url(") {
+        let at = from + found;
+        from = at + 4;
+        if outside(lower[from..].trim_start().trim_start_matches(['"', '\''])) {
+            return Some(format!("riga {}: url( carica dalla rete; usa data: dentro la pagina", line_of(at)));
+        }
+    }
+    meta_problem(&lower).map(|(at, why)| format!("riga {}: {why}", line_of(at)))
+}
+
+/*
+ * The two `<meta>` a page may get wrong: a refresh, which takes the frame to
+ * another page, and an `ade-size` the card would ignore (without one the
+ * page shows at 360×240, which is allowed).
+ */
+fn meta_problem(lower: &str) -> Option<(usize, String)> {
+    let said = "<meta name=\"ade-size\" content=\"LxA\">, lati da 120 a 1600 px";
+    let mut from = 0;
+    while let Some(found) = lower[from..].find("<meta") {
+        let at = from + found;
+        let tag = &lower[at..at + lower[at..].find('>').unwrap_or(lower.len() - at)];
+        from = at + 5;
+        if tag.contains("http-equiv") && tag.contains("refresh") {
+            return Some((at, "meta refresh porta la pagina altrove".to_string()));
+        }
+        if !tag.contains("ade-size") {
+            continue;
+        }
+        let Some(content) = tag.split("content").nth(1) else {
+            return Some((at, format!("ade-size senza content: {said}")));
+        };
+        let value = content.trim_start().trim_start_matches('=').trim_start().trim_start_matches(['"', '\'']);
+        let value = &value[..value.find(['"', '\'']).unwrap_or(value.len())];
+        let mut sides = value.split(['x', '×']).map(|side| side.trim().parse::<u32>().ok());
+        match (sides.next().flatten(), sides.next().flatten(), sides.next()) {
+            (Some(w), Some(h), None) if SIDES.contains(&w) && SIDES.contains(&h) => {}
+            _ => return Some((at, format!("ade-size «{value}» non va: {said}"))),
+        }
+    }
+    None
+}
+
 fn deny(status: StatusCode) -> Response<Vec<u8>> {
     hardened(Response::builder())
         .status(status)
@@ -596,6 +881,158 @@ mod tests {
         let err = design_sheet_with(&roots, &[], r"\\host\share\.ade\design\a.html", r"\\host\share", resolve);
         assert!(err.is_err());
         assert_eq!(resolved.get(), 0);
+    }
+
+    const PAGE: &str = "<!doctype html><meta name=\"ade-size\" content=\"360x240\"><svg xmlns=\"http://www.w3.org/2000/svg\"></svg><img src=\"data:image/png;base64,AA\"><a href=\"#su\" data-src=\"x\">su</a>";
+
+    /// A project with a proposal `.ade/design/DS-t2/` of two pages, served as a root.
+    fn proposal_project() -> (tempdir::Dir, PathBuf, Vec<PathBuf>) {
+        let dir = tempdir::Dir::new("ade-proposta");
+        let folder = dir.path().join(".ade").join("design").join("DS-t2");
+        std::fs::create_dir_all(&folder).expect("cartella");
+        let json = r#"{"title":"Tasti","context":"Perché adesso.","variants":[{"name":"1 · Scura","file":"1.html"},{"name":"2 · Carta","file":"2.html"}]}"#;
+        std::fs::write(folder.join(PROPOSAL_FILE), json).expect("proposta");
+        std::fs::write(folder.join("1.html"), PAGE).expect("pagina");
+        std::fs::write(folder.join("2.html"), PAGE).expect("pagina");
+        let roots = vec![dir.path().canonicalize().expect("radice")];
+        let project = dir.path().to_path_buf();
+        (dir, project, roots)
+    }
+
+    fn propose(roots: &[PathBuf], folder: &str, cwd: &Path, project: &Path) -> Result<DesignProposal, String> {
+        design_proposal(roots, &[], folder, &cwd.to_string_lossy(), &project.to_string_lossy())
+    }
+
+    #[test]
+    fn a_proposal_in_the_projects_design_folder_is_read_relative_or_absolute() {
+        let (_dir, project, roots) = proposal_project();
+        let read = propose(&roots, ".ade/design/DS-t2", &project, &project).expect("relativa");
+        assert_eq!(read.k, "DS-t2");
+        assert_eq!(read.files, vec!["1.html".to_string(), "2.html".to_string()]);
+        assert!(read.proposal.contains("\"Tasti\""));
+        let absolute = project.join(".ade").join("design").join("DS-t2");
+        let again = propose(&roots, &absolute.to_string_lossy(), Path::new(""), &project).expect("assoluta");
+        assert_eq!(again.folder, absolute.to_string_lossy());
+        // From a subfolder of the project, the way a session that did `cd` names it.
+        let sub = project.join("src");
+        std::fs::create_dir_all(&sub).expect("sotto");
+        assert!(propose(&roots, r"..\.ade\design\DS-t2", &sub, &project).expect_err("..").contains("contiene `..`"));
+        assert_eq!(propose(&roots, &absolute.to_string_lossy(), &sub, &project).expect("da sotto").k, "DS-t2");
+    }
+
+    #[test]
+    fn a_proposal_outside_its_folder_is_refused_with_the_reason() {
+        let (_dir, project, roots) = proposal_project();
+        let refused = |folder: &str| propose(&roots, folder, &project, &project).expect_err(folder);
+        assert!(refused("").contains("manca la cartella"));
+        assert!(refused(".ade/DS-t2").contains("non è la cartella di una proposta"));
+        assert!(refused(".ade/design").contains("non è la cartella di una proposta"));
+        assert!(refused(".ade/design/DS-t2/dentro").contains("non è la cartella di una proposta"));
+        assert!(refused(".ade/design/../design/DS-t2").contains("`..`"));
+        assert!(refused(".ade/design/.nascosta").contains("non è una chiave valida"));
+        assert!(refused(".ade/design/DS-manca").contains("non esiste"));
+        assert!(refused(".ade/design/DS\u{1b}[2J").contains("caratteri di controllo"));
+        // Another project's proposal folder, even an open one, is not this session's.
+        let other = tempdir::Dir::new("ade-proposta-altra");
+        let theirs = other.path().join(".ade").join("design").join("DS-t2");
+        std::fs::create_dir_all(&theirs).expect("cartella");
+        let both = vec![roots[0].clone(), other.path().canonicalize().expect("radice")];
+        let err = propose(&both, &theirs.to_string_lossy(), &project, &project).expect_err("altro");
+        assert!(err.contains("non è la cartella di una proposta"), "{err}");
+        // A folder ADE does not serve: the frame could not load the pages.
+        assert!(propose(&[], ".ade/design/DS-t2", &project, &project).expect_err("radici").contains("fuori dalle cartelle"));
+    }
+
+    #[test]
+    fn a_unc_or_device_proposal_is_refused_before_anything_is_resolved() {
+        let resolved = std::cell::Cell::new(0);
+        let resolve = |_: &Path| {
+            resolved.set(resolved.get() + 1);
+            None
+        };
+        let roots = vec![PathBuf::from(r"\\host\share")];
+        for (folder, cwd, project) in [
+            (r"\\host\share\.ade\design\DS1", r"C:\p", r"C:\p"),
+            (r"//host/share/.ade/design/DS1", r"C:\p", r"C:\p"),
+            (r"\??\C:\p\.ade\design\DS1", r"C:\p", r"C:\p"),
+            (r".ade\design\DS1", r"\\host\share", r"\\host\share"),
+            (r"C:\p\.ade\design\DS1", r"C:\p", r"\\host\share"),
+        ] {
+            let err = design_proposal_with(&roots, &[], folder, cwd, project, &resolve).expect_err(folder);
+            assert!(err.contains("percorso di rete o di dispositivo"), "{folder}: {err}");
+        }
+        assert_eq!(resolved.get(), 0);
+    }
+
+    #[test]
+    fn a_link_out_of_the_proposal_folder_is_refused_folder_or_page() {
+        let (_dir, project, roots) = proposal_project();
+        let folder = project.join(".ade").join("design").join("DS-t2");
+        let real_folder = folder.canonicalize().expect("cartella");
+        // Inside the project, so ADE serves it: only the proposal's folder is left.
+        std::fs::create_dir_all(project.join("fuori")).expect("fuori");
+        let out = project.join("fuori").canonicalize().expect("fuori");
+        std::fs::write(out.join("1.html"), PAGE).expect("fuori");
+        let (p, f) = (project.to_string_lossy().into_owned(), folder.to_string_lossy().into_owned());
+
+        // The folder itself a junction to somewhere else.
+        let to_out = |path: &Path| if path == folder.as_path() { Some(out.clone()) } else { path.canonicalize().ok() };
+        let err = design_proposal_with(&roots, &[], &f, &p, &p, to_out).expect_err("cartella");
+        assert!(err.contains("porta fuori da .ade/design/"), "{err}");
+
+        // One page a link to a file outside.
+        let page = real_folder.join("1.html");
+        let page_out = |path: &Path| if path == page.as_path() { Some(out.join("1.html")) } else { path.canonicalize().ok() };
+        let err = design_proposal_with(&roots, &[], &f, &p, &p, page_out).expect_err("pagina");
+        assert!(err.contains("1.html porta fuori dalla cartella della proposta"), "{err}");
+    }
+
+    #[test]
+    fn a_proposal_past_its_limits_says_which_file_and_why() {
+        let (_dir, project, roots) = proposal_project();
+        let folder = project.join(".ade").join("design").join("DS-t2");
+        let with = |json: &str| {
+            std::fs::write(folder.join(PROPOSAL_FILE), json).expect("proposta");
+            propose(&roots, ".ade/design/DS-t2", &project, &project).expect_err(json)
+        };
+        let variant = |file: &str| format!(r#"{{"name":"{file}","file":"{file}"}}"#);
+        let seven = (1..=7).map(|n| variant(&format!("{n}.html"))).collect::<Vec<_>>().join(",");
+        assert!(with(&format!(r#"{{"variants":[{seven}]}}"#)).contains("7 varianti, ne servono da 1 a 6"));
+        assert!(with(r#"{"variants":[]}"#).contains("0 varianti"));
+        assert!(with(r#"{"title":"x"}"#).contains("mancano le varianti"));
+        assert!(with(r#"{"variants":[{"name":"a"}]}"#).contains("la variante 1 non ha file"));
+        for bad in ["../1.html", "sotto/1.html", r"sotto\\1.html", "1.htm", ".html", "pagina 1.html"] {
+            let err = with(&format!(r#"{{"variants":[{{"name":"a","file":"{bad}"}}]}}"#));
+            assert!(err.contains("non è un nome di pagina"), "{bad}: {err}");
+        }
+        assert!(with(&format!("{{\"variants\":[{},{}]}}", variant("1.html"), variant("1.HTML"))).contains("stessa pagina"));
+        assert!(with(&format!("{{\"variants\":[{}]}}", variant("9.html"))).contains("9.html non c'è"));
+        assert!(with("{non json").contains("il json non si legge"));
+
+        std::fs::write(folder.join("3.html"), "x".repeat(2 * 1024 * 1024 + 1)).expect("grande");
+        assert!(with(&format!("{{\"variants\":[{}]}}", variant("3.html"))).contains("3.html pesa 2049 KB, il massimo è 2048 KB"));
+        let big = format!(r#"{{"variants":[{}],"context":"{}"}}"#, variant("1.html"), "x".repeat(41 * 1024));
+        assert!(with(&big).contains("proposta.json pesa"));
+    }
+
+    #[test]
+    fn a_page_that_loads_from_the_network_is_refused_with_its_line() {
+        let refused = |html: &str| page_problem(html).unwrap_or_else(|| panic!("accettata: {html}"));
+        assert!(refused("<p>\n<img src=\"https://x.test/a.png\">").starts_with("riga 2: src="));
+        assert!(refused("<link rel=stylesheet href='//cdn.test/a.css'>").contains("href="));
+        assert!(refused("<img SRC = HTTP://x.test/a.png>").contains("src="));
+        assert!(refused("<img srcset=\"a.png 1x, https://x.test/b.png 2x\">").contains("srcset="));
+        assert!(refused("<svg><image xlink:href=\"https://x.test/a.svg\"/></svg>").contains("href="));
+        assert!(refused("<style>body{background:url( 'https://x.test/a.png')}</style>").contains("url("));
+        assert!(refused("<style>@import 'a.css';</style>").contains("@import"));
+        assert!(refused("<script>img.src = \"http://x.test\"</script>").contains("src="));
+        assert!(refused("<meta http-equiv=\"refresh\" content=\"0;url=https://x.test\">").contains("meta refresh"));
+        assert!(refused("<meta name=\"ade-size\" content=\"100x50\">").contains("ade-size «100x50»"));
+        assert!(refused("<meta name=ade-size content=\"360\">").contains("ade-size"));
+        // What a page is allowed: inline SVG with its namespace, data: images, links inside the page, its size.
+        assert_eq!(page_problem(PAGE), None);
+        assert_eq!(page_problem("<meta name=\"ade-size\" content=\"1600×120\"><style>a{background:url(data:image/png;base64,AA)}</style>"), None);
+        assert_eq!(page_problem("<p>senza misura</p>"), None);
     }
 
     #[test]

@@ -229,7 +229,7 @@ export function resolvedMessage(proposal: DesignProposal): string {
     parts.push(
       "ALTRO GIRO, non una scelta",
       `parole: "${answer.words}"`,
-      "rifai le varianti e riapri con: ade-msg registro design riaperta",
+      "rifai le varianti e rilancia ade-msg design proponi sulla stessa cartella --attendi",
     )
     return asOneLine(parts.join(" — "))
   }

@@ -151,7 +151,10 @@ export interface Host {
   /** Answers the `ade-msg send` that is waiting on message `id`. */
   mailboxReceipt?: (id: string, text: string) => Promise<void>
   /** Replaces the list `ade-msg list` (sessions) or `ade-msg agents` prints. */
-  mailboxPublish?: (text: string, name?: "sessions" | "agents" | "requests" | "usage" | "stats") => Promise<void>
+  mailboxPublish?: (
+    text: string,
+    name?: "sessions" | "agents" | "requests" | "usage" | "usage-design" | "usage-decisioni" | "stats",
+  ) => Promise<void>
   /**
    * A PNG of ADE's own window, cropped and with the sensitive rectangles
    * painted over before it reaches the disk (S35). ADE Test only for now.
@@ -288,6 +291,15 @@ export interface Host {
    * no link leading out. Rejects with the reason, in Italian, for the CLI.
    */
   designSheetPath?: (path: string, cwd: string) => Promise<string>
+  /**
+   * The proposal folder `ade-msg design proponi` names, read and checked in Rust
+   * (`media::design_proposal`): confined to `.ade/design/<k>/` of `project`. Rejects with the reason.
+   */
+  designProposal?: (
+    folder: string,
+    cwd: string,
+    project: string,
+  ) => Promise<{ k: string; folder: string; proposal: string; files: string[] }>
   readTextFile?: (path: string, maxBytes?: number) => Promise<FileRead>
   writeTextFile?: (path: string, contents: string) => Promise<string | null>
   /**
@@ -715,6 +727,15 @@ export async function getHost(): Promise<Host | undefined> {
     async designSheetPath(path, cwd) {
       const { invoke } = await import("@tauri-apps/api/core")
       return await invoke<string>("design_sheet_path", { path, cwd })
+    },
+
+    async designProposal(folder, cwd, project) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return await invoke<{ k: string; folder: string; proposal: string; files: string[] }>("design_proposal_read", {
+        folder,
+        cwd,
+        project,
+      })
     },
 
     async readDir(path) {
