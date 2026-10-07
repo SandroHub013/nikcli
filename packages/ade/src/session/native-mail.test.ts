@@ -1,13 +1,19 @@
 import { describe, expect, test } from "bun:test"
+import { createLineAccumulator } from "../host/line-stream"
+import { stripAnsi } from "../host/ansi"
+import { modeBarRaw } from "./fixtures/mode-bar-raw"
 
 import {
   formatFallbackLine,
   formatHandoff,
   HANDOFF_ACK_MS,
   handoffOutcome,
-  INBOUND_SETTINGS,
   isHandoff,
+  LATE_NO_MS,
+  lateNo,
   nativeLaunchArgs,
+  createModeTracker,
+  permissionClassIn,
   nativeName,
   parseHandoffs,
   parseNativeSessions,
@@ -15,9 +21,12 @@ import {
 } from "./native-mail"
 
 describe("nativeLaunchArgs", () => {
-  test("a Claude session gets its name and an inbox that accepts", () => {
-    expect(nativeLaunchArgs("claude-code", "Fabio")).toEqual(["--name", "Fabio", "--settings", INBOUND_SETTINGS])
-    expect(JSON.parse(INBOUND_SETTINGS)).toEqual({ crossSessionInbound: "accept" })
+  // Sessioni 2, option (d): no `crossSessionInbound: accept`. The CLI's own rule is permission parity: bypass to bypass passes, a
+  // session that asks permission to one that does not is held, so no session of the machine drives a bypass ADE session.
+  test("a Claude session gets its name and no inbox setting: the CLI's own rule holds", () => {
+    expect(nativeLaunchArgs("claude-code", "Fabio")).toEqual(["--name", "Fabio"])
+    expect(nativeLaunchArgs("claude-code", "Fabio")).not.toContain("--settings")
+    expect(nativeLaunchArgs("claude-code", "Fabio").join(" ")).not.toContain("crossSessionInbound")
   })
 
   /** The other ten agents and the shell: nothing changes for them. */
@@ -59,9 +68,122 @@ describe("parseNativeSessions", () => {
   })
 })
 
+describe("permissionClassIn", () => {
+  test("reads the mode bar of a Claude pane: bypass, or one that asks", () => {
+    expect(permissionClassIn("⏵⏵ bypass permissions on (shift+tab to cycle)")).toBe("bypass")
+    expect(permissionClassIn("manual mode on (shift+tab to cycle)")).toBe("prompting")
+    expect(permissionClassIn("⏵⏵ accept edits on")).toBe("prompting")
+    expect(permissionClassIn("⏸ plan mode on")).toBe("prompting")
+  })
+
+  test("the last mention wins: Shift+Tab repaints the bar, and the old text may still be in the window", () => {
+    expect(permissionClassIn("bypass permissions on ... manual mode on")).toBe("prompting")
+    expect(permissionClassIn("manual mode on ... bypass permissions on")).toBe("bypass")
+  })
+
+  test("colour codes between the words do not hide it, and no mention means unknown", () => {
+    expect(permissionClassIn("\u001b[38;5;211mbypass permissions on\u001b[39m")).toBe("bypass")
+    expect(permissionClassIn("nothing about modes here")).toBeUndefined()
+    expect(permissionClassIn("auto mode on")).toBeUndefined()
+  })
+})
+
+/**
+ * A real capture (live test of the mode bar): Claude Code repaints the bar inside a pty chunk that has no newline, ESC[H, a CR, the bar,
+ * ESC[21;1H. The line path never delivers it: the accumulator holds it pending, and `stripAnsi` erases what comes before a lone CR.
+ * So the class is read from the raw chunk, by pane.
+ */
+describe("the mode bar in a raw pty chunk (no newline)", () => {
+  const [autoBar, manualBar] = modeBarRaw
+
+  test("the capture is what the line path cannot see", () => {
+    // The bar is held pending (no newline); the next repaint, which starts with a carriage return, makes `stripAnsi` erase it.
+    const lines = createLineAccumulator()
+    const seen = [...lines.push(autoBar!), ...lines.push(manualBar!), ...lines.push("\r\u001b[2K> hi\r\n")]
+    expect(seen).toEqual(["> hi"])
+    expect(seen.map(permissionClassIn)).toEqual([undefined])
+    expect(permissionClassIn(stripAnsi(manualBar!))).toBe("prompting")
+  })
+
+  test("from the pty chunk to the class: manual mode asks, auto mode is unknown", () => {
+    const modes = createModeTracker()
+    expect(modes.push("p1", autoBar!)).toBeUndefined()
+    expect(modes.push("p1", manualBar!)).toBe("prompting")
+  })
+
+  test("the bar cut in two chunks is still read, and the last bar wins", () => {
+    const modes = createModeTracker()
+    const cut = manualBar!.indexOf("manual") + 4
+    expect(modes.push("p1", manualBar!.slice(0, cut))).toBeUndefined()
+    expect(modes.push("p1", manualBar!.slice(cut))).toBe("prompting")
+    const bypass = "\u001b[?25l\u001b[H\r\u001b[2C\u001b[20B⏵⏵ bypass permissions on\u001b[39m\u001b[K\u001b[21;1H"
+    expect(modes.push("p1", bypass)).toBe("bypass")
+  })
+
+  test("each pane has its own tail, and forgetting one clears it", () => {
+    const modes = createModeTracker()
+    modes.push("p1", manualBar!)
+    expect(modes.push("p2", "no bar here")).toBeUndefined()
+    modes.forget("p1")
+    expect(modes.push("p1", "no bar here either")).toBeUndefined()
+  })
+
+  test("a bar that has scrolled out of the tail is not kept for ever", () => {
+    const modes = createModeTracker(200)
+    modes.push("p1", manualBar!)
+    expect(modes.push("p1", "x".repeat(400))).toBeUndefined()
+  })
+
+  test("cursor moves and carriage returns are spaces, not nothing: words from two cells are not glued", () => {
+    expect(permissionClassIn("bypass\u001b[1Cpermissions\ron")).toBe("bypass")
+    expect(permissionClassIn("manual\u001b[2Cmode on")).toBe("prompting")
+  })
+})
+
+describe("lateNo", () => {
+  const closed = { how: "confermata" as const, at: 1_000, by: "mittente" as const }
+  test("a `no` shortly after the sender's own confirmation still types the message", () => {
+    expect(lateNo(closed, 1_000 + 60_000)).toBe("retype")
+  })
+  test("a `no` long after, or after ADE typed it, or for nothing known, does not", () => {
+    expect(lateNo(closed, 1_000 + LATE_NO_MS + 1)).toBe("late")
+    expect(lateNo({ how: "digitata", at: 1_000 }, 2_000)).toBe("typed")
+    expect(lateNo(undefined, 2_000)).toBe("unknown")
+  })
+})
+
 describe("routeFor", () => {
   const listed = [{ sessionId: "s-1", name: "Fabio" }]
-  const both = { senderAgent: "claude-code", targetAgent: "claude-code", targetSessionId: "s-1", listed }
+  const both = {
+    senderAgent: "claude-code",
+    targetAgent: "claude-code",
+    targetSessionId: "s-1",
+    listed,
+    senderClass: "bypass" as const,
+    targetClass: "bypass" as const,
+  }
+
+  // Sessioni 2, live proof, test 3: the CLI holds a message from a session that asks permission to one that does not, and answers
+  // `success:true` anyway. So ADE picks the way before: native only when both ends are known to be in the same class.
+  test("native only when sender and target are in the same permission class, and both are known", () => {
+    expect(routeFor({ ...both, senderClass: "prompting", targetClass: "prompting" })).toEqual({ via: "nativa", name: "Fabio" })
+    expect(routeFor({ ...both, senderClass: "prompting" })).toEqual({
+      via: "digitata",
+      reason: "mittente e destinatario hanno permessi di classe diversa (mittente: chiede, destinatario: bypass)",
+    })
+    expect(routeFor({ ...both, targetClass: "prompting" })).toMatchObject({
+      via: "digitata",
+      reason: expect.stringContaining("classe diversa"),
+    })
+    expect(routeFor({ ...both, senderClass: undefined })).toEqual({
+      via: "digitata",
+      reason: "la modalità di permesso del mittente non è nota",
+    })
+    expect(routeFor({ ...both, targetClass: undefined })).toEqual({
+      via: "digitata",
+      reason: "la modalità di permesso del destinatario non è nota",
+    })
+  })
 
   test("two Claude sessions, the target listed: native, by the name the CLI kept", () => {
     expect(routeFor(both)).toEqual({ via: "nativa", name: "Fabio" })
