@@ -281,6 +281,33 @@ describe("when it stops", () => {
     expect(w.timers()).toBe(0)
   })
 
+  it("a budget of 0 with the compaction on: no keep-alive, and the compaction waits for the margin before the entry expires", async () => {
+    w.state.settings = { ...w.state.settings, compact: true, maxRenewals: 0 }
+    await turn(realRequest(anthropic))
+    // Not at the end of the turn: the entry is warm for the whole lifetime (20 s), and it is that warmth the compaction reads.
+    expect(w.state.compacted).toEqual([])
+    expect(w.timers()).toBe(1)
+    await w.advance(17_000)
+    expect(w.state.compacted).toEqual([])
+    // The margin is 10 % of the lifetime: 18 s.
+    await w.advance(1_500)
+    expect(w.state.compacted).toEqual([SESSION])
+    expect(w.sent).toHaveLength(0)
+    expect(w.events.at(-1)).toMatchObject({ state: "compacted", reason: "budget spent" })
+  })
+
+  it("a horizon reached after a renewal with the compaction on waits for the margin of the renewed entry too", async () => {
+    w.state.settings = { ...w.state.settings, compact: true, horizonS: 1 }
+    await turn(realRequest(anthropic))
+    // The first keep-alive at 18 s; the horizon (1 s) is spent by then, and the renewed entry lives until 38 s.
+    await w.advance(20_000)
+    expect(w.sent).toHaveLength(1)
+    expect(w.state.compacted).toEqual([])
+    await w.advance(17_000)
+    expect(w.state.compacted).toEqual([SESSION])
+    expect(w.sent).toHaveLength(1)
+  })
+
   it("idle compaction on, but a turn is running at the end of the budget: stop, never compact over a turn", async () => {
     w.state.settings = { ...w.state.settings, compact: true, maxRenewals: 1 }
     await turn(realRequest(anthropic))

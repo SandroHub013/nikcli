@@ -202,6 +202,17 @@ describe("the frame's private memory the gate reads", () => {
     expect(red({ frameGrowthAfterWarmupMb: framePrivate([90, 92, 94, 97, 99]).growthAfterWarmupMb })).toEqual(["frame growth over cycle 3, MB"])
   })
 
+  test("a third cycle measured low is not the start of a rise: the base is the higher of the second and the third", () => {
+    // L2's two red runs (private MB by cycle): the fourth and fifth come back to the first ones', nothing grows.
+    expect(framePrivate([102.42, 109.44, 81.93, 103.72, 102.25]).growthAfterWarmupMb).toBe(0)
+    expect(framePrivate([99.28, 97.23, 76.67, 97.28, 93.82]).growthAfterWarmupMb).toBeCloseTo(0.05, 2)
+    expect(red({ frameGrowthAfterWarmupMb: framePrivate([99.28, 97.23, 76.67, 97.28, 93.82]).growthAfterWarmupMb })).toEqual([])
+    // A leak of 4 MB a cycle stays red, whatever the third cycle did.
+    expect(framePrivate([90, 94, 98, 102, 106]).growthAfterWarmupMb).toBe(8)
+    expect(framePrivate([90, 94, 70, 102, 106]).growthAfterWarmupMb).toBe(12)
+    expect(red({ frameGrowthAfterWarmupMb: framePrivate([90, 94, 98, 102, 106]).growthAfterWarmupMb })).toEqual(["frame growth over cycle 3, MB"])
+  })
+
   test("fewer than five cycles, or a cycle without a number, give no growth (red) rather than a pass", () => {
     expect(Number.isNaN(framePrivate([90, 92, 94]).growthAfterWarmupMb)).toBe(true)
     expect(framePrivate([90, 92, 94]).peakMb).toBe(94)

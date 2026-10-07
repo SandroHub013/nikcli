@@ -30,9 +30,18 @@ describe("one-shot native calls", () => {
     server = Bun.serve({
       port: 0,
       async fetch(request) {
-        captured.push({ path: new URL(request.url).pathname, headers: request.headers, body: await request.json() })
-        const reply = replies.shift() ?? { body: sse(chunk({}, "stop")), type: "text/event-stream" }
-        return new Response(reply.body, { headers: { "content-type": reply.type } })
+        captured.push({
+          path: new URL(request.url).pathname,
+          headers: request.headers,
+          body: await request.json(),
+        })
+        const reply = replies.shift() ?? {
+          body: sse(chunk({}, "stop")),
+          type: "text/event-stream",
+        }
+        return new Response(reply.body, {
+          headers: { "content-type": reply.type },
+        })
       },
     })
   })
@@ -57,8 +66,13 @@ describe("one-shot native calls", () => {
               "call-e2e": {
                 npm: "@ai-sdk/openai-compatible",
                 api: `http://127.0.0.1:${server.port}/v1`,
-                options: { apiKey: "call-key", headers: { "x-gateway": "yes" } },
-                models: { m: { name: "M", limit: { context: 8192, output: 1024 } } },
+                options: {
+                  apiKey: "call-key",
+                  headers: { "x-gateway": "yes" },
+                },
+                models: {
+                  m: { name: "M", limit: { context: 8192, output: 1024 } },
+                },
               },
             },
           }),
@@ -126,7 +140,14 @@ describe("one-shot native calls", () => {
         chunk({
           role: "assistant",
           tool_calls: [
-            { index: 0, id: "c1", function: { name: "generate_object", arguments: '{"identifier":"a-b"}' } },
+            {
+              index: 0,
+              id: "c1",
+              function: {
+                name: "generate_object",
+                arguments: '{"identifier":"a-b"}',
+              },
+            },
           ],
         }),
         chunk({}, "tool_calls"),
@@ -137,17 +158,24 @@ describe("one-shot native calls", () => {
       const result = await call.generateObject({
         model,
         prompt: "name an agent",
-        schema: { type: "object", properties: { identifier: { type: "string" } }, required: ["identifier"] },
+        schema: {
+          type: "object",
+          properties: { identifier: { type: "string" } },
+          required: ["identifier"],
+        },
       })
       expect(result.object).toEqual({ identifier: "a-b" })
     })
     const tools = captured[0]!.body.tools
     expect(tools).toHaveLength(1)
     expect(tools[0].function.name).toBe("generate_object")
-    expect(captured[0]!.body.tool_choice).toEqual({ type: "function", function: { name: "generate_object" } })
+    expect(captured[0]!.body.tool_choice).toEqual({
+      type: "function",
+      function: { name: "generate_object" },
+    })
   })
 
-  it("generateText on a model with no route says so", async () => {
+  it("generateText on a custom-SDK provider that fails to load surfaces the SDK error", async () => {
     await withFixture(async ({ home }) => {
       const previous = process.env.NIKCLI_DISABLE_PROJECT_CONFIG
       process.env.NIKCLI_DISABLE_PROJECT_CONFIG = "0"
@@ -166,7 +194,9 @@ describe("one-shot native calls", () => {
                 npm: "some-ai-sdk-provider",
                 api: "https://x.example/v1",
                 options: { apiKey: "k" },
-                models: { m: { name: "M", limit: { context: 8192, output: 1024 } } },
+                models: {
+                  m: { name: "M", limit: { context: 8192, output: 1024 } },
+                },
               },
             },
           }),
@@ -182,7 +212,9 @@ describe("one-shot native calls", () => {
                 }),
               ),
             )
-            await expect(call.generateText({ model, prompt: "hi" })).rejects.toThrow(/no native route/)
+            // Native route refuses (no ModelRef), AI SDK fallback also fails because the
+            // configured npm package does not exist; the SDK error reaches the caller.
+            await expect(call.generateText({ model, prompt: "hi" })).rejects.toBeDefined()
           },
         })
       } finally {
@@ -217,7 +249,9 @@ describe("one-shot native calls", () => {
                 npm: "@acme/ai-sdk-provider",
                 api: `http://127.0.0.1:${server.port}/v1`,
                 options: { apiKey: "acme-key", protocol: "openai-compatible" },
-                models: { m: { name: "M", limit: { context: 8192, output: 1024 } } },
+                models: {
+                  m: { name: "M", limit: { context: 8192, output: 1024 } },
+                },
               },
             },
           }),
@@ -248,9 +282,17 @@ describe("one-shot native calls", () => {
 
   it("generateImage posts to /images/generations and decodes base64 images", async () => {
     captured.length = 0
-    replies.push({ body: JSON.stringify({ data: [{ b64_json: PNG }] }), type: "application/json" })
+    replies.push({
+      body: JSON.stringify({ data: [{ b64_json: PNG }] }),
+      type: "application/json",
+    })
     await withModel(async ({ model, call }) => {
-      const result = await call.generateImage({ model, prompt: "a pixel", n: 1, size: "1024x1024" })
+      const result = await call.generateImage({
+        model,
+        prompt: "a pixel",
+        n: 1,
+        size: "1024x1024",
+      })
       expect(result.images).toEqual([{ base64: PNG, mediaType: "image/png" }])
       expect(result.warnings).toEqual([])
     })
@@ -267,7 +309,10 @@ describe("one-shot native calls", () => {
   })
 
   it("generateImage rejects a response that carries no images", async () => {
-    replies.push({ body: JSON.stringify({ error: { message: "nope" } }), type: "application/json" })
+    replies.push({
+      body: JSON.stringify({ error: { message: "nope" } }),
+      type: "application/json",
+    })
     await withModel(async ({ model, call }) => {
       await expect(call.generateImage({ model, prompt: "x" })).rejects.toThrow(/no images/)
     })

@@ -22,7 +22,7 @@ import {
   type Placement,
   type Vec2,
 } from "./layout"
-import type { Pickable } from "./interaction"
+import type { SessionPickable } from "./interaction"
 import { lookOf, type StateLook } from "./states"
 
 /** A shop takes this long to come up from the pavement, or to go back into it. */
@@ -218,17 +218,17 @@ export function createTown() {
     },
 
     /** The computers (or, for someone standing, the person) that a click or `E` can open. */
-    pickables(): Pickable[] {
-      const out: Pickable[] = []
+    pickables(): SessionPickable[] {
+      const out: SessionPickable[] = []
       for (const a of agents.values()) {
         const s = shops.get(a.shopId)
         if (!s || s.closing || s.lift < 0.95 || a.leaving || a.presence < 0.5) continue
         if (a.seat.kind === "desk") {
           const c = toWorld(s.placement, deskLocal(a.seat.desk).computer)
-          out.push({ paneId: a.paneId, x: c.x, y: COMPUTER_HEIGHT, z: c.z, radius: 0.6 })
+          out.push({ kind: "session", paneId: a.paneId, x: c.x, y: COMPUTER_HEIGHT, z: c.z, radius: 0.6 })
         } else {
           const p = toWorld(s.placement, standLocal(a.seat.index))
-          out.push({ paneId: a.paneId, x: p.x, y: 1.2, z: p.z, radius: 0.55 })
+          out.push({ kind: "session", paneId: a.paneId, x: p.x, y: 1.2, z: p.z, radius: 0.55 })
         }
       }
       return out

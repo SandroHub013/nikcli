@@ -19,6 +19,7 @@ const navigation = (window as unknown as { happyDOM?: { settings: { navigation: 
 
 const { createComponent, render } = await import("solid-js/web")
 const { NikversePane } = await import("./nikverse-pane")
+const { LearnFrame } = await import("./learn/learn-frame")
 
 let dispose: (() => void) | undefined
 const realSetTimeout = globalThis.setTimeout
@@ -435,5 +436,66 @@ describe("a lesson over the world", () => {
     expect(inLesson(page)).toBeNull()
     expect(page.world()).toBeNull()
     expect(page.host.querySelector('[data-slot="nikverse-unloaded"]')).not.toBeNull()
+  })
+})
+
+/*
+ * Review of L1, B5. A `connect` waits for the host's commands before it opens a door; if the page was reloaded or retired in the
+ * meantime, the connect that finishes afterwards must offer nothing: the old page would have a port again just after its door was
+ * shut, and with `retire` that is the order that lets an answer overwrite what was just imported.
+ */
+describe("a lesson frame whose connect is still waiting for the host", () => {
+  function waiting() {
+    if (navigation) navigation.disableChildFrameNavigation = true
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => void (release = resolve))
+    let api: { reload: () => void; retire: () => Promise<void> } | undefined
+    const host = document.createElement("div")
+    document.body.append(host)
+    dispose = render(
+      () =>
+        createComponent(LearnFrame, {
+          place: "percorsi",
+          progress: async () => {
+            await gate
+            return { load: async () => null, save: async () => {} }
+          },
+          api: (a: { reload: () => void; retire: () => Promise<void> }) => void (api = a),
+        }),
+      host,
+    )
+    const frame = () => host.querySelector<HTMLIFrameElement>('iframe[data-slot="learn-frame"]')!
+    return { frame, api: () => api!, release: () => release!() }
+  }
+
+  test("a retire while it waits: the door stays shut", async () => {
+    const page = waiting()
+    const frame = page.frame()
+    const seen = watch(frame)
+    hello(seen.window, nonceOf(frame))
+    await flush()
+    await page.api().retire()
+    page.release()
+    await flush()
+    expect(seen.offers).toHaveLength(0)
+  })
+
+  test("a reload while it waits: the old page gets no port, and the new one still can", async () => {
+    const page = waiting()
+    const old = page.frame()
+    const oldSeen = watch(old)
+    hello(oldSeen.window, nonceOf(old))
+    await flush()
+    page.api().reload()
+    await flush()
+    page.release()
+    await flush()
+    expect(oldSeen.offers).toHaveLength(0)
+    const fresh = page.frame()
+    expect(fresh).not.toBe(old)
+    const freshSeen = watch(fresh)
+    hello(freshSeen.window, nonceOf(fresh))
+    await flush()
+    expect(freshSeen.offers).toHaveLength(1)
   })
 })

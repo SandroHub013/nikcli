@@ -71,8 +71,13 @@ const smooth = (a: number, b: number, x: number) => {
 /** Where the shore moves: on the beach's waterline, not on the islet nor under the chiringuiti. */
 const shoreBand = (r: number) => smooth(13, 16, r) * (1 - smooth(22, 25, r))
 
-/** The height of the island's ground under a point: the profile along the radius, and the pier's deck over it. */
+/**
+ * The height of the island's ground under a point: the profile along the radius, the pier's deck over it, and the
+ * Faro's boardwalk and deck (`WALKWAYS`), which stand over the lagoon and the mouth at their own height.
+ */
 export function islandHeight(p: Vec2): number {
+  const walkway = onWalkway(p)
+  if (walkway) return walkway.height
   const r = Math.hypot(p.x, p.z)
   const ground = profileHeight(r - shoreWobble(p) * shoreBand(r))
   const onPier = Math.abs(p.x) <= PIER.halfWidth && p.z >= PIER.fromZ && p.z <= PIER.toZ
@@ -305,4 +310,125 @@ export function placeShops(
     taken.add(slot)
   }
   return out
+}
+
+/**
+ * The Faro, where the lessons open: a lighthouse on a rock in the lagoon's mouth, behind the first look, past the
+ * last pair of chiringuiti (±143°), so it takes no project's slot. It stands 6.5 m east of the mouth's middle
+ * (about 165°, r 25): straight behind the hologram, the hologram's light hid it from the north shore; here it is
+ * the second silhouette beside it, against the sunset.
+ *
+ * The mouth's arms are where slots 10 and 11 stand (r 28, ±143°), so the boardwalk does not start there: it runs
+ * from the islet's sand across the lagoon, straight south like the pier, onto a square deck round the tower.
+ * `deckHalf` is the deck's half side, `towerRadius` the tower's foot, `towerTop` the tip of its cap.
+ */
+export const FARO = { x: 6.5, z: 24, deckHalf: 2.6, towerRadius: 1.2, towerTop: 11.4, top: PLATFORM_TOP }
+/**
+ * The boardwalk: its half width, where it runs (from the islet's sand to the deck), and where its rails start,
+ * before the mouth begins under it.
+ */
+export const FARO_WALK = { halfWidth: 0.8, fromZ: 4, toZ: FARO.z - FARO.deckHalf, railsFromZ: 16.5 }
+/** The rails: half their thickness, and their height above the deck. */
+export const RAIL_HALF = 0.05
+export const RAIL_HEIGHT = 1
+/** The Faro's door, on the tower's north face toward the islet: what a click or `E` presses. */
+export const FARO_DOOR = { x: FARO.x, y: FARO.top + 1, z: FARO.z - FARO.towerRadius - 0.05, radius: 0.6 }
+
+/**
+ * Ground over the water that the character walks on, mouth or not: the boardwalk and the deck. A box whose
+ * `height` is its deck's top. Inside one, the mouth does not push the character back (`collision.ts`): the rails
+ * (`faroBoxes`) keep it on the planks, so no wall is invisible.
+ */
+export const WALKWAYS: ReadonlyArray<Box> = [
+  {
+    cx: FARO.x,
+    cz: (FARO_WALK.fromZ + FARO_WALK.toZ) / 2,
+    hx: FARO_WALK.halfWidth,
+    hz: (FARO_WALK.toZ - FARO_WALK.fromZ) / 2,
+    yaw: 0,
+    height: FARO.top,
+  },
+  { cx: FARO.x, cz: FARO.z, hx: FARO.deckHalf, hz: FARO.deckHalf, yaw: 0, height: FARO.top },
+]
+
+/** Whether a point is inside a box on the ground, grown by `margin`. */
+export function inBox(p: Vec2, box: Box, margin = 0): boolean {
+  const s = Math.sin(box.yaw)
+  const c = Math.cos(box.yaw)
+  const dx = p.x - box.cx
+  const dz = p.z - box.cz
+  return Math.abs(dx * c - dz * s) <= box.hx + margin && Math.abs(dx * s + dz * c) <= box.hz + margin
+}
+
+/** The walkway a point stands on, if any. */
+export function onWalkway(p: Vec2, margin = 0): Box | undefined {
+  return WALKWAYS.find((w) => inBox(p, w, margin))
+}
+
+/**
+ * What stops the character at the Faro: the tower, as four boxes crossed every 45° (round to 10 cm, where one
+ * square would stick out half a metre at its corners), and the rails, along the boardwalk where it leaves the
+ * wading lagoon and round the deck, open where the boardwalk comes in.
+ */
+export function faroBoxes(): Box[] {
+  const { x, z, deckHalf: d, towerRadius: r, towerTop } = FARO
+  const rail = FARO.top + RAIL_HEIGHT
+  const w = FARO_WALK.halfWidth
+  const along = (FARO_WALK.toZ - FARO_WALK.railsFromZ) / 2
+  const north = (d + 2 * RAIL_HALF - w) / 2
+  const edge = d + RAIL_HALF
+  const tower = [0, 1, 2, 3].map((k): Box => ({ cx: x, cz: z, hx: r, hz: 0.5, yaw: (k * Math.PI) / 4, height: towerTop }))
+  return [
+    ...tower,
+    { cx: x - w - RAIL_HALF, cz: FARO_WALK.railsFromZ + along, hx: RAIL_HALF, hz: along, yaw: 0, height: rail },
+    { cx: x + w + RAIL_HALF, cz: FARO_WALK.railsFromZ + along, hx: RAIL_HALF, hz: along, yaw: 0, height: rail },
+    { cx: x - w - north, cz: z - edge, hx: north, hz: RAIL_HALF, yaw: 0, height: rail },
+    { cx: x + w + north, cz: z - edge, hx: north, hz: RAIL_HALF, yaw: 0, height: rail },
+    { cx: x - edge, cz: z, hx: RAIL_HALF, hz: d + 2 * RAIL_HALF, yaw: 0, height: rail },
+    { cx: x + edge, cz: z, hx: RAIL_HALF, hz: d + 2 * RAIL_HALF, yaw: 0, height: rail },
+    { cx: x, cz: z + edge, hx: d + 2 * RAIL_HALF, hz: RAIL_HALF, yaw: 0, height: rail },
+  ]
+}
+
+/** The walls a click cannot see through at the Faro: the tower (the rails are low and open). */
+export const faroWalls = (): Box[] => faroBoxes().slice(0, 4)
+
+/**
+ * The games' kiosk: on the islet's sand, toward the pier's head, built from the chiringuito's pieces at a kiosk's
+ * size. `angle` and `radius` put its middle (clockwise from straight ahead, as the slots), on the sand between the
+ * deck's lit edge and the water; its front faces the hologram, as a chiringuito's does. Where it stands is held by `layout.test.ts`: on the islet, off the pier and its
+ * way, clear of the projector, and seen from the spawn beside the hologram, not behind it.
+ */
+export const KIOSK = { angle: (56 * Math.PI) / 180, radius: 7.1 }
+/** All of the kiosk, awning and sign included, in its frame: what must stay on the sand and in sight. */
+export const KIOSK_FOOTPRINT = { hx: 1.62, back: -1.0, front: 1.1 }
+/** The counter, in the kiosk's frame (+z toward the hologram): what a click or `E` presses. */
+export const KIOSK_COUNTER = { x: 0, z: 0.35, hx: 1.15, hz: 0.32, height: 0.85 }
+/** The four posts under the awning. */
+export const KIOSK_POSTS: ReadonlyArray<Vec2> = [
+  { x: -1.25, z: -0.75 },
+  { x: 1.25, z: -0.75 },
+  { x: -1.25, z: 0.75 },
+  { x: 1.25, z: 0.75 },
+]
+
+export function kioskPlacement(): Placement {
+  const center = { x: Math.sin(KIOSK.angle) * KIOSK.radius, z: -Math.cos(KIOSK.angle) * KIOSK.radius }
+  return { slot: -1, center, yaw: Math.atan2(-center.x, -center.z) }
+}
+
+/** What stops the character at the kiosk: the counter and the posts. */
+export function kioskBoxes(): Box[] {
+  const p = kioskPlacement()
+  return [
+    worldBox(p, KIOSK_COUNTER),
+    ...KIOSK_POSTS.map((post) => worldBox(p, { x: post.x, z: post.z, hx: POST_HALF, hz: POST_HALF, height: EAVE_HEIGHT })),
+  ]
+}
+
+/** Where the counter is pressed: its middle, a little over its top, wide enough to take a click anywhere on it. */
+export function kioskSpot(): { x: number; y: number; z: number; radius: number } {
+  const p = kioskPlacement()
+  const at = toWorld(p, { x: KIOSK_COUNTER.x, z: KIOSK_COUNTER.z })
+  return { x: at.x, y: islandHeight(at) + KIOSK_COUNTER.height, z: at.z, radius: 0.9 }
 }
