@@ -357,8 +357,10 @@ export const CATALOGO_GIOCO = {
     cifraIniezioni: "iniezioni",
     cifraPenalita: "penalità",
     cifraTempo: "tempo",
-    cifraTotale: "totale",
-    xp: "{0} XP",
+    cifraTotale: "punteggio",
+    cifraXp: "XP del livello",
+    punti: "{0} punti",
+    xp: "+{0} XP",
     esitoTrovata: "Trovata",
     esitoPersa: "Non vista",
     esitoErrata: "Segnalata a torto",
@@ -424,8 +426,10 @@ export const CATALOGO_GIOCO = {
     cifraIniezioni: "injections",
     cifraPenalita: "penalty",
     cifraTempo: "time",
-    cifraTotale: "total",
-    xp: "{0} XP",
+    cifraTotale: "score",
+    cifraXp: "level XP",
+    punti: "{0} points",
+    xp: "+{0} XP",
     esitoTrovata: "Found",
     esitoPersa: "Missed",
     esitoErrata: "Reported by mistake",
@@ -566,12 +570,21 @@ export function valutaLivello(livello, righeScelte, tempoRimanente = 0, nessuna 
   }
 }
 
+/**
+ * What a level gives in XP, on the lessons' scale (a right answer is 10 XP a degree of difficulty): 20 a star, so 60 at the most.
+ * The points are the game's own score and stay out of the XP, or a fast level would be worth a whole lesson.
+ */
+export const XP_PER_STELLA = 20
+export const XP_MAX_LIVELLO = 3 * XP_PER_STELLA
+export const xpGioco = (stelle) => XP_PER_STELLA * Math.max(0, Math.min(3, Math.floor(Number(stelle) || 0)))
+
 /** The key under which a level is kept in the progress, next to the exercises' own. */
 export const chiaveGioco = (id) => `gioco#${id}`
 
 /**
- * The progress after one match: the stars and the points are the best so far, and the XP is only what the best score gained over the
- * last best one, so playing a level again is practice and not a way to earn what it already gave. A new object, like `recordAnswer`.
+ * The progress after one match: the stars and the points are the best so far, and the XP are only the stars gained over the best so
+ * far (`xpGioco`, 60 a level at most), so playing a level again is practice and not a way to earn what it already gave. A new object,
+ * like `recordAnswer`.
  *
  * @returns {Progress}
  */
@@ -582,7 +595,7 @@ export function recordGame(progress, id, esito, oggi) {
   const punti = Math.max(intero(prima.punti), esito.punteggio)
   return {
     v: PROGRESS_VERSION,
-    xp: progress.xp + Math.max(0, esito.punteggio - intero(prima.punti)),
+    xp: progress.xp + Math.max(0, xpGioco(stelle) - xpGioco(intero(prima.stelle))),
     giorni: isIso(oggi) ? [...new Set([...progress.giorni, oggi])].sort() : [...progress.giorni],
     esercizi: {
       ...progress.esercizi,
@@ -929,7 +942,9 @@ export async function boot(win) {
     fermaTimer()
     const esito = valutaLivello(stato.livelloCorrente, stato.righeScelte, stato.secondiRimanenti, nessuna)
     stato.esitoGioco = { ...esito, scaduto }
+    const xpPrima = stato.progress.xp
     stato.progress = recordGame(stato.progress, stato.livelloCorrente.id, esito, todayOf(win))
+    stato.esitoGioco.xpGuadagnati = stato.progress.xp - xpPrima
     salvataggio()
     stato.fase = "gioco-fine"
     disegna()
@@ -1007,7 +1022,8 @@ export async function boot(win) {
           el(doc, "div", {}, el(doc, "b", { text: `+${esito.puntiIniezioni}` }), el(doc, "span", { text: tr("cifraIniezioni") })),
           el(doc, "div", {}, el(doc, "b", { text: `−${esito.penalita}` }), el(doc, "span", { text: tr("cifraPenalita") })),
           el(doc, "div", {}, el(doc, "b", { text: `+${esito.tempoBonus}` }), el(doc, "span", { text: tr("cifraTempo") })),
-          el(doc, "div", {}, el(doc, "b", { text: tr("xp", esito.punteggio) }), el(doc, "span", { text: tr("cifraTotale") })),
+          el(doc, "div", {}, el(doc, "b", { text: tr("punti", esito.punteggio) }), el(doc, "span", { text: tr("cifraTotale") })),
+          el(doc, "div", {}, el(doc, "b", { text: tr("xp", esito.xpGuadagnati ?? 0) }), el(doc, "span", { text: tr("cifraXp") })),
         ),
         el(doc, "div", { class: "compito-box spiegazione-finale" }, el(doc, "p", { text: livello.spiegazione })),
         motivi,

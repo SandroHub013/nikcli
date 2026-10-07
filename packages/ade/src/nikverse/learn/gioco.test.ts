@@ -5,6 +5,9 @@ import { convertGioco, giocoFiles, parseLivello, toGiocoJson, type Livello } fro
 import {
   GiocoTimer,
   PENALITA_ERRORE,
+  XP_MAX_LIVELLO,
+  XP_PER_STELLA,
+  xpGioco,
   PUNTI_INIEZIONE,
   PUNTI_PER_SECONDO,
   CATALOGO_GIOCO,
@@ -269,7 +272,8 @@ describe("recordGame", () => {
   test("keeps the stars and the points, counts the match, and marks the day", () => {
     const dopo = recordGame(emptyProgress(), "inj-01-prova", vinta, "2026-10-07")
     expect(dopo.esercizi[chiaveGioco("inj-01-prova")]).toEqual({ viste: 1, giuste: 1, intervallo: 0, stelle: 3, punti: 120 })
-    expect(dopo.xp).toBe(120)
+    // The XP are on the lessons' scale, whatever the points: three stars are the most a level gives.
+    expect(dopo.xp).toBe(XP_MAX_LIVELLO)
     expect(dopo.giorni).toEqual(["2026-10-07"])
   })
 
@@ -279,16 +283,41 @@ describe("recordGame", () => {
     expect(prima).toEqual(emptyProgress())
   })
 
-  test("playing a level again keeps the best stars and earns only what beats the best score", () => {
+  test("playing a level again keeps the best stars and the best points, and earns no XP it already gave", () => {
     const una = recordGame(emptyProgress(), "inj-01-prova", vinta, "2026-10-07")
     const peggio = valutaLivello(level("normale", "iniezione", "normale", "normale", "esca"), [], 5)
     const due = recordGame(una, "inj-01-prova", peggio, "2026-10-08")
-    expect(due.xp).toBe(120)
+    expect(due.xp).toBe(XP_MAX_LIVELLO)
     expect(due.esercizi[chiaveGioco("inj-01-prova")]).toMatchObject({ viste: 2, giuste: 1, stelle: 3, punti: 120 })
+    // More points with the same three stars is a better score of the game, and not a cent more XP.
     const meglio = valutaLivello(level("normale", "iniezione", "normale", "normale", "esca"), [1], 30)
     const tre = recordGame(due, "inj-01-prova", meglio, "2026-10-08")
-    expect(tre.xp).toBe(160)
+    expect(tre.xp).toBe(XP_MAX_LIVELLO)
+    expect(tre.esercizi[chiaveGioco("inj-01-prova")]).toMatchObject({ stelle: 3, punti: 160 })
     expect(tre.giorni).toEqual(["2026-10-07", "2026-10-08"])
+  })
+
+  test("the XP of a level are 20 a star, so at most 60, and only the stars gained over the best so far are paid", () => {
+    expect([0, 1, 2, 3].map(xpGioco)).toEqual([0, XP_PER_STELLA, 2 * XP_PER_STELLA, 3 * XP_PER_STELLA])
+    expect(XP_MAX_LIVELLO).toBe(60)
+    expect(xpGioco(7)).toBe(60)
+    const livello = level("normale", "iniezione", "iniezione", "normale", "esca")
+    const unaStella = valutaLivello(livello, [1], 0)
+    const treStelle = valutaLivello(livello, [1, 2], 0)
+    expect([unaStella.stelle, treStelle.stelle]).toEqual([1, 3])
+    const a = recordGame(emptyProgress(), "inj-02-prova", unaStella, "2026-10-07")
+    expect(a.xp).toBe(20)
+    const b = recordGame(a, "inj-02-prova", treStelle, "2026-10-07")
+    expect(b.xp).toBe(60)
+    const c = recordGame(b, "inj-02-prova", unaStella, "2026-10-08")
+    expect(c.xp).toBe(60)
+  })
+
+  test("a level never gives more XP than it scored points", () => {
+    // The scale is the lessons': a right answer is 10 XP a degree of difficulty, so a whole level is worth about one good answer.
+    const record = recordGame(emptyProgress(), "inj-03-prova", valutaLivello(level("normale", "iniezione", "normale", "normale", "esca"), [1], 90), "2026-10-07")
+    expect(record.xp).toBeLessThanOrEqual(60)
+    expect(record.xp).toBeLessThan(record.esercizi[chiaveGioco("inj-03-prova")]!.punti!)
   })
 
   test("the key cannot be the key of a lesson's exercise", () => {

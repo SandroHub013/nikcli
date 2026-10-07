@@ -150,8 +150,14 @@ describe("the game on the page", () => {
       expect(rest).toHaveLength(0)
       const kept = saved!.progress.esercizi[`gioco#${level(1).id}`]!
       expect(kept).toMatchObject({ viste: 1, giuste: 1, stelle: 3 })
-      expect(saved!.progress.xp).toBe(kept.punti!)
+      // The points are the game's own; the XP are on the lessons' scale: three stars, 60.
       expect(kept.punti).toBe(100 + (level(1).secondi - 10) * 2)
+      expect(saved!.progress.xp).toBe(60)
+      expect(kept.punti).toBeGreaterThan(saved!.progress.xp)
+      // The end screen says points for the score and XP only for the XP.
+      expect(text(".cifre")).toContain(`${kept.punti} punti`)
+      expect(text(".cifre")).not.toContain(`${kept.punti} XP`)
+      expect(text(".cifre")).toContain("+60 XP")
       expect(document.querySelectorAll('[data-esito="trovata"]').length).toBe(injections(level(1)).length)
       // A second press of «verify» on a finished match grades nothing new.
       expect(document.querySelector('[data-slot="verifica-gioco"]')).toBeNull()
