@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import { Installation } from "@/installation"
-import { shouldNotifyUpdate } from "@/cli/upgrade"
+import { checksForUpdates, shouldNotifyUpdate } from "@/cli/upgrade"
 import { runPromiseWithLayer } from "@/effect"
 import { Effect } from "effect"
 import { createComponent, createRoot } from "solid-js"
@@ -445,13 +445,13 @@ describe("Update dialog wiring (cross-platform)", () => {
     expect(source).toContain("api.github.com/repos/nikcli/nikcli/releases/latest")
   })
 
-  it("the default config triggers the dialog (only opt-out via autoupdate:false or env)", async () => {
-    const source = await readSrc("packages/nikcli/src/cli/upgrade.ts")
-    expect(source).toMatch(/config\.autoupdate\s*===\s*false/)
-    expect(source).toContain("NIKCLI_DISABLE_AUTOUPDATE")
-    // The check must NOT be silently disabled when config is undefined
-    // (the default case is "show dialog and ask").
-    expect(source).not.toMatch(/config\.autoupdate\s*===\s*undefined/)
-    expect(source).not.toMatch(/config\.autoupdate\s*===\s*true/)
+  it("looks for an update only on an explicit autoupdate: true or notify, and never under the env switch", () => {
+    // Ragu Code: the feeds are upstream's, so an unset config does not check (see `checksForUpdates`).
+    expect(checksForUpdates(undefined, false)).toBe(false)
+    expect(checksForUpdates(false, false)).toBe(false)
+    expect(checksForUpdates("notify", false)).toBe(true)
+    expect(checksForUpdates(true, false)).toBe(true)
+    expect(checksForUpdates(true, true)).toBe(false)
+    expect(checksForUpdates("notify", true)).toBe(false)
   })
 })

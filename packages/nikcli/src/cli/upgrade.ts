@@ -97,6 +97,17 @@ export function shouldAutoInstall(input: {
 }
 
 /**
+ * Whether to look for an update at all. Ragu Code checks only on an explicit `autoupdate: true` or `"notify"`:
+ * the release feeds and installers it would use (`nikcli/nikcli` on GitHub, npm `nikcli-ai`, the nikomatt69 brew
+ * tap, nikcli-ai.dev) are upstream's, and an update from them would replace this fork with nikcli. Unset is off
+ * until Ragu Code publishes its own releases. `NIKCLI_DISABLE_AUTOUPDATE` (or `RAGU_DISABLE_AUTOUPDATE`) still wins.
+ */
+export function checksForUpdates(autoupdate: boolean | "notify" | undefined, disabledByEnv: boolean): boolean {
+  if (disabledByEnv) return false
+  return autoupdate === true || autoupdate === "notify"
+}
+
+/**
  * Checks for available updates and *returns* what it found, as well as
  * publishing the event other clients (desktop, mobile, SDK consumers)
  * subscribe to. The actual upgrade is triggered by the user from the
@@ -127,8 +138,8 @@ export async function upgrade(): Promise<UpdateAvailable | undefined> {
     return undefined
   }
 
-  if (config.autoupdate === false || Flag.NIKCLI_DISABLE_AUTOUPDATE) {
-    log.debug("Auto-update disabled in config or env")
+  if (!checksForUpdates(config.autoupdate, Boolean(Flag.NIKCLI_DISABLE_AUTOUPDATE))) {
+    log.debug("Update check off: autoupdate not set to true or notify, or disabled in env")
     return undefined
   }
 
