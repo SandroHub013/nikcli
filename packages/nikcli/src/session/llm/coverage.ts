@@ -42,8 +42,10 @@ export type Outcome =
   | "ineligible-late"
   /** The native runtime returned a stream (not proof of completion). */
   | "native"
+  /** The native runtime refused or failed; the AI SDK fallback finished the turn. */
+  | "fallback"
 
-export const OUTCOMES: readonly Outcome[] = ["unmapped", "ineligible", "ineligible-late", "native"] as const
+export const OUTCOMES: readonly Outcome[] = ["unmapped", "ineligible", "ineligible-late", "native", "fallback"] as const
 
 /**
  * Distinct refusal reasons kept before the rest bucket into `other`.

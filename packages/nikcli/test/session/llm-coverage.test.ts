@@ -221,8 +221,8 @@ describe("llm coverage counters", () => {
     const r = report()
     expect(r.providers.map((p) => p.providerID)).toEqual(["a", "z:custom"])
     expect(r.providers[0]).toMatchObject({
-      turns: 5,
-      mapped: 4,
+      turns: 6,
+      mapped: 5,
       eligibilityRefused: 2,
       overflow: false,
     })
@@ -233,6 +233,7 @@ describe("llm coverage counters", () => {
     })
     expect(summary().unmapped).toBe(2)
     expect(summary().native).toBe(2)
+    expect(summary().fallback).toBe(1)
     expect(report()).toEqual(r)
   })
 
