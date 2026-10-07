@@ -37,8 +37,12 @@ describe("who waits for a design choice", () => {
     expect(waitingFor(written, PATH, "DS-t2", T0)).toEqual([])
     expect(holdsDelivery(written, answer, T0 + CLAIM_MS - 1)).toBe(true)
     expect(dueWaiters(written, T0 + CLAIM_MS - 1)).toEqual([])
-    expect(holdsDelivery(written, answer, T0 + CLAIM_MS)).toBe(false)
     expect(dueWaiters(written, T0 + CLAIM_MS).map((item) => item.id)).toEqual(["a"])
+    // Still held once the window is over: the check that settles it is asynchronous, and a delivery pass beside it
+    // typed the line the script had already printed (live in ADE Test). Only dropping the waiter lets it go.
+    expect(holdsDelivery(written, answer, T0 + CLAIM_MS)).toBe(true)
+    expect(holdsDelivery(written, answer, T0 + 60 * 60 * 1000)).toBe(true)
+    expect(holdsDelivery(dropWaiters(written, ["a"]), answer, T0 + CLAIM_MS)).toBe(false)
     // Another answer of the same key (a later round) is not held by this one.
     expect(holdsDelivery(written, { ...answer, answeredAt: "2026-10-07T11:00:00.000Z" }, T0)).toBe(false)
     expect(dropWaiters(written, ["a"])).toEqual([])

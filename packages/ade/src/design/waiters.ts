@@ -9,7 +9,7 @@
  * forgets a script still waiting nor types an answer it already printed.
  *
  * The rule for "read or not": an answer written for a waiter holds the line
- * ADE would type for {@link CLAIM_MS}. Then ADE takes the file back
+ * ADE would type until the waiter is settled. After {@link CLAIM_MS} ADE takes the file back
  * (`mailbox_result_reclaim`): gone means the script took it, and the answer
  * counts as delivered, never typed; still there means nobody was waiting any
  * more (the script's own timeout, or the agent's shell killing it), and the
@@ -98,7 +98,15 @@ export function dropWaiters(list: readonly DesignWaiter[], ids: readonly string[
   return list.filter((item) => !ids.includes(item.id))
 }
 
-/** Whether the line for this answer waits, because a script may be taking it. */
+/**
+ * Whether the line for this answer waits, because a script may be taking it.
+ *
+ * Until the waiter is settled, not until its window ends: the check that
+ * settles it is asynchronous, and a delivery pass that ran at the end of the
+ * window, beside it, typed the line the script had already printed (seen
+ * live in ADE Test). Only `settle` lets it go, by dropping the waiter; a
+ * waiter that can never be settled goes with the day-old ones (`pruneWaiters`).
+ */
 export function holdsDelivery(
   list: readonly DesignWaiter[],
   answer: { readonly path: string; readonly k: string; readonly answeredAt: string },
@@ -110,7 +118,7 @@ export function holdsDelivery(
       item.k === answer.k &&
       item.answeredAt === answer.answeredAt &&
       item.writtenAt !== undefined &&
-      now < item.writtenAt + CLAIM_MS,
+      now - item.writtenAt < KEPT_MS,
   )
 }
 
