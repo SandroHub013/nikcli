@@ -30,7 +30,6 @@ export interface NewPaneItem {
     | "decisions"
     | "design"
     | "nikverse"
-    | "learn"
   /** The one the button performs on a plain click, without opening the menu. */
   readonly primary?: true
 }
@@ -119,16 +118,6 @@ export const NEW_PANE_ITEMS: readonly NewPaneItem[] = [
       return t("newPane.nikverse.hint")
     },
     glyph: "nikverse",
-  },
-  {
-    commandId: "learn.pane",
-    get label() {
-      return t("newPane.learn")
-    },
-    get hint() {
-      return t("newPane.learn.hint")
-    },
-    glyph: "learn",
   },
 ]
 

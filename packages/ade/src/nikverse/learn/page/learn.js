@@ -108,7 +108,7 @@ export function addDays(day, giorni) {
  * The streak of days, with one freeze for every week of it.
  *
  * A day the learner did something lengthens the streak; a day missing from the middle costs one of the freezes the streak has earned,
- * one for each seven days. Two days in a row missing end it. Nothing runs while the panel is closed: the streak is read from the days
+ * one for each seven days. Two days in a row missing end it. Nothing runs while the lesson is closed: the streak is read from the days
  * that are in the progress, at every opening.
  */
 export function streak(giorni, oggi) {
@@ -191,7 +191,7 @@ export function recordAnswer(progress, lezione, esercizio, ok, oggi) {
   }
 }
 
-/** The exercises whose turn has come: the ripasso, read when the panel opens and not kept alive by a timer. */
+/** The exercises whose turn has come: the ripasso, read when the lesson opens and not kept alive by a timer. */
 export function dueReview(progress, lezioni, oggi) {
   const scaduti = []
   for (const lezione of lezioni) {

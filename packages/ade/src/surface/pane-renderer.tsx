@@ -30,7 +30,7 @@ import { DecisionsPane } from "../decisions/decisions-pane"
 import type { DecisionsHub } from "../decisions/hub"
 import { DesignPane } from "../design/design-pane"
 import { NikversePane } from "../nikverse/nikverse-pane"
-import { LearnPane, type LearnProgressHost } from "../nikverse/learn/learn-pane"
+import type { LearnProgressHost } from "../nikverse/learn/learn-frame"
 import type { AssetsHost } from "../nikverse/assets"
 import type { Snapshot } from "../nikverse/protocol"
 import type { ForwardedChord } from "../nikverse/chords"
@@ -118,9 +118,9 @@ export interface PaneRendererDeps {
     /** The host's commands for NikVerse's assets (fetched the first time the world opens); absent where there is no host. */
     assets: () => Promise<AssetsHost | undefined>
   }
-  /** What the Learn panel needs from ADE: the learner's progress, and the few things it may ask for. */
+  /** What the lessons over the world need from ADE: the learner's progress, and what the lesson page said that ADE ignored. */
   learn: {
-    /** ADE's commands for the progress; absent where there is no host, and then the panel only shows the page. */
+    /** ADE's commands for the progress; absent where there is no host, and then the lesson only shows the page. */
     progress: () => Promise<LearnProgressHost | undefined>
     /** A message the lesson page sent that ADE ignored, and why. */
     ignored: (reason: string) => void
@@ -400,17 +400,6 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         onExpand={expand}
       />
     )
-
-    const learnPane = () => (
-      <LearnPane
-        focused={isFocused()}
-        progress={deps.learn.progress}
-        onIgnored={deps.learn.ignored}
-        onFocus={focus}
-        onClose={() => deps.close(current().id)}
-        onExpand={expand}
-      />
-    )
     const simulatorPane = () => (
       <SimulatorPane
         id={current().id}
@@ -649,11 +638,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                                     fallback={
                                       <Show
                                         when={current().mode === "nikverse"}
-                                        fallback={
-                                          <Show when={current().mode === "learn"} fallback={sessionPane()}>
-                                            {learnPane()}
-                                          </Show>
-                                        }
+                                        fallback={sessionPane()}
                                       >
                                         {nikversePane()}
                                       </Show>

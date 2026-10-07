@@ -1,7 +1,7 @@
 //! The learner's progress for «Impara»: one JSON document in the app's local data, per user and not per project.
 //!
 //! The lesson page runs in a frame with an opaque origin, so it has no `localStorage` of its own and can write no file. What it keeps
-//! travels on the port it was given, and these two commands are what is done with it: `learn_progress_get` when the panel opens, and
+//! travels on the port it was given, and these two commands are what is done with it: `learn_progress_get` when the lesson opens over the world, and
 //! `learn_progress_set` each time an exercise is answered. Nothing else about ADE is reachable from here.
 //!
 //! What makes it a document and not a scratch file:
