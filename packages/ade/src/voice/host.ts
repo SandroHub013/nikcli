@@ -3,6 +3,7 @@ import type { Host, SpawnedSession } from "../host/shell"
 import type { Project } from "../host/project"
 import type { RecentEntry } from "../host/recent"
 import {
+  isPermanentWording,
   isRefusal,
   permissionIdentity,
   type PermissionAnswer,
@@ -470,7 +471,9 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
          * refusal nothing is sent and the request stays on screen for the
          * user to answer by hand.
          */
-        chosen = pending.answers.find((a) => isRefusal(a) || /^(?:n|no)$/i.test(a.send.trim().toLowerCase()))
+        // The refusal that does not last first (F7e, N2): «No, and always deny» is a no that also decides the next ones.
+        const refusals = pending.answers.filter((a) => isRefusal(a) || /^(?:n|no)$/i.test(a.send.trim().toLowerCase()))
+        chosen = refusals.find((a) => !isPermanentWording(a.label)) ?? refusals[0]
       }
 
       if (chosen) {

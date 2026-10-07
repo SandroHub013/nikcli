@@ -185,6 +185,11 @@ const YES_START =
   /^(?:yes|y|s[iì]|allow|approve|proceed|confirm|concedi|consenti|accetta|procedi|conferma|ok|okay|continue|continua|run|esegui|approva|permetti|autorizza)(?![\p{L}\p{N}])/iu
 const SKIP_START = /^(?:skip|salta)(?![\p{L}\p{N}])/iu
 
+/** Whether the words of a choice make it last (always, for the session, in the future): a refusal can be one, «No, and always deny». */
+export function isPermanentWording(label: string): boolean {
+  return PERMANENT_ANSWER.test(label)
+}
+
 /** What a choice of the CLI does, from the words it was written in (English or Italian). Read once, here. */
 export function classifyAnswer(raw: string): AnswerIntent {
   const text = raw.trim()

@@ -352,6 +352,40 @@ describe("createAdeVoiceHost", () => {
     expect(answered.map((a) => a.label)).toEqual(["Yes, manually approve edits"])
   })
 
+  // F7e, N2: «No, and always deny» is a refusal that lasts; a spoken no takes the plain one, wherever it is in the menu.
+  describe("a spoken no prefers the refusal that is not permanent", () => {
+    const refuse = (labels: string[]) => {
+      const answered: PermissionAnswer[] = []
+      const { deps } = createMockDeps({
+        permissions: () => ({
+          p1: {
+            what: "Run it?",
+            kind: "shell",
+            answers: labels.map((label, i) => ({
+              intent: classifyAnswer(label),
+              label,
+              send: String(i + 1),
+              tone: i === 0 ? ("primary" as const) : ("secondary" as const),
+            })),
+          },
+        }),
+        answerPermission: (_id, answer) => void answered.push(answer),
+      })
+      createAdeVoiceHost(deps).answerPermission("p1", "deny")
+      return answered.map((a) => a.label)
+    }
+
+    test("the permanent refusal first in the menu", () => {
+      expect(refuse(["Yes", "No, and always deny", "No"])).toEqual(["No"])
+    })
+    test("the plain one first", () => {
+      expect(refuse(["Yes", "No", "No, and always deny"])).toEqual(["No"])
+    })
+    test("when only the permanent refusal is left it is still a refusal, as before", () => {
+      expect(refuse(["Yes", "No, and always deny"])).toEqual(["No, and always deny"])
+    })
+  })
+
   // F7e, D2: a label nobody recognised is not a yes, whatever its place in the menu.
   describe("a spoken yes sends only an answer that is a yes", () => {
     const grant = (answers: PermissionRequest["answers"]) => {
