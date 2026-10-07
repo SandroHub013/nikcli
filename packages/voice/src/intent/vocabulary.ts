@@ -382,6 +382,13 @@ export const VOCABULARY: readonly VoiceIntentSpec[] = [
       "approva richiesta",
       "consenti azione",
       "consenti",
+      // English (F7e, D3). No phrase for «always» or «for the session»: a spoken yes grants this request only.
+      "allow permission",
+      "approve permission",
+      "allow action",
+      "approve request",
+      "allow",
+      "approve",
     ],
     slots: ["paneIndex", "paneTitle"],
     /*
