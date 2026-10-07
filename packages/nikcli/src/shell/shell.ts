@@ -2,8 +2,12 @@ import { Flag } from "@nikcli-ai/util/flag"
 import { lazy } from "@nikcli-ai/util/lazy"
 import path from "path"
 import { spawn, type ChildProcess } from "child_process"
+import { Log } from "@nikcli-ai/util/log"
+import { ProcessJob } from "./job"
 
 const SIGKILL_TIMEOUT_MS = 200
+
+const log = Log.create({ service: "shell" })
 
 export namespace Shell {
   /**
@@ -171,18 +175,86 @@ export namespace Shell {
     return selectBinary([configured, "pwsh", "powershell"].filter((name): name is string => Boolean(name)))
   }
 
-  export async function killTree(proc: ChildProcess, opts?: { exited?: () => boolean }): Promise<void> {
-    const pid = proc.pid
-    if (!pid || opts?.exited?.()) return
+  /** The job of each command started on Windows, while it is open. */
+  const jobs = new WeakMap<ChildProcess, ProcessJob.Handle>()
+  /** Jobs of commands that exited with something still running in them: kept open so nikcli's own exit ends it. */
+  const lingering = new Set<ProcessJob.Handle>()
+  let open = 0
 
-    if (process.platform === "win32") {
-      await new Promise<void>((resolve) => {
-        const killer = spawn("taskkill", ["/pid", String(pid), "/f", "/t"], { windowsHide: true, stdio: "ignore" })
-        killer.once("exit", () => resolve())
-        killer.once("error", () => resolve())
-      })
+  /** How many job handles nikcli holds (running commands, and leftovers kept for its own exit). */
+  export function openJobs() {
+    return open
+  }
+
+  function release(job: ProcessJob.Handle) {
+    lingering.delete(job)
+    ProcessJob.close(job)
+    open--
+  }
+
+  /**
+   * Puts a command that was just spawned in a Job Object (Windows), so stopping it ends every process it started, orphans included.
+   * Call it right after `spawn`. If the job cannot be made, `killTree` stays what it was, `taskkill /t`, and the log says why.
+   *
+   * The command is in the job a few microseconds after `CreateProcess`, not from its first instruction (Node cannot start a process
+   * suspended). That is enough because a shell starts its commands only after its own start-up, tens of milliseconds; anything that
+   * did escape the job is still reached by `taskkill /t`, which `killTree` runs first.
+   */
+  export function adopt(proc: ChildProcess): void {
+    if (process.platform !== "win32" || !proc.pid) return
+    const job = ProcessJob.create()
+    if (!job) {
+      log.warn("job object not created; stopping a command falls back to taskkill /t", { reason: ProcessJob.unavailable() })
       return
     }
+    if (!ProcessJob.assign(job, proc.pid)) {
+      ProcessJob.close(job)
+      log.warn("command not assigned to a job object; stopping it falls back to taskkill /t", { pid: proc.pid })
+      return
+    }
+    jobs.set(proc, job)
+    open++
+    proc.once("exit", () => {
+      void (async () => {
+        // The job's count lags the exit event by a few milliseconds, so it is asked a few times before it is believed.
+        for (let attempt = 0; attempt < 5; attempt++) {
+          if (jobs.get(proc) !== job) return
+          if (ProcessJob.active(job) === 0) {
+            jobs.delete(proc)
+            release(job)
+            return
+          }
+          await Bun.sleep(40)
+        }
+        // Something is left (a deliberate background process): keep the job, so it ends when nikcli does.
+        if (jobs.get(proc) === job) lingering.add(job)
+      })()
+    })
+  }
+
+  export async function killTree(proc: ChildProcess, opts?: { exited?: () => boolean }): Promise<void> {
+    const pid = proc.pid
+    const exited = opts?.exited?.()
+
+    if (process.platform === "win32") {
+      if (pid && !exited) {
+        await new Promise<void>((resolve) => {
+          const killer = spawn("taskkill", ["/pid", String(pid), "/f", "/t"], { windowsHide: true, stdio: "ignore" })
+          killer.once("exit", () => resolve())
+          killer.once("error", () => resolve())
+        })
+      }
+      // After taskkill, which follows the live chain: the job takes what that chain cannot reach, and it also works once the shell is gone.
+      const job = jobs.get(proc)
+      if (job) {
+        jobs.delete(proc)
+        ProcessJob.terminate(job)
+        release(job)
+      }
+      return
+    }
+
+    if (!pid || exited) return
 
     try {
       process.kill(-pid, "SIGTERM")

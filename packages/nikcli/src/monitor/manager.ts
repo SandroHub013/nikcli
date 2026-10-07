@@ -562,6 +562,8 @@ export namespace Monitor {
     if (!proc.pid) {
       throw new Error("Failed to start monitor process")
     }
+    // Windows: the monitored command and everything it starts live in a Job Object, so stopping the monitor leaves no orphan.
+    Shell.adopt(proc)
 
     await fs.writeFile(pidPath, String(proc.pid), "utf8")
 
