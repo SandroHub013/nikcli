@@ -635,11 +635,23 @@ describe("on by default on Codex only", () => {
     expect(w.sent).toHaveLength(0)
     await w.advance(100_000)
     expect(w.sent).toHaveLength(1)
-    // The route's break-even (10 renewals), then the idle compaction.
+    // The Codex budget (2 renewals), then the idle compaction.
     await w.advance(24 * 60 * 60_000)
-    expect(w.sent).toHaveLength(10)
+    expect(w.sent).toHaveLength(CacheKeeper.CODEX_MAX_RENEWALS)
+    expect(w.sent).toHaveLength(2)
     expect(w.state.compacted).toEqual([SESSION])
     expect(w.events.at(-1)).toMatchObject({ state: "compacted", reason: "budget spent" })
+  })
+
+  it("Codex with MAX_RENEWALS=5: five keep-alives, then the compaction; other routes keep the break-even", async () => {
+    process.env["NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS"] = "5"
+    await codexTurn(realRequest(openai))
+    await w.advance(24 * 60 * 60_000)
+    expect(w.sent).toHaveLength(5)
+    expect(w.state.compacted).toEqual([SESSION])
+    delete process.env["NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS"]
+    expect(CacheKeeper.settings(true)).toMatchObject({ maxRenewals: 2, horizonS: undefined })
+    expect(CacheKeeper.settings(false).maxRenewals).toBeUndefined()
   })
 
   it("Codex with NIKCLI_CACHE_KEEPALIVE=0: no keep-alive, nothing armed", async () => {

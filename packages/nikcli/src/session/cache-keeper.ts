@@ -88,6 +88,8 @@ export namespace CacheKeeper {
 
   /** The lifetime of a Codex entry when none is configured: the plan's cache holds about 40 minutes, then it is a matter of luck. */
   export const CODEX_LIFETIME_S = 2_400
+  /** Keep-alives on Codex before the compaction, when none is configured: the lab measured 3 of 5 landing, and 40 and 81 minutes in compact2. No horizon by default. */
+  export const CODEX_MAX_RENEWALS = 2
 
   /**
    * The settings of a session. On Codex (ChatGPT OAuth, HTTP and WebSocket alike: `isCodex` in `LLM`) the keeper, its idle compaction
@@ -101,7 +103,7 @@ export namespace CacheKeeper {
       lifetimeS: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_LIFETIME_S") ?? (codex ? CODEX_LIFETIME_S : undefined),
       marginPct: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MARGIN_PCT") ?? 10,
       minTokens: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MIN_TOKENS") ?? 20_000,
-      maxRenewals: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS", { allowZero: true }),
+      maxRenewals: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS", { allowZero: true }) ?? (codex ? CODEX_MAX_RENEWALS : undefined),
       horizonS: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_HORIZON_S"),
       // Both switches: the compaction that is cheap is the one that shares the prefix, and without it this would rewrite the context.
       compact: (Flag.cacheKeepaliveCompactSetting() ?? codex) && (Flag.compactionSharedPrefixSetting() ?? codex),
