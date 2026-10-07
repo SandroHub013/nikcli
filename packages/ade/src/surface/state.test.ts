@@ -218,43 +218,40 @@ describe("a layout saved by a release that had plugin panels", () => {
   })
 })
 
-describe("a layout saved with the «Impara» panel", () => {
-  const learn = (id: string, extra: Partial<Pane> = {}): Pane => ({
-    id,
-    title: "Impara",
-    status: "working",
-    model: "—",
-    mode: "learn",
-    lines: [],
-    cwd: "",
-    workspaceId: "ws1",
-    ...extra,
-  })
-  const roundTrip = (wb: ReturnType<typeof createWorkbench>) =>
-    fromWorkspaceState(parseWorkspace(serializeWorkspace(toWorkspaceState(wb)))!)
-
-  test("comes back as the same panel, with its span and the focus on it", () => {
+describe("a layout saved when the lessons were a panel of their own", () => {
+  /** What the file looked like then: a `learns` list, and the focus on that panel. */
+  const old = (focused: string | undefined = "l1") => {
     let wb = createWorkbench()
     wb = addPane(wb, { ...mockSession("s1") })
-    wb = addPane(wb, learn("l1", { span: { columns: 2, rows: 1 } }))
-    expect(wb.focusedId).toBe("l1")
+    const saved = JSON.parse(serializeWorkspace(toWorkspaceState(wb)))
+    saved.learns = [{ id: "l1", title: "Impara", project: "ws1", span: { columns: 2, rows: 1 } }]
+    saved.focusedPaneId = focused
+    return JSON.stringify(saved)
+  }
 
-    const restored = roundTrip(wb)
-    const back = restored.panes.find((pane) => pane.mode === "learn")
-    expect(back?.id).toBe("l1")
-    expect(back?.title).toBe("Impara")
-    expect(back?.span).toEqual({ columns: 2, rows: 1 })
-    expect(restored.focusedId).toBe("l1")
+  test("starts, with no «Impara» panel, and the focus on a panel that exists", () => {
+    const parsed = parseWorkspace(old())
+    expect(parsed).toBeDefined()
+    const restored = fromWorkspaceState(parsed!)
+    expect(restored.panes.map((pane) => pane.id)).toEqual(["s1"])
+    expect(restored.panes.some((pane) => (pane.mode as string) === "learn")).toBe(false)
+    expect(restored.focusedId).toBe("s1")
   })
 
-  test("only one comes back when the file has two", () => {
-    let wb = createWorkbench()
-    wb = addPane(wb, learn("l1"))
-    wb = addPane(wb, learn("l2"))
-    const saved = JSON.parse(serializeWorkspace(toWorkspaceState(wb)))
-    saved.learns = [...saved.learns, { id: "l2", title: "Impara" }]
-    const restored = fromWorkspaceState(parseWorkspace(JSON.stringify(saved))!)
-    expect(restored.panes.filter((pane) => pane.mode === "learn")).toHaveLength(1)
+  test("the next save has no `learns`, and a layout with several of them starts the same", () => {
+    const parsed = parseWorkspace(old())!
+    expect((parsed as { learns?: unknown }).learns).toBeUndefined()
+    const resaved = JSON.parse(serializeWorkspace(toWorkspaceState(fromWorkspaceState(parsed))))
+    expect("learns" in resaved).toBe(false)
+    const several = JSON.parse(old())
+    several.learns = [...several.learns, { id: "l2", title: "Impara" }, "rotto", null]
+    const again = fromWorkspaceState(parseWorkspace(JSON.stringify(several))!)
+    expect(again.panes.map((pane) => pane.id)).toEqual(["s1"])
+  })
+
+  test("no focus in the file falls to the first panel, and one on a real panel is kept", () => {
+    expect(fromWorkspaceState(parseWorkspace(old(undefined))!).focusedId).toBe("s1")
+    expect(fromWorkspaceState(parseWorkspace(old("s1"))!).focusedId).toBe("s1")
   })
 })
 
