@@ -78,7 +78,7 @@ export namespace CacheKeeper {
     readonly marginPct: number
     /** Below this many tokens of prefix a rewrite is cheap and nothing is kept alive. */
     readonly minTokens: number
-    /** Renewals after which the keeper stops; `undefined` is the break-even of the provider. */
+    /** Renewals after which the keeper stops; `0` is no keep-alive at all, `undefined` is the break-even of the provider. */
     readonly maxRenewals: number | undefined
     /** Seconds after the last real request at which the keeper stops, whatever the renewals. */
     readonly horizonS: number | undefined
@@ -92,7 +92,7 @@ export namespace CacheKeeper {
       lifetimeS: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_LIFETIME_S"),
       marginPct: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MARGIN_PCT") ?? 10,
       minTokens: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MIN_TOKENS") ?? 20_000,
-      maxRenewals: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS"),
+      maxRenewals: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS", { allowZero: true }),
       horizonS: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_HORIZON_S"),
       // Both switches: the compaction that is cheap is the one that shares the prefix, and without it this would rewrite the context.
       compact: Flag.cacheKeepaliveCompact() && Flag.compactionSharedPrefix(),

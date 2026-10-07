@@ -112,12 +112,17 @@ export namespace Flag {
     const raw = process.env["NIKCLI_COMPACTION_TOOL_CHOICE"]?.trim().toLowerCase()
     return raw === "same" || raw === "none" ? raw : undefined
   }
-  /** A positive number from the environment (`NIKCLI_CACHE_KEEPALIVE_*`), or `undefined` when unset or not one. */
-  export function cacheKeepaliveNumber(name: string): number | undefined {
+  /**
+   * A positive number from the environment (`NIKCLI_CACHE_KEEPALIVE_*`), or `undefined` when unset or not one. `0` counts as «not set»
+   * (a 0 lifetime, margin, threshold or horizon means nothing), except with `allowZero`: `NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS=0` is a
+   * real budget (no keep-alive, compact at once). Negatives, `NaN`, infinities and text are «not set» either way.
+   */
+  export function cacheKeepaliveNumber(name: string, options?: { allowZero?: boolean }): number | undefined {
     const raw = process.env[name]?.trim()
     if (!raw) return undefined
     const value = Number(raw)
-    return Number.isFinite(value) && value > 0 ? value : undefined
+    if (!Number.isFinite(value)) return undefined
+    return value > 0 || (options?.allowZero === true && value === 0) ? value : undefined
   }
   // Opt out of journaling local (non-workspace) session restore events into
   // the unified sync_event log.
