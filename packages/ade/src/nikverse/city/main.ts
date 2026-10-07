@@ -30,8 +30,9 @@ import {
   type Orbit,
   type Player,
 } from "./controller"
-import { keyCommand, nearestPickable, pickWithRay, type Pickable, type Ray } from "./interaction"
-import { MOUTH, type Box } from "./layout"
+import { commandOf, keyCommand, nearestPickable, pickWithRay, pickableKey, type Pickable, type Ray } from "./interaction"
+import { MOUTH, WALKWAYS, type Box } from "./layout"
+import { placeBoxes, placeLabel, placePickables, placeWalls, worldLang } from "./places"
 import { CHECK_PIXELS_PER_UNIT, logoCheck } from "./hologram"
 import { parseLogo } from "./logo"
 import { loadLevel } from "./load-level"
@@ -82,6 +83,8 @@ export interface CityDeps {
   lowered?: boolean
   /** The bench's door is open (`?bench=1` or `?shot=`): nothing changes the level by itself while it measures. */
   measuring?: boolean
+  /** The language ADE speaks (`?lang=it|en`); without it, the system's, by ADE's own rule. For the hint and the kiosk's sign. */
+  lang?: string
   /** A renderer that draws in software (no GPU) is not worth starting: `startCity` stands down with `SoftwareRendering`, and the page is the list. */
   listIfSoftware?: boolean
   /** The city drew its first frame: the world is on screen (ADE stops waiting for it). */
@@ -118,6 +121,10 @@ export interface CityHandle {
 
 /** The projector under the hologram: the character walks around it, not through it. */
 const PROJECTOR: Box = { cx: 0, cz: 0, hx: 3.1, hz: 3.1, yaw: 0, height: 0.62 }
+/** The Faro and the kiosk: what stops the character there, what a click cannot see through, and what can be pressed. */
+const PLACE_BOXES = placeBoxes()
+const PLACE_WALLS = placeWalls()
+const PLACES = placePickables()
 
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n)
 
@@ -238,7 +245,8 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
 
   const logo = parseLogo()
   const town = createTown()
-  const view = createCityScene(logo, backend === "webgpu" ? "tsl" : "shader", cast, kit)
+  const lang = worldLang(deps.lang, [...(win.navigator.languages ?? []), win.navigator.language])
+  const view = createCityScene(logo, backend === "webgpu" ? "tsl" : "shader", cast, kit, { lang })
   const camera = new PerspectiveCamera(58, 1, 0.1, 400)
   // The bench's page: the fixed scene from one camera, drawn once (`?shot=N`).
   if (deps.shot !== undefined) {
@@ -266,9 +274,9 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   let timer: ReturnType<typeof setTimeout> | undefined
   let sized = false
   const movingInterval = movingIntervalMs(level)
-  let boxes: Box[] = [PROJECTOR]
+  let boxes: Box[] = [PROJECTOR, ...PLACE_BOXES]
   let boxesStale = true
-  let hintPane: string | undefined
+  let hintKey: string | undefined
   const hint = doc.getElementById("hint")
   const raycaster = new Raycaster()
   const pointer = new Vector2()
@@ -313,11 +321,14 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
 
   const world = () => {
     if (boxesStale) {
-      boxes = [PROJECTOR, ...town.boxes()]
+      boxes = [PROJECTOR, ...PLACE_BOXES, ...town.boxes()]
       boxesStale = false
     }
-    return { boxes, radius: town.radius(), mouth: MOUTH }
+    return { boxes, radius: town.radius(), mouth: MOUTH, walkways: WALKWAYS }
   }
+
+  /** What can be pressed: the sessions' computers, and the Faro's door and the kiosk's counter. */
+  const pickables = (): Pickable[] => [...town.pickables(), ...PLACES]
 
   const rayAt = (clientX: number, clientY: number): Ray => {
     const rect = canvas.getBoundingClientRect()
@@ -328,7 +339,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   }
 
   const pickAt = (clientX: number, clientY: number): Pickable | undefined =>
-    pickWithRay(rayAt(clientX, clientY), town.pickables(), town.walls())
+    pickWithRay(rayAt(clientX, clientY), pickables(), [...town.walls(), ...PLACE_WALLS])
 
   const busy = () =>
     town.animating || dragging || Object.values(keys).some(Boolean) || player.speed > 0.05 || !sized || !eye
@@ -370,13 +381,15 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     }
     wasMoving = walking
 
-    const near = nearestPickable(player, town.pickables())
-    if (near?.paneId !== hintPane) {
-      hintPane = near?.paneId
+    const near = nearestPickable(player, pickables())
+    const key = near ? pickableKey(near) : undefined
+    if (key !== hintKey) {
+      hintKey = key
       if (hint) {
-        const title = near ? deps.picture().agents.get(near.paneId)?.title : undefined
         hint.hidden = !near
-        hint.textContent = near ? `E · apri ${title ?? "la sessione"}` : ""
+        if (!near) hint.textContent = ""
+        else if (near.kind === "place") hint.textContent = placeLabel(near.place, lang)
+        else hint.textContent = `E · apri ${deps.picture().agents.get(near.paneId)?.title ?? "la sessione"}`
       }
     }
 
@@ -474,7 +487,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   const onKeyDown = (event: KeyboardEvent) => {
     // Shortcuts with Ctrl, Alt or Meta are ADE's: the world's own handler forwards them.
     if (event.ctrlKey || event.altKey || event.metaKey) return
-    const command = event.repeat ? undefined : keyCommand(event.code, player, town.pickables())
+    const command = event.repeat ? undefined : keyCommand(event.code, player, pickables())
     if (command) {
       event.preventDefault()
       deps.send(command)
@@ -502,7 +515,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     if (event.button !== 0) return
     const picked = pickAt(event.clientX, event.clientY)
     if (picked) {
-      deps.send({ cmd: "open-session", paneId: picked.paneId })
+      deps.send(commandOf(picked))
       wake()
       return
     }

@@ -203,7 +203,8 @@ const loadCityModule = () => import("./assets/world/city.js")
  * WebGPURenderer's own WebGL backend: it is never used.
  *
  * @returns {{ check: boolean, classic: boolean, quality: string | undefined, bench: boolean, shot: number | undefined,
- *   tune: { samples?: number, maxScale?: number, compile?: "async", slowWatch?: true } | undefined, list?: true, lowered?: true }}
+ *   tune: { samples?: number, maxScale?: number, compile?: "async", slowWatch?: true } | undefined, list?: true, lowered?: true,
+ *   lang?: "it" | "en" }}
  */
 export function readOptions(search) {
   const params = new URLSearchParams(String(search))
@@ -223,6 +224,8 @@ export function readOptions(search) {
     list: params.get("city") === "0" ? true : undefined,
     // `?lowered=1`: ADE opens the world at Bassa because it was too slow at its own level, and the page says so.
     lowered: params.get("lowered") === "1" ? true : undefined,
+    // `?lang=it|en`: the language ADE speaks, for the hint and the kiosk's sign; without it the city follows the system's.
+    lang: params.get("lang") === "it" || params.get("lang") === "en" ? params.get("lang") : undefined,
   }
 }
 
@@ -308,6 +311,7 @@ export function boot(win, options = {}) {
         // ADE keeps the place, not this frame: it is handed back when the frame comes up again.
         savePosition: (place) => port?.postMessage({ type: "position", x: place.x, z: place.z, heading: place.heading }),
         lowered: query.lowered,
+        lang: query.lang,
         measuring: query.bench || query.shot !== undefined,
         onDrawn: shown,
         onSlow: () => port?.postMessage({ type: "slow" }),

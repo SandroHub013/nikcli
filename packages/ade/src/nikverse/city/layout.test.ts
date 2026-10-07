@@ -21,6 +21,7 @@ import {
   WATER_Y,
   deskLocal,
   islandHeight,
+  onWalkway,
   placeShops,
   placementOf,
   ringRadius,
@@ -112,9 +113,11 @@ describe("the ring of shops", () => {
       for (let r = 12; r < 30; r += 0.02) if (islandHeight({ x: Math.sin(a) * r, z: -Math.cos(a) * r }) > WATER_Y) return r
       return Infinity
     }
-    // Round the circle, but off the pier (straight ahead), whose deck stands over the water.
+    // Round the circle, but off the pier (straight ahead) and the Faro's boardwalk, whose decks stand over the water.
+    const crossesWalkway = (a: number) =>
+      Array.from({ length: 200 }, (_, k) => 12 + k * 0.1).some((r) => onWalkway({ x: Math.sin(a) * r, z: -Math.cos(a) * r }) !== undefined)
     const radii = Array.from({ length: 72 }, (_, k) => (k / 72) * Math.PI * 2)
-      .filter((a) => Math.cos(a) < 0.99)
+      .filter((a) => Math.cos(a) < 0.99 && !crossesWalkway(a))
       .map(waterline)
     expect(Math.max(...radii) - Math.min(...radii)).toBeGreaterThan(2)
     for (const r of radii) {

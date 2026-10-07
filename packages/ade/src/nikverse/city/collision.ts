@@ -6,7 +6,7 @@
  * cannot cross one between two frames.
  */
 
-import type { Box, Vec2 } from "./layout"
+import { inBox, type Box, type Vec2 } from "./layout"
 
 /** Pushes a circle out of a box, or returns it unchanged when it does not touch it. */
 export function pushOut(p: Vec2, radius: number, box: Box): Vec2 {
@@ -54,6 +54,8 @@ export interface World {
   radius: number
   /** A sector of the disc that is water: around the south (straight behind the first look), past `radius`. */
   mouth?: { halfAngle: number; radius: number }
+  /** Ground over the water the mouth does not take back: the Faro's boardwalk and deck, held by their rails. */
+  walkways?: ReadonlyArray<Box>
 }
 
 /** Takes a circle out of the mouth's sector: back toward the centre, or sideways onto the shore, whichever is nearer. */
@@ -86,7 +88,8 @@ function settle(p: Vec2, radius: number, world: World): Vec2 {
   const d = Math.hypot(at.x, at.z)
   const limit = world.radius - radius
   if (d > limit) at = { x: (at.x / d) * limit, z: (at.z / d) * limit }
-  if (world.mouth) at = outOfMouth(at, radius, world.mouth)
+  const walking = world.walkways?.some((w) => inBox(at, w)) ?? false
+  if (world.mouth && !walking) at = outOfMouth(at, radius, world.mouth)
   return at
 }
 

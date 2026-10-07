@@ -90,6 +90,11 @@ export interface CityKit {
    * The merged geometry is made once for a variant and shared by every shop that has it.
    */
   drawnShop(variant?: number, tint?: ShopTint): Group
+  /**
+   * One piece of a chiringuito by its name (`chir_bar1_counter`), as the file has it: a mesh that shares its geometry
+   * and material with every shop. Undefined when the file has no such piece. The games' kiosk is made of these.
+   */
+  piece(name: string): Mesh | undefined
   /** Whether every lightmap the file asks for was loaded. */
   lit: boolean
   /** Whether the file is the island (its ground has heights: `islandHeight`), not a flat city. */
@@ -337,6 +342,8 @@ export function kitOf(loaded: Loaded, maps: Lightmaps = new Map(), wanted: strin
   const variants = new Map<number, Mesh[]>()
   /** A chiringuito's parts by kind (`base`, `roof`, `bar`, `sign`) and number. */
   const parts = new Map<string, Map<number, Mesh[]>>()
+  /** The same parts by their own name. */
+  const pieces = new Map<string, Mesh>()
   const signs = new Map<number, SignAnchor>()
   const cache = new Map<string, Material>()
   /** A variant's pieces merged by material, made once (`null`: they could not be merged). */
@@ -379,6 +386,7 @@ export function kitOf(loaded: Loaded, maps: Lightmaps = new Map(), wanted: strin
       parts.set(part[1], byNumber)
       const n = Number(part[2] || 0)
       byNumber.set(n, [...(byNumber.get(n) ?? []), mesh])
+      pieces.set(child.name, mesh)
     } else if (shop) {
       const variant = shop[1] ? Number(shop[1]) : 0
       if (!variants.has(variant)) variants.set(variant, [])
@@ -449,6 +457,9 @@ export function kitOf(loaded: Loaded, maps: Lightmaps = new Map(), wanted: strin
         group.add(copy)
       }
       return group
+    },
+    piece(name) {
+      return pieces.get(name)?.clone()
     },
     drawnShop(variant = 0, tint) {
       const kind = kinds[((variant % kinds.length) + kinds.length) % kinds.length]

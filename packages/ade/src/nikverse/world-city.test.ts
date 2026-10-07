@@ -85,6 +85,10 @@ describe("the 3D city the page starts", () => {
     expect(readOptions("?check=logo")).toEqual({ check: true, classic: false, quality: undefined, shot: undefined, bench: false, tune: undefined })
     expect(readOptions("?renderer=classic&check=logo")).toEqual({ check: true, classic: true, quality: undefined, shot: undefined, bench: false, tune: undefined })
     expect(readOptions("?quality=alta").quality).toBe("alta")
+    // The language ADE speaks, only Italian or English; anything else is left to the system's.
+    expect(readOptions("?lang=en").lang).toBe("en")
+    expect(readOptions("?lang=it").lang).toBe("it")
+    expect(readOptions("?lang=fr").lang).toBeUndefined()
     expect(readOptions("?x=1").quality).toBeUndefined()
     // For measuring, `?samples=1|4` and `?maxscale=0.75..1`, and only through the bench's door: a page without it ignores them.
     expect(readOptions("?bench=1&samples=1&maxscale=0.9").tune).toEqual({ samples: 1, maxScale: 0.9 })

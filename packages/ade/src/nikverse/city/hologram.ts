@@ -257,6 +257,8 @@ export interface Hologram {
 export const TURN_SECONDS = 40
 /** Where the logo floats: its centre, above the projector. */
 export const HOLOGRAM_HEIGHT = 3.5
+/** The cone of light's radius at its foot, its widest: how much of the view the hologram takes (`places.test.ts`). */
+export const CONE_RADIUS = 2.05
 
 type Halo = MeshBasicNodeMaterial | MeshBasicMaterial
 
@@ -315,7 +317,7 @@ export function createHologram(logo: Logo, kind: HologramKind = "tsl", options: 
       side: DoubleSide,
     })
   }
-  const cone = new Mesh(new CylinderGeometry(1.6, 2.05, HOLOGRAM_HEIGHT + 0.8, 48, 1, true), coneMaterial)
+  const cone = new Mesh(new CylinderGeometry(1.6, CONE_RADIUS, HOLOGRAM_HEIGHT + 0.8, 48, 1, true), coneMaterial)
   cone.position.y = RING_HEIGHT + (HOLOGRAM_HEIGHT + 0.8) / 2
   group.add(cone)
 

@@ -63,6 +63,8 @@ import type { Player } from "./controller"
 import { GLOW_COLOR, lookOf } from "./states"
 import { createRiseFx, type RiseFx } from "./rise"
 import { liftEase, type AgentEntity, type ShopEntity, type Town } from "./town"
+import { createPlaces, type PlacesView } from "./places-view"
+import type { WorldLang } from "./places"
 
 const box = new BoxGeometry(1, 1, 1)
 const plane = new PlaneGeometry(1, 1)
@@ -208,6 +210,8 @@ export interface CityView {
   update(town: Town, player: Player, t: number, camera: PerspectiveCamera): void
   /** The user's character. */
   user: Person
+  /** The Faro and the games' kiosk. */
+  places: PlacesView
   /** The height of the ground under a point: the island's, or 0 with the placeholders. */
   groundAt(p: Vec2): number
   /** How many shop groups and people are drawn, for the tests. */
@@ -326,7 +330,13 @@ function buildDesks(view: ShopView, count: number, kit?: CityKit): void {
   view.desks = count
 }
 
-export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "tsl", cast?: Cast, kit?: CityKit): CityView {
+export function createCityScene(
+  logo: Logo = parseLogo(),
+  kind: HologramKind = "tsl",
+  cast?: Cast,
+  kit?: CityKit,
+  options: { lang?: WorldLang } = {},
+): CityView {
   const scene = new Scene()
   scene.background = new Color(0x0b1226)
   // With the file's city the far towers fade into the haze at the foot of its sky dome, which is this colour.
@@ -387,6 +397,10 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
   // On the island the hologram stands on the deck: the file's ring anchor is measured from it.
   hologram.group.position.y += groundAt({ x: 0, z: 0 })
   scene.add(hologram.group)
+
+  // The Faro and the games' kiosk: built once, and never changed after.
+  const places = createPlaces(kit, options.lang ?? "it")
+  scene.add(places.group)
 
   const user = createPerson({ shirt: 0xf1ecec, hair: 0x2a1e18, user: true }, cast?.get(USER_BODY))
   scene.add(user.group)
@@ -487,6 +501,7 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
     scene,
     groundAt,
     hologram,
+    places,
     user,
     update(town, player, t, camera) {
       const seen = new Set<string>()
@@ -554,6 +569,7 @@ export function createCityScene(logo: Logo = parseLogo(), kind: HologramKind = "
         disposeScreens(v)
       }
       shops.clear()
+      places.dispose()
     },
   }
 }
