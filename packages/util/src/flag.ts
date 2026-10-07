@@ -81,6 +81,36 @@ export namespace Flag {
   export function cacheRetention() {
     return process.env["NIKCLI_CACHE_RETENTION"]
   }
+  /**
+   * The cache keeper (`session/cache-keeper.ts`): keeps an idle session's prompt-cache entry alive with one hidden request shortly
+   * before it would expire. Off unless `NIKCLI_CACHE_KEEPALIVE=1`. Read on every use, like `cacheRetention`.
+   */
+  export function cacheKeepalive() {
+    return truthy("NIKCLI_CACHE_KEEPALIVE")
+  }
+  /** Idle compaction by the keeper, instead of letting the entry die at the end of its budget. Needs `cacheKeepalive` and `compactionSharedPrefix`. */
+  export function cacheKeepaliveCompact() {
+    return truthy("NIKCLI_CACHE_KEEPALIVE_COMPACT")
+  }
+  /**
+   * Compaction that reuses the prefix of the conversation's last request (same system, tools and messages, the summary instruction as
+   * the last user message) so the provider reads it from cache. Off unless `NIKCLI_COMPACTION_SHARED_PREFIX=1`.
+   */
+  export function compactionSharedPrefix() {
+    return truthy("NIKCLI_COMPACTION_SHARED_PREFIX")
+  }
+  /** `NIKCLI_COMPACTION_TOOL_CHOICE=same|none` forces how the shared-prefix compaction keeps the model from calling tools; `undefined` is the provider's default. */
+  export function compactionToolChoice(): "same" | "none" | undefined {
+    const raw = process.env["NIKCLI_COMPACTION_TOOL_CHOICE"]?.trim().toLowerCase()
+    return raw === "same" || raw === "none" ? raw : undefined
+  }
+  /** A positive number from the environment (`NIKCLI_CACHE_KEEPALIVE_*`), or `undefined` when unset or not one. */
+  export function cacheKeepaliveNumber(name: string): number | undefined {
+    const raw = process.env[name]?.trim()
+    if (!raw) return undefined
+    const value = Number(raw)
+    return Number.isFinite(value) && value > 0 ? value : undefined
+  }
   // Opt out of journaling local (non-workspace) session restore events into
   // the unified sync_event log.
   export const NIKCLI_DISABLE_SESSION_JOURNAL = truthy("NIKCLI_DISABLE_SESSION_JOURNAL")

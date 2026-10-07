@@ -16,6 +16,7 @@ import { Plugin } from "../plugin"
 import BUILD_SWITCH from "../session/prompt/build-switch.txt"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { defer } from "@nikcli-ai/util/defer"
+import { Flag } from "@nikcli-ai/util/flag"
 import { clone } from "remeda"
 import { MCP } from "../mcp"
 import { LSP } from "../lsp"
@@ -1175,6 +1176,13 @@ export namespace SessionPrompt {
       }
 
       if (task?.type === "compaction") {
+        // Behind its own switch: the compaction sends the conversation's prefix, so the provider reads it from cache.
+        const shared = Flag.compactionSharedPrefix()
+          ? await sharedCompactionPrefix({ sessionID, session, msgs, lastUser, model, lastFinished }).catch((error) => {
+              log.warn("compaction shared prefix not built", { sessionID, error: String(error) })
+              return undefined
+            })
+          : undefined
         const result = await runCompaction(
           Effect.gen(function* () {
             const compaction = yield* SessionCompaction.Service
@@ -1184,6 +1192,7 @@ export namespace SessionPrompt {
               abort,
               sessionID,
               auto: task.auto,
+              shared,
             })
           }),
         )
@@ -2039,6 +2048,71 @@ export namespace SessionPrompt {
       synthetic: true,
     })
     input.userMessage.parts.push(part)
+  }
+
+  /**
+   * What a normal step of the loop would send, minus the assistant message it would create: the conversation's agent, system, tools
+   * and messages, for a compaction that reuses the prefix of the last real request (`SessionCompaction.SharedPrefix`).
+   */
+  async function sharedCompactionPrefix(input: {
+    sessionID: string
+    session: Session.Info
+    msgs: MessageV2.WithParts[]
+    lastUser: MessageV2.User
+    model: Provider.Model
+    lastFinished: MessageV2.Assistant | undefined
+  }): Promise<SessionCompaction.SharedPrefix> {
+    const agent = await agentRequired(input.lastUser.agent)
+    const sessionMessages = clone(input.msgs)
+    // The tools never run (the answer's tool calls are dropped), so the processor the schemas are bound to is a stand-in.
+    const { tools, deferred } = await resolveTools({
+      agent,
+      session: input.session,
+      model: input.model,
+      tools: input.lastUser.tools,
+      processor: { message: {} as MessageV2.Assistant, partFromToolCall: () => undefined },
+      bypassAgentCheck: sessionMessages.findLast((m) => m.info.role === "user")?.parts.some((p) => p.type === "agent") ?? false,
+    })
+    if (input.lastUser.format?.type === "json_schema") {
+      tools["StructuredOutput"] = createStructuredOutputTool({ schema: input.lastUser.format.schema, onSuccess() {} })
+    }
+    await runPlugin(
+      Effect.gen(function* () {
+        const plugin = yield* Plugin.Service
+        yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: sessionMessages })
+      }),
+    )
+    const config = await configGet()
+    const wrap = (config.experimental?.queued_message_wrap ?? false) as
+      | { header: string; footer: string }
+      | "default"
+      | boolean
+      | null
+    const assembled = await InstructionSync.assemble({
+      sessionID: input.sessionID,
+      projectID: input.session.projectID,
+      skills: input.session.skills ?? [],
+      disabled: input.session.disabledInstructions ?? [],
+    })
+    const system = [...assembled.system]
+    if (input.lastUser.format?.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+    return {
+      agent,
+      system,
+      tools,
+      deferred,
+      // Built the way the step builds them, so the prefix is byte-identical up to the compaction's own message.
+      messages: [
+        ...assembled.sessionMessages.map((content) => ({ role: "user" as const, content })),
+        ...assembled.skillMessages.map((content) => ({ role: "user" as const, content })),
+        ...MessageV2.toModelMessages(sessionMessages, input.model, {
+          remindAfter: input.lastFinished?.id,
+          wrap,
+        }),
+        ...assembled.updates,
+      ],
+      toolChoice: input.lastUser.format?.type === "json_schema" ? "required" : undefined,
+    }
   }
 
   async function insertReminders(input: { messages: MessageV2.WithParts[]; agent: Agent.Info; session: Session.Info }) {

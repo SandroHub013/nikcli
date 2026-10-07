@@ -18,6 +18,7 @@ import { Agent } from "@/agent/agent"
 import { SessionRepo } from "@/session/repo"
 import type { Project } from "@/project/project"
 import { InstanceReload } from "@/project/reload"
+import { CacheKeeper } from "@/session/cache-keeper"
 import { SessionDiffRepo } from "@/session/diff-repo"
 import { SessionV2Write } from "@/session/v2/write"
 import type { Session } from "@/session"
@@ -771,6 +772,9 @@ export async function runWithArgs(args: any): Promise<void> {
   // remote server that owns the config still watches it; the TUI never
   // reaches this handler.
   if (isHeadless()) InstanceReload.disableForHeadlessRun()
+  // A run ends with its turn: nothing in it is left idle for a cache entry to be kept alive for. (It reads events from its own
+  // in-process server, so an attached client alone would not tell it apart from a TUI.)
+  CacheKeeper.disableForProcess()
 
   await bootstrap(process.cwd(), async (instance) => {
     log.debug("Running local nikcli session")

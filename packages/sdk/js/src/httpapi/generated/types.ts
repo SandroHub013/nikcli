@@ -2353,6 +2353,18 @@ export type EventMessagePartRemoved = {
   properties: { sessionID: string; messageID: string; partID: string }
 }
 
+export type EventSessionCache = {
+  type: "session.cache"
+  properties: {
+    sessionID: string
+    state: "armed" | "renewed" | "compacted" | "stopped"
+    expiresAt?: number | undefined
+    renewals: number
+    reason?: string | undefined
+    usage?: { input: number; output: number; cacheRead: number; cacheWrite: number } | undefined
+  }
+}
+
 export type SessionWorktree8 = {
   name: string
   branch: string
@@ -4561,6 +4573,7 @@ export type Event =
   | EventFileEdited
   | EventMonitorCreated
   | EventMonitorUpdated
+  | EventSessionCache
   | EventMonitorOutput
   | EventMonitorCompleted
   | EventLoopUpserted
@@ -4633,6 +4646,7 @@ export type Event1 =
   | EventFileEdited
   | EventMonitorCreated
   | EventMonitorUpdated
+  | EventSessionCache
   | EventMonitorOutput
   | EventMonitorCompleted
   | EventLoopUpserted
