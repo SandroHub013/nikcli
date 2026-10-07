@@ -26,6 +26,7 @@ import {
   WATER_Y,
   deskLocal,
   islandHeight,
+  onWalkway,
   wallsLocal,
 } from "./layout"
 import { LEVELS_DIR, kitFor, presentLevels } from "./test-cast"
@@ -314,7 +315,8 @@ describe.each(presentLevels())("the city at %s against the layout", (level) => {
     for (let i = 0; i < pos.count; i++) {
       const p = { x: pos.getX(i), z: pos.getZ(i) }
       const r = Math.hypot(p.x, p.z)
-      const onPier = Math.abs(p.x) <= PIER.halfWidth + 0.1 && p.z >= PIER.fromZ - 0.1 && p.z <= PIER.toZ + 0.1
+      // The pier's deck and the Faro's boardwalk and deck stand over the ground at their own height.
+      const onPier = (Math.abs(p.x) <= PIER.halfWidth + 0.1 && p.z >= PIER.fromZ - 0.1 && p.z <= PIER.toZ + 0.1) || onWalkway(p, 0.1) !== undefined
       // The mouth's banks are lowered a few degrees past its edge, where nobody walks.
       const nearMouth = r > MOUTH.radius - 2 && Math.PI - Math.abs(Math.atan2(p.x, -p.z)) < MOUTH.halfAngle + (8 * Math.PI) / 180
       if (r < PLATFORM_RADIUS + 0.05 || r > 33 || onPier || nearMouth) continue

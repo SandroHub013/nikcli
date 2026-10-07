@@ -31,7 +31,8 @@ import {
   type Player,
 } from "./controller"
 import { keyCommand, nearestPickable, pickWithRay, type Pickable, type Ray } from "./interaction"
-import { MOUTH, type Box } from "./layout"
+import { MOUTH, WALKWAYS, type Box } from "./layout"
+import { placeBoxes, worldLang } from "./places"
 import { CHECK_PIXELS_PER_UNIT, logoCheck } from "./hologram"
 import { parseLogo } from "./logo"
 import { loadLevel } from "./load-level"
@@ -82,6 +83,8 @@ export interface CityDeps {
   lowered?: boolean
   /** The bench's door is open (`?bench=1` or `?shot=`): nothing changes the level by itself while it measures. */
   measuring?: boolean
+  /** The language ADE speaks (`?lang=it|en`); without it, the system's, by ADE's own rule. For the hint and the kiosk's sign. */
+  lang?: string
   /** The city drew its first frame: the world is on screen (ADE stops waiting for it). */
   onDrawn?(): void
   /** The frames stayed too slow at a 60 fps level the machine chose by itself: ADE opens it at Bassa from now on. */
@@ -108,6 +111,8 @@ export interface CityHandle {
 
 /** The projector under the hologram: the character walks around it, not through it. */
 const PROJECTOR: Box = { cx: 0, cz: 0, hx: 3.1, hz: 3.1, yaw: 0, height: 0.62 }
+/** The Faro and the kiosk: what stops the character there. */
+const PLACE_BOXES = placeBoxes()
 
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n)
 
@@ -222,7 +227,8 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
 
   const logo = parseLogo()
   const town = createTown()
-  const view = createCityScene(logo, backend === "webgpu" ? "tsl" : "shader", cast, kit)
+  const lang = worldLang(deps.lang, [...(win.navigator.languages ?? []), win.navigator.language])
+  const view = createCityScene(logo, backend === "webgpu" ? "tsl" : "shader", cast, kit, { lang })
   const camera = new PerspectiveCamera(58, 1, 0.1, 400)
   // The bench's page: the fixed scene from one camera, drawn once (`?shot=N`).
   if (deps.shot !== undefined) {
@@ -250,7 +256,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   let timer: ReturnType<typeof setTimeout> | undefined
   let sized = false
   const movingInterval = movingIntervalMs(level)
-  let boxes: Box[] = [PROJECTOR]
+  let boxes: Box[] = [PROJECTOR, ...PLACE_BOXES]
   let boxesStale = true
   let hintPane: string | undefined
   const hint = doc.getElementById("hint")
@@ -297,10 +303,10 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
 
   const world = () => {
     if (boxesStale) {
-      boxes = [PROJECTOR, ...town.boxes()]
+      boxes = [PROJECTOR, ...PLACE_BOXES, ...town.boxes()]
       boxesStale = false
     }
-    return { boxes, radius: town.radius(), mouth: MOUTH }
+    return { boxes, radius: town.radius(), mouth: MOUTH, walkways: WALKWAYS }
   }
 
   const rayAt = (clientX: number, clientY: number): Ray => {
