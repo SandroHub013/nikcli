@@ -1,11 +1,12 @@
 MIT License
 
-nikcli is a fork of OpenCode (https://github.com/anomalyco/opencode), which is
-also MIT licensed. The upstream copyright notice is retained below, as required
-by that license.
+Ragu Code is a fork of nikcli (https://github.com/nikcli/nikcli), which is a
+fork of OpenCode (https://github.com/anomalyco/opencode); both are MIT licensed.
+Their copyright notices are retained below, as required by that license.
 
 Copyright (c) 2025 opencode
 Copyright (c) 2025 nikcli
+Copyright (c) 2026 Alessandro Boni (Ragu Code)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
