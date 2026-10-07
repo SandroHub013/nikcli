@@ -289,3 +289,61 @@ describe("the hint within reach", () => {
   })
 })
 
+/** The bytes a geometry takes on the GPU: its attributes and its index. */
+function geometryBytes(g: BufferGeometry): number {
+  let bytes = g.index ? g.index.array.byteLength : 0
+  for (const name of Object.keys(g.attributes)) bytes += (g.getAttribute(name).array as ArrayLike<number> & { byteLength: number }).byteLength
+  return bytes
+}
+/** Every geometry a group draws, once each; shared ones are counted, so the number is an upper bound. */
+function groupBytes(root: Object3D): number {
+  const seen = new Set<BufferGeometry>()
+  root.traverse((o) => {
+    const g = (o as Mesh).geometry as BufferGeometry | undefined
+    if (g && (o as Mesh).isMesh) seen.add(g)
+  })
+  return [...seen].reduce((sum, g) => sum + geometryBytes(g), 0)
+}
+/** An RGBA picture with its mipmaps. */
+const pictureBytes = (w: number, h: number) => Math.ceil(w * h * 4 * (4 / 3))
+const MB = 1024 * 1024
+
+describe("what the places cost", () => {
+  for (const level of ["bassa", "media"]) {
+    test(`at ${level}: the Faro under 1 MB of GPU memory and the kiosk under half a megabyte, in a handful of draws`, async () => {
+      const places = createPlaces(await kitFor(level), "it")
+      const faro = groupBytes(places.faro) + pictureBytes(HALO_SIZE, HALO_SIZE)
+      const kiosk = groupBytes(places.kiosk) + pictureBytes(SIGN_SIZE.width, SIGN_SIZE.height)
+      expect(faro).toBeLessThan(1 * MB)
+      expect(kiosk).toBeLessThan(0.5 * MB)
+      // The kiosk is the file's pieces: the counter, the awning, the sign and the posts, not plain boxes.
+      const names = new Set<string>()
+      places.kiosk.traverse((o) => void names.add(o.name))
+      for (const piece of ["chir_bar1_counter", "chir_roof2_roof", "chir_roof2_stripes", "chir_sign0_board", "kiosk_post"]) expect(names.has(piece)).toBe(true)
+      let draws = 0
+      places.group.traverse((o) => void ((o as Mesh).isMesh || (o as { isSprite?: boolean }).isSprite ? draws++ : 0))
+      expect(draws).toBeLessThanOrEqual(12)
+      places.dispose()
+    })
+  }
+
+  test("nothing in them moves: no matrix is worked out per frame, nothing runs before a draw, and no material is a node clock's", async () => {
+    const places = createPlaces(await kitFor("media"), "it")
+    places.group.traverse((o) => {
+      expect([o.name, o.matrixAutoUpdate]).toEqual([o.name, false])
+      // Three's own empty hook, from the prototype: nobody hung a function of theirs on it.
+      expect([o.name, Object.prototype.hasOwnProperty.call(o, "onBeforeRender")]).toEqual([o.name, false])
+      const material = (o as Mesh).material as { isNodeMaterial?: boolean } | undefined
+      if (material) expect(material.isNodeMaterial ?? false).toBe(false)
+    })
+    places.dispose()
+  })
+
+  test("without the file the kiosk is a few plain boxes, and the Faro is the same", () => {
+    const places = createPlaces(undefined, "en")
+    expect(places.kiosk.children.length).toBeGreaterThan(0)
+    expect(places.faro.getObjectByName("faro_body")).toBeDefined()
+    expect(blocked(placePickables()[1], 0.1, { boxes: kioskBoxes(), radius: 99 })).toBe(true)
+    places.dispose()
+  })
+})

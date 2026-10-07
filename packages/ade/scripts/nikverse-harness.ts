@@ -120,9 +120,11 @@ export async function startHarness(options: HarnessOptions) {
     port: 0,
     fetch(request) {
       const url = new URL(request.url)
+      // The policy sandboxes the page (its origin is `null`), so its module scripts and files are cross-origin
+      // requests: the scheme answers them with `Access-Control-Allow-Origin: *` (`nikverse.rs`), and so does this.
       const policy: Record<string, string> = options.noPolicy?.includes(url.pathname)
-        ? {}
-        : { "content-security-policy": CSP }
+        ? { "access-control-allow-origin": "*" }
+        : { "content-security-policy": CSP, "access-control-allow-origin": "*" }
       const send = (body: string, type: string) =>
         new Response(body, { headers: { "content-type": type, "cache-control": "no-store", ...policy } })
       const own = options.routes?.(url, policy)
