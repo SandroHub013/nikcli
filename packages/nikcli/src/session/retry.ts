@@ -215,6 +215,25 @@ export namespace SessionRetry {
     return undefined
   }
 
+  /**
+   * Whether the processor will retry an error that came before any output, from the same numbers it decides on: the retry message
+   * (`retryable`, or "Rate limited"), whether it is a rate limit (counted in time waited, a zero wait costing a second), the attempts
+   * made, the time waited and the budget. Asked by the LLM layer so its fallback runtime comes after those retries, not instead.
+   */
+  export function retryFollows(input: {
+    retry: string | undefined
+    rateLimited: boolean
+    attempt: number
+    rateWaited: number
+    rateDelay: number
+    budget: number
+    outputEmitted: boolean
+  }): boolean {
+    if (input.outputEmitted || input.retry === undefined) return false
+    if (input.rateLimited) return input.rateWaited + Math.max(input.rateDelay, 1000) <= input.budget
+    return input.attempt + 1 <= RETRY_MAX_ATTEMPTS
+  }
+
   export function retryable(error: { name: string; data?: Record<string, unknown> }) {
     if (MessageV2.APIError.isInstance(error)) {
       const status = error.data.statusCode

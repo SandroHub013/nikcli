@@ -295,7 +295,30 @@ export namespace SessionProcessor {
             }
           }
           try {
-            const stream = await LLM.stream(streamInput)
+            // The retries below come first: an error before any output that one of them will take is not for the AI SDK fallback.
+            const stream = await LLM.stream({
+              ...streamInput,
+              attempt: attempt + rateAttempt,
+              retryFollows: async (e) => {
+                const err = MessageV2.fromError(e, { providerID: input.model.providerID })
+                const limited = MessageV2.APIError.isInstance(err) && SessionRetry.isRateLimit(err)
+                return SessionRetry.retryFollows({
+                  retry: SessionRetry.retryable(err) ?? (limited ? "Rate limited" : undefined),
+                  rateLimited: limited,
+                  attempt,
+                  rateWaited,
+                  rateDelay: limited
+                    ? SessionRetry.delay(
+                        rateAttempt + 1,
+                        MessageV2.APIError.isInstance(err) ? new MessageV2.APIError(err.data) : undefined,
+                        { rateLimited: true },
+                      )
+                    : 0,
+                  budget: (await configGet()).experimental?.rateLimitBudgetMs ?? SessionRetry.RATE_LIMIT_BUDGET_MS,
+                  outputEmitted,
+                })
+              },
+            })
 
             for await (const value of stream.fullStream) {
               input.abort.throwIfAborted()

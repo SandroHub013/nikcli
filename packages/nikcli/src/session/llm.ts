@@ -129,6 +129,13 @@ export namespace LLM {
      */
     deferred?: ReadonlySet<string>
     retries?: number
+    /** Retries the caller has made so far for this call (the processor's `attempt`), for the line that says why the fallback ran. */
+    attempt?: number
+    /**
+     * Whether the caller will retry this error by itself (`SessionRetry.retryFollows`). Asked when the native stream fails before
+     * any output: if it will, the error goes up to those retries, and the AI SDK fallback is what is left after them.
+     */
+    retryFollows?: (error: unknown) => boolean | Promise<boolean>
     toolChoice?: "auto" | "required" | "none"
     /**
      * The request carries the conversation's tools (so its prefix is the conversation's) but the model must not use them: a
@@ -603,8 +610,11 @@ export namespace LLM {
       })
     } catch (error) {
       if (input.abort.aborted || (error instanceof Error && error.name === "AbortError")) throw error
+      // The caller's retries come first, then the fallback.
+      if (await input.retryFollows?.(error)) throw error
       l.warn("native request failed before streaming, using ai-sdk", {
         error: String(error),
+        attempts: input.attempt ?? 0,
       })
       LLMCoverage.record({
         outcome: "fallback",
@@ -620,13 +630,20 @@ export namespace LLM {
       modelID: modelRef.id,
     })
     return streamResult(
-      withStreamFallback(result.fullStream, legacy, input.abort, (reason) =>
-        LLMCoverage.record({
-          outcome: "fallback",
-          providerID: modelRef.provider,
-          modelID: modelRef.id,
-          reason,
-        }),
+      withStreamFallback(
+        result.fullStream,
+        legacy,
+        input.abort,
+        (reason) => {
+          l.warn("native stream failed before any output, using ai-sdk", { reason, attempts: input.attempt ?? 0 })
+          LLMCoverage.record({
+            outcome: "fallback",
+            providerID: modelRef.provider,
+            modelID: modelRef.id,
+            reason,
+          })
+        },
+        async (error) => !(await input.retryFollows?.(error)),
       ),
     ) as StreamOutput
   }
