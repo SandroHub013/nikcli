@@ -278,7 +278,19 @@ export namespace CacheKeeper {
     if (!d.settings().compact) return stop(entry, reason, extra)
     clear(entry)
     const generation = entry.generation
-    void (async () => {
+    // Not now: the entry is warm until it expires, and a compaction that reads it is as cheap at the margin before the expiry as at
+    // the end of the turn, while a session that is resumed in between has lost nothing. With a budget of 0 this is the whole point:
+    // no keep-alive, and the one request left is the compaction.
+    const lifetime = entry.lifetimeMs ?? 0
+    const expiresAt = entry.lastTouch + lifetime
+    const delay = Math.max(0, expiresAt - marginMs(entry, d) - d.now())
+    d.publish({ sessionID: entry.sessionID, state: entry.renewals === 0 ? "armed" : "renewed", expiresAt, renewals: entry.renewals }, entry.ctx)
+    entry.timer = d.setTimer(() => {
+      entry.timer = undefined
+      if (entry.stopped || entry.generation !== generation) return
+      void compactNow()
+    }, delay)
+    const compactNow = async () => {
       try {
         if (!(await d.quiet(entry.sessionID, entry.ctx)) || entry.generation !== generation || entry.stopped) {
           return stop(entry, `${reason}; not idle for the compaction`, extra)
@@ -293,7 +305,7 @@ export namespace CacheKeeper {
         if (entry.generation !== generation || entry.stopped) return
         stop(entry, "the idle compaction failed", { error: error instanceof Error ? error.message : String(error) })
       }
-    })()
+    }
   }
 
   // ---------------------------------------------------------------- the three hooks
