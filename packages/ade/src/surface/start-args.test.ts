@@ -36,6 +36,14 @@ describe("a pane's start, the first and every restart (review-alti, ALTO 5)", ()
     expect(runAt(first, ["--model", "haiku"])).toBeGreaterThan(-1)
   })
 
+  // Sessioni 2, option (d): a Claude pane is named, and never told to accept mail from any session of the machine.
+  test("a Claude start names the session and carries no crossSessionInbound setting", () => {
+    const args = startArgsFor("claude-code", { spawnArgs: ["--model", "haiku"] }, { title: "bot", opening: [] })
+    expect(runAt(args, ["--name", "bot"])).toBeGreaterThan(-1)
+    expect(args).not.toContain("--settings")
+    expect(args.join(" ")).not.toContain("crossSessionInbound")
+  })
+
   test("what one start alone adds comes last, after the pane's own", () => {
     const args = startArgsFor("codex", { spawnArgs: ["-m", "gpt-5.5"] }, { title: "x", opening: [], extra: ["login"] })
     expect(args.at(-1)).toBe("login")

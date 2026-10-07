@@ -5,7 +5,6 @@ import {
   formatHandoff,
   HANDOFF_ACK_MS,
   handoffOutcome,
-  INBOUND_SETTINGS,
   isHandoff,
   nativeLaunchArgs,
   nativeName,
@@ -15,9 +14,12 @@ import {
 } from "./native-mail"
 
 describe("nativeLaunchArgs", () => {
-  test("a Claude session gets its name and an inbox that accepts", () => {
-    expect(nativeLaunchArgs("claude-code", "Fabio")).toEqual(["--name", "Fabio", "--settings", INBOUND_SETTINGS])
-    expect(JSON.parse(INBOUND_SETTINGS)).toEqual({ crossSessionInbound: "accept" })
+  // Sessioni 2, option (d): no `crossSessionInbound: accept`. The CLI's own rule is permission parity: bypass to bypass passes, a
+  // session that asks permission to one that does not is held, so no session of the machine drives a bypass ADE session.
+  test("a Claude session gets its name and no inbox setting: the CLI's own rule holds", () => {
+    expect(nativeLaunchArgs("claude-code", "Fabio")).toEqual(["--name", "Fabio"])
+    expect(nativeLaunchArgs("claude-code", "Fabio")).not.toContain("--settings")
+    expect(nativeLaunchArgs("claude-code", "Fabio").join(" ")).not.toContain("crossSessionInbound")
   })
 
   /** The other ten agents and the shell: nothing changes for them. */

@@ -25,33 +25,27 @@
 export const CLAUDE = "claude-code"
 
 /**
- * The settings a session ADE opens must carry for its inbox to accept peers.
- *
- * Passed with `--settings` on the command line, **per process**, and that
- * is the point: it writes no file of the user's. Putting the same key in
- * `~/.claude/settings.json` would look simpler and would make every session
- * on the machine accept peer mail, ADE's or not, which is the user's choice
- * to make and not ours. Do not move it there.
- */
-export const INBOUND_SETTINGS = '{"crossSessionInbound":"accept"}'
-
-/**
- * Arguments that make a session reachable by name and willing to accept.
+ * Arguments that make a session reachable by name.
  *
  * `--name` is how another session addresses it, so the pane's title becomes
  * its name; the CLI keeps the name only if free, and renames to a variant
  * otherwise — which is why nothing here ever assumes the name took, and the
  * listing is asked for the name that did.
  *
- * `crossSessionInbound: accept` is not optional. Without it the default
- * holds a message to a session that skips permission prompts — ours nearly
- * all do — behind a dialog that expires in five minutes, and nobody would
- * know: the sender is told "held", the message is dropped, and ADE never
- * hears either.
+ * Deliberately no `crossSessionInbound: accept`. With it, any Claude session
+ * of the machine — one that asks for permissions, or one with an injected
+ * prompt — could drive an ADE session that skips them. Without it the CLI
+ * applies its own rule, permission parity: a message passes when sender and
+ * receiver are in the same class (bypass to bypass, which is nearly all of
+ * ours, so the team's mail stays native), and is held when a session that asks
+ * writes to one that does not. A held message is not lost: the sender does not
+ * confirm it, and ADE's typed fallback delivers it with `verifySender`. The
+ * setting would never be written to `~/.claude/settings.json` either way: the
+ * user's rules are the user's.
  */
 export function nativeLaunchArgs(agentId: string, title: string): string[] {
   if (agentId !== CLAUDE) return []
-  return ["--name", nativeName(title), "--settings", INBOUND_SETTINGS]
+  return ["--name", nativeName(title)]
 }
 
 /** The pane's title as a session name: trimmed, one line, never empty. */
