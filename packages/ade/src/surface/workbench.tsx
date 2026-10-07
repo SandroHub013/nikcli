@@ -311,7 +311,9 @@ import { asOneLine, asSubmittedLine, confirmDeadline, pasteSettled, submitCheck 
 import { searchPaths, walkProject } from "../search"
 import { createProjectWalk } from "./project-walk"
 import {
-  DEFAULT_MAX_SPAWNED,
+  spawnDepthRefusal,
+  spawnLimit,
+  spawnLimitRefusal,
   USAGE,
   USAGE_DECISIONI,
   USAGE_DESIGN,
@@ -3193,11 +3195,8 @@ export function Workbench() {
   })
   onCleanup(() => setProviderPicker())
 
-  /** The cap on sessions `spawn` keeps open at once; `ade.mailbox.maxSpawned` in localStorage overrides it. */
-  const maxSpawned = () => {
-    const stored = Number(readStored("ade.mailbox.maxSpawned"))
-    return Number.isInteger(stored) && stored > 0 ? stored : DEFAULT_MAX_SPAWNED
-  }
+  /** The cap on sessions `spawn` keeps open at once: none by default (the depth stops a cascade); a whole number above zero in `ade.mailbox.maxSpawned` in localStorage sets one. */
+  const maxSpawned = () => spawnLimit(readStored("ade.mailbox.maxSpawned"))
 
   const targetOf = (request: OpenRequest) => ({
     running: running.has(request.to),
@@ -4315,18 +4314,16 @@ export function Workbench() {
         fork = planned
       }
       const open = [...spawnedBy.keys()].filter((paneId) => wb().panes.some((pane) => pane.id === paneId))
-      if (open.length >= maxSpawned()) {
-        await answer(
-          `errore: ci sono già ${open.length} sessioni avviate con spawn (limite ${maxSpawned()}); chiudine una con ade-msg close <sessione> o aspetta che finiscano`,
-        )
+      const overLimit = spawnLimitRefusal(open.length, maxSpawned())
+      if (overLimit) {
+        await answer(overLimit)
         return true
       }
       // Depth: the user's own sessions are level 0, and each spawn goes one down.
       const depth = message.from ? depthOf(message.from, parentOf) + 1 : 1
-      if (depth > maxDepth()) {
-        await answer(
-          `errore: questa sessione è già al livello ${depth - 1} e il massimo è ${maxDepth()}: fai il lavoro qui o chiedi a chi ti ha avviato`,
-        )
+      const tooDeep = spawnDepthRefusal(depth, maxDepth())
+      if (tooDeep) {
+        await answer(tooDeep)
         return true
       }
 
