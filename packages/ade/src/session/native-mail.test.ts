@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import { createLineAccumulator } from "../host/line-stream"
+import { stripAnsi } from "../host/ansi"
+import { modeBarRaw } from "./fixtures/mode-bar-raw"
 
 import {
   formatFallbackLine,
@@ -9,6 +12,7 @@ import {
   LATE_NO_MS,
   lateNo,
   nativeLaunchArgs,
+  createModeTracker,
   permissionClassIn,
   nativeName,
   parseHandoffs,
@@ -81,6 +85,58 @@ describe("permissionClassIn", () => {
     expect(permissionClassIn("\u001b[38;5;211mbypass permissions on\u001b[39m")).toBe("bypass")
     expect(permissionClassIn("nothing about modes here")).toBeUndefined()
     expect(permissionClassIn("auto mode on")).toBeUndefined()
+  })
+})
+
+/**
+ * A real capture (live test of the mode bar): Claude Code repaints the bar inside a pty chunk that has no newline, ESC[H, a CR, the bar,
+ * ESC[21;1H. The line path never delivers it: the accumulator holds it pending, and `stripAnsi` erases what comes before a lone CR.
+ * So the class is read from the raw chunk, by pane.
+ */
+describe("the mode bar in a raw pty chunk (no newline)", () => {
+  const [autoBar, manualBar] = modeBarRaw
+
+  test("the capture is what the line path cannot see", () => {
+    // The bar is held pending (no newline); the next repaint, which starts with a carriage return, makes `stripAnsi` erase it.
+    const lines = createLineAccumulator()
+    const seen = [...lines.push(autoBar!), ...lines.push(manualBar!), ...lines.push("\r\u001b[2K> hi\r\n")]
+    expect(seen).toEqual(["> hi"])
+    expect(seen.map(permissionClassIn)).toEqual([undefined])
+    expect(permissionClassIn(stripAnsi(manualBar!))).toBe("prompting")
+  })
+
+  test("from the pty chunk to the class: manual mode asks, auto mode is unknown", () => {
+    const modes = createModeTracker()
+    expect(modes.push("p1", autoBar!)).toBeUndefined()
+    expect(modes.push("p1", manualBar!)).toBe("prompting")
+  })
+
+  test("the bar cut in two chunks is still read, and the last bar wins", () => {
+    const modes = createModeTracker()
+    const cut = manualBar!.indexOf("manual") + 4
+    expect(modes.push("p1", manualBar!.slice(0, cut))).toBeUndefined()
+    expect(modes.push("p1", manualBar!.slice(cut))).toBe("prompting")
+    const bypass = "\u001b[?25l\u001b[H\r\u001b[2C\u001b[20B⏵⏵ bypass permissions on\u001b[39m\u001b[K\u001b[21;1H"
+    expect(modes.push("p1", bypass)).toBe("bypass")
+  })
+
+  test("each pane has its own tail, and forgetting one clears it", () => {
+    const modes = createModeTracker()
+    modes.push("p1", manualBar!)
+    expect(modes.push("p2", "no bar here")).toBeUndefined()
+    modes.forget("p1")
+    expect(modes.push("p1", "no bar here either")).toBeUndefined()
+  })
+
+  test("a bar that has scrolled out of the tail is not kept for ever", () => {
+    const modes = createModeTracker(200)
+    modes.push("p1", manualBar!)
+    expect(modes.push("p1", "x".repeat(400))).toBeUndefined()
+  })
+
+  test("cursor moves and carriage returns are spaces, not nothing: words from two cells are not glued", () => {
+    expect(permissionClassIn("bypass\u001b[1Cpermissions\ron")).toBe("bypass")
+    expect(permissionClassIn("manual\u001b[2Cmode on")).toBe("prompting")
   })
 })
 

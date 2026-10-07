@@ -419,7 +419,7 @@ import {
   lateNo,
   parseHandoffs,
   parseNativeSessions,
-  permissionClassIn,
+  createModeTracker,
   routeFor,
   type Handoff,
   type NativeSession,
@@ -2624,6 +2624,8 @@ export function Workbench() {
    * holds the message behind a dialog (sessioni 2, live proof).
    */
   const paneClasses = new Map<string, PermissionClass>()
+  /** The raw tail of each Claude pane, where its mode bar is read: the bar never comes out whole from the line path. */
+  const modeTracker = createModeTracker()
 
   /** Types what a handoff did not deliver, and says so on both sides. */
   const fallBackToTyping = (handoff: Handoff, reason: string) => {
@@ -7333,6 +7335,7 @@ export function Workbench() {
     records.forget(id)
     rawWindows.forget(id)
     paneClasses.delete(id)
+    modeTracker.forget(id)
     forgetQuiet(id)
     screenRequests.forget(id)
     // Per-pane bookkeeping kept in plain maps, which nothing else clears: a
@@ -7753,12 +7756,6 @@ export function Workbench() {
      */
     const recent = rawWindows.push(paneId, text)
     const agent = pane.agent ?? pane.model
-    // The mode bar is repainted on every Shift+Tab: what was seen last is the pane's class (native mail is picked on it).
-    if (agent === "claude-code") {
-      const seen = permissionClassIn(text)
-      if (seen) paneClasses.set(paneId, seen)
-    }
-
     const pending = permissions()[paneId]
     if (pending) {
       // Still asked, perhaps with an answer more than when it was found (the «3. No» of a menu).
@@ -8445,6 +8442,8 @@ export function Workbench() {
 
       // A restart reuses the pane's terminal; the new process starts at 1;1.
       startOnCleanScreen(paneId)
+      modeTracker.forget(paneId)
+      paneClasses.delete(paneId)
       // A conversation reopened is drawn again, requests and all: those were acted on.
       screenRequests.start(
         paneId,
@@ -8463,6 +8462,11 @@ export function Workbench() {
           lastByteAt = now
           lastOutputAt.set(paneId, now)
           noteBracketedPaste(paneId, chunk)
+          // The mode bar is repainted on every Shift+Tab, in a chunk with no newline: read from the raw bytes, the last one seen is the pane's class (native mail is picked on it).
+          if (agentId === "claude-code") {
+            const seen = modeTracker.push(paneId, chunk)
+            if (seen) paneClasses.set(paneId, seen)
+          }
 
           feedTerminal(paneId, chunk)
         },

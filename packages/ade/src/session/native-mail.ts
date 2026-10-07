@@ -111,11 +111,12 @@ export type PermissionClass = "bypass" | "prompting"
  * the words are ignored. Anything else (`auto mode`, no bar seen) is unknown, and unknown goes to the keyboard.
  */
 export function permissionClassIn(text: string): PermissionClass | undefined {
-  const plain = text.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "")
+  // A space, not nothing: a cursor move or a carriage return between two cells separates words, it does not erase them.
+  const plain = text.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]|\r/g, " ")
   let found: { at: number; class: PermissionClass } | undefined
   const patterns: [RegExp, PermissionClass][] = [
-    [/bypass permissions on/gi, "bypass"],
-    [/(?:manual mode|accept edits|plan mode) on/gi, "prompting"],
+    [/bypass\s+permissions\s+on/gi, "bypass"],
+    [/(?:manual\s+mode|accept\s+edits|plan\s+mode)\s+on/gi, "prompting"],
   ]
   for (const [pattern, kind] of patterns) {
     for (const match of plain.matchAll(pattern)) {
@@ -123,6 +124,29 @@ export function permissionClassIn(text: string): PermissionClass | undefined {
     }
   }
   return found?.class
+}
+
+/** How much raw output each pane keeps for reading its mode bar: a few repaints of the bar, escape sequences included. */
+const MODE_TAIL = 1200
+
+/**
+ * The permission class of each Claude pane, read from the raw pty chunks and not from lines. The mode bar is repainted in a chunk with no
+ * newline (`ESC[H`, a carriage return, the bar, `ESC[21;1H`): the line path keeps it pending and then `stripAnsi` erases it, so it
+ * never reaches `permissionClassIn`. A short raw tail per pane also catches a bar split between two chunks. The last bar in the tail wins.
+ */
+export function createModeTracker(limit: number = MODE_TAIL) {
+  const tails = new Map<string, string>()
+  return {
+    /** Adds a raw chunk to the pane's tail and returns the class its last mode bar says, if the tail holds one. */
+    push(paneId: string, chunk: string): PermissionClass | undefined {
+      const tail = ((tails.get(paneId) ?? "") + chunk).slice(-limit)
+      tails.set(paneId, tail)
+      return permissionClassIn(tail)
+    },
+    forget(paneId: string): void {
+      tails.delete(paneId)
+    },
+  }
 }
 
 export interface RouteInput {
