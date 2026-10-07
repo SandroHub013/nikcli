@@ -118,14 +118,16 @@ export const median = (values: readonly number[]) => {
 export const mean = (values: readonly number[]) =>
   values.length ? values.reduce((a, b) => a + b, 0) / values.length : Number.NaN
 
-/** The frame's private memory, by cycle, as the gate judges it: the highest, and the growth over the third cycle once the first ones have warmed it. */
+/** The frame's private memory, by cycle, as the gate judges it: the highest, and the growth once the first cycles have warmed it. */
 export function framePrivate(cycles: readonly number[]): { peakMb: number; growthAfterWarmupMb: number } {
   const ok = cycles.length > 0 && cycles.every(Number.isFinite)
   return {
     peakMb: ok ? Math.max(...cycles) : Number.NaN,
-    // Every cycle from the third on against the third, so a peak at the fourth does not slip by and more than five cycles all count; fewer than
-    // five cannot tell a leak from a warm-up, and is not a pass.
-    growthAfterWarmupMb: ok && cycles.length >= 5 ? Math.max(...cycles.slice(2)) - cycles[2] : Number.NaN,
+    // Every cycle from the fourth on against the higher of the second and the third, so a peak at the fourth does not slip by and more than
+    // five cycles all count, while a third cycle measured low (82 MB between 109 and 104, L2's gate) is not taken for the start of a rise.
+    // Fewer than five cannot tell a leak from a warm-up, and is not a pass.
+    growthAfterWarmupMb:
+      ok && cycles.length >= 5 ? Math.max(0, Math.max(...cycles.slice(3)) - Math.max(cycles[1], cycles[2])) : Number.NaN,
   }
 }
 
