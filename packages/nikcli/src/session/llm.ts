@@ -2,7 +2,10 @@ import os from "os"
 import { Installation } from "@/installation"
 import { Provider } from "@/provider/provider"
 import { Log } from "@nikcli-ai/util/log"
-import { LoadAPIKeyError, NoNativeRouteError } from "@/provider/error"
+import { NoNativeRouteError } from "@/provider/error"
+import { Config } from "@/config/config"
+import { streamLegacy } from "@/provider/legacy/stream"
+import { withStreamFallback } from "./llm/fallback"
 import { convertToModelMessages } from "@/session/llm/ui-messages"
 import {
   isModelMessage as isModelMessageShape,
@@ -314,7 +317,7 @@ export namespace LLM {
       modelID: input.model.id,
       providerID: input.model.providerID,
     })
-    const [{ provider, modelRef }, auth] = await Promise.all([
+    const [{ provider, modelRef }, auth, cfg] = await Promise.all([
       runProvider(
         Effect.gen(function* () {
           const service = yield* Provider.Service
@@ -328,6 +331,14 @@ export namespace LLM {
           const auth = yield* Auth.Service
           return yield* auth.get(input.model.providerID)
         }),
+      ),
+      runPromiseWithLayer(
+        Config.defaultLayer,
+        withCurrentInstance(
+          Effect.gen(function* () {
+            return yield* (yield* Config.Service).get()
+          }),
+        ),
       ),
     ])
     if (!provider) {
@@ -350,7 +361,6 @@ export namespace LLM {
         providerID: input.model.providerID,
         modelID: input.model.id,
       })
-      throw new NoNativeRouteError({ providerID: input.model.providerID, modelID: input.model.id })
     }
     const isCodex = provider.id === "openai" && auth?.type === "oauth"
 
@@ -515,6 +525,41 @@ export namespace LLM {
       input.agent.name === "title",
     )
 
+    const legacy = async () => {
+      input.abort.throwIfAborted()
+      l.debug("llm.runtime", { runtime: "ai-sdk" })
+      const language = await runProvider(
+        Effect.gen(function* () {
+          return yield* (yield* Provider.Service).getLanguage(input.model)
+        }),
+      )
+      return streamLegacy({
+        language,
+        model: input.model,
+        messages,
+        tools,
+        deferred: input.deferred,
+        providerOptions,
+        ...params,
+        options: params.options ?? options,
+        maxOutputTokens,
+        toolChoice: input.toolChoice,
+        abort: input.abort,
+        retries: input.retries,
+        headers: requestHeaders,
+      })
+    }
+    if (!modelRef || cfg.experimental?.nativeLlm === false) {
+      if (modelRef) {
+        LLMCoverage.record({
+          outcome: "fallback",
+          providerID: modelRef.provider,
+          modelID: modelRef.id,
+          reason: cfg.experimental?.nativeLlm === false ? "nativeLlm disabled" : "no modelRef",
+        })
+      }
+      return legacy()
+    }
     const nativeStatus = LLMNativeRuntime.status({
       model: input.model,
       provider,
@@ -528,32 +573,62 @@ export namespace LLM {
         modelID: modelRef.id,
         reason: nativeStatus.reason,
       })
-      throw new LoadAPIKeyError(`${nativeStatus.reason} (provider ${provider.id})`)
+      LLMCoverage.record({
+        outcome: "fallback",
+        providerID: modelRef.provider,
+        modelID: modelRef.id,
+        reason: `ineligible: ${nativeStatus.reason}`,
+      })
+      return legacy()
     }
 
     l.debug("llm.runtime", { runtime: "native", route: modelRef.route })
-    const result = await streamNative({
-      streamInput: input,
-      modelRef,
-      provider,
-      auth,
-      params,
-      options,
-      providerOptions,
-      maxOutputTokens,
-      system,
-      messages,
-      tools,
-      headers: requestHeaders,
-      isCodex,
-      l,
-    })
+    let result: StreamOutput
+    try {
+      result = await streamNative({
+        streamInput: input,
+        modelRef,
+        provider,
+        auth,
+        params,
+        options,
+        providerOptions,
+        maxOutputTokens,
+        system,
+        messages,
+        tools,
+        headers: requestHeaders,
+        isCodex,
+        l,
+      })
+    } catch (error) {
+      if (input.abort.aborted || (error instanceof Error && error.name === "AbortError")) throw error
+      l.warn("native request failed before streaming, using ai-sdk", {
+        error: String(error),
+      })
+      LLMCoverage.record({
+        outcome: "fallback",
+        providerID: modelRef.provider,
+        modelID: modelRef.id,
+        reason: "setup failure",
+      })
+      return legacy()
+    }
     LLMCoverage.record({
       outcome: "native",
       providerID: modelRef.provider,
       modelID: modelRef.id,
     })
-    return result
+    return streamResult(
+      withStreamFallback(result.fullStream, legacy, input.abort, (reason) =>
+        LLMCoverage.record({
+          outcome: "fallback",
+          providerID: modelRef.provider,
+          modelID: modelRef.id,
+          reason,
+        }),
+      ),
+    ) as StreamOutput
   }
 
   async function resolveTools(input: Pick<StreamInput, "tools" | "agent" | "user">) {
@@ -662,7 +737,10 @@ export namespace LLM {
     const messages = ProviderTransform.message(
       input.messages.map((m) =>
         Array.isArray(m.content)
-          ? ({ ...m, content: m.content.map((part) => ({ ...part })) } as ModelMessage)
+          ? ({
+              ...m,
+              content: m.content.map((part) => ({ ...part })),
+            } as ModelMessage)
           : { ...m },
       ),
       input.streamInput.model,
@@ -704,7 +782,13 @@ export namespace LLM {
     // The wire-level request (cache markers included), so the diff reflects what the provider matches against.
     if (cacheDiagnostics) {
       const { comparison, snapshot } = cacheDiagnostics.record(input.streamInput.sessionID, {
-        prompt: [...llmRequest.system.map((part) => ({ role: "system", content: part })), ...llmRequest.messages],
+        prompt: [
+          ...llmRequest.system.map((part) => ({
+            role: "system",
+            content: part,
+          })),
+          ...llmRequest.messages,
+        ],
         tools: llmRequest.tools,
         settings: {
           model: input.streamInput.model.id,
