@@ -74,6 +74,23 @@ describe("the answers of a prompt: intent and shown label", () => {
     }
   })
 
+  // F7e, D1: the wordings of the installed CLIs that grant more than the request on screen. Each one starts with «yes».
+  test("classifyAnswer reads every answer that grants more than the request as always", () => {
+    const wider = [
+      "Yes, and remember this directory",
+      "Yes, and keep allowing any reads outside the working directories",
+      "Yes, and use auto mode",
+      "Yes, auto-accept edits",
+      "Yes, clear context and auto-accept edits",
+      "Yes, clear context and bypass permissions",
+      "Yes, clear context and use auto mode",
+      "Yes, and allow this host in the future",
+    ]
+    for (const label of wider) expect([label, classifyAnswer(label)]).toEqual([label, "always"])
+    // The one the plan menu offers that grants only the plan.
+    expect(classifyAnswer("Yes, manually approve edits")).toBe("yes")
+  })
+
   test("classifyAnswer reads the CLI's wordings in both languages", () => {
     const table: [string, string][] = [
       ["Yes", "yes"],

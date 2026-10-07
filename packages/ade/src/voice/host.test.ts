@@ -4,7 +4,7 @@ import { createAdeVoiceHost, type AdeVoiceHostDeps } from "./host"
 import type { VoiceAgent } from "./agent"
 import { AGENTS } from "../session-new/agents"
 import { createWorkbench, type Pane, type Workbench } from "../surface/state"
-import type { PermissionAnswer, PermissionRequest } from "../session/permission"
+import { classifyAnswer, type PermissionAnswer, type PermissionRequest } from "../session/permission"
 import type { Project } from "../host/project"
 
 function createMockDeps(overrides: Partial<AdeVoiceHostDeps> = {}): {
@@ -323,6 +323,33 @@ describe("createAdeVoiceHost", () => {
       expect(host.pendingPermissionWhat?.("p1")).toBe("run command")
       expect(host.answerPermission("p1", "allow", "run command")).toBe(true)
     })
+  })
+
+  // F7e, D1: on Claude's «Would you like to proceed?» plan menu the first option is «use auto mode».
+  test("a spoken yes on the plan menu chooses «manually approve edits», never an auto mode", () => {
+    const answered: PermissionAnswer[] = []
+    const labels = [
+      "Yes, clear context and use auto mode",
+      "Yes, auto-accept edits",
+      "Yes, manually approve edits",
+      "No, keep planning",
+    ]
+    const request: PermissionRequest = {
+      what: "Would you like to proceed?",
+      kind: "unknown",
+      answers: labels.map((label, i) => ({
+        intent: classifyAnswer(label),
+        label,
+        send: String(i + 1),
+        tone: i === 0 ? ("primary" as const) : ("secondary" as const),
+      })),
+    }
+    const { deps } = createMockDeps({
+      permissions: () => ({ p1: request }),
+      answerPermission: (_id, ans) => void answered.push(ans),
+    })
+    expect(createAdeVoiceHost(deps).answerPermission("p1", "allow")).toBe(true)
+    expect(answered.map((a) => a.label)).toEqual(["Yes, manually approve edits"])
   })
 
   // Same review, ui 4 (c): «Allow always» is not what a spoken yes means.

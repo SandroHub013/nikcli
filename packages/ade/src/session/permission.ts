@@ -176,7 +176,7 @@ function extractKindAndTarget(
 
 /** An answer that grants more than the request on screen: for always, for the session, without asking again. */
 const PERMANENT_ANSWER =
-  /always|sempre|non chiedere|non chiederlo|don'?t ask|do not ask|never ask|(?:for|during) (?:this|the) session|allow all|per (?:questa )?sessione|tutta la sessione/i
+  /always|sempre|non chiedere|non chiederlo|don'?t ask|do not ask|never ask|(?:for|during) (?:this|the) session|allow all|per (?:questa )?sessione|tutta la sessione|remember|keep allowing|in the future|auto mode|auto-accept|bypass permissions/i
 // `` is not used: JS does not count «ì» as a letter, so «Sì» would never end a word.
 const REFUSAL_START = /^(?:no|n|deny|reject|nega|rifiuta)(?![\p{L}\p{N}])/iu
 const CANCEL_START = /^(?:cancel|annulla|abort)(?![\p{L}\p{N}])/iu
