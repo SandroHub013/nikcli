@@ -290,6 +290,20 @@ describe("a lesson over the world", () => {
     expect([page.ignored.length, page.learned.length]).toEqual(before)
   })
 
+  test("a connect that was waiting for the host when the page said hello again offers nothing: one port, from the latest", async () => {
+    const page = mount()
+    const world = await connectWorld(page)
+    world.say({ cmd: "open-learn", place: "faro" })
+    await flush()
+    const lesson = page.lesson()!
+    const seen = watch(lesson)
+    hello(seen.window, nonceOf(lesson))
+    hello(seen.window, nonceOf(lesson))
+    await flush()
+    // Both hellos were believed, but only the later connect finished with a door: one port, not two.
+    expect(seen.offers).toHaveLength(1)
+  })
+
   test("closing with «Torna al mondo» takes the lesson frame and its port away, and the world resumes", async () => {
     const page = mount()
     const world = await connectWorld(page)

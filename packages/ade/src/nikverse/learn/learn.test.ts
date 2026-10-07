@@ -333,7 +333,8 @@ describe("the page and ADE, over one port", () => {
     }
     const offer = (source: unknown, ports: unknown[], type = PORT_OFFER) =>
       listeners.get("message")?.({ source, data: { type, version: 1 }, ports })
-    const press = (key: string, defaultPrevented = false) => listeners.get("keydown")?.({ key, defaultPrevented })
+    const press = (key: string, defaultPrevented = false, target?: unknown) =>
+      listeners.get("keydown")?.({ key, defaultPrevented, target })
     return { win, parent, toParent, port, offer, press }
   }
 
@@ -405,6 +406,19 @@ describe("the page and ADE, over one port", () => {
     expect(via.seen).toEqual([{ type: "ready" }])
     press("Escape")
     expect(via.seen).toEqual([{ type: "ready" }, { type: "close" }])
+  })
+
+  test("Esc in a field with something typed in it does not close the layer, and in an empty one it does", async () => {
+    const { win, parent, port, offer, press } = fakePage(`#n=${NONCE}`)
+    await boot(win)
+    const via = port()
+    offer(parent, [via])
+    press("Escape", false, { tagName: "INPUT", value: "meta' di una rispos" })
+    press("Escape", false, { tagName: "TEXTAREA", value: "x" })
+    expect(via.seen).toEqual([{ type: "ready" }])
+    press("Escape", false, { tagName: "INPUT", value: "" })
+    press("Escape", false, { tagName: "BUTTON", value: "" })
+    expect(via.seen).toEqual([{ type: "ready" }, { type: "close" }, { type: "close" }])
   })
 
   test("without the nonce it says nothing, and no port offered to it is taken", async () => {

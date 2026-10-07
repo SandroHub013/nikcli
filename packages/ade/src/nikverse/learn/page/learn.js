@@ -816,6 +816,9 @@ export async function boot(win) {
   // The page is a layer over the world and cannot close it: Esc asks ADE to, on the port. Without the port there is no one to ask.
   win.addEventListener("keydown", (evento) => {
     if (evento.key !== "Escape" || evento.defaultPrevented) return
+    // Esc in a field with something typed in it is the learner's, not the layer's: an answer half written is not thrown away.
+    const campo = evento.target
+    if (campo && (campo.tagName === "INPUT" || campo.tagName === "TEXTAREA") && campo.value) return
     try {
       port?.postMessage({ type: "close" })
     } catch (errore) {

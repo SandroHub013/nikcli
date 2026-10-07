@@ -88,10 +88,14 @@ export function LearnFrame(props: {
     await old?.settled()
   }
 
+  /** Which `connect` is the latest: one that was waiting for the host when another began is out of date and offers nothing. */
+  let connecting = 0
   /** The page proved it is the page: a new port for its window, in place of any older one. */
   const connect = async (target: Window) => {
     link?.close()
+    const turn = ++connecting
     const commands = await props.progress?.()
+    if (turn !== connecting) return
     const channel = new MessageChannel()
     const current = createLearnLink({
       port: channel.port1,
@@ -127,6 +131,8 @@ export function LearnFrame(props: {
     if (props.autofocus) focus()
     onCleanup(() => {
       window.removeEventListener("message", onHello)
+      // A connect still waiting for the host must not open a door for a frame that is gone.
+      connecting++
       link?.close()
       link = undefined
     })
