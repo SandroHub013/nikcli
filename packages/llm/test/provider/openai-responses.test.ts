@@ -312,6 +312,19 @@ describe("OpenAI Responses route", () => {
     }).pipe(configEnv({ OPENAI_API_KEY: "test-key" })),
   )
 
+  it.effect("leaves prompt_cache_key off the wire when no key is given", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model: OpenAI.model("gpt-4.1-mini", { baseURL: "https://api.openai.test/v1/" }),
+          prompt: "no key",
+        }),
+      )
+
+      expect("prompt_cache_key" in prepared.body).toBe(false)
+    }).pipe(configEnv({ OPENAI_API_KEY: "test-key" })),
+  )
+
   it.effect("parses text and usage stream fixtures", () =>
     Effect.gen(function* () {
       const body = sseEvents(

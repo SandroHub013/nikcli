@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test"
+import { afterEach, describe, expect, it } from "bun:test"
 import { APICallError } from "@/provider/error"
 import type { ModelMessage } from "@/session/llm/types"
 import { Provider } from "@/provider/provider"
@@ -396,6 +396,74 @@ describe("ProviderTransform", () => {
     const [r1, r2] = keys(openrouter, "prompt_cache_key")
     expect(r1).toBe(r2)
     expect(r1).not.toContain("sess-")
+  })
+
+  describe("NIKCLI_PROMPT_CACHE_KEY", () => {
+    const original = process.env["NIKCLI_PROMPT_CACHE_KEY"]
+    const set = (value: string | undefined) => {
+      if (value === undefined) delete process.env["NIKCLI_PROMPT_CACHE_KEY"]
+      else process.env["NIKCLI_PROMPT_CACHE_KEY"] = value
+    }
+    afterEach(() => set(original))
+
+    const cases = [
+      { name: "openai", model: () => makeModel({ providerID: "openai" }), field: "promptCacheKey" },
+      {
+        name: "azure",
+        model: () => makeModel({ providerID: "azure", api: { id: "gpt-4.1", url: "u", npm: "@ai-sdk/azure" } }),
+        field: "promptCacheKey",
+      },
+      { name: "openrouter", model: () => makeModel({ providerID: "openrouter" }), field: "prompt_cache_key" },
+    ]
+
+    for (const { name, model, field } of cases) {
+      it(`${name}: model (and unset) keep today's key, byte for byte`, () => {
+        const m = model()
+        const today = `nikcli:${m.providerID}/${m.id}`
+        for (const value of [undefined, "model", "MODEL", " model "]) {
+          set(value)
+          expect(ProviderTransform.options({ model: m, sessionID: "s1" })[field]).toBe(today)
+        }
+      })
+
+      it(`${name}: session changes between sessions and is stable inside one`, () => {
+        set("session")
+        const m = model()
+        const a1 = ProviderTransform.options({ model: m, sessionID: "ses_a" })[field]
+        const a2 = ProviderTransform.options({ model: m, sessionID: "ses_a" })[field]
+        const b = ProviderTransform.options({ model: m, sessionID: "ses_b" })[field]
+        expect(a1).toBe("nikcli:ses_a")
+        expect(a2).toBe(a1)
+        expect(b).toBe("nikcli:ses_b")
+      })
+
+      it(`${name}: none leaves the field out`, () => {
+        set("none")
+        const result = ProviderTransform.options({ model: model(), sessionID: "s1" })
+        expect(field in result).toBe(false)
+      })
+
+      it(`${name}: an unknown value counts as model`, () => {
+        set("per-conversation")
+        const m = model()
+        expect(ProviderTransform.options({ model: m, sessionID: "s1" })[field]).toBe(`nikcli:${m.providerID}/${m.id}`)
+      })
+    }
+
+    it("setCacheKey follows the same rule", () => {
+      const m = makeModel({ providerID: "custom", api: { id: "x", url: "u", npm: "@ai-sdk/openai-compatible" } })
+      const providerOptions = { setCacheKey: true }
+      set("session")
+      expect(ProviderTransform.options({ model: m, sessionID: "ses_a", providerOptions })["promptCacheKey"]).toBe("nikcli:ses_a")
+      set("none")
+      expect("promptCacheKey" in ProviderTransform.options({ model: m, sessionID: "ses_a", providerOptions })).toBe(false)
+    })
+
+    it("opencode and venice keep the bare sessionID whatever the switch says", () => {
+      set("none")
+      const venice = makeModel({ providerID: "venice" })
+      expect(ProviderTransform.options({ model: venice, sessionID: "ses_v" })["promptCacheKey"]).toBe("ses_v")
+    })
   })
 
   it("options keys the cache by model, so two models never share a key", () => {

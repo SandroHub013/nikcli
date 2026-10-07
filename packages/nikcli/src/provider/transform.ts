@@ -6,6 +6,7 @@ import * as CachePolicy from "./cache-policy"
 import type { ModelsDev } from "./models"
 import { iife } from "@nikcli-ai/util/iife"
 import { Log } from "@nikcli-ai/util/log"
+import { Flag } from "@nikcli-ai/util/flag"
 
 const log = Log.create({ service: "provider.transform" })
 
@@ -1240,6 +1241,33 @@ export function stableCacheKey(model: Provider.Model): string {
   return `nikcli:${model.providerID}/${model.id}`
 }
 
+let warnedCacheKeyMode: string | undefined
+
+/**
+ * The prompt_cache_key to send, following `NIKCLI_PROMPT_CACHE_KEY`: `model` (default, `stableCacheKey`), `session`
+ * (`nikcli:<sessionID>`) or `none` (`undefined`, the field is left out). An unknown value counts as `model`, with one log line.
+ * Every request goes through `options`, so the Codex route (HTTP and WebSocket), the cache keeper and compaction follow the same rule.
+ */
+export function promptCacheKey(input: { model: Provider.Model; sessionID: string }): string | undefined {
+  const mode = Flag.promptCacheKey()
+  if (mode === "none") return undefined
+  if (mode === "session") return `nikcli:${input.sessionID}`
+  if (mode && mode !== "model" && warnedCacheKeyMode !== mode) {
+    warnedCacheKeyMode = mode
+    log.warn("unknown NIKCLI_PROMPT_CACHE_KEY, using model", { value: mode })
+  }
+  return stableCacheKey(input.model)
+}
+
+function setCacheKey(
+  result: Record<string, any>,
+  field: "promptCacheKey" | "prompt_cache_key",
+  input: { model: Provider.Model; sessionID: string },
+) {
+  const key = promptCacheKey(input)
+  if (key !== undefined) result[field] = key
+}
+
 export function options(input: {
   model: Provider.Model
   sessionID: string
@@ -1265,7 +1293,7 @@ export function options(input: {
 
   if (input.model.api.npm === "@ai-sdk/azure") {
     result["store"] = false
-    result["promptCacheKey"] = stableCacheKey(input.model)
+    setCacheKey(result, "promptCacheKey", input)
   }
 
   if (input.model.api.npm === "@openrouter/ai-sdk-provider" || input.model.api.npm === "@llmgateway/ai-sdk-provider") {
@@ -1295,7 +1323,7 @@ export function options(input: {
   }
 
   if (input.model.providerID === "openai" || input.providerOptions?.setCacheKey) {
-    result["promptCacheKey"] = stableCacheKey(input.model)
+    setCacheKey(result, "promptCacheKey", input)
   }
 
   if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
@@ -1392,7 +1420,7 @@ export function options(input: {
   }
 
   if (input.model.providerID === "openrouter") {
-    result["prompt_cache_key"] = stableCacheKey(input.model)
+    setCacheKey(result, "prompt_cache_key", input)
   }
   if (input.model.api.npm === "@ai-sdk/gateway") {
     result["gateway"] = {

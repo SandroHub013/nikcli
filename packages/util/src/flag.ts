@@ -82,6 +82,14 @@ export namespace Flag {
     return process.env["NIKCLI_CACHE_RETENTION"]
   }
   /**
+   * What the prompt_cache_key sent to OpenAI-style providers is made of: `model` (default, one key per provider/model), `session`
+   * (one key per session) or `none` (no key). The raw value, trimmed and lowercased: `provider/transform.ts` resolves unknown values.
+   * Read on every use, like `cacheRetention`.
+   */
+  export function promptCacheKey() {
+    return process.env["NIKCLI_PROMPT_CACHE_KEY"]?.trim().toLowerCase() || undefined
+  }
+  /**
    * The cache keeper (`session/cache-keeper.ts`): keeps an idle session's prompt-cache entry alive with one hidden request shortly
    * before it would expire. Off unless `NIKCLI_CACHE_KEEPALIVE=1`. Read on every use, like `cacheRetention`.
    */
