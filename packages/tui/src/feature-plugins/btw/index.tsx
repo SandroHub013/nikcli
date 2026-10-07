@@ -262,7 +262,7 @@ const tui: TuiPlugin = async (api) => {
  */
 function failureMessage(error: unknown, status?: number) {
   if (status === 404 || status === 405) {
-    return "The nikcli server this TUI is attached to predates /btw. Restart it — for the background service, run `nikcli service restart`."
+    return "The Ragu Code server this TUI is attached to predates /btw. Restart it — for the background service, run `ragu service restart`."
   }
   const message = friendlyErrorMessage(error, "Could not answer the side question")
   return status ? `${message} (HTTP ${status})` : message

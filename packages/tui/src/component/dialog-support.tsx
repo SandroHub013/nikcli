@@ -91,7 +91,7 @@ export function DialogQuickstartInfo() {
       <Header title="Quickstart" subtitle="60-second first-time tour" />
       <Body
         children={
-          "Run `nikcli quickstart` in your shell. It walks you through:\n  1. Connecting a provider (or skipping)\n  2. Picking a starter action\n  3. Launching the TUI, a one-shot prompt, or a model browser\n\nThe quickstart re-execs into the chosen command, so you don't have to copy/paste."
+          "Run `ragu quickstart` in your shell. It walks you through:\n  1. Connecting a provider (or skipping)\n  2. Picking a starter action\n  3. Launching the TUI, a one-shot prompt, or a model browser\n\nThe quickstart re-execs into the chosen command, so you don't have to copy/paste."
         }
       />
       <Footer left="Tip: type /quickstart in the TUI to launch the same flow" />
@@ -106,7 +106,7 @@ export function DialogDoctorInfo() {
       <Header title="Doctor" subtitle="diagnose common setup issues" />
       <Body
         children={
-          "Run `nikcli doctor` in your shell. It checks:\n  - Version & runtime\n  - TTY (warns when piped)\n  - PATH (suggests fix if the exec dir is missing)\n  - Disk space (warns when < 5% free)\n  - Config validity (JSON parse)\n  - Deprecated config keys (e.g. `keybinds` → `keymappings`)\n\nUse --json for a structured report."
+          "Run `ragu doctor` in your shell. It checks:\n  - Version & runtime\n  - TTY (warns when piped)\n  - PATH (suggests fix if the exec dir is missing)\n  - Disk space (warns when < 5% free)\n  - Config validity (JSON parse)\n  - Deprecated config keys (e.g. `keybinds` → `keymappings`)\n\nUse --json for a structured report."
         }
       />
       <Footer left="Tip: type /doctor in the TUI to launch the same flow" />
@@ -149,7 +149,7 @@ const WELCOME_HINTS: ReadonlyArray<{ title: string; prompt: string }> = [
   { title: "Change model", prompt: "How do I change the default model?" },
   {
     title: "Agent vs session",
-    prompt: "What is an agent in nikcli and how do I choose one?",
+    prompt: "What is an agent in Ragu Code and how do I choose one?",
   },
   {
     title: "Useful keybinds",
@@ -672,7 +672,7 @@ function WelcomeHints(props: { onPick: (prompt: string) => void }) {
   return (
     <box gap={1} flexDirection="column" paddingBottom={1}>
       <text fg={theme.foreground.default}>
-        Hi! I'm <span style={{ fg: theme.accent.alt }}>Support</span>, nikcli's documentation assistant.
+        Hi! I'm <span style={{ fg: theme.accent.alt }}>Support</span>, Ragu Code's documentation assistant.
       </text>
       <Show
         when={connected()}

@@ -629,7 +629,7 @@ export function Prompt(props: PromptProps) {
         const message =
           process.platform === "darwin"
             ? isLikelyIntegratedTerminal()
-              ? `Microphone denied for ${terminalName}. Allow it in System Settings > Privacy & Security > Microphone, or run nikcli in Terminal.app/iTerm2`
+              ? `Microphone denied for ${terminalName}. Allow it in System Settings > Privacy & Security > Microphone, or run Ragu Code in Terminal.app/iTerm2`
               : `Microphone access denied for ${terminalName}. Enable it in System Settings > Privacy & Security > Microphone`
             : "Microphone access denied. Allow microphone permission for your terminal"
         toast.show({

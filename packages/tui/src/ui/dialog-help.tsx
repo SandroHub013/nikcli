@@ -27,7 +27,7 @@ const SHORTCUTS: Array<{ key: string; description: string }> = [
   },
   { key: "model_favorite_toggle", description: "Cycle favorite models" },
   { key: "sidebar_toggle", description: "Toggle the sidebar" },
-  { key: "app_exit", description: "Exit nikcli" },
+  { key: "app_exit", description: "Exit Ragu Code" },
 ]
 
 const SLASH_COMMANDS: Array<{ name: string; description: string }> = [
@@ -52,14 +52,14 @@ const SLASH_COMMANDS: Array<{ name: string; description: string }> = [
 ]
 
 const CLI_COMMANDS: Array<{ name: string; description: string }> = [
-  { name: "nikcli", description: "Open the TUI" },
-  { name: "nikcli run <prompt>", description: "Run a one-shot prompt" },
-  { name: "nikcli auth login", description: "Connect a provider" },
-  { name: "nikcli models", description: "List configured models" },
-  { name: "nikcli agent list", description: "List configured agents" },
-  { name: "nikcli session", description: "Manage sessions" },
-  { name: "nikcli upgrade", description: "Self-upgrade" },
-  { name: "nikcli --help", description: "Show all CLI commands" },
+  { name: "ragu", description: "Open the TUI" },
+  { name: "ragu run <prompt>", description: "Run a one-shot prompt" },
+  { name: "ragu auth login", description: "Connect a provider" },
+  { name: "ragu models", description: "List configured models" },
+  { name: "ragu agent list", description: "List configured agents" },
+  { name: "ragu session", description: "Manage sessions" },
+  { name: "ragu upgrade", description: "Self-upgrade" },
+  { name: "ragu --help", description: "Show all CLI commands" },
 ]
 
 export function DialogHelp() {

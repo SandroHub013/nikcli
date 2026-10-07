@@ -127,7 +127,7 @@ export function DialogMobileConnect(props: { sessionID?: string; initialMode?: M
     {
       title: "Connect cloud server",
       value: "cloud",
-      description: "Enter a remote nikcli server URL and mobile auth token, then scan its QR code.",
+      description: "Enter a remote Ragu Code server URL and mobile auth token, then scan its QR code.",
     },
     {
       title: "Connect local server",
@@ -138,7 +138,7 @@ export function DialogMobileConnect(props: { sessionID?: string; initialMode?: M
       title: "Teleport session",
       value: "teleport",
       description: props.sessionID
-        ? "Send the current session and workspace to a remote nikcli server."
+        ? "Send the current session and workspace to a remote Ragu Code server."
         : "Open this dialog from an active session to use Teleport.",
       disabled: !props.sessionID,
     },
@@ -149,7 +149,7 @@ export function DialogMobileConnect(props: { sessionID?: string; initialMode?: M
       when={mode() !== "choose"}
       fallback={
         <DialogSelect
-          title="Connect Nikcli Mobile"
+          title="Connect Ragu Code Mobile"
           options={options()}
           onSelect={(option) => {
             if (!option.disabled) setMode(option.value)
@@ -262,7 +262,7 @@ function RemoteServerPanel(props: { mode: "cloud" | "teleport"; sessionID?: stri
         matrix,
       })
       setForm("url", base)
-      setForm("status", "Server verified — scan with the Nikcli mobile app")
+      setForm("status", "Server verified — scan with the Ragu Code mobile app")
     } catch (cause) {
       setForm("status", cause instanceof Error ? cause.message : String(cause))
     } finally {
@@ -415,8 +415,8 @@ function RemoteServerPanel(props: { mode: "cloud" | "teleport"; sessionID?: stri
           <>
             <text fg={theme.foreground.muted} wrapMode="word">
               {props.mode === "cloud"
-                ? "Use a mobile-scoped Bearer token from the remote nikcli server."
-                : "Send the current session and workspace to a remote nikcli server."}
+                ? "Use a mobile-scoped Bearer token from the remote Ragu Code server."
+                : "Send the current session and workspace to a remote Ragu Code server."}
             </text>
             <box flexDirection="row" gap={1} alignItems="center">
               <text fg={theme.foreground.muted}>Server URL:</text>
@@ -621,7 +621,7 @@ function LocalMobileConnect(props: { onBack: () => void }) {
         matrix,
         expiresAt: created.info.expiresAt,
       })
-      setStatus("Scan the QR code with the Nikcli mobile app")
+      setStatus("Scan the QR code with the Ragu Code mobile app")
       watchConnection(created.info.id)
     } catch (cause) {
       setPairing(undefined)

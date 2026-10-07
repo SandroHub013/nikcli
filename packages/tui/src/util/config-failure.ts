@@ -25,9 +25,9 @@ export class TuiConfigError extends Error {
 
 function describe(reason: TuiConfigFailure, url: string, status?: number): string {
   const code = status === undefined ? "" : ` (HTTP ${status})`
-  if (reason === "unauthorized") return `the nikcli server at ${url} rejected this client${code}`
-  if (reason === "unavailable") return `could not reach a nikcli server at ${url}`
-  return `the nikcli server at ${url} returned a TUI config this client cannot read${code}`
+  if (reason === "unauthorized") return `the Ragu Code server at ${url} rejected this client${code}`
+  if (reason === "unavailable") return `could not reach a Ragu Code server at ${url}`
+  return `the Ragu Code server at ${url} returned a TUI config this client cannot read${code}`
 }
 
 export function classifyConfigFailure(error: unknown, status?: number): TuiConfigFailure {

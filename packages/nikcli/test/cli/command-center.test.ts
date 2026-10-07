@@ -190,7 +190,7 @@ describe("buildCommandCenterSpec", () => {
     const checked = VizCatalog.validate(spec)
     expect(checked.valid).toBe(true)
     expect(checked.dropped).toBe(0)
-    expect(spec.title).toBe("nikcli Command Center")
+    expect(spec.title).toBe("Ragu Code Command Center")
     expect(spec.subtitle).toContain("12 sessions")
     expect(spec.components.length).toBeGreaterThanOrEqual(7)
     expect(spec.components.map((c) => c.type)).toEqual([

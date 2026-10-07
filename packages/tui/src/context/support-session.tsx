@@ -118,7 +118,7 @@ export const { use: useSupportSession, provider: SupportSessionProvider } = crea
           )
         }
         const created = await sdk.client.session.create({
-          title: "nikcli support",
+          title: "Ragu Code support",
         })
         if (!created.data) {
           throw new Error("Failed to create support session: empty response")

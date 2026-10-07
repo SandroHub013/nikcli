@@ -22,7 +22,7 @@ export function DialogRestart(props: { target: string }) {
   const { theme } = useTheme()
   return (
     <box paddingLeft={2} paddingRight={2} flexDirection="column" gap={1} width={60} maxWidth="90%">
-      <DialogHeader title="Restarting nikcli" />
+      <DialogHeader title="Restarting Ragu Code" />
       <Spinner color={theme.foreground.muted}>{`Restarting the ${props.target}…`}</Spinner>
       <text fg={theme.foreground.muted} wrapMode="word">
         This terminal stays open and reconnects on its own. Live sessions are suspended and resumed by the service that

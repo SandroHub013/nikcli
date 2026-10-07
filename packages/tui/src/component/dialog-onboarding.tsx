@@ -886,7 +886,7 @@ function RemoteContent(props: {
 }
 
 const STEP_TITLES = [
-  "Welcome to Nikcli",
+  "Welcome to Ragu Code",
   "Sign in or create your account",
   "Filesystem Footprint",
   "Connect a provider",

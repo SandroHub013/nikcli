@@ -616,7 +616,7 @@ export function buildCommandCenterSpec(stats: AggregatedStats, lattice: CommandC
   ]
 
   return VizCatalog.validate({
-    title: "nikcli Command Center",
+    title: "Ragu Code Command Center",
     subtitle: `${rangeLabel(stats.days)} · ${g.sessions} sessions · ${formatCompact(nonCache)} tokens · ${money.format(g.cost)}`,
     components,
   }).spec
