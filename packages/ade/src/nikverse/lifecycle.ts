@@ -29,36 +29,58 @@ export interface LifecycleIo {
   schedule(run: () => void, ms: number): () => void
 }
 
-/** The world starts `running`: the panel that creates it is on screen. */
+/**
+ * The world starts `running`: the panel that creates it is on screen and no lesson is open over it.
+ *
+ * It runs only when the panel is visible AND no lesson is open (`setLesson`). A lesson over the world pauses it, and leaves its frame
+ * loaded: the unload clock counts only a panel nobody can see, so a lesson read for an hour does not cost the world its frame.
+ */
 export function createLifecycle(io: LifecycleIo) {
   let phase: WorldPhase = "running"
   let cancel: (() => void) | undefined
+  let visible = true
+  let lesson = false
 
   const stopClock = () => {
     cancel?.()
     cancel = undefined
   }
 
-  return {
-    phase: (): WorldPhase => phase,
-    setVisible(visible: boolean) {
-      if (visible) {
-        if (phase === "running") return
-        stopClock()
-        const wasUnloaded = phase === "unloaded"
-        phase = "running"
-        if (wasUnloaded) io.load()
-        else io.resume()
-        return
-      }
-      if (phase !== "running") return
+  const apply = () => {
+    if (visible && !lesson) {
+      if (phase === "running") return
+      stopClock()
+      const wasUnloaded = phase === "unloaded"
+      phase = "running"
+      if (wasUnloaded) io.load()
+      else io.resume()
+      return
+    }
+    if (phase === "running") {
       phase = "paused"
       io.pause()
-      cancel = io.schedule(() => {
-        cancel = undefined
-        phase = "unloaded"
-        io.unload()
-      }, UNLOAD_AFTER_MS)
+    }
+    // Hidden: the clock runs (once). Seen again, with a lesson still over the world: it stops, and the world stays paused.
+    if (phase !== "paused") return
+    if (visible) return stopClock()
+    if (cancel) return
+    cancel = io.schedule(() => {
+      cancel = undefined
+      phase = "unloaded"
+      io.unload()
+    }, UNLOAD_AFTER_MS)
+  }
+
+  return {
+    phase: (): WorldPhase => phase,
+    setVisible(next: boolean) {
+      visible = next
+      apply()
+    },
+    /** A lesson is open over the world (or was closed): the world is paused for as long as it is, and the panel's visibility still rules the rest. */
+    setLesson(open: boolean) {
+      lesson = open
+      apply()
     },
     /** The panel is closed: no clock is left behind. */
     dispose() {

@@ -72,6 +72,9 @@ function fakePage(hash = `#n=${NONCE}`, served: unknown = gioco) {
     },
     /** The window says something happened to it (`pagehide`). */
     fire: (type: string) => void listeners.get(type)?.({}),
+    /** A key pressed in the page (on nothing in particular), and what has gone to ADE as `close`. */
+    press: (key: string) => void listeners.get("keydown")?.({ key, defaultPrevented: false, target: undefined }),
+    closes: () => seen.filter((message) => (message as { type: string }).type === "close").length,
     saves: () => seen.filter((message) => (message as { type: string }).type === "learn-save") as { progress: { xp: number; esercizi: Record<string, Record<string, number>> } }[],
     restore: () => void (Date.now = RealDate),
   }
@@ -87,6 +90,67 @@ const openGame = () => button('[data-slot="tab-gioco"]').click()
 const text = (selector: string) => document.querySelector(selector)?.textContent ?? ""
 
 describe("the game on the page", () => {
+  test("`a=gioco` opens the page on the levels when they were served, and `a=percorsi` or no game on the paths", async () => {
+    const asked = fakePage(`#n=${NONCE}&a=gioco`)
+    await asked.open({ v: 1, xp: 0, giorni: [], esercizi: {} })
+    try {
+      expect(document.querySelectorAll(".livello")).toHaveLength(24)
+      expect(button('[data-slot="tab-gioco"]').getAttribute("aria-selected")).toBe("true")
+      expect(asked.running()).toBe(0)
+    } finally {
+      asked.restore()
+    }
+    for (const [hash, served] of [
+      [`#n=${NONCE}&a=percorsi`, gioco],
+      [`#n=${NONCE}&a=altro`, gioco],
+      [`#n=${NONCE}`, gioco],
+      [`#n=${NONCE}&a=gioco`, null],
+    ] as const) {
+      const page = fakePage(hash, served)
+      await page.open({ v: 1, xp: 0, giorni: [], esercizi: {} })
+      try {
+        expect([hash, document.querySelectorAll(".livello").length]).toEqual([hash, 0])
+        expect([hash, document.querySelectorAll(".lesson").length > 0]).toEqual([hash, true])
+      } finally {
+        page.restore()
+      }
+    }
+  })
+
+  test("Esc in a timed match asks first and closes on the second press; anything else in between takes the question back; on the levels it closes at once", async () => {
+    const page = fakePage()
+    await page.open({ v: 1, xp: 0, giorni: [], esercizi: {} })
+    try {
+      openGame()
+      page.press("Escape")
+      expect(page.closes()).toBe(1)
+      startLevel(1)
+      expect(page.running()).toBe(1)
+      page.press("Escape")
+      expect(page.closes()).toBe(1)
+      expect(document.querySelector('[data-slot="esci-conferma"]')?.textContent).toContain("Esc")
+      // The match goes on under the question.
+      expect(page.running()).toBe(1)
+      page.press("a")
+      expect(document.querySelector('[data-slot="esci-conferma"]')).toBeNull()
+      page.press("Escape")
+      expect(page.closes()).toBe(1)
+      page.press("Escape")
+      expect(page.closes()).toBe(2)
+      // The question is asked again from the start: a key, then Esc, asks; and a match ended by the player drops the question with its screen.
+      page.press("x")
+      page.press("Escape")
+      expect(page.closes()).toBe(2)
+      expect(document.querySelector('[data-slot="esci-conferma"]')).not.toBeNull()
+      button('[data-slot="verifica-gioco"]').click()
+      expect(document.querySelector('[data-slot="esci-conferma"]')).toBeNull()
+      page.press("Escape")
+      expect(page.closes()).toBe(3)
+    } finally {
+      page.restore()
+    }
+  })
+
   test("is an entry beside the paths only when the levels were served, and lists all of them with their stars", async () => {
     const without = fakePage(undefined, null)
     await without.open({ v: 1, xp: 0, giorni: [], esercizi: {} })

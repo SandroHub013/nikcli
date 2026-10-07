@@ -36,6 +36,7 @@ const flush = async () => {
 }
 
 function setup(load: () => Promise<unknown>, save: (json: string) => Promise<void> = async () => {}) {
+  const closes = { count: 0 }
   const { port, sent, isClosed } = fakePort()
   const ignored: string[] = []
   const saved: string[] = []
@@ -53,13 +54,15 @@ function setup(load: () => Promise<unknown>, save: (json: string) => Promise<voi
     },
     ignored: (reason) => void ignored.push(reason),
     unreadable: () => void unreadable++,
+    close: () => void closes.count++,
   })
-  return { link, sent, saved, ignored, loads, isClosed, unreadable: () => unreadable }
+  return { link, sent, saved, ignored, loads, closes, isClosed, unreadable: () => unreadable }
 }
 
 describe("readFromPage", () => {
-  test("only `ready` and `learn-save` are messages", () => {
+  test("only `ready`, `learn-save` and `close` are messages", () => {
     expect(readFromPage({ type: "ready" })).toEqual({ type: "ready" })
+    expect(readFromPage({ type: "close", extra: "x" })).toEqual({ type: "close" })
     expect(readFromPage({ type: "learn-save", progress: 1 })).toEqual({ type: "learn-save", progress: 1 })
     expect(readFromPage({ type: "run-command" })).toBeUndefined()
     expect(readFromPage("ready")).toBeUndefined()
@@ -75,6 +78,16 @@ describe("the channel with the lesson page", () => {
     expect(t.saved).toEqual([])
     expect(t.ignored).toHaveLength(1)
     expect(t.ignored[0]).toContain("run-command")
+  })
+
+  test("`close` from the page asks the layer to go away, once the link is open, and never after it is closed", async () => {
+    const t = setup(async () => null)
+    t.link.receive({ type: "close" })
+    expect(t.closes.count).toBe(1)
+    expect(t.ignored).toEqual([])
+    t.link.close()
+    t.link.receive({ type: "close" })
+    expect(t.closes.count).toBe(1)
   })
 
   test("`ready` said twice reads the file once and answers once", async () => {
