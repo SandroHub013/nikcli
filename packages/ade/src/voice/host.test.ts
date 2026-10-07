@@ -352,6 +352,44 @@ describe("createAdeVoiceHost", () => {
     expect(answered.map((a) => a.label)).toEqual(["Yes, manually approve edits"])
   })
 
+  // F7e, D2: a label nobody recognised is not a yes, whatever its place in the menu.
+  describe("a spoken yes sends only an answer that is a yes", () => {
+    const grant = (answers: PermissionRequest["answers"]) => {
+      const answered: PermissionAnswer[] = []
+      const { deps } = createMockDeps({
+        permissions: () => ({ p1: { what: "Which library should I use?", kind: "unknown", answers } }),
+        answerPermission: (_id, answer) => void answered.push(answer),
+      })
+      const sent = createAdeVoiceHost(deps).answerPermission("p1", "allow")
+      return { answered, sent }
+    }
+    const menu = (labels: string[]): PermissionRequest["answers"] =>
+      labels.map((label, i) => ({
+        intent: classifyAnswer(label),
+        label,
+        send: String(i + 1),
+        tone: i === 0 ? ("primary" as const) : ("secondary" as const),
+      }))
+
+    test("a question menu [React, Vue, Svelte] gets nothing", () => {
+      const { answered, sent } = grant(menu(["React", "Vue", "Svelte"]))
+      expect(sent).toBe(false)
+      expect(answered).toHaveLength(0)
+    })
+
+    test("a menu that starts with «Not now» gets nothing", () => {
+      const { answered, sent } = grant(menu(["Not now", "Remind me tomorrow"]))
+      expect(sent).toBe(false)
+      expect(answered).toHaveLength(0)
+    })
+
+    test("a yes that is not the primary one is still found, and the primary yes is preferred", () => {
+      const { answered } = grant(menu(["Show me the diff", "Okay", "Yes", "No"]))
+      expect(answered.map((a) => a.label)).toEqual(["Okay"])
+      expect(grant(menu(["Open the file", "Yes"])).answered.map((a) => a.label)).toEqual(["Yes"])
+    })
+  })
+
   // Same review, ui 4 (c): «Allow always» is not what a spoken yes means.
   describe("a spoken yes never takes the permanent answer", () => {
     const grant = (answers: PermissionRequest["answers"]) => {

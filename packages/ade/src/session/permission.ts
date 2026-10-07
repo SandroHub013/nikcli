@@ -181,7 +181,8 @@ const PERMANENT_ANSWER =
 const REFUSAL_START = /^(?:no|n|deny|reject|nega|rifiuta)(?![\p{L}\p{N}])/iu
 const CANCEL_START = /^(?:cancel|annulla|abort)(?![\p{L}\p{N}])/iu
 const ONCE_START = /^(?:allow\s+once|consenti\s+una\s+volta|(?:yes|s[iì]),?\s+(?:only\s+this\s+(?:time|once)|solo\s+questa\s+volta))/iu
-const YES_START = /^(?:yes|y|s[iì]|allow|approve|proceed|confirm|concedi|consenti|accetta|procedi|conferma)(?![\p{L}\p{N}])/iu
+const YES_START =
+  /^(?:yes|y|s[iì]|allow|approve|proceed|confirm|concedi|consenti|accetta|procedi|conferma|ok|okay|continue|continua|run|esegui|approva|permetti|autorizza)(?![\p{L}\p{N}])/iu
 const SKIP_START = /^(?:skip|salta)(?![\p{L}\p{N}])/iu
 
 /** What a choice of the CLI does, from the words it was written in (English or Italian). Read once, here. */

@@ -91,6 +91,16 @@ describe("the answers of a prompt: intent and shown label", () => {
     expect(classifyAnswer("Yes, manually approve edits")).toBe("yes")
   })
 
+  // F7e, D2: the plain yes wordings a CLI may use, for recognising a label (not for what a spoken yes may send).
+  test("classifyAnswer reads ok, continue, run, esegui, approva, permetti and autorizza as a yes", () => {
+    for (const label of ["Ok", "Okay", "Continue", "Continua", "Run", "Esegui", "Approva", "Permetti", "Autorizza"]) {
+      expect([label, classifyAnswer(label)]).toEqual([label, "yes"])
+    }
+    for (const label of ["Not now", "Running late", "Okapi", "Continuous"]) {
+      expect([label, classifyAnswer(label)]).toEqual([label, "other"])
+    }
+  })
+
   test("classifyAnswer reads the CLI's wordings in both languages", () => {
     const table: [string, string][] = [
       ["Yes", "yes"],
