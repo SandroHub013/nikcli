@@ -127,6 +127,29 @@ export namespace LLM {
     deferred?: ReadonlySet<string>
     retries?: number
     toolChoice?: "auto" | "required" | "none"
+    /**
+     * The request carries the conversation's tools (so its prefix is the conversation's) but the model must not use them: a
+     * compaction that shares the prefix. `toolChoice` is then the provider's way of saying so (`uncallableToolChoice`), and any tool
+     * call in the answer is dropped, never run.
+     */
+    noToolCalls?: boolean
+  }
+
+  /**
+   * The `tool_choice` of a request whose tools stay in the prefix but must not be called. Anthropic's cache key covers `tool_choice`,
+   * so a changed one invalidates the cached messages: there it stays the conversation's (`same`) and `noToolCalls` drops what the model
+   * calls anyway. Elsewhere `none` costs nothing. `NIKCLI_COMPACTION_TOOL_CHOICE` forces either.
+   */
+  export function uncallableToolChoice(route: string, same: StreamInput["toolChoice"]): StreamInput["toolChoice"] {
+    const mode = Flag.compactionToolChoice() ?? (route === "anthropic-messages" ? "same" : "none")
+    return mode === "none" ? "none" : same
+  }
+
+  async function* withoutToolCalls<T extends { type: string }>(events: AsyncIterable<T>): AsyncGenerator<T> {
+    for await (const event of events) {
+      if (event.type.startsWith("tool-")) continue
+      yield event
+    }
   }
 
   export type StreamOutput = TurnOutput
@@ -656,7 +679,9 @@ export namespace LLM {
           messages,
           tools: input.tools,
           deferred: input.streamInput.deferred,
-          toolChoice: input.streamInput.toolChoice,
+          toolChoice: input.streamInput.noToolCalls
+            ? uncallableToolChoice(input.modelRef.route, input.streamInput.toolChoice)
+            : input.streamInput.toolChoice,
         },
         input.modelRef,
         {
@@ -704,7 +729,7 @@ export namespace LLM {
     // The keeper learns what this request's prefix is, so it can keep the entry alive once the session is idle. It never gets in the
     // turn's way: a failure here is nothing the turn has to know. Not for titles, nor for subagents or the compaction (their entries
     // are not the session's).
-    if (!input.streamInput.small && input.streamInput.agent.mode !== "subagent" && input.streamInput.agent.name !== "compaction") {
+    if (!input.streamInput.small && input.streamInput.agent.mode !== "subagent" && input.streamInput.agent.name !== "compaction" && !input.streamInput.noToolCalls) {
       try {
         CacheKeeper.observe({
           sessionID: input.streamInput.sessionID,
@@ -729,7 +754,8 @@ export namespace LLM {
 
     if (native.type === "unsupported") throw refuse(input, native.reason)
 
-    const fullStream = executeTools(toProcessorStream(extractThinkTags(native.events)), {
+    const events = toProcessorStream(extractThinkTags(native.events))
+    const fullStream = executeTools(input.streamInput.noToolCalls ? withoutToolCalls(events) : events, {
       tools: input.tools,
       messages: input.messages,
       abort: input.streamInput.abort,

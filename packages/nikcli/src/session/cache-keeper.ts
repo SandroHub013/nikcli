@@ -22,7 +22,7 @@
 // lifetime of seconds, and the production wiring is a handful of lines at the bottom.
 import { GenerationOptions, LLMRequest, Runtime } from "@nikcli-ai/llm"
 import type { LLMRequest as LLMRequestType } from "@nikcli-ai/llm"
-import { Effect, Schema } from "effect"
+import { Effect, Schema, type Layer } from "effect"
 import { BusEvent } from "@/bus/bus-event"
 import { Bus } from "@/bus"
 import { EventFeed } from "@/server/httpapi/event-feed"
@@ -82,6 +82,8 @@ export namespace CacheKeeper {
     readonly maxRenewals: number | undefined
     /** Seconds after the last real request at which the keeper stops, whatever the renewals. */
     readonly horizonS: number | undefined
+    /** At the end of the budget compact the session (with the shared prefix, still cached) instead of letting the entry die. */
+    readonly compact: boolean
   }
 
   export function settings(): Settings {
@@ -92,6 +94,8 @@ export namespace CacheKeeper {
       minTokens: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MIN_TOKENS") ?? 20_000,
       maxRenewals: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS"),
       horizonS: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_HORIZON_S"),
+      // Both switches: the compaction that is cheap is the one that shares the prefix, and without it this would rewrite the context.
+      compact: Flag.cacheKeepaliveCompact() && Flag.compactionSharedPrefix(),
     }
   }
 
@@ -165,6 +169,8 @@ export namespace CacheKeeper {
     prepare(request: LLMRequestType): Promise<{ readonly body: unknown }>
     /** Send the hidden request. Rejects on any failure; never resolves a response with an error in it. */
     send(request: LLMRequestType, fetch: typeof globalThis.fetch | undefined, signal: AbortSignal): Promise<Usage | undefined>
+    /** Compact the session now, through the loop (a manual compaction, so no model turn follows). Rejects on any failure. */
+    compact(sessionID: string, ctx: unknown): Promise<void>
     /** Whether the session is idle with no input waiting. */
     quiet(sessionID: string, ctx: unknown): Promise<boolean>
     /** Event streams attached to this process: a keeper without a client does not spend a token. */
@@ -260,6 +266,33 @@ export namespace CacheKeeper {
     dependencies().publish({ sessionID: entry.sessionID, state: "stopped", renewals: entry.renewals, reason }, entry.ctx)
   }
 
+  /**
+   * The budget or the horizon is reached while the entry is still warm: stop, or, with the compaction switch, compact first so the
+   * resume pays for the summary and not for the whole context. A failure, or a session that is not idle any more, is a stop.
+   */
+  function finish(entry: Entry, reason: string, extra?: Record<string, unknown>) {
+    const d = dependencies()
+    if (!d.settings().compact) return stop(entry, reason, extra)
+    clear(entry)
+    const generation = entry.generation
+    void (async () => {
+      try {
+        if (!(await d.quiet(entry.sessionID, entry.ctx)) || entry.generation !== generation || entry.stopped) {
+          return stop(entry, `${reason}; not idle for the compaction`, extra)
+        }
+        log.info("cache keeper compacting", { sessionID: entry.sessionID, reason, renewals: entry.renewals })
+        await d.compact(entry.sessionID, entry.ctx)
+        if (entry.generation !== generation || entry.stopped) return
+        // The prefix is the summary's now: nothing left to keep until the next real request observes the new one.
+        entry.stopped = true
+        d.publish({ sessionID: entry.sessionID, state: "compacted", renewals: entry.renewals, reason }, entry.ctx)
+      } catch (error) {
+        if (entry.generation !== generation || entry.stopped) return
+        stop(entry, "the idle compaction failed", { error: error instanceof Error ? error.message : String(error) })
+      }
+    })()
+  }
+
   // ---------------------------------------------------------------- the three hooks
 
   /**
@@ -348,9 +381,9 @@ export namespace CacheKeeper {
     }
     const lifetimeS = entry.lifetimeMs / 1_000
     const budget = s.maxRenewals ?? breakEven(entry.request.model.route, lifetimeS)
-    if (entry.renewals >= budget) return stop(entry, "budget spent", { budget })
+    if (entry.renewals >= budget) return finish(entry, "budget spent", { budget })
     const now = d.now()
-    if (s.horizonS !== undefined && now - entry.firstTouch >= s.horizonS * 1_000) return stop(entry, "horizon reached")
+    if (s.horizonS !== undefined && now - entry.firstTouch >= s.horizonS * 1_000) return finish(entry, "horizon reached")
     const expiresAt = entry.lastTouch + entry.lifetimeMs
     const delay = Math.max(0, expiresAt - marginMs(entry, d) - now)
     clear(entry)
@@ -450,6 +483,36 @@ export namespace CacheKeeper {
           cacheRead: usage.cacheReadInputTokens ?? 0,
           cacheWrite: usage.cacheWriteInputTokens ?? 0,
         }
+      },
+      compact: async (sessionID, ctx) => {
+        // Loaded when asked: the session modules import this one.
+        const [{ Session }, { SessionCompaction }, { SessionPrompt }] = await Promise.all([
+          import("."),
+          import("./compaction"),
+          import("./prompt"),
+        ])
+        const at = <A, E, R>(layer: Layer.Layer<R>, effect: Effect.Effect<A, E, R>) =>
+          runPromiseWithLayer(layer, locallyInstance(ctx as InstanceContext, effect))
+        const last = await at(
+          Session.defaultLayer,
+          Effect.gen(function* () {
+            const messages = yield* (yield* Session.Service).messages({ sessionID })
+            return messages.findLast((m) => m.info.role === "user")?.info
+          }),
+        )
+        if (!last || last.role !== "user") throw new Error("no user message to compact from")
+        await at(
+          SessionCompaction.defaultLayer,
+          Effect.gen(function* () {
+            yield* (yield* SessionCompaction.Service).create({ sessionID, agent: last.agent, model: last.model, auto: false })
+          }),
+        )
+        await at(
+          SessionPrompt.defaultLayer,
+          Effect.gen(function* () {
+            yield* (yield* SessionPrompt.Service).loop(sessionID)
+          }),
+        )
       },
       quiet: async (sessionID, ctx) => {
         // Loaded when asked: the session modules import this one.

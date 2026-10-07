@@ -56,6 +56,10 @@ function world(settings: Partial<CacheKeeper.Settings> = {}) {
     quiet: true,
     attached: 1,
     answers: [] as (CacheKeeper.Usage | Error | "hang")[],
+    /** Answers of the next `quiet` calls, before `quiet` itself. */
+    quietSeq: [] as boolean[],
+    compacted: [] as string[],
+    compactFails: undefined as Error | undefined,
     pending: [] as ((usage: CacheKeeper.Usage | undefined) => void)[],
     settings: {
       enabled: true,
@@ -64,6 +68,7 @@ function world(settings: Partial<CacheKeeper.Settings> = {}) {
       minTokens: 20_000,
       maxRenewals: undefined as number | undefined,
       horizonS: undefined as number | undefined,
+      compact: false,
       ...settings,
     } as CacheKeeper.Settings,
   }
@@ -86,7 +91,11 @@ function world(settings: Partial<CacheKeeper.Settings> = {}) {
       if (answer === "hang") return new Promise((resolve) => state.pending.push(resolve))
       return Promise.resolve(answer)
     },
-    quiet: async () => state.quiet,
+    compact: async (sessionID) => {
+      state.compacted.push(sessionID)
+      if (state.compactFails) throw state.compactFails
+    },
+    quiet: async () => (state.quietSeq.length > 0 ? state.quietSeq.shift()! : state.quiet),
     attached: () => state.attached,
     publish: (event) => void events.push(event),
     settings: () => state.settings,
@@ -248,6 +257,42 @@ describe("when it stops", () => {
     // A 20 s lifetime is a short entry: 12 renewals.
     expect(w.sent).toHaveLength(12)
     expect(w.events.at(-1)).toMatchObject({ state: "stopped", reason: "budget spent" })
+  })
+
+  it("idle compaction off: the budget ends in a stop and nothing is compacted", async () => {
+    await turn(realRequest(anthropic))
+    await w.advance(60 * 60_000)
+    expect(w.state.compacted).toEqual([])
+  })
+
+  it("idle compaction on: at the end of the budget the session is compacted once, then the keeper is done", async () => {
+    w.state.settings = { ...w.state.settings, compact: true }
+    await turn(realRequest(anthropic))
+    await w.advance(60 * 60_000)
+    expect(w.sent).toHaveLength(12)
+    expect(w.state.compacted).toEqual([SESSION])
+    expect(w.events.at(-1)).toMatchObject({ state: "compacted", reason: "budget spent" })
+    expect(w.events.filter((e) => e.state === "stopped")).toHaveLength(0)
+    expect(w.timers()).toBe(0)
+  })
+
+  it("idle compaction on, but a turn is running at the end of the budget: stop, never compact over a turn", async () => {
+    w.state.settings = { ...w.state.settings, compact: true, maxRenewals: 1 }
+    await turn(realRequest(anthropic))
+    // Idle when the keep-alive fires, busy by the time the budget is spent.
+    w.state.quietSeq = [true, false]
+    await w.advance(60_000)
+    expect(w.sent).toHaveLength(1)
+    expect(w.state.compacted).toEqual([])
+    expect(w.events.at(-1)).toMatchObject({ state: "stopped" })
+  })
+
+  it("a failed idle compaction is a log line and a stop, never an error of a turn", async () => {
+    w.state.settings = { ...w.state.settings, compact: true }
+    w.state.compactFails = new Error("boom")
+    await turn(realRequest(anthropic))
+    await w.advance(60 * 60_000)
+    expect(w.events.at(-1)).toMatchObject({ state: "stopped", reason: "the idle compaction failed" })
   })
 
   it("at the horizon, whatever the renewals", async () => {
