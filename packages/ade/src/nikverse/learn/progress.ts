@@ -18,6 +18,8 @@ export interface ExerciseRecord {
   giuste: number
   intervallo: number
   dovuta?: string
+  stelle?: number
+  punti?: number
 }
 
 export interface Progress {
@@ -61,6 +63,8 @@ export function parseProgress(raw: unknown): Parsed {
         giuste: counter(record.giuste),
         intervallo: Math.min(365, counter(record.intervallo)),
         ...(isIso(record.dovuta) ? { dovuta: record.dovuta } : {}),
+        ...(counter(record.stelle) > 0 ? { stelle: Math.min(3, counter(record.stelle)) } : {}),
+        ...(counter(record.punti) > 0 ? { punti: counter(record.punti) } : {}),
       }
     }
   }
