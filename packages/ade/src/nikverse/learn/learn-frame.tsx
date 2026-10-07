@@ -71,7 +71,11 @@ export function LearnFrame(props: {
   const [frameLoad, setFrameLoad] = createSignal(1)
   const handshake = createHandshake({ frameWindow: () => frame?.contentWindow, nonce: () => nonce })
 
+  /** Which `connect` is the latest: one that was waiting for the host when another began, or when the page was reloaded or retired, is out of date and offers nothing. */
+  let connecting = 0
   const reload = () => {
+    // A connect still waiting for the host belongs to the document that is going away: it must not open a door for it afterwards.
+    connecting++
     link?.close()
     link = undefined
     nonce = newNonce()
@@ -82,14 +86,14 @@ export function LearnFrame(props: {
   }
 
   const retire = async () => {
+    // The same: a connect that finishes after the door was shut would open it again, for the page that is being retired.
+    connecting++
     const old = link
     link = undefined
     old?.close()
     await old?.settled()
   }
 
-  /** Which `connect` is the latest: one that was waiting for the host when another began is out of date and offers nothing. */
-  let connecting = 0
   /** The page proved it is the page: a new port for its window, in place of any older one. */
   const connect = async (target: Window) => {
     link?.close()
