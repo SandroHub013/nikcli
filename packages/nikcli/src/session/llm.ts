@@ -27,6 +27,7 @@ import {
 import { clone, mergeDeep, pipe } from "remeda"
 import { ProviderTransform } from "@/provider/transform"
 import { CacheDiagnostics } from "@/provider/cache-diagnostics"
+import * as CachePolicy from "@/provider/cache-policy"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
@@ -606,6 +607,7 @@ export namespace LLM {
       providerOptions: genParams.providerOptions,
       http: headers && Object.keys(headers).length > 0 ? new HttpOptions({ headers }) : undefined,
       toolChoice: toLLMToolChoice(input.toolChoice),
+      cache: CachePolicy.nativePolicy(modelRef.route),
     })
   }
 

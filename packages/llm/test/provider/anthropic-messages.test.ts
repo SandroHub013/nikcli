@@ -42,6 +42,29 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("an hour or more asks for the 1-hour entry; less, or nothing, is the default 5 minutes with no field", () =>
+    Effect.gen(function* () {
+      const body = (ttlSeconds: number | undefined) =>
+        LLMClient.prepare(
+          LLM.request({
+            id: "req_ttl",
+            model,
+            system: { type: "text", text: "You are concise.", cache: new CacheHint({ type: "ephemeral", ttlSeconds }) },
+            prompt: "Say hello.",
+            cache: "none",
+          }),
+        )
+      expect((yield* body(3_600)).body).toMatchObject({
+        system: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral", ttl: "1h" } }],
+      })
+      expect((yield* body(7_200)).body).toMatchObject({ system: [{ cache_control: { type: "ephemeral", ttl: "1h" } }] })
+      for (const short of [300, undefined]) {
+        const system = ((yield* body(short)).body as { system: { cache_control?: unknown }[] }).system
+        expect(system[0]?.cache_control).toEqual({ type: "ephemeral" })
+      }
+    }),
+  )
+
   it.effect("prepares tool call and tool result messages", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
