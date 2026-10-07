@@ -121,6 +121,36 @@ describe("the release workflows keep their guards", () => {
     expect(text).toContain('grep -qx false <<<"$DRAFT"')
   })
 
+  // Tauri names the rpm `<name>-<version>-<release>.<arch>.rpm` (dashes), the other bundles `<name>_<version>_...`: a sum over
+  // `"${NAME}"_*` left the rpm out of SHA256SUMS.txt (ade-v0.12.0 has ADE-0.12.0-1.x86_64.rpm).
+  test("SHA256SUMS.txt sums every bundle the step downloaded, the rpm (dashes, not underscores) included", () => {
+    const text = readFileSync(join(WORKFLOWS, "ade-release.yml"), "utf8").replace(/\r\n/g, "\n")
+    const step = text.slice(text.indexOf("- name: Checksums and the warning Windows will show"))
+    const lines = step.split("\n")
+    const sum = lines.find((content) => /^\s*sha256sum\b.*>\s*SHA256SUMS\.txt/.test(content))
+    expect(sum).toBeDefined()
+    // Everything in `sums/`, which only the download loop fills; never a name prefix.
+    expect(sum!).toMatch(/sha256sum\s+(?:--\s+)?\*\s*>/)
+    const patterns = [...(lines.find((content) => /for pattern in /.test(content)) ?? "").matchAll(/'([^']+)'/g)].map((m) => m[1]!)
+    expect(patterns.length).toBeGreaterThan(0)
+    const globToRegExp = (glob: string) => new RegExp("^" + glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*") + "$")
+    // The release's own asset names for ade-v0.12.0 (gh release view ade-v0.12.0).
+    const bundles = [
+      "ADE-0.12.0-1.aarch64.rpm",
+      "ADE-0.12.0-1.x86_64.rpm",
+      "ADE_0.12.0_aarch64.app.tar.gz",
+      "ADE_0.12.0_aarch64.app.zip",
+      "ADE_0.12.0_aarch64.dmg",
+      "ADE_0.12.0_amd64.AppImage",
+      "ADE_0.12.0_amd64.deb",
+      "ADE_0.12.0_arm64-setup.exe",
+      "ADE_0.12.0_x64-setup.exe",
+    ]
+    for (const name of bundles) expect([name, patterns.some((glob) => globToRegExp(glob).test(name))]).toEqual([name, true])
+    // The updater's signatures are not bundles: the loop does not fetch them, so nothing else lands in `sums/`.
+    expect(patterns.some((glob) => globToRegExp(glob).test("ADE_0.12.0_x64-setup.exe.sig"))).toBe(false)
+  })
+
   test("the updater feed is written only when the guard says so", () => {
     const text = read("ade-release.yml")
     expect(text).toContain("script/feed-guard.ts")
