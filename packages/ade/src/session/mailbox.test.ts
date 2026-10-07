@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import { DEFAULT_MAX_DEPTH, depthOf } from "./orchestra"
 import {
   MAX_TEXT,
+  spawnDepthRefusal,
+  spawnLimit,
+  spawnLimitRefusal,
   formatDelivery,
   formatLateReply,
   formatLost,
@@ -1213,5 +1217,46 @@ describe("ade-msg registro", () => {
       parseMessage('{"kind":"registro","from":"a","register":"design","op":"rimandata","text":"{}"}'),
     ).toBeUndefined()
     expect(parseMessage('{"kind":"registro","from":"a","register":"design","op":"aperta","text":" "}')).toBeUndefined()
+  })
+})
+
+describe("spawn: no cap on the number of sessions, the depth stays", () => {
+  /** What the workbench does: the stored `ade.mailbox.maxSpawned` (or nothing) makes the limit, the open count is checked against it. */
+  const refusal = (open: number, stored?: string | null) => spawnLimitRefusal(open, spawnLimit(stored))
+
+  test("by default a seventh session, and the hundredth, are allowed", () => {
+    expect(refusal(6)).toBeUndefined()
+    expect(refusal(7)).toBeUndefined()
+    expect(refusal(100)).toBeUndefined()
+  })
+
+  test("a stored whole number above zero puts a cap back: the third spawn under a cap of 2 gets today's message", () => {
+    expect(refusal(1, "2")).toBeUndefined()
+    expect(refusal(2, "2")).toBe(
+      "errore: ci sono già 2 sessioni avviate con spawn (limite 2); chiudine una con ade-msg close <sessione> o aspetta che finiscano",
+    )
+  })
+
+  test("anything else stored (zero, negative, fraction, text, empty) leaves it unlimited", () => {
+    for (const stored of ["0", "-3", "2.5", "molte", "", null, undefined]) expect(refusal(50, stored)).toBeUndefined()
+  })
+
+  test("a child at the last level cannot spawn: the depth is refused as before", () => {
+    const parentOf = (id: string) => ({ c2: "c1", c1: "root" })[id]
+    const maxDepth = 2
+    // The user's session (level 0) and a child (level 1) may still spawn; the grandchild, at level 2, may not.
+    expect(spawnDepthRefusal(depthOf("root", parentOf) + 1, maxDepth)).toBeUndefined()
+    expect(spawnDepthRefusal(depthOf("c1", parentOf) + 1, maxDepth)).toBeUndefined()
+    expect(depthOf("c2", parentOf)).toBe(maxDepth)
+    expect(spawnDepthRefusal(depthOf("c2", parentOf) + 1, maxDepth)).toBe(
+      "errore: questa sessione è già al livello 2 e il massimo è 2: fai il lavoro qui o chiedi a chi ti ha avviato",
+    )
+    // And the request it receives says so.
+    expect(formatRequest("x", "t", undefined, { depth: 2, maxDepth })).toContain("Non avviare sessioni")
+  })
+
+  test("with no cap on the number, the depth still stops a cascade", () => {
+    expect(refusal(500)).toBeUndefined()
+    expect(spawnDepthRefusal(3, DEFAULT_MAX_DEPTH)).toContain("livello 2")
   })
 })

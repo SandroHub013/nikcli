@@ -1515,8 +1515,26 @@ export function parseOpenRequests(text: string | null | undefined): OpenRequest[
   }
 }
 
-/** How many sessions `spawn` may keep open at once, unless the user set another number. */
-export const DEFAULT_MAX_SPAWNED = 6
+/** How many sessions `spawn` may keep open at once, unless the user set a number: no cap. What stops a cascade is the depth. */
+export const DEFAULT_MAX_SPAWNED = Infinity
+
+/** The cap on open spawned sessions: a stored whole number above zero, else the default. */
+export function spawnLimit(stored: string | null | undefined): number {
+  const value = Number(stored)
+  return Number.isInteger(value) && value > 0 ? value : DEFAULT_MAX_SPAWNED
+}
+
+/** Why `spawn` must refuse another session when `open` are already running, or nothing if it may go on. */
+export function spawnLimitRefusal(open: number, limit: number): string | undefined {
+  if (open < limit) return undefined
+  return `errore: ci sono già ${open} sessioni avviate con spawn (limite ${limit}); chiudine una con ade-msg close <sessione> o aspetta che finiscano`
+}
+
+/** Why `spawn` must refuse a session at `depth` (the user's own sessions are level 0), or nothing if it may go on. */
+export function spawnDepthRefusal(depth: number, maxDepth: number): string | undefined {
+  if (depth <= maxDepth) return undefined
+  return `errore: questa sessione è già al livello ${depth - 1} e il massimo è ${maxDepth}: fai il lavoro qui o chiedi a chi ti ha avviato`
+}
 
 /** The first words of a text, on one line. */
 export function briefOf(text: string, length = 60): string {
