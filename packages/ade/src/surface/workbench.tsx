@@ -365,6 +365,7 @@ import {
   type Message,
   formatBell,
   formatHeld,
+  formatHeldDialogReceipt,
   formatHeldReceipt,
   HELD_BY_LINE,
   formatUnread,
@@ -3174,7 +3175,8 @@ export function Workbench() {
    * this was reviewed the miss was in `isFree` alone, and the Architect says he had
    * missed the rest here too on the first pass.
    */
-  const questionOpen = (paneId: string) => isQuestionOpen(permissions()[paneId], activityOf.get(paneId))
+  const questionOpen = (paneId: string) =>
+    isQuestionOpen(permissions()[paneId], activityOf.get(paneId)) || modeTracker.heldOpen(paneId)
 
   /*
    * One secret per spawn, in that process tree's environment only. A pane id
@@ -4838,7 +4840,14 @@ export function Workbench() {
     }
 
     // A standing permission prompt reads the next Enter as its answer: the message waits for it to go.
-    if (questionOpen(target.pane.id)) return false
+    if (questionOpen(target.pane.id)) {
+      // The «Held message» window of the CLI: its Enter picks «Deny», so the message waits, and the sender is told once why.
+      if (modeTracker.heldOpen(target.pane.id) && !held.has(id)) {
+        held.add(id)
+        await answer(formatHeldDialogReceipt(target.pane))
+      }
+      return false
+    }
 
     /*
      * In the background: a note or a request waits for the recipient's turn

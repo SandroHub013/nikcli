@@ -745,6 +745,14 @@ export function formatHeldReceipt(target: MailPane | undefined): string {
   return `ok: in coda, "${target?.title ?? "la sessione"}" ha una riga iniziata e non inviata: arriva appena è libera`
 }
 
+/**
+ * The receipt a sender gets for mail held back because the target shows the CLI's «Held message from another session» window: a key
+ * typed there would answer it («Deny — drop it» is the choice that is selected), so ADE waits until the window is closed.
+ */
+export function formatHeldDialogReceipt(target: MailPane | undefined): string {
+  return `ok: in coda, "${target?.title ?? "la sessione"}" ha aperta la finestra «Held message from another session» (un tasto la rifiuterebbe): arriva appena è chiusa`
+}
+
 /** Told to the sender when a long message was never read. */
 export function formatUnread(entry: InboxEntry, reader: MailPane | undefined): string {
   const what = entry.kind === "ask" || entry.kind === "spawn" ? `la richiesta ${entry.id}` : "il tuo messaggio"
