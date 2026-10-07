@@ -385,6 +385,16 @@ button[disabled] {
   border-color: var(--accent);
 }
 
+.livello .testo {
+  flex: 1;
+  min-width: 0;
+}
+
+.livello .testo small {
+  display: block;
+  color: var(--dim);
+}
+
 .livello .stelle {
   margin-left: auto;
   font-size: 1rem;
@@ -454,7 +464,8 @@ button[disabled] {
   font-family: ui-monospace, monospace;
   font-size: 0.8125rem;
   white-space: pre-wrap;
-  word-break: break-all;
+  /* A long word that does not fit breaks; a word that fits goes whole to the next row. */
+  overflow-wrap: anywhere;
 }
 
 .spiegazioni-lista {

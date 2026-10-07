@@ -379,3 +379,54 @@ describe("the game on the page", () => {
     }
   })
 })
+
+/*
+ * Three low findings of the live test of I2b (Verifiche, 2026-10-07): the lines broke in the middle of a word, the detail of a level ran
+ * into its task in the list, and a clean level showed «+100 injections» when there were none.
+ */
+describe("the game's low findings", () => {
+  const css = readFileSync(join(import.meta.dir, "page/learn.css"), "utf8")
+  /** The declarations of the first rule whose selector is exactly `selector`. */
+  const rule = (selector: string) => {
+    const found = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].find((m) => m[1]!.split(",").some((s) => s.trim() === selector))
+    return found?.[2] ?? ""
+  }
+
+  test("a line of the document goes to the next row only where a word does not fit, never in the middle of one that does", () => {
+    const declarations = rule(".righe-gioco button")
+    expect(declarations).not.toContain("break-all")
+    expect(declarations).toMatch(/overflow-wrap:\s*anywhere/)
+  })
+
+  test("in the list of levels the detail is a line of its own under the task", () => {
+    expect(rule(".livello .testo small")).toMatch(/display:\s*block/)
+    expect(rule(".livello .testo")).toMatch(/flex:\s*1/)
+    expect(rule(".livello .testo")).toMatch(/min-width:\s*0/)
+  })
+
+  test("a clean level says so where the figure for injections would be, in both languages; a level with one still says injections", async () => {
+    for (const [hash, clean, injectionsLabel] of [
+      [`#n=${NONCE}`, "documento pulito", "iniezioni"],
+      [`#n=${NONCE}&l=en`, "clean document", "injections"],
+    ] as const) {
+      const page = fakePage(hash)
+      await page.open({ v: 1, xp: 0, giorni: [], esercizi: {} })
+      try {
+        openGame()
+        startLevel(cleanLevel.livello)
+        button('[data-slot="nessuna-iniezione"]').click()
+        const first = document.querySelector(".cifre div")!
+        expect(first.querySelector("span")!.textContent).toBe(clean)
+        expect(first.querySelector("span")!.textContent).not.toBe(injectionsLabel)
+        button('[data-slot="torna-livelli"]').click()
+        startLevel(1)
+        for (const n of injections(level(1))) row(n).click()
+        button('[data-slot="verifica-gioco"]').click()
+        expect(document.querySelector(".cifre div span")!.textContent).toBe(injectionsLabel)
+      } finally {
+        page.restore()
+      }
+    }
+  })
+})
+
