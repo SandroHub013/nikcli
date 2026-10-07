@@ -386,6 +386,33 @@ describe("createAdeVoiceHost", () => {
     })
   })
 
+  // F7e review, low 1: a spoken yes never takes an answer that widens the reach, and sends nothing when it is all that is offered.
+  test("a spoken yes does not choose «Run all commands», «Continue without sandbox» or «Approve for this project»", () => {
+    const answered: PermissionAnswer[] = []
+    const labels = ["Run all commands", "Continue without sandbox", "Approve for this project", "Permetti per questa cartella"]
+    const request = (list: string[]): PermissionRequest => ({
+      what: "Proceed?",
+      kind: "unknown",
+      answers: list.map((label, i) => ({
+        intent: classifyAnswer(label),
+        label,
+        send: String(i + 1),
+        tone: i === 0 ? ("primary" as const) : ("secondary" as const),
+      })),
+    })
+    let open = request(labels)
+    const { deps } = createMockDeps({
+      permissions: () => ({ p1: open }),
+      answerPermission: (_id, ans) => void answered.push(ans),
+    })
+    const host = createAdeVoiceHost(deps)
+    expect(host.answerPermission("p1", "allow")).toBe(false)
+    expect(answered).toHaveLength(0)
+    open = request([...labels, "Yes, once"])
+    expect(host.answerPermission("p1", "allow")).toBe(true)
+    expect(answered.map((a) => a.label)).toEqual(["Yes, once"])
+  })
+
   // F7e, D2: a label nobody recognised is not a yes, whatever its place in the menu.
   describe("a spoken yes sends only an answer that is a yes", () => {
     const grant = (answers: PermissionRequest["answers"]) => {

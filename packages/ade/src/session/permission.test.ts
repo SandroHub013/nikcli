@@ -91,6 +91,27 @@ describe("the answers of a prompt: intent and shown label", () => {
     expect(classifyAnswer("Yes, manually approve edits")).toBe("yes")
   })
 
+  // F7e review, low 1: labels that widen the reach (every command, no sandbox, a whole project or folder) and read as a yes.
+  test("classifyAnswer reads the labels that widen the reach as always, one by one", () => {
+    const wider = [
+      "Run all commands",
+      "Run all",
+      "Continue without sandbox",
+      "Approve for this project",
+      "Yes, for this project",
+      "Yes, allow this directory",
+      "Permetti per questa cartella",
+      "Approva per questo progetto",
+      "Esegui tutti i comandi",
+      "Continua senza sandbox",
+    ]
+    for (const label of wider) expect([label, classifyAnswer(label)]).toEqual([label, "always"])
+    // The plain ones stay a yes.
+    for (const label of ["Run", "Continue", "Approve", "Permetti", "Esegui", "Yes, run it"]) {
+      expect([label, classifyAnswer(label)]).toEqual([label, "yes"])
+    }
+  })
+
   // F7e, D2: the plain yes wordings a CLI may use, for recognising a label (not for what a spoken yes may send).
   test("classifyAnswer reads ok, continue, run, esegui, approva, permetti and autorizza as a yes", () => {
     for (const label of ["Ok", "Okay", "Continue", "Continua", "Run", "Esegui", "Approva", "Permetti", "Autorizza"]) {
