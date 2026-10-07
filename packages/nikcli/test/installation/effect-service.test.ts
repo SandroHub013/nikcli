@@ -220,7 +220,7 @@ describe("Update dialog wiring (cross-platform)", () => {
     const offer = source.slice(source.indexOf("async function offerUpdate"), source.indexOf("// Plugin routes"))
     expect(offer.indexOf("runRestart(onUpgraded")).toBeGreaterThan(offer.indexOf("upgradeNow?.(method"))
     expect(offer).not.toContain("exit()")
-    expect(offer).toContain("Restart nikcli to use the new version.")
+    expect(offer).toContain("Restart Ragu Code to use the new version.")
     const host = await readSrc("packages/nikcli/src/cli/handlers/default.ts")
     expect(host).toContain('restartServiceAfterUpgrade("always")')
     expect(host).toContain("enableAutoUpdate: async () => {")
