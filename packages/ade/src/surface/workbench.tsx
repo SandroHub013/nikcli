@@ -416,11 +416,14 @@ import {
   formatFallbackLine,
   formatHandoff,
   handoffOutcome,
+  lateNo,
   parseHandoffs,
   parseNativeSessions,
+  permissionClassIn,
   routeFor,
   type Handoff,
   type NativeSession,
+  type PermissionClass,
 } from "../session/native-mail"
 
 /** Who a message is from and what it is, for the inbox when it is too long to type. */
@@ -2607,13 +2610,22 @@ export function Workbench() {
    * and the sender then read "no handoff waiting" as a failure. A confirmation
    * that arrives after the fact is answered with what happened, not an error.
    */
-  const closedHandoffs = new Map<string, "confermata" | "digitata">()
+  const closedHandoffs = new Map<
+    string,
+    { how: "confermata" | "digitata"; at: number; by?: "mittente"; handoff?: Handoff }
+  >()
+  /**
+   * The permission class each Claude pane showed last in its mode bar (`bypass permissions on`, `manual mode on`). Native mail is
+   * chosen only between two panes whose class is known and the same: the CLI answers a sender `success:true` even when the target
+   * holds the message behind a dialog (sessioni 2, live proof).
+   */
+  const paneClasses = new Map<string, PermissionClass>()
 
   /** Types what a handoff did not deliver, and says so on both sides. */
   const fallBackToTyping = (handoff: Handoff, reason: string) => {
     handoffs.delete(handoff.id)
     saveHandoffs()
-    closedHandoffs.set(handoff.id, "digitata")
+    closedHandoffs.set(handoff.id, { how: "digitata", at: Date.now() })
     const request = openRequests.get(handoff.id)
     if (request) {
       request.via = "digitata"
@@ -2660,7 +2672,8 @@ export function Workbench() {
       }
       handoffs.delete(handoff.id)
       saveHandoffs()
-      closedHandoffs.set(handoff.id, "confermata")
+      // Only the sender's word closes a handoff as confirmed (the target's hook is not a witness): kept a while, for a late `no`.
+      closedHandoffs.set(handoff.id, { how: "confermata", at: Date.now(), by: "mittente", handoff })
       const request = openRequests.get(handoff.id)
       if (request) {
         request.acked = true
@@ -3969,10 +3982,22 @@ export function Workbench() {
       const handoff = handoffs.get(message.ref)
       if (!handoff) {
         const closed = closedHandoffs.get(message.ref)
+        // A `no` after the sender's own confirmation: the CLI said `success:true` and only then that the target held the message.
+        // Typed after all, as if the `no` had come first (sessioni 2, live proof).
+        if (!message.ok && lateNo(closed, Date.now()) === "retype" && closed?.handoff && message.from === closed.handoff.from) {
+          const request = openRequests.get(closed.handoff.id)
+          if (request) {
+            delete request.acked
+            saveRequests()
+          }
+          fallBackToTyping(closed.handoff, message.text.trim() || "il mittente ha segnalato che la consegna nativa non è riuscita")
+          await answer(`ok: ADE digita ${message.ref} nella sessione, con la protezione della riga`)
+          return true
+        }
         await answer(
-          closed === "confermata"
-            ? `ok: consegna ${message.ref} già confermata dal turno del destinatario${message.ok ? "" : "; nessun doppione"}`
-            : closed === "digitata"
+          closed?.how === "confermata"
+            ? `ok: consegna ${message.ref} già confermata dal mittente${message.ok ? "" : "; troppo tardi per correggerla"}`
+            : closed?.how === "digitata"
               ? `ok: consegna ${message.ref} già digitata da ADE${message.ok ? ": il destinatario può averla due volte" : ""}`
               : `errore: nessuna consegna nativa in attesa con id ${message.ref}`,
         )
@@ -4749,6 +4774,8 @@ export function Workbench() {
           : undefined,
       typedRequested: message.via === "typed",
       alreadyQueued: held.has(id),
+      ...(sender ? { senderClass: paneClasses.get(sender.id) } : {}),
+      targetClass: paneClasses.get(target.pane.id),
     })
     if (route.via === "nativa") {
       const nativeContext = {
@@ -7301,6 +7328,7 @@ export function Workbench() {
   const forgetPane = (id: string) => {
     records.forget(id)
     rawWindows.forget(id)
+    paneClasses.delete(id)
     forgetQuiet(id)
     screenRequests.forget(id)
     // Per-pane bookkeeping kept in plain maps, which nothing else clears: a
@@ -7721,6 +7749,11 @@ export function Workbench() {
      */
     const recent = rawWindows.push(paneId, text)
     const agent = pane.agent ?? pane.model
+    // The mode bar is repainted on every Shift+Tab: what was seen last is the pane's class (native mail is picked on it).
+    if (agent === "claude-code") {
+      const seen = permissionClassIn(text)
+      if (seen) paneClasses.set(paneId, seen)
+    }
 
     const pending = permissions()[paneId]
     if (pending) {

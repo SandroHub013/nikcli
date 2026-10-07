@@ -6,7 +6,10 @@ import {
   HANDOFF_ACK_MS,
   handoffOutcome,
   isHandoff,
+  LATE_NO_MS,
+  lateNo,
   nativeLaunchArgs,
+  permissionClassIn,
   nativeName,
   parseHandoffs,
   parseNativeSessions,
@@ -61,9 +64,70 @@ describe("parseNativeSessions", () => {
   })
 })
 
+describe("permissionClassIn", () => {
+  test("reads the mode bar of a Claude pane: bypass, or one that asks", () => {
+    expect(permissionClassIn("⏵⏵ bypass permissions on (shift+tab to cycle)")).toBe("bypass")
+    expect(permissionClassIn("manual mode on (shift+tab to cycle)")).toBe("prompting")
+    expect(permissionClassIn("⏵⏵ accept edits on")).toBe("prompting")
+    expect(permissionClassIn("⏸ plan mode on")).toBe("prompting")
+  })
+
+  test("the last mention wins: Shift+Tab repaints the bar, and the old text may still be in the window", () => {
+    expect(permissionClassIn("bypass permissions on ... manual mode on")).toBe("prompting")
+    expect(permissionClassIn("manual mode on ... bypass permissions on")).toBe("bypass")
+  })
+
+  test("colour codes between the words do not hide it, and no mention means unknown", () => {
+    expect(permissionClassIn("\u001b[38;5;211mbypass permissions on\u001b[39m")).toBe("bypass")
+    expect(permissionClassIn("nothing about modes here")).toBeUndefined()
+    expect(permissionClassIn("auto mode on")).toBeUndefined()
+  })
+})
+
+describe("lateNo", () => {
+  const closed = { how: "confermata" as const, at: 1_000, by: "mittente" as const }
+  test("a `no` shortly after the sender's own confirmation still types the message", () => {
+    expect(lateNo(closed, 1_000 + 60_000)).toBe("retype")
+  })
+  test("a `no` long after, or after ADE typed it, or for nothing known, does not", () => {
+    expect(lateNo(closed, 1_000 + LATE_NO_MS + 1)).toBe("late")
+    expect(lateNo({ how: "digitata", at: 1_000 }, 2_000)).toBe("typed")
+    expect(lateNo(undefined, 2_000)).toBe("unknown")
+  })
+})
+
 describe("routeFor", () => {
   const listed = [{ sessionId: "s-1", name: "Fabio" }]
-  const both = { senderAgent: "claude-code", targetAgent: "claude-code", targetSessionId: "s-1", listed }
+  const both = {
+    senderAgent: "claude-code",
+    targetAgent: "claude-code",
+    targetSessionId: "s-1",
+    listed,
+    senderClass: "bypass" as const,
+    targetClass: "bypass" as const,
+  }
+
+  // Sessioni 2, live proof, test 3: the CLI holds a message from a session that asks permission to one that does not, and answers
+  // `success:true` anyway. So ADE picks the way before: native only when both ends are known to be in the same class.
+  test("native only when sender and target are in the same permission class, and both are known", () => {
+    expect(routeFor({ ...both, senderClass: "prompting", targetClass: "prompting" })).toEqual({ via: "nativa", name: "Fabio" })
+    expect(routeFor({ ...both, senderClass: "prompting" })).toEqual({
+      via: "digitata",
+      reason: "mittente e destinatario hanno permessi di classe diversa (mittente: chiede, destinatario: bypass)",
+    })
+    expect(routeFor({ ...both, targetClass: "prompting" })).toMatchObject({
+      via: "digitata",
+      reason: expect.stringContaining("classe diversa"),
+    })
+    expect(routeFor({ ...both, senderClass: undefined })).toEqual({
+      via: "digitata",
+      reason: "la modalità di permesso del mittente non è nota",
+    })
+    expect(routeFor({ ...both, targetClass: undefined })).toEqual({
+      via: "digitata",
+      reason: "la modalità di permesso del destinatario non è nota",
+    })
+  })
 
   test("two Claude sessions, the target listed: native, by the name the CLI kept", () => {
     expect(routeFor(both)).toEqual({ via: "nativa", name: "Fabio" })

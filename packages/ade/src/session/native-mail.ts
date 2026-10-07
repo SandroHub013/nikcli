@@ -38,10 +38,13 @@ export const CLAUDE = "claude-code"
  * applies its own rule, permission parity: a message passes when sender and
  * receiver are in the same class (bypass to bypass, which is nearly all of
  * ours, so the team's mail stays native), and is held when a session that asks
- * writes to one that does not. A held message is not lost: the sender does not
- * confirm it, and ADE's typed fallback delivers it with `verifySender`. The
- * setting would never be written to `~/.claude/settings.json` either way: the
- * user's rules are the user's.
+ * writes to one that does not. The CLI tells the sender `success:true` even then,
+ * and only afterwards that the message was held, so the sender confirms too
+ * early: ADE picks the way before (`routeFor`, from the mode bars) and types,
+ * with `verifySender`, when the classes differ or one is unknown; and a
+ * `delivered <id> no` after a confirmation still makes ADE type it
+ * (`lateNo`). The setting would never be written to `~/.claude/settings.json`
+ * either way: the user's rules are the user's.
  */
 export function nativeLaunchArgs(agentId: string, title: string): string[] {
   if (agentId !== CLAUDE) return []
@@ -99,6 +102,29 @@ export function parseNativeSessions(output: string): NativeSession[] {
   return rows
 }
 
+/** The CLI's two classes of permission: a session that skips the prompts, and one that asks. Mail passes between the same class. */
+export type PermissionClass = "bypass" | "prompting"
+
+/**
+ * The class a Claude pane is in, from the mode bar at the foot of its screen (`bypass permissions on`, `manual mode on`, ...).
+ * The last mention in `text` wins: Shift+Tab repaints the bar, and what came before may still be in the window. Colour codes between
+ * the words are ignored. Anything else (`auto mode`, no bar seen) is unknown, and unknown goes to the keyboard.
+ */
+export function permissionClassIn(text: string): PermissionClass | undefined {
+  const plain = text.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "")
+  let found: { at: number; class: PermissionClass } | undefined
+  const patterns: [RegExp, PermissionClass][] = [
+    [/bypass permissions on/gi, "bypass"],
+    [/(?:manual mode|accept edits|plan mode) on/gi, "prompting"],
+  ]
+  for (const [pattern, kind] of patterns) {
+    for (const match of plain.matchAll(pattern)) {
+      if (!found || match.index > found.at) found = { at: match.index, class: kind }
+    }
+  }
+  return found?.class
+}
+
 export interface RouteInput {
   /** Which CLI each end runs. */
   senderAgent?: string
@@ -116,6 +142,13 @@ export interface RouteInput {
    * keyboard, it stays there.
    */
   alreadyQueued?: boolean
+  /**
+   * The permission class of each end, as ADE read it off the panes' mode bars. The CLI holds a message from a session that asks
+   * permission to one that does not, behind a dialog in the target, and still tells the sender `success:true`: so the way is picked
+   * here, before, and native only when both ends are known and the same.
+   */
+  senderClass?: PermissionClass
+  targetClass?: PermissionClass
 }
 
 export type Route = { via: "nativa"; name: string } | { via: "digitata"; reason: string }
@@ -139,6 +172,15 @@ export function routeFor(input: RouteInput): Route {
     return { via: "digitata", reason: "il CLI non elenca le sessioni (claude agents --json)" }
   const row = input.listed.find((session) => session.sessionId === input.targetSessionId)
   if (!row) return { via: "digitata", reason: "destinatario non nell'elenco del CLI" }
+  if (!input.senderClass) return { via: "digitata", reason: "la modalità di permesso del mittente non è nota" }
+  if (!input.targetClass) return { via: "digitata", reason: "la modalità di permesso del destinatario non è nota" }
+  if (input.senderClass !== input.targetClass) {
+    const word = (kind: PermissionClass) => (kind === "bypass" ? "bypass" : "chiede")
+    return {
+      via: "digitata",
+      reason: `mittente e destinatario hanno permessi di classe diversa (mittente: ${word(input.senderClass)}, destinatario: ${word(input.targetClass)})`,
+    }
+  }
   return { via: "nativa", name: row.name }
 }
 
@@ -241,6 +283,22 @@ export function handoffOutcome(
   if (seen.failed) return "fallback"
   if (seen.acked) return "delivered"
   return now - handoff.at >= HANDOFF_ACK_MS ? "fallback" : "wait"
+}
+
+/** How long after its own confirmation a sender's `delivered <id> no` still makes ADE type the message. */
+export const LATE_NO_MS = 5 * 60_000
+
+/**
+ * What a `delivered <id> no` is, once the handoff is closed. After the sender's own confirmation it is still a refusal worth
+ * acting on (the CLI answers `success:true` and holds the message afterwards), for a short time; after ADE typed it, it is nothing.
+ */
+export function lateNo(
+  closed: { how: "confermata" | "digitata"; at: number; by?: "mittente" } | undefined,
+  now: number,
+): "retype" | "late" | "typed" | "unknown" {
+  if (!closed) return "unknown"
+  if (closed.how === "digitata") return "typed"
+  return now - closed.at <= LATE_NO_MS ? "retype" : "late"
 }
 
 /** The typed line, when the native way was tried first. */
