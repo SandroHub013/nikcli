@@ -17,6 +17,14 @@ function runSession<A, E>(effect: Effect.Effect<A, E, Session.Service>) {
 }
 
 /**
+ * Skills by name, compared by code point: the same order on every platform and in every process. Discovery order follows the
+ * filesystem walk, and the catalog is part of the tool prefix the provider caches, so it must not depend on it.
+ */
+function byName<T extends { name: string }>(skills: readonly T[]): T[] {
+  return [...skills].sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+}
+
+/**
  * The model-visible catalog: **names only**.
  *
  * Spelling out every skill's description, category and tags here cost ~16 KB of
@@ -26,10 +34,11 @@ function runSession<A, E>(effect: Effect.Effect<A, E, Session.Service>) {
  * skill *exists*; `search` already returns the descriptions on demand and `name`
  * loads the skill itself, so nothing is lost but the standing cost.
  */
-export function catalogDescription(skills: readonly { name: string }[]): string {
-  if (skills.length === 0) {
+export function catalogDescription(discovered: readonly { name: string }[]): string {
+  if (discovered.length === 0) {
     return "Load a skill to get detailed instructions for a specific task. No skills are currently available."
   }
+  const skills = byName(discovered)
   return [
     "Load a skill to get detailed instructions for a specific task.",
     "Skills provide specialized knowledge and step-by-step guidance.",
@@ -50,12 +59,14 @@ export const SkillTool = Tool.define("skill", async (ctx) => {
   )
 
   const agent = ctx?.agent
-  const accessibleSkills = agent
-    ? allSkills.filter((skill) => {
-        const rule = PermissionNext.evaluate("skill", skill.name, agent.permission)
-        return rule.action !== "deny"
-      })
-    : allSkills
+  const accessibleSkills = byName(
+    agent
+      ? allSkills.filter((skill) => {
+          const rule = PermissionNext.evaluate("skill", skill.name, agent.permission)
+          return rule.action !== "deny"
+        })
+      : allSkills,
+  )
 
   const description = catalogDescription(accessibleSkills)
 

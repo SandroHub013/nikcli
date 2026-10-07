@@ -58,3 +58,31 @@ describe("skill catalog description", () => {
     expect(text).not.toContain("<available_skills>")
   })
 })
+
+/**
+ * The description is part of the tool prefix the provider caches. Discovery order depends on the filesystem walk, which differs from
+ * one process to the next, so two sessions of the same project must still send the same bytes.
+ */
+describe("skill catalog order", () => {
+  const names = ["zeta", "Alpha", "beta", "alpha", "Zeta", "ärger", "10-x", "2-x", "a-b", "a_b", "ab"]
+
+  it("two discovery orders give the same description, byte for byte", () => {
+    const forward = catalogDescription(names.map(skill))
+    const backward = catalogDescription([...names].reverse().map(skill))
+    const shuffled = catalogDescription([5, 2, 9, 0, 7, 3, 10, 1, 8, 4, 6].map((i) => skill(names[i]!)))
+    expect(backward).toBe(forward)
+    expect(shuffled).toBe(forward)
+  })
+
+  it("is ordered by code point, not by locale", () => {
+    const text = catalogDescription(names.map(skill))
+    const listed = /<available_skills>(.*)<\/available_skills>/.exec(text)![1]!.split(", ")
+    expect(listed).toEqual(["10-x", "2-x", "Alpha", "Zeta", "a-b", "a_b", "ab", "alpha", "beta", "zeta", "ärger"])
+  })
+
+  it("does not reorder the caller's array", () => {
+    const input = names.map(skill)
+    catalogDescription(input)
+    expect(input.map((s) => s.name)).toEqual(names)
+  })
+})
