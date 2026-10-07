@@ -121,7 +121,7 @@ describe("applyExit", () => {
 
   test("a failing exit says so once, and not again after an error event", () => {
     const failed = applyExit(emptyTalk(), 1, T0)
-    expect(failed.messages.at(-1)?.text).toBe("nikcli è uscito con codice 1.")
+    expect(failed.messages.at(-1)?.text).toBe("Ragu Code è uscito con codice 1.")
     const afterError = applyExit(failedWith(emptyTalk(), "boom"), 1, T0)
     expect(afterError.messages).toHaveLength(1)
     expect(afterError.status).toBe("error")

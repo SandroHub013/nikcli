@@ -61,7 +61,7 @@ export interface Runner {
 export const RUNNERS: readonly Runner[] = [
   {
     id: "nikcli",
-    label: "nikcli",
+    label: "Ragu Code",
     command: NIKCLI_COMMAND,
     models: [],
     // A nikcli model's efforts are its own variants, read from nikcli (`effort.ts`), not a list here.

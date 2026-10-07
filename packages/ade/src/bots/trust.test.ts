@@ -117,7 +117,7 @@ describe("fiducia nei bot di progetto", () => {
     }
     expect(questions["codex"]).toContain("sola lettura")
     expect(questions["claude"]).toContain(".git")
-    expect(questions["nikcli"]).toContain("configurazione di nikcli")
+    expect(questions["nikcli"]).toContain("configurazione di Ragu Code")
     expect(new Set(Object.values(questions)).size).toBe(3)
   })
 

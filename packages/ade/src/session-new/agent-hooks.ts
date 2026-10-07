@@ -130,7 +130,7 @@ export const HOOK_TARGETS: readonly HookTarget[] = [
    */
   {
     id: "nikcli",
-    label: "nikcli",
+    label: "Ragu Code",
     agent: "nikcli",
     config: [],
     // As it lands on Windows. Rust puts it under nikcli's configuration folder on every platform (`config_home`).

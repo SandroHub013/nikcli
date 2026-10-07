@@ -464,7 +464,7 @@ export function permissionAnswered(talk: Talk, at: number): Talk {
  * The process is gone. A clean exit ends the turn; anything else, with no
  * error already on the thread, is said once so the silence has a reason.
  */
-export function applyExit(talk: Talk, code: number | null, at: number, program = "nikcli", lastWords?: string): Talk {
+export function applyExit(talk: Talk, code: number | null, at: number, program = "Ragu Code", lastWords?: string): Talk {
   talk = sealTurn(talk)
   const limited = withLimitNotice(talk, code, at, program)
   if (limited) return limited

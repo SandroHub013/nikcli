@@ -109,7 +109,7 @@ async function cost(seconds: number) {
 }
 
 const ORB = `document.querySelector('[data-slot="ade-voice-controls"] [data-component="orb-mark"]') ?? document.querySelector('[data-component="orb-mark"]')`
-const LOGO = `document.querySelector('[data-component="nik-chrome-logo"]')`
+const LOGO = `document.querySelector('[data-component="ragu-pot-mark"]')`
 const pointerAt = (x: number, y: number) => page("Input.dispatchMouseEvent", { type: "mouseMoved", x, y })
 async function parkOnLogo() {
   const r = (await ev(

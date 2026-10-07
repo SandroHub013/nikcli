@@ -297,7 +297,7 @@ export const it = {
   "hooks.broken":
     "C'è una voce di ADE nella configurazione, ma non corrisponde allo script sul disco: la CLI sta eseguendo un hook che non fa nulla. Reinstalla per sistemarla.",
   "hooks.plugin":
-    "Un plugin del TUI di nikcli, non una voce di configurazione: dice ad ADE quale conversazione mostra il pannello, anche dopo /new, /sessions o un cambio di scheda. Non fa nulla in un nikcli che ADE non ha avviato.",
+    "Un plugin del TUI di Ragu Code, non una voce di configurazione: dice ad ADE quale conversazione mostra il pannello, anche dopo /new, /sessions o un cambio di scheda. Non fa nulla in un Ragu Code che ADE non ha avviato.",
   "hooks.install": "Installa",
   "hooks.reinstall": "Reinstalla",
   "hooks.update": "Aggiorna",
@@ -309,7 +309,7 @@ export const it = {
   "hooks.removeOnly":
     "Gli hook PowerShell non funzionano su questo sistema, e questo fallisce a ogni evento di ogni sessione di Claude Code o Codex. Si può solo rimuovere.",
   "hooks.windowsOnly":
-    "Gli hook di Claude Code e Codex sono script PowerShell, quindi ADE li installa solo su Windows. Su questo sistema si offre solo il plugin di nikcli.",
+    "Gli hook di Claude Code e Codex sono script PowerShell, quindi ADE li installa solo su Windows. Su questo sistema si offre solo il plugin di Ragu Code.",
   "agent.mic.start": "Avvia il microfono",
   "agent.mic.stop": "Ferma il microfono",
   "agent.settings": "Impostazioni",
@@ -531,16 +531,16 @@ export const it = {
     "Le CLI agente che ADE avvia usano intanto la propria configurazione MCP, quella che userebbero da un terminale.",
   "settings.bots.title": "Bot",
   "settings.bots.desc":
-    "Gli agenti di nikcli che questa macchina conosce: con quale modello girano, e se appartengono al progetto o a tutti. Si creano e si modificano nella vista Bot.",
-  "settings.bots.empty": "Nessun agente nikcli. Se ne crea uno dalla vista Bot.",
-  "settings.bots.reading": "Lettura delle cartelle di nikcli…",
-  "settings.bots.defaultModel": "modello di nikcli",
+    "Gli agenti di Ragu Code che questa macchina conosce: con quale modello girano, e se appartengono al progetto o a tutti. Si creano e si modificano nella vista Bot.",
+  "settings.bots.empty": "Nessun agente Ragu Code. Se ne crea uno dalla vista Bot.",
+  "settings.bots.reading": "Lettura delle cartelle di Ragu Code…",
+  "settings.bots.defaultModel": "modello di Ragu Code",
   "settings.bots.scopeProject": "progetto",
   "settings.bots.scopeGlobal": "globale",
   "settings.skills.title": "Strumenti",
   "settings.skills.desc":
-    "Quali strumenti sono stati tolti a un bot. Chi non compare qui li ha tutti: nikcli registra nel file solo le rinunce.",
-  "settings.skills.empty": "Nessun bot ha limitazioni: tutti possono usare ogni strumento di nikcli.",
+    "Quali strumenti sono stati tolti a un bot. Chi non compare qui li ha tutti: Ragu Code registra nel file solo le rinunce.",
+  "settings.skills.empty": "Nessun bot ha limitazioni: tutti possono usare ogni strumento di Ragu Code.",
   "settings.skills.none": "Nessuno strumento",
   "settings.skills.addHint": "Aggiungi o rimuovi limitazioni configurando il bot nella vista Bot.",
   "settings.skills.without": (tools: string) => `senza ${tools}`,
@@ -548,7 +548,7 @@ export const it = {
   "settings.account.intro":
     "I programmi su cui possono girare i bot, ognuno con l'account della propria CLI.",
   "settings.providers.desc1":
-    "I programmi su cui può girare un bot, ognuno con l'account della propria CLI: l'abbonamento Anthropic passa da Claude Code, quello ChatGPT da Codex, le chiavi e gli altri abbonamenti da nikcli. Il motore, il modello e lo sforzo si scelgono nella scheda di ogni bot.",
+    "I programmi su cui può girare un bot, ognuno con l'account della propria CLI: l'abbonamento Anthropic passa da Claude Code, quello ChatGPT da Codex, le chiavi e gli altri abbonamenti da Ragu Code. Il motore, il modello e lo sforzo si scelgono nella scheda di ogni bot.",
   "settings.providers.desc2Before": (max: number) =>
     `ADE non chiede né legge le credenziali: l'accesso si fa nel flusso ufficiale di ogni CLI. Gli abbonamenti sono per uso personale e ADE tiene al massimo ${max} turni insieme per ognuno; per automazioni intensive o non presidiate accedi alla CLI con una chiave API (Claude Code accetta la chiave della Console Anthropic, Codex la chiave OpenAI con `,
   "settings.providers.desc2After": ").",
@@ -623,7 +623,7 @@ export const it = {
   "pane.close": "Chiudi",
   "hooks.foreign":
     "Di un'altra build di ADE, non di questa: questa non lo aggiorna e non lo rimuove, perché con quel file ci lavorano le sessioni dell'ADE ufficiale",
-  "bar.nikcliVersion": (v: string) => `nikcli ${v}: è il programma con cui partono le sessioni, non ADE`,
+  "bar.nikcliVersion": (v: string) => `Ragu Code ${v}: è il programma con cui partono le sessioni, non ADE`,
   "bar.sessions": (count: number) => `${count} ${count === 1 ? "sessione" : "sessioni"}`,
   "bar.meta.ade": (version: string) => `ADE ${version}`,
   "bar.info": (facts: string) => `Dettagli del progetto: ${facts}`,
@@ -753,22 +753,22 @@ export const it = {
     "Non potrà eseguire comandi né toccare .git e le impostazioni degli strumenti (.claude, .nikcli, .codex, .vscode, .husky, .github/workflows), ma potrà modificare gli altri file del progetto.",
   "bots.trust.can.claudeReadOnly": "Non potrà eseguire comandi né modificare file: potrà solo leggere il progetto.",
   "bots.trust.can.nikcli":
-    "Potrà fare quello che la tua configurazione di nikcli concede: il file del bot non può concedersi altro.",
+    "Potrà fare quello che la tua configurazione di Ragu Code concede: il file del bot non può concedersi altro.",
   "bots.trust.selfApproves": (name: string, what: string, line: string) =>
-    `Il bot «${name}» di questo progetto si concede da solo «${what}» nel suo file, con la riga «${line}», e nikcli lo eseguirebbe senza chiedere: non lo avvio. Togli quella riga dal file, oppure copia il bot tra i tuoi.`,
+    `Il bot «${name}» di questo progetto si concede da solo «${what}» nel suo file, con la riga «${line}», e Ragu Code lo eseguirebbe senza chiedere: non lo avvio. Togli quella riga dal file, oppure copia il bot tra i tuoi.`,
   "bots.projectTrust.new": (root: string, files: string) =>
-    `La cartella ${root} ha una configurazione di nikcli sua (${files}): plugin, strumenti e impostazioni che nikcli carica ed esegue a ogni turno, con il tuo account, scritti da chi ha scritto il progetto. Li carichi? Se dici di no, qui i bot su nikcli non partono; quelli su Claude Code e Codex sì, perché non la leggono.`,
+    `La cartella ${root} ha una configurazione di Ragu Code sua (${files}): plugin, strumenti e impostazioni che Ragu Code carica ed esegue a ogni turno, con il tuo account, scritti da chi ha scritto il progetto. Li carichi? Se dici di no, qui i bot su Ragu Code non partono; quelli su Claude Code e Codex sì, perché non la leggono.`,
   "bots.projectTrust.changed": (root: string, files: string) =>
-    `La configurazione di nikcli della cartella ${root} è cambiata da quando l'hai accettata (${files}): nikcli la carica ed esegue a ogni turno. La carichi così com'è ora?`,
+    `La configurazione di Ragu Code della cartella ${root} è cambiata da quando l'hai accettata (${files}): Ragu Code la carica ed esegue a ogni turno. La carichi così com'è ora?`,
   "bots.projectTrust.more": (count: number) => ` e altri ${count}`,
   "bots.projectTrust.refused": (root: string) =>
-    `I bot su nikcli non partono in ${root} finché non accetti la configurazione di nikcli del progetto. I bot su Claude Code e Codex non la leggono.`,
+    `I bot su Ragu Code non partono in ${root} finché non accetti la configurazione di Ragu Code del progetto. I bot su Claude Code e Codex non la leggono.`,
   "bots.ask.yes": "Sì",
   "bots.ask.no": "No",
   "bots.ask.failed": (name: string) =>
     `ADE non è riuscita a farti la domanda sul bot «${name}» di questo progetto: non lo avvio.`,
   "bots.projectTrust.failed": (root: string) =>
-    `ADE non è riuscita a farti la domanda sulla configurazione di nikcli di ${root}: i bot su nikcli qui non partono.`,
+    `ADE non è riuscita a farti la domanda sulla configurazione di Ragu Code di ${root}: i bot su Ragu Code qui non partono.`,
   "bots.trust.unreadable": (name: string) => `Non riesco a leggere il file del bot «${name}»: non lo avvio.`,
   // A bot's gateway, in the chat it answers (G4): what the bot says there on its own.
   "gateway.redacted": "Ho nascosto una chiave che hai scritto: non la uso e non la salvo.",
@@ -921,11 +921,11 @@ export const it = {
     "La Chat non è ancora collegata a questo progetto: si collega quando scegli un modello o invii un messaggio.",
   "chat.connect": "Collega adesso",
   "chat.status.admitting": "Controllo la fiducia nel progetto…",
-  "chat.status.connecting": "Collegamento al server di nikcli…",
+  "chat.status.connecting": "Collegamento al server di Ragu Code…",
   "chat.status.retrying": "Collegamento perso: riprovo…",
   "chat.status.refused": "La Chat non può lavorare in questo progetto.",
   "chat.rules.always":
-    "La Chat chiede prima di ogni comando e di ogni modifica, ma un «sempre» già dato per questo progetto (per esempio nel terminale di nikcli) vale anche qui: quella richiesta non comparirà.",
+    "La Chat chiede prima di ogni comando e di ogni modifica, ma un «sempre» già dato per questo progetto (per esempio nel terminale di Ragu Code) vale anche qui: quella richiesta non comparirà.",
   "chat.question.label": "Domanda del modello",
   "chat.question.typed": "Oppure scrivi la tua risposta",
   "chat.question.send": "Rispondi",
@@ -958,7 +958,7 @@ export const it = {
     "Da chat il bot potrà chiederti di eseguire comandi sul PC. Ogni comando arriva su Slack con Sì o No, e senza risposta in 5 minuti vale no. È un aiuto, non una protezione: approva solo ciò che riconosci per intero. Se il file del bot cambia, i comandi si spengono.",
   "gateway.panel.cancel": "Annulla",
   "gateway.panel.remoteConfirm": "Accendi i comandi",
-  "gateway.panel.mcp": "Da chat il bot usa anche i tuoi server MCP e i plugin della tua configurazione di nikcli.",
+  "gateway.panel.mcp": "Da chat il bot usa anche i tuoi server MCP e i plugin della tua configurazione di Ragu Code.",
   "design.variant.missing": (k: string, variant: number) => `${k} non ha la variante ${variant}.`,
   "browser.forget": "Dimentica questo sito",
   "browser.forget.tip": "Cancella cookie e dati che questo sito ha lasciato nel profilo di ADE.",
@@ -1235,7 +1235,7 @@ export const it = {
   "mods.title": "Mod",
   "mods.pane": "Mod del progetto",
   "mods.command": "Mostra i mod del progetto",
-  "mods.explain": "I mod sono plugin che girano nel server nikcli e disegnano qui, nel terminale e sul telefono.",
+  "mods.explain": "I mod sono plugin che girano nel server Ragu Code e disegnano qui, nel terminale e sul telefono.",
   "mods.connect": "Collega i mod del progetto",
   "mods.connecting": "Collego i mod…",
   "mods.failed": "Non riesco a collegare i mod di questo progetto.",
@@ -1494,7 +1494,7 @@ export const it = {
   "resume.noneHere": (agent: string) =>
     `Nessuna conversazione di ${agent} di questa cartella da riaprire: ne parte una nuova`,
   "resume.otherFolder": (dir: string) =>
-    `Questa conversazione è di un'altra cartella (${dir}): le schede di nikcli sono comuni a tutti i progetti. Il pannello ora la segue, anche al riavvio`,
+    `Questa conversazione è di un'altra cartella (${dir}): le schede di Ragu Code sono comuni a tutti i progetti. Il pannello ora la segue, anche al riavvio`,
   "resume.shared": (pane: string) =>
     `La conversazione è già aperta nel pannello «${pane}»: qui non la riapro, per non scrivere in due nella stessa`,
   "resume.alsoOpen": (pane: string) =>
@@ -1720,15 +1720,15 @@ export const it = {
   "effort.high": "alto",
   "effort.xhigh": "molto alto",
   "effort.max": "massimo",
-  "bots.models.noHost": "ADE non può eseguire nikcli qui",
-  "bots.models.notFound": "nikcli non si avvia (è nel PATH?)",
+  "bots.models.noHost": "ADE non può eseguire Ragu Code qui",
+  "bots.models.notFound": "Ragu Code non si avvia (nikcli è nel PATH?)",
   "bots.models.exit": (code: string, detail: string) =>
     `nikcli models è uscito con ${code}${detail ? `: ${detail}` : ""}`,
-  "bots.models.empty": "nikcli non ha elencato nessun modello",
+  "bots.models.empty": "Ragu Code non ha elencato nessun modello",
   "chat.model.choose": "Scegli un modello",
   "chat.model.none": "Nessun modello disponibile",
   "chat.model.missing": (model: string) =>
-    `Il modello ${model} non è nel catalogo del server di nikcli: è stato tolto, o il suo provider non è collegato. Non è partito niente: scegline un altro.`,
+    `Il modello ${model} non è nel catalogo del server di Ragu Code: è stato tolto, o il suo provider non è collegato. Non è partito niente: scegline un altro.`,
   "chat.agent.label": "Agente",
   "chat.agent.none": "Nessun agente disponibile",
   "chat.agent.name.build": "Assistente",
@@ -1738,7 +1738,7 @@ export const it = {
   "chat.new": "Nuova conversazione",
   "chat.empty.title": "Chiedi qualcosa.",
   "chat.empty.body":
-    "Una conversazione con nikcli in questo progetto: legge i file da sé, e prima di ogni comando o modifica ti chiede.",
+    "Una conversazione con Ragu Code in questo progetto: legge i file da sé, e prima di ogni comando o modifica ti chiede.",
   "chat.input.placeholder": "Scrivi un messaggio…",
   "chat.send": "Invia",
   "chat.stop": "Ferma",
@@ -1746,7 +1746,7 @@ export const it = {
   "chat.error.aborted": "Risposta fermata.",
   "chat.error.outputLength": "La risposta ha superato la lunghezza massima del modello ed è stata tagliata.",
   "chat.error.contextOverflow": "La conversazione non entra più nella finestra del modello: aprine una nuova.",
-  "chat.error.auth": "Il fornitore ha rifiutato le credenziali: controllale in nikcli.",
+  "chat.error.auth": "Il fornitore ha rifiutato le credenziali: controllale in Ragu Code.",
   "chat.error.credit": "Il credito presso il fornitore è finito.",
   "chat.error.modelMissing": "Il fornitore non trova questo modello: scegline un altro.",
   "chat.error.rateLimit":
@@ -1757,12 +1757,12 @@ export const it = {
   "chat.error.api": "Il fornitore ha risposto con un errore.",
   "chat.error.apiStatus": (status: number) => `Il fornitore ha risposto con un errore (${status}).`,
   "chat.error.unknown": "Qualcosa è andato storto.",
-  "chat.error.server": "Il server di nikcli non risponde.",
+  "chat.error.server": "Il server di Ragu Code non risponde.",
   "chat.error.notOpen": "La Chat non è aperta su una cartella.",
   "chat.error.otherFolder": (open: string, other: string) =>
     `La Chat è aperta su ${open}: una richiesta per ${other} non parte.`,
   "chat.error.otherOrigin": (origin: string) =>
-    `Il trasporto della Chat parla solo con il server di nikcli, non con ${origin}.`,
+    `Il trasporto della Chat parla solo con il server di Ragu Code, non con ${origin}.`,
   "chat.error.requestAborted": "La richiesta è stata interrotta.",
   "chat.retry": (attempt: number) => `Il fornitore ha dato un errore: nuovo tentativo, il ${attempt}°…`,
   "chat.attach.outside": (path: string) =>
@@ -1792,7 +1792,7 @@ export const it = {
   "bots.roster.title": "bot",
   "bots.newBot": "Nuovo bot",
   "bots.roster.loading": "Lettura…",
-  "bots.roster.empty": "Nessun agente nikcli. Creane uno.",
+  "bots.roster.empty": "Nessun agente Ragu Code. Creane uno.",
   "bots.noDescription": "Nessuna descrizione.",
   "bots.blank.empty": "Nessun bot ancora. Premi + nella barra laterale per crearne uno.",
   "bots.blank.pick": "Scegli un bot nella barra laterale, o creane un altro.",
@@ -1804,7 +1804,7 @@ export const it = {
   "bots.subagent.isA": "È un ",
   "bots.subagent.label": "subagente",
   "bots.subagent.desc":
-    ": non risponde da solo, lo chiama un altro agente. Puoi comunque scrivergli, ma nikcli userà l'agente predefinito al suo posto.",
+    ": non risponde da solo, lo chiama un altro agente. Puoi comunque scrivergli, ma Ragu Code userà l'agente predefinito al suo posto.",
   "bots.permission.request": "Richiesta di permesso",
   "bots.permission.wantsToUse": "Vuole usare",
   "bots.permission.on": "su",
@@ -1834,7 +1834,7 @@ export const it = {
     "fa girare comandi dentro un'altra shell, che la lista non sempre legge per intero",
   "bots.approval.reason.outside": "lavora fuori dalla cartella del progetto",
   "bots.approval.reason.tool": (tool: string) =>
-    `usa ${tool}, che la tua configurazione di nikcli chiede di confermare`,
+    `usa ${tool}, che la tua configurazione di Ragu Code chiede di confermare`,
   "bots.approval.why": (reason: string) => `Si ferma perché ${reason}.`,
   "bots.approval.always": "Sempre per questo bot",
   "bots.approval.timeout": (minutes: number) => `Senza risposta entro ${minutes} minuti vale come Nega.`,
@@ -2046,30 +2046,30 @@ export const it = {
   "bots.turn.cannotRefuse": (label: string) => `${label} non può rifiutare gli strumenti che questo turno esclude.`,
   "bots.turn.didNotStart": (label: string, why: string) => `${label} non si avvia: ${why}`,
   "bots.turn.nikcliOnServer":
-    "Un turno di nikcli gira sul server di nikcli di ADE, con le regole della sua sessione: qui non parte.",
-  "bots.serve.noFolder": "Un bot nikcli risponde da un progetto: apri una cartella per parlargli.",
+    "Un turno di Ragu Code gira sul server di Ragu Code di ADE, con le regole della sua sessione: qui non parte.",
+  "bots.serve.noFolder": "Un bot Ragu Code risponde da un progetto: apri una cartella per parlargli.",
   "bots.serve.notAdmitted": (root: string) =>
-    `Il progetto ${root} non è ancora ammesso per nikcli, o è cambiato: apri il bot nel pannello, rispondi alla domanda e riprova.`,
-  "bots.serve.noAgent": (name: string) => `Il server di nikcli non vede il bot «${name}» in questa cartella.`,
+    `Il progetto ${root} non è ancora ammesso per Ragu Code, o è cambiato: apri il bot nel pannello, rispondi alla domanda e riprova.`,
+  "bots.serve.noAgent": (name: string) => `Il server di Ragu Code non vede il bot «${name}» in questa cartella.`,
   "bots.serve.noModel": (model: string) =>
-    `Il modello ${model} non è nel catalogo del server di nikcli: è stato tolto, o il suo provider non è collegato. Il turno non è partito: cambia il modello del bot.`,
+    `Il modello ${model} non è nel catalogo del server di Ragu Code: è stato tolto, o il suo provider non è collegato. Il turno non è partito: cambia il modello del bot.`,
   "bots.serve.toolInPlanner": (tool: string) =>
     `Un turno senza strumenti ha provato a usare «${tool}»: il turno è stato fermato.`,
   "bots.serve.noFreeModel":
-    "Nel catalogo del server di nikcli non c'è nessun modello gratuito tra quelli previsti per questo turno: il turno non è partito.",
+    "Nel catalogo del server di Ragu Code non c'è nessun modello gratuito tra quelli previsti per questo turno: il turno non è partito.",
   "bots.serve.effortNoModel": (effort: string) =>
-    `Lo sforzo «${effort}» vale per un modello scelto: questo bot usa il modello predefinito di nikcli, e questo turno usa lo sforzo predefinito. Scegli un modello nelle impostazioni del bot.`,
+    `Lo sforzo «${effort}» vale per un modello scelto: questo bot usa il modello predefinito di Ragu Code, e questo turno usa lo sforzo predefinito. Scegli un modello nelle impostazioni del bot.`,
   "bots.serve.effortDropped": (effort: string, model: string, variants: string) =>
     `Lo sforzo «${effort}» non esiste per ${model}: questo turno usa quello predefinito. ${variants ? `Livelli di questo modello: ${variants}.` : "Questo modello non ha livelli di sforzo."} Cambialo nelle impostazioni del bot.`,
   "bots.serve.agentTaken": (name: string) =>
     `Il progetto ha un suo agente «${name}», diverso da questo bot: sul server risponderebbe al suo posto, quindi il turno non parte. Rinomina uno dei due.`,
   "bots.serve.newSession":
-    "Conversazione nuova: la precedente era di «nikcli run», o aveva altre regole, e sul server di ADE ogni conversazione di un bot nasce con le sue. Il bot non ricorda quello che c'era prima.",
+    "Conversazione nuova: la precedente era di «ragu run», o aveva altre regole, e sul server di ADE ogni conversazione di un bot nasce con le sue. Il bot non ricorda quello che c'era prima.",
   "bots.serve.refused": (permission: string, patterns: string) =>
-    `Rifiutato: nikcli ha chiesto «${permission}» (${patterns}) e qui nessuno può rispondere.`,
+    `Rifiutato: Ragu Code ha chiesto «${permission}» (${patterns}) e qui nessuno può rispondere.`,
   "bots.serve.rulesNote":
-    "Il bot chiede prima di ogni comando, ma un «sempre» già dato per questo progetto (per esempio nel terminale di nikcli) vale anche per lui, come nella Chat: quella richiesta non comparirà. Un «sempre» dato a una modifica di file gli apre anche la configurazione di nikcli (.nikcli, nikcli.json), che altrimenti un bot non può scrivere.",
-  "bots.serve.lost": "Il server di nikcli ha chiuso il flusso degli eventi prima della fine del turno.",
+    "Il bot chiede prima di ogni comando, ma un «sempre» già dato per questo progetto (per esempio nel terminale di Ragu Code) vale anche per lui, come nella Chat: quella richiesta non comparirà. Un «sempre» dato a una modifica di file gli apre anche la configurazione di Ragu Code (.nikcli, nikcli.json), che altrimenti un bot non può scrivere.",
+  "bots.serve.lost": "Il server di Ragu Code ha chiuso il flusso degli eventi prima della fine del turno.",
   "bots.runner.protectedPath": (paths: string) =>
     `Claude Code non ha potuto scrivere in un percorso protetto per i bot di progetto (${paths}): lì una scrittura diventa codice che parte dopo, quindi è negata di proposito.`,
   "bots.runner.permissionDenied": (names: string) =>
@@ -2089,15 +2089,15 @@ export const it = {
   "bots.login.noProvider": "Nessun provider collegato",
   "bots.store.noHost": "Nessun host: i bot si creano solo nell'app desktop.",
   "bots.store.noProject": "Nessun progetto aperto: scegli «globale» o apri un progetto.",
-  "bots.store.noGlobal": "Cartella di configurazione di nikcli non trovata.",
-  "bots.store.noNikcli": "Questo host non può eseguire nikcli.",
+  "bots.store.noGlobal": "Cartella di configurazione di Ragu Code non trovata.",
+  "bots.store.noNikcli": "Questo host non può eseguire Ragu Code.",
   "bots.store.noWrite": "Questo host non può scrivere file.",
   "bots.store.noRead": "Questo host non può leggere file.",
   "bots.store.noDir": "Questo host non può leggere cartelle.",
   "bots.store.hostMissing": "Nessun host.",
   "bots.store.gatewayKept": (error: string) =>
     `Non ho tolto i token e i gateway di questo bot (${error}): il bot non è cancellato. Riprova: toglie quello che è rimasto.`,
-  "bots.store.nikcliExited": (code: string) => `nikcli è uscito con codice ${code}.`,
+  "bots.store.nikcliExited": (code: string) => `Ragu Code è uscito con codice ${code}.`,
   "bots.store.unknownCode": "sconosciuto",
   "bots.spend.plan": "abbonamento",
   "bots.spend.api": "chiave API",
@@ -2117,15 +2117,15 @@ export const it = {
   "bots.lastTurn.unknownModel": "modello non riportato",
   "bots.conversation.total": "in questa conversazione:",
   "bots.form.generateCostDefault":
-    "Nikcli scrive la persona con il suo modello predefinito. Se quel modello è a pagamento, questa chiamata consuma credito.",
+    "Ragu Code scrive la persona con il suo modello predefinito. Se quel modello è a pagamento, questa chiamata consuma credito.",
   "bots.form.generateCostPaid": (model: string) =>
-    `Nikcli scrive la persona con ${model}. Questa chiamata consuma credito.`,
+    `Ragu Code scrive la persona con ${model}. Questa chiamata consuma credito.`,
   "bots.form.generateCostFree": (model: string) =>
-    `Nikcli scrive la persona con ${model}, un modello gratuito. Questa chiamata non consuma credito.`,
+    `Ragu Code scrive la persona con ${model}, un modello gratuito. Questa chiamata non consuma credito.`,
   "bots.scope.project": "progetto",
   "bots.scope.global": "globale",
   "bots.terminal.subagentTip": "Un subagente non si avvia da solo: lo chiama un altro agente",
-  "bots.terminal.launchTip": "Apre la TUI di nikcli con questo bot in un pannello",
+  "bots.terminal.launchTip": "Apre la TUI di Ragu Code con questo bot in un pannello",
   "bots.terminal.button": "Terminale",
   "bots.openFile": "Apri il file",
   "bots.edit.close": "Chiudi",
@@ -2140,13 +2140,13 @@ export const it = {
   "bots.delete.confirm": (name: string) => `Eliminare ${name}?`,
   "bots.delete.cancel": "No",
   "bots.delete.confirmBtn": "Elimina",
-  "bots.form.problemDesc": "Serve una descrizione: è quello che nikcli usa per decidere quando chiamarlo.",
+  "bots.form.problemDesc": "Serve una descrizione: è quello che Ragu Code usa per decidere quando chiamarlo.",
   "bots.form.problemName": "Serve un nome: diventa l'identificativo del file.",
   "bots.form.title": "Nuovo bot",
   "bots.form.name": "Nome",
   "bots.form.namePlaceholder": "Revisore",
   "bots.form.hintGenerating":
-    "Con la persona vuota è nikcli a scegliere l'identificativo: questo nome è solo un promemoria.",
+    "Con la persona vuota è Ragu Code a scegliere l'identificativo: questo nome è solo un promemoria.",
   "bots.form.hintNamed": "Diventa il nome del file e l'identificativo passato a --agent.",
   "bots.form.logo": "Logo",
   "bots.form.description": "A cosa serve",
@@ -2158,14 +2158,14 @@ export const it = {
   "bots.form.objectivesPlaceholder": "Uno per riga. Restano veri in ogni conversazione.",
   "bots.form.persona": "Persona",
   "bots.form.personaPlaceholder":
-    "Lascia vuoto e la scrive nikcli dalla descrizione. Oppure scrivila tu: come deve comportarsi, e cosa non deve fare.",
+    "Lascia vuoto e la scrive Ragu Code dalla descrizione. Oppure scrivila tu: come deve comportarsi, e cosa non deve fare.",
   "bots.form.cancel": "Annulla",
   "bots.form.creating": "Creazione…",
-  "bots.form.generateWithNikcli": "Genera con nikcli",
+  "bots.form.generateWithNikcli": "Genera con Ragu Code",
   "bots.form.create": "Crea",
-  "bots.form.generatingHint": "nikcli sta scrivendo l'agente. Ci vuole qualche secondo.",
+  "bots.form.generatingHint": "Ragu Code sta scrivendo l'agente. Ci vuole qualche secondo.",
   "bots.engine.label": "Motore",
-  "bots.runner.account.nikcli": "I provider collegati a nikcli (nikcli auth).",
+  "bots.runner.account.nikcli": "I provider collegati a Ragu Code (ragu auth).",
   "bots.runner.account.claude": "L'abbonamento Anthropic o la chiave API di Claude Code.",
   "bots.runner.account.codex": "L'abbonamento ChatGPT o la chiave API di Codex.",
   "bots.engine.accountHint": "Gli accessi si controllano in Impostazioni › Provider.",
@@ -2173,7 +2173,7 @@ export const it = {
     "ADE avvia la CLI ufficiale installata sul tuo computer, con l'account con cui vi hai fatto l'accesso, e non vede le tue credenziali. L'abbonamento è per uso personale e consuma i limiti del tuo piano: per automazioni intensive o non presidiate usa una chiave API nella CLI.",
   "bots.engine.model": "Modello",
   "bots.engine.modelDefaultOf": (label: string) => `predefinito di ${label}`,
-  "bots.engine.nikcliDefault": "Predefinito di nikcli",
+  "bots.engine.nikcliDefault": "Predefinito di Ragu Code",
   "bots.engine.effort": "Sforzo",
   "bots.engine.effortNotSupported": "non previsto",
   "bots.engine.effortDefault": "predefinito",
@@ -2182,7 +2182,7 @@ export const it = {
   "bots.engine.effortPickModel": "Scegli un modello per vedere i suoi livelli di sforzo.",
   "bots.settings.whenToUse": "Quando usarlo",
   "bots.settings.whenToUseHint1": "È il",
-  "bots.settings.whenToUseHint2": "del file: nikcli lo legge per decidere quando chiamare questo bot come subagente.",
+  "bots.settings.whenToUseHint2": "del file: Ragu Code lo legge per decidere quando chiamare questo bot come subagente.",
   "bots.settings.objectivesPlaceholder": "Uno per riga.\nEs. Segnala i rischi prima delle opinioni",
   "bots.settings.objectivesHint": "Uno per riga. Finiscono nel prompt sotto",
   "bots.settings.saved": "Salvato.",

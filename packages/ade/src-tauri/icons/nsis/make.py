@@ -16,11 +16,12 @@ from PIL import Image
 
 HERE = Path(__file__).resolve().parent
 ICON = HERE.parent / "icon.png"
-BACKGROUND = (0, 0, 0)  # the icon's own black, so its square does not show
+BACKGROUND = (0, 0, 0)  # the dark the pixel pot is drawn for, so its square does not show
 
 
 def place(canvas: Image.Image, size: int, x: int, y: int) -> None:
-    mark = Image.open(ICON).convert("RGBA").resize((size, size), Image.LANCZOS)
+    # The icon is pixel art (a 32 px drawing at 16x): whole factors of it, no interpolation.
+    mark = Image.open(ICON).convert("RGBA").resize((size, size), Image.NEAREST)
     canvas.paste(mark, (x, y), mark)
 
 
@@ -29,6 +30,6 @@ place(sidebar, 128, 18, 93)
 sidebar.save(HERE / "sidebar.bmp", "BMP")
 
 header = Image.new("RGB", (150, 57), BACKGROUND)
-place(header, 44, 98, 6)
+place(header, 32, 104, 12)
 header.save(HERE / "header.bmp", "BMP")
 print("sidebar.bmp 164x314, header.bmp 150x57")

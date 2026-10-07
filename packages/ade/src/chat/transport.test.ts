@@ -158,7 +158,7 @@ describe("il trasporto della chat", () => {
 
   test("un indirizzo diverso dal server è rifiutato prima di partire", async () => {
     const fake = fakeBridge()
-    await expect(serverFetch(fake.bridge)("https://evil.example/x")).rejects.toThrow("solo con il server di nikcli")
+    await expect(serverFetch(fake.bridge)("https://evil.example/x")).rejects.toThrow("solo con il server di Ragu Code")
     expect(fake.starts()).toBe(0)
     expect(fake.sent).toHaveLength(0)
   })

@@ -342,7 +342,7 @@ describe("Agenti e account › Bot e strumenti", () => {
 
     const body = document.body.textContent ?? ""
     // Nessuna limitazione vuol dire che ogni bot ha tutti gli strumenti: il contrario di «nessuno strumento».
-    expect(body).toContain("Nessun bot ha limitazioni: tutti possono usare ogni strumento di nikcli.")
+    expect(body).toContain("Nessun bot ha limitazioni: tutti possono usare ogni strumento di Ragu Code.")
     expect(body).not.toContain("Nessuno strumento")
     expect(document.body.querySelectorAll('[data-slot="settings-hint"]').length).toBe(1)
     expect(body).toContain("Aggiungi o rimuovi limitazioni configurando il bot nella vista Bot.")
@@ -444,7 +444,7 @@ describe("Agenti e account › Ripresa delle sessioni", () => {
     await settle()
 
     const names = Array.from(document.body.querySelectorAll('[data-slot="hook-name"]')).map((node) => node.textContent)
-    expect(names).toEqual(["nikcli"])
+    expect(names).toEqual(["Ragu Code"])
     expect(document.body.querySelector("[data-hooks-summary]")?.textContent).toBe("La ripresa non è attiva per nessun programma.")
     expect(document.body.querySelector("[data-hooks-windows-only]")?.textContent).toContain("solo su Windows")
   })
@@ -461,7 +461,7 @@ describe("Agenti e account › Ripresa delle sessioni", () => {
     await settle()
 
     const rows = Array.from(document.body.querySelectorAll('[data-slot="hook-row"]'))
-    expect(rows.map((row) => row.querySelector('[data-slot="hook-name"]')?.textContent)).toEqual(["Claude Code", "nikcli"])
+    expect(rows.map((row) => row.querySelector('[data-slot="hook-name"]')?.textContent)).toEqual(["Claude Code", "Ragu Code"])
     const claude = rows[0]!
     expect(claude.querySelector("[data-hook-remove-only]")).not.toBeNull()
     const buttons = Array.from(claude.querySelectorAll('[data-slot="hook-action"]')).map((button) => button.textContent)
