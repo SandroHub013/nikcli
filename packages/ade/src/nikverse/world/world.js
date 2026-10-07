@@ -265,6 +265,11 @@ export function boot(win, options = {}) {
   // The check page shows the logo and nothing else, from the first paint.
   if (query.check) mark("check", "1")
 
+  // The two ways into the lessons from the list, which is where a machine with no 3D lands: the same command the city's lighthouse and
+  // kiosk send, and real buttons, so the keyboard reaches them.
+  for (const button of doc.querySelectorAll?.("#learn-entries button[data-learn]") ?? [])
+    button.addEventListener("click", () => send({ cmd: "open-learn", place: button.dataset.learn }))
+
   /** The world is on screen (the city's first frame, or the list): ADE stops waiting for it, once (`opening.ts`). */
   let onScreen = false
   let told = false
@@ -295,6 +300,8 @@ export function boot(win, options = {}) {
         picture: () => state,
         mode: query.check ? "logo-check" : "city",
         classic: query.classic,
+        // A machine that draws in software gets the list at once, not a city that costs its processors; a measuring page keeps the city.
+        listIfSoftware: !query.bench && query.shot === undefined && !query.classic,
         quality: query.quality,
         shot: query.shot,
         tune: query.tune,
@@ -320,9 +327,11 @@ export function boot(win, options = {}) {
       if (paused) city.pause()
     })
     .catch((error) => {
-      mark("city", "failed")
-      mark("cityError", String(error?.message ?? error).slice(0, 200))
-      // The page works as the list: that is on screen too.
+      // No renderer at all fails here at once; a software one was recognised and the city stood down (`SoftwareRendering`): both are the list.
+      mark("city", error?.software === true ? "off" : "failed")
+      if (error?.software === true) mark("cityWhy", "software")
+      else mark("cityError", String(error?.message ?? error).slice(0, 200))
+      // The page works as the list: that is on screen too, and nothing waits 30 s for it.
       shown()
     })
 

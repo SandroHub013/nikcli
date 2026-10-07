@@ -26,6 +26,15 @@ export function readNonce(hash) {
   return value && /^[0-9a-f]{32,}$/.test(value) ? value : undefined
 }
 
+/**
+ * Where ADE asks the page to open (`&a=…` in the fragment): the paths, or the game. Only these two are believed: anything else, or
+ * nothing, is the paths.
+ */
+export function readPlace(hash) {
+  const value = new URLSearchParams(String(hash).replace(/^#/, "")).get("a")
+  return value === "gioco" ? "gioco" : "percorsi"
+}
+
 const PROGRESS_VERSION = 1
 /** The most an exercise can come back for the same right answer: past this, it rests. */
 export const MAX_INTERVAL = 30
@@ -101,7 +110,7 @@ export function addDays(day, giorni) {
  * The streak of days, with one freeze for every week of it.
  *
  * A day the learner did something lengthens the streak; a day missing from the middle costs one of the freezes the streak has earned,
- * one for each seven days. Two days in a row missing end it. Nothing runs while the panel is closed: the streak is read from the days
+ * one for each seven days. Two days in a row missing end it. Nothing runs while the lesson is closed: the streak is read from the days
  * that are in the progress, at every opening.
  */
 export function streak(giorni, oggi) {
@@ -184,7 +193,7 @@ export function recordAnswer(progress, lezione, esercizio, ok, oggi) {
   }
 }
 
-/** The exercises whose turn has come: the ripasso, read when the panel opens and not kept alive by a timer. */
+/** The exercises whose turn has come: the ripasso, read when the lesson opens and not kept alive by a timer. */
 export function dueReview(progress, lezioni, oggi) {
   const scaduti = []
   for (const lezione of lezioni) {
@@ -345,6 +354,7 @@ export const CATALOGO_GIOCO = {
     stelle: "stelle",
     riga: "Riga {0}",
     tornaLivelli: "Torna ai livelli",
+    esciConferma: "Premi di nuovo Esc per uscire: la partita in corso si perde.",
     riprova: "Riprova il livello",
     prossimoLivello: "Livello successivo",
     tempoScaduto: "Tempo scaduto.",
@@ -414,6 +424,7 @@ export const CATALOGO_GIOCO = {
     stelle: "stars",
     riga: "Line {0}",
     tornaLivelli: "Back to the levels",
+    esciConferma: "Press Esc again to leave: the match in progress is lost.",
     riprova: "Try the level again",
     prossimoLivello: "Next level",
     tempoScaduto: "Time is up.",
@@ -693,6 +704,7 @@ export async function boot(win) {
   const summary = doc.getElementById("summary")
   const empty = doc.getElementById("empty")
   const nonce = readNonce(win.location?.hash ?? "")
+  const luogo = readPlace(win.location?.hash ?? "")
   if (!view || !summary || !empty) return undefined
   if (!nonce) {
     empty.textContent = "Questa pagina va aperta da ADE."
@@ -714,6 +726,10 @@ export async function boot(win) {
     timer: undefined,
     esitoGioco: undefined,
     fase: "lista",
+    /** Where ADE asked the page to open: the paths or the game (`readPlace`). */
+    luogo,
+    /** The first Esc in a timed match asked whether to leave: the second one closes. */
+    uscitaChiesta: false,
     /** The exercises being asked now: a lesson's, or the ones the ripasso is due. */
     esercizi: [],
     indice: 0,
@@ -1370,6 +1386,8 @@ export async function boot(win) {
   function disegna() {
     if (!stato.contenuti) return
     empty.hidden = true
+    // A new screen drops the question about leaving the match.
+    stato.uscitaChiesta = false
     if (stato.fase === "gioco-lista") giocoLista()
     else if (stato.fase === "gioco-partita") giocoPartita()
     else if (stato.fase === "gioco-fine") giocoFine()
@@ -1401,6 +1419,32 @@ export async function boot(win) {
     port.postMessage({ type: "ready" })
   }
   win.addEventListener("message", onPort)
+  // The page is a layer over the world and cannot close it: Esc asks ADE to, on the port. Without the port there is no one to ask.
+  win.addEventListener("keydown", (evento) => {
+    // Any other key withdraws the question: Esc has to be pressed twice in a row.
+    if (evento.key !== "Escape") {
+      if (stato.uscitaChiesta) {
+        stato.uscitaChiesta = false
+        view.querySelector?.('[data-slot="esci-conferma"]')?.remove()
+      }
+      return
+    }
+    if (evento.defaultPrevented) return
+    // Esc in a field with something typed in it is the learner's, not the layer's: an answer half written is not thrown away.
+    const campo = evento.target
+    if (campo && (campo.tagName === "INPUT" || campo.tagName === "TEXTAREA") && campo.value) return
+    // In a timed match the first Esc only asks: leaving loses the match, so it closes on the second press.
+    if (stato.fase === "gioco-partita" && stato.timer && !stato.uscitaChiesta) {
+      stato.uscitaChiesta = true
+      view.prepend(el(doc, "p", { class: "esci-conferma", "data-slot": "esci-conferma", role: "status", text: tr("esciConferma") }))
+      return
+    }
+    try {
+      port?.postMessage({ type: "close" })
+    } catch (errore) {
+      console.warn(`[impara] non riesco a chiudere: ${String(errore?.message ?? errore)}`)
+    }
+  })
   // A frame that goes away takes its match with it: no timer outlives the page.
   win.addEventListener?.("pagehide", fermaTimer)
   win.parent.postMessage({ type: HELLO, nonce }, "*")
@@ -1418,6 +1462,11 @@ export async function boot(win) {
     if (rispostaGioco.ok) stato.gioco = await rispostaGioco.json()
   } catch (errore) {
     console.warn(`[impara] gioco.json non caricato: ${String(errore?.message ?? errore)}`)
+  }
+  // ADE asked for the game (`a=gioco`, from the kiosk): it opens on the levels, when they were served; otherwise on the paths.
+  if (stato.luogo === "gioco" && stato.gioco) {
+    stato.modalita = "gioco"
+    stato.fase = "gioco-lista"
   }
   disegna()
   return stato

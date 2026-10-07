@@ -206,6 +206,112 @@ describe("the world proves it is the world, and takes the port only after that",
   })
 })
 
+describe("the list: the way into the lessons, and the machines that get it at once", () => {
+  const NONCE = "0123456789abcdef".repeat(3)
+  const nextTurn = async () => {
+    for (let i = 0; i < 8; i++) await Promise.resolve()
+  }
+
+  /** The page with the list's two entries, a window that is ADE's child, and the port ADE gave it. */
+  function listWorld(search = "") {
+    document.documentElement.removeAttribute("data-city")
+    document.documentElement.removeAttribute("data-city-why")
+    document.documentElement.removeAttribute("data-city-error")
+    document.body.innerHTML =
+      '<main id="world"></main><span id="status"></span><nav id="learn-entries"><button type="button" data-learn="faro">Faro</button><button type="button" data-learn="gioco">Chiosco</button></nav><p id="empty" hidden></p><section id="shops"></section>'
+    const listeners = new Map<string, (event: unknown) => void>()
+    const parent = { postMessage: () => {} }
+    const win = {
+      document,
+      parent,
+      location: { hash: `#n=${NONCE}`, search },
+      requestAnimationFrame: () => 1,
+      cancelAnimationFrame: () => {},
+      addEventListener: (type: string, fn: (event: unknown) => void) => void listeners.set(type, fn),
+      removeEventListener: (type: string) => void listeners.delete(type),
+    }
+    const seen: unknown[] = []
+    const port = { postMessage: (message: unknown) => void seen.push(message), onmessage: undefined as unknown }
+    const give = () => listeners.get("message")?.({ source: parent, data: { type: PORT_OFFER, version: 1 }, ports: [port] })
+    return { win, seen, give }
+  }
+  const handle = { restore() {}, pause() {}, resume() {}, sync() {}, dispose() {} }
+
+  test("the list has «Faro · Lezioni» and «Chiosco · Trova l'iniezione», real buttons, and each sends the same `open-learn` the city sends", async () => {
+    const html = readFileSync(join(import.meta.dir, "world", "index.html"), "utf8")
+    expect(html).toContain('<button type="button" data-learn="faro">Faro · Lezioni</button>')
+    expect(html).toContain(`<button type="button" data-learn="gioco">Chiosco · Trova l'iniezione</button>`)
+    // Before the list's shops, at the top.
+    expect(html.indexOf('id="learn-entries"')).toBeLessThan(html.indexOf('id="shops"'))
+    const { win, seen, give } = listWorld("?city=0")
+    boot(win)
+    give()
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>("#learn-entries button")]
+    expect(buttons.map((b) => [b.tagName, b.type, b.tabIndex])).toEqual([
+      ["BUTTON", "button", 0],
+      ["BUTTON", "button", 0],
+    ])
+    buttons[0]!.click()
+    buttons[1]!.click()
+    expect(seen.slice(-2)).toEqual([
+      { type: "command", command: { cmd: "open-learn", place: "faro" } },
+      { type: "command", command: { cmd: "open-learn", place: "gioco" } },
+    ])
+  })
+
+  test("a renderer that draws in software puts the list on screen at once: ADE is told it opened, with no 30 s", async () => {
+    const { win, seen, give } = listWorld()
+    boot(win, { loadCity: async () => ({ startCity: async () => Promise.reject(Object.assign(new Error("rendering software"), { software: true })) }) })
+    give()
+    await nextTurn()
+    expect(document.documentElement.dataset.city).toBe("off")
+    expect(document.documentElement.dataset.cityWhy).toBe("software")
+    expect(document.documentElement.dataset.cityError).toBeUndefined()
+    expect(seen).toContainEqual({ type: "opened" })
+  })
+
+  test("no renderer at all is the list at once too, and says why; a start that merely fails the same", async () => {
+    const { win, seen, give } = listWorld()
+    boot(win, { loadCity: async () => ({ startCity: async () => Promise.reject(new Error("Error creating WebGL context")) }) })
+    give()
+    await nextTurn()
+    expect(document.documentElement.dataset.city).toBe("failed")
+    expect(document.documentElement.dataset.cityError).toContain("WebGL")
+    expect(seen).toContainEqual({ type: "opened" })
+  })
+
+  test("a slow or unknown machine is not given the list: the city starts and the 30 s are ADE's to watch", async () => {
+    const { win, seen, give } = listWorld()
+    boot(win, { loadCity: async () => ({ startCity: () => new Promise(() => {}) }) })
+    give()
+    await nextTurn()
+    expect(document.documentElement.dataset.city).toBeUndefined()
+    expect(seen).not.toContainEqual({ type: "opened" })
+  })
+
+  test("the city is asked to stand down in software, except on a measuring page or when the classic renderer was asked for", async () => {
+    const asked = async (search: string) => {
+      const { win } = listWorld(search)
+      let given: Record<string, unknown> | undefined
+      boot(win, {
+        loadCity: async () => ({
+          startCity: async (deps: Record<string, unknown>) => {
+            given = deps
+            return handle
+          },
+        }),
+      })
+      await nextTurn()
+      return given?.listIfSoftware
+    }
+    expect(await asked("")).toBe(true)
+    expect(await asked("?quality=bassa&lowered=1")).toBe(true)
+    expect(await asked("?bench=1")).toBe(false)
+    expect(await asked("?shot=3")).toBe(false)
+    expect(await asked("?renderer=classic")).toBe(false)
+  })
+})
+
 describe("the keyboard: focus and shortcuts", () => {
   test("a shortcut with Ctrl, Alt or Meta is forwarded to ADE; a plain key stays in the world", () => {
     const key = (init: Record<string, unknown>) => chordCommand({ key: "k", ...init })
