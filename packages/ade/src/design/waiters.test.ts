@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import {
   CLAIM_MS,
+  HOLD_MS,
   WAIT_GRACE_MS,
   addWaiter,
   dropWaiters,
   dueWaiters,
+  givenUp,
   holdsDelivery,
   markWritten,
   parseWaiters,
@@ -41,11 +43,26 @@ describe("who waits for a design choice", () => {
     // Still held once the window is over: the check that settles it is asynchronous, and a delivery pass beside it
     // typed the line the script had already printed (live in ADE Test). Only dropping the waiter lets it go.
     expect(holdsDelivery(written, answer, T0 + CLAIM_MS)).toBe(true)
-    expect(holdsDelivery(written, answer, T0 + 60 * 60 * 1000)).toBe(true)
+    expect(holdsDelivery(written, answer, T0 + HOLD_MS - 1)).toBe(true)
     expect(holdsDelivery(dropWaiters(written, ["a"]), answer, T0 + CLAIM_MS)).toBe(false)
     // Another answer of the same key (a later round) is not held by this one.
     expect(holdsDelivery(written, { ...answer, answeredAt: "2026-10-07T11:00:00.000Z" }, T0)).toBe(false)
     expect(dropWaiters(written, ["a"])).toEqual([])
+  })
+
+  test("an answer whose check keeps failing is let go after a few minutes, not held for a day", () => {
+    // `mailbox_result_reclaim` failing every time (an I/O error that repeats): a line typed twice is better than a choice
+    // lost for a day (review B8).
+    const written = markWritten([waiter("a")], ["a"], AT, T0)
+    const answer = { path: PATH, k: "DS-t2", answeredAt: AT }
+    expect(HOLD_MS).toBeGreaterThanOrEqual(CLAIM_MS * 4)
+    expect(HOLD_MS).toBeLessThanOrEqual(5 * 60 * 1000)
+    expect(givenUp(written[0]!, T0 + HOLD_MS - 1)).toBe(false)
+    expect(givenUp(written[0]!, T0 + HOLD_MS)).toBe(true)
+    expect(holdsDelivery(written, answer, T0 + HOLD_MS)).toBe(false)
+    expect(holdsDelivery(written, answer, T0 + 60 * 60 * 1000)).toBe(false)
+    // A waiter nothing was written for is never given up this way: it waits for its script's own timeout.
+    expect(givenUp(waiter("b"), T0 + HOLD_MS * 10)).toBe(false)
   })
 
   test("with nobody waiting, nothing holds the line: it is typed as it always was", () => {

@@ -41,6 +41,14 @@ export const WAITERS_KEY = "ade.design.waiters"
 /** How long a written answer waits for its script to take it before it is typed instead. */
 export const CLAIM_MS = 15_000
 
+/**
+ * How long a written answer may hold its line while ADE cannot tell whether the script took it: past it the waiter
+ * is given up and the line typed. Every pass whose check failed proves nothing and asks again, and a check that
+ * fails every time (an I/O error that repeats) would otherwise hold the user's choice for a day; a line typed twice
+ * is better than a choice lost (review B8). Several claim windows, so a check that fails once or twice still settles.
+ */
+export const HOLD_MS = 3 * 60 * 1000
+
 /** Past its timeout a script may still be reading its receipt: this much longer counts as waiting. */
 export const WAIT_GRACE_MS = 5_000
 
@@ -105,7 +113,7 @@ export function dropWaiters(list: readonly DesignWaiter[], ids: readonly string[
  * settles it is asynchronous, and a delivery pass that ran at the end of the
  * window, beside it, typed the line the script had already printed (seen
  * live in ADE Test). Only `settle` lets it go, by dropping the waiter; a
- * waiter that can never be settled goes with the day-old ones (`pruneWaiters`).
+ * waiter that cannot be settled is given up after {@link HOLD_MS} (`givenUp`).
  */
 export function holdsDelivery(
   list: readonly DesignWaiter[],
@@ -118,8 +126,13 @@ export function holdsDelivery(
       item.k === answer.k &&
       item.answeredAt === answer.answeredAt &&
       item.writtenAt !== undefined &&
-      now - item.writtenAt < KEPT_MS,
+      !givenUp(item, now),
   )
+}
+
+/** A written waiter whose script ADE could not check for {@link HOLD_MS}: dropped, and its line typed. */
+export function givenUp(item: DesignWaiter, now: number): boolean {
+  return item.writtenAt !== undefined && now - item.writtenAt >= HOLD_MS
 }
 
 /** The written waiters whose script has had its time: ADE asks whether the answer was taken. */
