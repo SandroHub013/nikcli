@@ -546,7 +546,11 @@ mod tests {
         }
         let mondo = get("nikverse://localhost/world.js");
         assert_eq!(mondo.status(), StatusCode::OK);
-        assert!(!String::from_utf8_lossy(mondo.body()).contains("data-learn"));
+        // The world's script is not the lesson page's: its markers are the engine's own files, not `data-learn`, which the world
+        // carries on purpose (the lighthouse and the kiosk open the lessons).
+        let mondo = String::from_utf8_lossy(mondo.body()).into_owned();
+        assert!(!mondo.contains("content.json"), "world.js is the lesson page");
+        assert!(!mondo.contains("learn.js"), "world.js is the lesson page");
         // Nothing under `/learn/` is a way out: `..`, a backslash and an absolute path are refused before the list is looked at.
         for uri in [
             "nikverse://localhost/learn/../Cargo.toml",
