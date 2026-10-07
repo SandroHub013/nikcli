@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { spawn, spawnSync, type ChildProcess } from "child_process"
 import path from "path"
+import { dlopen, FFIType } from "bun:ffi"
 import { Shell } from "@/shell/shell"
 
 /**
@@ -13,6 +14,25 @@ import { Shell } from "@/shell/shell"
  * so a failing test does not leave the orphan it is looking for.
  */
 const windows = process.platform === "win32"
+
+/**
+ * Whether this process already runs inside a Job Object (a sandbox, a terminal, a CI agent). There, a process put in a nested job was
+ * measured to die when the process that spawned it exits, even with the kill-on-close flag cleared and the handle left open: so "the
+ * leftover outlives nikcli" cannot be shown, and is skipped.
+ */
+const insideAJob = (() => {
+  if (!windows) return false
+  try {
+    const k = dlopen("kernel32.dll", {
+      IsProcessInJob: { args: [FFIType.ptr, FFIType.ptr, FFIType.ptr], returns: FFIType.i32 },
+      GetCurrentProcess: { args: [], returns: FFIType.ptr },
+    })
+    const result = new Uint8Array(4)
+    return k.symbols.IsProcessInJob(k.symbols.GetCurrentProcess(), null, result) !== 0 && result[0] !== 0
+  } catch {
+    return false
+  }
+})()
 
 const marker = () => `127.${Math.floor(Math.random() * 200) + 20}.${Math.floor(Math.random() * 200) + 20}.${Math.floor(Math.random() * 200) + 20}`
 
@@ -74,7 +94,7 @@ describe.skipIf(!windows)("Shell.killTree on Windows", () => {
     }
   }, 60_000)
 
-  it("a job also ends what is left once the root has exited, when the command is stopped afterwards", async () => {
+  it("what a command leaves running after it ends by itself stays: `start chrome`, `code .`, a server started with &", async () => {
     const address = marker()
     const script = `cmd /c "start /b ping -n 600 ${address} > nul"`
     const proc = spawn(script, { shell: true, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
@@ -85,10 +105,12 @@ describe.skipIf(!windows)("Shell.killTree on Windows", () => {
       await waitForPing(address)
       for (let waited = 0; waited < 10_000 && !exited; waited += 100) await Bun.sleep(100)
       expect(exited).toBe(true)
-      expect(pidsWith(address).length).toBeGreaterThan(0)
+      await Bun.sleep(500)
+      // The job has let go: nothing ends the leftover, neither the end of the command nor a later stop.
+      expect(Shell.openJobs()).toBe(0)
       await Shell.killTree(proc, { exited: () => exited })
       await Bun.sleep(500)
-      expect(pidsWith(address)).toEqual([])
+      expect(pidsWith(address).length).toBeGreaterThan(0)
     } finally {
       killByPid(pidsWith(address))
     }
@@ -105,7 +127,7 @@ describe.skipIf(!windows)("Shell.killTree on Windows", () => {
 
 /**
  * nikcli killed from outside (`taskkill /f`, a crash): nothing runs its cleanup, so the only thing left to end the command's processes is
- * the job handle closing with the process (`KILL_ON_JOB_CLOSE`). The host is a small stand-in for nikcli that does what the tool bash and
+ * the job handle closing with the process (`KILL_ON_JOB_CLOSE`), for a command that is still running. The host is a small stand-in for nikcli that does what the tool bash and
  * the monitor do.
  */
 describe.skipIf(!windows)("a command in a job and the life of nikcli", () => {
@@ -138,7 +160,7 @@ describe.skipIf(!windows)("a command in a job and the life of nikcli", () => {
     }
   }, 60_000)
 
-  it("a process left in the background survives the end of its command, and dies with nikcli", async () => {
+  it.skipIf(insideAJob)("a process left in the background survives the end of its command and the death of nikcli", async () => {
     const address = marker()
     const { child, output } = await startHost(address, "background")
     try {
@@ -150,7 +172,8 @@ describe.skipIf(!windows)("a command in a job and the life of nikcli", () => {
       expect(pidsWith(address).length).toBeGreaterThan(0)
       endHost(child)
       await Bun.sleep(1_500)
-      expect(pidsWith(address)).toEqual([])
+      // Nikcli is gone and the process stays, like on Linux (it was meant to outlive the command).
+      expect(pidsWith(address).length).toBeGreaterThan(0)
     } finally {
       killByPid(pidsWith(address))
       endHost(child)

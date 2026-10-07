@@ -107,4 +107,13 @@ export namespace ProcessJob {
   export function close(job: Handle): void {
     kernel()?.symbols.CloseHandle(job)
   }
+
+  /** Lets go of the job without ending what is in it: the kill-on-close flag is cleared, then the handle closed. */
+  export function release(job: Handle): void {
+    const k = kernel()
+    if (!k) return
+    const info = new Uint8Array(144)
+    k.symbols.SetInformationJobObject(job, JobObjectExtendedLimitInformation, info, info.byteLength)
+    k.symbols.CloseHandle(job)
+  }
 }

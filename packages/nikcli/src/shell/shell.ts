@@ -177,18 +177,18 @@ export namespace Shell {
 
   /** The job of each command started on Windows, while it is open. */
   const jobs = new WeakMap<ChildProcess, ProcessJob.Handle>()
-  /** Jobs of commands that exited with something still running in them: kept open so nikcli's own exit ends it. */
-  const lingering = new Set<ProcessJob.Handle>()
+  /** Jobs whose command is being stopped: its exit must not let go of what is in them. */
+  const stopping = new WeakSet<object>()
   let open = 0
 
-  /** How many job handles nikcli holds (running commands, and leftovers kept for its own exit). */
+  /** How many job handles nikcli holds (commands that are running). */
   export function openJobs() {
     return open
   }
 
-  function release(job: ProcessJob.Handle) {
-    lingering.delete(job)
-    ProcessJob.close(job)
+  function finish(job: ProcessJob.Handle, keepRunning: boolean) {
+    if (keepRunning) ProcessJob.release(job)
+    else ProcessJob.close(job)
     open--
   }
 
@@ -214,21 +214,12 @@ export namespace Shell {
     }
     jobs.set(proc, job)
     open++
+    // The command ended by itself: whatever it left running (`start chrome`, `code .`, a server started with `&`) is meant to stay,
+    // as on Linux. The job lets go of it without ending it. Stopping the command (timeout, abort) happens while it runs.
     proc.once("exit", () => {
-      void (async () => {
-        // The job's count lags the exit event by a few milliseconds, so it is asked a few times before it is believed.
-        for (let attempt = 0; attempt < 5; attempt++) {
-          if (jobs.get(proc) !== job) return
-          if (ProcessJob.active(job) === 0) {
-            jobs.delete(proc)
-            release(job)
-            return
-          }
-          await Bun.sleep(40)
-        }
-        // Something is left (a deliberate background process): keep the job, so it ends when nikcli does.
-        if (jobs.get(proc) === job) lingering.add(job)
-      })()
+      if (jobs.get(proc) !== job || stopping.has(proc)) return
+      jobs.delete(proc)
+      finish(job, true)
     })
   }
 
@@ -237,6 +228,8 @@ export namespace Shell {
     const exited = opts?.exited?.()
 
     if (process.platform === "win32") {
+      // Marked before taskkill ends the shell: its exit event must not let go of the job, or the orphans taskkill cannot reach would stay.
+      if (jobs.has(proc)) stopping.add(proc)
       if (pid && !exited) {
         await new Promise<void>((resolve) => {
           const killer = spawn("taskkill", ["/pid", String(pid), "/f", "/t"], { windowsHide: true, stdio: "ignore" })
@@ -244,12 +237,12 @@ export namespace Shell {
           killer.once("error", () => resolve())
         })
       }
-      // After taskkill, which follows the live chain: the job takes what that chain cannot reach, and it also works once the shell is gone.
+      // After taskkill, which follows the live chain: the job takes what that chain cannot reach (a command that ended by itself has let go of its job).
       const job = jobs.get(proc)
       if (job) {
         jobs.delete(proc)
         ProcessJob.terminate(job)
-        release(job)
+        finish(job, false)
       }
       return
     }
