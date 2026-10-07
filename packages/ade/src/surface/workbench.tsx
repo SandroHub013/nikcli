@@ -426,8 +426,7 @@ import {
 /** Who a message is from and what it is, for the inbox when it is too long to type. */
 type InboxMeta = { id: string; kind: InboxEntry["kind"]; from: string }
 import {
-  applyKv,
-  emptySpace,
+  applyKvAcross,
   memoryAddReply,
   memoryEntry,
   parseKvStore,
@@ -4040,16 +4039,17 @@ export function Workbench() {
     }
 
     if (message.kind === "kv") {
-      const space = sender?.project || project()?.name || "workspace"
-      const result = applyKv(
-        kvStore[space] ?? emptySpace(),
+      // A key that starts with `pc:` is one for the machine, whatever the project; the others are the sender's project's.
+      const result = applyKvAcross(
+        kvStore,
+        { sender: sender?.project, ui: project()?.name },
         { op: message.op, key: message.key, value: message.text, ttl: message.ttl, force: message.force },
         sender ? { id: sender.id, title: sender.title } : undefined,
         Date.now(),
         (paneId) => running.has(paneId),
       )
-      if (result.space !== kvStore[space]) {
-        kvStore = { ...kvStore, [space]: result.space }
+      if (result.store !== kvStore) {
+        kvStore = result.store
         saveKv()
       }
       await answer(result.reply)

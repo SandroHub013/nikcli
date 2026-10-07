@@ -1596,6 +1596,9 @@ export const USAGE =
   "                                          stato condiviso tra le sessioni del progetto\n" +
   '  ade-msg kv lock <chiave> [--ttl <sec>] ["<nota>"] | unlock <chiave> [--force]\n' +
   "                                          lock con scadenza (predefinita 600s): chi lo tiene lo rilascia\n" +
+  "                                          ogni progetto ha i suoi lock: «sweep» di due progetti sono due lock\n" +
+  "                                          per ciò che la macchina ha una volta sola (ADE Test, sweep, GPU)\n" +
+  "                                          usa il prefisso pc: (pc:ade-test, pc:sweep): vale per tutta la macchina\n" +
   "  ade-msg stats                           token per sessione e quota letta dalla cache\n" +
   "  ade-msg who-owns <file>                chi possiede il file secondo la bacheca del team (TEAM.md)\n" +
   "  ade-msg inbox                          stampa i messaggi lunghi arrivati per te e li segna come letti\n" +

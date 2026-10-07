@@ -43,6 +43,48 @@ export function emptySpace(): KvSpace {
   return { entries: {}, locks: {} }
 }
 
+/** The one space of the machine: what a key starting with `pc:` lives in, whatever the project of who asks. */
+export const KV_MACHINE_SPACE = "__pc__"
+
+/**
+ * Where a key lives. A lock on what the machine has once (ADE Test, the bench, a GPU) must be one for every project, so the keys
+ * that start with `pc:` (`pc:ade-test`, `pc:sweep`) share one space; every other key is in the project of who asks, as it always was.
+ */
+export function kvSpaceFor(key: string, senderProject: string | undefined, uiProject: string | undefined): string {
+  return key.startsWith("pc:") ? KV_MACHINE_SPACE : senderProject || uiProject || "workspace"
+}
+
+/** Said in the reply of a lock, so a lock that does not hold across projects is seen at once. */
+export function kvScopeLabel(space: string): string {
+  return space === KV_MACHINE_SPACE ? "su tutta la macchina" : `nel progetto ${space}`
+}
+
+/**
+ * `applyKv` over the whole store: picks the space of the key (`kvSpaceFor`), and shows a listing the project's keys together with
+ * the machine's, so anyone sees who holds `pc:ade-test`. Returns the store with the space that changed.
+ */
+export function applyKvAcross(
+  store: Record<string, KvSpace>,
+  projects: { sender?: string; ui?: string },
+  request: KvRequest,
+  who: KvWho | undefined,
+  now: number,
+  alive: (paneId: string) => boolean,
+): { store: Record<string, KvSpace>; reply: string } {
+  const name = kvSpaceFor(request.key, projects.sender, projects.ui)
+  const space = store[name] ?? emptySpace()
+  if (request.op === "list" && name !== KV_MACHINE_SPACE) {
+    const machine = store[KV_MACHINE_SPACE] ?? emptySpace()
+    const merged: KvSpace = {
+      entries: { ...machine.entries, ...space.entries },
+      locks: { ...machine.locks, ...space.locks },
+    }
+    return { store, reply: applyKv(merged, request, who, now, alive).reply }
+  }
+  const result = applyKv(space, request, who, now, alive, kvScopeLabel(name))
+  return { store: result.space === store[name] ? store : { ...store, [name]: result.space }, reply: result.reply }
+}
+
 /**
  * A value of `record` only if it is the record's own: `isKvKey` accepts `constructor`, `toString` and `__proto__`, and a
  * plain `record[key]` answers those with a function or the prototype (full review 2026-10-06, sessions 17).
@@ -82,6 +124,8 @@ export function applyKv(
   who: KvWho | undefined,
   now: number,
   alive: (paneId: string) => boolean,
+  /** Where the space holds, for the reply of a lock (`kvScopeLabel`). */
+  where?: string,
 ): { space: KvSpace; reply: string } {
   const { op, key } = request
   if (op !== "list" && !isKvKey(key)) {
@@ -162,7 +206,7 @@ export function applyKv(
       }
       return {
         space: { ...space, locks },
-        reply: `ok: ${key} bloccata per ${age(ttl * 1000)}; rilasciala con ade-msg kv unlock ${key}`,
+        reply: `ok: ${key} bloccata per ${age(ttl * 1000)}${where ? ` ${where}` : ""}; rilasciala con ade-msg kv unlock ${key}`,
       }
     }
     case "unlock": {
