@@ -176,13 +176,19 @@ function extractKindAndTarget(
 
 /** An answer that grants more than the request on screen: for always, for the session, without asking again. */
 const PERMANENT_ANSWER =
-  /always|sempre|non chiedere|non chiederlo|don'?t ask|do not ask|never ask|(?:for|during) (?:this|the) session|allow all|per (?:questa )?sessione|tutta la sessione/i
+  /always|sempre|non chiedere|non chiederlo|don'?t ask|do not ask|never ask|(?:for|during) (?:this|the) session|allow all|per (?:questa )?sessione|tutta la sessione|remember|keep allowing|in the future|auto mode|auto-accept|bypass permissions/i
 // `` is not used: JS does not count «ì» as a letter, so «Sì» would never end a word.
 const REFUSAL_START = /^(?:no|n|deny|reject|nega|rifiuta)(?![\p{L}\p{N}])/iu
 const CANCEL_START = /^(?:cancel|annulla|abort)(?![\p{L}\p{N}])/iu
 const ONCE_START = /^(?:allow\s+once|consenti\s+una\s+volta|(?:yes|s[iì]),?\s+(?:only\s+this\s+(?:time|once)|solo\s+questa\s+volta))/iu
-const YES_START = /^(?:yes|y|s[iì]|allow|approve|proceed|confirm|concedi|consenti|accetta|procedi|conferma)(?![\p{L}\p{N}])/iu
+const YES_START =
+  /^(?:yes|y|s[iì]|allow|approve|proceed|confirm|concedi|consenti|accetta|procedi|conferma|ok|okay|continue|continua|run|esegui|approva|permetti|autorizza)(?![\p{L}\p{N}])/iu
 const SKIP_START = /^(?:skip|salta)(?![\p{L}\p{N}])/iu
+
+/** Whether the words of a choice make it last (always, for the session, in the future): a refusal can be one, «No, and always deny». */
+export function isPermanentWording(label: string): boolean {
+  return PERMANENT_ANSWER.test(label)
+}
 
 /** What a choice of the CLI does, from the words it was written in (English or Italian). Read once, here. */
 export function classifyAnswer(raw: string): AnswerIntent {

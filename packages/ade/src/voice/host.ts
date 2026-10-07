@@ -3,7 +3,7 @@ import type { Host, SpawnedSession } from "../host/shell"
 import type { Project } from "../host/project"
 import type { RecentEntry } from "../host/recent"
 import {
-  isPermanent,
+  isPermanentWording,
   isRefusal,
   permissionIdentity,
   type PermissionAnswer,
@@ -455,11 +455,10 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
          * screen for the user.
          */
         // By what the answer does (`intent`, set where the CLI's prompt is read), not by the words on the button: those are in
-        // the user's language and the CLI's own wording.
-        const once = pending.answers.filter((a) => !isPermanent(a))
-        chosen =
-          once.find((a) => a.tone === "primary" || a.intent === "yes" || a.intent === "once" || a.send.toLowerCase() === "y") ??
-          once.find((a) => !isRefusal(a))
+        // the user's language and the CLI's own wording. Only an answer that reads as a yes (F7e, D2): an option nobody
+        // recognised (a library in a question menu, «Not now») is not one, however first it comes. The primary yes is preferred.
+        const granting = pending.answers.filter((a) => a.intent === "yes" || a.intent === "once")
+        chosen = granting.find((a) => a.tone === "primary") ?? granting[0]
       } else {
         /*
          * No fallback, on purpose.
@@ -472,7 +471,9 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
          * refusal nothing is sent and the request stays on screen for the
          * user to answer by hand.
          */
-        chosen = pending.answers.find((a) => isRefusal(a) || /^(?:n|no)$/i.test(a.send.trim().toLowerCase()))
+        // The refusal that does not last first (F7e, N2): «No, and always deny» is a no that also decides the next ones.
+        const refusals = pending.answers.filter((a) => isRefusal(a) || /^(?:n|no)$/i.test(a.send.trim().toLowerCase()))
+        chosen = refusals.find((a) => !isPermanentWording(a.label)) ?? refusals[0]
       }
 
       if (chosen) {
