@@ -163,6 +163,10 @@ const YES_WORDS: ReadonlySet<string> = new Set([
   "ok",
   "okay",
   "consenti",
+  // English (F7e, D3). Never a word that means «always» or «for the session»: those are not in this set and make the answer unclear.
+  "yes",
+  "allow",
+  "approve",
 ])
 
 /** Words that turn an answer into a no wherever they appear: a yes with a «but» is not a yes. */

@@ -223,6 +223,12 @@ export async function InstanceBootstrap(instance: InstanceContext) {
     )
   }
 
+  // The cache keeper's timers belong to the instance: they end with it. Only loaded when the keeper is on.
+  if (Flag.cacheKeepalive()) {
+    const { CacheKeeper } = await import("../session/cache-keeper")
+    Instance.registerDisposer(() => CacheKeeper.releaseInstance(instance))
+  }
+
   // Unified backend: journal local (non-workspace) session restore events
   // into sync_event, same log the workspace loops and remote sync use.
   // Imported lazily: the bridge reaches into session/, which would close

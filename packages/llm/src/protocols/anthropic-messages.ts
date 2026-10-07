@@ -26,7 +26,11 @@ export const PATH = "/messages"
 // =============================================================================
 // Request Body Schema
 // =============================================================================
-const AnthropicCacheControl = Schema.Struct({ type: Schema.tag("ephemeral") })
+// `ttl` is the 1-hour entry: absent, the entry is the provider's default 5 minutes.
+const AnthropicCacheControl = Schema.Struct({
+  type: Schema.tag("ephemeral"),
+  ttl: Schema.optional(Schema.Literal("1h")),
+})
 
 const AnthropicTextBlock = Schema.Struct({
   type: Schema.tag("text"),
@@ -222,8 +226,13 @@ const invalid = ProviderShared.invalidRequest
 // =============================================================================
 // Request Lowering
 // =============================================================================
+/** An hour or more asks for the 1-hour entry; anything shorter (or nothing) is the default 5 minutes, which has no field. */
 const cacheControl = (cache: CacheHint | undefined) =>
-  cache?.type === "ephemeral" ? { type: "ephemeral" as const } : undefined
+  cache?.type === "ephemeral"
+    ? cache.ttlSeconds !== undefined && cache.ttlSeconds >= 3_600
+      ? { type: "ephemeral" as const, ttl: "1h" as const }
+      : { type: "ephemeral" as const }
+    : undefined
 
 const anthropicMetadata = (metadata: Record<string, unknown>): ProviderMetadata => ({ anthropic: metadata })
 

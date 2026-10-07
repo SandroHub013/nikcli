@@ -14,6 +14,7 @@ import type {
   ConnectorStatus,
   FormatterStatus,
   SessionStatus,
+  EventSessionCache,
   ProviderListResponse,
   ProviderAuthMethod,
   VcsInfo,
@@ -41,6 +42,9 @@ import { createLatestOnlyAsync } from "@tui/util/signal"
 import type { Path } from "@nikcli-ai/sdk/httpapi"
 import { features } from "@nikcli-ai/util/features"
 import { appendInstructionNotice, type InstructionNotice } from "@nikcli-ai/util/instruction-delta"
+
+/** What the cache keeper last said about a session's prompt-cache entry. */
+export type SessionCacheState = EventSessionCache["properties"]
 
 /** Tries a reconnect's refetch gets, and the step of its linear backoff. */
 const REFETCH_ATTEMPTS = 5
@@ -142,6 +146,8 @@ export const {
       question: Record<string, QuestionRequest[]>
       session: Session[]
       session_status: Record<string, SessionStatus>
+      /** What the cache keeper last said about a session's prompt-cache entry (`session.cache`). */
+      session_cache: Record<string, SessionCacheState>
       session_pending: Record<string, SessionPendingInput2[]>
       session_instructions: Record<string, InstructionNotice[]>
       session_goal: Record<string, GoalState>
@@ -184,6 +190,7 @@ export const {
       question: {},
       session: [],
       session_status: {},
+      session_cache: {},
       session_pending: {},
       session_instructions: {},
       session_goal: {},
@@ -471,6 +478,11 @@ export const {
               draft.splice(result.index, 0, event.properties.info)
             }),
           )
+          break
+        }
+
+        case "session.cache": {
+          setStore("session_cache", event.properties.sessionID, event.properties)
           break
         }
 
@@ -806,6 +818,7 @@ export const {
           draft.monitor = {}
           draft.session_diff = {}
           draft.session_status = {}
+          draft.session_cache = {}
           draft.session_pending = {}
           draft.session_instructions = {}
           draft.session_goal = {}

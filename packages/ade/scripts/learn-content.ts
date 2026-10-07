@@ -22,6 +22,12 @@ try {
     0,
   )
   console.log(`content.json: ${files.length} lezioni, ${exercises} esercizi, da ${files[0] ?? "-"} a ${files.at(-1) ?? "-"}`)
+  const { convertGioco, giocoFiles, toGiocoJson } = await import("../src/nikverse/learn/gioco-build")
+  const giocoDir = root + "/gioco"
+  const gFiles = giocoFiles(giocoDir)
+  const gContent = convertGioco(giocoDir)
+  writeFileSync(`${root}/gioco.json`, toGiocoJson(gContent))
+  console.log(`gioco.json: ${gFiles.length} livelli, da ${gFiles[0] ?? "-"} a ${gFiles.at(-1) ?? "-"}`)
 } catch (error) {
   console.error(`learn-content: ${(error as Error).message}`)
   process.exit(1)

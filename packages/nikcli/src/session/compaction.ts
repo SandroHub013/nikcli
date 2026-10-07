@@ -11,6 +11,9 @@ import { InstructionRepo } from "./instruction-repo"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Mod } from "@/mod"
+import { Flag } from "@nikcli-ai/util/flag"
+import { LLM } from "./llm"
+import type { ModelMessage, Tool } from "./llm/types"
 import { Config } from "@/config/config"
 import { zodObject } from "@nikcli-ai/util/effect-zod"
 import { Context, Effect, Layer, Schema } from "effect"
@@ -85,12 +88,27 @@ export namespace SessionCompaction {
   export const CreateInput = zodObject(CreateInputSchema)
   export type CreateInput = Schema.Schema.Type<typeof CreateInputSchema>
 
+  /**
+   * What the conversation's last real request sent, so the compaction can send the same prefix and be read from the provider's
+   * cache: the conversation's agent, system, tools and messages. Only used with `NIKCLI_COMPACTION_SHARED_PREFIX`.
+   */
+  export interface SharedPrefix {
+    agent: Agent.Info
+    system: string[]
+    tools: Record<string, Tool>
+    deferred?: ReadonlySet<string>
+    /** Every message of the conversation as the model sees it, the compaction's own user message included; the summary instruction is added after them. */
+    messages: ModelMessage[]
+    toolChoice?: "auto" | "required" | "none"
+  }
+
   export interface ProcessInput {
     parentID: string
     messages: MessageV2.WithParts[]
     sessionID: string
     abort: AbortSignal
     auto: boolean
+    shared?: SharedPrefix
   }
 
   export interface Interface {
@@ -470,44 +488,47 @@ export namespace SessionCompaction {
       }),
       input.ctx,
     )
-    const msg = (await runSession(
-      Effect.gen(function* () {
-        const session = yield* Session.Service
-        return yield* session.updateMessage({
-          id: Identifier.ascending("message"),
-          role: "assistant",
-          parentID: input.parentID,
-          sessionID: input.sessionID,
-          mode: "compaction",
-          agent: "compaction",
-          summary: true,
-          path: {
-            cwd: input.directory,
-            root: input.worktree,
-          },
-          cost: 0,
-          tokens: {
-            output: 0,
-            input: 0,
-            reasoning: 0,
-            cache: { read: 0, write: 0 },
-          },
-          modelID: model.id,
-          providerID: model.providerID,
-          time: {
-            created: Date.now(),
-          },
-        })
-      }),
-      input.ctx,
-    )) as MessageV2.Assistant
-    const processor = SessionProcessor.create({
-      instance: input.ctx,
-      assistantMessage: msg,
-      sessionID: input.sessionID,
-      model,
-      abort: input.abort,
-    })
+    const begin = async () => {
+      const msg = (await runSession(
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          return yield* session.updateMessage({
+            id: Identifier.ascending("message"),
+            role: "assistant",
+            parentID: input.parentID,
+            sessionID: input.sessionID,
+            mode: "compaction",
+            agent: "compaction",
+            summary: true,
+            path: {
+              cwd: input.directory,
+              root: input.worktree,
+            },
+            cost: 0,
+            tokens: {
+              output: 0,
+              input: 0,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            modelID: model.id,
+            providerID: model.providerID,
+            time: {
+              created: Date.now(),
+            },
+          })
+        }),
+        input.ctx,
+      )) as MessageV2.Assistant
+      const processor = SessionProcessor.create({
+        instance: input.ctx,
+        assistantMessage: msg,
+        sessionID: input.sessionID,
+        model,
+        abort: input.abort,
+      })
+      return { msg, processor }
+    }
     const compacting = await runPlugin(
       Effect.gen(function* () {
         const plugin = yield* Plugin.Service
@@ -547,27 +568,76 @@ When constructing the summary, try to stick to this template:
 [Construct a structured list of relevant files that have been read, edited, or created that pertain to the task at hand. If all the files in a directory are relevant, include the path to the directory.]
 ---`
     const promptText = compacting.prompt ?? [defaultPrompt, ...compacting.context].join("\n\n")
-    const result = await processor.process({
+    const instruction = { role: "user" as const, content: [{ type: "text" as const, text: promptText }] }
+    const defaultInput = {
       user: userMessageInfo,
       agent,
       abort: input.abort,
       sessionID: input.sessionID,
       tools: {},
       system: [],
-      messages: [
-        ...MessageV2.toModelMessages(input.messages, model),
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: promptText,
-            },
-          ],
-        },
-      ],
+      messages: [...MessageV2.toModelMessages(input.messages, model), instruction],
       model,
-    })
+    }
+    let { msg, processor } = await begin()
+    let result: "continue" | "stop" | "compact" | undefined
+    // The same prefix as the conversation's last request, so the provider reads it from its cache. The compaction agent's own model
+    // would be another cache, so that case keeps the way of today.
+    const shared =
+      input.shared &&
+      Flag.compactionSharedPrefix() &&
+      (!agent.model ||
+        (agent.model.providerID === userMessageInfo.model.providerID && agent.model.modelID === userMessageInfo.model.modelID))
+        ? input.shared
+        : undefined
+    if (shared) {
+      const toolChoice = await runProvider(
+        Effect.gen(function* () {
+          const provider = yield* Provider.Service
+          const ref = yield* provider.getModelRef(model)
+          return LLM.uncallableToolChoice(ref?.route ?? "", shared.toolChoice) ?? "same"
+        }),
+        input.ctx,
+      ).catch(() => "unknown")
+      let reason: string | undefined
+      try {
+        result = await processor.process({
+          ...defaultInput,
+          agent: shared.agent,
+          system: shared.system,
+          tools: shared.tools,
+          deferred: shared.deferred,
+          messages: [...shared.messages, instruction],
+          toolChoice: shared.toolChoice,
+          noToolCalls: true,
+        })
+        const answered = (await MessageV2.parts(msg.id)).some((part) => part.type === "text" && part.text.trim() !== "")
+        if (processor.message.error) reason = "error"
+        else if (!answered) reason = processor.message.finish === "tool-calls" ? "tool_use_only" : "no_text"
+      } catch (error) {
+        reason = "error"
+        log.warn("compaction shared prefix request failed", { sessionID: input.sessionID, error: String(error) })
+      }
+      // An aborted request is the user's stop, not a reason to ask again.
+      if (reason && !input.abort.aborted) {
+        log.warn("compaction shared prefix fell back", {
+          sessionID: input.sessionID,
+          reason,
+          provider: model.providerID,
+          toolChoice,
+        })
+        await runSession(
+          Effect.gen(function* () {
+            const session = yield* Session.Service
+            yield* session.removeMessage({ sessionID: input.sessionID, messageID: msg.id })
+          }),
+          input.ctx,
+        )
+        ;({ msg, processor } = await begin())
+        result = undefined
+      }
+    }
+    if (result === undefined) result = await processor.process(defaultInput)
 
     if (result === "continue" && input.auto) {
       await runSession(

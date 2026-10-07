@@ -85,10 +85,20 @@ export interface CityDeps {
   measuring?: boolean
   /** The language ADE speaks (`?lang=it|en`); without it, the system's, by ADE's own rule. For the hint and the kiosk's sign. */
   lang?: string
+  /** A renderer that draws in software (no GPU) is not worth starting: `startCity` stands down with `SoftwareRendering`, and the page is the list. */
+  listIfSoftware?: boolean
   /** The city drew its first frame: the world is on screen (ADE stops waiting for it). */
   onDrawn?(): void
   /** The frames stayed too slow at a 60 fps level the machine chose by itself: ADE opens it at Bassa from now on. */
   onSlow?(): void
+}
+
+/** Thrown by `startCity` when `listIfSoftware` is set and the renderer it got draws in software: the page shows the list instead. */
+export class SoftwareRendering extends Error {
+  readonly software = true
+  constructor() {
+    super("rendering software: la città non parte, si apre la lista")
+  }
 }
 
 export interface CityHandle {
@@ -176,6 +186,12 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   // Drawn in software (no GPU): every frame costs processors, so the city rests as soon as it can (`schedule.ts`).
   const software = isSoftwareRenderer(rendererName(renderer, backend, (gpu as { info?: Parameters<typeof rendererName>[2] }).info))
   if (software) doc.documentElement.dataset.software = "1"
+  if (software && deps.listIfSoftware && !check) {
+    // Nothing of the city was built yet but the canvas: it goes, and the GPU's side of it with it.
+    canvas.remove?.()
+    renderer.dispose()
+    throw new SoftwareRendering()
+  }
   const quietMs = software ? SOFTWARE_IMMOBILE_AFTER_MS : IMMOBILE_AFTER_MS
 
   if (check) {

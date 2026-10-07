@@ -6,7 +6,8 @@
  * whole of what it is allowed to say, and there is very little:
  *
  * - **ADE → page:** `progress`, once, when the page says it is there.
- * - **page → ADE:** `ready`, and `learn-save` with the progress after an answer.
+ * - **page → ADE:** `ready`, `learn-save` with the progress after an answer, and `close` when the learner leaves with Esc (the lesson
+ *   is a layer over the world, and the page cannot close it itself).
  *
  * Anything else is ignored, and the reason is given to the panel so it lands in the console. That is the whole allowlist: no command
  * towards a session, nothing about a project, nothing of the workbench.
@@ -17,14 +18,15 @@ import { parseProgress } from "./progress"
 /** ADE → page. */
 export type ToPage = { type: "progress"; progress: unknown }
 
-/** page → ADE, once read defensively: anything that is not one of these two shapes is nothing. */
-export type FromPage = { type: "ready" } | { type: "learn-save"; progress: unknown }
+/** page → ADE, once read defensively: anything that is not one of these three shapes is nothing. */
+export type FromPage = { type: "ready" } | { type: "learn-save"; progress: unknown } | { type: "close" }
 
 /** A message the page sent, if it is one ADE knows and it is well formed. */
 export function readFromPage(data: unknown): FromPage | undefined {
   if (!data || typeof data !== "object") return undefined
   const body = data as { type?: unknown; progress?: unknown }
   if (body.type === "ready") return { type: "ready" }
+  if (body.type === "close") return { type: "close" }
   if (body.type === "learn-save") return { type: "learn-save", progress: body.progress }
   return undefined
 }
@@ -56,6 +58,8 @@ export function createLearnLink(deps: {
   ignored: (reason: string) => void
   /** The file on disk could not be read as a progress, so it is left alone: the user is told, the console gets the reason. */
   unreadable?: () => void
+  /** The learner pressed Esc in the page: the layer over the world goes away. Absent where the page is not a layer. */
+  close?: () => void
 }): LearnLink {
   let closed = false
   let given = false
@@ -112,6 +116,11 @@ export function createLearnLink(deps: {
         this.onReady()
         return
       }
+      if (message.type === "close") {
+        // Once the link is closed the page is gone with its port: a `close` that arrives late closes nothing.
+        if (!closed) deps.close?.()
+        return
+      }
       const parsed = parseProgress(message.progress)
       if (!parsed.ok) {
         deps.ignored(ignoredReason(data, parsed.reason))
@@ -131,6 +140,8 @@ export function createLearnLink(deps: {
     },
     close() {
       closed = true
+      // A save waiting for a read that has not finished must not hold `settled` for ever: a closed link writes nothing more.
+      resolveWritable(false)
       try {
         deps.port.close()
       } catch {

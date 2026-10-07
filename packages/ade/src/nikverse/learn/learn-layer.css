@@ -1,12 +1,9 @@
-[data-component="learn-pane"] {
-  --ade-pane-ground: var(--ade-bg);
-}
-
-[data-slot="learn-body"] {
+[data-component="learn-layer"] {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  background: var(--ade-bg, canvas);
 }
 
 /* The progress of the learner is ADE's to keep: it is exported and imported from here, in ADE's own DOM. */

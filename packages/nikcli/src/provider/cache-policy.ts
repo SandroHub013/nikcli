@@ -95,6 +95,21 @@ export function ttlFor(retention: Retention): "1h" | undefined {
 }
 
 /**
+ * The cache policy of a request on the native route (`@nikcli-ai/llm`), which places its own breakpoints from `LLMRequest.cache`.
+ *
+ * The native route is sent messages without cache markers (`ProviderTransform.message(..., { cache: false })`), so `applyCaching`
+ * above, the only reader of `NIKCLI_CACHE_RETENTION`, never runs for it: without this the setting did nothing and every entry was
+ * the 5-minute one. `undefined` leaves the route's own default (`"auto"`, 5 minutes).
+ *
+ * Only Anthropic's own wire has a `ttl` field to carry the hour. OpenRouter and the Vercel gateway copy the hint through, which is
+ * the bet `applyCaching` declines to make, and Bedrock has no such field here.
+ */
+export function nativePolicy(route: string, retention = resolveRetention()) {
+  if (route !== "anthropic-messages" || retention !== "long") return undefined
+  return { system: true, messages: { tail: CONVERSATION_TAIL }, ttlSeconds: 3_600 } as const
+}
+
+/**
  * How far back a breakpoint looks for a prior cache entry, in content blocks.
  *
  * Marking the last two messages bounds the distance between consecutive entries

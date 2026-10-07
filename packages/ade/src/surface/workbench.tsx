@@ -426,8 +426,7 @@ import {
 /** Who a message is from and what it is, for the inbox when it is too long to type. */
 type InboxMeta = { id: string; kind: InboxEntry["kind"]; from: string }
 import {
-  applyKv,
-  emptySpace,
+  applyKvAcross,
   memoryAddReply,
   memoryEntry,
   parseKvStore,
@@ -2040,31 +2039,6 @@ export function Workbench() {
     }))
   }
 
-  /**
-   * Opens the «Impara» panel, or takes the user to the one already open.
-   *
-   * There is one, and it belongs to nobody: the lessons are the user's, not a project's, and the progress is a file of the app's local
-   * data (`learn.rs`). Asking for the panel twice therefore focuses it rather than opening a second copy of the same lessons.
-   */
-  const openLearnPane = () => {
-    const existing = wb().panes.find((pane) => pane.mode === "learn")
-    if (existing) {
-      setWb((w) => ({ ...w, view: "code", focusedId: existing.id }))
-      return
-    }
-    setWb((w) => ({
-      ...addPane(w, {
-        id: newPaneId("lp"),
-        title: t("newPane.learn"),
-        status: "working",
-        model: "—",
-        mode: "learn",
-        ...here(),
-        lines: [],
-      }),
-      view: "code",
-    }))
-  }
   /** Opens the Decisions panel, or focuses the one already open. */
   const openDecisionsPane = () => {
     const existing = wb().panes.find((pane) => pane.mode === "decisions")
@@ -4040,16 +4014,17 @@ export function Workbench() {
     }
 
     if (message.kind === "kv") {
-      const space = sender?.project || project()?.name || "workspace"
-      const result = applyKv(
-        kvStore[space] ?? emptySpace(),
+      // A key that starts with `pc:` is one for the machine, whatever the project; the others are the sender's project's.
+      const result = applyKvAcross(
+        kvStore,
+        { sender: sender?.project, ui: project()?.name },
         { op: message.op, key: message.key, value: message.text, ttl: message.ttl, force: message.force },
         sender ? { id: sender.id, title: sender.title } : undefined,
         Date.now(),
         (paneId) => running.has(paneId),
       )
-      if (result.space !== kvStore[space]) {
-        kvStore = { ...kvStore, [space]: result.space }
+      if (result.store !== kvStore) {
+        kvStore = result.store
         saveKv()
       }
       await answer(result.reply)
@@ -6901,8 +6876,6 @@ export function Workbench() {
       openDesignPane()
     } else if (id === "nikverse.pane") {
       void openNikversePane()
-    } else if (id === "learn.pane") {
-      openLearnPane()
     } else if (id === "model.new") {
       // Opened empty, like the video panel; a model file clicked in the tree opens it directly.
       openModel("")
@@ -10165,10 +10138,6 @@ function NewPaneGlyph(props: { kind: NewPaneItem["glyph"] }) {
       </Show>
       <Show when={props.kind === "nikverse"}>
         <path d="M2 14V7l3-2v9M5 14V4l4-2v12M9 14V6l5 2v6M1.5 14h13" stroke-linecap="round" stroke-linejoin="round" />
-      </Show>
-      <Show when={props.kind === "learn"}>
-        <path d="M2 14V7l3-2v9M5 14V4l4-2v12M9 14V6l5 2v6M1.5 14h13" stroke-linecap="round" stroke-linejoin="round" />
-        <path d="M11.5 3.2l.9 1.8 2 .3-1.45 1.4.35 2-1.8-.95-1.8.95.35-2L8.6 5.3l2-.3z" stroke-linejoin="round" />
       </Show>
     </svg>
   )

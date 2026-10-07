@@ -74,6 +74,54 @@ describe("the answers of a prompt: intent and shown label", () => {
     }
   })
 
+  // F7e, D1: the wordings of the installed CLIs that grant more than the request on screen. Each one starts with «yes».
+  test("classifyAnswer reads every answer that grants more than the request as always", () => {
+    const wider = [
+      "Yes, and remember this directory",
+      "Yes, and keep allowing any reads outside the working directories",
+      "Yes, and use auto mode",
+      "Yes, auto-accept edits",
+      "Yes, clear context and auto-accept edits",
+      "Yes, clear context and bypass permissions",
+      "Yes, clear context and use auto mode",
+      "Yes, and allow this host in the future",
+    ]
+    for (const label of wider) expect([label, classifyAnswer(label)]).toEqual([label, "always"])
+    // The one the plan menu offers that grants only the plan.
+    expect(classifyAnswer("Yes, manually approve edits")).toBe("yes")
+  })
+
+  // F7e review, low 1: labels that widen the reach (every command, no sandbox, a whole project or folder) and read as a yes.
+  test("classifyAnswer reads the labels that widen the reach as always, one by one", () => {
+    const wider = [
+      "Run all commands",
+      "Run all",
+      "Continue without sandbox",
+      "Approve for this project",
+      "Yes, for this project",
+      "Yes, allow this directory",
+      "Permetti per questa cartella",
+      "Approva per questo progetto",
+      "Esegui tutti i comandi",
+      "Continua senza sandbox",
+    ]
+    for (const label of wider) expect([label, classifyAnswer(label)]).toEqual([label, "always"])
+    // The plain ones stay a yes.
+    for (const label of ["Run", "Continue", "Approve", "Permetti", "Esegui", "Yes, run it"]) {
+      expect([label, classifyAnswer(label)]).toEqual([label, "yes"])
+    }
+  })
+
+  // F7e, D2: the plain yes wordings a CLI may use, for recognising a label (not for what a spoken yes may send).
+  test("classifyAnswer reads ok, continue, run, esegui, approva, permetti and autorizza as a yes", () => {
+    for (const label of ["Ok", "Okay", "Continue", "Continua", "Run", "Esegui", "Approva", "Permetti", "Autorizza"]) {
+      expect([label, classifyAnswer(label)]).toEqual([label, "yes"])
+    }
+    for (const label of ["Not now", "Running late", "Okapi", "Continuous"]) {
+      expect([label, classifyAnswer(label)]).toEqual([label, "other"])
+    }
+  })
+
   test("classifyAnswer reads the CLI's wordings in both languages", () => {
     const table: [string, string][] = [
       ["Yes", "yes"],

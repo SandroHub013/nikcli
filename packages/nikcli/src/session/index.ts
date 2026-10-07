@@ -761,6 +761,8 @@ export namespace Session {
       }
       SessionSync.install()
       SyncEvent.run(SessionSync.Deleted, { sessionID, info: session }, { projectID: ctx.project.id })
+      // Loaded when asked: the keeper imports this module.
+      void import("./cache-keeper").then((module) => module.CacheKeeper.release(sessionID)).catch(() => {})
     } catch (e) {
       log.error(e)
     }
