@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test"
 import { spawn, spawnSync, type ChildProcess } from "child_process"
+import path from "path"
 import { Shell } from "@/shell/shell"
 
 /**
@@ -100,6 +101,61 @@ describe.skipIf(!windows)("Shell.killTree on Windows", () => {
     await Bun.sleep(600)
     expect(Shell.openJobs()).toBe(0)
   }, 30_000)
+})
+
+/**
+ * nikcli killed from outside (`taskkill /f`, a crash): nothing runs its cleanup, so the only thing left to end the command's processes is
+ * the job handle closing with the process (`KILL_ON_JOB_CLOSE`). The host is a small stand-in for nikcli that does what the tool bash and
+ * the monitor do.
+ */
+describe.skipIf(!windows)("a command in a job and the life of nikcli", () => {
+  const host = path.join(import.meta.dir, "fixtures", "host-command.ts")
+
+  async function startHost(address: string, mode: "long" | "background") {
+    const child = spawn(process.execPath, [host, address, mode], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
+    let out = ""
+    child.stdout?.on("data", (chunk) => (out += String(chunk)))
+    for (let waited = 0; waited < 20_000 && !out.includes("started"); waited += 100) await Bun.sleep(100)
+    expect(out).toContain("started")
+    return { child, output: () => out }
+  }
+
+  const endHost = (child: ChildProcess) =>
+    child.pid && spawnSync("taskkill", ["/pid", String(child.pid), "/f"], { stdio: "ignore", timeout: 10_000 })
+
+  it("a command still running when nikcli is killed with taskkill /f leaves no process behind", async () => {
+    const address = marker()
+    const { child } = await startHost(address, "long")
+    try {
+      await waitForPing(address)
+      expect(pidsWith(address).length).toBeGreaterThan(0)
+      endHost(child)
+      await Bun.sleep(1_500)
+      expect(pidsWith(address)).toEqual([])
+    } finally {
+      killByPid(pidsWith(address))
+      endHost(child)
+    }
+  }, 60_000)
+
+  it("a process left in the background survives the end of its command, and dies with nikcli", async () => {
+    const address = marker()
+    const { child, output } = await startHost(address, "background")
+    try {
+      await waitForPing(address)
+      for (let waited = 0; waited < 10_000 && !output().includes("command-exited"); waited += 100) await Bun.sleep(100)
+      expect(output()).toContain("command-exited")
+      // The command ended normally: its background process is still there, as it has always been.
+      await Bun.sleep(1_000)
+      expect(pidsWith(address).length).toBeGreaterThan(0)
+      endHost(child)
+      await Bun.sleep(1_500)
+      expect(pidsWith(address)).toEqual([])
+    } finally {
+      killByPid(pidsWith(address))
+      endHost(child)
+    }
+  }, 60_000)
 })
 
 describe.skipIf(windows)("Shell.adopt off Windows", () => {
