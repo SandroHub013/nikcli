@@ -443,7 +443,9 @@ jobs:
             echo "no bundles to sum in $TAG"
             exit 1
           fi
-          sha256sum "${NAME}"_* > SHA256SUMS.txt
+          # Everything the loop above downloaded, not a name prefix: Tauri's rpm is <name>-<version>-<release>.<arch>.rpm
+          # (dashes), so a sum over "${NAME}"_* left it out. The shell expands * before it opens SHA256SUMS.txt.
+          sha256sum -- * > SHA256SUMS.txt
           gh release upload "$TAG" SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"
 
           # HAS_SIGNATURE: every Windows installer uploaded (the setup, and an
