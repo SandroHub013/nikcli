@@ -76,8 +76,9 @@ export function applyKvAcross(
   if (request.op === "list" && name !== KV_MACHINE_SPACE) {
     const machine = store[KV_MACHINE_SPACE] ?? emptySpace()
     const merged: KvSpace = {
-      entries: { ...machine.entries, ...space.entries },
-      locks: { ...machine.locks, ...space.locks },
+      // The machine wins: an old pc: key left in a project's space (taken before the prefix existed) must not hide the real one.
+      entries: { ...space.entries, ...machine.entries },
+      locks: { ...space.locks, ...machine.locks },
     }
     return { store, reply: applyKv(merged, request, who, now, alive).reply }
   }
