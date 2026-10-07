@@ -150,6 +150,19 @@ describe("kv locks of the machine (pc:)", () => {
     expect(call(store, "sandrobench", bob, req("list", "build/")).reply).not.toContain("pc:ade-test")
   })
 
+  test("list: an old pc: lock left in a project's space does not hide the machine's", () => {
+    // Taken before pc: keys moved to the machine's space, with the key already pc:ade-test.
+    const old: KvSpace = {
+      entries: {},
+      locks: { "pc:ade-test": { owner: "p9", ownerTitle: "vecchio", until: 1000 + 10_000 } },
+    }
+    let store: Store = { nikcli: old }
+    store = call(store, "sandrobench", alice, req("lock", "pc:ade-test"), 1000).store
+    const seen = call(store, "nikcli", bob, req("list", ""), 2000).reply
+    expect(seen).toContain("lock pc:ade-test: alice")
+    expect(seen).not.toContain("vecchio")
+  })
+
   test("values under pc: are one for the machine too", () => {
     let store: Store = {}
     store = call(store, "nikcli", alice, req("set", "pc:gpu", "libera")).store
