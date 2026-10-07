@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import type { BufferGeometry, Mesh, Object3D } from "three/webgpu"
+import { parseCommand } from "../protocol"
 import { blocked, moveWithCollisions, type World } from "./collision"
 import { BODY_RADIUS, spawnPlayer } from "./controller"
 import { CONE_RADIUS } from "./hologram"
-import type { Ray } from "./interaction"
+import { commandOf, keyCommand, nearestPickable, pickWithRay, type Ray, type SessionPickable } from "./interaction"
 import {
   FARO,
   FARO_DOOR,
@@ -27,7 +28,7 @@ import {
   type Vec2,
 } from "./layout"
 import { createPlaces, faroGeometry, HALO_SIZE, SIGN_SIZE } from "./places-view"
-import { placeBoxes } from "./places"
+import { kioskSign, placeBoxes, placeLabel, placePickables, placeWalls, worldLang } from "./places"
 import { kitFor } from "./test-cast"
 
 /** The projector under the hologram, as `main.ts` has it. */
@@ -178,6 +179,7 @@ describe("walking to the Faro", () => {
       if (inMouth(at)) expect(onWalkway(at)).toBeDefined()
     })
     expect(Math.hypot(end.x - FARO_DOOR.x, end.z - FARO_DOOR.z)).toBeLessThanOrEqual(0.6)
+    expect(nearestPickable(end, placePickables())?.kind).toBe("place")
   })
 
   test("round the tower on the deck, all the way, with no wall where nothing is drawn", () => {
@@ -221,6 +223,26 @@ describe("walking to the Faro", () => {
     for (const b of faroBoxes()) expect(drawnIn(b)).toBe(true)
     // The tower's boxes stay within 10 cm of the drawn tower's foot.
     for (const b of faroBoxes().slice(0, 4)) for (const c of boxCorners(b)) expect(Math.hypot(c.x - FARO.x, c.z - FARO.z)).toBeLessThanOrEqual(FARO.towerRadius + 0.1)
+  })
+})
+
+describe("the hint within reach", () => {
+  test("the hint says what the key does, in both languages, and the sign says it too", () => {
+    expect(placeLabel("faro", "it")).toBe("E · Lezioni")
+    expect(placeLabel("gioco", "it")).toBe("E · Gioca")
+    expect(placeLabel("faro", "en")).toBe("E · Lessons")
+    expect(placeLabel("gioco", "en")).toBe("E · Play")
+    expect(kioskSign("it")).toBe("GIOCA")
+    expect(kioskSign("en")).toBe("PLAY")
+  })
+
+  test("the language is ADE's when the address names it, else the system's by ADE's own rule", () => {
+    expect(worldLang("en", ["it-IT"])).toBe("en")
+    expect(worldLang("it", ["en-US"])).toBe("it")
+    expect(worldLang(undefined, ["it-IT", "en"])).toBe("it")
+    expect(worldLang(undefined, ["en-GB"])).toBe("en")
+    expect(worldLang(undefined, ["de-DE"])).toBe("en")
+    expect(worldLang("fr", [])).toBe("it")
   })
 })
 

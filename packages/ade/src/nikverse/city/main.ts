@@ -30,9 +30,9 @@ import {
   type Orbit,
   type Player,
 } from "./controller"
-import { keyCommand, nearestPickable, pickWithRay, type Pickable, type Ray } from "./interaction"
+import { commandOf, keyCommand, nearestPickable, pickWithRay, pickableKey, type Pickable, type Ray } from "./interaction"
 import { MOUTH, WALKWAYS, type Box } from "./layout"
-import { placeBoxes, worldLang } from "./places"
+import { placeBoxes, placeLabel, placePickables, placeWalls, worldLang } from "./places"
 import { CHECK_PIXELS_PER_UNIT, logoCheck } from "./hologram"
 import { parseLogo } from "./logo"
 import { loadLevel } from "./load-level"
@@ -111,8 +111,10 @@ export interface CityHandle {
 
 /** The projector under the hologram: the character walks around it, not through it. */
 const PROJECTOR: Box = { cx: 0, cz: 0, hx: 3.1, hz: 3.1, yaw: 0, height: 0.62 }
-/** The Faro and the kiosk: what stops the character there. */
+/** The Faro and the kiosk: what stops the character there, what a click cannot see through, and what can be pressed. */
 const PLACE_BOXES = placeBoxes()
+const PLACE_WALLS = placeWalls()
+const PLACES = placePickables()
 
 const finite = (n: unknown): n is number => typeof n === "number" && Number.isFinite(n)
 
@@ -258,7 +260,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   const movingInterval = movingIntervalMs(level)
   let boxes: Box[] = [PROJECTOR, ...PLACE_BOXES]
   let boxesStale = true
-  let hintPane: string | undefined
+  let hintKey: string | undefined
   const hint = doc.getElementById("hint")
   const raycaster = new Raycaster()
   const pointer = new Vector2()
@@ -308,6 +310,9 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     }
     return { boxes, radius: town.radius(), mouth: MOUTH, walkways: WALKWAYS }
   }
+
+  /** What can be pressed: the sessions' computers, and the Faro's door and the kiosk's counter. */
+  const pickables = (): Pickable[] => [...town.pickables(), ...PLACES]
 
   const rayAt = (clientX: number, clientY: number): Ray => {
     const rect = canvas.getBoundingClientRect()
@@ -360,13 +365,15 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     }
     wasMoving = walking
 
-    const near = nearestPickable(player, town.pickables())
-    if (near?.paneId !== hintPane) {
-      hintPane = near?.paneId
+    const near = nearestPickable(player, pickables())
+    const key = near ? pickableKey(near) : undefined
+    if (key !== hintKey) {
+      hintKey = key
       if (hint) {
-        const title = near ? deps.picture().agents.get(near.paneId)?.title : undefined
         hint.hidden = !near
-        hint.textContent = near ? `E · apri ${title ?? "la sessione"}` : ""
+        if (!near) hint.textContent = ""
+        else if (near.kind === "place") hint.textContent = placeLabel(near.place, lang)
+        else hint.textContent = `E · apri ${deps.picture().agents.get(near.paneId)?.title ?? "la sessione"}`
       }
     }
 
@@ -492,7 +499,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
     if (event.button !== 0) return
     const picked = pickAt(event.clientX, event.clientY)
     if (picked) {
-      deps.send({ cmd: "open-session", paneId: picked.paneId })
+      deps.send(commandOf(picked))
       wake()
       return
     }

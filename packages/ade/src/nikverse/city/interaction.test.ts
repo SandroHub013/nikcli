@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
-import { REACH, keyCommand, nearestPickable, pickWithRay, rayBox, raySphere, type Pickable, type Ray } from "./interaction"
+import { REACH, keyCommand, nearestPickable, pickWithRay, rayBox, raySphere, type Ray, type SessionPickable } from "./interaction"
 import { COMPUTER_HEIGHT, SHOP_DEPTH, placementOf, shopBoxes, toWorld } from "./layout"
 
-const computer = (paneId: string, x: number, z: number): Pickable => ({ paneId, x, y: COMPUTER_HEIGHT, z, radius: 0.6 })
+const computer = (paneId: string, x: number, z: number): SessionPickable => ({ kind: "session", paneId, x, y: COMPUTER_HEIGHT, z, radius: 0.6 })
 const list = [computer("a", 0, 0), computer("b", 1, 1), computer("far", 10, 10)]
 
 /** A ray from `from` at `to`. */
@@ -61,7 +61,7 @@ describe("a click", () => {
     const p = placementOf(0)
     const walls = shopBoxes(p, 0)
     const inside = toWorld(p, { x: 0, z: -1 })
-    const target = { paneId: "in", x: inside.x, y: COMPUTER_HEIGHT, z: inside.z, radius: 0.6 }
+    const target: SessionPickable = { kind: "session", paneId: "in", x: inside.x, y: COMPUTER_HEIGHT, z: inside.z, radius: 0.6 }
     const back = toWorld(p, { x: 0, z: -SHOP_DEPTH / 2 - 6 })
     // Level with the computer, from behind the back wall: the wall is in the way.
     expect(pickWithRay(through([back.x, COMPUTER_HEIGHT, back.z], [target.x, target.y, target.z]), [target], walls)).toBeUndefined()
