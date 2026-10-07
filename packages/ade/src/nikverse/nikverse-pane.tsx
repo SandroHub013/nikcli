@@ -462,6 +462,8 @@ export function NikversePane(props: {
                 title={t("newPane.nikverse")}
                 name="ade-nikverse"
                 src={frameSrc()}
+                // Under a lesson the world is not to be reached with Tab or the pointer: it is paused, and the layer is what is on screen.
+                inert={lesson() !== undefined}
                 // No `allow-same-origin`: the origin is `null`, which Tauri's IPC refuses (every registered scheme is
                 // a local origin for it, so the world's own would not be). No top navigation, no popups, no forms.
                 // Scripts and nothing else: the camera turns by dragging, WebView2 gives a frame no pointer lock.

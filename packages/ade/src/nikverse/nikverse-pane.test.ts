@@ -213,6 +213,8 @@ describe("a lesson over the world", () => {
     expect(page.world()).toBe(world.frame)
     expect(world.frame.isConnected).toBe(true)
     expect(world.got.map((m) => m.type)).toContain("pause")
+    // Paused and out of reach of the keyboard and the pointer for as long as the layer is over it.
+    expect(world.frame.hasAttribute("inert")).toBe(true)
     const src = new URL(page.lesson()!.src)
     expect(src.pathname).toEndWith("/learn/")
     const fragment = new URLSearchParams(src.hash.slice(1))
@@ -305,6 +307,7 @@ describe("a lesson over the world", () => {
     expect(page.lesson()).toBeNull()
     expect(lesson.isConnected).toBe(false)
     expect(page.world()).toBe(world.frame)
+    expect(world.frame.hasAttribute("inert")).toBe(false)
     expect(world.got.map((m) => m.type).filter((type) => type === "pause" || type === "resume")).toEqual(["pause", "resume"])
     // The listener is gone with the layer: the old frame's hello gets no port.
     hello(lessonSeen.window, nonceOf(lesson))
