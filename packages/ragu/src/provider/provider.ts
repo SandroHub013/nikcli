@@ -377,10 +377,7 @@ export namespace Provider {
    * Custom loaders receive the already-parsed internal `Model` shape (with
    * `api`/`capabilities`), not the models.dev shape used to seed the database.
    */
-  async function fetchRaguInferenceModels(
-    baseURL: string,
-    apiKey: string,
-  ): Promise<Record<string, Model> | undefined> {
+  async function fetchRaguInferenceModels(baseURL: string, apiKey: string): Promise<Record<string, Model> | undefined> {
     const res = await fetch(`${baseURL}/models`, {
       headers: { Authorization: `Bearer ${apiKey}` },
       signal: AbortSignal.timeout(4000),

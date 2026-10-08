@@ -100,8 +100,7 @@ export namespace CacheKeeper {
   export function settings(codex = false): Settings {
     return {
       enabled: Flag.cacheKeepaliveSetting() ?? codex,
-      lifetimeS:
-        Flag.cacheKeepaliveNumber("RAGU_CACHE_KEEPALIVE_LIFETIME_S") ?? (codex ? CODEX_LIFETIME_S : undefined),
+      lifetimeS: Flag.cacheKeepaliveNumber("RAGU_CACHE_KEEPALIVE_LIFETIME_S") ?? (codex ? CODEX_LIFETIME_S : undefined),
       marginPct: Flag.cacheKeepaliveNumber("RAGU_CACHE_KEEPALIVE_MARGIN_PCT") ?? 10,
       minTokens: Flag.cacheKeepaliveNumber("RAGU_CACHE_KEEPALIVE_MIN_TOKENS") ?? 20_000,
       maxRenewals:

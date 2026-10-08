@@ -89,13 +89,7 @@ describe("autofix env handshake", () => {
   it("every env var the autofix script reads is set by the workflow", async () => {
     const ts = await read(AUTOFIX_TS)
     const yml = await read(PIPELINE_YML)
-    const consumed = [
-      "MINIMAX_API_KEY",
-      "RAGU_AUTOFIX_MODEL",
-      "GITHUB_REPOSITORY",
-      "GITHUB_EVENT_NAME",
-      "GITHUB_ACTOR",
-    ]
+    const consumed = ["MINIMAX_API_KEY", "RAGU_AUTOFIX_MODEL", "GITHUB_REPOSITORY", "GITHUB_EVENT_NAME", "GITHUB_ACTOR"]
     for (const v of consumed) {
       expect(ts).toContain(v)
       expect(yml).toContain(v)

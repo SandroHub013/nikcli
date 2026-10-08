@@ -15,12 +15,7 @@ const managedDir = await fs.mkdtemp(path.join(os.tmpdir(), "ragu-mod-managed-"))
 process.env.RAGU_TEST_HOME = testHome
 process.env.RAGU_DISABLE_PROJECT_CONFIG = "1"
 process.env.RAGU_MANAGED_CONFIG_DIR = managedDir
-preserveTestEnv([
-  "RAGU_TEST_HOME",
-  "RAGU_DISABLE_PROJECT_CONFIG",
-  "RAGU_MANAGED_CONFIG_DIR",
-  "RAGU_DISABLE_MODS",
-])
+preserveTestEnv(["RAGU_TEST_HOME", "RAGU_DISABLE_PROJECT_CONFIG", "RAGU_MANAGED_CONFIG_DIR", "RAGU_DISABLE_MODS"])
 
 const { Effect } = await import("effect")
 const { Plugin } = await import("@/plugin")

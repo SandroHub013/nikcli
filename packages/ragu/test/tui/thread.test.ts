@@ -73,9 +73,7 @@ describe("TUI thread bootstrap", () => {
   })
 
   it("rejects malformed session ids before rendering", async () => {
-    await expect(validateSession({ url: "http://ragu.local", sessionID: "bad" })).rejects.toThrow(
-      "Invalid session ID",
-    )
+    await expect(validateSession({ url: "http://ragu.local", sessionID: "bad" })).rejects.toThrow("Invalid session ID")
   })
 
   it("chdirToThreadDirectory returns false when chdir fails", () => {

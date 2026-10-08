@@ -224,9 +224,7 @@ describe("the prompt loop prunes a long single-message task", () => {
     // Outputs are ~300 tokens a step: never half a budget, so nothing is cleared and it keeps growing.
     expect(prompts.at(-1)!).toBeGreaterThan(prompts[0]! * 5)
     const tools = messages.flatMap((m) => m.parts.filter((p) => p.type === "tool"))
-    expect(tools.some((p) => (p as { metadata?: Record<string, unknown> }).metadata?.["raguReplayCleared"])).toBe(
-      false,
-    )
+    expect(tools.some((p) => (p as { metadata?: Record<string, unknown> }).metadata?.["raguReplayCleared"])).toBe(false)
   })
 })
 

@@ -46,9 +46,7 @@ export function printResolved(cfg: LocaleConfig | undefined) {
   if (r.source === "override") {
     UI.println("")
     UI.println(
-      UI.Style.TEXT_DIM +
-        "  (from RAGU_LOCALE / RAGU_LANGUAGE / RAGU_REGION — this run only)" +
-        UI.Style.TEXT_NORMAL,
+      UI.Style.TEXT_DIM + "  (from RAGU_LOCALE / RAGU_LANGUAGE / RAGU_REGION — this run only)" + UI.Style.TEXT_NORMAL,
     )
   }
 }

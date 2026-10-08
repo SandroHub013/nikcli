@@ -96,9 +96,9 @@ describe("framework-neutral server router", () => {
   it("matches loopback and tailnet origins by hostname, not by prefix", async () => {
     const handle = ServerRouter.make({ fallback: async () => new Response("fallback") })
     const allowedOrigin = async (origin: string) =>
-      (
-        await handle(new Request("http://ragu.local/session", { method: "OPTIONS", headers: { origin } }))
-      ).headers.get("access-control-allow-origin")
+      (await handle(new Request("http://ragu.local/session", { method: "OPTIONS", headers: { origin } }))).headers.get(
+        "access-control-allow-origin",
+      )
 
     for (const origin of [
       "http://localhost",

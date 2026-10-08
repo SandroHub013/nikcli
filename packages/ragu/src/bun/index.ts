@@ -14,14 +14,7 @@ export {
   defaultWebViewBackend,
   onMemoryPressure,
 } from "@ragu/util/bun-utils"
-export type {
-  BunUtils,
-  CronJob,
-  FetchInit,
-  FetchCompress,
-  WebViewInstance,
-  WebViewBackend,
-} from "@ragu/util/bun-utils"
+export type { BunUtils, CronJob, FetchInit, FetchCompress, WebViewInstance, WebViewBackend } from "@ragu/util/bun-utils"
 
 export namespace BunProc {
   const log = Log.create({ service: "bun" })

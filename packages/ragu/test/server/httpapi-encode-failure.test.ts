@@ -90,9 +90,7 @@ describe("encoded-route failure log", () => {
     const capture = captureEffectLog()
     try {
       const response = await Server.fetch(
-        new Request(
-          new URL(`/session/${created.id}?directory=${encodeURIComponent(directory)}`, "http://ragu.local"),
-        ),
+        new Request(new URL(`/session/${created.id}?directory=${encodeURIComponent(directory)}`, "http://ragu.local")),
       )
       expect(response.status).toBe(400)
       expect(await response.text()).toBe("")
