@@ -28,7 +28,7 @@
  */
 
 import { basename, joinPath } from "../host/path"
-import { DOT_FOLDERS, appFolderName, dotFolderName, type Exists } from "./app-folder"
+import { CONFIG_STEMS, DOT_FOLDERS, appFolderName, dotFolderName, type Exists } from "./app-folder"
 import { currentAgentId } from "../session/legacy-agent-id"
 
 /** The executable. Same name `session-new/agents.ts` resolves on PATH. */
@@ -251,7 +251,11 @@ export function agentDirs(base: string, scope: AgentScope, dotFolder?: string): 
  * of being wrong is a global roster that lists nothing, never a file written
  * in the wrong place: every write goes through a path ragu itself printed.
  */
-export function globalConfigDir(home: string, platform: "windows" | "posix", name = "nikcli"): string {
+export function globalConfigDir(
+  home: string,
+  platform: "windows" | "posix",
+  name: string = CONFIG_STEMS[CONFIG_STEMS.length - 1]!,
+): string {
   return joinPath(globalConfigBase(home, platform), name)
 }
 

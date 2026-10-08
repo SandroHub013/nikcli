@@ -919,7 +919,7 @@ fn unlink_target(target: &HookTarget, home: &Path, config_home: &Path) -> Result
     };
     if target.config.is_empty() {
         // A plugin: one file, and the two folders the install made if they are empty; in the folder of
-        // either name, since one installed before the rename is in `nikcli` (`app_folder.rs`).
+        // either name, since one installed before the rename is in `nikcli`, not `ragu` (`app_folder.rs`).
         let mut removed = false;
         for script in every_path(target.base, base, target.script) {
             if script.is_file() {
@@ -1596,7 +1596,7 @@ mod tests {
     fn the_plugin_goes_in_the_folder_ragu_reads_and_comes_out_of_either() {
         let (dir, home, config) = fake_home("rule-b");
         let ragu = target("ragu").unwrap();
-        // Neither folder yet, or only the old one: `nikcli`, where the plugin of before the rename is.
+        // Neither folder yet, or only the old one: `nikcli`, where the plugin of before the rename is, not `ragu`.
         assert_eq!(path_under(ragu.base, &config, ragu.script), config.join("nikcli").join("plugin").join("tui").join(PLUGIN_NAME));
         install_everywhere(&home, &config);
         assert_eq!(path_under(ragu.base, &config, ragu.script), config.join("nikcli").join("plugin").join("tui").join(PLUGIN_NAME));

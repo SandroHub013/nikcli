@@ -152,7 +152,7 @@ const ALLOWED_AGENTS: &[&str] = &[
 /// (`menu-click.ts`). Only in the panes ADE starts: never the user's settings.
 fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
     let stem = command_stem(command.trim());
-    // Both names, and the nikcli of before the rename too (`legacy_cli`).
+    // Both names, and the nikcli of before ragu's rename too (`legacy_cli`).
     if crate::legacy_cli::is_cli_stem(stem) {
         &[("RAGU_SERVICE", "0"), ("NIKCLI_SERVICE", "0")]
     } else if stem.eq_ignore_ascii_case("claude") {
@@ -2504,7 +2504,7 @@ mod tests {
 
     #[test]
     fn ragu_runs_its_tools_in_the_pane_not_in_the_shared_server() {
-        // Both names, and an installed nikcli of before the rename too (`legacy_cli`, until 2026-12-01).
+        // Both names, and an installed nikcli of before ragu's rename too (`legacy_cli`, until 2026-12-01).
         for name in ["ragu", "RAGU", "ragu.exe", "ragu.cmd", "nikcli", "nikcli.cmd"] {
             assert_eq!(agent_env(name), &[("RAGU_SERVICE", "0"), ("NIKCLI_SERVICE", "0")], "{name}");
         }

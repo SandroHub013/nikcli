@@ -58,7 +58,7 @@ const READY_TIMEOUT: Duration = Duration::from_secs(45);
 const START_WAIT: Duration = Duration::from_secs(2 * 45 + 15 + 5);
 
 // The line `serve` prints once it is actually listening is `ragu server
-// listening on <url>`, or `nikcli …` from a CLI of before the rename
+// listening on <url>`, or `nikcli …` from a CLI of before ragu's rename
 // (`legacy_cli::is_ready_line`).
 
 /// The user name ADE's own server is started with; the password is random.
@@ -592,7 +592,7 @@ fn serve_command(program: &str, directory: Option<&str>, password: &str, config_
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    // Every setting under both names, so a nikcli of before the rename reads
+    // Every setting under both names, so a nikcli of before ragu's rename reads
     // them too; and the approve-everything ones removed under both, since ragu
     // turns an inherited NIKCLI_X into RAGU_X at start (`legacy_cli`).
     let mut set = |name: &str, value: &str| {
@@ -1122,17 +1122,17 @@ mod tests {
         assert_eq!(parse_ready_line("ragu server listening"), None);
     }
 
-    /// An installed nikcli of before the rename prints its own name (`legacy_cli`, until 2026-12-01).
+    /// An installed nikcli of before ragu's rename prints its own name (`legacy_cli`, until 2026-12-01).
     #[test]
-    fn reads_the_readiness_line_of_an_installed_nikcli() {
-        assert_eq!(
-            parse_ready_line("nikcli server listening on http://127.0.0.1:52341"),
-            Some("http://127.0.0.1:52341".to_string())
-        );
-        assert_eq!(parse_ready_line("nikcli server listening"), None);
+    fn reads_the_readiness_line_of_a_nikcli_installed_before_ragu() {
+        for cli in ["ragu", "nikcli"] {
+            let line = format!("{cli} server listening on http://127.0.0.1:52341");
+            assert_eq!(parse_ready_line(&line), Some("http://127.0.0.1:52341".to_string()), "{line}");
+            assert_eq!(parse_ready_line(&format!("{cli} server listening")), None, "{cli}");
+        }
     }
 
-    /// Both names, so an installed nikcli of before the rename gets them too (`legacy_cli`).
+    /// Both names, so an installed nikcli of before ragu's rename gets them too (`legacy_cli`).
     #[test]
     fn the_server_gets_every_setting_under_both_names() {
         let command = serve_command("ragu", None, "finta-password", Some("{}"));
@@ -1141,8 +1141,9 @@ mod tests {
             .filter_map(|(name, value)| Some((name.to_string_lossy().into_owned(), value?.to_string_lossy().into_owned())))
             .collect();
         for (name, value) in [("SERVER_PASSWORD", "finta-password"), ("SERVER_USERNAME", "ragu"), ("CONFIG_CONTENT", "{}")] {
-            assert!(envs.contains(&(format!("RAGU_{name}"), value.to_string())), "RAGU_{name} {envs:?}");
-            assert!(envs.contains(&(format!("NIKCLI_{name}"), value.to_string())), "NIKCLI_{name} {envs:?}");
+            for prefix in ["RAGU", "NIKCLI"] {
+                assert!(envs.contains(&(format!("{prefix}_{name}"), value.to_string())), "{prefix}_{name} {envs:?}");
+            }
         }
     }
 
@@ -1155,8 +1156,9 @@ mod tests {
             .filter(|(_, value)| value.is_none())
             .map(|(name, _)| name.to_string_lossy().into_owned())
             .collect();
-        assert!(removed.contains(&"NIKCLI_AUTO_APPROVE".to_string()), "{removed:?}");
-        assert!(removed.contains(&"NIKCLI_DANGEROUSLY_SKIP_PERMISSIONS".to_string()), "{removed:?}");
+        for name in ["RAGU_AUTO_APPROVE", "NIKCLI_AUTO_APPROVE", "RAGU_DANGEROUSLY_SKIP_PERMISSIONS", "NIKCLI_DANGEROUSLY_SKIP_PERMISSIONS"] {
+            assert!(removed.contains(&name.to_string()), "{name} {removed:?}");
+        }
     }
 
     #[test]
