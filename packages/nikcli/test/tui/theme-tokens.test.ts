@@ -169,10 +169,11 @@ describe("TUI callers", () => {
     const hits: string[] = []
     let scanned = 0
     for await (const file of glob.scan({ cwd: TUI_SRC })) {
-      if (file.startsWith("context/theme")) continue
+      const normalized = file.replaceAll("\\", "/")
+      if (normalized.startsWith("context/theme")) continue
       scanned++
       const src = await tuiSource(file)
-      if (banned.test(src) || bareAccent.test(src)) hits.push(file)
+      if (banned.test(src) || bareAccent.test(src)) hits.push(normalized)
     }
     // A scan over a cwd that does not exist yields nothing, so this assertion
     // would pass without reading a single file. Prove the tree was there.

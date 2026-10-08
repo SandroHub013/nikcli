@@ -20,7 +20,7 @@ async function sources(): Promise<Array<{ file: string; text: string }>> {
   const glob = new Bun.Glob("**/*.{ts,tsx}")
   const out: Array<{ file: string; text: string }> = []
   for await (const file of glob.scan({ cwd: ROOT })) {
-    out.push({ file, text: await Bun.file(path.join(ROOT, file)).text() })
+    out.push({ file: file.replaceAll("\\", "/"), text: await Bun.file(path.join(ROOT, file)).text() })
   }
   return out
 }
