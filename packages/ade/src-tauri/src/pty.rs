@@ -152,8 +152,9 @@ const ALLOWED_AGENTS: &[&str] = &[
 /// (`menu-click.ts`). Only in the panes ADE starts: never the user's settings.
 fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
     let stem = command_stem(command.trim());
-    if stem.eq_ignore_ascii_case("ragu") {
-        &[("RAGU_SERVICE", "0")]
+    // Both names, and the nikcli of before the rename too (`legacy_cli`).
+    if crate::legacy_cli::is_cli_stem(stem) {
+        &[("RAGU_SERVICE", "0"), ("NIKCLI_SERVICE", "0")]
     } else if stem.eq_ignore_ascii_case("claude") {
         &[("CLAUDE_CODE_DISABLE_MOUSE_CLICKS", "1")]
     } else {
@@ -889,7 +890,8 @@ pub async fn pty_spawn(
      * is not a formality: the agent CLIs ship as several files of the same name
      * in the same directory, and only the one PATHEXT picks can actually run.
      */
-    let resolved = which_on_path(&command).unwrap_or_else(|| command.clone());
+    // `ragu` falls back to the nikcli of before the rename (`legacy_cli`).
+    let resolved = crate::legacy_cli::resolve(&command, which_on_path).unwrap_or_else(|| command.clone());
     /*
      * Prime Agent and pi report their turns through an extension ADE passes on
      * the command line, and only to a spawn that has a nonce to report under.
@@ -1568,7 +1570,7 @@ pub async fn pty_which(command: String) -> Option<String> {
     if !is_allowed_command(&command) {
         return None;
     }
-    which_on_path(&command)
+    crate::legacy_cli::resolve(&command, which_on_path)
 }
 
 /// Whether CreateProcess would accept this file as a program.
@@ -2502,8 +2504,9 @@ mod tests {
 
     #[test]
     fn ragu_runs_its_tools_in_the_pane_not_in_the_shared_server() {
-        for name in ["ragu", "RAGU", "ragu.exe", "ragu.cmd"] {
-            assert_eq!(agent_env(name), &[("RAGU_SERVICE", "0")], "{name}");
+        // Both names, and an installed nikcli of before the rename too (`legacy_cli`, until 2026-12-01).
+        for name in ["ragu", "RAGU", "ragu.exe", "ragu.cmd", "nikcli", "nikcli.cmd"] {
+            assert_eq!(agent_env(name), &[("RAGU_SERVICE", "0"), ("NIKCLI_SERVICE", "0")], "{name}");
         }
         for name in ["codex", "opencode", "agy", "pwsh", "ragu-island", "claude-island"] {
             assert!(agent_env(name).is_empty(), "{name}");

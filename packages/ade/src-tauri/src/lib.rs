@@ -22,6 +22,7 @@ mod browser_shot;
 mod frontend;
 mod gateway;
 mod learn;
+mod legacy_cli;
 mod media;
 mod nikverse;
 mod nikverse_assets;
@@ -1091,7 +1092,7 @@ async fn ragu_bot(
     cwd: Option<String>,
 ) -> Result<ShellOutput, String> {
     check_ragu_args(&roots, &args)?;
-    let program = pty::which_on_path("ragu").ok_or("ragu non trovato nel PATH")?;
+    let program = legacy_cli::which_cli(pty::which_on_path).ok_or("ragu non trovato nel PATH")?;
     let mut command = std::process::Command::new(program);
     command.args(&args);
     if let Some(dir) = cwd.as_ref().filter(|d| !d.is_empty()) {

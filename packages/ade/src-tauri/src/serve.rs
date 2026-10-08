@@ -57,8 +57,9 @@ const READY_TIMEOUT: Duration = Duration::from_secs(45);
 /// succeeds (modello assente review, B2).
 const START_WAIT: Duration = Duration::from_secs(2 * 45 + 15 + 5);
 
-/// The line `serve` prints once it is actually listening.
-const READY_PREFIX: &str = "ragu server listening";
+// The line `serve` prints once it is actually listening is `ragu server
+// listening on <url>`, or `nikcli …` from a CLI of before the rename
+// (`legacy_cli::is_ready_line`).
 
 /// The user name ADE's own server is started with; the password is random.
 const USERNAME: &str = "ragu";
@@ -262,7 +263,7 @@ impl Drop for Claim<'_> {
 
 /// Reads `url` out of the readiness line, which carries it whole.
 fn parse_ready_line(line: &str) -> Option<String> {
-    if !line.starts_with(READY_PREFIX) {
+    if !crate::legacy_cli::is_ready_line(line) {
         return None;
     }
     let start = line.find("http://").or_else(|| line.find("https://"))?;
@@ -560,7 +561,7 @@ fn catalog_small_model(serving: &Serving) -> Option<String> {
 
 /// The user's own config files, as text: the global one and `RAGU_CONFIG`.
 fn user_config_texts() -> Vec<String> {
-    let custom = std::env::var_os("RAGU_CONFIG").map(PathBuf::from);
+    let custom = crate::legacy_cli::var_os("RAGU_CONFIG").map(PathBuf::from);
     user_config_file()
         .into_iter()
         .chain(custom)
@@ -586,17 +587,25 @@ fn serve_command(program: &str, directory: Option<&str>, password: &str, config_
         // Port 0 asks the OS for a free one; the readiness line reports which.
         // A fixed port would collide with a ragu the user started themselves.
         .arg("--port=0")
-        .env("RAGU_SERVER_USERNAME", USERNAME)
-        .env("RAGU_SERVER_PASSWORD", password)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    for name in AUTO_APPROVE {
-        command.env_remove(name);
-    }
+    // Every setting under both names, so a nikcli of before the rename reads
+    // them too; and the approve-everything ones removed under both, since ragu
+    // turns an inherited NIKCLI_X into RAGU_X at start (`legacy_cli`).
+    let mut set = |name: &str, value: &str| {
+        for name in crate::legacy_cli::env_names(name) {
+            command.env(name, value);
+        }
+    };
+    set("RAGU_SERVER_USERNAME", USERNAME);
+    set("RAGU_SERVER_PASSWORD", password);
     if let Some(content) = config_content {
-        command.env("RAGU_CONFIG_CONTENT", content);
+        set("RAGU_CONFIG_CONTENT", content);
+    }
+    for name in AUTO_APPROVE.iter().flat_map(|name| crate::legacy_cli::env_names(name)) {
+        command.env_remove(name);
     }
 
     if let Some(dir) = directory.filter(|d| !d.is_empty()) {
@@ -640,9 +649,9 @@ fn start_blocking(server: &Server, directory: Option<String>) -> Result<ServerIn
 /// when it is up (`replace_when_ready`). The pick is kept for the next start
 /// of this run, so the second server is the exception.
 fn spawn_own(server: &Server, directory: Option<String>) -> Result<ServerInfo, String> {
-    let program = which_on_path("ragu")
+    let program = crate::legacy_cli::which_cli(which_on_path)
         .ok_or_else(|| "ragu non è nel PATH: installalo per usare chat e assistente.".to_string())?;
-    let inherited = std::env::var("RAGU_CONFIG_CONTENT").ok();
+    let inherited = crate::legacy_cli::var("RAGU_CONFIG_CONTENT");
     let serving = start_with_small_model(
         inherited.as_deref(),
         &user_config_texts(),
@@ -1110,6 +1119,43 @@ mod tests {
     #[test]
     fn refuses_a_readiness_line_with_no_url() {
         assert_eq!(parse_ready_line("ragu server listening"), None);
+    }
+
+    /// An installed nikcli of before the rename prints its own name (`legacy_cli`, until 2026-12-01).
+    #[test]
+    fn reads_the_readiness_line_of_an_installed_nikcli() {
+        assert_eq!(
+            parse_ready_line("nikcli server listening on http://127.0.0.1:52341"),
+            Some("http://127.0.0.1:52341".to_string())
+        );
+        assert_eq!(parse_ready_line("nikcli server listening"), None);
+    }
+
+    /// Both names, so an installed nikcli of before the rename gets them too (`legacy_cli`).
+    #[test]
+    fn the_server_gets_every_setting_under_both_names() {
+        let command = serve_command("ragu", None, "finta-password", Some("{}"));
+        let envs: Vec<(String, String)> = command
+            .get_envs()
+            .filter_map(|(name, value)| Some((name.to_string_lossy().into_owned(), value?.to_string_lossy().into_owned())))
+            .collect();
+        for (name, value) in [("SERVER_PASSWORD", "finta-password"), ("SERVER_USERNAME", "ragu"), ("CONFIG_CONTENT", "{}")] {
+            assert!(envs.contains(&(format!("RAGU_{name}"), value.to_string())), "RAGU_{name} {envs:?}");
+            assert!(envs.contains(&(format!("NIKCLI_{name}"), value.to_string())), "NIKCLI_{name} {envs:?}");
+        }
+    }
+
+    /// ragu turns an inherited NIKCLI_AUTO_APPROVE into RAGU_AUTO_APPROVE at start, so the old names go too.
+    #[test]
+    fn the_server_never_inherits_an_approve_everything_flag_under_the_old_name() {
+        let command = serve_command("ragu", None, "finta-password", None);
+        let removed: Vec<String> = command
+            .get_envs()
+            .filter(|(_, value)| value.is_none())
+            .map(|(name, _)| name.to_string_lossy().into_owned())
+            .collect();
+        assert!(removed.contains(&"NIKCLI_AUTO_APPROVE".to_string()), "{removed:?}");
+        assert!(removed.contains(&"NIKCLI_DANGEROUSLY_SKIP_PERMISSIONS".to_string()), "{removed:?}");
     }
 
     #[test]
