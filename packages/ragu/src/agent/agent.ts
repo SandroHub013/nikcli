@@ -25,7 +25,7 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { InstanceState, locallyInstance, runPromiseWithLayer, type InstanceContext } from "@/effect"
 import { type DeepMutable, zodObject } from "@ragu/util/effect-zod"
 import { Flag } from "@ragu/util/flag"
-import { DOT_FOLDERS } from "@ragu/util/app-folder"
+import { dotFolder } from "@ragu/util/app-folder"
 
 function runAuth<A, E>(effect: Effect.Effect<A, E, Auth.Service>) {
   return runPromiseWithLayer(Auth.defaultLayer, effect)
@@ -246,7 +246,8 @@ You have access to subagents that can be launched as background tasks.${PRIMARY_
             },
             edit: {
               "*": "deny",
-              ...Object.fromEntries(DOT_FOLDERS.map((dir) => [path.join(dir, "plans", "*.md"), "allow" as const])),
+              // The dot folder in use only (rule B): opening .ragu/plans would let the plan make .ragu and drop .nikcli.
+              [path.join(path.basename(dotFolder(worktree)), "plans", "*.md")]: "allow",
               [path.relative(worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
             },
           }),

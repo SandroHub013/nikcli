@@ -1,7 +1,7 @@
 import os from "os"
 import path from "path"
 import type { PermissionRuleset } from "./ruleset"
-import { CONFIG_FILES, DOT_FOLDERS } from "@ragu/util/app-folder"
+import { CONFIG_FILES, DOT_FOLDERS, dotFolder } from "@ragu/util/app-folder"
 
 /**
  * Auto mode — the pure half.
@@ -87,11 +87,14 @@ export namespace AutoMode {
     ".claude",
   ] as const
 
-  /** Sub-trees of a protected directory that ragu itself writes to. */
-  export const PROTECTED_EXCEPTIONS = [
-    ...DOT_FOLDERS.flatMap((dir) => [`${dir}/.worktrees`, `${dir}/plans`]),
-    ".claude/worktrees",
-  ] as const
+  /**
+   * Sub-trees of a protected directory that ragu itself writes to: in the dot folder in use only (rule B,
+   * `app-folder.ts`), the old name when no worktree says which. Opening `.ragu/plans` in a project that has only
+   * `.nikcli` would let the model create `.ragu`, and from the next load rule B would drop `.nikcli` with its denials.
+   */
+  export function protectedExceptions(dotFolderInUse: string = DOT_FOLDERS[DOT_FOLDERS.length - 1]!) {
+    return [`${dotFolderInUse}/.worktrees`, `${dotFolderInUse}/plans`, ".claude/worktrees"]
+  }
 
   export const PROTECTED_FILES: ReadonlySet<string> = new Set([
     ".gitconfig",
@@ -134,29 +137,53 @@ export namespace AutoMode {
     ...CONFIG_FILES,
   ])
 
+  const PROTECTED_FILE_NAMES = [...PROTECTED_FILES].map((name) => name.toLowerCase())
+  const PROTECTED_FILE_SET: ReadonlySet<string> = new Set(PROTECTED_FILE_NAMES)
+  const PROTECTED_DIRECTORY_HEADS = [...new Set(PROTECTED_DIRECTORIES.map((dir) => dir.split("/")[0]!))]
+
+  /** Whether `part` is the 8.3 short name Windows gives `name` (`.nikcli` → `NIKCLI~1`, `ragu.json` → `RAGU~1.JSO`). */
+  function isShortNameOf(part: string, name: string) {
+    const short = /^([^~.]{1,6})~\d+(?:\.([^.]{1,3}))?$/.exec(part)
+    if (!short) return false
+    const long = name.replace(/^\.+/, "")
+    const dot = long.lastIndexOf(".")
+    const base = (dot > 0 ? long.slice(0, dot) : long).replace(/[.\s]/g, "")
+    const ext = dot > 0 ? long.slice(dot + 1) : ""
+    return short[1] === base.slice(0, 6) && (short[2] ?? "") === ext.slice(0, 3)
+  }
+
+  /**
+   * A path as Windows resolves it: any case, `::$DATA` or any `:stream` after a name dropped, and an 8.3 short
+   * name read as the protected name it shortens (the last part may be a file, the others are folders).
+   */
   function segments(file: string) {
-    return file
+    const parts = file
       .replaceAll("\\", "/")
       .split("/")
+      .map((part, index) => (index === 0 && /^[a-z]:$/i.test(part) ? part : part.replace(/:.*$/s, "")).toLowerCase())
       .filter((part) => part !== "" && part !== ".")
+    return parts.map((part, index) => {
+      const names = index === parts.length - 1 ? [...PROTECTED_FILE_NAMES, ...PROTECTED_DIRECTORY_HEADS] : PROTECTED_DIRECTORY_HEADS
+      return names.find((name) => isShortNameOf(part, name)) ?? part
+    })
   }
 
   /**
    * Whether an edit target is one of the protected paths. `file` may be
    * relative to the working tree (what the edit tools put in their patterns)
-   * or absolute.
+   * or absolute. With `worktree`, the sub-trees ragu writes itself are open in
+   * the dot folder in use there (`protectedExceptions`).
    */
-  export function isProtectedPath(file: string) {
+  export function isProtectedPath(file: string, worktree?: string) {
     const parts = segments(file)
     if (parts.length === 0) return false
-    if (PROTECTED_FILES.has(parts[parts.length - 1]!)) return true
+    if (PROTECTED_FILE_SET.has(parts[parts.length - 1]!)) return true
+    const exceptions = protectedExceptions(worktree ? path.basename(dotFolder(worktree)) : undefined)
     for (let index = 0; index < parts.length; index++) {
       const rest = parts.slice(index).join("/")
       for (const dir of PROTECTED_DIRECTORIES) {
         if (rest !== dir && !rest.startsWith(dir + "/")) continue
-        const excepted = PROTECTED_EXCEPTIONS.some(
-          (exception) => rest === exception || rest.startsWith(exception + "/"),
-        )
+        const excepted = exceptions.some((exception) => rest === exception || rest.startsWith(exception + "/"))
         if (!excepted) return true
       }
     }
@@ -337,8 +364,8 @@ export namespace AutoMode {
 
   function editRoute(input: RouteInput): Route {
     if (!isInsideWorktree(input.pattern)) return "classify"
-    if (isProtectedPath(input.pattern)) return "classify"
-    if (destructiveCategory("edit", [input.pattern])) return "classify"
+    if (isProtectedPath(input.pattern, input.worktree)) return "classify"
+    if (destructiveCategory("edit", [input.pattern], input.worktree)) return "classify"
     return "allow"
   }
 
@@ -732,7 +759,11 @@ export namespace AutoMode {
    * matched per sub-command; an edit to a protected path or a database file
    * counts too.
    */
-  export function destructiveCategory(permission: string, patterns: readonly string[]): string | undefined {
+  export function destructiveCategory(
+    permission: string,
+    patterns: readonly string[],
+    worktree?: string,
+  ): string | undefined {
     if (permission === "bash") {
       for (const pattern of patterns) {
         const hit = DESTRUCTIVE_SHELL.find((entry) => entry.pattern.test(pattern))
@@ -742,7 +773,7 @@ export namespace AutoMode {
     }
     if (permission === "edit") {
       if (patterns.some((pattern) => /\.(sqlite3?|db|mdb|accdb)$/i.test(pattern))) return "database"
-      if (patterns.some(isProtectedPath)) return "protected-path"
+      if (patterns.some((pattern) => isProtectedPath(pattern, worktree))) return "protected-path"
     }
     return undefined
   }
