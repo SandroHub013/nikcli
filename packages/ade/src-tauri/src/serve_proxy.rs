@@ -795,7 +795,7 @@ mod tests {
         let head = requests.recv_timeout(Duration::from_secs(5)).unwrap().to_ascii_lowercase();
         assert!(head.starts_with("get /provider http/1.1"), "{head}");
         // "ragu:finta", and only that one.
-        assert!(head.contains("authorization: basic bmlry2xpomzpbnrh"), "{head}");
+        assert!(head.contains("authorization: basic cmfndtpmaw50yq=="), "{head}");
         assert_eq!(head.matches("authorization").count(), 1, "{head}");
         assert!(matches!(events.first(), Some(ProxyEvent::Head { status: 200, .. })));
         assert_eq!(events.last(), Some(&ProxyEvent::End));
