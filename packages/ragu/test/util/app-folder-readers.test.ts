@@ -25,6 +25,8 @@ const OLD_NAME = [
 /** File (relative to packages/) → why it may name the old folder. */
 const ALLOWED: Record<string, string> = {
   "util/src/app-folder.ts": "rule B itself",
+  "ragu/src/migrate/migrate.ts":
+    "ragu migrate renames the nikcli folders to ragu, and its mark (migrated-from-nikcli.json) says where a folder came from: it names the old folder because moving it is its job",
   "ragu/src/project/project.ts": "the project id cached in .git/nikcli: inside the repository's own .git, not a user folder",
   "tui/src/context/theme-catalog.ts": "the bundled theme file ./theme/nikcli.json, not a user's",
   "ragu/src/tool/plugin.txt": "text the model reads: the prompt commit",
