@@ -105,8 +105,8 @@ export const RULES: readonly Rule[] = [
 export const PROTECTED: readonly Exclusion[] = [
   {
     id: "host",
-    find: /(?:[a-z0-9-]+\.)*nikcli(?:-ai)?\.(?:dev|store|ai|run|com|io)\b(?:\/[\w.~%/?=&#-]*)?|[a-z0-9-]*nikcli[a-z0-9-]*\.(?:up\.railway\.app|vercel\.app|workers\.dev|pages\.dev|fly\.dev)\b/gi,
-    why: "Nik's domains (nikcli-ai.dev, nikcli.store, his railway deploy, …): renaming would send requests to a domain nobody here owns; the services go in their own brief",
+    find: /(?:[a-z0-9-]+\.)*nikcli(?:-ai)?\.(?:dev|store|ai|run|com|io)\b|[a-z0-9-]*nikcli[a-z0-9-]*\.(?:up\.railway\.app|vercel\.app|workers\.dev|pages\.dev|fly\.dev)\b/gi,
+    why: "Nik's domains (nikcli-ai.dev, nikcli.store, his railway deploy, …): renaming would send requests to a domain nobody here owns; the services go in their own brief. The host only: a path or query after it (/.well-known/nikcli, client_id=nikcli-studio) is a route this repo serves and renames, and its tests follow",
   },
   {
     id: "registry",
@@ -140,8 +140,8 @@ export const PROTECTED: readonly Exclusion[] = [
   },
   {
     id: "user-file",
-    find: /\bnikcli\.(?:jsonc?|db(?:-wal|-shm)?)\b/g,
-    why: "nikcli.json(c) and nikcli.db: a user's config and database; moved by hand with rule B",
+    find: /\bnikcli\.(?:jsonc?|db(?:-wal|-shm)?)\b(?!\s*\()/g,
+    why: "nikcli.json(c) and nikcli.db: a user's config and database; moved by hand with rule B. Not a call: `nikcli.json()` is a variable's method",
   },
   {
     id: "user-dir",
