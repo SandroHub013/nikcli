@@ -45,13 +45,12 @@ const base64url = (input: string | Uint8Array) =>
   (typeof input === "string" ? Buffer.from(input) : Buffer.from(input)).toString("base64url")
 
 function wellKnownFile(env: Record<string, string | undefined>) {
-  if (process.platform === "win32" && env.APPDATA) {
-    return path.join(env.APPDATA, "gcloud", "application_default_credentials.json")
-  }
-  return path.join(
-    env.CLOUDSDK_CONFIG ?? path.join(os.homedir(), ".config", "gcloud"),
-    "application_default_credentials.json",
-  )
+  const base =
+    env.CLOUDSDK_CONFIG ??
+    (process.platform === "win32" && env.APPDATA
+      ? path.join(env.APPDATA, "gcloud")
+      : path.join(os.homedir(), ".config", "gcloud"))
+  return path.join(base, "application_default_credentials.json")
 }
 
 async function loadCredentials(deps: Required<Pick<Deps, "env" | "readFile">>): Promise<Credentials | undefined> {
