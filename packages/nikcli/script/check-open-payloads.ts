@@ -102,7 +102,7 @@ async function findUnknowns(file: string): Promise<{ file: string; line: number;
     hits.push({
       // Package-relative, matching how the allowlist stores `file`. The line
       // is carried for the failure message only — it is not part of the key.
-      file: path.relative(PATH_BASE, file),
+      file: path.relative(PATH_BASE, file).replaceAll("\\", "/"),
       line: i + 1,
       snippet: line.trim(),
     })
@@ -116,7 +116,8 @@ async function findUnknowns(file: string): Promise<{ file: string; line: number;
  * both are normalized to the package-relative form.
  */
 function keyOf(file: string, snippet: string): string {
-  const normalized = file.startsWith("packages/nikcli/") ? file.slice("packages/nikcli/".length) : file
+  const withoutPrefix = file.startsWith("packages/nikcli/") ? file.slice("packages/nikcli/".length) : file
+  const normalized = withoutPrefix.replaceAll("\\", "/")
   return `${normalized}\u0000${snippet}`
 }
 

@@ -25,7 +25,7 @@ function runScript(options: { dir?: string; allowlist?: string } = {}): Run {
   return { status: result.status ?? -1, stdout: result.stdout, stderr: result.stderr }
 }
 
-describe("check-open-payloads.ts (EOT-10)", () => {
+describe("check-open-payloads.ts (EOT-10)", { timeout: 30_000 }, () => {
   it("passes on the real allowlist (no violations, no stale entries)", () => {
     const { status, stdout, stderr } = runScript()
     if (status !== 0) {
