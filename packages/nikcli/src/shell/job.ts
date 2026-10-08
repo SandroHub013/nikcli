@@ -10,7 +10,7 @@ import { dlopen, FFIType, type Pointer } from "bun:ffi"
  */
 export namespace ProcessJob {
   /** A job handle: `bun:ffi` hands the HANDLE back as a pointer value. */
-  export type Handle = Pointer | bigint
+  export type Handle = Pointer
 
   const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
   const JobObjectBasicAccountingInformation = 1
@@ -69,7 +69,7 @@ export namespace ProcessJob {
       k.symbols.CloseHandle(job)
       return undefined
     }
-    return job
+    return job as Handle
   }
 
   /** Puts the process in the job. Whatever it starts from now on joins the job; what it started before does not. */
