@@ -17,7 +17,8 @@ function run(target) {
   process.exit(code)
 }
 
-const envPath = process.env.RAGU_BIN_PATH
+// The old name too, until 2026-12-01 (src/util/legacy-env.ts): this launcher runs before the CLI's own shim.
+const envPath = process.env.RAGU_BIN_PATH || process.env.NIKCLI_BIN_PATH
 if (envPath) {
   run(envPath)
 }

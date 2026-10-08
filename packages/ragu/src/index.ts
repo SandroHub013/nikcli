@@ -6,6 +6,7 @@
  * on-disk `daemon.ts` under `/$bunfs`, and re-execing this binary just to bind
  * a Unix socket is killed by the OS (SIGKILL on a ~280MB image).
  */
+import "./util/legacy-env-run"
 import "./util/document-shim"
 
 const { runEffectCli } = await import("./cli/main-effect")
