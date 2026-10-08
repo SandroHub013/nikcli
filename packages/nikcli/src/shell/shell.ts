@@ -204,7 +204,9 @@ export namespace Shell {
     if (process.platform !== "win32" || !proc.pid) return
     const job = ProcessJob.create()
     if (!job) {
-      log.warn("job object not created; stopping a command falls back to taskkill /t", { reason: ProcessJob.unavailable() })
+      log.warn("job object not created; stopping a command falls back to taskkill /t", {
+        reason: ProcessJob.unavailable(),
+      })
       return
     }
     if (!ProcessJob.assign(job, proc.pid)) {

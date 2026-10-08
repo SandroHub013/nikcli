@@ -21,7 +21,13 @@ import os from "os"
 import path from "path"
 import { removeTestDirSync } from "./helpers/fs"
 
-const forbidden = [process.env.LOCALAPPDATA, process.env.APPDATA, process.env.USERPROFILE, process.env.HOME, os.homedir()]
+const forbidden = [
+  process.env.LOCALAPPDATA,
+  process.env.APPDATA,
+  process.env.USERPROFILE,
+  process.env.HOME,
+  os.homedir(),
+]
   .filter((dir): dir is string => !!dir)
   .map((dir) => path.resolve(dir))
 

@@ -21,7 +21,12 @@ const server = Bun.serve<{ headers: Record<string, string> }>({
   websocket: {
     message(ws, raw) {
       received.push({ headers: ws.data.headers, message: JSON.parse(String(raw)) })
-      const resp = { id: "resp_1", model: "gpt-6-luna", status: "completed", usage: { input_tokens: 5, output_tokens: 1 } }
+      const resp = {
+        id: "resp_1",
+        model: "gpt-6-luna",
+        status: "completed",
+        usage: { input_tokens: 5, output_tokens: 1 },
+      }
       ws.send(JSON.stringify({ type: "response.created", response: { ...resp, status: "in_progress" } }))
       ws.send(JSON.stringify({ type: "response.completed", response: resp }))
     },
@@ -80,7 +85,9 @@ describe("codex requests and the WebSocket pool", () => {
   test("a title request stays on HTTP and the internal marker is not sent upstream", async () => {
     received.length = 0
     const p = pool()
-    await (await p.fetch(url(), post({ session_id: "ses_headless", [OpenAIWebSocketPool.TITLE_HEADER]: "true" }))).text()
+    await (
+      await p.fetch(url(), post({ session_id: "ses_headless", [OpenAIWebSocketPool.TITLE_HEADER]: "true" }))
+    ).text()
     p.fetch.close()
     expect(received).toHaveLength(0)
     expect(p.http).toHaveLength(1)

@@ -23,7 +23,8 @@ function fakeNetwork(authorizationServer: string) {
   const fetchFn = async (input: string | URL, init?: RequestInit): Promise<Response> => {
     const url = String(input)
     requested.push(url)
-    const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } })
+    const json = (body: unknown) =>
+      new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } })
     if (url.startsWith("https://mcp.example/.well-known/oauth-protected-resource")) {
       return json({ resource: SERVER, authorization_servers: [authorizationServer] })
     }

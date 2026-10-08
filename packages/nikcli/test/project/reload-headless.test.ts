@@ -94,61 +94,57 @@ afterAll(async () => {
 })
 
 describe("InstanceReload.watch — teardown", () => {
-  it(
-    "closes every watcher it opened when stopped",
-    async () => {
-      const dir = await directory("stop")
-      const watchers = trackWatchers(path.basename(dir))
+  // 30s: the first `watch()` in the process builds the config layer, and the
+  // reload pulls in `@/plugin`; the default 5s budget does not cover it.
+  it("closes every watcher it opened when stopped", async () => {
+    const dir = await directory("stop")
+    const watchers = trackWatchers(path.basename(dir))
 
-      let stop = () => {}
-      let armed: boolean | undefined
-      let afterStop: boolean | undefined
-      try {
-        const seen = await Instance.provide({
-          directory: dir,
-          fn: async () => {
-            const events: string[] = []
-            const unsubscribe = Bus.subscribeAll((event) => {
-              events.push(event.type)
-            })
-            try {
-              stop = await InstanceReload.watch(context(dir))
+    let stop = () => {}
+    let armed: boolean | undefined
+    let afterStop: boolean | undefined
+    try {
+      const seen = await Instance.provide({
+        directory: dir,
+        fn: async () => {
+          const events: string[] = []
+          const unsubscribe = Bus.subscribeAll((event) => {
+            events.push(event.type)
+          })
+          try {
+            stop = await InstanceReload.watch(context(dir))
 
-              // Armed, or the half of the assertion below is vacuous.
-              await fs.writeFile(path.join(dir, "nikcli.json"), JSON.stringify({ agent: { beta: { prompt: "b" } } }))
-              await settle()
-              armed = events.includes(InstanceReload.Event.Started.type)
+            // Armed, or the half of the assertion below is vacuous.
+            await fs.writeFile(path.join(dir, "nikcli.json"), JSON.stringify({ agent: { beta: { prompt: "b" } } }))
+            await settle()
+            armed = events.includes(InstanceReload.Event.Started.type)
 
-              stop()
-              events.length = 0
+            stop()
+            events.length = 0
 
-              await fs.writeFile(path.join(dir, "nikcli.json"), JSON.stringify({ agent: { gamma: { prompt: "g" } } }))
-              await settle()
-              afterStop = events.includes(InstanceReload.Event.Started.type)
-              return { armed, afterStop }
-            } finally {
-              unsubscribe()
-            }
-          },
-        })
-        armed = seen.armed
-        afterStop = seen.afterStop
-      } finally {
-        stop()
-        await Instance.provide({ directory: dir, fn: () => Instance.dispose() }).catch(() => {})
-      }
+            await fs.writeFile(path.join(dir, "nikcli.json"), JSON.stringify({ agent: { gamma: { prompt: "g" } } }))
+            await settle()
+            afterStop = events.includes(InstanceReload.Event.Started.type)
+            return { armed, afterStop }
+          } finally {
+            unsubscribe()
+          }
+        },
+      })
+      armed = seen.armed
+      afterStop = seen.afterStop
+    } finally {
+      stop()
+      await Instance.provide({ directory: dir, fn: () => Instance.dispose() }).catch(() => {})
+    }
 
-      expect(armed).toBe(true)
-      expect(afterStop).toBe(false)
-      // The instance was never disposed while the watchers were open, so the
-      // `stop` function is the only thing that could have closed them.
-      expect(watchers.opened).toBeGreaterThan(0)
-      expect(watchers.closed).toBe(watchers.opened)
-    },
-    // The first `watch()` in the process builds the config layer, and the
-    // reload pulls in `@/plugin`; the default 5s budget does not cover it.
-    30000,
-  )
+    expect(armed).toBe(true)
+    expect(afterStop).toBe(false)
+    // The instance was never disposed while the watchers were open, so the
+    // `stop` function is the only thing that could have closed them.
+    expect(watchers.opened).toBeGreaterThan(0)
+    expect(watchers.closed).toBe(watchers.opened)
+  }, 30000)
 
   it("closes the watchers when dispose arrives before watch() resolves", async () => {
     const dir = await directory("late-dispose")

@@ -386,7 +386,10 @@ export namespace LLM {
       // coding workflow, so build gets both, the provider prompt first.
       ...(input.agent.prompt
         ? input.agent.name === "build" && !isCodex
-          ? [{ id: "provider", text: providerPrompt() }, { id: "agent", text: input.agent.prompt }]
+          ? [
+              { id: "provider", text: providerPrompt() },
+              { id: "agent", text: input.agent.prompt },
+            ]
           : [{ id: "agent", text: input.agent.prompt }]
         : [{ id: "provider", text: isCodex ? "" : providerPrompt() }]),
       // any custom prompt passed into this call
@@ -834,7 +837,13 @@ export namespace LLM {
     // turn's way: a failure here is nothing the turn has to know. Not for titles, nor for subagents or the compaction (their entries
     // are not the session's).
     if (input.isCodex) CacheKeeper.markCodex(input.streamInput.sessionID)
-    if (CacheKeeper.active(undefined, input.isCodex) && !input.streamInput.small && input.streamInput.agent.mode !== "subagent" && input.streamInput.agent.name !== "compaction" && !input.streamInput.noToolCalls) {
+    if (
+      CacheKeeper.active(undefined, input.isCodex) &&
+      !input.streamInput.small &&
+      input.streamInput.agent.mode !== "subagent" &&
+      input.streamInput.agent.name !== "compaction" &&
+      !input.streamInput.noToolCalls
+    ) {
       try {
         CacheKeeper.observe({
           sessionID: input.streamInput.sessionID,

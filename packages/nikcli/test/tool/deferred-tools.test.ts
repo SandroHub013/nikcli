@@ -60,7 +60,9 @@ async function allRegistered(directory: string) {
 /** The tools the registry hands the model: names in order, plus the bytes it would send. */
 async function shipped(directory: string) {
   const tools = await allRegistered(directory)
-  const visible = tools.filter((tool) => ToolRegistry.exposure(tool.id, { disabledTools: {}, ruleset: [] }) === "active")
+  const visible = tools.filter(
+    (tool) => ToolRegistry.exposure(tool.id, { disabledTools: {}, ruleset: [] }) === "active",
+  )
   const wire = visible.map((tool) => `${tool.id} :: ${tool.description}`).join("\n")
   return { ids: visible.map((tool) => tool.id), wire }
 }
@@ -152,7 +154,9 @@ describe("the opt-out", () => {
     expect(off).toContain("code_mode")
     expect(on).not.toContain("code_mode")
     // Back on: the split is the default, not a benchmark-only setting.
-    expect(registered.filter((id) => ToolRegistry.exposure(id, { disabledTools: {}, ruleset: [] }) === "active")).toEqual(on)
+    expect(
+      registered.filter((id) => ToolRegistry.exposure(id, { disabledTools: {}, ruleset: [] }) === "active"),
+    ).toEqual(on)
   })
 
   it("is on unless the config says otherwise", async () => {

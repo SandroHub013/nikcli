@@ -159,7 +159,10 @@ async function toolParts(sessionID: string) {
 
 const compacted = (part: MessageV2.ToolPart) => part.state.status === "completed" && !!part.state.time.compacted
 const live = (parts: MessageV2.ToolPart[]) =>
-  parts.reduce((sum, p) => sum + (p.state.status === "completed" && !compacted(p) ? Token.estimate(p.state.output) : 0), 0)
+  parts.reduce(
+    (sum, p) => sum + (p.state.status === "completed" && !compacted(p) ? Token.estimate(p.state.output) : 0),
+    0,
+  )
 
 const readStep = (): Tool[] => [{ tool: "read" }]
 const steps = (n: number) => Array.from({ length: n }, readStep)
@@ -293,14 +296,31 @@ describe("what the model sees in place of a cleared output", () => {
     }
     const msgs = [
       {
-        info: { id: "msg_1", sessionID: "ses_1", role: "user", time: { created: 1 }, agent: "build", model: { providerID: "p", modelID: "m" } },
+        info: {
+          id: "msg_1",
+          sessionID: "ses_1",
+          role: "user",
+          time: { created: 1 },
+          agent: "build",
+          model: { providerID: "p", modelID: "m" },
+        },
         parts: [{ id: "prt_0", sessionID: "ses_1", messageID: "msg_1", type: "text", text: "go" }],
       },
       {
         info: {
-          id: "msg_2", sessionID: "ses_1", role: "assistant", time: { created: 2, completed: 3 }, parentID: "msg_1",
-          modelID: "m", providerID: "p", mode: "build", agent: "build", path: { cwd: "/", root: "/" }, cost: 0,
-          tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } }, finish: "tool-calls",
+          id: "msg_2",
+          sessionID: "ses_1",
+          role: "assistant",
+          time: { created: 2, completed: 3 },
+          parentID: "msg_1",
+          modelID: "m",
+          providerID: "p",
+          mode: "build",
+          agent: "build",
+          path: { cwd: "/", root: "/" },
+          cost: 0,
+          tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+          finish: "tool-calls",
         },
         parts: [part],
       },
@@ -338,20 +358,57 @@ describe("replayed reasoning of a cleared step", () => {
     const mark = cleared ? { [Message.REPLAY_CLEARED]: true } : {}
     return [
       {
-        info: { id: "msg_1", sessionID: "ses_1", role: "user", time: { created: 1 }, agent: "build", model: { providerID: "p", modelID: "m" } },
+        info: {
+          id: "msg_1",
+          sessionID: "ses_1",
+          role: "user",
+          time: { created: 1 },
+          agent: "build",
+          model: { providerID: "p", modelID: "m" },
+        },
         parts: [{ id: "prt_0", sessionID: "ses_1", messageID: "msg_1", type: "text", text: "go" }],
       },
       {
         info: {
-          id: "msg_2", sessionID: "ses_1", role: "assistant", time: { created: 2, completed: 3 }, parentID: "msg_1",
-          modelID: "m", providerID: "p", mode: "build", agent: "build", path: { cwd: "/", root: "/" }, cost: 0,
-          tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } }, finish: "tool-calls",
+          id: "msg_2",
+          sessionID: "ses_1",
+          role: "assistant",
+          time: { created: 2, completed: 3 },
+          parentID: "msg_1",
+          modelID: "m",
+          providerID: "p",
+          mode: "build",
+          agent: "build",
+          path: { cwd: "/", root: "/" },
+          cost: 0,
+          tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+          finish: "tool-calls",
         },
         parts: [
-          { id: "prt_1", sessionID: "ses_1", messageID: "msg_2", type: "reasoning", text: "SUMMARY-TEXT", time: { start: 1, end: 2 }, metadata: { ...details, ...mark } },
           {
-            id: "prt_2", sessionID: "ses_1", messageID: "msg_2", type: "tool", callID: "call_1", tool: "bash",
-            state: { status: "completed", input: { command: "ls" }, output: "OUT", title: "bash", metadata: {}, time: { start: 1, end: 2 } },
+            id: "prt_1",
+            sessionID: "ses_1",
+            messageID: "msg_2",
+            type: "reasoning",
+            text: "SUMMARY-TEXT",
+            time: { start: 1, end: 2 },
+            metadata: { ...details, ...mark },
+          },
+          {
+            id: "prt_2",
+            sessionID: "ses_1",
+            messageID: "msg_2",
+            type: "tool",
+            callID: "call_1",
+            tool: "bash",
+            state: {
+              status: "completed",
+              input: { command: "ls" },
+              output: "OUT",
+              title: "bash",
+              metadata: {},
+              time: { start: 1, end: 2 },
+            },
             metadata: { ...details, ...mark },
           },
         ],
@@ -377,23 +434,49 @@ describe("replayed reasoning of a cleared step", () => {
 
 describe("the digest of old cleared calls", () => {
   const call = (n: number, digested: boolean) => ({
-    id: `prt_c${n}`, sessionID: "ses_1", messageID: `msg_a${n}`, type: "tool", callID: `call_${n}`, tool: "bash",
+    id: `prt_c${n}`,
+    sessionID: "ses_1",
+    messageID: `msg_a${n}`,
+    type: "tool",
+    callID: `call_${n}`,
+    tool: "bash",
     state: {
-      status: "completed", input: { command: `arc3 act ACTION6 ${n} ${n}`, workdir: "C:/very/long/work/dir" },
-      output: "OUT", title: "bash", metadata: {}, time: { start: 1, end: 2, compacted: 3 },
+      status: "completed",
+      input: { command: `arc3 act ACTION6 ${n} ${n}`, workdir: "C:/very/long/work/dir" },
+      output: "OUT",
+      title: "bash",
+      metadata: {},
+      time: { start: 1, end: 2, compacted: 3 },
     },
     metadata: { [Message.REPLAY_CLEARED]: true, ...(digested ? { [Message.DIGESTED]: true } : {}) },
   })
   const step = (n: number, digested: boolean) => ({
     info: {
-      id: `msg_a${n}`, sessionID: "ses_1", role: "assistant", time: { created: 2 + n, completed: 3 + n }, parentID: "msg_u",
-      modelID: "m", providerID: "p", mode: "build", agent: "build", path: { cwd: "/", root: "/" }, cost: 0,
-      tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } }, finish: "tool-calls",
+      id: `msg_a${n}`,
+      sessionID: "ses_1",
+      role: "assistant",
+      time: { created: 2 + n, completed: 3 + n },
+      parentID: "msg_u",
+      modelID: "m",
+      providerID: "p",
+      mode: "build",
+      agent: "build",
+      path: { cwd: "/", root: "/" },
+      cost: 0,
+      tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+      finish: "tool-calls",
     },
     parts: [call(n, digested)],
   })
   const user = {
-    info: { id: "msg_u", sessionID: "ses_1", role: "user", time: { created: 1 }, agent: "build", model: { providerID: "p", modelID: "m" } },
+    info: {
+      id: "msg_u",
+      sessionID: "ses_1",
+      role: "user",
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "p", modelID: "m" },
+    },
     parts: [{ id: "prt_0", sessionID: "ses_1", messageID: "msg_u", type: "text", text: "go" }],
   }
   const model = { providerID: "p", id: "m", api: { id: "m", npm: "@ai-sdk/openai" }, capabilities: {} } as never
@@ -417,7 +500,9 @@ describe("the digest of old cleared calls", () => {
   })
 
   it("does nothing when no call is folded", () => {
-    const json = JSON.stringify(Message.toModelMessages([user, step(1, false)] as unknown as MessageV2.WithParts[], model))
+    const json = JSON.stringify(
+      Message.toModelMessages([user, step(1, false)] as unknown as MessageV2.WithParts[], model),
+    )
     expect(json).not.toContain("Earlier tool calls")
   })
 })
@@ -425,19 +510,48 @@ describe("the digest of old cleared calls", () => {
 describe("an empty tool output", () => {
   function modelJson(output: string) {
     const part = {
-      id: "prt_1", sessionID: "ses_1", messageID: "msg_2", type: "tool", callID: "call_1", tool: "bash",
-      state: { status: "completed", input: { command: "true" }, output, title: "bash", metadata: {}, time: { start: 1, end: 2 } },
+      id: "prt_1",
+      sessionID: "ses_1",
+      messageID: "msg_2",
+      type: "tool",
+      callID: "call_1",
+      tool: "bash",
+      state: {
+        status: "completed",
+        input: { command: "true" },
+        output,
+        title: "bash",
+        metadata: {},
+        time: { start: 1, end: 2 },
+      },
     }
     const msgs = [
       {
-        info: { id: "msg_1", sessionID: "ses_1", role: "user", time: { created: 1 }, agent: "build", model: { providerID: "p", modelID: "m" } },
+        info: {
+          id: "msg_1",
+          sessionID: "ses_1",
+          role: "user",
+          time: { created: 1 },
+          agent: "build",
+          model: { providerID: "p", modelID: "m" },
+        },
         parts: [{ id: "prt_0", sessionID: "ses_1", messageID: "msg_1", type: "text", text: "go" }],
       },
       {
         info: {
-          id: "msg_2", sessionID: "ses_1", role: "assistant", time: { created: 2, completed: 3 }, parentID: "msg_1",
-          modelID: "m", providerID: "p", mode: "build", agent: "build", path: { cwd: "/", root: "/" }, cost: 0,
-          tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } }, finish: "tool-calls",
+          id: "msg_2",
+          sessionID: "ses_1",
+          role: "assistant",
+          time: { created: 2, completed: 3 },
+          parentID: "msg_1",
+          modelID: "m",
+          providerID: "p",
+          mode: "build",
+          agent: "build",
+          path: { cwd: "/", root: "/" },
+          cost: 0,
+          tokens: { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+          finish: "tool-calls",
         },
         parts: [part],
       },

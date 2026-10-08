@@ -25,7 +25,10 @@ const shellRuns = windows && spawnSync(Shell.acceptable(), ["-c", "true"], { tim
 
 function pidsWith(marker: string): number[] {
   const query = `Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'sleep.exe' -and $_.CommandLine -like '*${marker}*' } | ForEach-Object { $_.ProcessId }`
-  const out = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", query], { encoding: "utf8", timeout: 20_000 })
+  const out = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", query], {
+    encoding: "utf8",
+    timeout: 20_000,
+  })
   return (out.stdout ?? "")
     .split(/\s+/)
     .map(Number)

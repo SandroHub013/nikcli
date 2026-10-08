@@ -108,7 +108,8 @@ describe("permission and agent surfaces reference real tools", () => {
       full_access: INTERNAL_DENIES,
       approve_for_me: [
         ...PERMISSION_TOOL_KEYS.filter(
-          (key) => !ToolRegistry.DEFERRED.has(key) || getPermissionActionFor(patchOf("approve_for_me"), key) !== "allow",
+          (key) =>
+            !ToolRegistry.DEFERRED.has(key) || getPermissionActionFor(patchOf("approve_for_me"), key) !== "allow",
         ),
         ...INTERNAL_DENIES,
       ],
@@ -176,7 +177,13 @@ describe("permission presets", () => {
 
   it("approve for me drops the allow rules the wildcard already covers", () => {
     const patch = permissionPresetPatch("approve_for_me")
-    for (const key of ["repo_overview", "context_collect", "context_related", "context_diagnostics", "speak"] as const) {
+    for (const key of [
+      "repo_overview",
+      "context_collect",
+      "context_related",
+      "context_diagnostics",
+      "speak",
+    ] as const) {
       expect(patch[key]).toBeUndefined()
     }
     expect(patch["*"]).toBe("allow")
@@ -267,7 +274,10 @@ describe("permission presets on the config that results from the server merge", 
   /** The server's write: `mergeDeep(existing, config)` with the patch nested under the agent. */
   function applyPreset(existing: AgentPermission, preset: "require_approval" | "approve_for_me" | "full_access") {
     const patch = permissionPresetPatch(preset, existing)
-    const merged = mergeDeep({ agent: { build: { permission: existing } } }, { agent: { build: { permission: patch } } })
+    const merged = mergeDeep(
+      { agent: { build: { permission: existing } } },
+      { agent: { build: { permission: patch } } },
+    )
     const permission = (merged.agent as Record<string, { permission: AgentPermission }>).build.permission
     return { permission, ruleset: PermissionRuleset.fromConfig(permission) }
   }
@@ -368,9 +378,12 @@ describe("permission presets on the config that results from the server merge", 
   it("auto writes nothing and leaves the map alone", () => {
     const existing = { ...OLD_FULL_ACCESS, edit: "allow" } as AgentPermission
     expect(permissionPresetPatch("auto", existing)).toEqual({})
-    const merged = mergeDeep({ agent: { build: { permission: existing } } }, {
-      agent: { build: { permission: permissionPresetPatch("auto", existing) } },
-    })
+    const merged = mergeDeep(
+      { agent: { build: { permission: existing } } },
+      {
+        agent: { build: { permission: permissionPresetPatch("auto", existing) } },
+      },
+    )
     expect((merged.agent as Record<string, { permission: AgentPermission }>).build.permission).toEqual(existing)
   })
 })

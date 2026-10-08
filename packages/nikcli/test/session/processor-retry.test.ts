@@ -262,10 +262,14 @@ describe("SessionProcessor retry safety", () => {
     expect(result.errors).toEqual([])
     expect(result.info.error).toBeUndefined()
     // The half answer is gone from storage; only the second attempt's text remains.
-    expect(result.parts.filter((part) => part.type === "text")).toMatchObject([{ type: "text", text: "recovered output" }])
+    expect(result.parts.filter((part) => part.type === "text")).toMatchObject([
+      { type: "text", text: "recovered output" },
+    ])
     const partial = result.events.findIndex((event) => event.type === "updated" && event.text === "half an answer")
     expect(partial).toBeGreaterThanOrEqual(0)
-    expect(result.events.some((event) => event.type === "removed" && event.partID === result.events[partial]?.partID)).toBe(true)
+    expect(
+      result.events.some((event) => event.type === "removed" && event.partID === result.events[partial]?.partID),
+    ).toBe(true)
   })
 
   it("retries after an empty reasoning start without publishing the discarded part", async () => {
@@ -526,7 +530,9 @@ describe("SessionProcessor retry safety", () => {
       const result = await runProcessor((attempt) => (attempt === 1 ? toProcessorStream(native()) : success()))
       expect(result.calls).toBe(2)
       expect(result.waits).toHaveLength(1)
-      expect(result.parts.filter((part) => part.type === "text")).toMatchObject([{ type: "text", text: "recovered output" }])
+      expect(result.parts.filter((part) => part.type === "text")).toMatchObject([
+        { type: "text", text: "recovered output" },
+      ])
       expect(result.parts.some((part) => part.type === "reasoning")).toBe(false)
       expect(result.info.error).toBeUndefined()
       expect(result.errors).toEqual([])

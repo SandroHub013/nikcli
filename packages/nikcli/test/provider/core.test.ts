@@ -454,9 +454,13 @@ describe("ProviderTransform", () => {
       const m = makeModel({ providerID: "custom", api: { id: "x", url: "u", npm: "@ai-sdk/openai-compatible" } })
       const providerOptions = { setCacheKey: true }
       set("session")
-      expect(ProviderTransform.options({ model: m, sessionID: "ses_a", providerOptions })["promptCacheKey"]).toBe("nikcli:ses_a")
+      expect(ProviderTransform.options({ model: m, sessionID: "ses_a", providerOptions })["promptCacheKey"]).toBe(
+        "nikcli:ses_a",
+      )
       set("none")
-      expect("promptCacheKey" in ProviderTransform.options({ model: m, sessionID: "ses_a", providerOptions })).toBe(false)
+      expect("promptCacheKey" in ProviderTransform.options({ model: m, sessionID: "ses_a", providerOptions })).toBe(
+        false,
+      )
     })
 
     it("opencode and venice keep the bare sessionID whatever the switch says", () => {

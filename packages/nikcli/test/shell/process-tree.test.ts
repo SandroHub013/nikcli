@@ -34,11 +34,15 @@ const insideAJob = (() => {
   }
 })()
 
-const marker = () => `127.${Math.floor(Math.random() * 200) + 20}.${Math.floor(Math.random() * 200) + 20}.${Math.floor(Math.random() * 200) + 20}`
+const marker = () =>
+  `127.${Math.floor(Math.random() * 200) + 20}.${Math.floor(Math.random() * 200) + 20}.${Math.floor(Math.random() * 200) + 20}`
 
 function pidsWith(address: string): number[] {
   const query = `Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'PING.EXE' -and $_.CommandLine -like '*${address}*' } | ForEach-Object { $_.ProcessId }`
-  const out = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", query], { encoding: "utf8", timeout: 20_000 })
+  const out = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", query], {
+    encoding: "utf8",
+    timeout: 20_000,
+  })
   return (out.stdout ?? "")
     .split(/\s+/)
     .map(Number)
@@ -134,7 +138,10 @@ describe.skipIf(!windows)("a command in a job and the life of nikcli", () => {
   const host = path.join(import.meta.dir, "fixtures", "host-command.ts")
 
   async function startHost(address: string, mode: "long" | "background") {
-    const child = spawn(process.execPath, [host, address, mode], { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] })
+    const child = spawn(process.execPath, [host, address, mode], {
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    })
     let out = ""
     child.stdout?.on("data", (chunk) => (out += String(chunk)))
     for (let waited = 0; waited < 20_000 && !out.includes("started"); waited += 100) await Bun.sleep(100)
@@ -160,25 +167,30 @@ describe.skipIf(!windows)("a command in a job and the life of nikcli", () => {
     }
   }, 60_000)
 
-  it.skipIf(insideAJob)("a process left in the background survives the end of its command and the death of nikcli", async () => {
-    const address = marker()
-    const { child, output } = await startHost(address, "background")
-    try {
-      await waitForPing(address)
-      for (let waited = 0; waited < 10_000 && !output().includes("command-exited"); waited += 100) await Bun.sleep(100)
-      expect(output()).toContain("command-exited")
-      // The command ended normally: its background process is still there, as it has always been.
-      await Bun.sleep(1_000)
-      expect(pidsWith(address).length).toBeGreaterThan(0)
-      endHost(child)
-      await Bun.sleep(1_500)
-      // Nikcli is gone and the process stays, like on Linux (it was meant to outlive the command).
-      expect(pidsWith(address).length).toBeGreaterThan(0)
-    } finally {
-      killByPid(pidsWith(address))
-      endHost(child)
-    }
-  }, 60_000)
+  it.skipIf(insideAJob)(
+    "a process left in the background survives the end of its command and the death of nikcli",
+    async () => {
+      const address = marker()
+      const { child, output } = await startHost(address, "background")
+      try {
+        await waitForPing(address)
+        for (let waited = 0; waited < 10_000 && !output().includes("command-exited"); waited += 100)
+          await Bun.sleep(100)
+        expect(output()).toContain("command-exited")
+        // The command ended normally: its background process is still there, as it has always been.
+        await Bun.sleep(1_000)
+        expect(pidsWith(address).length).toBeGreaterThan(0)
+        endHost(child)
+        await Bun.sleep(1_500)
+        // Nikcli is gone and the process stays, like on Linux (it was meant to outlive the command).
+        expect(pidsWith(address).length).toBeGreaterThan(0)
+      } finally {
+        killByPid(pidsWith(address))
+        endHost(child)
+      }
+    },
+    60_000,
+  )
 })
 
 describe.skipIf(windows)("Shell.adopt off Windows", () => {

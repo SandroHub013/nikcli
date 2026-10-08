@@ -26,16 +26,23 @@ preserveTestEnv([
   "NIKCLI_COMPACTION_TOOL_CHOICE",
 ])
 
-const [{ Session }, { SessionPrompt }, { SessionCompaction }, { LLM }, { Instance }, { InstanceState, locallyInstance }, { Effect }] =
-  await Promise.all([
-    import("@/session"),
-    import("@/session/prompt"),
-    import("@/session/compaction"),
-    import("@/session/llm"),
-    import("@/project/instance"),
-    import("@/effect"),
-    import("effect"),
-  ])
+const [
+  { Session },
+  { SessionPrompt },
+  { SessionCompaction },
+  { LLM },
+  { Instance },
+  { InstanceState, locallyInstance },
+  { Effect },
+] = await Promise.all([
+  import("@/session"),
+  import("@/session/prompt"),
+  import("@/session/compaction"),
+  import("@/session/llm"),
+  import("@/project/instance"),
+  import("@/effect"),
+  import("effect"),
+])
 
 type StreamInput = Parameters<typeof LLM.stream>[0]
 type Answer = { kind: "text"; text: string } | { kind: "tool-only" } | { kind: "text-and-tool"; text: string }
@@ -91,7 +98,9 @@ function fakeModel(answers: Answer[]) {
     if (input.small) return { text: Promise.resolve("title"), fullStream: (async function* () {})() }
     const compaction = input.agent.name === "compaction" || input.noToolCalls === true
     calls.push({ input, compaction })
-    const answer: Answer = compaction ? (queue.shift() ?? { kind: "text", text: "summary" }) : { kind: "text", text: "answer" }
+    const answer: Answer = compaction
+      ? (queue.shift() ?? { kind: "text", text: "summary" })
+      : { kind: "text", text: "answer" }
     const text = answer.kind === "tool-only" ? undefined : answer.text
     const tool = answer.kind !== "text"
     return {
@@ -146,7 +155,11 @@ async function scenario(answers: Answer[]) {
       await run(
         Effect.gen(function* () {
           const prompt = yield* SessionPrompt.Service
-          yield* prompt.prompt({ sessionID, model, parts: [{ type: "text", text: "Read the repository and tell me what it is." }] })
+          yield* prompt.prompt({
+            sessionID,
+            model,
+            parts: [{ type: "text", text: "Read the repository and tell me what it is." }],
+          })
         }).pipe(Effect.provide(SessionPrompt.defaultLayer)),
       )
       const turns = calls.length
@@ -187,7 +200,9 @@ async function wire(input: StreamInput) {
       messages: input.messages,
       tools: input.tools,
       deferred: input.deferred,
-      toolChoice: input.noToolCalls ? LLM.uncallableToolChoice("anthropic-messages", input.toolChoice) : input.toolChoice,
+      toolChoice: input.noToolCalls
+        ? LLM.uncallableToolChoice("anthropic-messages", input.toolChoice)
+        : input.toolChoice,
     },
     anthropic,
     { maxOutputTokens: 4096 },
@@ -246,12 +261,16 @@ describe("compaction with the shared prefix", () => {
     expect(JSON.stringify(compaction.tool_choice)).toBe(JSON.stringify(main.tool_choice))
     // The main request's last message carries a cache breakpoint the compaction's does not repeat in that place: the bytes of the
     // message content are what the cache matches on, so compare the messages without the markers.
-    const bare = (messages: unknown[]) => JSON.parse(JSON.stringify(messages).replaceAll(/,?"cache_control":\{[^}]*\}/g, ""))
+    const bare = (messages: unknown[]) =>
+      JSON.parse(JSON.stringify(messages).replaceAll(/,?"cache_control":\{[^}]*\}/g, ""))
     expect(bare(compaction.messages).slice(0, main.messages.length)).toEqual(bare(main.messages))
     expect(compaction.messages.length).toBeGreaterThan(main.messages.length)
     // Dump for the report, when asked for: `NIKCLI_DUMP_DIR=<dir> bun test ...`.
     if (process.env.NIKCLI_DUMP_DIR) {
-      await Bun.write(path.join(process.env.NIKCLI_DUMP_DIR, "compaction-prefix-dump.json"), JSON.stringify({ main, compaction }, null, 2))
+      await Bun.write(
+        path.join(process.env.NIKCLI_DUMP_DIR, "compaction-prefix-dump.json"),
+        JSON.stringify({ main, compaction }, null, 2),
+      )
     }
   })
 
@@ -268,7 +287,10 @@ describe("compaction with the shared prefix", () => {
     process.env.NIKCLI_COMPACTION_SHARED_PREFIX = "1"
     const warn = spyOn(Log.create({ service: "session.compaction" }), "warn")
     try {
-      const { calls, turns, messages } = await scenario([{ kind: "tool-only" }, { kind: "text", text: "the summary from the old way" }])
+      const { calls, turns, messages } = await scenario([
+        { kind: "tool-only" },
+        { kind: "text", text: "the summary from the old way" },
+      ])
       const compactions = calls.slice(turns).filter((call) => call.compaction)
       expect(compactions).toHaveLength(2)
       expect(compactions[0]!.input.noToolCalls).toBe(true)

@@ -797,7 +797,11 @@ export namespace SessionProcessor {
                   })
                 }
               } else {
-                log.warn("rate limit budget exhausted, giving up", { sessionID: input.sessionID, waitedMs: rateWaited, budgetMs: budget })
+                log.warn("rate limit budget exhausted, giving up", {
+                  sessionID: input.sessionID,
+                  waitedMs: rateWaited,
+                  budgetMs: budget,
+                })
               }
             } else if (retry !== undefined) {
               if (nextAttempt <= SessionRetry.RETRY_MAX_ATTEMPTS) {

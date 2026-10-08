@@ -52,7 +52,9 @@ describe("file tools read a path the same way", () => {
   it("write puts /zzsrc/b.txt in the project, not at the root of the disk", async () => {
     const def = await withProjectDirectory(projectDir, () => WriteTool.init())
     const { ctx } = makeToolContext()
-    await withProjectDirectory(projectDir, () => def.executeAsync({ filePath: "/zzsrc/b.txt", content: "bravo\n" }, ctx))
+    await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ filePath: "/zzsrc/b.txt", content: "bravo\n" }, ctx),
+    )
     expect(await fs.readFile(path.join(projectDir, "zzsrc", "b.txt"), "utf8")).toBe("bravo\n")
   })
 
@@ -93,7 +95,10 @@ describe("file tools read a path the same way", () => {
           { patchText: "*** Begin Patch\n*** Update File: zzsrc/c.txt\n@@\n one\n-twoo\n+x\n*** End Patch" },
           ctx,
         )
-        .then(() => "", (error) => String(error)),
+        .then(
+          () => "",
+          (error) => String(error),
+        ),
     )
     expect(failure).toContain("apply_patch verification failed")
     expect(failure).toContain("Closest match")

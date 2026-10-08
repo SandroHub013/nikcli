@@ -360,7 +360,8 @@ export namespace SessionCompaction {
       }
       const reasoning = msg.parts.filter((p): p is MessageV2.ReasoningPart => p.type === "reasoning")
       const liveOutputs = tools.reduce(
-        (sum, p) => sum + (p.state.status === "completed" && !p.state.time.compacted ? Token.estimate(p.state.output) : 0),
+        (sum, p) =>
+          sum + (p.state.status === "completed" && !p.state.time.compacted ? Token.estimate(p.state.output) : 0),
         0,
       )
       const replayLive =
@@ -369,7 +370,11 @@ export namespace SessionCompaction {
           tools.some((p) => !MessageV2.replayCleared(p.metadata)))
       const weight = liveOutputs + (replayLive ? msg.info.tokens.reasoning : 0)
       if (weight === 0) {
-        if (tools.every((p) => p.state.status === "completed" && p.state.time.compacted && MessageV2.replayCleared(p.metadata)))
+        if (
+          tools.every(
+            (p) => p.state.status === "completed" && p.state.time.compacted && MessageV2.replayCleared(p.metadata),
+          )
+        )
           cleared.push(tools)
         continue
       }
@@ -587,7 +592,8 @@ When constructing the summary, try to stick to this template:
       input.shared &&
       CacheKeeper.sharedPrefix(input.sessionID) &&
       (!agent.model ||
-        (agent.model.providerID === userMessageInfo.model.providerID && agent.model.modelID === userMessageInfo.model.modelID))
+        (agent.model.providerID === userMessageInfo.model.providerID &&
+          agent.model.modelID === userMessageInfo.model.modelID))
         ? input.shared
         : undefined
     if (shared) {

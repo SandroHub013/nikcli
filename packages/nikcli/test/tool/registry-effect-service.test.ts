@@ -153,9 +153,7 @@ describe("ToolRegistry.Service", () => {
     expect(ToolRegistry.exposure("bash", { disabledTools: { bash: true }, ruleset: [] })).toBe("hidden")
     // A switched-off deferred tool is not usable, a plain deferred one is.
     expect(ToolRegistry.visible("generate_image", { disabledTools: {}, ruleset: [] })).toBe(true)
-    expect(ToolRegistry.visible("generate_image", { disabledTools: { generate_image: true }, ruleset: [] })).toBe(
-      false,
-    )
+    expect(ToolRegistry.visible("generate_image", { disabledTools: { generate_image: true }, ruleset: [] })).toBe(false)
   })
 
   it("loads configured tools from the first request", () => {
@@ -163,9 +161,9 @@ describe("ToolRegistry.Service", () => {
     expect(ToolRegistry.exposure("code_mode", { ruleset: [], eager: ["code_*"] })).toBe("active")
     expect(ToolRegistry.exposure("code_mode", { ruleset: [], eager: ["*"] })).toBe("active")
     // Configuring a tool as eager does not override the user switching it off.
-    expect(
-      ToolRegistry.exposure("code_mode", { disabledTools: { code_mode: true }, ruleset: [], eager: ["*"] }),
-    ).toBe("hidden")
+    expect(ToolRegistry.exposure("code_mode", { disabledTools: { code_mode: true }, ruleset: [], eager: ["*"] })).toBe(
+      "hidden",
+    )
   })
 
   it("defers nothing for an agent with a curated toolset", () => {

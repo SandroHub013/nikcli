@@ -875,7 +875,11 @@ export namespace MessageV2 {
             })
           if (part.type === "tool" && part.state.status === "completed" && digested(part.metadata)) {
             if (!digestSlot) {
-              digestSlot = { id: Identifier.ascending("message"), role: "assistant", parts: [{ type: "text", text: "" }] }
+              digestSlot = {
+                id: Identifier.ascending("message"),
+                role: "assistant",
+                parts: [{ type: "text", text: "" }],
+              }
               result.push(digestSlot)
             }
             const arg = callArg(part)
@@ -917,7 +921,9 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 output,
-                ...(differentModel || replayCleared(part.metadata) ? undefined : { callProviderMetadata: part.metadata }),
+                ...(differentModel || replayCleared(part.metadata)
+                  ? undefined
+                  : { callProviderMetadata: part.metadata }),
               })
             }
             if (part.state.status === "error")
@@ -927,7 +933,9 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 errorText: part.state.error,
-                ...(differentModel || replayCleared(part.metadata) ? undefined : { callProviderMetadata: part.metadata }),
+                ...(differentModel || replayCleared(part.metadata)
+                  ? undefined
+                  : { callProviderMetadata: part.metadata }),
               })
             // Handle pending/running tool calls to prevent dangling tool_use blocks
             // Anthropic/Claude APIs require every tool_use to have a corresponding tool_result
@@ -938,7 +946,9 @@ export namespace MessageV2 {
                 toolCallId: part.callID,
                 input: part.state.input,
                 errorText: "[Tool execution was interrupted]",
-                ...(differentModel || replayCleared(part.metadata) ? undefined : { callProviderMetadata: part.metadata }),
+                ...(differentModel || replayCleared(part.metadata)
+                  ? undefined
+                  : { callProviderMetadata: part.metadata }),
               })
           }
           if (part.type === "reasoning") {

@@ -38,7 +38,9 @@ describe("an error before the output: the retries come before the fallback", () 
     const calls = { n: 0 }
     const failure = new Error("503 overloaded")
     await expect(
-      drain(withStreamFallback(failing(failure), legacy(calls), new AbortController().signal, undefined, async () => false)),
+      drain(
+        withStreamFallback(failing(failure), legacy(calls), new AbortController().signal, undefined, async () => false),
+      ),
     ).rejects.toBe(failure)
     expect(calls.n).toBe(0)
   })
@@ -68,7 +70,15 @@ describe("an error before the output: the retries come before the fallback", () 
 })
 
 describe("SessionRetry.retryFollows: the processor's decision, asked before the processor makes it", () => {
-  const base = { retry: "Provider Server Error", rateLimited: false, attempt: 0, rateWaited: 0, rateDelay: 0, budget: 600_000, outputEmitted: false }
+  const base = {
+    retry: "Provider Server Error",
+    rateLimited: false,
+    attempt: 0,
+    rateWaited: 0,
+    rateDelay: 0,
+    budget: 600_000,
+    outputEmitted: false,
+  }
 
   it("a retryable error with attempts left is followed by a retry", () => {
     expect(SessionRetry.retryFollows(base)).toBe(true)

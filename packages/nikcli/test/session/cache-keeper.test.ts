@@ -169,7 +169,8 @@ describe("the hidden request", () => {
     }
     expect(JSON.stringify(CacheKeeper.prefixOf(hiddenBody))).toBe(JSON.stringify(CacheKeeper.prefixOf(realBody)))
     // Tools, system and messages: the three parts of the prefix, each compared on its own as well.
-    for (const part of ["system", "messages", "tools"]) expect(JSON.stringify(hiddenBody[part])).toBe(JSON.stringify(realBody[part]))
+    for (const part of ["system", "messages", "tools"])
+      expect(JSON.stringify(hiddenBody[part])).toBe(JSON.stringify(realBody[part]))
     expect(realBody["max_tokens"]).toBe(4096)
     expect(hiddenBody["max_tokens"]).toBe(1)
     // The breakpoints are still on the last blocks: that is what the read refreshes.
@@ -195,7 +196,9 @@ describe("the hidden request", () => {
     await w.advance(18_000)
     const hiddenBody = await body(w.sent[0]!.request)
     expect(hiddenBody["max_output_tokens"]).toBe(16)
-    expect(JSON.stringify(CacheKeeper.prefixOf(hiddenBody))).toBe(JSON.stringify(CacheKeeper.prefixOf(await body(real))))
+    expect(JSON.stringify(CacheKeeper.prefixOf(hiddenBody))).toBe(
+      JSON.stringify(CacheKeeper.prefixOf(await body(real))),
+    )
   })
 })
 
@@ -224,7 +227,9 @@ describe("when it fires", () => {
     w.state.settings = { ...w.state.settings, lifetimeS: undefined }
     await turn(realRequest(anthropic))
     expect(w.events.at(-1)?.expiresAt).toBe(w.now() + 300_000)
-    expect(CacheKeeper.anthropicLifetimeS({ system: [{ cache_control: { type: "ephemeral", ttl: "1h" } }] })).toBe(3_600)
+    expect(CacheKeeper.anthropicLifetimeS({ system: [{ cache_control: { type: "ephemeral", ttl: "1h" } }] })).toBe(
+      3_600,
+    )
     expect(CacheKeeper.anthropicLifetimeS({ system: [{ cache_control: { type: "ephemeral" } }] })).toBe(300)
     process.env["NIKCLI_CACHE_RETENTION"] = "long"
     try {
@@ -333,7 +338,10 @@ describe("when it stops", () => {
     const request = LLM.buildLLMRequest(
       { system: ["You are the agent."], messages: [user("hello")], tools: {} },
       anthropic,
-      { maxOutputTokens: 32000, providerOptions: { anthropic: { thinking: { type: "enabled", budgetTokens: 16000 } } } as never },
+      {
+        maxOutputTokens: 32000,
+        providerOptions: { anthropic: { thinking: { type: "enabled", budgetTokens: 16000 } } } as never,
+      },
     )
     expect(CacheKeeper.thinkingBudget(request)).toBe(16000)
     await turn(request)

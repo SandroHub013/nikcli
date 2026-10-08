@@ -100,10 +100,13 @@ export namespace CacheKeeper {
   export function settings(codex = false): Settings {
     return {
       enabled: Flag.cacheKeepaliveSetting() ?? codex,
-      lifetimeS: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_LIFETIME_S") ?? (codex ? CODEX_LIFETIME_S : undefined),
+      lifetimeS:
+        Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_LIFETIME_S") ?? (codex ? CODEX_LIFETIME_S : undefined),
       marginPct: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MARGIN_PCT") ?? 10,
       minTokens: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MIN_TOKENS") ?? 20_000,
-      maxRenewals: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS", { allowZero: true }) ?? (codex ? CODEX_MAX_RENEWALS : undefined),
+      maxRenewals:
+        Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS", { allowZero: true }) ??
+        (codex ? CODEX_MAX_RENEWALS : undefined),
       horizonS: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_HORIZON_S"),
       // Both switches: the compaction that is cheap is the one that shares the prefix, and without it this would rewrite the context.
       compact: (Flag.cacheKeepaliveCompactSetting() ?? codex) && (Flag.compactionSharedPrefixSetting() ?? codex),
@@ -142,7 +145,10 @@ export namespace CacheKeeper {
    * options and headers, so the prefix the provider matches is the same bytes.
    */
   export function hiddenRequest(request: LLMRequestType): LLMRequestType {
-    const generation = new GenerationOptions({ ...(request.generation ?? {}), maxTokens: outputCap(request.model.route) })
+    const generation = new GenerationOptions({
+      ...(request.generation ?? {}),
+      maxTokens: outputCap(request.model.route),
+    })
     return LLMRequest.update(request, { generation })
   }
 
@@ -152,7 +158,9 @@ export namespace CacheKeeper {
   /** A wire body without its output cap: what the provider matches its cache against. Used by the tests to dump and compare. */
   export function prefixOf(body: unknown): unknown {
     if (!body || typeof body !== "object" || Array.isArray(body)) return body
-    return Object.fromEntries(Object.entries(body as Record<string, unknown>).filter(([key]) => !GENERATION_KEYS.has(key)))
+    return Object.fromEntries(
+      Object.entries(body as Record<string, unknown>).filter(([key]) => !GENERATION_KEYS.has(key)),
+    )
   }
 
   /** The lifetime of the entry a body asks for: the hour when any block carries `ttl: "1h"`, the 5 minutes otherwise. */
@@ -161,7 +169,9 @@ export namespace CacheKeeper {
       if (depth > 8 || value === null || typeof value !== "object") return false
       if (Array.isArray(value)) return value.some((item) => seen(item, depth + 1))
       return Object.entries(value as Record<string, unknown>).some(([key, item]) =>
-        key === "cache_control" && item && typeof item === "object" ? (item as { ttl?: unknown }).ttl === "1h" : seen(item, depth + 1),
+        key === "cache_control" && item && typeof item === "object"
+          ? (item as { ttl?: unknown }).ttl === "1h"
+          : seen(item, depth + 1),
       )
     }
     return seen(body) ? 3_600 : 300
@@ -198,7 +208,11 @@ export namespace CacheKeeper {
     /** The wire body of a request, for the lifetime a request asks for. */
     prepare(request: LLMRequestType): Promise<{ readonly body: unknown }>
     /** Send the hidden request. Rejects on any failure; never resolves a response with an error in it. */
-    send(request: LLMRequestType, fetch: typeof globalThis.fetch | undefined, signal: AbortSignal): Promise<Usage | undefined>
+    send(
+      request: LLMRequestType,
+      fetch: typeof globalThis.fetch | undefined,
+      signal: AbortSignal,
+    ): Promise<Usage | undefined>
     /** Compact the session now, through the loop (a manual compaction, so no model turn follows). Rejects on any failure. */
     compact(sessionID: string, ctx: unknown): Promise<void>
     /** Whether the session is idle with no input waiting. */
@@ -301,7 +315,10 @@ export namespace CacheKeeper {
     clear(entry)
     entry.stopped = true
     log.info("cache keeper stopped", { sessionID: entry.sessionID, reason, renewals: entry.renewals, ...extra })
-    dependencies().publish({ sessionID: entry.sessionID, state: "stopped", renewals: entry.renewals, reason }, entry.ctx)
+    dependencies().publish(
+      { sessionID: entry.sessionID, state: "stopped", renewals: entry.renewals, reason },
+      entry.ctx,
+    )
   }
 
   /**
@@ -319,7 +336,15 @@ export namespace CacheKeeper {
     const lifetime = entry.lifetimeMs ?? 0
     const expiresAt = entry.lastTouch + lifetime
     const delay = Math.max(0, expiresAt - marginMs(entry, d) - d.now())
-    d.publish({ sessionID: entry.sessionID, state: entry.renewals === 0 ? "armed" : "renewed", expiresAt, renewals: entry.renewals }, entry.ctx)
+    d.publish(
+      {
+        sessionID: entry.sessionID,
+        state: entry.renewals === 0 ? "armed" : "renewed",
+        expiresAt,
+        renewals: entry.renewals,
+      },
+      entry.ctx,
+    )
     entry.timer = d.setTimer(() => {
       entry.timer = undefined
       if (entry.stopped || entry.generation !== generation) return
@@ -379,7 +404,9 @@ export namespace CacheKeeper {
     entries.set(input.sessionID, entry)
     const budget = thinkingBudget(input.request)
     if (budget !== undefined) {
-      stop(entry, "thinking with a budget: Anthropic rejects an output cap of 1 below the budget", { budgetTokens: budget })
+      stop(entry, "thinking with a budget: Anthropic rejects an output cap of 1 below the budget", {
+        budgetTokens: budget,
+      })
     }
   }
 
@@ -396,7 +423,8 @@ export namespace CacheKeeper {
     if (!active(d, entry.codex)) return forget(sessionID)
     const generation = entry.generation
     entry.prefixTokens = usage.input + usage.cacheRead + usage.cacheWrite
-    if (usage.cacheRead + usage.cacheWrite === 0) return stop(entry, "no cache entry: the provider reported no cached tokens")
+    if (usage.cacheRead + usage.cacheWrite === 0)
+      return stop(entry, "no cache entry: the provider reported no cached tokens")
     try {
       entry.lifetimeMs = await lifetimeMs(entry, d)
     } catch (error) {
@@ -424,7 +452,8 @@ export namespace CacheKeeper {
    */
   export function thinkingBudget(request: LLMRequestType): number | undefined {
     if (request.model.route !== "anthropic-messages") return undefined
-    const thinking = (request.providerOptions as { anthropic?: { thinking?: Record<string, unknown> } } | undefined)?.anthropic?.thinking
+    const thinking = (request.providerOptions as { anthropic?: { thinking?: Record<string, unknown> } } | undefined)
+      ?.anthropic?.thinking
     if (!thinking || thinking["type"] !== "enabled") return undefined
     const budget = thinking["budgetTokens"] ?? thinking["budget_tokens"]
     return typeof budget === "number" ? budget : 0
@@ -458,13 +487,22 @@ export namespace CacheKeeper {
     const budget = s.maxRenewals ?? breakEven(entry.request.model.route, lifetimeS)
     if (entry.renewals >= budget) return finish(entry, "budget spent", { budget })
     const now = d.now()
-    if (s.horizonS !== undefined && now - entry.firstTouch >= s.horizonS * 1_000) return finish(entry, "horizon reached")
+    if (s.horizonS !== undefined && now - entry.firstTouch >= s.horizonS * 1_000)
+      return finish(entry, "horizon reached")
     const expiresAt = entry.lastTouch + entry.lifetimeMs
     const delay = Math.max(0, expiresAt - marginMs(entry, d) - now)
     clear(entry)
     const generation = entry.generation
     entry.timer = d.setTimer(() => void fire(entry, generation), delay)
-    d.publish({ sessionID: entry.sessionID, state: entry.renewals === 0 ? "armed" : "renewed", expiresAt, renewals: entry.renewals }, entry.ctx)
+    d.publish(
+      {
+        sessionID: entry.sessionID,
+        state: entry.renewals === 0 ? "armed" : "renewed",
+        expiresAt,
+        renewals: entry.renewals,
+      },
+      entry.ctx,
+    )
   }
 
   async function fire(entry: Entry, generation: number) {
@@ -482,7 +520,10 @@ export namespace CacheKeeper {
         if (entry.generation !== generation || entry.stopped) return
         const now = d.now()
         if (now >= expiresAt) return stop(entry, "the session was busy until the entry expired")
-        entry.timer = d.setTimer(() => void fire(entry, generation), Math.min(Math.max(1_000, marginMs(entry, d) / 2), expiresAt - now))
+        entry.timer = d.setTimer(
+          () => void fire(entry, generation),
+          Math.min(Math.max(1_000, marginMs(entry, d) / 2), expiresAt - now),
+        )
         return
       }
       if (entry.generation !== generation || entry.stopped) return
@@ -591,7 +632,12 @@ export namespace CacheKeeper {
         await at(
           SessionCompaction.defaultLayer,
           Effect.gen(function* () {
-            yield* (yield* SessionCompaction.Service).create({ sessionID, agent: last.agent, model: last.model, auto: false })
+            yield* (yield* SessionCompaction.Service).create({
+              sessionID,
+              agent: last.agent,
+              model: last.model,
+              auto: false,
+            })
           }),
         )
         await at(

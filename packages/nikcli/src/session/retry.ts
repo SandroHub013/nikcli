@@ -74,7 +74,9 @@ export namespace SessionRetry {
     if (body.includes("FreeUsageLimitError") || message.includes("FreeUsageLimitError")) return false
     const status = typeof data["statusCode"] === "number" ? (data["statusCode"] as number) : undefined
     if (status === 429) return true
-    return /rate.?limit|too many requests|free-models-per-min|overloaded|at capacity|resource.?exhausted/i.test(message + " " + body)
+    return /rate.?limit|too many requests|free-models-per-min|overloaded|at capacity|resource.?exhausted/i.test(
+      message + " " + body,
+    )
   }
 
   /**
@@ -92,7 +94,9 @@ export namespace SessionRetry {
         const n = Number.parseFloat(value)
         ms = n > 1e12 ? n - now : n > 1e9 ? n * 1000 - now : n * 1000
       } else {
-        const match = value.match(/^(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m(?!s))?(?:(\d+(?:\.\d+)?)s)?(?:(\d+(?:\.\d+)?)ms)?$/)
+        const match = value.match(
+          /^(?:(\d+(?:\.\d+)?)h)?(?:(\d+(?:\.\d+)?)m(?!s))?(?:(\d+(?:\.\d+)?)s)?(?:(\d+(?:\.\d+)?)ms)?$/,
+        )
         if (match && match[0] !== "") {
           ms =
             (Number.parseFloat(match[1] ?? "0") * 3600 +

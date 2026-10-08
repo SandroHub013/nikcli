@@ -2071,7 +2071,8 @@ export namespace SessionPrompt {
       model: input.model,
       tools: input.lastUser.tools,
       processor: { message: {} as MessageV2.Assistant, partFromToolCall: () => undefined },
-      bypassAgentCheck: sessionMessages.findLast((m) => m.info.role === "user")?.parts.some((p) => p.type === "agent") ?? false,
+      bypassAgentCheck:
+        sessionMessages.findLast((m) => m.info.role === "user")?.parts.some((p) => p.type === "agent") ?? false,
     })
     if (input.lastUser.format?.type === "json_schema") {
       tools["StructuredOutput"] = createStructuredOutputTool({ schema: input.lastUser.format.schema, onSuccess() {} })

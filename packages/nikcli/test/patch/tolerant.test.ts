@@ -14,27 +14,46 @@ const wrap = (body: string) => `*** Begin Patch\n*** Update File: x.py\n${body}\
 
 describe("apply_patch tolerates the usual model habits", () => {
   it("reads a blank line written as an empty line inside a hunk as a blank context line", () => {
-    const out = apply(wrap(['@@ def greet():', '-    print("Hi")', '+    print("Hello")', "", " def bye():"].join("\n")))
+    const out = apply(
+      wrap(["@@ def greet():", '-    print("Hi")', '+    print("Hello")', "", " def bye():"].join("\n")),
+    )
     expect(out).toContain('    print("Hello")\n\ndef bye():')
   })
 
   it("drops empty lines at the end of a hunk instead of requiring them", () => {
-    const out = apply(wrap(["@@ def greet():", '-    print("Hi")', '+    print("Hello")', "", "@@ def bye():", '-    print("Bye")', '+    print("Goodbye")'].join("\n")))
+    const out = apply(
+      wrap(
+        [
+          "@@ def greet():",
+          '-    print("Hi")',
+          '+    print("Hello")',
+          "",
+          "@@ def bye():",
+          '-    print("Bye")',
+          '+    print("Goodbye")',
+        ].join("\n"),
+      ),
+    )
     expect(out).toContain('print("Goodbye")')
     expect(out).toContain('print("Hello")')
   })
 
   it("takes a numbered unified header as no anchor, and keeps the text after it as the anchor", () => {
     const bare = Patch.parsePatch(wrap(["@@ -1,3 +1,3 @@", '-    print("Hi")', '+    print("Hello")'].join("\n")))
-    const withText = Patch.parsePatch(wrap(["@@ -1,3 +1,3 @@ def greet():", '-    print("Hi")', '+    print("Hello")'].join("\n")))
-    const chunk = (p: ReturnType<typeof Patch.parsePatch>) => (p.hunks[0] as Extract<Patch.Hunk, { type: "update" }>).chunks[0]
+    const withText = Patch.parsePatch(
+      wrap(["@@ -1,3 +1,3 @@ def greet():", '-    print("Hi")', '+    print("Hello")'].join("\n")),
+    )
+    const chunk = (p: ReturnType<typeof Patch.parsePatch>) =>
+      (p.hunks[0] as Extract<Patch.Hunk, { type: "update" }>).chunks[0]
     expect(chunk(bare)?.change_context).toBeUndefined()
     expect(chunk(withText)?.change_context).toBe("def greet():")
-    expect(apply(wrap(["@@ -1,3 +1,3 @@ def greet():", '-    print("Hi")', '+    print("Hello")'].join("\n")))).toContain('print("Hello")')
+    expect(
+      apply(wrap(["@@ -1,3 +1,3 @@ def greet():", '-    print("Hi")', '+    print("Hello")'].join("\n"))),
+    ).toContain('print("Hello")')
   })
 
   it("matches when only whitespace inside the line differs", () => {
-    const out = apply(wrap(["@@", '-def   greet():', "+def greet(name):"].join("\n")))
+    const out = apply(wrap(["@@", "-def   greet():", "+def greet(name):"].join("\n")))
     expect(out.startsWith("def greet(name):")).toBe(true)
   })
 

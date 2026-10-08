@@ -1896,7 +1896,9 @@ export namespace Config {
             .int()
             .min(1)
             .optional()
-            .describe("Prompt size (tokens) that triggers summarizing compaction before the window overflows (default: off)"),
+            .describe(
+              "Prompt size (tokens) that triggers summarizing compaction before the window overflows (default: off)",
+            ),
         })
         .optional(),
       experimental: z
@@ -1922,7 +1924,9 @@ export namespace Config {
           toolset: z
             .enum(["default", "a1", "t5"])
             .optional()
-            .describe("Tool schema size: default, a1 (7 rarely used tools deferred) or t5 (read, bash, patch/edit/write, search_tools, call_tool)"),
+            .describe(
+              "Tool schema size: default, a1 (7 rarely used tools deferred) or t5 (read, bash, patch/edit/write, search_tools, call_tool)",
+            ),
           rateLimitBudgetMs: z
             .number()
             .int()

@@ -100,7 +100,18 @@ describe.serial("deferred tools", () => {
   it("offers the core tools, leaves the deferred ones out and names them in search_tools", async () => {
     await withSession(async ({ resolve }) => {
       const { tools, deferred } = await resolve()
-      for (const id of ["read", "edit", "bash", "grep", "glob", "task", "search_tools", "call_tool", "monitor", "todoread"]) {
+      for (const id of [
+        "read",
+        "edit",
+        "bash",
+        "grep",
+        "glob",
+        "task",
+        "search_tools",
+        "call_tool",
+        "monitor",
+        "todoread",
+      ]) {
         expect(tools[id]).toBeDefined()
       }
       for (const id of ["generate_image", "code_mode", "opentui"]) expect(tools[id]).toBeUndefined()
@@ -200,7 +211,10 @@ describe.serial("deferred tools", () => {
   it("a direct call to a deferred tool is redirected to search_tools + call_tool, and loads nothing", async () => {
     await withSession(async ({ session, resolve }) => {
       const { tools } = await resolve()
-      const result = (await tools.invalid.execute!({ tool: "generate_image", error: "prompt: Required" }, callOptions())) as {
+      const result = (await tools.invalid.execute!(
+        { tool: "generate_image", error: "prompt: Required" },
+        callOptions(),
+      )) as {
         output: string
       }
       expect(result.output).toContain("registered but not in your tool schema")

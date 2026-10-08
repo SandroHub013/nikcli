@@ -2,7 +2,10 @@ import { describe, expect, it } from "bun:test"
 import { normalizeToolPath, resolveWorkdir } from "@/tool/tool-path"
 
 const root = "C:\\work\\proj"
-const exists = (...present: string[]) => (target: string) => present.map((p) => p.toLowerCase()).includes(target.toLowerCase())
+const exists =
+  (...present: string[]) =>
+  (target: string) =>
+    present.map((p) => p.toLowerCase()).includes(target.toLowerCase())
 
 describe("normalizeToolPath on Windows", () => {
   const win = (present: string[] = []) => ({ platform: "win32" as const, exists: exists(...present) })
@@ -50,9 +53,20 @@ describe("normalizeToolPath on POSIX", () => {
 })
 
 describe("resolveWorkdir", () => {
-  const dirs = (...present: string[]) => (target: string) => present.map((p) => p.toLowerCase()).includes(target.toLowerCase())
-  const win = (present: string[]) => ({ platform: "win32" as const, exists: exists(...present), isDirectory: dirs(...present) })
-  const posix = (present: string[]) => ({ platform: "linux" as const, exists: exists(...present), isDirectory: dirs(...present) })
+  const dirs =
+    (...present: string[]) =>
+    (target: string) =>
+      present.map((p) => p.toLowerCase()).includes(target.toLowerCase())
+  const win = (present: string[]) => ({
+    platform: "win32" as const,
+    exists: exists(...present),
+    isDirectory: dirs(...present),
+  })
+  const posix = (present: string[]) => ({
+    platform: "linux" as const,
+    exists: exists(...present),
+    isDirectory: dirs(...present),
+  })
 
   it("reads an MSYS workdir as the drive path", () => {
     expect(resolveWorkdir("/c/sbx/ws", root, win(["C:\\sbx\\ws"]))).toBe("C:\\sbx\\ws")

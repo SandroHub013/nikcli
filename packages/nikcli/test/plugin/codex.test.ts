@@ -155,7 +155,11 @@ describe("NIKCLI_CODEX_ENDPOINT", () => {
     const server = Bun.serve({
       port: 0,
       fetch(req) {
-        seen.push({ url: req.url, authorization: req.headers.get("authorization"), account: req.headers.get("chatgpt-account-id") })
+        seen.push({
+          url: req.url,
+          authorization: req.headers.get("authorization"),
+          account: req.headers.get("chatgpt-account-id"),
+        })
         return Response.json({ ok: true })
       },
     })
@@ -163,7 +167,14 @@ describe("NIKCLI_CODEX_ENDPOINT", () => {
       process.env.NIKCLI_CODEX_ENDPOINT = `http://127.0.0.1:${server.port}/backend-api/codex/responses`
       const hooks = await CodexAuthPlugin({ client: { auth: { set: async () => ({}) } } } as never, {})
       const loader = await hooks.auth!.loader!(
-        async () => ({ type: "oauth", refresh: "r", access: "access-token", expires: Date.now() + 86_400_000, accountId: "acc-1" }) as never,
+        async () =>
+          ({
+            type: "oauth",
+            refresh: "r",
+            access: "access-token",
+            expires: Date.now() + 86_400_000,
+            accountId: "acc-1",
+          }) as never,
         { models: {} } as never,
       )
       const response = await loader.fetch!("https://api.openai.com/v1/responses", {

@@ -28,10 +28,7 @@ function within(file: string, dir: string) {
 }
 
 function list(value: string | undefined) {
-  return (value ?? "")
-    .split(path.delimiter)
-    .filter(Boolean)
-    .map(normal)
+  return (value ?? "").split(path.delimiter).filter(Boolean).map(normal)
 }
 
 /** The real folder that holds `filename` while a test runs, or `undefined` when it is a place a test may use. */

@@ -51,7 +51,11 @@ export function normalizeToolPath(value: string, root: string, env: PathEnv = {}
  * project). A directory that is not there fails here, with its own name in the message: left to `spawn`, the
  * error that comes back names the shell binary and sends the model looking at the wrong thing.
  */
-export function resolveWorkdir(value: string, root: string, env: PathEnv & { isDirectory?: (target: string) => boolean } = {}): string {
+export function resolveWorkdir(
+  value: string,
+  root: string,
+  env: PathEnv & { isDirectory?: (target: string) => boolean } = {},
+): string {
   const resolved = normalizeToolPath(value, root, env)
   const isDirectory =
     env.isDirectory ??

@@ -33,7 +33,6 @@ preserveTestEnv([
 const { InstanceScope } = await import("@/effect")
 const { ToolRegistry } = await import("@/tool/registry")
 
-
 const projectDirs: string[] = []
 
 async function makeProjectDir() {
@@ -80,7 +79,19 @@ describe("toolset switch (NIKCLI_TOOLSET / experimental.toolset)", () => {
     expect(unknown.ids).toEqual(unset.ids)
     expect(ToolRegistry.deferredToolIds()).toEqual(ToolRegistry.DEFERRED)
     expect([...ToolRegistry.schemaHidden()]).toEqual([])
-    for (const id of ["glob", "grep", "lsp", "skill", "todoread", "todowrite", "webfetch", "task", "tree", "monitor", "invalid"])
+    for (const id of [
+      "glob",
+      "grep",
+      "lsp",
+      "skill",
+      "todoread",
+      "todowrite",
+      "webfetch",
+      "task",
+      "tree",
+      "monitor",
+      "invalid",
+    ])
       expect(unset.ids).toContain(id)
   })
 
@@ -133,11 +144,17 @@ describe("toolset switch (NIKCLI_TOOLSET / experimental.toolset)", () => {
     const baseTools = await shipped(dir)
     const t5Tools = await shipped(dir, "t5")
     for (const id of ["bash", "read", "call_tool"])
-      expect(t5Tools.all.find((t) => t.id === id)!.description).toBe(baseTools.all.find((t) => t.id === id)!.description)
+      expect(t5Tools.all.find((t) => t.id === id)!.description).toBe(
+        baseTools.all.find((t) => t.id === id)!.description,
+      )
   })
 
   it("a rule that names a tool does not bring back what the toolset defers, but still does for the default deferrals", () => {
-    const named = ["grep", "glob", "webfetch", "websearch"].map((permission) => ({ permission, pattern: "*", action: "allow" })) as never
+    const named = ["grep", "glob", "webfetch", "websearch"].map((permission) => ({
+      permission,
+      pattern: "*",
+      action: "allow",
+    })) as never
     ToolRegistry.setToolset("default")
     expect(ToolRegistry.exposure("grep", { disabledTools: {}, ruleset: named })).toBe("active")
     ToolRegistry.setToolset("a1")
@@ -151,7 +168,10 @@ describe("toolset switch (NIKCLI_TOOLSET / experimental.toolset)", () => {
 
   it("curated subagents keep what their ruleset names, whatever the toolset", () => {
     ToolRegistry.setToolset("t5")
-    const curated = [{ permission: "*", pattern: "*", action: "deny" }, { permission: "grep", pattern: "*", action: "allow" }] as never
+    const curated = [
+      { permission: "*", pattern: "*", action: "deny" },
+      { permission: "grep", pattern: "*", action: "allow" },
+    ] as never
     expect(ToolRegistry.exposure("grep", { disabledTools: {}, ruleset: curated })).toBe("active")
     expect(ToolRegistry.exposure("grep", { disabledTools: {}, ruleset: [] })).toBe("deferred")
   })

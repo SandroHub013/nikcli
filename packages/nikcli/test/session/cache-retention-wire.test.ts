@@ -41,8 +41,7 @@ function controls(value: unknown, found: unknown[] = []): unknown[] {
     for (const [key, item] of Object.entries(value)) {
       if (key === "cache_control") {
         if (item !== undefined) found.push(item)
-      }
-      else controls(item, found)
+      } else controls(item, found)
     }
   }
   return found
