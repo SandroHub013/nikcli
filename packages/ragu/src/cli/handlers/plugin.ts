@@ -12,6 +12,7 @@ import { errorMessage } from "@ragu/util/error-format"
 import { Filesystem } from "@ragu/util/filesystem"
 import { Process } from "@ragu/util/process"
 import { UI } from "@/cli/ui"
+import type { ConfigStem } from "@ragu/util/app-folder"
 
 // Reachable directly (`ragu plug …`), not only through `cli-main`.
 installPluginInstaller()
@@ -32,7 +33,7 @@ export type PlugDeps = {
   readText: (file: string) => Promise<string>
   write: (file: string, text: string) => Promise<void>
   exists: (file: string) => Promise<boolean>
-  files: (dir: string, name: "nikcli" | "tui") => string[]
+  files: (dir: string, name: ConfigStem | "tui") => string[]
   global: string
 }
 

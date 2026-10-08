@@ -12,6 +12,7 @@ import matter from "gray-matter"
 import { withInstanceAsync } from "@/effect"
 import { log, AgentModeSchema, AVAILABLE_TOOLS, agentGenerate } from "./shared"
 import type { AgentMode } from "./shared"
+import { dotFolder } from "@ragu/util/app-folder"
 
 export default Runtime.handler(Commands.commands["agent"].commands["create"], async (input) => {
   const args = {
@@ -70,7 +71,7 @@ export default Runtime.handler(Commands.commands["agent"].commands["create"], as
         }
         scope = scopeResult
       }
-      targetPath = path.join(scope === "global" ? Global.Path.config : path.join(instance.worktree, ".nikcli"), "agent")
+      targetPath = path.join(scope === "global" ? Global.Path.config : dotFolder(instance.worktree), "agent")
     }
 
     let description: string

@@ -8,6 +8,7 @@ import { InstanceState, runPromiseWithLayer, withCurrentInstance } from "@/effec
 import { InstanceReload } from "@/project/reload"
 import { Provider } from "@/provider/provider"
 import { Workspace } from "@/workspace"
+import { configFile } from "@ragu/util/app-folder"
 
 const PROFILE_NAME = /^[a-zA-Z0-9._-]+$/
 
@@ -166,7 +167,7 @@ export async function extraRequest(request: Request): Promise<Response | undefin
       const next = { ...current.mcp }
       if (!(name in next)) return json({ error: "MCP server not found" }, 404)
       delete next[name]
-      await Bun.write(path.join(instance.directory, "nikcli.json"), JSON.stringify({ ...current, mcp: next }, null, 2))
+      await Bun.write(configFile(instance.directory), JSON.stringify({ ...current, mcp: next }, null, 2))
       return json({ success: true })
     }
   }
@@ -228,7 +229,7 @@ export async function extraRequest(request: Request): Promise<Response | undefin
       return json({ error: "Profile name can only contain letters, numbers, dots, underscores, and dashes" }, 400)
     const file = Bun.file(profilePath(name))
     if (!(await file.exists())) return json({ error: "Profile not found" }, 404)
-    await Bun.write(path.join(instance.directory, "nikcli.json"), JSON.stringify(await file.json(), null, 2))
+    await Bun.write(configFile(instance.directory), JSON.stringify(await file.json(), null, 2))
     await Bun.write(activeProfilePath(), name)
     return json({ success: true })
   }

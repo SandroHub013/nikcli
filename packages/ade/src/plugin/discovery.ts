@@ -41,12 +41,16 @@
  */
 import { pluginOptions, pluginSpecifier, pluginExportEntry, type PluginSpecValue } from "@ragu/util/plugin-read"
 import { t } from "../i18n"
+import { dotFolderName } from "../bots/app-folder"
 
 /** Which surface this discovery is for. The TUI passes `"tui"` for its own. */
 export const ADE_EXPORT_KIND = "ade"
 
 /** The config file ADE reads, relative to the project root. */
-export const CONFIG_RELATIVE_PATH = ".nikcli/tui.json"
+/** The project's `tui.json`, in its `.ragu` when there is one, else `.nikcli` (rule B, `bots/app-folder.ts`). */
+export async function configRelativePath(projectRoot: string, io: DiscoveryIO): Promise<string> {
+  return `${await dotFolderName(projectRoot, (path) => there(io, path))}/tui.json`
+}
 
 export interface DeclaredPlugin {
   readonly spec: string
@@ -262,7 +266,7 @@ export async function resolveDeclaredPlugin(
 
 /** Everything the project declares, sorted into what loads and what does not. */
 export async function discoverPlugins(projectRoot: string, io: DiscoveryIO): Promise<DiscoveryResult> {
-  const configPath = urlToPath(specToUrl(CONFIG_RELATIVE_PATH, projectRoot) ?? "")
+  const configPath = urlToPath(specToUrl(await configRelativePath(projectRoot, io), projectRoot) ?? "")
   if (!configPath || !(await there(io, configPath))) return { resolved: [], rejected: [] }
 
   const config = await io.readTextFile(configPath).catch(() => undefined)

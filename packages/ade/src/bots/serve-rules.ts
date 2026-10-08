@@ -32,6 +32,7 @@
  */
 
 import type { PermissionRule } from "../chat/rules"
+import { CONFIG_STEMS } from "./app-folder"
 
 export type BotProfile = "ask" | "ask-outside" | "no-shell" | "read-only" | "remote-ask" | "remote-none" | "planner"
 
@@ -172,7 +173,8 @@ function spellings(word: string): string[] {
  */
 export function configDenials(): string[] {
   const denied: string[] = ["*::*"]
-  for (const name of casings("nikcli")) {
+  // Rule B (`app-folder.ts`): ragu reads `.ragu` and `ragu.json` first, `.nikcli` and `nikcli.json` otherwise.
+  for (const name of CONFIG_STEMS.flatMap(casings)) {
     denied.push(`*.${name}?*`, `*${name}.????`, `*${name}.?????`, `*${name}~*`)
   }
   return denied

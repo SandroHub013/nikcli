@@ -19,6 +19,7 @@ import { dirname, joinPath, normalizePath } from "../host/path"
 import { t } from "../i18n"
 import type { AgentFile } from "./ragu"
 import { fileFingerprint, reachesShell, selfApproval, type TrustStore } from "./trust"
+import { CONFIG_FILE_NAMES, DOT_FOLDERS } from "./app-folder"
 
 /** The two calls this needs from the host, as `host/shell.ts` has them. */
 export interface ProjectFs {
@@ -139,13 +140,16 @@ export async function projectSurface(root: string, fs: ProjectFs): Promise<Surfa
   return found.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
 }
 
-/** One folder's own configuration: its `nikcli.json(c)` and `.nikcli/`, named under `prefix`. */
+/**
+ * One folder's own configuration: its `ragu.json(c)`, `nikcli.json(c)`, `.ragu/` and `.nikcli/`, named
+ * under `prefix`. Every name, not rule B's pick: a guard counts what either name could hold.
+ */
 async function surfaceAt(folder: string, prefix: string, fs: ProjectFs): Promise<SurfaceFile[]> {
   const found: SurfaceFile[] = []
   // The root of a disk (`C:/`, `/`) already ends in a slash: `C://.nikcli` is not the folder.
   const root = normalizePath(folder).replace(/\/+$/, "")
 
-  for (const name of ["nikcli.json", "nikcli.jsonc"]) {
+  for (const name of CONFIG_FILE_NAMES) {
     const text = await readOrMark(fs, `${root}/${name}`)
     if (text !== undefined) found.push({ path: `${prefix}${name}`, text })
   }
@@ -190,7 +194,7 @@ async function surfaceAt(folder: string, prefix: string, fs: ProjectFs): Promise
       found.push({ path: rel, text: text ?? "<non leggibile>" })
     }
   }
-  await walk(`${root}/.nikcli`, `${prefix}.nikcli`, 0, false)
+  for (const dot of DOT_FOLDERS) await walk(`${root}/${dot}`, `${prefix}${dot}`, 0, false)
 
   return found
 }
@@ -219,7 +223,7 @@ const asking = new Map<string, Promise<{ ok: true } | { ok: false; problem?: str
 
 /** How the files are named in the question: the first few, then how many more. */
 function listed(files: readonly SurfaceFile[]): string {
-  const shown = files.slice(0, 6).map((file) => file.path.replace(/^\.nikcli\//, ""))
+  const shown = files.slice(0, 6).map((file) => file.path.replace(/^\.(?:ragu|nikcli)\//, ""))
   const more = files.length - shown.length
   return more > 0 ? `${shown.join(", ")}${t("bots.projectTrust.more", more)}` : shown.join(", ")
 }
@@ -267,10 +271,10 @@ async function checkProject(
 
 /*
  * The configuration ragu reads in the project whatever the bot: the root
- * `nikcli.json` and `.nikcli/nikcli.json`. ADE's server loads both for every
- * bot's turn (B8d).
+ * `ragu.json` and `.ragu/ragu.json`, under either name (rule B, `app-folder.ts`).
+ * ADE's server loads both for every bot's turn (B8d).
  */
-const CONFIG_FILES = ["nikcli.json", "nikcli.jsonc", ".nikcli/nikcli.json", ".nikcli/nikcli.jsonc"]
+const CONFIG_FILES = [...CONFIG_FILE_NAMES, ...DOT_FOLDERS.flatMap((dot) => CONFIG_FILE_NAMES.map((name) => `${dot}/${name}`))]
 
 /** Whether `path`, relative to the project as `projectSurface` names it, is one of ragu's configuration files. */
 export function isConfigFile(path: string): boolean {

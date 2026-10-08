@@ -13,6 +13,7 @@ import fs from "fs/promises"
 import { InstanceState, locallyInstance, runPromiseWithLayer, type InstanceContext } from "@/effect"
 import { zodObject } from "@ragu/util/effect-zod"
 import { Context, Effect, Layer, Schema } from "effect"
+import { dotFolder } from "@ragu/util/app-folder"
 
 export namespace Skill {
   const log = Log.create({ service: "skill" })
@@ -338,7 +339,7 @@ export namespace Skill {
         const skillDir =
           parsed.scope === "global"
             ? path.join(Global.Path.config, "skills", slug(parsed.name))
-            : path.join(directory, ".nikcli", "skill", slug(parsed.name))
+            : path.join(dotFolder(directory), "skill", slug(parsed.name))
 
         yield* Effect.tryPromise({
           try: () => fs.mkdir(skillDir, { recursive: true }),

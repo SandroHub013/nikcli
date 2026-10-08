@@ -23,6 +23,7 @@ import type {
 } from "./types"
 import { RemoteServiceConfigSchema, RemoteSessionPersistenceSchema, SessionStatusSchema } from "./types"
 import { Log } from "@ragu/util/log"
+import { dotFolder } from "../app-folder"
 
 const log = Log.create({ service: "remote-service" })
 
@@ -50,8 +51,8 @@ export class RemoteService extends EventEmitter {
 
   private constructor() {
     super()
-    this.configPath = path.join(os.homedir(), ".nikcli", "remote-config.json")
-    this.sessionsDir = path.join(os.homedir(), ".nikcli", "remote-sessions")
+    this.configPath = path.join(dotFolder(os.homedir()), "remote-config.json")
+    this.sessionsDir = path.join(dotFolder(os.homedir()), "remote-sessions")
     this.config = this.getDefaultConfig()
     log.debug("RemoteService instance created", {
       configPath: this.configPath,

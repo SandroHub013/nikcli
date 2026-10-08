@@ -11,6 +11,7 @@ import path from "path"
 import os from "os"
 import { runPromiseWithLayer } from "@/effect"
 import { Effect } from "effect"
+import { DOT_FOLDERS } from "@ragu/util/app-folder"
 
 export function runInstallation<A, E>(effect: Effect.Effect<A, E, Installation.Service>) {
   return runPromiseWithLayer(Installation.defaultLayer, effect)
@@ -160,7 +161,7 @@ export async function executeUninstall(method: Installation.Method, targets: Rem
     prompts.log.info(`  rm "${targets.binary}"`)
 
     const binDir = path.dirname(targets.binary)
-    if (binDir.includes(".nikcli")) {
+    if (DOT_FOLDERS.some((dir) => binDir.includes(dir))) {
       prompts.log.info(`  rmdir "${binDir}" 2>/dev/null`)
     }
   }
@@ -213,7 +214,7 @@ export async function getShellConfigFile(): Promise<string | null> {
     const content = await Bun.file(file)
       .text()
       .catch(() => "")
-    if (content.includes("# ragu") || content.includes(".nikcli/bin")) {
+    if (content.includes("# ragu") || DOT_FOLDERS.some((dir) => content.includes(`${dir}/bin`))) {
       return file
     }
   }
@@ -238,14 +239,14 @@ export async function cleanShellConfig(file: string) {
 
     if (skip) {
       skip = false
-      if (trimmed.includes(".nikcli/bin") || trimmed.includes("fish_add_path")) {
+      if (DOT_FOLDERS.some((dir) => trimmed.includes(`${dir}/bin`)) || trimmed.includes("fish_add_path")) {
         continue
       }
     }
 
     if (
-      (trimmed.startsWith("export PATH=") && trimmed.includes(".nikcli/bin")) ||
-      (trimmed.startsWith("fish_add_path") && trimmed.includes(".nikcli"))
+      (trimmed.startsWith("export PATH=") && DOT_FOLDERS.some((dir) => trimmed.includes(`${dir}/bin`))) ||
+      (trimmed.startsWith("fish_add_path") && DOT_FOLDERS.some((dir) => trimmed.includes(dir)))
     ) {
       continue
     }

@@ -14,6 +14,7 @@ import {
 } from "@/effect"
 import { Effect, Schema } from "effect"
 import { Instance } from "./instance"
+import { CONFIG_FILES } from "@ragu/util/app-folder"
 
 /**
  * In-process hot reload for an instance.
@@ -175,9 +176,9 @@ export namespace InstanceReload {
       targets.set(dir, () => true)
     }
 
-    watchFile(path.join(Global.Path.config, "nikcli.json"))
-    watchFile(path.join(directory, "nikcli.json"))
-    if (worktree !== "/" && worktree !== directory) watchFile(path.join(worktree, "nikcli.json"))
+    for (const name of CONFIG_FILES) watchFile(path.join(Global.Path.config, name))
+    for (const name of CONFIG_FILES) watchFile(path.join(directory, name))
+    if (worktree !== "/" && worktree !== directory) for (const name of CONFIG_FILES) watchFile(path.join(worktree, name))
     const configDirs = await configDirectories().catch((error): string[] => {
       log.warn("failed to resolve config directories for hot reload", { directory, error })
       return []

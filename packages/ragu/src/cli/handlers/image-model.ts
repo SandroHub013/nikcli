@@ -10,6 +10,7 @@ import { Provider } from "@/provider/provider"
 import { ModelsDev } from "@/provider/models"
 import { runPromiseWithLayer, withCurrentInstance, withInstanceAsync } from "@/effect"
 import { Effect } from "effect"
+import { configFile } from "@ragu/util/app-folder"
 
 export const DEFAULT_IMAGE_PROVIDER = "openai"
 export const DEFAULT_IMAGE_MODEL = "gpt-image-1"
@@ -39,7 +40,7 @@ export function providerList() {
 }
 
 export async function saveConfig(config: Config.Info, globalFlag: boolean) {
-  const configPath = globalFlag ? path.join(Global.Path.config, "nikcli.json") : path.join(process.cwd(), "nikcli.json")
+  const configPath = globalFlag ? configFile(Global.Path.config) : configFile(process.cwd())
 
   const current = await Bun.file(configPath)
     .text()

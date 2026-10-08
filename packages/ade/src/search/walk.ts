@@ -1,5 +1,6 @@
 import type { Host, DirEntry } from "../host/shell"
 import { normalizePath, joinPath, dirname } from "../host/path"
+import { DOT_FOLDERS } from "../bots/app-folder"
 
 /**
  * Directories skipped by default during project traversal.
@@ -150,7 +151,7 @@ export async function walkProject(input: { host: Host; root: string; options?: W
       if (entry.is_dir) {
         if (
           !skipDirs.has(entry.name) &&
-          !(entry.name.startsWith(".") && entry.name !== ".github" && entry.name !== ".nikcli")
+          !(entry.name.startsWith(".") && entry.name !== ".github" && !(DOT_FOLDERS as readonly string[]).includes(entry.name))
         ) {
           const dirPath = entry.path ? normalizePath(entry.path) : joinPath(current.dir, entry.name)
           subdirs.push(dirPath)

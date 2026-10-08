@@ -14,6 +14,7 @@ import { UI } from "@/cli/ui"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
 import { createWorkspaceArchive, uploadWorkspaceArchive } from "@ragu/util/teleport-archive"
 import type { MessageV2 } from "@/session/message-v2"
+import { configFile } from "@ragu/util/app-folder"
 
 export function runSession<A, E>(effect: Effect.Effect<A, E, Session.Service>) {
   return runPromiseWithLayer(Session.defaultLayer, withCurrentInstance(effect))
@@ -60,7 +61,7 @@ export function formatBytes(bytes: number): string {
 }
 
 export async function saveTeleportDefaults(url: string, token: string) {
-  const configPath = path.join(Global.Path.config, "nikcli.json")
+  const configPath = configFile(Global.Path.config)
   const current = await Bun.file(configPath)
     .text()
     .catch(() => "{}")

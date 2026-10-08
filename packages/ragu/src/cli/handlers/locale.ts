@@ -9,6 +9,7 @@ import path from "path"
 import { resolveLocale, type LocaleConfig } from "@/locale/resolve"
 import { runPromiseWithLayer, withCurrentInstance, withInstanceAsync } from "@/effect"
 import { Effect } from "effect"
+import { configFile } from "@ragu/util/app-folder"
 
 export function configGet() {
   return runPromiseWithLayer(
@@ -52,7 +53,7 @@ export function printResolved(cfg: LocaleConfig | undefined) {
 }
 
 export async function saveLocale(locale: LocaleConfig | undefined, globalFlag: boolean) {
-  const configPath = globalFlag ? path.join(Global.Path.config, "nikcli.json") : path.join(process.cwd(), "nikcli.json")
+  const configPath = globalFlag ? configFile(Global.Path.config) : configFile(process.cwd())
 
   const current = await Bun.file(configPath)
     .text()

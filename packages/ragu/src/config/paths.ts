@@ -7,6 +7,7 @@ import { Flag } from "@ragu/util/flag"
 import { Global } from "@ragu/util/global"
 import { Cause, Context, Effect, Exit, Layer, Schema } from "effect"
 import { AppRuntime } from "@/effect/runtime"
+import { DOT_FOLDERS, preferNew } from "@ragu/util/app-folder"
 
 export namespace ConfigPaths {
   type MissingMode = "error" | "empty"
@@ -43,21 +44,21 @@ export namespace ConfigPaths {
         ? yield* Effect.promise(() =>
             Array.fromAsync(
               Filesystem.up({
-                targets: [".nikcli"],
+                targets: [...DOT_FOLDERS],
                 start: directory,
                 stop: worktree,
               }),
-            ),
+            ).then(preferNew),
           )
         : []),
       ...(yield* Effect.promise(() =>
         Array.fromAsync(
           Filesystem.up({
-            targets: [".nikcli"],
+            targets: [...DOT_FOLDERS],
             start: Global.Path.home,
             stop: Global.Path.home,
           }),
-        ),
+        ).then(preferNew),
       )),
       ...(Flag.RAGU_CONFIG_DIR ? [Flag.RAGU_CONFIG_DIR] : []),
     ]

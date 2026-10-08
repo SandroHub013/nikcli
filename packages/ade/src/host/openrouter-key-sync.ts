@@ -1,4 +1,5 @@
 import { isTestIdentifier } from "./build-identity"
+import { CONFIG_STEMS } from "../bots/app-folder"
 
 /**
  * The OpenRouter key for the voice, taken from ragu's `auth.json` when the
@@ -25,17 +26,23 @@ export type KeySyncOutcome = "copied" | "removed" | "test-identity" | "not-found
 /** Where ragu keeps `auth.json`, on each system, in the spellings the host may need. */
 export function authCandidates(home: string): string[] {
   const normalizedHome = home.replace(/\\/g, "/")
+  // Rule B (`bots/app-folder.ts`): in each place the ragu folder first, then the nikcli one.
+  const inEach = (paths: (name: string) => string[]) => CONFIG_STEMS.flatMap(paths)
   return [
-    `${normalizedHome}/AppData/Local/nikcli/auth.json`,
-    `${home}/AppData/Local/nikcli/auth.json`,
-    `${home}\\AppData\\Local\\nikcli\\auth.json`,
-    `${normalizedHome}/AppData/Roaming/nikcli/auth.json`,
-    `${home}/AppData/Roaming/nikcli/auth.json`,
-    `${home}\\AppData\\Roaming\\nikcli\\auth.json`,
+    ...inEach((name) => [
+      `${normalizedHome}/AppData/Local/${name}/auth.json`,
+      `${home}/AppData/Local/${name}/auth.json`,
+      `${home}\\AppData\\Local\\${name}\\auth.json`,
+    ]),
+    ...inEach((name) => [
+      `${normalizedHome}/AppData/Roaming/${name}/auth.json`,
+      `${home}/AppData/Roaming/${name}/auth.json`,
+      `${home}\\AppData\\Roaming\\${name}\\auth.json`,
+    ]),
     // macOS and Linux: ragu's data folder is `$XDG_DATA_HOME/ragu`, `~/.local/share/nikcli` by default (`packages/util/src/global.ts`);
     // without this the copy never found the file there (full review 2026-10-06, sessions). The two below it are older guesses.
-    `${normalizedHome}/.local/share/nikcli/auth.json`,
-    `${normalizedHome}/.config/nikcli/auth.json`,
+    ...inEach((name) => [`${normalizedHome}/.local/share/${name}/auth.json`]),
+    ...inEach((name) => [`${normalizedHome}/.config/${name}/auth.json`]),
     `${normalizedHome}/.nikcli/auth.json`,
   ]
 }

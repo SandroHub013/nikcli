@@ -40,7 +40,7 @@ import { readEvents } from "../chat/stream"
 import { admitProject, PROJECT_TRUST_KEY, projectSurface, type AdmitProjectDeps } from "./project-trust"
 import { projectFs } from "./store"
 import { localTrustStore } from "./trust"
-import { agentDirs, type AgentFile } from "./ragu"
+import { agentDirs, projectConfigDir, type AgentFile } from "./ragu"
 import { joinPath } from "../host/path"
 import { finalText, isFreeModel, spendKind } from "./runners"
 import { BOT_SESSION_MARK, botPermission, hasBotRules, profileFor } from "./serve-rules"
@@ -783,7 +783,8 @@ export function appServeTurnDeps(
     )
   return {
     projectHasAgent: async (directory, identifier) => {
-      for (const folder of agentDirs(directory, "project")) {
+      const exists = (path: string) => projectFs.readDir(path).then(() => true, () => false)
+      for (const folder of agentDirs(directory, "project", await projectConfigDir(directory, exists))) {
         try {
           await projectFs.readText(joinPath(folder, `${identifier}.md`))
           return true

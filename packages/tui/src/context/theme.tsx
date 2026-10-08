@@ -27,6 +27,7 @@ import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
 import { Global } from "@ragu/util/global"
 import { Filesystem } from "@ragu/util/filesystem"
+import { DOT_FOLDERS, preferNew } from "@ragu/util/app-folder"
 
 export { BUILT_IN_THEME_IDS } from "./theme-catalog"
 export { tint, contrastFg, type SemanticTokens } from "./theme-tokens"
@@ -547,10 +548,10 @@ async function getCustomThemes() {
     Global.Path.config,
     ...(await Array.fromAsync(
       Filesystem.up({
-        targets: [".nikcli"],
+        targets: [...DOT_FOLDERS],
         start: process.cwd(),
       }),
-    )),
+    ).then(preferNew)),
   ]
 
   const result: Record<string, ThemeJson> = {}
@@ -583,10 +584,10 @@ const COMPONENT_OVERRIDE_FILE = "components.json"
 async function getComponentOverrides(): Promise<ComponentPatchMap> {
   const ancestors = await Array.fromAsync(
     Filesystem.up({
-      targets: [".nikcli"],
+      targets: [...DOT_FOLDERS],
       start: process.cwd(),
     }),
-  )
+  ).then(preferNew)
   const directories = [Global.Path.config, ...ancestors.reverse()]
 
   const merged: Record<string, { box?: Record<string, unknown>; colors?: Record<string, unknown> }> = {}

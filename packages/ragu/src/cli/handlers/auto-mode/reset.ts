@@ -5,13 +5,14 @@ import { Runtime } from "../../framework/runtime"
 import { Commands } from "../../commands"
 import { Global } from "@ragu/util/global"
 import { UI } from "@/cli/ui"
+import { configFile } from "@ragu/util/app-folder"
 
 /**
  * Remove `auto_mode` from the global config. Only the global file is touched:
  * it is the only place the classifier reads its rules from.
  */
 export default Runtime.handler(Commands.commands["auto-mode"].commands["reset"], async (input) => {
-  const filepath = path.join(Global.Path.config, "nikcli.json")
+  const filepath = configFile(Global.Path.config)
   const text = await Bun.file(filepath)
     .text()
     .catch(() => "")

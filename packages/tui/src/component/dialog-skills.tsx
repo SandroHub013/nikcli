@@ -9,13 +9,14 @@ import { skillCommandName } from "@ragu/util/skill-command"
 import { Global } from "@ragu/util/global"
 import { useToast } from "@tui/ui/toast"
 import { Keybind } from "@tui/util/keybind"
+import { DOT_FOLDERS } from "@ragu/util/app-folder"
 
 function detectSource(location: string) {
   const normalized = location.replaceAll("\\", "/")
   const config = Global.Path.config.replaceAll("\\", "/")
   const home = Global.Path.home.replaceAll("\\", "/")
 
-  if (normalized.includes("/.nikcli/skill/") || normalized.includes("/.nikcli/skills/")) {
+  if (DOT_FOLDERS.some((dir) => normalized.includes(`/${dir}/skill/`) || normalized.includes(`/${dir}/skills/`))) {
     return { label: "Workspace", rank: 0 }
   }
 
@@ -46,7 +47,7 @@ function isDeletable(location: string): boolean {
   const config = Global.Path.config.replaceAll("\\", "/")
   if (normalized.startsWith(`${home}/.claude/`) || normalized.startsWith(`${home}/.agents/`)) return false
   if (normalized.startsWith(`${config}/skills/`)) return true
-  if (normalized.includes("/.nikcli/skill/") || normalized.includes("/.nikcli/skills/")) return true
+  if (DOT_FOLDERS.some((dir) => normalized.includes(`/${dir}/skill/`) || normalized.includes(`/${dir}/skills/`))) return true
   return false
 }
 

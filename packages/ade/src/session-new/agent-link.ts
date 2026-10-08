@@ -37,6 +37,7 @@
  */
 
 import { sameFolder } from "./folder"
+import { currentAgentId } from "../session/legacy-agent-id"
 
 /** The directory a hook drops its report into. */
 export const LINK_DIR_ENV = "ADE_SESSION_DIR"
@@ -108,7 +109,8 @@ export function parseReport(text: string): LinkReport | undefined {
 
   const pane = asId(raw.pane)
   const nonce = asId(raw.nonce)
-  const agent = asId(raw.agent)
+  const saved = asId(raw.agent)
+  const agent = saved && currentAgentId(saved)
   const sessionId = asId(raw.sessionId)
   if (!pane || !nonce || !agent || !sessionId) return undefined
 

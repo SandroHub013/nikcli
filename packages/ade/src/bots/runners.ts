@@ -36,6 +36,7 @@ import {
   sealTurn,
   type Talk,
 } from "./talk"
+import { DOT_FOLDERS } from "./app-folder"
 
 export type RunnerId = "ragu" | "claude" | "codex"
 
@@ -333,7 +334,7 @@ function fromRepository(bot: AgentFile): boolean {
  * or the next agent session (review B3, M1): hooks, tasks, workflows, and the
  * settings and plugins of Claude Code, ragu and Codex.
  */
-const EXECUTES_LATER = [".git", ".claude", ".nikcli", ".codex", ".husky", ".vscode", ".github/workflows"]
+const EXECUTES_LATER = [".git", ".claude", ...DOT_FOLDERS, ".codex", ".husky", ".vscode", ".github/workflows"]
 const EXECUTES_LATER_RULES = EXECUTES_LATER.flatMap((path) =>
   ["Edit", "Write", "NotebookEdit"].map((tool) => `${tool}(./${path}/**)`),
 )

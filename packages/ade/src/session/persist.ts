@@ -15,6 +15,7 @@
 
 import { restoreHistory } from "../browser/history"
 import { restoreNotes, type SheetNote } from "../design/notes"
+import { currentAgentId } from "./legacy-agent-id"
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -231,7 +232,7 @@ function sanitisePane(raw: unknown): PaneState {
   return {
     id: asString(raw.id, def.id),
     title: asString(raw.title, def.title),
-    agent: asString(raw.agent, def.agent),
+    agent: currentAgentId(asString(raw.agent, def.agent)),
     cwd: asString(raw.cwd, def.cwd),
     branch: asString(raw.branch, def.branch),
     status: asString(raw.status, def.status),

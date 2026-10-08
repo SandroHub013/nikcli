@@ -15,6 +15,7 @@ import { BunProc } from "../bun"
 import { Plugin } from "../plugin"
 import { InstanceReload } from "../project/reload"
 import { locallyInstance, runPromiseWithLayer, withInstanceAsync, type InstanceContext } from "@/effect"
+import { dotFolder } from "@ragu/util/app-folder"
 
 const Parameters = Schema.Struct({
   action: Schema.Literals(["create", "update", "list", "reload", "remove"]).annotate({
@@ -100,14 +101,14 @@ export namespace PluginScaffold {
     const stop = instance.worktree === "/" ? instance.directory : instance.worktree
     let current = instance.directory
     while (true) {
-      const candidate = path.join(current, ".nikcli")
+      const candidate = dotFolder(current)
       if (existsSync(candidate)) return candidate
       if (current === stop || !Filesystem.contains(stop, current)) break
       const parent = path.dirname(current)
       if (parent === current) break
       current = parent
     }
-    return path.join(stop, ".nikcli")
+    return dotFolder(stop)
   }
 
   export function folderOf(scope: Scope, instance: InstanceContext, name: string) {

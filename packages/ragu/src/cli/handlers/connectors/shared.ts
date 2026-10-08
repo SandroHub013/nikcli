@@ -4,6 +4,7 @@ import { modify, applyEdits } from "jsonc-parser"
 import path from "path"
 import { Effect } from "effect"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
+import { configFile, dotFolder } from "@ragu/util/app-folder"
 
 /** Helpers shared by the `connectors` commands. */
 
@@ -62,10 +63,10 @@ export function connectorAuthUpdateBotToken(name: string, botToken: string) {
 }
 
 export async function resolveConfigPath(baseDir: string, global = false) {
-  const candidates = [path.join(baseDir, "nikcli.json")]
+  const candidates = [configFile(baseDir)]
 
   if (!global) {
-    candidates.push(path.join(baseDir, ".nikcli", "nikcli.json"))
+    candidates.push(configFile(dotFolder(baseDir)))
   }
 
   for (const candidate of candidates) {
@@ -74,7 +75,7 @@ export async function resolveConfigPath(baseDir: string, global = false) {
     }
   }
 
-  return path.join(baseDir, "nikcli.json")
+  return configFile(baseDir)
 }
 
 export async function addConnectorToConfig(name: string, connectorConfig: Config.Connector, configPath: string) {

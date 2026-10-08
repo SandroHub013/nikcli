@@ -51,6 +51,7 @@ import { adaptValidatedV2TuiPlugin, readV2TuiPlugin } from "./v2"
 import { evictPluginStorage, pluginStorage } from "./storage"
 import { createSourceWatcher, entrypointMtime, freshSpecifier, type SourceWatcher } from "./reload"
 import { dbg } from "../feature-plugins/background/__debug"
+import { dotFolder, isDotFolder } from "@ragu/util/app-folder"
 
 type PluginLoad = {
   item?: PluginSpec
@@ -237,9 +238,7 @@ function createThemeInstaller(meta: PluginConfigMeta, root: string, spec: string
 
     const source_dir = path.dirname(meta.source)
     const local_dir =
-      path.basename(source_dir) === ".nikcli"
-        ? path.join(source_dir, "themes")
-        : path.join(source_dir, ".nikcli", "themes")
+      isDotFolder(source_dir) ? path.join(source_dir, "themes") : path.join(dotFolder(source_dir), "themes")
     const dest_dir = meta.scope === "local" ? local_dir : path.join(Global.Path.config, "themes")
     const dest = path.join(dest_dir, `${theme}.json`)
     if (!(await Filesystem.exists(dest))) {
@@ -1358,7 +1357,7 @@ async function addExternalPluginEntries(state: RuntimeState, ready: PluginLoad[]
 function defaultPluginMeta(state: RuntimeState): PluginConfigMeta {
   return {
     scope: "local",
-    source: state.api.state.path.config || path.join(state.directory, ".nikcli", "tui.json"),
+    source: state.api.state.path.config || path.join(dotFolder(state.directory), "tui.json"),
   }
 }
 

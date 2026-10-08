@@ -1,6 +1,7 @@
 import os from "os"
 import path from "path"
 import type { PermissionRuleset } from "./ruleset"
+import { CONFIG_FILES, DOT_FOLDERS } from "@ragu/util/app-folder"
 
 /**
  * Auto mode — the pure half.
@@ -81,12 +82,16 @@ export namespace AutoMode {
     ".devcontainer",
     ".yarn",
     ".mvn",
-    ".nikcli",
+    // A user's config, under both names (rule B, `app-folder.ts`).
+    ...DOT_FOLDERS,
     ".claude",
   ] as const
 
   /** Sub-trees of a protected directory that ragu itself writes to. */
-  export const PROTECTED_EXCEPTIONS = [".nikcli/.worktrees", ".nikcli/plans", ".claude/worktrees"] as const
+  export const PROTECTED_EXCEPTIONS = [
+    ...DOT_FOLDERS.flatMap((dir) => [`${dir}/.worktrees`, `${dir}/plans`]),
+    ".claude/worktrees",
+  ] as const
 
   export const PROTECTED_FILES: ReadonlySet<string> = new Set([
     ".gitconfig",
@@ -126,8 +131,7 @@ export namespace AutoMode {
     "pyrightconfig.json",
     ".mcp.json",
     ".claude.json",
-    "nikcli.json",
-    "nikcli.jsonc",
+    ...CONFIG_FILES,
   ])
 
   function segments(file: string) {

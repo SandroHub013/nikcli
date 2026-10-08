@@ -7,6 +7,7 @@ import { Filesystem } from "@ragu/util/filesystem"
 import { Global } from "@ragu/util/global"
 import { ModGuard } from "@/mod/guard"
 import { ModTemplate } from "@/mod/template"
+import { dotFolder } from "@ragu/util/app-folder"
 
 /**
  * `ragu mod create <name>`: write a mod that draws on every client.
@@ -27,7 +28,7 @@ export default Runtime.handler(Commands.commands["mod"].commands["create"], asyn
 
   const root = input["global"]
     ? path.join(Global.Path.config, "plugins")
-    : path.join(process.cwd(), ".nikcli", "plugin")
+    : path.join(dotFolder(process.cwd()), "plugin")
   const folder = path.join(root, name)
   const entry = path.join(folder, "index.ts")
   if ((await Filesystem.exists(entry)) && !input["force"]) {

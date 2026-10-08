@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import type { AgentFile } from "./ragu"
-import { admitProject, configGrant, projectSurface, type ProjectFs } from "./project-trust"
+import { admitProject, configGrant, isConfigFile, projectSurface, type ProjectFs } from "./project-trust"
 import { t } from "../i18n"
 import { memoryTrustStore } from "./trust"
 
@@ -131,6 +131,37 @@ describe("la fiducia nel progetto, per i turni ragu", () => {
     s.fs.files[`${ROOT}/.nikcli/package.json`] = '{"dependencies":{"@nikcli-ai/plugin":"1.384.0"}}'
     expect(await admitProject(ROOT, s.deps)).toEqual({ ok: true })
     expect(s.asked).toHaveLength(1)
+  })
+
+  test("regola B: .ragu e ragu.json(c) contano come .nikcli e nikcli.json, anche tutti insieme", async () => {
+    const s = setup({
+      ...generated,
+      [`${ROOT}/ragu.json`]: '{"permission":{"bash":"allow"}}',
+      [`${ROOT}/ragu.jsonc`]: "{}",
+      [`${ROOT}/.ragu/ragu.json`]: "{}",
+      [`${ROOT}/.ragu/plugin/spia.ts`]: "x",
+      [`${ROOT}/.ragu/package.json`]: "{}",
+      [`${ROOT}/.ragu/bun.lock`]: "{}",
+      [`${ROOT}/.nikcli/plugin/vecchio.ts`]: "x",
+    })
+    const paths = (await projectSurface(ROOT, s.fs)).map((file) => file.path)
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        "ragu.json",
+        "ragu.jsonc",
+        ".ragu/ragu.json",
+        ".ragu/plugin/spia.ts",
+        ".nikcli/plugin/vecchio.ts",
+      ]),
+    )
+    expect(paths).not.toContain(".ragu/bun.lock")
+  })
+
+  test("regola B: i file di configurazione di ragu hanno i due nomi", () => {
+    for (const path of ["ragu.json", "ragu.jsonc", ".ragu/ragu.json", ".ragu/ragu.jsonc", ".ragu/nikcli.json", ".nikcli/ragu.jsonc"])
+      expect([path, isConfigFile(path)]).toEqual([path, true])
+    for (const path of ["nikcli.json", ".nikcli/nikcli.jsonc"]) expect([path, isConfigFile(path)]).toEqual([path, true])
+    for (const path of ["package.json", ".ragu/package.json", "sotto/ragu.json"]) expect([path, isConfigFile(path)]).toEqual([path, false])
   })
 
   test("i bot del progetto contano solo se si concedono permessi (gli altri li copre B3)", async () => {
@@ -325,6 +356,7 @@ describe("la fiducia guarda anche le cartelle superiori, come ragu", () => {
       },
     }
     expect(await projectSurface("C:/progetto", watching)).toEqual([])
-    expect(listed.filter((path) => path !== "C:/progetto/.nikcli")).toEqual(["C:/progetto"])
+    // The project's own folders, under both names (rule B), and then only the list of the folder itself.
+    expect(listed.filter((path) => path !== "C:/progetto/.nikcli" && path !== "C:/progetto/.ragu")).toEqual(["C:/progetto"])
   })
 })

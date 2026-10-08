@@ -34,6 +34,7 @@ import { Git } from "@/git"
 import { Log } from "@ragu/util/log"
 import { withInstance } from "@/effect"
 import { Worktree } from "./index"
+import { DOT_FOLDERS, dotFolder } from "@ragu/util/app-folder"
 
 const log = Log.create({ service: "worktree.sandbox" })
 
@@ -45,7 +46,12 @@ export namespace RunSandbox {
    * drops a self-ignoring `.gitignore` in that root, so the sandboxes never
    * show up in the parent repo's `git status`.
    */
-  export const ROOT = path.join(".nikcli", ".worktrees")
+  export const ROOT = path.join(DOT_FOLDERS[DOT_FOLDERS.length - 1]!, ".worktrees")
+
+  /** `.ragu/.worktrees` when the project has a `.ragu`, else ROOT (rule B, `app-folder.ts`). */
+  export function rootFor(hostDirectory: string) {
+    return path.join(path.basename(dotFolder(hostDirectory)), ".worktrees")
+  }
 
   /** Directory prefix for every sandbox, e.g. `worktree-loop-nightly-qa`. */
   export const PREFIX = "worktree"
@@ -107,7 +113,7 @@ export namespace RunSandbox {
           return yield* service.create({
             name: `${PREFIX}-${input.name}`,
             branchPrefix: input.branchPrefix,
-            root: ROOT,
+            root: rootFor(input.hostDirectory),
           })
         }),
       )

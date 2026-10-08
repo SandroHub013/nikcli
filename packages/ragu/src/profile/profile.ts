@@ -5,6 +5,7 @@ import { Global } from "@ragu/util/global"
 import { Log } from "@ragu/util/log"
 import { zodObject, type DeepMutable } from "@ragu/util/effect-zod"
 import { AccountRepo } from "@/account/repo"
+import { dotFolder } from "@ragu/util/app-folder"
 
 /**
  * Per-user personalization ("who am I, how do I work") that every agent sees as
@@ -288,7 +289,7 @@ export namespace Profile {
    * also what keeps `.github/instructions/memory.instruction.md` current.
    */
   export function habitsFile(worktree: string) {
-    return path.join(worktree, ".nikcli", "habits.md")
+    return path.join(dotFolder(worktree), "habits.md")
   }
 
   /**

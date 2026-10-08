@@ -465,7 +465,7 @@ describe("un bot di progetto non ha pre-approvazioni", () => {
   test("Claude: niente scritture nei percorsi che poi eseguono codice (review B3, M1)", () => {
     const { args } = turnCommand(runnerById("claude"), { bot: fromRepo, message: "x", lean: true })
     const disallowed = (args[args.indexOf("--disallowedTools") + 1] ?? "").split(",")
-    for (const path of [".git", ".claude", ".nikcli", ".codex", ".husky", ".vscode", ".github/workflows"]) {
+    for (const path of [".git", ".claude", ".ragu", ".nikcli", ".codex", ".husky", ".vscode", ".github/workflows"]) {
       for (const tool of ["Edit", "Write", "NotebookEdit"]) expect(disallowed).toContain(`${tool}(./${path}/**)`)
     }
     // Writing elsewhere is still what the user accepted.

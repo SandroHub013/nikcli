@@ -21,24 +21,26 @@ import { SAFE_EFFORT, SAFE_MODEL } from "./runners"
 import { isLegacyTalkKey, parseTalk, serializeTalk, talkKey, TALK_KEY_PREFIX, type Talk } from "./talk"
 import { createGatewayThreads, type GatewayThreads } from "./gateway/threads"
 import {
-  agentDir,
   agentHome,
   agentDirs,
   createArgs,
   editedAgentFile,
   globalConfigDir,
+  globalConfigName,
   identifierFor,
   joinPrompt,
   launchArgs,
   RAGU_COMMAND,
   parseCreatedPath,
   parseModelList,
+  projectConfigDir,
   readAgentFile,
   serializeAgentFile,
   type AgentFile,
   type AgentMode,
   type AgentScope,
 } from "./ragu"
+import { DOT_FOLDERS, folderExists, type Exists } from "./app-folder"
 
 /** Where to look, and where to write. */
 export interface BotRoots {
@@ -64,7 +66,7 @@ export async function resolveRoots(projectRoot?: string): Promise<BotRoots> {
 
   return {
     ...(projectRoot ? { project: projectRoot } : {}),
-    ...(home ? { global: globalConfigDir(home, platform) } : {}),
+    ...(home ? { global: globalConfigDir(home, platform, await globalConfigName(home, platform, hostFolders(host))) } : {}),
   }
 }
 
@@ -124,10 +126,20 @@ async function readDirectory(
   }
 }
 
+/** The host's folders, for rule B (`app-folder.ts`). */
+function hostFolders(host: Host | null | undefined): Exists {
+  return folderExists(host?.readDir && ((path: string) => host.readDir!(path)))
+}
+
+/** A project's `.ragu` or `.nikcli`; nothing for the global scope, whose folder is the configuration itself. */
+async function dotFolderOf(host: Host, base: string, scope: AgentScope): Promise<string | undefined> {
+  return scope === "project" ? projectConfigDir(base, hostFolders(host)) : undefined
+}
+
 async function readScope(host: Host, base: string, scope: AgentScope): Promise<AgentFile[]> {
   const found: AgentFile[] = []
   // Both spellings, because ragu accepts both.
-  for (const directory of agentDirs(base, scope)) {
+  for (const directory of agentDirs(base, scope, await dotFolderOf(host, base, scope))) {
     await readDirectory(host, directory, scope, 0, found)
   }
   return found
@@ -207,7 +219,7 @@ export async function createBot(input: CreateBotInput, roots: BotRoots): Promise
     }
   }
 
-  const home = agentHome(base, input.scope)
+  const home = agentHome(base, input.scope, await dotFolderOf(host, base, input.scope))
   const mode: AgentMode = input.mode ?? "primary"
 
   if (input.persona && input.persona.trim().length > 0) {
@@ -291,7 +303,7 @@ export async function writeBot(
   )
   // `agent`, not `agents`: ragu reads both but writes the first, and a
   // roster split across two spellings is one the user has to think about.
-  const path = joinPath(agentDir(input.base, input.scope), `${identifier}.md`)
+  const path = joinPath(input.home, "agent", `${identifier}.md`)
 
   /*
    * Refused rather than overwritten, which is also what `agent create` does:
@@ -592,7 +604,7 @@ function dropOldestTalks(disk: TalkDisk, except: string): boolean {
 export function projectOfBotPath(path: string): string | undefined {
   const folded = path.replace(/\\/g, "/").toLowerCase()
   let at = -1
-  for (const mark of ["/.nikcli/agents/", "/.nikcli/agent/"]) {
+  for (const mark of DOT_FOLDERS.flatMap((dot) => [`/${dot}/agents/`, `/${dot}/agent/`])) {
     const found = folded.lastIndexOf(mark)
     if (found > at) at = found
   }

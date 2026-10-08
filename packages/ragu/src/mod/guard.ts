@@ -1,6 +1,7 @@
 import path from "path"
 import { parse as parseJsonc, type ParseError } from "jsonc-parser"
 import { Effect, Schema } from "effect"
+import { CONFIG_STEMS } from "@ragu/util/app-folder"
 import { configFilesInDirectory } from "@ragu/util/config-file"
 import { Filesystem } from "@ragu/util/filesystem"
 import { Flag } from "@ragu/util/flag"
@@ -63,17 +64,18 @@ export namespace ModGuard {
    * admin-owned and also hold the organization's own mods; the legacy
    * `~/.config/nikcli/managed` carries policy only, because the user owns it.
    */
-  export function managedDirs(): { dir: string; org: boolean }[] {
-    const system =
-      process.platform === "darwin"
-        ? "/Library/Application Support/nikcli"
-        : process.platform === "win32"
-          ? path.join(process.env["ProgramData"] ?? "C:\\ProgramData", "nikcli")
-          : "/etc/ragu"
+  export function managedDirs(platform: NodeJS.Platform = process.platform): { dir: string; org: boolean }[] {
+    const root =
+      platform === "darwin"
+        ? "/Library/Application Support"
+        : platform === "win32"
+          ? (process.env["ProgramData"] ?? "C:\\ProgramData")
+          : "/etc"
     const dirs: { dir: string; org: boolean }[] = []
     const extra = Flag.managedConfigDir()
     if (extra) dirs.push({ dir: extra, org: true })
-    dirs.push({ dir: path.join(system, "managed"), org: true })
+    // Both names, not rule B: the policy fails closed, so one an admin left under either binds.
+    for (const name of CONFIG_STEMS) dirs.push({ dir: path.join(root, name, "managed"), org: true })
     dirs.push({ dir: path.join(Global.Path.config, "managed"), org: false })
     return dirs
   }
@@ -103,7 +105,7 @@ export namespace ModGuard {
     let invalid: string | undefined
     for (const { dir, org } of managedDirs()) {
       if (org && (yield* Effect.promise(() => Filesystem.exists(dir)))) orgDirs.push(dir)
-      for (const file of configFilesInDirectory(dir, "nikcli")) {
+      for (const file of CONFIG_STEMS.flatMap((stem) => configFilesInDirectory(dir, stem))) {
         const found = yield* Effect.result(readPolicyFile(file))
         if (found._tag === "Failure") {
           log.warn("managed mod policy is invalid; refusing user mods", { file, reason: found.failure.reason })

@@ -9,6 +9,7 @@ import { Flag } from "@ragu/util/flag"
 import { Log } from "@ragu/util/log"
 import { Filesystem } from "@ragu/util/filesystem"
 import { Global } from "@ragu/util/global"
+import { CONFIG_STEMS, configStem, preferNew } from "@ragu/util/app-folder"
 
 const log = Log.create({ service: "tui.migrate" })
 
@@ -157,13 +158,19 @@ async function backupAndStripLegacy(file: string, source: string) {
 async function raguFiles(input: MigrateInput) {
   const project = Flag.RAGU_DISABLE_PROJECT_CONFIG
     ? []
-    : await ConfigPaths.projectFiles("ragu", input.instance.directory, input.instance.worktree)
-  const files = [...project, ...ConfigPaths.fileInDirectory(Global.Path.config, "nikcli")]
+    : preferNew(
+        (
+          await Promise.all(
+            CONFIG_STEMS.map((stem) => ConfigPaths.projectFiles(stem, input.instance.directory, input.instance.worktree)),
+          )
+        ).flat(),
+      )
+  const files = [...project, ...ConfigPaths.fileInDirectory(Global.Path.config, configStem(Global.Path.config))]
   for (const dir of unique(input.directories)) {
-    files.push(...ConfigPaths.fileInDirectory(dir, "nikcli"))
+    files.push(...ConfigPaths.fileInDirectory(dir, configStem(dir)))
   }
   if (Flag.RAGU_CONFIG) files.push(Flag.RAGU_CONFIG)
-  files.push(...ConfigPaths.fileInDirectory(input.managed, "nikcli"))
+  files.push(...ConfigPaths.fileInDirectory(input.managed, configStem(input.managed)))
 
   const existing = await Promise.all(
     unique(files).map(async (file) => {

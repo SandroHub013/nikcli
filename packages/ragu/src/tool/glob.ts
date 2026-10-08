@@ -8,6 +8,7 @@ import { FFF } from "../file/fff"
 import { assertExternalDirectory, isProjectRootAlias } from "./external-directory"
 import { normalizeToolPath } from "./tool-path"
 import { withSearchDeadline } from "./search-deadline"
+import { dotFolder } from "@ragu/util/app-folder"
 
 type Row = {
   path: string
@@ -137,7 +138,7 @@ export const GlobTool = Tool.define("glob", {
         // Phase 1: Try FFF fuzzy file search
         const fffResult = await FFF.filesRich(include(params.pattern), {
           pageSize: size,
-          currentFile: path.join(dir, ".nikcli"),
+          currentFile: dotFolder(dir),
         })
 
         let found: Row[] = []
@@ -155,7 +156,7 @@ export const GlobTool = Tool.define("glob", {
             const short = words.slice(0, 2).join(" ")
             const next = await FFF.filesRich(include(short), {
               pageSize: size,
-              currentFile: path.join(dir, ".nikcli"),
+              currentFile: dotFolder(dir),
             })
             if (next) {
               found = pick(

@@ -28,12 +28,19 @@
  */
 
 import { basename, joinPath } from "../host/path"
+import { DOT_FOLDERS, appFolderName, dotFolderName, type Exists } from "./app-folder"
+import { currentAgentId } from "../session/legacy-agent-id"
 
 /** The executable. Same name `session-new/agents.ts` resolves on PATH. */
 export const RAGU_COMMAND = "ragu"
 
-/** Where ragu keeps a project's own configuration. */
-export const PROJECT_CONFIG_DIR = ".nikcli"
+/** A project's own configuration folder when it has none yet: the old name, rule B (`app-folder.ts`). */
+const NEW_PROJECT_DIR = DOT_FOLDERS[DOT_FOLDERS.length - 1]!
+
+/** `.ragu` when the project has one, else `.nikcli`: the folder ragu reads (rule B). */
+export function projectConfigDir(base: string, exists: Exists): Promise<string> {
+  return dotFolderName(base, exists)
+}
 
 /**
  * The directory `--path` gets `agent` appended to.
@@ -207,17 +214,17 @@ export function joinPrompt(parts: PromptParts): string {
 /**
  * The configuration root for a scope — the value `--path` takes.
  *
- * `global` is the ragu config directory itself; `project` is `.nikcli`
- * inside the open project, which is the layout `ragu agent create` produces
- * when asked interactively and the one `Config` scans.
+ * `global` is the ragu config directory itself; `project` is `.ragu` or
+ * `.nikcli` inside the open project (`projectConfigDir`), which is the layout
+ * `ragu agent create` produces when asked interactively and the one `Config` scans.
  */
-export function agentHome(base: string, scope: AgentScope): string {
-  return scope === "project" ? joinPath(base, PROJECT_CONFIG_DIR) : base
+export function agentHome(base: string, scope: AgentScope, dotFolder: string = NEW_PROJECT_DIR): string {
+  return scope === "project" ? joinPath(base, dotFolder) : base
 }
 
 /** Where the files themselves live, and where new ones are written. */
-export function agentDir(base: string, scope: AgentScope): string {
-  return joinPath(agentHome(base, scope), "agent")
+export function agentDir(base: string, scope: AgentScope, dotFolder?: string): string {
+  return joinPath(agentHome(base, scope, dotFolder), "agent")
 }
 
 /**
@@ -228,8 +235,8 @@ export function agentDir(base: string, scope: AgentScope): string {
  * cannot see — a bot that exists everywhere except in the list of bots. New
  * files go in `agent`, which is the spelling `agent create` produces.
  */
-export function agentDirs(base: string, scope: AgentScope): string[] {
-  const home = agentHome(base, scope)
+export function agentDirs(base: string, scope: AgentScope, dotFolder?: string): string[] {
+  const home = agentHome(base, scope, dotFolder)
   return [joinPath(home, "agent"), joinPath(home, "agents")]
 }
 
@@ -244,8 +251,17 @@ export function agentDirs(base: string, scope: AgentScope): string[] {
  * of being wrong is a global roster that lists nothing, never a file written
  * in the wrong place: every write goes through a path ragu itself printed.
  */
-export function globalConfigDir(home: string, platform: "windows" | "posix"): string {
-  return platform === "windows" ? joinPath(home, "AppData", "Roaming", "nikcli") : joinPath(home, ".config", "nikcli")
+export function globalConfigDir(home: string, platform: "windows" | "posix", name = "nikcli"): string {
+  return joinPath(globalConfigBase(home, platform), name)
+}
+
+function globalConfigBase(home: string, platform: "windows" | "posix"): string {
+  return platform === "windows" ? joinPath(home, "AppData", "Roaming") : joinPath(home, ".config")
+}
+
+/** `ragu` when that folder is there, else `nikcli` (rule B, `app-folder.ts`). */
+export function globalConfigName(home: string, platform: "windows" | "posix", exists: Exists): Promise<string> {
+  return appFolderName(globalConfigBase(home, platform), exists)
 }
 
 export interface CreateArgsInput {
@@ -577,7 +593,7 @@ export function readAgentFile(input: {
     ...(parsed.front.values["model"] ? { model: parsed.front.values["model"] } : {}),
     ...(parsed.front.values["variant"] ? { effort: parsed.front.values["variant"] } : {}),
     ...(parsed.front.values["avatar"] ? { avatar: parsed.front.values["avatar"] } : {}),
-    ...(parsed.front.values["runner"] ? { runner: parsed.front.values["runner"] } : {}),
+    ...(parsed.front.values["runner"] ? { runner: currentAgentId(parsed.front.values["runner"]) } : {}),
     prompt: parsed.prompt,
     disabledTools: disabled,
   }

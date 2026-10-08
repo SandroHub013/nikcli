@@ -12,6 +12,7 @@ import { OPENROUTER_VOICES_LIST } from "@ragu/util/tts/openrouter"
 import { openRouterProvider } from "@/tool/speak/openrouter"
 import { runPromiseWithLayer, withCurrentInstance, withInstanceAsync } from "@/effect"
 import { Effect } from "effect"
+import { configFile } from "@ragu/util/app-folder"
 
 export const DEFAULT_SPEAK_PROVIDER = "elevenlabs"
 export const DEFAULT_SPEAK_MODEL = "YOq2y2Up4RgXP2HyXjE5"
@@ -64,7 +65,7 @@ export async function getOpenRouterAudioModels(): Promise<{ id: string; name: st
 }
 
 export async function saveConfig(config: Config.Info, globalFlag: boolean) {
-  const configPath = globalFlag ? path.join(Global.Path.config, "nikcli.json") : path.join(process.cwd(), "nikcli.json")
+  const configPath = globalFlag ? configFile(Global.Path.config) : configFile(process.cwd())
 
   const current = await Bun.file(configPath)
     .text()

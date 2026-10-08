@@ -17,6 +17,7 @@ import { parsePluginSpecifier } from "@ragu/util/plugin-shared"
 import { Effect } from "effect"
 import { InstanceState, runPromiseWithLayer, type InstanceContext } from "@/effect"
 import { Filesystem } from "@ragu/util/filesystem"
+import { isDotFolder } from "@ragu/util/app-folder"
 
 export namespace TuiConfig {
   const log = Log.create({ service: "tui.config" })
@@ -189,7 +190,7 @@ export namespace TuiConfig {
     }
 
     for (const dir of unique(directories)) {
-      if (!dir.endsWith(".nikcli") && dir !== Flag.RAGU_CONFIG_DIR) continue
+      if (!isDotFolder(dir) && dir !== Flag.RAGU_CONFIG_DIR) continue
       for (const file of ConfigPaths.fileInDirectory(dir, "tui")) {
         yield* merge(file)
       }
@@ -206,7 +207,7 @@ export namespace TuiConfig {
     // discovered plugins load before configured ones.
     const roots = unique([
       Global.Path.config,
-      ...directories.filter((dir) => dir.endsWith(".nikcli") || dir === Flag.RAGU_CONFIG_DIR),
+      ...directories.filter((dir) => isDotFolder(dir) || dir === Flag.RAGU_CONFIG_DIR),
       ...(existsSync(managed) ? [managed] : []),
     ])
     const discovered: PluginEntry[] = []
@@ -239,7 +240,7 @@ export namespace TuiConfig {
     const deps: Promise<void>[] = []
     if (bootstrap && acc.result.plugin?.length) {
       for (const dir of unique(directories)) {
-        if (!dir.endsWith(".nikcli") && dir !== Flag.RAGU_CONFIG_DIR) continue
+        if (!isDotFolder(dir) && dir !== Flag.RAGU_CONFIG_DIR) continue
         deps.push(installDeps(dir))
       }
     }

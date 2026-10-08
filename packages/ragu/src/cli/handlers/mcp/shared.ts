@@ -5,6 +5,7 @@ import path from "path"
 import { modify, applyEdits } from "jsonc-parser"
 import { Effect } from "effect"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
+import { configFile, dotFolder } from "@ragu/util/app-folder"
 
 /** Helpers shared by the `mcp` commands. */
 
@@ -108,10 +109,10 @@ export function isMcpRemote(config: McpEntry): config is McpRemote {
 }
 
 export async function resolveConfigPath(baseDir: string, global = false) {
-  const candidates = [path.join(baseDir, "nikcli.json")]
+  const candidates = [configFile(baseDir)]
 
   if (!global) {
-    candidates.push(path.join(baseDir, ".nikcli", "nikcli.json"))
+    candidates.push(configFile(dotFolder(baseDir)))
   }
 
   for (const candidate of candidates) {

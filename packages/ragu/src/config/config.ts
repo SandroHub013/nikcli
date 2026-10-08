@@ -27,6 +27,7 @@ import type { InstanceContext } from "@/effect"
 import { ConfigPaths } from "./paths"
 import { AppFileSystem } from "@/filesystem"
 import { overrideZod } from "@/util/zod-effect"
+import { CONFIG_STEMS, DOT_FOLDERS, configFile, isDotFolder, preferNew } from "@ragu/util/app-folder"
 
 export namespace Config {
   const log = Log.create({ service: "config" })
@@ -154,9 +155,9 @@ export namespace Config {
     }
 
     for (const dir of unique(directories)) {
-      if (dir.endsWith(".nikcli") || dir === Flag.RAGU_CONFIG_DIR) {
-        log.debug(`loading config from ${path.join(dir, "nikcli.json")}`)
-        result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, "nikcli.json")))
+      if (isDotFolder(dir) || dir === Flag.RAGU_CONFIG_DIR) {
+        log.debug(`loading config from ${configFile(dir)}`)
+        result = mergeConfigConcatArrays(result, await loadFile(configFile(dir)))
         // to satisfy the type checker
         result.agent ??= {}
         result.mode ??= {}
@@ -237,7 +238,12 @@ export namespace Config {
           const directories = yield* paths.directories(ctx.directory, ctx.worktree)
           const found = Flag.RAGU_DISABLE_PROJECT_CONFIG
             ? []
-            : yield* appFs.findUp("nikcli.json", ctx.directory, ctx.worktree)
+            : preferNew(
+                (yield* Effect.forEach(CONFIG_STEMS, (stem) => appFs.findUp(`${stem}.json`, ctx.directory, ctx.worktree)))
+                  .flat()
+                  // Nearest first, as one findUp lists them: both names in one directory stay together.
+                  .sort((a, b) => path.dirname(b).length - path.dirname(a).length),
+              )
           const projectFiles = found.toReversed()
           return yield* Effect.promise(() => loadState(ctx, directories, projectFiles))
         }),
@@ -355,7 +361,7 @@ export namespace Config {
       })
       if (!md) continue
 
-      const patterns = ["/.nikcli/command/", "/.nikcli/commands/", "/command/", "/commands/"]
+      const patterns = [...DOT_FOLDERS.flatMap((dir) => [`/${dir}/command/`, `/${dir}/commands/`]), "/command/", "/commands/"]
       const file = rel(item, patterns) ?? path.basename(item)
       const name = trim(file)
 
@@ -390,7 +396,7 @@ export namespace Config {
       })
       if (!md) continue
 
-      const patterns = ["/.nikcli/agent/", "/.nikcli/agents/", "/agent/", "/agents/"]
+      const patterns = [...DOT_FOLDERS.flatMap((dir) => [`/${dir}/agent/`, `/${dir}/agents/`]), "/agent/", "/agents/"]
       const file = rel(item, patterns) ?? path.basename(item)
       const agentName = trim(file)
 
@@ -2209,7 +2215,7 @@ export namespace Config {
   export type Info = z.output<typeof Info>
 
   async function global() {
-    return await loadFile(path.join(Global.Path.config, "nikcli.json"))
+    return await loadFile(configFile(Global.Path.config))
   }
 
   async function loadFile(filepath: string, env: Record<string, string> = {}): Promise<Info> {
@@ -2394,13 +2400,13 @@ export namespace Config {
   }) {}
 
   async function updateImpl(ctx: InstanceContext, config: Info) {
-    const filepath = path.join(ctx.directory, "nikcli.json")
+    const filepath = configFile(ctx.directory)
     const existing = await loadFile(filepath)
     await Bun.write(filepath, JSON.stringify(mergeDeep(existing, config), null, 2))
   }
 
   function globalConfigFile() {
-    return path.join(Global.Path.config, "nikcli.json")
+    return configFile(Global.Path.config)
   }
 
   function parseConfig(text: string, filepath: string): Info {

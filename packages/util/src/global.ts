@@ -2,8 +2,7 @@ import fs from "fs/promises"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
 import os from "os"
-
-const app = "nikcli"
+import { appFolder } from "./app-folder"
 
 const home = os.homedir()
 
@@ -17,7 +16,7 @@ const winRoamingAppData = process.env.APPDATA || path.join(home, "AppData", "Roa
 
 function xdgPath(xdgValue: string | undefined, posixFallback: string, windowsRoot: string) {
   const base = isWindows ? windowsRoot : xdgValue || posixFallback
-  return path.join(base, app)
+  return appFolder(base)
 }
 
 const data = xdgPath(xdgData, path.join(home, ".local", "share"), winLocalAppData)
@@ -29,7 +28,7 @@ function testPath(name: string, fallback: string) {
   return process.env.RAGU_TEST_HOME ? path.join(process.env.RAGU_TEST_HOME, name) : fallback
 }
 
-/** Primary data root: `<XDG_DATA_HOME>/ragu/` — holds `storage/`, `snapshot/`, DBs, etc. */
+/** Primary data root: `<XDG_DATA_HOME>/ragu/` or `/nikcli/` (rule B, `app-folder.ts`) — holds `storage/`, `snapshot/`, DBs, etc. */
 function resolveDataDir(): string {
   if (process.env.RAGU_TEST_HOME) {
     return path.join(process.env.RAGU_TEST_HOME, "data")

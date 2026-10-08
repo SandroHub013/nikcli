@@ -5,6 +5,7 @@ import { FFF } from "./fff"
 import { Ripgrep } from "./ripgrep"
 import { Log } from "@ragu/util/log"
 import { FilePathFilters } from "./path-filters"
+import { DOT_FOLDERS } from "@ragu/util/app-folder"
 
 export namespace SearchBackend {
   const log = Log.create({ service: "search.backend" })
@@ -405,7 +406,7 @@ export namespace SearchBackend {
 
     const root: Node = { path: [], children: [] }
     for (const file of listed.files) {
-      if (file.includes(".nikcli")) continue
+      if (DOT_FOLDERS.some((dir) => file.includes(dir))) continue
       getPath(root, FilePathFilters.normalizeRelative(file).split("/"), true)
     }
 

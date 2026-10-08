@@ -35,6 +35,7 @@ import { ShareRepo } from "@/share/repo"
 import { SessionSync } from "./projectors"
 import { SyncEvent } from "@/sync/sync-event"
 import { MessageRepo } from "./message-repo"
+import { dotFolder } from "@ragu/util/app-folder"
 
 function configGet(ctx: InstanceContext) {
   const effect = Effect.gen(function* () {
@@ -366,7 +367,7 @@ export namespace Session {
   }
 
   function planImpl(ctx: InstanceContext, input: { slug: string; time: { created: number } }) {
-    const base = ctx.project.vcs ? path.join(ctx.worktree, ".nikcli", "plans") : path.join(Global.Path.data, "plans")
+    const base = ctx.project.vcs ? path.join(dotFolder(ctx.worktree), "plans") : path.join(Global.Path.data, "plans")
     return path.join(base, [input.time.created, input.slug].join("-") + ".md")
   }
 

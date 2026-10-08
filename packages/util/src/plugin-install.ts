@@ -14,6 +14,7 @@ import { Flock } from "@ragu/util/flock"
 import { isRecord } from "@ragu/util/record"
 
 import { parsePluginSpecifier, readPluginPackage, resolvePluginTarget } from "./plugin-shared"
+import { configStem, dotFolder, type ConfigStem } from "./app-folder"
 
 type Mode = "noop" | "add" | "replace"
 type Kind = "server" | "tui"
@@ -31,7 +32,7 @@ export type PatchDeps = {
   readText: (file: string) => Promise<string>
   write: (file: string, text: string) => Promise<void>
   exists: (file: string) => Promise<boolean>
-  files: (dir: string, name: "nikcli" | "tui") => string[]
+  files: (dir: string, name: ConfigStem | "tui") => string[]
 }
 
 export type PatchInput = {
@@ -267,16 +268,16 @@ function patchDir(input: PatchInput) {
   if (input.global) return input.config ?? Global.Path.config
   const git = input.vcs === "git" && input.worktree !== "/"
   const root = git ? input.worktree : input.directory
-  return path.join(root, ".nikcli")
+  return dotFolder(root)
 }
 
-function patchName(kind: Kind): "nikcli" | "tui" {
-  if (kind === "server") return "nikcli"
+function patchName(kind: Kind, dir: string): ConfigStem | "tui" {
+  if (kind === "server") return configStem(dir)
   return "tui"
 }
 
 async function patchOne(dir: string, target: Target, spec: string, force: boolean, dep: PatchDeps): Promise<PatchOne> {
-  const name = patchName(target.kind)
+  const name = patchName(target.kind, dir)
   await using _ = await Flock.acquire(`plug-config:${Filesystem.resolve(path.join(dir, name))}`)
 
   const files = dep.files(dir, name)

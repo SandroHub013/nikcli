@@ -1,3 +1,4 @@
+import { currentAgentId } from "../session/legacy-agent-id"
 /**
  * The agents ADE can start, and how to start them.
  *
@@ -109,7 +110,8 @@ export function systemShell(): string {
 }
 
 export function agentById(id: string): AgentOption | undefined {
-  return AGENTS.find((agent) => agent.id === id)
+  const current = currentAgentId(id)
+  return AGENTS.find((agent) => agent.id === current)
 }
 
 /** Whether this is an app run as a server (`kind: "app"`) rather than an agent a task is typed into. */
