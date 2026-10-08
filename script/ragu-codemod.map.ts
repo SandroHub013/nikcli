@@ -129,24 +129,29 @@ export const PROTECTED: readonly Exclusion[] = [
     why: "GitHub Actions secret names live in the repository settings, not in the tree",
   },
   {
+    id: "upgrade-pid",
+    find: /NIKCLI_UPGRADE_PID/g,
+    why: "the variable the CLI's upgrade hands to install.ps1, which is kept whole (upstream-install): both ends keep the old name",
+  },
+  {
     id: "identity",
     find: /\b(?:group\.)?(?:ai|com|dev)\.nikcli(?:\.[\w-]+)+/g,
     why: "bundle identifiers (ai.nikcli.ade, ai.nikcli.mobile, com.nikcli.island): data folders, WebView2 profiles, keychains and stores hang off them; the ADE id moves last, in its own brief",
   },
   {
     id: "user-folder",
-    find: /(?<=^|[\s"'`/\\~(=,:[])\.nikcli\b/g,
-    why: "the project folder .nikcli and ~/.nikcli: a user's config; moved by hand with rule B (ragu if it exists, else nikcli) and the guards in the same commit",
+    find: /(?<=^|[\s"'`/\\~(=,:[}])\.nikcli\b/gi,
+    why: "the project folder .nikcli and ~/.nikcli, in any case (a guard test spells .NIKCLI): a user's config; moved by hand with rule B (ragu if it exists, else nikcli) and the guards in the same commit. Also after a template's `}` (`${prefix}.nikcli`)",
   },
   {
     id: "user-file",
-    find: /\bnikcli\.(?:jsonc?|db(?:-wal|-shm)?)\b(?!\s*\()/g,
-    why: "nikcli.json(c) and nikcli.db: a user's config and database; moved by hand with rule B. Not a call: `nikcli.json()` is a variable's method",
+    find: /\bnikcli\.(?:jsonc?|db(?:-wal|-shm)?)\b(?!\(\))/g,
+    why: "nikcli.json(c) and nikcli.db: a user's config and database; moved by hand with rule B. Not the call `nikcli.json()`, a variable's method",
   },
   {
     id: "user-dir",
-    find: /(?:\.config|\.local[\\/]+share|\.local[\\/]+state|\.cache|AppData[\\/]+(?:Local|Roaming)(?:[\\/]+(?:Cache|State))?|Library[\\/]+Application Support)[\\/]+nikcli\b/g,
-    why: "the platform data and config folders (APPDATA, LOCALAPPDATA, XDG): a user's data; rule B by hand",
+    find: /(?:\.config|\.local[\\/]+share|\.local[\\/]+state|\.cache|AppData[\\/]+(?:Local|Roaming)(?:[\\/]+(?:Cache|State))?|Library[\\/]+Application Support)[\\/]+nikcli\b/gi,
+    why: "the platform data and config folders (APPDATA, LOCALAPPDATA, XDG), in any case (`appdata\\roaming\\nikcli` in a test): a user's data; rule B by hand",
   },
 ]
 
@@ -167,6 +172,32 @@ export const LINE_EXCLUSIONS: readonly Exclusion[] = [
     find: /const app = "nikcli"|\bjoin(?:Path)?\([^)\n]*["']nikcli["']|\.join\("nikcli"\)/,
     unless: /["']packages["']|import\.meta|nikcliBinDir/,
     why: "the folder name of a user's data and config (global.ts, ADE in TS and Rust, desktop, devhub): rule B by hand, with the guards",
+  },
+  {
+    id: "guard",
+    find: /casings\("nikcli"\)/,
+    why: "a guard that builds its denials from the bare name (serve-rules.ts `configDenials`): it must keep denying .nikcli until correction 2 adds ragu beside it",
+  },
+  {
+    id: "kept-source-assert",
+    find: /\.(?:not\.)?(?:toContain|toMatch)\(/,
+    files: /^packages\/(?:nikcli|ragu)\/test\/installation\/[^/]+\.test\.ts$/,
+    why: "assertions on the text of the files kept for the services brief (installation/index.ts, install.ps1): they must quote that text as it stays",
+  },
+  {
+    id: "config-stem",
+    find: /(?:fileInDirectory|configFilesInDirectory)\([^)\n]*"nikcli"\)|"nikcli" \| "tui"|kind === "server"\) return "nikcli"/,
+    why: "the stem nikcli.json(c) is built from (config paths, the TUI config migration, plugin install, the mod guard): renamed, ragu would stop reading a user's nikcli.json; rule B by hand in correction 2",
+  },
+  {
+    id: "npm-plugin",
+    find: /\["@nikcli-ai\/plugin"\]|"@nikcli-ai\/plugin@"|"dependencies":\{"@nikcli-ai\/plugin"/,
+    why: "the plugin package ragu adds from npm to a user's config folder (config.ts `bun add`, the pin it checks, ADE's project trust that discounts it): @ragu/plugin is not on npm; it moves when we publish one, in the services brief",
+  },
+  {
+    id: "publisher",
+    find: /"publisher"\s*:\s*"nikcli"|"copyright"\s*:\s*"[^"]*\bnikcli"/,
+    why: "ADE's publisher (brand.json, tauri.conf.json, and the copyright made from it): the NSIS install folder and registry keys hang off it; it moves with the ADE id, last",
   },
   {
     id: "prompt",
@@ -203,6 +234,22 @@ export const SKIP_FILES: readonly PathExclusion[] = [
     find: /^(?:script\/publish-registries\.ts|packages\/(?:nikcli|ragu)\/src\/installation\/index\.ts)$/,
     onlyRules: ["scope", "env"],
     why: "upgrade and publishing code that names nikcli's packages on npm, brew, scoop and choco: only the imports and the env names change, so it still compiles; the names stay until the autoupdate/services brief",
+  },
+  {
+    id: "upstream-service",
+    find: /^packages\/(?:auth|identity)\//,
+    onlyRules: ["scope", "env"],
+    why: "Nik's sign-in service (auth.nikcli-ai.dev) and its token check: client ids, audience, worker and database names are registered there and must agree between src and tests; only the imports and the env names change; the services brief decides the rest",
+  },
+  {
+    id: "guard-test",
+    find: /^packages\/ade\/src\/bots\/serve-rules\.test\.ts$/,
+    why: "the hostile spellings the .nikcli guard must deny (NIKCLI.JSON, Nikcli.Jsonc, NIKCLI~1, …): the guard keeps denying nikcli, so its test keeps those inputs; correction 2 adds the ragu ones",
+  },
+  {
+    id: "example-word",
+    find: /^packages\/voice\/src\/asr\/custom-words\.test\.ts$/,
+    why: "spelling-correction tests with nikcli as the sample word («nick cli» → «nikcli», edit distances): renamed, the distances they assert change",
   },
   { id: "lock", find: /(?:^|\/)(?:bun\.lockb?|Cargo\.lock|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/, why: "lockfiles: regenerated by bun install and cargo after the rename" },
   { id: "self", find: /^script\/ragu-codemod(?:\.map)?\.ts$/, why: "the codemod itself" },
