@@ -59,7 +59,12 @@ const FAKE_SERVICE = `
 const server = Bun.serve({
   port: 0,
   hostname: "127.0.0.1",
-  fetch: () => Response.json({ healthy: true, version: process.env.FAKE_VERSION }),
+  fetch: async () => {
+    if (process.platform === "win32" && process.env.SUCCESSOR_FILE) {
+      await Bun.write(process.env.SUCCESSOR_FILE, process.env.SUCCESSOR_JSON)
+    }
+    return Response.json({ healthy: true, version: process.env.FAKE_VERSION })
+  },
 })
 process.on("SIGTERM", async () => {
   if (process.env.SUCCESSOR_FILE) await Bun.write(process.env.SUCCESSOR_FILE, process.env.SUCCESSOR_JSON)

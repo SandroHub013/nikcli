@@ -184,7 +184,20 @@ export namespace BackgroundService {
           // cannot create-if-absent: replacing is the fallback for both.
         }
       }
-      await fs.rename(temp, file)
+      try {
+        await fs.rename(temp, file)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException | undefined)?.code === "EPERM" && process.platform === "win32") {
+          for (let attempt = 0; attempt < 5; attempt++) {
+            await Bun.sleep(20)
+            try {
+              await fs.rename(temp, file)
+              return secret
+            } catch {}
+          }
+        }
+        throw error
+      }
       return secret
     } finally {
       await fs.rm(temp, { force: true }).catch(() => {})
