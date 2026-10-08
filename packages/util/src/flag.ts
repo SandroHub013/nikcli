@@ -3,6 +3,14 @@ function truthy(key: string) {
   return value === "true" || value === "1"
 }
 
+/** Three states: on (`1`/`true`), off (`0`/`false`), or `undefined` when unset or anything else, so a default can tell «no» from «not said». */
+function tristate(key: string): boolean | undefined {
+  const value = process.env[key]?.trim().toLowerCase()
+  if (value === "true" || value === "1") return true
+  if (value === "false" || value === "0") return false
+  return undefined
+}
+
 export namespace Flag {
   /**
    * Whether permission prompts are auto-approved for this process.
@@ -82,11 +90,29 @@ export namespace Flag {
     return process.env["NIKCLI_CACHE_RETENTION"]
   }
   /**
+   * What the prompt_cache_key sent to OpenAI-style providers is made of: `model` (default, one key per provider/model), `session`
+   * (one key per session) or `none` (no key). The raw value, trimmed and lowercased: `provider/transform.ts` resolves unknown values.
+   * Read on every use, like `cacheRetention`.
+   */
+  export function promptCacheKey() {
+    return process.env["NIKCLI_PROMPT_CACHE_KEY"]?.trim().toLowerCase() || undefined
+  }
+  /**
    * The cache keeper (`session/cache-keeper.ts`): keeps an idle session's prompt-cache entry alive with one hidden request shortly
    * before it would expire. Off unless `NIKCLI_CACHE_KEEPALIVE=1`. Read on every use, like `cacheRetention`.
    */
   export function cacheKeepalive() {
     return truthy("NIKCLI_CACHE_KEEPALIVE")
+  }
+  /** `NIKCLI_CACHE_KEEPALIVE` as the user said it: `undefined` is «not said», which is on for Codex and off elsewhere (`CacheKeeper.settings`). */
+  export function cacheKeepaliveSetting() {
+    return tristate("NIKCLI_CACHE_KEEPALIVE")
+  }
+  export function cacheKeepaliveCompactSetting() {
+    return tristate("NIKCLI_CACHE_KEEPALIVE_COMPACT")
+  }
+  export function compactionSharedPrefixSetting() {
+    return tristate("NIKCLI_COMPACTION_SHARED_PREFIX")
   }
   /** Idle compaction by the keeper, instead of letting the entry die at the end of its budget. Needs `cacheKeepalive` and `compactionSharedPrefix`. */
   export function cacheKeepaliveCompact() {
@@ -104,12 +130,17 @@ export namespace Flag {
     const raw = process.env["NIKCLI_COMPACTION_TOOL_CHOICE"]?.trim().toLowerCase()
     return raw === "same" || raw === "none" ? raw : undefined
   }
-  /** A positive number from the environment (`NIKCLI_CACHE_KEEPALIVE_*`), or `undefined` when unset or not one. */
-  export function cacheKeepaliveNumber(name: string): number | undefined {
+  /**
+   * A positive number from the environment (`NIKCLI_CACHE_KEEPALIVE_*`), or `undefined` when unset or not one. `0` counts as «not set»
+   * (a 0 lifetime, margin, threshold or horizon means nothing), except with `allowZero`: `NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS=0` is a
+   * real budget (no keep-alive, compact at once). Negatives, `NaN`, infinities and text are «not set» either way.
+   */
+  export function cacheKeepaliveNumber(name: string, options?: { allowZero?: boolean }): number | undefined {
     const raw = process.env[name]?.trim()
     if (!raw) return undefined
     const value = Number(raw)
-    return Number.isFinite(value) && value > 0 ? value : undefined
+    if (!Number.isFinite(value)) return undefined
+    return value > 0 || (options?.allowZero === true && value === 0) ? value : undefined
   }
   // Opt out of journaling local (non-workspace) session restore events into
   // the unified sync_event log.

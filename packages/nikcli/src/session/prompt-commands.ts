@@ -244,6 +244,8 @@ export namespace PromptCommands {
         TERM: "dumb",
       },
     })
+    // Windows: the command and everything it starts live in a Job Object, so stopping it leaves no orphan.
+    Shell.adopt(proc)
 
     let output = ""
 

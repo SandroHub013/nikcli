@@ -78,7 +78,7 @@ export namespace CacheKeeper {
     readonly marginPct: number
     /** Below this many tokens of prefix a rewrite is cheap and nothing is kept alive. */
     readonly minTokens: number
-    /** Renewals after which the keeper stops; `undefined` is the break-even of the provider. */
+    /** Renewals after which the keeper stops; `0` is no keep-alive at all, `undefined` is the break-even of the provider. */
     readonly maxRenewals: number | undefined
     /** Seconds after the last real request at which the keeper stops, whatever the renewals. */
     readonly horizonS: number | undefined
@@ -86,17 +86,45 @@ export namespace CacheKeeper {
     readonly compact: boolean
   }
 
-  export function settings(): Settings {
+  /** The lifetime of a Codex entry when none is configured: the plan's cache holds about 40 minutes, then it is a matter of luck. */
+  export const CODEX_LIFETIME_S = 2_400
+  /** Keep-alives on Codex before the compaction, when none is configured: the lab measured 3 of 5 landing, and 40 and 81 minutes in compact2. No horizon by default. */
+  export const CODEX_MAX_RENEWALS = 2
+
+  /**
+   * The settings of a session. On Codex (ChatGPT OAuth, HTTP and WebSocket alike: `isCodex` in `LLM`) the keeper, its idle compaction
+   * and the shared prefix are on without any variable, with a lifetime of `CODEX_LIFETIME_S`; `NIKCLI_CACHE_KEEPALIVE=0` (and the same
+   * for the other two) turns them off, and the numbers, when set, win. Everywhere else nothing changes: it is on only with the variables,
+   * since there it would spend paid credits on a measurement nobody has made.
+   */
+  export function settings(codex = false): Settings {
     return {
-      enabled: Flag.cacheKeepalive(),
-      lifetimeS: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_LIFETIME_S"),
+      enabled: Flag.cacheKeepaliveSetting() ?? codex,
+      lifetimeS: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_LIFETIME_S") ?? (codex ? CODEX_LIFETIME_S : undefined),
       marginPct: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MARGIN_PCT") ?? 10,
       minTokens: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MIN_TOKENS") ?? 20_000,
-      maxRenewals: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS"),
+      maxRenewals: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS", { allowZero: true }) ?? (codex ? CODEX_MAX_RENEWALS : undefined),
       horizonS: Flag.cacheKeepaliveNumber("NIKCLI_CACHE_KEEPALIVE_HORIZON_S"),
       // Both switches: the compaction that is cheap is the one that shares the prefix, and without it this would rewrite the context.
-      compact: Flag.cacheKeepaliveCompact() && Flag.compactionSharedPrefix(),
+      compact: (Flag.cacheKeepaliveCompactSetting() ?? codex) && (Flag.compactionSharedPrefixSetting() ?? codex),
     }
+  }
+
+  const codexSessions = new Set<string>()
+
+  /** `LLM` says which sessions run on Codex, so the compaction (which has no auth at hand) can tell. Bounded: the oldest is dropped. */
+  export function markCodex(sessionID: string) {
+    if (codexSessions.has(sessionID)) return
+    if (codexSessions.size >= 256) {
+      const oldest = codexSessions.values().next().value
+      if (oldest !== undefined) codexSessions.delete(oldest)
+    }
+    codexSessions.add(sessionID)
+  }
+
+  /** Whether the compaction of this session reuses the prefix of its last request: the variable, else on for Codex. */
+  export function sharedPrefix(sessionID: string): boolean {
+    return Flag.compactionSharedPrefixSetting() ?? codexSessions.has(sessionID)
   }
 
   // ---------------------------------------------------------------- the request
@@ -159,6 +187,8 @@ export namespace CacheKeeper {
     readonly startedAt?: number
     /** The instance the session lives in, which a timer cannot find again by itself. */
     readonly ctx?: unknown
+    /** The request goes to Codex: the defaults of `settings(true)` apply. */
+    readonly codex?: boolean
   }
 
   export interface Deps {
@@ -186,12 +216,13 @@ export namespace CacheKeeper {
       },
       ctx: unknown,
     ): void
-    settings(): Settings
+    settings(codex?: boolean): Settings
   }
 
   interface Entry {
     readonly sessionID: string
     readonly ctx: unknown
+    readonly codex: boolean
     request: LLMRequestType
     fetch: typeof globalThis.fetch | undefined
     /** Bumped by every real request: a keep-alive that finds a newer number than it started with was overtaken. */
@@ -201,6 +232,8 @@ export namespace CacheKeeper {
     lifetimeMs?: number
     prefixTokens: number
     renewals: number
+    /** Keep-alives in a row that read nothing from the cache; a hit, or a real request (a new entry), starts it again. */
+    misses: number
     timer?: unknown
     flight?: AbortController
     stopped: boolean
@@ -209,6 +242,8 @@ export namespace CacheKeeper {
   }
 
   const MAX_SESSIONS = 64
+  /** Keep-alives in a row that may miss before the keeper gives up on the session. */
+  const MAX_MISSES_IN_A_ROW = 2
   const entries = new Map<string, Entry>()
   let disabled = false
   let deps: Deps | undefined
@@ -219,8 +254,8 @@ export namespace CacheKeeper {
     for (const entry of [...entries.values()]) forget(entry.sessionID)
   }
 
-  export function active(d = dependencies()): boolean {
-    return !disabled && d.settings().enabled
+  export function active(d = dependencies(), codex = false): boolean {
+    return !disabled && d.settings(codex).enabled
   }
 
   export function dependencies(): Deps {
@@ -275,7 +310,7 @@ export namespace CacheKeeper {
    */
   function finish(entry: Entry, reason: string, extra?: Record<string, unknown>) {
     const d = dependencies()
-    if (!d.settings().compact) return stop(entry, reason, extra)
+    if (!d.settings(entry.codex).compact) return stop(entry, reason, extra)
     clear(entry)
     const generation = entry.generation
     // Not now: the entry is warm until it expires, and a compaction that reads it is as cheap at the margin before the expiry as at
@@ -316,7 +351,7 @@ export namespace CacheKeeper {
    */
   export function observe(input: Observation) {
     const d = dependencies()
-    if (!active(d)) return
+    if (!active(d, input.codex)) return
     if (!(ROUTES as readonly string[]).includes(input.request.model.route)) return
     const previous = entries.get(input.sessionID)
     if (previous) clear(previous)
@@ -328,6 +363,7 @@ export namespace CacheKeeper {
     const entry: Entry = {
       sessionID: input.sessionID,
       ctx: input.ctx,
+      codex: input.codex === true,
       request: input.request,
       fetch: input.fetch,
       generation: (previous?.generation ?? 0) + 1,
@@ -336,6 +372,7 @@ export namespace CacheKeeper {
       lifetimeMs: undefined,
       prefixTokens: 0,
       renewals: 0,
+      misses: 0,
       stopped: false,
       awaiting: true,
     }
@@ -356,7 +393,7 @@ export namespace CacheKeeper {
     if (!entry || entry.stopped || !entry.awaiting) return
     entry.awaiting = false
     const d = dependencies()
-    if (!active(d)) return forget(sessionID)
+    if (!active(d, entry.codex)) return forget(sessionID)
     const generation = entry.generation
     entry.prefixTokens = usage.input + usage.cacheRead + usage.cacheWrite
     if (usage.cacheRead + usage.cacheWrite === 0) return stop(entry, "no cache entry: the provider reported no cached tokens")
@@ -396,7 +433,7 @@ export namespace CacheKeeper {
   // ---------------------------------------------------------------- the timer
 
   async function lifetimeMs(entry: Entry, d: Deps): Promise<number | undefined> {
-    const override = d.settings().lifetimeS
+    const override = d.settings(entry.codex).lifetimeS
     if (override !== undefined) return override * 1_000
     // Anthropic says on the wire how long the entry lives. OpenAI's cache is implicit, with no lifetime to read: it is configured
     // (`NIKCLI_CACHE_KEEPALIVE_LIFETIME_S`) until a measurement exists, and with none the keeper is off for it.
@@ -408,12 +445,12 @@ export namespace CacheKeeper {
   }
 
   function marginMs(entry: Entry, d: Deps) {
-    return Math.max(1_000, Math.round((entry.lifetimeMs ?? 0) * (d.settings().marginPct / 100)))
+    return Math.max(1_000, Math.round((entry.lifetimeMs ?? 0) * (d.settings(entry.codex).marginPct / 100)))
   }
 
   function arm(entry: Entry, d: Deps) {
     if (entry.stopped || entry.lifetimeMs === undefined) return
-    const s = d.settings()
+    const s = d.settings(entry.codex)
     if (entry.prefixTokens < s.minTokens) {
       return stop(entry, "prefix below the threshold", { tokens: entry.prefixTokens, minTokens: s.minTokens })
     }
@@ -435,7 +472,7 @@ export namespace CacheKeeper {
     entry.timer = undefined
     if (entry.stopped || entry.generation !== generation) return
     try {
-      if (!active(d)) return forget(entry.sessionID)
+      if (!active(d, entry.codex)) return forget(entry.sessionID)
       if (d.attached() === 0) return stop(entry, "no client attached")
       const lifetime = entry.lifetimeMs ?? 0
       const expiresAt = entry.lastTouch + lifetime
@@ -470,16 +507,28 @@ export namespace CacheKeeper {
         output: usage.output,
         elapsedMs: d.now() - sentAt,
       })
-      if (usage.cacheRead === 0) {
-        // The entry was already gone (or never matched): this request paid the write. Renewing now would be a rewrite every time.
-        return stop(entry, usage.cacheWrite > 0 ? "the entry had expired: this request rewrote it" : "no cached tokens read", {
-          cached: usage.cacheRead,
+      /*
+       * A miss (nothing read from the cache) still wrote the entry again, at full price, so it counts as a renewal: it uses the budget
+       * like a hit, and the next keep-alive is timed from it. OpenAI reports no cache writes (`cacheWrite` stays 0): there a miss is an
+       * implicit write too, and the rule is the same for every provider. Two in a row stop the keeper: a key that never gets the cache
+       * (routing, load) would otherwise rewrite the entry at every round. A hit starts the count again.
+       */
+      const miss = usage.cacheRead === 0
+      entry.misses = miss ? entry.misses + 1 : 0
+      if (miss) {
+        log.info("cache keepalive miss", {
+          sessionID: entry.sessionID,
+          miss: true,
           uncached: usage.input,
           written: usage.cacheWrite,
+          misses: entry.misses,
         })
       }
       entry.renewals += 1
       entry.lastTouch = sentAt
+      if (entry.misses >= MAX_MISSES_IN_A_ROW) {
+        return stop(entry, "two misses in a row", { uncached: usage.input, written: usage.cacheWrite })
+      }
       d.publish(
         {
           sessionID: entry.sessionID,

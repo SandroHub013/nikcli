@@ -11,7 +11,7 @@ import { InstructionRepo } from "./instruction-repo"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Mod } from "@/mod"
-import { Flag } from "@nikcli-ai/util/flag"
+import { CacheKeeper } from "./cache-keeper"
 import { LLM } from "./llm"
 import type { ModelMessage, Tool } from "./llm/types"
 import { Config } from "@/config/config"
@@ -585,7 +585,7 @@ When constructing the summary, try to stick to this template:
     // would be another cache, so that case keeps the way of today.
     const shared =
       input.shared &&
-      Flag.compactionSharedPrefix() &&
+      CacheKeeper.sharedPrefix(input.sessionID) &&
       (!agent.model ||
         (agent.model.providerID === userMessageInfo.model.providerID && agent.model.modelID === userMessageInfo.model.modelID))
         ? input.shared

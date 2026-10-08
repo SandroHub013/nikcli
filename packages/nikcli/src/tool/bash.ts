@@ -574,6 +574,8 @@ export const BashTool = Tool.define("bash", async () => {
       const proc = direct
         ? spawn(direct.file, direct.args, spawnOptions)
         : spawn(invocation.command, { shell, ...spawnOptions })
+      // Windows: the command and everything it starts live in a Job Object, so a timeout or an abort leaves no orphan.
+      Shell.adopt(proc)
 
       let output = ""
       let outputTruncated = false

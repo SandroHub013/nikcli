@@ -38,6 +38,8 @@ const realRequest = (model: typeof anthropic) =>
 
 const BIG: CacheKeeper.Usage = { input: 40, output: 300, cacheRead: 30_000, cacheWrite: 2_000 }
 const READ: CacheKeeper.Usage = { input: 30, output: 1, cacheRead: 32_000, cacheWrite: 0 }
+/** A keep-alive that finds the entry gone: it reads nothing and writes the prefix again at full price. */
+const MISS: CacheKeeper.Usage = { input: 20, output: 1, cacheRead: 0, cacheWrite: 31_000 }
 
 interface Sent {
   request: LLMRequest
@@ -400,13 +402,77 @@ describe("when it stops", () => {
     expect(w.events.at(-1)?.reason).toContain("no cache entry")
   })
 
-  it("when the keep-alive finds the entry already gone (it rewrote it), instead of rewriting every time", async () => {
-    w.state.answers = [{ input: 20, output: 1, cacheRead: 0, cacheWrite: 31_000 }]
+  it("a keep-alive that finds the entry gone (it rewrote it) counts as a renewal and the keeper goes on", async () => {
+    w.state.answers = [MISS]
     await turn(realRequest(anthropic))
     await w.advance(18_000)
     expect(w.sent).toHaveLength(1)
-    expect(w.events.at(-1)?.reason).toBe("the entry had expired: this request rewrote it")
+    expect(w.events.at(-1)).toMatchObject({ state: "renewed", renewals: 1 })
+    expect(w.timers()).toBe(1)
+    // The next one is timed from the miss, which wrote the entry again: 18 s later.
+    await w.advance(18_000)
+    expect(w.sent).toHaveLength(2)
+    expect(w.sent[1]!.at - w.sent[0]!.at).toBe(18_000)
+  })
+
+  it("hit, miss, hit: the keeper goes on, and the miss in the middle does not count against it", async () => {
+    w.state.answers = [READ, MISS, READ]
+    await turn(realRequest(anthropic))
+    await w.advance(18_000 * 3)
+    expect(w.sent).toHaveLength(3)
+    expect(w.events.filter((event) => event.state === "stopped")).toEqual([])
+    expect(w.events.at(-1)).toMatchObject({ state: "renewed", renewals: 3 })
+    expect(w.timers()).toBe(1)
+  })
+
+  it("miss, miss: two in a row stop it, whatever the budget", async () => {
+    w.state.answers = [MISS, MISS]
+    await turn(realRequest(anthropic))
+    await w.advance(60 * 60_000)
+    expect(w.sent).toHaveLength(2)
+    expect(w.events.at(-1)).toMatchObject({ state: "stopped", reason: "two misses in a row", renewals: 2 })
     expect(w.timers()).toBe(0)
+  })
+
+  it("a hit between two misses starts the count again", async () => {
+    w.state.answers = [MISS, READ, MISS, READ]
+    await turn(realRequest(anthropic))
+    await w.advance(18_000 * 4)
+    expect(w.sent).toHaveLength(4)
+    expect(w.events.filter((event) => event.state === "stopped")).toEqual([])
+  })
+
+  it("a miss uses the budget like a hit: with a budget of 2, hit then miss ends in `budget spent`", async () => {
+    w.state.settings = { ...w.state.settings, maxRenewals: 2 }
+    w.state.answers = [READ, MISS]
+    await turn(realRequest(anthropic))
+    await w.advance(10 * 60_000)
+    expect(w.sent).toHaveLength(2)
+    expect(w.events.at(-1)).toMatchObject({ state: "stopped", reason: "budget spent", renewals: 2 })
+  })
+
+  it("a miss without cache writes (OpenAI reports none) is the same: it counts, and two in a row stop", async () => {
+    w.state.settings = { ...w.state.settings, lifetimeS: 20 }
+    const silent: CacheKeeper.Usage = { input: 31_000, output: 16, cacheRead: 0, cacheWrite: 0 }
+    w.state.answers = [silent, silent]
+    await turn(realRequest(openai), { input: 40, output: 300, cacheRead: 30_000, cacheWrite: 0 })
+    await w.advance(60 * 60_000)
+    expect(w.sent).toHaveLength(2)
+    expect(w.events.at(-1)).toMatchObject({ state: "stopped", reason: "two misses in a row" })
+  })
+
+  it("a real turn in the middle starts everything again: the misses, the renewals and the budget", async () => {
+    w.state.answers = [MISS]
+    await turn(realRequest(anthropic))
+    await w.advance(18_000)
+    expect(w.events.at(-1)).toMatchObject({ renewals: 1 })
+    w.state.answers = [MISS]
+    await turn(realRequest(anthropic))
+    expect(w.events.at(-1)).toMatchObject({ state: "armed", renewals: 0 })
+    await w.advance(18_000)
+    // One miss since the real turn, not two: it goes on.
+    expect(w.events.at(-1)).toMatchObject({ state: "renewed", renewals: 1 })
+    expect(w.timers()).toBe(1)
   })
 
   it("on any failure of the provider: a stop for that session, and nothing thrown", async () => {
@@ -534,5 +600,108 @@ describe("the wiring", () => {
     expect(EventFeed.attached()).toBe(before + 1)
     b.abandon()
     expect(EventFeed.attached()).toBe(before)
+  })
+})
+
+/** On Codex the keeper is on without a variable; everywhere else it needs the variables, as before. Real `settings()`, fake provider. */
+describe("on by default on Codex only", () => {
+  const VARS = [
+    "NIKCLI_CACHE_KEEPALIVE",
+    "NIKCLI_CACHE_KEEPALIVE_COMPACT",
+    "NIKCLI_COMPACTION_SHARED_PREFIX",
+    "NIKCLI_CACHE_KEEPALIVE_LIFETIME_S",
+    "NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS",
+  ]
+  const clear = () => {
+    for (const name of VARS) delete process.env[name]
+  }
+  beforeEach(() => {
+    clear()
+    CacheKeeper.useDeps({ ...w.deps, settings: (codex) => CacheKeeper.settings(codex) })
+  })
+  afterEach(clear)
+
+  const codexTurn = async (request: LLMRequest, session = SESSION) => {
+    CacheKeeper.observe({ sessionID: session, request, fetch: undefined, codex: true })
+    await CacheKeeper.used(session, BIG)
+  }
+
+  it("Codex, no variables: armed with a lifetime of 2400 s, fires at the margin, compacts when the budget is spent", async () => {
+    CacheKeeper.markCodex(SESSION)
+    expect(CacheKeeper.sharedPrefix(SESSION)).toBe(true)
+    await codexTurn(realRequest(openai))
+    expect(w.events.at(-1)).toMatchObject({ state: "armed", renewals: 0, expiresAt: w.now() + 2_400_000 })
+    await w.advance(2_100_000)
+    expect(w.sent).toHaveLength(0)
+    await w.advance(100_000)
+    expect(w.sent).toHaveLength(1)
+    // The Codex budget (2 renewals), then the idle compaction.
+    await w.advance(24 * 60 * 60_000)
+    expect(w.sent).toHaveLength(CacheKeeper.CODEX_MAX_RENEWALS)
+    expect(w.sent).toHaveLength(2)
+    expect(w.state.compacted).toEqual([SESSION])
+    expect(w.events.at(-1)).toMatchObject({ state: "compacted", reason: "budget spent" })
+  })
+
+  it("Codex with MAX_RENEWALS=5: five keep-alives, then the compaction; other routes keep the break-even", async () => {
+    process.env["NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS"] = "5"
+    await codexTurn(realRequest(openai))
+    await w.advance(24 * 60 * 60_000)
+    expect(w.sent).toHaveLength(5)
+    expect(w.state.compacted).toEqual([SESSION])
+    delete process.env["NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS"]
+    expect(CacheKeeper.settings(true)).toMatchObject({ maxRenewals: 2, horizonS: undefined })
+    expect(CacheKeeper.settings(false).maxRenewals).toBeUndefined()
+  })
+
+  it("Codex with NIKCLI_CACHE_KEEPALIVE=0: no keep-alive, nothing armed", async () => {
+    process.env["NIKCLI_CACHE_KEEPALIVE"] = "0"
+    await codexTurn(realRequest(openai))
+    await w.advance(24 * 60 * 60_000)
+    expect(w.sent).toHaveLength(0)
+    expect(w.events).toHaveLength(0)
+    expect(w.timers()).toBe(0)
+  })
+
+  it("Codex with the compaction or the shared prefix switched off: keep-alives, but no compaction", async () => {
+    process.env["NIKCLI_CACHE_KEEPALIVE_COMPACT"] = "0"
+    expect(CacheKeeper.settings(true)).toMatchObject({ enabled: true, compact: false })
+    delete process.env["NIKCLI_CACHE_KEEPALIVE_COMPACT"]
+    process.env["NIKCLI_COMPACTION_SHARED_PREFIX"] = "0"
+    expect(CacheKeeper.settings(true)).toMatchObject({ enabled: true, compact: false })
+    CacheKeeper.markCodex("ses_codex_2")
+    expect(CacheKeeper.sharedPrefix("ses_codex_2")).toBe(false)
+  })
+
+  it("variables set win over the Codex default", async () => {
+    process.env["NIKCLI_CACHE_KEEPALIVE_LIFETIME_S"] = "300"
+    process.env["NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS"] = "0"
+    expect(CacheKeeper.settings(true)).toMatchObject({ lifetimeS: 300, maxRenewals: 0 })
+    await codexTurn(realRequest(openai))
+    expect(w.events.at(-1)).toMatchObject({ state: "armed", expiresAt: w.now() + 300_000 })
+    await w.advance(24 * 60 * 60_000)
+    expect(w.sent).toHaveLength(0)
+    expect(w.state.compacted).toEqual([SESSION])
+  })
+
+  it("Anthropic and OpenAI with an API key (not Codex), no variables: no keep-alive, as before", async () => {
+    expect(CacheKeeper.settings()).toMatchObject({ enabled: false, lifetimeS: undefined, compact: false })
+    expect(CacheKeeper.active(undefined, false)).toBe(false)
+    expect(CacheKeeper.sharedPrefix("ses_plain")).toBe(false)
+    for (const model of [anthropic, openai]) {
+      CacheKeeper.observe({ sessionID: "ses_plain", request: realRequest(model), fetch: undefined })
+      await CacheKeeper.used("ses_plain", BIG)
+    }
+    await w.advance(24 * 60 * 60_000)
+    expect(w.sent).toHaveLength(0)
+    expect(w.events).toHaveLength(0)
+  })
+
+  it("the variables still turn it on for the others", async () => {
+    process.env["NIKCLI_CACHE_KEEPALIVE"] = "1"
+    expect(CacheKeeper.settings()).toMatchObject({ enabled: true, lifetimeS: undefined, compact: false })
+    process.env["NIKCLI_CACHE_KEEPALIVE_COMPACT"] = "1"
+    process.env["NIKCLI_COMPACTION_SHARED_PREFIX"] = "1"
+    expect(CacheKeeper.settings()).toMatchObject({ compact: true })
   })
 })
