@@ -212,7 +212,7 @@ describe("daemon left behind by the CLI", () => {
       stdin: "ignore",
       stdout: "pipe",
       stderr: "pipe",
-      env: { ...process.env, NIKCLI_BROWSER_IDLE_MINUTES: "0.05" },
+      env: { ...process.env, RAGU_BROWSER_IDLE_MINUTES: "0.05" },
     })
     const [code, out] = await Promise.all([client.exited, new Response(client.stdout).text()])
     if (code !== 0) {
@@ -240,9 +240,9 @@ describe("daemon left behind by the CLI", () => {
 
 describe("daemon", () => {
   test("stops an abandoned session on its own, without being asked", async () => {
-    const previous = process.env.NIKCLI_BROWSER_IDLE_MINUTES
+    const previous = process.env.RAGU_BROWSER_IDLE_MINUTES
     // 0.05 min = 3s, which also shortens the sweep interval to match.
-    process.env.NIKCLI_BROWSER_IDLE_MINUTES = "0.05"
+    process.env.RAGU_BROWSER_IDLE_MINUTES = "0.05"
     const socket = join(tmpdir(), `browser-control-idle-${crypto.randomUUID()}.sock`)
 
     try {
@@ -264,8 +264,8 @@ describe("daemon", () => {
       }
       expect(sessions.every((s) => s.status !== "running")).toBe(true)
     } finally {
-      if (previous === undefined) delete process.env.NIKCLI_BROWSER_IDLE_MINUTES
-      else process.env.NIKCLI_BROWSER_IDLE_MINUTES = previous
+      if (previous === undefined) delete process.env.RAGU_BROWSER_IDLE_MINUTES
+      else process.env.RAGU_BROWSER_IDLE_MINUTES = previous
       await fetch("http://localhost/shutdown", { method: "POST", unix: socket } as RequestInit).catch(() => {})
     }
   }, 90_000)

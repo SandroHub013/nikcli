@@ -62,11 +62,11 @@ const unsafeCSS = `
   background-color: var(--diffs-bg-selection-text);
 }
 
-::highlight(nikcli-find) {
+::highlight(ragu-find) {
   background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
 }
 
-::highlight(nikcli-find-current) {
+::highlight(ragu-find-current) {
   background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
 }
 
@@ -145,7 +145,7 @@ const unsafeCSS = `
 
 export function createDefaultOptions<T>(style: FileDiffOptions<T>["diffStyle"]) {
   return {
-    theme: "Nikcli",
+    theme: "Ragu",
     themeType: "system",
     disableLineNumbers: false,
     overflow: "wrap",

@@ -1,5 +1,5 @@
-import type { McpLocalConfig } from "@nikcli-ai/sdk/httpapi"
-import { Runtime } from "@nikcli-ai/util/runtime"
+import type { McpLocalConfig } from "@ragu/sdk/httpapi"
+import { Runtime } from "@ragu/util/runtime"
 
 export type CatalogMcp = {
   name: string

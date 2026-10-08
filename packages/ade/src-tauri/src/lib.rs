@@ -81,8 +81,8 @@ pub struct WriteRoots(Mutex<Vec<PathBuf>>, Mutex<Vec<String>>);
  * dispatched on the thread that owns the window, so a `read_dir` on a cold
  * network share or a `git status` on a large repository stops the window from
  * drawing until it finishes. Declaring them `async` moves them onto Tauri's
- * async runtime, which is all these need. Bounded waits such as `nikcli_bot`
- * and `nikcli_serve_start` go further onto a blocking worker. `pty.rs` reached
+ * async runtime, which is all these need. Bounded waits such as `ragu_bot`
+ * and `ragu_serve_start` go further onto a blocking worker. `pty.rs` reached
  * the same conclusion first and documents it on `pty_write`.
  */
 
@@ -164,7 +164,7 @@ fn environment_path_dirs() -> Vec<PathBuf> {
 /// the OneDrive folder whose `Documents` holds the PowerShell profile, is a
 /// reasonable-looking project. So the file is checked, whatever the root:
 /// a `PATH` folder (`~/.nikcli/bin`, `~/.bun/bin`, `~/.local/bin`) is where the
-/// next `nikcli` or `bun` comes from, and `Documents/WindowsPowerShell` and
+/// next `ragu` or `bun` comes from, and `Documents/WindowsPowerShell` and
 /// `Documents/PowerShell` hold the profile every PowerShell opens in ADE's terminal.
 /// Names are compared in lower case, as the file system does.
 fn runs_by_itself(resolved: &Path, home: Option<&Path>, path_dirs: &[PathBuf]) -> Option<&'static str> {
@@ -366,7 +366,7 @@ fn refuse_network_path(path: &str) -> Result<(), String> {
 /// read through `read_text_file`, which otherwise opens any path.
 ///
 /// Not the whole home: the sidebar opens files anywhere, plugin discovery reads
-/// `~/.config/nikcli`, and the OpenRouter key sync reads nikcli's own `auth.json`.
+/// `~/.config/nikcli`, and the OpenRouter key sync reads ragu's own `auth.json`.
 /// What is listed is what no ADE feature reads.
 fn is_credential_path(path: &Path, home: Option<&Path>) -> bool {
     let Some(home) = home.and_then(|h| h.canonicalize().ok()) else {
@@ -472,17 +472,17 @@ fn within_roots_with(
 /// Whether `path` is a file of the project at `root` once links and
 /// junctions are followed (C6 review, MEDIO): the chat's attachments.
 ///
-/// nikcli reads a `file://` part itself, with `bypassCwdCheck` and without
+/// ragu reads a `file://` part itself, with `bypassCwdCheck` and without
 /// asking (`session/prompt.ts`), so a link or a junction inside the project
 /// aimed at `~/.ssh` or an `auth.json` would send that file to the provider.
 /// Both sides are resolved (`resolve_for_check`, which follows them) and
 /// compared by whole components (`starts_with`), so `app-backup` is not
 /// inside `app`. The path must be absolute and an existing file.
 ///
-/// A `.env` or `.env.*` is refused by the name it resolves to (`env`): nikcli
+/// A `.env` or `.env.*` is refused by the name it resolves to (`env`): ragu
 /// guards those files for its read tool, and an attachment skips that guard.
 ///
-/// There is a window between this check and nikcli's read (TOCTOU): a link
+/// There is a window between this check and ragu's read (TOCTOU): a link
 /// swapped in between is read where it points then. Closing it would mean
 /// sending the file's contents instead of its path; the check still stops
 /// every link already there when the user attaches.
@@ -713,11 +713,11 @@ fn write_atomic(roots: &WriteRoots, path: &str, bytes: &[u8]) -> Result<(), Stri
 }
 
 // ---------------------------------------------------------------------------
-// Bots: nikcli agent files, and the two nikcli commands the panel needs
+// Bots: ragu agent files, and the two ragu commands the panel needs
 // ---------------------------------------------------------------------------
 
-/// nikcli's global configuration directory. Mirrors `globalConfigDir` in `bots/nikcli.ts`.
-fn nikcli_global_dir() -> Option<PathBuf> {
+/// ragu's global configuration directory. Mirrors `globalConfigDir` in `bots/ragu.ts`.
+fn ragu_global_dir() -> Option<PathBuf> {
     let home = dirs::home_dir()?;
     #[cfg(windows)]
     let dir = home.join("AppData").join("Roaming").join("nikcli");
@@ -743,10 +743,10 @@ fn is_bot_path(path: &Path, config: &Path) -> bool {
 
 /// A global bot's file, resolved, when `path` is one.
 ///
-/// The global directory is not a write root — it also holds nikcli's providers
+/// The global directory is not a write root — it also holds ragu's providers
 /// and plugins, which are code — so only agent files inside it are writable.
 fn global_bot_file(path: &str) -> Option<PathBuf> {
-    let config = nikcli_global_dir()?;
+    let config = ragu_global_dir()?;
     let config = config.canonicalize().unwrap_or(config);
     let resolved = resolve_for_check(Path::new(path)).ok()?;
     is_bot_path(&resolved, &config).then_some(resolved)
@@ -766,11 +766,11 @@ async fn bot_delete(roots: tauri::State<'_, WriteRoots>, path: String) -> Result
     std::fs::remove_file(&target).map_err(|e| format!("{path}: {e}"))
 }
 
-/// The arguments `nikcli` may be run with from the bots panel.
+/// The arguments `ragu` may be run with from the bots panel.
 ///
-///   nikcli --version
-///   nikcli models
-///   nikcli agent create --path <dir> --description <t> --mode <m> --tools <list> [--model <id>]
+///   ragu --version
+///   ragu models
+///   ragu agent create --path <dir> --description <t> --mode <m> --tools <list> [--model <id>]
 ///
 /// Each option once, each with a value, and `--path` a configuration root the
 /// agent file is then written under.
@@ -779,7 +779,7 @@ async fn bot_delete(roots: tauri::State<'_, WriteRoots>, path: String) -> Result
 /// program with fixed arguments, it writes nothing and reads nothing but
 /// itself, and the top bar asks it a few times a day. A second command would
 /// have been a second thing to keep in step with this list for no gain.
-/// A provider id as nikcli names one (`openrouter`, `nikcli-inference`,
+/// A provider id as ragu names one (`openrouter`, `ragu-inference`,
 /// `amazon-bedrock`): letters, digits, `-`, `_` and `.`, starting with a letter
 /// or a digit, so it can never read as an option.
 fn is_provider_id(id: &str) -> bool {
@@ -789,7 +789,7 @@ fn is_provider_id(id: &str) -> bool {
         && id.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
 }
 
-fn check_nikcli_args(roots: &WriteRoots, args: &[String]) -> Result<(), String> {
+fn check_ragu_args(roots: &WriteRoots, args: &[String]) -> Result<(), String> {
     match args {
         [only] if only == "--version" => Ok(()),
         [only] if only == "models" => Ok(()),
@@ -802,23 +802,23 @@ fn check_nikcli_args(roots: &WriteRoots, args: &[String]) -> Result<(), String> 
         [models, verbose] if models == "models" && verbose == "--verbose" => Ok(()),
         [agent, create, rest @ ..] if agent == "agent" && create == "create" => {
             if rest.len() % 2 != 0 {
-                return Err("argomenti di nikcli agent create incompleti".to_string());
+                return Err("argomenti di ragu agent create incompleti".to_string());
             }
             let mut seen = Vec::new();
             for pair in rest.chunks(2) {
                 let (flag, value) = (pair[0].as_str(), pair[1].as_str());
                 if !["--path", "--description", "--mode", "--tools", "--model"].contains(&flag) || seen.contains(&flag) {
-                    return Err(format!("opzione di nikcli non consentita: {flag}"));
+                    return Err(format!("opzione di ragu non consentita: {flag}"));
                 }
                 seen.push(flag);
                 if flag == "--path" {
-                    // Read against ADE's folder here and against `cwd` by nikcli: only an absolute path means one place
+                    // Read against ADE's folder here and against `cwd` by ragu: only an absolute path means one place
                     // (full review 2026-10-06, rust 20).
                     if !Path::new(value).is_absolute() {
                         return Err(format!("--path deve essere un percorso assoluto: {value}"));
                     }
                     let resolved = resolve_for_check(Path::new(value))?;
-                    let global = nikcli_global_dir().map(|d| d.canonicalize().unwrap_or(d));
+                    let global = ragu_global_dir().map(|d| d.canonicalize().unwrap_or(d));
                     let in_project = within_roots(roots, value).is_ok();
                     if !in_project && global.as_deref() != Some(resolved.as_path()) {
                         return Err(format!("cartella dei bot non consentita: {value}"));
@@ -826,15 +826,15 @@ fn check_nikcli_args(roots: &WriteRoots, args: &[String]) -> Result<(), String> 
                 }
             }
             if !seen.contains(&"--path") {
-                return Err("nikcli agent create senza --path".to_string());
+                return Err("ragu agent create senza --path".to_string());
             }
             Ok(())
         }
-        _ => Err("comando nikcli non consentito".to_string()),
+        _ => Err("comando ragu non consentito".to_string()),
     }
 }
 
-fn nikcli_timeout(args: &[String]) -> Duration {
+fn ragu_timeout(args: &[String]) -> Duration {
     match args {
         [only] if only == "--version" => Duration::from_secs(15),
         [only] if only == "models" => Duration::from_secs(30),
@@ -861,7 +861,7 @@ pub(crate) fn resume_child(child: &std::process::Child) -> Result<(), String> {
     let status =
         unsafe { NtResumeProcess(windows::Win32::Foundation::HANDLE(child.as_raw_handle())) };
     if status < 0 {
-        return Err(format!("nikcli non può essere riattivato: {status:#x}"));
+        return Err(format!("ragu non può essere riattivato: {status:#x}"));
     }
     Ok(())
 }
@@ -1083,15 +1083,15 @@ fn run_bounded_output(
     })
 }
 
-/// Runs `nikcli models` or `nikcli agent create`, and hands back what it printed.
+/// Runs `ragu models` or `ragu agent create`, and hands back what it printed.
 #[tauri::command]
-async fn nikcli_bot(
+async fn ragu_bot(
     roots: tauri::State<'_, WriteRoots>,
     args: Vec<String>,
     cwd: Option<String>,
 ) -> Result<ShellOutput, String> {
-    check_nikcli_args(&roots, &args)?;
-    let program = pty::which_on_path("nikcli").ok_or("nikcli non trovato nel PATH")?;
+    check_ragu_args(&roots, &args)?;
+    let program = pty::which_on_path("ragu").ok_or("ragu non trovato nel PATH")?;
     let mut command = std::process::Command::new(program);
     command.args(&args);
     if let Some(dir) = cwd.as_ref().filter(|d| !d.is_empty()) {
@@ -1102,10 +1102,10 @@ async fn nikcli_bot(
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x0800_0000);
     }
-    let timeout = nikcli_timeout(&args);
-    tauri::async_runtime::spawn_blocking(move || run_bounded_output(command, timeout, "nikcli"))
+    let timeout = ragu_timeout(&args);
+    tauri::async_runtime::spawn_blocking(move || run_bounded_output(command, timeout, "ragu"))
         .await
-        .map_err(|_| "avvio di nikcli interrotto".to_string())?
+        .map_err(|_| "avvio di ragu interrotto".to_string())?
 }
 
 /// Runs `claude agents --json`, the CLI's own list of its live sessions, and
@@ -1114,7 +1114,7 @@ async fn nikcli_bot(
 /// One program, fixed arguments, nothing from the caller but a directory: the
 /// list is what native mail delivery is routed on, and `run` is git-only on
 /// purpose (see below), so this is the second door of its kind, next to
-/// `nikcli_bot`. An older CLI without the subcommand exits non-zero, and the
+/// `ragu_bot`. An older CLI without the subcommand exits non-zero, and the
 /// caller reads that as "the CLI does not list".
 #[tauri::command]
 async fn claude_agents(cwd: Option<String>) -> Result<ShellOutput, String> {
@@ -1133,7 +1133,7 @@ async fn claude_agents(cwd: Option<String>) -> Result<ShellOutput, String> {
 /// takes longer than this is one the next call would have replaced anyway.
 const CLAUDE_AGENTS_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Off the async runtime and on a clock, like `claude_version` and `nikcli_bot`:
+/// Off the async runtime and on a clock, like `claude_version` and `ragu_bot`:
 /// a bare `output()` inside the async command held a Tauri worker, and left the
 /// child hanging, for as long as a stuck `claude` did not answer — once per call,
 /// every 5 s, until the app's async commands stopped.
@@ -1552,7 +1552,7 @@ async fn git_run(
     /*
      * Off the async worker, and bounded: `output()` here blocked a runtime thread until git was done, with no
      * limit, so a git stuck on a lock took one worker for good and a few of them stopped every command.
-     * Same runner as `nikcli_bot` and `claude_agents`: a job that ends the tree, a deadline, the output read
+     * Same runner as `ragu_bot` and `claude_agents`: a job that ends the tree, a deadline, the output read
      * on its own threads.
      */
     let timeout = git_timeout(&args);
@@ -1577,9 +1577,9 @@ async fn current_dir() -> Result<String, String> {
 /// Gives a GUI launch the PATH the user's shell would have.
 ///
 /// macOS starts apps from Finder or the Dock with launchd's PATH
-/// (`/usr/bin:/bin:/usr/sbin:/sbin`), so `nikcli`, `bun`, Homebrew and every
+/// (`/usr/bin:/bin:/usr/sbin:/sbin`), so `ragu`, `bun`, Homebrew and every
 /// agent CLI are missing from the terminal panes, from the new-session form
-/// (which then disables every agent as "not installed") and from `nikcli serve`.
+/// (which then disables every agent as "not installed") and from `ragu serve`.
 ///
 /// The PATH becomes, in order: what the login shell reports, what the process
 /// already had, and the directories the usual installers write to. The shell's
@@ -2184,7 +2184,7 @@ fn open_main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
                 window.state::<pty::Registry>().end_all_in_background();
                 // Nor any listener for the chats' messages: they wait for the new page.
                 window.state::<gateway::Gateway>().page_loading();
-                // Nor the chat's streams to `nikcli serve`: their channels are gone with the old page.
+                // Nor the chat's streams to `ragu serve`: their channels are gone with the old page.
                 window.state::<serve_proxy::Requests>().abort_all();
             }
         })
@@ -2515,7 +2515,7 @@ pub fn run() {
                         tauri_plugin_global_shortcut::ShortcutState::Released => "released",
                     };
                     let _ = app.emit(
-                        "nikcli-global-voice",
+                        "ragu-global-voice",
                         GlobalVoiceEvent { chord: shortcut.to_string(), state },
                     );
                 })
@@ -2618,7 +2618,7 @@ pub fn run() {
             ade_prune::ade_worktree_bytes,
             ade_prune::ade_worktree_rescue,
             tts::tts_disk_report,
-            nikcli_bot,
+            ragu_bot,
             claude_agents,
             claude_version,
             read_dir,
@@ -2688,11 +2688,11 @@ pub fn run() {
             gateway::gateway_pairing_revoke,
             gateway::gateway_pairing_open,
             gateway::gateway_slack_manifest,
-            serve::nikcli_serve_start,
-            serve::nikcli_serve_status,
-            serve::nikcli_serve_stop,
-            serve_proxy::nikcli_serve_fetch,
-            serve_proxy::nikcli_serve_abort,
+            serve::ragu_serve_start,
+            serve::ragu_serve_status,
+            serve::ragu_serve_stop,
+            serve_proxy::ragu_serve_fetch,
+            serve_proxy::ragu_serve_abort,
             chat_attachment_inside,
             shots::shots_dir,
             shots::shots_recent,
@@ -3132,10 +3132,10 @@ mod tests {
     }
 
     #[test]
-    fn bounded_nikcli_output_kills_and_reaps_a_command_that_does_not_finish() {
+    fn bounded_ragu_output_kills_and_reaps_a_command_that_does_not_finish() {
         let started = Instant::now();
         let error =
-            run_bounded_output(sleeper(), Duration::from_millis(100), "nikcli").expect_err("must time out");
+            run_bounded_output(sleeper(), Duration::from_millis(100), "ragu").expect_err("must time out");
         assert!(error.contains("ed è stato fermato"), "{error}");
         assert!(
             started.elapsed() < Duration::from_secs(2),
@@ -3146,7 +3146,7 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn bounded_nikcli_output_does_not_wait_for_a_grandchild_holding_stdout() {
+    fn bounded_ragu_output_does_not_wait_for_a_grandchild_holding_stdout() {
         let temp = TempDir::new("grandchild-output");
         let release = temp.join("release.txt");
         let marker = temp.join("survived.txt");
@@ -3162,7 +3162,7 @@ mod tests {
         command.args(["-NoProfile", "-Command", &script]);
         let started = Instant::now();
         let output =
-            run_bounded_output(command, Duration::from_secs(5), "nikcli").expect("root output must survive");
+            run_bounded_output(command, Duration::from_secs(5), "ragu").expect("root output must survive");
         let returned = started.elapsed();
         assert_eq!(output.code, Some(0));
         assert!(output.stdout.contains("root-output"), "{}", output.stdout);
@@ -3398,15 +3398,15 @@ mod tests {
         }
         // The roots a page could register: the home's child that holds the folder, or the home's OneDrive.
         for (root, file) in [
-            ("tools", "tools/bin/nikcli.cmd"),
+            ("tools", "tools/bin/ragu.cmd"),
             ("tools", "tools/bin/sub/x.cmd"),
-            ("tools/bin", "tools/bin/nikcli.cmd"),
+            ("tools/bin", "tools/bin/ragu.cmd"),
             ("OneDrive", "OneDrive/Documents/PowerShell/profile.ps1"),
             ("OneDrive", "OneDrive/Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1"),
             ("Documents/WindowsPowerShell", "Documents/WindowsPowerShell/Microsoft.PowerShell_profile.ps1"),
             ("Documents", "Documents/PowerShell/profile.ps1"),
             ("Documents", "documents/windowspowershell/x.ps1"),
-            (".nikcli", ".nikcli/bin/nikcli.cmd"),
+            (".nikcli", ".nikcli/bin/ragu.cmd"),
         ] {
             let roots = roots_at(at(root));
             let error = within_roots_with(&roots, &at(file).to_string_lossy(), Some(&home), &path_dirs)
@@ -3435,7 +3435,7 @@ mod tests {
 
     #[test]
     fn only_an_agent_file_counts_as_a_bot() {
-        let config = Path::new("C:\\cfg\\nikcli");
+        let config = Path::new("C:\\cfg\\ragu");
         assert!(is_bot_path(&config.join("agent").join("reviewer.md"), config));
         assert!(is_bot_path(&config.join("agents").join("team").join("senior.md"), config));
         assert!(!is_bot_path(&config.join("nikcli.json"), config));
@@ -3445,7 +3445,7 @@ mod tests {
         assert!(!is_bot_path(Path::new("C:\\elsewhere\\agent\\x.md"), config));
     }
 
-    // Full review 2026-10-06, rust 20: the check read a relative path against ADE's folder, nikcli reads it against `cwd`.
+    // Full review 2026-10-06, rust 20: the check read a relative path against ADE's folder, ragu reads it against `cwd`.
     #[test]
     fn a_relative_config_path_is_refused_whatever_folder_it_would_land_in() {
         let here = std::env::current_dir().expect("cartella di lavoro").canonicalize().expect("canonica");
@@ -3456,26 +3456,26 @@ mod tests {
                 .map(String::from)
                 .to_vec()
         };
-        // Inside ADE's own folder, so the old check passed it; nikcli would put the file under `cwd`.
-        let error = check_nikcli_args(&roots, &args(".nikcli-rel-test")).unwrap_err();
+        // Inside ADE's own folder, so the old check passed it; ragu would put the file under `cwd`.
+        let error = check_ragu_args(&roots, &args(".nikcli-rel-test")).unwrap_err();
         assert!(error.contains("assoluto"), "{error}");
-        assert!(check_nikcli_args(&roots, &args("..\\x")).is_err());
+        assert!(check_ragu_args(&roots, &args("..\\x")).is_err());
     }
 
     #[test]
-    fn nikcli_runs_only_the_commands_on_the_list() {
+    fn ragu_runs_only_the_commands_on_the_list() {
         let dir = TempDir::new("bots");
         let roots = dir.roots();
         let args = |list: &[&str]| list.iter().map(|a| a.to_string()).collect::<Vec<_>>();
         let home = dir.join(".nikcli").to_string_lossy().into_owned();
 
-        assert!(check_nikcli_args(&roots, &args(&["--version"])).is_ok());
-        assert!(check_nikcli_args(&roots, &args(&["models"])).is_ok());
-        assert!(check_nikcli_args(&roots, &args(&["models", "opencode", "--verbose"])).is_ok());
-        assert!(check_nikcli_args(&roots, &args(&["models", "openrouter", "--verbose"])).is_ok());
-        assert!(check_nikcli_args(&roots, &args(&["models", "nikcli-inference", "--verbose"])).is_ok());
-        assert!(check_nikcli_args(&roots, &args(&["models", "--verbose"])).is_ok());
-        assert!(check_nikcli_args(
+        assert!(check_ragu_args(&roots, &args(&["--version"])).is_ok());
+        assert!(check_ragu_args(&roots, &args(&["models"])).is_ok());
+        assert!(check_ragu_args(&roots, &args(&["models", "opencode", "--verbose"])).is_ok());
+        assert!(check_ragu_args(&roots, &args(&["models", "openrouter", "--verbose"])).is_ok());
+        assert!(check_ragu_args(&roots, &args(&["models", "ragu-inference", "--verbose"])).is_ok());
+        assert!(check_ragu_args(&roots, &args(&["models", "--verbose"])).is_ok());
+        assert!(check_ragu_args(
             &roots,
             &args(&["agent", "create", "--path", &home, "--description", "a", "--mode", "primary", "--tools", ""])
         )
@@ -3502,16 +3502,16 @@ mod tests {
             &["agent", "create", "--path", "C:\\Windows\\Temp"],
             &["agent", "create", "--path"],
         ] {
-            assert!(check_nikcli_args(&roots, &args(bad)).is_err(), "{bad:?}");
+            assert!(check_ragu_args(&roots, &args(bad)).is_err(), "{bad:?}");
         }
     }
 
     #[test]
-    fn nikcli_commands_have_command_specific_timeouts() {
+    fn ragu_commands_have_command_specific_timeouts() {
         let args = |list: &[&str]| list.iter().map(|arg| (*arg).to_string()).collect::<Vec<_>>();
-        assert_eq!(nikcli_timeout(&args(&["--version"])), Duration::from_secs(15));
-        assert_eq!(nikcli_timeout(&args(&["models"])), Duration::from_secs(30));
-        assert_eq!(nikcli_timeout(&args(&["agent", "create"])), Duration::from_secs(120));
+        assert_eq!(ragu_timeout(&args(&["--version"])), Duration::from_secs(15));
+        assert_eq!(ragu_timeout(&args(&["models"])), Duration::from_secs(30));
+        assert_eq!(ragu_timeout(&args(&["agent", "create"])), Duration::from_secs(120));
     }
 
     #[test]

@@ -20,7 +20,7 @@ export namespace Flag {
    * a worker thread that inherits the environment.
    */
   export function autoApprove() {
-    return truthy("NIKCLI_AUTO_APPROVE")
+    return truthy("RAGU_AUTO_APPROVE")
   }
 
   /**
@@ -29,55 +29,55 @@ export namespace Flag {
    * reason as `autoApprove`.
    */
   export function permissionMode(): "default" | "auto" | undefined {
-    const value = process.env["NIKCLI_PERMISSION_MODE"]?.toLowerCase()
+    const value = process.env["RAGU_PERMISSION_MODE"]?.toLowerCase()
     if (value === "auto" || value === "default") return value
     return undefined
   }
 
   /**
-   * Turn every mod off for this process (`NIKCLI_DISABLE_MODS=1`), the safe-mode switch. Read on
+   * Turn every mod off for this process (`RAGU_DISABLE_MODS=1`), the safe-mode switch. Read on
    * every access for the same reason as `autoApprove`: the CLI can set it after this module is
    * first imported.
    */
   export function modsDisabled() {
-    return truthy("NIKCLI_DISABLE_MODS")
+    return truthy("RAGU_DISABLE_MODS")
   }
 
   /**
    * An extra directory of managed settings and organization mods
-   * (`NIKCLI_MANAGED_CONFIG_DIR`), for MDM and tests. Read on every access like `autoApprove`.
+   * (`RAGU_MANAGED_CONFIG_DIR`), for MDM and tests. Read on every access like `autoApprove`.
    */
   export function managedConfigDir() {
-    return process.env["NIKCLI_MANAGED_CONFIG_DIR"]
+    return process.env["RAGU_MANAGED_CONFIG_DIR"]
   }
 
-  export const NIKCLI_AUTO_SHARE = truthy("NIKCLI_AUTO_SHARE")
-  export const NIKCLI_GIT_BASH_PATH = process.env["NIKCLI_GIT_BASH_PATH"]
-  export const NIKCLI_CONFIG = process.env["NIKCLI_CONFIG"]
-  export declare const NIKCLI_CONFIG_DIR: string | undefined
-  export declare const NIKCLI_CONFIG_CONTENT: string | undefined
-  export const NIKCLI_DISABLE_AUTOUPDATE = truthy("NIKCLI_DISABLE_AUTOUPDATE")
-  export const NIKCLI_DISABLE_PRUNE = truthy("NIKCLI_DISABLE_PRUNE")
-  export const NIKCLI_DISABLE_TERMINAL_TITLE = truthy("NIKCLI_DISABLE_TERMINAL_TITLE")
-  export const NIKCLI_PERMISSION = process.env["NIKCLI_PERMISSION"]
-  export const NIKCLI_DISABLE_DEFAULT_PLUGINS = truthy("NIKCLI_DISABLE_DEFAULT_PLUGINS")
-  export declare const NIKCLI_ISLAND: boolean
-  export declare const NIKCLI_HERDR: boolean
-  export const NIKCLI_DISABLE_LSP_DOWNLOAD = truthy("NIKCLI_DISABLE_LSP_DOWNLOAD")
-  export const NIKCLI_ENABLE_EXPERIMENTAL_MODELS = truthy("NIKCLI_ENABLE_EXPERIMENTAL_MODELS")
+  export const RAGU_AUTO_SHARE = truthy("RAGU_AUTO_SHARE")
+  export const RAGU_GIT_BASH_PATH = process.env["RAGU_GIT_BASH_PATH"]
+  export const RAGU_CONFIG = process.env["RAGU_CONFIG"]
+  export declare const RAGU_CONFIG_DIR: string | undefined
+  export declare const RAGU_CONFIG_CONTENT: string | undefined
+  export const RAGU_DISABLE_AUTOUPDATE = truthy("RAGU_DISABLE_AUTOUPDATE")
+  export const RAGU_DISABLE_PRUNE = truthy("RAGU_DISABLE_PRUNE")
+  export const RAGU_DISABLE_TERMINAL_TITLE = truthy("RAGU_DISABLE_TERMINAL_TITLE")
+  export const RAGU_PERMISSION = process.env["RAGU_PERMISSION"]
+  export const RAGU_DISABLE_DEFAULT_PLUGINS = truthy("RAGU_DISABLE_DEFAULT_PLUGINS")
+  export declare const RAGU_ISLAND: boolean
+  export declare const RAGU_HERDR: boolean
+  export const RAGU_DISABLE_LSP_DOWNLOAD = truthy("RAGU_DISABLE_LSP_DOWNLOAD")
+  export const RAGU_ENABLE_EXPERIMENTAL_MODELS = truthy("RAGU_ENABLE_EXPERIMENTAL_MODELS")
   // Opt out of falling back to `gpt-reserve` when a ChatGPT plan's main models
   // (gpt-6-astra, gpt-5.x, the codex slugs) run out of allowance. See
   // `plugin/codex.ts`; requests then fail with the provider's 429 instead.
-  export const NIKCLI_DISABLE_GPT_RESERVE_FALLBACK = truthy("NIKCLI_DISABLE_GPT_RESERVE_FALLBACK")
-  export const NIKCLI_DISABLE_AUTOCOMPACT = truthy("NIKCLI_DISABLE_AUTOCOMPACT")
+  export const RAGU_DISABLE_GPT_RESERVE_FALLBACK = truthy("RAGU_DISABLE_GPT_RESERVE_FALLBACK")
+  export const RAGU_DISABLE_AUTOCOMPACT = truthy("RAGU_DISABLE_AUTOCOMPACT")
   // Opt out of the in-process config hot reload (instance reload on config
   // file changes). Reload can still be triggered explicitly via the API.
-  export const NIKCLI_DISABLE_HOT_RELOAD = truthy("NIKCLI_DISABLE_HOT_RELOAD")
+  export const RAGU_DISABLE_HOT_RELOAD = truthy("RAGU_DISABLE_HOT_RELOAD")
   // Opt out of TUI plugin hot reload (watching local plugin sources and
   // swapping an edited plugin in place). Plugins then load once at startup.
-  export const NIKCLI_DISABLE_PLUGIN_RELOAD = truthy("NIKCLI_DISABLE_PLUGIN_RELOAD")
+  export const RAGU_DISABLE_PLUGIN_RELOAD = truthy("RAGU_DISABLE_PLUGIN_RELOAD")
   /** Log which part of the request prefix changed between calls. See `provider/cache-diagnostics.ts`. */
-  export const NIKCLI_PROMPT_CACHE_DIAGNOSTICS = truthy("NIKCLI_PROMPT_CACHE_DIAGNOSTICS")
+  export const RAGU_PROMPT_CACHE_DIAGNOSTICS = truthy("RAGU_PROMPT_CACHE_DIAGNOSTICS")
   /**
    * Prompt-cache entry lifetime: `long` opts into the provider's 1-hour entry
    * instead of the 5-minute default. See `provider/cache-policy.ts` for the
@@ -87,7 +87,7 @@ export namespace Flag {
    * value can be set after this module is first imported.
    */
   export function cacheRetention() {
-    return process.env["NIKCLI_CACHE_RETENTION"]
+    return process.env["RAGU_CACHE_RETENTION"]
   }
   /**
    * What the prompt_cache_key sent to OpenAI-style providers is made of: `model` (default, one key per provider/model), `session`
@@ -95,44 +95,44 @@ export namespace Flag {
    * Read on every use, like `cacheRetention`.
    */
   export function promptCacheKey() {
-    return process.env["NIKCLI_PROMPT_CACHE_KEY"]?.trim().toLowerCase() || undefined
+    return process.env["RAGU_PROMPT_CACHE_KEY"]?.trim().toLowerCase() || undefined
   }
   /**
    * The cache keeper (`session/cache-keeper.ts`): keeps an idle session's prompt-cache entry alive with one hidden request shortly
-   * before it would expire. Off unless `NIKCLI_CACHE_KEEPALIVE=1`. Read on every use, like `cacheRetention`.
+   * before it would expire. Off unless `RAGU_CACHE_KEEPALIVE=1`. Read on every use, like `cacheRetention`.
    */
   export function cacheKeepalive() {
-    return truthy("NIKCLI_CACHE_KEEPALIVE")
+    return truthy("RAGU_CACHE_KEEPALIVE")
   }
-  /** `NIKCLI_CACHE_KEEPALIVE` as the user said it: `undefined` is «not said», which is on for Codex and off elsewhere (`CacheKeeper.settings`). */
+  /** `RAGU_CACHE_KEEPALIVE` as the user said it: `undefined` is «not said», which is on for Codex and off elsewhere (`CacheKeeper.settings`). */
   export function cacheKeepaliveSetting() {
-    return tristate("NIKCLI_CACHE_KEEPALIVE")
+    return tristate("RAGU_CACHE_KEEPALIVE")
   }
   export function cacheKeepaliveCompactSetting() {
-    return tristate("NIKCLI_CACHE_KEEPALIVE_COMPACT")
+    return tristate("RAGU_CACHE_KEEPALIVE_COMPACT")
   }
   export function compactionSharedPrefixSetting() {
-    return tristate("NIKCLI_COMPACTION_SHARED_PREFIX")
+    return tristate("RAGU_COMPACTION_SHARED_PREFIX")
   }
   /** Idle compaction by the keeper, instead of letting the entry die at the end of its budget. Needs `cacheKeepalive` and `compactionSharedPrefix`. */
   export function cacheKeepaliveCompact() {
-    return truthy("NIKCLI_CACHE_KEEPALIVE_COMPACT")
+    return truthy("RAGU_CACHE_KEEPALIVE_COMPACT")
   }
   /**
    * Compaction that reuses the prefix of the conversation's last request (same system, tools and messages, the summary instruction as
-   * the last user message) so the provider reads it from cache. Off unless `NIKCLI_COMPACTION_SHARED_PREFIX=1`.
+   * the last user message) so the provider reads it from cache. Off unless `RAGU_COMPACTION_SHARED_PREFIX=1`.
    */
   export function compactionSharedPrefix() {
-    return truthy("NIKCLI_COMPACTION_SHARED_PREFIX")
+    return truthy("RAGU_COMPACTION_SHARED_PREFIX")
   }
-  /** `NIKCLI_COMPACTION_TOOL_CHOICE=same|none` forces how the shared-prefix compaction keeps the model from calling tools; `undefined` is the provider's default. */
+  /** `RAGU_COMPACTION_TOOL_CHOICE=same|none` forces how the shared-prefix compaction keeps the model from calling tools; `undefined` is the provider's default. */
   export function compactionToolChoice(): "same" | "none" | undefined {
-    const raw = process.env["NIKCLI_COMPACTION_TOOL_CHOICE"]?.trim().toLowerCase()
+    const raw = process.env["RAGU_COMPACTION_TOOL_CHOICE"]?.trim().toLowerCase()
     return raw === "same" || raw === "none" ? raw : undefined
   }
   /**
-   * A positive number from the environment (`NIKCLI_CACHE_KEEPALIVE_*`), or `undefined` when unset or not one. `0` counts as «not set»
-   * (a 0 lifetime, margin, threshold or horizon means nothing), except with `allowZero`: `NIKCLI_CACHE_KEEPALIVE_MAX_RENEWALS=0` is a
+   * A positive number from the environment (`RAGU_CACHE_KEEPALIVE_*`), or `undefined` when unset or not one. `0` counts as «not set»
+   * (a 0 lifetime, margin, threshold or horizon means nothing), except with `allowZero`: `RAGU_CACHE_KEEPALIVE_MAX_RENEWALS=0` is a
    * real budget (no keep-alive, compact at once). Negatives, `NaN`, infinities and text are «not set» either way.
    */
   export function cacheKeepaliveNumber(name: string, options?: { allowZero?: boolean }): number | undefined {
@@ -144,39 +144,39 @@ export namespace Flag {
   }
   // Opt out of journaling local (non-workspace) session restore events into
   // the unified sync_event log.
-  export const NIKCLI_DISABLE_SESSION_JOURNAL = truthy("NIKCLI_DISABLE_SESSION_JOURNAL")
+  export const RAGU_DISABLE_SESSION_JOURNAL = truthy("RAGU_DISABLE_SESSION_JOURNAL")
   // Optional hub-and-spoke remote sync. Setting both URL and TOKEN enables
   // it; AUTOSTART=false keeps bootstrap from starting it automatically
-  // (explicit `nikcli sync` / `nikcli serve` still can).
-  export const NIKCLI_REMOTE_URL = process.env["NIKCLI_REMOTE_URL"]
-  export const NIKCLI_REMOTE_TOKEN = process.env["NIKCLI_REMOTE_TOKEN"]
-  export const NIKCLI_REMOTE_AUTOSTART = (() => {
-    const value = process.env["NIKCLI_REMOTE_AUTOSTART"]?.toLowerCase()
+  // (explicit `ragu sync` / `ragu serve` still can).
+  export const RAGU_REMOTE_URL = process.env["RAGU_REMOTE_URL"]
+  export const RAGU_REMOTE_TOKEN = process.env["RAGU_REMOTE_TOKEN"]
+  export const RAGU_REMOTE_AUTOSTART = (() => {
+    const value = process.env["RAGU_REMOTE_AUTOSTART"]?.toLowerCase()
     return value !== "false" && value !== "0"
   })()
   /** Read on every access: tests set it at their own module scope, after this module is imported. */
   export function disableModelsFetch() {
-    return truthy("NIKCLI_DISABLE_MODELS_FETCH")
+    return truthy("RAGU_DISABLE_MODELS_FETCH")
   }
-  export const NIKCLI_DISABLE_CLAUDE_CODE = truthy("NIKCLI_DISABLE_CLAUDE_CODE")
-  export const NIKCLI_DISABLE_CLAUDE_CODE_PROMPT =
-    NIKCLI_DISABLE_CLAUDE_CODE || truthy("NIKCLI_DISABLE_CLAUDE_CODE_PROMPT")
-  export const NIKCLI_DISABLE_CLAUDE_CODE_SKILLS =
-    NIKCLI_DISABLE_CLAUDE_CODE || truthy("NIKCLI_DISABLE_CLAUDE_CODE_SKILLS")
-  export const NIKCLI_DISABLE_EXTERNAL_SKILLS =
-    NIKCLI_DISABLE_CLAUDE_CODE_SKILLS || truthy("NIKCLI_DISABLE_EXTERNAL_SKILLS")
-  export declare const NIKCLI_DISABLE_PROJECT_CONFIG: boolean
-  export const NIKCLI_FAKE_VCS = process.env["NIKCLI_FAKE_VCS"]
-  export const NIKCLI_CLIENT = process.env["NIKCLI_CLIENT"] ?? "cli"
-  export const NIKCLI_SERVER_PASSWORD = process.env["NIKCLI_SERVER_PASSWORD"]
-  export const NIKCLI_SERVER_USERNAME = process.env["NIKCLI_SERVER_USERNAME"]
+  export const RAGU_DISABLE_CLAUDE_CODE = truthy("RAGU_DISABLE_CLAUDE_CODE")
+  export const RAGU_DISABLE_CLAUDE_CODE_PROMPT =
+    RAGU_DISABLE_CLAUDE_CODE || truthy("RAGU_DISABLE_CLAUDE_CODE_PROMPT")
+  export const RAGU_DISABLE_CLAUDE_CODE_SKILLS =
+    RAGU_DISABLE_CLAUDE_CODE || truthy("RAGU_DISABLE_CLAUDE_CODE_SKILLS")
+  export const RAGU_DISABLE_EXTERNAL_SKILLS =
+    RAGU_DISABLE_CLAUDE_CODE_SKILLS || truthy("RAGU_DISABLE_EXTERNAL_SKILLS")
+  export declare const RAGU_DISABLE_PROJECT_CONFIG: boolean
+  export const RAGU_FAKE_VCS = process.env["RAGU_FAKE_VCS"]
+  export const RAGU_CLIENT = process.env["RAGU_CLIENT"] ?? "cli"
+  export const RAGU_SERVER_PASSWORD = process.env["RAGU_SERVER_PASSWORD"]
+  export const RAGU_SERVER_USERNAME = process.env["RAGU_SERVER_USERNAME"]
   // Max HTTP request body in bytes (defaults applied at the serve site). Lets
   // large teleport uploads through Bun's 128MB default when needed.
-  export const NIKCLI_SERVER_MAX_BODY = process.env["NIKCLI_SERVER_MAX_BODY"]
-    ? parseInt(process.env["NIKCLI_SERVER_MAX_BODY"]!, 10)
+  export const RAGU_SERVER_MAX_BODY = process.env["RAGU_SERVER_MAX_BODY"]
+    ? parseInt(process.env["RAGU_SERVER_MAX_BODY"]!, 10)
     : undefined
-  export const NIKCLI_SERVER_TAILSCALE_AUTH = truthy("NIKCLI_SERVER_TAILSCALE_AUTH")
-  export const NIKCLI_SERVER_TAILSCALE_USERS = process.env["NIKCLI_SERVER_TAILSCALE_USERS"]
+  export const RAGU_SERVER_TAILSCALE_AUTH = truthy("RAGU_SERVER_TAILSCALE_AUTH")
+  export const RAGU_SERVER_TAILSCALE_USERS = process.env["RAGU_SERVER_TAILSCALE_USERS"]
   /**
    * Identity-plane verifier inputs, read on every access for the same reason
    * as `autoApprove`: the value can be set after this module is first
@@ -187,16 +187,16 @@ export namespace Flag {
    * it signed verified as 401.
    */
   export function authIssuer() {
-    return process.env["NIKCLI_AUTH_ISSUER"]
+    return process.env["RAGU_AUTH_ISSUER"]
   }
   export function authJwksUrl() {
-    return process.env["NIKCLI_AUTH_JWKS_URL"]
+    return process.env["RAGU_AUTH_JWKS_URL"]
   }
   export function authAudience() {
-    return process.env["NIKCLI_AUTH_AUDIENCE"] ?? "nikcli-api"
+    return process.env["RAGU_AUTH_AUDIENCE"] ?? "ragu-api"
   }
   export function authJwtSecret() {
-    return process.env["NIKCLI_AUTH_JWT_SECRET"]
+    return process.env["RAGU_AUTH_JWT_SECRET"]
   }
   /**
    * The legacy-credential gate, read on every access.
@@ -205,7 +205,7 @@ export namespace Flag {
    * sessions, Basic and Tailscale. Captured as constants they were fixed by
    * whichever module in the process touched a flag first, which under
    * `bun test` is not the file that set them — `test/server/unified-auth.fixture.ts`
-   * exports `NIKCLI_REQUIRE_OAUTH=1` at its own module scope and would still
+   * exports `RAGU_REQUIRE_OAUTH=1` at its own module scope and would still
    * have run against the process default. A security test that passes because
    * the gate it meant to close was never open is worse than one that fails.
    *
@@ -213,29 +213,29 @@ export namespace Flag {
    * where one side is live and the other is a snapshot can disagree.
    */
   export function requireOauth() {
-    return truthy("NIKCLI_REQUIRE_OAUTH")
+    return truthy("RAGU_REQUIRE_OAUTH")
   }
   export function legacyLogin() {
-    return truthy("NIKCLI_LEGACY_LOGIN")
+    return truthy("RAGU_LEGACY_LOGIN")
   }
 
   // OpenTelemetry (OTLP) — standard env vars. Setting an endpoint enables export.
   export const OTEL_EXPORTER_OTLP_ENDPOINT = process.env["OTEL_EXPORTER_OTLP_ENDPOINT"]
   export const OTEL_EXPORTER_OTLP_HEADERS = process.env["OTEL_EXPORTER_OTLP_HEADERS"]
-  export const NIKCLI_DANGEROUSLY_SKIP_PERMISSIONS = truthy("NIKCLI_DANGEROUSLY_SKIP_PERMISSIONS")
+  export const RAGU_DANGEROUSLY_SKIP_PERMISSIONS = truthy("RAGU_DANGEROUSLY_SKIP_PERMISSIONS")
   // Live telemetry capture (spans streamed to the TUI panel) is on by default;
   // set this to opt out of the in-process span capture entirely.
-  export const NIKCLI_DISABLE_OTEL_LIVE = truthy("NIKCLI_DISABLE_OTEL_LIVE")
+  export const RAGU_DISABLE_OTEL_LIVE = truthy("RAGU_DISABLE_OTEL_LIVE")
 
   // SSH Server
-  export const NIKCLI_SERVER_SSH_ENABLED = truthy("NIKCLI_SERVER_SSH_ENABLED")
-  export const NIKCLI_SERVER_SSH_PORT = parseInt(process.env["NIKCLI_SERVER_SSH_PORT"] ?? "2222")
-  export const NIKCLI_SERVER_SSH_HOST = process.env["NIKCLI_SERVER_SSH_HOST"] ?? "0.0.0.0"
+  export const RAGU_SERVER_SSH_ENABLED = truthy("RAGU_SERVER_SSH_ENABLED")
+  export const RAGU_SERVER_SSH_PORT = parseInt(process.env["RAGU_SERVER_SSH_PORT"] ?? "2222")
+  export const RAGU_SERVER_SSH_HOST = process.env["RAGU_SERVER_SSH_HOST"] ?? "0.0.0.0"
 
   // Connectors
-  export const NIKCLI_FIGMA_TOKEN = process.env["NIKCLI_FIGMA_TOKEN"]
-  export const NIKCLI_SLACK_BOT_TOKEN = process.env["NIKCLI_SLACK_BOT_TOKEN"]
-  export const NIKCLI_GITHUB_TOKEN = process.env["NIKCLI_GITHUB_TOKEN"]
+  export const RAGU_FIGMA_TOKEN = process.env["RAGU_FIGMA_TOKEN"]
+  export const RAGU_SLACK_BOT_TOKEN = process.env["RAGU_SLACK_BOT_TOKEN"]
+  export const RAGU_GITHUB_TOKEN = process.env["RAGU_GITHUB_TOKEN"]
   /**
    * The GitHub client every host falls back to. Public, not a secret: users
    * only approve their own GitHub account against it.
@@ -253,7 +253,7 @@ export namespace Flag {
    * Single source of truth: the host resolves env var → `nikcli.json`
    * connector → this value, and nothing else ships a copy.
    */
-  export const NIKCLI_GITHUB_OAUTH_CLIENT_ID_DEFAULT = "Ov23liIrum4YVdDu8Ogr"
+  export const RAGU_GITHUB_OAUTH_CLIENT_ID_DEFAULT = "Ov23liIrum4YVdDu8Ogr"
   /**
    * The same lookup with the built-in default folded in, so this is never
    * empty. Kept for callers that just want "whatever client ID applies", but
@@ -264,80 +264,80 @@ export namespace Flag {
    *
    * `||` so empty-string env vars do not win over the default.
    */
-  export const NIKCLI_GITHUB_OAUTH_CLIENT_ID =
-    process.env["NIKCLI_GITHUB_OAUTH_CLIENT_ID"]?.trim() ||
+  export const RAGU_GITHUB_OAUTH_CLIENT_ID =
+    process.env["RAGU_GITHUB_OAUTH_CLIENT_ID"]?.trim() ||
     process.env["GITHUB_CLIENT_ID_CONSOLE"]?.trim() ||
     process.env["GITHUB_CLIENT_ID"]?.trim() ||
-    NIKCLI_GITHUB_OAUTH_CLIENT_ID_DEFAULT
-  export const NIKCLI_LOVABLE_TOKEN = process.env["NIKCLI_LOVABLE_TOKEN"] ?? process.env["NIKCLI_LOVABLE_API_KEY"]
-  export const NIKCLI_LOVABLE_API_KEY = process.env["NIKCLI_LOVABLE_API_KEY"]
+    RAGU_GITHUB_OAUTH_CLIENT_ID_DEFAULT
+  export const RAGU_LOVABLE_TOKEN = process.env["RAGU_LOVABLE_TOKEN"] ?? process.env["RAGU_LOVABLE_API_KEY"]
+  export const RAGU_LOVABLE_API_KEY = process.env["RAGU_LOVABLE_API_KEY"]
 
   // Notifications
-  export const NIKCLI_SLACK_CHANNEL =
-    process.env["NIKCLI_SLACK_CHANNEL"] ?? process.env["SLACK_DEFAULT_CHANNEL"] ?? process.env["SLACK_CHANNEL"]
-  export const NIKCLI_DISCORD_WEBHOOK_URL =
-    process.env["NIKCLI_DISCORD_WEBHOOK_URL"] ?? process.env["DISCORD_WEBHOOK_URL"]
-  export const NIKCLI_TODO_NOTIFICATIONS = true
-  export const NIKCLI_SLACK_TASK_NOTIFICATIONS =
-    truthy("NIKCLI_SLACK_TASK_NOTIFICATIONS") || truthy("SLACK_TASK_NOTIFICATIONS")
-  export const NIKCLI_DISCORD_TASK_NOTIFICATIONS =
-    truthy("NIKCLI_DISCORD_TASK_NOTIFICATIONS") || truthy("DISCORD_TASK_NOTIFICATIONS")
+  export const RAGU_SLACK_CHANNEL =
+    process.env["RAGU_SLACK_CHANNEL"] ?? process.env["SLACK_DEFAULT_CHANNEL"] ?? process.env["SLACK_CHANNEL"]
+  export const RAGU_DISCORD_WEBHOOK_URL =
+    process.env["RAGU_DISCORD_WEBHOOK_URL"] ?? process.env["DISCORD_WEBHOOK_URL"]
+  export const RAGU_TODO_NOTIFICATIONS = true
+  export const RAGU_SLACK_TASK_NOTIFICATIONS =
+    truthy("RAGU_SLACK_TASK_NOTIFICATIONS") || truthy("SLACK_TASK_NOTIFICATIONS")
+  export const RAGU_DISCORD_TASK_NOTIFICATIONS =
+    truthy("RAGU_DISCORD_TASK_NOTIFICATIONS") || truthy("DISCORD_TASK_NOTIFICATIONS")
 
   // TUI plugin system
-  export declare const NIKCLI_TUI_CONFIG: string | undefined
+  export declare const RAGU_TUI_CONFIG: string | undefined
   /** Where the ChatGPT-plan (Codex) provider sends its model calls; the plugin's own URL when unset. */
-  export declare const NIKCLI_CODEX_ENDPOINT: string | undefined
+  export declare const RAGU_CODEX_ENDPOINT: string | undefined
   /** Which tool set the model's schema carries: default | a1 | t5 (see ToolRegistry.TOOLSETS); the config's `experimental.toolset` when unset. */
-  export declare const NIKCLI_TOOLSET: string | undefined
-  export const NIKCLI_PURE = truthy("NIKCLI_PURE")
-  export const NIKCLI_PLUGIN_META_FILE = process.env["NIKCLI_PLUGIN_META_FILE"]
+  export declare const RAGU_TOOLSET: string | undefined
+  export const RAGU_PURE = truthy("RAGU_PURE")
+  export const RAGU_PLUGIN_META_FILE = process.env["RAGU_PLUGIN_META_FILE"]
 
   // Experimental
-  export const NIKCLI_EXPERIMENTAL = truthy("NIKCLI_EXPERIMENTAL")
-  export const NIKCLI_EXPERIMENTAL_FILEWATCHER = true
+  export const RAGU_EXPERIMENTAL = truthy("RAGU_EXPERIMENTAL")
+  export const RAGU_EXPERIMENTAL_FILEWATCHER = true
   /** Read on every access: tests set it at their own module scope, after this module is imported. */
   export function disableFilewatcher() {
-    return truthy("NIKCLI_EXPERIMENTAL_DISABLE_FILEWATCHER")
+    return truthy("RAGU_EXPERIMENTAL_DISABLE_FILEWATCHER")
   }
-  export const NIKCLI_EXPERIMENTAL_ICON_DISCOVERY = NIKCLI_EXPERIMENTAL || truthy("NIKCLI_EXPERIMENTAL_ICON_DISCOVERY")
-  export const NIKCLI_EXPERIMENTAL_DISABLE_COPY_ON_SELECT = truthy("NIKCLI_EXPERIMENTAL_DISABLE_COPY_ON_SELECT")
-  export const NIKCLI_ENABLE_EXA =
-    truthy("NIKCLI_ENABLE_EXA") || NIKCLI_EXPERIMENTAL || truthy("NIKCLI_EXPERIMENTAL_EXA")
-  export const NIKCLI_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH = number("NIKCLI_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH")
-  export const NIKCLI_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS = number("NIKCLI_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS")
-  export const NIKCLI_EXPERIMENTAL_OUTPUT_TOKEN_MAX = number("NIKCLI_EXPERIMENTAL_OUTPUT_TOKEN_MAX")
-  export const NIKCLI_EXPERIMENTAL_OXFMT = true
-  export const NIKCLI_EXPERIMENTAL_LSP_TY = true
-  export const NIKCLI_EXPERIMENTAL_LSP_TOOL = true
-  export const NIKCLI_DISABLE_FILETIME_CHECK = truthy("NIKCLI_DISABLE_FILETIME_CHECK")
-  export const NIKCLI_EXPERIMENTAL_SCOUT = true
-  export const NIKCLI_EXPERIMENTAL_WORKSPACES_TUI = true
-  export const NIKCLI_EXPERIMENTAL_SECURITY_TOOL = true
-  export const NIKCLI_EXPERIMENTAL_WEBSOCKETS = true
+  export const RAGU_EXPERIMENTAL_ICON_DISCOVERY = RAGU_EXPERIMENTAL || truthy("RAGU_EXPERIMENTAL_ICON_DISCOVERY")
+  export const RAGU_EXPERIMENTAL_DISABLE_COPY_ON_SELECT = truthy("RAGU_EXPERIMENTAL_DISABLE_COPY_ON_SELECT")
+  export const RAGU_ENABLE_EXA =
+    truthy("RAGU_ENABLE_EXA") || RAGU_EXPERIMENTAL || truthy("RAGU_EXPERIMENTAL_EXA")
+  export const RAGU_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH = number("RAGU_EXPERIMENTAL_BASH_MAX_OUTPUT_LENGTH")
+  export const RAGU_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS = number("RAGU_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS")
+  export const RAGU_EXPERIMENTAL_OUTPUT_TOKEN_MAX = number("RAGU_EXPERIMENTAL_OUTPUT_TOKEN_MAX")
+  export const RAGU_EXPERIMENTAL_OXFMT = true
+  export const RAGU_EXPERIMENTAL_LSP_TY = true
+  export const RAGU_EXPERIMENTAL_LSP_TOOL = true
+  export const RAGU_DISABLE_FILETIME_CHECK = truthy("RAGU_DISABLE_FILETIME_CHECK")
+  export const RAGU_EXPERIMENTAL_SCOUT = true
+  export const RAGU_EXPERIMENTAL_WORKSPACES_TUI = true
+  export const RAGU_EXPERIMENTAL_SECURITY_TOOL = true
+  export const RAGU_EXPERIMENTAL_WEBSOCKETS = true
   // Confined code-mode tool (interpreter port from opencode v2 codemode); see specs/codemode.md.
-  // Default-on; opt out with NIKCLI_DISABLE_CODE_MODE.
-  export const NIKCLI_EXPERIMENTAL_CODE_MODE = !truthy("NIKCLI_DISABLE_CODE_MODE")
+  // Default-on; opt out with RAGU_DISABLE_CODE_MODE.
+  export const RAGU_EXPERIMENTAL_CODE_MODE = !truthy("RAGU_DISABLE_CODE_MODE")
   // Linux-only: place sandboxed children in this cgroup before they start.
-  export const NIKCLI_SANDBOX_CGROUP = process.env["NIKCLI_SANDBOX_CGROUP"]
+  export const RAGU_SANDBOX_CGROUP = process.env["RAGU_SANDBOX_CGROUP"]
 
   // Computer & browser control ("computer use" like Codex / Claude Code).
-  // The browser_control tool drives @nikcli-ai/browser-control's local,
+  // The browser_control tool drives @ragu/browser-control's local,
   // headless, background-daemon Chromium; desktop computer-use sends real
   // input to the local machine. Both tools remain explicitly disableable.
-  // Opt out with NIKCLI_DISABLE_BROWSER_CONTROL_TOOL / NIKCLI_DISABLE_COMPUTER_TOOL.
-  // NIKCLI_DISABLE_BROWSER_TOOL stays honoured: it is what the tool was called
+  // Opt out with RAGU_DISABLE_BROWSER_CONTROL_TOOL / RAGU_DISABLE_COMPUTER_TOOL.
+  // RAGU_DISABLE_BROWSER_TOOL stays honoured: it is what the tool was called
   // before the rename, and it may already be set in someone's shell profile.
-  export const NIKCLI_EXPERIMENTAL_BROWSER_CONTROL_TOOL = !(
-    truthy("NIKCLI_DISABLE_BROWSER_CONTROL_TOOL") || truthy("NIKCLI_DISABLE_BROWSER_TOOL")
+  export const RAGU_EXPERIMENTAL_BROWSER_CONTROL_TOOL = !(
+    truthy("RAGU_DISABLE_BROWSER_CONTROL_TOOL") || truthy("RAGU_DISABLE_BROWSER_TOOL")
   )
-  export const NIKCLI_EXPERIMENTAL_COMPUTER_TOOL = !truthy("NIKCLI_DISABLE_COMPUTER_TOOL")
+  export const RAGU_EXPERIMENTAL_COMPUTER_TOOL = !truthy("RAGU_DISABLE_COMPUTER_TOOL")
 
   // Opt-in filesystem scan of `{tool,tools}/*.{js,ts}` under config dirs.
   // Default off — arbitrary code import from config directories is a security
-  // boundary. Set NIKCLI_ALLOW_PLUGIN_AUTOLOAD=1 to restore the historical
+  // boundary. Set RAGU_ALLOW_PLUGIN_AUTOLOAD=1 to restore the historical
   // glob+import behaviour, or pin specific files via `tool.allow` / `tool.pin`
   // in nikcli.json (allowlist loads without the flag).
-  export declare const NIKCLI_ALLOW_PLUGIN_AUTOLOAD: boolean
+  export declare const RAGU_ALLOW_PLUGIN_AUTOLOAD: boolean
 
   function number(key: string) {
     const value = process.env[key]
@@ -347,91 +347,91 @@ export namespace Flag {
   }
 }
 
-// Dynamic getter for NIKCLI_DISABLE_PROJECT_CONFIG
-Object.defineProperty(Flag, "NIKCLI_DISABLE_PROJECT_CONFIG", {
+// Dynamic getter for RAGU_DISABLE_PROJECT_CONFIG
+Object.defineProperty(Flag, "RAGU_DISABLE_PROJECT_CONFIG", {
   get() {
-    return truthy("NIKCLI_DISABLE_PROJECT_CONFIG")
+    return truthy("RAGU_DISABLE_PROJECT_CONFIG")
   },
   enumerable: true,
   configurable: false,
 })
 
-Object.defineProperty(Flag, "NIKCLI_ISLAND", {
+Object.defineProperty(Flag, "RAGU_ISLAND", {
   get() {
-    return truthy("NIKCLI_ISLAND")
+    return truthy("RAGU_ISLAND")
   },
   enumerable: true,
   configurable: false,
 })
 
-Object.defineProperty(Flag, "NIKCLI_HERDR", {
+Object.defineProperty(Flag, "RAGU_HERDR", {
   get() {
-    return truthy("NIKCLI_HERDR")
+    return truthy("RAGU_HERDR")
   },
   enumerable: true,
   configurable: false,
 })
 
-// Dynamic getter for NIKCLI_CONFIG_DIR
-Object.defineProperty(Flag, "NIKCLI_CONFIG_DIR", {
+// Dynamic getter for RAGU_CONFIG_DIR
+Object.defineProperty(Flag, "RAGU_CONFIG_DIR", {
   get() {
-    return process.env["NIKCLI_CONFIG_DIR"]
+    return process.env["RAGU_CONFIG_DIR"]
   },
   enumerable: true,
   configurable: false,
 })
 
-// Dynamic getter for NIKCLI_CONFIG_CONTENT: tests assign it at runtime (e.g.
+// Dynamic getter for RAGU_CONFIG_CONTENT: tests assign it at runtime (e.g.
 // `test/brain/brain-pass.test.ts` turning on `experimental.brain`), after
 // flag.ts may already have been imported.
-Object.defineProperty(Flag, "NIKCLI_CONFIG_CONTENT", {
+Object.defineProperty(Flag, "RAGU_CONFIG_CONTENT", {
   get() {
-    return process.env["NIKCLI_CONFIG_CONTENT"]
+    return process.env["RAGU_CONFIG_CONTENT"]
   },
   enumerable: true,
   configurable: false,
 })
 
-// Dynamic getter for NIKCLI_CODEX_ENDPOINT: read at each request, so a test or a wrapper can set it late.
-Object.defineProperty(Flag, "NIKCLI_CODEX_ENDPOINT", {
+// Dynamic getter for RAGU_CODEX_ENDPOINT: read at each request, so a test or a wrapper can set it late.
+Object.defineProperty(Flag, "RAGU_CODEX_ENDPOINT", {
   get() {
-    return process.env["NIKCLI_CODEX_ENDPOINT"]
+    return process.env["RAGU_CODEX_ENDPOINT"]
   },
   enumerable: true,
   configurable: false,
 })
 
-Object.defineProperty(Flag, "NIKCLI_TOOLSET", {
+Object.defineProperty(Flag, "RAGU_TOOLSET", {
   get() {
-    return process.env["NIKCLI_TOOLSET"]
+    return process.env["RAGU_TOOLSET"]
   },
   enumerable: true,
   configurable: false,
 })
 
-Object.defineProperty(Flag, "NIKCLI_TUI_CONFIG", {
+Object.defineProperty(Flag, "RAGU_TUI_CONFIG", {
   get() {
-    return process.env["NIKCLI_TUI_CONFIG"]
+    return process.env["RAGU_TUI_CONFIG"]
   },
   enumerable: true,
   configurable: false,
 })
 
-Object.defineProperty(Flag, "NIKCLI_ALLOW_PLUGIN_AUTOLOAD", {
+Object.defineProperty(Flag, "RAGU_ALLOW_PLUGIN_AUTOLOAD", {
   get() {
-    return truthy("NIKCLI_ALLOW_PLUGIN_AUTOLOAD")
+    return truthy("RAGU_ALLOW_PLUGIN_AUTOLOAD")
   },
   enumerable: true,
   configurable: false,
 })
 
-Object.defineProperty(Flag, "NIKCLI_GITHUB_OAUTH_CLIENT_ID", {
+Object.defineProperty(Flag, "RAGU_GITHUB_OAUTH_CLIENT_ID", {
   get() {
     return (
-      process.env["NIKCLI_GITHUB_OAUTH_CLIENT_ID"]?.trim() ||
+      process.env["RAGU_GITHUB_OAUTH_CLIENT_ID"]?.trim() ||
       process.env["GITHUB_CLIENT_ID_CONSOLE"]?.trim() ||
       process.env["GITHUB_CLIENT_ID"]?.trim() ||
-      Flag.NIKCLI_GITHUB_OAUTH_CLIENT_ID_DEFAULT
+      Flag.RAGU_GITHUB_OAUTH_CLIENT_ID_DEFAULT
     )
   },
   enumerable: true,

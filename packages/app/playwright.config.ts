@@ -24,8 +24,8 @@ export default defineConfig({
     reuseExistingServer: reuse,
     timeout: 120_000,
     env: {
-      VITE_NIKCLI_SERVER_HOST: serverHost,
-      VITE_NIKCLI_SERVER_PORT: serverPort,
+      VITE_RAGU_SERVER_HOST: serverHost,
+      VITE_RAGU_SERVER_PORT: serverPort,
     },
   },
   use: {

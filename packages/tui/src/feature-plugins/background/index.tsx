@@ -15,7 +15,7 @@
  * it would keep the order it was mounted in and paint over the tabs and the
  * prompt. Being a direct child of the app root is what puts it behind.
  */
-import type { TuiPlugin, TuiPluginModule } from "@nikcli-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginModule } from "@ragu/plugin/tui"
 import { sourceLabel } from "./settings"
 import { readSettings, rotation, writeSettings } from "./store"
 import { DialogBackground, DialogBackgroundPicker } from "./dialog"

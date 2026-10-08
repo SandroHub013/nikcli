@@ -1,0 +1,10 @@
+{
+  "name": "@ragu/ragu-island",
+  "private": true,
+  "version": "1.431.0",
+  "description": "RaguIsland.app - a macOS Dynamic-Island-style notch status UI for ragu sessions (Swift package, not part of the JS build graph)",
+  "scripts": {
+    "build": "./scripts/install.sh",
+    "typecheck": "echo 'Swift package - see: swift build --package-path .'"
+  }
+}

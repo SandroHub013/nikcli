@@ -58,7 +58,7 @@ export function HelpOverlay(props: HelpOverlayProps) {
         onMouseUp={(event) => event.stopPropagation()}
       >
         <text fg={theme.blue} attributes={TextAttributes.BOLD} wrapMode="none">
-          Nikcli Bench TUI \u2014 Keyboard Reference
+          Ragu Bench TUI \u2014 Keyboard Reference
         </text>
         <text fg={theme.textMuted} wrapMode="none">
           {" "}

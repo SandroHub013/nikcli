@@ -6,7 +6,7 @@
  * paths, URLs, dictation text), and evaluates ambiguity and confidence.
  */
 
-import { fuzzyMatch } from "@nikcli-ai/ade/command/match"
+import { fuzzyMatch } from "@ragu/ade/command/match"
 import type { AdeView, PaneSummary, PermissionSpeechKind } from "../bridge/host"
 import { normalizeUtterance } from "./normalize"
 import { VOCABULARY, type VoiceIntentSpec } from "./vocabulary"

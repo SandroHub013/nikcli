@@ -1,11 +1,11 @@
-import { createNikcliClient, type NikcliClient, type Result } from "@nikcli-ai/sdk/httpapi"
+import { createRaguClient, type RaguClient, type Result } from "@ragu/sdk/httpapi"
 import { native } from "./native"
 
 /**
  * The SDK talks to the local service through the Rust proxy: the channel password
  * is read from its 0600 file there, so it never reaches the webview.
  */
-export function clientFor(serviceUrl: string): NikcliClient {
+export function clientFor(serviceUrl: string): RaguClient {
   const proxied: typeof globalThis.fetch = Object.assign(
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(input instanceof Request ? input.url : input.toString())
@@ -25,7 +25,7 @@ export function clientFor(serviceUrl: string): NikcliClient {
     },
     { preconnect: () => undefined },
   )
-  return createNikcliClient({ baseUrl: serviceUrl, fetch: proxied })
+  return createRaguClient({ baseUrl: serviceUrl, fetch: proxied })
 }
 
 /** Unwraps the SDK result envelope so callers can use plain `await` + try/catch. */

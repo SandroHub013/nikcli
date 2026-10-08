@@ -71,7 +71,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     {
         let app_menu = Submenu::with_items(
             app,
-            "Nikcli DevHub",
+            "Ragu DevHub",
             true,
             &[
                 &PredefinedMenuItem::about(app, None, None)?,
@@ -128,7 +128,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         }
     });
 
-    // ── tray: live nikcli memory in the menu bar (kept fresh by the sampler), quick jump to a page
+    // ── tray: live ragu memory in the menu bar (kept fresh by the sampler), quick jump to a page
     let tray_menu = Menu::new(app)?;
     tray_menu.append(&MenuItem::with_id(
         app,
@@ -162,7 +162,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let mut tray = TrayIconBuilder::with_id("main")
         .menu(&tray_menu)
         .show_menu_on_left_click(false)
-        .tooltip("nikcli DevHub")
+        .tooltip("ragu DevHub")
         .on_menu_event(|app, event| match event.id().0.as_str() {
             "tray:show" => show_main(app),
             "tray:quit" => app.exit(0),

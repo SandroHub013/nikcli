@@ -33,7 +33,7 @@ describe("nativeLaunchArgs", () => {
 
   /** The other ten agents and the shell: nothing changes for them. */
   test("any other agent is started exactly as before", () => {
-    for (const agent of ["codex", "nikcli", "agy", "opencode", "kimi", "prime", "pi", "ohmypi", "hermes", "terminal"]) {
+    for (const agent of ["codex", "ragu", "agy", "opencode", "kimi", "prime", "pi", "ohmypi", "hermes", "terminal"]) {
       expect(nativeLaunchArgs(agent, "Fabio")).toEqual([])
     }
   })
@@ -278,7 +278,7 @@ describe("routeFor", () => {
 
   /** Every fallback is a reason ADE can show, never a silent keyboard. */
   test("anything else is typed, and says why", () => {
-    expect(routeFor({ ...both, senderAgent: "nikcli" })).toEqual({
+    expect(routeFor({ ...both, senderAgent: "ragu" })).toEqual({
       via: "digitata",
       reason: "il mittente non è una sessione Claude",
     })

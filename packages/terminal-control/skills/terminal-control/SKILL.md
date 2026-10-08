@@ -1,17 +1,17 @@
 ---
 name: terminal-control
-description: Autonomously control, inspect, test, and record real terminal applications through PTY sessions, retaining the native raw .termctrl stream and producing screenshots, GIF, MP4, a manifest, inline nikcli evidence, and PR-ready Markdown. Use whenever the user asks to test, check, exercise, or verify a TUI, OpenTUI application, REPL, interactive CLI, shell workflow, or terminal regression, including requests such as "testa il TUI", "registra il vero TUI", "registrazione grezza", or "includilo nella PR".
+description: Autonomously control, inspect, test, and record real terminal applications through PTY sessions, retaining the native raw .termctrl stream and producing screenshots, GIF, MP4, a manifest, inline ragu evidence, and PR-ready Markdown. Use whenever the user asks to test, check, exercise, or verify a TUI, OpenTUI application, REPL, interactive CLI, shell workflow, or terminal regression, including requests such as "testa il TUI", "registra il vero TUI", "registrazione grezza", or "includilo nella PR".
 ---
 
 # Terminal Control
 
-Operate the visible terminal state with `terminal-control`. Never infer a full-screen TUI from logs. Inside the nikcli monorepo, where the package binary is not installed globally, replace `terminal-control` with `bun run --cwd packages/terminal-control control --`.
+Operate the visible terminal state with `terminal-control`. Never infer a full-screen TUI from logs. Inside the ragu monorepo, where the package binary is not installed globally, replace `terminal-control` with `bun run --cwd packages/terminal-control control --`.
 
 ## Handle Requests Autonomously
 
 When the user asks to test a terminal interface, inspect the project to identify its real launch command and acceptance criteria, then run the recorded verification without asking for commands that are already discoverable. Translate the requested interactions into deterministic `wait`, `send`, `show`, and `mark` operations. Do not claim success unless the visible screen proves the expected result.
 
-Restarted nikcli processes discover this skill through `.agents/skills/terminal-control`. If the skill is not registered in the current workspace, install it once from the worktree root:
+Restarted ragu processes discover this skill through `.agents/skills/terminal-control`. If the skill is not registered in the current workspace, install it once from the worktree root:
 
 ```bash
 bun run --cwd packages/terminal-control install-skill
@@ -33,7 +33,7 @@ terminal-control show tui-check
 terminal-control stop tui-check
 ```
 
-When testing nikcli or another Bun/OpenTUI application in a managed PTY, ensure the child inherits `NIKCLI_TERMINAL=1`. For example, launch nikcli from the repository root with:
+When testing ragu or another Bun/OpenTUI application in a managed PTY, ensure the child inherits `RAGU_TERMINAL=1`. For example, launch ragu from the repository root with:
 
 ```bash
 terminal-control start tui-check \
@@ -41,7 +41,7 @@ terminal-control start tui-check \
   --cols 112 \
   --rows 34 \
   --record /tmp/tui-check.termctrl \
-  -- env NIKCLI_TERMINAL=1 bun run --cwd packages/nikcli dev
+  -- env RAGU_TERMINAL=1 bun run --cwd packages/ragu dev
 ```
 
 Wait for a visible application-specific string such as `Ask anything` before sending input. Seeing only the Bun launcher line does not prove that OpenTUI rendered.
@@ -71,7 +71,7 @@ Retain the native raw `.termctrl` recording for requested TUI verifications in t
 
 Treat `recording.termctrl` as sensitive because it contains terminal output and input. Inspect it for credentials, tokens, personal data, and pasted secrets before publishing. If it contains sensitive material, keep it local and state why it was omitted from the PR.
 
-The bundle command also prints an absolute `file://` GIF Markdown line. Include that exact line in the final assistant response so nikcli can render the local preview inline. Treat it as local-only output and never paste the `file://` URL into a pull request.
+The bundle command also prints an absolute `file://` GIF Markdown line. Include that exact line in the final assistant response so ragu can render the local preview inline. Treat it as local-only output and never paste the `file://` URL into a pull request.
 
 When the user explicitly requests PR evidence or the task is already operating on a pull request:
 
@@ -82,7 +82,7 @@ When the user explicitly requests PR evidence or the task is already operating o
 
 If no pull request exists, leave `pr.md` ready and report its path instead of creating unrelated remote state.
 
-Inside the `/nikcli` GitHub Actions runner, always write the bundle below `artifacts/tui/`. Do not paste local `file://` preview links into the response. The runner validates the manifest and artifact hashes, refuses to create a PR when GIF, MP4, or raw recording is missing, commits the bundle, and adds an idempotent commit-addressed evidence section to the PR body.
+Inside the `/ragu` GitHub Actions runner, always write the bundle below `artifacts/tui/`. Do not paste local `file://` preview links into the response. The runner validates the manifest and artifact hashes, refuses to create a PR when GIF, MP4, or raw recording is missing, commits the bundle, and adds an idempotent commit-addressed evidence section to the PR body.
 
 If the test fails, still retain the final screen and video with `--result failed`, describe the observed failure accurately, and never report it as passed.
 

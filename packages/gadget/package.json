@@ -1,12 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@nikcli-ai/gadget",
+  "name": "@ragu/gadget",
   "version": "1.431.0",
-  "description": "Build nikcli gadgets: devices that pair with a nikcli server, run commands for the agent, push messages into sessions and draw what it answers",
+  "description": "Build ragu gadgets: devices that pair with a ragu server, run commands for the agent, push messages into sessions and draw what it answers",
   "type": "module",
   "license": "MIT",
   "bin": {
-    "nikcli-gadget": "./linux/src/cli.ts"
+    "ragu-gadget": "./linux/src/cli.ts"
   },
   "files": [
     "README.md",

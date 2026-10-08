@@ -1,5 +1,5 @@
 /**
- * The chat's way to a project on the nikcli server (C2).
+ * The chat's way to a project on the ragu server (C2).
  *
  * A request with a directory makes the server load that folder's `.nikcli/`,
  * plugins included, which run as code. So a folder is admitted first, as the Bots
@@ -27,7 +27,7 @@
  * no answer, and that request fails as one that can be tried again.
  */
 
-import { createNikcliClient, type NikcliClient, type ConfigProviders, type Agent } from "@nikcli-ai/sdk/client"
+import { createRaguClient, type RaguClient, type ConfigProviders, type Agent } from "@ragu/sdk/client"
 import { t } from "../i18n"
 import { askDialog } from "../host/ask"
 import { admitProject, PROJECT_TRUST_KEY, projectSurface } from "../bots/project-trust"
@@ -64,7 +64,7 @@ export function within<T>(promise: Promise<T>, ms: number): Promise<T | undefine
 /**
  * Loads the configured providers, agents, and config model using an admitted chat client.
  */
-export async function loadChatCatalog(client: NikcliClient, timeoutMs = CATALOG_TIMEOUT_MS): Promise<ChatCatalog> {
+export async function loadChatCatalog(client: RaguClient, timeoutMs = CATALOG_TIMEOUT_MS): Promise<ChatCatalog> {
   const [pRes, aRes, cRes] = await Promise.all([
     within(client.config.providers(), timeoutMs),
     within(client.app.agents(), timeoutMs),
@@ -88,7 +88,7 @@ export interface ChatConnectionDeps {
 export type ChatConnection =
   | {
       ok: true
-      client: NikcliClient
+      client: RaguClient
       directory: string
       /** The client's own `fetch`, bound to the folder and its trust: for the event stream (`stream.ts`). */
       fetch: typeof globalThis.fetch
@@ -113,7 +113,7 @@ const same = (a: string, b: string) =>
 
 function named(request: Request): string[] {
   const names: string[] = []
-  const header = request.headers.get("x-nikcli-directory")
+  const header = request.headers.get("x-ragu-directory")
   if (header !== null) {
     try {
       names.push(decodeURIComponent(header))
@@ -173,7 +173,7 @@ export async function openChat(directory: string, deps: ChatConnectionDeps): Pro
     trustedFetch(serverFetch(deps.bridge, { directory }), directory, deps.admit, deps.now ?? Date.now),
     directory,
   )
-  const client = createNikcliClient({ baseUrl: SERVER_BASE, fetch, directory, throwOnError: true })
+  const client = createRaguClient({ baseUrl: SERVER_BASE, fetch, directory, throwOnError: true })
   return { ok: true, client, directory, fetch }
 }
 

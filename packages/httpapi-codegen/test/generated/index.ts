@@ -1,2 +1,2 @@
 export { ClientError } from "./client-error"
-export * as NikCli from "./client"
+export * as Ragu from "./client"

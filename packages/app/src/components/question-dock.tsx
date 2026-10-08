@@ -1,9 +1,9 @@
 import { For, Show, createMemo, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Button } from "@nikcli-ai/ui/button"
-import { Icon } from "@nikcli-ai/ui/icon"
-import { showToast } from "@nikcli-ai/ui/toast"
-import type { QuestionAnswer, QuestionRequest } from "@nikcli-ai/sdk/httpapi"
+import { Button } from "@ragu/ui/button"
+import { Icon } from "@ragu/ui/icon"
+import { showToast } from "@ragu/ui/toast"
+import type { QuestionAnswer, QuestionRequest } from "@ragu/sdk/httpapi"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 

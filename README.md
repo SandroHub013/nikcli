@@ -6,16 +6,16 @@ Ragu Code is maintained by **Alessandro Boni** ([SandroHub013](https://github.co
 
 **All credit for the original work goes to its authors.** nikcli is maintained by **nikomatt69** ([GitHub](https://github.com/nikomatt69)); on top of OpenCode it adds new commands (`goal`, `routine`, `mobile`, `ads`, `heap`, `locale`, `brain-model` / `image-model` / `speak-model`, `workspace-serve`, …), ACP integration, the Loops/Goal/Routines system, mobile pairing with a dedicated Expo app, the web companion UI, multi-channel bots, the Session v2 engine, and Effect Schema throughout the HTTP contract. OpenCode (previously `sst/opencode`) is the base of both: its architecture, its terminal-first idea and a large share of the code.
 
-- **Command**: `ragu`. `nikcli` stays as an alias of the same program, so scripts and tools that call it keep working. The rest of this README documents the nikcli base: every `nikcli` command below also runs as `ragu`.
-- **Upstream projects**: nikcli — [github.com/nikcli/nikcli](https://github.com/nikcli/nikcli) · OpenCode — [github.com/anomalyco/opencode](https://github.com/anomalyco/opencode)
+- **Command**: `ragu`. `ragu` stays as an alias of the same program, so scripts and tools that call it keep working. The rest of this README documents the ragu base: every `ragu` command below also runs as `ragu`.
+- **Upstream projects**: ragu — [github.com/nikcli/nikcli](https://github.com/nikcli/nikcli) · OpenCode — [github.com/anomalyco/opencode](https://github.com/anomalyco/opencode)
 - **Package manager**: `bun@1.4.2`
-- **License**: MIT — see `LICENSE`, which retains the OpenCode and nikcli copyrights.
+- **License**: MIT — see `LICENSE`, which retains the OpenCode and ragu copyrights.
 
 ---
 
 ## Table of contents
 
-1. [What nikcli is](#what-nikcli-is)
+1. [What ragu is](#what-ragu-is)
 2. [Installation](#installation)
 3. [Build from source](#build-from-source)
 4. [Quickstart](#quickstart)
@@ -37,23 +37,23 @@ Ragu Code is maintained by **Alessandro Boni** ([SandroHub013](https://github.co
 
 ---
 
-## What nikcli is
+## What ragu is
 
 > Reminder: nikcli is a fork of [OpenCode](https://github.com/anomalyco/opencode). The architecture below — TUI, headless server, tool registry, session engine, plugin runtime — descends from OpenCode's design; credit for it belongs to the upstream project.
 
-Nikcli is not just a CLI to chat with a model: it is a **complete agentic platform** that orchestrates models, tools, subagents and project context. Its main surfaces:
+Ragu Code is not just a CLI to chat with a model: it is a **complete agentic platform** that orchestrates models, tools, subagents and project context. Its main surfaces:
 
 - **Interactive TUI** — a full-screen terminal application built on [OpenTUI](https://github.com/sst/opentui) and Solid.js: sessions, turn queues, history, autocomplete, permissions, modal dialogs, remote attach.
 - **Headless server** — HTTP + SSE + WebSocket on Effect `HttpApi` and `Bun.serve`, with OpenAPI and a generated TypeScript/JavaScript SDK.
 - **One-shot CLI** — non-interactive execution (`run`, `goal`, `mission`, `agent`, `generate`, `github`, `pr`, `stats`, `export` / `import`).
-- **Web companion** — SolidStart/Cloudflare UI for sessions and sharing (`nikcli web`, `nikcli companion serve`).
-- **Mobile companion** — Expo / React Native app in `packages/mobile` with QR pairing and `nikcli://` deep links.
+- **Web companion** — SolidStart/Cloudflare UI for sessions and sharing (`ragu web`, `ragu companion serve`).
+- **Mobile companion** — Expo / React Native app in `packages/mobile` with QR pairing and `ragu://` deep links.
 - **Multi-platform bots** — unified adapter for Slack, Discord, Microsoft Teams, Google Chat, GitHub Issues, Linear.
-- **Plugin runtime** — plugin installation with hot-reload for TUI, agents and tools (`nikcli plug install <mod>`).
-- **ACP server** — implements the [Agent Client Protocol](https://github.com/zed-industries/acp) to integrate with external editors and IDEs (`nikcli acp`).
-- **Missions** — high-altitude workflows that decompose a goal into milestones, each holding a DAG of features with a validation checkpoint per milestone (`nikcli mission`). Headless, server-side orchestrator.
+- **Plugin runtime** — plugin installation with hot-reload for TUI, agents and tools (`ragu plug install <mod>`).
+- **ACP server** — implements the [Agent Client Protocol](https://github.com/zed-industries/acp) to integrate with external editors and IDEs (`ragu acp`).
+- **Missions** — high-altitude workflows that decompose a goal into milestones, each holding a DAG of features with a validation checkpoint per milestone (`ragu mission`). Headless, server-side orchestrator.
 - **Loops** — named, persisted workflows that run an ordered list of stages, each driven by a single `goal` command. Manage them through the TUI or HTTP/SDK; the headless LoopEngine keeps firing on schedule when the TUI is closed.
-- **Observability** — OpenTelemetry (OTLP) trace export and a live in-process telemetry panel (configurable through `OTEL_EXPORTER_OTLP_ENDPOINT` and `NIKCLI_DISABLE_OTEL_LIVE`).
+- **Observability** — OpenTelemetry (OTLP) trace export and a live in-process telemetry panel (configurable through `OTEL_EXPORTER_OTLP_ENDPOINT` and `RAGU_DISABLE_OTEL_LIVE`).
 
 Everything is orchestrated by an internal **event bus**, a **SQLite/Drizzle persistence** layer, and a service architecture built with `Effect` (typed schema validation, dependency injection, layer composition).
 
@@ -67,14 +67,14 @@ The install script downloads release binaries from `nikcli-ai.dev` with GitHub r
 
 ```bash
 curl -fsSL https://nikcli-ai.dev/install | bash
-nikcli
+ragu
 ```
 
 **Windows** (PowerShell 5.1+ or pwsh 7+ — `curl | bash` needs a bash to pipe into, so use this instead):
 
 ```powershell
 irm https://nikcli-ai.dev/install.ps1 | iex
-nikcli
+ragu
 ```
 
 **Any platform** (npm, pnpm, yarn or bun):
@@ -83,21 +83,21 @@ nikcli
 npm i -g nikcli-ai@latest
 ```
 
-The install location can be overridden with `NIKCLI_INSTALL_DIR` (or `XDG_BIN_DIR`); it defaults to
-`~/.nikcli/bin` on every platform. The PowerShell installer also reads `NIKCLI_VERSION` to pin a version
-and `NIKCLI_NO_PATH=1` to leave the user PATH alone.
+The install location can be overridden with `RAGU_INSTALL_DIR` (or `XDG_BIN_DIR`); it defaults to
+`~/.nikcli/bin` on every platform. The PowerShell installer also reads `RAGU_VERSION` to pin a version
+and `RAGU_NO_PATH=1` to leave the user PATH alone.
 
-Alternative install methods handled by `nikcli upgrade`:
+Alternative install methods handled by `ragu upgrade`:
 
 ```bash
-nikcli upgrade --method curl    # standalone installer (install.ps1 on Windows)
-nikcli upgrade --method npm     # npm package
-nikcli upgrade --method pnpm
-nikcli upgrade --method bun
-nikcli upgrade --method brew    # macOS / Linux
+ragu upgrade --method curl    # standalone installer (install.ps1 on Windows)
+ragu upgrade --method npm     # npm package
+ragu upgrade --method pnpm
+ragu upgrade --method bun
+ragu upgrade --method brew    # macOS / Linux
 ```
 
-> Requirements: Node.js or Bun runtime, Git for most VCS flows, `gh` CLI for `nikcli pr` and some GitHub integrations.
+> Requirements: Node.js or Bun runtime, Git for most VCS flows, `gh` CLI for `ragu pr` and some GitHub integrations.
 
 ---
 
@@ -105,44 +105,44 @@ nikcli upgrade --method brew    # macOS / Linux
 
 ```bash
 bun install
-bun run --cwd packages/nikcli --conditions=browser src/index.ts
+bun run --cwd packages/ragu --conditions=browser src/index.ts
 ```
 
 Useful development scripts:
 
 | Script                                                   | Description                                                    |
 | -------------------------------------------------------- | -------------------------------------------------------------- |
-| `bun run dev`                                            | Start the nikcli CLI/TUI from source                           |
+| `bun run dev`                                            | Start the ragu CLI/TUI from source                           |
 | `bun run typecheck`                                      | `bun turbo typecheck` across the whole workspace               |
 | `bun run build`                                          | Build all packages                                             |
 | `bun run web:dev`                                        | Dev server for the `packages/web` site                         |
-| `bun run --cwd packages/nikcli generate:httpapi-clients` | Regenerate clients after modifying the Effect HttpApi contract |
-| `cd packages/nikcli && bun run bench`                    | TUI bench (`test/bench/viz.tsx`)                               |
-| `cd packages/nikcli && bun run sandbox:vercel`           | Vercel sandbox smoke test                                      |
+| `bun run --cwd packages/ragu generate:httpapi-clients` | Regenerate clients after modifying the Effect HttpApi contract |
+| `cd packages/ragu && bun run bench`                    | TUI bench (`test/bench/viz.tsx`)                               |
+| `cd packages/ragu && bun run sandbox:vercel`           | Vercel sandbox smoke test                                      |
 
 ---
 
 ## Quickstart
 
 ```bash
-nikcli                  # opens the TUI in the current directory
-nikcli run "..."        # one-shot without TUI
-nikcli quickstart       # 60s walkthrough for first-time users
-nikcli doctor           # diagnostics: connectivity, config, providers
+ragu                  # opens the TUI in the current directory
+ragu run "..."        # one-shot without TUI
+ragu quickstart       # 60s walkthrough for first-time users
+ragu doctor           # diagnostics: connectivity, config, providers
 ```
 
 Connect an LLM provider:
 
 ```bash
-nikcli auth login
+ragu auth login
 # or select from the CLI/TUI with the dedicated dialog
 ```
 
-Running `nikcli` with no arguments opens the **TUI**, which by default starts a local server in the background and connects to it via WebSocket/SSE. The TUI can also be attached to a remote instance:
+Running `ragu` with no arguments opens the **TUI**, which by default starts a local server in the background and connects to it via WebSocket/SSE. The TUI can also be attached to a remote instance:
 
 ```bash
-nikcli serve --hostname 0.0.0.0 --port 4096
-nikcli attach http://other-host:4096
+ragu serve --hostname 0.0.0.0 --port 4096
+ragu attach http://other-host:4096
 ```
 
 ---
@@ -153,9 +153,9 @@ Bun workspace with centralized version catalog (`bunfig.toml`, `package.json`).
 
 | Package                                      | Role                                                                                          |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `packages/nikcli`                            | Core CLI/TUI/server — main application (`@nikcli-ai/cli`, `nikcli` binary)                    |
-| `packages/sdk`                               | API SDK generated from OpenAPI (`@nikcli-ai/sdk` for JS, other languages in `packages/sdk/*`) |
-| `packages/plugin`                            | Plugin system and hooks contract (`@nikcli-ai/plugin`)                                        |
+| `packages/ragu`                            | Core CLI/TUI/server — main application (`@ragu/cli`, `ragu` binary)                    |
+| `packages/sdk`                               | API SDK generated from OpenAPI (`@ragu/sdk` for JS, other languages in `packages/sdk/*`) |
+| `packages/plugin`                            | Plugin system and hooks contract (`@ragu/plugin`)                                        |
 | `packages/remote`                            | Tunnels, QR pairing, web client for remote attach                                             |
 | `packages/companion`                         | Companion UI and companion server routes                                                      |
 | `packages/terminal-control`                  | Terminal abstraction reused by CLI and IDE                                                    |
@@ -177,11 +177,11 @@ Bun workspace with centralized version catalog (`bunfig.toml`, `package.json`).
 | `packages/containers`                        | Container bundles for deploy                                                                  |
 | `homebrew-tap` · `infra` · `nix` · `script`  | Packaging and IaC                                                                             |
 
-Internal layout of the core (`packages/nikcli/src`):
+Internal layout of the core (`packages/ragu/src`):
 
 ```
 account/        # account management with device code
-acp/            # Agent Client Protocol (editor ↔ nikcli)
+acp/            # Agent Client Protocol (editor ↔ ragu)
 agent/          # agent system, prompts, generate, subagents
 analytics/      # local/aggregated telemetry
 auth/           # provider credentials (keychain, file, OAuth)
@@ -199,7 +199,7 @@ delegation/     # background subagent runs
 effect/         # Effect runtime, layer helpers
 file/           # file abstraction (read/write/patch/tree)
 filesystem/     # fs helpers
-flag/           # environment-variable flags (incl. OTEL/NIKCLI_*)
+flag/           # environment-variable flags (incl. OTEL/RAGU_*)
 format/         # formatter (prettier, biome, oxc, …)
 git/            # local git operations (status, diff, worktree)
 global/         # global paths (~/.config/nikcli)
@@ -242,49 +242,49 @@ worktree/       # git worktree management
 
 ## CLI: all commands
 
-All main commands (registered in `packages/nikcli/src/cli-main.ts`):
+All main commands (registered in `packages/ragu/src/cli-main.ts`):
 
 | Command                                                                       | Purpose                                                                                               |
 | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------- | ------------------------------------ |
-| `nikcli`                                                                      | Default: opens the TUI.                                                                               |
-| `nikcli run [message..]`                                                      | Runs a one-shot prompt non-interactively; supports model variants, agent, session, fork, attachments. |
-| `nikcli goal [condition..]`                                                   | Works autonomously until a verifiable condition holds (Goal engine with budget and persistent state). |
-| `nikcli mission`                                                              | Headless Mission orchestrator: new, start, pause, resume, cancel, get, list.                          |
-| `nikcli routine`                                                              | Create / list / get / run / pause / resume / delete routines (cron + API trigger).                    |
-| `nikcli generate`                                                             | Prints the server OpenAPI spec with JS SDK samples.                                                   |
-| `nikcli acp`                                                                  | Starts an ACP (Agent Client Protocol) server for external editors.                                    |
-| `nikcli mcp`                                                                  | Manage MCP servers: add, OAuth auth, list, status, debug.                                             |
-| `nikcli tui` (default) · `nikcli attach <url>`                                | Local TUI or attach to a remote server.                                                               |
-| `nikcli serve`                                                                | Starts a headless Effect HttpApi server (HTTP + SSE + WebSocket) with OpenAPI.                        |
-| `nikcli web`                                                                  | Starts the server and opens the web UI in the browser.                                                |
-| `nikcli workspace-serve`                                                      | Starts the multi-workspace event server (proactive sync).                                             |
-| `nikcli companion serve`                                                      | Server with integrated companion UI (also accessible from mobile).                                    |
-| `nikcli remote start` / `remote status`                                       | Remote control of the session (localtunnel / cloudflared / ngrok / remotosh tunnel, cloud relay).     |
-| `nikcli mobile`                                                               | Mobile pairing: QR + deep link, host server for the device.                                           |
-| `nikcli chat` (`chatbot`)                                                     | Starts a bot on Slack / Discord / Teams / Google Chat / Linear / GitHub.                              |
-| `nikcli auth`                                                                 | Provider credentials: login / logout / list / set / get / remove with device code.                    |
-| `nikcli account`                                                              | nikcli cloud account (login, logout, list, switch, orgs).                                             |
-| `nikcli agent create` / `agent list`                                          | Generate (via LLM) or list custom agents.                                                             |
-| `nikcli models [provider]`                                                    | List models from `models.dev`, refresh cache, filter by provider.                                     |
-| `nikcli brain-model` · `image-model` · `speak-model`                          | Configure brain, image-gen and TTS models.                                                            |
-| `nikcli locale [show                                                          | set                                                                                                   | reset]` | Set language/region/timezone/currency and the model reply language. |
-| `nikcli stats` · `nikcli usage` · `nikcli ads`                                | Local metrics, session/project cost, configurable ads.                                                |
-| `nikcli heap`                                                                 | Show process memory metrics (rss, heap, external, arrayBuffers).                                      |
-| `nikcli session list`                                                         | List and manage saved sessions (with pager).                                                          |
-| `nikcli export [sessionID]`                                                   | Export a session as JSON (info + messages + parts).                                                   |
-| `nikcli import <file>`                                                        | Import a session from JSON or a share URL.                                                            |
-| `nikcli share` (via TUI)                                                      | Generate a public/enterprise URL for the session.                                                     |
-| `nikcli github install` · `nikcli github run`                                 | Install and manage a GitHub App for automations.                                                      |
-| `nikcli pr <number>`                                                          | Check out a PR and auto-start a review session.                                                       |
-| `nikcli plug` (`plugin`)                                                      | Install and manage plugins (npm mod or local path) with config patching.                              |
-| `nikcli connectors`                                                           | Manage connectors (Linear, GitHub, Slack, Notion, …) with dedicated auth.                             |
-| `nikcli quickstart` · `nikcli doctor` · `nikcli upgrade` · `nikcli uninstall` | Onboarding, diagnostics, upgrade, uninstall.                                                          |
-| `nikcli completion`                                                           | Generate shell completion scripts.                                                                    |
+| `ragu`                                                                      | Default: opens the TUI.                                                                               |
+| `ragu run [message..]`                                                      | Runs a one-shot prompt non-interactively; supports model variants, agent, session, fork, attachments. |
+| `ragu goal [condition..]`                                                   | Works autonomously until a verifiable condition holds (Goal engine with budget and persistent state). |
+| `ragu mission`                                                              | Headless Mission orchestrator: new, start, pause, resume, cancel, get, list.                          |
+| `ragu routine`                                                              | Create / list / get / run / pause / resume / delete routines (cron + API trigger).                    |
+| `ragu generate`                                                             | Prints the server OpenAPI spec with JS SDK samples.                                                   |
+| `ragu acp`                                                                  | Starts an ACP (Agent Client Protocol) server for external editors.                                    |
+| `ragu mcp`                                                                  | Manage MCP servers: add, OAuth auth, list, status, debug.                                             |
+| `ragu tui` (default) · `ragu attach <url>`                                | Local TUI or attach to a remote server.                                                               |
+| `ragu serve`                                                                | Starts a headless Effect HttpApi server (HTTP + SSE + WebSocket) with OpenAPI.                        |
+| `ragu web`                                                                  | Starts the server and opens the web UI in the browser.                                                |
+| `ragu workspace-serve`                                                      | Starts the multi-workspace event server (proactive sync).                                             |
+| `ragu companion serve`                                                      | Server with integrated companion UI (also accessible from mobile).                                    |
+| `ragu remote start` / `remote status`                                       | Remote control of the session (localtunnel / cloudflared / ngrok / remotosh tunnel, cloud relay).     |
+| `ragu mobile`                                                               | Mobile pairing: QR + deep link, host server for the device.                                           |
+| `ragu chat` (`chatbot`)                                                     | Starts a bot on Slack / Discord / Teams / Google Chat / Linear / GitHub.                              |
+| `ragu auth`                                                                 | Provider credentials: login / logout / list / set / get / remove with device code.                    |
+| `ragu account`                                                              | ragu cloud account (login, logout, list, switch, orgs).                                             |
+| `ragu agent create` / `agent list`                                          | Generate (via LLM) or list custom agents.                                                             |
+| `ragu models [provider]`                                                    | List models from `models.dev`, refresh cache, filter by provider.                                     |
+| `ragu brain-model` · `image-model` · `speak-model`                          | Configure brain, image-gen and TTS models.                                                            |
+| `ragu locale [show                                                          | set                                                                                                   | reset]` | Set language/region/timezone/currency and the model reply language. |
+| `ragu stats` · `ragu usage` · `ragu ads`                                | Local metrics, session/project cost, configurable ads.                                                |
+| `ragu heap`                                                                 | Show process memory metrics (rss, heap, external, arrayBuffers).                                      |
+| `ragu session list`                                                         | List and manage saved sessions (with pager).                                                          |
+| `ragu export [sessionID]`                                                   | Export a session as JSON (info + messages + parts).                                                   |
+| `ragu import <file>`                                                        | Import a session from JSON or a share URL.                                                            |
+| `ragu share` (via TUI)                                                      | Generate a public/enterprise URL for the session.                                                     |
+| `ragu github install` · `ragu github run`                                 | Install and manage a GitHub App for automations.                                                      |
+| `ragu pr <number>`                                                          | Check out a PR and auto-start a review session.                                                       |
+| `ragu plug` (`plugin`)                                                      | Install and manage plugins (npm mod or local path) with config patching.                              |
+| `ragu connectors`                                                           | Manage connectors (Linear, GitHub, Slack, Notion, …) with dedicated auth.                             |
+| `ragu quickstart` · `ragu doctor` · `ragu upgrade` · `ragu uninstall` | Onboarding, diagnostics, upgrade, uninstall.                                                          |
+| `ragu completion`                                                           | Generate shell completion scripts.                                                                    |
 | Global flags                                                                  | `--print-logs`, `--log-level DEBUG                                                                    | INFO    | WARN                                                                | ERROR`, `--help/-h`, `--version/-v`. |
 
 ### Auto-approving permissions
 
-`--auto` (aliases `--yolo`, `--dangerously-skip-permissions`) stops nikcli from pausing for
+`--auto` (aliases `--yolo`, `--dangerously-skip-permissions`) stops ragu from pausing for
 permission confirmations. Intended for unattended runs — CI, scripted sessions, sandboxed
 worktrees — where there is nobody to answer a prompt.
 
@@ -299,7 +299,7 @@ unattended while keeping specific operations off-limits:
 ```
 
 ```sh
-nikcli --auto run "migrate the config loader to zod v4"
+ragu --auto run "migrate the config loader to zod v4"
 ```
 
 The flag applies to the whole process, including the session worker the TUI runs in.
@@ -315,13 +315,13 @@ and are not hot-reloadable.
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | unset   | OTLP/HTTP endpoint. Setting it enables export.                      |
 | `OTEL_EXPORTER_OTLP_HEADERS`  | unset   | Comma-separated `key=value` pairs (e.g. `Authorization=Bearer%20…`) |
 | `OTEL_RESOURCE_ATTRIBUTES`    | unset   | Comma-separated `key=value` pairs merged into every span resource.  |
-| `NIKCLI_DISABLE_OTEL_LIVE`    | `false` | Opt out of the in-process span capture (live panel).                |
+| `RAGU_DISABLE_OTEL_LIVE`    | `false` | Opt out of the in-process span capture (live panel).                |
 
 ---
 
 ## TUI: terminal user interface
 
-The TUI (`packages/nikcli/src/cli/cmd/tui`) runs in a dedicated worker (`worker.ts`) that talks to the server via RPC + SSE. It is built on `@opentui/core` and `@opentui/solid` (45 FPS renderer, mouse, kitty keyboard, copy-on-select) and on `@solid-primitives/*` for storage, event-bus and scheduling.
+The TUI (`packages/ragu/src/cli/cmd/tui`) runs in a dedicated worker (`worker.ts`) that talks to the server via RPC + SSE. It is built on `@opentui/core` and `@opentui/solid` (45 FPS renderer, mouse, kitty keyboard, copy-on-select) and on `@solid-primitives/*` for storage, event-bus and scheduling.
 
 ### Main areas (routes)
 
@@ -351,13 +351,13 @@ The TUI (`packages/nikcli/src/cli/cmd/tui`) runs in a dedicated worker (`worker.
 
 ### TUI = server client
 
-The TUI can run as a client to a remote server (`nikcli attach`), so the same interface can control sessions on a different machine (workstation ↔ cloud server, etc.).
+The TUI can run as a client to a remote server (`ragu attach`), so the same interface can control sessions on a different machine (workstation ↔ cloud server, etc.).
 
 ---
 
 ## Agents and subagents
 
-The agent system (`packages/nikcli/src/agent/`) defines the LLM behavior, the exposed tools, the permissions and the mode (`primary` / `subagent` / `all`).
+The agent system (`packages/ragu/src/agent/`) defines the LLM behavior, the exposed tools, the permissions and the mode (`primary` / `subagent` / `all`).
 
 ### Primary agents (built-in)
 
@@ -384,7 +384,7 @@ The agent system (`packages/nikcli/src/agent/`) defines the LLM behavior, the ex
 
 ### Custom agents
 
-`nikcli agent create` uses a meta-prompt (`agent/generate.txt`) to generate an agent from a description, picking the identifier, system prompt, enabled tools and mode. The resulting file is a Markdown with frontmatter saved to `~/.config/nikcli/agent/` or to the project's `.nikcli/agent/`. `nikcli agent list` shows the resolved list with the effective permissions.
+`ragu agent create` uses a meta-prompt (`agent/generate.txt`) to generate an agent from a description, picking the identifier, system prompt, enabled tools and mode. The resulting file is a Markdown with frontmatter saved to `~/.config/nikcli/agent/` or to the project's `.nikcli/agent/`. `ragu agent list` shows the resolved list with the effective permissions.
 
 ### Modes
 
@@ -400,7 +400,7 @@ The `delegation` and `delegator` tools let the primary agent start subagents in 
 
 ## Toolset available to agents
 
-Tools are registered in `packages/nikcli/src/tool/`:
+Tools are registered in `packages/ragu/src/tool/`:
 
 | Tool                                                                             | Purpose                                                                                                                               |
 | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -436,18 +436,18 @@ Each tool has a description in `tool/<name>.txt` consulted by the primary agent 
 
 ## Skills
 
-**Skills** (`packages/nikcli/src/skill/`) are Markdown + script packages (e.g. `computer-use`, `orca-cli`, `effect`, `opentui`, `bun-file-io`, `orchestration`, `find-skills`, `emil-design-eng`, …) that inject specialized instructions, hooks, and extra tools. They are dynamically loaded and filtered against the agent permissions. The `skill` tool lets the agent invoke them explicitly.
+**Skills** (`packages/ragu/src/skill/`) are Markdown + script packages (e.g. `computer-use`, `orca-cli`, `effect`, `opentui`, `bun-file-io`, `orchestration`, `find-skills`, `emil-design-eng`, …) that inject specialized instructions, hooks, and extra tools. They are dynamically loaded and filtered against the agent permissions. The `skill` tool lets the agent invoke them explicitly.
 
 ---
 
 ## Loops, Goal, Routines, Missions
 
-Nikcli ships four continuous-orchestration primitives:
+Ragu Code ships four continuous-orchestration primitives:
 
-- **Goal** (`session/goal.ts`, `nikcli goal` command) — the agent works **until** a verifiable condition holds, with state `active | paused | blocked | usage_limited | budget_limited | complete`, token budget and iteration count (`MAX_ITERATIONS = 50`).
+- **Goal** (`session/goal.ts`, `ragu goal` command) — the agent works **until** a verifiable condition holds, with state `active | paused | blocked | usage_limited | budget_limited | complete`, token budget and iteration count (`MAX_ITERATIONS = 50`).
 - **Loops** (`loop/engine.ts` + TUI `feature-plugins/loops`) — a loop is a named, persisted workflow that runs an ordered list of stages, each driven by a single `goal` command. Triggers are manual or interval (`Scheduler` with `scope: "instance"`). It keeps running even when the TUI is closed thanks to the server-side engine. The user defines objective + trigger + stop conditions once.
 - **Missions** (`mission/orchestrator.ts` + TUI `feature-plugins/mission`) — a higher-altitude workflow that decomposes a goal into milestones, each holding a DAG of features, with a validation checkpoint at the end of every milestone (`scrutiny`, `user-test`, or `none`). The orchestrator drives one feature at a time as a `goal` command, then runs a validation worker before advancing.
-- **Routines** (`mobile/routine.ts`, `nikcli routine` command) — workflows scheduled (cron) or triggerable via API/HTTP, with auth tokens. They expose nikcli procedures as endpoints.
+- **Routines** (`mobile/routine.ts`, `ragu routine` command) — workflows scheduled (cron) or triggerable via API/HTTP, with auth tokens. They expose ragu procedures as endpoints.
 
 > These primitives compose existing tools (`Scheduler`, Goal, `task`, `delegation`): nothing is reinvented, only orchestrated.
 
@@ -457,7 +457,7 @@ Nikcli ships four continuous-orchestration primitives:
 
 ### LLM providers
 
-Registry in `packages/nikcli/src/provider/`. Integrated AI SDK adapters: **Anthropic, OpenAI, Azure OpenAI, Google, Google Vertex, AWS Bedrock, Groq, Mistral, Cohere, xAI (Grok), Cerebras, DeepInfra, Perplexity, Together AI, OpenRouter, Vercel AI Gateway, GitLab AI Provider, OpenAI-compatible**. Custom adapters also included for **GitHub Copilot, OpenAI Codex, Cloudflare AI, Cursor**.
+Registry in `packages/ragu/src/provider/`. Integrated AI SDK adapters: **Anthropic, OpenAI, Azure OpenAI, Google, Google Vertex, AWS Bedrock, Groq, Mistral, Cohere, xAI (Grok), Cerebras, DeepInfra, Perplexity, Together AI, OpenRouter, Vercel AI Gateway, GitLab AI Provider, OpenAI-compatible**. Custom adapters also included for **GitHub Copilot, OpenAI Codex, Cloudflare AI, Cursor**.
 
 For each provider:
 
@@ -468,12 +468,12 @@ For each provider:
 Commands:
 
 ```bash
-nikcli auth login
-nikcli models                  # all models
-nikcli models openai --verbose
-nikcli brain-model             # model for the "brain" (background reasoning)
-nikcli image-model openrouter openai/gpt-5-image
-nikcli speak-model elevenlabs YOq2y2Up4RgXP2HyXjE5
+ragu auth login
+ragu models                  # all models
+ragu models openai --verbose
+ragu brain-model             # model for the "brain" (background reasoning)
+ragu image-model openrouter openai/gpt-5-image
+ragu speak-model elevenlabs YOq2y2Up4RgXP2HyXjE5
 ```
 
 ### Multimodal models
@@ -484,17 +484,17 @@ nikcli speak-model elevenlabs YOq2y2Up4RgXP2HyXjE5
 
 ### MCP (Model Context Protocol)
 
-First-class MCP server with OAuth auth (`packages/nikcli/src/mcp`):
+First-class MCP server with OAuth auth (`packages/ragu/src/mcp`):
 
-- `nikcli mcp add <name> <url-or-cmd>`: adds a server.
-- `nikcli mcp auth <name>`: dedicated OAuth flow.
-- `nikcli mcp list` · `status` · `debug`.
+- `ragu mcp add <name> <url-or-cmd>`: adds a server.
+- `ragu mcp auth <name>`: dedicated OAuth flow.
+- `ragu mcp list` · `status` · `debug`.
 - MCP tools are exposed as native tools in the agent (registered in `tool/registry.ts`).
 - Preconfigured MCP: **Exa** (`mcp-exa`).
 
 ### Connectors
 
-`packages/nikcli/src/connectors/` manages third-party integrations with dedicated credentials and auth (GitHub, GitLab, Linear, Slack, Notion, Jira, …). Commands `nikcli connectors` (add, list, auth, status) with both CLI and TUI support. Each connector exposes an API reused by the agent tools.
+`packages/ragu/src/connectors/` manages third-party integrations with dedicated credentials and auth (GitHub, GitLab, Linear, Slack, Notion, Jira, …). Commands `ragu connectors` (add, list, auth, status) with both CLI and TUI support. Each connector exposes an API reused by the agent tools.
 
 ---
 
@@ -514,7 +514,7 @@ First-class MCP server with OAuth auth (`packages/nikcli/src/mcp`):
 
 ### Sharing
 
-`share/` and `share-next.ts` generate public/enterprise URLs to read sessions. `nikcli export` and `nikcli import` allow JSON serialization. The `nikcli import` command also accepts share URLs, normalizing enterprise hosts (`nikcli-ai.dev`, `*.dev.nikcli-ai.dev`).
+`share/` and `share-next.ts` generate public/enterprise URLs to read sessions. `ragu export` and `ragu import` allow JSON serialization. The `ragu import` command also accepts share URLs, normalizing enterprise hosts (`nikcli-ai.dev`, `*.dev.nikcli-ai.dev`).
 
 ### Loop, Background, Brain
 
@@ -527,7 +527,7 @@ First-class MCP server with OAuth auth (`packages/nikcli/src/mcp`):
 
 ### Sync / Workspace
 
-`sync/` and `workspace/` keep projects and sessions in sync on multi-workspace servers. `nikcli serve` and `nikcli workspace-serve` expose event servers; MCP and mobile clients consume via SSE.
+`sync/` and `workspace/` keep projects and sessions in sync on multi-workspace servers. `ragu serve` and `ragu workspace-serve` expose event servers; MCP and mobile clients consume via SSE.
 
 ---
 
@@ -535,34 +535,34 @@ First-class MCP server with OAuth auth (`packages/nikcli/src/mcp`):
 
 ### HTTP/SSE/WebSocket server
 
-`packages/nikcli/src/server/server.ts` owns the listener and request pipeline. The contract lives in `src/server/httpapi/`:
+`packages/ragu/src/server/server.ts` owns the listener and request pipeline. The contract lives in `src/server/httpapi/`:
 
 - **Effect `HttpApi`** groups plus raw handlers on `Bun.serve`. OpenAPI and the generated clients come from `PublicApi`.
-- **Clients** — `bun run generate:httpapi-clients` writes `@nikcli-ai/sdk/httpapi` and the in-process Effect client. There is no Hono app and no hey-api step.
+- **Clients** — `bun run generate:httpapi-clients` writes `@ragu/sdk/httpapi` and the in-process Effect client. There is no Hono app and no hey-api step.
 - **Routes** — session, file, pty, mcp, connectors, mobile, provider, config, permission, loop, question, global, tui, experimental, users, workspace, …
 - **SSE** for realtime events to the TUI, mobile, web (`EventFeed`).
 - **WebSocket** for PTY connect.
 - **mDNS** (`server/mdns.ts`) with `bonjour-service` for local discovery.
 - **Proxy** (`server/proxy.ts`) to route to container/sandbox instances.
-- **Auth**: optional basic auth, `NIKCLI_SERVER_PASSWORD`, `NIKCLI_SERVER_TAILSCALE_AUTH` to trust Tailscale headers on loopback.
+- **Auth**: optional basic auth, `RAGU_SERVER_PASSWORD`, `RAGU_SERVER_TAILSCALE_AUTH` to trust Tailscale headers on loopback.
 
 ### Web apps
 
 - `packages/web` (Astro + Tailwind) — public site, install script, docs (hosted on Cloudflare Pages).
 - `packages/app` (SolidStart) — full web application.
-- `packages/companion` — companion UI and server routes for `nikcli companion serve`.
+- `packages/companion` — companion UI and server routes for `ragu companion serve`.
 
 ### Mobile companion
 
 - `packages/mobile` (Expo / React Native) with realtime SSE, iOS and Android support (`ios/`, `android/`, `eas.json`).
 - Installing a release build: [`packages/mobile/README.md`](packages/mobile/README.md). Android ships a plain `.apk`; iOS ships an **unsigned** `.ipa` that you re-sign yourself with SideStore/Sideloadly, because the project has no Apple Developer Program membership.
-- Pairing: `nikcli mobile` shows a QR + deep link `nikcli://connect?server=...&token=...&directory=...`.
-- `MobileAuth` server-side (`packages/nikcli/src/mobile/auth.ts`) handles tokens, device id, scope.
+- Pairing: `ragu mobile` shows a QR + deep link `ragu://connect?server=...&token=...&directory=...`.
+- `MobileAuth` server-side (`packages/ragu/src/mobile/auth.ts`) handles tokens, device id, scope.
 
 ### Remote control
 
-- `nikcli remote start` opens a tunnel (localtunnel, cloudflared, ngrok, **remotosh**) or uses the **cloud relay** (`--cloud`) with bearer token.
-- `nikcli remote status` shows tunnel state.
+- `ragu remote start` opens a tunnel (localtunnel, cloudflared, ngrok, **remotosh**) or uses the **cloud relay** (`--cloud`) with bearer token.
+- `ragu remote status` shows tunnel state.
 - `packages/remote` contains the web client and QR renderer (`qrRenderer`, `tunnelProvider`, `cloudService`).
 - `packages/terminal-control` abstracts the terminal session across CLI, TUI and agents.
 
@@ -570,10 +570,10 @@ First-class MCP server with OAuth auth (`packages/nikcli/src/mcp`):
 
 ## Bots and chat adapters
 
-`packages/nikcli/src/chatbot/` orchestrates multi-platform bots thanks to `@chat-adapter/*`:
+`packages/ragu/src/chatbot/` orchestrates multi-platform bots thanks to `@chat-adapter/*`:
 
 - **Slack** (`packages/slack`, deployed on `slack.nikcli-ai.dev` via Wrangler).
-- **Discord Gateway** (`packages/discord`, `@nikcli-ai/discord`) — native Gateway bot. In the TUI, `/discord` (alias `/discord-setup`) walks through the bot token, invite URL, and start/stop. HTTP: `GET /discord`, `POST /discord/setup`, `/start`, `/stop`.
+- **Discord Gateway** (`packages/discord`, `@ragu/discord`) — native Gateway bot. In the TUI, `/discord` (alias `/discord-setup`) walks through the bot token, invite URL, and start/stop. HTTP: `GET /discord`, `POST /discord/setup`, `/start`, `/stop`.
 - **Discord webhooks** (`@chat-adapter/discord`) — the Chat SDK adapter, managed with `/bots`.
 - **Microsoft Teams** (`@chat-adapter/teams`).
 - **Google Chat** (`@chat-adapter/gchat`).
@@ -584,13 +584,13 @@ First-class MCP server with OAuth auth (`packages/nikcli/src/mcp`):
 Unified command:
 
 ```bash
-nikcli chat          # configure and start the Chat SDK bot
-nikcli chatbot       # alias
+ragu chat          # configure and start the Chat SDK bot
+ragu chatbot       # alias
 ```
 
 In the TUI, `/discord` sets up the Discord Gateway bot (token, invite, start). `/bots` manages Chat SDK webhook adapters.
 
-Bot sessions are full nikcli sessions: prompt, tools, MCP, connectors, history.
+Bot sessions are full ragu sessions: prompt, tools, MCP, connectors, history.
 
 ---
 
@@ -598,20 +598,20 @@ Bot sessions are full nikcli sessions: prompt, tools, MCP, connectors, history.
 
 ### Plugins (in-process)
 
-`packages/nikcli/src/plugin/` supports plugins that add:
+`packages/ragu/src/plugin/` supports plugins that add:
 
 - Agents (Markdown files with frontmatter `mode` + `tools`).
 - Tools (entries in `tool/registry.ts`).
-- Hooks (`@nikcli-ai/plugin` exports a hook system: `auth`, `chat.headers`, `chat.params`, `tool.execute.before`, `tool.execute.after`, `experimental.session.compacting`, `experimental.text.complete`, `command.execute.before`, …).
+- Hooks (`@ragu/plugin` exports a hook system: `auth`, `chat.headers`, `chat.params`, `tool.execute.before`, `tool.execute.after`, `experimental.session.compacting`, `experimental.text.complete`, `command.execute.before`, …).
 - LLM providers.
 - TUI plugins (route, slot, keymap, asset).
 
 Install:
 
 ```bash
-nikcli plug install @nikcli-ai/plugin-foo
-nikcli plug list
-nikcli plug remove @nikcli-ai/plugin-foo
+ragu plug install @ragu/plugin-foo
+ragu plug list
+ragu plug remove @ragu/plugin-foo
 ```
 
 Preconfigured plugins (`packages/plugin/plugins`):
@@ -632,9 +632,9 @@ The TUI feature-plugins (`feature-plugins/home`, `loops`, `sidebar`, `system`) a
 
 Config resolution (in order of increasing priority):
 
-1. **Remote**: `/.well-known/nikcli` for public OAuth providers.
+1. **Remote**: `/.well-known/ragu` for public OAuth providers.
 2. **Global**: `~/.config/nikcli/nikcli.jsonc` (or `nikcli.json`, `config.json`).
-3. **Custom**: env vars `NIKCLI_CONFIG` (path) or `NIKCLI_CONFIG_CONTENT` (string).
+3. **Custom**: env vars `RAGU_CONFIG` (path) or `RAGU_CONFIG_CONTENT` (string).
 4. **Project**: `nikcli.jsonc` or `nikcli.json` walking up the directory tree.
 
 Schema published at: [https://nikcli-ai.dev/config.json](https://nikcli-ai.dev/config.json)
@@ -644,7 +644,7 @@ Minimal example:
 ```jsonc
 {
   "$schema": "https://nikcli-ai.dev/config.json",
-  "theme": "nikcli",
+  "theme": "ragu",
   "provider": {
     "openai": { "options": { "apiKey": "sk-..." } },
   },
@@ -670,7 +670,7 @@ Useful sub-configs:
 - `ads` — custom ads/announcements for the TUI.
 - `locale` — language/region/model reply language (`it-IT`, `Europe/Rome`, `EUR`, `reply-language: "it"`).
 
-Recognized env flags (see `flag/flag.ts`): `NIKCLI_SERVER_PASSWORD`, `NIKCLI_SERVER_TAILSCALE_AUTH`, `NIKCLI_OPENROUTER_API_KEY`, `NIKCLI_ELEVENLABS_API_KEY`, `NIKCLI_GIT_BASH_PATH`, `NIKCLI_LOG_LEVEL`, etc.
+Recognized env flags (see `flag/flag.ts`): `RAGU_SERVER_PASSWORD`, `RAGU_SERVER_TAILSCALE_AUTH`, `RAGU_OPENROUTER_API_KEY`, `RAGU_ELEVENLABS_API_KEY`, `RAGU_GIT_BASH_PATH`, `RAGU_LOG_LEVEL`, etc.
 
 ---
 
@@ -703,7 +703,7 @@ Useful repository files:
 Ragu Code is a fork of **[nikcli](https://github.com/nikcli/nikcli)** by nikomatt69, which is a fork of
 **[OpenCode](https://github.com/anomalyco/opencode)**, the open source coding agent (the repo previously lived at
 `sst/opencode`). The core architecture, the terminal-first product idea, and most of the code in this repository
-originate there. Thanks to the nikcli and OpenCode authors, maintainers, and contributors for releasing their work
+originate there. Thanks to the ragu and OpenCode authors, maintainers, and contributors for releasing their work
 under a permissive license.
 
 Ragu Code is an independent fork, not affiliated with or endorsed by either project. Any bug you hit in Ragu Code
@@ -711,5 +711,5 @@ should be reported to this repository, never upstream.
 
 ## License
 
-MIT — see `LICENSE`. The license file retains the OpenCode and nikcli copyrights alongside the
+MIT — see `LICENSE`. The license file retains the OpenCode and ragu copyrights alongside the
 copyright for this fork's changes. `packages/kokoro-host` is GPL-3.0, with its own `NOTICE`.

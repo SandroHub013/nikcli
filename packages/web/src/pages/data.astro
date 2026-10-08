@@ -1,6 +1,6 @@
 ---
 /**
- * /data — what nikcli's own inference gateway actually did.
+ * /data — what ragu's own inference gateway actually did.
  *
  * Every gateway number is a SUM over the `usage` table the gateway bills from,
  * reached through the aggregate feed the console deployment publishes — see
@@ -222,8 +222,8 @@ const installColumns = plainColumns(
 const installPeak = peak(communitySeries, (point) => installsByDay.get(point.day) ?? 0)
 const installPeakValue = installPeak ? (installsByDay.get(installPeak.day) ?? 0) : 0
 
-// Activity grid — the same contribution-style picture nikcli's own analytics
-// view draws, from the shared helper in @nikcli-ai/util/activity.
+// Activity grid — the same contribution-style picture ragu's own analytics
+// view draws, from the shared helper in @ragu/util/activity.
 const CELL = 17
 const CELL_GAP = 4
 const CELL_PITCH = CELL + CELL_GAP
@@ -399,8 +399,8 @@ const updatedAt = new Date(now * 1000).toLocaleString("en-US", {
 ---
 
 <Layout
-  title="Data | nikcli"
-  description="Real usage from the nikcli inference gateway: token volume by model, request cost, cache hit ratio, provider share, and adoption over time."
+  title="Data | ragu"
+  description="Real usage from the ragu inference gateway: token volume by model, request cost, cache hit ratio, provider share, and adoption over time."
 >
   <Navbar />
 
@@ -409,7 +409,7 @@ const updatedAt = new Date(now * 1000).toLocaleString("en-US", {
     <section class="page-shell pt-12 pb-8 sm:pt-16">
       <p class="text-eyebrow uppercase text-terminal-accent">Data</p>
       <h1 class="mt-3 max-w-3xl font-display text-page-title text-terminal-text">
-        What nikcli actually runs on
+        What ragu actually runs on
       </h1>
       <p class="mt-4 max-w-2xl text-body-md text-terminal-muted">
         Two telemetry sources, kept apart because they measure different things: what installs report about the
@@ -452,8 +452,8 @@ const updatedAt = new Date(now * 1000).toLocaleString("en-US", {
                   Models developers run
                 </h2>
                 <p class="mt-2 max-w-2xl text-body-sm text-terminal-muted">
-                  Reported by nikcli installs — including models run on their own provider keys, which never touch the
-                  nikcli gateway. Figures cover the last {community.windowDays} days; the chart below covers
+                  Reported by ragu installs — including models run on their own provider keys, which never touch the
+                  ragu gateway. Figures cover the last {community.windowDays} days; the chart below covers
                   {community.seriesDays}.
                 </p>
               </div>
@@ -861,11 +861,11 @@ const updatedAt = new Date(now * 1000).toLocaleString("en-US", {
             </div>
 
             <p class="mt-6 text-[13px] text-terminal-muted">
-              nikcli reports one row per day, provider and model — session count, message count, token count and cost,
+              ragu reports one row per day, provider and model — session count, message count, token count and cost,
               under a random identifier. Never prompts, paths, repositories, session titles or account. It is on by
               default, because a sample of only those who opted in would measure those people rather than the
               community. <code class="rounded-sm bg-terminal-code px-1.5 py-0.5">DO_NOT_TRACK=1</code>,
-              {" "}<code class="rounded-sm bg-terminal-code px-1.5 py-0.5">NIKCLI_DISABLE_ANALYTICS=1</code> or
+              {" "}<code class="rounded-sm bg-terminal-code px-1.5 py-0.5">RAGU_DISABLE_ANALYTICS=1</code> or
               {" "}<code class="rounded-sm bg-terminal-code px-1.5 py-0.5">analytics.share: false</code> turns it off;
               {" "}<a class="underline underline-offset-2 hover:text-terminal-text" href="/docs/configuration#analytics">the docs</a>
               {" "}spell out exactly what is sent.
@@ -895,7 +895,7 @@ const updatedAt = new Date(now * 1000).toLocaleString("en-US", {
               <p class="viz-source">Hosted gateway</p>
               <h2 id="overview-heading" class="font-display text-panel-title text-terminal-text">Through the hosted gateway</h2>
               <p class="mt-2 max-w-2xl text-body-sm text-terminal-muted">
-                A separate, smaller thing: completions nikcli's own gateway billed, one row each in
+                A separate, smaller thing: completions ragu's own gateway billed, one row each in
                 {" "}<code class="rounded-sm bg-terminal-code px-1.5 py-0.5 text-[0.85em]">usage</code> — the table
                 billing reads. Nothing above passes through it.
               </p>

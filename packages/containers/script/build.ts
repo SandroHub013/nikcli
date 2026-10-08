@@ -22,11 +22,11 @@ const images = ["base", "bun-node", "rust", "tauri-linux", "publish"]
 const setup = async () => {
   if (!push) return
   const list = await $`docker buildx ls`.text()
-  if (list.includes("nikcli")) {
-    await $`docker buildx use nikcli`
+  if (list.includes("ragu")) {
+    await $`docker buildx use ragu`
     return
   }
-  await $`docker buildx create --name nikcli --use`
+  await $`docker buildx create --name ragu --use`
 }
 
 await setup()

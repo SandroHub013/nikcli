@@ -113,27 +113,27 @@ describe("folders are compared as host/path.ts compares them", () => {
 
 describe("a session whose folder is gone (ROADMAP, BASSO)", () => {
   const gone = (paths: string[]) => async (path: string) => paths.includes(path)
-  const open = { name: "nikcli", root: "C:/x/nikcli" }
+  const open = { name: "ragu", root: "C:/x/ragu" }
 
   test("its project's folder gone: that folder, not the open project to start in", async () => {
-    const pane = { workspaceId: "vecchia", projectRoot: "C:/x/nikcli-ade-vecchia" }
-    expect(await goneFolder(pane, open, [], gone(["C:/x/nikcli-ade-vecchia"]))).toBe("C:/x/nikcli-ade-vecchia")
+    const pane = { workspaceId: "vecchia", projectRoot: "C:/x/ragu-ade-vecchia" }
+    expect(await goneFolder(pane, open, [], gone(["C:/x/ragu-ade-vecchia"]))).toBe("C:/x/ragu-ade-vecchia")
   })
 
   test("its worktree gone: the worktree, which is where it would start", async () => {
-    const pane = { workspaceId: "nikcli", projectRoot: open.root, worktree: "C:/x/nikcli-ade-s62" }
-    expect(await goneFolder(pane, open, [], gone(["C:/x/nikcli-ade-s62"]))).toBe("C:/x/nikcli-ade-s62")
+    const pane = { workspaceId: "ragu", projectRoot: open.root, worktree: "C:/x/ragu-ade-s62" }
+    expect(await goneFolder(pane, open, [], gone(["C:/x/ragu-ade-s62"]))).toBe("C:/x/ragu-ade-s62")
   })
 
   test("a pane saved before folders were kept, found by name among the recents", async () => {
-    const recents = [{ name: "vecchia", root: "C:/x/nikcli-ade-vecchia" }]
-    expect(await goneFolder({ workspaceId: "vecchia" }, open, recents, gone(["C:/x/nikcli-ade-vecchia"]))).toBe(
-      "C:/x/nikcli-ade-vecchia",
+    const recents = [{ name: "vecchia", root: "C:/x/ragu-ade-vecchia" }]
+    expect(await goneFolder({ workspaceId: "vecchia" }, open, recents, gone(["C:/x/ragu-ade-vecchia"]))).toBe(
+      "C:/x/ragu-ade-vecchia",
     )
   })
 
   test("nothing gone, nothing to say", async () => {
-    expect(await goneFolder({ workspaceId: "nikcli", projectRoot: open.root }, open, [], gone([]))).toBeUndefined()
+    expect(await goneFolder({ workspaceId: "ragu", projectRoot: open.root }, open, [], gone([]))).toBeUndefined()
     expect(await goneFolder(undefined, undefined, [], gone(["C:/x"]))).toBeUndefined()
   })
 })

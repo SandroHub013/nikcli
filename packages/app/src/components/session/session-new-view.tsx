@@ -2,9 +2,9 @@ import { For, Show, createMemo } from "solid-js"
 import { DateTime } from "luxon"
 import { useSync } from "@/context/sync"
 import { useLanguage } from "@/context/language"
-import { Icon } from "@nikcli-ai/ui/icon"
-import { Mark } from "@nikcli-ai/ui/logo"
-import { getDirectory, getFilename } from "@nikcli-ai/util/path"
+import { Icon } from "@ragu/ui/icon"
+import { Mark } from "@ragu/ui/logo"
+import { getDirectory, getFilename } from "@ragu/util/path"
 import { usePlatform } from "@/context/platform"
 import { useLocal } from "@/context/local"
 import { WORK_SUGGESTIONS } from "./session-new-view-data"
@@ -38,7 +38,7 @@ export function NewSessionView(props: NewSessionViewProps) {
     return sync.data.path.directory !== project.worktree
   })
   const desktop = createMemo(() => platform.platform === "desktop")
-  const projectName = createMemo(() => getFilename(projectRoot()) || "Nikcli")
+  const projectName = createMemo(() => getFilename(projectRoot()) || "Ragu")
   const mode = createMemo(() => {
     const name = local.agent.current()?.name
     return name === "build" || name === "plan" || name === "ralph" ? "work" : "chat"

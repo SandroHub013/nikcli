@@ -270,7 +270,7 @@ describe("every danger of a command", () => {
  * Second check, MEDIO: the user's folder and a drive's root as PowerShell and
  * cmd write them, in any case. And every spelling Rust's
  * `no_spelling_passes_a_users_allow_in_any_flag` leaves to ADE's answer
- * (nikcli asks, it does not deny) is refused here.
+ * (ragu asks, it does not deny) is refused here.
  */
 describe("Windows: the user's folder, a bare drive, any case", () => {
   test("deleting the user's folder or a drive's root never runs", () => {
@@ -339,8 +339,8 @@ describe("Windows: the user's folder, a bare drive, any case", () => {
     }
   })
 
-  test("every spelling nikcli asks about is refused by ADE", () => {
-    // nikcli's globs count case (`serve-rules.ts`): these reach its question, and ADE refuses them.
+  test("every spelling ragu asks about is refused by ADE", () => {
+    // ragu's globs count case (`serve-rules.ts`): these reach its question, and ADE refuses them.
     const spellings = [
       "REMOVE-ITEM -Recurse -Force C:\\",
       "rEmOvE-iTeM -Recurse -Force C:\\",

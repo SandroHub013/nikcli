@@ -20,11 +20,11 @@
  */
 
 import { normalizeKeyName, parseChord, type Chord, type Platform } from "../keyboard/keymap"
-import { isSystemChord, isWindowsRuntime, type VoiceMode, type VoiceSettings } from "@nikcli-ai/voice/core"
+import { isSystemChord, isWindowsRuntime, type VoiceMode, type VoiceSettings } from "@ragu/voice/core"
 import { t } from "../i18n"
 
 /** The event the native side emits for every registered voice hotkey. */
-export const GLOBAL_VOICE_EVENT = "nikcli-global-voice"
+export const GLOBAL_VOICE_EVENT = "ragu-global-voice"
 
 /**
  * Runs the registrations one at a time, newest last.

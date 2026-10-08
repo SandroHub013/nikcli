@@ -5,10 +5,10 @@ Owner: permission, sandbox, policy, tool, plugin maintainers. [Roadmap](../ROADM
 
 ## Problem and Evidence
 
-Evidence B32, B33 in the [register](../README.md): `packages/nikcli/src/permission/{ruleset,evaluate,arity,schema}.ts`
+Evidence B32, B33 in the [register](../README.md): `packages/ragu/src/permission/{ruleset,evaluate,arity,schema}.ts`
 already define a typed ruleset, an evaluation engine, and a per-tool coupling map (`PermissionRuleset.TOOL_PERMISSION`,
 e.g. `monitor` → `bash`, edit-family → `edit`). A deny on `bash` covers `monitor`; a deny on `monitor` alone does **not**.
-`packages/nikcli/src/sandbox/index.ts` exposes a sandbox primitive. The remaining gap is a unified architectural spec
+`packages/ragu/src/sandbox/index.ts` exposes a sandbox primitive. The remaining gap is a unified architectural spec
 covering the **full** permission/sandbox/policy model: file system globs, network domains, command execution, sandbox
 isolation, plugin capability gating, and the runtime that ties them together. Right now, those primitives exist as
 loosely-coordinated modules rather than a single coherent trust boundary.
@@ -107,9 +107,9 @@ Permission evaluation must not block indefinitely; an evaluation that needs a us
 - Headless mode without a fully-resolving ruleset fails closed; a CI run with a permissive flag and a missing ruleset
   does not silently run with default permissions.
 - Permission denial never retries on the user's behalf; the user explicitly retries if desired.
-- Extend `packages/nikcli/test/permission/`, `packages/nikcli/test/sandbox/`, `packages/nikcli/test/policy/`,
-  `packages/nikcli/test/plugin/`, and the existing tool permission tests.
-- From `packages/nikcli`: `bun test test/permission/ test/sandbox/ test/policy/ test/plugin/`. One final root
+- Extend `packages/ragu/test/permission/`, `packages/ragu/test/sandbox/`, `packages/ragu/test/policy/`,
+  `packages/ragu/test/plugin/`, and the existing tool permission tests.
+- From `packages/ragu`: `bun test test/permission/ test/sandbox/ test/policy/ test/plugin/`. One final root
   `bun run typecheck` after the slice.
 - Meet EOT-01 budgets; permission evaluation p95 below 5 ms; audit write does not exceed the approved log budget;
   redaction tests pass with synthetic secrets.
@@ -126,7 +126,7 @@ an explicit migration step.
 
 Slice 6 landed the parts of this spec that are enforceable today, and recorded the one that is not. Four notes so a reviewer does not have to re-derive them.
 
-1. **Network policy has no chokepoint — and building one now would be a lie.** The spec asks for every outbound HTTP/WS/raw TCP call to route through the runtime `HttpClient`. It does not: `fetch`/`WebSocket`/`Bun.connect` are called directly from **45 modules** under `packages/nikcli/src`, and the only Effect `FetchHttpClient` layer in the tree (`observability/otlp.ts`) serves OTLP export alone. Wrapping a layer that nothing calls would add a policy check no traffic passes through. What is enforced instead is **accounting**: `packages/nikcli/specs/network-egress.json` lists all 45 modules with a purpose, and `script/check-network-egress.ts` fails CI on an unlisted egress module (new surface) or a listed module with no egress (stale entry). Regenerate the list with `--report`; the detector that validates the file is the one that produced it, so they cannot drift. `packages/llm/src` is already layer-based and has zero direct egress — that is the shape the rest should eventually take.
+1. **Network policy has no chokepoint — and building one now would be a lie.** The spec asks for every outbound HTTP/WS/raw TCP call to route through the runtime `HttpClient`. It does not: `fetch`/`WebSocket`/`Bun.connect` are called directly from **45 modules** under `packages/ragu/src`, and the only Effect `FetchHttpClient` layer in the tree (`observability/otlp.ts`) serves OTLP export alone. Wrapping a layer that nothing calls would add a policy check no traffic passes through. What is enforced instead is **accounting**: `packages/ragu/specs/network-egress.json` lists all 45 modules with a purpose, and `script/check-network-egress.ts` fails CI on an unlisted egress module (new surface) or a listed module with no egress (stale entry). Regenerate the list with `--report`; the detector that validates the file is the one that produced it, so they cannot drift. `packages/llm/src` is already layer-based and has zero direct egress — that is the shape the rest should eventually take.
 2. **The sandbox contract is pinned by tests, not by a comment.** `test/sandbox/sandbox.test.ts` locks `SAFE_ENV_PASSTHROUGH` (the exact eight-variable allowlist), `scrubEnv`'s credential stripping and caller-extras behaviour, the `{cwd, project}` shape of `EscapeError`, the SIGTERM→SIGKILL escalation producing a typed `TimeoutError`, and the fact that `defaultLayer === localLayer` — i.e. no Docker/Vercel/Firecracker layer has been wired despite the plug-in points existing as types. A future layer must update that last assertion deliberately.
 3. **`Policy.allows` starts from the open default and takes the last match.** A lone `{allow, resource: "anthropic/*"}` does **not** deny every other provider; narrowing requires an explicit `{deny, resource: "*"}` ahead of the allow — which is exactly what `legacyProviderStatements` emits for `enabled_providers`. `test/policy/headless.test.ts` pins both halves, because assuming the stricter reading is the natural mistake.
-4. **Headless fails closed at the CLI boundary, not in policy.** `cli/main-effect.ts` sets `NIKCLI_AUTO_APPROVE=1` only for `--auto`/`--yolo`/`--dangerously-skip-permissions`. There is no other writer. An unattended runner therefore hits `ask` and blocks unless the caller opted in — and `PermissionRuleset.autoApprove` keeps `deny` entries alive underneath the blanket allow, which is what makes `fullAccess()` safe to hand to a loop/mission runner. The bash⊃monitor and edit-family couplings were already locked by `test/permission/coupling.test.ts`; Slice 6 added nothing there because nothing was missing.
+4. **Headless fails closed at the CLI boundary, not in policy.** `cli/main-effect.ts` sets `RAGU_AUTO_APPROVE=1` only for `--auto`/`--yolo`/`--dangerously-skip-permissions`. There is no other writer. An unattended runner therefore hits `ask` and blocks unless the caller opted in — and `PermissionRuleset.autoApprove` keeps `deny` entries alive underneath the blanket allow, which is what makes `fullAccess()` safe to hand to a loop/mission runner. The bash⊃monitor and edit-family couplings were already locked by `test/permission/coupling.test.ts`; Slice 6 added nothing there because nothing was missing.

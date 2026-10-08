@@ -1,7 +1,7 @@
 /**
- * @nikcli-ai/tui-math
+ * @ragu/tui-math
  *
- * LaTeX math rendering for OpenTUI terminals, vendored into nikcli so the
+ * LaTeX math rendering for OpenTUI terminals, vendored into ragu so the
  * feature ships by default with no npm dependency and no TeX installation.
  *
  * The renderer is a math-mode engine, not a TeX engine: it parses a formula
@@ -11,7 +11,7 @@
  * there is no graphics-protocol probe, no rasterizer and no image transfer.
  *
  * ```ts
- * import { renderLatexToString } from "@nikcli-ai/tui-math"
+ * import { renderLatexToString } from "@ragu/tui-math"
  *
  * renderLatexToString(String.raw`x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}`)
  * ```

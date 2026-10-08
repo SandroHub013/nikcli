@@ -22,7 +22,7 @@ export function stripAnsi(text: string): string {
        * would otherwise eat only the introducer and leave the payload as
        * text. That is not hypothetical: a terminal that answers XTGETTCAP
        * replies `ESC P +q<hex>=<hex> ESC \`, and the first thing a restored
-       * nikcli session appeared to say was `+q4d73Gi=31337,s=1,v=1,a=q,…`.
+       * ragu session appeared to say was `+q4d73Gi=31337,s=1,v=1,a=q,…`.
        */
       .replace(/\x1b[P^_X][\s\S]*?(?:\x07|\x1b\\)/g, "")
       /*

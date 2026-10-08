@@ -1,5 +1,5 @@
 /**
- * Buttons: a press on the device becomes `ui.press { key }` in nikcli.
+ * Buttons: a press on the device becomes `ui.press { key }` in ragu.
  *
  * A driver owns the hardware and reports presses by key; the runtime posts
  * them. `keyboard` maps terminal keys to button keys for development and for

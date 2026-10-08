@@ -3,14 +3,14 @@
 | Field  | Value                                                                           |
 | ------ | ------------------------------------------------------------------------------- |
 | Status | **Working list** — the v2 port's remaining decisions, reviewed 2026-09-11       |
-| Scope  | What is left of the opencode v2 port, and which of it nikcli has already passed |
+| Scope  | What is left of the opencode v2 port, and which of it ragu has already passed |
 
-This is the nikcli counterpart to opencode's `specs/v2/todo.md`: the coordination list for getting
+This is the ragu counterpart to opencode's `specs/v2/todo.md`: the coordination list for getting
 out of the rebuild phase.
 
 **It is not the backlog.** Dated, sequenced, measured work belongs in [../ROADMAP.md](../ROADMAP.md),
 which tracks the twenty-spec Effect/TUI program. This file holds the v2-port items that are still
-_decisions_ — where the shape is unsettled, or where nikcli deliberately diverged and the divergence
+_decisions_ — where the shape is unsettled, or where ragu deliberately diverged and the divergence
 needs to stay visible.
 
 ## Already Closed
@@ -18,9 +18,9 @@ needs to stay visible.
 These are open upstream and finished here. They are listed so nobody reopens them by porting an
 upstream document verbatim.
 
-| Upstream item              | nikcli status                                                                                                                                                                                           |
+| Upstream item              | ragu status                                                                                                                                                                                           |
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Post-Hono cleanup          | **Done.** Hono and `NIKCLI_EXPERIMENTAL_HTTPAPI` are gone from `src`. Routes are `server/httpapi/*.ts` plus the `bridge.ts` route table.                                                                |
+| Post-Hono cleanup          | **Done.** Hono and `RAGU_EXPERIMENTAL_HTTPAPI` are gone from `src`. Routes are `server/httpapi/*.ts` plus the `bridge.ts` route table.                                                                |
 | New data mode / session v2 | **Done and ahead.** Flat entries, event-sourced write path, persisted entry projection — see [session-v2-write-path.md](./session-v2-write-path.md). `MessageV2` stays authoritative for the LLM layer. |
 | Event system               | **Done.** One encoded feed with a per-connection lag budget — see [event-stream-architecture.md](./event-stream-architecture.md).                                                                       |
 | Durable pending input      | **Done.** Pending row plus promotion transaction, steer vs queue, compaction barrier — see [durable-pending-input.md](./durable-pending-input.md).                                                      |
@@ -51,7 +51,7 @@ precedents in the codebase and they disagree:
 
 Pick one before the first rename lands, not after the third.
 
-Also unresolved: whether `nikcli.jsonc` is supported. Upstream v2 accepts it; nikcli's `findUp`
+Also unresolved: whether `nikcli.jsonc` is supported. Upstream v2 accepts it; ragu's `findUp`
 looks for `nikcli.json` only.
 
 ## Provider And Model
@@ -60,19 +60,19 @@ The catalog is documented in [provider-model.md](./provider-model.md). Three gap
 each an independent decision:
 
 - **No plugin hook surface.** Upstream registers providers and models through ordered plugins with
-  `provider.update` / `model.update` hooks over Immer drafts. nikcli builds the catalog in one
+  `provider.update` / `model.update` hooks over Immer drafts. ragu builds the catalog in one
   function with six literal steps. The function is readable and testable; the cost is that a plugin
   cannot add a model without an auth loader. Decide whether that is a real constraint before
   building a hook system for it.
 - **No account abstraction.** Credentials are `Auth.Info` records keyed by provider id. Upstream has
-  `AccountV2` with activation and a service id. nikcli's unified-auth work (OAuth on
+  `AccountV2` with activation and a service id. ragu's unified-auth work (OAuth on
   `auth.nikcli-ai.dev` with a shared JWKS verifier, pinned by `test/server/unified-auth.test.ts`) is
   the natural place for this, not the provider catalog.
 - **`Model.family` is carried but unused.** Either selection starts using it or it comes out.
 
 ## Native LLM Routing
 
-`experimental.nativeLlm` is gone since 2026-10-03: native `@nikcli-ai/llm` streaming is the only runtime and the
+`experimental.nativeLlm` is gone since 2026-10-03: native `@ragu/llm` streaming is the only runtime and the
 AI SDK is removed (`packages/util/src/features.ts` no longer reads the key).
 
 Done: the gate is removed and the AI SDK fallback with it. Coverage is no longer invisible: a model no route can
@@ -90,7 +90,7 @@ the processor, so no step part and no snapshot) is fixed in `toProcessorStream` 
   `context: { directory, workspaceID? }` plus `id` and `time`. One shape would let a single
   connection multiplex directories; it breaks every client that reads `data.type`.
 - **The TUI store is single-context.** Upstream partitions runtime data by
-  `${workspaceID ?? "local"}:${directory}`. nikcli keeps one flat store per process. The partition is
+  `${workspaceID ?? "local"}:${directory}`. ragu keeps one flat store per process. The partition is
   a prerequisite for showing two worktrees in one window and is needed for nothing else today.
 
 Neither should be done for symmetry with upstream. Both need a named consumer first.
@@ -123,8 +123,8 @@ Two hardening items are independent of that work and should not block it:
 
 ## Project And Worktree Routing
 
-[../project.md](../project.md) records the divergence: nikcli binds requests to a **directory**
-(`?directory=` or `x-nikcli-directory`), upstream nests them under `/project/:projectID`.
+[../project.md](../project.md) records the divergence: ragu binds requests to a **directory**
+(`?directory=` or `x-ragu-directory`), upstream nests them under `/project/:projectID`.
 
 The open question is not which is better — it is whether cross-worktree aggregation needs a route.
 Listing every session for a project that spans three worktrees is three calls today. The data
@@ -136,7 +136,7 @@ is a routing decision, not a migration.
 Upstream's goal: every service emits granular events so dependents reconfigure themselves instead of
 being torn down, and the frontend receives them too (`model.added` and friends).
 
-nikcli has the invalidation half — `InstanceReload.watch()` debounces config-surface changes and
+ragu has the invalidation half — `InstanceReload.watch()` debounces config-surface changes and
 invalidates reloadable per-instance caches, publishing `instance.reload.started` and
 `instance.reloaded`. What it does not have is **granularity**: a single changed model invalidates the
 whole provider state for that directory.
@@ -147,10 +147,10 @@ prerequisite is knowing which dependents actually want it — a TUI that re-read
 
 ## Plugin API
 
-`@nikcli-ai/plugin` is the public type and autoload is fail-closed
+`@ragu/plugin` is the public type and autoload is fail-closed
 ([tool-plugin-autoload-security.md](./tool-plugin-autoload-security.md)). What does not exist is
 upstream's server-plugin hook design — Immer drafts so bad mutations can be discarded, a global
-instance handle (`nikcli.session.prompt()`, `nikcli.tool.register({…})`), and a hook spec with
+instance handle (`ragu.session.prompt()`, `ragu.tool.register({…})`), and a hook spec with
 `cancel` semantics.
 
 Do not build a fraction of it for a single service. If it lands it should land as one document with a

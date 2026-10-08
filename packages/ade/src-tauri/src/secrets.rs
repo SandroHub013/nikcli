@@ -359,7 +359,7 @@ pub fn agent_for_command(command: &str) -> Option<&'static str> {
         "claude" => Some("claude-code"),
         "codex" => Some("codex"),
         "opencode" => Some("opencode"),
-        "nikcli" => Some("nikcli"),
+        "ragu" => Some("ragu"),
         "grok" => Some("grok"),
         "agy" => Some("agy"),
         "kimi" => Some("kimi"),
@@ -722,7 +722,7 @@ mod tests {
         let vault = MemoryVault::default();
         let path = temp_index("exposure");
         let agents = |list: &[&str]| list.iter().map(|a| a.to_string()).collect::<Vec<_>>();
-        save_in(&vault, "svc", &path, "OpenRouter", "OPENROUTER_API_KEY", agents(&["nikcli"]), Some(FAKE), 1).unwrap();
+        save_in(&vault, "svc", &path, "OpenRouter", "OPENROUTER_API_KEY", agents(&["ragu"]), Some(FAKE), 1).unwrap();
         save_in(&vault, "svc", &path, "anthropic", "ANTHROPIC_API_KEY", vec![], Some("sk-ant-value"), 1).unwrap();
 
         // The attack: the Anthropic key takes the variable the page may read, or reaches a shell.
@@ -742,7 +742,7 @@ mod tests {
         // The same exposure, in another order or spelled with blanks and repeats, asks nothing.
         assert_eq!(exposure_change(&path, "anthropic", "ANTHROPIC_API_KEY", &[]), None);
         assert_eq!(exposure_change(&path, "anthropic", "ANTHROPIC_API_KEY", &agents(&["", " "])), None);
-        assert_eq!(exposure_change(&path, "OpenRouter", "OPENROUTER_API_KEY", &agents(&["nikcli", "nikcli"])), None);
+        assert_eq!(exposure_change(&path, "OpenRouter", "OPENROUTER_API_KEY", &agents(&["ragu", "ragu"])), None);
         // A key that is not there is a new one, which needs its value anyway.
         assert_eq!(exposure_change(&path, "nuova", "NUOVA_API_KEY", &agents(&["terminal"])), None);
         let _ = std::fs::remove_file(&path);

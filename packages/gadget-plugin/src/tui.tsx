@@ -1,24 +1,24 @@
 /**
- * `@nikcli-ai/plugin-gadgets/tui` — the terminal half.
+ * `@ragu/plugin-gadgets/tui` — the terminal half.
  *
- * Add `"@nikcli-ai/plugin-gadgets"` to `plugin` in `tui.json` and the TUI gets
+ * Add `"@ragu/plugin-gadgets"` to `plugin` in `tui.json` and the TUI gets
  * `/gadget` (list), `/gadget pair`, `/gadget health <id>`, `/gadget send <id>
  * <text>` and `/gadget revoke <id>`, and a "Gadgets" block in the sidebar once
  * one is paired. It talks to the bridge's `/admin` routes,
- * which answer this machine only, so the TUI has to run where the nikcli
+ * which answer this machine only, so the TUI has to run where the ragu
  * server runs. Option `url` points it elsewhere on the same machine
  * (default `http://127.0.0.1:4097`).
  *
  * A manifest asking for `commands` only: the TUI host supplies it, and there is
  * nothing else this plugin needs from the host.
  */
-import { Plugin } from "@nikcli-ai/plugin/v2/tui"
-import type { Context } from "@nikcli-ai/plugin/v2/tui/context"
-import { GadgetError, ROUTES, type GadgetInfo, type HealthInfo, type PairWindow } from "@nikcli-ai/gadget/protocol"
-import { trimTrailingSlashes } from "@nikcli-ai/gadget"
+import { Plugin } from "@ragu/plugin/v2/tui"
+import type { Context } from "@ragu/plugin/v2/tui/context"
+import { GadgetError, ROUTES, type GadgetInfo, type HealthInfo, type PairWindow } from "@ragu/gadget/protocol"
+import { trimTrailingSlashes } from "@ragu/gadget"
 import { Gadgets } from "./sidebar.tsx"
 
-const ID = "nikcli:gadgets"
+const ID = "ragu:gadgets"
 
 async function call<T>(base: string, method: string, path: string, body?: unknown): Promise<T> {
   let response: Response
@@ -31,7 +31,7 @@ async function call<T>(base: string, method: string, path: string, body?: unknow
     })
   } catch {
     throw new Error(
-      `the gadgets bridge is not reachable at ${base}: is nikcli's server running with the plugin enabled?`,
+      `the gadgets bridge is not reachable at ${base}: is ragu's server running with the plugin enabled?`,
     )
   }
   const text = await response.text()
@@ -88,7 +88,7 @@ export function setup(context: Context) {
       "Gadgets",
       all.length
         ? all.map(line).join("\n")
-        : "No gadgets are paired.\nRun /gadget pair, then nikcli-gadget pair on the device.",
+        : "No gadgets are paired.\nRun /gadget pair, then ragu-gadget pair on the device.",
     )
   }
 
@@ -101,7 +101,7 @@ export function setup(context: Context) {
         `Code: ${window.code}   (open for ${minutes} minutes)`,
         "",
         "On the device:",
-        `nikcli-gadget pair --server ${window.url} --code ${window.code}`,
+        `ragu-gadget pair --server ${window.url} --code ${window.code}`,
       ].join("\n"),
     )
   }

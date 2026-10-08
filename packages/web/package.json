@@ -1,5 +1,5 @@
 {
-  "name": "@nikcli-ai/web",
+  "name": "@ragu/web",
   "version": "1.431.0",
   "type": "module",
   "scripts": {
@@ -18,8 +18,8 @@
     "build:social-image": "bun run script/build-social-image.ts",
     "test:social-meta": "bun run build && bun test script/social-meta.test.ts",
     "build:world-map": "bun run script/build-world-map.ts",
-    "d1:migrate:local": "wrangler d1 migrations apply nikcli-web --local",
-    "d1:migrate:remote": "wrangler d1 migrations apply nikcli-web --remote"
+    "d1:migrate:local": "wrangler d1 migrations apply ragu-web --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply ragu-web --remote"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^12.0.0",
@@ -29,9 +29,9 @@
     "@fontsource/jetbrains-mono": "^5.1.1",
     "@fontsource/space-grotesk": "^5.1.1",
     "@mixmark-io/domino": "^2.2.0",
-    "@nikcli-ai/auth": "workspace:*",
-    "@nikcli-ai/sdk": "workspace:*",
-    "@nikcli-ai/util": "workspace:*",
+    "@ragu/auth": "workspace:*",
+    "@ragu/sdk": "workspace:*",
+    "@ragu/util": "workspace:*",
     "@tailwindcss/typography": "0.5.19",
     "@types/bcryptjs": "3.0.0",
     "@xterm/addon-fit": "0.11.0",

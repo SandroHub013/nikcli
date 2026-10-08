@@ -12,7 +12,7 @@ import type { AgentEntry } from "../agent/log"
 import type { DialogStatus } from "../dialog/session"
 import type { VoiceErrorKind } from "../effect/errors"
 import type { OrbRim } from "./orb-mark"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 
 /** How urgent the widget looks. Maps to one hairline colour, nothing more. */
 export type HudTone = "armed" | "listening" | "asking" | "working" | "done"

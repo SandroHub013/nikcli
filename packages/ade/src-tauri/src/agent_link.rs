@@ -45,12 +45,12 @@ const LINK_TTL: Duration = Duration::from_secs(60 * 60 * 24);
 /// Filename of the script ADE installs. Mirrors `HOOK_MARKER` in `agent-hooks.ts`.
 const SCRIPT_NAME: &str = "ade-agent-session.ps1";
 
-/// Filename of nikcli's TUI plugin. Mirrors `NIKCLI_PLUGIN_NAME` in `nikcli-plugin.ts`.
+/// Filename of ragu's TUI plugin. Mirrors `RAGU_PLUGIN_NAME` in `ragu-plugin.ts`.
 const PLUGIN_NAME: &str = "ade-agent-session.js";
 
 /// The plugin's text, compiled in: the only one ADE writes (ripristino
 /// review, BASSO 1). The page asks for the install and sends no program, so
-/// a compromised page cannot make every nikcli TUI load one of its choosing.
+/// a compromised page cannot make every ragu TUI load one of its choosing.
 /// The TypeScript tests load this same file and run it.
 const PLUGIN_TEXT: &str = include_str!("../plugins/ade-agent-session.js");
 
@@ -81,7 +81,7 @@ const ACTIVITY_EXTENSION_AGENTS: &[&str] = &["prime", "pi"];
 enum Base {
     /// The user's home directory.
     Home,
-    /// Where nikcli keeps its configuration (its `Global.Path.config`, one
+    /// Where ragu keeps its configuration (its `Global.Path.config`, one
     /// level up): `%APPDATA%` on Windows, `$XDG_CONFIG_HOME` or `~/.config`
     /// elsewhere. See `config_home`.
     ConfigHome,
@@ -118,13 +118,13 @@ const HOOK_TARGETS: &[HookTarget] = &[
         config: &[".codex", "hooks.json"],
         script: &[".codex", SCRIPT_NAME],
     },
-    // A TUI plugin, not a hook: the folder nikcli's TUI scans, and one file of ADE's in it.
+    // A TUI plugin, not a hook: the folder ragu's TUI scans, and one file of ADE's in it.
     HookTarget {
-        id: "nikcli",
-        reports_as: "nikcli",
+        id: "ragu",
+        reports_as: "ragu",
         base: Base::ConfigHome,
         config: &[],
-        script: &["nikcli", "plugin", "tui", PLUGIN_NAME],
+        script: &["ragu", "plugin", "tui", PLUGIN_NAME],
     },
 ];
 
@@ -338,12 +338,12 @@ fn under_base(base: Base, segments: &[&str]) -> Result<PathBuf, String> {
     Ok(segments.iter().fold(root, |path, segment| path.join(segment)))
 }
 
-/// The folder nikcli's configuration lives under, as `@nikcli-ai/util`'s
+/// The folder ragu's configuration lives under, as `@ragu/util`'s
 /// `global.ts` works it out: `%APPDATA%` (or `<home>\AppData\Roaming`) on
 /// Windows; `$XDG_CONFIG_HOME` (or `<home>/.config`) on macOS and Linux.
 ///
 /// It was `AppData/Roaming` everywhere, so on a Mac the plugin went to
-/// `~/AppData/Roaming/nikcli/plugin/tui`, a folder nikcli never scans, and the
+/// `~/AppData/Roaming/nikcli/plugin/tui`, a folder ragu never scans, and the
 /// panel said it was installed (lettura di Mimo, F1). Arguments rather than
 /// the environment, so both platforms are tested on either.
 pub(crate) fn config_home(windows: bool, appdata: Option<String>, xdg_config: Option<String>, home: Option<PathBuf>) -> Option<PathBuf> {
@@ -571,7 +571,7 @@ fn write_hook_files(
 ///
 /// Removing takes the two folders the install may have made (`plugin\tui`,
 /// then `plugin`) when they are left empty, and only then: an empty folder
-/// holds nothing anyone reads, nikcli scans an absent one the same way, and a
+/// holds nothing anyone reads, ragu scans an absent one the same way, and a
 /// folder with anything else in it is the user's. «Rimuovi» used to leave an
 /// empty `plugin\tui` behind (prove dal vivo 2).
 fn write_plugin_file(path: &Path, script: Option<&str>, confirm: impl FnOnce(&Path) -> bool) -> Result<(), String> {
@@ -817,7 +817,7 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
 /*
  * Taking ADE out of the other programs, when ADE is uninstalled.
  *
- * The hooks in `~/.claude` and `~/.codex` and the plugin in nikcli's folder are files of other programs that ADE wrote with the user's
+ * The hooks in `~/.claude` and `~/.codex` and the plugin in ragu's folder are files of other programs that ADE wrote with the user's
  * consent, and they run a script of ADE's every time that program starts. Left behind after an uninstall they go on launching PowerShell for
  * a script of an application that is no longer there. `ade-desktop.exe --unlink-agents` (the installer's PREUNINSTALL hook, never on an
  * update) takes them out with the same rules as the panel's «Rimuovi»: only ADE's own entries leave the configuration (the same check as an
@@ -888,7 +888,7 @@ fn path_in(base: &Path, segments: &[&str]) -> PathBuf {
     segments.iter().fold(base.to_path_buf(), |path, segment| path.join(segment))
 }
 
-/// Takes ADE out of one target, with its bases given: `home` for `~`, `config_home` for nikcli's configuration folder.
+/// Takes ADE out of one target, with its bases given: `home` for `~`, `config_home` for ragu's configuration folder.
 fn unlink_target(target: &HookTarget, home: &Path, config_home: &Path) -> Result<Unlinked, String> {
     let base = match target.base {
         Base::Home => home,
@@ -1150,11 +1150,11 @@ mod tests {
     }
 
     #[test]
-    fn nikclis_plugin_goes_in_the_folder_its_tui_scans_and_nowhere_else() {
-        let nikcli = target("nikcli").expect("nikcli is a target");
-        assert!(nikcli.config.is_empty());
-        let path = under_base(nikcli.base, nikcli.script).expect("a path");
-        assert!(path.ends_with(Path::new("nikcli").join("plugin").join("tui").join(PLUGIN_NAME)), "{}", path.display());
+    fn ragus_plugin_goes_in_the_folder_its_tui_scans_and_nowhere_else() {
+        let ragu = target("ragu").expect("ragu is a target");
+        assert!(ragu.config.is_empty());
+        let path = under_base(ragu.base, ragu.script).expect("a path");
+        assert!(path.ends_with(Path::new("ragu").join("plugin").join("tui").join(PLUGIN_NAME)), "{}", path.display());
         let roaming = std::env::var("APPDATA").map(PathBuf::from).unwrap_or_else(|_| dirs_home().unwrap().join("AppData").join("Roaming"));
         assert!(path.starts_with(&roaming), "{} is not under {}", path.display(), roaming.display());
     }
@@ -1235,7 +1235,7 @@ mod tests {
     }
 
     #[test]
-    fn the_plugin_goes_where_nikcli_reads_its_configuration_on_every_platform() {
+    fn the_plugin_goes_where_ragu_reads_its_configuration_on_every_platform() {
         let home = Some(PathBuf::from("/home/utente"));
         // macOS and Linux: XDG first, then ~/.config — never AppData.
         let unix = config_home(false, None, None, home.clone()).unwrap();
@@ -1249,10 +1249,10 @@ mod tests {
         let fallback = config_home(true, None, None, home.clone()).unwrap();
         assert_eq!(fallback, PathBuf::from("/home/utente").join("AppData").join("Roaming"));
         assert!(config_home(false, None, None, None).is_none());
-        // And the plugin's segments sit under it as nikcli scans them: `<config>/nikcli/plugin/tui`.
-        let plugin = target("nikcli").unwrap();
+        // And the plugin's segments sit under it as ragu scans them: `<config>/ragu/plugin/tui`.
+        let plugin = target("ragu").unwrap();
         assert_eq!(plugin.base, Base::ConfigHome);
-        assert_eq!(&plugin.script[..3], &["nikcli", "plugin", "tui"]);
+        assert_eq!(&plugin.script[..3], &["ragu", "plugin", "tui"]);
     }
 
     #[test]
@@ -1414,7 +1414,7 @@ mod tests {
 
     // ----- taking ADE out when it is uninstalled: a home that is not the user's -----
 
-    /// A made-up home and nikcli configuration folder, in a folder of their own under the test TEMP; never the real `~`.
+    /// A made-up home and ragu configuration folder, in a folder of their own under the test TEMP; never the real `~`.
     fn fake_home(tag: &str) -> (PathBuf, PathBuf, PathBuf) {
         let (_, _, dir) = hook_scratch(tag);
         let home = dir.join("home");
@@ -1462,7 +1462,7 @@ mod tests {
     }
 
     #[test]
-    fn uninstalling_takes_ade_out_of_claude_codex_and_nikcli_and_leaves_what_is_theirs() {
+    fn uninstalling_takes_ade_out_of_claude_codex_and_ragu_and_leaves_what_is_theirs() {
         let (dir, home, config) = fake_home("unlink-all");
         install_everywhere(&home, &config);
         fs::write(home.join(".claude").join("history.jsonl"), "x").unwrap();
@@ -1470,7 +1470,7 @@ mod tests {
         let done = unlink_all(&home, &config);
         assert_eq!(
             done.iter().map(|(id, result)| (*id, result.as_ref().map(|r| r == &Unlinked::Removed))).collect::<Vec<_>>(),
-            vec![("claude-code", Ok(true)), ("codex", Ok(true)), ("nikcli", Ok(true))]
+            vec![("claude-code", Ok(true)), ("codex", Ok(true)), ("ragu", Ok(true))]
         );
 
         // The scripts and the plugin are gone, and the folders the install made with them.

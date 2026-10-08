@@ -1,10 +1,10 @@
 import { Component, Show } from "solid-js"
-import { useDialog } from "@nikcli-ai/ui/context/dialog"
+import { useDialog } from "@ragu/ui/context/dialog"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
-import { Dialog } from "@nikcli-ai/ui/dialog"
-import { List } from "@nikcli-ai/ui/list"
-import { Tag } from "@nikcli-ai/ui/tag"
-import { ProviderIcon } from "@nikcli-ai/ui/provider-icon"
+import { Dialog } from "@ragu/ui/dialog"
+import { List } from "@ragu/ui/list"
+import { Tag } from "@ragu/ui/tag"
+import { ProviderIcon } from "@ragu/ui/provider-icon"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 import { useLanguage } from "@/context/language"
 import { DialogCustomProvider } from "./dialog-custom-provider"
@@ -61,7 +61,7 @@ export const DialogSelectProvider: Component = () => {
             <Show when={i.id === CUSTOM_ID}>
               <Tag>{language.t("settings.providers.tag.custom")}</Tag>
             </Show>
-            <Show when={i.id === "nikcli"}>
+            <Show when={i.id === "ragu"}>
               <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
             </Show>
             <Show when={i.id === "anthropic"}>

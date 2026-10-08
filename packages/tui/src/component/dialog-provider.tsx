@@ -8,7 +8,7 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { Link } from "../ui/link"
 import { useTheme } from "../context/theme"
 import { TextAttributes } from "@opentui/core"
-import type { ProviderAuthAuthorization } from "@nikcli-ai/sdk/httpapi"
+import type { ProviderAuthAuthorization } from "@ragu/sdk/httpapi"
 import { DialogModel } from "./dialog-model"
 import { useKeyboard } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
@@ -17,7 +17,7 @@ import { Keybind } from "@tui/util/keybind"
 import { useAbortOnCleanup, type AbortOnCleanup } from "@tui/util/lifecycle"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
-  nikcli: 0,
+  ragu: 0,
   anthropic: 1,
   "github-copilot": 2,
   openai: 3,
@@ -39,7 +39,7 @@ export function createDialogProviderOptions() {
           title: provider.name,
           value: provider.id,
           description: {
-            nikcli: "(Recommended)",
+            ragu: "(Recommended)",
             anthropic: "(Claude Max or API key)",
             openai: "(ChatGPT Plus/Pro or API key)",
           }[provider.id],
@@ -126,7 +126,7 @@ export function createDialogProviderOptions() {
 /**
  * Reload state once a provider is connected. Not fatal: the user is in the
  * middle of this dialog, and a refetch that fails is reported here instead of
- * exiting nikcli.
+ * exiting ragu.
  *
  * `life` is required rather than optional because the toast below is an app
  * mutation that lands after the `await`. Every caller checked `disposed()`
@@ -233,7 +233,7 @@ export function DialogProvider() {
             if (!apiMethod) {
               toast.show({
                 variant: "warning",
-                message: "OpenRouter API-key auth is not available in this build of nikcli.",
+                message: "OpenRouter API-key auth is not available in this build of ragu.",
                 duration: 5000,
               })
               return
@@ -581,11 +581,11 @@ function ApiMethod(props: ApiMethodProps) {
       title={props.title}
       placeholder="API key"
       description={
-        props.providerID === "nikcli"
+        props.providerID === "ragu"
           ? () => (
               <box gap={1}>
                 <text fg={theme.foreground.muted}>
-                  Nikcli Zen gives you access to all the best coding models at the cheapest prices with a single API
+                  Ragu Zen gives you access to all the best coding models at the cheapest prices with a single API
                   key.
                 </text>
                 <text fg={theme.foreground.default}>

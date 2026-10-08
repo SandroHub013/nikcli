@@ -11,7 +11,7 @@ import { Schema } from "effect"
 import { z } from "zod"
 // The catalog describes itself to the model; the text is part of the contract, not of the tool.
 import DESCRIPTION from "./viz.txt"
-import { zod } from "@nikcli-ai/util/effect-zod"
+import { zod } from "@ragu/util/effect-zod"
 
 // ──────────────────────────────────────────────────────────────────────────
 // Shared primitives
@@ -730,7 +730,7 @@ export type VizValidationResult = {
 }
 
 /**
- * The OpenTUI visualization **catalog** — nikcli's analogue to json-render's
+ * The OpenTUI visualization **catalog** — ragu's analogue to json-render's
  * `defineCatalog(schema, config)` return value. It is the one place that knows
  * the component vocabulary, the prompt that teaches a model to use it, the Zod
  * and JSON schemas the model is constrained to, and how to validate/repair raw

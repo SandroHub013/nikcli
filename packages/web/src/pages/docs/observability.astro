@@ -20,21 +20,21 @@ const toc = [
 
 <DocsLayout
   title="Observability"
-  subtitle="OpenTelemetry (OTLP) trace export and live in-process telemetry for the TUI panel. Source: packages/nikcli/src/observability/."
-  description="Guide to nikcli observability, OpenTelemetry export, live telemetry, resource attributes, and Effect spans."
+  subtitle="OpenTelemetry (OTLP) trace export and live in-process telemetry for the TUI panel. Source: packages/ragu/src/observability/."
+  description="Guide to ragu observability, OpenTelemetry export, live telemetry, resource attributes, and Effect spans."
   toc={toc}
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
-      nikcli ships a small observability layer that wires the Effect runtime to
+      ragu ships a small observability layer that wires the Effect runtime to
       <a href="https://opentelemetry.io" target="_blank" rel="noopener">OpenTelemetry</a> and
       publishes a stream of captured spans on the internal bus. The layer is merged into every
-      Effect runtime base (<code>packages/nikcli/src/effect/runtime.ts</code>) so the same spans
+      Effect runtime base (<code>packages/ragu/src/effect/runtime.ts</code>) so the same spans
       power the live TUI panel, the OTLP export, and the on-disk log file.
     </p>
     <p>
-      There is no separate <code>nikcli telemetry</code> command. The whole subsystem is
+      There is no separate <code>ragu telemetry</code> command. The whole subsystem is
       configured by environment variables and turned on or off from the TUI.
     </p>
     <div class="doc-grid not-prose">
@@ -49,14 +49,14 @@ const toc = [
         <p>
           On by default, the layer captures spans and publishes them on the
           <code>telemetry.record</code> bus event. The TUI renders them in the live telemetry
-          dialog. Disable with <code>NIKCLI_DISABLE_OTEL_LIVE=1</code>.
+          dialog. Disable with <code>RAGU_DISABLE_OTEL_LIVE=1</code>.
         </p>
       </DocCard>
       <DocCard title="Resource attributes" eyebrow="Identity">
         <p>
           Every span carries <code>service.name</code>, <code>service.version</code>, and
-          <code>deployment.environment</code> derived from <code>NIKCLI_VERSION</code>,
-          <code>NIKCLI_CHANNEL</code>, and the <code>OTEL_RESOURCE_ATTRIBUTES</code> env var.
+          <code>deployment.environment</code> derived from <code>RAGU_VERSION</code>,
+          <code>RAGU_CHANNEL</code>, and the <code>OTEL_RESOURCE_ATTRIBUTES</code> env var.
         </p>
       </DocCard>
       <DocCard title="No-op when idle" eyebrow="Zero cost">
@@ -74,7 +74,7 @@ const toc = [
       <thead><tr><th>Mode</th><th>Enabled by</th><th>What it does</th></tr></thead>
       <tbody>
         <tr><td><strong>OTLP export</strong></td><td><code>OTEL_EXPORTER_OTLP_ENDPOINT</code> is set to a URL.</td><td>Spans and logs are POSTed to the OTLP/HTTP endpoint. Headers can be passed through <code>OTEL_EXPORTER_OTLP_HEADERS</code>.</td></tr>
-        <tr><td><strong>Live panel</strong></td><td>Default ON. Disabled with <code>NIKCLI_DISABLE_OTEL_LIVE=1</code>.</td><td>Each completed span is published on the <code>telemetry.record</code> bus event so the TUI can render it in real time.</td></tr>
+        <tr><td><strong>Live panel</strong></td><td>Default ON. Disabled with <code>RAGU_DISABLE_OTEL_LIVE=1</code>.</td><td>Each completed span is published on the <code>telemetry.record</code> bus event so the TUI can render it in real time.</td></tr>
       </tbody>
     </table>
     <p>
@@ -98,7 +98,7 @@ const toc = [
         <tr><td><code>OTEL_EXPORTER_OTLP_ENDPOINT</code></td><td>unset</td><td>OTLP/HTTP endpoint (for example <code>http://localhost:4318</code> or <code>https://otlp.grafana.net</code>). Setting it enables export.</td></tr>
         <tr><td><code>OTEL_EXPORTER_OTLP_HEADERS</code></td><td>unset</td><td>Comma-separated <code>key=value</code> pairs, URL-decoded. Useful for auth headers (<code>Authorization=Bearer%20…</code>).</td></tr>
         <tr><td><code>OTEL_RESOURCE_ATTRIBUTES</code></td><td>unset</td><td>Comma-separated <code>key=value</code> pairs merged into every span's resource (URL-decoded).</td></tr>
-        <tr><td><code>NIKCLI_DISABLE_OTEL_LIVE</code></td><td><code>false</code></td><td>Disable the live telemetry panel even when OTLP is enabled.</td></tr>
+        <tr><td><code>RAGU_DISABLE_OTEL_LIVE</code></td><td><code>false</code></td><td>Disable the live telemetry panel even when OTLP is enabled.</td></tr>
       </tbody>
     </table>
     <h3>Headers</h3>
@@ -109,17 +109,17 @@ const toc = [
     </p>
     <DocCode language="bash">
 # Export to a local Jaeger collector
-OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 nikcli run "summarize this repo"
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 ragu run "summarize this repo"
 
 # Export to a hosted backend with auth
 OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp.grafana.net \
 OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer%20xxx" \
-nikcli serve --port 4096
+ragu serve --port 4096
 
 # Disable the live panel but keep OTLP export
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
-NIKCLI_DISABLE_OTEL_LIVE=1 \
-nikcli serve --port 4096
+RAGU_DISABLE_OTEL_LIVE=1 \
+ragu serve --port 4096
     </DocCode>
   </section>
 
@@ -128,9 +128,9 @@ nikcli serve --port 4096
     <p>
       The live panel is on by default. Each completed span is published on the
       <code>telemetry.record</code> bus event with the payload defined in
-      <code>packages/nikcli/src/observability/telemetry-bus.ts</code>:
+      <code>packages/ragu/src/observability/telemetry-bus.ts</code>:
     </p>
-    <DocCode language="ts" title="packages/nikcli/src/observability/telemetry-bus.ts">
+    <DocCode language="ts" title="packages/ragu/src/observability/telemetry-bus.ts">
 export const TelemetryRecord = BusEvent.define(
   "telemetry.record",
   z.object(&lbrace;
@@ -165,8 +165,8 @@ export const TelemetryRecord = BusEvent.define(
     <h2>Configuration</h2>
     <p>
       All configuration is read from environment variables in
-      <code>@nikcli-ai/util/flag</code> and consumed by
-      <code>packages/nikcli/src/observability/otlp.ts</code>. There is no <code>nikcli.json</code>
+      <code>@ragu/util/flag</code> and consumed by
+      <code>packages/ragu/src/observability/otlp.ts</code>. There is no <code>nikcli.json</code>
       field for telemetry — the values are deliberately env-only so container images can be
       reconfigured without rebuilding.
     </p>
@@ -177,15 +177,15 @@ export const TelemetryRecord = BusEvent.define(
     <table class="doc-table">
       <thead><tr><th>Attribute</th><th>Source</th></tr></thead>
       <tbody>
-        <tr><td><code>service.name</code></td><td>Constant: <code>"nikcli"</code>.</td></tr>
-        <tr><td><code>service.version</code></td><td>Compile-time <code>NIKCLI_VERSION</code> (or <code>"local"</code> when running from source).</td></tr>
-        <tr><td><code>deployment.environment</code></td><td>Compile-time <code>NIKCLI_CHANNEL</code> (or <code>"local"</code>).</td></tr>
+        <tr><td><code>service.name</code></td><td>Constant: <code>"ragu"</code>.</td></tr>
+        <tr><td><code>service.version</code></td><td>Compile-time <code>RAGU_VERSION</code> (or <code>"local"</code> when running from source).</td></tr>
+        <tr><td><code>deployment.environment</code></td><td>Compile-time <code>RAGU_CHANNEL</code> (or <code>"local"</code>).</td></tr>
         <tr><td>User-defined</td><td>Parsed from <code>OTEL_RESOURCE_ATTRIBUTES</code>.</td></tr>
       </tbody>
     </table>
     <h3>Disabling the live panel</h3>
     <p>
-      Set <code>NIKCLI_DISABLE_OTEL_LIVE=1</code> to opt out of the in-process span capture. This
+      Set <code>RAGU_DISABLE_OTEL_LIVE=1</code> to opt out of the in-process span capture. This
       is useful when you only want the OTLP export and want to skip the bus traffic.
     </p>
   </section>
@@ -214,7 +214,7 @@ export const TelemetryRecord = BusEvent.define(
     <h2>Effect integration</h2>
     <p>
       The observability layer is merged into the Effect runtime base in
-      <code>packages/nikcli/src/effect/runtime.ts</code>. Application code that needs to emit a
+      <code>packages/ragu/src/effect/runtime.ts</code>. Application code that needs to emit a
       span can use the standard Effect combinators:
     </p>
     <DocCode language="ts" title="Effect runtime span example">
@@ -235,11 +235,11 @@ const program = Effect.gen(function* () &lbrace;
     <table class="doc-table">
       <thead><tr><th>File</th><th>What to inspect</th></tr></thead>
       <tbody>
-        <tr><td><code>packages/nikcli/src/observability/index.ts</code></td><td>Public <code>Observability</code> namespace: <code>layer</code>, <code>isEnabled</code>, <code>isLiveEnabled</code>, <code>resourceInfo</code>.</td></tr>
-        <tr><td><code>packages/nikcli/src/observability/otlp.ts</code></td><td>OTLP layer built from <code>effect/unstable/observability</code>; reads flags and resource attributes.</td></tr>
-        <tr><td><code>packages/nikcli/src/observability/telemetry-bus.ts</code></td><td><code>TelemetryRecord</code> bus event and zod schema.</td></tr>
-        <tr><td><code>packages/nikcli/src/effect/runtime.ts</code></td><td>Where the observability layer is merged into the runtime base.</td></tr>
-        <tr><td><code>@nikcli-ai/util/flag</code></td><td>OTLP / OTel environment variable definitions.</td></tr>
+        <tr><td><code>packages/ragu/src/observability/index.ts</code></td><td>Public <code>Observability</code> namespace: <code>layer</code>, <code>isEnabled</code>, <code>isLiveEnabled</code>, <code>resourceInfo</code>.</td></tr>
+        <tr><td><code>packages/ragu/src/observability/otlp.ts</code></td><td>OTLP layer built from <code>effect/unstable/observability</code>; reads flags and resource attributes.</td></tr>
+        <tr><td><code>packages/ragu/src/observability/telemetry-bus.ts</code></td><td><code>TelemetryRecord</code> bus event and zod schema.</td></tr>
+        <tr><td><code>packages/ragu/src/effect/runtime.ts</code></td><td>Where the observability layer is merged into the runtime base.</td></tr>
+        <tr><td><code>@ragu/util/flag</code></td><td>OTLP / OTel environment variable definitions.</td></tr>
         <tr><td><code>packages/tui/src/component/dialog-telemetry-live.tsx</code></td><td>Live TUI panel.</td></tr>
         <tr><td><code>packages/tui/src/component/dialog-opentelemetry.tsx</code></td><td>OTLP configuration dialog.</td></tr>
         <tr><td><code>packages/tui/src/component/dialog-advisor-model.tsx</code></td><td>Advisor model picker (drives advisor spans).</td></tr>

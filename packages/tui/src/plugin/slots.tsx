@@ -1,7 +1,7 @@
-import { type SlotMode, type TuiPluginApi, type TuiSlotContext, type TuiSlotMap } from "@nikcli-ai/plugin/tui"
+import { type SlotMode, type TuiPluginApi, type TuiSlotContext, type TuiSlotMap } from "@ragu/plugin/tui"
 import { createSlot, createSolidSlotRegistry, type JSX, type SolidPlugin } from "@opentui/solid"
 import { createSignal } from "solid-js"
-import { isRecord } from "@nikcli-ai/util/record"
+import { isRecord } from "@ragu/util/record"
 import type { SlotRegistry } from "@opentui/core"
 
 type SlotProps<K extends keyof TuiSlotMap> = {

@@ -6,7 +6,7 @@ import * as core from "@actions/core"
 import * as github from "@actions/github"
 import type { Context as GitHubContext } from "@actions/github/lib/context"
 import type { IssueCommentEvent, PullRequestReviewCommentEvent } from "@octokit/webhooks-types"
-import { createNikcliClient, type Result } from "@nikcli-ai/sdk/httpapi"
+import { createRaguClient, type Result } from "@ragu/sdk/httpapi"
 import {
   assertCompleteGitHubTuiEvidence,
   changedGitHubTuiEvidence,
@@ -17,7 +17,7 @@ import {
   snapshotGitHubTuiEvidence,
   type GitHubTuiEvidence,
   type GitHubTuiEvidenceSnapshot,
-} from "@nikcli-ai/terminal-control/evidence"
+} from "@ragu/terminal-control/evidence"
 import { spawn } from "node:child_process"
 
 type GitHubAuthor = {
@@ -126,13 +126,13 @@ type IssueQueryResponse = {
 async function dataOf<A>(result: Promise<Result<A>>): Promise<A> {
   const settled = await result
   if (settled.data === undefined) {
-    throw settled.error ?? new Error("Nikcli API returned no data")
+    throw settled.error ?? new Error("Ragu API returned no data")
   }
   return settled.data
 }
 
-let client!: ReturnType<typeof createNikcli>["client"]
-let server: ReturnType<typeof createNikcli>["server"] | undefined
+let client!: ReturnType<typeof createRagu>["client"]
+let server: ReturnType<typeof createRagu>["server"] | undefined
 let accessToken: string
 let octoRest: Octokit
 let octoGraph: typeof graphql
@@ -151,8 +151,8 @@ try {
   accessToken = await getAccessToken()
   process.env.GH_TOKEN = accessToken
   process.env.GITHUB_TOKEN ??= accessToken
-  ;({ client, server } = createNikcli())
-  await assertNikcliConnected()
+  ;({ client, server } = createRagu())
+  await assertRaguConnected()
 
   octoRest = new Octokit({ auth: accessToken })
   octoGraph = graphql.defaults({
@@ -167,7 +167,7 @@ try {
   const comment = await createComment()
   commentId = comment.data.id
 
-  // Setup nikcli session
+  // Setup ragu session
   const repoData = await fetchRepo()
   if (tuiEvidenceRequested) await assertTerminalControlSkillAvailable()
   session = await dataOf(client.session.create())
@@ -179,7 +179,7 @@ try {
     await dataOf(client.session.share({ sessionID: session.id }))
     return session.id.slice(-8)
   })()
-  console.log("nikcli session", session.id)
+  console.log("ragu session", session.id)
   if (shareId) {
     console.log("Share link:", `${useShareUrl()}/s/${shareId}`)
   }
@@ -263,16 +263,16 @@ function githubAgentPrompt(userPrompt: string, dataPrompt: string, tuiEvidenceRe
   return `${userPrompt}\n\n${dataPrompt}
 
 <github_tui_evidence_contract>
-Use the active terminal-control skill. Test the real application TUI in a PTY; do not substitute a fixture, shell demo, transcript, or headless simulation. The environment already sets NIKCLI_TERMINAL=1 for OpenTUI compatibility.
+Use the active terminal-control skill. Test the real application TUI in a PTY; do not substitute a fixture, shell demo, transcript, or headless simulation. The environment already sets RAGU_TERMINAL=1 for OpenTUI compatibility.
 
 Create the final bundle under artifacts/tui/<descriptive-name> and pass --include-recording. The bundle must contain preview.gif, demo.mp4, recording.termctrl, screen.png, and manifest.json. Inspect the visible screen and recording for secrets before finishing. Do not put local file:// URLs in the response: this GitHub runner publishes immutable commit-addressed links in the PR automatically.
 </github_tui_evidence_contract>`
 }
 
 async function assertTerminalControlSkillAvailable() {
-  if (!server) throw new Error("nikcli server is not running")
+  if (!server) throw new Error("ragu server is not running")
   const response = await fetch(`${server.url}/app/skill`)
-  if (!response.ok) throw new Error(`Failed to list nikcli skills: HTTP ${response.status}`)
+  if (!response.ok) throw new Error(`Failed to list ragu skills: HTTP ${response.status}`)
   const skills = (await response.json()) as Array<{ name?: string }>
   if (!skills.some((skill) => skill.name === "terminal-control")) {
     throw new Error("TUI verification requires the terminal-control skill, but the GitHub runner did not discover it.")
@@ -280,7 +280,7 @@ async function assertTerminalControlSkillAvailable() {
 }
 
 async function activateTerminalControlSkill() {
-  if (!server) throw new Error("nikcli server is not running")
+  if (!server) throw new Error("ragu server is not running")
   const response = await fetch(`${server.url}/session/${session.id}/context/toggle`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -318,16 +318,16 @@ async function updatePullRequestTuiEvidence(evidence: GitHubTuiEvidence[], repos
   await octoRest.rest.pulls.update({ owner: repo.owner, repo: repo.repo, pull_number: useIssueId(), body })
 }
 
-function createNikcli() {
+function createRagu() {
   const host = "127.0.0.1"
   const port = 4096
   const url = `http://${host}:${port}`
-  const nikcliRoot = path.resolve(import.meta.dir, "../packages/nikcli")
+  const raguRoot = path.resolve(import.meta.dir, "../packages/ragu")
   const proc = spawn(
     process.execPath,
     ["run", "--conditions=browser", "src/index.ts", "serve", `--hostname=${host}`, `--port=${port}`],
     {
-      cwd: nikcliRoot,
+      cwd: raguRoot,
       env: process.env,
       stdio: "inherit",
     },
@@ -337,7 +337,7 @@ function createNikcli() {
   // to resolving transport failures as `{ error }`, which previously made the
   // first connection-refused response look successful and let execution race
   // ahead to the SSE subscription before the server had bound its port.
-  const client = createNikcliClient({ baseUrl: url, throwOnError: true })
+  const client = createRaguClient({ baseUrl: url, throwOnError: true })
 
   // Watch the child. Nothing did before, so when the server died mid-run every
   // later request failed as an opaque transport error and the job reported that
@@ -346,7 +346,7 @@ function createNikcli() {
   let exit: { readonly code: number | null; readonly signal: string | null } | undefined
   proc.on("exit", (code, signal) => {
     exit = { code, signal }
-    console.log(`nikcli server exited (code=${code ?? "null"} signal=${signal ?? "null"})`)
+    console.log(`ragu server exited (code=${code ?? "null"} signal=${signal ?? "null"})`)
   })
 
   return {
@@ -372,14 +372,14 @@ function explainFailure(error: unknown): string {
       : exited.signal
         ? `was terminated by ${exited.signal}`
         : `exited with code ${exited.code}`
-  return `The nikcli server ${how}, so the request could not complete.\n\nUnderlying error: ${base}`
+  return `The ragu server ${how}, so the request could not complete.\n\nUnderlying error: ${base}`
 }
 
 function assertPayloadKeyword() {
   const payload = useContext().payload as IssueCommentEvent | PullRequestReviewCommentEvent
   const body = payload.comment.body.trim()
-  if (!body.match(/(?:^|\s)(?:\/nikcli|\/nik|\/nc|\/oc)(?=$|\s)/)) {
-    throw new Error("Comments must mention `/nikcli`, `/nik`, or `/nc`")
+  if (!body.match(/(?:^|\s)(?:\/ragu|\/nik|\/nc|\/oc)(?=$|\s)/)) {
+    throw new Error("Comments must mention `/ragu`, `/nik`, or `/nc`")
   }
 }
 
@@ -401,7 +401,7 @@ function getReviewCommentContext() {
   }
 }
 
-async function assertNikcliConnected() {
+async function assertRaguConnected() {
   let retry = 0
   let connected = false
   do {
@@ -420,7 +420,7 @@ async function assertNikcliConnected() {
   } while (retry++ < 30)
 
   if (!connected) {
-    throw new Error("Failed to connect to nikcli server")
+    throw new Error("Failed to connect to ragu server")
   }
 }
 
@@ -520,7 +520,7 @@ async function getAccessToken() {
       body: JSON.stringify({ owner: repo.owner, repo: repo.repo }),
     })
   } else {
-    const oidcToken = await core.getIDToken("nikcli-github-action")
+    const oidcToken = await core.getIDToken("ragu-github-action")
     response = await fetch("https://api.nikcli-ai.dev/exchange_github_app_token", {
       method: "POST",
       headers: {
@@ -556,19 +556,19 @@ async function getUserPrompt() {
 
   let prompt = (() => {
     const body = payload.comment.body.trim()
-    if (body === "/nikcli" || body === "/nik" || body === "/nc" || body === "/oc") {
+    if (body === "/ragu" || body === "/nik" || body === "/nc" || body === "/oc") {
       if (reviewContext) {
         return `Review this code change and suggest improvements for the commented lines:\n\nFile: ${reviewContext.file}\nLines: ${reviewContext.line}\n\n${reviewContext.diffHunk}`
       }
       return "Summarize this thread"
     }
-    if (body.includes("/nikcli") || body.includes("/nik") || body.includes("/nc") || body.includes("/oc")) {
+    if (body.includes("/ragu") || body.includes("/nik") || body.includes("/nc") || body.includes("/oc")) {
       if (reviewContext) {
         return `${body}\n\nContext: You are reviewing a comment on file "${reviewContext.file}" at line ${reviewContext.line}.\n\nDiff context:\n${reviewContext.diffHunk}`
       }
       return body
     }
-    throw new Error("Comments must mention `/nikcli`, `/nik`, or `/nc`")
+    throw new Error("Comments must mention `/ragu`, `/nik`, or `/nc`")
   })()
 
   // Handle images
@@ -631,7 +631,7 @@ async function getUserPrompt() {
 
 async function subscribeSessionEvents() {
   console.log("Subscribing to session events...")
-  if (!server) throw new Error("nikcli server is not running")
+  if (!server) throw new Error("ragu server is not running")
 
   const TOOL: Record<string, [string, string]> = {
     todowrite: ["Todo", "\x1b[33m\x1b[1m"],
@@ -747,7 +747,7 @@ async function resolveAgent(): Promise<string | undefined> {
 }
 
 async function chat(text: string, files: PromptFiles = []) {
-  console.log("Sending message to nikcli...")
+  console.log("Sending message to ragu...")
   const { providerID, modelID } = useEnvModel()
   const agent = await resolveAgent()
 
@@ -802,12 +802,12 @@ async function chat(text: string, files: PromptFiles = []) {
 
   const partTypes = chat.parts.map((part) => part.type)
   if (partTypes.length > 0) {
-    console.warn(`Nikcli completed without a textual response. Part types: [${partTypes.join(", ")}]`)
-    return "Nikcli completed the task without a textual response."
+    console.warn(`Ragu completed without a textual response. Part types: [${partTypes.join(", ")}]`)
+    return "Ragu completed the task without a textual response."
   }
 
   const finish = assistant?.finish ? ` Finish reason: ${assistant.finish}.` : ""
-  throw new Error(`Nikcli returned an empty response.${finish}`)
+  throw new Error(`Ragu returned an empty response.${finish}`)
 }
 
 function formatAssistantError(error: unknown) {
@@ -851,8 +851,8 @@ async function configureGit(appToken: string) {
   // `--unset-all` exits non-zero when the key doesn't exist; ignore that.
   await $`git config --local --unset-all ${config}`.nothrow()
   await $`git config --local ${config} "AUTHORIZATION: basic ${newCredentials}"`
-  await $`git config --global user.name "nikcli-agent[bot]"`
-  await $`git config --global user.email "nikcli-agent[bot]@users.noreply.github.com"`
+  await $`git config --global user.name "ragu-agent[bot]"`
+  await $`git config --global user.email "ragu-agent[bot]@users.noreply.github.com"`
 }
 
 async function restoreGitConfig() {
@@ -898,7 +898,7 @@ function generateBranchName(type: "issue" | "pr") {
     .replace(/\.\d{3}Z/, "")
     .split("T")
     .join("")
-  return `nikcli/${type}${useIssueId()}-${timestamp}`
+  return `ragu/${type}${useIssueId()}-${timestamp}`
 }
 
 async function pushToNewBranch(summary: string, branch: string) {
@@ -1009,9 +1009,9 @@ function footer(opts?: { image?: boolean }) {
     const titleAlt = encodeURIComponent(session.title.substring(0, 50))
     const title64 = Buffer.from(session.title.substring(0, 700), "utf8").toString("base64")
 
-    return `<a href="${useShareUrl()}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/nikcli-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
+    return `<a href="${useShareUrl()}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/ragu-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
   })()
-  const shareUrl = shareId ? `[nikcli session](${useShareUrl()}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
+  const shareUrl = shareId ? `[ragu session](${useShareUrl()}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
   return `\n\n${image}${shareUrl}[github run](${useEnvRunUrl()})`
 }
 

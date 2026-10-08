@@ -1,6 +1,6 @@
 import { createSignal, Show, type JSX } from "solid-js"
-import { IconButton } from "@nikcli-ai/ui/icon-button"
-import { Button } from "@nikcli-ai/ui/button"
+import { IconButton } from "@ragu/ui/icon-button"
+import { Button } from "@ragu/ui/button"
 import type { InspectedElement } from "./inspector-bridge"
 
 export interface PointPromptPopoverProps {

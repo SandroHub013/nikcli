@@ -1,6 +1,6 @@
 import type {
   Event,
-  NikcliClient,
+  RaguClient,
   Provider,
   PermissionRequest,
   UserMessage,
@@ -9,7 +9,7 @@ import type {
   Auth,
   Model,
   Config as SDKConfig,
-} from "@nikcli-ai/sdk/httpapi"
+} from "@ragu/sdk/httpapi"
 
 import type { BunShell } from "./shell"
 import { type ToolDefinition } from "./tool"
@@ -29,7 +29,7 @@ export type ProviderContext = {
 }
 
 export type PluginInput = {
-  client: NikcliClient
+  client: RaguClient
   project: {
     id: string
     worktree: string
@@ -228,7 +228,7 @@ export interface Hooks {
    *
    * The server merges values written to `output.env` over the caller-provided
    * environment, before re-applying forced terminal invariants (such as `TERM`
-   * and `NIKCLI_TERMINAL`). `input.cwd` is the resolved working directory the
+   * and `RAGU_TERMINAL`). `input.cwd` is the resolved working directory the
    * PTY will spawn in.
    */
   "shell.env"?: (input: { cwd: string }, output: { env: Record<string, string> }) => Promise<void>
@@ -240,7 +240,7 @@ export interface Hooks {
    * granted for the original one.
    *
    * `output.shell` is the shell binary to run the command with; leaving it `undefined` keeps
-   * nikcli's own shell selection. `output.env` is merged over the inherited process environment.
+   * ragu's own shell selection. `output.env` is merged over the inherited process environment.
    */
   "shell.create.before"?: (
     input: { sessionID: string; command: string },

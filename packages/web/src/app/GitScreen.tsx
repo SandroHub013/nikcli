@@ -6,7 +6,7 @@ import {
   type MobileGitCommitsResponse,
   type MobileGitDiffResponse,
   type MobileGitStatusResponse,
-  WebNikcliClient,
+  WebRaguClient,
 } from "@/app/api"
 import { Banner, Button, Chip, cn, EmptyState, Field, Spinner, Surface } from "@/app/ui"
 
@@ -64,7 +64,7 @@ function DiffHunks(props: { diff: MobileGitDiffResponse[number] }) {
   )
 }
 
-export function GitScreen(props: { client: WebNikcliClient | null }) {
+export function GitScreen(props: { client: WebRaguClient | null }) {
   const { client } = props
   const [status, setStatus] = useState<MobileGitStatusResponse | null>(null)
   const [branches, setBranches] = useState<MobileGitBranchesResponse>([])

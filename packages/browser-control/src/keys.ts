@@ -4,7 +4,7 @@
  * `ctrl+a`, `alt+shift+x`, ...) but targets WebView named keys + modifiers.
  */
 
-import type { WebViewModifier } from "@nikcli-ai/util/bun-utils"
+import type { WebViewModifier } from "@ragu/util/bun-utils"
 
 const NAMED: Record<string, string> = {
   enter: "Enter",

@@ -23,12 +23,12 @@ describe("desktop OAuth", () => {
   })
 
   test("accepts only the registered auth callback", () => {
-    expect(parseAuthCallback("nikcli://auth/callback?code=abc&state=xyz")).toEqual({
+    expect(parseAuthCallback("ragu://auth/callback?code=abc&state=xyz")).toEqual({
       code: "abc",
       state: "xyz",
       error: undefined,
     })
-    expect(parseAuthCallback("nikcli://open-project?code=abc")).toBeUndefined()
+    expect(parseAuthCallback("ragu://open-project?code=abc")).toBeUndefined()
     expect(parseAuthCallback("https://auth/callback?code=abc")).toBeUndefined()
   })
 

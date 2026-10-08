@@ -1,11 +1,11 @@
 import { createEffect, createMemo, Show, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useNavigate } from "@solidjs/router"
-import { IconButton } from "@nikcli-ai/ui/icon-button"
-import { Icon } from "@nikcli-ai/ui/icon"
-import { Button } from "@nikcli-ai/ui/button"
-import { Tooltip, TooltipKeybind } from "@nikcli-ai/ui/tooltip"
-import { useTheme } from "@nikcli-ai/ui/theme"
+import { IconButton } from "@ragu/ui/icon-button"
+import { Icon } from "@ragu/ui/icon"
+import { Button } from "@ragu/ui/button"
+import { Tooltip, TooltipKeybind } from "@ragu/ui/tooltip"
+import { useTheme } from "@ragu/ui/theme"
 
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -236,11 +236,11 @@ export function Titlebar() {
             </Tooltip>
           </div>
         </div>
-        <div id="nikcli-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
+        <div id="ragu-titlebar-left" class="flex items-center gap-3 min-w-0 px-2" />
       </div>
 
       <div class="min-w-0 flex items-center justify-center pointer-events-none lg:absolute lg:inset-0 lg:flex lg:items-center lg:justify-center">
-        <div id="nikcli-titlebar-center" class="pointer-events-auto w-full min-w-0 flex justify-center lg:w-fit" />
+        <div id="ragu-titlebar-center" class="pointer-events-auto w-full min-w-0 flex justify-center lg:w-fit" />
       </div>
 
       <div
@@ -250,7 +250,7 @@ export function Titlebar() {
         }}
         onMouseDown={drag}
       >
-        <div id="nikcli-titlebar-right" class="flex items-center gap-3 shrink-0 justify-end" />
+        <div id="ragu-titlebar-right" class="flex items-center gap-3 shrink-0 justify-end" />
         <Show when={windows()}>
           <div class="w-6 shrink-0" />
           <div data-tauri-decorum-tb class="flex flex-row" />

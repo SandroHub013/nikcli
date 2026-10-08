@@ -710,7 +710,7 @@ describe("the island from the file, with its chiringuiti", () => {
   })
 
   test("the sign's text is where the file's sign says, as wide and tall, turned as it is", async () => {
-    for (const name of ["a", "docs", "nikcli", "voice"]) {
+    for (const name of ["a", "docs", "ragu", "voice"]) {
       const { view, kit } = await withKit([], [shop(name, 0)])
       const sign = view.scene.getObjectByName(`shop:${name}`)!.children.find((o) => (o as Mesh).isMesh && (o as Mesh).geometry.type === "PlaneGeometry") as Mesh
       const anchor = kit.signOf(shopLook(name, kit.variants).variant)!

@@ -1,7 +1,7 @@
 import type { APIEvent } from "@solidjs/start/server"
-import { Database } from "@nikcli-ai/console-core/drizzle/index.js"
-import { BenchmarkTable } from "@nikcli-ai/console-core/schema/benchmark.sql.js"
-import { Identifier } from "@nikcli-ai/console-core/identifier.js"
+import { Database } from "@ragu/console-core/drizzle/index.js"
+import { BenchmarkTable } from "@ragu/console-core/schema/benchmark.sql.js"
+import { Identifier } from "@ragu/console-core/identifier.js"
 
 interface SubmissionBody {
   model: string

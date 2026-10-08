@@ -10,7 +10,7 @@
 <script>
   type Settings = { baseUrl: string; directory: string; token: string }
 
-  const STORAGE_KEY = "nikcli-docs-playground"
+  const STORAGE_KEY = "ragu-docs-playground"
   const DEFAULT_BASE = "http://127.0.0.1:4096"
 
   const readSettings = (): Settings => {
@@ -87,12 +87,12 @@
             return
           }
           const body = (await response.json()) as { version?: string }
-          setState("ok", "Connected", `${base} — nikcli ${body.version ?? "unknown"}`)
+          setState("ok", "Connected", `${base} — ragu ${body.version ?? "unknown"}`)
         } catch {
           setState(
             "error",
             "Unreachable",
-            `Could not reach ${base}. Start one with: nikcli serve --hostname 127.0.0.1 --port 4096`,
+            `Could not reach ${base}. Start one with: ragu serve --hostname 127.0.0.1 --port 4096`,
           )
         }
       })
@@ -322,7 +322,7 @@
               `Could not reach ${request.url}`,
               "",
               "The usual causes:",
-              "  • no server running — nikcli serve --hostname 127.0.0.1 --port 4096",
+              "  • no server running — ragu serve --hostname 127.0.0.1 --port 4096",
               "  • wrong base URL in the playground bar above",
               "  • the server is not on loopback, so the browser blocked a plain-http request",
               "",

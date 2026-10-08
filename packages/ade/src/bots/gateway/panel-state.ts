@@ -11,14 +11,14 @@
  *
  * Switching on asks for the trust the turns need (`approve`: the dialogs of
  * B3/B3b, then the check every chat turn repeats), with the project fixed
- * then. The remote commands are the owner's, for nikcli only, off by default,
+ * then. The remote commands are the owner's, for ragu only, off by default,
  * and on only after an explicit confirmation, saved with the fingerprint of
  * the bot's file as it was at that yes (`remote.ts`).
  */
 
 import { createSignal, type Accessor } from "solid-js"
 import { t } from "../../i18n"
-import type { AgentFile } from "../nikcli"
+import type { AgentFile } from "../ragu"
 import type { GatewayMessage } from "./controller"
 import { offersRemoteCommands, REMOTE_OFF, remoteKey, type RemoteStore } from "./remote"
 

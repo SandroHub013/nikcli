@@ -104,8 +104,8 @@ describe("serialize / parse round-trip", () => {
 
 describe("missing roots", () => {
   const list = [
-    { root: "C:/Users/x/nikcli-ade-vecchia" },
-    { root: "C:/Users/x/nikcli" },
+    { root: "C:/Users/x/ragu-ade-vecchia" },
+    { root: "C:/Users/x/ragu" },
     { root: "ssh://user@host/srv/app" },
     { root: "D:/progetto" },
   ]
@@ -115,13 +115,13 @@ describe("missing roots", () => {
     const gone = await missingRecents(list, async (path) => {
       asked.push(path)
       if (path === "D:/progetto") throw new Error("drive not ready")
-      return path !== "C:/Users/x/nikcli-ade-vecchia"
+      return path !== "C:/Users/x/ragu-ade-vecchia"
     })
     // A remote Space is never asked about; a check that fails marks nothing.
     expect(asked).not.toContain("ssh://user@host/srv/app")
-    expect(isMissingRecent(gone, "C:/Users/x/nikcli-ade-vecchia")).toBe(true)
-    expect(isMissingRecent(gone, "C:\\Users\\x\\nikcli-ade-vecchia\\")).toBe(true)
-    expect(isMissingRecent(gone, "C:/Users/x/nikcli")).toBe(false)
+    expect(isMissingRecent(gone, "C:/Users/x/ragu-ade-vecchia")).toBe(true)
+    expect(isMissingRecent(gone, "C:\\Users\\x\\ragu-ade-vecchia\\")).toBe(true)
+    expect(isMissingRecent(gone, "C:/Users/x/ragu")).toBe(false)
     expect(isMissingRecent(gone, "D:/progetto")).toBe(false)
   })
 

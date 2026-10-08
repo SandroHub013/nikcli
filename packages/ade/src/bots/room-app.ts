@@ -12,7 +12,7 @@
 import { t } from "../i18n"
 import type { BotTurns } from "./controller"
 import { takeMemoryOps } from "./memory"
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 import {
   appendEntry,
   describeProblem,

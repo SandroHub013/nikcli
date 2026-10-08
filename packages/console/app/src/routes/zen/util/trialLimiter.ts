@@ -1,7 +1,7 @@
-import { Database, eq, sql } from "@nikcli-ai/console-core/drizzle/index.js"
-import { IpTable } from "@nikcli-ai/console-core/schema/ip.sql.js"
+import { Database, eq, sql } from "@ragu/console-core/drizzle/index.js"
+import { IpTable } from "@ragu/console-core/schema/ip.sql.js"
 import { UsageInfo } from "./provider/provider"
-import { ZenData } from "@nikcli-ai/console-core/model.js"
+import { ZenData } from "@ragu/console-core/model.js"
 
 export function createTrialLimiter(trial: ZenData.Trial | undefined, ip: string, client: string) {
   if (!trial) return

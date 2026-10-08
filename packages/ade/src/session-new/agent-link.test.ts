@@ -264,7 +264,7 @@ describe("followReports", () => {
     expect(await run([report("first", "startup"), report("first", "resume")])).toEqual(["first"])
   })
 
-  test("nikcli's switch of tab, /new or /sessions moves the pane", async () => {
+  test("ragu's switch of tab, /new or /sessions moves the pane", async () => {
     expect(
       await run([report("ses_first", "switch"), null, report("ses_new", "switch"), report("ses_tab", "switch")]),
     ).toEqual(["ses_first", "ses_new", "ses_tab"])
@@ -325,7 +325,7 @@ describe("followReports slows down when nothing comes (P1-C2b)", () => {
 describe("lastReportedId", () => {
   const expected = { pane: "pane-7", nonce: "a1b2c3" }
   const left = (sessionId: string, source: string, nonce = "a1b2c3") =>
-    JSON.stringify({ pane: "pane-7", nonce, agent: "nikcli", sessionId, source })
+    JSON.stringify({ pane: "pane-7", nonce, agent: "ragu", sessionId, source })
 
   test("a switch the pane never read beats the id saved with it", () => {
     expect(lastReportedId(left("ses_tab", "switch"), expected, "ses_saved")).toBe("ses_tab")
@@ -342,14 +342,14 @@ describe("lastReportedId", () => {
   })
 })
 
-/* nikcli's tabs are shared by every project: a pane can be moved to another folder's conversation. */
+/* ragu's tabs are shared by every project: a pane can be moved to another folder's conversation. */
 describe("otherFolder", () => {
   const report = (sessionDir?: string) =>
     parseReport(
       JSON.stringify({
         pane: "p",
         nonce: "n",
-        agent: "nikcli",
+        agent: "ragu",
         sessionId: "ses_x",
         source: "switch",
         ...(sessionDir ? { sessionDir } : {}),
@@ -367,7 +367,7 @@ describe("otherFolder", () => {
 })
 
 /*
- * Lettura di Mimo, F4, scenario B: nikcli's plugin leaves the folder out of a
+ * Lettura di Mimo, F4, scenario B: ragu's plugin leaves the folder out of a
  * report when its `session.get` fails, and that report used to write "the
  * pane's own folder" over what was known.
  */
@@ -377,7 +377,7 @@ describe("followedFolder", () => {
       JSON.stringify({
         pane: "p",
         nonce: "n",
-        agent: "nikcli",
+        agent: "ragu",
         sessionId,
         source: "switch",
         ...(sessionDir ? { sessionDir } : {}),

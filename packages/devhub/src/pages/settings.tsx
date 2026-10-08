@@ -2,10 +2,10 @@ import { For, Match, Show, Switch as SolidSwitch, createMemo, createSignal, onCl
 import { open as pickFolder } from "@tauri-apps/plugin-dialog"
 import { openUrl } from "@tauri-apps/plugin-opener"
 import { Effect } from "effect"
-import { Button } from "@nikcli-ai/ui/button"
-import { Icon } from "@nikcli-ai/ui/icon"
-import { Switch } from "@nikcli-ai/ui/switch"
-import { useTheme, type ColorScheme } from "@nikcli-ai/ui/theme"
+import { Button } from "@ragu/ui/button"
+import { Icon } from "@ragu/ui/icon"
+import { Switch } from "@ragu/ui/switch"
+import { useTheme, type ColorScheme } from "@ragu/ui/theme"
 import { Gateway } from "../lib/agent"
 import { errorText, native } from "../lib/native"
 import { runApp } from "../lib/runtime"
@@ -62,7 +62,7 @@ function Account() {
 
   const signIn = async () => {
     const svc = app.service()
-    if (!svc) return toastError("No service", "Start a nikcli service first")
+    if (!svc) return toastError("No service", "Start a ragu service first")
     const mine = ++attempt
     setBusy(true)
     setError(undefined)
@@ -77,7 +77,7 @@ function Account() {
       if (mine !== attempt) return
       setStart(undefined)
       if (!done.provisioned) throw new Error("Signed in, but this install could not be provisioned — try again")
-      toastOk(done.email ? `Signed in as ${done.email}` : "Signed in to your nikcli account")
+      toastOk(done.email ? `Signed in as ${done.email}` : "Signed in to your ragu account")
       await account.reload()
     } catch (e) {
       if (mine !== attempt) return
@@ -90,7 +90,7 @@ function Account() {
   const cancel = () => (attempt++, setStart(undefined), setBusy(false))
   const signOut = async () => {
     const svc = app.service()
-    if (!svc || !confirm("Sign out of your nikcli account on this machine?")) return
+    if (!svc || !confirm("Sign out of your ragu account on this machine?")) return
     try {
       await native.accountSignOut(svc.url)
       toastOk("Signed out")
@@ -161,7 +161,7 @@ function Account() {
         </Match>
         <Match when={true}>
           <p class="dh-sub" style={{ margin: 0 }}>
-            Not signed in. Sign in to sync with your nikcli account — the same sign-in the terminal and desktop app use.
+            Not signed in. Sign in to sync with your ragu account — the same sign-in the terminal and desktop app use.
           </p>
         </Match>
       </SolidSwitch>
@@ -255,13 +255,13 @@ function Appearance() {
 
 function Workspace() {
   const pick = async () => {
-    const dir = await pickFolder({ directory: true, title: "Select the nikcli repository" })
+    const dir = await pickFolder({ directory: true, title: "Select the ragu repository" })
     if (typeof dir !== "string") return
     try {
       await app.setRepo(dir)
       toastOk("Repository set", dir)
     } catch (e) {
-      toastError("Not a nikcli repository", e)
+      toastError("Not a ragu repository", e)
     }
   }
   return (

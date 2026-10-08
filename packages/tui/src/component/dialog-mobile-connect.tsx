@@ -2,8 +2,8 @@ import { TextAttributes } from "@opentui/core"
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { generateQRMatrix } from "@nikcli-ai/remote"
-import { buildMobilePairingDeepLink, getLocalIPs, isLoopbackHostname } from "@nikcli-ai/util/mobile-pairing"
+import { generateQRMatrix } from "@ragu/remote"
+import { buildMobilePairingDeepLink, getLocalIPs, isLoopbackHostname } from "@ragu/util/mobile-pairing"
 import { DialogHeader, useDialog } from "@tui/ui/dialog"
 import { useTheme } from "@tui/context/theme"
 import { useSDK } from "@tui/context/sdk"
@@ -12,7 +12,7 @@ import { Clipboard } from "@tui/util/clipboard"
 import { useSync } from "@tui/context/sync"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { QRCode, qrCanImageFit, qrDialogBudget, qrFittedSize, useQRRepaint } from "@tui/component/qr"
-import { createWorkspaceArchive, uploadWorkspaceArchive } from "@nikcli-ai/util/teleport-archive"
+import { createWorkspaceArchive, uploadWorkspaceArchive } from "@ragu/util/teleport-archive"
 import { isPlainShortcut } from "@tui/util/keys"
 
 type Pairing = {
@@ -432,7 +432,7 @@ function RemoteServerPanel(props: { mode: "cloud" | "teleport"; sessionID?: stri
                     setForm("url", value)
                     setForm("status", "")
                   }}
-                  placeholder="https://my-nikcli-server.example.com"
+                  placeholder="https://my-ragu-server.example.com"
                   cursorColor={theme.accent.fg}
                   focusedTextColor={theme.foreground.default}
                   ref={(value) => (urlInput = value)}
@@ -492,7 +492,7 @@ function RemoteServerPanel(props: { mode: "cloud" | "teleport"; sessionID?: stri
             <box flexDirection={stacked() ? "column" : "row"} gap={2} alignItems={stacked() ? "center" : "flex-start"}>
               <box flexDirection="column" gap={1} flexGrow={1} minWidth={32}>
                 <text attributes={TextAttributes.BOLD} fg={theme.accent.fg}>
-                  Scan from Nikcli Mobile
+                  Scan from Ragu Mobile
                 </text>
                 <text fg={theme.foreground.muted} wrapMode="word">
                   This QR connects the app directly to the verified cloud server.
@@ -694,7 +694,7 @@ function LocalMobileConnect(props: { onBack: () => void }) {
           <box flexDirection={stacked() ? "column" : "row"} gap={2} alignItems={stacked() ? "center" : "flex-start"}>
             <box flexDirection="column" gap={1} flexGrow={1} minWidth={32}>
               <text attributes={TextAttributes.BOLD} fg={theme.accent.fg}>
-                Scan from Nikcli Mobile
+                Scan from Ragu Mobile
               </text>
               <text fg={theme.foreground.muted} wrapMode="word">
                 The QR securely pairs this server and workspace. It enables mobile sessions, approvals, remote actions

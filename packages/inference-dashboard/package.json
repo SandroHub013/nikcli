@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@nikcli-ai/inference-dashboard",
+  "name": "@ragu/inference-dashboard",
   "version": "1.431.0",
   "type": "module",
   "private": true,
@@ -11,9 +11,9 @@
     "astro": "astro",
     "typecheck": "astro check",
     "deploy": "echo '_worker.js' > dist/.assetsignore && wrangler deploy",
-    "d1:create": "wrangler d1 create nikcli-inference",
-    "d1:migrate:local": "wrangler d1 migrations apply nikcli-inference --local",
-    "d1:migrate:remote": "wrangler d1 migrations apply nikcli-inference --remote"
+    "d1:create": "wrangler d1 create ragu-inference",
+    "d1:migrate:local": "wrangler d1 migrations apply ragu-inference --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply ragu-inference --remote"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^12.0.0",
@@ -23,7 +23,7 @@
     "@fontsource/jetbrains-mono": "5.2.8",
     "@fontsource/space-grotesk": "5.2.10",
     "@kobalte/core": "catalog:",
-    "@nikcli-ai/auth": "workspace:*",
+    "@ragu/auth": "workspace:*",
     "@solid-primitives/storage": "catalog:",
     "@tailwindcss/typography": "0.5.19",
     "astro": "^5.1.1",

@@ -24,11 +24,11 @@ function docsIndex(origin: string) {
     })
     .join("\n\n")
 
-  return `# Nikcli documentation for AI\n\nThis endpoint serves the official Nikcli documentation as GitHub-flavored Markdown. Fetch a page with \`/.llm?path=/docs/<page>\`. Add \`&format=prompt\` for a ready-to-use AI prompt containing that page.\n\n${groups}\n`
+  return `# Ragu documentation for AI\n\nThis endpoint serves the official Ragu documentation as GitHub-flavored Markdown. Fetch a page with \`/.llm?path=/docs/<page>\`. Add \`&format=prompt\` for a ready-to-use AI prompt containing that page.\n\n${groups}\n`
 }
 
 function asPrompt(input: { markdown: string; source: string; endpoint: string; title: string }) {
-  return `You are working with the official Nikcli documentation. Use it as the source of truth for Nikcli behavior, commands, configuration, APIs, and architecture. Do not invent unsupported features. If the documentation is insufficient or conflicts with the user's code, state that clearly and verify against the local repository.\n\nDocumentation page: ${input.title}\nCanonical source: ${input.source}\nMachine-readable endpoint: ${input.endpoint}\nDocumentation index: ${new URL("/.llm", input.source).toString()}\n\nAnswer the user's request using the documentation below. Cite the relevant section or source path when useful.\n\n<nikcli_documentation>\n${input.markdown}\n</nikcli_documentation>\n`
+  return `You are working with the official Ragu documentation. Use it as the source of truth for Ragu behavior, commands, configuration, APIs, and architecture. Do not invent unsupported features. If the documentation is insufficient or conflicts with the user's code, state that clearly and verify against the local repository.\n\nDocumentation page: ${input.title}\nCanonical source: ${input.source}\nMachine-readable endpoint: ${input.endpoint}\nDocumentation index: ${new URL("/.llm", input.source).toString()}\n\nAnswer the user's request using the documentation below. Cite the relevant section or source path when useful.\n\n<ragu_documentation>\n${input.markdown}\n</ragu_documentation>\n`
 }
 
 export const OPTIONS: APIRoute = ({ request }) => new Response(null, { status: 204, headers: headers(request) })

@@ -3,16 +3,16 @@
 | Field  | Value                                                                                                                                                                                                                            |
 | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Status | **Accepted and implemented** (reconciled against the scripts 2026-09-10)                                                                                                                                                         |
-| Scope  | `script/ci-validate.ts`, `packages/nikcli/script/test-ci.ts`, `script/check-railway-context.ts`, `script/check-docker-versions.ts`, `script/railway-deploy.sh`                                                                   |
+| Scope  | `script/ci-validate.ts`, `packages/ragu/script/test-ci.ts`, `script/check-railway-context.ts`, `script/check-docker-versions.ts`, `script/railway-deploy.sh`                                                                   |
 | Tests  | `test/release/ci-targeted.test.ts`, `test/release/ci-coherence.test.ts`, `test/release/automation.test.ts`, `test/release/docker-versions.test.ts`, `test/release/patched-deps.test.ts`, `test/release/release-identity.test.ts` |
 
 The question this records: what are the operational constraints of `ci-pipeline`, how are they enforced, and what failures the pipeline must refuse to paper over.
 
-The answer is a **sharded-by-memory runtime with a validated release surface**: the nikcli test suite is sharded because the per-process memory cost is real, the railway deploy is gated by preflight checks because the `--detach` flag reports success before building, and the contract is the enforceability of those constraints in CI.
+The answer is a **sharded-by-memory runtime with a validated release surface**: the ragu test suite is sharded because the per-process memory cost is real, the railway deploy is gated by preflight checks because the `--detach` flag reports success before building, and the contract is the enforceability of those constraints in CI.
 
 ## The Surface
 
-The pipeline is `script/ci-validate.ts`, run by the `validate` job in `.github/workflows/ci-pipeline.yml`. The test sharding is `packages/nikcli/script/test-ci.ts` (`bun run test:ci`), which no workflow calls. The railway preflight is `script/check-railway-context.ts`, `script/check-docker-versions.ts`, and the preflight inside `script/railway-deploy.sh`. The pipeline is the gate; the scripts are the rules.
+The pipeline is `script/ci-validate.ts`, run by the `validate` job in `.github/workflows/ci-pipeline.yml`. The test sharding is `packages/ragu/script/test-ci.ts` (`bun run test:ci`), which no workflow calls. The railway preflight is `script/check-railway-context.ts`, `script/check-docker-versions.ts`, and the preflight inside `script/railway-deploy.sh`. The pipeline is the gate; the scripts are the rules.
 
 `ci-validate.ts` runs twelve steps in this order, all `critical` (a failure stops the run):
 
@@ -26,7 +26,7 @@ The pipeline is `script/ci-validate.ts`, run by the `validate` job in `.github/w
 | 6   | Lint                            | Blocking since C1                                                                               |
 | 7   | Shell syntax (`install`)        | A broken installer that only fails on a user's machine                                          |
 | 8   | Shell syntax (`railway-deploy`) | A parse error that would surface as a silent failed deploy                                      |
-| 9   | Docker nikcli version check     | A literal `NIKCLI_VERSION`, and positional installs that change the validated Effect graph (C2) |
+| 9   | Docker ragu version check     | A literal `RAGU_VERSION`, and positional installs that change the validated Effect graph (C2) |
 | 10  | Patched dependency check        | A `patchedDependencies` key whose version no longer resolves (C1's fifth drift channel)         |
 | 11  | Railway upload context check    | A `.railwayignore` rule that drops something `Dockerfile.serve` COPYs                           |
 | 12  | PowerShell syntax (install.ps1) | Skipped, not failed, where `pwsh` is absent                                                     |
@@ -37,7 +37,7 @@ The order is pinned by `test/release/ci-targeted.test.ts`, which also asserts th
 
 ### 1. The 350-file suite memory model
 
-The suite is 385 selected files (`bun run test:ci --dry-run`, 2026-09-10; 21 benchmark/integration files are excluded by `IGNORE_PATTERNS`). Each file builds nikcli instances and SQLite databases whose memory is never returned to the OS, so RSS climbs for the life of the process rather than per file.
+The suite is 385 selected files (`bun run test:ci --dry-run`, 2026-09-10; 21 benchmark/integration files are excluded by `IGNORE_PATTERNS`). Each file builds ragu instances and SQLite databases whose memory is never returned to the OS, so RSS climbs for the life of the process rather than per file.
 
 The observed failure, which is the budget:
 
@@ -49,7 +49,7 @@ The observed failure, which is the budget:
 
 ### 2. `script/test-ci.ts` and the sharding
 
-The sharding is `packages/nikcli/script/test-ci.ts`. It splits the suite into short-lived bun processes: batches of `--batch=` files (default 25, so 16 batches today), each a separate `bun test` invocation handed explicit file paths.
+The sharding is `packages/ragu/script/test-ci.ts`. It splits the suite into short-lived bun processes: batches of `--batch=` files (default 25, so 16 batches today), each a separate `bun test` invocation handed explicit file paths.
 
 The two halves are orthogonal, and dropping either brings back a different bug:
 
@@ -58,13 +58,13 @@ The two halves are orthogonal, and dropping either brings back a different bug:
 
 File selection is not reimplemented: the ignore patterns are matched with `Bun.Glob`, the same engine `--path-ignore-patterns` uses, and the batches are then given explicit paths. An empty match refuses to report a vacuous pass. `--dry-run` prints the partition and asserts it covers every selected file exactly once.
 
-### 3. Why the nikcli suite does not run in CI
+### 3. Why the ragu suite does not run in CI
 
 No workflow runs it. `ci-validate.ts` runs the twelve static steps above and no tests at all — the comment at the step list says so, and `.github/workflows/test.yml` says the same from the other side: its matrix was reduced to a single `bun turbo typecheck` entry, with the removal and its reason written into the file. Sharding is what makes the suite runnable on a laptop, not what would make it affordable in the `validate` job.
 
 The consequence is stated plainly rather than hidden: **the release path is typecheck-gated, not test-gated.** `publish` needs `validate`; `railway-deploy` needs `publish`. Both gates are pinned by `test/release/automation.test.ts` and `test/release/ci-coherence.test.ts`.
 
-The suite is run with `bun run test:ci` in `packages/nikcli`.
+The suite is run with `bun run test:ci` in `packages/ragu`.
 
 ### 4. Windows-compat.yml
 
@@ -75,7 +75,7 @@ Windows compatibility is checked by `.github/workflows/windows-compat.yml`, on a
 - `bun test test/config test/worktree` — Effect `TaggedError` tags
 - `bun test test/util` — filesystem, lock, wildcard
 - Inline invariants: `pathToFileURL` round-trip with drive letters, `Global.Path` under AppData, `Shell.preferred` / `Shell.select`
-- A single-target `nikcli.exe` build, then `--help`, `--version`, a TUI boot, the npm postinstall/wrapper path, and a `cmd.exe` re-run
+- A single-target `ragu.exe` build, then `--help`, `--version`, a TUI boot, the npm postinstall/wrapper path, and a `cmd.exe` re-run
 - `install.ps1` end to end: parsing, `iex`, a working install, and the deferred swap when the target exe is locked
 
 That workflow is the cross-platform signal. It is separate from `ci-pipeline.yml`, so it does not gate the release path.
@@ -93,14 +93,14 @@ The footgun is recorded in the root [AGENTS.md](../../AGENTS.md) "CI" section. T
 The guards are wired into `ci-validate.ts`:
 
 1. **`script/check-railway-context.ts`** — every path `Dockerfile.serve` COPYs out of the build context must survive `.railwayignore`. Matching is delegated to `git ls-files -c -i --exclude-from=`, so git's own gitignore implementation decides, not a reimplementation of it. `packages/discord` was filtered out this way and every deploy failed for two days on a bare `failed to compute cache key`.
-2. **`script/check-docker-versions.ts`** — rejects a literal `NIKCLI_VERSION` in a Dockerfile (both images sat at 1.216.0 while the repo shipped 1.302.0), requires Bun image tags and build-arg defaults to match the root `packageManager`, and rejects positional Effect installs that would change the validated workspace graph. That last rule is C2's.
+2. **`script/check-docker-versions.ts`** — rejects a literal `RAGU_VERSION` in a Dockerfile (both images sat at 1.216.0 while the repo shipped 1.302.0), requires Bun image tags and build-arg defaults to match the root `packageManager`, and rejects positional Effect installs that would change the validated workspace graph. That last rule is C2's.
 3. **Preflight inside `script/railway-deploy.sh`** — builds its own ~10 MB upload context, derives the package list from the Dockerfile rather than a second hardcoded copy, refuses to upload when the expected revision cannot be determined, and fails on a context path the Dockerfile COPYs but the sync did not produce.
 
 The three guards are independent and cover different contexts: guard 1 is the repo-root `railway up` path, guard 3 is the script's own build context. `test/release/docker-versions.test.ts` pins guard 2, including the Railway override that reintroduced Effect `beta.83` after E6.
 
 ### 4. What `--detach` still cannot tell you
 
-None of the three guards observes the deployed instance. That gap is **C3**: the validated commit is baked into the image (`NIKCLI_REVISION`), served as an optional `revision` on `GET /global/health`, and confirmed by `script/check-release-identity.ts`, which treats an unconfirmed upload as a failed release rather than a pending one. `test/release/release-identity.test.ts` covers its five outcomes.
+None of the three guards observes the deployed instance. That gap is **C3**: the validated commit is baked into the image (`RAGU_REVISION`), served as an optional `revision` on `GET /global/health`, and confirmed by `script/check-release-identity.ts`, which treats an unconfirmed upload as a failed release rather than a pending one. `test/release/release-identity.test.ts` covers its five outcomes.
 
 ### 5. The release gates
 
@@ -137,7 +137,7 @@ The rule is the contract: the pipeline is green or the change is reverted.
 
 ## Invariants
 
-- The nikcli suite does not run in CI, in `ci-validate.ts` or in `test.yml`. The release is typecheck-gated, and that is stated rather than implied.
+- The ragu suite does not run in CI, in `ci-validate.ts` or in `test.yml`. The release is typecheck-gated, and that is stated rather than implied.
 - The suite never runs in a single process. `test:ci` batches it, and `--parallel=1` (which implies `--isolate`) stays on inside each batch.
 - `test:ci` refuses to report a pass when no file matched.
 - Every `ci-validate.ts` step is critical, in the order the table above records; formatting and lint are blocking.

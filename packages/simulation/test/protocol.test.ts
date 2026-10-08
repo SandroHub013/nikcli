@@ -7,9 +7,9 @@ test("decodes deterministic frontend and backend requests", () => {
       jsonrpc: "2.0",
       id: 1,
       method: "ui.matches",
-      params: { text: "nikcli ready" },
+      params: { text: "ragu ready" },
     }),
-  ).toMatchObject({ method: "ui.matches", params: { text: "nikcli ready" } })
+  ).toMatchObject({ method: "ui.matches", params: { text: "ragu ready" } })
 
   expect(
     SimulationProtocol.Backend.decodeRequest({
@@ -27,7 +27,7 @@ test("rejects regex-shaped ui.matches params instead of interpreting them", () =
       jsonrpc: "2.0",
       id: 1,
       method: "ui.matches",
-      params: { pattern: "nikcli.*" },
+      params: { pattern: "ragu.*" },
     }),
   ).toThrow()
 })

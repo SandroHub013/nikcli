@@ -7,7 +7,7 @@ import { fileURLToPath } from "url"
  */
 export default [
   {
-    name: "nikcli-desktop:config",
+    name: "ragu-desktop:config",
     config() {
       return {
         resolve: {

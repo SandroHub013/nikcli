@@ -194,7 +194,7 @@ export interface TrendAnalysis {
 }
 
 export const TARGET_PACKAGE_ROOT = path.resolve(
-  process.env.BENCH_TUI_TARGET_PACKAGE ?? path.resolve(import.meta.dir, "../../nikcli"),
+  process.env.BENCH_TUI_TARGET_PACKAGE ?? path.resolve(import.meta.dir, "../../ragu"),
 )
 export const TARGET_TEST_DIR = path.join(TARGET_PACKAGE_ROOT, "test")
 export const TARGET_PACKAGE_NAME = (() => {
@@ -208,7 +208,7 @@ export const TARGET_PACKAGE_NAME = (() => {
 export const TARGET_PACKAGE_READY =
   existsSync(path.join(TARGET_PACKAGE_ROOT, "package.json")) && existsSync(TARGET_TEST_DIR)
 export const OUTPUT_DIR =
-  process.env.NIKCLI_BENCHMARK_OUTPUT_DIR ?? path.join(TARGET_PACKAGE_ROOT, "test", "benchmarks", "runs")
+  process.env.RAGU_BENCHMARK_OUTPUT_DIR ?? path.join(TARGET_PACKAGE_ROOT, "test", "benchmarks", "runs")
 export const LEGACY_DIR = path.join(TARGET_PACKAGE_ROOT, "test", "bench", "results")
 export const USER_ARGS = process.argv.slice(2).filter((a) => a !== "--")
 export const TEST_PATTERNS = USER_ARGS.length > 0 ? USER_ARGS : ["test/benchmarks/**/*.benchmark.test.ts"]

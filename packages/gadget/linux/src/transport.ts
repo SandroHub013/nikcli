@@ -201,7 +201,7 @@ function readWithin(reader: ReadableStreamDefaultReader<Uint8Array>, idleMs: num
   return Promise.race([reader.read(), quiet]).finally(() => clearTimeout(timer))
 }
 
-/** Bounded exponential backoff with jitter, the same shape nikcli's own clients use. */
+/** Bounded exponential backoff with jitter, the same shape ragu's own clients use. */
 export function backoff(attempt: number, baseMs = 1_000, maxMs = 30_000): number {
   const exp = Math.min(maxMs, baseMs * 2 ** Math.min(attempt, 10))
   return Math.floor(exp / 2 + Math.random() * (exp / 2))

@@ -28,7 +28,7 @@ obiettivi:
 
 fonti:
   - id: F5
-    titolo: "nikcli docs, Permissions"
+    titolo: "ragu docs, Permissions"
     url: "https://github.com/nikcli/nikcli/blob/live-main/packages/web/src/pages/docs/permissions.astro"
   - id: F6
     titolo: "Configure permissions"
@@ -47,10 +47,10 @@ teoria:
     obiettivi: [O3, O4]
     fonti: [F5, F6]
     testo: >-
-      Non esiste un solo ordine di valutazione valido per tutti gli ambienti. In alcuni harness come nikcli (F5)
+      Non esiste un solo ordine di valutazione valido per tutti gli ambienti. In alcuni harness come ragu (F5)
       le regole vengono lette dall'alto in basso e **vince l'ultima regola** che corrisponde. In altri come
       Claude Code (F6) la precedenza è fissa: si valutano **prima i divieti**, poi le richieste di conferma e
-      infine i permessi. In nikcli, inoltre, le regole di un singolo agente prevalgono su quelle globali, e se
+      infine i permessi. In ragu, inoltre, le regole di un singolo agente prevalgono su quelle globali, e se
       nessuna regola corrisponde l'harness chiede conferma (F5).
   - id: T3
     obiettivi: [O5]
@@ -188,7 +188,7 @@ esercizi:
     obiettivo: O4
     difficolta: 2
     fonte: F5
-    consegna: "In nikcli (F5) vince l'ultima regola che corrisponde. Metti in ordine come l'harness decide su un'azione di un agente."
+    consegna: "In ragu (F5) vince l'ultima regola che corrisponde. Metti in ordine come l'harness decide su un'azione di un agente."
     elementi:
       - "Mette in fila le regole globali"
       - "Aggiunge in coda le regole dell'agente"
@@ -196,7 +196,7 @@ esercizi:
       - "Applica il suo esito, oppure chiede conferma se nessuna regola corrisponde"
     spiegazione: >-
       Le regole dell'agente vengono dopo quelle globali: siccome vince l'ultima che corrisponde, prevalgono. Se
-      nessuna regola corrisponde, nikcli chiede conferma.
+      nessuna regola corrisponde, ragu chiede conferma.
     sbagliate:
       - risposta: [1, 0, 2, 3]
         perche: "Se le regole dell'agente stessero prima, quelle globali scritte dopo le sovrascriverebbero: prevalgono proprio perché vengono dopo."
@@ -208,7 +208,7 @@ esercizi:
     obiettivo: O3
     difficolta: 1
     fonte: F5
-    consegna: "Una configurazione contiene in sequenza: \"bash:deploy.sh\": \"deny\" e poi \"bash:*\": \"allow\". Cosa accade eseguendo deploy.sh in un harness dove vince l'ultima regola (come nikcli, F5)?"
+    consegna: "Una configurazione contiene in sequenza: \"bash:deploy.sh\": \"deny\" e poi \"bash:*\": \"allow\". Cosa accade eseguendo deploy.sh in un harness dove vince l'ultima regola (come ragu, F5)?"
     opzioni:
       - "Il comando viene eseguito senza chiedere conferma perché la regola successiva sovrascrive il divieto"
       - "Il comando viene rifiutato perché qualsiasi divieto ha sempre la precedenza assoluta"
@@ -220,7 +220,7 @@ esercizi:
       divieto precedente autorizzando il comando.
     sbagliate:
       - risposta: 1
-        perche: "In nikcli (F5) la valutazione è sequenziale: non esiste priorità implicita del divieto sull'ultima regola corrispondente."
+        perche: "In ragu (F5) la valutazione è sequenziale: non esiste priorità implicita del divieto sull'ultima regola corrispondente."
       - risposta: 2
         perche: "L'harness applica la regola risolta (`allow`) ed esegue il comando direttamente."
       - risposta: 3
@@ -299,7 +299,7 @@ esercizi:
     difficolta: 1
     fonte: F5
     consegna: "Completa la frase."
-    testo: "In nikcli (F5), le regole configurate per un singolo [[1]] prevalgono su quelle della configurazione [[2]]."
+    testo: "In ragu (F5), le regole configurate per un singolo [[1]] prevalgono su quelle della configurazione [[2]]."
     banca: ["agente", "globale", "remoto", "chiuso", "server"]
     giusta: ["agente", "globale"]
     spiegazione: >-
@@ -312,6 +312,6 @@ esercizi:
         perche: "La contrapposizione corretta è tra la regola per l'agente specifico e il profilo globale del sistema."
 
 # Dubbi e note:
-# - Spiegati entrambi gli ordini di valutazione: F5 (nikcli, ultima vince) e F6 (Claude Code, prima i divieti).
+# - Spiegati entrambi gli ordini di valutazione: F5 (ragu, ultima vince) e F6 (Claude Code, prima i divieti).
 # - Rispettate le regole su trova-riga: riferimenti solo per contenuto, mai numeri.
 # - Esplicitato il rischio della fatica da conferma (approval fatigue).

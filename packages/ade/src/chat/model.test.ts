@@ -19,28 +19,28 @@ import {
   parseModelRef,
   type ModelRef,
 } from "./model"
-import type { ProviderList, Agent } from "@nikcli-ai/sdk/client"
+import type { ProviderList, Agent } from "@ragu/sdk/client"
 import { setLocalePreference } from "../i18n/locale"
 
 const mockProviderList: ProviderList = {
   all: [
     {
-      id: "nikcli",
-      name: "nikcli",
+      id: "ragu",
+      name: "ragu",
       source: "custom",
       env: [],
       options: {},
       models: {
         "google/gemini-2.5-flash:free": {
           id: "google/gemini-2.5-flash:free",
-          providerID: "nikcli",
+          providerID: "ragu",
           name: "Gemini 2.5 Flash",
           cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
           status: "active",
         } as any,
         "meta-llama/llama-3.3-70b-instruct:free": {
           id: "meta-llama/llama-3.3-70b-instruct:free",
-          providerID: "nikcli",
+          providerID: "ragu",
           name: "Llama 3.3 70B",
           cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
           status: "active",
@@ -79,10 +79,10 @@ const mockProviderList: ProviderList = {
     },
   ],
   default: {
-    nikcli: "google/gemini-2.5-flash:free",
+    ragu: "google/gemini-2.5-flash:free",
     openrouter: "openai/gpt-6-astra-pro", // Note from Dario: default OpenRouter is paid.
   },
-  connected: ["nikcli", "openrouter"],
+  connected: ["ragu", "openrouter"],
 }
 
 describe("isFreeModel", () => {
@@ -125,14 +125,14 @@ describe("isFreeModel", () => {
     expect(isFreeModel({ id: "unknown/zero", cost: { input: 0, output: 0 } })).toBe(false)
   })
 
-  test("a nikcli model without cost is not free and does not enter ADE Test", () => {
-    expect(isFreeModel({ id: "nikcli-bundled", providerID: "nikcli" })).toBe(false)
+  test("a ragu model without cost is not free and does not enter ADE Test", () => {
+    expect(isFreeModel({ id: "ragu-bundled", providerID: "ragu" })).toBe(false)
 
     const list: ProviderList = {
       all: [
         {
-          id: "nikcli",
-          name: "nikcli",
+          id: "ragu",
+          name: "ragu",
           source: "custom",
           env: [],
           options: {},
@@ -140,13 +140,13 @@ describe("isFreeModel", () => {
             "custom-nocost": {
               id: "custom-nocost",
               name: "No Cost Model",
-              providerID: "nikcli",
+              providerID: "ragu",
             } as any,
           },
         },
       ],
       default: {},
-      connected: ["nikcli"],
+      connected: ["ragu"],
     }
     const testModels = modelsFromProviderList(list, { isTest: true })
     expect(testModels.some((m) => m.name === "No Cost Model")).toBe(false)
@@ -295,15 +295,15 @@ const noisyCatalog: ProviderList = {
       },
     },
     {
-      id: "nikcli",
-      name: "nikcli",
+      id: "ragu",
+      name: "ragu",
       source: "custom",
       env: [],
       options: {},
       models: {
         "google/gemini-2.5-flash:free": {
           id: "google/gemini-2.5-flash:free",
-          providerID: "nikcli",
+          providerID: "ragu",
           name: "Gemini 2.5 Flash",
           cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
           status: "active",
@@ -319,8 +319,8 @@ const noisyCatalog: ProviderList = {
         } as any,
         "eleven/tts-v2": {
           id: "eleven/tts-v2",
-          providerID: "nikcli",
-          name: "Eleven tts via nikcli",
+          providerID: "ragu",
+          name: "Eleven tts via ragu",
           cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
           status: "active",
           capabilities: {
@@ -337,7 +337,7 @@ const noisyCatalog: ProviderList = {
     },
   ],
   default: {},
-  connected: ["elevenlabs", "kilo", "ollama", "opencode", "nikcli"],
+  connected: ["elevenlabs", "kilo", "ollama", "opencode", "ragu"],
 }
 
 describe("the selector shows chat models, and calls free only what is free (C3-bis)", () => {
@@ -637,7 +637,7 @@ describe("validateSelectedModel (C3)", () => {
 
   test("accepts free model in ADE Test mode", () => {
     expect(validateSelectedModel("google/gemini-2.5-flash:free", models, true)).toEqual({
-      providerID: "nikcli",
+      providerID: "ragu",
       modelID: "google/gemini-2.5-flash:free",
     })
   })
@@ -653,9 +653,9 @@ describe("Model identity and ModelRef (C3 - Point 5)", () => {
   })
 
   test("serializes and parses ModelRef", () => {
-    const ref: ModelRef = { providerID: "nikcli", modelID: "google/gemini-2.5-flash:free" }
-    expect(serializeModelRef(ref)).toBe("nikcli/google/gemini-2.5-flash:free")
-    expect(parseModelRef("nikcli/google/gemini-2.5-flash:free")).toEqual(ref)
+    const ref: ModelRef = { providerID: "ragu", modelID: "google/gemini-2.5-flash:free" }
+    expect(serializeModelRef(ref)).toBe("ragu/google/gemini-2.5-flash:free")
+    expect(parseModelRef("ragu/google/gemini-2.5-flash:free")).toEqual(ref)
     expect(parseModelRef(JSON.stringify(ref))).toEqual(ref)
     expect(parseModelRef(null)).toBeUndefined()
     expect(parseModelRef("invalid")).toBeUndefined()
@@ -716,11 +716,11 @@ describe("Model identity and ModelRef (C3 - Point 5)", () => {
   test("defaultModelChoice matches ModelRef config model", () => {
     const models = modelsFromProviderList(mockProviderList, { isTest: false })
     const choice = defaultModelChoice(models, {
-      providerID: "nikcli",
+      providerID: "ragu",
       modelID: "google/gemini-2.5-flash:free",
     })
     expect(choice).toBeDefined()
-    expect(choice!.providerID).toBe("nikcli")
+    expect(choice!.providerID).toBe("ragu")
     expect(choice!.modelID).toBe("google/gemini-2.5-flash:free")
   })
 })

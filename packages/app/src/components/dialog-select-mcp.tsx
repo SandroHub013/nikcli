@@ -1,9 +1,9 @@
 import { Component, createMemo, createSignal, Show } from "solid-js"
 import { useSync } from "@/context/sync"
 import { useSDK } from "@/context/sdk"
-import { Dialog } from "@nikcli-ai/ui/dialog"
-import { List } from "@nikcli-ai/ui/list"
-import { Switch } from "@nikcli-ai/ui/switch"
+import { Dialog } from "@ragu/ui/dialog"
+import { List } from "@ragu/ui/list"
+import { Switch } from "@ragu/ui/switch"
 import { useLanguage } from "@/context/language"
 
 export const DialogSelectMcp: Component = () => {

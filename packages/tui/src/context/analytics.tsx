@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js"
 import { useSDK } from "./sdk"
 import { createSimpleContext } from "./helper"
-import { Log } from "@nikcli-ai/util/log"
+import { Log } from "@ragu/util/log"
 import {
   mergeDailyAnalyticsLists,
   mergeGlobalAnalytics,

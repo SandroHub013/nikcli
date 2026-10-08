@@ -1,19 +1,19 @@
 # EOT-02: Effect Runtime and Service Boundaries
 
 Status: proposed. Tier: 1. Phase: P1. Dependencies: EOT-01.
-Owner: nikcli Effect/domain maintainers. [Roadmap](../ROADMAP.md).
+Owner: ragu Effect/domain maintainers. [Roadmap](../ROADMAP.md).
 
 ## Problem and Evidence
 
 Evidence B02, B03, B18: runtime reuse, instance scopes, and two-layer services already exist. However,
-`packages/nikcli/src/effect/runtime.ts` and `packages/nikcli/src/effect/run-service.ts` widen service requirements with
+`packages/ragu/src/effect/runtime.ts` and `packages/ragu/src/effect/run-service.ts` widen service requirements with
 `any`; `SessionPrompt` coordinates many Promise-to-Effect calls. The opportunity is stronger boundaries and fewer
 crossings, not another runtime abstraction or a wholesale asynchronous rewrite.
 
 ## Scope and Non-Goals
 
 Improve the existing bridge, service interfaces, lifetime ownership, and high-value caller chains. Keep SDK Promise
-compatibility and the current instance ALS boundary. Do not introduce a TUI dependency on nikcli runtime, eagerly rebuild
+compatibility and the current instance ALS boundary. Do not introduce a TUI dependency on ragu runtime, eagerly rebuild
 all layers, replace synchronous repositories, or apply newer/v3 Effect APIs without checking rc.112.
 
 ## Design and Requirements
@@ -80,9 +80,9 @@ process layers while another instance still uses them.
   derivation does not cancel running jobs or remove live tool registrations.
 - A migrated caller chain performs no nested Promise-to-Effect-to-Promise round trip inside its service body. Compare
   boundary invocation counts and duration against EOT-01; no required workload regresses more than its approved budget.
-- Extend `packages/nikcli/test/effect/runtime.test.ts`, `packages/nikcli/test/effect/instance-scope.test.ts`, and
-  `packages/nikcli/test/effect/instance-ambient.test.ts`; add domain assertions next to the migrated service's existing tests.
-- From `packages/nikcli`: `bun test test/effect/runtime.test.ts test/effect/instance-scope.test.ts test/effect/instance-ambient.test.ts`.
+- Extend `packages/ragu/test/effect/runtime.test.ts`, `packages/ragu/test/effect/instance-scope.test.ts`, and
+  `packages/ragu/test/effect/instance-ambient.test.ts`; add domain assertions next to the migrated service's existing tests.
+- From `packages/ragu`: `bun test test/effect/runtime.test.ts test/effect/instance-scope.test.ts test/effect/instance-ambient.test.ts`.
   Run one final root `bun run typecheck` after all implementation edits, not once per service.
 
 ## Migration and Rollback

@@ -10,11 +10,11 @@ import { useSDK } from "@tui/context/sdk"
 import { Clipboard } from "@tui/util/clipboard"
 import { UserApi } from "@tui/util/user-api"
 import { useAttempts } from "@tui/util/lifecycle"
-import { UserSession } from "@nikcli-ai/util/user-session"
-import type { UserSchema } from "@nikcli-ai/util/user-schema"
+import { UserSession } from "@ragu/util/user-session"
+import type { UserSchema } from "@ragu/util/user-schema"
 
 /**
- * Device-code sign-in to the nikcli account issuer (auth.nikcli-ai.dev).
+ * Device-code sign-in to the ragu account issuer (auth.nikcli-ai.dev).
  * On success the issuer JWT is stored locally and `GET /user/me` provisions
  * the matching local user on the server (`ensureExternalUser` lives there).
  * One sign-in covers both the account plane and the TUI/server session.

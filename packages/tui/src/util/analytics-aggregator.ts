@@ -1,6 +1,6 @@
-import type { Session, Message, Part, Todo, Workspace } from "@nikcli-ai/sdk/httpapi"
+import type { Session, Message, Part, Todo, Workspace } from "@ragu/sdk/httpapi"
 import type { SessionAnalytics } from "@tui/util/analytics-merge"
-import * as Activity from "@nikcli-ai/util/activity"
+import * as Activity from "@ragu/util/activity"
 
 export interface BackgroundJob {
   jobID: string
@@ -1391,13 +1391,13 @@ export function augmentAggregatedStatsFromPersistedSessions(
 // Used by the Overview tab to render a GitHub-style contribution graph and the
 // headline KPIs ("Longest streak", "Avg / day", "Avg / week", "Total").
 //
-// The geometry itself lives in @nikcli-ai/util/activity, because the public
+// The geometry itself lives in @ragu/util/activity, because the public
 // /data page draws the same grid from gateway aggregates rather than from a
 // local session database. These wrappers keep the TUI's call sites unchanged by
 // supplying the default metric — non-cache tokens, already summed in
 // `DayStats.tokens`.
 
-export type { ActivityGrid, ActivityStats } from "@nikcli-ai/util/activity"
+export type { ActivityGrid, ActivityStats } from "@ragu/util/activity"
 
 export function computeActivityStats(days: DayStats[], metric: (d: DayStats) => number = (d) => d.tokens) {
   return Activity.computeActivityStats(days, metric)

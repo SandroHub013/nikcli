@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { LIST_MS, MINT_MS, MINT_SLOW_LEFT_S, MINT_SLOW_MS, mintTrace, waitForAnswer, type Timers } from "./ask-cli"
-import { mintedNikcliId } from "./resume"
+import { mintedRaguId } from "./resume"
 import { en } from "../i18n/en"
 import { it as italian } from "../i18n/it"
 
@@ -60,7 +60,7 @@ describe("waiting for a CLI's answer", () => {
     let said = 0
     const answer = waitForAnswer({
       start: cli.start,
-      read: mintedNikcliId,
+      read: mintedRaguId,
       timeoutMs: MINT_MS,
       slow: { afterMs: MINT_SLOW_MS, say: () => said++ },
       timers,
@@ -85,7 +85,7 @@ describe("waiting for a CLI's answer", () => {
     let answered: string | null | undefined
     const answer = waitForAnswer({
       start: cli.start,
-      read: mintedNikcliId,
+      read: mintedRaguId,
       timeoutMs: MINT_MS,
       slow: { afterMs: MINT_SLOW_MS, say: () => said++ },
       timers,
@@ -107,7 +107,7 @@ describe("waiting for a CLI's answer", () => {
     let done = false
     const answer = waitForAnswer({
       start: cli.start,
-      read: mintedNikcliId,
+      read: mintedRaguId,
       timeoutMs: MINT_MS,
       slow: { afterMs: MINT_SLOW_MS, say: () => said++ },
       timers,
@@ -138,7 +138,7 @@ describe("waiting for a CLI's answer", () => {
     expect(await ended).toBeNull()
     const refused = await waitForAnswer({
       start: async () => Promise.reject(new Error("no")),
-      read: mintedNikcliId,
+      read: mintedRaguId,
       timeoutMs: LIST_MS,
       timers,
     })
@@ -156,9 +156,9 @@ describe("the mint's time", () => {
   /* Review of ripristino-sexies, nota 2: «15 secondi» was written by hand. */
   test("the note says the seconds left after it, from the constants", () => {
     expect(MINT_SLOW_LEFT_S).toBe((MINT_MS - MINT_SLOW_MS) / 1000)
-    expect(italian["resume.slowMint"]("nikcli", MINT_SLOW_LEFT_S)).toContain("fino a 15 secondi")
-    expect(italian["resume.slowMint"]("nikcli", 7)).toContain("fino a 7 secondi")
-    expect(en["resume.slowMint"]("nikcli", 7)).toContain("up to 7 more seconds")
+    expect(italian["resume.slowMint"]("ragu", MINT_SLOW_LEFT_S)).toContain("fino a 15 secondi")
+    expect(italian["resume.slowMint"]("ragu", 7)).toContain("fino a 7 secondi")
+    expect(en["resume.slowMint"]("ragu", 7)).toContain("up to 7 more seconds")
   })
 
   test("lint: the workbench passes the mint and list times to askCli as the exported constants", () => {
@@ -185,53 +185,53 @@ describe("the mint's trace", () => {
   test("the answer's JSON is said by its size only, the title in it or not", () => {
     const json = `{ "title": ${ESCAPED}, "id": "ses_x" }`
     const line = mintTrace({
-      agent: "nikcli",
+      agent: "ragu",
       ms: 16_234.6,
       outcome: "id",
       first: { ms: 15_900.2, line: `  ${json}` },
       title: TITLE,
     })
-    expect(line).toBe(`[ade.mint] nikcli: id in 16235 ms, first output at 15900 ms: json, ${json.length} chars`)
+    expect(line).toBe(`[ade.mint] ragu: id in 16235 ms, first output at 15900 ms: json, ${json.length} chars`)
     expect(line).not.toContain("login")
     expect(
-      mintTrace({ agent: "nikcli", ms: 1, outcome: "none", first: { ms: 1, line: "[]" }, title: TITLE }),
+      mintTrace({ agent: "ragu", ms: 1, outcome: "none", first: { ms: 1, line: "[]" }, title: TITLE }),
     ).toEndWith(": json, 2 chars")
   })
 
   test("another first line is kept, the title taken out raw and escaped", () => {
     const raw = mintTrace({
-      agent: "nikcli",
+      agent: "ragu",
       ms: 2_000,
       outcome: "id",
       first: { ms: 1_500, line: `creating ${TITLE} now` },
       title: TITLE,
     })
     const escaped = mintTrace({
-      agent: "nikcli",
+      agent: "ragu",
       ms: 2_000,
       outcome: "id",
       first: { ms: 1_500, line: `creating ${ESCAPED} now` },
       title: TITLE,
     })
-    expect(raw).toBe('[ade.mint] nikcli: id in 2000 ms, first output at 1500 ms: "creating \u2026 now"')
-    expect(escaped).toBe('[ade.mint] nikcli: id in 2000 ms, first output at 1500 ms: "creating \\"\u2026\\" now"')
+    expect(raw).toBe('[ade.mint] ragu: id in 2000 ms, first output at 1500 ms: "creating \u2026 now"')
+    expect(escaped).toBe('[ade.mint] ragu: id in 2000 ms, first output at 1500 ms: "creating \\"\u2026\\" now"')
     expect(raw + escaped).not.toContain("login")
     const plain = mintTrace({
-      agent: "nikcli",
+      agent: "ragu",
       ms: 9,
       outcome: "timeout",
-      first: { ms: 8, line: "Installing @nikcli-ai/plugin" },
+      first: { ms: 8, line: "Installing @ragu/plugin" },
       title: TITLE,
     })
-    expect(plain).toEndWith(': "Installing @nikcli-ai/plugin"')
+    expect(plain).toEndWith(': "Installing @ragu/plugin"')
   })
 
   test("a mint that printed nothing says so; a long first line is cut", () => {
-    expect(mintTrace({ agent: "nikcli", ms: 30_000, outcome: "timeout", title: "x" })).toBe(
-      "[ade.mint] nikcli: timeout in 30000 ms, nothing printed",
+    expect(mintTrace({ agent: "ragu", ms: 30_000, outcome: "timeout", title: "x" })).toBe(
+      "[ade.mint] ragu: timeout in 30000 ms, nothing printed",
     )
     const long = mintTrace({
-      agent: "nikcli",
+      agent: "ragu",
       ms: 10,
       outcome: "none",
       first: { ms: 5, line: "a".repeat(500) },

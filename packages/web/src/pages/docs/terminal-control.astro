@@ -18,14 +18,14 @@ const toc = [
 
 <DocsLayout
   title="Terminal-control"
-  subtitle="@nikcli-ai/terminal-control records, replays and bundles PTY-driven TUI sessions."
+  subtitle="@ragu/terminal-control records, replays and bundles PTY-driven TUI sessions."
   toc={toc}
-  description="The @nikcli-ai/terminal-control package: native termctrl driver, .termctrl recordings, and PR-ready evidence bundles."
+  description="The @ragu/terminal-control package: native termctrl driver, .termctrl recordings, and PR-ready evidence bundles."
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
-      <code>@nikcli-ai/terminal-control</code> is the recording-and-evidence engine for
+      <code>@ragu/terminal-control</code> is the recording-and-evidence engine for
       PTY-driven TUI sessions. It wraps a native <code>termctrl</code> driver that captures
       every frame of a terminal session into a <code>.termctrl</code> recording and lets
       you render that recording as MP4, GIF preview, single-frame PNG, SVG, ANSI-coloured
@@ -33,8 +33,8 @@ const toc = [
     </p>
     <p>
       It is the third sibling engine — alongside
-      <a href="/docs/browser-control">@nikcli-ai/browser-control</a> (headless Chromium) and
-      <a href="/docs/computer-use">@nikcli-ai/computer-use</a> (real desktops) — that shares
+      <a href="/docs/browser-control">@ragu/browser-control</a> (headless Chromium) and
+      <a href="/docs/computer-use">@ragu/computer-use</a> (real desktops) — that shares
       the same evidence-bundle output format. New agents only learn one bundle shape, and
       PR bots can treat all three sibling engines the same way.
     </p>
@@ -66,7 +66,7 @@ const toc = [
   <section id="cli" class="doc-section">
     <h2>CLI surface</h2>
     <DocCode language="bash" title="Terminal">
-      # Register the bundled skill in WORKSPACE/.agents/skills so nikcli discovers it.
+      # Register the bundled skill in WORKSPACE/.agents/skills so ragu discovers it.
       # WORKSPACE defaults to the nearest Git worktree. Idempotent relative symlink.
       terminal-control install-skill [--workspace DIR] [--json]
 
@@ -76,7 +76,7 @@ const toc = [
     <p>
       The <code>--json</code> flag on <code>install-skill</code> returns a typed payload
       describing the install (source, target, installed boolean) — useful for test harnesses
-      and for the <code>nikcli</code> install pipeline.
+      and for the <code>ragu</code> install pipeline.
     </p>
   </section>
 
@@ -181,7 +181,7 @@ const toc = [
       The bundle format matches <a href="/docs/browser-control">browser-control</a> and
       <a href="/docs/computer-use">computer-use</a>: <code>screenshot.png</code>,
       <code>demo.mp4</code>, <code>preview.gif</code>, <code>manifest.json</code>,
-      <code>pr.md</code>. PR pipelines and <code>nikcli</code>'s own bundle command treat
+      <code>pr.md</code>. PR pipelines and <code>ragu</code>'s own bundle command treat
       all three siblings uniformly.
     </DocCallout>
   </section>

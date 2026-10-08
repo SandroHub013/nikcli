@@ -1,12 +1,12 @@
-# nikcli Repository
+# ragu Repository
 
-nikcli is a fork of [OpenCode](https://github.com/anomalyco/opencode). Much of the structure below comes from
+ragu is a fork of [OpenCode](https://github.com/anomalyco/opencode). Much of the structure below comes from
 there — when in doubt about why something is shaped the way it is, check upstream first.
 
 ## Key Commands
 
-- **Test nikcli**: `bun run dev` in `packages/nikcli`
-- **Regenerate HTTP clients**: `bun run generate:httpapi-clients` in `packages/nikcli`
+- **Test ragu**: `bun run dev` in `packages/ragu`
+- **Regenerate HTTP clients**: `bun run generate:httpapi-clients` in `packages/ragu`
 - **ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE**
 - **Default branch**: `live-main`
 
@@ -14,7 +14,7 @@ there — when in doubt about why something is shaped the way it is, check upstr
 
 This is a Bun monorepo. Key packages:
 
-- `packages/nikcli` - Main CLI application
+- `packages/ragu` - Main CLI application
 - `packages/sdk` - API client SDK
 - `packages/studio` - Desktop UI
 - `packages/plugin` - Plugin system
@@ -34,20 +34,20 @@ acceptance tests land.
 - **Type checking**: `bun run typecheck`
 - **Testing**: `bun test` (single file: `bun test test/path/file.test.ts`)
 - **Build**: `bun run build`
-- **HttpApi route coverage** (nikcli): `bun run check:routes` in `packages/nikcli`. `--strict` is honored as of 2026-08-17 (H4 landed `AccountGroup` + `ConfigManagementGroup.profilesList`; the script reads `process.argv`). Today `--strict` is the same rules as default; future strict-only checks land in `script/check-route-coverage.ts`.
+- **HttpApi route coverage** (ragu): `bun run check:routes` in `packages/ragu`. `--strict` is honored as of 2026-08-17 (H4 landed `AccountGroup` + `ConfigManagementGroup.profilesList`; the script reads `process.argv`). Today `--strict` is the same rules as default; future strict-only checks land in `script/check-route-coverage.ts`.
 
 ## HTTP integration
 
-The nikcli server is Effect `HttpApi` on `Bun.serve`. There is no Hono app.
-The contract lives in `packages/nikcli/src/server/httpapi/*` and **is** the
+The ragu server is Effect `HttpApi` on `Bun.serve`. There is no Hono app.
+The contract lives in `packages/ragu/src/server/httpapi/*` and **is** the
 source for both OpenAPI and the generated clients.
 
 To change any HTTP endpoint: edit the group in `src/server/httpapi/`, then run
-`bun run generate:httpapi-clients` from `packages/nikcli`. Full workflow,
-schema rules, and verification steps are in `packages/nikcli/AGENTS.md`
+`bun run generate:httpapi-clients` from `packages/ragu`. Full workflow,
+schema rules, and verification steps are in `packages/ragu/AGENTS.md`
 ("HTTP integration workflow").
 
-Consumers import `@nikcli-ai/sdk/httpapi`. There is no hey-api step and no
+Consumers import `@ragu/sdk/httpapi`. There is no hey-api step and no
 `v2` client any more — `packages/sdk/js/script/build.ts` now regenerates from
 the contract and emits `dist`, so running it is safe.
 
@@ -56,13 +56,13 @@ the contract and emits `dist`, so running it is safe.
 1. **No mocks/placeholders**: All code must be production-ready, no TODO/FIXME placeholders
 2. **Minimize new files**: Prefer modifying existing files over creating new ones
 3. **Parallel execution**: Use background tasks for independent work
-4. **Client regeneration**: After changing an HTTP contract in `packages/nikcli/src/server/httpapi/`, run `bun run generate:httpapi-clients` and commit the generated output
+4. **Client regeneration**: After changing an HTTP contract in `packages/ragu/src/server/httpapi/`, run `bun run generate:httpapi-clients` and commit the generated output
 5. **The AI SDK lives in one directory.** `ai`, `@ai-sdk/*` and the other provider SDKs are imported only under
-   `packages/nikcli/src/provider/legacy/`; everything else imports from `@/provider/legacy/ai-sdk`
-   (`test/provider/legacy-isolation.test.ts` enforces it). Native `@nikcli-ai/llm` streaming is the default
+   `packages/ragu/src/provider/legacy/`; everything else imports from `@/provider/legacy/ai-sdk`
+   (`test/provider/legacy-isolation.test.ts` enforces it). Native `@ragu/llm` streaming is the default
    (`experimental.nativeLlm`, opt out with `false`); the AI SDK is the fallback for models without a native route.
-   `@nikcli-ai/llm` must not depend on `ai`.
-6. **Custom tool autoload**: config-dir `tool/*.ts` requires `NIKCLI_ALLOW_PLUGIN_AUTOLOAD=1` or `tool.allow`/`tool.pin` — see `packages/nikcli/AGENTS.md`
+   `@ragu/llm` must not depend on `ai`.
+6. **Custom tool autoload**: config-dir `tool/*.ts` requires `RAGU_ALLOW_PLUGIN_AUTOLOAD=1` or `tool.allow`/`tool.pin` — see `packages/ragu/AGENTS.md`
 7. **CI must never be left failing — no exceptions.** `ci-pipeline` going red is
    never acceptable and is never "someone else's problem". If a change of yours
    turns it red, fixing it comes before any other work, and a red pipeline is
@@ -76,7 +76,7 @@ the contract and emits `dist`, so running it is safe.
 `ci-pipeline` runs `script/ci-validate.ts`. Two failure modes have bitten this
 repo more than once — check them before changing anything in that file:
 
-- **The nikcli suite does not run in CI — do not add it back.** Not in
+- **The ragu suite does not run in CI — do not add it back.** Not in
   `ci-validate.ts`, not in `test.yml`. Releases gate on typecheck: `publish`
   needs `validate`, and `railway-deploy` needs `publish`.
 
@@ -87,7 +87,7 @@ repo more than once — check them before changing anything in that file:
   remove what is broken or unaffordable, never what works.
 
   The reason is not taste. The suite leaks roughly 80 MB per test file (each one
-  builds nikcli instances and SQLite databases), so all ~350 files in one bun
+  builds ragu instances and SQLite databases), so all ~350 files in one bun
   process reached 14.5 GB on a ~16 GB runner and got it killed at file 175. That
   fails the job with exit 143 however the step is marked — `critical: false`
   cannot save a step whose runner is gone. Sharding stopped the crash but left
@@ -96,7 +96,7 @@ repo more than once — check them before changing anything in that file:
   and the failures are ignored.
 
 - **To run the whole suite anywhere else**, use `bun run test:ci` in
-  `packages/nikcli`. It shards across short-lived bun processes via
+  `packages/ragu`. It shards across short-lived bun processes via
   `script/test-ci.ts`, keeping `--parallel=1` (hence `--isolate`) inside each
   batch. Both halves matter: isolation per file, memory ceiling per batch. Do
   not collapse it back into a single `bun test`.

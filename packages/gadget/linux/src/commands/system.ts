@@ -2,7 +2,7 @@
  * `system.run` — the command a sysadmin gadget is for.
  *
  * Runs as the account the SDK runs as, with exactly its permissions: there is
- * no privilege step here and none in the bridge. The nikcli side asks the
+ * no privilege step here and none in the bridge. The ragu side asks the
  * operator before every call unless a rule allows it, which is where the
  * safety lives — a gadget cannot approve itself.
  */

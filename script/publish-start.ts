@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { Script } from "@nikcli-ai/script"
+import { Script } from "@ragu/script"
 import { buildNotes, getLatestRelease, writeReleaseSection } from "./changelog"
 
 let notes: string[] = []
@@ -12,7 +12,7 @@ if (!Script.preview) {
   const previous = await getLatestRelease()
   try {
     // Generate the changelog straight from the commit messages (grouped by area),
-    // no AI / nikcli server required — robust in CI.
+    // no AI / ragu server required — robust in CI.
     notes = await buildNotes(previous, "HEAD", { raw: true })
   } catch (e) {
     console.log("Could not build changelog notes:", e)
@@ -53,8 +53,8 @@ if (await Bun.file(extensionToml).exists()) {
 
 await $`bun install`
 
-console.log("\n=== nikcli ===\n")
-await import(`../packages/nikcli/script/publish.ts`)
+console.log("\n=== ragu ===\n")
+await import(`../packages/ragu/script/publish.ts`)
 
 console.log("\n=== sdk ===\n")
 await import(`../packages/sdk/js/script/publish.ts`)
@@ -159,7 +159,7 @@ if (!Script.preview) {
   await $`git tag v${Script.version}`
   await $`git push origin v${Script.version}`
   await new Promise((resolve) => setTimeout(resolve, 5_000))
-  await $`gh release create v${Script.version} -d --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"} ./packages/nikcli/dist/*.zip ./packages/nikcli/dist/*.tar.gz`
+  await $`gh release create v${Script.version} -d --title "v${Script.version}" --notes ${notes.join("\n") || "No notable changes"} ./packages/ragu/dist/*.zip ./packages/ragu/dist/*.tar.gz`
   const release = await $`gh release view v${Script.version} --json id,tagName`.json()
   output += `release=${release.id}\n`
   output += `tag=${release.tagName}\n`

@@ -7,7 +7,7 @@
  *
  * What it shows and why it is worth having is documented on the bar.
  */
-import type { TuiPlugin, TuiPluginModule } from "@nikcli-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginModule } from "@ragu/plugin/tui"
 import { readEnabled, writeEnabled } from "./store"
 
 const id = "internal:devtools"

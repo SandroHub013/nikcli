@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { AuthProvider, useAuth } from "../auth/AuthContext"
-import { studioApi, type NikcliConfig, type McpServerConfig } from "../lib/studio-api"
+import { studioApi, type RaguConfig, type McpServerConfig } from "../lib/studio-api"
 import {
   Badge,
   Card,
@@ -23,7 +23,7 @@ const isDev = typeof import.meta !== "undefined" && (import.meta as any).env?.DE
 function McpPageInner() {
   const { token, serverUrl } = useAuth()
   const isConnected = isDev || (!!token && !!serverUrl)
-  const [config, setConfig] = useState<NikcliConfig | null>(null)
+  const [config, setConfig] = useState<RaguConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
@@ -138,7 +138,7 @@ function McpPageInner() {
       <PageHeader
         eyebrow="User MCP"
         title="Manage MCP servers"
-        description="Add, edit, enable, disable, or remove MCP servers from the connected nikcli user configuration."
+        description="Add, edit, enable, disable, or remove MCP servers from the connected ragu user configuration."
         actions={
           <button onClick={() => setShowAdd(!showAdd)} className={btnPrimary}>
             {showAdd ? "Cancel" : "+ Add Server"}
@@ -206,7 +206,7 @@ function McpPageInner() {
         <EmptyState
           icon={emptyIcons.bolt}
           title="No MCP servers"
-          description="Add an MCP server to extend nikcli capabilities."
+          description="Add an MCP server to extend ragu capabilities."
         />
       ) : (
         <div className="space-y-3">

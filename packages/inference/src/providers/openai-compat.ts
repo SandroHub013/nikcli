@@ -69,7 +69,7 @@ export const PROVIDER_DEFS = {
     envKey: "OPENROUTER_API_KEY",
     headers: {
       "HTTP-Referer": process.env.OPENROUTER_REFERRER ?? "https://nikcli-ai.dev",
-      "X-Title": process.env.OPENROUTER_APP_NAME ?? "nikcli-inference",
+      "X-Title": process.env.OPENROUTER_APP_NAME ?? "ragu-inference",
     },
   },
   deepseek: {

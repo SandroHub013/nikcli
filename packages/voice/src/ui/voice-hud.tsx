@@ -42,7 +42,7 @@ import {
   type HudState,
 } from "./voice-hud-state"
 import "./voice-hud.css"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 
 export interface VoiceHudProps {
   /** The voice control engine instance. */

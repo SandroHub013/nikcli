@@ -10,7 +10,7 @@
 import { createEffect, createMemo, createResource, createSignal, For, on, Show } from "solid-js"
 import { t } from "../i18n"
 import { APPROVAL_TIMEOUT_MS } from "./approval"
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 import {
   MAX_MEMBERS,
   MAX_ROUNDS,

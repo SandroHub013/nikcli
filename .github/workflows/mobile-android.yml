@@ -124,12 +124,12 @@ jobs:
           if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
             echo "::error::ANDROID_KEYSTORE_BASE64 is not set — cannot produce a signed build."
             echo "Generate one with:"
-            echo "  keytool -genkeypair -v -storetype PKCS12 -keystore nikcli-upload.jks \\"
-            echo "    -alias nikcli-upload -keyalg RSA -keysize 2048 -validity 10000"
-            echo "  base64 -i nikcli-upload.jks | pbcopy"
+            echo "  keytool -genkeypair -v -storetype PKCS12 -keystore ragu-upload.jks \\"
+            echo "    -alias ragu-upload -keyalg RSA -keysize 2048 -validity 10000"
+            echo "  base64 -i ragu-upload.jks | pbcopy"
             exit 1
           fi
-          KEYSTORE_PATH="$RUNNER_TEMP/nikcli-upload.jks"
+          KEYSTORE_PATH="$RUNNER_TEMP/ragu-upload.jks"
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > "$KEYSTORE_PATH"
           if [ ! -s "$KEYSTORE_PATH" ]; then
             echo "::error::Decoded keystore is empty — ANDROID_KEYSTORE_BASE64 is not valid base64."
@@ -166,7 +166,7 @@ jobs:
           esac
           echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
-          echo "Building nikcli mobile $VERSION_NAME ($VERSION_CODE)"
+          echo "Building ragu mobile $VERSION_NAME ($VERSION_CODE)"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -176,16 +176,16 @@ jobs:
       - name: Build signed app
         working-directory: packages/mobile/android
         env:
-          NIKCLI_ANDROID_STORE_FILE: ${{ steps.keystore.outputs.path }}
-          NIKCLI_ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          NIKCLI_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          NIKCLI_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          NIKCLI_ANDROID_VERSION_NAME: ${{ steps.version.outputs.name }}
-          NIKCLI_ANDROID_VERSION_CODE: ${{ steps.version.outputs.code }}
+          RAGU_ANDROID_STORE_FILE: ${{ steps.keystore.outputs.path }}
+          RAGU_ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          RAGU_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          RAGU_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          RAGU_ANDROID_VERSION_NAME: ${{ steps.version.outputs.name }}
+          RAGU_ANDROID_VERSION_CODE: ${{ steps.version.outputs.code }}
           EXPO_NO_TELEMETRY: "1"
         run: |
           set -euo pipefail
-          if [ -z "${NIKCLI_ANDROID_STORE_PASSWORD:-}" ] || [ -z "${NIKCLI_ANDROID_KEY_ALIAS:-}" ] || [ -z "${NIKCLI_ANDROID_KEY_PASSWORD:-}" ]; then
+          if [ -z "${RAGU_ANDROID_STORE_PASSWORD:-}" ] || [ -z "${RAGU_ANDROID_KEY_ALIAS:-}" ] || [ -z "${RAGU_ANDROID_KEY_PASSWORD:-}" ]; then
             echo "::error::ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD must all be set."
             exit 1
           fi
@@ -235,7 +235,7 @@ jobs:
             CERTS="$("$APKSIGNER" verify --print-certs --verbose "$APK")"
             echo "$CERTS"
             assert_not_debug "$CERTS" "$APK"
-            cp "$APK" "$STAGE/nikcli-${VERSION_NAME}-${VERSION_CODE}.apk"
+            cp "$APK" "$STAGE/ragu-${VERSION_NAME}-${VERSION_CODE}.apk"
           fi
 
           AAB="app/build/outputs/bundle/release/app-release.aab"
@@ -243,16 +243,16 @@ jobs:
             CERTS="$(keytool -printcert -jarfile "$AAB")"
             echo "$CERTS"
             assert_not_debug "$CERTS" "$AAB"
-            cp "$AAB" "$STAGE/nikcli-${VERSION_NAME}-${VERSION_CODE}.aab"
+            cp "$AAB" "$STAGE/ragu-${VERSION_NAME}-${VERSION_CODE}.aab"
           fi
 
           if [ -z "$(ls -A "$STAGE")" ]; then
             echo "::error::Gradle produced no release artifacts."
             exit 1
           fi
-          (cd "$STAGE" && sha256sum nikcli-* > checksums.txt)
+          (cd "$STAGE" && sha256sum ragu-* > checksums.txt)
           {
-            echo "### nikcli mobile ${VERSION_NAME} (${VERSION_CODE})"
+            echo "### ragu mobile ${VERSION_NAME} (${VERSION_CODE})"
             echo
             echo '```'
             cat "$STAGE/checksums.txt"
@@ -263,7 +263,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: nikcli-android-${{ steps.version.outputs.name }}-${{ steps.version.outputs.code }}
+          name: ragu-android-${{ steps.version.outputs.name }}-${{ steps.version.outputs.code }}
           path: ${{ steps.verify.outputs.stage }}
           if-no-files-found: error
           retention-days: 30

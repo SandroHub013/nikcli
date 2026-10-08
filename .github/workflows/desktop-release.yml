@@ -1,6 +1,6 @@
 name: desktop-release
 
-# Builds the Tauri desktop apps (Nikcli) for every platform with `bun run tauri
+# Builds the Tauri desktop apps (Ragu) for every platform with `bun run tauri
 # build` and uploads the installers to the GitHub release — mirroring the way the
 # CLI binaries are attached. When a Tauri signing key is configured it also builds
 # the auto-updater artifacts and publishes a Tauri `latest.json` manifest (the
@@ -15,7 +15,7 @@ on:
         required: true
         type: string
       cli_run_id:
-        description: "GitHub Actions run ID of the publish job that produced the prebuilt `nikcli-cli` artifact (used by `bun run prepare:sidecar` to download the sidecar instead of rebuilding it)"
+        description: "GitHub Actions run ID of the publish job that produced the prebuilt `ragu-cli` artifact (used by `bun run prepare:sidecar` to download the sidecar instead of rebuilding it)"
         required: false
         type: string
         default: ""
@@ -26,7 +26,7 @@ on:
         required: true
         type: string
       cli_run_id:
-        description: "GitHub Actions run ID of the publish job that produced the prebuilt `nikcli-cli` artifact"
+        description: "GitHub Actions run ID of the publish job that produced the prebuilt `ragu-cli` artifact"
         required: false
         type: string
         default: ""
@@ -128,8 +128,8 @@ jobs:
             echo "Unable to derive release version from tag '${{ inputs.tag }}'"
             exit 1
           fi
-          export NIKCLI_VERSION="$RELEASE_VERSION"
-          export VITE_NIKCLI_DESKTOP_VERSION="$RELEASE_VERSION"
+          export RAGU_VERSION="$RELEASE_VERSION"
+          export VITE_RAGU_DESKTOP_VERSION="$RELEASE_VERSION"
           bun ./scripts/predev.ts
           bun x tsc -b
           bun x vite build
@@ -141,10 +141,10 @@ jobs:
       #
       # Apple Developer signing/notarization is not configured. Instead the macOS
       # bundles are ad-hoc signed (tauri.conf `macOS.signingIdentity: "-"`) so the
-      # bundle seal — including the embedded `nikcli-cli` sidecar — is valid and
+      # bundle seal — including the embedded `ragu-cli` sidecar — is valid and
       # Apple Silicon no longer reports the app as "damaged". Downloaded builds are
       # still quarantined: users right-click → Open (or `xattr -dr
-      # com.apple.quarantine Nikcli.app`) once. Revisit with Developer ID +
+      # com.apple.quarantine Ragu.app`) once. Revisit with Developer ID +
       # notarization once we have a stable keychain secret.
       - name: Build desktop app
         id: build
@@ -178,7 +178,7 @@ jobs:
             echo "Unable to derive release version from tag '${{ inputs.tag }}'"
             exit 1
           fi
-          export NIKCLI_VERSION="$RELEASE_VERSION"
+          export RAGU_VERSION="$RELEASE_VERSION"
           CONFIG_ARGS=()
           if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
             echo "signing key present → prod config (updater artifacts)"
@@ -258,7 +258,7 @@ jobs:
           esac
           # macOS .app.tar.gz has no arch in its name → make it unique per arch.
           case "$base" in
-            *.app.tar.gz) newbase="Nikcli_${ARCH}.app.tar.gz";;
+            *.app.tar.gz) newbase="Ragu_${ARCH}.app.tar.gz";;
             *)            newbase="$base";;
           esac
           mkdir -p frag
@@ -300,5 +300,5 @@ jobs:
         env:
           UPDATER_FRAGMENTS_DIR: updater-fragments
           GH_REPO: ${{ github.repository }}
-          NIKCLI_VERSION: ${{ inputs.tag }}
+          RAGU_VERSION: ${{ inputs.tag }}
           GH_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}

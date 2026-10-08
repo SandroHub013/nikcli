@@ -22,14 +22,14 @@ const toc = [
 
 <DocsLayout
   title="A guided tour with real responses"
-  subtitle="Every request on this page was run against a real nikcli server, and every response is what actually came back."
-  description="A hands-on tour of the nikcli HTTP API with real captured responses: health, paths, projects, tools, sessions, files, search, the event feed and error shapes."
+  subtitle="Every request on this page was run against a real ragu server, and every response is what actually came back."
+  description="A hands-on tour of the ragu HTTP API with real captured responses: health, paths, projects, tools, sessions, files, search, the event feed and error shapes."
   toc={toc}
 >
   <section id="setup" class="doc-section">
     <h2>A throwaway server</h2>
     <p>
-      The fastest way to learn this API is to hit it. Point <code>NIKCLI_TEST_HOME</code> somewhere
+      The fastest way to learn this API is to hit it. Point <code>RAGU_TEST_HOME</code> somewhere
       disposable and the server keeps its sessions, config and database there instead of in your
       real one — so you can create and delete freely.
     </p>
@@ -39,8 +39,8 @@ printf '# demo\\n' > README.md
 git add -A && git commit -qm initial
 
 # an isolated home, so nothing here touches your real sessions or config
-NIKCLI_TEST_HOME=~/demo/.nikcli-home \\
-  nikcli serve --hostname 127.0.0.1 --port 4199`}</DocCode>
+RAGU_TEST_HOME=~/demo/.nikcli-home \\
+  ragu serve --hostname 127.0.0.1 --port 4199`}</DocCode>
     <DocCallout type="info" title="Everything below is copied from a real run">
       <p>
         The responses on this page were captured from exactly that setup. The only edit is
@@ -290,7 +290,7 @@ HTTP 200`}</DocCode>
     <DocCode language="html" title="response — HTTP 200">{`<!doctype html>
 <html lang="en">
   <head>
-    <title>NikCLI</title>
+    <title>Ragu Code</title>
     ...`}</DocCode>
     <DocCallout type="warn" title="An unknown path returns the web app, not a 404">
       <p>
@@ -339,7 +339,7 @@ say "errors"
 curl -s -w ' <- HTTP %{http_code}\\n' "$BASE/session/ses_nope?directory=$DIR"`}</DocCode>
     <DocCallout type="note" title="Then throw it away">
       <p>
-        Because the server ran with <code>NIKCLI_TEST_HOME</code> pointed at
+        Because the server ran with <code>RAGU_TEST_HOME</code> pointed at
         <code>~/demo/.nikcli-home</code>, deleting that directory removes every session and every
         row this tour created. Nothing touched your real state.
       </p>

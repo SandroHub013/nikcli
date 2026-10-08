@@ -303,7 +303,7 @@
   --cli-contrast: light-dark(#ffffff, #121212);
 }
 
-[data-agent-id="nikcli"] {
+[data-agent-id="ragu"] {
   --cli-color: light-dark(#2563eb, #3b82f6);
   --cli-tint: light-dark(rgba(37, 99, 235, 0.1), rgba(59, 130, 246, 0.15));
   --cli-border: light-dark(rgba(37, 99, 235, 0.3), rgba(59, 130, 246, 0.4));

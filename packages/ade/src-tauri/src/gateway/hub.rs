@@ -139,7 +139,7 @@ pub trait Env: Send + Sync {
     /// A diagnostic line. Called with metadata only: never a message's text or a token.
     fn log(&self, line: &str);
     /// Secret values besides the gateway tokens: the keys in the keychain,
-    /// nikcli's provider keys, the keys in ADE's environment.
+    /// ragu's provider keys, the keys in ADE's environment.
     fn secrets(&self) -> Vec<String>;
     fn now_ms(&self) -> u64;
     /// Whether the bot's file is still there: a bot is its file.

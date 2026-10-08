@@ -1,5 +1,5 @@
 /**
- * Waiting for a short CLI command's answer: the conversation `nikcli api
+ * Waiting for a short CLI command's answer: the conversation `ragu api
  * session.create` opens, the most recent one `session.list` finds.
  *
  * The command prints its answer and then stays up (it holds the CLI's
@@ -80,7 +80,7 @@ export const MINT_SLOW_MS = 15_000
 export const LIST_MS = 15_000
 /**
  * Whether a conversation is still there (`ResumeRecipe.exists`): about 2 s
- * either way (measured, nikcli 1.400). Past this the pane reopens the id as
+ * either way (measured, ragu 1.400). Past this the pane reopens the id as
  * it always did, so a slow CLI costs a restore no more than this.
  */
 export const EXISTS_MS = 8_000

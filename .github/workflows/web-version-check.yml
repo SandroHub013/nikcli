@@ -47,14 +47,14 @@ jobs:
 
           # 2) Latest *complete* release = CI finished, all artifacts published.
           #    Requires desktop for macOS (.dmg) + Windows (-setup.exe) +
-          #    Linux (.deb/.rpm) AND the CLI (nikcli-ai-*).
+          #    Linux (.deb/.rpm) AND the CLI (ragu-code-*).
           complete_tag=$(gh api "repos/$REPO/releases?per_page=20" --jq '
             map(select(
               (.draft | not) and
               (.assets | any(.name | test("\\.dmg$"))) and
               (.assets | any(.name | test("-setup\\.exe$"))) and
               (.assets | any(.name | test("\\.deb$|\\.rpm$"))) and
-              (.assets | any(.name | test("^nikcli-ai-")))
+              (.assets | any(.name | test("^ragu-code-")))
             )) | .[0].tag_name // ""')
           echo "Latest complete release: ${complete_tag:-none}"
 

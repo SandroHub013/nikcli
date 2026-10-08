@@ -2,10 +2,10 @@ import { json, action, useParams, useSubmission, createAsync, query } from "@sol
 import { createEffect, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { withActor } from "~/context/auth.withActor"
-import { Workspace } from "@nikcli-ai/console-core/workspace.js"
+import { Workspace } from "@ragu/console-core/workspace.js"
 import styles from "./settings-section.module.css"
-import { Database, eq } from "@nikcli-ai/console-core/drizzle/index.js"
-import { WorkspaceTable } from "@nikcli-ai/console-core/schema/workspace.sql.js"
+import { Database, eq } from "@ragu/console-core/drizzle/index.js"
+import { WorkspaceTable } from "@ragu/console-core/schema/workspace.sql.js"
 import { useI18n } from "~/context/i18n"
 import { formError, localizeError } from "~/lib/form-error"
 

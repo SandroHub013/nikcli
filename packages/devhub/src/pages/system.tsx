@@ -1,7 +1,7 @@
 import { For, Show, createSignal } from "solid-js"
 import { open } from "@tauri-apps/plugin-dialog"
-import { Button } from "@nikcli-ai/ui/button"
-import { Select } from "@nikcli-ai/ui/select"
+import { Button } from "@ragu/ui/button"
+import { Select } from "@ragu/ui/select"
 import { app, createPoll, toastError, toastOk } from "../lib/store"
 import { unwrap } from "../lib/api"
 import { native } from "../lib/native"
@@ -45,19 +45,19 @@ export function System() {
 
   const runCheck = async (c: (typeof CHECKS)[number]) => {
     try {
-      setCheckView(await runner.start({ kind: "check", label: c.label, cwd: "packages/nikcli", args: c.args }))
+      setCheckView(await runner.start({ kind: "check", label: c.label, cwd: "packages/ragu", args: c.args }))
     } catch (e) {
       toastError(`Could not run ${c.label}`, e)
     }
   }
   const pick = async () => {
-    const dir = await open({ directory: true, title: "Select the nikcli repository" })
+    const dir = await open({ directory: true, title: "Select the ragu repository" })
     if (typeof dir !== "string") return
     try {
       await app.setRepo(dir)
       toastOk("Repository set", dir)
     } catch (e) {
-      toastError("Not a nikcli repository", e)
+      toastError("Not a ragu repository", e)
     }
   }
   const dataTotal = () => (storage.data() ?? []).reduce((a, e) => a + e.size, 0)

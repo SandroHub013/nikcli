@@ -101,10 +101,10 @@ describe("dates", () => {
 
 describe("who hears about an answer", () => {
   const panes = [
-    { id: "a", title: "Dario", project: "nikcli", running: true },
+    { id: "a", title: "Dario", project: "ragu", running: true },
     { id: "b", title: "Master", project: "altro", running: true },
-    { id: "c", title: "master · S18", project: "nikcli", running: false },
-    { id: "d", title: "Master 2", project: "nikcli", running: true },
+    { id: "c", title: "master · S18", project: "ragu", running: false },
+    { id: "d", title: "Master 2", project: "ragu", running: true },
   ]
 
   test("only the chosen session, whatever it is called; nobody chosen is nobody", () => {
@@ -158,7 +158,7 @@ describe("who hears about an answer", () => {
     const closed = recipientOptions(panes, { state: "non attiva", id: "z", title: "Vecchia" })
     expect(closed.at(-1)).toEqual({ value: "z", label: "Vecchia (chiusa)", selected: true })
     expect(recipientOptions(panes, { state: "non scelta" }).map((option) => option.label)).toContain(
-      "master · S18 · nikcli (ferma)",
+      "master · S18 · ragu (ferma)",
     )
   })
 
@@ -259,8 +259,8 @@ describe("the outbox", () => {
 
   test("reopen notice goes to original recipient A even when current recipient changed to B (M1)", () => {
     const candidates: DeliveryCandidate[] = [
-      { id: "s-a", title: "Sessione A", project: "nikcli", running: true },
-      { id: "s-b", title: "Sessione B", project: "nikcli", running: true },
+      { id: "s-a", title: "Sessione A", project: "ragu", running: true },
+      { id: "s-b", title: "Sessione B", project: "ragu", running: true },
     ]
     // 1. Decision D1 was answered and delivered to Sessione A
     let outbox = enqueue([], { path, k: "D1", answeredAt: "2026-09-15T10:05:00Z", queuedAt: 1 })
@@ -291,8 +291,8 @@ describe("the outbox", () => {
 
     // 5. If Sessione A is closed, it falls back to current recipient (Sessione B)
     const candidatesWithoutA: DeliveryCandidate[] = [
-      { id: "s-a", title: "Sessione A", project: "nikcli", running: false },
-      { id: "s-b", title: "Sessione B", project: "nikcli", running: true },
+      { id: "s-a", title: "Sessione A", project: "ragu", running: false },
+      { id: "s-b", title: "Sessione B", project: "ragu", running: true },
     ]
     const fallbackTarget = resolveDeliveryTarget(reopenItem, candidatesWithoutA, recipientB)
     expect(fallbackTarget).toEqual({ id: "s-b", title: "Sessione B" })
@@ -300,8 +300,8 @@ describe("the outbox", () => {
 
   test("two sessions with the same title: the notice goes to the saved id, and an old entry still uses the title", () => {
     const candidates: DeliveryCandidate[] = [
-      { id: "s-1", title: "Master", project: "nikcli", running: true },
-      { id: "s-2", title: "Master", project: "nikcli", running: true },
+      { id: "s-1", title: "Master", project: "ragu", running: true },
+      { id: "s-2", title: "Master", project: "ragu", running: true },
     ]
     const current: RecipientStatus = { state: "pronta", id: "s-1", title: "Master" }
     const byId = resolveDeliveryTarget(
@@ -330,8 +330,8 @@ describe("the outbox", () => {
  */
 describe("answering with nobody to receive", () => {
   const sessions = [
-    { id: "p1", title: "Master", project: "nikcli", running: true },
-    { id: "p2", title: "fable", project: "nikcli", running: false },
+    { id: "p1", title: "Master", project: "ragu", running: true },
+    { id: "p2", title: "fable", project: "ragu", running: false },
   ]
   const decision: Decision = {
     k: "D30",

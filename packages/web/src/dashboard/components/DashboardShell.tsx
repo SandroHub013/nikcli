@@ -138,7 +138,7 @@ function ServerSetup() {
       setServerUrl(url)
       window.location.href = "/dashboard/login"
     } catch (err) {
-      setError(getErrorMessage(err) || "Cannot reach the nikcli server. Make sure it is running.")
+      setError(getErrorMessage(err) || "Cannot reach the ragu server. Make sure it is running.")
     } finally {
       setChecking(false)
     }
@@ -150,7 +150,7 @@ function ServerSetup() {
         <div className="flex flex-col items-start gap-3">
           <img
             src="/brand/wordmark-light.png"
-            alt="nikcli"
+            alt="ragu"
             width={158}
             height={52}
             loading="eager"
@@ -159,7 +159,7 @@ function ServerSetup() {
           />
           <img
             src="/brand/wordmark-dark.png"
-            alt="nikcli"
+            alt="ragu"
             width={158}
             height={52}
             loading="eager"
@@ -171,7 +171,7 @@ function ServerSetup() {
 
         <div className="glass-strong rounded-[var(--radius-card)] border p-6">
           <h2 className="mb-1 text-[15px] font-semibold text-terminal-text">Server URL</h2>
-          <p className="mb-4 text-[13px] text-terminal-muted">Enter the address of your running nikcli server</p>
+          <p className="mb-4 text-[13px] text-terminal-muted">Enter the address of your running ragu server</p>
           <form onSubmit={handleConnect} className="space-y-3">
             {error && (
               <div className="rounded-[var(--radius-md)] border border-terminal-error/30 bg-terminal-error/8 px-4 py-3 text-[13px] text-terminal-error">

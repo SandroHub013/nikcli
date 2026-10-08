@@ -221,7 +221,7 @@ function model<Input>(
 /**
  * `prepare`/`stream`/`generate` are the canonical inference seam in
  * `specs/effect-tui/11-provider-inference-streaming.md`: the production path
- * still runs through `nikcli/src/provider/provider.ts` and `session/llm/*` on
+ * still runs through `ragu/src/provider/provider.ts` and `session/llm/*` on
  * AI SDK streams and Promises, and that spec converges the two by making the
  * AI SDK route an adapter into `LLMEvent` rather than a second model. New
  * producer code targets these three methods; the bus/SSE wire shape does not
@@ -257,7 +257,7 @@ export interface GenerateMethod {
   <T extends Tools>(options: ToolRuntime.RunOptions<T>): Effect.Effect<LLMResponse, LLMError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@nikcli/LLMClient") {}
+export class Service extends Context.Service<Service, Interface>()("@ragu/LLMClient") {}
 
 const noRoute = (model: ModelRef) =>
   new LLMErrorClass({

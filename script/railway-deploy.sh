@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Deploy nikcli-mobile to Railway
+# Deploy ragu-mobile to Railway
 # Usage: ./script/railway-deploy.sh [--detach]
 #
 # Creates a minimal build context (~10MB) to avoid Railway upload timeouts,
@@ -9,13 +9,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-CTX="/tmp/nikcli-railway-ctx"
+CTX="/tmp/ragu-railway-ctx"
 DOCKERFILE="$ROOT/Dockerfile.serve"
 DETACH="${1:-}"
 # The Railway project has multiple services, so `railway up` cannot pick a
 # default. We must pass --service explicitly. Override with RAILWAY_SERVICE=...
 # (the CI workflow also sets this from a repo variable).
-SERVICE="${RAILWAY_SERVICE:-nikcli-mobile}"
+SERVICE="${RAILWAY_SERVICE:-ragu-mobile}"
 
 # Every path Dockerfile.serve COPYs out of the build context. `--from=` stages
 # copy between image layers, not from the context, so they are skipped. The last
@@ -109,13 +109,13 @@ done
 # bake the commit into the binary (see Dockerfile.serve). Written after the rsync loop, because
 # `rsync --delete` would remove it. `railway up --detach` only proves the upload was accepted, so
 # this is also what a later health probe has to match before the release can be called good.
-REVISION="${NIKCLI_REVISION:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)}"
+REVISION="${RAGU_REVISION:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)}"
 if [ -z "$REVISION" ]; then
-  echo "✗ Cannot determine the commit being deployed (not a git checkout and NIKCLI_REVISION unset)"
+  echo "✗ Cannot determine the commit being deployed (not a git checkout and RAGU_REVISION unset)"
   echo "  A build with no revision cannot be told apart from the instance it is meant to replace."
   exit 1
 fi
-printf '%s\n' "$REVISION" > "$CTX/packages/nikcli/.nikcli-revision"
+printf '%s\n' "$REVISION" > "$CTX/packages/ragu/.nikcli-revision"
 echo "→ Expected release identity: revision=$REVISION service=$SERVICE"
 
 # Preflight: a missing context path fails the Railway build minutes later with a

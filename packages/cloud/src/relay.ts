@@ -51,9 +51,9 @@ export class RelayRoom {
       return new Response("Expected websocket upgrade", { status: 426 })
     }
 
-    const userID = request.headers.get("x-nikcli-user-id") || "unknown"
-    const sessionID = request.headers.get("x-nikcli-session-id") || "unknown"
-    const deviceID = request.headers.get("x-nikcli-device-id") || undefined
+    const userID = request.headers.get("x-ragu-user-id") || "unknown"
+    const sessionID = request.headers.get("x-ragu-session-id") || "unknown"
+    const deviceID = request.headers.get("x-ragu-device-id") || undefined
 
     const pair = new WebSocketPair()
     const client = pair[0]

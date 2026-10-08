@@ -6,7 +6,7 @@
  * anything that lives in the component is untestable by construction.
  */
 
-import type { ConfigProviders, ProviderList, Agent } from "@nikcli-ai/sdk/client"
+import type { ConfigProviders, ProviderList, Agent } from "@ragu/sdk/client"
 import type { ModelRef } from "./store"
 import { t } from "../i18n"
 
@@ -28,7 +28,7 @@ export interface ChatModelChoice {
   readonly context?: number
   readonly label: string
   /**
-   * Its effort levels, nikcli's variants after the configuration's overrides:
+   * Its effort levels, ragu's variants after the configuration's overrides:
    * only from `/config/providers`. Empty when it has none; absent when the
    * catalog did not say (`provider.list`).
    */
@@ -77,7 +77,7 @@ export function parseModelRef(raw?: string | null): ModelRef | undefined {
  * model. `undefined` when the catalog is not known, and the server decides.
  *
  * Checked before a prompt because a model the server does not have ends the
- * turn without a word: nikcli 1.398 fails it with a `ModelNotFoundError` that
+ * turn without a word: ragu 1.398 fails it with a `ModelNotFoundError` that
  * has no message and publishes no error, so the answer simply never comes.
  * Models do leave the catalog: `nex-agi/nex-n2.5-mini:free` did.
  */
@@ -109,7 +109,7 @@ const LOCAL_PROVIDERS: ReadonlySet<string> = new Set(["ollama", "lmstudio"])
  * costs nothing, is free, and does not end in a colon.
  */
 const RELIABLE_COST_PROVIDERS: ReadonlySet<string> = new Set(["opencode"])
-/* ADE reads these providers' catalogs from nikcli: keep `CATALOG_PROVIDERS` in `lib.rs` the same. */
+/* ADE reads these providers' catalogs from ragu: keep `CATALOG_PROVIDERS` in `lib.rs` the same. */
 
 /**
  * Whether a cost of 0 from this provider can be believed, and therefore whether
@@ -412,7 +412,7 @@ export function rememberModel(storage: RecentStorage | undefined, root: string |
 
 /**
  * Resolves the default model choice.
- * Rule: The default is the model from nikcli config (GET /config, field model) IF it is free,
+ * Rule: The default is the model from ragu config (GET /config, field model) IF it is free,
  * otherwise the first free model, otherwise undefined (none: the Chat asks to choose and Send is disabled).
  */
 export function defaultModelChoice(
@@ -458,7 +458,7 @@ export function defaultModelChoice(
 
 /** Extracts selectable agents (excluding subagents and hidden ones). */
 /*
- * nikcli's agents by name, for the chip (model-picker review of chat-chip,
+ * ragu's agents by name, for the chip (model-picker review of chat-chip,
  * b): the chip showed the raw «build». A name not listed stays as it is.
  */
 const AGENT_NAMES: Readonly<

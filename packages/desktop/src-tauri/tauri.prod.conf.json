@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Nikcli",
+  "productName": "Ragu",
   "identifier": "ai.nikcli.desktop",
-  "mainBinaryName": "Nikcli",
+  "mainBinaryName": "Ragu",
   "version": "../package.json",
   "build": {
     "beforeDevCommand": "bun ./scripts/predev.ts && bun x vite",
@@ -34,7 +34,7 @@
     ],
     "active": true,
     "targets": ["deb", "rpm", "dmg", "nsis", "app"],
-    "externalBin": ["sidecars/nikcli-cli"],
+    "externalBin": ["sidecars/ragu-cli"],
     "linux": {
       "deb": {
         "files": {
@@ -62,7 +62,7 @@
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["nikcli"]
+        "schemes": ["ragu"]
       }
     },
     "updater": {

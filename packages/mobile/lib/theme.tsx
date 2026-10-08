@@ -117,7 +117,7 @@ import neon from "./themes/neon.json"
 import neonfusion from "./themes/neonfusion.json"
 import neutral from "./themes/neutral.json"
 import nightowl from "./themes/nightowl.json"
-import nikcli from "./themes/nikcli.json"
+import ragu from "./themes/nikcli.json"
 import nord from "./themes/nord.json"
 import nordic from "./themes/nordic.json"
 import nova from "./themes/nova.json"
@@ -324,7 +324,7 @@ export const THEMES: ThemeRegistry = {
   neonfusion,
   neutral,
   nightowl,
-  nikcli,
+  ragu,
   nord,
   nordic,
   nova,
@@ -417,7 +417,7 @@ export const THEMES: ThemeRegistry = {
 
 // Theme info for UI display
 export const THEME_LIST: ThemeInfo[] = [
-  { id: "nikcli", name: "Nikcli", author: "nikcli" },
+  { id: "ragu", name: "Ragu", author: "ragu" },
   { id: "nord", name: "Nord", author: "arcticicestudio" },
   { id: "dracula", name: "Dracula", author: "Dracula Theme" },
   { id: "dracula-official", name: "Dracula Official" },
@@ -936,7 +936,7 @@ type ThemeContextType = {
 const ThemeContext = createContext<ThemeContextType | null>(null)
 
 // Default theme
-const DEFAULT_THEME = "nikcli"
+const DEFAULT_THEME = "ragu"
 const DEFAULT_COLOR_SCHEME = "system"
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
@@ -979,7 +979,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // Resolve theme colors
   const theme = useMemo(() => {
-    const themeJson = THEMES[themeId] ?? THEMES.nikcli
+    const themeJson = THEMES[themeId] ?? THEMES.ragu
     return resolveThemeColors(themeJson, colorScheme)
   }, [themeId, colorScheme])
 

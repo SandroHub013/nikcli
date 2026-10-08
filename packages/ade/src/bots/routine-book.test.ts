@@ -30,8 +30,8 @@ const HOUR = 3_600_000
 
 const claudePlan: RoutineContext = { runner: "claude", model: "sonnet", account: { mode: "plan" } }
 const claudeKey: RoutineContext = { runner: "claude", model: "sonnet", account: { mode: "key", key: "lavoro" } }
-const nikcliFree: RoutineContext = { runner: "nikcli", model: "openrouter/nex-agi/nex-n2.5-mini:free" }
-const nikcliPaid: RoutineContext = { runner: "nikcli", model: "openrouter/openai/gpt-4o" }
+const raguFree: RoutineContext = { runner: "ragu", model: "openrouter/nex-agi/nex-n2.5-mini:free" }
+const raguPaid: RoutineContext = { runner: "ragu", model: "openrouter/openai/gpt-4o" }
 
 async function made(context: RoutineContext, fields: Partial<Routine> = {}): Promise<Routine> {
   const draft = {
@@ -72,10 +72,10 @@ describe("B11: the list decides where a routine may exist", () => {
 
   test("a paid model, or a key, without a spending cap is not saved", () => {
     const draft = { prompt: "x", every: { kind: "hours", hours: 2 } as const }
-    expect(routineProblem(draft, routineOffer("nikcli", undefined, nikcliPaid.model))).toContain("tetto di spesa")
+    expect(routineProblem(draft, routineOffer("ragu", undefined, raguPaid.model))).toContain("tetto di spesa")
     expect(routineProblem(draft, routineOffer("claude", claudeKey.account, "sonnet"))).toContain("tetto di spesa")
     const capped = { ...draft, spend: { perRunUsd: 0.05, perDayUsd: 0.2 } }
-    expect(routineProblem(capped, routineOffer("nikcli", undefined, nikcliPaid.model))).toBeUndefined()
+    expect(routineProblem(capped, routineOffer("ragu", undefined, raguPaid.model))).toBeUndefined()
     // Within the row's cap, never over it.
     expect(
       routineProblem(
@@ -83,44 +83,44 @@ describe("B11: the list decides where a routine may exist", () => {
         routineOffer("claude", claudeKey.account, "sonnet"),
       ),
     ).toContain("0.1")
-    expect(routineProblem(draft, routineOffer("nikcli", undefined, nikcliFree.model))).toBeUndefined()
-    expect(routineProblem({ ...draft, prompt: "  " }, routineOffer("nikcli", undefined, nikcliFree.model))).toBeTruthy()
+    expect(routineProblem(draft, routineOffer("ragu", undefined, raguFree.model))).toBeUndefined()
+    expect(routineProblem({ ...draft, prompt: "  " }, routineOffer("ragu", undefined, raguFree.model))).toBeTruthy()
   })
 })
 
 describe("B11 review, M2: ADE Test spends nothing", () => {
   test("in ADE Test only free models and subscriptions have routines", () => {
     const test = { testBuild: true }
-    expect(routineOffer("nikcli", undefined, "openrouter/mario:free", test).allowed).toBe(true)
+    expect(routineOffer("ragu", undefined, "openrouter/mario:free", test).allowed).toBe(true)
     expect(routineOffer("claude", { mode: "plan" }, "sonnet", test).allowed).toBe(true)
     expect(routineOffer("codex", { mode: "plan" }, "gpt-5.5", test).allowed).toBe(true)
-    const paid = routineOffer("nikcli", undefined, "openrouter/openai/gpt-4o", test)
+    const paid = routineOffer("ragu", undefined, "openrouter/openai/gpt-4o", test)
     expect(paid.allowed).toBe(false)
     expect(paid.reason).toContain("ADE Test")
     expect(routineOffer("claude", { mode: "key", key: "lavoro" }, "sonnet", test).allowed).toBe(false)
     // Outside ADE Test the same rows stay open.
-    expect(routineOffer("nikcli", undefined, "openrouter/openai/gpt-4o", { testBuild: false }).allowed).toBe(true)
+    expect(routineOffer("ragu", undefined, "openrouter/openai/gpt-4o", { testBuild: false }).allowed).toBe(true)
   })
 
   test("free is the catalog's word, not only the suffix's", () => {
     const test = { testBuild: true }
-    expect(routineOffer("nikcli", undefined, "opencode/mario-free", { ...test, free: true })).toMatchObject({
+    expect(routineOffer("ragu", undefined, "opencode/mario-free", { ...test, free: true })).toMatchObject({
       allowed: true,
       mode: "free",
     })
-    expect(routineOffer("nikcli", undefined, "opencode/mario-free", test).allowed).toBe(false)
+    expect(routineOffer("ragu", undefined, "opencode/mario-free", test).allowed).toBe(false)
   })
 
   test("a free run is capped at nothing, and one that cost something suspends the routine", async () => {
-    const routine = await made(nikcliFree)
+    const routine = await made(raguFree)
     const verdict = checkRoutine(
       addRoutine(EMPTY_BOOK, routine),
       routine,
-      { context: nikcliFree, consent: routine.consent, busy: false },
+      { context: raguFree, consent: routine.consent, busy: false },
       at(9),
     )
     expect(verdict.kind === "run" && verdict.run.maxCostUsd).toBe(0)
-    const key = planKey("nikcli", "free")
+    const key = planKey("ragu", "free")
     let book = recordStart(addRoutine(EMPTY_BOOK, routine), routine, key, 0, at(9))
     book = recordResult(book, routine, key, { status: "done", costUsd: 0 }, at(9, 1))
     expect(book.logs[routine.id]?.suspended).toBeUndefined()
@@ -131,12 +131,12 @@ describe("B11 review, M2: ADE Test spends nothing", () => {
 })
 
 describe("B11 review: routines only read", () => {
-  test("the consent says so on every runner, nikcli included", () => {
+  test("the consent says so on every runner, ragu included", () => {
     expect(routineReadOnly("claude")).toBe(true)
     expect(routineReadOnly("codex")).toBe(true)
-    expect(routineReadOnly("nikcli")).toBe(true)
+    expect(routineReadOnly("ragu")).toBe(true)
     expect(t("bots.routine.consentReadOnly", "Claude Code", "abbonamento", "sonnet")).toContain("sola lettura")
-    expect(t("bots.routine.consent", "nikcli", "modello gratuito", "x:free")).not.toContain("sola lettura")
+    expect(t("bots.routine.consent", "ragu", "modello gratuito", "x:free")).not.toContain("sola lettura")
   })
 })
 
@@ -274,31 +274,31 @@ describe("B11: the caps, checked before every run", () => {
     })
   })
 
-  test("a paid nikcli routine saved without a cap never runs", async () => {
-    const routine = await made(nikcliPaid)
+  test("a paid ragu routine saved without a cap never runs", async () => {
+    const routine = await made(raguPaid)
     const verdict = checkRoutine(
       addRoutine(EMPTY_BOOK, routine),
       routine,
-      { context: nikcliPaid, consent: routine.consent, busy: false },
+      { context: raguPaid, consent: routine.consent, busy: false },
       at(10),
     )
     expect(verdict.kind === "suspend" && verdict.reason).toContain("tetto di spesa")
   })
 
   test("with ADE closed for 10 hours, one run on opening, and it says what was missed", async () => {
-    const routine = await made(nikcliFree)
-    const key = planKey("nikcli", "free")
+    const routine = await made(raguFree)
+    const key = planKey("ragu", "free")
     let book = recordStart(addRoutine(EMPTY_BOOK, routine), routine, key, 0, at(8))
     expect(dueAt(routine, book.logs[routine.id], at(18))).toEqual({ due: true, missed: 9 })
-    const verdict = checkRoutine(book, routine, { context: nikcliFree, consent: routine.consent, busy: false }, at(18))
+    const verdict = checkRoutine(book, routine, { context: raguFree, consent: routine.consent, busy: false }, at(18))
     expect(verdict).toMatchObject({ kind: "run", missed: 9 })
     book = recordStart(book, routine, key, 9, at(18))
     expect(book.logs[routine.id]?.note).toContain("9 esecuzioni saltate")
     expect(
-      checkRoutine(book, routine, { context: nikcliFree, consent: routine.consent, busy: false }, at(18, 1)).kind,
+      checkRoutine(book, routine, { context: raguFree, consent: routine.consent, busy: false }, at(18, 1)).kind,
     ).toBe("wait")
     // A daily routine closed over three days: one run, two missed.
-    const daily = await made(nikcliFree, { id: "d", every: { kind: "daily", at: "07:30" }, createdAt: at(6) })
+    const daily = await made(raguFree, { id: "d", every: { kind: "daily", at: "07:30" }, createdAt: at(6) })
     expect(dueAt(daily, undefined, at(12, 0, 28))).toEqual({ due: true, missed: 2 })
   })
 
@@ -325,8 +325,8 @@ describe("B11: the scheduler", () => {
   }
 
   test("one run at a time, its cost written down, and a check that fails suspends", async () => {
-    const a = await made(nikcliFree, { id: "a", bot: "A" })
-    const b = await made(nikcliFree, { id: "b", bot: "B" })
+    const a = await made(raguFree, { id: "a", bot: "A" })
+    const b = await made(raguFree, { id: "b", bot: "B" })
     const store = memoryRoutineStore(addRoutine(addRoutine(EMPTY_BOOK, a), b))
     let clock = at(10)
     const started: string[] = []
@@ -335,9 +335,9 @@ describe("B11: the scheduler", () => {
     const scheduler = createRoutineScheduler({
       store,
       now: () => clock,
-      botOf: async () => nikcliFree,
+      botOf: async () => raguFree,
       prepare: async (routine) =>
-        refuse === routine.id ? { ok: false, problem: "progetto non fidato" } : { ok: true, context: nikcliFree },
+        refuse === routine.id ? { ok: false, problem: "progetto non fidato" } : { ok: true, context: raguFree },
       start: (routine) => {
         started.push(routine.id)
         const fake = fakeTurn()
@@ -365,7 +365,7 @@ describe("B11: the scheduler", () => {
       store,
       now: () => clock,
       botOf: async () => undefined,
-      prepare: async () => ({ ok: true, context: nikcliFree }),
+      prepare: async () => ({ ok: true, context: raguFree }),
       start: () => undefined,
       running: () => false,
     })
@@ -374,15 +374,15 @@ describe("B11: the scheduler", () => {
   })
 
   test("the consent is asked again of the file prepare read, not the one botOf saw (review, BASSO 2)", async () => {
-    const routine = await made(nikcliFree)
+    const routine = await made(raguFree)
     const store = memoryRoutineStore(addRoutine(EMPTY_BOOK, routine))
     const started: string[] = []
     const scheduler = createRoutineScheduler({
       store,
       now: () => at(10),
-      botOf: async () => nikcliFree,
+      botOf: async () => raguFree,
       // Between the two reads the file was changed to a paid model.
-      prepare: async () => ({ ok: true, context: nikcliPaid }),
+      prepare: async () => ({ ok: true, context: raguPaid }),
       start: (routine) => {
         started.push(routine.id)
         return fakeTurn().turn

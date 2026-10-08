@@ -4,12 +4,12 @@
 | ------ | ------------------------------------------------------------------------------------------------- |
 | Status | **Implemented** 2026-08-14 (was roadmap S2)                                                       |
 | Scope  | `src/cli/handlers/serve.ts`, `src/session/prompt-state.ts`, `src/session/repo.ts`, `session_info` |
-| Buys   | `nikcli upgrade` and a server redeploy stop silently killing turns                                |
+| Buys   | `ragu upgrade` and a server redeploy stop silently killing turns                                |
 | Tests  | `test/session/restart-continuation.test.ts`                                                       |
 
 ## Summary
 
-When a nikcli server shuts down gracefully, the sessions it was actively running should continue automatically the next time a server starts for the same data directory.
+When a ragu server shuts down gracefully, the sessions it was actively running should continue automatically the next time a server starts for the same data directory.
 
 The mechanism is one private nullable timestamp on the session row: `time_suspended`. The shutting-down server suspends its active sessions before interrupting them; the next server atomically consumes each suspension and schedules at most one resume.
 
@@ -72,7 +72,7 @@ That last point is what makes this safe with no new execution semantics. `loop` 
 ## What Is Explicitly Not Covered
 
 - **Hard crashes.** A `SIGKILL` or a panic never writes `time_suspended`, so nothing resumes. Fixing that needs provider-dispatch ambiguity, tool idempotency, and retry budgets designed together.
-- **In-flight provider requests.** A request dispatched before shutdown may or may not have been billed and may or may not have produced output nikcli never saw. Resume starts a new step from durable history; it does not attempt to recover that request.
+- **In-flight provider requests.** A request dispatched before shutdown may or may not have been billed and may or may not have produced output ragu never saw. Resume starts a new step from durable history; it does not attempt to recover that request.
 - **Non-idempotent tools.** A tool interrupted mid-side-effect is reconciled as `[Tool execution was interrupted]` at request assembly. Resume does not replay it.
 - **Clustering.** Ownership stays process-local. Multiple servers on one data directory are guarded only by the atomic consume; real placement and fencing is a separate design.
 

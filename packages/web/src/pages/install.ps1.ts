@@ -31,7 +31,7 @@ export const GET: APIRoute = async ({ url, request }) => {
     // `irm ... | iex` cannot pass parameters, so ?version= is baked into the
     // env var the script already reads.
     if (version) {
-      script = `$env:NIKCLI_VERSION = ${JSON.stringify(version)}\n${script}`
+      script = `$env:RAGU_VERSION = ${JSON.stringify(version)}\n${script}`
     }
 
     const headers = corsHeaders(request)

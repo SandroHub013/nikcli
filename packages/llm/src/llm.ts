@@ -44,7 +44,7 @@ export type RequestInput<M extends ModelRef = ModelRef> = Omit<
   /**
    * Checked against the options the selected model declares. Models built by provider helpers
    * carry their own option shape; anything else falls back to the open `ProviderOptions` record,
-   * so this never blocks passing a knob nikcli does not know about.
+   * so this never blocks passing a knob ragu does not know about.
    */
   readonly providerOptions?: ProviderOptionsOf<M>
   readonly http?: HttpOptions.Input

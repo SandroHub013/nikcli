@@ -1,7 +1,7 @@
 import { isTestIdentifier } from "./build-identity"
 
 /**
- * The OpenRouter key for the voice, taken from nikcli's `auth.json` when the
+ * The OpenRouter key for the voice, taken from ragu's `auth.json` when the
  * keychain has none. `save` writes it into the keychain, as the «OpenRouter»
  * entry of the Chiavi API page (S6), never into browser storage.
  *
@@ -22,7 +22,7 @@ export interface KeySyncDeps {
 
 export type KeySyncOutcome = "copied" | "removed" | "test-identity" | "not-found"
 
-/** Where nikcli keeps `auth.json`, on each system, in the spellings the host may need. */
+/** Where ragu keeps `auth.json`, on each system, in the spellings the host may need. */
 export function authCandidates(home: string): string[] {
   const normalizedHome = home.replace(/\\/g, "/")
   return [
@@ -32,7 +32,7 @@ export function authCandidates(home: string): string[] {
     `${normalizedHome}/AppData/Roaming/nikcli/auth.json`,
     `${home}/AppData/Roaming/nikcli/auth.json`,
     `${home}\\AppData\\Roaming\\nikcli\\auth.json`,
-    // macOS and Linux: nikcli's data folder is `$XDG_DATA_HOME/nikcli`, `~/.local/share/nikcli` by default (`packages/util/src/global.ts`);
+    // macOS and Linux: ragu's data folder is `$XDG_DATA_HOME/ragu`, `~/.local/share/nikcli` by default (`packages/util/src/global.ts`);
     // without this the copy never found the file there (full review 2026-10-06, sessions). The two below it are older guesses.
     `${normalizedHome}/.local/share/nikcli/auth.json`,
     `${normalizedHome}/.config/nikcli/auth.json`,

@@ -1,15 +1,15 @@
 /**
- * A nikcli bot's effort, checked against its model's variants.
+ * A ragu bot's effort, checked against its model's variants.
  *
- * nikcli's efforts are the model's variants, and their names are the model's
+ * ragu's efforts are the model's variants, and their names are the model's
  * own: low, medium, high, max, or none at all. A name the model does not have
- * is dropped by nikcli without a word (`session/llm.ts`), and kept on the
+ * is dropped by ragu without a word (`session/llm.ts`), and kept on the
  * message as if it had been used: a bot saved with «high» on a model without
  * it ran at the default, and nobody knew (chat-bot-facili, pezzo 0). The
  * variants are the ones `GET /config/providers` gives, after the
  * configuration's overrides, and the check happens before the turn is sent.
  */
-import type { ConfigProviders } from "@nikcli-ai/sdk/client"
+import type { ConfigProviders } from "@ragu/sdk/client"
 
 /**
  * The variants of `providerID/modelID` in the server's configured catalog;
@@ -60,20 +60,20 @@ export interface EffortChoices {
 
 /**
  * The efforts the form offers. Claude Code's and Codex's are their flags'
- * fixed values, and a value they do not list is theirs to judge. A nikcli
+ * fixed values, and a value they do not list is theirs to judge. A ragu
  * bot's are its model's variants and nothing else: a fixed list offered
  * levels a model did not have (`minimal` to `max` for models whose variants
  * are `none` and `thinking`). While the variants are not known (no model
  * pinned, the catalog unread) only the default is offered.
  */
 export function effortChoices(input: {
-  readonly nikcli: boolean
+  readonly ragu: boolean
   readonly fixed: readonly string[]
   readonly variants: readonly string[] | undefined
   readonly saved: string
 }): EffortChoices {
   const saved = input.saved.trim()
-  if (!input.nikcli) {
+  if (!input.ragu) {
     return {
       options: input.fixed,
       ...(saved && !input.fixed.includes(saved) ? { kept: saved } : {}),

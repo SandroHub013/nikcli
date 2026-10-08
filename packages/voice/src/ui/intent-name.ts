@@ -5,7 +5,7 @@
  * the page shows this name and puts the id beside it, small.
  */
 
-import { t, type MessageKey } from "@nikcli-ai/ade/i18n"
+import { t, type MessageKey } from "@ragu/ade/i18n"
 
 export function intentName(intent: string): string {
   return t(`vui.intent.${intent}` as MessageKey & `vui.intent.${string}`)

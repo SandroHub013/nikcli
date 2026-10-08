@@ -1,6 +1,6 @@
-# @nikcli-ai/plugin-gadgets
+# @ragu/plugin-gadgets
 
-The nikcli side of [gadgets](../gadget/README.md): a plugin that adds a bridge devices pair with, a `gadget` tool for the
+The ragu side of [gadgets](../gadget/README.md): a plugin that adds a bridge devices pair with, a `gadget` tool for the
 agent, and `/gadget` commands in the TUI.
 
 ## Enable it
@@ -8,24 +8,24 @@ agent, and `/gadget` commands in the TUI.
 In `nikcli.json` (server) and `tui.json` (terminal commands):
 
 ```json
-{ "plugin": ["@nikcli-ai/plugin-gadgets"] }
+{ "plugin": ["@ragu/plugin-gadgets"] }
 ```
 
 or drop the package's `src/index.ts` into `~/.config/nikcli/plugins/gadgets/` as a folder plugin.
 
 | Variable                    | Default                                      | What                                              |
 | --------------------------- | -------------------------------------------- | ------------------------------------------------- |
-| `NIKCLI_GADGET_PORT`        | `4097`                                       | Bridge port. `0` picks a free one.                |
-| `NIKCLI_GADGET_HOST`        | `0.0.0.0`                                    | Bind address. Devices are on the LAN.             |
-| `NIKCLI_GADGET`             | on                                           | `0` registers nothing.                            |
-| `NIKCLI_GADGET_BRIDGE_FILE` | `~/.local/share/nikcli/gadgets/devices.json` | Paired devices (tokens stored hashed, mode 0600). |
+| `RAGU_GADGET_PORT`        | `4097`                                       | Bridge port. `0` picks a free one.                |
+| `RAGU_GADGET_HOST`        | `0.0.0.0`                                    | Bind address. Devices are on the LAN.             |
+| `RAGU_GADGET`             | on                                           | `0` registers nothing.                            |
+| `RAGU_GADGET_BRIDGE_FILE` | `~/.local/share/nikcli/gadgets/devices.json` | Paired devices (tokens stored hashed, mode 0600). |
 
 `nikcli.json` lists server plugins as bare specifiers, so this is the way to configure the server half; the TUI half takes
 `url` in `tui.json` if the bridge is not on `http://127.0.0.1:4097`.
 
 ## What it does
 
-- **Bridge.** A listener of its own (not nikcli's server): `POST /pair` with the code, then token-authenticated
+- **Bridge.** A listener of its own (not ragu's server): `POST /pair` with the code, then token-authenticated
   `PUT /devices/:id/hello`, an SSE feed at `GET /devices/:id/commands`, `POST …/result`, `…/event`, `…/message`. One
   command in flight per device, eight waiting behind it, a deadline from the moment a command is sent, a 15 s ping, a feed
   evicted when it is 256 frames behind. `/admin/*` (list, pair, health, message, revoke) answers loopback callers without a proxy header only, refuses what a browser

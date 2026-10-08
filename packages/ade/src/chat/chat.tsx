@@ -1,5 +1,5 @@
 /**
- * The chat section: a conversation with nikcli in the open project (C4).
+ * The chat section: a conversation with ragu in the open project (C4).
  *
  * Everything comes from the chat's store (`store.ts`): the folder's sessions,
  * their messages as the server's events build them, the permission requests
@@ -15,7 +15,7 @@
 
 import { createEffect, createMemo, createSignal, on, For, Show, onMount } from "solid-js"
 import { t } from "../i18n"
-import type { Agent, ConfigProviders } from "@nikcli-ai/sdk/client"
+import type { Agent, ConfigProviders } from "@ragu/sdk/client"
 import type { ChatCatalog } from "./connection"
 import {
   agentDisplayName,
@@ -275,7 +275,7 @@ export function Chat(props: ChatProps) {
     const id = open()
     return id ? (store.state.data.question[id] ?? []) : []
   }
-  // The provider failed mid-answer and nikcli tries again: said, rather than a caret that just waits.
+  // The provider failed mid-answer and ragu tries again: said, rather than a caret that just waits.
   const retrying = () => {
     const id = open()
     return id ? retryNotice(store.state.data.session_status[id]) : undefined

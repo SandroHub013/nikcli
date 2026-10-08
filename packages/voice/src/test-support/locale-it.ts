@@ -3,6 +3,6 @@
  * here and not read from the machine that runs the tests (Bun reports the OS's: «en-US» on most CI runners).
  * A test that wants English says so with `resetLocaleForTests("en")` and puts it back.
  */
-import { resetLocaleForTests } from "@nikcli-ai/ade/i18n"
+import { resetLocaleForTests } from "@ragu/ade/i18n"
 
 resetLocaleForTests("it")

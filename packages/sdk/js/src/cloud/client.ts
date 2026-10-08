@@ -34,7 +34,7 @@ export interface RelaySocketOptions {
   webSocketFactory?: RelaySocketFactory
 }
 
-export class NikcliCloudClient {
+export class RaguCloudClient {
   private readonly baseUrl: URL
   private readonly customFetch: typeof fetch
   private readonly getToken: () => Promise<string>
@@ -181,6 +181,6 @@ export class NikcliCloudClient {
   }
 }
 
-export function createNikcliCloudClient(config: CloudClientConfig): NikcliCloudClient {
-  return new NikcliCloudClient(config)
+export function createRaguCloudClient(config: CloudClientConfig): RaguCloudClient {
+  return new RaguCloudClient(config)
 }

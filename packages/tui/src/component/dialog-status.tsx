@@ -3,7 +3,7 @@ import { DialogHeader } from "@tui/ui/dialog"
 import { useTheme } from "../context/theme"
 import { useSync } from "@tui/context/sync"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
-import { VERSION } from "@nikcli-ai/util/version"
+import { VERSION } from "@ragu/util/version"
 
 export type DialogStatusProps = {}
 
@@ -42,7 +42,7 @@ export function DialogStatus() {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <DialogHeader title="Status" />
-      <text fg={theme.foreground.muted}>Nikcli v{VERSION}</text>
+      <text fg={theme.foreground.muted}>Ragu v{VERSION}</text>
       <text fg={theme.foreground.muted}>a fork of opencode — github.com/anomalyco/opencode</text>
       <Show
         when={Object.keys(sync.data.mcp).length > 0}
@@ -77,7 +77,7 @@ export function DialogStatus() {
                       <Match when={item.status === "failed" && item}>{(val) => val().error}</Match>
                       <Match when={item.status === "disabled"}>Disabled in configuration</Match>
                       <Match when={(item.status as string) === "needs_auth"}>
-                        Needs authentication (run: nikcli mcp auth {key})
+                        Needs authentication (run: ragu mcp auth {key})
                       </Match>
                       <Match when={(item.status as string) === "needs_client_registration" && item}>
                         {(val) => (val() as { error: string }).error}

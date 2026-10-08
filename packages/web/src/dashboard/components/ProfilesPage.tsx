@@ -83,7 +83,7 @@ function ProfilesPageInner() {
             Manage configuration profiles
           </h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-terminal-muted">
-            Save and switch isolated nikcli configurations, including MCP servers, providers, plugins, and model
+            Save and switch isolated ragu configurations, including MCP servers, providers, plugins, and model
             defaults.
           </p>
         </div>

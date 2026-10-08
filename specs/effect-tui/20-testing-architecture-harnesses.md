@@ -5,11 +5,11 @@ Owner: test infrastructure, TUI/E2E, Effect, server, and SDK maintainers. [Roadm
 
 ## Problem and Evidence
 
-Evidence B38, B39, B40 in the [register](../README.md): the repository ships 418 test files under `packages/nikcli/test/`,
-plus TUI PTY harnesses (`packages/nikcli/test/tui/`), Effect unit tests (`packages/nikcli/test/effect/`), server HTTP tests
-(`packages/nikcli/test/server/`), and isolated-database helpers (`packages/nikcli/test/helpers/sqlite.ts`,
-`packages/nikcli/test/helpers/tool-context.ts`). `script/test-ci.ts` shards the suite across short-lived bun processes
-with `--isolate`, and `packages/nikcli/package.json` already exposes `test:unit`, `test:integration`, and `test:e2e`.
+Evidence B38, B39, B40 in the [register](../README.md): the repository ships 418 test files under `packages/ragu/test/`,
+plus TUI PTY harnesses (`packages/ragu/test/tui/`), Effect unit tests (`packages/ragu/test/effect/`), server HTTP tests
+(`packages/ragu/test/server/`), and isolated-database helpers (`packages/ragu/test/helpers/sqlite.ts`,
+`packages/ragu/test/helpers/tool-context.ts`). `script/test-ci.ts` shards the suite across short-lived bun processes
+with `--isolate`, and `packages/ragu/package.json` already exposes `test:unit`, `test:integration`, and `test:e2e`.
 Those three scripts split by path and filename pattern (`test:integration` is `test/workspace test/worktree
 test/session test/database`; `test:e2e` is `test/tui`; `test:unit` is everything that is not a benchmark or an
 `*integration*` file), not by the resource-access definition below — so a unit-labelled test may still touch the
@@ -22,7 +22,7 @@ them enforceable and discoverable.
 
 Define the canonical testing architecture: harness layers, fixture strategy, isolated database usage, TUI/OpenTUI
 driver, Effect unit patterns, integration boundaries, and CI workflow. Preserve the existing helpers and the
-`bun run test:ci` sharded harness. Do not add the full nikcli suite back to CI, replace `bun test`, or weaken existing
+`bun run test:ci` sharded harness. Do not add the full ragu suite back to CI, replace `bun test`, or weaken existing
 assertions to satisfy the new patterns.
 
 ## Design and Requirements
@@ -33,7 +33,7 @@ assertions to satisfy the new patterns.
    that do not match their layer. Each layer has its own harness and its own CI workflow.
    Unit tests are fast and run on every change; integration tests run on demand and on PR; e2e tests run on PR and on
    release-sized integration.
-2. Unit tests use `bun test` and Effect test helpers from `packages/nikcli/test/helpers/`. Pure reducers, schemas, and
+2. Unit tests use `bun test` and Effect test helpers from `packages/ragu/test/helpers/`. Pure reducers, schemas, and
    validation logic live in this layer. A unit test must not touch the network, the database, the filesystem (beyond
    `tmp`), the bus, or the renderer. A test that needs those resources moves to integration.
 3. Integration tests use `bun test` with the existing isolated-database helper (`withIsolatedDatabase`) and the
@@ -41,7 +41,7 @@ assertions to satisfy the new patterns.
    listener; SDK tests use the generated Promise client with `throwOnError`. A test that uses `Bun.spawn` for an
    external process must capture and reap the child.
 4. TUI tests use the OpenTUI test renderer (`testRender` from `@opentui/core/testing`) for component-level behavior
-   and a real PTY harness for end-to-end keyboard/focus/streaming. `packages/nikcli/script/tui-startup.ts` is the
+   and a real PTY harness for end-to-end keyboard/focus/streaming. `packages/ragu/script/tui-startup.ts` is the
    canonical startup probe; `packages/tui/script/standalone-smoke.ts` is the canonical standalone host check. The PTY
    harness drives real key events (escape, paste, ctrl+c, kitty sequences) and asserts terminal output, not source
    structure.
@@ -59,7 +59,7 @@ any`. A test that reaches for `as any` is a code smell flagged in review.
      `prettier` config) plus a spec link/reference check. There is no repo-wide `check` script; do not invent one.
    - Implementation PRs run `bun run typecheck` (once at the end), the affected package's `bun test`, the affected
      server tests, and the affected TUI tests. `bun run test:ci` is run locally for full-suite confirmation; CI does
-     not run the full nikcli suite.
+     not run the full ragu suite.
    - Release-sized integration runs `bun run test:ci` plus the compiled build/smoke checks. The Railway/Docker guards
      stay wired into the validation step.
    - Never weaken existing assertions to pass; never quarantine tests except by an explicit, separately-scoped
@@ -69,7 +69,7 @@ any`. A test that reaches for `as any` is a code smell flagged in review.
    timestamps use a frozen clock. A test that "happens to pass" because of the current time is a defect.
 10. Coverage: maintain 70%+ line coverage on changed code paths; add coverage for newly-introduced domain code. Coverage
     is informational; it is not a gate. A test that exists only to bump coverage is removed in review.
-11. Herdr-related tests (where applicable) live in `packages/nikcli/test/plugin/herdr/`; they use the existing isolated
+11. Herdr-related tests (where applicable) live in `packages/ragu/test/plugin/herdr/`; they use the existing isolated
     harness. The `herdr` bridge is integration-level; unit tests of the bridge protocol live alongside the bridge code.
 12. Test isolation: each test gets a unique working directory and a unique database file under `tmp/`. Cleanup is
     best-effort, but the harness records the leftover paths on failure so the user can inspect them. `bun test
@@ -84,7 +84,7 @@ Integration (bun test, withIsolatedDatabase / Server.fetch / SDK)
   - HTTP routes, server Effect services, tool execution, repository tests
 E2E (TUI PTY + browser harness)
   - OpenTUI test renderer, real key events, terminal output
-  - Compiled binary smoke (packages/tui smoke, packages/nikcli smoke)
+  - Compiled binary smoke (packages/tui smoke, packages/ragu smoke)
 CI (script/test-ci.ts sharded)
   - bun run typecheck (one final pass per slice)
   - bun test (affected packages only in CI; bun run test:ci locally)
@@ -108,10 +108,10 @@ than one release is either removed or made runnable.
 - A flake under load is replaced with a barrier; no test relies on a fixed `sleep` to win a race.
 - Generated HttpApi clients are exercised by integration tests, not just typecheck; one round-trip per endpoint group.
 - TUI e2e tests assert terminal output via the PTY harness, not via source-text inspection.
-- `bun run typecheck` runs once at the end of a slice; CI does not run the full nikcli suite.
-- Extend `packages/nikcli/test/helpers/`, `packages/nikcli/test/tui/`, `packages/nikcli/test/server/`, and any
+- `bun run typecheck` runs once at the end of a slice; CI does not run the full ragu suite.
+- Extend `packages/ragu/test/helpers/`, `packages/ragu/test/tui/`, `packages/ragu/test/server/`, and any
   package's existing test directory; add harnesses only when the existing ones cannot express the required scenario.
-- From `packages/nikcli`: `bun test test/helpers/ test/tui/ test/server/`. Locally: `bun run test:ci` for a full-suite
+- From `packages/ragu`: `bun test test/helpers/ test/tui/ test/server/`. Locally: `bun run test:ci` for a full-suite
   confirmation. One final root `bun run typecheck` after the slice.
 - Meet EOT-01 budgets: full unit-test run under 60 s, integration under 5 min, e2e under 10 min on the reference
   machine; `bun run test:ci` sharded run stays under the documented time cap with `--isolate`.
@@ -130,7 +130,7 @@ Three concrete rules pin what a Slice-1 EOT-20 delivery looks like in this codeb
 they codify the helpers and patterns that already exist so a code reviewer does not have to re-derive them every PR.
 
 1. **No `sleep` for racing.** When a test needs to coordinate with concurrent work, it uses the barrier helpers in
-   `packages/nikcli/test/helpers/barrier.ts` (`barrier(count)`, `deferred()`, `withTimeout`, `waitFor`). A test that
+   `packages/ragu/test/helpers/barrier.ts` (`barrier(count)`, `deferred()`, `withTimeout`, `waitFor`). A test that
    uses `await new Promise(r => setTimeout(r, N))` to wait for an event is a test that loses under CI load. The fix is
    to subscribe to the event itself (`bus.on`, `fiber.addObserver`, a deferred resolve), not to wait longer.
 2. **Isolated database per test.** Tests that touch `nikcli.db` use `withIsolatedDatabase` (`test/helpers/sqlite.ts`) or
@@ -160,7 +160,7 @@ they codify the helpers and patterns that already exist so a code reviewer does 
    synthetic tree, in both directions. A test that re-declares the script's own regexes and asserts against the copies
    passes whatever the script does.
 
-6. **TUI tests live in `packages/nikcli/test/tui/`, not in `packages/tui`.** 55 files, and the
+6. **TUI tests live in `packages/ragu/test/tui/`, not in `packages/tui`.** 55 files, and the
    evidence table in `ROADMAP.md` names that directory for TUI work. A second test directory was
    created in `packages/tui` during the EOT-03 audit on the belief that none existed, duplicating
    coverage that was already there; it has been removed. Before concluding a surface is untested,
@@ -176,6 +176,6 @@ they codify the helpers and patterns that already exist so a code reviewer does 
    third time in this catalogue. Assemble such a literal from parts — nothing asserting on
    source should spell an import statement out in one piece.
 
-The lifecycle counters from EOT-01 (`packages/nikcli/src/effect/lifecycle-counters.ts`) are observable from any test via
+The lifecycle counters from EOT-01 (`packages/ragu/src/effect/lifecycle-counters.ts`) are observable from any test via
 `snapshot()` so a test can assert `scope.completed === 1` or `runtime.bridge.failure === 0` after a behavior assertion
 without having to instrument the production code. Use this when the assertion would otherwise be a magic `sleep`.

@@ -16,7 +16,7 @@
  */
 import { createSignal } from "solid-js"
 import { t } from "../i18n"
-import type { Definition } from "@nikcli-ai/plugin/v2/ade/plugin"
+import type { Definition } from "@ragu/plugin/v2/ade/plugin"
 import { createPluginRegistry, type PluginRegistry } from "./registry"
 import { adaptV2AdePlugin, readV2AdePlugin, type AdePluginHost, type LoadedV2Plugin } from "./v2"
 import { discoverPlugins, type DiscoveryIO, type ResolvedPlugin } from "./discovery"

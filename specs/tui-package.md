@@ -3,27 +3,27 @@
 | Field  | Value                                                                                            |
 | ------ | ------------------------------------------------------------------------------------------------ |
 | Status | **Complete** 2026-08-14/16. `packages/tui` stands alone and has a second consumer that proves it |
-| Scope  | `packages/nikcli/src/cli/cmd/tui` → `packages/tui` (**done**)                                    |
+| Scope  | `packages/ragu/src/cli/cmd/tui` → `packages/tui` (**done**)                                    |
 | Buys   | A TUI that builds, tests, and starts without the backend graph                                   |
 
 ## Goal
 
-Move the terminal application from `packages/nikcli/src/cli/cmd/tui` into a self-contained workspace package while the CLI keeps using the same implementation.
+Move the terminal application from `packages/ragu/src/cli/cmd/tui` into a self-contained workspace package while the CLI keeps using the same implementation.
 
 ```text
 packages/tui
-name: @nikcli-ai/tui
+name: @ragu/tui
 ```
 
 Target dependency graph:
 
 ```text
-packages/nikcli ----\
-                     > @nikcli-ai/tui -> @nikcli-ai/sdk
+packages/ragu ----\
+                     > @ragu/tui -> @ragu/sdk
 packages/desktop ---/
 ```
 
-The TUI may depend directly on terminal and UI infrastructure — `@opentui/core`, `@opentui/solid`, `@opentui/keymap`, `solid-js`, Effect, `@nikcli-ai/tui-math`, `@nikcli-ai/tui-image` — and on generic presentation libraries. It must not depend on `packages/nikcli` internals.
+The TUI may depend directly on terminal and UI infrastructure — `@opentui/core`, `@opentui/solid`, `@opentui/keymap`, `solid-js`, Effect, `@ragu/tui-math`, `@ragu/tui-image` — and on generic presentation libraries. It must not depend on `packages/ragu` internals.
 
 The SDK is the TUI's backend boundary. Missing data or operations get added to the HttpApi and the generated client, not imported from a server module.
 
@@ -50,13 +50,13 @@ Section 3 is therefore complete: **the terminal no longer calls a backend servic
 
 | Remaining import                                               | Count | Why it stays                                                                                                           |
 | -------------------------------------------------------------- | ----: | ---------------------------------------------------------------------------------------------------------------------- |
-| `@/{cli,project,server,mobile,installation,bus,config,effect}` |    12 | `thread.ts`, `worker.ts` and `plugin/host-local.ts` — host files that stay in `packages/nikcli` (see the boundary).    |
+| `@/{cli,project,server,mobile,installation,bus,config,effect}` |    12 | `thread.ts`, `worker.ts` and `plugin/host-local.ts` — host files that stay in `packages/ragu` (see the boundary).    |
 | `@/image/photon`                                               |     4 | **Deliberate.** It primes the WASM path before the decoder's first `import()`; only a compiled binary can validate it. |
 | `@/config/tui` in `app.tsx`                                    |     1 | **Deliberate.** The one config read that happens before any transport exists — see `GET /tui/config` below.            |
 
 **There are no `await import("@/…")` left.** There were four, and they mattered: lazy-loading a subsystem keeps it out of the startup graph, which is why they were written that way, but it decouples nothing and hides the dependency from exactly the measurement this document runs on. Keep counting both forms.
 
-**`@/image/photon` stays where it is on purpose.** It primes `globalThis.__NIKCLI_PHOTON_WASM_PATH` before the decoder's first `import()`, and its own comment records the failure mode when that resolution is wrong: _"a compiled binary loses the WASM decoder entirely."_ Moving a bundler-sensitive asset path for four imports, when no test exercises image decoding from the installer binary, trades a verified state for an unverifiable one.
+**`@/image/photon` stays where it is on purpose.** It primes `globalThis.__RAGU_PHOTON_WASM_PATH` before the decoder's first `import()`, and its own comment records the failure mode when that resolution is wrong: _"a compiled binary loses the WASM decoder entirely."_ Moving a bundler-sensitive asset path for four imports, when no test exercises image decoding from the installer binary, trades a verified state for an unverifiable one.
 
 ### The first service over the wire: `GET /tui/config`
 
@@ -84,7 +84,7 @@ Verifying these means curling the routes against a real server; `bun run src/ind
 
 The read half landed 2026-08-15. `GET /user/me` and `/user/status` already existed; `GET /user/me/stats` is new and returns the profile view's two counters. It derives the account from the bearer, never from a path parameter — in process the dialog passed whichever id it held, and that is not a check a route may skip. Regression test: `test/server/httpapi-user-stats.test.ts`, which gives one user's token and counts another user's contact.
 
-**The session token deliberately does not move behind an endpoint.** It is what the terminal presents to authenticate, so a server cannot answer "which session does this machine hold" without already having it — and it must be readable before any transport exists. It was a four-function file store inside `UserDB` touching none of its tables, so reaching it cost the terminal drizzle and the whole user schema for one line of text; it is now `@nikcli-ai/util/user-session`, with `UserDB` re-exporting the four names so no backend caller changed. This is the same call as `@/image/photon`: local because of what it is, not because moving it was hard.
+**The session token deliberately does not move behind an endpoint.** It is what the terminal presents to authenticate, so a server cannot answer "which session does this machine hold" without already having it — and it must be readable before any transport exists. It was a four-function file store inside `UserDB` touching none of its tables, so reaching it cost the terminal drizzle and the whole user schema for one line of text; it is now `@ragu/util/user-session`, with `UserDB` re-exporting the four names so no backend caller changed. This is the same call as `@/image/photon`: local because of what it is, not because moving it was hard.
 
 Two consequences worth keeping:
 
@@ -92,7 +92,7 @@ Two consequences worth keeping:
 
 **`null` is not `false`.** `UserApi.hasUsers` answers `null` when the question could not be asked. `app.tsx` treats only an explicit `false` as first run — reading an unreachable server as "no users" would restart onboarding for someone who already has an account.
 
-Since `/user/*` sits outside the OpenAPI surface there is no generated type, so `PublicUser` is declared once in `@nikcli-ai/util/user-schema` and `UserDB.User` is now that shape plus `password_hash` — the alternative was a hand-copy that drifts, which is the `MobileAuth.PublicToken` failure again.
+Since `/user/*` sits outside the OpenAPI surface there is no generated type, so `PublicUser` is declared once in `@ragu/util/user-schema` and `UserDB.User` is now that shape plus `password_hash` — the alternative was a hand-copy that drifts, which is the `MobileAuth.PublicToken` failure again.
 
 The write half landed the same day, and needed exactly one new route. Registration, password login and logout already existed: `POST /user/register` and `POST /user/login` both answer `{token, user}`, which is the whole of `dialog-login.tsx`. Only the self-service password change had no home — `PATCH /user/:id` can set a password but never asks for the current one, because an admin resetting another account has none to give. `POST /user/me/password` verifies the old one where the hash lives, instead of the terminal reading the user row and deciding for itself. Regression test: `test/server/httpapi-user-password.test.ts`, including that a wrong current password leaves the old one working.
 
@@ -120,7 +120,7 @@ Closed 2026-08-16 (roadmap H2): the roots are a table in `httpapi/instance-less.
 
 `@/tool/speak/openrouter` was on this list as "needs an audio-models endpoint". It did not. `getAudioModels()` returns three hardcoded strings and the voice catalog is a constant — the terminal only ever asks for those two, and never synthesizes; the `speak` tool runs server-side in the worker, with its own module instance of `ttsRegistry`.
 
-What actually tied the module to the backend was one method: `getConfig()` reading `Auth.get("openrouter")` and the provider options out of `nikcli.json`. So the provider moved whole to `@nikcli-ai/util/tts/openrouter` with the credential lookup behind a `resolveCredentials()` hook that reads env, and `src/tool/speak/openrouter.ts` is now a subclass that overrides it — precedence unchanged (env, `auth.json`, `provider.openrouter.options`), 276 lines down to 70. One provider id, one catalog, one request path.
+What actually tied the module to the backend was one method: `getConfig()` reading `Auth.get("openrouter")` and the provider options out of `nikcli.json`. So the provider moved whole to `@ragu/util/tts/openrouter` with the credential lookup behind a `resolveCredentials()` hook that reads env, and `src/tool/speak/openrouter.ts` is now a subclass that overrides it — precedence unchanged (env, `auth.json`, `provider.openrouter.options`), 276 lines down to 70. One provider id, one catalog, one request path.
 
 The general form, and it is worth applying before writing any endpoint: **when a module is backend-bound by one method, extract the method, not the module.** An endpoint would have shipped a second copy of the catalog and a network round trip for a constant.
 
@@ -140,7 +140,7 @@ The join of "configured" and "running" also moved server-side, because only the 
 
 ### The herdr and island bridges were never backend
 
-Both were filed under "host operations to invert". They are not operations at all: they are **terminal integrations** — herdr talks to a local multiplexer over a unix socket, island writes snapshot files macOS reads — and between them, 1,418 lines whose only backend import was `GlobalBus`, an `EventEmitter` with no imports of its own. So the bus moved to `@nikcli-ai/util/global-bus` (with `src/bus/global.ts` re-exporting for every backend caller) and both bridges followed it, joining `remote-tunnel` as things that live in the shared package because both sides run them.
+Both were filed under "host operations to invert". They are not operations at all: they are **terminal integrations** — herdr talks to a local multiplexer over a unix socket, island writes snapshot files macOS reads — and between them, 1,418 lines whose only backend import was `GlobalBus`, an `EventEmitter` with no imports of its own. So the bus moved to `@ragu/util/global-bus` (with `src/bus/global.ts` re-exporting for every backend caller) and both bridges followed it, joining `remote-tunnel` as things that live in the shared package because both sides run them.
 
 The island bridge needed two answers it could not have there: the HTTP port and a session's parent/title. Neither could move — they belong to whoever owns the server and the session store — so `IslandBridge.configure({ port, identity })` takes them from `src/bus/index.ts`, right where `start()` is already called on publish. Both stay lazily imported, and both already had working fallbacks (`0`, empty strings), so a terminal that never configures the bridge degrades exactly as before instead of failing.
 
@@ -158,9 +158,9 @@ The route reports failure in the body rather than as an HTTP error, because ever
 
 The last chunk was `plugin/runtime.ts` — five backend imports for a file whose whole job is loading plugins into the terminal. Splitting it needed both tools, and which one applied was decided by _what the dependency actually was_, not by where the file sat.
 
-**Three moves.** `plugin/shared.ts`, `plugin/meta.ts` and `plugin/install.ts` are path work, manifest parsing and JSONC patching — 732 lines, and between them exactly two backend touch points: one line calling `BunProc.install`, and `ConfigPaths.fileInDirectory`, which is two `path.join`s. The installer is now a `configurePluginInstaller` hook that `src/plugin/shared.ts` sets on import (so every backend caller keeps both its path and its behaviour), the filename pair became `@nikcli-ai/util/config-file` with `ConfigPaths` delegating to it, and all three modules live in `@nikcli-ai/util`. `packages/util` gained `jsonc-parser` and `semver`.
+**Three moves.** `plugin/shared.ts`, `plugin/meta.ts` and `plugin/install.ts` are path work, manifest parsing and JSONC patching — 732 lines, and between them exactly two backend touch points: one line calling `BunProc.install`, and `ConfigPaths.fileInDirectory`, which is two `path.join`s. The installer is now a `configurePluginInstaller` hook that `src/plugin/shared.ts` sets on import (so every backend caller keeps both its path and its behaviour), the filename pair became `@ragu/util/config-file` with `ConfigPaths` delegating to it, and all three modules live in `@ragu/util`. `packages/util` gained `jsonc-parser` and `semver`.
 
-**One inversion.** What was left is genuinely host work: enumerate the config files to watch, force a re-read when one changes, wait for a plugin's dependencies to install. Those are `TuiPluginHost`, supplied by `thread.ts` and `attach.ts` from `plugin/host-local.ts` — a **host file** that keeps `@/config/tui` and `@/effect`, and stays in `packages/nikcli` at section 4 alongside `thread.ts` and `worker.ts`.
+**One inversion.** What was left is genuinely host work: enumerate the config files to watch, force a re-read when one changes, wait for a plugin's dependencies to install. Those are `TuiPluginHost`, supplied by `thread.ts` and `attach.ts` from `plugin/host-local.ts` — a **host file** that keeps `@/config/tui` and `@/effect`, and stays in `packages/ragu` at section 4 alongside `thread.ts` and `worker.ts`.
 
 **Each operation takes its directory.** That is what removed `@/effect`: the runtime used to wrap its own calls in `withInstanceAsync`, so the instance binding moved to the host, where the instance actually lives. Two wrappers disappeared with it — and the one around `load()` was also catching, so its `try`/`catch` had to be reinstated by hand. A removed wrapper is not only a removed argument.
 
@@ -178,34 +178,34 @@ The profile dialog ran five `Profile.Service` operations in-process. They are no
 
 **The prompt preview moved to the server, not to a shared module.** The dialog showed what agents receive by calling `Profile.render(info)` and `renderHabits()` locally. Extracting those looked right until the render turned out to read fifteen fields through a helper — a second renderer to keep in step with the first, for a preview whose whole point is fidelity. `GET /profile/preview` returns the rendered lines and the habits path from the code that actually builds the block. Regression test: `test/server/httpapi-profile.test.ts`.
 
-Loop validation went the other way for the same reason: `isValidModel`, `validateStage` and `validateDefinition` produce the messages a user sees _while typing_, so a round trip is the wrong shape. They are `@nikcli-ai/util/loop-validation`, typed structurally, with `loop/schema.ts` re-exporting them. When copying a block like that, extract it from the file rather than retyping it — `formatDuration` has a two-branch shape that is easy to "remember" wrong, and every interval message depends on it.
+Loop validation went the other way for the same reason: `isValidModel`, `validateStage` and `validateDefinition` produce the messages a user sees _while typing_, so a round trip is the wrong shape. They are `@ragu/util/loop-validation`, typed structurally, with `loop/schema.ts` re-exporting them. When copying a block like that, extract it from the file rather than retyping it — `formatDuration` has a two-branch shape that is easy to "remember" wrong, and every interval message depends on it.
 
 ### Three more that were never backend
 
-`cli/error` (176 lines) already imported nothing but `@nikcli-ai/util/*` — pure error presentation, now `@nikcli-ai/util/cli-error`. The mobile pairing dialog wanted three helpers (`buildMobilePairingDeepLink`, `getLocalIPs`, `isLoopbackHostname`) and imported the whole `mobile` **command** to get them, dragging `Server` and `MobileAuth` in to build a URL; they are now `@nikcli-ai/util/mobile-pairing`.
+`cli/error` (176 lines) already imported nothing but `@ragu/util/*` — pure error presentation, now `@ragu/util/cli-error`. The mobile pairing dialog wanted three helpers (`buildMobilePairingDeepLink`, `getLocalIPs`, `isLoopbackHostname`) and imported the whole `mobile` **command** to get them, dragging `Server` and `MobileAuth` in to build a URL; they are now `@ragu/util/mobile-pairing`.
 
-The four `TuiEvent` definitions split the same way: names and payloads are `@nikcli-ai/util/tui-event-schema`, and `src/bus/tui-event.ts` is now just the `BusEvent.schema` wrapping. One definition, two projections — the terminal takes the names to subscribe and the zod form to parse a toast, and neither can drift from what the server publishes.
+The four `TuiEvent` definitions split the same way: names and payloads are `@ragu/util/tui-event-schema`, and `src/bus/tui-event.ts` is now just the `BusEvent.schema` wrapping. One definition, two projections — the terminal takes the names to subscribe and the zod form to parse a toast, and neither can drift from what the server publishes.
 
 **A bug found by moving one of them.** `app.tsx` reported a failed self-update with `error instanceof Installation.UpgradeFailedError ? error.stderr : …`. That check could never be true: the upgrade runs in the worker, and `Rpc.deserializeError` rebuilds a plain `Error` from `{name, message, stack}` — the class does not cross a worker boundary, and `stderr` was not even serialized. Since `UpgradeFailedError.message` is empty by design, every failed update showed the generic "Update failed" with no reason. Worse, a source-reading test _required_ the broken form. `serializeError` now carries the error's own fields and the handler matches on `name`; `test/tui/rpc-error.test.ts` covers the round-trip, and the old test asserts the `instanceof` form is **absent**.
 
-`cli/remote` — 1889 lines across seven files, with **zero** `@/` imports — moved to `@nikcli-ai/util/remote-tunnel`. Two traps there. A grep for `cli/remote` said the TUI dialog was the only consumer; `src/cli/cmd/remote.ts` and `src/cli/ui.ts` reach it as `../remote` and `./remote`, so the relative forms have to be part of the search or the conclusion inverts. And `packages/util`'s exports map is `"./*": "./src/*.ts"`, which resolves a _file_: a directory needs its own entry, hence the explicit `"./remote-tunnel"`. It is named for the tunnel rather than "remote" because `@nikcli-ai/remote` is a different package it depends on.
+`cli/remote` — 1889 lines across seven files, with **zero** `@/` imports — moved to `@ragu/util/remote-tunnel`. Two traps there. A grep for `cli/remote` said the TUI dialog was the only consumer; `src/cli/cmd/remote.ts` and `src/cli/ui.ts` reach it as `../remote` and `./remote`, so the relative forms have to be part of the search or the conclusion inverts. And `packages/util`'s exports map is `"./*": "./src/*.ts"`, which resolves a _file_: a directory needs its own entry, hence the explicit `"./remote-tunnel"`. It is named for the tunnel rather than "remote" because `@ragu/remote` is a different package it depends on.
 
 ### Inverting the server start
 
-`worker.ts` is the one that decides the transport, and section 3 must preserve what it does rather than replace it with a URL. In a normal run the TUI has **no listening HTTP server**: `thread.ts` sets `url = "http://nikcli.local"` — a synthetic hostname — and hands the SDK `createWorkerFetch(client)`, which marshals requests over worker RPC straight into `Server.fetch`. A host that "hands the TUI a base URL" without also handing it that transport produces a TUI where every request fails DNS silently: no error, no router log line, and nothing that fails at build time. This is not hypothetical — it is what disabled the analytics panel's history for weeks (see `test/tui/analytics-transport.test.ts`).
+`worker.ts` is the one that decides the transport, and section 3 must preserve what it does rather than replace it with a URL. In a normal run the TUI has **no listening HTTP server**: `thread.ts` sets `url = "http://ragu.local"` — a synthetic hostname — and hands the SDK `createWorkerFetch(client)`, which marshals requests over worker RPC straight into `Server.fetch`. A host that "hands the TUI a base URL" without also handing it that transport produces a TUI where every request fails DNS silently: no error, no router log line, and nothing that fails at build time. This is not hypothetical — it is what disabled the analytics panel's history for weeks (see `test/tui/analytics-transport.test.ts`).
 
 ## Migration Rules
 
 - Keep one canonical implementation of every TUI feature. Do not copy the tree and synchronize two of them.
 - Land each section below independently and commit at its boundary. Every intermediate commit must build and typecheck (`bun run typecheck`).
 - Use temporary compatibility re-exports only where they materially reduce conflict risk, and mark them for removal in a named later section.
-- Do not preserve a private import by aliasing `packages/tui` back into `packages/nikcli`.
+- Do not preserve a private import by aliasing `packages/tui` back into `packages/ragu`.
 - Keep tool rendering tolerant of unknown tools and wire-format drift. Local checks over `unknown` metadata are fine; importing a backend tool implementation for type safety is not.
-- Keep CLI argument parsing, server startup, worker management, auth, and config discovery **outside** `@nikcli-ai/tui`.
+- Keep CLI argument parsing, server startup, worker management, auth, and config discovery **outside** `@ragu/tui`.
 
 ## Ownership Boundary
 
-### `@nikcli-ai/tui` owns
+### `@ragu/tui` owns
 
 - The OpenTUI renderer lifecycle and app entry (`app.tsx`)
 - Solid application composition, routes, dialogs, components, contexts
@@ -213,11 +213,11 @@ The four `TuiEvent` definitions split the same way: names and payloads are `@nik
 - Feature plugins (`feature-plugins/`, 47 files) and the TUI plugin host
 - Rendering of tool calls, diffs, markdown, and math
 
-### `packages/nikcli` keeps
+### `packages/ragu` keeps
 
 - The `tui` command, server bootstrap, and instance binding — **including `thread.ts` and `worker.ts`**, which contain no UI. `worker.ts` is the backend half of the worker (it owns `Server`, `Instance`, `InstanceBootstrap`, `GlobalBus`, upgrades and event streams); `thread.ts` is the yargs `$0` command that spawns it and then calls `tui()`. Together they carry 12 of the TUI tree's remaining `@/` imports, and they are most of the reason the tree still looks coupled.
 
-  **They keep their current path and filenames** (`src/cli/cmd/tui/{worker,thread}.ts`). That path is load-bearing: `script/build.ts`, `packages/nikcli/script/{build,cross-build-windows}.ts` and the `NIKCLI_WORKER_PATH` define all name `./src/cli/cmd/tui/worker.ts` literally, and the compiled binary emits the worker chunk at the matching bunfs path. Section 4 therefore **excludes these two files from the tree move** rather than relocating them beforehand — the exclusion is the cheap operation, the rename is not. Relocating them was tried on 2026-08-14 and reverted; it works (build and binary verified) but buys nothing that the exclusion does not.
+  **They keep their current path and filenames** (`src/cli/cmd/tui/{worker,thread}.ts`). That path is load-bearing: `script/build.ts`, `packages/ragu/script/{build,cross-build-windows}.ts` and the `RAGU_WORKER_PATH` define all name `./src/cli/cmd/tui/worker.ts` literally, and the compiled binary emits the worker chunk at the matching bunfs path. Section 4 therefore **excludes these two files from the tree move** rather than relocating them beforehand — the exclusion is the cheap operation, the rename is not. Relocating them was tried on 2026-08-14 and reverted; it works (build and binary verified) but buys nothing that the exclusion does not.
 
 - Everything under `src/session`, `src/server`, `src/provider`, `src/tool`
 - Config discovery and the auth flows the TUI triggers over HTTP
@@ -235,16 +235,16 @@ Landed 2026-08-14. `packages/util` now depends on `effect` and `xdg-basedir`, wh
 | Module                                                                            | Move                             | Why                                                                    |
 | --------------------------------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------- |
 | `util/keybind`, `util/rpc`                                                        | → `@tui/util/*`                  | Zero consumers outside the TUI.                                        |
-| `util/iife`                                                                       | deleted → `@nikcli-ai/util/iife` | Byte-identical duplicate of the packaged one.                          |
-| `global`                                                                          | → `@nikcli-ai/util/global`       | 81 call sites; brought `xdg-basedir` with it.                          |
-| `flag/flag`                                                                       | → `@nikcli-ai/util/flag`         | 49 call sites, pure leaf.                                              |
-| `util/{locale,token,record,defer,format,redact,hash,teleport-archive,user-error}` | → `@nikcli-ai/util/*`            | Shared leaves.                                                         |
-| `util/{filesystem,process,effect-zod,log,flock}`                                  | → `@nikcli-ai/util/*`            | Unblocked by the Effect dependency.                                    |
-| `util/error`                                                                      | → `@nikcli-ai/util/error-format` | Renamed: the packaged `error.ts` is `NamedError`, a different concern. |
+| `util/iife`                                                                       | deleted → `@ragu/util/iife` | Byte-identical duplicate of the packaged one.                          |
+| `global`                                                                          | → `@ragu/util/global`       | 81 call sites; brought `xdg-basedir` with it.                          |
+| `flag/flag`                                                                       | → `@ragu/util/flag`         | 49 call sites, pure leaf.                                              |
+| `util/{locale,token,record,defer,format,redact,hash,teleport-archive,user-error}` | → `@ragu/util/*`            | Shared leaves.                                                         |
+| `util/{filesystem,process,effect-zod,log,flock}`                                  | → `@ragu/util/*`            | Unblocked by the Effect dependency.                                    |
+| `util/error`                                                                      | → `@ragu/util/error-format` | Renamed: the packaged `error.ts` is `NamedError`, a different concern. |
 
 Two things are deliberately left where they are:
 
-- **`id/id` (5).** `packages/util/src/id.ts` already exports a namespace called `Identifier`, and so does this one. They are two implementations of the same idea, not a collision of names — the nikcli one adds prefixes, zod and an Effect schema. Renaming the file would ship the duplicate rather than resolve it, so reconcile the two first.
+- **`id/id` (5).** `packages/util/src/id.ts` already exports a namespace called `Identifier`, and so does this one. They are two implementations of the same idea, not a collision of names — the ragu one adds prefixes, zod and an Effect schema. Renaming the file would ship the duplicate rather than resolve it, so reconcile the two first.
 - **`util/runtime` (1).** It imports `./lazy`, and `packages/util/src/lazy.ts` is a _different_ module from `src/util/lazy.ts`. Moving the file would silently rebind it.
 
 Note for anyone repeating this kind of sweep: `src/permission/ruleset.ts` is not valid text to `grep`, which skips it in `-l` mode without saying so. Every repo-wide import rewrite must be verified by `bun run typecheck`, never by a clean `grep` alone.
@@ -265,22 +265,22 @@ Landed 2026-08-14, all of them modules that only looked backend:
 
 | Module                                        | Move                                   | Why                                                                                                           |
 | --------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `lsp/language`                                | → `@nikcli-ai/util/language`           | A pure extension→language map; 4 of its 5 consumers were TUI.                                                 |
-| `provider/parse`                              | → `@nikcli-ai/util/model`              | Four lines, no deps, two of three consumers were TUI.                                                         |
+| `lsp/language`                                | → `@ragu/util/language`           | A pure extension→language map; 4 of its 5 consumers were TUI.                                                 |
+| `provider/parse`                              | → `@ragu/util/model`              | Four lines, no deps, two of three consumers were TUI.                                                         |
 | `agent/prompt/support-docs`                   | → `@tui/util/support-docs`             | Zero consumers outside the TUI.                                                                               |
-| `cli/cmd/tui/util/prompt-blob`                | → `@nikcli-ai/util/prompt-blob`        | Breaks a cycle — see below.                                                                                   |
-| loop shapes                                   | → `@nikcli-ai/sdk/httpapi`             | `LoopDefinition`, `LoopRun`, `LoopTemplate` and `LoopPullRequestRef` are all in the generated contract.       |
-| `Snapshot.FileDiff`, `MobileAuth.PublicToken` | → `@nikcli-ai/sdk/httpapi`             | Same: `FileDiff` and `MobileAuthTokenPublic` were already there.                                              |
+| `cli/cmd/tui/util/prompt-blob`                | → `@ragu/util/prompt-blob`        | Breaks a cycle — see below.                                                                                   |
+| loop shapes                                   | → `@ragu/sdk/httpapi`             | `LoopDefinition`, `LoopRun`, `LoopTemplate` and `LoopPullRequestRef` are all in the generated contract.       |
+| `Snapshot.FileDiff`, `MobileAuth.PublicToken` | → `@ragu/sdk/httpapi`             | Same: `FileDiff` and `MobileAuthTokenPublic` were already there.                                              |
 | analytics merge helpers                       | → `@tui/util/analytics-merge`          | 184 lines of `Math.max` over wire shapes, `await import()`-ed from the panel; no server caller.               |
-| `session/primitives`                          | → `@nikcli-ai/util/session-primitives` | Its own comment says it exists for the TUI; 31 pure lines.                                                    |
-| `config/features`                             | → `@nikcli-ai/util/features`           | A predicate over `experimental`; every field is read with `=== true`, so naming `Config.Info` bought nothing. |
-| `Installation.VERSION`                        | → `@nikcli-ai/util/version`            | Seven files pulled the whole upgrade subsystem to print a string in a footer. `Installation` re-exports it.   |
-| viz catalog + codec                           | → `@nikcli-ai/util/viz` (+ `viz.txt`)  | The contract between the `opentui` tool and the terminal; the tool module went from 804 lines to 24.          |
-| `tool/speak/{provider,elevenlabs}`            | → `@nikcli-ai/util/tts/*`              | Registry and voice catalog. `openrouter` stays: `getAudioModels` reads auth through `@/effect`.               |
+| `session/primitives`                          | → `@ragu/util/session-primitives` | Its own comment says it exists for the TUI; 31 pure lines.                                                    |
+| `config/features`                             | → `@ragu/util/features`           | A predicate over `experimental`; every field is read with `=== true`, so naming `Config.Info` bought nothing. |
+| `Installation.VERSION`                        | → `@ragu/util/version`            | Seven files pulled the whole upgrade subsystem to print a string in a footer. `Installation` re-exports it.   |
+| viz catalog + codec                           | → `@ragu/util/viz` (+ `viz.txt`)  | The contract between the `opentui` tool and the terminal; the tool module went from 804 lines to 24.          |
+| `tool/speak/{provider,elevenlabs}`            | → `@ragu/util/tts/*`              | Registry and voice catalog. `openrouter` stays: `getAudioModels` reads auth through `@/effect`.               |
 | `interaction/spec`                            | → `@tui/util/interaction-spec`         | 274 lines whose only consumer was the TUI.                                                                    |
-| `provider/fusion`, `brain/constants`          | → `@nikcli-ai/util/*`                  | Constant tables.                                                                                              |
+| `provider/fusion`, `brain/constants`          | → `@ragu/util/*`                  | Constant tables.                                                                                              |
 
-A third pattern showed up late and is worth naming, because it applies to almost everything still on the list: **when the TUI reaches into a backend namespace for one small pure thing, extract that thing rather than the namespace.** `Skill.commandName` is a slug plus a six-character hash — reaching for it pulled in the skill loader and with it `@/session`, `@/bus` and the Effect runtime. `Config.pluginSpecifier`/`pluginOptions` are three-line accessors over a `string | [string, options]` tuple. Both now live in `@nikcli-ai/util` and the original namespaces re-export them, so no caller changed.
+A third pattern showed up late and is worth naming, because it applies to almost everything still on the list: **when the TUI reaches into a backend namespace for one small pure thing, extract that thing rather than the namespace.** `Skill.commandName` is a slug plus a six-character hash — reaching for it pulled in the skill loader and with it `@/session`, `@/bus` and the Effect runtime. `Config.pluginSpecifier`/`pluginOptions` are three-line accessors over a `string | [string, options]` tuple. Both now live in `@ragu/util` and the original namespaces re-export them, so no caller changed.
 
 The other two patterns:
 
@@ -289,13 +289,13 @@ The other two patterns:
 
 ### The cycles — closed 2026-08-14
 
-`packages/nikcli` importing `packages/tui` is the allowed direction. `packages/tui` importing back is not, and five backend modules did exactly that. Each would have failed section 4 outright rather than merely looking untidy, and none was visible in the `@/` import count, which only looks one way.
+`packages/ragu` importing `packages/tui` is the allowed direction. `packages/tui` importing back is not, and five backend modules did exactly that. Each would have failed section 4 outright rather than merely looking untidy, and none was visible in the `@/` import count, which only looks one way.
 
 | Backend module                                                 | Imported from the TUI                             | Fix                                                                                                                                                 |
 | -------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `prompt/stash-store`                                           | `util/prompt-blob` (runtime), `PromptInfo` (type) | Store moved to `@nikcli-ai/util/prompt-stash`; `parts` is `unknown[]` there — persistence never inspects a part — and the composer narrows on read. |
+| `prompt/stash-store`                                           | `util/prompt-blob` (runtime), `PromptInfo` (type) | Store moved to `@ragu/util/prompt-stash`; `parts` is `unknown[]` there — persistence never inspects a part — and the composer narrows on read. |
 | `bus/all-events`, `server/httpapi/tui`, `mcp`, `session/toast` | `cli/cmd/tui/event`                               | `TuiEvent` is a bus contract, not UI. Moved to `src/bus/tui-event.ts`.                                                                              |
-| `cli/cmd/upgrade`                                              | `cli/cmd/tui/win32`                               | Terminal/FFI handling with one `bun:ffi` import. Moved to `@nikcli-ai/util/win32`.                                                                  |
+| `cli/cmd/upgrade`                                              | `cli/cmd/tui/win32`                               | Terminal/FFI handling with one `bun:ffi` import. Moved to `@ragu/util/win32`.                                                                  |
 | `session/toast.tsx`                                            | `cli/cmd/tui/component/border`                    | **Deleted.** An orphaned 107-line copy of `cli/cmd/tui/ui/toast.tsx` with no importer at all.                                                       |
 
 What is left pointing into the TUI is `cli-main.ts` registering `AttachCommand` and `TuiThreadCommand` — the host wiring up its own commands, which is the direction the target graph wants.
@@ -309,14 +309,14 @@ Sections 4–6 closed the leftovers that used to sit here (`@/effect` service ca
 It was not only a `git mv`. What the move actually cost, in the order it surfaced:
 
 - **`exports` needs both extensions.** `"./*": "./src/*.ts"` cannot reach `context/sdk.tsx`. The fallback-array form works: `"./*": ["./src/*.ts", "./src/*.tsx"]`.
-- **The last five `@/` imports had to go, not be aliased.** Aliasing `packages/tui` back at `packages/nikcli` is the one thing the migration rules forbid, so `app.tsx`'s deliberate local config read became a `tuiConfig` prop that `thread.ts` and `attach.ts` fill — which is _better_ placed than before, since the read has to happen before any transport exists and the host is who can do it — and `photon` moved to `@nikcli-ai/util/photon`, where the server's `image.ts` also uses it.
+- **The last five `@/` imports had to go, not be aliased.** Aliasing `packages/tui` back at `packages/ragu` is the one thing the migration rules forbid, so `app.tsx`'s deliberate local config read became a `tuiConfig` prop that `thread.ts` and `attach.ts` fill — which is _better_ placed than before, since the read has to happen before any transport exists and the host is who can do it — and `photon` moved to `@ragu/util/photon`, where the server's `image.ts` also uses it.
 - **Ambient declarations do not travel through a package boundary.** `photon` imports a `.wasm` asset, so every program compiling it needs `wasm.d.ts` in its own include set: `packages/tui` and `packages/util` each got a copy.
-- **Two non-source assets moved with it.** `parsers-config.ts` (tree-sitter highlight config, TUI-only) sat at the `packages/nikcli` root behind a six-level relative import.
-- **The test paths were already prepared** — `TUI_SRC` was a one-line edit, exactly as intended — but four tests _outside_ `test/tui/` still spelled `packages/nikcli/src/cli/cmd/tui/app.tsx` and failed loudly with ENOENT, which is the good failure. One assertion had to change meaning: `cli-commands-benchmark-suite` checked every module specifier contained `/cli/`, which is no longer what a TUI module looks like.
+- **Two non-source assets moved with it.** `parsers-config.ts` (tree-sitter highlight config, TUI-only) sat at the `packages/ragu` root behind a six-level relative import.
+- **The test paths were already prepared** — `TUI_SRC` was a one-line edit, exactly as intended — but four tests _outside_ `test/tui/` still spelled `packages/ragu/src/cli/cmd/tui/app.tsx` and failed loudly with ENOENT, which is the good failure. One assertion had to change meaning: `cli-commands-benchmark-suite` checked every module specifier contained `/cli/`, which is no longer what a TUI module looks like.
 
-**Verified:** `bun run typecheck` (34 packages, 0 errors), `packages/tui` typechecking with no path to `packages/nikcli`, `bun test` at its two-failure baseline, a real `--single` build, and `bun run smoke:tui` — the compiled binary booting the real TUI in a PTY and painting 6,641 characters. `--version` and `--help` prove nothing here; only the smoke does.
+**Verified:** `bun run typecheck` (34 packages, 0 errors), `packages/tui` typechecking with no path to `packages/ragu`, `bun test` at its two-failure baseline, a real `--single` build, and `bun run smoke:tui` — the compiled binary booting the real TUI in a PTY and painting 6,641 characters. `--version` and `--help` prove nothing here; only the smoke does.
 
-**Startup did not regress**, which this section had no way to check until now. `bun run bench:startup <binary>` spawns the real binary in a PTY and stops the clock at the first frame carrying printable text; all runs share one `NIKCLI_TEST_HOME` and the first is discarded, because a fresh home pays for migrations and config bootstrap — real costs, but not ones a packaging change moves.
+**Startup did not regress**, which this section had no way to check until now. `bun run bench:startup <binary>` spawns the real binary in a PTY and stops the clock at the first frame carrying printable text; all runs share one `RAGU_TEST_HOME` and the first is discarded, because a fresh home pays for migrations and config bootstrap — real costs, but not ones a packaging change moves.
 
 | Binary                      | Warm, best of 3 |
 | --------------------------- | --------------: |
@@ -331,7 +331,7 @@ _Prepared 2026-08-15._ The tests no longer spell the tree's path. Twenty-four fi
 
 The reason to centralise it is a failure mode, not tidiness. A missing file read throws, but `theme-tokens.test.ts`'s `Bun.Glob.scan` over a cwd that no longer exists yields **nothing**, so its asserted-absence check passed while reading zero files. `TUI_SRC` is existence-checked at import (verified: pointing it at a non-existent directory turns that test red), and the scan now asserts it walked more than 200 files.
 
-One path stays hardcoded on purpose: `./src/cli/cmd/tui/worker.ts` in `script/build.ts`, `packages/nikcli/script/build.ts` and `cross-build-windows.ts`. It is correct precisely because section 4 excludes `worker.ts` from the move — the exclusion _is_ the mitigation. A stale cross-package `"@tui/*"` alias in `packages/sdk-next/tsconfig.json`, unused by any file there, was removed rather than repointed.
+One path stays hardcoded on purpose: `./src/cli/cmd/tui/worker.ts` in `script/build.ts`, `packages/ragu/script/build.ts` and `cross-build-windows.ts`. It is correct precisely because section 4 excludes `worker.ts` from the move — the exclusion _is_ the mitigation. A stale cross-package `"@tui/*"` alias in `packages/sdk-next/tsconfig.json`, unused by any file there, was removed rather than repointed.
 
 **5. Delete the compatibility re-exports.** Landed 2026-08-16. `src/bus/global.ts`, `src/plugin/shared.ts` and the four `UserDB.{get,save,clear}ActiveSession*` aliases are gone, along with the three older ones (`FUSION_*` from `provider/transform`, `BRAIN_SESSION_TITLE` from `brain/index`, `HerdrBridge` from `plugin/herdr/index`) and `OPENROUTER_VOICES_LIST` from the speak tool. Callers import the shared package directly.
 
@@ -343,23 +343,23 @@ A re-export that has a side effect is not a compatibility shim — deleting it s
 
 `packages/desktop` was the obvious candidate and is the wrong one: it is a Tauri webview app, and the TUI renders through `@opentui/solid` to a terminal. (`@opentui/webrenderer` does not bridge that gap — it is a _webview inside the TUI_, the opposite direction.) Rendering the terminal in the desktop is a product feature, not a packaging check, and section 6 exists for the packaging check.
 
-So the second consumer is `packages/tui/bin/nikcli-tui.ts` → `src/host/standalone.ts`: the real terminal, attached to a nikcli server it did not start, importing `@nikcli-ai/tui` and the SDK and **nothing** from `packages/nikcli`. That boundary is structural — `packages/tui/package.json` has no dependency on `nikcli-ai` — so if a backend chain creeps back in, this host stops building while the CLI's own entry points keep working, because they carry the backend anyway.
+So the second consumer is `packages/tui/bin/ragu-tui.ts` → `src/host/standalone.ts`: the real terminal, attached to a ragu server it did not start, importing `@ragu/tui` and the SDK and **nothing** from `packages/ragu`. That boundary is structural — `packages/tui/package.json` has no dependency on `ragu-code` — so if a backend chain creeps back in, this host stops building while the CLI's own entry points keep working, because they carry the backend anyway.
 
 Two things it does without, both honest limits rather than stubs:
 
 - **No external plugins.** The plugin runtime needs the config _surface_ — which files to watch, when a dependency install finished — and that is local filesystem work belonging to whoever owns the project. A client attached to someone else's server has no such surface, so `remotePluginHost` reports none and only internal plugins load.
 - **No local config read.** `tui()` takes the renderer config as a prop because it is needed before any transport exists; here the transport is a server that is _already listening_, so the host simply asks it.
 
-**Verified** by `bun run smoke:standalone <url>` against a real `nikcli serve`: 580 printable characters painted. Two failures on the way there are worth keeping:
+**Verified** by `bun run smoke:standalone <url>` against a real `ragu serve`: 580 printable characters painted. Two failures on the way there are worth keeping:
 
 - `bun run <file>` resolves its argument as a _script name_ first and prints the script list instead of executing the file. The harness spawns `bun <file>`.
 - Bun reads `jsxImportSource` from the nearest tsconfig **to the cwd**, not to the entry file. Started from a scratch directory, JSX fell back to `react/jsx-dev-runtime` and the app could not load — a failure that looks like a missing dependency and is not one. A consumer runs from its own package root; the CLI does the equivalent explicitly, by passing `tsconfig` and the Solid plugin to `Bun.build`.
 
-**Deployment**: `packages/tui` is a build-time dependency of the nikcli binary, so `Dockerfile`, `Dockerfile.serve` and `script/railway-deploy.sh` each copy it twice — once as a manifest for the `bun install` layer, once as source. It cannot be one of the stubbed workspace entries in `Dockerfile.serve`: `thread.ts` imports `@nikcli-ai/tui/app` and the build bundles it.
+**Deployment**: `packages/tui` is a build-time dependency of the ragu binary, so `Dockerfile`, `Dockerfile.serve` and `script/railway-deploy.sh` each copy it twice — once as a manifest for the `bun install` layer, once as source. It cannot be one of the stubbed workspace entries in `Dockerfile.serve`: `thread.ts` imports `@ragu/tui/app` and the build bundles it.
 
 ## Verification
 
-- `packages/tui` typechecks with `packages/nikcli` excluded from its `tsconfig` references.
-- No import in `packages/tui` matches `@/` or resolves into `packages/nikcli`.
+- `packages/tui` typechecks with `packages/ragu` excluded from its `tsconfig` references.
+- No import in `packages/tui` matches `@/` or resolves into `packages/ragu`.
 - The TUI starts from the installer binary, not just from a dev checkout — the binary is where bundling assumptions break (see the Playwright `__dirname` precedent in the browser work).
 - Startup time does not regress. The TUI startup graph was deliberately cut once already (server chains removed from the module graph, AI SDKs made lazy), so measure warm, best of three, before and after section 4 — a packaging change that re-imports a backend chain undoes that work invisibly.

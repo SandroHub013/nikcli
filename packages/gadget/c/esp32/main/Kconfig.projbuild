@@ -1,34 +1,34 @@
-menu "nikcli gadget"
+menu "ragu gadget"
 
-config NIKCLI_WIFI_SSID
+config RAGU_WIFI_SSID
     string "Wi-Fi SSID"
     default ""
 
-config NIKCLI_WIFI_PASSWORD
+config RAGU_WIFI_PASSWORD
     string "Wi-Fi password"
     default ""
 
-config NIKCLI_SERVER
+config RAGU_SERVER
     string "Bridge URL"
     default "http://192.168.1.10:4097"
 
-config NIKCLI_PAIR_CODE
+config RAGU_PAIR_CODE
     string "Pairing code (used once; the token is then kept in NVS)"
     default ""
 
-config NIKCLI_NAME
+config RAGU_NAME
     string "Gadget name"
     default "esp32-gadget"
 
-config NIKCLI_BUTTON_GPIO
+config RAGU_BUTTON_GPIO
     int "Button GPIO (active low, internal pull-up); -1 for none"
     default 0
 
-config NIKCLI_LED_GPIO
+config RAGU_LED_GPIO
     int "LED GPIO; -1 for none"
     default 8
 
-config NIKCLI_LED_ACTIVE_LOW
+config RAGU_LED_ACTIVE_LOW
     bool "LED is active low"
     default y
 

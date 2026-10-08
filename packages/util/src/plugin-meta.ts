@@ -1,10 +1,10 @@
 import path from "path"
 import { fileURLToPath } from "url"
 
-import { Flag } from "@nikcli-ai/util/flag"
-import { Global } from "@nikcli-ai/util/global"
-import { Filesystem } from "@nikcli-ai/util/filesystem"
-import { Flock } from "@nikcli-ai/util/flock"
+import { Flag } from "@ragu/util/flag"
+import { Global } from "@ragu/util/global"
+import { Filesystem } from "@ragu/util/filesystem"
+import { Flock } from "@ragu/util/flock"
 
 import { parsePluginSpecifier, pluginSource } from "./plugin-shared"
 
@@ -39,7 +39,7 @@ export namespace PluginMeta {
   type Row = Touch & { core: Core }
 
   function storePath() {
-    return Flag.NIKCLI_PLUGIN_META_FILE ?? path.join(Global.Path.state, "plugin-meta.json")
+    return Flag.RAGU_PLUGIN_META_FILE ?? path.join(Global.Path.state, "plugin-meta.json")
   }
 
   function lock(file: string) {

@@ -22,7 +22,7 @@ import { DISCLOSURE } from "@tui/component/disclosure"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
-import { Identifier } from "@nikcli-ai/util/id"
+import { Identifier } from "@ragu/util/id"
 import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
@@ -35,12 +35,12 @@ import { Editor } from "@tui/util/editor"
 import { useExit } from "../../context/exit"
 import { useEditorContext } from "../../context/editor"
 import { Clipboard } from "../../util/clipboard"
-import type { AssistantMessage, FilePart } from "@nikcli-ai/sdk/httpapi"
-import { TuiEventName } from "@nikcli-ai/util/tui-event-schema"
-import { iife } from "@nikcli-ai/util/iife"
-import { userFacingParts } from "@nikcli-ai/util/user-error"
-import { Locale } from "@nikcli-ai/util/locale"
-import { formatDuration } from "@nikcli-ai/util/format"
+import type { AssistantMessage, FilePart } from "@ragu/sdk/httpapi"
+import { TuiEventName } from "@ragu/util/tui-event-schema"
+import { iife } from "@ragu/util/iife"
+import { userFacingParts } from "@ragu/util/user-error"
+import { Locale } from "@ragu/util/locale"
+import { formatDuration } from "@ragu/util/format"
 import { createColors, createFrames } from "../../ui/spinner.ts"
 import type { SpinnerStyle } from "../dialog-settings/spinner"
 import { useDialog } from "@tui/ui/dialog"
@@ -96,13 +96,13 @@ const money = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
 })
-const SWIFT_MIC_PERMISSION_ERROR = "__NIKCLI_MIC_PERMISSION_DENIED__"
+const SWIFT_MIC_PERMISSION_ERROR = "__RAGU_MIC_PERMISSION_DENIED__"
 
 const SWIFT_RECORDER_SOURCE = String.raw`
 import Foundation
 import AVFoundation
 
-let permissionMarker = "__NIKCLI_MIC_PERMISSION_DENIED__"
+let permissionMarker = "__RAGU_MIC_PERMISSION_DENIED__"
 
 guard CommandLine.arguments.count >= 2 else {
   fputs("missing output path\n", stderr)
@@ -324,7 +324,7 @@ export function Prompt(props: PromptProps) {
     const swift = Bun.which("swift")
     if (!swift) return null
 
-    const scriptPath = path.join(os.tmpdir(), "nikcli-mic-recorder.swift")
+    const scriptPath = path.join(os.tmpdir(), "ragu-mic-recorder.swift")
     const file = Bun.file(scriptPath)
     const exists = await file.exists()
 
@@ -525,7 +525,7 @@ export function Prompt(props: PromptProps) {
     voiceStartCancelled = false
 
     try {
-      const filePath = path.join(os.tmpdir(), `nikcli-voice-${Date.now()}-${Math.random().toString(16).slice(2)}.wav`)
+      const filePath = path.join(os.tmpdir(), `ragu-voice-${Date.now()}-${Math.random().toString(16).slice(2)}.wav`)
       const recorder = await detectVoiceRecorder(filePath)
       if (voiceStartCancelled) return
 
@@ -1691,7 +1691,7 @@ export function Prompt(props: PromptProps) {
     try {
       const os = await import("os")
       const path = await import("path")
-      const tmp = path.join(os.tmpdir(), `nikcli-paste-${Date.now()}.${file.mime.split("/")[1] ?? "png"}`)
+      const tmp = path.join(os.tmpdir(), `ragu-paste-${Date.now()}.${file.mime.split("/")[1] ?? "png"}`)
       const bytes = Buffer.from(file.content, "base64")
       await Bun.write(tmp, bytes)
       url = `file://${tmp}`
@@ -2447,7 +2447,7 @@ export function Prompt(props: PromptProps) {
                               <text
                                 fg={theme.foreground.muted}
                                 wrapMode="none"
-                                onMouseUp={() => command.trigger("nikcli.usage")}
+                                onMouseUp={() => command.trigger("ragu.usage")}
                               >
                                 {[item().context, item().cost].filter(Boolean).join(" · ")}
                               </text>

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Idempotent server bootstrap for nikcli-inference on Ubuntu 24.04 (Hetzner CX22).
+# Idempotent server bootstrap for ragu-inference on Ubuntu 24.04 (Hetzner CX22).
 # Designed to be safe to re-run.
 
 set -euo pipefail
@@ -44,7 +44,7 @@ ufw allow OpenSSH
 yes | ufw enable
 
 log "5/8 sysctl"
-cat >/etc/sysctl.d/99-nikcli.conf <<'EOF'
+cat >/etc/sysctl.d/99-ragu.conf <<'EOF'
 fs.file-max = 1000000
 net.ipv4.tcp_fin_timeout = 15
 net.ipv4.tcp_keepalive_time = 600
@@ -54,9 +54,9 @@ EOF
 sysctl --system >/dev/null
 
 log "6/8 unprivileged service user"
-if ! id nikcli >/dev/null 2>&1; then
-  useradd --create-home --shell /bin/bash nikcli
-  usermod -aG docker nikcli
+if ! id ragu >/dev/null 2>&1; then
+  useradd --create-home --shell /bin/bash ragu
+  usermod -aG docker ragu
 fi
 
 log "7/8 cloudflared apt repo (install deferred until tunnel step)"
@@ -68,6 +68,6 @@ if [[ ! -f /etc/apt/sources.list.d/cloudflared.list ]]; then
 fi
 
 log "8/8 app directory"
-install -d -o nikcli -g nikcli /opt/nikcli-inference /opt/nikcli-inference/logs
+install -d -o ragu -g ragu /opt/ragu-inference /opt/ragu-inference/logs
 
 log "done — docker $(docker --version | awk '{print $3}'), kernel $(uname -r)"

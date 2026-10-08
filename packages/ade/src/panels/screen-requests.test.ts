@@ -8,13 +8,13 @@ import { parseRequest } from "./protocol"
 import { RESTORED_MS, SCREEN_QUIET_MS, alternateRows, createScreenRequests, newRequests } from "./screen-requests"
 
 /*
- * A nikcli pane wrote `@ade keys ask …` and ADE never answered (Verifiche,
- * 2026-09-27). The fixture is the pty stream of nikcli 1.400 on
+ * A ragu pane wrote `@ade keys ask …` and ADE never answered (Verifiche,
+ * 2026-09-27). The fixture is the pty stream of ragu 1.400 on
  * `nemotron-3.5-lightning:free`, 120x30, asked to write only
  * `@ade keys ask ADE_PROVA_FINTA prova di Dario`: the bytes as they arrived,
  * and when each read arrived (`ms size`, one per line).
  */
-const FIXTURE = join(import.meta.dir, "fixtures", "nikcli-ade-request")
+const FIXTURE = join(import.meta.dir, "fixtures", "ragu-ade-request")
 const bytes = readFileSync(`${FIXTURE}.bin`)
 const reads = readFileSync(`${FIXTURE}.chunks`, "utf8")
   .trim()

@@ -3,7 +3,7 @@ import path from "path"
 
 const rootPkgPath = path.resolve(import.meta.dir, "../../../package.json")
 const rootPkg = await Bun.file(rootPkgPath).json()
-const nikcliPkgPath = path.resolve(import.meta.dir, "../../nikcli/package.json")
+const raguPkgPath = path.resolve(import.meta.dir, "../../ragu/package.json")
 const expectedBunVersion = rootPkg.packageManager?.split("@")[1]
 
 if (!expectedBunVersion) {
@@ -18,25 +18,25 @@ if (!semver.satisfies(process.versions.bun, expectedBunVersionRange)) {
 }
 
 const env = {
-  NIKCLI_CHANNEL: process.env["NIKCLI_CHANNEL"],
-  NIKCLI_BUMP: process.env["NIKCLI_BUMP"],
-  NIKCLI_VERSION: process.env["NIKCLI_VERSION"],
+  RAGU_CHANNEL: process.env["RAGU_CHANNEL"],
+  RAGU_BUMP: process.env["RAGU_BUMP"],
+  RAGU_VERSION: process.env["RAGU_VERSION"],
 }
 const CHANNEL = await (async () => {
-  if (env.NIKCLI_CHANNEL) return env.NIKCLI_CHANNEL
-  if (env.NIKCLI_BUMP) return "latest"
-  if (env.NIKCLI_VERSION && !env.NIKCLI_VERSION.startsWith("0.0.0-")) return "latest"
+  if (env.RAGU_CHANNEL) return env.RAGU_CHANNEL
+  if (env.RAGU_BUMP) return "latest"
+  if (env.RAGU_VERSION && !env.RAGU_VERSION.startsWith("0.0.0-")) return "latest"
   return await $`git branch --show-current`.text().then((x) => x.trim())
 })()
 const IS_PREVIEW = CHANNEL !== "latest"
 
 const VERSION = await (async () => {
-  if (env.NIKCLI_VERSION) return env.NIKCLI_VERSION
+  if (env.RAGU_VERSION) return env.RAGU_VERSION
   if (IS_PREVIEW) return `0.0.0-${CHANNEL}-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}`
-  const version = await fetch("https://registry.npmjs.org/nikcli-ai/latest")
+  const version = await fetch("https://registry.npmjs.org/ragu-code/latest")
     .then(async (res) => {
       if (res.status === 404) {
-        const pkg = await Bun.file(nikcliPkgPath).json()
+        const pkg = await Bun.file(raguPkgPath).json()
         return { version: pkg.version }
       }
       if (!res.ok) throw new Error(res.statusText)
@@ -44,7 +44,7 @@ const VERSION = await (async () => {
     })
     .then((data: any) => data.version)
   const [major, minor, patch] = version.split(".").map((x: string) => Number(x) || 0)
-  const t = env.NIKCLI_BUMP?.toLowerCase()
+  const t = env.RAGU_BUMP?.toLowerCase()
   if (t === "major") return `${major + 1}.0.0`
   if (t === "minor") return `${major}.${minor + 1}.0`
   return `${major}.${minor}.${patch + 1}`
@@ -61,7 +61,7 @@ export const Script = {
     return IS_PREVIEW
   },
 }
-console.log(`nikcli script`, JSON.stringify(Script, null, 2))
+console.log(`ragu script`, JSON.stringify(Script, null, 2))
 
 /**
  * bun 1.4.0's `--compile` writes a darwin Mach-O whose ad-hoc signature no longer

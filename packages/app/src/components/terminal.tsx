@@ -6,9 +6,9 @@ import { monoFontFamily, useSettings } from "@/context/settings"
 import { parseKeybind, matchKeybind } from "@/context/command"
 import { SerializeAddon } from "@/addons/serialize"
 import { LocalPTY } from "@/context/terminal"
-import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@nikcli-ai/ui/theme"
+import { resolveThemeVariant, useTheme, withAlpha, type HexColor } from "@ragu/ui/theme"
 import { useLanguage } from "@/context/language"
-import { showToast } from "@nikcli-ai/ui/toast"
+import { showToast } from "@ragu/ui/toast"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
@@ -166,9 +166,9 @@ export const Terminal = (props: TerminalProps) => {
 
       const url = new URL(sdk.url + `/pty/${local.pty.id}/connect?directory=${encodeURIComponent(sdk.directory)}`)
       url.protocol = url.protocol === "https:" ? "wss:" : "ws:"
-      if (window.__NIKCLI__?.serverPassword) {
-        url.username = "nikcli"
-        url.password = window.__NIKCLI__?.serverPassword
+      if (window.__RAGU__?.serverPassword) {
+        url.username = "ragu"
+        url.password = window.__RAGU__?.serverPassword
       }
       const socket = new WebSocket(url)
       cleanups.push(() => {

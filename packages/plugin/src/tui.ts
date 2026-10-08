@@ -1,5 +1,5 @@
 import type {
-  NikcliClient,
+  RaguClient,
   Event,
   LspStatus,
   McpStatus,
@@ -12,7 +12,7 @@ import type {
   SessionStatus,
   Workspace,
   Config as SdkConfig,
-} from "@nikcli-ai/sdk/httpapi"
+} from "@ragu/sdk/httpapi"
 import type { CliRenderer, ParsedKey, RGBA } from "@opentui/core"
 import type { JSX, SolidPlugin } from "@opentui/solid"
 import type { Store } from "solid-js/store"
@@ -123,7 +123,7 @@ export type TuiKeybindSet = {
   print: (name: string) => string
 }
 
-/** Mirrors the host's `DialogSize` in `@nikcli-ai/tui/ui/dialog`. */
+/** Mirrors the host's `DialogSize` in `@ragu/tui/ui/dialog`. */
 export type TuiDialogSize = "small" | "medium" | "large" | "xlarge" | "full"
 
 export type TuiDialogProps = {
@@ -625,7 +625,7 @@ export type TuiPluginApi = {
   /** Full reactive data contract used by v2 TUI plugins. */
   data: TuiV2Data
   theme: TuiTheme
-  client: NikcliClient
+  client: RaguClient
   event: TuiEventBus
   renderer: CliRenderer
   /**

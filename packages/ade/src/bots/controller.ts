@@ -25,7 +25,7 @@ import {
   type MemoryOp,
   type MemoryStore,
 } from "./memory"
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 import type { RoutineRun } from "./routine"
 import { applyRunnerLine, runnerById, spendKind } from "./runners"
 import {
@@ -71,14 +71,14 @@ export interface BotTurns {
   /**
    * A routine's run of `bot` (B11), in its thread like any other turn, but
    * with nobody to answer: no shell, whatever the bot may do in the panel
-   * and read-only (the `read-only` rules on ADE's server for nikcli, B8d; no
+   * and read-only (the `read-only` rules on ADE's server for ragu, B8d; no
    * Bash, Edit or Write for Claude Code; Codex read-only).
    * Undefined when the bot already has a turn.
    */
   routine: (bot: AgentFile, message: string, cwd?: string, run?: RoutineRun) => Turn | undefined
   /**
    * A member's turn in a room (B8b): its own session there, in `thread`
-   * rather than in the bot's chat; the user is watching the room, so nikcli's
+   * rather than in the bot's chat; the user is watching the room, so ragu's
    * questions are answered as in the panel (B8c) and shown in the room; what
    * the bot writes to its memory is only proposed. Undefined when the bot
    * already has a turn: one at a time per bot, in a room or not.
@@ -89,7 +89,7 @@ export interface BotTurns {
   /**
    * The user's answer to the question on screen, `requestID` (B8d): Consenti
    * (`once`), Nega (`reject`), or Sempre (`always`), which is ADE's for this
-   * bot and goes to nikcli as a once: nikcli's own «always» is the project's,
+   * bot and goes to ragu as a once: ragu's own «always» is the project's,
    * every bot's. Nothing happens when the question on screen is another.
    */
   answer: (bot: AgentFile, choice: PermissionAnswer, requestID: string | undefined) => void
@@ -127,7 +127,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     expiries.delete(path)
   }
 
-  /** Answers nikcli's question `asked` and closes it; a line in the thread when there is something to say. */
+  /** Answers ragu's question `asked` and closes it; a line in the thread when there is something to say. */
   const reply = (path: string, turn: Turn, asked: PendingPermission, answer: "once" | "reject", line?: string) => {
     cancelExpiry(path)
     const at = now()
@@ -135,7 +135,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
      * The question is closed in the thread BEFORE the server is told. `turn.answer` shows the next waiting
      * question at once, synchronously, and that one is put in the thread by `onPermission`; closing this one
      * afterwards cleared it too: the card of the second question vanished, its expiry found nothing on screen,
-     * and the turn waited for nikcli's answer for the whole turn timeout (full review 2026-10-06, bots 5).
+     * and the turn waited for ragu's answer for the whole turn timeout (full review 2026-10-06, bots 5).
      */
     deps.update(threadOf(path), (talk) => {
       const answered = permissionAnswered(talk, at)
@@ -146,7 +146,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
   }
 
   /**
-   * A question nikcli just asked (B8c): the block list refuses it, the bot's
+   * A question ragu just asked (B8c): the block list refuses it, the bot's
    * «Sempre» or an everyday command lets it through, and anything else stays
    * on screen with Consenti, Nega and Sempre, until it expires as a Nega.
    */
@@ -221,7 +221,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     const current = () => turns.get(path) === turn
     /*
      * A question on the thread, then settled. Nobody is there to answer a
-     * routine (B11 review, BASSO 1): whatever nikcli asks is refused at once,
+     * routine (B11 review, BASSO 1): whatever ragu asks is refused at once,
      * not left waiting until the turn runs out of time.
      */
     const ask = (asked: PendingPermission) => {
@@ -238,7 +238,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       ...(cwd ? { cwd } : {}),
       // A bot's turn is ADE's, not the user's: no user MCP, settings or memory (S13).
       lean: true,
-      // nikcli asks, `settle` answers; Claude Code is refused what the bot's «Sempre» does not cover (B8c).
+      // ragu asks, `settle` answers; Claude Code is refused what the bot's «Sempre» does not cover (B8c).
       // A routine has nobody to answer: no approvals, and no shell (`TurnSpec.unattended`).
       ...(routine ? { unattended: true } : { approvals: true, always: always.get(path) }),
       // A routine's cap per run holds during the turn, not after it (B11 review, M1).
@@ -246,7 +246,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       timeoutMs: BOT_TURN_TIMEOUT_MS,
       // Someone is watching the panel and a room: a project not admitted yet is asked about (B8d).
       interactive: !routine,
-      /* nikcli on ADE's server (B8d): its events as changes to the thread, and its questions by id, one at a time. */
+      /* ragu on ADE's server (B8d): its events as changes to the thread, and its questions by id, one at a time. */
       onChange: (change) => {
         if (current()) deps.update(thread, change)
       },

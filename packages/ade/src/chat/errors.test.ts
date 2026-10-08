@@ -36,7 +36,7 @@ describe("an answer that fails mid-stream", () => {
     apply({ type: "message.part.updated", properties: { part: text("Ecco la prima metà della ris") } })
     expect(retryNotice(data.session_status[SES])).toBeUndefined()
 
-    // The provider breaks: nikcli retries, and the chat says so while it waits.
+    // The provider breaks: ragu retries, and the chat says so while it waits.
     apply({
       type: "session.status",
       properties: { sessionID: SES, status: { type: "retry", attempt: 2, message: "Provider Server Error", next: 9 } },
@@ -75,7 +75,7 @@ describe("an answer that fails mid-stream", () => {
 })
 
 describe("errors in words", () => {
-  test("every kind nikcli sends has its sentence, in both languages", () => {
+  test("every kind ragu sends has its sentence, in both languages", () => {
     const kinds = [
       [{ name: "MessageAbortedError", data: { message: "Aborted" } }, "chat.error.aborted"],
       [{ name: "MessageOutputLengthError", data: {} }, "chat.error.outputLength"],

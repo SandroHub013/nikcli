@@ -13,7 +13,7 @@
  * Everything here is pure and synchronous so it can be unit-tested without a
  * renderer or a real image file.
  */
-import { createPixelImage, type PixelImage } from "@nikcli-ai/tui-image"
+import { createPixelImage, type PixelImage } from "@ragu/tui-image"
 import type { BackgroundDetail, BackgroundFit } from "./settings"
 
 export type Rect = { x: number; y: number; width: number; height: number }
@@ -99,7 +99,7 @@ export function placement(
 
 /**
  * Box-average resample of `rect` into a `width × height` image. Averaging
- * (rather than the bilinear sampler in `@nikcli-ai/tui-image`) matters here:
+ * (rather than the bilinear sampler in `@ragu/tui-image`) matters here:
  * a 4000px photo shrunk to ~200 cells aliases badly when point-sampled.
  */
 export function resample(image: PixelImage, rect: Rect, width: number, height: number): PixelImage {

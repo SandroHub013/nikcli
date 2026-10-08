@@ -94,8 +94,8 @@ describe("an answer event for design", () => {
 
 describe("who receives design answers", () => {
   const candidates: DeliveryCandidate[] = [
-    { id: "p1", title: "Master", project: "nikcli", running: true },
-    { id: "p2", title: "fable", project: "nikcli", running: false },
+    { id: "p1", title: "Master", project: "ragu", running: true },
+    { id: "p2", title: "fable", project: "ragu", running: false },
   ]
 
   test("resolves chosen session or non scelta", () => {
@@ -212,8 +212,8 @@ describe("who receives design answers", () => {
 
   test("reopen notice goes to original recipient A even when current recipient changed to B (M1)", () => {
     const candidates: DeliveryCandidate[] = [
-      { id: "s-a", title: "Sessione A", project: "nikcli", running: true },
-      { id: "s-b", title: "Sessione B", project: "nikcli", running: true },
+      { id: "s-a", title: "Sessione A", project: "ragu", running: true },
+      { id: "s-b", title: "Sessione B", project: "ragu", running: true },
     ]
     // 1. Design DS1 was answered and delivered to Sessione A
     let outbox = enqueue([], {
@@ -249,8 +249,8 @@ describe("who receives design answers", () => {
 
     // 5. If Sessione A is closed, it falls back to current recipient (Sessione B)
     const candidatesWithoutA: DeliveryCandidate[] = [
-      { id: "s-a", title: "Sessione A", project: "nikcli", running: false },
-      { id: "s-b", title: "Sessione B", project: "nikcli", running: true },
+      { id: "s-a", title: "Sessione A", project: "ragu", running: false },
+      { id: "s-b", title: "Sessione B", project: "ragu", running: true },
     ]
     const fallbackTarget = resolveDeliveryTarget(reopenItem, candidatesWithoutA, recipientB)
     expect(fallbackTarget).toEqual({ id: "s-b", title: "Sessione B" })
@@ -258,8 +258,8 @@ describe("who receives design answers", () => {
 
   test("two sessions with the same title: the notice goes to the saved id, and an old entry still uses the title", () => {
     const same: DeliveryCandidate[] = [
-      { id: "s-1", title: "Master", project: "nikcli", running: true },
-      { id: "s-2", title: "Master", project: "nikcli", running: true },
+      { id: "s-1", title: "Master", project: "ragu", running: true },
+      { id: "s-2", title: "Master", project: "ragu", running: true },
     ]
     const current: RecipientStatus = { state: "pronta", id: "s-1", title: "Master" }
     const file = "C:\\p\\.ade\\design.jsonl"
@@ -294,16 +294,16 @@ describe("preview type security detection and path resolution", () => {
   })
 
   test("resolvePreviewPath resolves project-relative and preserves absolute paths", () => {
-    const projectRoot = "C:/Users/39349/Favorites/nikcli"
+    const projectRoot = "C:/Users/39349/Favorites/ragu"
 
     // Relative paths resolved against project root
     expect(resolvePreviewPath(".ade/ostile-anteprima.html", projectRoot)).toBe(
-      "C:/Users/39349/Favorites/nikcli/.ade/ostile-anteprima.html",
+      "C:/Users/39349/Favorites/ragu/.ade/ostile-anteprima.html",
     )
     expect(resolvePreviewPath("./results/preview.html", projectRoot)).toBe(
-      "C:/Users/39349/Favorites/nikcli/results/preview.html",
+      "C:/Users/39349/Favorites/ragu/results/preview.html",
     )
-    expect(resolvePreviewPath("shots/mockup.png", projectRoot)).toBe("C:/Users/39349/Favorites/nikcli/shots/mockup.png")
+    expect(resolvePreviewPath("shots/mockup.png", projectRoot)).toBe("C:/Users/39349/Favorites/ragu/shots/mockup.png")
 
     // Absolute paths preserved as-is
     expect(resolvePreviewPath("C:/Users/39349/Favorites/ade-team/results/S54-anteprima.html", projectRoot)).toBe(
@@ -316,7 +316,7 @@ describe("preview type security detection and path resolution", () => {
 
     // Strips query strings and hashes
     expect(resolvePreviewPath(".ade/preview.html#glass,A", projectRoot)).toBe(
-      "C:/Users/39349/Favorites/nikcli/.ade/preview.html",
+      "C:/Users/39349/Favorites/ragu/.ade/preview.html",
     )
     expect(resolvePreviewPath("C:/preview.html?theme=dark", projectRoot)).toBe("C:/preview.html")
 
@@ -412,8 +412,8 @@ describe("top bar narrow window layout, and what the eye has to check", () => {
  */
 describe("answering with nobody to receive", () => {
   const sessions = [
-    { id: "p1", title: "Master", project: "nikcli", running: true },
-    { id: "p2", title: "fable", project: "nikcli", running: false },
+    { id: "p1", title: "Master", project: "ragu", running: true },
+    { id: "p2", title: "fable", project: "ragu", running: false },
   ]
   const proposal: DesignProposal = {
     k: "DS30",

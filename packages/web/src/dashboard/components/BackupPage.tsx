@@ -6,7 +6,7 @@ function BackupPageInner() {
     <EmptyState
       icon={emptyIcons.disk}
       title="Backups unavailable"
-      description="This nikcli server doesn’t expose a backup API. Manage config backups from the CLI instead."
+      description="This ragu server doesn’t expose a backup API. Manage config backups from the CLI instead."
     />
   )
 }

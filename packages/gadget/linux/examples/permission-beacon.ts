@@ -2,18 +2,18 @@
  * Permission beacon — a lamp that lights up when the agent needs you, and a
  * button that answers it.
  *
- * nikcli asks before risky tool calls. On a Pi with an LED on GPIO 18 and a
+ * ragu asks before risky tool calls. On a Pi with an LED on GPIO 18 and a
  * button on GPIO 17, this gadget turns the LED on while a permission is
  * pending and reports the press as `ui.press { key: "approve" }`.
  *
- * This file is the device half only. Closing the loop needs a nikcli mod that
+ * This file is the device half only. Closing the loop needs a ragu mod that
  * turns a pending permission into a `beacon.set` call and the press into the
  * permission reply; that mod is not part of this repository.
  *
  * The LED is driven by a command so such a mod can switch it: `beacon.set`.
  */
 import { writeFileSync, existsSync } from "node:fs"
-import { Gadget, button } from "@nikcli-ai/gadget"
+import { Gadget, button } from "@ragu/gadget"
 
 const LED_PIN = 18
 const SYSFS = "/sys/class/gpio"

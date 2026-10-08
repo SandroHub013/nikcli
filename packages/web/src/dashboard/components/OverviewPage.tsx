@@ -4,7 +4,7 @@ import {
   getErrorMessage,
   studioApi,
   type CloudSessionInfo,
-  type NikcliConfig,
+  type RaguConfig,
   type ProfilesData,
 } from "../lib/studio-api"
 import { Card, ErrorBanner, PageHeader, StatCard, btnPrimary, cardClass } from "./ui"
@@ -21,7 +21,7 @@ function QuickAction({ label, href, description }: { label: string; href: string
 function OverviewPageInner() {
   const { user, token, serverUrl } = useAuth()
   const [sessions, setSessions] = useState<CloudSessionInfo[]>([])
-  const [config, setConfig] = useState<NikcliConfig | null>(null)
+  const [config, setConfig] = useState<RaguConfig | null>(null)
   const [profiles, setProfiles] = useState<ProfilesData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -105,7 +105,7 @@ function OverviewPageInner() {
         <QuickAction
           label="Profiles"
           href="/dashboard/profiles"
-          description="Switch isolated nikcli profiles and see profile-specific MCP/provider coverage."
+          description="Switch isolated ragu profiles and see profile-specific MCP/provider coverage."
         />
         <QuickAction
           label="Config"
@@ -128,7 +128,7 @@ function OverviewPageInner() {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h3 className="font-display text-xl font-semibold text-terminal-text">Recent Cloud Sessions</h3>
-            <p className="mt-1 text-sm text-terminal-muted">Latest sessions visible to the connected nikcli server.</p>
+            <p className="mt-1 text-sm text-terminal-muted">Latest sessions visible to the connected ragu server.</p>
           </div>
           <a href="/dashboard/sessions" className="text-sm font-semibold text-terminal-accent hover:underline">
             Manage all

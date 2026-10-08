@@ -113,7 +113,7 @@ function clampInteger(value: string | undefined, fallback: number, min: number, 
 app.get("/health", (c) =>
   c.json({
     status: "ok",
-    service: "nikcli-cloud",
+    service: "ragu-cloud",
     now: Date.now(),
   }),
 )
@@ -405,8 +405,8 @@ const worker: ExportedHandler<CloudEnv["Bindings"]> = {
       const stub = env.RELAY_ROOM.get(id)
 
       const headers = new Headers(request.headers)
-      headers.set("x-nikcli-user-id", auth.userID)
-      headers.set("x-nikcli-session-id", sessionID)
+      headers.set("x-ragu-user-id", auth.userID)
+      headers.set("x-ragu-session-id", sessionID)
       const deviceID = url.searchParams.get("deviceID")
       if (!deviceID) {
         return new Response("Missing deviceID", { status: 400 })
@@ -416,7 +416,7 @@ const worker: ExportedHandler<CloudEnv["Bindings"]> = {
       if (!hasDevice) {
         return new Response("Unknown device", { status: 403 })
       }
-      headers.set("x-nikcli-device-id", deviceID)
+      headers.set("x-ragu-device-id", deviceID)
 
       const forwarded = new Request(request, {
         headers,

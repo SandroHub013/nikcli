@@ -2,7 +2,7 @@
  * Browser Inspector Bridge Protocol
  *
  * Re-exports the unified visual editor bridge protocol types and script from
- * `@nikcli-ai/util/visual-editor-bridge`.
+ * `@ragu/util/visual-editor-bridge`.
  */
 
 export {
@@ -10,4 +10,4 @@ export {
   type ConsoleEntry,
   type BridgeMessage,
   INSPECTOR_BRIDGE_SCRIPT,
-} from "@nikcli-ai/util/visual-editor-bridge"
+} from "@ragu/util/visual-editor-bridge"

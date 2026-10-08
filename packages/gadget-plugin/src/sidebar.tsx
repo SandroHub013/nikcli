@@ -8,7 +8,7 @@
  * secondary words are coloured.
  */
 import { createSignal, For, onCleanup, Show } from "solid-js"
-import { ROUTES, type GadgetInfo } from "@nikcli-ai/gadget/protocol"
+import { ROUTES, type GadgetInfo } from "@ragu/gadget/protocol"
 
 const GREEN = "#4caf50"
 const AMBER = "#e0a030"

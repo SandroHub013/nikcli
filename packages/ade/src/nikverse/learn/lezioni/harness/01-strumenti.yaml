@@ -37,7 +37,7 @@ fonti:
     titolo: "What is MCP?"
     url: "https://modelcontextprotocol.io/introduction"
   - id: F4
-    titolo: "nikcli docs, Tools"
+    titolo: "ragu docs, Tools"
     url: "https://github.com/nikcli/nikcli/blob/live-main/packages/web/src/pages/docs/tools.astro"
 
 teoria:

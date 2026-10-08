@@ -20,7 +20,7 @@ mock.module("../extensions/extensions-page", () => ({
 
 const { createComponent, render } = await import("solid-js/web")
 const { SettingsSheet } = await import("./settings-sheet")
-const { DEFAULT_VOICE_SETTINGS } = await import("@nikcli-ai/voice/core")
+const { DEFAULT_VOICE_SETTINGS } = await import("@ragu/voice/core")
 
 let dispose: (() => void) | undefined
 afterEach(() => {
@@ -674,7 +674,7 @@ describe("S5: le pagine della voce nella categoria Voce", () => {
   })
 
   test("VoiceSettingsPage si disegna da sola, senza guscio né barra", async () => {
-    const { VoiceSettingsPage } = await import("@nikcli-ai/voice")
+    const { VoiceSettingsPage } = await import("@ragu/voice")
     const host = document.createElement("div")
     document.body.append(host)
     dispose = render(

@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 
 /**
- * ci-autofix.ts — Runs nikcli headlessly to attempt validation repair.
+ * ci-autofix.ts — Runs ragu headlessly to attempt validation repair.
  *
  * Safety guards:
  *   - Refuses to run on untrusted contexts (forks, bots, release/generated/autofix commits)
- *   - Anti-loop: skips commits with [nikcli autofix], release: v, chore: generate, [skip ci]
+ *   - Anti-loop: skips commits with [ragu autofix], release: v, chore: generate, [skip ci]
  *   - Only pushes if validation passes after changes
  *   - Never touches version/release files unless explicitly required
  */
@@ -42,11 +42,11 @@ const EVENT = process.env.GITHUB_EVENT_NAME || ""
 const PR_HEAD_REPO = process.env.GITHUB_EVENT_PULL_REQUEST_HEAD_REPO_FULL_NAME || ""
 
 // Commit messages that indicate we should NOT attempt autofix
-const SKIP_PATTERNS = [/^\[nikcli autofix\]/, /^release: v/, /^chore: generate/, /\[skip ci\]/]
+const SKIP_PATTERNS = [/^\[ragu autofix\]/, /^release: v/, /^chore: generate/, /\[skip ci\]/]
 
 function shouldSkip(): { skip: boolean; reason: string } {
   // Skip bot commits
-  if (ACTOR === "github-actions[bot]" || ACTOR === "nikcli-ci[bot]") {
+  if (ACTOR === "github-actions[bot]" || ACTOR === "ragu-ci[bot]") {
     return { skip: true, reason: `Bot actor: ${ACTOR}` }
   }
 
@@ -68,7 +68,7 @@ function shouldSkip(): { skip: boolean; reason: string } {
     return { skip: true, reason: "Missing MINIMAX_API_KEY secret" }
   }
 
-  // Only run on the nikcli repo (moved from nikomatt69/nikcli to nikcli/nikcli)
+  // Only run on the ragu repo (moved from nikomatt69/nikcli to nikcli/nikcli)
   if (REPO !== "nikomatt69/nikcli" && REPO !== "nikcli/nikcli") {
     return { skip: true, reason: `Wrong repository: ${REPO}` }
   }
@@ -86,7 +86,7 @@ async function main() {
     process.exit(0)
   }
 
-  console.log("=== NikCLI Autofix Started ===\n")
+  console.log("=== Ragu Autofix Started ===\n")
 
   // Step 1: Run validation to reproduce the failure
   console.log("▸ Running validation to reproduce failure...")
@@ -112,8 +112,8 @@ async function main() {
     summary = readFileSync("tmp/ci-validation-summary.md", "utf8")
   }
 
-  // Step 2: Install nikcli
-  console.log("▸ Installing nikcli...")
+  // Step 2: Install ragu
+  console.log("▸ Installing ragu...")
   const installProc = Bun.spawn(["bash", "-c", "curl -fsSL https://nikcli-ai.dev/install | bash"], {
     stdout: "pipe",
     stderr: "pipe",
@@ -122,25 +122,25 @@ async function main() {
   const installExit = await installProc.exited
   if (installExit !== 0) {
     const installErr = await new Response(installProc.stderr).text()
-    console.error(`Failed to install nikcli: ${redact(installErr).slice(-500)}`)
+    console.error(`Failed to install ragu: ${redact(installErr).slice(-500)}`)
     process.exit(1)
   }
-  console.log("✅ nikcli installed")
+  console.log("✅ ragu installed")
 
   // The installer drops the binary in ~/.nikcli/bin and appends that to the shell profile —
-  // which this already-running process never re-reads. Spawning "nikcli" by name therefore
+  // which this already-running process never re-reads. Spawning "ragu" by name therefore
   // died with `Executable not found in $PATH` on every autofix run. Resolve the binary and
-  // prepend its directory, so nikcli and anything it shells out to both find it.
-  const nikcliBinDir = join(homedir(), ".nikcli", "bin")
-  const nikcliBin = join(nikcliBinDir, "nikcli")
-  if (!existsSync(nikcliBin)) {
-    console.error(`nikcli not found at ${nikcliBin} after install`)
+  // prepend its directory, so ragu and anything it shells out to both find it.
+  const raguBinDir = join(homedir(), ".nikcli", "bin")
+  const raguBin = join(raguBinDir, "ragu")
+  if (!existsSync(raguBin)) {
+    console.error(`ragu not found at ${raguBin} after install`)
     process.exit(1)
   }
-  const nikcliPath = `${nikcliBinDir}${delimiter}${process.env.PATH ?? ""}`
+  const raguPath = `${raguBinDir}${delimiter}${process.env.PATH ?? ""}`
 
-  // Step 3: Run nikcli headless repair
-  const model = process.env.NIKCLI_AUTOFIX_MODEL || "minimax-coding-plan/MiniMax-M3"
+  // Step 3: Run ragu headless repair
+  const model = process.env.RAGU_AUTOFIX_MODEL || "minimax-coding-plan/MiniMax-M3"
   const prompt = [
     "Reproduce and fix the validation failure shown below.",
     "Make the SMALLEST possible change to fix the issue.",
@@ -153,14 +153,14 @@ async function main() {
     summary.slice(0, 4000), // Limit context size
   ].join("\n")
 
-  console.log(`▸ Running nikcli autofix with model: ${model}`)
+  console.log(`▸ Running ragu autofix with model: ${model}`)
 
-  const nikcliProc = Bun.spawn([nikcliBin, "run", "--command", prompt, "--model", model, "--format", "json"], {
+  const raguProc = Bun.spawn([raguBin, "run", "--command", prompt, "--model", model, "--format", "json"], {
     stdout: "pipe",
     stderr: "pipe",
     env: {
       ...process.env,
-      PATH: nikcliPath,
+      PATH: raguPath,
       MINIMAX_API_KEY: process.env.MINIMAX_API_KEY,
       TERM: "dumb",
       CI: "true",
@@ -168,15 +168,15 @@ async function main() {
     cwd: process.cwd(),
   })
 
-  const nikcliExit = await nikcliProc.exited
-  const nikcliStdout = await new Response(nikcliProc.stdout).text()
-  const nikcliStderr = await new Response(nikcliProc.stderr).text()
+  const raguExit = await raguProc.exited
+  const raguStdout = await new Response(raguProc.stdout).text()
+  const raguStderr = await new Response(raguProc.stderr).text()
 
-  console.log(`nikcli exited with code ${nikcliExit}`)
-  if (nikcliStderr.length > 0) {
+  console.log(`ragu exited with code ${raguExit}`)
+  if (raguStderr.length > 0) {
     // Don't dump full stderr — just last few lines, redacted
-    const tail = nikcliStderr.split("\n").slice(-5).join("\n")
-    console.log(`nikcli stderr (tail): ${redact(tail)}`)
+    const tail = raguStderr.split("\n").slice(-5).join("\n")
+    console.log(`ragu stderr (tail): ${redact(tail)}`)
   }
 
   // Step 4: Re-run validation after attempted fix

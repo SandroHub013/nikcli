@@ -74,7 +74,7 @@ CompanionWsRoutes.get(
 
     return {
       onOpen(_event, ws) {
-        console.log(`[companion] nikcli WebSocket connected: ${sessionId}`)
+        console.log(`[companion] ragu WebSocket connected: ${sessionId}`)
         cliSockets.set(sessionId ?? "", ws)
 
         const session = sessions.get(sessionId ?? "")
@@ -123,12 +123,12 @@ CompanionWsRoutes.get(
               }
             }
           } catch (e) {
-            console.error("[companion] Failed to parse nikcli message:", e)
+            console.error("[companion] Failed to parse ragu message:", e)
           }
         }
       },
       onClose(_event, ws) {
-        console.log(`[companion] nikcli WebSocket disconnected: ${sessionId}`)
+        console.log(`[companion] ragu WebSocket disconnected: ${sessionId}`)
         cliSockets.delete(sessionId ?? "")
 
         const session = sessions.get(sessionId ?? "")

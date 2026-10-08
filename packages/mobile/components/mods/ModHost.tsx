@@ -7,7 +7,7 @@ import type { HostEvent } from "@/lib/types"
 /**
  * One connection to the mods for everything on a screen.
  *
- * Mods live in the nikcli server and draw on request, so a screen that shows several of their panes
+ * Mods live in the ragu server and draw on request, so a screen that shows several of their panes
  * would otherwise open one event stream per pane, and a phone only gets a handful of simultaneous
  * connections to one host. The host keeps a single `/mobile/events` stream, tells every `ModSite` below
  * it when its drawing may have changed, and keeps the pane list and "does any mod draw at all" current.

@@ -7,9 +7,9 @@ Owner: identity/auth/account maintainers and `packages/identity` Cloudflare Work
 
 Evidence B15, B24, B25 in the [register](../README.md): schema-first HttpApi, tagged account failures, and identity verifier
 options already exist. The `packages/identity` Cloudflare Worker exposes login, OAuth callback, PKCE, device-code, passkey,
-and rate-limit primitives, and `packages/nikcli/src/server/identity-auth.ts` already verifies JWTs against the issuer. The
+and rate-limit primitives, and `packages/ragu/src/server/identity-auth.ts` already verifies JWTs against the issuer. The
 gap is a unified architectural spec covering the **end-to-end** auth lifecycle across `packages/identity` (browser/Cloud),
-the nikcli server (JWT verification), the TUI (`DialogAccountLogin`, onboarding), the CLI (`auth`, `account`),
+the ragu server (JWT verification), the TUI (`DialogAccountLogin`, onboarding), the CLI (`auth`, `account`),
 the mobile app, and the SDK clients — and the migration between them. Login, refresh, expiry, and revocation must be a
 single state machine, not a sequence of unrelated flows.
 
@@ -19,7 +19,7 @@ Define the canonical state machine and trust boundaries for identity, account cr
 email, PKCE OAuth, device code, passkey), token lifecycle, and account switching. Preserve the existing
 `packages/identity` Workers implementation and the existing JWT verifier. Do not invent a second identity provider,
 relax PKCE to plain, skip account creation on first sign-in, store secrets in the TUI, or change the existing flag-based
-opt-outs (`NIKCLI_AUTH_ISSUER=off`, etc.). Do not migrate `packages/identity` itself unless a contract change requires it.
+opt-outs (`RAGU_AUTH_ISSUER=off`, etc.). Do not migrate `packages/identity` itself unless a contract change requires it.
 
 ## Design and Requirements
 
@@ -49,7 +49,7 @@ opt-outs (`NIKCLI_AUTH_ISSUER=off`, etc.). Do not migrate `packages/identity` it
 8. Account switching is a typed transition: `SwitchTo(accountID)` decodes identity, verifies the new token, invalidates
    cached `Auth.Info` for the previous account, and emits an audit event. Multi-account storage is bounded (candidate 16);
    an over-quota switch returns `AuthError.AccountLimitReached`, not silent eviction.
-9. The nikcli server trusts the issuer's JWT (verified by `verifyAccessToken`) and stores the resulting `UserDB.PublicUser`
+9. The ragu server trusts the issuer's JWT (verified by `verifyAccessToken`) and stores the resulting `UserDB.PublicUser`
    locally. The TUI trusts the server's typed responses; it never re-validates the JWT signature. The server is the
    single trust boundary for `externalSessionForToken`; the TUI has no authority over its own authorization.
 10. Revocation: a server-issued logout or a Cloud-side session invalidation must propagate to every open TUI/SDK/CLI
@@ -58,8 +58,8 @@ opt-outs (`NIKCLI_AUTH_ISSUER=off`, etc.). Do not migrate `packages/identity` it
 11. Re-authentication during a session: the TUI surfaces a banner, not a silent retry. Background operations pause, the
     user re-authenticates, and the pending work resumes; the typed recovery does not guess identities.
 12. A refresh token is single-use machine-wide, not process-wide. The issuer rotates it on first use and revokes the
-    whole family on the second, so several nikcli processes on one machine (installed TUI, dev build, background service,
-    a `nikcli` command) serialize the refresh through a lock every one of them can see (`FileLock`) and re-read the
+    whole family on the second, so several ragu processes on one machine (installed TUI, dev build, background service,
+    a `ragu` command) serialize the refresh through a lock every one of them can see (`FileLock`) and re-read the
     account row from the database — never a cache — before spending the token. A process that cannot take the claim does
     not refresh; it answers from the account row and lets the holder rotate.
 13. "Could not ask" is never "signed out". A startup that cannot reach the server, a `/user/me` that never answered, and
@@ -73,7 +73,7 @@ opt-outs (`NIKCLI_AUTH_ISSUER=off`, etc.). Do not migrate `packages/identity` it
 Browser (packages/identity, Cloudflare Worker)
   - OAuth start, callback, PKCE, device-code, passkey
   - One-shot codes, short-lived, never stored client-side
-Server (packages/nikcli)
+Server (packages/ragu)
   - Verifies issuer JWT (JWKS) at every request
   - Owns local account/user mapping
   - Owns session token issuance to SDK clients
@@ -110,11 +110,11 @@ never appear in logs, errors, telemetry, or metric labels.
   silently re-authenticate using a previously cached refresh token.
 - No tokens, OAuth codes, PKCE verifiers, email tokens, passkey challenges, or password material appear in logs, error
   bodies, stacks, telemetry spans, or metric dimensions. Redaction tests assert this for both success and failure paths.
-- Extend `packages/nikcli/test/account/`, `packages/nikcli/test/auth/`, `packages/nikcli/test/server/httpapi-account.test.ts`,
-  `packages/nikcli/test/server/httpapi-bridge-401.test.ts`, `packages/nikcli/test/server/httpapi-bridge-auth.test.ts`,
-  `packages/nikcli/test/tui/onboarding-auth.test.ts`, and `packages/identity/test/` (existing).
-- From `packages/nikcli`: `bun test test/account/ test/auth/ test/server/httpapi-account.test.ts test/tui/onboarding-auth.test.ts`.
-  Run `packages/identity` tests through that package's own harness; do not assume a `bun test` in `packages/nikcli` covers
+- Extend `packages/ragu/test/account/`, `packages/ragu/test/auth/`, `packages/ragu/test/server/httpapi-account.test.ts`,
+  `packages/ragu/test/server/httpapi-bridge-401.test.ts`, `packages/ragu/test/server/httpapi-bridge-auth.test.ts`,
+  `packages/ragu/test/tui/onboarding-auth.test.ts`, and `packages/identity/test/` (existing).
+- From `packages/ragu`: `bun test test/account/ test/auth/ test/server/httpapi-account.test.ts test/tui/onboarding-auth.test.ts`.
+  Run `packages/identity` tests through that package's own harness; do not assume a `bun test` in `packages/ragu` covers
   Worker code. One final root `bun run typecheck` after the slice.
 
 ## Migration and Rollback
@@ -143,7 +143,7 @@ The one surface that answers "who is signed in on this machine" — `/user/me` a
 
 ### 2. Verifier configuration is read at call time
 
-`Flag.NIKCLI_AUTH_{ISSUER,JWKS_URL,AUDIENCE,JWT_SECRET}` were `const`, capturing `process.env` when `@nikcli-ai/util/flag` was first imported — by whichever module in the process touched a flag first (commit `48344aa4` makes them functions). `flag.ts` already documented this hazard on `autoApprove` and `cacheRetention`; these four were missed.
+`Flag.RAGU_AUTH_{ISSUER,JWKS_URL,AUDIENCE,JWT_SECRET}` were `const`, capturing `process.env` when `@ragu/util/flag` was first imported — by whichever module in the process touched a flag first (commit `48344aa4` makes them functions). `flag.ts` already documented this hazard on `autoApprove` and `cacheRetention`; these four were missed.
 
 The symptom was not a config bug, it was eight tests that failed in a directory run and passed alone, for a year, with nothing wrong in either file: `test/server/local-account-session.test.ts` exports its own issuer and HS256 secret at the top of its own file, before importing anything, and still got the process defaults, so every token it signed verified as 401. **Any** file that boots the server machinery reproduces it and no file that does not ever will — which is the shape of a structural bug wearing a flake's clothes. `test/auth/identity-verifier-env.test.ts` guards the ordering that was broken (import first, set the variables after) and fails 6/6 against the constants.
 
@@ -151,11 +151,11 @@ The symptom was not a config bug, it was eight tests that failed in a directory 
 
 Four more constants were in the same class, found by intersecting "captured as
 `export const` in `flag.ts`" with "assigned to `process.env` anywhere in the repo at
-runtime": `NIKCLI_DISABLE_MODELS_FETCH`, `NIKCLI_EXPERIMENTAL_DISABLE_FILEWATCHER`, and
-the legacy-credential pair `NIKCLI_REQUIRE_OAUTH` / `NIKCLI_LEGACY_LOGIN`.
+runtime": `RAGU_DISABLE_MODELS_FETCH`, `RAGU_EXPERIMENTAL_DISABLE_FILEWATCHER`, and
+the legacy-credential pair `RAGU_REQUIRE_OAUTH` / `RAGU_LEGACY_LOGIN`.
 
 The pair is the one that matters. `test/server/unified-auth.fixture.ts` sets
-`NIKCLI_REQUIRE_OAUTH=1` at its own module scope, so its tests could have run against a
+`RAGU_REQUIRE_OAUTH=1` at its own module scope, so its tests could have run against a
 gate that was never closed — **a security test that passes because the thing it meant to
 forbid was never forbidden**. They were converted together, because every call site reads
 both and a pair where one side is live and the other a snapshot can disagree. The auth

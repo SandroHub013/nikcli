@@ -9,7 +9,7 @@ const pluginsDir = join(scriptDir, "..", "plugins")
 
 // Determine publish tag from branch / env
 const channel = await (async () => {
-  if (process.env["NIKCLI_CHANNEL"]) return process.env["NIKCLI_CHANNEL"]
+  if (process.env["RAGU_CHANNEL"]) return process.env["RAGU_CHANNEL"]
   const branch = await $`git branch --show-current`.text().then((x) => x.trim())
   return branch === "main" ? "latest" : branch
 })()

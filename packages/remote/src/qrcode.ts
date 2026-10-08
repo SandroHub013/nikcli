@@ -32,7 +32,7 @@ export async function generateQRMatrix(value: string): Promise<boolean[][] | nul
  * keep the compact renderer — the ASCII fallback is two cells per module and
  * overflows a typical pane.
  *
- * Kept local: `@nikcli-ai/util` already depends on this package.
+ * Kept local: `@ragu/util` already depends on this package.
  */
 export function shouldRenderCompactTerminalQR(
   platform: NodeJS.Platform = process.platform,
@@ -113,7 +113,7 @@ export async function renderSessionCard(session: RemoteSession): Promise<string>
   const lines = [
     "",
     "╭─────────────────────────────────────────────╮",
-    "│           NikCLI Remote Session             │",
+    "│           Ragu Remote Session             │",
     "╰─────────────────────────────────────────────╯",
     "",
   ]

@@ -9,7 +9,7 @@
  */
 
 import { plainProblem } from "../effect/errors"
-import { fuzzyMatch } from "@nikcli-ai/ade/command/match"
+import { fuzzyMatch } from "@ragu/ade/command/match"
 import type { ParseResult } from "../intent/parse"
 import type { AdeView, PaneSummary, VoiceHost } from "./host"
 

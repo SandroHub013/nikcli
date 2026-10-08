@@ -1,14 +1,14 @@
 #!/bin/bash
-# nikcli-slack-tunnel.sh
-# Script to manage tunnel for nikcli slack integration
+# ragu-slack-tunnel.sh
+# Script to manage tunnel for ragu slack integration
 # Supports both cloudflared (default) and ngrok
 
 # Use ngrok if USE_NGROK is set, otherwise default to cloudflared
 USE_NGROK=${USE_NGROK:-0}
-PORT=${PORT:-4096} # Default Nikcli port
+PORT=${PORT:-4096} # Default Ragu port
 
 if [ "$USE_NGROK" = "1" ]; then
-    echo "Starting ngrok tunnel for nikcli server..."
+    echo "Starting ngrok tunnel for ragu server..."
     
     # Kill existing ngrok
     killall ngrok 2>/dev/null || true
@@ -35,7 +35,7 @@ if [ "$USE_NGROK" = "1" ]; then
     fi
 else
     # Default to cloudflared
-    echo "Starting cloudflared tunnel for nikcli server..."
+    echo "Starting cloudflared tunnel for ragu server..."
     
     # Kill any existing cloudflared tunnel
     killall cloudflared 2>/dev/null || true
@@ -61,21 +61,21 @@ echo ""
 echo "✅ Tunnel created: $TUNNEL_URL"
 echo ""
 
-# Update NIKCLI_URL in Cloudflare Workers
-echo "Updating NIKCLI_URL secret..."
+# Update RAGU_URL in Cloudflare Workers
+echo "Updating RAGU_URL secret..."
  
-echo "$TUNNEL_URL" | bunx wrangler secret put NIKCLI_URL --name nikcli-slack || true
+echo "$TUNNEL_URL" | bunx wrangler secret put RAGU_URL --name ragu-slack || true
 
 echo ""
-echo "✅ NIKCLI_URL updated!"
+echo "✅ RAGU_URL updated!"
 echo ""
-echo "To use nikcli via Slack:"
+echo "To use ragu via Slack:"
 echo "1. Keep this terminal running"
-echo "2. Mention @nikcli in Slack to start a conversation"
+echo "2. Mention @ragu in Slack to start a conversation"
 echo ""
 echo "⚠️ NOTE: This URL will change if you restart this script"
 echo "   For a permanent solution, consider:"
-echo "   - Deploy nikcli server on a VPS with static IP"
+echo "   - Deploy ragu server on a VPS with static IP"
 echo "   - Set up a named tunnel with Cloudflare Zero Trust or ngrok custom domain"
 
 # Wait for background process to keep script alive

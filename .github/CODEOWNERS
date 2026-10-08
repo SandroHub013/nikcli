@@ -1,32 +1,32 @@
-# Code Owners for nikcli
+# Code Owners for ragu
 #
 # Only paths listed here require an owner review (enforced by branch protection
 # on live-main). Everything else is freely editable by collaborators with Write.
 
-/.github/CODEOWNERS @nikomatt69
-/.github/workflows/ @nikomatt69
+/.github/CODEOWNERS @SandroHub013
+/.github/workflows/ @SandroHub013
 
-/packages/auth/ @nikomatt69
-/packages/bench-tui/ @nikomatt69
-/packages/companion/ @nikomatt69
-/packages/console/ @nikomatt69
-/packages/containers/ @nikomatt69
-/packages/enterprise/ @nikomatt69
-/packages/function/ @nikomatt69
-/packages/http-recorder/ @nikomatt69
-/packages/httpapi-codegen/ @nikomatt69
-/packages/identity/ @nikomatt69
-/packages/inference/ @nikomatt69
-/packages/llm/ @nikomatt69
-/packages/nikcli/ @nikomatt69
-/packages/plugin/ @nikomatt69
-/packages/remote/ @nikomatt69
-/packages/script/ @nikomatt69
-/packages/sdk/ @nikomatt69
-/packages/sdk-next/ @nikomatt69
-/packages/simulation/ @nikomatt69
-/packages/slack/ @nikomatt69
-/packages/tui/ @nikomatt69
-/packages/tui-storybook/ @nikomatt69
-/packages/util/ @nikomatt69
-/packages/web/ @nikomatt69
+/packages/auth/ @SandroHub013
+/packages/bench-tui/ @SandroHub013
+/packages/companion/ @SandroHub013
+/packages/console/ @SandroHub013
+/packages/containers/ @SandroHub013
+/packages/enterprise/ @SandroHub013
+/packages/function/ @SandroHub013
+/packages/http-recorder/ @SandroHub013
+/packages/httpapi-codegen/ @SandroHub013
+/packages/identity/ @SandroHub013
+/packages/inference/ @SandroHub013
+/packages/llm/ @SandroHub013
+/packages/ragu/ @SandroHub013
+/packages/plugin/ @SandroHub013
+/packages/remote/ @SandroHub013
+/packages/script/ @SandroHub013
+/packages/sdk/ @SandroHub013
+/packages/sdk-next/ @SandroHub013
+/packages/simulation/ @SandroHub013
+/packages/slack/ @SandroHub013
+/packages/tui/ @SandroHub013
+/packages/tui-storybook/ @SandroHub013
+/packages/util/ @SandroHub013
+/packages/web/ @SandroHub013

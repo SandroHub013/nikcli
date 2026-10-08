@@ -29,7 +29,7 @@ const shop = (id: string, name = id, slot = 0) => ({ id, name, slot })
 
 const picture = () => ({
   at: 1,
-  shops: [shop("s1", "nikcli")],
+  shops: [shop("s1", "ragu")],
   agents: [agent("n1"), agent("n2", { state: "perm" })],
   waiting: { decisions: 2 },
 })
@@ -92,7 +92,7 @@ describe("the page", () => {
     const sent: unknown[] = []
     render(doc, applySnapshot(emptyState(), picture()), (command: unknown) => sent.push(command))
     expect(doc.querySelectorAll(".shop")).toHaveLength(1)
-    expect(doc.querySelector(".shop h2")?.textContent).toBe("nikcli")
+    expect(doc.querySelector(".shop h2")?.textContent).toBe("ragu")
     expect([...doc.querySelectorAll(".agent")].map((row) => row.getAttribute("data-state"))).toEqual(["work", "perm"])
     expect(doc.getElementById("status")?.textContent).toBe("2 sessioni · 1 progetti · 2 decisioni in attesa")
     const buttons = [...doc.querySelectorAll<HTMLButtonElement>(".agent button")]

@@ -56,7 +56,7 @@ export const Logo = (props: { class?: string }) => {
     <span
       data-component="logo-wordmark"
       role="img"
-      aria-label="Nikcli"
+      aria-label="Ragu"
       classList={{ [props.class ?? ""]: !!props.class }}
     >
       <img data-tone="dark" src={wordmarkDark} alt="" draggable={false} />

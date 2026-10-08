@@ -1,4 +1,4 @@
-import { ZenData } from "@nikcli-ai/console-core/model.js"
+import { ZenData } from "@ragu/console-core/model.js"
 import {
   fromAnthropicChunk,
   fromAnthropicRequest,

@@ -47,8 +47,8 @@ export default function Home() {
 
       <div data-component="content">
         <section data-component="top">
-          <img data-slot="logo light" src={logoLight} alt="nikcli logo light" />
-          <img data-slot="logo dark" src={logoDark} alt="nikcli logo dark" />
+          <img data-slot="logo light" src={logoLight} alt="ragu logo light" />
+          <img data-slot="logo dark" src={logoDark} alt="ragu logo dark" />
           <h1 data-slot="title">{i18n.t("temp.hero.title")}</h1>
           <div data-slot="login">
             <a href="/auth">{i18n.t("temp.zen")}</a>
@@ -113,7 +113,7 @@ export default function Home() {
             <h3 data-component="title">npm</h3>
             <button data-copy data-slot="button">
               <span>
-                npm install -g <strong>nikcli-ai</strong>
+                npm install -g <strong>ragu-code</strong>
               </span>
               <CopyStatus />
             </button>
@@ -122,7 +122,7 @@ export default function Home() {
             <h3 data-component="title">bun</h3>
             <button data-copy data-slot="button">
               <span>
-                bun install -g <strong>nikcli-ai</strong>
+                bun install -g <strong>ragu-code</strong>
               </span>
               <CopyStatus />
             </button>
@@ -131,7 +131,7 @@ export default function Home() {
             <h3 data-component="title">homebrew</h3>
             <button data-copy data-slot="button">
               <span>
-                brew install <strong>nikcli</strong>
+                brew install <strong>ragu</strong>
               </span>
               <CopyStatus />
             </button>
@@ -140,7 +140,7 @@ export default function Home() {
             <h3 data-component="title">paru</h3>
             <button data-copy data-slot="button">
               <span>
-                paru -S <strong>nikcli-bin</strong>
+                paru -S <strong>ragu-bin</strong>
               </span>
               <CopyStatus />
             </button>

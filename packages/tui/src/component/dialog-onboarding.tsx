@@ -8,14 +8,14 @@ import { useDialog, type DialogContext } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
 import { DialogAccountLogin } from "@tui/component/dialog-account-login"
 import { Spinner } from "@tui/component/spinner"
-import { Global } from "@nikcli-ai/util/global"
+import { Global } from "@ragu/util/global"
 import { useSync } from "@tui/context/sync"
 import { useSDK } from "@tui/context/sdk"
 import { useToast } from "@tui/ui/toast"
 import { entries, sortBy } from "remeda"
-import { ELEVENLABS_VOICES_LIST, elevenLabsProvider } from "@nikcli-ai/util/tts/elevenlabs"
-import { OPENROUTER_VOICES_LIST, openRouterProvider } from "@nikcli-ai/util/tts/openrouter"
-import { ttsRegistry, type TTSVoice } from "@nikcli-ai/util/tts/provider"
+import { ELEVENLABS_VOICES_LIST, elevenLabsProvider } from "@ragu/util/tts/elevenlabs"
+import { OPENROUTER_VOICES_LIST, openRouterProvider } from "@ragu/util/tts/openrouter"
+import { ttsRegistry, type TTSVoice } from "@ragu/util/tts/provider"
 import { DialogPrompt } from "@tui/ui/dialog-prompt"
 import path from "path"
 import fs from "fs/promises"
@@ -244,7 +244,7 @@ function FilesystemContent() {
   return (
     <box gap={2}>
       <text fg={theme.foreground.muted} wrapMode="word">
-        Nikcli stores all data under standard XDG directories. Nothing hidden outside these locations. All data stays on
+        Ragu stores all data under standard XDG directories. Nothing hidden outside these locations. All data stays on
         your machine — no telemetry.
       </text>
 
@@ -320,7 +320,7 @@ function FilesystemContent() {
 
 const PROVIDERS_INFO = [
   {
-    name: "Nikcli Zen",
+    name: "Ragu Zen",
     desc: "All top models with a single API key — recommended for new users",
     recommended: true,
   },
@@ -631,7 +631,7 @@ function ImageContent(props: {
   return (
     <box gap={2}>
       <text fg={theme.foreground.muted} wrapMode="word">
-        Pick the image model Nikcli should use by default for image generation. Skip to configure later via
+        Pick the image model Ragu should use by default for image generation. Skip to configure later via
         <span style={{ fg: theme.accent.alt }}> Ctrl+P → Image Models</span>.
       </text>
       <SectionLabel title={`Available image models (${options().length})`} />
@@ -1299,7 +1299,7 @@ function OnboardingWizard(props: { onComplete: () => void }) {
         <text fg={theme.accent.fg} attributes={TextAttributes.BOLD}>
           {STEP_TITLES[step()]}
         </text>
-        <text fg={theme.border.subtle}>nikcli</text>
+        <text fg={theme.border.subtle}>ragu</text>
       </box>
 
       {/* Step breadcrumb */}

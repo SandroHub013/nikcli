@@ -96,7 +96,7 @@ function PairingScanner({ onClose, onScanned }: { onClose(): void; onScanned(pay
               const parsed = parsePairingPayload(result.data)
               if (!parsed) {
                 lock.current = true
-                setHint("This is not a nikcli pairing QR. Use the code from your computer.")
+                setHint("This is not a ragu pairing QR. Use the code from your computer.")
                 void triggerHaptic("error")
                 setTimeout(() => {
                   lock.current = false
@@ -133,7 +133,7 @@ function PairingScanner({ onClose, onScanned }: { onClose(): void; onScanned(pay
                 ...typeStyle(15),
               }}
             >
-              Allow the camera so this phone can read the pairing QR shown by nikcli on your computer.
+              Allow the camera so this phone can read the pairing QR shown by ragu on your computer.
             </Text>
             <ActionButton
               label={permission && !permission.canAskAgain ? "Open Settings" : "Allow camera"}
@@ -337,7 +337,7 @@ export function ConnectScreen({ mode }: { mode: ConnectMode }) {
   }, [config, incoming, isEditor, launchUrlReady, ready, rootNavigationState?.key, userToken])
 
   function handleUrlChange(value: string) {
-    if (value.includes("nikcli://")) {
+    if (value.includes("ragu://")) {
       const parsed = parsePairingPayload(value)
       if (parsed) {
         applyPairing(parsed)
@@ -365,7 +365,7 @@ export function ConnectScreen({ mode }: { mode: ConnectMode }) {
     const text = await Clipboard.getStringAsync().catch(() => "")
     const parsed = parsePairingPayload(text)
     if (!parsed) {
-      setError("Copy the pairing link from nikcli on your computer, then paste it here.")
+      setError("Copy the pairing link from ragu on your computer, then paste it here.")
       setShowManual(true)
       void triggerHaptic("error")
       return
@@ -456,7 +456,7 @@ export function ConnectScreen({ mode }: { mode: ConnectMode }) {
             >
               {isAddDevice
                 ? "Scan a QR or type the host. Nothing is saved until you continue."
-                : "Scan the QR nikcli shows on your computer, then confirm the details."}
+                : "Scan the QR ragu shows on your computer, then confirm the details."}
             </Text>
           </View>
         ) : (
@@ -472,7 +472,7 @@ export function ConnectScreen({ mode }: { mode: ConnectMode }) {
               Connect
             </Text>
             <Text style={{ color: palette.muted, ...typeStyle(16) }}>
-              Scan the QR that nikcli shows on your computer. Same Wi-Fi, then this phone is paired.
+              Scan the QR that ragu shows on your computer. Same Wi-Fi, then this phone is paired.
             </Text>
           </View>
         )}
@@ -486,13 +486,13 @@ export function ConnectScreen({ mode }: { mode: ConnectMode }) {
             <View style={{ gap: 14 }}>
               <HowToStep
                 index={1}
-                title="Start nikcli on your computer"
+                title="Start ragu on your computer"
                 detail="Keep the terminal open while you pair."
               />
               <HowToStep
                 index={2}
                 title="Show the pairing QR"
-                detail="In the TUI choose Connect Mobile, or run nikcli mobile pair."
+                detail="In the TUI choose Connect Mobile, or run ragu mobile pair."
               />
               <HowToStep index={3} title="Scan it with this phone" detail="Use Scan QR below, or paste the link." />
               <View
@@ -507,7 +507,7 @@ export function ConnectScreen({ mode }: { mode: ConnectMode }) {
                 }}
               >
                 <Text selectable style={{ color: palette.soft, ...mono(12) }}>
-                  nikcli mobile pair
+                  ragu mobile pair
                 </Text>
               </View>
             </View>
@@ -566,7 +566,7 @@ export function ConnectScreen({ mode }: { mode: ConnectMode }) {
                 onPress={() => void connectWith(form)}
               />
               {mode === "landing" || mode === "pair" ? (
-                <ActionButton label="Sign in with a Nikcli account" variant="ghost" onPress={signInWithAccount} />
+                <ActionButton label="Sign in with a Ragu account" variant="ghost" onPress={signInWithAccount} />
               ) : null}
             </View>
           </SurfaceCard>

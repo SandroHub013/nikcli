@@ -11,8 +11,8 @@ import { createMemo, createResource, createSignal, onCleanup, onMount, For, Show
 import { Usage } from "../util/usage"
 import { useEditorContext } from "../context/editor"
 import { useKV } from "../context/kv"
-import { Token } from "@nikcli-ai/util/token"
-import type { SessionContextResponse, AssistantMessage, Session } from "@nikcli-ai/sdk/httpapi"
+import { Token } from "@ragu/util/token"
+import type { SessionContextResponse, AssistantMessage, Session } from "@ragu/sdk/httpapi"
 import {
   BrailleSparkline,
   StackedBarChartV2,

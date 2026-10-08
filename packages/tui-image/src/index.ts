@@ -1,5 +1,5 @@
 /**
- * @nikcli-ai/tui-image
+ * @ragu/tui-image
  *
  * WASM-compatible image rendering for TUI / OpenTUI terminals. The package
  * auto-detects the best graphics protocol (Kitty, Sixel, iTerm2) and falls
@@ -10,7 +10,7 @@
  * Quick start:
  *
  * ```ts
- * import { renderImage, Protocol } from "@nikcli-ai/tui-image"
+ * import { renderImage, Protocol } from "@ragu/tui-image"
  *
  * const bytes = await Bun.file("logo.png").bytes()
  * const { output, renderer, capabilities } = await renderImage({

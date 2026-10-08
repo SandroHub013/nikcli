@@ -1,5 +1,5 @@
 //! Secrets ADE did not save but a gateway may still meet: the provider keys
-//! nikcli keeps in its `auth.json`, and the keys in ADE's own environment.
+//! ragu keeps in its `auth.json`, and the keys in ADE's own environment.
 //!
 //! Read here, in Rust, each time the gateway needs the list, and never kept,
 //! logged or sent to the page: they are only what `redact` looks for.
@@ -16,8 +16,8 @@ const MIN_AUTH_LEN: usize = 16;
 /// As `redact` would skip anything shorter anyway.
 const MIN_ENV_LEN: usize = 8;
 
-/// Where nikcli keeps `auth.json`, on each system.
-fn nikcli_auth_paths() -> Vec<PathBuf> {
+/// Where ragu keeps `auth.json`, on each system.
+fn ragu_auth_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
     for dir in [dirs::data_local_dir(), dirs::data_dir()].into_iter().flatten() {
         paths.push(dir.join("nikcli").join("auth.json"));
@@ -85,10 +85,10 @@ fn env_values(vars: impl IntoIterator<Item = (String, String)>) -> Vec<String> {
     out
 }
 
-/// Every secret of nikcli's and of ADE's environment, read now.
+/// Every secret of ragu's and of ADE's environment, read now.
 pub fn values() -> Vec<String> {
     let mut values = Vec::new();
-    for path in nikcli_auth_paths() {
+    for path in ragu_auth_paths() {
         if let Ok(text) = std::fs::read_to_string(&path) {
             values.extend(auth_values(&text));
         }
@@ -181,12 +181,12 @@ mod tests {
     }
 
     #[test]
-    fn nikclis_auth_json_is_looked_for_where_nikcli_keeps_it() {
-        let paths = nikcli_auth_paths();
+    fn ragus_auth_json_is_looked_for_where_ragu_keeps_it() {
+        let paths = ragu_auth_paths();
         assert!(!paths.is_empty());
         for path in &paths {
             let folder = path.parent().and_then(|dir| dir.file_name()).and_then(|name| name.to_str());
-            assert!(path.ends_with("auth.json") && matches!(folder, Some("nikcli" | ".nikcli")), "{path:?}");
+            assert!(path.ends_with("auth.json") && matches!(folder, Some("ragu" | ".nikcli")), "{path:?}");
         }
     }
 }

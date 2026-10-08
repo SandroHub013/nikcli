@@ -29,11 +29,11 @@ const OUTPUT_FILE = path.join(OUTPUT_DIR, "brandkit.zip")
 
 const ALLOWED_EXTENSIONS = new Set([".png", ".PNG"])
 
-const readme = `# nikcli brand kit
+const readme = `# ragu brand kit
 
 Generated ${new Date().toISOString().slice(0, 10)} from packages/mobile/assets/.
 
-Every file inside this archive is a portable rasterization of the nikcli brand.
+Every file inside this archive is a portable rasterization of the ragu brand.
 Filenames and content match the source files committed to \`packages/mobile/assets/\`.
 
 ## What's inside

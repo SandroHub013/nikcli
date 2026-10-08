@@ -1,5 +1,5 @@
-import { createNikcliClient, type Event, type NikcliClient } from "@nikcli-ai/sdk/httpapi"
-import { createSimpleContext } from "@nikcli-ai/ui/context"
+import { createRaguClient, type Event, type RaguClient } from "@ragu/sdk/httpapi"
+import { createSimpleContext } from "@ragu/ui/context"
 import { createGlobalEmitter, type GlobalEmitter } from "@solid-primitives/event-bus"
 import { createEffect, createMemo, onCleanup, type Accessor } from "solid-js"
 import { useGlobalSDK } from "./global-sdk"
@@ -7,7 +7,7 @@ import { usePlatform } from "./platform"
 
 export interface SDK {
   readonly directory: string
-  readonly client: NikcliClient
+  readonly client: RaguClient
   readonly event: GlobalEmitter<{
     [key in Event["type"]]: Extract<Event, { type: key }>
   }>
@@ -27,7 +27,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext<
 
     const directory = createMemo(props.directory)
     const client = createMemo(() =>
-      createNikcliClient({
+      createRaguClient({
         baseUrl: globalSDK.url,
         fetch: platform.fetch,
         directory: directory(),

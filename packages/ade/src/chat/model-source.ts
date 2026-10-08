@@ -4,9 +4,9 @@
  *
  * The bot section used to read it as it mounted, even for a folder not yet
  * known (`createResource(() => projectRoot() ?? "")` loads on ""), so
- * `nikcli models --verbose` ran, 2.6 s and 620 KB, for a user who never
+ * `ragu models --verbose` ran, 2.6 s and 620 KB, for a user who never
  * opened the menu. A failure used to be kept like a list, an empty one, and
- * said «serve nikcli nel PATH» whatever had happened.
+ * said «serve ragu nel PATH» whatever had happened.
  *
  * Here a read starts on `open`, one per key at a time; a list is kept, a
  * failure is not, and says why.

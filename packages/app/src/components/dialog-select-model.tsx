@@ -2,14 +2,14 @@ import { Popover as Kobalte } from "@kobalte/core/popover"
 import { Component, ComponentProps, createEffect, createMemo, JSX, onCleanup, Show, ValidComponent } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/context/local"
-import { useDialog } from "@nikcli-ai/ui/context/dialog"
+import { useDialog } from "@ragu/ui/context/dialog"
 import { popularProviders } from "@/hooks/use-providers"
-import { Button } from "@nikcli-ai/ui/button"
-import { IconButton } from "@nikcli-ai/ui/icon-button"
-import { Tag } from "@nikcli-ai/ui/tag"
-import { Dialog } from "@nikcli-ai/ui/dialog"
-import { List } from "@nikcli-ai/ui/list"
-import { Tooltip } from "@nikcli-ai/ui/tooltip"
+import { Button } from "@ragu/ui/button"
+import { IconButton } from "@ragu/ui/icon-button"
+import { Tag } from "@ragu/ui/tag"
+import { Dialog } from "@ragu/ui/dialog"
+import { List } from "@ragu/ui/list"
+import { Tooltip } from "@ragu/ui/tooltip"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogManageModels } from "./dialog-manage-models"
 import { ModelTooltip } from "./model-tooltip"
@@ -58,7 +58,7 @@ const ModelList: Component<{
             <ModelTooltip
               model={item}
               latest={item.latest}
-              free={item.provider.id === "nikcli" && (!item.cost || item.cost.input === 0)}
+              free={item.provider.id === "ragu" && (!item.cost || item.cost.input === 0)}
             />
           }
         >
@@ -75,7 +75,7 @@ const ModelList: Component<{
       {(i) => (
         <div class="w-full flex items-center gap-x-2 text-13-regular">
           <span class="truncate">{i.name}</span>
-          <Show when={i.provider.id === "nikcli" && (!i.cost || i.cost?.input === 0)}>
+          <Show when={i.provider.id === "ragu" && (!i.cost || i.cost?.input === 0)}>
             <Tag>{language.t("model.tag.free")}</Tag>
           </Show>
           <Show when={i.latest}>

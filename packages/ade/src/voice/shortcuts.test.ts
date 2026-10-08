@@ -8,7 +8,7 @@ import {
   type VoiceSettings,
   // The logic-only entry point: the main barrel re-exports Solid components,
   // which need Solid's compiler and so cannot load under a plain test runtime.
-} from "@nikcli-ai/voice/core"
+} from "@ragu/voice/core"
 
 describe("resolveVoiceOrAdeKey", () => {
   const adeBindings: Binding[] = [

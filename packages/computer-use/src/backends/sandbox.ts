@@ -1,6 +1,6 @@
 /**
  * Sandbox backend — drives an isolated background Linux desktop container for
- * the given conversation, the way `@nikcli-ai/browser-control`'s Playwright
+ * the given conversation, the way `@ragu/browser-control`'s Playwright
  * sandbox keeps one Chromium per session. The container lifecycle is owned by
  * the per-process `Sandbox` registry; this module adapts the host-side
  * `Backend` contract onto `docker exec ... DISPLAY=:99 <xdotool|scrot>`.
@@ -78,7 +78,7 @@ export function sandboxBackend(sessionID: string): Backend {
       const { code, stdout, stderr } = await Sandbox.exec(sessionID, [
         "sh",
         "-c",
-        "scrot -o /tmp/nikcli-shot.png >/dev/null 2>&1 && cat /tmp/nikcli-shot.png",
+        "scrot -o /tmp/ragu-shot.png >/dev/null 2>&1 && cat /tmp/ragu-shot.png",
       ])
       if (code !== 0 || stdout.length === 0)
         throw new Error(`sandbox screenshot failed: ${stderr.trim() || "no image output"}`)

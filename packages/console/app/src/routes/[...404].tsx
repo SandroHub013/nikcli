@@ -16,8 +16,8 @@ export default function NotFound() {
       <div data-component="content">
         <section data-component="top">
           <a href={language.route("/")} data-slot="logo-link">
-            <img data-slot="logo light" src={logoLight} alt="nikcli logo light" />
-            <img data-slot="logo dark" src={logoDark} alt="nikcli logo dark" />
+            <img data-slot="logo light" src={logoLight} alt="ragu logo light" />
+            <img data-slot="logo dark" src={logoDark} alt="ragu logo dark" />
           </a>
           <h1 data-slot="title">{i18n.t("notFound.heading")}</h1>
         </section>

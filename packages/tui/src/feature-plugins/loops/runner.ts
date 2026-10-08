@@ -7,7 +7,7 @@
  * the canonical run/server-side; the local store is a fast cache for the
  * sidebar + per-stage diff totals.
  */
-import type { TuiPluginApi } from "@nikcli-ai/plugin/tui"
+import type { TuiPluginApi } from "@ragu/plugin/tui"
 import { createStore } from "solid-js/store"
 import { LoopApi, subscribeLoopEvents, type LoopDefinition, type LoopRuntime, type LoopRuntimeStatus } from "./sdk"
 import * as Store from "./store"

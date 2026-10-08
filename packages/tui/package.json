@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@nikcli-ai/tui",
+  "name": "@ragu/tui",
   "version": "1.431.0",
   "private": true,
   "type": "module",
@@ -13,23 +13,23 @@
     ]
   },
   "bin": {
-    "nikcli-tui": "./bin/nikcli-tui.ts"
+    "ragu-tui": "./bin/ragu-tui.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "start": "bun run ./bin/nikcli-tui.ts",
+    "start": "bun run ./bin/ragu-tui.ts",
     "smoke:standalone": "bun run script/standalone-smoke.ts"
   },
   "dependencies": {
-    "@nikcli-ai/browser-control": "workspace:*",
-    "@nikcli-ai/computer-use": "workspace:*",
-    "@nikcli-ai/plugin": "workspace:*",
-    "@nikcli-ai/remote": "workspace:*",
-    "@nikcli-ai/sdk": "workspace:*",
-    "@nikcli-ai/simulation": "workspace:*",
-    "@nikcli-ai/tui-image": "workspace:*",
-    "@nikcli-ai/tui-math": "workspace:*",
-    "@nikcli-ai/util": "workspace:*",
+    "@ragu/browser-control": "workspace:*",
+    "@ragu/computer-use": "workspace:*",
+    "@ragu/plugin": "workspace:*",
+    "@ragu/remote": "workspace:*",
+    "@ragu/sdk": "workspace:*",
+    "@ragu/simulation": "workspace:*",
+    "@ragu/tui-image": "workspace:*",
+    "@ragu/tui-math": "workspace:*",
+    "@ragu/util": "workspace:*",
     "@opentui/core": "0.5.11",
     "@opentui/solid": "0.5.11",
     "@solid-primitives/event-bus": "1.1.2",

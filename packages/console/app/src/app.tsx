@@ -2,8 +2,8 @@ import { MetaProvider, Title, Meta } from "@solidjs/meta"
 import { Router } from "@solidjs/router"
 import { FileRoutes } from "@solidjs/start/router"
 import { Suspense } from "solid-js"
-import { Favicon } from "@nikcli-ai/ui/favicon"
-import { Font } from "@nikcli-ai/ui/font"
+import { Favicon } from "@ragu/ui/favicon"
+import { Font } from "@ragu/ui/font"
 import "@ibm/plex/css/ibm-plex.css"
 import "./app.css"
 import { LanguageProvider } from "~/context/language"
@@ -19,8 +19,8 @@ export default function App() {
         <LanguageProvider>
           <I18nProvider>
             <MetaProvider>
-              <Title>nikcli</Title>
-              <Meta name="description" content="Nikcli - The open source coding agent." />
+              <Title>ragu</Title>
+              <Meta name="description" content="Ragu - The open source coding agent." />
               <Favicon />
               <Font />
               <Suspense>{props.children}</Suspense>

@@ -1,5 +1,5 @@
 /**
- * Everything in @nikcli-ai/voice except the Solid components.
+ * Everything in @ragu/voice except the Solid components.
  *
  * Why this entry point exists:
  * Solid's JSX has no automatic runtime - it needs Solid's own compiler, which

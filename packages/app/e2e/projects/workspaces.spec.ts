@@ -1,4 +1,4 @@
-import { base64Decode } from "@nikcli-ai/util/encode"
+import { base64Decode } from "@ragu/util/encode"
 import fs from "node:fs/promises"
 import path from "node:path"
 import type { Page } from "@playwright/test"

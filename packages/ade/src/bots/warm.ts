@@ -27,7 +27,7 @@
 import { t } from "../i18n"
 import { getHost, type SpawnedSession } from "../host/shell"
 import { registerSender, unregisterSender } from "../session/senders"
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 import { applyRunnerLine, finalText, runnerById, turnCommand } from "./runners"
 import { applyExit, applyProblem, emptyTalk, sendMessage, type Talk } from "./talk"
 import { acquireTurn } from "./terms"

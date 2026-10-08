@@ -18,7 +18,7 @@ export function sessionPreviewFrameUrl(item: SessionPreviewItem): string {
 
   try {
     const url = new URL(value)
-    url.searchParams.set("_nikcli_preview", String(item.version))
+    url.searchParams.set("_ragu_preview", String(item.version))
     return url.toString()
   } catch {
     return value

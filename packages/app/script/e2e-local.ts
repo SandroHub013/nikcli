@@ -44,7 +44,7 @@ async function waitForHealth(url: string) {
 
 const appDir = process.cwd()
 const repoDir = path.resolve(appDir, "../..")
-const nikcliDir = path.join(repoDir, "packages", "nikcli")
+const raguDir = path.join(repoDir, "packages", "ragu")
 
 const extraArgs = (() => {
   const args = process.argv.slice(2)
@@ -54,37 +54,37 @@ const extraArgs = (() => {
 
 const [serverPort, webPort] = await Promise.all([freePort(), freePort()])
 
-const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-e2e-"))
+const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "ragu-e2e-"))
 
 const serverEnv = {
   ...process.env,
-  NIKCLI_DISABLE_SHARE: process.env.NIKCLI_DISABLE_SHARE ?? "true",
-  NIKCLI_DISABLE_LSP_DOWNLOAD: "true",
-  NIKCLI_DISABLE_DEFAULT_PLUGINS: "true",
-  NIKCLI_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
-  NIKCLI_TEST_HOME: path.join(sandbox, "home"),
+  RAGU_DISABLE_SHARE: process.env.RAGU_DISABLE_SHARE ?? "true",
+  RAGU_DISABLE_LSP_DOWNLOAD: "true",
+  RAGU_DISABLE_DEFAULT_PLUGINS: "true",
+  RAGU_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",
+  RAGU_TEST_HOME: path.join(sandbox, "home"),
   XDG_DATA_HOME: path.join(sandbox, "share"),
   XDG_CACHE_HOME: path.join(sandbox, "cache"),
   XDG_CONFIG_HOME: path.join(sandbox, "config"),
   XDG_STATE_HOME: path.join(sandbox, "state"),
-  NIKCLI_E2E_PROJECT_DIR: repoDir,
-  NIKCLI_E2E_SESSION_TITLE: "E2E Session",
-  NIKCLI_E2E_MESSAGE: "Seeded for UI e2e",
-  NIKCLI_E2E_MODEL: "nikcli/gpt-5-nano",
-  NIKCLI_CLIENT: "app",
+  RAGU_E2E_PROJECT_DIR: repoDir,
+  RAGU_E2E_SESSION_TITLE: "E2E Session",
+  RAGU_E2E_MESSAGE: "Seeded for UI e2e",
+  RAGU_E2E_MODEL: "ragu/gpt-5-nano",
+  RAGU_CLIENT: "app",
 } satisfies Record<string, string>
 
 const runnerEnv = {
   ...serverEnv,
   PLAYWRIGHT_SERVER_HOST: "127.0.0.1",
   PLAYWRIGHT_SERVER_PORT: String(serverPort),
-  VITE_NIKCLI_SERVER_HOST: "127.0.0.1",
-  VITE_NIKCLI_SERVER_PORT: String(serverPort),
+  VITE_RAGU_SERVER_HOST: "127.0.0.1",
+  VITE_RAGU_SERVER_PORT: String(serverPort),
   PLAYWRIGHT_PORT: String(webPort),
 } satisfies Record<string, string>
 
 const seed = Bun.spawn(["bun", "script/seed-e2e.ts"], {
-  cwd: nikcliDir,
+  cwd: raguDir,
   env: serverEnv,
   stdout: "inherit",
   stderr: "inherit",
@@ -97,20 +97,20 @@ if (seedExit !== 0) {
 
 Object.assign(process.env, serverEnv)
 process.env.AGENT = "1"
-process.env.NIKCLI = "1"
+process.env.RAGU = "1"
 
-const log = await import("../../nikcli/src/util/log")
-const install = await import("../../nikcli/src/installation")
+const log = await import("../../ragu/src/util/log")
+const install = await import("../../ragu/src/installation")
 await log.Log.init({
   print: true,
   dev: install.Installation.isLocal(),
   level: "WARN",
 })
 
-const servermod = await import("../../nikcli/src/server/server")
-const inst = await import("../../nikcli/src/project/instance")
+const servermod = await import("../../ragu/src/server/server")
+const inst = await import("../../ragu/src/project/instance")
 const server = servermod.Server.listen({ port: serverPort, hostname: "127.0.0.1" })
-console.log(`nikcli server listening on http://127.0.0.1:${serverPort}`)
+console.log(`ragu server listening on http://127.0.0.1:${serverPort}`)
 
 const result = await (async () => {
   try {

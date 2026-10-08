@@ -1,5 +1,5 @@
 /*
- * nikcli gadget on an ESP32: Wi-Fi, pairing, then the portable client.
+ * ragu gadget on an ESP32: Wi-Fi, pairing, then the portable client.
  *
  * NOT BUILT. This file was written against ESP-IDF's documented APIs without an
  * ESP-IDF toolchain to compile it, so treat it as a starting point: the
@@ -7,7 +7,7 @@
  * is not. Build it with `idf.py build`; if the compiler disagrees with this
  * file, the compiler is right.
  *
- * Flow: join Wi-Fi; if NVS holds no token, pair with CONFIG_NIKCLI_PAIR_CODE
+ * Flow: join Wi-Fi; if NVS holds no token, pair with CONFIG_RAGU_PAIR_CODE
  * (waiting for the button when the bridge asks); then serve the feed forever.
  * Commands: device.health and, with an LED, led.set. A button press is `ok`.
  * A board with a panel receives 1-bit frames in `display_draw`.
@@ -27,12 +27,12 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
-#include "nikcli_gadget.h"
+#include "ragu_gadget.h"
 #include "ng_json.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 
-static const char *TAG = "nikcli";
+static const char *TAG = "ragu";
 #define WIFI_UP BIT0
 static EventGroupHandle_t wifi_events;
 static ng_config cfg;
@@ -49,8 +49,8 @@ static void log_line(void *user, const char *line) {
 }
 
 static void led_set(bool on) {
-#if CONFIG_NIKCLI_LED_GPIO >= 0
-    gpio_set_level(CONFIG_NIKCLI_LED_GPIO, CONFIG_NIKCLI_LED_ACTIVE_LOW ? !on : on);
+#if CONFIG_RAGU_LED_GPIO >= 0
+    gpio_set_level(CONFIG_RAGU_LED_GPIO, CONFIG_RAGU_LED_ACTIVE_LOW ? !on : on);
 #else
     (void)on;
 #endif
@@ -68,10 +68,10 @@ static void on_bitmap(void *user, int w, int h, const uint8_t *packed, size_t le
 
 static int poll_button(void *user, char *key, size_t key_len) {
     (void)user;
-#if CONFIG_NIKCLI_BUTTON_GPIO >= 0
+#if CONFIG_RAGU_BUTTON_GPIO >= 0
     static int last = 1;
     static uint64_t changed = 0;
-    int level = gpio_get_level(CONFIG_NIKCLI_BUTTON_GPIO);
+    int level = gpio_get_level(CONFIG_RAGU_BUTTON_GPIO);
     uint64_t t = now_ms();
     if (level != last && t - changed > 50) {
         last = level;
@@ -125,7 +125,7 @@ static int cmd_led(void *user, const char *args, uint64_t deadline, char *out, s
 
 static const ng_command COMMANDS[] = {
     { "device.health", "Uptime, free heap and Wi-Fi signal of the board.", "{\"type\":\"object\",\"properties\":{}}", 5000, cmd_health },
-#if CONFIG_NIKCLI_LED_GPIO >= 0
+#if CONFIG_RAGU_LED_GPIO >= 0
     { "led.set", "Turn the status LED on or off.", "{\"type\":\"object\",\"properties\":{\"on\":{\"type\":\"boolean\"}},\"required\":[\"on\"]}", 5000, cmd_led },
 #endif
 };
@@ -136,7 +136,7 @@ static const char *const BUTTONS[] = { "ok" };
 
 static bool load_pairing(void) {
     nvs_handle_t nvs;
-    if (nvs_open("nikcli", NVS_READONLY, &nvs) != ESP_OK) return false;
+    if (nvs_open("ragu", NVS_READONLY, &nvs) != ESP_OK) return false;
     size_t id_len = sizeof cfg.id, token_len = sizeof cfg.token;
     bool ok = nvs_get_str(nvs, "id", cfg.id, &id_len) == ESP_OK && nvs_get_str(nvs, "token", cfg.token, &token_len) == ESP_OK;
     nvs_close(nvs);
@@ -145,7 +145,7 @@ static bool load_pairing(void) {
 
 static void save_pairing(void) {
     nvs_handle_t nvs;
-    if (nvs_open("nikcli", NVS_READWRITE, &nvs) != ESP_OK) return;
+    if (nvs_open("ragu", NVS_READWRITE, &nvs) != ESP_OK) return;
     nvs_set_str(nvs, "id", cfg.id);
     nvs_set_str(nvs, "token", cfg.token);
     nvs_commit(nvs);
@@ -154,7 +154,7 @@ static void save_pairing(void) {
 
 static void forget_pairing(void) {
     nvs_handle_t nvs;
-    if (nvs_open("nikcli", NVS_READWRITE, &nvs) == ESP_OK) {
+    if (nvs_open("ragu", NVS_READWRITE, &nvs) == ESP_OK) {
         nvs_erase_all(nvs);
         nvs_commit(nvs);
         nvs_close(nvs);
@@ -188,8 +188,8 @@ static void wifi_start(void) {
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, wifi_handler, NULL));
     wifi_config_t wifi = { 0 };
-    strncpy((char *)wifi.sta.ssid, CONFIG_NIKCLI_WIFI_SSID, sizeof wifi.sta.ssid - 1);
-    strncpy((char *)wifi.sta.password, CONFIG_NIKCLI_WIFI_PASSWORD, sizeof wifi.sta.password - 1);
+    strncpy((char *)wifi.sta.ssid, CONFIG_RAGU_WIFI_SSID, sizeof wifi.sta.ssid - 1);
+    strncpy((char *)wifi.sta.password, CONFIG_RAGU_WIFI_PASSWORD, sizeof wifi.sta.password - 1);
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi));
     ESP_ERROR_CHECK(esp_wifi_start());
@@ -203,12 +203,12 @@ static void gadget_task(void *arg) {
         xEventGroupWaitBits(wifi_events, WIFI_UP, pdFALSE, pdTRUE, portMAX_DELAY);
         if (!cfg.token[0]) {
             bool confirm = false;
-            if (strlen(CONFIG_NIKCLI_PAIR_CODE) == 0) {
+            if (strlen(CONFIG_RAGU_PAIR_CODE) == 0) {
                 ESP_LOGE(TAG, "not paired and no pairing code: run /gadget pair, put the code in menuconfig, flash");
                 vTaskDelay(pdMS_TO_TICKS(30000));
                 continue;
             }
-            int r = ng_pair(&cfg, CONFIG_NIKCLI_PAIR_CODE, &confirm);
+            int r = ng_pair(&cfg, CONFIG_RAGU_PAIR_CODE, &confirm);
             if (r != NG_OK) {
                 ESP_LOGE(TAG, "pairing failed: %s", cfg.last_error);
                 vTaskDelay(pdMS_TO_TICKS(10000));
@@ -237,13 +237,13 @@ void app_main(void) {
         ESP_ERROR_CHECK(nvs_flash_erase());
         ESP_ERROR_CHECK(nvs_flash_init());
     }
-#if CONFIG_NIKCLI_LED_GPIO >= 0
-    gpio_reset_pin(CONFIG_NIKCLI_LED_GPIO);
-    gpio_set_direction(CONFIG_NIKCLI_LED_GPIO, GPIO_MODE_OUTPUT);
+#if CONFIG_RAGU_LED_GPIO >= 0
+    gpio_reset_pin(CONFIG_RAGU_LED_GPIO);
+    gpio_set_direction(CONFIG_RAGU_LED_GPIO, GPIO_MODE_OUTPUT);
     led_set(false);
 #endif
-#if CONFIG_NIKCLI_BUTTON_GPIO >= 0
-    gpio_config_t io = { .pin_bit_mask = 1ULL << CONFIG_NIKCLI_BUTTON_GPIO, .mode = GPIO_MODE_INPUT, .pull_up_en = GPIO_PULLUP_ENABLE };
+#if CONFIG_RAGU_BUTTON_GPIO >= 0
+    gpio_config_t io = { .pin_bit_mask = 1ULL << CONFIG_RAGU_BUTTON_GPIO, .mode = GPIO_MODE_INPUT, .pull_up_en = GPIO_PULLUP_ENABLE };
     gpio_config(&io);
 #endif
     uint8_t mac[6];
@@ -251,14 +251,14 @@ void app_main(void) {
     snprintf(fingerprint, sizeof fingerprint, "esp32-%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 
     memset(&cfg, 0, sizeof cfg);
-    cfg.server = CONFIG_NIKCLI_SERVER;
-    cfg.name = CONFIG_NIKCLI_NAME;
+    cfg.server = CONFIG_RAGU_SERVER;
+    cfg.name = CONFIG_RAGU_NAME;
     cfg.fingerprint = fingerprint;
     cfg.os = "esp-idf";
     cfg.arch = CONFIG_IDF_TARGET;
     cfg.commands = COMMANDS;
     cfg.command_count = sizeof COMMANDS / sizeof COMMANDS[0];
-#if CONFIG_NIKCLI_BUTTON_GPIO >= 0
+#if CONFIG_RAGU_BUTTON_GPIO >= 0
     cfg.buttons = BUTTONS;
     cfg.button_count = 1;
 #endif
@@ -273,5 +273,5 @@ void app_main(void) {
 
     load_pairing();
     wifi_start();
-    xTaskCreate(gadget_task, "nikcli_gadget", 8192, NULL, 5, NULL);
+    xTaskCreate(gadget_task, "ragu_gadget", 8192, NULL, 5, NULL);
 }

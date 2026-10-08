@@ -1,11 +1,11 @@
-import type { TuiMemoryEntry, TuiStoreEntry, TuiStorage } from "@nikcli-ai/plugin/tui"
+import type { TuiMemoryEntry, TuiStoreEntry, TuiStorage } from "@ragu/plugin/tui"
 import { mkdirSync, readFileSync, renameSync, watch, type FSWatcher } from "fs"
 import { unlink } from "fs/promises"
 import path from "path"
 import { createStore, produce, reconcile } from "solid-js/store"
-import { Global } from "@nikcli-ai/util/global"
-import { Flock } from "@nikcli-ai/util/flock"
-import { Log } from "@nikcli-ai/util/log"
+import { Global } from "@ragu/util/global"
+import { Flock } from "@ragu/util/flock"
+import { Log } from "@ragu/util/log"
 
 const log = Log.create({ service: "tui.plugin.storage" })
 

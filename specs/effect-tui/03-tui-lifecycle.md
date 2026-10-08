@@ -67,9 +67,9 @@ third-party disposer and revoke its ability to mutate the host as specified in E
   requests/timers/listeners. Use controlled barriers, not timing-dependent sleep guesses.
 - Exercise real `DialogAccountLogin`, onboarding, browser-control, and web-preview ownership paths. Preserve user changes
   already present in `packages/tui/src/component/dialog-web-preview.tsx` and its lifecycle tests when implementing.
-- Extend `packages/nikcli/test/tui/dialog-lifecycle.test.ts`, `packages/nikcli/test/tui/onboarding-auth.test.ts`,
-  `packages/nikcli/test/tui/plugin-dispose.test.ts`, and SDK subscription tests in the existing TUI suites.
-- From `packages/nikcli`: `bun test test/tui/dialog-lifecycle.test.ts test/tui/onboarding-auth.test.ts test/tui/plugin-dispose.test.ts`.
+- Extend `packages/ragu/test/tui/dialog-lifecycle.test.ts`, `packages/ragu/test/tui/onboarding-auth.test.ts`,
+  `packages/ragu/test/tui/plugin-dispose.test.ts`, and SDK subscription tests in the existing TUI suites.
+- From `packages/ragu`: `bun test test/tui/dialog-lifecycle.test.ts test/tui/onboarding-auth.test.ts test/tui/plugin-dispose.test.ts`.
   Add real-renderer/PTY coverage where a source-structure assertion cannot prove component behavior.
 - EOT-01's 100-cycle resource gate passes; cancellation-to-owned-request-stop target is at most 100 ms on the local harness,
   excluding explicitly non-cancellable third-party code, which must instead demonstrate host capability revocation.
@@ -144,7 +144,7 @@ worth doing here, ahead of any further site-by-site work.
 ### A third correction: the harness was never missing
 
 Round two was partly justified by "`packages/tui` has no test directory", which is true
-and misleading. The TUI's tests live in **`packages/nikcli/test/tui/`** — 55 files, which
+and misleading. The TUI's tests live in **`packages/ragu/test/tui/`** — 55 files, which
 this roadmap's own evidence table names as the required location for TUI work — and two
 of them, `lifecycle-attempts.test.ts` and `dialog-lifecycle.test.ts`, already cover
 `useAbortOnCleanup` and `useAttempts` with the same `createRoot` owner pattern that was
@@ -161,7 +161,7 @@ time.
 
 "What blocks it" above said the dialog host could not be constructed in a test. **That was
 wrong, in the same way as the "no test directory" claim.** `testRender` from
-`@opentui/solid` builds a real renderer — five tests in `packages/nikcli/test/tui/` already
+`@opentui/solid` builds a real renderer — five tests in `packages/ragu/test/tui/` already
 use it — and `DialogProvider` yields its context with only a `ToastProvider` above it. The
 cost appears one step later: rendering an _entry_ pulls in `ThemeProvider`, which pulls in
 `SyncProvider`, which bootstraps against a live server.

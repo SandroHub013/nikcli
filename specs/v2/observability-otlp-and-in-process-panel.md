@@ -12,9 +12,9 @@ The answer is **a dual-mode Effect telemetry layer**: in-process span streaming 
 
 ## The Surface
 
-- **In-Process Telemetry**: Active by default (`!Flag.NIKCLI_DISABLE_OTEL_LIVE`). Captures trace spans during effect execution and publishes `TelemetryRecord` events on the bus for real-time TUI rendering.
+- **In-Process Telemetry**: Active by default (`!Flag.RAGU_DISABLE_OTEL_LIVE`). Captures trace spans during effect execution and publishes `TelemetryRecord` events on the bus for real-time TUI rendering.
 - **OTLP Exporter**: Activated when `OTEL_EXPORTER_OTLP_ENDPOINT` is set in the environment. Exports traces/logs using standard OpenTelemetry protocols.
-- **Resource Attributes**: Merges operator-provided `OTEL_RESOURCE_ATTRIBUTES` and `OTEL_SERVICE_NAME` with nikcli runtime tags (`nikcli.client`, `nikcli.run`, `service.instance.id`).
+- **Resource Attributes**: Merges operator-provided `OTEL_RESOURCE_ATTRIBUTES` and `OTEL_SERVICE_NAME` with ragu runtime tags (`ragu.client`, `nikcli.run`, `service.instance.id`).
 - **Telemetry Record**: Standardized schema (`TelemetryRecord`) containing `id`, `traceId`, `parentId`, `name`, `kind`, `startTime`, `durationMs`, and optional status/attributes.
 
 ## Invariants

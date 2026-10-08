@@ -1,7 +1,7 @@
 /**
- * @nikcli-ai/terminal-control
+ * @ragu/terminal-control
  *
- * A custom-built terminal-control engine for nikcli: drive, inspect, capture and
+ * A custom-built terminal-control engine for ragu: drive, inspect, capture and
  * test real terminal applications (TUIs). Spawn a PTY-backed program, parse its
  * ANSI/VT output into a screen grid (a {@link Frame}), and render that frame to
  * text, ANSI, JSON, SVG or PNG.

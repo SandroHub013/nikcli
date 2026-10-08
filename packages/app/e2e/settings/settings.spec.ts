@@ -27,7 +27,7 @@ test("smoke settings dialog opens, switches tabs, closes", async ({ page, gotoSe
 
 test("changing language updates settings labels", async ({ page, gotoSession }) => {
   await page.addInitScript(() => {
-    localStorage.setItem("nikcli.global.dat:language", JSON.stringify({ locale: "en" }))
+    localStorage.setItem("ragu.global.dat:language", JSON.stringify({ locale: "en" }))
   })
 
   await gotoSession()
@@ -95,11 +95,11 @@ test("changing theme persists in localStorage", async ({ page, gotoSession }) =>
   await page.keyboard.press("Escape")
 
   const storedThemeId = await page.evaluate(() => {
-    return localStorage.getItem("nikcli-theme-id")
+    return localStorage.getItem("ragu-theme-id")
   })
 
   expect(storedThemeId).not.toBeNull()
-  expect(storedThemeId).not.toBe("nikcli-default")
+  expect(storedThemeId).not.toBe("ragu-default")
 
   const dataTheme = await page.evaluate(() => {
     return document.documentElement.getAttribute("data-theme")

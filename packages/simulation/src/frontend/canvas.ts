@@ -18,7 +18,7 @@ import { createRequire } from "node:module"
  * not pull a parallel copy of @opentui/core (or anything else the rewritten
  * app graph also loads) into the module cache.
  */
-const CanvasBindingKey = Symbol.for("nikcli.simulation.canvas")
+const CanvasBindingKey = Symbol.for("ragu.simulation.canvas")
 
 type CanvasModule = typeof import("@napi-rs/canvas")
 const cache = globalThis as { [CanvasBindingKey]?: CanvasModule }

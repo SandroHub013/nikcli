@@ -29,7 +29,7 @@ on:
         description: "Released version (e.g. 1.106.0)"
         value: ${{ jobs.publish.outputs.version }}
       run_id:
-        description: "GitHub Actions run ID that produced the nikcli-cli artifact (downstream jobs use it to download the prebuilt CLI via `gh run download`)"
+        description: "GitHub Actions run ID that produced the ragu-cli artifact (downstream jobs use it to download the prebuilt CLI via `gh run download`)"
         value: ${{ jobs.publish.outputs.run_id }}
   push:
     branches:
@@ -65,7 +65,7 @@ jobs:
       (github.event_name != 'push' ||
       (!startsWith(github.event.head_commit.message, 'release: v') &&
       !startsWith(github.event.head_commit.message, 'chore: generate') &&
-      !contains(github.event.head_commit.message, '[nikcli autofix]')))
+      !contains(github.event.head_commit.message, '[ragu autofix]')))
     steps:
       - uses: actions/checkout@v7
         with:
@@ -78,20 +78,20 @@ jobs:
       - name: Validate direct publish
         if: ${{ !inputs.prevalidated }}
         env:
-          NIKCLI_TEST_HOME: ${{ runner.temp }}/nikcli-publish/home
-          XDG_DATA_HOME: ${{ runner.temp }}/nikcli-publish/share
-          XDG_CACHE_HOME: ${{ runner.temp }}/nikcli-publish/cache
-          XDG_CONFIG_HOME: ${{ runner.temp }}/nikcli-publish/config
-          XDG_STATE_HOME: ${{ runner.temp }}/nikcli-publish/state
-          NIKCLI_DISABLE_MODELS_FETCH: "true"
-          NIKCLI_DISABLE_SHARE: "true"
-          NIKCLI_DISABLE_LSP_DOWNLOAD: "true"
-          NIKCLI_DISABLE_DEFAULT_PLUGINS: "true"
-          NIKCLI_DISABLE_AUTOUPDATE: "true"
-          NIKCLI_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
+          RAGU_TEST_HOME: ${{ runner.temp }}/ragu-publish/home
+          XDG_DATA_HOME: ${{ runner.temp }}/ragu-publish/share
+          XDG_CACHE_HOME: ${{ runner.temp }}/ragu-publish/cache
+          XDG_CONFIG_HOME: ${{ runner.temp }}/ragu-publish/config
+          XDG_STATE_HOME: ${{ runner.temp }}/ragu-publish/state
+          RAGU_DISABLE_MODELS_FETCH: "true"
+          RAGU_DISABLE_SHARE: "true"
+          RAGU_DISABLE_LSP_DOWNLOAD: "true"
+          RAGU_DISABLE_DEFAULT_PLUGINS: "true"
+          RAGU_DISABLE_AUTOUPDATE: "true"
+          RAGU_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
         run: bun run script/ci-validate.ts
 
-      - name: Install nikcli
+      - name: Install ragu
         if: inputs.bump || inputs.version
         run: bun i -g nikcli-ai@latest || true
 
@@ -118,8 +118,8 @@ jobs:
 
       - name: Setup Git Identity
         run: |
-          git config --global user.email "nikcli-ci@users.noreply.github.com"
-          git config --global user.name "nikcli"
+          git config --global user.email "ragu-ci@users.noreply.github.com"
+          git config --global user.name "ragu"
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
 
       # bun 1.4's `--compile` emits darwin binaries whose ad-hoc signature macOS
@@ -140,9 +140,9 @@ jobs:
         id: publish
         run: ./script/publish-start.ts
         env:
-          NIKCLI_BUMP: ${{ inputs.bump || '' }}
-          NIKCLI_CHANNEL: ${{ inputs.channel || '' }}
-          NIKCLI_VERSION: ${{ inputs.version }}
+          RAGU_BUMP: ${{ inputs.bump || '' }}
+          RAGU_CHANNEL: ${{ inputs.channel || '' }}
+          RAGU_VERSION: ${{ inputs.version }}
           GH_PUSH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: false
@@ -152,11 +152,11 @@ jobs:
       # release `.zip`/`.tar.gz` archives and `bun pm pack` `.tgz` tarballs for
       # every variant (~GBs), which then filled the small desktop runners' disks
       # while extracting the artifact (`no space left on device`). Ship just the
-      # `bin/` payloads — the artifact root stays `<variant>/bin/nikcli`.
+      # `bin/` payloads — the artifact root stays `<variant>/bin/ragu`.
       - uses: actions/upload-artifact@v7
         with:
-          name: nikcli-cli
-          path: packages/nikcli/dist/*/bin/**
+          name: ragu-cli
+          path: packages/ragu/dist/*/bin/**
 
     outputs:
       release: ${{ steps.publish.outputs.release }}
@@ -179,7 +179,7 @@ jobs:
 
       - run: ./script/publish-complete.ts
         env:
-          NIKCLI_VERSION: ${{ needs.publish.outputs.version  }}
+          RAGU_VERSION: ${{ needs.publish.outputs.version  }}
           GH_PUSH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}

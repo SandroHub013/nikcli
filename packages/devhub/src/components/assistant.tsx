@@ -1,12 +1,12 @@
 import { shortcut } from "../lib/platform"
 import { For, Match, Show, Switch as SolidSwitch, createEffect, createMemo, createSignal, onMount } from "solid-js"
-import { Button } from "@nikcli-ai/ui/button"
-import { IconButton } from "@nikcli-ai/ui/icon-button"
-import { Icon } from "@nikcli-ai/ui/icon"
-import { Markdown } from "@nikcli-ai/ui/markdown"
-import { Select } from "@nikcli-ai/ui/select"
-import { Spinner } from "@nikcli-ai/ui/spinner"
-import { Switch } from "@nikcli-ai/ui/switch"
+import { Button } from "@ragu/ui/button"
+import { IconButton } from "@ragu/ui/icon-button"
+import { Icon } from "@ragu/ui/icon"
+import { Markdown } from "@ragu/ui/markdown"
+import { Select } from "@ragu/ui/select"
+import { Spinner } from "@ragu/ui/spinner"
+import { Switch } from "@ragu/ui/switch"
 import { assistant, type Card } from "../lib/assistant"
 import { createAgents, createModels, modelKey, type AgentOption, type ModelOption } from "../lib/models"
 import { app } from "../lib/store"
@@ -14,7 +14,7 @@ import { bytes, duration, ms } from "../lib/format"
 import { textOf, type ChatMessage, type Part } from "../lib/agent"
 
 const SUGGESTIONS = [
-  "Quanta memoria usa nikcli adesso e quale processo pesa di più?",
+  "Quanta memoria usa ragu adesso e quale processo pesa di più?",
   "Lancia i test del pacchetto httpapi-codegen e dimmi cosa è lento",
   "Crea un benchmark che confronta JSON.parse e structuredClone su un oggetto da 10k chiavi",
   "Sonda la latenza delle route e confrontala con la baseline",
@@ -278,7 +278,7 @@ export function Assistant() {
           <div>
             <h2>Assistant</h2>
             <p>
-              nikcli · {assistant.agent()} agent · sees {assistant.page()}
+              ragu · {assistant.agent()} agent · sees {assistant.page()}
             </p>
           </div>
         </div>
@@ -350,10 +350,10 @@ export function Assistant() {
             <div class="dh-assistant__empty">
               <div class="dh-hero">
                 <span class="dh-assistant__glyph" aria-hidden="true" />
-                Cosa vuoi fare con nikcli?
+                Cosa vuoi fare con ragu?
               </div>
               <p>
-                Chiedimi qualsiasi cosa su nikcli e su questa app: processi, memoria, test, benchmark, API. Posso anche
+                Chiedimi qualsiasi cosa su ragu e su questa app: processi, memoria, test, benchmark, API. Posso anche
                 scrivere ed eseguire un benchmark a partire da una descrizione.
               </p>
               <div class="dh-suggest">

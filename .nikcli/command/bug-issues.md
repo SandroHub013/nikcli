@@ -3,7 +3,7 @@ description: create github issues for critical bugs
 subtask: true
 ---
 
-Create GitHub issues for the critical bugs found in nikcli codebase analysis.
+Create GitHub issues for the critical bugs found in ragu codebase analysis.
 
 ## Issues to Create
 
@@ -201,7 +201,7 @@ Low/Medium - Code quality and maintainability.
 ## Instructions
 
 1. Run this command to create issues
-2. Use `nikcli gh create-issue` or `gh issue create`
+2. Use `ragu gh create-issue` or `gh issue create`
 3. Assign to appropriate team members
 4. Label as `security` for auth bypass issues
 ```

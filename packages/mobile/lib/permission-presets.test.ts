@@ -66,7 +66,7 @@ describe("permission presets", () => {
  * What the user ends up with, not what the client sends.
  *
  * The server does not apply the patch: `Config.update` writes
- * `mergeDeep(existing, config)` (`packages/nikcli/src/config/config.ts`), so
+ * `mergeDeep(existing, config)` (`packages/ragu/src/config/config.ts`), so
  * every per-tool key a previous preset wrote survives the next one. That is how
  * "Approve for me" then "Require approval" could keep `edit: "allow"` — file
  * edits, reads and searches ran without asking while the UI read "Custom".
@@ -80,7 +80,7 @@ describe("permission presets", () => {
  * server-side `mergeDeep` is exercised against the real thing in
  * `packages/app/src/components/permission-presets.test.ts` and, with the real
  * `PermissionRuleset.evaluate`, in
- * `packages/nikcli/test/tool/permission-surface.test.ts`.
+ * `packages/ragu/test/tool/permission-surface.test.ts`.
  */
 describe("permission presets on the config that results from the server merge", () => {
   /** `mergeDeep(existing.permission, patch)` for the shape these maps take. */

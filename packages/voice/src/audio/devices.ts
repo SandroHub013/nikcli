@@ -1,4 +1,4 @@
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 /**
  * Which microphones and speakers this machine has, and what they are called.
  *

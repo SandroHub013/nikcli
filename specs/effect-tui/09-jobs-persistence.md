@@ -1,7 +1,7 @@
 # EOT-09: Jobs, Persistence, and Resource Budgets
 
 Status: proposed. Tier: 1. Phase: P2. Dependencies: EOT-02, EOT-04, EOT-10.
-Owner: nikcli execution/domain repository maintainers. [Roadmap](../ROADMAP.md).
+Owner: ragu execution/domain repository maintainers. [Roadmap](../ROADMAP.md).
 
 ## Problem and Evidence
 
@@ -75,9 +75,9 @@ using supported platform helpers. Do not alter permission coupling (`monitor` to
   write failure. A successful spawn or accepted upload cannot satisfy completion assertions.
 - Exercise isolated repository restart/readback and lease-expiry cases. No tests use the user's database or real provider
   credentials. DB operations require the user's approval before execution, even when local fixtures are intended.
-- Extend existing `packages/nikcli/test/background/`, `packages/nikcli/test/delegation/`, `packages/nikcli/test/tool/`,
-  `packages/nikcli/test/database/`, and `packages/nikcli/test/sync/` cases for each migrated path.
-- From `packages/nikcli`, select the changed path's individual test files; for the whole suite use `bun run test:ci`, not a
+- Extend existing `packages/ragu/test/background/`, `packages/ragu/test/delegation/`, `packages/ragu/test/tool/`,
+  `packages/ragu/test/database/`, and `packages/ragu/test/sync/` cases for each migrated path.
+- From `packages/ragu`, select the changed path's individual test files; for the whole suite use `bun run test:ci`, not a
   single unsharded `bun test`. Use one final root `bun run typecheck` after the complete slice.
 - Meet EOT-01 resource and latency budgets. Candidate repository target: p95 synchronous transaction under 10 ms for the
   reference session workload; any longer query gets a measured mitigation plan before admission limits are increased.

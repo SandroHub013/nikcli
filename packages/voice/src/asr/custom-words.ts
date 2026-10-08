@@ -2,7 +2,7 @@
  * Repairing the words a speech model has never heard.
  *
  * Every ASR model decodes into the vocabulary it was trained on, and the words
- * that matter most here are not in it: "nikcli", "opencode", "worktree",
+ * that matter most here are not in it: "ragu", "opencode", "worktree",
  * "codex", "tauri", "xterm". They come back split ("open code"), respelled
  * ("nick cli"), or translated ("codice" for "codex") — and the result is
  * dictated into a coding agent's prompt, where a wrong identifier is not a

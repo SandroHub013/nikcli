@@ -34,7 +34,7 @@
  *   prime        PrimeIntellect-ai/prime-agent, `assets/brand/prime-butterfly.svg`
  *   pi           `pi.dev/logo-auto.svg`
  *   ohmypi       can1357/oh-my-pi, `assets/icon.svg`
- *   nikcli       `packages/console/app/src/asset/brand/nikcli-logo-dark.svg`
+ *   ragu       `packages/console/app/src/asset/brand/ragu-logo-dark.svg`
  *   grok         xAI's Grok mark, from `@lobehub/icons-static-svg`, kept in
  *                `vendor-paths.ts`. The product's mark, not the company's
  *   hermes       Nous Research's profile portrait, from `@lobehub/icons-static-svg`,
@@ -102,7 +102,7 @@ export interface AgentMarkProps {
   /**
    * Rendered size in px.
    *
-   * Most marks are square and take it as both dimensions. nikcli's and
+   * Most marks are square and take it as both dimensions. ragu's and
    * OpenCode's are 4:5 and take it as their height; OhMyPi's is 4:3 and takes
    * it as its width, so a wide mark cannot push a row apart.
    */
@@ -353,11 +353,11 @@ const MARKS: Record<string, (size: () => number, colored: () => boolean) => JSX.
     )
   },
 
-  /* nikcli block N */
-  nikcli: (size, colored) => {
+  /* ragu block N */
+  ragu: (size, colored) => {
     const height = size()
     return (
-      <svg width={(height * 240) / 300} height={height} viewBox="0 0 240 300" aria-hidden="true" data-mark="nikcli">
+      <svg width={(height * 240) / 300} height={height} viewBox="0 0 240 300" aria-hidden="true" data-mark="ragu">
         <path
           d="M0 0H60V60H0ZM60 0H120V60H60ZM120 0H180V60H120ZM0 60H60V120H0ZM180 60H240V120H180ZM0 120H60V180H0ZM180 120H240V180H180ZM0 180H60V240H0ZM180 180H240V240H180ZM0 240H60V300H0ZM180 240H240V300H180Z"
           fill={colored() ? "light-dark(#211E1E, #F1ECEC)" : "currentColor"}

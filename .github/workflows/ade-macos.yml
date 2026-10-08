@@ -5,7 +5,7 @@ name: ade-macos
 # environment. Not a release: nothing is attached to a tag.
 #
 # The bundle is ad-hoc signed (`signingIdentity: "-"`), as desktop-release does
-# for Nikcli: without a seal Apple Silicon reports the app as "damaged". It is
+# for Ragu: without a seal Apple Silicon reports the app as "damaged". It is
 # not notarized, so a downloaded copy still needs right-click → Open once (or
 # `xattr -dr com.apple.quarantine ADE.app`).
 on:

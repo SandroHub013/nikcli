@@ -3,8 +3,8 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { createEffect, createMemo, createResource, createSignal, onMount } from "solid-js"
-import type { Session, Workspace } from "@nikcli-ai/sdk/httpapi"
-import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
+import type { Session, Workspace } from "@ragu/sdk/httpapi"
+import { createRaguClient } from "@ragu/sdk/httpapi"
 import { Keybind } from "@tui/util/keybind"
 import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
@@ -39,7 +39,7 @@ export async function openWorkspace(input: {
 
   const directory = input.directory || input.sync.data.path.directory || input.sdk.directory
   function scoped(workspaceID?: string) {
-    return createNikcliClient({
+    return createRaguClient({
       baseUrl: input.sdk.url,
       fetch: input.sdk.fetch,
       directory,
@@ -116,7 +116,7 @@ export function DialogWorkspaceList() {
   const project = useProject()
 
   function scoped(workspaceID?: string) {
-    return createNikcliClient({
+    return createRaguClient({
       baseUrl: sdk.url,
       fetch: sdk.fetch,
       directory: ownerDirectory(),
@@ -146,7 +146,7 @@ export function DialogWorkspaceList() {
   const [globalWorkspaces, { refetch: refetchGlobal }] = createResource(
     () => (scope() === "global" ? ownerDirectory() : undefined),
     async (directory) => {
-      const client = createNikcliClient({ baseUrl: sdk.url, fetch: sdk.fetch, directory })
+      const client = createRaguClient({ baseUrl: sdk.url, fetch: sdk.fetch, directory })
       const result = await client.experimental.workspace.list().catch(() => undefined)
       if (!result) {
         toast.show({ message: "Failed to load global environments", variant: "error" })
@@ -257,7 +257,7 @@ export function DialogWorkspaceList() {
     setCounts(Object.fromEntries(list.map((workspace) => [workspace.id, undefined])))
     void Promise.all(
       list.map(async (workspace) => {
-        const client = createNikcliClient({
+        const client = createRaguClient({
           baseUrl: sdk.url,
           fetch: sdk.fetch,
           directory,

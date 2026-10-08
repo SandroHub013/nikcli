@@ -5,7 +5,7 @@ import type { ServerBridge } from "../chat/transport"
 import { t } from "../i18n"
 import { APPROVAL_TIMEOUT_MS, withAlways } from "./approval"
 import { createBotTurns } from "./controller"
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 import { admitProject } from "./project-trust"
 import { runRoutine } from "./routine"
 import { BOT_SESSION_MARK, botPermission } from "./serve-rules"
@@ -15,9 +15,9 @@ import { emptyTalk, type Talk } from "./talk"
 import type { TrustStore } from "./trust"
 
 /*
- * B8d: the panel's and a room's nikcli turns on ADE's server. A question is
+ * B8d: the panel's and a room's ragu turns on ADE's server. A question is
  * `permission.asked` with an id, settled as B8c settles it (`approval.ts`),
- * and answered by that id: once or no, never nikcli's «always», which would
+ * and answered by that id: once or no, never ragu's «always», which would
  * hold for the whole project and every bot.
  */
 
@@ -30,7 +30,7 @@ const BOT: AgentFile = {
   mode: "primary",
   prompt: "Sei alfa.",
   disabledTools: [],
-  runner: "nikcli",
+  runner: "ragu",
 }
 
 function server() {
@@ -117,8 +117,8 @@ function panel(fake: ReturnType<typeof server>, serverOf: (path: string) => Retu
   return { turns, talks, kept, timers, talk: (path = BOT.path) => talks[path] ?? emptyTalk() }
 }
 
-describe("B8d: nikcli's questions in the panel and a room, by their id", () => {
-  test("blocked, everyday, dangerous: settled as before, answered by id, never «always» to nikcli", async () => {
+describe("B8d: ragu's questions in the panel and a room, by their id", () => {
+  test("blocked, everyday, dangerous: settled as before, answered by id, never «always» to ragu", async () => {
     const fake = server()
     const view = panel(fake)
     expect(view.turns.send(BOT, "ciao", "C:/progetto")).toBe(true)
@@ -207,15 +207,15 @@ describe("B8d: nikcli's questions in the panel and a room, by their id", () => {
     view.turns.stop(BOT)
   })
 
-  test("the panel runs nikcli on the server, the other runners as before", async () => {
+  test("the panel runs ragu on the server, the other runners as before", async () => {
     const fake = server()
-    const nikcli = runBotTurn(
-      { runner: "nikcli", bot: BOT, message: "ciao", cwd: "C:/progetto", approvals: true },
+    const ragu = runBotTurn(
+      { runner: "ragu", bot: BOT, message: "ciao", cwd: "C:/progetto", approvals: true },
       () => fake.deps,
     )
     await until(() => fake.prompts.length === 1)
-    nikcli.stop()
-    await nikcli.result
+    ragu.stop()
+    await ragu.result
     const claude = runBotTurn({ runner: "claude", message: "ciao", approvals: true }, () => fake.deps)
     claude.stop()
     await claude.result
@@ -297,7 +297,7 @@ describe("B8d: the panel's approvals, as B8c gave them", () => {
     expect(waiting.expiresAt! - waiting.askedAt).toBe(APPROVAL_TIMEOUT_MS)
     view.turns.answer(BOT, "always", "per_1")
     await until(() => first.replies.length === 1)
-    // ADE's «Sempre», sent to nikcli as a once: never nikcli's own «always».
+    // ADE's «Sempre», sent to ragu as a once: never ragu's own «always».
     expect(first.replies[0]).toEqual(["per_1", "once"])
     expect(view.kept[BOT.path]).toEqual(["gitRewrite"])
     first.push(asked("per_2", "git push -f"))
@@ -440,7 +440,7 @@ describe("B8d: an answer is for its own question only", () => {
       signal: ended.signal,
     })
     turn = runServeTurn(
-      { runner: "nikcli", bot: BOT, message: "ciao", cwd: "C:/progetto", remote: { commands: true }, onPermission },
+      { runner: "ragu", bot: BOT, message: "ciao", cwd: "C:/progetto", remote: { commands: true }, onPermission },
       fake.deps,
     )
     await until(() => fake.prompts.length === 1)
@@ -560,13 +560,13 @@ describe("B8d: the project admitted on every turn, asked about once", () => {
 
 describe("B8d: the panel says what the rules do not cover", () => {
   const bots = readFileSync(new URL("./bots.tsx", import.meta.url), "utf8")
-  test("lint: the Bot section's turns go through runBotTurn, and a nikcli bot's thread carries the Chat's line on «always»", () => {
+  test("lint: the Bot section's turns go through runBotTurn, and a ragu bot's thread carries the Chat's line on «always»", () => {
     expect(bots).toContain("runTurn: (request) => runBotTurn(request)")
     const thread = bots.slice(
       bots.indexOf('<div data-slot="bots-thread">'),
       bots.indexOf('<div data-slot="bots-messages"'),
     )
-    expect(thread).toContain('runnerById(props.bot.runner).id === "nikcli"')
+    expect(thread).toContain('runnerById(props.bot.runner).id === "ragu"')
     expect(thread).toContain('t("bots.serve.rulesNote")')
   })
 })

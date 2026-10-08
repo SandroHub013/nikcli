@@ -80,9 +80,9 @@ and use EOT-04's restoration barrier; never merge an unversioned stale snapshot 
 - Exhaust capacity using only non-evictable metadata, then race two admissions for the last reservation. Assert bounded
   memory accounting, visible rejection with server-side pending decisions still discoverable, and successful retry after
   a reservation is released. No missing-data success may replace pressure/error state.
-- Extend `packages/nikcli/test/tui/streaming-store.test.ts`, `packages/nikcli/test/tui/session-view.test.ts`,
-  `packages/nikcli/test/tui/session-tabs.test.ts`, and tests under `packages/nikcli/test/tui/util/`.
-- From `packages/nikcli`: `bun test test/tui/streaming-store.test.ts test/tui/session-view.test.ts test/tui/session-tabs.test.ts`.
+- Extend `packages/ragu/test/tui/streaming-store.test.ts`, `packages/ragu/test/tui/session-view.test.ts`,
+  `packages/ragu/test/tui/session-tabs.test.ts`, and tests under `packages/ragu/test/tui/util/`.
+- From `packages/ragu`: `bun test test/tui/streaming-store.test.ts test/tui/session-view.test.ts test/tui/session-tabs.test.ts`.
   Add coordination/capacity assertions to these seams; existing tests alone do not prove the proposed query layer.
 - Meet EOT-01 input/flush/memory budgets; target at least 30% fewer redundant reads in the repeated-session fixture while
   preserving the exact authoritative end state. A reduced request count caused by stale UI is a failure.

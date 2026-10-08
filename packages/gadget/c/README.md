@@ -1,4 +1,4 @@
-# nikcli Gadget — C client
+# ragu Gadget — C client
 
 The gadget protocol in C, for devices where TypeScript does not run: microcontrollers, consoles, anything with a C
 compiler and BSD sockets. It pairs with a code, says hello, holds the SSE feed, answers `invoke` frames, posts results,
@@ -19,7 +19,7 @@ The wire format is [`../linux/src/protocol.ts`](../linux/src/protocol.ts); this 
 ## Use it
 
 ```c
-#include "nikcli_gadget.h"
+#include "ragu_gadget.h"
 
 static int say(void *user, const char *args, uint64_t deadline, char *out, size_t out_len, int *exit_code) {
     snprintf(out, out_len, "hello");
@@ -66,7 +66,7 @@ configurable, and none of them is allocated until `ng_run`.
 
 ## Porting
 
-Everything that touches a socket is in four functions at the top of `src/nikcli_gadget.c` (`net_connect`, `net_send`,
+Everything that touches a socket is in four functions at the top of `src/ragu_gadget.c` (`net_connect`, `net_send`,
 `net_recv`, `net_close`). A device that needs TLS, or a stack that is not BSD sockets, replaces those and nothing else.
 
 ## Build and test on a host

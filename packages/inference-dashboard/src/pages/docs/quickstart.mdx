@@ -1,6 +1,6 @@
 ---
 layout: ../../layouts/Doc.astro
-title: Quickstart · nikcli Inference docs
+title: Quickstart · ragu Inference docs
 ---
 
 # Quickstart
@@ -10,14 +10,14 @@ title: Quickstart · nikcli Inference docs
 [Sign up](/sign-up) → [Dashboard → API Keys](/dashboard/keys) → **Create key** → copy it (shown once).
 
 ```
-export NIKCLI_API_KEY=nik_live_xxxxxxxxxxxxxxxxx
+export RAGU_API_KEY=nik_live_xxxxxxxxxxxxxxxxx
 ```
 
 ## 2. First request
 
 ```bash
 curl https://inference.nikcli-ai.dev/v1/chat/completions \
-  -H "Authorization: Bearer $NIKCLI_API_KEY" \
+  -H "Authorization: Bearer $RAGU_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "nikseek",
@@ -25,7 +25,7 @@ curl https://inference.nikcli-ai.dev/v1/chat/completions \
   }'
 ```
 
-The response is OpenAI-compatible. We add a `nikcli` field with cost breakdown, the upstream route, and cache status:
+The response is OpenAI-compatible. We add a `ragu` field with cost breakdown, the upstream route, and cache status:
 
 ```json
 {
@@ -33,7 +33,7 @@ The response is OpenAI-compatible. We add a `nikcli` field with cost breakdown, 
   "model": "nikseek",
   "choices": [{ "message": { "role": "assistant", "content": "Hi" } }],
   "usage": { "prompt_tokens": 10, "completion_tokens": 2 },
-  "nikcli": {
+  "ragu": {
     "provider": "openrouter",
     "upstreamModel": "deepseek/deepseek-v4-pro-20260423",
     "cache": "miss",
@@ -51,14 +51,14 @@ Pick by **alias** (recommended):
 
 | Alias           | Backed by         | Use it for                   |
 | --------------- | ----------------- | ---------------------------- |
-| `nikcli-mini`   | Qwen 3.5 Flash    | Tiny tool calls / extraction |
-| `nikcli-fast`   | DeepSeek V4 Flash | Cheap fast chat              |
+| `ragu-mini`   | Qwen 3.5 Flash    | Tiny tool calls / extraction |
+| `ragu-fast`   | DeepSeek V4 Flash | Cheap fast chat              |
 | `nikseek`       | DeepSeek V4 Pro   | Strong general reasoning     |
-| `nikcli-max`    | Kimi K2.6         | Top-quality chat             |
-| `nikcli-reason` | DeepSeek R1       | Hard reasoning               |
-| `nikcli-coder`  | Devstral 2        | Code generation              |
-| `nikcli-vision` | Llama 4 Scout     | Image-aware chat             |
-| `nikcli-free`   | MiniMax 2.5 free  | Zero-cost calls              |
+| `ragu-max`    | Kimi K2.6         | Top-quality chat             |
+| `ragu-reason` | DeepSeek R1       | Hard reasoning               |
+| `ragu-coder`  | Devstral 2        | Code generation              |
+| `ragu-vision` | Llama 4 Scout     | Image-aware chat             |
+| `ragu-free`   | MiniMax 2.5 free  | Zero-cost calls              |
 
 Append `:thinking` to enable chain-of-thought on hybrid models. See [Reasoning](/docs/thinking).
 

@@ -17,13 +17,13 @@ import {
 
 describe("host/test-app", () => {
   test("the same worktree gets the same port however its path is spelled", () => {
-    const a = planTestApp({ root: "C:\\Users\\me\\Favorites\\nikcli-ade", branch: "feat/ade" })
-    const b = planTestApp({ root: "c:/users/me/favorites/nikcli-ade/", branch: "feat/ade" })
+    const a = planTestApp({ root: "C:\\Users\\me\\Favorites\\ragu-ade", branch: "feat/ade" })
+    const b = planTestApp({ root: "c:/users/me/favorites/ragu-ade/", branch: "feat/ade" })
     expect(a.port).toBe(b.port)
   })
 
   test("different worktrees get different ports, inside the reserved range", () => {
-    const ports = ["nikcli-ade", "nikcli-ade-testapp", "nikcli-ade-release", "nikcli-ade-fix"].map(
+    const ports = ["ragu-ade", "ragu-ade-testapp", "ragu-ade-release", "ragu-ade-fix"].map(
       (name) => planTestApp({ root: `C:/Users/me/Favorites/${name}`, branch: "x" }).port,
     )
     expect(new Set(ports).size).toBe(ports.length)
@@ -36,12 +36,12 @@ describe("host/test-app", () => {
   })
 
   test("state lives in the worktree, labelled with name and branch", () => {
-    const plan = planTestApp({ root: "C:/Users/me/Favorites/nikcli-ade-testapp", branch: "ade/test-app" })
-    expect(plan.name).toBe("nikcli-ade-testapp")
-    expect(plan.label).toBe("nikcli-ade-testapp · ade/test-app")
+    const plan = planTestApp({ root: "C:/Users/me/Favorites/ragu-ade-testapp", branch: "ade/test-app" })
+    expect(plan.name).toBe("ragu-ade-testapp")
+    expect(plan.label).toBe("ragu-ade-testapp · ade/test-app")
     // S25: its own ade-msg mailbox, not the one every test build shares.
-    expect(plan.mailboxDir.replace(/\\/g, "/")).toBe("C:/Users/me/Favorites/nikcli-ade-testapp/.ade-test/mailbox")
-    expect(plan.profileDir.replace(/\\/g, "/")).toBe("C:/Users/me/Favorites/nikcli-ade-testapp/.ade-test/webview2")
+    expect(plan.mailboxDir.replace(/\\/g, "/")).toBe("C:/Users/me/Favorites/ragu-ade-testapp/.ade-test/mailbox")
+    expect(plan.profileDir.replace(/\\/g, "/")).toBe("C:/Users/me/Favorites/ragu-ade-testapp/.ade-test/webview2")
   })
 
   test("the dev config points Vite and the window at the same port, strictly", () => {
@@ -58,8 +58,8 @@ describe("host/test-app", () => {
   })
 
   describe("which processes are this worktree's instance", () => {
-    const root = "C:\\Users\\me\\Favorites\\nikcli-ade-testapp"
-    const other = "C:\\Users\\me\\Favorites\\nikcli-ade"
+    const root = "C:\\Users\\me\\Favorites\\ragu-ade-testapp"
+    const other = "C:\\Users\\me\\Favorites\\ragu-ade"
     const plan = planTestApp({ root, branch: "ade/test-app" })
     const otherPlan = planTestApp({ root: other, branch: "feat/ade" })
     const rows: ProcessRow[] = [

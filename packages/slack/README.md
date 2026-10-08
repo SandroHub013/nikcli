@@ -1,13 +1,13 @@
-# nikcli Slack Integration
+# ragu Slack Integration
 
-Deploy nikcli as a Slack bot using Cloudflare Workers.
+Deploy ragu as a Slack bot using Cloudflare Workers.
 
 ## Architecture
 
 ```
 ┌─────────────────┐     ┌──────────────────────────┐     ┌─────────────────┐
-│  Slack API      │────▶│  Cloudflare Worker       │────▶│  Nikcli Server  │
-│                 │     │  nikcli-slack            │     │  (localhost)    │
+│  Slack API      │────▶│  Cloudflare Worker       │────▶│  Ragu Code Server  │
+│                 │     │  ragu-slack            │     │  (localhost)    │
 └─────────────────┘     │  - Basic Auth            │     │  - Port 4096    │
                         │  - KV Session Storage    │     │  - Basic Auth   │
                         │  - Voice Transcription   │     └─────────────────┘
@@ -24,17 +24,17 @@ Deploy nikcli as a Slack bot using Cloudflare Workers.
 - [Cloudflare Workers](https://workers.cloudflare.com/) account
 - [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-update/) installed
 - Slack App with Bot Token and Signing Secret
-- nikcli server running with Basic Auth
+- ragu server running with Basic Auth
 
 ## Quick Start
 
-### 1. Setup nikcli Server
+### 1. Setup ragu Server
 
 ```bash
-# Start nikcli server with external access
-export NIKCLI_SERVER_PASSWORD="your-secure-password"
-export NIKCLI_SERVER_USERNAME="slackbot"
-nikcli serve --port 4096 --hostname 0.0.0.0 --mdns
+# Start ragu server with external access
+export RAGU_SERVER_PASSWORD="your-secure-password"
+export RAGU_SERVER_USERNAME="slackbot"
+ragu serve --port 4096 --hostname 0.0.0.0 --mdns
 ```
 
 ### 2. Expose Server to Internet
@@ -47,7 +47,7 @@ brew install cloudflare/cloudflare/cloudflared
 cloudflared tunnel --url http://localhost:4096
 
 # Output: https://random-name.trycloudflare.com
-# Save this URL for NIKCLI_URL
+# Save this URL for RAGU_URL
 ```
 
 ### 3. Create Slack App
@@ -61,19 +61,19 @@ _metadata:
   major_version: 1
   minor_version: 1
 display_information:
-  name: nikcli
+  name: ragu
   description: AI coding assistant for Slack
   background_color: "#1a1a2e"
 features:
   bot_user:
-    display_name: nikcli
+    display_name: ragu
     always_online: true
   assistant_view:
     # AI Assistant panel (the Claude-icon side panel surface)
     assistant_description: AI coding assistant
     suggested_prompts: []
   slash_commands:
-    - command: /nikcli-tools
+    - command: /ragu-tools
       description: Manage per-channel tool policy (admins)
       usage_hint: "[list | allow <tool> | deny <tool> | reset]"
       should_escape: false
@@ -106,7 +106,7 @@ settings:
       - message.im
       - message.mpim
   interactivity:
-    placeholder_text: Ask nikcli...
+    placeholder_text: Ask ragu...
   org_deploy_enabled: false
   # Socket Mode (src/index.ts) needs socket_mode_enabled: true + an app-level
   # token with connections:write. The Cloudflare Worker (src/worker.ts) uses
@@ -131,15 +131,15 @@ bunx wrangler secret put SLACK_SIGNING_SECRET
 bunx wrangler secret put SLACK_CLIENT_ID
 bunx wrangler secret put SLACK_CLIENT_SECRET
 bunx wrangler secret put OPENAI_API_KEY
-bunx wrangler secret put NIKCLI_URL
-bunx wrangler secret put NIKCLI_USERNAME
-bunx wrangler secret put NIKCLI_PASSWORD
+bunx wrangler secret put RAGU_URL
+bunx wrangler secret put RAGU_USERNAME
+bunx wrangler secret put RAGU_PASSWORD
 
 # Deploy with custom domain (optional)
-bunx wrangler deploy src/worker.ts --name nikcli-slack --routes 'slack.nikcli-ai.dev/*'
+bunx wrangler deploy src/worker.ts --name ragu-slack --routes 'slack.nikcli-ai.dev/*'
 
 # Or without custom domain
-# bunx wrangler deploy src/worker.ts --name nikcli-slack
+# bunx wrangler deploy src/worker.ts --name ragu-slack
 ```
 
 ### 5. Update Slack App URLs
@@ -161,9 +161,9 @@ Reinstall the app.
 | `SLACK_CLIENT_SECRET`       | No       | Slack OAuth Client Secret (for /slack/install)                |
 | `SLACK_APP_TOKEN`           | No       | Required only for Socket Mode (`bun run dev`)                 |
 | `OPENAI_API_KEY`            | No       | OpenAI API for voice transcription                            |
-| `NIKCLI_URL`                | Yes      | Your nikcli server URL                                        |
-| `NIKCLI_USERNAME`           | No       | Basic Auth username (default: `nikcli`)                       |
-| `NIKCLI_PASSWORD`           | Yes      | Basic Auth password (`NIKCLI_SERVER_PASSWORD`)                |
+| `RAGU_URL`                | Yes      | Your ragu server URL                                        |
+| `RAGU_USERNAME`           | No       | Basic Auth username (default: `ragu`)                       |
+| `RAGU_PASSWORD`           | Yes      | Basic Auth password (`RAGU_SERVER_PASSWORD`)                |
 | `GITHUB_TOKEN`              | No       | GitHub token for GitHub Actions mode                          |
 | `GITHUB_REPO`               | No       | GitHub repo (e.g., `owner/repo`) for Actions                  |
 | `GITHUB_ACTIONS_MODE`       | No       | Set to `"true"` to use GitHub Actions instead of direct API   |
@@ -173,7 +173,7 @@ Reinstall the app.
 | `SLACK_FOLLOWUP_SLOW_MS`    | No       | Warn a job is slow after this many ms (default `120000`)      |
 | `SLACK_FOLLOWUP_DONE_MS`    | No       | Only ping on completion if job ran ≥ this many ms (`20000`)   |
 | `SLACK_DEFAULT_TOOLS`       | No       | Workspace tool defaults, e.g. `bash=false,write=false`        |
-| `SLACK_ADMIN_USERS`         | No       | Comma-separated Slack user IDs allowed to run `/nikcli-tools` |
+| `SLACK_ADMIN_USERS`         | No       | Comma-separated Slack user IDs allowed to run `/ragu-tools` |
 | `CHANNEL_MEMORY_FILE`       | No       | Path for channel memory store (default `/tmp/...`)            |
 | `CHANNEL_TOOLS_FILE`        | No       | Path for channel tool policy store (default `/tmp/...`)       |
 
@@ -182,7 +182,7 @@ Reinstall the app.
 In Slack, mention the bot to start a conversation:
 
 ```
-@nikcli Write a function to calculate fibonacci
+@ragu Write a function to calculate fibonacci
 ```
 
 Features:
@@ -194,12 +194,12 @@ Features:
 
 ### Claude Tag–style surfaces & behaviours
 
-The Socket Mode bot (`src/index.ts`) brings the nikcli agent to Slack the way
+The Socket Mode bot (`src/index.ts`) brings the ragu agent to Slack the way
 Claude Tag does:
 
-- **Channel tagging** — `@nikcli <task>` in any channel; work happens in the thread.
+- **Channel tagging** — `@ragu <task>` in any channel; work happens in the thread.
 - **Direct messages** — DM the bot to work privately.
-- **AI Assistant panel** — open the assistant side panel and chat with nikcli from
+- **AI Assistant panel** — open the assistant side panel and chat with ragu from
   anywhere in Slack. Shows suggested prompts and a live "is thinking…" status.
 - **Channel memory** — the bot remembers salient requests per channel (across
   threads) and feeds them back as context on new sessions. Toggle with
@@ -207,8 +207,8 @@ Claude Tag does:
 - **Autonomous follow-ups** — it pings the requester when a long-running job
   finishes and warns (tagging them) when a job is taking unusually long. Toggle
   with `SLACK_FOLLOWUPS=false`.
-- **Per-channel tool policy** — admins restrict which nikcli tools the bot may use
-  in each channel via `/nikcli-tools allow|deny <tool>`. Defaults come from
+- **Per-channel tool policy** — admins restrict which ragu tools the bot may use
+  in each channel via `/ragu-tools allow|deny <tool>`. Defaults come from
   `SLACK_DEFAULT_TOOLS`; admins are listed in `SLACK_ADMIN_USERS`.
 
 ## Development
@@ -232,10 +232,10 @@ bun run typecheck
 - Check Slack app has required bot scopes
 - Reinstall app after changing scopes
 
-### 401 Unauthorized from nikcli server
+### 401 Unauthorized from ragu server
 
-- Verify `NIKCLI_USERNAME` and `NIKCLI_PASSWORD` match server config
-- Ensure server is running and accessible at `NIKCLI_URL`
+- Verify `RAGU_USERNAME` and `RAGU_PASSWORD` match server config
+- Ensure server is running and accessible at `RAGU_URL`
 
 ### Voice transcription not working
 

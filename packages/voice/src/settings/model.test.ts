@@ -351,7 +351,7 @@ describe("settings/model - normalizeSettings", () => {
      * transcript would flip between them depending on which scored first.
      */
     test("duplicates are removed regardless of case", () => {
-      expect(normalizeSettings({ customWords: ["NikCLI", "nikcli"] }).customWords).toEqual(["NikCLI"])
+      expect(normalizeSettings({ customWords: ["Ragu", "ragu"] }).customWords).toEqual(["Ragu"])
     })
 
     test("non-textual entries are dropped and reported", () => {
@@ -420,7 +420,7 @@ describe("settings/model replyVoice", () => {
 
 describe("repairs and warnings follow the language", () => {
   test("a repaired setting and a risky shortcut are described in English under English", async () => {
-    const { resetLocaleForTests } = await import("@nikcli-ai/ade/i18n")
+    const { resetLocaleForTests } = await import("@ragu/ade/i18n")
     const { describeChordRisk } = await import("./shortcuts")
     resetLocaleForTests("en")
     try {

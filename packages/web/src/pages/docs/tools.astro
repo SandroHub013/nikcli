@@ -49,7 +49,7 @@ const toolIndex = [
   { id: "apply_patch", file: "src/tool/apply_patch.ts", desc: "Patch files with structured diffs." },
   { id: "speak", file: "src/tool/speak.ts", desc: "Convert text to speech and play audio." },
   { id: "opentui", file: "src/tool/opentui.ts", desc: "Render terminal dashboards and rich visualizations." },
-  { id: "plugin", file: "src/tool/plugin.ts", desc: "Create, update, list, reload and remove nikcli plugins; new plugins load without a restart." },
+  { id: "plugin", file: "src/tool/plugin.ts", desc: "Create, update, list, reload and remove ragu plugins; new plugins load without a restart." },
   { id: "artifact", file: "src/tool/artifact.ts", desc: "Publish a local file as a hosted page on nikcli-ai.dev, openable in a browser or the mobile app." },
   { id: "lsp", file: "src/tool/lsp.ts", desc: "LSP tool exposed behind experimental flags." },
   { id: "batch", file: "src/tool/batch.ts", desc: "Batch tool calls behind experimental flags." },
@@ -71,21 +71,21 @@ const toolIndex = [
 
 <DocsLayout
   title="Tools"
-  subtitle="Public tools registered in packages/nikcli/src/tool/registry.ts plus tool-gating behavior."
-  description="Reference for nikcli public tools, tool registry, permissions, model gating, and agent tool access."
+  subtitle="Public tools registered in packages/ragu/src/tool/registry.ts plus tool-gating behavior."
+  description="Reference for ragu public tools, tool registry, permissions, model gating, and agent tool access."
   toc={toc}
 >
   <section id="tool-registry" class="doc-section">
     <h2>Tool Registry</h2>
     <p>
-      Tools are registered in <code>packages/nikcli/src/tool/registry.ts</code>. The registry filters
+      Tools are registered in <code>packages/ragu/src/tool/registry.ts</code>. The registry filters
       them based on model capabilities, client type, and experimental flags.
     </p>
     <DocCallout type="info" title="Gating">
       <p>
         Some GPT-family models use <code>apply_patch</code> instead of <code>edit</code> and
         <code>write</code>. <code>websearch</code> and <code>codesearch</code> require provider or env
-        setup. <code>lsp</code> needs <code>NIKCLI_EXPERIMENTAL_LSP_TOOL</code>;
+        setup. <code>lsp</code> needs <code>RAGU_EXPERIMENTAL_LSP_TOOL</code>;
         <code>batch</code> needs <code>experimental.batch_tool</code> in config;
         <code>plan_enter</code> / <code>plan_exit</code> need experimental plan mode on the CLI client.
         <code>question</code> is available on app, CLI, and desktop clients.
@@ -136,7 +136,7 @@ const toolIndex = [
         <p>Render tables, charts, timelines, and progress widgets directly in the terminal UI.</p>
       </DocCard>
       <DocCard title="plugin" eyebrow="Self-extension" href="/docs/guides/plugins#self-extend">
-        <p>Write a plugin into its own folder, install its dependencies and hot-reload it, so nikcli gains hooks and tools on request. Asks the <code>plugin</code> permission by default.</p>
+        <p>Write a plugin into its own folder, install its dependencies and hot-reload it, so ragu gains hooks and tools on request. Asks the <code>plugin</code> permission by default.</p>
       </DocCard>
     </div>
   </section>

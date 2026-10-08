@@ -226,8 +226,8 @@ export class TunnelManager {
 
       this.process = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"], shell: false })
 
-      if (process.env.NODE_DEBUG?.includes("nikcli:remotosh")) {
-        process.stderr.write(`[nikcli:remotosh] Spawning: ${cmd} ${args.join(" ")}\n`)
+      if (process.env.NODE_DEBUG?.includes("ragu:remotosh")) {
+        process.stderr.write(`[ragu:remotosh] Spawning: ${cmd} ${args.join(" ")}\n`)
       }
 
       let output = ""
@@ -237,14 +237,14 @@ export class TunnelManager {
 
       const handleData = (data: Buffer) => {
         const text = data.toString()
-        if (process.env.NODE_DEBUG?.includes("nikcli:remotosh")) {
-          process.stderr.write(`[nikcli:remotosh] ${text}`)
+        if (process.env.NODE_DEBUG?.includes("ragu:remotosh")) {
+          process.stderr.write(`[ragu:remotosh] ${text}`)
         }
         output += text
         const match = output.match(/(?:visit|connect)?\s*(https?:\/\/[^\s]+)/i)
         if (match?.[1]) {
-          if (process.env.NODE_DEBUG?.includes("nikcli:remotosh")) {
-            process.stderr.write(`[nikcli:remotosh] Matched URL: ${match[1]}\n`)
+          if (process.env.NODE_DEBUG?.includes("ragu:remotosh")) {
+            process.stderr.write(`[ragu:remotosh] Matched URL: ${match[1]}\n`)
           }
           clearTimeout(timeout)
           this.url = match[1]

@@ -26,12 +26,12 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Install nikcli
+      - name: Install ragu
         run: bun i -g nikcli@latest || curl -fsSL https://nikcli-ai.dev/install | bash || true
 
       - name: Sync beta branch
         if: hashFiles('script/beta.ts') != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          NIKCLI_API_KEY: ${{ secrets.NIKCLI_API_KEY }}
+          RAGU_API_KEY: ${{ secrets.NIKCLI_API_KEY }}
         run: bun script/beta.ts

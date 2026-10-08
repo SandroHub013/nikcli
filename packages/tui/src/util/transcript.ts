@@ -1,5 +1,5 @@
-import type { AssistantMessage, Part, UserMessage } from "@nikcli-ai/sdk/httpapi"
-import { Locale } from "@nikcli-ai/util/locale"
+import type { AssistantMessage, Part, UserMessage } from "@ragu/sdk/httpapi"
+import { Locale } from "@ragu/util/locale"
 
 export type TranscriptOptions = {
   thinking: boolean

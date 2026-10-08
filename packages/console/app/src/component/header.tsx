@@ -9,10 +9,10 @@ import copyBrandAssetsDark from "../asset/lander/brand-assets-dark.svg"
 
 // SVG files for copying (separate from button icons)
 // Replace these with your actual SVG files for copying
-import copyLogoSvgLight from "../asset/lander/nikcli-logo-light.svg"
-import copyLogoSvgDark from "../asset/lander/nikcli-logo-dark.svg"
-import copyWordmarkSvgLight from "../asset/lander/nikcli-wordmark-light.svg"
-import copyWordmarkSvgDark from "../asset/lander/nikcli-wordmark-dark.svg"
+import copyLogoSvgLight from "../asset/lander/ragu-logo-light.svg"
+import copyLogoSvgDark from "../asset/lander/ragu-logo-dark.svg"
+import copyWordmarkSvgLight from "../asset/lander/ragu-wordmark-light.svg"
+import copyWordmarkSvgDark from "../asset/lander/ragu-wordmark-dark.svg"
 import { A, createAsync, useNavigate } from "@solidjs/router"
 import { createMemo, Match, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -124,8 +124,8 @@ export function Header(props: { zen?: boolean; hideGetStarted?: boolean }) {
     <section data-component="top">
       <div onContextMenu={handleLogoContextMenu}>
         <A href={language.route("/")}>
-          <img data-slot="logo light" src={logoLight} alt="Nikcli" width="189" height="34" />
-          <img data-slot="logo dark" src={logoDark} alt="Nikcli" width="189" height="34" />
+          <img data-slot="logo light" src={logoLight} alt="Ragu" width="189" height="34" />
+          <img data-slot="logo dark" src={logoDark} alt="Ragu" width="189" height="34" />
         </A>
       </div>
 

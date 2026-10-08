@@ -90,7 +90,7 @@
   color-scheme: light;
   --text-mix-blend-mode: multiply;
 
-  /* Nikcli default fallback variables (light) */
+  /* Ragu default fallback variables (light) */
   --background-base: #f8f7f7;
   --background-weak: var(--smoke-light-3);
   --background-strong: var(--smoke-light-1);
@@ -353,7 +353,7 @@
     color-scheme: dark;
     --text-mix-blend-mode: plus-lighter;
 
-    /* Nikcli default fallback variables (dark) */
+    /* Ragu default fallback variables (dark) */
     --background-base: var(--smoke-dark-1);
     --background-weak: #1c1717;
     --background-strong: #151313;

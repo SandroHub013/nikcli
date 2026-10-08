@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@nikcli-ai/console-resource",
+  "name": "@ragu/console-resource",
   "license": "MIT",
   "dependencies": {
     "@cloudflare/workers-types": "catalog:"

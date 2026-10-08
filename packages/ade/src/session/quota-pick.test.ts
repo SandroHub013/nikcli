@@ -74,7 +74,7 @@ describe("pickByQuota", () => {
 
   test("an agent whose quota is n/d is started as asked: no evidence, no reroute", () => {
     expect(pickByQuota({ agent: "agy", from: "m" }, report(claude(60)), now)).toEqual({ agent: "agy" })
-    expect(pickByQuota({ agent: "nikcli", from: "m" }, report(claude(60)), now)).toEqual({ agent: "nikcli" })
+    expect(pickByQuota({ agent: "ragu", from: "m" }, report(claude(60)), now)).toEqual({ agent: "ragu" })
     expect(pickByQuota({ agent: "codex", from: "m" }, undefined, now)).toEqual({ agent: "codex" })
   })
 
@@ -84,7 +84,7 @@ describe("pickByQuota", () => {
   })
 
   test("n/d agents are never picked as the replacement", () => {
-    const picked = pickByQuota({ agent: "codex", from: "m" }, report(codex(0)), now, ["agy", "nikcli", "claude-code"])
+    const picked = pickByQuota({ agent: "codex", from: "m" }, report(codex(0)), now, ["agy", "ragu", "claude-code"])
     expect(picked.agent).toBe("codex")
     expect(picked.reason).toContain("nessun altro agente")
   })

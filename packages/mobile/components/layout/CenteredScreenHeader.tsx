@@ -6,7 +6,7 @@ import { type as typeStyle } from "@/lib/typography"
 
 /**
  * Navigation-bar shaped screen header: one circular control per side with the
- * screen's name centred between them. Pass `brand` to show the NIKCLI wordmark
+ * screen's name centred between them. Pass `brand` to show the RAGU wordmark
  * instead of the title — tab roots already name themselves in the tab bar.
  */
 export function CenteredScreenHeader({

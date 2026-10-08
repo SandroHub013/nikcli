@@ -11,7 +11,7 @@ export {} // mark as module so top-level await is allowed
  * release both report `1.330.0`, and so does the older container that never got replaced.
  *
  * So the identity that is compared here is the commit, baked into the binary at compile time
- * (`NIKCLI_REVISION` → `@nikcli-ai/util/version`) and served on the already-public
+ * (`RAGU_REVISION` → `@ragu/util/version`) and served on the already-public
  * `GET /global/health`. This script waits a bounded time for the observed revision to equal the
  * expected one, and treats anything else — unhealthy, absent revision, a different revision still
  * serving when the deadline passes — as a failed release, not as a pending one.
@@ -24,7 +24,7 @@ export {} // mark as module so top-level await is allowed
  * Usage:
  *   bun run script/check-release-identity.ts --url https://host [--expect <sha>] [--timeout 600]
  *
- * `--expect` defaults to NIKCLI_REVISION, then to the current git HEAD.
+ * `--expect` defaults to RAGU_REVISION, then to the current git HEAD.
  */
 
 interface Observation {
@@ -49,14 +49,14 @@ function seconds(name: string, fallback: number): number {
   return value
 }
 
-const base = (arg("url") ?? process.env["NIKCLI_HEALTH_URL"] ?? "").trim().replace(/\/+$/, "")
+const base = (arg("url") ?? process.env["RAGU_HEALTH_URL"] ?? "").trim().replace(/\/+$/, "")
 if (!base) {
-  console.error("✗ No health URL. Pass --url https://host or set NIKCLI_HEALTH_URL.")
+  console.error("✗ No health URL. Pass --url https://host or set RAGU_HEALTH_URL.")
   process.exit(2)
 }
 
 const expected = await (async () => {
-  const explicit = (arg("expect") ?? process.env["NIKCLI_REVISION"] ?? "").trim()
+  const explicit = (arg("expect") ?? process.env["RAGU_REVISION"] ?? "").trim()
   if (explicit) return explicit
   try {
     const proc = Bun.spawn(["git", "rev-parse", "HEAD"], { stdout: "pipe", stderr: "ignore" })
@@ -69,7 +69,7 @@ const expected = await (async () => {
 })()
 
 if (!expected) {
-  console.error("✗ No expected revision. Pass --expect <sha>, set NIKCLI_REVISION, or run in a git checkout.")
+  console.error("✗ No expected revision. Pass --expect <sha>, set RAGU_REVISION, or run in a git checkout.")
   process.exit(2)
 }
 

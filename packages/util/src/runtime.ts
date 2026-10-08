@@ -3,10 +3,10 @@ import { lazy } from "./lazy"
 /**
  * Runtime-aware command selection.
  *
- * nikcli itself always executes under Bun, but the *commands it spawns* —
+ * ragu itself always executes under Bun, but the *commands it spawns* —
  * monitor processes and local MCP servers — historically defaulted to the
  * Node toolchain (`node` / `npm` / `npx`). Each of those boots a second,
- * separate runtime (its own V8 heap, GC and event loop) alongside nikcli,
+ * separate runtime (its own V8 heap, GC and event loop) alongside ragu,
  * which is what makes a workspace full of background monitors and MCP servers
  * pile up CPU. When a standalone `bun` is resolvable we route those spawns
  * through Bun (`bun` / `bunx`) so the runtime is reused; when only Node is

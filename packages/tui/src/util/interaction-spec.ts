@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { zod } from "@nikcli-ai/util/effect-zod"
+import { zod } from "@ragu/util/effect-zod"
 
 // ──────────────────────────────────────────────────────────────────────────
 // Interactive TUI mini-app spec.

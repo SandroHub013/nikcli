@@ -22,7 +22,7 @@ const toc = [
 <DocsLayout
   title="Parallel work with workspaces"
   subtitle="Run several sessions against the same repository at once, each in its own worktree or container — and move a session between them without losing it."
-  description="Guide to nikcli workspaces: worktree and container configurations, creating and targeting them, warping sessions, status and events, and cleanup."
+  description="Guide to ragu workspaces: worktree and container configurations, creating and targeting them, warping sessions, status and events, and cleanup."
   toc={toc}
 >
   <section id="why" class="doc-section">
@@ -37,7 +37,7 @@ const toc = [
     </p>
     <DocCallout type="warn" title="Not the same 'workspace' as an editor's">
       <p>
-        A nikcli workspace is a sandboxed compute environment for a session — a worktree or a
+        A ragu workspace is a sandboxed compute environment for a session — a worktree or a
         container — not a multi-root project. The endpoints live under
         <code>/experimental/workspace</code> and the surface is still experimental.
       </p>
@@ -86,7 +86,7 @@ const toc = [
     directory: process.cwd(),
     runtime: "docker",
     image: "oven/bun:1",
-    containerName: "nikcli-pr-482",
+    containerName: "ragu-pr-482",
   },
 })`}</DocCode>
     <p>
@@ -105,7 +105,7 @@ const toc = [
 await client.session.list({ workspace: "feature-search" })
 
 // a client pinned to the workspace
-const inWorkspace = createNikcliClient({
+const inWorkspace = createRaguClient({
   baseUrl: "http://127.0.0.1:4096",
   workspace: "feature-search",
 })
@@ -179,9 +179,9 @@ await client.experimental.workspace.remove({ id: "feature-search" })`}</DocCode>
 
   <section id="complete" class="doc-section">
     <h2>Three branches at once</h2>
-    <DocCode language="ts" title="parallel.ts">{`import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
+    <DocCode language="ts" title="parallel.ts">{`import { createRaguClient } from "@ragu/sdk/httpapi"
 
-const client = createNikcliClient({
+const client = createRaguClient({
   baseUrl: "http://127.0.0.1:4096",
   directory: process.cwd(),
 })

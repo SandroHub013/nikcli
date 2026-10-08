@@ -12,7 +12,7 @@ describe("introArgs", () => {
   })
 
   test("the rest get no arguments", () => {
-    for (const id of ["agy", "opencode", "nikcli", "kimi", "hermes", "terminal"]) {
+    for (const id of ["agy", "opencode", "ragu", "kimi", "hermes", "terminal"]) {
       expect([id, introArgs(id)]).toEqual([id, []])
     }
   })
@@ -47,7 +47,7 @@ describe("introText", () => {
 
   /** The review's reproduction: a Prime pane whose model is called like ours must not get Sonnet's line. */
   test("only claude-code gets a model line, whatever the model is called", () => {
-    for (const id of ["prime", "pi", "codex", "agy", "opencode", "nikcli", "terminal"]) {
+    for (const id of ["prime", "pi", "codex", "agy", "opencode", "ragu", "terminal"]) {
       expect([id, introText(id, "un-modello-con-sonnet-nel-nome")]).toEqual([id, INTRO_TEXT])
       expect(introArgs(id, introText(id, "opus"))).toEqual(introArgs(id))
     }

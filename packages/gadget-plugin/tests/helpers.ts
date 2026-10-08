@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import type { Frame, Hello } from "@nikcli-ai/gadget/protocol"
+import type { Frame, Hello } from "@ragu/gadget/protocol"
 import { Registry, type Feed } from "../src/registry.ts"
 
 export const FINGERPRINT = "fp-0123456789abcdef"
@@ -63,7 +63,7 @@ export function online(options: { now?: () => number; file?: string; display?: b
   return { registry, id, token, feed }
 }
 
-export function tempDir(prefix = "nikcli-gadget-plugin-"): { dir: string; cleanup: () => void } {
+export function tempDir(prefix = "ragu-gadget-plugin-"): { dir: string; cleanup: () => void } {
   const dir = mkdtempSync(path.join(os.tmpdir(), prefix))
   return { dir, cleanup: () => rmSync(dir, { recursive: true, force: true }) }
 }

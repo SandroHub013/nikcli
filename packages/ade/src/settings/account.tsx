@@ -1,5 +1,5 @@
 import { createEffect, createSignal, onCleanup, onMount, For, Show, type JSX } from "solid-js"
-import { HowItWorks } from "@nikcli-ai/voice"
+import { HowItWorks } from "@ragu/voice"
 import { providerState, type ProviderState } from "../bots/providers"
 import { RUNNERS, runnerAccount, type Runner } from "../bots/runners"
 import { MAX_PARALLEL_TURNS } from "../bots/terms"

@@ -3,12 +3,12 @@ import { ARTIFACT_TOKEN_COOKIE } from "../../lib/artifact"
 
 export const GET: APIRoute = async (context) => {
   const state = context.url.searchParams.get("state")
-  const expected = context.cookies.get("nikcli_oauth_state")?.value
-  const verifier = context.cookies.get("nikcli_oauth_verifier")?.value
-  const returnTo = context.cookies.get("nikcli_oauth_return")?.value || "/"
-  context.cookies.delete("nikcli_oauth_state", { path: "/user" })
-  context.cookies.delete("nikcli_oauth_verifier", { path: "/user" })
-  context.cookies.delete("nikcli_oauth_return", { path: "/user" })
+  const expected = context.cookies.get("ragu_oauth_state")?.value
+  const verifier = context.cookies.get("ragu_oauth_verifier")?.value
+  const returnTo = context.cookies.get("ragu_oauth_return")?.value || "/"
+  context.cookies.delete("ragu_oauth_state", { path: "/user" })
+  context.cookies.delete("ragu_oauth_verifier", { path: "/user" })
+  context.cookies.delete("ragu_oauth_return", { path: "/user" })
   if (!state || !expected || state !== expected || !verifier) {
     return Response.json({ error: "invalid_oauth_state" }, { status: 400 })
   }
@@ -22,7 +22,7 @@ export const GET: APIRoute = async (context) => {
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "authorization_code",
-      client_id: "nikcli-web",
+      client_id: "ragu-web",
       redirect_uri: redirectUri,
       code,
       code_verifier: verifier,
@@ -45,7 +45,7 @@ export const GET: APIRoute = async (context) => {
     path: "/",
     maxAge: tokens.expires_in,
   })
-  context.cookies.set("nikcli_refresh", tokens.refresh_token, {
+  context.cookies.set("ragu_refresh", tokens.refresh_token, {
     httpOnly: true,
     secure,
     sameSite: "lax",

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { localAccountStore, memoryAccountStore, parseAccount, ACCOUNT_PLAN } from "./account"
-import { readAgentFile } from "./nikcli"
+import { readAgentFile } from "./ragu"
 
 describe("l'account di un bot", () => {
   test("il parse è rigoroso: tutto ciò che non è atteso vale abbonamento", () => {

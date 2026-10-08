@@ -1,7 +1,7 @@
 import { Match, Show, Switch, createMemo } from "solid-js"
-import { Tooltip } from "@nikcli-ai/ui/tooltip"
-import { ProgressCircle } from "@nikcli-ai/ui/progress-circle"
-import { Button } from "@nikcli-ai/ui/button"
+import { Tooltip } from "@ragu/ui/tooltip"
+import { ProgressCircle } from "@ragu/ui/progress-circle"
+import { Button } from "@ragu/ui/button"
 import { useParams } from "@solidjs/router"
 
 import { useLayout } from "@/context/layout"

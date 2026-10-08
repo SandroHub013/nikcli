@@ -1,7 +1,7 @@
 import type { APIRoute } from "astro"
 
 /**
- * Public, aggregate-only feed of what nikcli installs report running — the
+ * Public, aggregate-only feed of what ragu installs report running — the
  * community half of nikcli-ai.dev/data.
  *
  * `install_id` never leaves this route. It is grouped away everywhere, and the
@@ -62,7 +62,7 @@ export const GET: APIRoute = async (ctx) => {
 
   // The full breakdown, so the page can show what opencode.ai/data shows —
   // blended price per million, cache ratio, cost per session — measured across
-  // nikcli installs rather than across one gateway's traffic.
+  // ragu installs rather than across one gateway's traffic.
   //
   // `sessions` sums each install's per-day distinct count. Across installs that
   // is exact, since two installs never share a session; across days it counts a

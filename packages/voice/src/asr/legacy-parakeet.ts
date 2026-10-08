@@ -14,7 +14,7 @@
 export const LEGACY_PARAKEET_DB = "parakeet-cache-db"
 
 /** Set when the legacy cache has been dealt with. */
-const DONE_KEY = "nikcli.voice.parakeetCacheDropped"
+const DONE_KEY = "ragu.voice.parakeetCacheDropped"
 
 export interface LegacyParakeetEnv {
   indexedDB?: Pick<IDBFactory, "deleteDatabase"> & { databases?: () => Promise<Array<{ name?: string }>> }

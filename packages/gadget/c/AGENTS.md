@@ -1,6 +1,6 @@
 # C client — for coding agents
 
-`include/nikcli_gadget.h` is the API, `src/nikcli_gadget.c` the client, `src/ng_json.c` the tokenizer, writer and base64.
+`include/ragu_gadget.h` is the API, `src/ragu_gadget.c` the client, `src/ng_json.c` the tokenizer, writer and base64.
 `platform/posix.c` and `examples/host_gadget.c` are the host build; `esp32/` is the ESP-IDF shell (not built).
 
 - The protocol is `../linux/src/protocol.ts`. A change there needs the same change here, and a case in

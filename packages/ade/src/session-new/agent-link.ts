@@ -75,11 +75,11 @@ export interface LinkReport {
   /**
    * Why the session started, as the CLI says it: Claude Code sends
    * `startup`, `resume`, `clear` or `compact`. Absent from older scripts and
-   * from CLIs that do not say. nikcli's TUI plugin sends `switch`.
+   * from CLIs that do not say. ragu's TUI plugin sends `switch`.
    */
   readonly source?: string
   /**
-   * The folder the conversation belongs to, where the CLI says it: nikcli's
+   * The folder the conversation belongs to, where the CLI says it: ragu's
    * session tabs are shared by every TUI of every project, so a tab clicked
    * in a pane can be another folder's conversation.
    */
@@ -246,7 +246,7 @@ export async function watchForReport(watch: LinkWatch): Promise<LinkReport | und
  * a conversation it never had. `compact` keeps the id, so it has nothing to
  * say.
  *
- * `switch` is nikcli's: its TUI plugin reports the conversation the TUI shows
+ * `switch` is ragu's: its TUI plugin reports the conversation the TUI shows
  * whenever it changes, by `/new`, `/sessions`, a tab or «+ new». It is the
  * user acting in the TUI too, and only the TUI of this spawn has its nonce.
  */
@@ -354,7 +354,7 @@ export async function followReports(follow: LinkFollow): Promise<void> {
 /**
  * The folder of the reported conversation, when it is not the pane's.
  *
- * nikcli's session tabs are one list for every TUI of every project, so a
+ * ragu's session tabs are one list for every TUI of every project, so a
  * tab clicked in a pane can open another folder's conversation, and the pane
  * follows it. That cannot be stopped from here; it can be said. Windows hands
  * the same folder back with either slash and any case.
@@ -368,7 +368,7 @@ export function otherFolder(report: LinkReport, cwd: string): string | undefined
  * The folder to keep with the pane after a report: where the followed
  * conversation lives when it is not the pane's.
  *
- * A report that does not say its folder — nikcli's plugin leaves it out when
+ * A report that does not say its folder — ragu's plugin leaves it out when
  * its `session.get` fails — says nothing about it: for the conversation the
  * pane already follows, what was known stays; for another one, nothing is
  * known. It used to be written as "the pane's own folder", and a restart

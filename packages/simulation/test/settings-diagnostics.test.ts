@@ -15,7 +15,7 @@ import { join, resolve } from "node:path"
 import { connect, type DriverSocket } from "../src/driver"
 import type { SimulationProtocol } from "../src/protocol"
 
-const nikcli = resolve(import.meta.dir, "../../nikcli")
+const ragu = resolve(import.meta.dir, "../../ragu")
 
 async function freePort() {
   return new Promise<number>((resolvePort, reject) => {
@@ -49,7 +49,7 @@ async function eventually<T>(fn: () => Promise<T | undefined>, timeoutMs = 20_00
 }
 
 test("opens the Diagnostics settings category in the real TUI", async () => {
-  const root = await mkdtemp(join(tmpdir(), "nikcli-simulation-settings-"))
+  const root = await mkdtemp(join(tmpdir(), "ragu-simulation-settings-"))
   const registry = join(root, "registry")
   const media = join(root, "media")
   const project = join(root, "project")
@@ -68,20 +68,20 @@ test("opens the Diagnostics settings category in the real TUI", async () => {
   const child = Bun.spawn(
     [process.execPath, "run", "--conditions=browser", "./src/index.ts", project, "--model", "simulation/deterministic"],
     {
-      cwd: nikcli,
+      cwd: ragu,
       env: {
         ...process.env,
-        NIKCLI_DRIVE: "settings",
-        NIKCLI_DRIVE_REGISTRY_DIR: registry,
-        NIKCLI_DRIVE_RENDERER: "headless",
-        NIKCLI_DRIVE_MEDIA_DIR: media,
-        NIKCLI_TEST_HOME: join(root, "home"),
+        RAGU_DRIVE: "settings",
+        RAGU_DRIVE_REGISTRY_DIR: registry,
+        RAGU_DRIVE_RENDERER: "headless",
+        RAGU_DRIVE_MEDIA_DIR: media,
+        RAGU_TEST_HOME: join(root, "home"),
         // Unlike the other drive tests this one must NOT disable project
         // config: the whole point is that the toggle writes the project's
         // `nikcli.json` and the server reads it back. The project is a fresh
         // temp dir, so discovery still cannot reach the repo's own config.
-        NIKCLI_DISABLE_DEFAULT_PLUGINS: "1",
-        NIKCLI_DISABLE_LSP_DOWNLOAD: "1",
+        RAGU_DISABLE_DEFAULT_PLUGINS: "1",
+        RAGU_DISABLE_LSP_DOWNLOAD: "1",
         XDG_DATA_HOME: join(root, "xdg-data"),
         XDG_CACHE_HOME: join(root, "xdg-cache"),
         XDG_CONFIG_HOME: join(root, "xdg-config"),
@@ -102,7 +102,7 @@ test("opens the Diagnostics settings category in the real TUI", async () => {
       return state.screen.includes("Ask anything") ? state : undefined
     })
 
-    // Ctrl+P is the command palette in nikcli (not Ctrl+K).
+    // Ctrl+P is the command palette in ragu (not Ctrl+K).
     await ui.call("ui.press", { key: "p", modifiers: { ctrl: true } })
     await ui.call("ui.type", { text: "Diagnostics" })
 

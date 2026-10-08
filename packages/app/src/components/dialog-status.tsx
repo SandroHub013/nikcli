@@ -1,5 +1,5 @@
 import { Component, createMemo, For, JSXElement, Show } from "solid-js"
-import { Dialog } from "@nikcli-ai/ui/dialog"
+import { Dialog } from "@ragu/ui/dialog"
 import { useSync } from "@/context/sync"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
@@ -164,7 +164,7 @@ export const DialogStatus: Component = () => {
   }
 
   return (
-    <Dialog size="large" title={language.t("dialog.status.title")} description={`nikcli v${platform.version ?? "?"}`}>
+    <Dialog size="large" title={language.t("dialog.status.title")} description={`ragu v${platform.version ?? "?"}`}>
       <div class="flex w-full min-w-0 flex-col gap-y-5">
         <div class="grid grid-cols-2 gap-2 md:grid-cols-4">
           <Metric label={language.t("dialog.status.version")} value={platform.version ?? "?"} />

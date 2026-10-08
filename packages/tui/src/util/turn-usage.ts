@@ -15,8 +15,8 @@
 //
 // This module is pure: it takes messages and returns rows. `provider/cache-diagnostics.ts`
 // answers the follow-up question (*which* part of the prefix moved) from the
-// request side, behind NIKCLI_PROMPT_CACHE_DIAGNOSTICS.
-import type { AssistantMessage, Message } from "@nikcli-ai/sdk/httpapi"
+// request side, behind RAGU_PROMPT_CACHE_DIAGNOSTICS.
+import type { AssistantMessage, Message } from "@ragu/sdk/httpapi"
 
 export namespace TurnUsage {
   export type Step = {

@@ -115,7 +115,7 @@ describe("the catalogs", () => {
   })
 
   test("every voice command has a name in both languages (S7)", async () => {
-    const { VOCABULARY } = await import("@nikcli-ai/voice/core")
+    const { VOCABULARY } = await import("@ragu/voice/core")
     for (const spec of VOCABULARY) {
       const key = `vui.intent.${spec.intent}` as Key
       expect(typeof it[key], key).toBe("string")

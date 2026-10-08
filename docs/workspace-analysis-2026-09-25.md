@@ -1,4 +1,4 @@
-# nikcli Workspace Analysis — 2026-09-25
+# ragu Workspace Analysis — 2026-09-25
 
 Branch `live-main` @ `4d1240ca6d` (v1.396.0). Analysis is read-only; nothing was modified.
 Every number below was measured, not estimated. Claims I could not verify are marked as such.
@@ -11,15 +11,15 @@ Every number below was measured, not estimated. Claims I could not verify are ma
 | --------------------------- | --------------------------------------------------------------------- |
 | Workspace packages          | 41 (+3 under `packages/console/*`, +`github`) — **44 in turbo scope** |
 | TypeScript/TSX under `src/` | **429,911 LOC** across 1,577 files                                    |
-| Largest package             | `packages/nikcli` — 153,339 LOC / 711 files (36% of the monorepo)     |
+| Largest package             | `packages/ragu` — 153,339 LOC / 711 files (36% of the monorepo)     |
 | Rust (ade/src-tauri)        | 9,435 LOC                                                             |
-| Test files                  | **819** total; 488 under `packages/nikcli/test`                       |
+| Test files                  | **819** total; 488 under `packages/ragu/test`                       |
 | HTTP endpoints              | **319** across 30 groups, in 44 contract files                        |
 | SQL domain repos            | 18, over 33 migrations                                                |
 | Commits (30d)               | 695 — roughly 4 releases/day                                          |
 | Dependency graph            | `bun.lock` 8,477 lines, 8 patched deps                                |
 | Typecheck (monorepo)        | **FAILS — OOM-killed, exit 137** after 7m34s                          |
-| Typecheck (nikcli alone)    | passes — 148s, 981 MB peak RSS                                        |
+| Typecheck (ragu alone)    | passes — 148s, 981 MB peak RSS                                        |
 
 **Headline.** The repo is fast-moving, well-instrumented, and honest about its own tradeoffs
 (the comment in `script/test-ci.ts` explaining _why_ sharding exists is genuinely good
@@ -35,7 +35,7 @@ services, **dormant** = present in the workspace with no current consumer signal
 
 | Package                                                                     |           LOC (src) |     Tests | Class     | Note                                                |
 | --------------------------------------------------------------------------- | ------------------: | --------: | --------- | --------------------------------------------------- |
-| `nikcli`                                                                    |             153,339 |       496 | core      | The product. 57 top-level src dirs.                 |
+| `ragu`                                                                    |             153,339 |       496 | core      | The product. 57 top-level src dirs.                 |
 | `tui`                                                                       |              79,337 |         0 | ui        | 2nd largest, zero tests.                            |
 | `app`                                                                       |              50,548 |        46 | ui        | SolidJS web GUI.                                    |
 | `ade`                                                                       | 78,137 + 9,435 Rust |       157 | ui        | Tauri desktop; highest 30d churn (2,088 files).     |
@@ -51,7 +51,7 @@ services, **dormant** = present in the workspace with no current consumer signal
 | 19 further packages                                                         |        < 3,500 each |     mixed | satellite | Includes `discord`, `slack`, `enterprise`, `cloud`. |
 | `mobile`, `desktop`, `webrenderer`, `containers`, `extensions`, `ade`(rust) |                   — | 7/1/0/0/0 | ui        | Non-TS trees; excluded from LOC.                    |
 
-`packages/nikcli/src` by size: `server/` 24.8k · `session/` 18.9k · `cli/` 15.5k ·
+`packages/ragu/src` by size: `server/` 24.8k · `session/` 18.9k · `cli/` 15.5k ·
 `tool/` 11.6k · `provider/` 10.7k · `codemode/` 6.5k · `plugin/` 6.0k · `acp/` 3.7k.
 
 Largest hand-written files: `provider/provider.ts` (2,445) · `config/config.ts` (2,322) ·
@@ -69,12 +69,12 @@ with a concrete cost; **Low** = hygiene.
 
 ```
 $ bun run typecheck        → exit 137 (SIGKILL), 7m34s, 38/44 tasks done
-$ cd packages/nikcli && bun run typecheck
+$ cd packages/ragu && bun run typecheck
                           → exit 0, 147.8s, 980,926,464 B peak RSS
 ```
 
 The package is healthy. The failure is **parallel memory pressure**: this machine has 8 GB, and
-`nikcli` alone needs ~0.98 GB. `package.json:13` already passes `--concurrency=1`, and turbo
+`ragu` alone needs ~0.98 GB. `package.json:13` already passes `--concurrency=1`, and turbo
 2.9.18 accepts the flag — but the run still started 38 tasks in one 454s wall window, which is
 arithmetically impossible under real serialization (the single longest task is 148s). So the flag
 is not being honored in practice.
@@ -85,14 +85,14 @@ is not being honored in practice.
 - **Caveat:** CI runners are larger, so this is likely a local-dev-only failure. It still blocks
   exactly the verification step AGENTS.md tells every agent to run.
 
-### F2 — Circular runtime dependency `@nikcli-ai/voice` ↔ `@nikcli-ai/ade` · **High**
+### F2 — Circular runtime dependency `@ragu/voice` ↔ `@ragu/ade` · **High**
 
 Turbo warns on every invocation:
-`WARNING Circular package dependency detected: @nikcli-ai/voice, @nikcli-ai/ade`
+`WARNING Circular package dependency detected: @ragu/voice, @ragu/ade`
 
 Both edges are in `dependencies` (not `devDependencies`), so this is a real published-package
-cycle: `packages/voice/package.json:24` → `@nikcli-ai/ade`, and `packages/ade/package.json:59` →
-`@nikcli-ai/voice`. It defeats deterministic build order and is the kind of cycle that breaks
+cycle: `packages/voice/package.json:24` → `@ragu/ade`, and `packages/ade/package.json:59` →
+`@ragu/voice`. It defeats deterministic build order and is the kind of cycle that breaks
 only in a clean CI cache.
 
 - **Fix or leave:** fix. Almost certainly one side wants a `devDependency` or a type-only import.
@@ -160,7 +160,7 @@ shipped runtime dependencies have **zero** tests — `util`, `tui`, `plugin`, `r
 `util` in particular is imported by nearly everything.
 
 - **Fix or leave:** should-fix, narrowly. Do **not** re-add the full suite to CI. Instead, unit-test
-  the pure functions in `util` — high ratio, no DB, no nikcli instance, negligible CI cost.
+  the pure functions in `util` — high ratio, no DB, no ragu instance, negligible CI cost.
 
 ### F6 — `packages/inference` is invisible to `turbo typecheck` · **Medium**
 
@@ -172,7 +172,7 @@ no tests wired anywhere.
 
 ### F7 — Dead and misleading config · **Low**
 
-- `turbo.json` declares `nikcli#test`, `@nikcli-ai/app#test`, `@nikcli-ai/simulation#test` with
+- `turbo.json` declares `ragu#test`, `@ragu/app#test`, `@ragu/simulation#test` with
   `dependsOn: ["^build"]` — nothing invokes them.
 - `packages/web` has its own `check:*` gates; none are referenced from `script/ci-validate.ts`.
 - `test-ci.ts:8,10` and `ci-validate.ts:153` both say the suite is "348" / "~350 files".
@@ -259,7 +259,7 @@ Worth stating, because the analysis would be misleading without them.
   nonexistent directory. It does not — it is the deliberate sentinel
   `./do-not-run-tests-from-root`, matching the root `test` script that exits 1. Not a finding.
   I also initially looked for `specs/perf-baseline.json` at the repo root and wrongly called it
-  missing; the artifact is package-local at `packages/nikcli/specs/` and is present and gated.
+  missing; the artifact is package-local at `packages/ragu/specs/` and is present and gated.
 - **Not verified:** per-package build success (I did not run builds), the 60-cycle figure an agent
   reported (my stricter measurement gives 402 cycles of length ≥2; the numbers are not comparable),
   and the 123-endpoint `mobile.ts` estimate, which is dispatcher-derived and approximate.

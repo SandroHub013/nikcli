@@ -1,7 +1,7 @@
 /**
  * The permission rules of a chat session (C5).
  *
- * nikcli decides a tool call with the last rule that matches, in this order:
+ * ragu decides a tool call with the last rule that matches, in this order:
  * the agent's rules, then the session's, then what the user approved for the
  * project with «always» (`permission/next.ts`, `evaluate`). An agent starts
  * from `"*": "allow"` and the user's config comes after it: on this machine
@@ -11,7 +11,7 @@
  *
  * - everything asks first (`* *: ask`), MCP tools and tools added tomorrow
  *   included;
- * - reading and searching are allowed, with nikcli's own guard on `.env`
+ * - reading and searching are allowed, with ragu's own guard on `.env`
  *   files kept (the session's `read *` would otherwise lift it);
  * - the model may ask the user a question (the chat shows it) and keep its
  *   todo list;
@@ -27,7 +27,7 @@
  * the chat does not send to it (`hasChatRules`), it offers a new one.
  */
 
-import type { Session } from "@nikcli-ai/sdk/httpapi"
+import type { Session } from "@ragu/sdk/httpapi"
 
 export interface PermissionRule {
   readonly permission: string

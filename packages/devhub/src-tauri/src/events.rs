@@ -1,4 +1,4 @@
-//! Live event streaming from the nikcli service (`/global/event`, Server-Sent Events).
+//! Live event streaming from the ragu service (`/global/event`, Server-Sent Events).
 //!
 //! The webview cannot hold an authenticated SSE connection (the password stays native), so Rust
 //! keeps the connection, parses the frames and pushes one JSON value per event over an IPC channel.
@@ -98,7 +98,7 @@ pub async fn event_stream(
                 .get(format!("{}{}", svc.url.trim_end_matches('/'), path))
                 .header("accept", "text/event-stream");
             if let Some(pw) = service::password_for(&svc) {
-                req = req.basic_auth("nikcli", Some(pw));
+                req = req.basic_auth("ragu", Some(pw));
             }
             match req.send().await {
                 Ok(mut res) if res.status().is_success() => {

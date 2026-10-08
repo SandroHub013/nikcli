@@ -1,6 +1,6 @@
 /**
  * ComputerSession — a single named desktop whose state can be inspected,
- * driven and captured. Mirrors `@nikcli-ai/browser-control`'s
+ * driven and captured. Mirrors `@ragu/browser-control`'s
  * {@link BrowserSession} one-to-one: each session is its own isolated
  * desktop (sandbox container or real host desktop), with a `status`
  * (running/stopped), an info snapshot, screenshot/click/type/key/scroll
@@ -64,9 +64,9 @@ export class ComputerSession {
     this.screen = screen
   }
 
-  static async create(nikcliSessionID: string, options: SessionOptions): Promise<ComputerSession> {
+  static async create(raguSessionID: string, options: SessionOptions): Promise<ComputerSession> {
     const mode: Mode = options.mode ?? "sandbox"
-    const instance = backend(mode, nikcliSessionID)
+    const instance = backend(mode, raguSessionID)
     const screen = await instance.screenSize()
     return new ComputerSession(options.name, mode, instance, screen)
   }

@@ -1,9 +1,9 @@
 /**
  * What a mod draws and how a client talks to the mods, with no renderer in it.
  *
- * Mods run in the nikcli server and answer `POST /mod/ui/render` with an element tree: plain data,
- * already checked against the server's limits (`packages/nikcli/src/mod/ui.ts`). The types are the
- * structural twin of `@nikcli-ai/plugin/mod`'s `ModNode`, restated because this package does not
+ * Mods run in the ragu server and answer `POST /mod/ui/render` with an element tree: plain data,
+ * already checked against the server's limits (`packages/ragu/src/mod/ui.ts`). The types are the
+ * structural twin of `@ragu/plugin/mod`'s `ModNode`, restated because this package does not
  * depend on the plugin package. This file is plain TypeScript so it can be tested without a DOM.
  */
 

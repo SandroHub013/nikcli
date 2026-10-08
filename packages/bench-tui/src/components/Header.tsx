@@ -71,7 +71,7 @@ export function Header(props: HeaderProps) {
   return (
     <box height={4} width="100%" backgroundColor={theme.bg} flexDirection="column">
       <box height={1} paddingLeft={2} paddingRight={2} flexDirection="row">
-        <text fg={theme.accent} attributes={TextAttributes.BOLD} content={"Nikcli Test Interface"} />
+        <text fg={theme.accent} attributes={TextAttributes.BOLD} content={"Ragu Test Interface"} />
         <text fg={theme.textMuted} content={" / "} />
         <text
           fg={theme.blue}

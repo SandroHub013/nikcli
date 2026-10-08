@@ -220,8 +220,8 @@ console.log(`\nFetched ${releases.length} releases total\n`)
 
 const { total: githubTotal, stats } = calculate(releases)
 
-console.log("Fetching npm all-time downloads for nikcli-ai...\n")
-const npmDownloads = await fetchNpmDownloads("nikcli-ai")
+console.log("Fetching npm all-time downloads for ragu-code...\n")
+const npmDownloads = await fetchNpmDownloads("ragu-code")
 console.log(`Fetched npm all-time downloads: ${npmDownloads.toLocaleString()}\n`)
 
 await save(githubTotal, npmDownloads)

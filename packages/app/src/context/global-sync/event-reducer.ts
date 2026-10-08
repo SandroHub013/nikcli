@@ -1,4 +1,4 @@
-import { Binary } from "@nikcli-ai/util/binary"
+import { Binary } from "@ragu/util/binary"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type {
   FileDiff,
@@ -10,10 +10,10 @@ import type {
   Session,
   SessionStatus,
   Todo,
-} from "@nikcli-ai/sdk/httpapi"
+} from "@ragu/sdk/httpapi"
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
-import { appendInstructionNotice } from "@nikcli-ai/util/instruction-delta"
+import { appendInstructionNotice } from "@ragu/util/instruction-delta"
 
 export function applyGlobalEvent(input: {
   event: { type: string; properties?: unknown }

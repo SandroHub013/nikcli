@@ -9,7 +9,7 @@
  * TUI, no model catalogue, no auth refresh:
  *
  *     claude 60ms · pi 493 · agy 664 · codex 683 · opencode 1093
- *     kimi 1377 · nikcli 1912 · gemini 2398 · hermes 22954
+ *     kimi 1377 · ragu 1912 · gemini 2398 · hermes 22954
  *
  * So for most of the catalogue the text landed in a buffer nobody was reading
  * yet, or — worse — the carriage return answered the first question the CLI

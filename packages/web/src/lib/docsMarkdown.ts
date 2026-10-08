@@ -29,7 +29,7 @@ export function extractDocument(html: string) {
 
 export function extractTitle(html: string) {
   const match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i)
-  return decodeHtml(match?.[1].replace(/<[^>]+>/g, "").trim() || "Nikcli documentation")
+  return decodeHtml(match?.[1].replace(/<[^>]+>/g, "").trim() || "Ragu documentation")
 }
 
 /**

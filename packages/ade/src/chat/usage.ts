@@ -1,5 +1,5 @@
 /**
- * What an answer and a session cost (C7), from what nikcli writes on every
+ * What an answer and a session cost (C7), from what ragu writes on every
  * assistant message: `cost`, in dollars, and `tokens`.
  *
  * Ported from the web app's `session-context-metrics.ts`: a session costs the
@@ -8,7 +8,7 @@
  * the server's; nothing here estimates.
  */
 
-import type { Message } from "@nikcli-ai/sdk/httpapi"
+import type { Message } from "@ragu/sdk/httpapi"
 import { locale, t } from "../i18n"
 
 type Assistant = Extract<Message, { role: "assistant" }>

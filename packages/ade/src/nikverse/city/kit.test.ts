@@ -439,7 +439,7 @@ describe.each(presentLevels())("the city at %s against the layout", (level) => {
 
 describe("which shop a project gets", () => {
   test("the same name gets the same shop, every time, among the ones the file has", () => {
-    for (const name of ["nikcli", "docs", "ade", "a very long project name"]) {
+    for (const name of ["ragu", "docs", "ade", "a very long project name"]) {
       const look = shopLook(name, 3)
       expect(shopLook(name, 3)).toEqual(look)
       expect(look.variant).toBeGreaterThanOrEqual(0)
@@ -450,7 +450,7 @@ describe("which shop a project gets", () => {
   })
 
   test("a handful of projects gets more than one shop and more than one colour", () => {
-    const looks = ["nikcli", "docs", "ade", "voice", "site", "bench", "infra", "notes"].map((name) => shopLook(name, 3))
+    const looks = ["ragu", "docs", "ade", "voice", "site", "bench", "infra", "notes"].map((name) => shopLook(name, 3))
     expect(new Set(looks.map((l) => l.variant)).size).toBeGreaterThan(1)
     expect(new Set(looks.map((l) => l.tint)).size).toBeGreaterThan(1)
   })

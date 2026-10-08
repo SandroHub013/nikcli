@@ -27,7 +27,7 @@ export type PaneStatus = "idle" | "provisioning" | "working" | "waiting" | "done
  * and a memory of its own that outlives any one conversation — and several of
  * them can be put in a room together.
  *
- * Mirrored, not imported, by `@nikcli-ai/voice`: the voice package already
+ * Mirrored, not imported, by `@ragu/voice`: the voice package already
  * depends on this one, so importing the type back would close a cycle. Four
  * string literals are the cheaper price, which is the same trade that file
  * makes for `PaneStatus`.
@@ -478,7 +478,7 @@ function inferAgent(model: string, title: string): string {
   if (t.includes("pi")) return "pi"
   if (t.includes("shell") || t.includes("term") || t.includes("bash") || t.includes("zsh") || t.includes("powershell"))
     return "terminal"
-  return "nikcli"
+  return "ragu"
 }
 
 export function deriveWorkspaces(
@@ -749,7 +749,7 @@ export function fromWorkspaceState(state: WorkspaceState, projectName?: string):
          *
          * The transcripts already on disk were captured before anything
          * filtered them, and they are the ones being looked at right now: a
-         * restored nikcli session opened on a thousand braille spinner frames,
+         * restored ragu session opened on a thousand braille spinner frames,
          * a flattened banner and a stray `+q4d73Gi=…` from a DCS reply. Doing
          * it here means they read correctly on the next launch rather than on
          * the next session.

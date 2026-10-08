@@ -9,7 +9,7 @@ import { TextAttributes } from "@opentui/core"
 import { useSDK } from "@tui/context/sdk"
 import { useToast } from "../ui/toast"
 import { MCP_CATALOG } from "./mcp-catalog"
-import type { McpLocalConfig } from "@nikcli-ai/sdk/httpapi"
+import type { McpLocalConfig } from "@ragu/sdk/httpapi"
 
 type McpRowValue = { kind: "installed"; name: string } | { kind: "catalog"; index: number }
 

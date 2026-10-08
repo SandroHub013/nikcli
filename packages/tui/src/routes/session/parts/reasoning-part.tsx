@@ -1,6 +1,6 @@
 import { liveMarkdown, splitLiveMarkdown, wrapDiagramsInFences } from "../diagram"
 import { use } from "../session-context"
-import { Locale } from "@nikcli-ai/util/locale"
+import { Locale } from "@ragu/util/locale"
 import { borderCharsFor } from "@tui/component/border"
 import { DISCLOSURE, hiddenRows, LESS, more, worthCollapsing } from "@tui/component/disclosure"
 import { bodyColumns } from "@tui/context/component-tokens"

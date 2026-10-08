@@ -12,7 +12,7 @@
  * agree on what a spec is and where a plugin's entrypoint is declared, rather
  * than each having its own opinion that drifts.
  */
-import { isRecord } from "@nikcli-ai/util/record"
+import { isRecord } from "@ragu/util/record"
 
 /**
  * A plugin as config names it: a bare specifier, or a `[specifier, options]`

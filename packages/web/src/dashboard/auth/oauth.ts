@@ -1,8 +1,8 @@
-import { createTokenClient, StoredTokens, type TokenStore } from "@nikcli-ai/auth/client"
+import { createTokenClient, StoredTokens, type TokenStore } from "@ragu/auth/client"
 
-const OAUTH_TRANSACTION_KEY = "nikcli_studio_oauth_transaction"
-const OAUTH_TOKENS_KEY = "nikcli_studio_oauth_tokens"
-export const STUDIO_CLIENT_ID = "nikcli-studio"
+const OAUTH_TRANSACTION_KEY = "ragu_studio_oauth_transaction"
+const OAUTH_TOKENS_KEY = "ragu_studio_oauth_tokens"
+export const STUDIO_CLIENT_ID = "ragu-studio"
 
 type OAuthTransaction = {
   state: string
@@ -28,7 +28,7 @@ async function challengeFor(verifier: string): Promise<string> {
 }
 
 export function issuerUrl(): string {
-  return (import.meta.env.PUBLIC_NIKCLI_AUTH_ISSUER || "https://auth.nikcli-ai.dev").replace(/\/$/, "")
+  return (import.meta.env.PUBLIC_RAGU_AUTH_ISSUER || "https://auth.nikcli-ai.dev").replace(/\/$/, "")
 }
 
 export async function beginOAuth(redirectUri: string): Promise<string> {

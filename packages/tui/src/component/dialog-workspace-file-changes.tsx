@@ -1,7 +1,7 @@
 import { useKeyboard } from "@opentui/solid"
 import { createMemo, For } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Locale } from "@nikcli-ai/util/locale"
+import { Locale } from "@ragu/util/locale"
 import { useTheme } from "../context/theme"
 import { DialogHeader, useDialog, type DialogContext } from "../ui/dialog"
 import { useScrollAcceleration } from "../util/scroll"

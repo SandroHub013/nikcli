@@ -8,13 +8,13 @@ export const EMAILOCTOPUS_API_KEY = new sst.Secret("EMAILOCTOPUS_API_KEY")
 const ADMIN_SECRET = new sst.Secret("ADMIN_SECRET")
 const DISCORD_SUPPORT_BOT_TOKEN = new sst.Secret("DISCORD_SUPPORT_BOT_TOKEN")
 const DISCORD_SUPPORT_CHANNEL_ID = new sst.Secret("DISCORD_SUPPORT_CHANNEL_ID")
-const NIKCLI_DISCORD_WEBHOOK_URL = new sst.Secret("NIKCLI_DISCORD_WEBHOOK_URL")
+const RAGU_DISCORD_WEBHOOK_URL = new sst.Secret("RAGU_DISCORD_WEBHOOK_URL")
 const FEISHU_APP_ID = new sst.Secret("FEISHU_APP_ID")
 const FEISHU_APP_SECRET = new sst.Secret("FEISHU_APP_SECRET")
-const NIKCLI_FIGMA_TOKEN = new sst.Secret("NIKCLI_FIGMA_TOKEN")
-const NIKCLI_GITHUB_TOKEN = new sst.Secret("NIKCLI_GITHUB_TOKEN")
-const NIKCLI_SLACK_BOT_TOKEN = new sst.Secret("NIKCLI_SLACK_BOT_TOKEN")
-const NIKCLI_SLACK_CHANNEL = new sst.Secret("NIKCLI_SLACK_CHANNEL")
+const RAGU_FIGMA_TOKEN = new sst.Secret("RAGU_FIGMA_TOKEN")
+const RAGU_GITHUB_TOKEN = new sst.Secret("RAGU_GITHUB_TOKEN")
+const RAGU_SLACK_BOT_TOKEN = new sst.Secret("RAGU_SLACK_BOT_TOKEN")
+const RAGU_SLACK_CHANNEL = new sst.Secret("RAGU_SLACK_CHANNEL")
 
 // Durable storage for shared session JSON (survives Durable Object eviction).
 const bucket = new sst.cloudflare.Bucket("Bucket")
@@ -33,13 +33,13 @@ export const api = new sst.cloudflare.Worker("Api", {
     ADMIN_SECRET,
     DISCORD_SUPPORT_BOT_TOKEN,
     DISCORD_SUPPORT_CHANNEL_ID,
-    NIKCLI_DISCORD_WEBHOOK_URL,
+    RAGU_DISCORD_WEBHOOK_URL,
     FEISHU_APP_ID,
     FEISHU_APP_SECRET,
-    NIKCLI_FIGMA_TOKEN,
-    NIKCLI_GITHUB_TOKEN,
-    NIKCLI_SLACK_BOT_TOKEN,
-    NIKCLI_SLACK_CHANNEL,
+    RAGU_FIGMA_TOKEN,
+    RAGU_GITHUB_TOKEN,
+    RAGU_SLACK_BOT_TOKEN,
+    RAGU_SLACK_CHANNEL,
   ],
   transform: {
     worker: (args) => {
@@ -67,7 +67,7 @@ export const api = new sst.cloudflare.Worker("Api", {
 new sst.cloudflare.x.Astro("Web", {
   domain: "docs." + domain,
   path: "packages/web",
-  buildCommand: "bun turbo build --filter=@nikcli-ai/web",
+  buildCommand: "bun turbo build --filter=@ragu/web",
   environment: {
     SST_STAGE: $app.stage,
     VITE_API_URL: api.url.apply((url) => url!),
@@ -77,7 +77,7 @@ new sst.cloudflare.x.Astro("Web", {
 new sst.cloudflare.x.Astro("Website", {
   domain,
   path: "packages/web",
-  buildCommand: "bun turbo build --filter=@nikcli-ai/web",
+  buildCommand: "bun turbo build --filter=@ragu/web",
   environment: {
     SST_STAGE: $app.stage,
   },

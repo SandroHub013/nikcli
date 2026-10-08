@@ -23,8 +23,8 @@ COPY --from=build /app/dist ./dist
 COPY --from=deps /app/node_modules ./node_modules
 COPY deploy/package.runtime.json ./package.json
 
-RUN addgroup -g 1001 nikcli && adduser -D -u 1001 -G nikcli nikcli && chown -R nikcli:nikcli /app
-USER nikcli
+RUN addgroup -g 1001 ragu && adduser -D -u 1001 -G ragu ragu && chown -R ragu:ragu /app
+USER ragu
 
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \

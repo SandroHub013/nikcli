@@ -5,25 +5,25 @@ import { Footer } from "~/component/footer"
 import { Legal } from "~/component/legal"
 import { useI18n } from "~/context/i18n"
 import { LocaleLinks } from "~/component/locale-links"
-import previewLogoLight from "../../asset/brand/preview-nikcli-logo-light.png"
-import previewLogoDark from "../../asset/brand/preview-nikcli-logo-dark.png"
-import previewWordmarkLight from "../../asset/brand/preview-nikcli-wordmark-light.png"
-import previewWordmarkDark from "../../asset/brand/preview-nikcli-wordmark-dark.png"
-import previewWordmarkSimpleLight from "../../asset/brand/preview-nikcli-wordmark-simple-light.png"
-import previewWordmarkSimpleDark from "../../asset/brand/preview-nikcli-wordmark-simple-dark.png"
-import logoLightPng from "../../asset/brand/nikcli-logo-light.png"
-import logoDarkPng from "../../asset/brand/nikcli-logo-dark.png"
-import wordmarkLightPng from "../../asset/brand/nikcli-wordmark-light.png"
-import wordmarkDarkPng from "../../asset/brand/nikcli-wordmark-dark.png"
-import wordmarkSimpleLightPng from "../../asset/brand/nikcli-wordmark-simple-light.png"
-import wordmarkSimpleDarkPng from "../../asset/brand/nikcli-wordmark-simple-dark.png"
-import logoLightSvg from "../../asset/brand/nikcli-logo-light.svg"
-import logoDarkSvg from "../../asset/brand/nikcli-logo-dark.svg"
-import wordmarkLightSvg from "../../asset/brand/nikcli-wordmark-light.svg"
-import wordmarkDarkSvg from "../../asset/brand/nikcli-wordmark-dark.svg"
-import wordmarkSimpleLightSvg from "../../asset/brand/nikcli-wordmark-simple-light.svg"
-import wordmarkSimpleDarkSvg from "../../asset/brand/nikcli-wordmark-simple-dark.svg"
-const brandAssets = "/nikcli-brand-assets.zip"
+import previewLogoLight from "../../asset/brand/preview-ragu-logo-light.png"
+import previewLogoDark from "../../asset/brand/preview-ragu-logo-dark.png"
+import previewWordmarkLight from "../../asset/brand/preview-ragu-wordmark-light.png"
+import previewWordmarkDark from "../../asset/brand/preview-ragu-wordmark-dark.png"
+import previewWordmarkSimpleLight from "../../asset/brand/preview-ragu-wordmark-simple-light.png"
+import previewWordmarkSimpleDark from "../../asset/brand/preview-ragu-wordmark-simple-dark.png"
+import logoLightPng from "../../asset/brand/ragu-logo-light.png"
+import logoDarkPng from "../../asset/brand/ragu-logo-dark.png"
+import wordmarkLightPng from "../../asset/brand/ragu-wordmark-light.png"
+import wordmarkDarkPng from "../../asset/brand/ragu-wordmark-dark.png"
+import wordmarkSimpleLightPng from "../../asset/brand/ragu-wordmark-simple-light.png"
+import wordmarkSimpleDarkPng from "../../asset/brand/ragu-wordmark-simple-dark.png"
+import logoLightSvg from "../../asset/brand/ragu-logo-light.svg"
+import logoDarkSvg from "../../asset/brand/ragu-logo-dark.svg"
+import wordmarkLightSvg from "../../asset/brand/ragu-wordmark-light.svg"
+import wordmarkDarkSvg from "../../asset/brand/ragu-wordmark-dark.svg"
+import wordmarkSimpleLightSvg from "../../asset/brand/ragu-wordmark-simple-light.svg"
+import wordmarkSimpleDarkSvg from "../../asset/brand/ragu-wordmark-simple-dark.svg"
+const brandAssets = "/ragu-brand-assets.zip"
 
 export default function Brand() {
   const i18n = useI18n()
@@ -67,7 +67,7 @@ export default function Brand() {
             <p>{i18n.t("brand.subtitle")}</p>
             <button
               data-component="download-button"
-              onClick={() => downloadFile(brandAssets, "nikcli-brand-assets.zip")}
+              onClick={() => downloadFile(brandAssets, "ragu-brand-assets.zip")}
             >
               {i18n.t("brand.downloadAll")}
               <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -82,9 +82,9 @@ export default function Brand() {
 
             <div data-component="brand-grid">
               <div>
-                <img src={previewLogoLight} alt="Nikcli brand guidelines" />
+                <img src={previewLogoLight} alt="Ragu brand guidelines" />
                 <div data-component="actions">
-                  <button onClick={() => downloadFile(logoLightPng, "nikcli-logo-light.png")}>
+                  <button onClick={() => downloadFile(logoLightPng, "ragu-logo-light.png")}>
                     PNG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -95,7 +95,7 @@ export default function Brand() {
                       />
                     </svg>
                   </button>
-                  <button onClick={() => downloadFile(logoLightSvg, "nikcli-logo-light.svg")}>
+                  <button onClick={() => downloadFile(logoLightSvg, "ragu-logo-light.svg")}>
                     SVG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -109,9 +109,9 @@ export default function Brand() {
                 </div>
               </div>
               <div>
-                <img src={previewLogoDark} alt="Nikcli brand guidelines" />
+                <img src={previewLogoDark} alt="Ragu brand guidelines" />
                 <div data-component="actions">
-                  <button onClick={() => downloadFile(logoDarkPng, "nikcli-logo-dark.png")}>
+                  <button onClick={() => downloadFile(logoDarkPng, "ragu-logo-dark.png")}>
                     PNG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -122,7 +122,7 @@ export default function Brand() {
                       />
                     </svg>
                   </button>
-                  <button onClick={() => downloadFile(logoDarkSvg, "nikcli-logo-dark.svg")}>
+                  <button onClick={() => downloadFile(logoDarkSvg, "ragu-logo-dark.svg")}>
                     SVG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -136,9 +136,9 @@ export default function Brand() {
                 </div>
               </div>
               <div>
-                <img src={previewWordmarkLight} alt="Nikcli brand guidelines" />
+                <img src={previewWordmarkLight} alt="Ragu brand guidelines" />
                 <div data-component="actions">
-                  <button onClick={() => downloadFile(wordmarkLightPng, "nikcli-wordmark-light.png")}>
+                  <button onClick={() => downloadFile(wordmarkLightPng, "ragu-wordmark-light.png")}>
                     PNG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -149,7 +149,7 @@ export default function Brand() {
                       />
                     </svg>
                   </button>
-                  <button onClick={() => downloadFile(wordmarkLightSvg, "nikcli-wordmark-light.svg")}>
+                  <button onClick={() => downloadFile(wordmarkLightSvg, "ragu-wordmark-light.svg")}>
                     SVG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -163,9 +163,9 @@ export default function Brand() {
                 </div>
               </div>
               <div>
-                <img src={previewWordmarkDark} alt="Nikcli brand guidelines" />
+                <img src={previewWordmarkDark} alt="Ragu brand guidelines" />
                 <div data-component="actions">
-                  <button onClick={() => downloadFile(wordmarkDarkPng, "nikcli-wordmark-dark.png")}>
+                  <button onClick={() => downloadFile(wordmarkDarkPng, "ragu-wordmark-dark.png")}>
                     PNG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -176,7 +176,7 @@ export default function Brand() {
                       />
                     </svg>
                   </button>
-                  <button onClick={() => downloadFile(wordmarkDarkSvg, "nikcli-wordmark-dark.svg")}>
+                  <button onClick={() => downloadFile(wordmarkDarkSvg, "ragu-wordmark-dark.svg")}>
                     SVG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -190,9 +190,9 @@ export default function Brand() {
                 </div>
               </div>
               <div>
-                <img src={previewWordmarkSimpleLight} alt="Nikcli brand guidelines" />
+                <img src={previewWordmarkSimpleLight} alt="Ragu brand guidelines" />
                 <div data-component="actions">
-                  <button onClick={() => downloadFile(wordmarkSimpleLightPng, "nikcli-wordmark-simple-light.png")}>
+                  <button onClick={() => downloadFile(wordmarkSimpleLightPng, "ragu-wordmark-simple-light.png")}>
                     PNG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -203,7 +203,7 @@ export default function Brand() {
                       />
                     </svg>
                   </button>
-                  <button onClick={() => downloadFile(wordmarkSimpleLightSvg, "nikcli-wordmark-simple-light.svg")}>
+                  <button onClick={() => downloadFile(wordmarkSimpleLightSvg, "ragu-wordmark-simple-light.svg")}>
                     SVG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -217,9 +217,9 @@ export default function Brand() {
                 </div>
               </div>
               <div>
-                <img src={previewWordmarkSimpleDark} alt="Nikcli brand guidelines" />
+                <img src={previewWordmarkSimpleDark} alt="Ragu brand guidelines" />
                 <div data-component="actions">
-                  <button onClick={() => downloadFile(wordmarkSimpleDarkPng, "nikcli-wordmark-simple-dark.png")}>
+                  <button onClick={() => downloadFile(wordmarkSimpleDarkPng, "ragu-wordmark-simple-dark.png")}>
                     PNG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path
@@ -230,7 +230,7 @@ export default function Brand() {
                       />
                     </svg>
                   </button>
-                  <button onClick={() => downloadFile(wordmarkSimpleDarkSvg, "nikcli-wordmark-simple-dark.svg")}>
+                  <button onClick={() => downloadFile(wordmarkSimpleDarkSvg, "ragu-wordmark-simple-dark.svg")}>
                     SVG
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
                       <path

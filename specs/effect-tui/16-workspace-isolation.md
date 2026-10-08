@@ -99,9 +99,9 @@ not a partial result.
   workspace switch disposes the full set.
 - Workspace disposal releases all owned resources; no residual listeners, timers, fibers, or file handles after the
   deterministic teardown completes.
-- Extend `packages/nikcli/test/workspace/`, `packages/nikcli/test/worktree/`, `packages/nikcli/test/effect/instance-scope.test.ts`,
-  `packages/nikcli/test/effect/instance-ambient.test.ts`, and the existing TUI workspace tests.
-- From `packages/nikcli`: `bun test test/workspace/ test/worktree/ test/effect/instance-scope.test.ts test/effect/instance-ambient.test.ts`.
+- Extend `packages/ragu/test/workspace/`, `packages/ragu/test/worktree/`, `packages/ragu/test/effect/instance-scope.test.ts`,
+  `packages/ragu/test/effect/instance-ambient.test.ts`, and the existing TUI workspace tests.
+- From `packages/ragu`: `bun test test/workspace/ test/worktree/ test/effect/instance-scope.test.ts test/effect/instance-ambient.test.ts`.
   Use `withIsolatedDatabase` for any DB-touching test. One final root `bun run typecheck` after the slice.
 - Meet EOT-01 budgets; workspace switch p95 below 250 ms on the warm fixture (excluding network); concurrent workspace
   count never exceeds the documented cap; resource plateau after a deterministic teardown cycle.

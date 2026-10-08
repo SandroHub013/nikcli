@@ -1,17 +1,17 @@
 # EOT-19: Mobile Companion Bridge
 
 Status: proposed. Tier: 2. Phase: P3. Dependencies: EOT-04, EOT-08, EOT-12, EOT-15.
-Owner: `packages/nikcli/src/server/mobile/*`, `packages/companion/`, `packages/remote/`, and mobile dispatch
+Owner: `packages/ragu/src/server/mobile/*`, `packages/companion/`, `packages/remote/`, and mobile dispatch
 maintainers. [Roadmap](../ROADMAP.md).
 
 ## Problem and Evidence
 
-Evidence B36, B37 in the [register](../README.md): `packages/nikcli/src/server/mobile/` is 3,605 lines spread across 18
+Evidence B36, B37 in the [register](../README.md): `packages/ragu/src/server/mobile/` is 3,605 lines spread across 18
 modules (`auth.ts`, `dispatcher.ts`, `events.ts`, `features.ts`, `git.ts`, `github.ts`, `helpers.ts`, `host-status.ts`,
 `loops.ts`, `memory.ts`, `misc.ts`, `missions.ts`, `pty.ts`, `request.ts`, `session-lifecycle.ts`, `session.ts`,
 `teleport.ts`, `worktree.ts`). The routes themselves are an Effect HttpApi group:
-`packages/nikcli/src/server/httpapi/mobile.ts` (1,319 lines) declares the `/mobile/*` endpoints and
-`mobile-handlers.ts` (355 lines) binds them, while `packages/nikcli/src/server/websocket.ts` (122 lines) owns the
+`packages/ragu/src/server/httpapi/mobile.ts` (1,319 lines) declares the `/mobile/*` endpoints and
+`mobile-handlers.ts` (355 lines) binds them, while `packages/ragu/src/server/websocket.ts` (122 lines) owns the
 upgrade. There is no `server/mobile.ts` monolith — a resurrected copy of that file silently shadows the split directory
 and empties the mobile session list, so do not reintroduce one. The `packages/companion` (Cloudflare Workers + UI) and
 `packages/remote` (tunneled proxy + UI) ship separate clients. The opportunity is a single architectural spec covering the **bridge protocol**: authentication,
@@ -79,7 +79,7 @@ Mobile app / companion UI / remote proxy
        -> command dispatch (typed)
        -> event admission (bounded queue)
        -> multi-device ordering (originDeviceID, watermark)
-  -> nikcli server (mobile handlers)
+  -> ragu server (mobile handlers)
        -> typed Effect operations
        -> domain services (session, loop, mission, pty, git, teleport, worktree, memory)
   -> bus + SSE/SDK + TUI
@@ -106,10 +106,10 @@ honors it without retrying sooner. Multi-device conflicts return `Conflict`; the
 - Companion (`packages/companion`) and remote (`packages/remote`) consume the same contract; the only difference is the
   transport, which is verified by a shared schema test.
 - Reconnection with the EOT-04 backoff produces the same final state as a clean connection.
-- Extend `packages/nikcli/test/mobile/`, `packages/nikcli/test/server/event-feed.test.ts`,
-  `packages/nikcli/test/server/event-visibility.test.ts`, `packages/companion/test/`, `packages/remote/test/`, and
+- Extend `packages/ragu/test/mobile/`, `packages/ragu/test/server/event-feed.test.ts`,
+  `packages/ragu/test/server/event-visibility.test.ts`, `packages/companion/test/`, `packages/remote/test/`, and
   existing pty/teleport tests.
-- From `packages/nikcli`: `bun test test/mobile/ test/server/event-feed.test.ts`. From `packages/companion` and
+- From `packages/ragu`: `bun test test/mobile/ test/server/event-feed.test.ts`. From `packages/companion` and
   `packages/remote`, use each package's own harness. One final root `bun run typecheck` after the slice.
 - Meet EOT-01 budgets; reconnect resumes within the backoff cap; mobile admission queue respects the same byte/count
   bounds as the SDK; redaction tests assert no token leakage in error paths.
@@ -138,7 +138,7 @@ Two rules for this bridge:
 ## A Sync Token Reaches Only the Sync Transport — 2026-09-24
 
 Capability gating (`MobileAuth.requiredCapability`) guards pty, teleport and git, and deliberately leaves `read` and
-`write` unclassified. That left a `cli-sync` token — the credential `nikcli sync token create` hands to a remote hub —
+`write` unclassified. That left a `cli-sync` token — the credential `ragu sync token create` hands to a remote hub —
 able to reach every route no capability guarded: sessions, config, files.
 
 The fix does not classify the whole API. `MobileAuth.scopeReaches` makes that one scope an allowlist of the transport's

@@ -2,7 +2,7 @@ import { redirect } from "@solidjs/router"
 import type { APIEvent } from "@solidjs/start/server"
 import { useAuthSession } from "~/context/auth"
 import { localeFromRequest, route } from "~/lib/language"
-import { verifyAccessToken } from "@nikcli-ai/auth"
+import { verifyAccessToken } from "@ragu/auth"
 
 export async function GET(input: APIEvent) {
   const url = new URL(input.request.url)
@@ -22,7 +22,7 @@ export async function GET(input: APIEvent) {
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         grant_type: "authorization_code",
-        client_id: "nikcli-console",
+        client_id: "ragu-console",
         redirect_uri: transaction.callback,
         code,
         code_verifier: transaction.verifier,
@@ -33,7 +33,7 @@ export async function GET(input: APIEvent) {
     if (!tokens.access_token) throw new Error("Identity issuer returned no access token")
     const identity = await verifyAccessToken(tokens.access_token, {
       issuer,
-      audience: "nikcli-api",
+      audience: "ragu-api",
       jwksUrl: new URL("/.well-known/jwks.json", issuer).toString(),
     })
     const email = identity.email

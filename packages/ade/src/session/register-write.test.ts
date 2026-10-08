@@ -188,27 +188,27 @@ describe("the check after the write looks for this very event (audit 0.7.7, MEDI
 
 describe("the reply says which project's register (audit 0.7.7, MEDIO 4)", () => {
   const ok = "ok: D3 aperta, nel tasto Decisioni entro 3 s"
-  const nikcli = { name: "nikcli", root: "C:/lavoro/nikcli" }
+  const ragu = { name: "ragu", root: "C:/lavoro/ragu" }
   const sito = { name: "sito", root: "C:/lavoro/sito" }
   const pane = (project: { name: string; root: string }) => ({ workspaceId: project.name, projectRoot: project.root })
 
   test("the open project: said, and the button promise stands", () => {
-    expect(withPlace(ok, "decisioni", { written: nikcli, shown: nikcli, asked: pane(nikcli) })).toBe(
-      `${ok} (progetto nikcli)`,
+    expect(withPlace(ok, "decisioni", { written: ragu, shown: ragu, asked: pane(ragu) })).toBe(
+      `${ok} (progetto ragu)`,
     )
   })
 
   test("another project: the button does not show it, and the reply says where to look", () => {
-    const reply = withPlace(ok, "decisioni", { written: sito, shown: nikcli, asked: pane(sito) })
+    const reply = withPlace(ok, "decisioni", { written: sito, shown: ragu, asked: pane(sito) })
     expect(reply).not.toContain("entro 3 s")
     expect(reply).toBe(
-      "ok: D3 aperta, nel progetto sito: il tasto Decisioni ora mostra nikcli, lo vedi aprendo sito",
+      "ok: D3 aperta, nel progetto sito: il tasto Decisioni ora mostra ragu, lo vedi aprendo sito",
     )
   })
 
   test("a session whose project is not among the recents: the fallback is said, not silent", () => {
-    expect(withPlace(ok, "decisioni", { written: nikcli, shown: nikcli, asked: { workspaceId: "vecchio" } })).toBe(
-      `${ok} (progetto nikcli); la sessione è del progetto vecchio, che non è fra i recenti: scritto in nikcli`,
+    expect(withPlace(ok, "decisioni", { written: ragu, shown: ragu, asked: { workspaceId: "vecchio" } })).toBe(
+      `${ok} (progetto ragu); la sessione è del progetto vecchio, che non è fra i recenti: scritto in ragu`,
     )
   })
 
@@ -227,13 +227,13 @@ describe("the reply says which project's register (audit 0.7.7, MEDIO 4)", () =>
   })
 
   test("a pane saved without a folder is still judged by name", () => {
-    expect(withPlace(ok, "decisioni", { written: nikcli, shown: nikcli, asked: { workspaceId: "nikcli" } })).toBe(
-      `${ok} (progetto nikcli)`,
+    expect(withPlace(ok, "decisioni", { written: ragu, shown: ragu, asked: { workspaceId: "ragu" } })).toBe(
+      `${ok} (progetto ragu)`,
     )
   })
 
   test("an error is left as it is", () => {
-    expect(withPlace("errore: manca la chiave k", "design", { written: sito, shown: nikcli })).toBe(
+    expect(withPlace("errore: manca la chiave k", "design", { written: sito, shown: ragu })).toBe(
       "errore: manca la chiave k",
     )
   })

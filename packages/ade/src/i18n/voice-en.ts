@@ -108,7 +108,7 @@ export const voiceEn: VoiceMessages = {
   "vui.engine.auto.desc": "The first one installed between Claude Code and Codex",
   "vui.engine.claude.desc": "With your Anthropic subscription",
   "vui.engine.codex.desc": "With your ChatGPT subscription",
-  "vui.engine.nikcli.desc": "Doesn't answer by voice: it can't be kept read-only",
+  "vui.engine.ragu.desc": "Doesn't answer by voice: it can't be kept read-only",
   "vui.engine.off": "Commands only",
   "vui.engine.off.desc": "No agent: only known phrases are understood",
   "vui.engine.title": "Voice agent",

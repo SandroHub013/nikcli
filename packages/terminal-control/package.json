@@ -1,8 +1,8 @@
 {
-  "name": "@nikcli-ai/terminal-control",
+  "name": "@ragu/terminal-control",
   "version": "1.431.0",
   "private": true,
-  "description": "Control, inspect, capture and test real terminal applications (TUIs) — a custom-built terminal-control engine for nikcli.",
+  "description": "Control, inspect, capture and test real terminal applications (TUIs) — a custom-built terminal-control engine for ragu.",
   "license": "MIT",
   "bin": {
     "terminal-control": "./src/cli.ts"
@@ -22,7 +22,7 @@
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "1.1.0",
     "@kitlangton/terminal-control": "0.3.1",
-    "@nikcli-ai/util": "workspace:*"
+    "@ragu/util": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "catalog:",

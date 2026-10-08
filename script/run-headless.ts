@@ -1,7 +1,7 @@
 import { App } from "@slack/bolt"
 
 const [prompt, channel, thread_ts] = Bun.argv.slice(2)
-const model = process.env.NIKCLI_MODEL ?? "minimax-coding-plan/MiniMax-M3"
+const model = process.env.RAGU_MODEL ?? "minimax-coding-plan/MiniMax-M3"
 
 if (!prompt?.trim()) {
   console.error("A non-empty prompt is required")
@@ -30,15 +30,15 @@ async function postToSlack(text: string) {
 
 async function main() {
   try {
-    console.log(`Running nikcli with model ${model}`)
-    await postToSlack(`NikCLI GitHub Actions: task avviata con \`${model}\`.`)
+    console.log(`Running ragu with model ${model}`)
+    await postToSlack(`Ragu GitHub Actions: task avviata con \`${model}\`.`)
 
     const child = Bun.spawn(
       [
         process.execPath,
         "run",
         "--cwd",
-        "packages/nikcli",
+        "packages/ragu",
         "--conditions=browser",
         "src/index.ts",
         "run",
@@ -64,13 +64,13 @@ async function main() {
 
     if (stdout) process.stdout.write(stdout)
     if (stderr) process.stderr.write(stderr)
-    if (exitCode !== 0) throw new Error(stderr.trim() || `nikcli exited with code ${exitCode}`)
+    if (exitCode !== 0) throw new Error(stderr.trim() || `ragu exited with code ${exitCode}`)
 
     const summary = stdout.trim() || "Task completata senza output testuale."
-    await postToSlack(`NikCLI GitHub Actions: task completata.\n\n${summary}`)
+    await postToSlack(`Ragu GitHub Actions: task completata.\n\n${summary}`)
   } catch (error) {
     console.error("Error during execution:", error)
-    await postToSlack(`NikCLI GitHub Actions: task fallita.\n\`${String(error)}\``)
+    await postToSlack(`Ragu GitHub Actions: task fallita.\n\`${String(error)}\``)
     process.exit(1)
   }
 }

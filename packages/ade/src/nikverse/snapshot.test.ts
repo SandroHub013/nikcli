@@ -26,12 +26,12 @@ const pane = (id: string, over: Partial<P> = {}): P => ({
   mode: "—",
   agent: "claude-code",
   model: "claude-code",
-  workspaceId: "nikcli",
-  projectRoot: "C:/work/nikcli",
+  workspaceId: "ragu",
+  projectRoot: "C:/work/ragu",
   ...over,
 })
 
-const open = { name: "nikcli", root: "C:/work/nikcli" }
+const open = { name: "ragu", root: "C:/work/ragu" }
 const noFacts = (): PaneFacts => ({})
 
 const snap = (over: Partial<Parameters<typeof worldSnapshot>[0]> = {}) =>
@@ -47,7 +47,7 @@ describe("worldSnapshot: the real projects and sessions become shops and agents"
         pane("n3", { title: "Fabio", workspaceId: "voice", projectRoot: "C:/work/voice" }),
       ],
     })
-    expect(result.shops.map((shop) => shop.name)).toEqual(["nikcli", "voice"])
+    expect(result.shops.map((shop) => shop.name)).toEqual(["ragu", "voice"])
     expect(result.agents.map((agent) => [agent.title, agent.shop])).toEqual([
       ["Dario", shopId(open)],
       ["Lucia", shopId(open)],
@@ -57,7 +57,7 @@ describe("worldSnapshot: the real projects and sessions become shops and agents"
 
   test("the open project has its shop even with no session in it", () => {
     const result = snap({ open })
-    expect(result.shops).toEqual([{ id: shopId(open), name: "nikcli" }])
+    expect(result.shops).toEqual([{ id: shopId(open), name: "ragu" }])
     expect(result.agents).toEqual([])
   })
 
@@ -66,7 +66,7 @@ describe("worldSnapshot: the real projects and sessions become shops and agents"
       open,
       panes: [
         pane("n1", { title: "Dario" }),
-        pane("f1", { filePath: "C:/work/nikcli/a.ts", agent: undefined, model: "—" }),
+        pane("f1", { filePath: "C:/work/ragu/a.ts", agent: undefined, model: "—" }),
         pane("b1", { browserUrl: "http://localhost:3000", agent: undefined, model: "—" }),
         pane("v1", { mode: "video", agent: undefined, model: "—" }),
         pane("d1", { mode: "decisions", agent: undefined, model: "—" }),
@@ -78,7 +78,7 @@ describe("worldSnapshot: the real projects and sessions become shops and agents"
   })
 
   test("a pane saved without its folder joins the shop of the project it is named after", () => {
-    const result = snap({ open, panes: [pane("old", { projectRoot: undefined, workspaceId: "nikcli" })] })
+    const result = snap({ open, panes: [pane("old", { projectRoot: undefined, workspaceId: "ragu" })] })
     expect(result.shops).toHaveLength(1)
     expect(result.agents[0]!.shop).toBe(shopId(open))
   })
@@ -182,16 +182,16 @@ describe("worldSnapshot: the real projects and sessions become shops and agents"
 
 describe("stable identities", () => {
   test("a shop's id is the same for the same folder, however it is spelled, and differs for another", () => {
-    const id = shopId({ name: "nikcli", root: "C:\\work\\nikcli\\" })
-    expect(shopId({ name: "nikcli", root: "c:/WORK/nikcli" })).toBe(id)
-    expect(shopId({ name: "nikcli", root: "C:/work/other" })).not.toBe(id)
-    expect(shopId({ name: "nikcli" })).not.toBe(id)
-    expect(shopId({ name: "nikcli" })).toBe(shopId({ name: "nikcli" }))
+    const id = shopId({ name: "ragu", root: "C:\\work\\ragu\\" })
+    expect(shopId({ name: "ragu", root: "c:/WORK/ragu" })).toBe(id)
+    expect(shopId({ name: "ragu", root: "C:/work/other" })).not.toBe(id)
+    expect(shopId({ name: "ragu" })).not.toBe(id)
+    expect(shopId({ name: "ragu" })).toBe(shopId({ name: "ragu" }))
   })
 
   test("the hash is the same on every run", () => {
     expect(hashText("")).toBe(2166136261)
-    expect(hashText("nikcli")).toBe(hashText("nikcli"))
+    expect(hashText("ragu")).toBe(hashText("ragu"))
     expect(hashText("a")).not.toBe(hashText("b"))
   })
 
@@ -224,7 +224,7 @@ describe("stable identities", () => {
   test("the shops of a snapshot carry their slots when a book is given", () => {
     const slots = createSlotBook()
     const first = snap({ open, panes: [pane("n3", { workspaceId: "voice", projectRoot: "C:/work/voice" })], slots })
-    expect(first.shops.map((shop) => [shop.name, shop.slot])).toEqual([["nikcli", 0], ["voice", 1]])
+    expect(first.shops.map((shop) => [shop.name, shop.slot])).toEqual([["ragu", 0], ["voice", 1]])
     const second = snap({ panes: [pane("n3", { workspaceId: "voice", projectRoot: "C:/work/voice" })], slots })
     expect(second.shops.map((shop) => [shop.name, shop.slot])).toEqual([["voice", 1]])
   })
@@ -335,7 +335,7 @@ describe("needsResync: what the events cannot say", () => {
     expect(needsResync(mk([dario()]), mk([pane("n1", { title: "Dario 2" })]))).toBe(true)
     expect(needsResync(mk([dario()]), mk([pane("n1", { title: "Dario", agent: "codex", model: "codex" })]))).toBe(true)
     // The same folder under another name: the shop keeps its id, and its sign changes.
-    expect(needsResync(mk([dario()]), mk([dario()], { name: "nikcli-2", root: open.root }))).toBe(true)
+    expect(needsResync(mk([dario()]), mk([dario()], { name: "ragu-2", root: open.root }))).toBe(true)
     // Two shops listed in the other order swap places.
     const voice = pane("n3", { title: "Fabio", workspaceId: "voice", projectRoot: "C:/work/voice" })
     expect(needsResync(mk([voice], open), mk([voice], { name: "voice", root: "C:/work/voice" }))).toBe(true)

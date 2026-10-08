@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@nikcli-ai/console-core",
+  "name": "@ragu/console-core",
   "version": "1.431.0",
   "private": true,
   "type": "module",
@@ -8,8 +8,8 @@
   "dependencies": {
     "@aws-sdk/client-sts": "3.782.0",
     "@jsx-email/render": "1.1.1",
-    "@nikcli-ai/console-mail": "workspace:*",
-    "@nikcli-ai/console-resource": "workspace:*",
+    "@ragu/console-mail": "workspace:*",
+    "@ragu/console-resource": "workspace:*",
     "@planetscale/database": "1.19.0",
     "aws4fetch": "1.0.20",
     "drizzle-orm": "0.45.3",

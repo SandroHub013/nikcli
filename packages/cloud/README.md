@@ -1,6 +1,6 @@
-# @nikcli-ai/cloud
+# @ragu/cloud
 
-Cloud relay and sync backend for Nikcli mobile and web remote clients.
+Cloud relay and sync backend for Ragu Code mobile and web remote clients.
 
 ## Features
 

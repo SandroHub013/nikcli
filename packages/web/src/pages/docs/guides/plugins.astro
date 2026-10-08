@@ -8,7 +8,7 @@ import DocRelated from "../../../components/docs/DocRelated.astro";
 
 const toc = [
   { title: "What a plugin is", href: "#what", depth: 2 },
-  { title: "Let nikcli write it", href: "#self-extend", depth: 2 },
+  { title: "Let ragu write it", href: "#self-extend", depth: 2 },
   { title: "Folder plugins and hot reload", href: "#folders", depth: 2 },
   { title: "1. Write the file", href: "#step-1", depth: 2 },
   { title: "2. Point config at it", href: "#step-2", depth: 2 },
@@ -27,18 +27,18 @@ const toc = [
 <DocsLayout
   title="Writing a plugin"
   subtitle="From an empty file to a loaded plugin with its own tool — the module shape, the runtime input, every hook, and how to ship it."
-  description="Step-by-step guide to writing a nikcli plugin: local file, config entry, module shape, plugin input, hooks, custom tools, publishing and debugging."
+  description="Step-by-step guide to writing a ragu plugin: local file, config entry, module shape, plugin input, hooks, custom tools, publishing and debugging."
   toc={toc}
 >
   <section id="what" class="doc-section">
     <h2>What a plugin is</h2>
     <p>
-      A plugin is a module nikcli imports at startup. It is called once per project instance with a
+      A plugin is a module ragu imports at startup. It is called once per project instance with a
       client bound to that instance, and it returns an object of hooks. From then on the server
       calls those hooks at the points they name.
     </p>
     <p>
-      Plugins run <strong>inside</strong> the nikcli process, with the same access the agent has.
+      Plugins run <strong>inside</strong> the ragu process, with the same access the agent has.
       That is the point — a hook can change the model call, veto a permission, or add a tool — and
       also the caution: a plugin is trusted code.
     </p>
@@ -51,7 +51,7 @@ const toc = [
   </section>
 
   <section id="self-extend" class="doc-section">
-    <h2>Let nikcli write it</h2>
+    <h2>Let ragu write it</h2>
     <p>
       You do not have to write the file yourself. Ask for the capability in the TUI — "create a
       plugin that sends me a desktop notification when a session finishes" — and the agent uses the
@@ -73,15 +73,15 @@ const toc = [
     <p>
       Scope <code>global</code> (the default) writes under <code>~/.config/nikcli/plugins/</code>
       and applies to every project; <code>project</code> writes under the project's
-      <code>.nikcli/plugins/</code>. When a plugin fails to load, the error goes back to the agent,
+      <code>.ragu/plugins/</code>. When a plugin fails to load, the error goes back to the agent,
       which fixes the source and calls <code>update</code>.
     </p>
     <DocCallout type="warn" title="Writing a plugin is its own permission">
       <p>
-        Plugin code runs inside nikcli with your privileges, so the <code>plugin</code> permission
+        Plugin code runs inside ragu with your privileges, so the <code>plugin</code> permission
         asks by default and the prompt shows the code as a diff. The <code>plan</code> agent is
         denied it. Set <code>"permission": {"{"} "plugin": "allow" {"}"}</code> only if you want the
-        agent to extend nikcli without asking.
+        agent to extend ragu without asking.
       </p>
     </DocCallout>
   </section>
@@ -103,7 +103,7 @@ const toc = [
   hello.ts            # single-file plugins still work`}</DocCode>
     <p>
       Plugins in <code>plugins/</code> are discovered without a <code>nikcli.json</code> entry,
-      and they reload while nikcli runs. Editing a plugin's files, adding one or removing one
+      and they reload while ragu runs. Editing a plugin's files, adding one or removing one
       reconciles plugin by plugin: a changed plugin is disposed and loaded again, a removed one is
       disposed, and every other plugin keeps running untouched. Anything long-lived a plugin starts
       — timers, servers, watchers — must be released in <code>dispose()</code>, or a reload
@@ -114,14 +114,14 @@ const toc = [
   <section id="step-1" class="doc-section">
     <h2>1. Write the file</h2>
     <p>
-      Create <code>.nikcli/plugins/hello.ts</code> in your project. The only dependency is
-      <code>@nikcli-ai/plugin</code>, which carries types and the <code>tool()</code> helper and
+      Create <code>.ragu/plugins/hello.ts</code> in your project. The only dependency is
+      <code>@ragu/plugin</code>, which carries types and the <code>tool()</code> helper and
       nothing else at runtime.
     </p>
     <DocCode language="bash">
-npm install --save-dev @nikcli-ai/plugin
+npm install --save-dev @ragu/plugin
     </DocCode>
-    <DocCode language="ts" title=".nikcli/plugins/hello.ts">{`import type { Plugin } from "@nikcli-ai/plugin"
+    <DocCode language="ts" title=".nikcli/plugins/hello.ts">{`import type { Plugin } from "@ragu/plugin"
 
 export const HelloPlugin: Plugin = async ({ directory }) => {
   console.log("[hello] loaded for", directory)
@@ -133,7 +133,7 @@ export const HelloPlugin: Plugin = async ({ directory }) => {
   }
 }`}</DocCode>
     <p>
-      That is a whole plugin. It exports one function; nikcli calls it and keeps the hooks it
+      That is a whole plugin. It exports one function; ragu calls it and keeps the hooks it
       returns.
     </p>
   </section>
@@ -156,7 +156,7 @@ export const HelloPlugin: Plugin = async ({ directory }) => {
     <DocCallout type="note" title="Global instead of per project">
       <p>
         The same key in the global config applies the plugin to every project. Use
-        <code>nikcli plugin &lt;pkg&gt; --global</code> to patch it, or edit the file directly.
+        <code>ragu plugin &lt;pkg&gt; --global</code> to patch it, or edit the file directly.
       </p>
     </DocCallout>
   </section>
@@ -164,11 +164,11 @@ export const HelloPlugin: Plugin = async ({ directory }) => {
   <section id="step-3" class="doc-section">
     <h2>3. Check it loaded</h2>
     <p>
-      Start nikcli and watch the log. Loading is logged per plugin, and a plugin that throws during
+      Start ragu and watch the log. Loading is logged per plugin, and a plugin that throws during
       init is reported rather than silently skipped.
     </p>
     <DocCode language="bash">
-nikcli --print-logs
+ragu --print-logs
     </DocCode>
     <p>
       If the plugin registers a tool, the fastest confirmation is to ask the server what tools exist
@@ -188,7 +188,7 @@ curl -s "http://127.0.0.1:4096/experimental/tool/ids?directory=$PWD"
       Every exported function is treated as a plugin and called. Exporting the same function twice —
       as a named and a default export — is deduplicated by reference, so it initialises once.
     </p>
-    <DocCode language="ts">{`import type { Plugin } from "@nikcli-ai/plugin"
+    <DocCode language="ts">{`import type { Plugin } from "@ragu/plugin"
 
 export const First: Plugin = async () => ({ /* hooks */ })
 export const Second: Plugin = async () => ({ /* hooks */ })`}</DocCode>
@@ -199,7 +199,7 @@ export const Second: Plugin = async () => ({ /* hooks */ })`}</DocCode>
       <code>server</code> or <code>tui</code> is read as a manifest instead. This is the shape to
       use when publishing, because the <code>id</code> is what config and the plugin manager key on.
     </p>
-    <DocCode language="ts">{`import type { PluginModule } from "@nikcli-ai/plugin"
+    <DocCode language="ts">{`import type { PluginModule } from "@ragu/plugin"
 
 export default {
   id: "@scope/my-plugin",
@@ -220,7 +220,7 @@ export default {
     <table class="doc-table">
       <thead><tr><th>Field</th><th>Type</th><th>What it is</th></tr></thead>
       <tbody>
-        <tr><td><code>client</code></td><td><code>NikcliClient</code></td><td>The same typed client the <a href="/docs/build/client">Connect path</a> uses, already bound to this instance.</td></tr>
+        <tr><td><code>client</code></td><td><code>RaguClient</code></td><td>The same typed client the <a href="/docs/build/client">Connect path</a> uses, already bound to this instance.</td></tr>
         <tr><td><code>directory</code></td><td><code>string</code></td><td>The resolved project directory.</td></tr>
         <tr><td><code>worktree</code></td><td><code>string</code></td><td>The worktree root.</td></tr>
         <tr><td><code>project</code></td><td><code>{"{ id, worktree }"}</code></td><td>Project identity.</td></tr>
@@ -247,7 +247,7 @@ export default {
     ["./.nikcli/plugins/notify.ts", { "channel": "#builds", "quiet": true }]
   ]
 }`}</DocCode>
-    <DocCode language="ts">{`import type { Plugin } from "@nikcli-ai/plugin"
+    <DocCode language="ts">{`import type { Plugin } from "@ragu/plugin"
 
 type Options = { channel?: string; quiet?: boolean }
 
@@ -262,7 +262,7 @@ export const Notify: Plugin = async (input, options) => {
     <h2>The hook surface</h2>
     <p>
       Every hook is optional. The mutating ones take <code>(input, output)</code> and you change
-      <code>output</code> in place — the value you leave there is what nikcli uses.
+      <code>output</code> in place — the value you leave there is what ragu uses.
     </p>
     <table class="doc-table">
       <thead><tr><th>Hook</th><th>Runs when</th><th>You can change</th></tr></thead>
@@ -305,8 +305,8 @@ export const Notify: Plugin = async (input, options) => {
       identity helper: it infers the argument type from the zod shape you declare, so
       <code>execute</code> receives parsed, typed args.
     </p>
-    <DocCode language="ts" title=".nikcli/plugins/deploy.ts">{`import type { Plugin } from "@nikcli-ai/plugin"
-import { tool } from "@nikcli-ai/plugin/tool"
+    <DocCode language="ts" title=".nikcli/plugins/deploy.ts">{`import type { Plugin } from "@ragu/plugin"
+import { tool } from "@ragu/plugin/tool"
 
 export const Deploy: Plugin = async ({ $ }) => ({
   tool: {
@@ -374,9 +374,9 @@ export const Deploy: Plugin = async ({ $ }) => ({
 }`}</DocCode>
     <p>Consumers then install it with one command, which also patches their config:</p>
     <DocCode language="bash">
-nikcli plugin @scope/my-plugin
-nikcli plugin @scope/my-plugin --global
-nikcli plugin @scope/my-plugin@1.2.3 --force
+ragu plugin @scope/my-plugin
+ragu plugin @scope/my-plugin --global
+ragu plugin @scope/my-plugin@1.2.3 --force
     </DocCode>
     <p>
       See <a href="/docs/plugins#manifest">the plugin manifest</a> for what the installer detects
@@ -388,7 +388,7 @@ nikcli plugin @scope/my-plugin@1.2.3 --force
     <h2>Debugging</h2>
     <ul>
       <li>
-        <strong>Run with logs.</strong> <code>nikcli --print-logs</code> shows each plugin as it
+        <strong>Run with logs.</strong> <code>ragu --print-logs</code> shows each plugin as it
         loads, with its resolved path.
       </li>
       <li>

@@ -52,5 +52,5 @@ pub fn run() {
             tasks::task_cancel,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running nikcli devhub");
+        .expect("error while running ragu devhub");
 }

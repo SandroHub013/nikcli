@@ -37,17 +37,17 @@ jobs:
         # (node_modules included) — which took the runner itself down with
         # "the runner has received a shutdown signal" / exit 143.
         env:
-          NIKCLI_TEST_HOME: ${{ runner.temp }}/nikcli-validate/home
-          XDG_DATA_HOME: ${{ runner.temp }}/nikcli-validate/share
-          XDG_CACHE_HOME: ${{ runner.temp }}/nikcli-validate/cache
-          XDG_CONFIG_HOME: ${{ runner.temp }}/nikcli-validate/config
-          XDG_STATE_HOME: ${{ runner.temp }}/nikcli-validate/state
-          NIKCLI_DISABLE_MODELS_FETCH: "true"
-          NIKCLI_DISABLE_SHARE: "true"
-          NIKCLI_DISABLE_LSP_DOWNLOAD: "true"
-          NIKCLI_DISABLE_DEFAULT_PLUGINS: "true"
-          NIKCLI_DISABLE_AUTOUPDATE: "true"
-          NIKCLI_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
+          RAGU_TEST_HOME: ${{ runner.temp }}/ragu-validate/home
+          XDG_DATA_HOME: ${{ runner.temp }}/ragu-validate/share
+          XDG_CACHE_HOME: ${{ runner.temp }}/ragu-validate/cache
+          XDG_CONFIG_HOME: ${{ runner.temp }}/ragu-validate/config
+          XDG_STATE_HOME: ${{ runner.temp }}/ragu-validate/state
+          RAGU_DISABLE_MODELS_FETCH: "true"
+          RAGU_DISABLE_SHARE: "true"
+          RAGU_DISABLE_LSP_DOWNLOAD: "true"
+          RAGU_DISABLE_DEFAULT_PLUGINS: "true"
+          RAGU_DISABLE_AUTOUPDATE: "true"
+          RAGU_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
         run: |
           set -o pipefail
           # Sample memory next to the run. When the host reclaims a runner the
@@ -90,7 +90,7 @@ jobs:
       !startsWith(github.event.head_commit.message, 'release: v') &&
       !startsWith(github.event.head_commit.message, 'chore: generate') &&
       !startsWith(github.event.head_commit.message, 'chore: update') &&
-      !contains(github.event.head_commit.message, '[nikcli autofix]')
+      !contains(github.event.head_commit.message, '[ragu autofix]')
     uses: ./.github/workflows/publish.yml
     with:
       bump: minor
@@ -114,7 +114,7 @@ jobs:
       cli_run_id: ${{ needs.publish.outputs.run_id }}
     secrets: inherit
 
-  # ADE ships alongside Nikcli on the same release, using its own installers.
+  # ADE ships alongside Ragu on the same release, using its own installers.
   ade:
     needs: publish
     if: >-
@@ -201,7 +201,7 @@ jobs:
         shell: bash
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_SERVICE: ${{ vars.RAILWAY_SERVICE || 'nikcli-mobile' }}
+          RAILWAY_SERVICE: ${{ vars.RAILWAY_SERVICE || 'ragu-mobile' }}
           # Declared, not defaulted in the shell: the identity line below reports which environment
           # was targeted, and a value that silently falls back to "production" would report the one
           # thing this line exists to prove rather than the one that was used.
@@ -211,11 +211,11 @@ jobs:
             echo "✗ RAILWAY_TOKEN not configured — refusing to report a skipped deploy as successful"
             exit 1
           fi
-          echo "→ Deploying to Railway service: ${RAILWAY_SERVICE:-nikcli-mobile}"
+          echo "→ Deploying to Railway service: ${RAILWAY_SERVICE:-ragu-mobile}"
           echo "→ Expected identity: revision=${GITHUB_SHA} service=${RAILWAY_SERVICE} environment=${RAILWAY_ENVIRONMENT}"
           mkdir -p tmp
-          if NIKCLI_REVISION="$GITHUB_SHA" ./script/railway-deploy.sh --detach >tmp/railway.log 2>&1; then
-            echo "✓ Railway deploy triggered (service=${RAILWAY_SERVICE:-nikcli-mobile})"
+          if RAGU_REVISION="$GITHUB_SHA" ./script/railway-deploy.sh --detach >tmp/railway.log 2>&1; then
+            echo "✓ Railway deploy triggered (service=${RAILWAY_SERVICE:-ragu-mobile})"
           else
             echo "✗ Railway deploy failed (last 30 lines):"
             tail -n 30 tmp/railway.log || true
@@ -229,11 +229,11 @@ jobs:
       - name: Confirm release identity
         shell: bash
         env:
-          NIKCLI_HEALTH_URL: ${{ vars.RAILWAY_HEALTH_URL }}
+          RAGU_HEALTH_URL: ${{ vars.RAILWAY_HEALTH_URL }}
         run: |
           # Default lives in bash. GitHub expressions treat `//` as a comment, so an https
           # URL cannot be used as an expression fallback.
-          : "${NIKCLI_HEALTH_URL:=https://nikcli-mobile-production.up.railway.app}"
+          : "${RAGU_HEALTH_URL:=https://nikcli-mobile-production.up.railway.app}"
           bun run script/check-release-identity.ts --expect "$GITHUB_SHA" --timeout 900
 
   autofix:
@@ -263,12 +263,12 @@ jobs:
           COMMIT_MSG: ${{ github.event.head_commit.message || github.event.pull_request.title || '' }}
           ACTOR: ${{ github.actor }}
         run: |
-          if printf '%s' "$COMMIT_MSG" | grep -qE '^\[nikcli autofix\]|^release: v|^chore: generate|\[skip ci\]'; then
+          if printf '%s' "$COMMIT_MSG" | grep -qE '^\[ragu autofix\]|^release: v|^chore: generate|\[skip ci\]'; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "Skipping autofix: anti-loop pattern matched"
             exit 0
           fi
-          if [ "$ACTOR" = "github-actions[bot]" ] || [ "$ACTOR" = "nikcli-ci[bot]" ]; then
+          if [ "$ACTOR" = "github-actions[bot]" ] || [ "$ACTOR" = "ragu-ci[bot]" ]; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
             echo "Skipping autofix: bot actor"
             exit 0
@@ -289,8 +289,8 @@ jobs:
       - name: Setup Git identity
         if: steps.skip-check.outputs.skip != 'true'
         run: |
-          git config --global user.email "nikcli-ci@users.noreply.github.com"
-          git config --global user.name "nikcli-ci[bot]"
+          git config --global user.email "ragu-ci@users.noreply.github.com"
+          git config --global user.name "ragu-ci[bot]"
 
       - name: Run autofix
         if: steps.skip-check.outputs.skip != 'true'
@@ -298,7 +298,7 @@ jobs:
         run: bun run script/ci-autofix.ts
         env:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
-          NIKCLI_AUTOFIX_MODEL: ${{ vars.NIKCLI_AUTOFIX_MODEL || 'minimax-coding-plan/MiniMax-M3' }}
+          RAGU_AUTOFIX_MODEL: ${{ vars.RAGU_AUTOFIX_MODEL || 'minimax-coding-plan/MiniMax-M3' }}
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           GITHUB_REF: ${{ github.ref }}
@@ -320,7 +320,7 @@ jobs:
           fi
           if [ -n "$(git status --porcelain)" ]; then
             git add -A
-            git commit -m "fix(ci): automated validation repair [nikcli autofix]"
+            git commit -m "fix(ci): automated validation repair [ragu autofix]"
             git push origin "HEAD:$REF_NAME"
           else
             echo "No changes to push"
@@ -355,5 +355,5 @@ jobs:
           GITHUB_RUN_ID: ${{ github.run_id }}
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number || '' }}
           GITHUB_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          NIKCLI_CI_FAILURE_MENTION: ${{ vars.NIKCLI_CI_FAILURE_MENTION || '@nikomatt69' }}
+          RAGU_CI_FAILURE_MENTION: ${{ vars.RAGU_CI_FAILURE_MENTION || '@nikomatt69' }}
           AUTOFIX_ATTEMPTED: ${{ needs.autofix.result }}

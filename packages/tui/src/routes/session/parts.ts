@@ -1,9 +1,9 @@
 /**
  * Public surface of the session's message components.
  *
- * A file rather than `parts/index.ts` on purpose: `@nikcli-ai/tui` exports
+ * A file rather than `parts/index.ts` on purpose: `@ragu/tui` exports
  * `"./*": ["./src/*.ts", "./src/*.tsx"]`, a subpath pattern with no directory
- * or index resolution, so `@nikcli-ai/tui/routes/session/parts` reaches this
+ * or index resolution, so `@ragu/tui/routes/session/parts` reaches this
  * module and a directory barrel would not resolve at all from outside.
  *
  * This is the seam. Anything importing a session component from another package

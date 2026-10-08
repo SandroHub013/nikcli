@@ -1,6 +1,6 @@
-# Nikcli Desktop
+# Ragu Code Desktop
 
-Native Nikcli desktop app, built with Tauri v2.
+Native Ragu Code desktop app, built with Tauri v2.
 
 ## Development
 
@@ -11,7 +11,7 @@ bun install
 bun run desktop:dev
 ```
 
-This builds the current-platform nikcli sidecar, starts the Vite WebGUI on http://localhost:1420,
+This builds the current-platform ragu sidecar, starts the Vite WebGUI on http://localhost:1420,
 and opens it in the native Tauri window.
 
 If you only want the shared WebGUI (no native shell):
@@ -20,10 +20,10 @@ If you only want the shared WebGUI (no native shell):
 bun run webgui:dev
 ```
 
-The shared WebGUI connects to a nikcli server. Start one separately when needed:
+The shared WebGUI connects to a ragu server. Start one separately when needed:
 
 ```bash
-bun run --cwd packages/nikcli dev serve --hostname 127.0.0.1 --port 4096
+bun run --cwd packages/ragu dev serve --hostname 127.0.0.1 --port 4096
 ```
 
 ## Build
@@ -47,7 +47,7 @@ one-time warning on a freshly downloaded app. This is expected — the app is sa
   clear the download quarantine flag once:
 
   ```bash
-  xattr -dr com.apple.quarantine /Applications/Nikcli.app
+  xattr -dr com.apple.quarantine /Applications/Ragu Code.app
   ```
 
 - **Windows** — if SmartScreen shows "Windows protected your PC", click **More info → Run anyway**.

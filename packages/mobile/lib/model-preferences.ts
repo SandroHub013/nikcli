@@ -1,7 +1,7 @@
 import * as SecureStore from "expo-secure-store"
 import { modelKey } from "@/lib/model-catalog"
 
-const VARIANTS_KEY = "nikcli_model_variants"
+const VARIANTS_KEY = "ragu_model_variants"
 
 type VariantStore = Record<string, string | undefined>
 

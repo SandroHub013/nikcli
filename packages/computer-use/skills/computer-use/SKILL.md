@@ -5,13 +5,13 @@ description: Autonomously control, inspect, test, and record real desktop sessio
 
 # Computer Use
 
-Operate the visible desktop with `computer-use`. Never infer a desktop outcome from logs alone. Inside the nikcli monorepo, where the package binary is not installed globally, replace `computer-use` with `bun run --cwd packages/computer-use control --`.
+Operate the visible desktop with `computer-use`. Never infer a desktop outcome from logs alone. Inside the ragu monorepo, where the package binary is not installed globally, replace `computer-use` with `bun run --cwd packages/computer-use control --`.
 
 ## Handle Requests Autonomously
 
 When the user asks to test or automate a desktop application, identify the real launch command and acceptance criteria, then run the recorded verification without asking for commands that are already discoverable. Translate the requested interactions into deterministic `wait`, `click`, `type`, and `key` operations. Do not claim success unless a captured screenshot proves the expected result.
 
-Restarted nikcli processes discover this skill through `.agents/skills/computer-use`. If the skill is not registered in the current workspace, install it once from the worktree root:
+Restarted ragu processes discover this skill through `.agents/skills/computer-use`. If the skill is not registered in the current workspace, install it once from the worktree root:
 
 ```bash
 bun run --cwd packages/computer-use install-skill
@@ -55,7 +55,7 @@ computer-use bundle \
 
 The bundle contains `screenshot.png`, `demo.mp4` (assembled from the recorder's periodic samples), `preview.gif`, `manifest.json`, and `pr.md`. When the recording has no samples (markers-only mode), no video is produced.
 
-Use `pr.md` as the PR section; it embeds the GIF preview and links the full MP4. The bundle command also prints an absolute `file://` preview Markdown line — include that exact line in the final assistant response so nikcli can render the local preview inline, but never paste that `file://` URL into a pull request.
+Use `pr.md` as the PR section; it embeds the GIF preview and links the full MP4. The bundle command also prints an absolute `file://` preview Markdown line — include that exact line in the final assistant response so ragu can render the local preview inline, but never paste that `file://` URL into a pull request.
 
 When the user explicitly requests PR evidence or the task is already operating on a pull request:
 
@@ -70,7 +70,7 @@ If the test fails, still capture the final screenshot and video with `--result f
 
 ## Modes
 
-- `sandbox` (default) — drives an isolated Linux desktop in a Docker container; the host screen is never touched. The container is created lazily on first action and exposes a noVNC `liveUrl` for an optional live preview. Needs a reachable container runtime (`docker`, or set `NIKCLI_COMPUTER_RUNTIME`). On macOS start it with colima (already a lightweight Linux VM):
+- `sandbox` (default) — drives an isolated Linux desktop in a Docker container; the host screen is never touched. The container is created lazily on first action and exposes a noVNC `liveUrl` for an optional live preview. Needs a reachable container runtime (`docker`, or set `RAGU_COMPUTER_RUNTIME`). On macOS start it with colima (already a lightweight Linux VM):
   ```bash
   colima start --cpu 4 --memory 6 --disk 30
   ```

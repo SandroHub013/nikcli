@@ -1,10 +1,10 @@
 /**
  * The gadgets bridge: HTTP and server-sent events in front of the registry.
  *
- * It listens on its own port (4097 by default), not on the nikcli server's:
+ * It listens on its own port (4097 by default), not on the ragu server's:
  * devices must never be able to reach the operator's API, and the operator's
  * API must never have to trust a device. The only unauthenticated routes are
- * `GET /` and `POST /pair`, and `/pair` needs the code nikcli printed.
+ * `GET /` and `POST /pair`, and `/pair` needs the code ragu printed.
  * Everything under `/admin` answers loopback callers only, which is how the
  * TUI plugin and nothing else reaches it.
  */
@@ -20,14 +20,14 @@ import {
   type InvokeRequest,
   type MessageBody,
   type PairRequest,
-} from "@nikcli-ai/gadget/protocol"
+} from "@ragu/gadget/protocol"
 import { Registry, type Feed } from "./registry.ts"
 
-export const BRIDGE_NAME = "nikcli-gadgets"
+export const BRIDGE_NAME = "ragu-gadgets"
 export const BRIDGE_VERSION = "1.427.0"
 export const DEFAULT_PORT = 4097
 
-/** What the host nikcli instance does for a device: start a session, answer a press. */
+/** What the host ragu instance does for a device: start a session, answer a press. */
 export interface BridgeHooks {
   message(device: GadgetInfo, text: string, sessionID?: string): Promise<string>
   press(device: GadgetInfo, event: DeviceEvent): Promise<{ handled: boolean }>
@@ -122,7 +122,7 @@ export class Bridge {
 
   constructor(options: BridgeOptions = {}) {
     this.options = options
-    this.log = options.log ?? ((message) => console.error(`[nikcli-gadgets] ${message}`))
+    this.log = options.log ?? ((message) => console.error(`[ragu-gadgets] ${message}`))
     this.registry = new Registry({ file: options.file, url: () => this.url })
   }
 
@@ -278,7 +278,7 @@ export class Bridge {
           throw new GadgetError("Denied", "a gadget can continue only the sessions it started")
         }
         const hooks = this.options.hooks?.()
-        if (!hooks) throw new GadgetError("Offline", "no nikcli instance is ready to take messages yet")
+        if (!hooks) throw new GadgetError("Offline", "no ragu instance is ready to take messages yet")
         const sessionID = await hooks.message(this.registry.get(id), body.text, requested)
         this.registry.rememberSession(id, sessionID)
         return json({ sessionID }, 202)

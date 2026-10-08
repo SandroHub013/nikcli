@@ -2,7 +2,7 @@
  * Type-level plumbing that lets a model carry the shape of the provider options it accepts.
  *
  * `ProviderOptions` is `Record<string, Record<string, unknown>>` on the wire and stays that way —
- * every provider must be able to pass knobs nikcli has never heard of. But at a call site the model
+ * every provider must be able to pass knobs ragu has never heard of. But at a call site the model
  * is known, so `providerOptions` can be checked against *that provider's* documented options rather
  * than against `unknown`. A typo like `{ anthropic: { thinkingBudget: 4000 } }` (the field is
  * `thinking`) is otherwise accepted silently and simply ignored by the provider.

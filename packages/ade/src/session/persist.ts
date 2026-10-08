@@ -72,7 +72,7 @@ export interface PaneState {
   linkNonce?: string
   /**
    * The folder of the conversation the pane followed, when it is not the
-   * pane's own (nikcli's shared tabs), so a restore says so again.
+   * pane's own (ragu's shared tabs), so a restore says so again.
    */
   otherDir?: string
   /** The project the pane belongs to; absent in states saved before panes of several projects were kept. */

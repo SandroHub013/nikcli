@@ -6,7 +6,7 @@ Owner: sync, session, mobile-bridge maintainers. [Roadmap](../ROADMAP.md).
 ## Problem and Evidence
 
 Evidence B06, B19 in the [register](../README.md): the durable sync journal has per-aggregate sequences and snapshots
-machinery (`docs/sync-architecture.md`, `packages/nikcli/src/sync/index.ts`), and the server encodes events once with
+machinery (`docs/sync-architecture.md`, `packages/ragu/src/sync/index.ts`), and the server encodes events once with
 bounded frame lag. EOT-04 covers delivery and recovery. The remaining gap is the **end-to-end replay/catch-up** protocol:
 snapshot watermarks, sequence gaps, compaction cursors, multi-device state ordering, and the seam between aggregate-level
 replay and global SSE. Without it, the recovery model in EOT-04 cannot safely promise lossless catch-up across a
@@ -97,10 +97,10 @@ and forces a refetch.
   suppresses local-origin events; cross-device conflicts resolve per the documented rules.
 - Bootstrap from a fresh install delivers the full snapshot bundle before the first live event; the consumer never sees
   partial state.
-- Extend `packages/nikcli/test/sync/`, `packages/nikcli/test/mobile/` (sync tests in the mobile surface),
-  `packages/nikcli/test/server/event-feed.test.ts`, `packages/nikcli/test/server/event-visibility.test.ts`, and
-  `packages/nikcli/test/tui/streaming-store.test.ts`.
-- From `packages/nikcli`: `bun test test/sync/ test/mobile/ test/server/event-feed.test.ts test/tui/streaming-store.test.ts`.
+- Extend `packages/ragu/test/sync/`, `packages/ragu/test/mobile/` (sync tests in the mobile surface),
+  `packages/ragu/test/server/event-feed.test.ts`, `packages/ragu/test/server/event-visibility.test.ts`, and
+  `packages/ragu/test/tui/streaming-store.test.ts`.
+- From `packages/ragu`: `bun test test/sync/ test/mobile/ test/server/event-feed.test.ts test/tui/streaming-store.test.ts`.
   Run with the existing isolated database (`withIsolatedDatabase`). One final root `bun run typecheck` after the slice.
 - Meet EOT-01 budgets; recovery readiness gate measured end-to-end against the snapshot+replay fixture.
 
@@ -248,7 +248,7 @@ and is additive; it is not done here.
 ### `/sync/outbox` can now be asked for one aggregate — 2026-10-02
 
 **Landed.** `OutboxQuery` gained an optional `aggregate` parameter
-(`packages/nikcli/src/server/httpapi/sync.ts:48`) and the handler adds
+(`packages/ragu/src/server/httpapi/sync.ts:48`) and the handler adds
 `eq(syncEvent.aggregate, onlyAggregate)` to the `where` clause only when it is
 present (`sync.ts:338`). Absent means no predicate at all, so every existing
 caller keeps the exact project-wide page it had — which is what "additive" has to
@@ -301,8 +301,8 @@ stages, not two independent tickets.
 The producer that already exists and should be reused is
 `/sync/stream?readiness=1`: the greeting is an explicit `ready` event emitted
 before the feed subscribes, so no event can fall between subscribe and ready
-(`packages/nikcli/src/server/httpapi/sync.ts:550-573`), and `RemoteSync` already
-consumes it via `lifecycle.ready()` (`packages/nikcli/src/sync/transport.ts:186`).
+(`packages/ragu/src/server/httpapi/sync.ts:550-573`), and `RemoteSync` already
+consumes it via `lifecycle.ready()` (`packages/ragu/src/sync/transport.ts:186`).
 The TUI does not: it reads `/global/event` unfenced. That gap is part of this
 slice, not a separate one.
 

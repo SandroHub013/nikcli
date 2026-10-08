@@ -23,16 +23,16 @@ const related = [
 
 <DocsLayout
   title="CLI Debug"
-  subtitle="Low-level debugging utilities under packages/nikcli/src/cli/cmd/debug — for contributors and support, not everyday use."
-  description="Guide to nikcli CLI debug utilities, LSP diagnostics commands, file/ripgrep probes, and snapshot inspection."
+  subtitle="Low-level debugging utilities under packages/ragu/src/cli/cmd/debug — for contributors and support, not everyday use."
+  description="Guide to ragu CLI debug utilities, LSP diagnostics commands, file/ripgrep probes, and snapshot inspection."
   toc={toc}
 >
   <section id="when-to-use" class="doc-section">
     <h2>When to use</h2>
     <p>
-      The <code>nikcli debug …</code> tree exposes internal probes: resolved config, global paths, agent
+      The <code>ragu debug …</code> tree exposes internal probes: resolved config, global paths, agent
       tool access, LSP round-trips, and ripgrep-backed file helpers. For install health and common fixes,
-      prefer <code>nikcli doctor</code> (see <a href="/docs/cli">CLI Reference</a>).
+      prefer <code>ragu doctor</code> (see <a href="/docs/cli">CLI Reference</a>).
     </p>
     <DocCallout type="info" title="debug config vs doctor">
       <p>
@@ -42,9 +42,9 @@ const related = [
       </p>
     </DocCallout>
     <DocCode language="bash" title="Examples">
-nikcli debug config
-nikcli debug agent build
-nikcli debug paths
+ragu debug config
+ragu debug agent build
+ragu debug paths
     </DocCode>
   </section>
 

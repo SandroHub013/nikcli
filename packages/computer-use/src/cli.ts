@@ -4,7 +4,7 @@
  * thin RPC call against the per-workspace background daemon (auto-spawned on
  * first use). This is what lets `start`, then a later `wait`, then a later
  * `stop` work as three separate process invocations, e.g. from shell
- * scripts or CI steps — the same model as `@nikcli-ai/browser-control`'s
+ * scripts or CI steps — the same model as `@ragu/browser-control`'s
  * CLI.
  */
 import { lstat, mkdir, readFile, readlink, realpath, symlink, writeFile } from "node:fs/promises"
@@ -74,7 +74,7 @@ Evidence:
 Other:
   computer-use install-skill [--workspace DIR | --global] [--json]
 
-    --global installs into ~/.agents/skills so nikcli discovers it in every
+    --global installs into ~/.agents/skills so ragu discovers it in every
     workspace on this machine, not just the current one.
   computer-use shutdown        Stop the background daemon for this workspace
   -h, --help
@@ -130,7 +130,7 @@ async function cmdStart(args: string[]): Promise<void> {
   }
   const info = await withDaemon((socket) =>
     rpc<SessionInfo>(socket, "start", {
-      nikcliSessionID: process.cwd(),
+      raguSessionID: process.cwd(),
       name,
       mode,
       width,
@@ -322,7 +322,7 @@ async function findWorkspaceRoot(start = process.cwd()): Promise<string> {
 
 /**
  * `global: true` targets `~/.agents/skills/computer-use` — the home-rooted
- * external skill directory nikcli's Skill loader scans unconditionally for
+ * external skill directory ragu's Skill loader scans unconditionally for
  * every workspace on this machine, making the skill available by default
  * rather than opt-in per project. Mirrors browser-control's
  * install-skill exactly.
@@ -529,7 +529,7 @@ export async function main(argv = Bun.argv.slice(2)): Promise<void> {
         printInfo(
           await withDaemon((socket) =>
             rpc<SessionInfo>(socket, "restart", {
-              nikcliSessionID: process.cwd(),
+              raguSessionID: process.cwd(),
               name,
             }),
           ),
@@ -588,7 +588,7 @@ export async function main(argv = Bun.argv.slice(2)): Promise<void> {
           return
         }
         const action = installation.installed ? "Installed" : "Already installed"
-        process.stdout.write(`${action}: ${installation.target}\nRestart nikcli to load the skill.\n`)
+        process.stdout.write(`${action}: ${installation.target}\nRestart ragu to load the skill.\n`)
         return
       }
       case "bundle": {

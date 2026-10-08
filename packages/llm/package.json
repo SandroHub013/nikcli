@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.431.0",
-  "name": "@nikcli-ai/llm",
+  "name": "@ragu/llm",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -23,7 +23,7 @@
     "./providers/cloudflare": "./src/providers/cloudflare.ts",
     "./providers/github-copilot": "./src/providers/github-copilot.ts",
     "./providers/google": "./src/providers/google.ts",
-    "./providers/nikcli-inference": "./src/providers/nikcli-inference.ts",
+    "./providers/ragu-inference": "./src/providers/ragu-inference.ts",
     "./providers/openai": "./src/providers/openai.ts",
     "./providers/openai-compatible": "./src/providers/openai-compatible.ts",
     "./providers/openai-compatible-profile": "./src/providers/openai-compatible-profile.ts",
@@ -40,7 +40,7 @@
   "devDependencies": {
     "@clack/prompts": "1.0.0-alpha.1",
     "@effect/platform-node": "4.0.0-rc.112",
-    "@nikcli-ai/http-recorder": "workspace:*",
+    "@ragu/http-recorder": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native": "catalog:"

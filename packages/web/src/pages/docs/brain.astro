@@ -21,19 +21,19 @@ const toc = [
   title="Brain"
   subtitle="The Brain subsystem periodically consolidates session memory and re-evaluates long-running context — TUI plugin, server route, and headless scheduler."
   toc={toc}
-  description="How nikcli's Brain subsystem schedules, triggers, and runs memory consolidation sessions, with its config keys, thresholds, and TUI surface."
+  description="How ragu's Brain subsystem schedules, triggers, and runs memory consolidation sessions, with its config keys, thresholds, and TUI surface."
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
-      Brain is nikcli's "long-term memory" subsystem. While a session is running, every
+      Brain is ragu's "long-term memory" subsystem. While a session is running, every
       tool call, message, and decision lives in the session's JSON store; Brain's job is
       to periodically consolidate that signal into a single, well-organised
       <code>memory.instruction.md</code> file that future coding sessions can read at
       startup to orient quickly.
     </p>
     <p>
-      Brain is implemented in <code>packages/nikcli/src/brain/</code> and surfaces in three
+      Brain is implemented in <code>packages/ragu/src/brain/</code> and surfaces in three
       places: a headless scheduler that ticks every hour, a TUI feature plugin for the
       <code>brain</code> model picker, and a server route (<code>/brain</code>) plus a
       typed <code>httpapi/brain.ts</code> group for the Studio dashboard and external
@@ -49,7 +49,7 @@ const toc = [
   <section id="what" class="doc-section">
     <h2>What Brain does</h2>
     <p>
-      When triggered, Brain runs a real nikcli session under the hood — but a session with
+      When triggered, Brain runs a real ragu session under the hood — but a session with
       a very narrow scope. It:
     </p>
     <ol>
@@ -212,7 +212,7 @@ const toc = [
     </p>
     <DocCallout type="success" title="Brain is also a long-term signal for other agents">
       Because the file lives under <code>.github/instructions/</code>, every future
-      nikcli session in the same project picks it up automatically — it becomes part of
+      ragu session in the same project picks it up automatically — it becomes part of
       the system prompt context for the next agent run.
     </DocCallout>
   </section>
@@ -243,7 +243,7 @@ const toc = [
         <p>
           Same surface under the typed HttpApi group
           (<code>operationId: brain.status</code>, <code>brain.trigger</code>) — mounted
-          through <code>HttpApiBridge</code> when <code>NIKCLI_EXPERIMENTAL_HTTPAPI</code> is
+          through <code>HttpApiBridge</code> when <code>RAGU_EXPERIMENTAL_HTTPAPI</code> is
           set. Used by the Studio dashboard and SDK clients.
         </p>
       </DocCard>
@@ -251,7 +251,7 @@ const toc = [
     <DocCallout type="note" title="Headless scheduler">
       The scheduler registers itself from <code>initBrainScheduler()</code> with
       <code>scope: "instance"</code>. The scheduler definition is in
-      <code>packages/nikcli/src/scheduler/</code>; one tick per hour, per project
+      <code>packages/ragu/src/scheduler/</code>; one tick per hour, per project
       instance.
     </DocCallout>
   </section>
@@ -268,23 +268,23 @@ const toc = [
       <tbody>
         <tr>
           <td>Core service + consolidation prompt</td>
-          <td><code>packages/nikcli/src/brain/index.ts</code></td>
+          <td><code>packages/ragu/src/brain/index.ts</code></td>
         </tr>
         <tr>
           <td>Hourly scheduler</td>
-          <td><code>packages/nikcli/src/brain/scheduler.ts</code></td>
+          <td><code>packages/ragu/src/brain/scheduler.ts</code></td>
         </tr>
         <tr>
           <td>Constants</td>
-          <td><code>@nikcli-ai/util/brain-constants</code></td>
+          <td><code>@ragu/util/brain-constants</code></td>
         </tr>
         <tr>
           <td>Classic routes</td>
-          <td><code>packages/nikcli/src/server/httpapi/brain.ts</code></td>
+          <td><code>packages/ragu/src/server/httpapi/brain.ts</code></td>
         </tr>
         <tr>
           <td>Typed HttpApi</td>
-          <td><code>packages/nikcli/src/server/httpapi/brain.ts</code></td>
+          <td><code>packages/ragu/src/server/httpapi/brain.ts</code></td>
         </tr>
         <tr>
           <td>TUI plugin</td>

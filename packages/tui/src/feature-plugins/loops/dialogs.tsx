@@ -4,7 +4,7 @@
  * DialogSelect/DialogPrompt components (available to internal feature plugins,
  * mirroring system/plugins.tsx).
  */
-import type { TuiPluginApi } from "@nikcli-ai/plugin/tui"
+import type { TuiPluginApi } from "@ragu/plugin/tui"
 import type { RGBA } from "@opentui/core"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { DialogPrompt } from "@tui/ui/dialog-prompt"

@@ -1,7 +1,7 @@
 /**
  * The chat's errors in words (C7), in the language ADE speaks.
  *
- * An answer that fails carries nikcli's error on its message, by name
+ * An answer that fails carries ragu's error on its message, by name
  * (`MessageV2.AssistantErrorSchema`): the kind is said here in a sentence, and
  * what the provider said, when it said something useful, follows it as a
  * detail — «rate-limited upstream» is worth reading verbatim. A request that
@@ -11,7 +11,7 @@
  * Everything returned is text: it goes into text nodes only.
  */
 
-import type { SessionStatus } from "@nikcli-ai/sdk/httpapi"
+import type { SessionStatus } from "@ragu/sdk/httpapi"
 import { t } from "../i18n"
 
 export interface ErrorView {
@@ -98,7 +98,7 @@ export function answerError(error: unknown): ErrorView | undefined {
   }
 }
 
-/** The provider failed mid-answer and nikcli is trying again: said, with which attempt. */
+/** The provider failed mid-answer and ragu is trying again: said, with which attempt. */
 export function retryNotice(status: SessionStatus | undefined): string | undefined {
   return status?.type === "retry" ? t("chat.retry", status.attempt) : undefined
 }

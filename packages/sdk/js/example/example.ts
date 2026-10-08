@@ -1,8 +1,8 @@
-import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
-import { createNikcliServer } from "@nikcli-ai/sdk/server"
+import { createRaguClient } from "@ragu/sdk/httpapi"
+import { createRaguServer } from "@ragu/sdk/server"
 
-const server = await createNikcliServer()
-const client = createNikcliClient({ baseUrl: server.url })
+const server = await createRaguServer()
+const client = createRaguClient({ baseUrl: server.url })
 
 const input = await Array.fromAsync(new Bun.Glob("packages/core/*.ts").scan())
 

@@ -420,8 +420,8 @@ export function byProject(panes: readonly MailPane[]): MailPane[] {
  * Sessions are found by project. `progetto/nome` looks only inside that
  * project (`progetto/2` is the second session there); a plain name matching
  * in several projects goes to the one in the sender's own project, which is
- * almost always the one meant — "claude" from a codex working on nikcli is
- * the claude working on nikcli. Ambiguity left after that is an error, never
+ * almost always the one meant — "claude" from a codex working on ragu is
+ * the claude working on ragu. Ambiguity left after that is an error, never
  * a guess: a message delivered to the wrong session is worse than one refused.
  */
 export function resolveTarget(panes: readonly MailPane[], to: string, fromId?: string): Resolution {
@@ -1307,7 +1307,7 @@ export const INTERRUPT_GAP_MS = 300
  * 2026-10-06, sessioni 5; OpenCode and Mimo 2.6 were lost on 2026-09-24):
  * - Claude Code, codex, agy: one Esc cancels the turn and keeps the session.
  *   Ctrl-C to Claude Code twice would quit it.
- * - nikcli and OpenCode: Esc twice within five seconds (`session_interrupt`,
+ * - ragu and OpenCode: Esc twice within five seconds (`session_interrupt`,
  *   «esc again to interrupt», `packages/tui/src/component/prompt`); the first
  *   only arms it. Ctrl-C there is `app_exit`.
  * - The shell: Ctrl-C, which is what it expects.
@@ -1321,7 +1321,7 @@ export function interruptPlan(agentId: string | undefined): { keys: string[] } |
     case "codex":
     case "agy":
       return { keys: [esc] }
-    case "nikcli":
+    case "ragu":
     case "opencode":
       return { keys: [esc, esc] }
     case "terminal":

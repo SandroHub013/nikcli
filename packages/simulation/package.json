@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@nikcli-ai/simulation",
+  "name": "@ragu/simulation",
   "version": "1.431.0",
   "private": true,
   "type": "module",
@@ -23,8 +23,8 @@
   "dependencies": {
     "@fontsource/adwaita-mono": "5.2.1",
     "@napi-rs/canvas": "1.0.2",
-    "@nikcli-ai/http-recorder": "workspace:*",
-    "@nikcli-ai/llm": "workspace:*",
+    "@ragu/http-recorder": "workspace:*",
+    "@ragu/llm": "workspace:*",
     "@opentui/core": "0.5.11",
     "effect": "4.0.0-rc.112",
     "web-tree-sitter": "0.25.10"

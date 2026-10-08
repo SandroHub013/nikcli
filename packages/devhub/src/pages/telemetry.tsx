@@ -1,7 +1,7 @@
 import { For, Match, Show, Switch as SolidSwitch, createMemo, createSignal } from "solid-js"
-import { Button } from "@nikcli-ai/ui/button"
-import { Switch } from "@nikcli-ai/ui/switch"
-import { Tabs } from "@nikcli-ai/ui/tabs"
+import { Button } from "@ragu/ui/button"
+import { Switch } from "@ragu/ui/switch"
+import { Tabs } from "@ragu/ui/tabs"
 import { aggregate, events, isError, quantile, traceTree, type Span } from "../lib/events"
 import { app } from "../lib/store"
 import { ms, num } from "../lib/format"
@@ -94,7 +94,7 @@ export function Telemetry() {
   return (
     <Page
       title="Telemetry"
-      subtitle="Live spans and events straight from the nikcli service bus — what it is doing right now, with timings"
+      subtitle="Live spans and events straight from the ragu service bus — what it is doing right now, with timings"
       actions={
         <>
           <Switch checked={!events.paused()} onChange={(v) => events.setPaused(!v)}>
@@ -182,7 +182,7 @@ export function Telemetry() {
                   fallback={
                     <Empty>
                       {events.state() === "live"
-                        ? "Connected — spans appear as nikcli works (send a prompt, run something)."
+                        ? "Connected — spans appear as ragu works (send a prompt, run something)."
                         : "Waiting for the event stream…"}
                     </Empty>
                   }
@@ -367,7 +367,7 @@ export function Telemetry() {
       </SolidSwitch>
       <Show when={events.state() === "idle"}>
         <Empty>
-          <Dot tone={STATE_TONE.idle} /> Start a nikcli service to see live telemetry.
+          <Dot tone={STATE_TONE.idle} /> Start a ragu service to see live telemetry.
         </Empty>
       </Show>
     </Page>

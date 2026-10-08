@@ -1,7 +1,7 @@
--- Opt-in usage reports from nikcli installs.
+-- Opt-in usage reports from ragu installs.
 --
 -- `usage_events` only ever sees traffic that went through the inference
--- gateway. Most nikcli users bring their own provider keys, so their models
+-- gateway. Most ragu users bring their own provider keys, so their models
 -- never appear there — which is the whole picture nikcli-ai.dev/data was
 -- missing. This table holds what those installs choose to report: one row per
 -- install, day, provider and model, and nothing else.
@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS community_usage (
   messages   INTEGER NOT NULL DEFAULT 0,
   tokens     INTEGER NOT NULL DEFAULT 0,  -- input + output + reasoning + cache
   cost       REAL    NOT NULL DEFAULT 0,  -- USD, as the CLI priced it
-  version    TEXT,                        -- nikcli version that reported
+  version    TEXT,                        -- ragu version that reported
   updated_at INTEGER NOT NULL,
   -- A report for a day it has already sent overwrites that day, so a retry
   -- after a failed request cannot count the same tokens twice.

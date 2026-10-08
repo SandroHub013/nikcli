@@ -8,9 +8,9 @@
  * surface on declared capabilities (req 6). The revocable per-generation scope
  * (req 4) is still the legacy runtime's.
  */
-import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@nikcli-ai/plugin/tui"
-import type { Context, Destination, Route } from "@nikcli-ai/plugin/v2/tui/context"
-import type { Definition } from "@nikcli-ai/plugin/v2/tui/plugin"
+import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@ragu/plugin/tui"
+import type { Context, Destination, Route } from "@ragu/plugin/v2/tui/context"
+import type { Definition } from "@ragu/plugin/v2/tui/plugin"
 import {
   CapabilityDenied,
   Incompatible,
@@ -18,11 +18,11 @@ import {
   parseManifest,
   type Capability,
   type Manifest,
-} from "@nikcli-ai/plugin/v2/manifest"
-import { isRecord } from "@nikcli-ai/util/record"
-import { satisfiesRange } from "@nikcli-ai/util/plugin-shared"
+} from "@ragu/plugin/v2/manifest"
+import { isRecord } from "@ragu/util/record"
+import { satisfiesRange } from "@ragu/util/plugin-shared"
 
-const ROUTE_PREFIX = "__nikcli_v2_tui__:"
+const ROUTE_PREFIX = "__ragu_v2_tui__:"
 
 /**
  * Resolve a presentation field that may be a thunk.
@@ -91,11 +91,11 @@ function navigate(api: TuiPluginApi, owner: string, destination: Destination) {
  *
  * Read from the running packages rather than hardcoded, so a dependency bump
  * cannot leave a stale number here that silently accepts an incompatible
- * plugin. `nikcli` is supplied by the caller because the TUI package does not
+ * plugin. `ragu` is supplied by the caller because the TUI package does not
  * own the product version.
  */
 export interface Host {
-  readonly nikcli?: string
+  readonly ragu?: string
   readonly effect?: string
   readonly opentui?: string
   readonly node?: string
@@ -137,7 +137,7 @@ function checkHost(manifest: Manifest, host: Host) {
   const requirements = manifest.hostRequirements
   if (!requirements) return
 
-  for (const key of ["nikcli", "effect", "opentui", "node"] as const) {
+  for (const key of ["ragu", "effect", "opentui", "node"] as const) {
     const required = requirements[key]
     if (!required) continue
     const actual = host[key]

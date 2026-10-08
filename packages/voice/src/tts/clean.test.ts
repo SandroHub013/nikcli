@@ -104,14 +104,14 @@ Riferimenti:
     )
 
     // 2. Preposizione "in" prima di un percorso
-    expect(cleanForSpeech("Dettagli in C:/Users/39349/Favorites/nikcli/.ade/results/1789864941966-0bea8afe.md.")).toBe(
+    expect(cleanForSpeech("Dettagli in C:/Users/39349/Favorites/ragu/.ade/results/1789864941966-0bea8afe.md.")).toBe(
       "Dettagli nel file.",
     )
 
     // 3. Se "il file" è già presente nel testo
     expect(
       cleanForSpeech(
-        "Ho modificato il file C:\\Users\\39349\\Favorites\\nikcli\\packages\\voice\\src\\tts\\clean.ts con le nuove modifiche.",
+        "Ho modificato il file C:\\Users\\39349\\Favorites\\ragu\\packages\\voice\\src\\tts\\clean.ts con le nuove modifiche.",
       ),
     ).toBe("Ho modificato il file con le nuove modifiche.")
 

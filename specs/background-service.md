@@ -2,7 +2,7 @@
 
 ## Why
 
-Every `nikcli` invocation evaluates the whole engine graph in its own process:
+Every `ragu` invocation evaluates the whole engine graph in its own process:
 ~988K `Function` objects, ~23K `FunctionExecutable`, ~125 MB of JS heap, and
 ~423 MB peak RSS on the compiled binary — paid again on every start, and paid a
 second time by the TUI's worker thread, which is a separate isolate.
@@ -13,16 +13,16 @@ connects to over HTTP (`packages/cli/src/server-process.ts`, plus its
 `service start/stop/status/restart` commands). The engine graph is evaluated
 once per machine and stays warm across invocations.
 
-nikcli already has every piece this needs:
+ragu already has every piece this needs:
 
 - `Server.listen()` binds a real HTTP server (`server/server.ts`).
-- `nikcli serve --stdio` prints `{"url":"..."}` on stdout once `/global/health`
+- `ragu serve --stdio` prints `{"url":"..."}` on stdout once `/global/health`
   answers — a readiness handshake explicitly "for parent processes".
 - `GET /global/health` is public and returns `{ healthy, version, revision? }`,
   which is both the liveness probe and the version check.
-- The HTTP API is **directory-scoped** already (`x-nikcli-directory` header or
+- The HTTP API is **directory-scoped** already (`x-ragu-directory` header or
   `?directory=`), so one global service serves every project.
-- `nikcli attach <url>` runs the complete TUI against an external server in 38
+- `ragu attach <url>` runs the complete TUI against an external server in 38
   lines — no worker thread, no custom `fetch`, no synthetic origin.
 - `serve` already suspends active sessions on shutdown and resumes them on the
   next start (`specs/v2/session-restart-continuation.md`).
@@ -123,12 +123,12 @@ service serves every project and outlives the client; requests name their own
 directory, and a project cwd would leak into whatever still falls back to
 `process.cwd()` — and pin a directory that may be deleted or sit on an
 unmounted volume. Every client therefore names one: the SDK client on each call,
-the TUI's raw `/sync/*` requests as `?directory=`, and `nikcli attach` to the
+the TUI's raw `/sync/*` requests as `?directory=`, and `ragu attach` to the
 service, without `--dir`, the directory it runs in.
 
 ### Settings
 
-`nikcli service get|set|unset` persist `hostname`, `port`, `cors` and `env` next
+`ragu service get|set|unset` persist `hostname`, `port`, `cors` and `env` next
 to the registration, per channel, and `start` applies them. Clients spawn the
 service, so there is nowhere to pass these at the moment it actually starts;
 this file is that "nowhere". **Every mutation stops the running service** — a
@@ -165,9 +165,9 @@ holds.
   before it listens (`Auth.useServicePassword`), so there is no moment it answers
   without one. It never travels through the environment: the shells, MCP servers
   and language servers the service spawns do not inherit it. It outranks
-  `NIKCLI_SERVER_PASSWORD`, whose value belongs to whichever client happened to
+  `RAGU_SERVER_PASSWORD`, whose value belongs to whichever client happened to
   spawn the service.
-- **Username `nikcli`, HTTP Basic** — opencode's `ServerAuth.headers` shape.
+- **Username `ragu`, HTTP Basic** — opencode's `ServerAuth.headers` shape.
 - **The credential is the trust boundary, not the socket.** Two layers stay
   apart: _admission_ (may this caller talk to the server — the password, a
   tailnet identity, or nothing on an unsecured server; `Auth.serverAdmission`)
@@ -183,28 +183,28 @@ holds.
   signed-in account, so it takes admission and nothing less — a user's bearer
   identifies a user, not the operator — and the LAN pairing socket serves none
   of it. It is exempt only from the signed-in-user requirement
-  (`NIKCLI_REQUIRE_OAUTH`), since signing in is how a machine gets a user.
+  (`RAGU_REQUIRE_OAUTH`), since signing in is how a machine gets a user.
 - **Every client presents it.**
   - One rule, `BackgroundService.withCredentials`: the credential goes in the
     `Authorization` header, and a bearer the request already carries (the
     `/user/*` calls send the terminal's issuer token) moves to `?token=`, the
     `auth_token` scheme the server accepts wherever it accepts a bearer — one
     header cannot hold both.
-  - The TUI's service path, `nikcli attach` and `nikcli run --attach` resolve a
+  - The TUI's service path, `ragu attach` and `ragu run --attach` resolve a
     URL through `BackgroundService.connection`: the channel password for the
     service, sent to its origin only, plus the directory the client runs in;
-    `NIKCLI_SERVER_PASSWORD` for any other server.
-  - In-process SDK clients (plugins, the embedded TUI worker, `nikcli run`)
-    use `Server.localFetch`, and `nikcli acp`'s client of its own listener
+    `RAGU_SERVER_PASSWORD` for any other server.
+  - In-process SDK clients (plugins, the embedded TUI worker, `ragu run`)
+    use `Server.localFetch`, and `ragu acp`'s client of its own listener
     sends `Auth.authorizationHeader()`.
   - The Discord bot the server starts receives the credentials; the island
     snapshot (0600, in a 0700 directory) carries the `Authorization` its
     permission replies need.
-  - WebUI and anything outside nikcli sign in as `nikcli` with the output of
-    `nikcli service password`.
-- **`nikcli service set env NIKCLI_SERVER_PASSWORD|USERNAME`** is refused: the
+  - WebUI and anything outside ragu sign in as `ragu` with the output of
+    `ragu service password`.
+- **`ragu service set env RAGU_SERVER_PASSWORD|USERNAME`** is refused: the
   service password outranks them, so the setting would do nothing.
-- **`nikcli service password [value]`** prints the password, or replaces it and
+- **`ragu service password [value]`** prints the password, or replaces it and
   stops the running service. It writes before it stops — the reverse of
   opencode — because a client starting between a stop and the write would
   spawn a service on the old password while every client reads the new one.
@@ -235,7 +235,7 @@ closes it on server shutdown; a pairing is revoked by revoking its token.
 
 ### Deliberate differences from opencode
 
-Behaviour follows opencode's daemon (`services/daemon.ts` in its `packages/cli`). What nikcli adds, each
+Behaviour follows opencode's daemon (`services/daemon.ts` in its `packages/cli`). What ragu adds, each
 for a failure opencode's shape does not cover:
 
 - **Per-channel registration, port, password and settings**, so a `local` build
@@ -250,7 +250,7 @@ for a failure opencode's shape does not cover:
 
 ## Measured
 
-TUI booted under `@nikcli-ai/terminal-control` in a fresh test home; **peak** RSS
+TUI booted under `@ragu/terminal-control` in a fresh test home; **peak** RSS
 of the process tree, sampled every 2s over a **fixed 30s dwell after first
 paint**. The dwell has to be fixed: an adaptive wait (`stable`) settles at
 different times in the two modes, compares two different load states, and
@@ -294,7 +294,7 @@ command that is almost always the default TUI.
 
 Registering through `lazy()` (`src/cli/cmd/lazy.ts`) takes `@/cli-main` from
 **988K `Function` / 125 MB heap / ~364 MB RSS / ~745 ms eval** to
-**154K / 26 MB / ~127 MB / ~237 ms**, and `nikcli heap` from 0.90s to 0.40s warm.
+**154K / 26 MB / ~127 MB / ~237 ms**, and `ragu heap` from 0.90s to 0.40s warm.
 
 This is the change commit `1e6e0ce304` made and had reverted for making the tool
 worse. Three differences:
@@ -310,22 +310,22 @@ worse. Three differences:
 ## Rollout
 
 **On by default**, matching opencode, whose `--standalone` flag means "run with a
-private server instead of the background service". nikcli's TUI takes the same
+private server instead of the background service". ragu's TUI takes the same
 shape:
 
 |                                    | path                                                         |
 | ---------------------------------- | ------------------------------------------------------------ |
-| `nikcli`                           | shared background service                                    |
-| `nikcli --standalone`              | private in-process server                                    |
-| `NIKCLI_SERVICE=0`                 | private in-process server                                    |
+| `ragu`                           | shared background service                                    |
+| `ragu --standalone`              | private in-process server                                    |
+| `RAGU_SERVICE=0`                 | private in-process server                                    |
 | `--port` / `--hostname` / `--mdns` | private server, since the caller wants their own listener    |
-| `NIKCLI_DRIVE` (simulation)        | private, always — the deterministic mock lives in the client |
-| `NIKCLI_TEST_HOME` set             | private, unless `NIKCLI_SERVICE=1`                           |
+| `RAGU_DRIVE` (simulation)        | private, always — the deterministic mock lives in the client |
+| `RAGU_TEST_HOME` set             | private, unless `RAGU_SERVICE=1`                           |
 
 The test-home rule is not cosmetic. A service outlives its client by design, so a
 suite that boots the TUI would leave one daemon per test home behind, and stray
-nikcli processes are already a documented cause of bogus measurements and flaky
-runs. Tests that _want_ the service ask for it with `NIKCLI_SERVICE=1`.
+ragu processes are already a documented cause of bogus measurements and flaky
+runs. Tests that _want_ the service ask for it with `RAGU_SERVICE=1`.
 
 A service that will not start is not fatal: the client logs a warning and falls
 through to the private path. The failure modes are environmental — a wedged port,
@@ -333,7 +333,7 @@ a killed spawn — and a user who cannot open their editor has a worse problem t
 a cold engine.
 
 The one behaviour change to know about: **a session now outlives the client**.
-Closing the TUI no longer stops the work; `nikcli service stop` does.
+Closing the TUI no longer stops the work; `ragu service stop` does.
 
 Upgrade runs in the _client_, not the service: it replaces the installed binary,
 and the service is a different (older) copy of it. After an upgrade the running

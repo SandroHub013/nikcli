@@ -1,5 +1,5 @@
-import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
-import type { ModSource, ModSurface } from "@nikcli-ai/ui/mod-tree-model"
+import { createRaguClient } from "@ragu/sdk/httpapi"
+import type { ModSource, ModSurface } from "@ragu/ui/mod-tree-model"
 import { createMemo, type Accessor } from "solid-js"
 import { useGlobalSDK } from "./global-sdk"
 import { usePlatform } from "./platform"
@@ -7,7 +7,7 @@ import { usePlatform } from "./platform"
 /**
  * Where this window reaches the mods of one project.
  *
- * Mods are plugins that run in the nikcli server, per project, and draw on request. This binds a
+ * Mods are plugins that run in the ragu server, per project, and draw on request. This binds a
  * client to the project's directory and listens to that project's `mod.ui.*` events, which is how a
  * mod edited on disk reaches the window: the server reloads it and publishes an invalidation. The
  * window says which `surface` it is, so the same mod that draws a row for the terminal can draw a
@@ -23,7 +23,7 @@ export function useModSource(
   return createMemo<ModSource | undefined>(() => {
     const dir = directory()
     if (!dir) return undefined
-    const client = createNikcliClient({
+    const client = createRaguClient({
       baseUrl: globalSDK.url,
       fetch: platform.fetch,
       directory: dir,

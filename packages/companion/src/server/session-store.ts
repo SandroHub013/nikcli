@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync
 import { join } from "path"
 import type { Session } from "./session-types.js"
 
-const SESSIONS_DIR = join(process.env.TMPDIR || "/tmp", "nikcli-sessions")
+const SESSIONS_DIR = join(process.env.TMPDIR || "/tmp", "ragu-sessions")
 
 function ensureDir() {
   if (!existsSync(SESSIONS_DIR)) {

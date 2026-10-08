@@ -1,7 +1,7 @@
 /**
- * A nikcli bot's turn on ADE's nikcli server (B8d).
+ * A ragu bot's turn on ADE's ragu server (B8d).
  *
- * `nikcli run` in a terminal, one process per turn, becomes a prompt to a
+ * `ragu run` in a terminal, one process per turn, becomes a prompt to a
  * session of the server the Chat uses (`chat/connection.ts`), with the bot as
  * its agent. What the process printed as JSON lines arrives here as the
  * server's events, and a question arrives as `permission.asked` with its own
@@ -10,7 +10,7 @@
  *
  * The session is made with the rules of the turn's profile (`serve-rules.ts`),
  * which come after the bot's own file and win over it. A session whose rules
- * are not the profile's — one of `nikcli run`, or of another profile — is not
+ * are not the profile's — one of `ragu run`, or of another profile — is not
  * continued: a new one starts, and the thread says so once. The prompt never
  * carries `tools`, which would replace the session's rules.
  *
@@ -18,14 +18,14 @@
  * the Chat: with its dialog when someone is in front of the screen, refused
  * otherwise. A project agent with the bot's name would take its place on the
  * server, with its own prompt and rules: the turn is refused instead. So is a
- * turn whose model the server's catalog does not have: nikcli would end it
+ * turn whose model the server's catalog does not have: ragu would end it
  * without a word (`catalogHasModel`).
  *
  * Stop, the time limit and the spend cap abort the session's turn on the
  * server; nothing of it keeps running.
  */
 
-import type { Agent, ConfigProviders, NikcliClient, ProviderList } from "@nikcli-ai/sdk/client"
+import type { Agent, ConfigProviders, RaguClient, ProviderList } from "@ragu/sdk/client"
 import { t } from "../i18n"
 import {
   appChatConnectionDeps,
@@ -40,7 +40,7 @@ import { readEvents } from "../chat/stream"
 import { admitProject, PROJECT_TRUST_KEY, projectSurface, type AdmitProjectDeps } from "./project-trust"
 import { projectFs } from "./store"
 import { localTrustStore } from "./trust"
-import { agentDirs, type AgentFile } from "./nikcli"
+import { agentDirs, type AgentFile } from "./ragu"
 import { joinPath } from "../host/path"
 import { finalText, isFreeModel, spendKind } from "./runners"
 import { BOT_SESSION_MARK, botPermission, hasBotRules, profileFor } from "./serve-rules"
@@ -178,7 +178,7 @@ const samePrompt = (a: string | undefined, b: string) =>
 
 /**
  * Why the server's agent by the bot's name is not the bot, if it is not: the
- * server knows no such agent, or one of the project's (or nikcli's own) has
+ * server knows no such agent, or one of the project's (or ragu's own) has
  * the name with another prompt, and would answer in the bot's place.
  */
 export function agentProblem(agents: readonly Pick<Agent, "name" | "prompt">[], bot: AgentFile): string | undefined {
@@ -275,9 +275,9 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
       disabledTools: request.disabledTools ?? [],
       ...(request.model ? { model: request.model } : {}),
       ...(request.effort ? { effort: request.effort } : {}),
-      runner: "nikcli",
+      runner: "ragu",
     }
-    talk = { ...talk, turnMode: spendKind("nikcli", bot.model, request.account) }
+    talk = { ...talk, turnMode: spendKind("ragu", bot.model, request.account) }
     /* A change to the turn: to its own thread, and to the caller's. */
     const change = (next: (talk: Talk) => Talk) => {
       talk = next(talk)
@@ -299,7 +299,7 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
     // The server answers for a folder: a turn without one has nowhere to run.
     const cwd = request.cwd
     if (!cwd) return finish("error", t("bots.serve.noFolder"))
-    const slot = acquireTurn("nikcli", "nikcli")
+    const slot = acquireTurn("ragu", "ragu")
     if ("problem" in slot) return finish("error", slot.problem)
     const timeoutMs = request.timeoutMs ?? TURN_TIMEOUT_MS
     const timer = setTimeout(() => end({ kind: "timeout" }), timeoutMs)
@@ -341,14 +341,14 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
             reload().then(
               () => true,
               (error: unknown) => {
-                warn(`ADE: il server di nikcli non ha riletto i bot: ${brief(error)}`)
+                warn(`ADE: il server di ragu non ha riletto i bot: ${brief(error)}`)
                 return false
               },
             ),
             limit,
           )
           if (reloaded === undefined)
-            warn(`ADE: il server di nikcli non ha riletto i bot entro ${Math.round(limit / 1000)} s`)
+            warn(`ADE: il server di ragu non ha riletto i bot entro ${Math.round(limit / 1000)} s`)
           if (reloaded) {
             const again = await orEnd(server.agents())
             if ("kind" in again) return settled(again)
@@ -370,7 +370,7 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
       /*
        * The model the server would use, as it picks it: the bot's, else its
        * agent's, else the configured one. One the catalog does not have is
-       * refused here, before any session: nikcli would end the turn without
+       * refused here, before any session: ragu would end the turn without
        * a word. A catalog that cannot be read lets the server decide.
        */
       let model = modelRef(bot.model)
@@ -398,7 +398,7 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
           return finish("error", t("bots.serve.noModel", serializeModelRef(wanted)))
       }
       /*
-       * The effort, only when that model has it: nikcli drops a variant it
+       * The effort, only when that model has it: ragu drops a variant it
        * does not know without a word, and the turn ran at the default as if
        * the bot's effort had been used (chat-bot-facili, pezzo 0).
        */
@@ -552,7 +552,7 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
             if (typeof id !== "string") return
             const permission = String(props["permission"] ?? "")
             /*
-             * One command to a line: nikcli's bash tool sends a pattern per command, and `decide`
+             * One command to a line: ragu's bash tool sends a pattern per command, and `decide`
              * reads a new line as the start of one. Joined with ", " the second command followed
              * no separator it knows, and `npm test, rm -rf src` was let through unasked.
              */
@@ -640,7 +640,7 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
     } catch (error) {
       return finish(
         "error",
-        t("bots.turn.didNotStart", "nikcli", error instanceof Error ? error.message : String(error)),
+        t("bots.turn.didNotStart", "ragu", error instanceof Error ? error.message : String(error)),
       )
     } finally {
       clearTimeout(timer)
@@ -656,10 +656,10 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
         case "stopped":
           return finish("stopped")
         case "timeout":
-          return finish("error", timeoutProblem("nikcli", timeoutMs))
+          return finish("error", timeoutProblem("ragu", timeoutMs))
         case "budget": {
           const usd = (value: number) => `${value.toFixed(2)} $`
-          return finish("error", t("bots.turn.overBudget", "nikcli", usd(talk.costUsd), usd(request.maxCostUsd ?? 0)))
+          return finish("error", t("bots.turn.overBudget", "ragu", usd(talk.costUsd), usd(request.maxCostUsd ?? 0)))
         }
         case "lost":
           return finish("error", how.why)
@@ -685,7 +685,7 @@ export function appProjectTrust(directory: string): Omit<AdmitProjectDeps, "conf
 }
 
 /**
- * A bot's turn, on the runner it names: nikcli's on ADE's server, where a
+ * A bot's turn, on the runner it names: ragu's on ADE's server, where a
  * question has an id (B8d) — the panel's, a room's, a routine's and a chat's;
  * the others as `runTurn` runs them.
  */
@@ -694,7 +694,7 @@ export function runBotTurn(
   serve: () => ServeTurnDeps = appServeTurnDeps,
   deps: TurnDeps = {},
 ): Turn {
-  if (request.runner === "nikcli") return runServeTurn(request, serve())
+  if (request.runner === "ragu") return runServeTurn(request, serve())
   return runTurn(request, deps)
 }
 
@@ -707,7 +707,7 @@ export function runBotTurn(
  */
 const NO_MODEL_KNOWN: readonly string[] = []
 
-export function serveClientOf(client: NikcliClient, catalogTimeoutMs = CATALOG_TIMEOUT_MS): ServeClient {
+export function serveClientOf(client: RaguClient, catalogTimeoutMs = CATALOG_TIMEOUT_MS): ServeClient {
   return {
     agents: async () => ((await client.app.agents()).data ?? []) as readonly Agent[],
     catalog: async () => {
@@ -730,7 +730,7 @@ export function serveClientOf(client: NikcliClient, catalogTimeoutMs = CATALOG_T
       try {
         return (await client.session.get({ sessionID })).data as { permission?: unknown } | undefined
       } catch (error) {
-        // Gone, or never on this server: a session of `nikcli run` from another folder, say.
+        // Gone, or never on this server: a session of `ragu run` from another folder, say.
         if (
           /\b404\b|not ?found/i.test(
             error instanceof Error ? `${error.message} ${String(error.cause ?? "")}` : String(error),

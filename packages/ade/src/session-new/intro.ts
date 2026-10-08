@@ -14,7 +14,7 @@
  *   pi       --append-system-prompt <text>
  *   codex    -c developer_instructions=<toml string>   (key present in 0.154)
  *
- * agy, opencode, nikcli, kimi and hermes have no such flag. For them the
+ * agy, opencode, ragu, kimi and hermes have no such flag. For them the
  * notice rides in front of the opening task when there is one; a session
  * started with no task learns it from the first message it receives, which
  * carries the reply command.

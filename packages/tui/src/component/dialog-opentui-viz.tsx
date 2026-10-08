@@ -30,7 +30,7 @@ import type {
   VizSeverity,
   VizTreeNode,
   VizThreshold,
-} from "@nikcli-ai/util/viz"
+} from "@ragu/util/viz"
 
 export type DialogOpenTUIVizProps = {
   spec: OpenTUIVizSpecType
@@ -1926,7 +1926,7 @@ export type VizComponentProps<T extends VizComponent["type"]> = { comp: Of<T> }
 
 /**
  * Maps each catalog component `type` to the OpenTUI Solid component that renders
- * it — nikcli's analogue to json-render's `Registry`. Supply a partial override
+ * it — ragu's analogue to json-render's `Registry`. Supply a partial override
  * to `createVizRenderer` / `<Renderer>` to swap or extend renderers without
  * touching the dispatcher.
  */
@@ -2010,7 +2010,7 @@ export type VizRendererProps = {
 }
 
 /**
- * Walk a spec's components through a registry — nikcli's `<Renderer>`. Provides
+ * Walk a spec's components through a registry — ragu's `<Renderer>`. Provides
  * the registry on context so nested `section`/`grid` containers resolve their
  * children against the same map. Mirrors `@json-render/solid`'s `Renderer`.
  */

@@ -47,7 +47,7 @@ const CHROME = {
 function StorybookApp() {
   const dimensions = useTerminalDimensions()
   const [storyIndex, setStoryIndex] = createSignal(0)
-  const [themeIndex, setThemeIndex] = createSignal(Math.max(0, BUILT_IN_THEME_IDS.indexOf("nikcli")))
+  const [themeIndex, setThemeIndex] = createSignal(Math.max(0, BUILT_IN_THEME_IDS.indexOf("ragu")))
   const [mode, setMode] = createSignal<"dark" | "light">("dark")
   const [fieldIndex, setFieldIndex] = createSignal(2)
   const [overrides, setOverrides] = createSignal<ComponentPatchMap>({})
@@ -55,7 +55,7 @@ function StorybookApp() {
 
   void readOverrides().then(setOverrides)
 
-  const themeName = createMemo(() => BUILT_IN_THEME_IDS[themeIndex()] ?? "nikcli")
+  const themeName = createMemo(() => BUILT_IN_THEME_IDS[themeIndex()] ?? "ragu")
   const [document] = createResource(themeName, (name) => loadBuiltInTheme(name))
 
   const story = createMemo(() => STORIES[storyIndex()]!)

@@ -1,4 +1,4 @@
-import type { TuiPlugin, TuiPluginModule } from "@nikcli-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginModule } from "@ragu/plugin/tui"
 import { createStore, produce } from "solid-js/store"
 import { DialogPrompt } from "../../ui/dialog-prompt"
 import { friendlyErrorMessage } from "../../util/error-message"

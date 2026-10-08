@@ -201,8 +201,8 @@ export function Code<T>(props: CodeProps<T>) {
   const clearHighlightFind = () => {
     const api = (globalThis as { CSS?: { highlights?: { delete: (name: string) => void } } }).CSS?.highlights
     if (!api) return
-    api.delete("nikcli-find")
-    api.delete("nikcli-find-current")
+    api.delete("ragu-find")
+    api.delete("ragu-find-current")
   }
 
   const clearOverlayScroll = () => {
@@ -380,14 +380,14 @@ export function Code<T>(props: CodeProps<T>) {
     const Highlight = (globalThis as unknown as { Highlight?: any }).Highlight
     if (!api || typeof Highlight !== "function") return false
 
-    api.delete("nikcli-find")
-    api.delete("nikcli-find-current")
+    api.delete("ragu-find")
+    api.delete("ragu-find-current")
 
     const active = ranges[index]
-    if (active) api.set("nikcli-find-current", new Highlight(active))
+    if (active) api.set("ragu-find-current", new Highlight(active))
 
     const rest = ranges.filter((_, i) => i !== index)
-    if (rest.length > 0) api.set("nikcli-find", new Highlight(...rest))
+    if (rest.length > 0) api.set("ragu-find", new Highlight(...rest))
     return true
   }
 

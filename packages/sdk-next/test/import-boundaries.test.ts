@@ -4,7 +4,7 @@ import { join, resolve, sep } from "node:path"
 
 const directory = resolve(import.meta.dir, "..")
 const client = resolve(import.meta.dir, "../../sdk/js/src")
-const host = resolve(import.meta.dir, "../../nikcli/src")
+const host = resolve(import.meta.dir, "../../ragu/src")
 
 test("bundles the client and in-memory host", async () => {
   const inputs = await bundleInputs()
@@ -18,7 +18,7 @@ async function bundleInputs() {
   const entrypoint = join(temporary, "index.ts")
   const metafile = join(temporary, "meta.json")
   try {
-    await Bun.write(entrypoint, 'export * from "@nikcli-ai/sdk-next"')
+    await Bun.write(entrypoint, 'export * from "@ragu/sdk-next"')
     const child = Bun.spawn(
       [
         process.execPath,

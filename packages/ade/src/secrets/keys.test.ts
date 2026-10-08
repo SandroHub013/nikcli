@@ -93,7 +93,7 @@ describe("launch", () => {
   test("a session gets only the keys that name its agent, and none by default", () => {
     const keys = [
       key("Anthropic", "ANTHROPIC_API_KEY", []),
-      key("OpenAI", "OPENAI_API_KEY", ["codex", "nikcli"]),
+      key("OpenAI", "OPENAI_API_KEY", ["codex", "ragu"]),
       key("Lost", "LOST_KEY", ["codex"], null),
     ]
     expect(keysForAgent(keys, "claude-code")).toEqual([])
@@ -104,7 +104,7 @@ describe("launch", () => {
     expect(billingWarning("ANTHROPIC_API_KEY", "claude-code")).toBe(
       "Claude Code userà questa chiave invece dell'abbonamento Claude: consumo a pagamento",
     )
-    expect(billingWarning("ANTHROPIC_API_KEY", "nikcli")).toBeUndefined()
+    expect(billingWarning("ANTHROPIC_API_KEY", "ragu")).toBeUndefined()
     expect(billingWarning("OPENAI_API_KEY", "codex")).toContain("Codex")
   })
 

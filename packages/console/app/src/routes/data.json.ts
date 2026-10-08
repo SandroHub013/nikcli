@@ -1,5 +1,5 @@
-import { and, count, Database, gte, lt, sql } from "@nikcli-ai/console-core/drizzle/index.js"
-import { UsageTable } from "@nikcli-ai/console-core/schema/billing.sql.js"
+import { and, count, Database, gte, lt, sql } from "@ragu/console-core/drizzle/index.js"
+import { UsageTable } from "@ragu/console-core/schema/billing.sql.js"
 
 /**
  * Public, aggregate-only feed of gateway usage — the data behind nikcli-ai.dev/data.

@@ -1,5 +1,5 @@
 {
-  "name": "@nikcli-ai/voice",
+  "name": "@ragu/voice",
   "version": "1.431.0",
   "description": "Voice control logical core for ADE in Italian",
   "type": "module",
@@ -21,7 +21,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@nikcli-ai/ade": "workspace:*",
+    "@ragu/ade": "workspace:*",
     "effect": "^3.22.2",
     "onnxruntime-web": "1.24.1",
     "parakeet.js": "^1.4.4",

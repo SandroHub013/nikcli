@@ -1,0 +1,84 @@
+import { preserveTestEnv } from "../helpers/env"
+import { afterAll, afterEach, describe, expect, it } from "bun:test"
+import { Effect } from "effect"
+import fs from "fs/promises"
+import os from "os"
+import path from "path"
+import { removeTestDir } from "../helpers/fs"
+import { runPromiseWithLayer, withCurrentInstance } from "../../src/effect"
+import { Instance } from "../../src/project/instance"
+
+const testHome = await fs.mkdtemp(path.join(os.tmpdir(), "ragu-system-effect-home-"))
+process.env.RAGU_TEST_HOME = testHome
+process.env.RAGU_DISABLE_EXTERNAL_SKILLS = "1"
+process.env.XDG_DATA_HOME = path.join(testHome, "data")
+process.env.XDG_CACHE_HOME = path.join(testHome, "cache")
+process.env.XDG_CONFIG_HOME = path.join(testHome, "config")
+process.env.XDG_STATE_HOME = path.join(testHome, "state")
+
+preserveTestEnv([
+  "RAGU_TEST_HOME",
+  "RAGU_DISABLE_EXTERNAL_SKILLS",
+  "XDG_DATA_HOME",
+  "XDG_CACHE_HOME",
+  "XDG_CONFIG_HOME",
+  "XDG_STATE_HOME",
+])
+
+const { SystemPrompt } = await import("../../src/session/system")
+
+const projectDirs: string[] = []
+
+async function withProject<T>(fn: (projectDir: string) => Promise<T>): Promise<T> {
+  const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "ragu-system-project-"))
+  const resolved = await fs.realpath(projectDir)
+  projectDirs.push(resolved)
+  await fs.writeFile(path.join(projectDir, "AGENTS.md"), "Project instructions")
+  return Instance.provide({
+    directory: resolved,
+    fn: () => fn(resolved),
+  })
+}
+
+function runSystemPrompt<A, E>(effect: Effect.Effect<A, E, any>) {
+  return runPromiseWithLayer(SystemPrompt.defaultLayer, withCurrentInstance(effect))
+}
+
+afterEach(async () => {
+  await Instance.disposeAll().catch(() => undefined)
+})
+
+afterAll(async () => {
+  await Instance.disposeAll().catch(() => undefined)
+  await Promise.all(projectDirs.map((dir) => removeTestDir(dir)))
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await removeTestDir(testHome)
+})
+
+describe("SystemPrompt.Service", () => {
+  it("loads environment, custom instructions, and active skills through Effect context", async () => {
+    await withProject(async (projectDir) => {
+      const result = await runSystemPrompt(
+        Effect.gen(function* () {
+          const systemPrompt = yield* SystemPrompt.Service
+          const environment = yield* systemPrompt.environment()
+          const custom = yield* systemPrompt.custom()
+          const skills = yield* systemPrompt.skills([])
+          return { environment, custom, skills }
+        }),
+      )
+
+      // `environment()` is the whole block, static half first: the session half no longer lives in
+      // the system prompt but is delivered ahead of the conversation, so the two are no longer one
+      // string in one place. Assert on the content, not on which part carries it.
+      expect(result.environment.join("\n")).toContain(`Working directory: ${projectDir}`)
+      expect(result.environment.join("\n")).toContain("<command_execution>")
+      if (!process.env.RAGU_DISABLE_PROJECT_CONFIG) {
+        expect(result.custom[0]).toContain("Instructions from:")
+        expect(result.custom[0]).toContain("Project instructions")
+      }
+      expect(result.skills).toEqual([])
+    })
+  })
+})

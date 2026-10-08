@@ -1,11 +1,11 @@
-import { TextField } from "@nikcli-ai/ui/text-field"
-import { Logo } from "@nikcli-ai/ui/logo"
-import { Button } from "@nikcli-ai/ui/button"
+import { TextField } from "@ragu/ui/text-field"
+import { Logo } from "@ragu/ui/logo"
+import { Button } from "@ragu/ui/button"
 import { Component, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
-import { Icon } from "@nikcli-ai/ui/icon"
+import { Icon } from "@ragu/ui/icon"
 
 export type InitError = {
   name: string

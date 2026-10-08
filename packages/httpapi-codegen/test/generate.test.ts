@@ -249,11 +249,11 @@ describe("HttpApiCodegen.generate", () => {
     expect(client).toContain('responseHeaders: ["location"]')
     expect(client).toContain("attachDeclaredHeaders")
 
-    const directory = await mkdtemp(join(tmpdir(), "nikcli-httpapi-codegen-"))
+    const directory = await mkdtemp(join(tmpdir(), "ragu-httpapi-codegen-"))
     try {
       await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
       const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
-      const result = await generated.NikCli.make({
+      const result = await generated.Ragu.make({
         baseUrl: "https://example.com",
         fetch: async () =>
           new Response(null, {
@@ -482,13 +482,13 @@ describe("HttpApiCodegen.generate", () => {
         ),
     )
     const output = emitPromise(compileContract(source))
-    const directory = await mkdtemp(join(tmpdir(), "nikcli-httpapi-codegen-"))
+    const directory = await mkdtemp(join(tmpdir(), "ragu-httpapi-codegen-"))
     const methods: Array<string> = []
 
     try {
       await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
       const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
-      const client = generated.NikCli.make({
+      const client = generated.Ragu.make({
         baseUrl: "https://example.com",
         fetch: async (_input: RequestInfo | URL, init?: RequestInit) => {
           methods.push(init?.method ?? "GET")
@@ -1009,13 +1009,13 @@ describe("HttpApiCodegen.generate", () => {
         ),
       ),
     )
-    const directory = await mkdtemp(join(tmpdir(), "nikcli-httpapi-codegen-"))
+    const directory = await mkdtemp(join(tmpdir(), "ragu-httpapi-codegen-"))
 
     try {
       await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
       const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
       let request: Request | undefined
-      const client = generated.NikCli.make({
+      const client = generated.Ragu.make({
         baseUrl: "https://example.com",
         fetch: async (input: RequestInfo | URL) => {
           request = input instanceof Request ? input : new Request(input)
@@ -1042,12 +1042,12 @@ describe("HttpApiCodegen.generate", () => {
         ),
       ),
     )
-    const directory = await mkdtemp(join(tmpdir(), "nikcli-httpapi-codegen-"))
+    const directory = await mkdtemp(join(tmpdir(), "ragu-httpapi-codegen-"))
 
     try {
       await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
       const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
-      const client = generated.NikCli.make({
+      const client = generated.Ragu.make({
         baseUrl: "https://example.com",
         fetch: async () => new Response(null, { status: 204 }),
       })
@@ -1085,13 +1085,13 @@ describe("HttpApiCodegen.generate", () => {
         ),
       ),
     )
-    const directory = await mkdtemp(join(tmpdir(), "nikcli-httpapi-codegen-"))
+    const directory = await mkdtemp(join(tmpdir(), "ragu-httpapi-codegen-"))
 
     try {
       await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
       const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
       let request: Request | undefined
-      const client = generated.NikCli.make({
+      const client = generated.Ragu.make({
         baseUrl: "https://example.com",
         fetch: async (input: RequestInfo | URL) => {
           request = input instanceof Request ? input : new Request(input)
@@ -1126,13 +1126,13 @@ describe("HttpApiCodegen.generate", () => {
         ),
       ),
     )
-    const directory = await mkdtemp(join(tmpdir(), "nikcli-httpapi-codegen-"))
+    const directory = await mkdtemp(join(tmpdir(), "ragu-httpapi-codegen-"))
 
     try {
       await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
       const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
       let request: Request | undefined
-      const client = generated.NikCli.make({
+      const client = generated.Ragu.make({
         baseUrl: "https://example.com",
         fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
           request = input instanceof Request ? input : new Request(input, init)
@@ -1167,13 +1167,13 @@ describe("HttpApiCodegen.generate", () => {
         ),
       ),
     )
-    const directory = await mkdtemp(join(tmpdir(), "nikcli-httpapi-codegen-"))
+    const directory = await mkdtemp(join(tmpdir(), "ragu-httpapi-codegen-"))
 
     try {
       await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
       const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
       let request: Request | undefined
-      const client = generated.NikCli.make({
+      const client = generated.Ragu.make({
         baseUrl: "https://example.com",
         fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
           request = input instanceof Request ? input : new Request(input, init)
@@ -1201,12 +1201,12 @@ describe("HttpApiCodegen.generate", () => {
         ),
       ),
     )
-    const directory = await mkdtemp(join(tmpdir(), "nikcli-httpapi-codegen-"))
+    const directory = await mkdtemp(join(tmpdir(), "ragu-httpapi-codegen-"))
 
     try {
       await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
       const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
-      const client = generated.NikCli.make({
+      const client = generated.Ragu.make({
         baseUrl: "https://example.com",
         fetch: async () => Response.json({ _tag: "Missing", message: "gone" }, { status: 404 }),
       })
@@ -1235,14 +1235,14 @@ describe("HttpApiCodegen.generate", () => {
         ),
       ),
     )
-    const directory = await mkdtemp(join(tmpdir(), "nikcli-httpapi-codegen-"))
+    const directory = await mkdtemp(join(tmpdir(), "ragu-httpapi-codegen-"))
 
     try {
       await Promise.all(output.files.map((file) => Bun.write(join(directory, file.path), file.content)))
       const generated = await import(`${join(directory, "index.ts")}?t=${crypto.randomUUID()}`)
       let requests = 0
       let url: string | undefined
-      const client = generated.NikCli.make({
+      const client = generated.Ragu.make({
         baseUrl: "https://example.com",
         fetch: async (input: RequestInfo | URL) => {
           requests++

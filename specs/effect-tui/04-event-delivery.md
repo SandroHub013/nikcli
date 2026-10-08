@@ -86,9 +86,9 @@ changing fire-and-forget callers. Persistence success and notification failure r
 - Fail one handler and verify later handlers still run; assert stale status and recovery for the failed projection.
 - Cancel during iterator acquisition, backoff, drain, and snapshot fetch; assert no subsequent requests or store mutations.
 - Test clean EOF, 401, malformed envelopes, compaction gaps, and repeated overflow; no zero-delay loop or false connected state.
-- Extend `packages/nikcli/test/server/event-feed.test.ts`, `packages/nikcli/test/server/event-visibility.test.ts`,
-  `packages/nikcli/test/tui/streaming-store.test.ts`, and `packages/nikcli/test/tui/thread.test.ts`.
-- From `packages/nikcli`: `bun test test/server/event-feed.test.ts test/server/event-visibility.test.ts test/tui/streaming-store.test.ts test/tui/thread.test.ts`.
+- Extend `packages/ragu/test/server/event-feed.test.ts`, `packages/ragu/test/server/event-visibility.test.ts`,
+  `packages/ragu/test/tui/streaming-store.test.ts`, and `packages/ragu/test/tui/thread.test.ts`.
+- From `packages/ragu`: `bun test test/server/event-feed.test.ts test/server/event-visibility.test.ts test/tui/streaming-store.test.ts test/tui/thread.test.ts`.
   Contract changes additionally follow EOT-10 codegen/route checks. Meet EOT-01's flush and input budgets under burst load.
 
 ## Migration and Rollback
@@ -103,10 +103,10 @@ restore an unbounded queue as the permanent fix for an overflow test failure.
 Slice 3 promotes `BYTE_BUDGET` from a candidate ceiling (`src/server/httpapi/event-feed.ts:79`) to an enforced one and pins the Promise publish contract. These do not change the spec above; they codify what the code does today so a code reviewer does not have to re-derive it.
 
 1. **`BYTE_BUDGET = 8 MiB` is enforced per frame.** `Connection.offer()` evicts with `ByteBudgetExceededError` when _one_ broadcast frame exceeds the ceiling. It is deliberately not a lifetime budget: `Connection.written` only grows, so `written + frame > BYTE_BUDGET` would evict every healthy reader that had been sent eight megabytes of ordinary events — which a TUI session reaches well inside an hour — and would report it as the client's fault. Per frame the question needs no producer inventory to answer: an event that large is a producer bug, and forwarding it puts the same megabytes into the client. Local frames (greeting, heartbeat, close reason) bypass the check entirely — they exist to hold the connection open and to state why it is being dropped. A lifetime or windowed budget remains possible later; `Connection.cost.bytes` is the measurement it would be ratified against.
-2. **Promise publish is best-effort by design.** `Bus.publish` in `packages/nikcli/src/bus/index.ts:173` swallows rejections — the spec wording was "best-effort" because changing it globally would change compatibility semantics for every existing caller. Tests assert _no exception escapes_; recovery from a dropped publish happens at the next event, not via redelivery.
+2. **Promise publish is best-effort by design.** `Bus.publish` in `packages/ragu/src/bus/index.ts:173` swallows rejections — the spec wording was "best-effort" because changing it globally would change compatibility semantics for every existing caller. Tests assert _no exception escapes_; recovery from a dropped publish happens at the next event, not via redelivery.
 3. **The two budgets answer different questions.** Frame-count eviction (`SubscriberOverflowError`, `LAG_BUDGET = 4096`) catches a reader that cannot keep up. Frame-size eviction (`ByteBudgetExceededError`) catches a producer emitting a single event nobody should have to receive. Neither subsumes the other, and both write their reason into the close frame so a client knows which one tripped.
 
-Tests in `packages/nikcli/test/server/event-feed.test.ts` exercise all of it: a reader handed more than `BYTE_BUDGET` _in total_ stays attached, a single oversized broadcast evicts with `ByteBudgetExceededError` and is itself never delivered, and local frames bypass the check. A future change that introduces a new eviction reason must add a matching test in the same describe block before merge.
+Tests in `packages/ragu/test/server/event-feed.test.ts` exercise all of it: a reader handed more than `BYTE_BUDGET` _in total_ stays attached, a single oversized broadcast evicts with `ByteBudgetExceededError` and is itself never delivered, and local frames bypass the check. A future change that introduces a new eviction reason must add a matching test in the same describe block before merge.
 
 ## No Silent Loss — 2026-09-20
 
@@ -151,7 +151,7 @@ writing a reason would throw on the way out. That it does not throw is pinned.
 Recovery step 1 says an EOF must not create a tight reconnect loop. It did. The TUI's HTTP stream loop in
 `packages/tui/src/context/sdk.tsx` backed off only when the subscribe **threw**; when the server accepted the stream
 and then closed it cleanly — an eviction, a proxy with a short idle timeout — the loop re-subscribed at once. Upstream
-opencode waits after every stream exit, clean or not; nikcli had dropped that half.
+opencode waits after every stream exit, clean or not; ragu had dropped that half.
 
 Measured with a server that closes every stream immediately: **270 subscribes in 400 ms**. With a fetch that resolves
 on microtasks alone, the loop never yields to a timer at all and starves the process — the first run of the test hung
@@ -169,7 +169,7 @@ What changed, and what did not:
 - Not changed: auth and schema failures are still retried rather than
   classified non-retryable, and there is still no restoration barrier. Those remain open under this spec.
 
-`packages/nikcli/test/tui/reconnect-gate.test.ts` mounts the real `SDKProvider` against that server and bounds the
+`packages/ragu/test/tui/reconnect-gate.test.ts` mounts the real `SDKProvider` against that server and bounds the
 subscribes in a 400 ms window to three. Removing the post-EOF wait fails it (270 against a limit of 3). Its fake
 `fetch` yields one macrotask per subscribe on purpose: without it the unfixed loop hangs the test instead of failing it.
 

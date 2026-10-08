@@ -8,10 +8,10 @@ import {
 } from "jsonc-parser"
 
 import { configFilesInDirectory } from "./config-file"
-import { Global } from "@nikcli-ai/util/global"
-import { Filesystem } from "@nikcli-ai/util/filesystem"
-import { Flock } from "@nikcli-ai/util/flock"
-import { isRecord } from "@nikcli-ai/util/record"
+import { Global } from "@ragu/util/global"
+import { Filesystem } from "@ragu/util/filesystem"
+import { Flock } from "@ragu/util/flock"
+import { isRecord } from "@ragu/util/record"
 
 import { parsePluginSpecifier, readPluginPackage, resolvePluginTarget } from "./plugin-shared"
 
@@ -119,7 +119,7 @@ function parseTargets(raw: unknown) {
   return [...map.values()]
 }
 
-async function detectNikCliPluginTargets(target: string): Promise<Target[] | undefined> {
+async function detectRaguPluginTargets(target: string): Promise<Target[] | undefined> {
   const pkg = await readPluginPackage(target)
   const json = pkg.json
 
@@ -247,7 +247,7 @@ export async function readPluginManifest(target: string): Promise<ManifestResult
 
   let targets = parseTargets(pkg.item.json["oc-plugin"])
   if (!targets.length) {
-    targets = (await detectNikCliPluginTargets(target)) ?? []
+    targets = (await detectRaguPluginTargets(target)) ?? []
   }
   if (!targets.length) {
     return {

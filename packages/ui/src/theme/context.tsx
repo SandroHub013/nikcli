@@ -8,13 +8,13 @@ import { createSimpleContext } from "../context/helper"
 export type ColorScheme = "light" | "dark" | "system"
 
 const STORAGE_KEYS = {
-  THEME_ID: "nikcli-theme-id",
-  COLOR_SCHEME: "nikcli-color-scheme",
-  THEME_CSS_LIGHT: "nikcli-theme-css-light",
-  THEME_CSS_DARK: "nikcli-theme-css-dark",
+  THEME_ID: "ragu-theme-id",
+  COLOR_SCHEME: "ragu-color-scheme",
+  THEME_CSS_LIGHT: "ragu-theme-css-light",
+  THEME_CSS_DARK: "ragu-theme-css-dark",
 } as const
 
-const THEME_STYLE_ID = "nikcli-theme"
+const THEME_STYLE_ID = "ragu-theme"
 
 function ensureThemeStyleElement(): HTMLStyleElement {
   const existing = document.getElementById(THEME_STYLE_ID) as HTMLStyleElement | null
@@ -35,7 +35,7 @@ function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "da
   const tokens = resolveThemeVariant(variant, isDark)
   const css = themeToCss(tokens)
 
-  if (themeId !== "nikcli-default") {
+  if (themeId !== "ragu-default") {
     try {
       localStorage.setItem(isDark ? STORAGE_KEYS.THEME_CSS_DARK : STORAGE_KEYS.THEME_CSS_LIGHT, css)
     } catch {}
@@ -47,14 +47,14 @@ function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "da
   ${css}
 }`
 
-  document.getElementById("nikcli-theme-preload")?.remove()
+  document.getElementById("ragu-theme-preload")?.remove()
   ensureThemeStyleElement().textContent = fullCss
   document.documentElement.dataset.theme = themeId
   document.documentElement.dataset.colorScheme = mode
 }
 
 function cacheThemeVariants(theme: DesktopTheme, themeId: string) {
-  if (themeId === "nikcli-default") return
+  if (themeId === "ragu-default") return
   for (const mode of ["light", "dark"] as const) {
     const isDark = mode === "dark"
     const variant = isDark ? theme.dark : theme.light
@@ -105,7 +105,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
   init: (props: { defaultTheme?: string }) => {
     const [store, setStore] = createStore({
       themes: DEFAULT_THEMES as Record<string, DesktopTheme>,
-      themeId: props.defaultTheme ?? "nikcli-default",
+      themeId: props.defaultTheme ?? "ragu-default",
       colorScheme: "system" as ColorScheme,
       mode: getSystemMode(),
       previewThemeId: null as string | null,

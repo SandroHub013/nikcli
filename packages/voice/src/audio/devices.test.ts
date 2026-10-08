@@ -88,7 +88,7 @@ describe("listAudioDevices", () => {
 
 describe("device names follow the language", () => {
   test("the system device and unnamed devices are named in English under English", async () => {
-    const { resetLocaleForTests } = await import("@nikcli-ai/ade/i18n")
+    const { resetLocaleForTests } = await import("@ragu/ade/i18n")
     resetLocaleForTests("en")
     try {
       expect(SYSTEM_DEFAULT.label).toBe("System device")

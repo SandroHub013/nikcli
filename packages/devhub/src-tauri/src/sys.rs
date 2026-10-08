@@ -59,8 +59,8 @@ fn basename(p: &str) -> &str {
     p.rsplit(['/', '\\']).next().unwrap_or(p)
 }
 
-/// Which part of nikcli (if any) a process belongs to. Being *inside the repo directory* is not
-/// enough — Vite, esbuild or an editor helper running there are not nikcli processes.
+/// Which part of ragu (if any) a process belongs to. Being *inside the repo directory* is not
+/// enough — Vite, esbuild or an editor helper running there are not ragu processes.
 fn classify(name: &str, cmd: &str, exe: &str, cwd: &str) -> Option<&'static str> {
     // Windows paths use backslashes and `.exe`; match on one normalised form.
     let norm = |s: &str| s.replace('\\', "/").to_lowercase();
@@ -69,11 +69,11 @@ fn classify(name: &str, cmd: &str, exe: &str, cwd: &str) -> Option<&'static str>
     let bin = basename(if exe.is_empty() { first } else { exe.as_str() })
         .trim_end_matches(".exe")
         .to_string();
-    let mentions = format!("{low_cmd} {exe} {cwd}").contains("nikcli");
-    if !mentions && bin != "nikcli" {
+    let mentions = format!("{low_cmd} {exe} {cwd}").contains("ragu");
+    if !mentions && bin != "ragu" {
         return None;
     }
-    if bin.starts_with("nikcli-devhub")
+    if bin.starts_with("ragu-devhub")
         || low_cmd.contains("packages/devhub")
         || cwd.contains("packages/devhub")
     {
@@ -87,7 +87,7 @@ fn classify(name: &str, cmd: &str, exe: &str, cwd: &str) -> Option<&'static str>
         return Some("editor");
     }
     let serves = low_cmd.split_whitespace().any(|t| t == "serve");
-    if bin == "nikcli" || bin.starts_with("nikcli-") {
+    if bin == "ragu" || bin.starts_with("ragu-") {
         return Some(if serves {
             if low_cmd.contains("--service") {
                 "service"
@@ -163,7 +163,7 @@ fn collect(sys: &System) -> Vec<ProcInfo> {
             ),
         );
     }
-    // Descendants of service/server/cli/test/dev processes (MCP servers, LSPs, shells) are nikcli's too.
+    // Descendants of service/server/cli/test/dev processes (MCP servers, LSPs, shells) are ragu's too.
     let roots: HashSet<u32> = base
         .iter()
         .filter(|(_, (c, _))| matches!(*c, "service" | "server" | "cli" | "test" | "dev"))
@@ -297,7 +297,7 @@ pub fn system_subscribe(app: tauri::AppHandle, on_snapshot: Channel<Snapshot>, i
                 .fold((0usize, 0u64), |(n, r), p| (n + 1, r + p.rss));
             if let Some(tray) = app.tray_by_id("main") {
                 let _ =
-                    tray.set_tooltip(Some(format!("nikcli · {n} processes · {}", fmt_bytes(rss))));
+                    tray.set_tooltip(Some(format!("ragu · {n} processes · {}", fmt_bytes(rss))));
                 #[cfg(target_os = "macos")]
                 let _ = tray.set_title(Some(fmt_bytes(rss)));
             }
@@ -308,7 +308,7 @@ pub fn system_subscribe(app: tauri::AppHandle, on_snapshot: Channel<Snapshot>, i
     });
 }
 
-/// Only processes classified as nikcli's (or their descendants) can be signalled.
+/// Only processes classified as ragu's (or their descendants) can be signalled.
 #[tauri::command]
 pub fn kill_process(state: tauri::State<SysState>, pid: u32, force: bool) -> Result<(), String> {
     let mut sys = state.0.lock().unwrap();
@@ -317,7 +317,7 @@ pub fn kill_process(state: tauri::State<SysState>, pid: u32, force: bool) -> Res
         .iter()
         .any(|p| p.pid == pid && p.category != "editor" && p.category != "devhub")
     {
-        return Err("not a nikcli process".into());
+        return Err("not a ragu process".into());
     }
     let proc = sys.process(Pid::from_u32(pid)).ok_or("process is gone")?;
     let sent = if force {
@@ -336,30 +336,30 @@ pub fn kill_process(state: tauri::State<SysState>, pid: u32, force: bool) -> Res
 mod tests {
     use super::classify;
 
-    const REPO: &str = "/Volumes/SSD/Projects/nikcli";
+    const REPO: &str = "/Volumes/SSD/Projects/ragu";
 
     #[test]
     fn classifies_real_world_processes() {
         // the installed background service
         assert_eq!(
             classify(
-                "nikcli",
-                "/Users/u/.nikcli/bin/nikcli serve --service --port 49374 --hostname 127.0.0.1",
-                "/Users/u/.nikcli/bin/nikcli",
+                "ragu",
+                "/Users/u/.nikcli/bin/ragu serve --service --port 49374 --hostname 127.0.0.1",
+                "/Users/u/.nikcli/bin/ragu",
                 "/"
             ),
             Some("service")
         );
         // the TUI
         assert_eq!(
-            classify("nikcli", "nikcli", "/Users/u/.nikcli/bin/nikcli", REPO),
+            classify("ragu", "ragu", "/Users/u/.nikcli/bin/ragu", REPO),
             Some("cli")
         );
         // a dev run from source and a test run
         assert_eq!(
             classify(
                 "bun",
-                "bun run --cwd packages/nikcli src/index.ts",
+                "bun run --cwd packages/ragu src/index.ts",
                 "/Users/u/.bun/bin/bun",
                 REPO
             ),
@@ -370,7 +370,7 @@ mod tests {
                 "bun",
                 "bun test --timeout 30000 test/a.test.ts",
                 "/Users/u/.bun/bin/bun",
-                "/Volumes/SSD/Projects/nikcli/packages/nikcli"
+                "/Volumes/SSD/Projects/ragu/packages/ragu"
             ),
             Some("test")
         );
@@ -381,17 +381,17 @@ mod tests {
     }
 
     #[test]
-    fn repo_location_alone_is_not_nikcli() {
-        // esbuild / vite running inside the repo are tooling, not nikcli
+    fn repo_location_alone_is_not_ragu() {
+        // esbuild / vite running inside the repo are tooling, not ragu
         assert_eq!(
-            classify("esbuild", "/Volumes/SSD/Projects/nikcli/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.25 --ping", "/Volumes/SSD/Projects/nikcli/node_modules/@esbuild/darwin-arm64/bin/esbuild", REPO),
+            classify("esbuild", "/Volumes/SSD/Projects/ragu/node_modules/@esbuild/darwin-arm64/bin/esbuild --service=0.25 --ping", "/Volumes/SSD/Projects/ragu/node_modules/@esbuild/darwin-arm64/bin/esbuild", REPO),
             Some("other")
         );
         // editor helpers with the repo open
         assert_eq!(
             classify(
                 "Cursor Helper (Plugin)",
-                "Cursor Helper (Plugin): extension-host (user) nikcli [1-1]",
+                "Cursor Helper (Plugin): extension-host (user) ragu [1-1]",
                 "/Applications/Cursor.app/x",
                 "/"
             ),
@@ -413,19 +413,19 @@ mod tests {
     fn windows_paths_and_exe_suffix_classify_the_same() {
         assert_eq!(
             classify(
-                "nikcli.exe",
-                r"C:\Users\u\.nikcli\bin\nikcli.exe serve --service --port 49374",
-                r"C:\Users\u\.nikcli\bin\nikcli.exe",
+                "ragu.exe",
+                r"C:\Users\u\.nikcli\bin\ragu.exe serve --service --port 49374",
+                r"C:\Users\u\.nikcli\bin\ragu.exe",
                 r"C:\"
             ),
             Some("service")
         );
         assert_eq!(
             classify(
-                "nikcli-devhub.exe",
-                r"C:\src\nikcli\packages\devhub\src-tauri\target\debug\nikcli-devhub.exe",
-                r"C:\src\nikcli\packages\devhub\src-tauri\target\debug\nikcli-devhub.exe",
-                r"C:\src\nikcli"
+                "ragu-devhub.exe",
+                r"C:\src\ragu\packages\devhub\src-tauri\target\debug\ragu-devhub.exe",
+                r"C:\src\ragu\packages\devhub\src-tauri\target\debug\ragu-devhub.exe",
+                r"C:\src\ragu"
             ),
             Some("devhub")
         );
@@ -434,7 +434,7 @@ mod tests {
                 "bun.exe",
                 r"bun.exe test --timeout 30000",
                 r"C:\Users\u\.bun\bin\bun.exe",
-                r"C:\src\nikcli\packages\nikcli"
+                r"C:\src\ragu\packages\ragu"
             ),
             Some("test")
         );
@@ -444,9 +444,9 @@ mod tests {
     fn devhub_own_processes_are_separate() {
         assert_eq!(
             classify(
-                "nikcli-devhub",
-                "target/debug/nikcli-devhub",
-                "/Volumes/SSD/Projects/nikcli/packages/devhub/src-tauri/target/debug/nikcli-devhub",
+                "ragu-devhub",
+                "target/debug/ragu-devhub",
+                "/Volumes/SSD/Projects/ragu/packages/devhub/src-tauri/target/debug/ragu-devhub",
                 REPO
             ),
             Some("devhub")
@@ -454,9 +454,9 @@ mod tests {
         assert_eq!(
             classify(
                 "node",
-                "node /Volumes/SSD/Projects/nikcli/packages/devhub/node_modules/.bin/vite",
+                "node /Volumes/SSD/Projects/ragu/packages/devhub/node_modules/.bin/vite",
                 "/usr/local/bin/node",
-                "/Volumes/SSD/Projects/nikcli/packages/devhub"
+                "/Volumes/SSD/Projects/ragu/packages/devhub"
             ),
             Some("devhub")
         );

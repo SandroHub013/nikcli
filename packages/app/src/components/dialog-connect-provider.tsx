@@ -1,16 +1,16 @@
-import type { ProviderAuthAuthorization } from "@nikcli-ai/sdk/httpapi"
-import { Button } from "@nikcli-ai/ui/button"
-import { useDialog } from "@nikcli-ai/ui/context/dialog"
-import { Dialog } from "@nikcli-ai/ui/dialog"
-import { Icon } from "@nikcli-ai/ui/icon"
-import { IconButton } from "@nikcli-ai/ui/icon-button"
-import type { IconName } from "@nikcli-ai/ui/icons/provider"
-import { List, type ListRef } from "@nikcli-ai/ui/list"
-import { ProviderIcon } from "@nikcli-ai/ui/provider-icon"
-import { Spinner } from "@nikcli-ai/ui/spinner"
-import { TextField } from "@nikcli-ai/ui/text-field"
-import { showToast } from "@nikcli-ai/ui/toast"
-import { iife } from "@nikcli-ai/util/iife"
+import type { ProviderAuthAuthorization } from "@ragu/sdk/httpapi"
+import { Button } from "@ragu/ui/button"
+import { useDialog } from "@ragu/ui/context/dialog"
+import { Dialog } from "@ragu/ui/dialog"
+import { Icon } from "@ragu/ui/icon"
+import { IconButton } from "@ragu/ui/icon-button"
+import type { IconName } from "@ragu/ui/icons/provider"
+import { List, type ListRef } from "@ragu/ui/list"
+import { ProviderIcon } from "@ragu/ui/provider-icon"
+import { Spinner } from "@ragu/ui/spinner"
+import { TextField } from "@ragu/ui/text-field"
+import { showToast } from "@ragu/ui/toast"
+import { iife } from "@ragu/util/iife"
 import { createMemo, Match, onCleanup, onMount, Switch } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Link } from "@/components/link"
@@ -265,20 +265,20 @@ export function DialogConnectProvider(props: { provider: string }) {
                 return (
                   <div class="flex flex-col gap-6">
                     <Switch>
-                      <Match when={provider().id === "nikcli"}>
+                      <Match when={provider().id === "ragu"}>
                         <div class="flex flex-col gap-4">
                           <div class="text-14-regular text-text-base">
-                            {language.t("provider.connect.nikcliZen.line1")}
+                            {language.t("provider.connect.raguZen.line1")}
                           </div>
                           <div class="text-14-regular text-text-base">
-                            {language.t("provider.connect.nikcliZen.line2")}
+                            {language.t("provider.connect.raguZen.line2")}
                           </div>
                           <div class="text-14-regular text-text-base">
-                            {language.t("provider.connect.nikcliZen.visit.prefix")}
+                            {language.t("provider.connect.raguZen.visit.prefix")}
                             <Link href="https://nikcli-ai.dev/zen" tabIndex={-1}>
-                              {language.t("provider.connect.nikcliZen.visit.link")}
+                              {language.t("provider.connect.raguZen.visit.link")}
                             </Link>
-                            {language.t("provider.connect.nikcliZen.visit.suffix")}
+                            {language.t("provider.connect.raguZen.visit.suffix")}
                           </div>
                         </div>
                       </Match>

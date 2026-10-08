@@ -12,7 +12,7 @@ import type {
   QuestionRequest,
   ReferenceConfig,
   SessionEntry,
-} from "@nikcli-ai/sdk/httpapi"
+} from "@ragu/sdk/httpapi"
 import type {
   Data,
   IntegrationInfo,
@@ -23,7 +23,7 @@ import type {
   SessionMessageInfo,
   SessionPendingInfo,
   SkillInfo,
-} from "@nikcli-ai/plugin/v2/tui/context"
+} from "@ragu/plugin/v2/tui/context"
 import type { useSDK } from "@tui/context/sdk"
 import type { useRoute } from "@tui/context/route"
 import type { useSync } from "@tui/context/sync"

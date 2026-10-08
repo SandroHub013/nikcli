@@ -5,12 +5,12 @@
 # Required env:
 #   HCLOUD_TOKEN     — Hetzner Cloud API token (Read & Write)
 # Optional env:
-#   SERVER_NAME      — default: nikcli-inference
+#   SERVER_NAME      — default: ragu-inference
 #   SERVER_TYPE      — default: cx22
 #   SERVER_IMAGE     — default: ubuntu-24.04
 #   SERVER_LOCATION  — default: fsn1
-#   SSH_KEY_NAME     — default: nikcli-inference
-#   SSH_KEY_PATH     — default: ~/.ssh/nikcli_inference
+#   SSH_KEY_NAME     — default: ragu-inference
+#   SSH_KEY_PATH     — default: ~/.ssh/ragu_inference
 #   ENV_LOCAL_PATH   — path to a local .env to ship to the server (REQUIRED for the deploy step)
 #
 # Usage:
@@ -24,12 +24,12 @@ set -euo pipefail
 
 : "${HCLOUD_TOKEN:?missing HCLOUD_TOKEN}"
 
-SERVER_NAME="${SERVER_NAME:-nikcli-inference}"
+SERVER_NAME="${SERVER_NAME:-ragu-inference}"
 SERVER_TYPE="${SERVER_TYPE:-cx22}"
 SERVER_IMAGE="${SERVER_IMAGE:-ubuntu-24.04}"
 SERVER_LOCATION="${SERVER_LOCATION:-fsn1}"
-SSH_KEY_NAME="${SSH_KEY_NAME:-nikcli-inference}"
-SSH_KEY_PATH="${SSH_KEY_PATH:-$HOME/.ssh/nikcli_inference}"
+SSH_KEY_NAME="${SSH_KEY_NAME:-ragu-inference}"
+SSH_KEY_PATH="${SSH_KEY_PATH:-$HOME/.ssh/ragu_inference}"
 PKG_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 hc() { hcloud "$@"; }
@@ -57,7 +57,7 @@ provision() {
       --image "$SERVER_IMAGE" \
       --location "$SERVER_LOCATION" \
       --ssh-key "$SSH_KEY_NAME" \
-      --label app=nikcli-inference
+      --label app=ragu-inference
     echo "[provision] waiting 15s for sshd"
     sleep 15
   fi
@@ -79,8 +79,8 @@ sync() {
   rsync -az --delete \
     --exclude node_modules --exclude dist --exclude .turbo --exclude logs --exclude .env \
     -e "ssh -i $SSH_KEY_PATH -o StrictHostKeyChecking=accept-new" \
-    "$PKG_DIR/" "root@$ip:/opt/nikcli-inference/package/"
-  ssh_to_server "chown -R nikcli:nikcli /opt/nikcli-inference"
+    "$PKG_DIR/" "root@$ip:/opt/ragu-inference/package/"
+  ssh_to_server "chown -R ragu:ragu /opt/ragu-inference"
 }
 
 app() {
@@ -89,10 +89,10 @@ app() {
   local ip; ip=$(server_ip)
   [[ -z "$ip" ]] && { echo "[app] no server"; exit 1; }
   echo "[app] uploading .env"
-  scp -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=accept-new "$ENV_LOCAL_PATH" "root@$ip:/opt/nikcli-inference/.env"
-  ssh_to_server "chown nikcli:nikcli /opt/nikcli-inference/.env && chmod 600 /opt/nikcli-inference/.env"
-  echo "[app] running deploy.sh as nikcli"
-  ssh_to_server "sudo -u nikcli bash /opt/nikcli-inference/package/deploy/deploy.sh"
+  scp -i "$SSH_KEY_PATH" -o StrictHostKeyChecking=accept-new "$ENV_LOCAL_PATH" "root@$ip:/opt/ragu-inference/.env"
+  ssh_to_server "chown ragu:ragu /opt/ragu-inference/.env && chmod 600 /opt/ragu-inference/.env"
+  echo "[app] running deploy.sh as ragu"
+  ssh_to_server "sudo -u ragu bash /opt/ragu-inference/package/deploy/deploy.sh"
 }
 
 case "${1:-all}" in

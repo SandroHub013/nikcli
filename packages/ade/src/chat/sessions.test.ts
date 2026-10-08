@@ -17,7 +17,7 @@ function data(patch: Partial<ChatData>): ChatData {
 }
 
 describe("the session list", () => {
-  test("only the open folder's: nikcli lists every non-git folder's sessions together", () => {
+  test("only the open folder's: ragu lists every non-git folder's sessions together", () => {
     const list = sessionEntries(
       data({
         session: [

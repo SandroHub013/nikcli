@@ -22,7 +22,7 @@ const toc = [
 <DocsLayout
   title="Orchestrating missions"
   subtitle="A mission is a dependency graph of features grouped into milestones — parallel where it can be, gated where it must be."
-  description="Guide to nikcli missions: milestones, features, dependsOn graphs, validation gates, running and pausing, and intervening in a running mission."
+  description="Guide to ragu missions: milestones, features, dependsOn graphs, validation gates, running and pausing, and intervening in a running mission."
   toc={toc}
 >
   <section id="what" class="doc-section">
@@ -190,9 +190,9 @@ await client.mission.feature.mutate({
 
   <section id="complete" class="doc-section">
     <h2>A complete mission</h2>
-    <DocCode language="ts" title="search-v2.ts">{`import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
+    <DocCode language="ts" title="search-v2.ts">{`import { createRaguClient } from "@ragu/sdk/httpapi"
 
-const client = createNikcliClient({
+const client = createRaguClient({
   baseUrl: "http://127.0.0.1:4096",
   directory: process.cwd(),
 })

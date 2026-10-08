@@ -2,14 +2,14 @@ import "@/index.css"
 import { ErrorBoundary, Show, lazy, type ParentProps } from "solid-js"
 import { Router, Route, Navigate } from "@solidjs/router"
 import { MetaProvider } from "@solidjs/meta"
-import { Font } from "@nikcli-ai/ui/font"
-import { MarkedProvider } from "@nikcli-ai/ui/context/marked"
-import { DiffComponentProvider } from "@nikcli-ai/ui/context/diff"
-import { CodeComponentProvider } from "@nikcli-ai/ui/context/code"
-import { I18nProvider } from "@nikcli-ai/ui/context"
-import { Diff } from "@nikcli-ai/ui/diff"
-import { Code } from "@nikcli-ai/ui/code"
-import { ThemeProvider } from "@nikcli-ai/ui/theme"
+import { Font } from "@ragu/ui/font"
+import { MarkedProvider } from "@ragu/ui/context/marked"
+import { DiffComponentProvider } from "@ragu/ui/context/diff"
+import { CodeComponentProvider } from "@ragu/ui/context/code"
+import { I18nProvider } from "@ragu/ui/context"
+import { Diff } from "@ragu/ui/diff"
+import { Code } from "@ragu/ui/code"
+import { ThemeProvider } from "@ragu/ui/theme"
 import { GlobalSyncProvider } from "@/context/global-sync"
 import { PermissionProvider } from "@/context/permission"
 import { LayoutProvider } from "@/context/layout"
@@ -23,7 +23,7 @@ import { FileProvider } from "@/context/file"
 import { CommentsProvider } from "@/context/comments"
 import { NotificationProvider } from "@/context/notification"
 import { ModelsProvider } from "@/context/models"
-import { DialogProvider } from "@nikcli-ai/ui/context/dialog"
+import { DialogProvider } from "@ragu/ui/context/dialog"
 import { CommandProvider } from "@/context/command"
 import { LanguageProvider, useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
@@ -44,7 +44,7 @@ function UiI18nBridge(props: ParentProps) {
 
 declare global {
   interface Window {
-    __NIKCLI__?: {
+    __RAGU__?: {
       updaterEnabled?: boolean
       serverPassword?: string
       deepLinks?: string[]
@@ -105,7 +105,7 @@ export function AppInterface(props: { defaultUrl?: string; children?: JSX.Elemen
     if (stored) return stored
     if (location.hostname.includes("nikcli.ai")) return "http://localhost:4096"
     if (import.meta.env.DEV)
-      return `http://${import.meta.env.VITE_NIKCLI_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_NIKCLI_SERVER_PORT ?? "4096"}`
+      return `http://${import.meta.env.VITE_RAGU_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_RAGU_SERVER_PORT ?? "4096"}`
 
     return window.location.origin
   }

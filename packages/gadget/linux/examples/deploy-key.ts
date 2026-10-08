@@ -1,7 +1,7 @@
 /**
  * Deploy key — a physical key switch that gates the agent's deploys.
  *
- * This file is the device half only. A nikcli mod (not included here) would
+ * This file is the device half only. A ragu mod (not included here) would
  * hook `tool.check` for `bash` calls matching `git push` or your deploy
  * script, ask this gadget `key.state`, and refuse the call while the key is
  * not turned, whatever the permission rules say. Turning the key is then the
@@ -10,7 +10,7 @@
  * Key switch between GPIO 22 and ground (pull-up): 0 = turned.
  */
 import { readFileSync, writeFileSync, existsSync } from "node:fs"
-import { Gadget } from "@nikcli-ai/gadget"
+import { Gadget } from "@ragu/gadget"
 
 const KEY_PIN = 22
 const SYSFS = "/sys/class/gpio"

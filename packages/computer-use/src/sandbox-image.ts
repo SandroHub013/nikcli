@@ -10,7 +10,7 @@ import { createHash } from "node:crypto"
  * preview over HTTP — never touching the host screen.
  */
 export namespace SandboxImage {
-  export const NAME = "nikcli-computer-sandbox"
+  export const NAME = "ragu-computer-sandbox"
 
   export const DEFAULT_WIDTH = 1280
   export const DEFAULT_HEIGHT = 800

@@ -9,7 +9,7 @@ import type { SpawnedSession } from "../host/shell"
  * disposes the Workbench and mounts a new one in the same document, and the
  * new one restores every pane by spawning again, so each save left a whole
  * set of agents running with no pane to reach them: measured, three agents
- * per update, a 580 MB nikcli among them, alive until ADE closed.
+ * per update, a 580 MB ragu among them, alive until ADE closed.
  *
  * `endAll` is the surface's half of what a reload does. A spawn that comes
  * back after it — a restore still awaiting `host.spawn` when the surface went

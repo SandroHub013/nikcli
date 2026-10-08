@@ -36,14 +36,14 @@ const toc = [
 
 <DocsLayout
   title="Configuration"
-  subtitle="How nikcli discovers, parses, merges, validates, and applies config across global, project, and runtime sources."
-  description="Guide to nikcli configuration discovery, parsing, merging, validation, and per-environment overrides."
+  subtitle="How ragu discovers, parses, merges, validates, and applies config across global, project, and runtime sources."
+  description="Guide to ragu configuration discovery, parsing, merging, validation, and per-environment overrides."
   toc={toc}
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
-      Config is resolved by <code>packages/nikcli/src/config/config.ts</code> with path discovery
+      Config is resolved by <code>packages/ragu/src/config/config.ts</code> with path discovery
       from <code>config/paths.ts</code>. Files are JSONC, support trailing commas, and are validated
       against <code>Config.Info</code>. Arrays for <code>plugin</code> and <code>instructions</code>
       are concatenated and deduplicated instead of simply replaced.
@@ -56,10 +56,10 @@ const toc = [
         <p>Discovered upward from the working directory and worktree unless project config is disabled.</p>
       </DocCard>
       <DocCard title="Config directories" eyebrow="Plugins">
-        <p>Directories ending in <code>.nikcli</code> and <code>NIKCLI_CONFIG_DIR</code> can provide config, commands, agents, modes, plugins, and instructions.</p>
+        <p>Directories ending in <code>.ragu</code> and <code>RAGU_CONFIG_DIR</code> can provide config, commands, agents, modes, plugins, and instructions.</p>
       </DocCard>
       <DocCard title="Inline env config" eyebrow="Override">
-        <p><code>NIKCLI_CONFIG_CONTENT</code> is merged after global/custom/project config, before directory extras are loaded.</p>
+        <p><code>RAGU_CONFIG_CONTENT</code> is merged after global/custom/project config, before directory extras are loaded.</p>
       </DocCard>
     </div>
   </section>
@@ -70,19 +70,19 @@ const toc = [
     <ol>
       <li>Remote well-known config from saved auth records with type <code>wellknown</code>. This is the lowest-precedence layer.</li>
       <li>Global config from <code>Global.Path.config/nikcli.json</code>.</li>
-      <li>Custom config file from <code>NIKCLI_CONFIG</code>.</li>
-      <li>Project config files discovered upward, unless <code>NIKCLI_DISABLE_PROJECT_CONFIG</code> is set.</li>
-      <li>Inline JSON from <code>NIKCLI_CONFIG_CONTENT</code>.</li>
-      <li>Config directories from <code>ConfigPaths.directories</code>, including global config dir, repo <code>.nikcli</code> dirs, home <code>.nikcli</code>, and <code>NIKCLI_CONFIG_DIR</code>.</li>
+      <li>Custom config file from <code>RAGU_CONFIG</code>.</li>
+      <li>Project config files discovered upward, unless <code>RAGU_DISABLE_PROJECT_CONFIG</code> is set.</li>
+      <li>Inline JSON from <code>RAGU_CONFIG_CONTENT</code>.</li>
+      <li>Config directories from <code>ConfigPaths.directories</code>, including global config dir, repo <code>.ragu</code> dirs, home <code>.ragu</code>, and <code>RAGU_CONFIG_DIR</code>.</li>
       <li>Command, agent, mode, and plugin entries loaded from those directories.</li>
       <li>Deprecated <code>mode</code> entries are migrated into <code>agent</code>.</li>
-      <li><code>NIKCLI_PERMISSION</code> merges into <code>permission</code>.</li>
+      <li><code>RAGU_PERMISSION</code> merges into <code>permission</code>.</li>
       <li>Legacy top-level <code>tools</code> is converted into permission rules.</li>
-      <li>Runtime flag overrides such as <code>NIKCLI_DISABLE_AUTOCOMPACT</code> and <code>NIKCLI_DISABLE_PRUNE</code> are applied.</li>
+      <li>Runtime flag overrides such as <code>RAGU_DISABLE_AUTOCOMPACT</code> and <code>RAGU_DISABLE_PRUNE</code> are applied.</li>
     </ol>
     <DocCallout type="warn" title="Directory extras load after inline config">
       <p>
-        Even though <code>NIKCLI_CONFIG_CONTENT</code> is the highest file/content layer, later
+        Even though <code>RAGU_CONFIG_CONTENT</code> is the highest file/content layer, later
         directory scans still load command, agent, mode, plugin, and <code>.nikcli/nikcli.json</code>
         entries from config directories.
       </p>
@@ -96,15 +96,15 @@ const toc = [
       <tbody>
         <tr><td>Global config dir</td><td><code>Global.Path.config</code></td><td>User-wide <code>nikcli.json</code>, command, agent, plugin, and skill files.</td></tr>
         <tr><td>Project config</td><td><code>Filesystem.findUp("nikcli.json")</code></td><td>Repo or subdirectory-specific overrides.</td></tr>
-        <tr><td><code>.nikcli</code> directories</td><td><code>Filesystem.up</code> from directory/worktree and home</td><td>Local config modules and plugin entrypoints.</td></tr>
-        <tr><td><code>NIKCLI_CONFIG</code></td><td>Exact env path</td><td>Single custom config file.</td></tr>
-        <tr><td><code>NIKCLI_CONFIG_DIR</code></td><td>Exact env directory</td><td>Additional config directory, always included in directory scan.</td></tr>
+        <tr><td><code>.ragu</code> directories</td><td><code>Filesystem.up</code> from directory/worktree and home</td><td>Local config modules and plugin entrypoints.</td></tr>
+        <tr><td><code>RAGU_CONFIG</code></td><td>Exact env path</td><td>Single custom config file.</td></tr>
+        <tr><td><code>RAGU_CONFIG_DIR</code></td><td>Exact env directory</td><td>Additional config directory, always included in directory scan.</td></tr>
       </tbody>
     </table>
     <DocCode language="bash">
-NIKCLI_CONFIG=/path/to/nikcli.json nikcli
-NIKCLI_CONFIG_DIR=/path/to/.nikcli nikcli
-NIKCLI_DISABLE_PROJECT_CONFIG=1 nikcli
+RAGU_CONFIG=/path/to/nikcli.json ragu
+RAGU_CONFIG_DIR=/path/to/.nikcli ragu
+RAGU_DISABLE_PROJECT_CONFIG=1 ragu
     </DocCode>
   </section>
 
@@ -193,16 +193,16 @@ NIKCLI_DISABLE_PROJECT_CONFIG=1 nikcli
   <section id="analytics" class="doc-section">
     <h2>Anonymous usage reporting</h2>
     <p>
-      nikcli keeps per-day analytics locally, for the <code>/analytics</code> view. It also contributes those
+      ragu keeps per-day analytics locally, for the <code>/analytics</code> view. It also contributes those
       per-day totals, anonymously, to the public stats at <a href="/data">nikcli-ai.dev/data</a> — which is how
       that page can show the models people actually run on their own provider keys rather than only what the
-      nikcli gateway served. <strong>This is on by default</strong>, because a sample of only the people who
+      ragu gateway served. <strong>This is on by default</strong>, because a sample of only the people who
       opted in would measure those people rather than the community.
     </p>
     <p>Turning it off, in order of precedence:</p>
     <pre class="doc-code"><code>{`# either environment variable, no config file needed
 DO_NOT_TRACK=1
-NIKCLI_DISABLE_ANALYTICS=1`}</code></pre>
+RAGU_DISABLE_ANALYTICS=1`}</code></pre>
     <pre class="doc-code"><code>{`{
   "analytics": {
     "share": false
@@ -220,15 +220,15 @@ NIKCLI_DISABLE_ANALYTICS=1`}</code></pre>
     <p>
       What is never sent: prompts, responses, file paths, repository names, session titles, account details, or
       anything about your environment. Set <code>analytics.endpoint</code> to send reports to your own collector
-      instead of nikcli's. A failed report is retried later and never surfaces an error. Run
-      <code>nikcli analytics show</code> to see exactly what would be sent.
+      instead of ragu's. A failed report is retried later and never surfaces an error. Run
+      <code>ragu analytics show</code> to see exactly what would be sent.
     </p>
   </section>
 
   <section id="providers" class="doc-section">
     <h2>Providers</h2>
     <p>
-      Provider entries are partial models.dev providers plus nikcli-specific options. Use
+      Provider entries are partial models.dev providers plus ragu-specific options. Use
       <code>enabled_providers</code> to allow only specific provider ids, or
       <code>disabled_providers</code> to remove automatic providers.
     </p>
@@ -418,22 +418,22 @@ NIKCLI_DISABLE_ANALYTICS=1`}</code></pre>
     <table class="doc-table">
       <thead><tr><th>Flag</th><th>Effect</th></tr></thead>
       <tbody>
-        <tr><td><code>NIKCLI_CONFIG</code></td><td>Load an explicit config file after global config.</td></tr>
-        <tr><td><code>NIKCLI_CONFIG_CONTENT</code></td><td>Merge inline JSON after project config.</td></tr>
-        <tr><td><code>NIKCLI_CONFIG_DIR</code></td><td>Add a config directory to directory scanning.</td></tr>
-        <tr><td><code>NIKCLI_DISABLE_PROJECT_CONFIG</code></td><td>Disable project-level file discovery and <code>.nikcli</code> project directories.</td></tr>
-        <tr><td><code>NIKCLI_PERMISSION</code></td><td>Inline permission overrides.</td></tr>
-        <tr><td><code>NIKCLI_DISABLE_DEFAULT_PLUGINS</code></td><td>Skip built-in external plugins.</td></tr>
-        <tr><td><code>NIKCLI_DISABLE_EXTERNAL_SKILLS</code></td><td>Disable external skill discovery.</td></tr>
-        <tr><td><code>NIKCLI_DISABLE_LSP_DOWNLOAD</code></td><td>Prevent automatic LSP server downloads.</td></tr>
-        <tr><td><code>NIKCLI_ENABLE_EXPERIMENTAL_MODELS</code></td><td>Keep alpha models in provider catalog.</td></tr>
-        <tr><td><code>NIKCLI_DISABLE_AUTOCOMPACT</code></td><td>Force <code>compaction.auto</code> false.</td></tr>
-        <tr><td><code>NIKCLI_DISABLE_PRUNE</code></td><td>Force <code>compaction.prune</code> false.</td></tr>
-        <tr><td><code>NIKCLI_SERVER_PASSWORD</code></td><td>Enable Basic Auth for server mode.</td></tr>
-        <tr><td><code>NIKCLI_SERVER_TAILSCALE_AUTH</code></td><td>Trust loopback Tailscale identity headers.</td></tr>
-        <tr><td><code>NIKCLI_EXPERIMENTAL_HTTPAPI</code></td><td>Enable typed HttpApi bridge.</td></tr>
-        <tr><td><code>NIKCLI_EXPERIMENTAL_LSP_TOOL</code></td><td>Enable the LSP tool in the registry.</td></tr>
-        <tr><td><code>NIKCLI_EXPERIMENTAL_LSP_TY</code></td><td>Use ty and disable pyright in the built-in LSP set.</td></tr>
+        <tr><td><code>RAGU_CONFIG</code></td><td>Load an explicit config file after global config.</td></tr>
+        <tr><td><code>RAGU_CONFIG_CONTENT</code></td><td>Merge inline JSON after project config.</td></tr>
+        <tr><td><code>RAGU_CONFIG_DIR</code></td><td>Add a config directory to directory scanning.</td></tr>
+        <tr><td><code>RAGU_DISABLE_PROJECT_CONFIG</code></td><td>Disable project-level file discovery and <code>.ragu</code> project directories.</td></tr>
+        <tr><td><code>RAGU_PERMISSION</code></td><td>Inline permission overrides.</td></tr>
+        <tr><td><code>RAGU_DISABLE_DEFAULT_PLUGINS</code></td><td>Skip built-in external plugins.</td></tr>
+        <tr><td><code>RAGU_DISABLE_EXTERNAL_SKILLS</code></td><td>Disable external skill discovery.</td></tr>
+        <tr><td><code>RAGU_DISABLE_LSP_DOWNLOAD</code></td><td>Prevent automatic LSP server downloads.</td></tr>
+        <tr><td><code>RAGU_ENABLE_EXPERIMENTAL_MODELS</code></td><td>Keep alpha models in provider catalog.</td></tr>
+        <tr><td><code>RAGU_DISABLE_AUTOCOMPACT</code></td><td>Force <code>compaction.auto</code> false.</td></tr>
+        <tr><td><code>RAGU_DISABLE_PRUNE</code></td><td>Force <code>compaction.prune</code> false.</td></tr>
+        <tr><td><code>RAGU_SERVER_PASSWORD</code></td><td>Enable Basic Auth for server mode.</td></tr>
+        <tr><td><code>RAGU_SERVER_TAILSCALE_AUTH</code></td><td>Trust loopback Tailscale identity headers.</td></tr>
+        <tr><td><code>RAGU_EXPERIMENTAL_HTTPAPI</code></td><td>Enable typed HttpApi bridge.</td></tr>
+        <tr><td><code>RAGU_EXPERIMENTAL_LSP_TOOL</code></td><td>Enable the LSP tool in the registry.</td></tr>
+        <tr><td><code>RAGU_EXPERIMENTAL_LSP_TY</code></td><td>Use ty and disable pyright in the built-in LSP set.</td></tr>
       </tbody>
     </table>
   </section>
@@ -444,7 +444,7 @@ NIKCLI_DISABLE_ANALYTICS=1`}</code></pre>
       <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
       <tbody>
         <tr><td>Config parse error includes JSONC input</td><td>Syntax error after token substitution.</td><td>Check the reported line/column and any <code>&#123;file:*&#125;</code> expansion.</td></tr>
-        <tr><td>Project config ignored</td><td><code>NIKCLI_DISABLE_PROJECT_CONFIG</code> is set.</td><td>Unset the flag or use <code>NIKCLI_CONFIG</code>.</td></tr>
+        <tr><td>Project config ignored</td><td><code>RAGU_DISABLE_PROJECT_CONFIG</code> is set.</td><td>Unset the flag or use <code>RAGU_CONFIG</code>.</td></tr>
         <tr><td>Custom LSP rejected</td><td>Unknown LSP id has no <code>extensions</code>.</td><td>Add the extension list or use a known built-in id.</td></tr>
         <tr><td>Plugin duplicated</td><td>Multiple layers append plugin arrays.</td><td>Config loader deduplicates plugin specs, but check versioned specs and force install behavior.</td></tr>
         <tr><td>Permission does not match</td><td>Later rules or stored always approvals override earlier ones.</td><td>Check merge order and project permission storage.</td></tr>
@@ -457,13 +457,13 @@ NIKCLI_DISABLE_ANALYTICS=1`}</code></pre>
     <table class="doc-table">
       <thead><tr><th>Need</th><th>File</th></tr></thead>
       <tbody>
-        <tr><td>Config loading and schema</td><td><code>packages/nikcli/src/config/config.ts</code></td></tr>
-        <tr><td>Config path discovery</td><td><code>packages/nikcli/src/config/paths.ts</code></td></tr>
-        <tr><td>TUI config</td><td><code>packages/nikcli/src/config/tui.ts</code>, <code>packages/nikcli/src/config/tui-schema.ts</code></td></tr>
-        <tr><td>Environment flags</td><td><code>@nikcli-ai/util/flag</code></td></tr>
-        <tr><td>Global paths</td><td><code>@nikcli-ai/util/global</code></td></tr>
-        <tr><td>Plugin install config patching</td><td><code>packages/nikcli/src/plugin/installer.ts</code></td></tr>
-        <tr><td>Connector CLI config patching</td><td><code>packages/nikcli/src/cli/cmd/connectors.ts</code></td></tr>
+        <tr><td>Config loading and schema</td><td><code>packages/ragu/src/config/config.ts</code></td></tr>
+        <tr><td>Config path discovery</td><td><code>packages/ragu/src/config/paths.ts</code></td></tr>
+        <tr><td>TUI config</td><td><code>packages/ragu/src/config/tui.ts</code>, <code>packages/ragu/src/config/tui-schema.ts</code></td></tr>
+        <tr><td>Environment flags</td><td><code>@ragu/util/flag</code></td></tr>
+        <tr><td>Global paths</td><td><code>@ragu/util/global</code></td></tr>
+        <tr><td>Plugin install config patching</td><td><code>packages/ragu/src/plugin/installer.ts</code></td></tr>
+        <tr><td>Connector CLI config patching</td><td><code>packages/ragu/src/cli/cmd/connectors.ts</code></td></tr>
       </tbody>
     </table>
   </section>

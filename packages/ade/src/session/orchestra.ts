@@ -59,7 +59,7 @@ export function slugify(name: string): string {
  * outside the user's folders, and because the user has to be able to find it.
  *
  * Not `<progetto>-ade`: that is the name people give their own ADE worktree,
- * and a spawn from `nikcli` put its checkout inside `nikcli-ade` (S24). The
+ * and a spawn from `ragu` put its checkout inside `ragu-ade` (S24). The
  * caller still checks the folder is not inside another repository.
  */
 export function worktreePlan(root: string, slug: string): { branch: string; path: string; container: string } {
@@ -153,7 +153,7 @@ export function modelArgs(agentId: string, model: string): string[] | { error: s
  *            its `--effort` flag logs "not supported for model" and the
  *            session runs at the model's own level
  *
- * nikcli's TUI has no effort flag: its effort is the agent's `variant`. An
+ * ragu's TUI has no effort flag: its effort is the agent's `variant`. An
  * effort that would be ignored is refused, never passed while the caller
  * believes it took.
  */
@@ -169,8 +169,8 @@ export function effortArgs(agentId: string, effort: string, model?: string): str
   if (!levels) {
     return {
       error:
-        agentId === "nikcli"
-          ? "nikcli non ha un flag per l'effort all'avvio: si imposta nel variant dell'agente; avvialo senza --effort"
+        agentId === "ragu"
+          ? "ragu non ha un flag per l'effort all'avvio: si imposta nel variant dell'agente; avvialo senza --effort"
           : `ADE non sa come scegliere l'effort per ${agentId}: avvialo senza --effort`,
     }
   }

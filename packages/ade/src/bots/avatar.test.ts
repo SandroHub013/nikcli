@@ -6,7 +6,7 @@ describe("avatarFor", () => {
     expect(avatarFor("revisore")).toEqual(avatarFor("revisore"))
   })
 
-  test("ignores case and surrounding space, as nikcli's identifiers are lower-case files", () => {
+  test("ignores case and surrounding space, as ragu's identifiers are lower-case files", () => {
     expect(avatarFor("Revisore ")).toEqual(avatarFor("revisore"))
   })
 

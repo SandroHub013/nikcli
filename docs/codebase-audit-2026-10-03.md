@@ -1,4 +1,4 @@
-# nikcli codebase audit — 2026-10-03
+# ragu codebase audit — 2026-10-03
 
 Commit `f42415fad4` (v1.423.0), branch `live-main`, working tree clean.
 All numbers below come from commands run in this session. Claims I could not verify
@@ -24,7 +24,7 @@ shipped zero ratified gates while 149 releases went out in 90 days.
 | Type safety         | Strong — 39/39 packages clean, `FIXME` count is 0                       |
 | Contract discipline | Strong — Effect HttpApi + generated clients + 11 `check:*` gates        |
 | Spec honesty        | Strong — statuses are pessimistic and dated, not aspirational           |
-| Test discipline     | Mixed — dense in nikcli/ade/tui, near-absent in identity/mobile/console |
+| Test discipline     | Mixed — dense in ragu/ade/tui, near-absent in identity/mobile/console |
 | Security            | One High finding, verified at source; rest of auth surface checks out   |
 | Release hygiene     | Weak — tags do not map to logical changes                               |
 | Repo hygiene        | Weak — 2.6 GB `.git`, 89 MB of tracked binaries                         |
@@ -33,7 +33,7 @@ shipped zero ratified gates while 149 releases went out in 90 days.
 
 ### F1 — Arbitrary file write via HTTP `file.write` (High)
 
-`packages/nikcli/src/server/httpapi/file.ts:195-203`
+`packages/ragu/src/server/httpapi/file.ts:195-203`
 
 ```ts
 const absolutePath = path.isAbsolute(requestedPath) ? requestedPath : path.join(ctx.directory, requestedPath)
@@ -44,7 +44,7 @@ yield * Effect.promise(() => Bun.write(normalizedPath, payload.content))
 `path.normalize` is not a containment check — it leaves `/etc/passwd` untouched and
 resolves `../../` without rejecting it. The sibling handlers `content` (`:186`) and
 `list` (`:177`) both route through `File.Service`, which enforces
-`containsPath` → `Filesystem.realpathInside` (`packages/nikcli/src/file/index.ts:327`,
+`containsPath` → `Filesystem.realpathInside` (`packages/ragu/src/file/index.ts:327`,
 `:476`). That guard is well built — it resolves symlinks, walks ancestors for
 non-existent write targets, and rejects cross-drive paths on Windows. The `write`
 handler is the single HTTP path that bypasses it, and it also skips the permission
@@ -56,7 +56,7 @@ primitive already exists; this is a wiring omission, not a design gap.
 ### F2 — Release tags absorb uncommitted work (High, process)
 
 `script/release-github.ts:64-66` does `git add <dist tarballs>` then
-`git commit --allow-empty`. `packages/nikcli/dist` is gitignored (`git ls-files` → 0
+`git commit --allow-empty`. `packages/ragu/dist` is gitignored (`git ls-files` → 0
 tracked files), so the `git add` stages nothing and the commit takes only whatever was
 already staged. The last release, `f42415fad4`, is 58 files / 2,797 insertions /
 2,696 deletions — it carries the entire plugin-runtime feature
@@ -73,7 +73,7 @@ Fix: make the release script fail on a dirty tree, or bump + commit versions its
 
 `turbo.json:6` — `"typecheck": { "inputs": ["$TURBO_DEFAULT$", "!**/test/**"] }`
 
-Editing a test file does not invalidate the typecheck cache. `packages/nikcli` runs
+Editing a test file does not invalidate the typecheck cache. `packages/ragu` runs
 `tsc --noEmit` over a tree that includes `test/`, so a cached green result can mask a
 type error introduced in a test. Since the full suite does not run in CI, this is the
 only thing that would have caught it.
@@ -89,7 +89,7 @@ proposed changes or performance targets have shipped."
 
 The blocker is EOT-00, which gates every other promotion. Per the ledger it is open
 because "Still no real Ghostty leg, and the tmux leg is an emulated environment. No
-promotion, no ratified budgets." `packages/nikcli/script/tui-startup.ts:428-436`
+promotion, no ratified budgets." `packages/ragu/script/tui-startup.ts:428-436`
 confirms the harness can only report `realTerminalCoverage: "unverified"` unless a real
 Ghostty or tmux process is the parent — it detects them, it cannot manufacture them.
 
@@ -103,7 +103,7 @@ permanently open makes "gates every other promotion" a dead clause.
 negligible (9 `test.skip`, 3 `describe.skip`, 4 `it.skip`, 4 `.todo`, 5 `test.failing`).
 
 Density is not the problem in `tui` — its 83k LOC has 0 colocated tests, but 95 test
-files in `packages/nikcli/test/tui/` (88 importing `@nikcli-ai/tui`) cover it from
+files in `packages/ragu/test/tui/` (88 importing `@ragu/tui`) cover it from
 outside. Naive per-package density misreads this.
 
 The genuinely thin areas:
@@ -120,7 +120,7 @@ The genuinely thin areas:
 | `app`      | 53,645  | 46         | 0.86         | Medium                                  |
 | `llm`      | 10,104  | 23         | 2.28         | OK                                      |
 | `ade`      | 152,957 | 342        | 2.24         | OK                                      |
-| `nikcli`   | 166,560 | 518        | 3.11         | OK                                      |
+| `ragu`   | 166,560 | 518        | 3.11         | OK                                      |
 
 `identity` is the one to worry about: it holds PKCE, device-code, passkeys, token
 issuance and rate limiting, and it is where the second confirmed bug lives (below).
@@ -150,8 +150,8 @@ a miss as already-redeemed).
 | `packages/web/src/app/AppShell.tsx`           | 2,771 |                                       |
 | `packages/ade/src/bots/bots.tsx`              | 2,502 |                                       |
 | `packages/tui/src/component/prompt/index.tsx` | 2,486 |                                       |
-| `packages/nikcli/src/provider/provider.ts`    | 2,445 |                                       |
-| `packages/nikcli/src/config/config.ts`        | 2,429 |                                       |
+| `packages/ragu/src/provider/provider.ts`    | 2,445 |                                       |
+| `packages/ragu/src/config/config.ts`        | 2,429 |                                       |
 
 `workbench.tsx` at 9,519 lines is the outlier — over 3x the next ade file. Note that
 `specs/README.md` evidence row B18 explicitly anticipates this: "Large coordination
@@ -166,8 +166,8 @@ at 9,270 are generated and excluded from judgement.)
 
 `.git` is 2.6 GB. The tracked tree is 175 MB, of which ~89 MB is binary assets:
 
-- `packages/console/app/src/asset/lander/nikcli-comparison-min.mp4` — 16.5 MB
-- `packages/console/app/src/asset/lander/nikcli-min.mp4` — 10.1 MB
+- `packages/console/app/src/asset/lander/ragu-comparison-min.mp4` — 16.5 MB
+- `packages/console/app/src/asset/lander/ragu-min.mp4` — 10.1 MB
 - 3 x `packages/ade/design/*.html` at ~3.5 MB each (self-contained design exports)
 - 2 x `artifacts/tui/*/screen.json` at ~1.7 MB each
 
@@ -180,7 +180,7 @@ Worth stating plainly, because these are the parts a future change could easily 
 
 - **Typecheck is green.** 39/39 packages, exit 0. `FIXME` count is 0.
 - **The HttpApi contract is a real single source of truth.** 45 contract files under
-  `packages/nikcli/src/server/httpapi/`, a 100-line `inventory.ts` that all
+  `packages/ragu/src/server/httpapi/`, a 100-line `inventory.ts` that all
   `check:routes` assertions flow through, and generated clients committed.
 - **1,605 lines of custom static gates** across 11 `check:*` scripts (network egress,
   workspace isolation, account-required, open payloads, plugin v2, observability
@@ -192,7 +192,7 @@ Worth stating plainly, because these are the parts a future change could easily 
   a documented no-op (`console.log("(strict mode)")` at `:17`) — AGENTS.md describes
   this accurately rather than overselling it.
 - **AGENTS.md is accurate.** I verified its two most load-bearing claims: the ~350-file
-  nikcli suite does not run in CI (`script/ci-validate.ts` has 2 advisory steps at
+  ragu suite does not run in CI (`script/ci-validate.ts` has 2 advisory steps at
   `:120`/`:129` and every test reference is a comment explaining the omission), and
   `windows-compat.yml` has exactly 4 `bun test` steps (`:86`, `:90`, `:94`, `:98`).
 - **Path containment is well engineered** where it is used — symlink resolution,
@@ -209,7 +209,7 @@ repeated:
   `packages/tui/src/component/prompt/index.tsx:148-160` calls `signal(SIGINT, SIG_IGN)`
   / `signal(SIGTERM, SIG_IGN)` and then installs its own `DispatchSource` handlers.
   The accurate statement: the `tui` package has no app-level signal handling (that
-  lives in `packages/nikcli/src/cli/handlers/{default,serve}.ts`), but the prompt's
+  lives in `packages/ragu/src/cli/handlers/{default,serve}.ts`), but the prompt's
   voice-recording path deliberately intercepts both signals and exits `0`.
 - Claim: test count "~599". That is only the `test/` directory. The repo has 1,069
   test files once colocated `src/**/*.test.ts` files are counted.

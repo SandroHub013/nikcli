@@ -26,7 +26,7 @@ import {
   QuestionRequest,
   QuestionAnswer,
   QuestionInfo,
-} from "@nikcli-ai/sdk/httpapi"
+} from "@ragu/sdk/httpapi"
 import { createStore } from "solid-js/store"
 import { useData } from "../context"
 import { useDiffComponent } from "../context/diff"
@@ -43,9 +43,9 @@ import { DiffChanges } from "./diff-changes"
 import { Markdown } from "./markdown"
 import { ImagePreview } from "./image-preview"
 import { ArtifactPreview } from "./artifact-preview"
-import { findLast } from "@nikcli-ai/util/array"
-import { getDirectory as _getDirectory, getFilename } from "@nikcli-ai/util/path"
-import { checksum } from "@nikcli-ai/util/encode"
+import { findLast } from "@ragu/util/array"
+import { getDirectory as _getDirectory, getFilename } from "@ragu/util/path"
+import { checksum } from "@ragu/util/encode"
 import { Tooltip } from "./tooltip"
 import { IconButton } from "./icon-button"
 import { createAutoScroll } from "../hooks"

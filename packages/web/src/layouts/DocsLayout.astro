@@ -23,7 +23,7 @@ const {
   title = "Documentation", 
   subtitle, 
   toc = [],
-  description = "Official documentation for Nikcli. Learn how to install, configure, and use the terminal-native AI development agent."
+  description = "Official documentation for Ragu Code. Learn how to install, configure, and use the terminal-native AI development agent."
 } = Astro.props;
 
 const pathname = Astro.url.pathname;
@@ -36,12 +36,12 @@ const pathname = Astro.url.pathname;
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
     
     <!-- SEO & Metadata -->
-    <title>{title} - Nikcli Docs</title>
+    <title>{title} - Ragu Code Docs</title>
     <meta name="description" content={description} />
-    <meta name="author" content="Nikcli" />
-    <meta name="keywords" content="nikcli, ai agent, development agent, terminal, cli, lsp, mcp, open source, documentation" />
+    <meta name="author" content="Ragu Code" />
+    <meta name="keywords" content="ragu, ai agent, development agent, terminal, cli, lsp, mcp, open source, documentation" />
     
-    <SocialMeta title={`${title} - Nikcli Docs`} description={description} />
+    <SocialMeta title={`${title} - Ragu Code Docs`} description={description} />
     <link rel="alternate" type="text/markdown" href={`/.llm?path=${encodeURIComponent(pathname)}`} title={`${title} as Markdown`} />
 
     <!-- Fonts: Syne (display) + Figtree (body) -->
@@ -115,7 +115,7 @@ const pathname = Astro.url.pathname;
         <div class="flex items-center gap-2.5">
           <img
             src="/brand/wordmark-light.png"
-            alt="nikcli"
+            alt="ragu"
             width="79"
             height="26"
             loading="lazy"
@@ -124,7 +124,7 @@ const pathname = Astro.url.pathname;
           />
           <img
             src="/brand/wordmark-dark.png"
-            alt="nikcli"
+            alt="ragu"
             width="79"
             height="26"
             loading="lazy"
@@ -147,7 +147,7 @@ const pathname = Astro.url.pathname;
     <script>
       const initDocs = async () => {
         if (typeof window === 'undefined') return;
-        (window as Window & { __nikcliDocsCleanup?: () => void }).__nikcliDocsCleanup?.();
+        (window as Window & { __raguDocsCleanup?: () => void }).__raguDocsCleanup?.();
 
         const cleanups: Array<() => void> = [];
         const mobileBtn = document.getElementById('mobile-docs-toggle');
@@ -196,7 +196,7 @@ const pathname = Astro.url.pathname;
           sidebar?.classList.add(...mobileSidebarClasses);
           document.body.style.overflow = 'hidden';
           renderButton(true);
-          window.dispatchEvent(new CustomEvent('nikcli:mobile-overlay-open', { detail: { source: 'docs' } }));
+          window.dispatchEvent(new CustomEvent('ragu:mobile-overlay-open', { detail: { source: 'docs' } }));
         };
 
         renderButton(false);
@@ -213,8 +213,8 @@ const pathname = Astro.url.pathname;
           if (!(event instanceof CustomEvent) || event.detail?.source === 'docs') return;
           closeSidebar();
         };
-        window.addEventListener('nikcli:mobile-overlay-open', handleExternalOpen);
-        cleanups.push(() => window.removeEventListener('nikcli:mobile-overlay-open', handleExternalOpen));
+        window.addEventListener('ragu:mobile-overlay-open', handleExternalOpen);
+        cleanups.push(() => window.removeEventListener('ragu:mobile-overlay-open', handleExternalOpen));
 
         const handleEscape = (event: KeyboardEvent) => {
           if (event.key === 'Escape') closeSidebar();
@@ -271,20 +271,20 @@ const pathname = Astro.url.pathname;
           cleanups.push(() => tocObserver.disconnect());
         }
 
-        (window as Window & { __nikcliDocsCleanup?: () => void }).__nikcliDocsCleanup = () => {
+        (window as Window & { __raguDocsCleanup?: () => void }).__raguDocsCleanup = () => {
           closeSidebar();
           cleanups.forEach((cleanup) => cleanup());
         };
       };
 
-      const win = window as Window & { __nikcliDocsPageLoad?: () => void };
-      if (win.__nikcliDocsPageLoad) {
-        document.removeEventListener('astro:page-load', win.__nikcliDocsPageLoad);
+      const win = window as Window & { __raguDocsPageLoad?: () => void };
+      if (win.__raguDocsPageLoad) {
+        document.removeEventListener('astro:page-load', win.__raguDocsPageLoad);
       }
-      win.__nikcliDocsPageLoad = () => initDocs();
+      win.__raguDocsPageLoad = () => initDocs();
 
       initDocs();
-      document.addEventListener('astro:page-load', win.__nikcliDocsPageLoad);
+      document.addEventListener('astro:page-load', win.__raguDocsPageLoad);
     </script>
   </body>
 </html>

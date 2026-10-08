@@ -1,4 +1,4 @@
-import { wavEnvelope, type PlaybackMeter } from "@nikcli-ai/voice/core"
+import { wavEnvelope, type PlaybackMeter } from "@ragu/voice/core"
 import { t } from "../i18n"
 
 /**

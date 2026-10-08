@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 /**
  * Publishes all library packages to npm.
- * Skips: nikcli (requires platform binary builds), private packages.
+ * Skips: ragu (requires platform binary builds), private packages.
  *
  * Usage:
  *   bun script/publish-packages.ts
- *   NIKCLI_CHANNEL=latest bun script/publish-packages.ts
+ *   RAGU_CHANNEL=latest bun script/publish-packages.ts
  */
 
 import { $ } from "bun"
@@ -16,7 +16,7 @@ const root = new URL("..", import.meta.url).pathname
 process.chdir(root)
 
 const channel = await (async () => {
-  if (process.env["NIKCLI_CHANNEL"]) return process.env["NIKCLI_CHANNEL"]
+  if (process.env["RAGU_CHANNEL"]) return process.env["RAGU_CHANNEL"]
   const branch = await $`git branch --show-current`.text().then((x) => x.trim())
   return branch === "main" ? "latest" : branch
 })()
@@ -95,16 +95,16 @@ async function publishSource(pkgDir: string) {
   }
 }
 
-// ── @nikcli-ai/plugin ────────────────────────────────────────────────────────
-await run("@nikcli-ai/plugin", async () => {
+// ── @ragu/plugin ────────────────────────────────────────────────────────
+await run("@ragu/plugin", async () => {
   const dir = join(root, "packages/plugin")
   process.chdir(dir)
   await import("../packages/plugin/script/publish.ts")
   process.chdir(root)
 })
 
-// ── @nikcli-ai/plugin-* (10 plugins) ─────────────────────────────────────────
-await run("@nikcli-ai/plugin-* (10 plugins)", async () => {
+// ── @ragu/plugin-* (10 plugins) ─────────────────────────────────────────
+await run("@ragu/plugin-* (10 plugins)", async () => {
   const dir = join(root, "packages/plugin")
   const res = Bun.spawnSync(["bun", "run", "publish:plugins"], {
     cwd: dir,
@@ -114,8 +114,8 @@ await run("@nikcli-ai/plugin-* (10 plugins)", async () => {
   if (res.exitCode !== 0) throw new Error(res.stderr.toString().trim().split("\n").pop() ?? "failed")
 })
 
-// ── @nikcli-ai/sdk ───────────────────────────────────────────────────────────
-await run("@nikcli-ai/sdk", async () => {
+// ── @ragu/sdk ───────────────────────────────────────────────────────────
+await run("@ragu/sdk", async () => {
   const dir = join(root, "packages/sdk/js")
   const distDir = join(dir, "dist")
   if (!existsSync(distDir)) throw new Error("no dist — run packages/sdk/js/script/build.ts first")
@@ -136,18 +136,18 @@ await run("@nikcli-ai/sdk", async () => {
   }
 })
 
-// ── @nikcli-ai/script ────────────────────────────────────────────────────────
-await run("@nikcli-ai/script", async () => {
+// ── @ragu/script ────────────────────────────────────────────────────────
+await run("@ragu/script", async () => {
   await publishSource(join(root, "packages/script"))
 })
 
-// ── @nikcli-ai/app ───────────────────────────────────────────────────────────
-await run("@nikcli-ai/app", async () => {
+// ── @ragu/app ───────────────────────────────────────────────────────────
+await run("@ragu/app", async () => {
   await publishSource(join(root, "packages/app"))
 })
 
-// ── @nikcli-ai/ui ────────────────────────────────────────────────────────────
-await run("@nikcli-ai/ui", async () => {
+// ── @ragu/ui ────────────────────────────────────────────────────────────
+await run("@ragu/ui", async () => {
   await publishSource(join(root, "packages/ui"))
 })
 

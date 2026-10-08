@@ -1,0 +1,113 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
+import { InstanceState } from "@/effect"
+import { zod, zodObjectMode } from "@ragu/util/effect-zod"
+import { Context, Effect, Layer, Schema } from "effect"
+
+export namespace SessionStatus {
+  // Legacy callers depend on `parse({type:"idle", extra: 1})` stripping unknown keys; the
+  // walker defaults to `.strict()` which would throw, so opt each variant into "strip" mode.
+  const strip = zodObjectMode("strip")
+  export const InfoSchema = Schema.Union([
+    Schema.Struct({ type: Schema.Literal("idle") }).annotate(strip),
+    Schema.Struct({
+      type: Schema.Literal("retry"),
+      attempt: Schema.Number,
+      message: Schema.String,
+      next: Schema.Number,
+    }).annotate(strip),
+    Schema.Struct({
+      type: Schema.Literal("busy"),
+      since: Schema.Number,
+    }).annotate(strip),
+    // Legacy: busy without 'since' for backward compatibility
+    Schema.Struct({
+      type: Schema.Literal("busy"),
+    }).annotate(strip),
+  ]).annotate({ identifier: "SessionStatus" })
+  export const Info = zod(InfoSchema)
+  export type Info = Schema.Schema.Type<typeof InfoSchema>
+
+  export const Event = {
+    Status: BusEvent.schema(
+      "session.status",
+      Schema.Struct({
+        sessionID: Schema.String,
+        status: InfoSchema,
+      }),
+    ),
+    // deprecated
+    Idle: BusEvent.schema(
+      "session.idle",
+      Schema.Struct({
+        sessionID: Schema.String,
+      }),
+    ),
+  }
+
+  const state = InstanceState.make<Record<string, Info>>(() => Effect.succeed({}))
+
+  export class Service extends Context.Service<
+    Service,
+    {
+      get(sessionID: string): Effect.Effect<Info>
+      list(): Effect.Effect<Record<string, Info>>
+      set(sessionID: string, status: Info): Effect.Effect<void>
+      hydrate(sessionID: string, status: Info): Effect.Effect<void>
+    }
+  >()("SessionStatus.Service") {}
+
+  export const layer = Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const cache = yield* state
+      return Service.of({
+        get(sessionID) {
+          return InstanceState.get(cache).pipe(
+            Effect.map(
+              (statuses) =>
+                statuses[sessionID] ?? {
+                  type: "idle" as const,
+                },
+            ),
+          )
+        },
+        list() {
+          return InstanceState.get(cache)
+        },
+        set(sessionID, status) {
+          return InstanceState.get(cache).pipe(
+            Effect.map((statuses) => {
+              Bus.publish(Event.Status, {
+                sessionID,
+                status,
+              })
+              if (status.type === "idle") {
+                // deprecated
+                Bus.publish(Event.Idle, {
+                  sessionID,
+                })
+                delete statuses[sessionID]
+                return
+              }
+              statuses[sessionID] = status
+            }),
+          )
+        },
+        hydrate(sessionID, status) {
+          return InstanceState.get(cache).pipe(
+            Effect.map((statuses) => {
+              if (status.type === "idle") {
+                delete statuses[sessionID]
+                return
+              }
+              statuses[sessionID] = status
+            }),
+          )
+        },
+      })
+    }),
+  )
+
+  export const defaultLayer = layer
+}

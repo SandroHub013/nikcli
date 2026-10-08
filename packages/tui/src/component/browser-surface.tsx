@@ -16,7 +16,7 @@ import { RGBA } from "@opentui/core"
 import type { BoxRenderable, MouseEvent } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { createEffect, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
-import { encodeSixel, pickDecoder, resize } from "@nikcli-ai/tui-image"
+import { encodeSixel, pickDecoder, resize } from "@ragu/tui-image"
 import { BrowserFramePump, cellSize, type FrameTransmission, type PumpStats } from "@tui/util/browser-frames"
 import { InputScheduler } from "@tui/util/browser-input"
 import { fitOverlayCells, registerNativeOverlay, type NativeOverlay } from "@tui/util/native-overlay"
@@ -77,7 +77,7 @@ export interface BrowserSurfaceProps {
 
 /** Session names are per surface instance: two dialogs must not fight over one page. */
 function surfaceSessionName(): string {
-  return `nikcli-preview-${process.pid}-${Math.floor(Math.random() * 0xffff).toString(16)}`
+  return `ragu-preview-${process.pid}-${Math.floor(Math.random() * 0xffff).toString(16)}`
 }
 
 export function BrowserSurface(props: BrowserSurfaceProps) {
@@ -158,7 +158,7 @@ export function BrowserSurface(props: BrowserSurfaceProps) {
   }
 
   async function connect() {
-    const { ensureDaemon, rpc, socketPathFor } = await import("@nikcli-ai/browser-control/daemon-client")
+    const { ensureDaemon, rpc, socketPathFor } = await import("@ragu/browser-control/daemon-client")
     const directory = sync.data.path.directory || process.cwd()
     socketPath = await socketPathFor(directory)
     await ensureDaemon(socketPath)
@@ -189,7 +189,7 @@ export function BrowserSurface(props: BrowserSurfaceProps) {
     const abort = new AbortController()
     streamAbort = abort
 
-    const { openScreencast } = await import("@nikcli-ai/browser-control/daemon-client")
+    const { openScreencast } = await import("@ragu/browser-control/daemon-client")
     const overlay = props.renderer === "overlay"
     const { capture } = geometry()
     streamedFps = frameRate()
@@ -424,7 +424,7 @@ export function BrowserSurface(props: BrowserSurfaceProps) {
     clearTimeout(rateTimer)
     pump.destroy()
     if (startRequested && socketPath) {
-      void import("@nikcli-ai/browser-control/daemon-client")
+      void import("@ragu/browser-control/daemon-client")
         .then(({ rpc }) => rpc(socketPath!, "remove", { name }))
         .catch(() => {})
     }

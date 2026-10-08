@@ -3,7 +3,7 @@
  *
  * The rules for reading the answers are in `runners.ts`; this only asks. The
  * status commands are quick and local — `claude auth status`, `codex login
- * status`, `nikcli auth list` read a credentials file and print — so they run
+ * status`, `ragu auth list` read a credentials file and print — so they run
  * each time the Provider section opens, and nothing is cached that could say
  * "collegato" about an account the user has since signed out of.
  */
@@ -34,7 +34,7 @@ export async function providerState(runner: Runner): Promise<ProviderState> {
   if (!runner.status) return { ...base, login: readLoginStatus(runner, "", null) }
 
   /*
-   * Through a pty for every runner, nikcli included: `nikcliBot` runs only
+   * Through a pty for every runner, ragu included: `raguBot` runs only
    * the two commands the bot form needs, and the host is right to keep it so.
    */
   if (!host.spawn) return { ...base, login: { state: "unknown", detail: t("bots.provider.statusUnavailable") } }

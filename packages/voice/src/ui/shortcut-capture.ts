@@ -16,10 +16,10 @@ import {
   VOICE_COMMAND_TRANSCRIPTION,
 } from "../settings/shortcuts"
 import type { VoiceSettings } from "../settings/model"
-import { normalizeKeyName, parseChord, type Binding, type Platform } from "@nikcli-ai/ade/keyboard/keymap"
-import { DEFAULT_BINDINGS } from "@nikcli-ai/ade/keyboard/bindings"
+import { normalizeKeyName, parseChord, type Binding, type Platform } from "@ragu/ade/keyboard/keymap"
+import { DEFAULT_BINDINGS } from "@ragu/ade/keyboard/bindings"
 import type { LanguageOption } from "../settings/languages"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 
 export interface KeyInput {
   key: string

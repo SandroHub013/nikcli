@@ -41,13 +41,13 @@ describe("names", () => {
 })
 
 test("a worktree goes beside the project, never inside a folder named like the user's own ADE worktree", () => {
-  expect(worktreePlan("C:\\Users\\me\\Favorites\\nikcli\\", "revisore")).toEqual({
+  expect(worktreePlan("C:\\Users\\me\\Favorites\\ragu\\", "revisore")).toEqual({
     branch: "ade/revisore",
-    path: "C:\\Users\\me\\Favorites\\nikcli-worktrees\\revisore",
-    container: "C:\\Users\\me\\Favorites\\nikcli-worktrees",
+    path: "C:\\Users\\me\\Favorites\\ragu-worktrees\\revisore",
+    container: "C:\\Users\\me\\Favorites\\ragu-worktrees",
   })
   expect(worktreePlan("/home/me/app", "x").path).toBe("/home/me/app-worktrees/x")
-  expect(worktreePlan("C:\\Users\\me\\Favorites\\nikcli", "codex").path).not.toContain("nikcli-ade")
+  expect(worktreePlan("C:\\Users\\me\\Favorites\\ragu", "codex").path).not.toContain("ragu-ade")
 })
 
 test("a worktree starts from the base asked for, and a base cannot be an option", () => {
@@ -135,7 +135,7 @@ describe("effort and dispatch profiles at spawn", () => {
     })
     expect(effortArgs("agy", "high")).toEqual({ error: expect.stringContaining("--model") })
     expect(effortArgs("agy", "high", "claude-sonnet-4-6")).toEqual({ error: expect.stringContaining("non ha livelli") })
-    expect(effortArgs("nikcli", "high")).toEqual({ error: expect.stringContaining("variant") })
+    expect(effortArgs("ragu", "high")).toEqual({ error: expect.stringContaining("variant") })
     expect(effortArgs("opencode", "high")).toEqual({ error: expect.stringContaining("senza --effort") })
   })
 

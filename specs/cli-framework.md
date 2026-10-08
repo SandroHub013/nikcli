@@ -4,7 +4,7 @@
 
 `cli-main.ts` must import `TuiThreadCommand` eagerly, because yargs needs the
 default command's module to build its parser. That module _is_ the TUI, so every
-invocation — `nikcli --help`, `nikcli heap`, a shell completion — evaluates it.
+invocation — `ragu --help`, `ragu heap`, a shell completion — evaluates it.
 
 opencode v2 does not have this problem. Its command tree is a dependency-free
 spec (`commands/commands.ts`), every handler is a `() => import()` including the
@@ -40,7 +40,7 @@ aliases})` builds the tree as data. Ported from opencode, including the detail
   yargs allowed a list, and 36 aliases are in use.
 - `src/cli/framework/runtime.ts` — `Runtime.handlers(tree, loaders)` flattens the
   loader tree; `Runtime.run` attaches `Command.withHandler` that imports on call.
-  nikcli's handlers are plain async functions, so the runtime awaits them.
+  ragu's handlers are plain async functions, so the runtime awaits them.
 - `src/cli/framework/yargs-bridge.ts` — calls a yargs handler from an effect one.
   Leaves export their handler; a subcommand's lives inside the parent's `builder`
   closure and is reached by replaying that builder against a recorder.
@@ -184,9 +184,9 @@ Each was found by running the CLI, and each is handled explicitly rather than
 papered over.
 
 **The root cannot own a positional.** yargs special-cases its default command, so
-`nikcli [project]` and `nikcli heap --detailed` both work. Effect has no such
+`ragu [project]` and `ragu heap --detailed` both work. Effect has no such
 rule: an optional positional on a command that also has subcommands swallows the
-subcommand name as soon as a flag follows, and _every_ `nikcli <cmd> --flag`
+subcommand name as soon as a flag follows, and _every_ `ragu <cmd> --flag`
 routes to the root handler — the TUI — instead. The generator therefore emits the
 root's positionals as flags, and `normalizeArgv` rewrites a leading path back
 into `--project`, so the spelling users type is unchanged. The declaration parity
@@ -194,7 +194,7 @@ test encodes this exception with its reason.
 
 **`--log-level` is effect's, not ours.** It ships as a built-in global flag;
 declaring a second one is a hard `Duplicate flag name` error at startup. Its
-choices are lower-case where nikcli has always taken `DEBUG`, so `normalizeArgv`
+choices are lower-case where ragu has always taken `DEBUG`, so `normalizeArgv`
 folds the value before the parser sees it.
 
 **`--` is not populated.** yargs did it via

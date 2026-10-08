@@ -65,7 +65,7 @@ function LoginFormInner() {
             className="w-full rounded-[var(--radius-md)] border border-terminal-border bg-terminal-panel px-4 py-3 text-[13px] text-terminal-text placeholder:text-terminal-muted/50 focus:border-terminal-accent focus:outline-none focus:ring-2 focus:ring-terminal-accent/20 transition-colors duration-150"
           />
           <p className="text-[12px] leading-5 text-terminal-muted">
-            Your nikcli server (the Railway deployment, or a local <code>nikcli serve</code>).
+            Your ragu server (the Railway deployment, or a local <code>ragu serve</code>).
           </p>
           <button
             type="submit"
@@ -91,7 +91,7 @@ function LoginFormInner() {
 
           <div className="flex gap-1 rounded-[var(--radius-md)] border border-terminal-border bg-terminal-panel p-1">
             <button type="button" onClick={() => setMode("oauth")} className={tabClass(mode === "oauth")}>
-              Nikcli account
+              Ragu account
             </button>
             <button type="button" onClick={() => setMode("account")} className={tabClass(mode === "account")}>
               Account
@@ -103,7 +103,7 @@ function LoginFormInner() {
 
           {mode === "oauth" ? (
             <p className="text-[13px] leading-6 text-terminal-muted">
-              Continue securely with GitHub or an email code through the configured Nikcli identity issuer.
+              Continue securely with GitHub or an email code through the configured Ragu identity issuer.
             </p>
           ) : mode === "account" ? (
             <div className="space-y-4">
@@ -161,7 +161,7 @@ function LoginFormInner() {
                 </button>
               </div>
               <p className="text-[12px] leading-5 text-terminal-muted">
-                The shared CLI/mobile/web token. Create one with <code>nikcli mobile pair</code>.
+                The shared CLI/mobile/web token. Create one with <code>ragu mobile pair</code>.
               </p>
             </div>
           )}
@@ -174,7 +174,7 @@ function LoginFormInner() {
             {loading
               ? "Connecting…"
               : mode === "oauth"
-                ? "Continue with Nikcli"
+                ? "Continue with Ragu"
                 : mode === "account"
                   ? "Legacy sign in"
                   : "Connect"}

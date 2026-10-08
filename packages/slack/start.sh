@@ -1,5 +1,5 @@
 #!/bin/bash
-# Start script for the NikCLI Slack bot + Tunnel
+# Start script for the Ragu Slack bot + Tunnel
 # Usage: ./start.sh [ngrok]
 
 # Setup trap for cleanup on exit early
@@ -21,7 +21,7 @@ TUNNEL_PID=$!
 sleep 2
 
 # Start the Slack bot
-echo "Starting NikCLI Slack bot..."
+echo "Starting Ragu Slack bot..."
 bun run src/index.ts &
 BOT_PID=$!
 

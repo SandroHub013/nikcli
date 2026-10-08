@@ -1,13 +1,13 @@
-/// The chat's calls to the nikcli server, made from here (C1).
+/// The chat's calls to the ragu server, made from here (C1).
 ///
 /// The page could `fetch` the server itself in development, and only there:
 /// Vite serves it from `http://localhost:1420`, which the server's CORS
 /// accepts. A release is served from `tauri.localhost`, which it does not, so
 /// every call failed before it left the WebView — the review's A3. Changing
-/// nikcli's CORS is not ADE's to do, and ADE's own server has a password the
+/// ragu's CORS is not ADE's to do, and ADE's own server has a password the
 /// page must not hold either.
 ///
-/// So the page hands a request to `nikcli_serve_fetch` — a method, a path and
+/// So the page hands a request to `ragu_serve_fetch` — a method, a path and
 /// a body, never an address — and gets the answer back on a channel: first
 /// the status and headers, then the body as it arrives, which is what makes
 /// the server's event stream (SSE) work. The address and the credentials are
@@ -84,7 +84,7 @@ impl Requests {
     ///
     /// The page that asked for them is going away: a reload kills the listeners of their channels, but
     /// `Channel::send` keeps answering `Ok`, so a chat's `GET /event` stream would otherwise stay open on
-    /// `nikcli serve` for ever, one more with every F5 (full review 2026-10-06, Rust 8).
+    /// `ragu serve` for ever, one more with every F5 (full review 2026-10-06, Rust 8).
     pub(crate) fn abort_all(&self) -> usize {
         let drained: Vec<_> = self.lock().drain().map(|(_, handle)| handle).collect();
         for handle in &drained {
@@ -136,26 +136,26 @@ pub(crate) fn client_with_timeout(timeout: Duration) -> Result<Client, String> {
 /// else: another host, another port, another scheme.
 pub(crate) fn target(base: &str, path: &str) -> Result<Url, String> {
     if !path.starts_with('/') || path.starts_with("//") || path.contains('\\') {
-        return Err(format!("percorso non valido per il server di nikcli: {path}"));
+        return Err(format!("percorso non valido per il server di ragu: {path}"));
     }
     let base = Url::parse(base).map_err(|error| format!("indirizzo del server non valido: {error}"))?;
     let url = base
         .join(path)
-        .map_err(|error| format!("percorso non valido per il server di nikcli: {error}"))?;
+        .map_err(|error| format!("percorso non valido per il server di ragu: {error}"))?;
     let same = url.scheme() == base.scheme()
         && url.host_str() == base.host_str()
         && url.port_or_known_default() == base.port_or_known_default()
         && url.username().is_empty()
         && url.password().is_none();
     if !same {
-        return Err(format!("percorso non valido per il server di nikcli: {path}"));
+        return Err(format!("percorso non valido per il server di ragu: {path}"));
     }
     Ok(url)
 }
 
 /// The only parts of the server the chat may call (C2 review, M1).
 ///
-/// An allowlist, not a list of what is forbidden: nikcli's server gains routes
+/// An allowlist, not a list of what is forbidden: ragu's server gains routes
 /// often, and a new one must stay closed until the chat needs it. Before, a
 /// list of forbidden parts left open publishing a conversation
 /// (`/session/*/share`), the server's voice, its autonomous work (`/brain`)
@@ -171,12 +171,12 @@ pub(crate) fn target(base: &str, path: &str) -> Result<Url, String> {
 /// Reading the configuration again (`POST /config/reload`): a bot made while
 /// the server runs is an agent file it has not read, and the bot's turn is
 /// refused as unknown until it does (Verifiche). The reload only rereads what
-/// is on disk, and nikcli leaves the live sessions as they are; changing the
+/// is on disk, and ragu leaves the live sessions as they are; changing the
 /// configuration (`PATCH /config`) stays closed. The inline configuration ADE
-/// passes in `NIKCLI_CONFIG_CONTENT` (a free model, in ADE Test) is read once
+/// passes in `RAGU_CONFIG_CONTENT` (a free model, in ADE Test) is read once
 /// at the server's start and merged again by every reload, so it stays.
 ///
-/// Not forking (C6): nikcli's fork makes the new session without the
+/// Not forking (C6): ragu's fork makes the new session without the
 /// permission rules the chat gives its own (`POST /session/:id/fork` takes a
 /// message id only, and `PATCH` cannot add rules), so a fork would run with
 /// the project's defaults and no «ask». The chat does not offer one.
@@ -245,7 +245,7 @@ pub(crate) fn fenced(method: &Method, url: &Url) -> Option<String> {
         && ALLOWED
             .iter()
             .any(|(methods, pattern)| methods.split(' ').any(|m| m == name) && matches(pattern, &segments));
-    (!allowed).then(|| format!("la chat non può chiamare {} {} sul server di nikcli", method, url.path()))
+    (!allowed).then(|| format!("la chat non può chiamare {} {} sul server di ragu", method, url.path()))
 }
 
 /// The methods the SDK uses, and nothing like `CONNECT` or `TRACE`.
@@ -257,7 +257,7 @@ pub(crate) fn method_of(name: &str) -> Result<Method, String> {
         "PUT" => Ok(Method::PUT),
         "PATCH" => Ok(Method::PATCH),
         "DELETE" => Ok(Method::DELETE),
-        other => Err(format!("metodo non consentito verso il server di nikcli: {other}")),
+        other => Err(format!("metodo non consentito verso il server di ragu: {other}")),
     }
 }
 
@@ -277,7 +277,7 @@ pub(crate) fn forwarded(headers: Vec<(String, String)>) -> Vec<(String, String)>
 /// environment it was read from.
 const PROVIDER_SECRETS: &[&str] = &["key", "options", "env"];
 
-/// The same for each of a provider's models: nikcli can send a key in their
+/// The same for each of a provider's models: ragu can send a key in their
 /// `headers` (Ollama's `Authorization`), and their `options` are the SDK's.
 const MODEL_SECRETS: &[&str] = &["headers", "options"];
 
@@ -375,7 +375,7 @@ fn scrubbed(body: &[u8], scrub: Scrub) -> Result<Vec<u8>, ()> {
 /// is listening. Returns true when the server could not be reached at all.
 ///
 /// An answer `scrub_of` names is read whole and sent as one chunk, cleaned
-/// (`scrubbed`): nikcli puts the user's API keys in it, and the page only
+/// (`scrubbed`): ragu puts the user's API keys in it, and the page only
 /// needs names and models. One that cannot be cleaned is an error.
 pub(crate) async fn relay(
     client: &Client,
@@ -410,7 +410,7 @@ pub(crate) async fn relay(
         Ok(response) => response,
         Err(error) => {
             sink(ProxyEvent::Error {
-                message: format!("il server di nikcli non risponde: {error}"),
+                message: format!("il server di ragu non risponde: {error}"),
             });
             return error.is_connect();
         }
@@ -424,7 +424,7 @@ pub(crate) async fn relay(
         .collect();
 
     if let Some(scrub) = scrub {
-        const REFUSED: &str = "il server di nikcli ha dato una risposta che non so ripulire dalle chiavi: non la passo alla chat";
+        const REFUSED: &str = "il server di ragu ha dato una risposta che non so ripulire dalle chiavi: non la passo alla chat";
         let encoded = headers
             .iter()
             .any(|(name, value)| name == "content-encoding" && !value.eq_ignore_ascii_case("identity"));
@@ -444,7 +444,7 @@ pub(crate) async fn relay(
             },
             Err(error) => {
                 sink(ProxyEvent::Error {
-                    message: format!("risposta del server di nikcli interrotta: {error}"),
+                    message: format!("risposta del server di ragu interrotta: {error}"),
                 });
                 return false;
             }
@@ -476,7 +476,7 @@ pub(crate) async fn relay(
             }
             Err(error) => {
                 sink(ProxyEvent::Error {
-                    message: format!("risposta del server di nikcli interrotta: {error}"),
+                    message: format!("risposta del server di ragu interrotta: {error}"),
                 });
                 return false;
             }
@@ -484,10 +484,10 @@ pub(crate) async fn relay(
     }
 }
 
-/// Sends one request to the nikcli server; the answer comes on `on_event`.
-/// Returns the request's id, for `nikcli_serve_abort`.
+/// Sends one request to the ragu server; the answer comes on `on_event`.
+/// Returns the request's id, for `ragu_serve_abort`.
 #[tauri::command]
-pub async fn nikcli_serve_fetch(
+pub async fn ragu_serve_fetch(
     app: tauri::AppHandle,
     request: ProxyRequest,
     on_event: Channel<ProxyEvent>,
@@ -495,7 +495,7 @@ pub async fn nikcli_serve_fetch(
     let (base, auth) = app
         .state::<Server>()
         .endpoint()
-        .ok_or_else(|| "il server di nikcli non è avviato".to_string())?;
+        .ok_or_else(|| "il server di ragu non è avviato".to_string())?;
     let url = target(&base, &request.path)?;
     let method = method_of(&request.method)?;
     if let Some(refusal) = fenced(&method, &url) {
@@ -521,7 +521,7 @@ pub async fn nikcli_serve_fetch(
 
 /// Stops a request: the page aborted it, or stopped reading the stream.
 #[tauri::command]
-pub async fn nikcli_serve_abort(requests: tauri::State<'_, Requests>, id: u64) -> Result<(), String> {
+pub async fn ragu_serve_abort(requests: tauri::State<'_, Requests>, id: u64) -> Result<(), String> {
     if let Some(handle) = requests.lock().remove(&id) {
         handle.abort();
     }
@@ -771,13 +771,13 @@ mod tests {
             ("cookie".into(), "a=b".into()),
             ("Proxy-Authorization".into(), "x".into()),
             ("host".into(), "evil.example".into()),
-            ("x-nikcli-directory".into(), "C:/p".into()),
+            ("x-ragu-directory".into(), "C:/p".into()),
             ("content-type".into(), "application/json".into()),
         ]);
         assert_eq!(
             kept,
             vec![
-                ("x-nikcli-directory".to_string(), "C:/p".to_string()),
+                ("x-ragu-directory".to_string(), "C:/p".to_string()),
                 ("content-type".to_string(), "application/json".to_string()),
             ]
         );
@@ -790,11 +790,11 @@ mod tests {
             &url,
             "/provider",
             vec![("authorization".into(), "Basic ZmFsc286ZmFsc28=".into())],
-            Some(("nikcli".into(), "finta".into())),
+            Some(("ragu".into(), "finta".into())),
         );
         let head = requests.recv_timeout(Duration::from_secs(5)).unwrap().to_ascii_lowercase();
         assert!(head.starts_with("get /provider http/1.1"), "{head}");
-        // "nikcli:finta", and only that one.
+        // "ragu:finta", and only that one.
         assert!(head.contains("authorization: basic bmlry2xpomzpbnrh"), "{head}");
         assert_eq!(head.matches("authorization").count(), 1, "{head}");
         assert!(matches!(events.first(), Some(ProxyEvent::Head { status: 200, .. })));
@@ -842,8 +842,8 @@ mod tests {
         serde_json::from_slice(&bytes).unwrap_or_else(|_| panic!("non JSON: {events:?}"))
     }
 
-    /// A provider as nikcli describes it, with a made-up key in each place
-    /// nikcli may put one.
+    /// A provider as ragu describes it, with a made-up key in each place
+    /// ragu may put one.
     fn provider() -> serde_json::Value {
         serde_json::json!({
             "id": "openrouter",
@@ -897,8 +897,8 @@ mod tests {
 
     #[test]
     fn the_configuration_reaches_the_page_as_the_model_it_names_and_nothing_else() {
-        // nikcli's config with `{env:VAR}` already replaced: a secret can be in
-        // any of these, and in the next field nikcli adds.
+        // ragu's config with `{env:VAR}` already replaced: a secret can be in
+        // any of these, and in the next field ragu adds.
         let config = serde_json::json!({
             "model": "openrouter/free-model",
             "small_model": "openrouter/free-model",
@@ -949,7 +949,7 @@ mod tests {
         for (path, body) in [
             ("/config/providers", "sk-finta-0000 non è JSON".to_string()),
             ("/config/providers", String::new()),
-            // The list under another name: nikcli changed its shape.
+            // The list under another name: ragu changed its shape.
             ("/config/providers", format!(r#"{{"providerList":[{provider}]}}"#)),
             ("/provider", format!(r#"{{"providers":[{provider}]}}"#)),
             ("/provider", format!(r#"{{"all":{{"openrouter":{provider}}}}}"#)),

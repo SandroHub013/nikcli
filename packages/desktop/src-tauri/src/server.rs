@@ -115,7 +115,7 @@ pub async fn check_health(url: &str, password: Option<&str>) -> bool {
     let mut req = client.get(health_url);
 
     if let Some(password) = password {
-        req = req.basic_auth("nikcli", Some(password));
+        req = req.basic_auth("ragu", Some(password));
     }
 
     req.send()
@@ -156,7 +156,7 @@ fn normalize_hostname_for_url(hostname: &str) -> String {
 fn get_server_url_from_config(config: &cli::Config) -> Option<String> {
     let server = config.server.as_ref()?;
     let port = server.port?;
-    println!("server.port found in Nikcli config: {port}");
+    println!("server.port found in Ragu config: {port}");
     let hostname = server
         .hostname
         .as_ref()

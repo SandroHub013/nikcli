@@ -1,7 +1,7 @@
 /**
- * `@nikcli-ai/plugin-gadgets` — the server half.
+ * `@ragu/plugin-gadgets` — the server half.
  *
- * Loaded by nikcli from `plugin` in `nikcli.json`. It starts the bridge (one
+ * Loaded by ragu from `plugin` in `nikcli.json`. It starts the bridge (one
  * listener per process, shared by every project instance that loads the
  * plugin), registers the `gadget` tool, and gives the bridge two ways into the
  * running instance: starting a session when a device sends a message, and
@@ -11,15 +11,15 @@
  * Settings. `nikcli.json` lists server plugins as bare specifiers, so they come
  * from the environment, with the second argument of `server()` taking
  * precedence for a host that passes one:
- *   NIKCLI_GADGET_PORT         listener port, default 4097
- *   NIKCLI_GADGET_HOST         bind address, default 0.0.0.0 (devices are on the LAN)
- *   NIKCLI_GADGET=0            registers nothing
- *   NIKCLI_GADGET_BRIDGE_FILE  where paired devices are stored
+ *   RAGU_GADGET_PORT         listener port, default 4097
+ *   RAGU_GADGET_HOST         bind address, default 0.0.0.0 (devices are on the LAN)
+ *   RAGU_GADGET=0            registers nothing
+ *   RAGU_GADGET_BRIDGE_FILE  where paired devices are stored
  */
 import os from "node:os"
 import path from "node:path"
-import type { Hooks, PluginInput, PluginModule, PluginOptions } from "@nikcli-ai/plugin"
-import type { DeviceEvent, GadgetInfo } from "@nikcli-ai/gadget/protocol"
+import type { Hooks, PluginInput, PluginModule, PluginOptions } from "@ragu/plugin"
+import type { DeviceEvent, GadgetInfo } from "@ragu/gadget/protocol"
 import { Bridge, DEFAULT_PORT, type BridgeHooks } from "./bridge.ts"
 import { createGadgetTool } from "./tool.ts"
 
@@ -36,21 +36,21 @@ interface Shared {
 const shared = new Map<string, Shared>()
 
 function setting(options: PluginOptions) {
-  const raw = process.env.NIKCLI_GADGET_PORT
+  const raw = process.env.RAGU_GADGET_PORT
   const fromEnv = raw === undefined || raw === "" ? undefined : Number(raw)
   if (fromEnv !== undefined && (!Number.isInteger(fromEnv) || fromEnv < 0 || fromEnv > 65_535)) {
-    throw new Error(`NIKCLI_GADGET_PORT must be a port number, got ${JSON.stringify(raw)}`)
+    throw new Error(`RAGU_GADGET_PORT must be a port number, got ${JSON.stringify(raw)}`)
   }
   return {
-    enabled: options.enabled !== false && process.env.NIKCLI_GADGET !== "0",
+    enabled: options.enabled !== false && process.env.RAGU_GADGET !== "0",
     port: typeof options.port === "number" ? options.port : (fromEnv ?? DEFAULT_PORT),
-    host: typeof options.host === "string" ? options.host : process.env.NIKCLI_GADGET_HOST || "0.0.0.0",
+    host: typeof options.host === "string" ? options.host : process.env.RAGU_GADGET_HOST || "0.0.0.0",
   }
 }
 
 function dataFile(options: PluginOptions): string {
   if (typeof options.file === "string" && options.file) return options.file
-  if (process.env.NIKCLI_GADGET_BRIDGE_FILE) return process.env.NIKCLI_GADGET_BRIDGE_FILE
+  if (process.env.RAGU_GADGET_BRIDGE_FILE) return process.env.RAGU_GADGET_BRIDGE_FILE
   const data = process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share")
   return path.join(data, "nikcli", "gadgets", "devices.json")
 }
@@ -130,7 +130,7 @@ function release(entry: Shared, input: PluginInput) {
 }
 
 const plugin: PluginModule = {
-  id: "nikcli:gadgets",
+  id: "ragu:gadgets",
   async server(input: PluginInput, options: PluginOptions = {}): Promise<Hooks> {
     if (!setting(options).enabled) return {}
     const entry = acquire(input, options)

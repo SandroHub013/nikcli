@@ -1,11 +1,11 @@
 import { batch, createMemo } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
-import { Binary } from "@nikcli-ai/util/binary"
-import { retry } from "@nikcli-ai/util/retry"
-import { createSimpleContext } from "@nikcli-ai/ui/context"
+import { Binary } from "@ragu/util/binary"
+import { retry } from "@ragu/util/retry"
+import { createSimpleContext } from "@ragu/ui/context"
 import { useGlobalSync } from "./global-sync"
 import { useSDK } from "./sdk"
-import type { Message, Part } from "@nikcli-ai/sdk/httpapi"
+import type { Message, Part } from "@ragu/sdk/httpapi"
 
 const keyFor = (directory: string, id: string) => `${directory}\n${id}`
 

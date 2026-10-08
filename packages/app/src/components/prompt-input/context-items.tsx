@@ -1,8 +1,8 @@
 import { Component, For, Show } from "solid-js"
-import { FileIcon } from "@nikcli-ai/ui/file-icon"
-import { IconButton } from "@nikcli-ai/ui/icon-button"
-import { Tooltip } from "@nikcli-ai/ui/tooltip"
-import { getDirectory, getFilename, getFilenameTruncated } from "@nikcli-ai/util/path"
+import { FileIcon } from "@ragu/ui/file-icon"
+import { IconButton } from "@ragu/ui/icon-button"
+import { Tooltip } from "@ragu/ui/tooltip"
+import { getDirectory, getFilename, getFilenameTruncated } from "@ragu/util/path"
 import type { ContextItem } from "@/context/prompt"
 
 type PromptContextItem = ContextItem & { key: string }

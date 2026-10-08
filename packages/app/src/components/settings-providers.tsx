@@ -1,8 +1,8 @@
-import { Button } from "@nikcli-ai/ui/button"
-import { useDialog } from "@nikcli-ai/ui/context/dialog"
-import { ProviderIcon } from "@nikcli-ai/ui/provider-icon"
-import { Tag } from "@nikcli-ai/ui/tag"
-import { showToast } from "@nikcli-ai/ui/toast"
+import { Button } from "@ragu/ui/button"
+import { useDialog } from "@ragu/ui/context/dialog"
+import { ProviderIcon } from "@ragu/ui/provider-icon"
+import { Tag } from "@ragu/ui/tag"
+import { showToast } from "@ragu/ui/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { createMemo, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
@@ -23,7 +23,7 @@ export const SettingsProviders: Component = () => {
   const providers = useProviders()
 
   const connected = createMemo(() => {
-    return providers.connected().filter((p) => p.id !== "nikcli" || Object.values(p.models).find((m) => m.cost?.input))
+    return providers.connected().filter((p) => p.id !== "ragu" || Object.values(p.models).find((m) => m.cost?.input))
   })
 
   const popular = createMemo(() => {
@@ -139,13 +139,13 @@ export const SettingsProviders: Component = () => {
                     <div class="flex items-center gap-x-3">
                       <ProviderIcon id={item.id} class="size-5 shrink-0 icon-strong-base" />
                       <span class="text-14-medium text-text-strong">{item.name}</span>
-                      <Show when={item.id === "nikcli"}>
+                      <Show when={item.id === "ragu"}>
                         <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
                       </Show>
                     </div>
-                    <Show when={item.id === "nikcli"}>
+                    <Show when={item.id === "ragu"}>
                       <span class="text-12-regular text-text-weak pl-8">
-                        {language.t("dialog.provider.nikcli.note")}
+                        {language.t("dialog.provider.ragu.note")}
                       </span>
                     </Show>
                     <Show when={item.id === "anthropic"}>

@@ -33,8 +33,8 @@ describe("a bot and a sign-in start the same way after a restart (ALTO 5)", () =
       mode: "bot",
       workspaceId: "web",
       lines: [],
-      model: "nikcli",
-      agent: "nikcli",
+      model: "ragu",
+      agent: "ragu",
       spawnArgs: ["--agent", "revisore", "--model", "openrouter/x:free"],
     })
     const back = fromWorkspaceState(JSON.parse(JSON.stringify(toWorkspaceState(wb))))

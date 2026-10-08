@@ -4,14 +4,14 @@ import type { Host, RunResult } from "../host/shell"
 import { readModelCatalog } from "./store"
 
 /*
- * Review 4, MEDIO 2: the bot form said «serve nikcli nel PATH» whatever had
+ * Review 4, MEDIO 2: the bot form said «serve ragu nel PATH» whatever had
  * happened. The read now says why it failed.
  */
 
 const hostRunning = (run: (args: string[], cwd?: string) => Promise<RunResult>) => async () =>
-  ({ nikcliBot: run }) as unknown as Host
+  ({ raguBot: run }) as unknown as Host
 
-describe("reading nikcli's catalog, and why it failed", () => {
+describe("reading ragu's catalog, and why it failed", () => {
   test("the list, from the folder, with every provider", async () => {
     const asked: { args: string[]; cwd?: string }[] = []
     const read = await readModelCatalog(
@@ -26,7 +26,7 @@ describe("reading nikcli's catalog, and why it failed", () => {
     expect(asked).toEqual([{ args: ["models", "--verbose"], cwd: "C:/progetto" }])
   })
 
-  test("an exit with an error gives the code and nikcli's first line of error, cut short", async () => {
+  test("an exit with an error gives the code and ragu's first line of error, cut short", async () => {
     const long = "x".repeat(400)
     const read = await readModelCatalog(
       undefined,
@@ -41,7 +41,7 @@ describe("reading nikcli's catalog, and why it failed", () => {
     expect(reason.length).toBeLessThan(260)
   })
 
-  test("a nikcli that does not start, a host that cannot run it, and an empty list each say so", async () => {
+  test("a ragu that does not start, a host that cannot run it, and an empty list each say so", async () => {
     expect(
       await readModelCatalog(
         undefined,

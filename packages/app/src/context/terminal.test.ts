@@ -7,7 +7,7 @@ beforeAll(async () => {
   mock.module("@solidjs/router", () => ({
     useParams: () => ({}),
   }))
-  mock.module("@nikcli-ai/ui/context", () => ({
+  mock.module("@ragu/ui/context", () => ({
     createSimpleContext: () => ({
       use: () => undefined,
       provider: () => undefined,

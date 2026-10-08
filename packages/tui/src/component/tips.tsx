@@ -1,6 +1,6 @@
 import { createMemo, For } from "solid-js"
 import { BUILT_IN_THEME_IDS, useTheme } from "@tui/context/theme"
-import type { Config } from "@nikcli-ai/sdk/httpapi"
+import type { Config } from "@ragu/sdk/httpapi"
 
 type TipPart = { text: string; highlight: boolean }
 type TipEntry = { type: "tip"; text: string }
@@ -159,9 +159,9 @@ const TIPS = [
   "Run {highlight}ragu upgrade{/highlight} to update to the latest version",
   "Run {highlight}ragu auth list{/highlight} to see all configured providers",
   "Run {highlight}ragu agent create{/highlight} for guided agent creation",
-  "Use {highlight}/nikcli{/highlight} in GitHub issues/PRs to trigger AI actions",
+  "Use {highlight}/ragu{/highlight} in GitHub issues/PRs to trigger AI actions",
   "Run {highlight}ragu github install{/highlight} to set up the GitHub workflow",
-  "Comment {highlight}/nikcli fix this{/highlight} on issues to auto-create PRs",
+  "Comment {highlight}/ragu fix this{/highlight} on issues to auto-create PRs",
   "Comment {highlight}/nik{/highlight} on PR code lines for targeted code reviews",
   'Use {highlight}"theme": "system"{/highlight} to match your terminal\'s colors',
   "Create JSON theme files in {highlight}.nikcli/themes/{/highlight} directory",
@@ -188,7 +188,7 @@ const TIPS = [
   "Enable {highlight}tui.scroll_acceleration{/highlight} for smooth macOS-style scrolling",
   "Toggle username display in chat via command palette ({highlight}Ctrl+P{/highlight})",
   "Run {highlight}docker run -it --rm ghcr.io/nikcli/nikcli{/highlight} for containerized use",
-  "Use {highlight}/connect{/highlight} with Nikcli Zen for curated, tested models",
+  "Use {highlight}/connect{/highlight} with Ragu Zen for curated, tested models",
   "Commit your project's {highlight}AGENTS.md{/highlight} file to Git for team sharing",
   "Use {highlight}/review{/highlight} to review uncommitted changes, branches, or PRs",
   "Use {highlight}/ultrareview{/highlight} for a deep parallel review with 4 specialized agents",

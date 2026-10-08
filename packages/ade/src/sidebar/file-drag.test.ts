@@ -181,7 +181,7 @@ describe("formatDroppedPaths", () => {
   /*
    * Relative to the project, because that is how a person refers to a file in
    * their own repository and how every agent reports one back. An absolute
-   * `C:/Users/39349/Favorites/nikcli/...` in every prompt is noise that also
+   * `C:/Users/39349/Favorites/ragu/...` in every prompt is noise that also
    * leaks the user's home directory into the conversation.
    */
   test("a file inside the project reads as a project path", () => {

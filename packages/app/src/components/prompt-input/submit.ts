@@ -1,8 +1,8 @@
 import { Accessor } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
-import { createNikcliClient, type Message } from "@nikcli-ai/sdk/httpapi"
-import { showToast } from "@nikcli-ai/ui/toast"
-import { base64Encode } from "@nikcli-ai/util/encode"
+import { createRaguClient, type Message } from "@ragu/sdk/httpapi"
+import { showToast } from "@ragu/ui/toast"
+import { base64Encode } from "@ragu/util/encode"
 import { useLocal } from "@/context/local"
 import { usePrompt, type ImageAttachmentPart, type Prompt } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
@@ -173,7 +173,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       }
 
       if (sessionDirectory !== projectDirectory) {
-        client = createNikcliClient({
+        client = createRaguClient({
           baseUrl: sdk.url,
           fetch: platform.fetch,
           directory: sessionDirectory,

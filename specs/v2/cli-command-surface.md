@@ -6,7 +6,7 @@
 | Scope  | `src/cli/commands.ts`, `src/cli/handlers/*.ts`, `packages/util/src/cli-error.ts`                                                                                                               |
 | Tests  | `test/cli/command-surface.test.ts` (the table below is the gate), `test/cli/bootstrap-exit.test.ts` (exit codes, both directions), `test/cli/index-help.e2e.test.ts`, `test/cli/error.test.ts` |
 
-The question this records: which `nikcli …` commands are actually registered, and what is shared across them.
+The question this records: which `ragu …` commands are actually registered, and what is shared across them.
 
 The answer is **the spec tree in `src/cli/commands.ts`**. A handler under `src/cli/handlers/` is not a command until it appears there. Filename inference is not the contract.
 
@@ -14,7 +14,7 @@ The answer is **the spec tree in `src/cli/commands.ts`**. A handler under `src/c
 
 ## The Surface
 
-Entry is `src/cli/main-effect.ts` `runEffectCli()`, over the root `Spec.make("nikcli", …)` at the foot of `src/cli/commands.ts`. Shared flags: `--help`/`-h`, `--version`/`-v`, `--print-logs`, `--log-level`, `--island`, `--auto` (aliases `--yolo`, `--dangerously-skip-permissions`), declared in `src/cli/global-flags.ts`. `--auto` sets `NIKCLI_AUTO_APPROVE=1` for the worker that never sees argv.
+Entry is `src/cli/main-effect.ts` `runEffectCli()`, over the root `Spec.make("ragu", …)` at the foot of `src/cli/commands.ts`. Shared flags: `--help`/`-h`, `--version`/`-v`, `--print-logs`, `--log-level`, `--island`, `--auto` (aliases `--yolo`, `--dangerously-skip-permissions`), declared in `src/cli/global-flags.ts`. `--auto` sets `RAGU_AUTO_APPROVE=1` for the worker that never sees argv.
 
 Fatal errors go through `FormatError` (`packages/util/src/cli-error.ts`) and `process.exitCode = 1`. There is no documented 2/3/4 category table in that module.
 
@@ -22,7 +22,7 @@ The default command is the TUI, registered as `$0 [project]` and handled by `src
 
 ## Registered Commands
 
-Source: the `commands` field of the root `Spec.make("nikcli", …)` in `src/cli/commands.ts`. Subcommands are the nested `commands` fields under it. **The command column is a gate**: `test/cli/command-surface.test.ts` imports the tree and fails if this table gains or loses a name. Subcommand cells and notes are not gated — they are read by people, not by the test.
+Source: the `commands` field of the root `Spec.make("ragu", …)` in `src/cli/commands.ts`. Subcommands are the nested `commands` fields under it. **The command column is a gate**: `test/cli/command-surface.test.ts` imports the tree and fails if this table gains or loses a name. Subcommand cells and notes are not gated — they are read by people, not by the test.
 
 | Command           | Subcommands (as registered)                                                                        | Notes                                                  |
 | ----------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
@@ -76,7 +76,7 @@ Source: the `commands` field of the root `Spec.make("nikcli", …)` in `src/cli/
 | `heap`            | —                                                                                                  |                                                        |
 | `completion`      | —                                                                                                  | yargs-generated shell completion                       |
 
-Not registered as top-level commands, despite files or earlier drafts: `config`, `db`, `tool`, `loop`. Loops are driven from the TUI / HTTP, not a `nikcli loop` command.
+Not registered as top-level commands, despite files or earlier drafts: `config`, `db`, `tool`, `loop`. Loops are driven from the TUI / HTTP, not a `ragu loop` command.
 
 ## User-visible install commands
 
@@ -86,7 +86,7 @@ Not registered as top-level commands, despite files or earlier drafts: `config`,
 
 - Server-bootstrapping commands (`serve`, `run`, `web`, `workspace-serve`, `mcp`, `acp`, …) start the server in-process and stop it when the command exits.
 - `--directory` is **not** a root flag. Directory binding is per-command / `bootstrap(process.cwd(), …)` where that command uses it. Do not document it as universal until the parser says so.
-- `NIKCLI_AUTO_APPROVE` is the only cross-command permission skip, and denials still apply (`--auto` help text).
+- `RAGU_AUTO_APPROVE` is the only cross-command permission skip, and denials still apply (`--auto` help text).
 
 ## What this document is not
 
@@ -96,7 +96,7 @@ It is not a CI check. Adding `src/cli/handlers/foo.ts` without registering it in
 
 **Index by filename.** Rejected because `chatbot.ts` is `bot`, several handlers back more than one name, and several files under `src/cli/` are not commands at all (`cmd/tui/worker.ts`).
 
-**Plugin-registered top-level commands.** Rejected: the CLI is bundled. `plugin` manages modules; modules do not add `nikcli <name>` entries.
+**Plugin-registered top-level commands.** Rejected: the CLI is bundled. `plugin` manages modules; modules do not add `ragu <name>` entries.
 
 ## Invariants
 

@@ -1,30 +1,30 @@
-# nikcli GitHub Action
+# ragu GitHub Action
 
-A GitHub Action that integrates [nikcli](https://nikcli-ai.dev) directly into your GitHub workflow.
+A GitHub Action that integrates [ragu](https://nikcli-ai.dev) directly into your GitHub workflow.
 
-Mention `/nikcli` in your comment, and nikcli will execute tasks within your GitHub Actions runner.
+Mention `/ragu` in your comment, and ragu will execute tasks within your GitHub Actions runner.
 
 ## Features
 
 #### Explain an issue
 
-Leave the following comment on a GitHub issue. `nikcli` will read the entire thread, including all comments, and reply with a clear explanation.
+Leave the following comment on a GitHub issue. `ragu` will read the entire thread, including all comments, and reply with a clear explanation.
 
 ```
-/nikcli explain this issue
+/ragu explain this issue
 ```
 
 #### Fix an issue
 
-Leave the following comment on a GitHub issue. nikcli will create a new branch, implement the changes, and open a PR with the changes.
+Leave the following comment on a GitHub issue. ragu will create a new branch, implement the changes, and open a PR with the changes.
 
 ```
-/nikcli fix this
+/ragu fix this
 ```
 
 #### Review PRs and make changes
 
-Leave the following comment on a GitHub PR. nikcli will implement the requested change and commit it to the same PR.
+Leave the following comment on a GitHub PR. ragu will implement the requested change and commit it to the same PR.
 
 ```
 Delete the attachment from S3 when the note is removed /nik
@@ -32,14 +32,14 @@ Delete the attachment from S3 when the note is removed /nik
 
 #### Review specific code lines
 
-Leave a comment directly on code lines in the PR's "Files" tab. nikcli will automatically detect the file, line numbers, and diff context to provide precise responses.
+Leave a comment directly on code lines in the PR's "Files" tab. ragu will automatically detect the file, line numbers, and diff context to provide precise responses.
 
 ```
 [Comment on specific lines in Files tab]
 /nik add error handling here
 ```
 
-When commenting on specific lines, nikcli receives:
+When commenting on specific lines, ragu receives:
 
 - The exact file being reviewed
 - The specific lines of code
@@ -53,7 +53,7 @@ This allows for more targeted requests without needing to specify file paths or 
 Run the following command in the terminal from your GitHub repo:
 
 ```bash
-nikcli github install
+ragu github install
 ```
 
 This will walk you through installing the GitHub app, creating the workflow, and setting up secrets.
@@ -61,10 +61,10 @@ This will walk you through installing the GitHub app, creating the workflow, and
 ### Manual Setup
 
 1. Install the GitHub app https://github.com/apps/nikcli-agent. Make sure it is installed on the target repository.
-2. Add the following workflow file to `.github/workflows/nikcli.yml` in your repo. Set the appropriate `model` and required API keys in `env`.
+2. Add the following workflow file to `.github/workflows/ragu.yml` in your repo. Set the appropriate `model` and required API keys in `env`.
 
    ```yml
-   name: nikcli
+   name: ragu
 
    on:
      issue_comment:
@@ -73,10 +73,10 @@ This will walk you through installing the GitHub app, creating the workflow, and
        types: [created]
 
    jobs:
-     nikcli:
+     ragu:
        if: |
          contains(github.event.comment.body, '/nik') ||
-         contains(github.event.comment.body, '/nikcli')
+         contains(github.event.comment.body, '/ragu')
        runs-on: ubuntu-latest
        permissions:
          id-token: write
@@ -87,7 +87,7 @@ This will walk you through installing the GitHub app, creating the workflow, and
               fetch-depth: 1
               persist-credentials: false
 
-          - name: Run nikcli
+          - name: Run ragu
            uses: nikcli/nikcli/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -121,20 +121,20 @@ To test locally:
      GITHUB_RUN_ID=dummy \
      MOCK_TOKEN=github_pat_1234567890 \
      MOCK_EVENT='{"eventName":"issue_comment",...}' \
-     bun /path/to/nikcli/github/index.ts
+     bun /path/to/ragu/github/index.ts
    ```
 
-   - `MODEL`: The model used by nikcli. Same as the `MODEL` defined in the GitHub workflow.
+   - `MODEL`: The model used by ragu. Same as the `MODEL` defined in the GitHub workflow.
    - `ANTHROPIC_API_KEY`: Your model provider API key. Same as the keys defined in the GitHub workflow.
    - `GITHUB_RUN_ID`: Dummy value to emulate GitHub action environment.
    - `MOCK_TOKEN`: A GitHub personal access token. This token is used to verify you have `admin` or `write` access to the test repo. Generate a token [here](https://github.com/settings/personal-access-tokens).
    - `MOCK_EVENT`: Mock GitHub event payload (see templates below).
-   - `/path/to/nikcli`: Path to your cloned nikcli repo. `bun /path/to/nikcli/github/index.ts` runs your local version of `nikcli`.
+   - `/path/to/ragu`: Path to your cloned ragu repo. `bun /path/to/ragu/github/index.ts` runs your local version of `ragu`.
 
 ### Issue comment event
 
 ```
-MOCK_EVENT='{"eventName":"issue_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"issue":{"number":4},"comment":{"id":1,"body":"hey nikcli, summarize thread"}}}'
+MOCK_EVENT='{"eventName":"issue_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"issue":{"number":4},"comment":{"id":1,"body":"hey ragu, summarize thread"}}}'
 ```
 
 Replace:
@@ -143,12 +143,12 @@ Replace:
 - `"repo":"hello-world"` with repo name
 - `"actor":"fwang"` with the GitHub username of commenter
 - `"number":4` with the GitHub issue id
-- `"body":"hey nikcli, summarize thread"` with comment body
+- `"body":"hey ragu, summarize thread"` with comment body
 
 ### Issue comment with image attachment.
 
 ```
-MOCK_EVENT='{"eventName":"issue_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"issue":{"number":4},"comment":{"id":1,"body":"hey nikcli, what is in my image ![Image](https://github.com/user-attachments/assets/xxxxxxxx)"}}}'
+MOCK_EVENT='{"eventName":"issue_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"issue":{"number":4},"comment":{"id":1,"body":"hey ragu, what is in my image ![Image](https://github.com/user-attachments/assets/xxxxxxxx)"}}}'
 ```
 
 Replace the image URL `https://github.com/user-attachments/assets/xxxxxxxx` with a valid GitHub attachment (you can generate one by commenting with an image in any issue).
@@ -156,11 +156,11 @@ Replace the image URL `https://github.com/user-attachments/assets/xxxxxxxx` with
 ### PR comment event
 
 ```
-MOCK_EVENT='{"eventName":"issue_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"issue":{"number":4,"pull_request":{}},"comment":{"id":1,"body":"hey nikcli, summarize thread"}}}'
+MOCK_EVENT='{"eventName":"issue_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"issue":{"number":4,"pull_request":{}},"comment":{"id":1,"body":"hey ragu, summarize thread"}}}'
 ```
 
 ### PR review comment event
 
 ```
-MOCK_EVENT='{"eventName":"pull_request_review_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"pull_request":{"number":7},"comment":{"id":1,"body":"hey nikcli, add error handling","path":"src/components/Button.tsx","diff_hunk":"@@ -45,8 +45,11 @@\n- const handleClick = () => {\n-   console.log('clicked')\n+ const handleClick = useCallback(() => {\n+   console.log('clicked')\n+   doSomething()\n+ }, [doSomething])","line":47,"original_line":45,"position":10,"commit_id":"abc123","original_commit_id":"def456"}}}'
+MOCK_EVENT='{"eventName":"pull_request_review_comment","repo":{"owner":"sst","repo":"hello-world"},"actor":"fwang","payload":{"pull_request":{"number":7},"comment":{"id":1,"body":"hey ragu, add error handling","path":"src/components/Button.tsx","diff_hunk":"@@ -45,8 +45,11 @@\n- const handleClick = () => {\n-   console.log('clicked')\n+ const handleClick = useCallback(() => {\n+   console.log('clicked')\n+   doSomething()\n+ }, [doSomething])","line":47,"original_line":45,"position":10,"commit_id":"abc123","original_commit_id":"def456"}}}'
 ```

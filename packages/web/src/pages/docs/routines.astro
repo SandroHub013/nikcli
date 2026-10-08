@@ -17,14 +17,14 @@ const toc = [
 
 <DocsLayout
   title="Routines"
-  subtitle="Saved prompts with schedule or API triggers, scoped per project. Source: packages/nikcli/src/cli/cmd/routine.ts."
-  description="Guide to nikcli routines, scheduled prompts, API triggers, cron parsing, and project-scoped automation."
+  subtitle="Saved prompts with schedule or API triggers, scoped per project. Source: packages/ragu/src/cli/cmd/routine.ts."
+  description="Guide to ragu routines, scheduled prompts, API triggers, cron parsing, and project-scoped automation."
   toc={toc}
 >
   <section id="what-are-routines" class="doc-section">
     <h2>What Are Routines</h2>
     <p>
-      A routine pairs a saved prompt with one or more triggers. When a trigger fires, nikcli runs
+      A routine pairs a saved prompt with one or more triggers. When a trigger fires, ragu runs
       the prompt as a background session and records the resulting session ID. Routines are scoped
       to the current project directory — each project has its own routine list.
     </p>
@@ -66,16 +66,16 @@ const toc = [
     <DocCallout type="warn" title="Unrecognised cron patterns">
       <p>
         If the cron pattern you supply does not match one of the supported forms above, the routine
-        is created and saved but the schedule will <strong>not</strong> fire. nikcli prints a warning
+        is created and saved but the schedule will <strong>not</strong> fire. ragu prints a warning
         at creation time and the trigger is stored as-is. You can still run the routine manually
-        with <code>nikcli routine run &lt;id&gt;</code>.
+        with <code>ragu routine run &lt;id&gt;</code>.
       </p>
     </DocCallout>
 
     <h3>API trigger</h3>
     <p>
       API triggers attach a secret token to the routine. Any system that can make an HTTP POST
-      request can fire the routine without needing direct access to the machine running nikcli.
+      request can fire the routine without needing direct access to the machine running ragu.
     </p>
     <DocCode language="bash">
       POST /mobile/routines/trigger/&lt;token&gt;
@@ -83,7 +83,7 @@ const toc = [
     <p>
       The token is generated automatically when you pass <code>--api</code> to
       <code>routine create</code>, or you can supply your own with <code>--api-token</code>.
-      nikcli prints the full endpoint URL after the routine is created.
+      ragu prints the full endpoint URL after the routine is created.
     </p>
   </section>
 
@@ -140,7 +140,7 @@ const toc = [
   <section id="creating-a-routine" class="doc-section">
     <h2>Creating a Routine</h2>
     <p>
-      Run <code>nikcli routine create</code> without flags to go through an interactive prompt for
+      Run <code>ragu routine create</code> without flags to go through an interactive prompt for
       name, prompt, and cron schedule. Pass flags to skip the interactive steps:
     </p>
     <table class="doc-table">
@@ -161,17 +161,17 @@ const toc = [
     </table>
     <DocCode language="bash">
       # Interactive creation
-      nikcli routine create
+      ragu routine create
 
       # Fully scripted — daily schedule + API trigger
-      nikcli routine create \
+      ragu routine create \
         --name "daily-review" \
         --prompt "Review recent changes and summarize any risks." \
         --cron @daily \
         --api
 
       # Every 30 minutes, custom API token
-      nikcli routine create \
+      ragu routine create \
         --name "health-check" \
         --prompt "Run the test suite and report failures." \
         --cron "*/30" \
@@ -182,7 +182,7 @@ const toc = [
   <section id="api-trigger" class="doc-section">
     <h2>API Trigger</h2>
     <p>
-      After creating a routine with <code>--api</code> or <code>--api-token</code>, nikcli prints
+      After creating a routine with <code>--api</code> or <code>--api-token</code>, ragu prints
       the trigger endpoint. Fire it from any HTTP client:
     </p>
     <DocCode language="bash">
@@ -190,7 +190,7 @@ const toc = [
       curl -X POST https://your-host/mobile/routines/trigger/nkr_abc123...
 
       # View the token again
-      nikcli routine get &lt;id&gt;
+      ragu routine get &lt;id&gt;
     </DocCode>
     <DocCallout type="info" title="Token prefix">
       <p>
@@ -218,11 +218,11 @@ const toc = [
       </tbody>
     </table>
     <DocCode language="bash">
-      nikcli routine list
-      nikcli routine pause rtn_abc123
-      nikcli routine resume rtn_abc123
-      nikcli routine run rtn_abc123 --text "focus on the auth module"
-      nikcli routine delete rtn_abc123 --yes
+      ragu routine list
+      ragu routine pause rtn_abc123
+      ragu routine resume rtn_abc123
+      ragu routine run rtn_abc123 --text "focus on the auth module"
+      ragu routine delete rtn_abc123 --yes
     </DocCode>
   </section>
 </DocsLayout>

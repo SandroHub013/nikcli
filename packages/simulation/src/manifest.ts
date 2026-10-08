@@ -26,14 +26,14 @@ export const defaults: Manifest = {
 }
 
 export function resolve(): Manifest {
-  const name = process.env.NIKCLI_DRIVE
-  if (!name) throw new Error("NIKCLI_DRIVE must contain a drive instance name")
+  const name = process.env.RAGU_DRIVE
+  if (!name) throw new Error("RAGU_DRIVE must contain a drive instance name")
   if (name === "1") return defaults
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/.test(name)) throw new Error(`Invalid drive instance name: ${name}`)
 
   const directory =
-    process.env.NIKCLI_DRIVE_REGISTRY_DIR ??
-    join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "nikcli-drive", "instances")
+    process.env.RAGU_DRIVE_REGISTRY_DIR ??
+    join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "ragu-drive", "instances")
   const file = join(directory, `${name}.json`)
   if (!existsSync(file)) throw new Error(`Drive manifest not found: ${file}`)
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { DEFAULT_VOICE_SETTINGS } from "@nikcli-ai/voice/core"
+import { DEFAULT_VOICE_SETTINGS } from "@ragu/voice/core"
 import { DEFAULT_BINDINGS, resolveDefaultBindings } from "../keyboard/bindings"
 import { parseChord, type Platform } from "../keyboard/keymap"
 import { resolveVoiceOrAdeKey } from "../voice/shortcuts"

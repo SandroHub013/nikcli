@@ -7,7 +7,7 @@
 
 The question this records: when provider, model, config, or plugin inputs change while an instance is open, what rebuilds, and who decides?
 
-nikcli's answer is **per-instance caches with three invalidation channels** — a broad file-driven one, the same channel reached synchronously by the request that made the change, and a narrow provider-specific one — rather than a service reload graph or a transform pipeline.
+ragu's answer is **per-instance caches with three invalidation channels** — a broad file-driven one, the same channel reached synchronously by the request that made the change, and a narrow provider-specific one — rather than a service reload graph or a transform pipeline.
 
 ## The Inputs That Change
 
@@ -16,7 +16,7 @@ nikcli's answer is **per-instance caches with three invalidation channels** — 
 | Config documents   | A `nikcli.json` (global, worktree, or directory) is edited                  |
 | Config directories | A file lands in a `.nikcli` directory (agents, commands, tools)             |
 | models.dev catalog | The background refresh in `provider/models.ts` completes                    |
-| Credentials        | `nikcli auth`, the TUI connect dialog, or an OAuth callback runs            |
+| Credentials        | `ragu auth`, the TUI connect dialog, or an OAuth callback runs            |
 | Plugins            | A plugin is installed, enabled, or hot-reloaded                             |
 | Policy             | Provider availability changes (see [provider policy](./provider-policy.md)) |
 
@@ -67,7 +67,7 @@ This channel exists because credential changes are not file-surface changes the 
 
 **Config transforms with a full service reload.** Let plugins mutate a `Draft<Config.Info>`, then reload every config-derived service. Rejected because a transform can touch any field, so no granular subset is provably sufficient — every derived service must reload on every transform. That is exactly the tear-down of live subscriptions and runtime registrations that the reloadable opt-in exists to prevent.
 
-**A dedicated catalog service with its own transform pipeline.** Cleaner in principle: provider/model inputs get their own replayable transform chain, independent of config. Rejected for nikcli because the catalog is not the only thing plugins and auth affect, so it would add a second lifecycle without removing the first — and `Provider.refresh()` already gives the narrow path at a fraction of the cost.
+**A dedicated catalog service with its own transform pipeline.** Cleaner in principle: provider/model inputs get their own replayable transform chain, independent of config. Rejected for ragu because the catalog is not the only thing plugins and auth affect, so it would add a second lifecycle without removing the first — and `Provider.refresh()` already gives the narrow path at a fraction of the cost.
 
 **Watching files with no reload, requiring a restart.** This was the pre-existing behavior. Rejected because config edits are frequent during agent authoring, and a restart loses live sessions.
 

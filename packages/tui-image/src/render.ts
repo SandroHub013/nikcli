@@ -1,7 +1,7 @@
 /**
  * High-level image rendering for the terminal.
  *
- * This module is the one nikcli's TUI calls. It ties together:
+ * This module is the one ragu's TUI calls. It ties together:
  *  - {@link detectCapabilities} (in `capabilities.ts`) to pick the best protocol,
  *  - a {@link Decoder} (in `decode.ts`) to convert image bytes into a
  *    {@link PixelImage},

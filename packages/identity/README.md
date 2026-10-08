@@ -1,4 +1,4 @@
-# `@nikcli-ai/identity` — nikcli Identity issuer
+# `@ragu/identity` — nikcli Identity issuer
 
 Cloudflare Worker at `auth.nikcli-ai.dev` (staging: `dev.auth.nikcli-ai.dev`) that
 issues OAuth 2.1 authorization-code + PKCE (S256) tokens for GitHub and email-code

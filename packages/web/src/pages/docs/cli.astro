@@ -20,27 +20,27 @@ const toc = [
 
 <DocsLayout
   title="CLI Reference"
-  subtitle="Command surface defined in packages/nikcli/src/index.ts and packages/nikcli/src/cli/cmd."
-  description="Reference for the nikcli CLI command surface, default TUI mode, flags, and command execution behavior."
+  subtitle="Command surface defined in packages/ragu/src/index.ts and packages/ragu/src/cli/cmd."
+  description="Reference for the ragu CLI command surface, default TUI mode, flags, and command execution behavior."
   toc={toc}
 >
   <section id="entry-point" class="doc-section">
     <h2>Entry Point</h2>
     <p>
-      Running <code>nikcli</code> without a subcommand opens the default terminal UI (TUI) in the
+      Running <code>ragu</code> without a subcommand opens the default terminal UI (TUI) in the
       current directory. Pass an optional project path to open the TUI in another directory. Global
       flags <code>--print-logs</code> and <code>--log-level</code> apply to every command.
     </p>
     <DocCode language="bash">
-      nikcli                    # open TUI in current directory
-      nikcli /path/to/project   # open TUI in another project
-      nikcli --help             # list all commands
-      nikcli completion         # generate shell completion script
+      ragu                    # open TUI in current directory
+      ragu /path/to/project   # open TUI in another project
+      ragu --help             # list all commands
+      ragu completion         # generate shell completion script
     </DocCode>
     <DocCallout type="info" title="Default TUI">
       <p>
         The default TUI command is <code>$0 [project]</code> and accepts session, model, agent,
-        continue, prompt, and network flags. All options available to <code>nikcli run</code> are
+        continue, prompt, and network flags. All options available to <code>ragu run</code> are
         also accepted here.
       </p>
     </DocCallout>
@@ -57,36 +57,36 @@ const toc = [
       </thead>
       <tbody>
         <tr>
-          <td><code>nikcli [project]</code></td>
+          <td><code>ragu [project]</code></td>
           <td>Open the TUI in the current or specified project directory.</td>
         </tr>
         <tr>
-          <td><code>nikcli run [message..]</code></td>
+          <td><code>ragu run [message..]</code></td>
           <td>Run a one-shot prompt without entering the TUI.</td>
         </tr>
         <tr>
-          <td><code>nikcli run --attach &lt;url&gt;</code></td>
-          <td>Connect a one-shot run to a running nikcli server. <code>--attach</code> is a flag on <code>run</code>, not a separate command.</td>
+          <td><code>ragu run --attach &lt;url&gt;</code></td>
+          <td>Connect a one-shot run to a running ragu server. <code>--attach</code> is a flag on <code>run</code>, not a separate command.</td>
         </tr>
         <tr>
-          <td><code>nikcli session list</code></td>
+          <td><code>ragu session list</code></td>
           <td>List past and active sessions.</td>
         </tr>
         <tr>
-          <td><code>nikcli quickstart</code></td>
+          <td><code>ragu quickstart</code></td>
           <td>Interactive walkthrough for first-time users. Accepts <code>--skip-checks</code> and <code>--dry-run</code>.</td>
         </tr>
         <tr>
-          <td><code>nikcli pr &lt;number&gt;</code></td>
-          <td>Fetch and checkout a GitHub PR branch, then launch nikcli in the resulting worktree.</td>
+          <td><code>ragu pr &lt;number&gt;</code></td>
+          <td>Fetch and checkout a GitHub PR branch, then launch ragu in the resulting worktree.</td>
         </tr>
       </tbody>
     </table>
     <DocCode language="bash">
-      nikcli run "audit this repo and summarize risks"
-      nikcli run --attach http://127.0.0.1:4096 "summarize the open work"
-      nikcli quickstart --skip-checks
-      nikcli pr 42
+      ragu run "audit this repo and summarize risks"
+      ragu run --attach http://127.0.0.1:4096 "summarize the open work"
+      ragu quickstart --skip-checks
+      ragu pr 42
     </DocCode>
   </section>
 
@@ -105,7 +105,7 @@ const toc = [
       </thead>
       <tbody>
         <tr>
-          <td><code>nikcli goal [condition..]</code></td>
+          <td><code>ragu goal [condition..]</code></td>
           <td>
             Work autonomously until the stated condition is met. Flags: <code>--continue</code>,
             <code>--session</code>, <code>--model</code>, <code>--agent</code>,
@@ -113,40 +113,40 @@ const toc = [
           </td>
         </tr>
         <tr>
-          <td><code>nikcli routine list</code></td>
+          <td><code>ragu routine list</code></td>
           <td>List all routines for the current project.</td>
         </tr>
         <tr>
-          <td><code>nikcli routine create</code></td>
+          <td><code>ragu routine create</code></td>
           <td>Create a routine interactively or with flags. See the <a href="/docs/routines">Routines</a> page.</td>
         </tr>
         <tr>
-          <td><code>nikcli routine get &lt;id&gt;</code></td>
+          <td><code>ragu routine get &lt;id&gt;</code></td>
           <td>Show details of a specific routine.</td>
         </tr>
         <tr>
-          <td><code>nikcli routine run &lt;id&gt;</code></td>
+          <td><code>ragu routine run &lt;id&gt;</code></td>
           <td>Trigger an immediate run of a routine.</td>
         </tr>
         <tr>
-          <td><code>nikcli routine pause &lt;id&gt;</code></td>
+          <td><code>ragu routine pause &lt;id&gt;</code></td>
           <td>Pause a routine (disables its scheduled triggers).</td>
         </tr>
         <tr>
-          <td><code>nikcli routine resume &lt;id&gt;</code></td>
+          <td><code>ragu routine resume &lt;id&gt;</code></td>
           <td>Resume a paused routine.</td>
         </tr>
         <tr>
-          <td><code>nikcli routine delete &lt;id&gt;</code></td>
+          <td><code>ragu routine delete &lt;id&gt;</code></td>
           <td>Delete a routine (alias: <code>rm</code>). Prompts for confirmation unless <code>--yes</code> is passed.</td>
         </tr>
       </tbody>
     </table>
     <DocCode language="bash">
-      nikcli goal "all tests pass and no lint errors"
-      nikcli goal --token-budget 50000 "fix the failing integration test"
-      nikcli routine create --name "daily review" --prompt "summarize recent changes" --cron @daily
-      nikcli routine run rtn_abc123
+      ragu goal "all tests pass and no lint errors"
+      ragu goal --token-budget 50000 "fix the failing integration test"
+      ragu routine create --name "daily review" --prompt "summarize recent changes" --cron @daily
+      ragu routine run rtn_abc123
     </DocCode>
   </section>
 
@@ -155,18 +155,18 @@ const toc = [
     <p>
       A <a href="/docs/missions">Mission</a> is a high-altitude workflow that decomposes a goal
       into milestones, each holding a DAG of features, with a validation checkpoint per
-      milestone. <code>nikcli mission</code> is a thin headless wrapper over the mission
-      orchestrator (<code>packages/nikcli/src/mission/</code>).
+      milestone. <code>ragu mission</code> is a thin headless wrapper over the mission
+      orchestrator (<code>packages/ragu/src/mission/</code>).
     </p>
     <table class="doc-table">
       <thead><tr><th>Command</th><th>Purpose</th></tr></thead>
       <tbody>
         <tr>
-          <td><code>nikcli mission</code></td>
+          <td><code>ragu mission</code></td>
           <td>Open the headless mission manager: list, status, quick actions.</td>
         </tr>
         <tr>
-          <td><code>nikcli mission new [-f file] [--brief …] [--model …] [--agent …]</code></td>
+          <td><code>ragu mission new [-f file] [--brief …] [--model …] [--agent …]</code></td>
           <td>
             Create a mission from a brief. With <code>-f</code> the brief is read from a file;
             otherwise it is read from <code>--brief</code> or stdin. <code>--model</code> and
@@ -174,36 +174,36 @@ const toc = [
           </td>
         </tr>
         <tr>
-          <td><code>nikcli mission start &lt;id&gt;</code></td>
+          <td><code>ragu mission start &lt;id&gt;</code></td>
           <td>Begin orchestrating the mission. The mission moves from <code>pending</code> to <code>running</code>.</td>
         </tr>
         <tr>
-          <td><code>nikcli mission pause &lt;id&gt;</code></td>
+          <td><code>ragu mission pause &lt;id&gt;</code></td>
           <td>Pause a running mission. In-flight features finish; no new features start.</td>
         </tr>
         <tr>
-          <td><code>nikcli mission resume &lt;id&gt;</code></td>
+          <td><code>ragu mission resume &lt;id&gt;</code></td>
           <td>Resume a paused mission.</td>
         </tr>
         <tr>
-          <td><code>nikcli mission cancel &lt;id&gt;</code></td>
+          <td><code>ragu mission cancel &lt;id&gt;</code></td>
           <td>Cancel the mission. In-flight workers are aborted via <code>prompt.cancel</code>.</td>
         </tr>
         <tr>
-          <td><code>nikcli mission get &lt;id&gt;</code></td>
+          <td><code>ragu mission get &lt;id&gt;</code></td>
           <td>Show progress, current milestone, current feature, statuses, and last error.</td>
         </tr>
         <tr>
-          <td><code>nikcli mission list</code></td>
+          <td><code>ragu mission list</code></td>
           <td>List all missions in the current project with their runtime status.</td>
         </tr>
       </tbody>
     </table>
     <DocCode language="bash">
       # Draft a mission from a brief file and start it
-      nikcli mission new -f ./brief.md --agent build --model anthropic/claude-sonnet-4.5
-      nikcli mission start mss_abc123
-      nikcli mission get mss_abc123
+      ragu mission new -f ./brief.md --agent build --model anthropic/claude-sonnet-4.5
+      ragu mission start mss_abc123
+      ragu mission get mss_abc123
     </DocCode>
   </section>
 
@@ -218,49 +218,49 @@ const toc = [
       <thead><tr><th>Command</th><th>Purpose</th></tr></thead>
       <tbody>
         <tr>
-          <td><code>nikcli loop list</code></td>
+          <td><code>ragu loop list</code></td>
           <td>List all loops for the current project.</td>
         </tr>
         <tr>
-          <td><code>nikcli loop create</code></td>
+          <td><code>ragu loop create</code></td>
           <td>Create a loop interactively or with flags. Flags: <code>--name</code>, <code>--stage</code> (repeatable), <code>--every</code>, <code>--max-runs</code>, <code>--timeout</code>.</td>
         </tr>
         <tr>
-          <td><code>nikcli loop get &lt;id&gt;</code></td>
+          <td><code>ragu loop get &lt;id&gt;</code></td>
           <td>Show full definition, runtime status, and the last few runs.</td>
         </tr>
         <tr>
-          <td><code>nikcli loop run &lt;id&gt;</code></td>
+          <td><code>ragu loop run &lt;id&gt;</code></td>
           <td>Trigger an immediate run. Accepts <code>--text</code> to append one-off context to this run.</td>
         </tr>
         <tr>
-          <td><code>nikcli loop pause &lt;id&gt;</code></td>
+          <td><code>ragu loop pause &lt;id&gt;</code></td>
           <td>Stop firing triggers. In-flight runs are not aborted.</td>
         </tr>
         <tr>
-          <td><code>nikcli loop resume &lt;id&gt;</code></td>
+          <td><code>ragu loop resume &lt;id&gt;</code></td>
           <td>Re-enable the loop's triggers.</td>
         </tr>
         <tr>
-          <td><code>nikcli loop cancel &lt;run-id&gt;</code></td>
+          <td><code>ragu loop cancel &lt;run-id&gt;</code></td>
           <td>Cancel an in-flight run.</td>
         </tr>
         <tr>
-          <td><code>nikcli loop delete &lt;id&gt;</code></td>
+          <td><code>ragu loop delete &lt;id&gt;</code></td>
           <td>Delete the loop and its run history. Prompts for confirmation unless <code>--yes</code> is passed.</td>
         </tr>
       </tbody>
     </table>
     <DocCode language="bash">
       # Two-stage loop that triages issues then drafts a fix every 30 minutes
-      nikcli loop create --name "triage-and-fix" \
+      ragu loop create --name "triage-and-fix" \
         --stage "triage:plan:Triage open issues and rank by impact" \
         --stage "draft-fix:build:Open a draft PR for the top issue" \
         --every 30m
 
-      nikcli loop run lop_abc123
-      nikcli loop pause lop_abc123
-      nikcli loop delete lop_abc123 --yes
+      ragu loop run lop_abc123
+      ragu loop pause lop_abc123
+      ragu loop delete lop_abc123 --yes
     </DocCode>
   </section>
 
@@ -275,77 +275,77 @@ const toc = [
       </thead>
       <tbody>
         <tr>
-          <td><code>nikcli serve</code></td>
+          <td><code>ragu serve</code></td>
           <td>Start the local HTTP API server.</td>
         </tr>
         <tr>
-          <td><code>nikcli web</code></td>
+          <td><code>ragu web</code></td>
           <td>Start the local web UI.</td>
         </tr>
         <tr>
-          <td><code>nikcli companion serve</code></td>
+          <td><code>ragu companion serve</code></td>
           <td>Boot the server with the companion web UI enabled.</td>
         </tr>
         <tr>
-          <td><code>nikcli companion open</code></td>
+          <td><code>ragu companion open</code></td>
           <td>Open the companion UI in the browser.</td>
         </tr>
         <tr>
-          <td><code>nikcli mobile serve</code></td>
+          <td><code>ragu mobile serve</code></td>
           <td>Serve the mobile API host for app pairing.</td>
         </tr>
         <tr>
-          <td><code>nikcli mobile pair</code></td>
+          <td><code>ragu mobile pair</code></td>
           <td>Generate a mobile pairing QR code.</td>
         </tr>
         <tr>
-          <td><code>nikcli mobile token list</code></td>
+          <td><code>ragu mobile token list</code></td>
           <td>List active mobile pairing tokens.</td>
         </tr>
         <tr>
-          <td><code>nikcli mobile token revoke</code></td>
+          <td><code>ragu mobile token revoke</code></td>
           <td>Revoke a mobile pairing token.</td>
         </tr>
         <tr>
-          <td><code>nikcli workspace-serve</code></td>
+          <td><code>ragu workspace-serve</code></td>
           <td>Expose workspace event streams for remote consumers.</td>
         </tr>
         <tr>
-          <td><code>nikcli remote start</code></td>
+          <td><code>ragu remote start</code></td>
           <td>Start a terminal or mobile remote control session.</td>
         </tr>
         <tr>
-          <td><code>nikcli remote stop</code></td>
+          <td><code>ragu remote stop</code></td>
           <td>Stop the active remote session.</td>
         </tr>
         <tr>
-          <td><code>nikcli remote status [--json]</code></td>
+          <td><code>ragu remote status [--json]</code></td>
           <td>Show remote session status and QR code.</td>
         </tr>
         <tr>
-          <td><code>nikcli remote share</code></td>
+          <td><code>ragu remote share</code></td>
           <td>Print the shareable session link and copy it to the clipboard.</td>
         </tr>
         <tr>
-          <td><code>nikcli remote attach &lt;sessionId&gt;</code></td>
+          <td><code>ragu remote attach &lt;sessionId&gt;</code></td>
           <td>Attach to an existing remote session by ID.</td>
         </tr>
         <tr>
-          <td><code>nikcli acp</code></td>
+          <td><code>ragu acp</code></td>
           <td>Start the ACP server.</td>
         </tr>
         <tr>
-          <td><code>nikcli mcp</code></td>
+          <td><code>ragu mcp</code></td>
           <td>Start the MCP server.</td>
         </tr>
       </tbody>
     </table>
     <DocCode language="bash">
-      nikcli remote start --name my-session --mobile
-      nikcli remote start --cloud --cloud-url https://relay.example.com --cloud-token TOKEN
-      nikcli remote status --json
-      nikcli remote share
-      nikcli remote attach SESSION_ID
+      ragu remote start --name my-session --mobile
+      ragu remote start --cloud --cloud-url https://relay.example.com --cloud-token TOKEN
+      ragu remote status --json
+      ragu remote share
+      ragu remote attach SESSION_ID
     </DocCode>
     <DocCallout type="note" title="remote attach">
       <p>
@@ -366,75 +366,75 @@ const toc = [
       </thead>
       <tbody>
         <tr>
-          <td><code>nikcli connectors list</code></td>
+          <td><code>ragu connectors list</code></td>
           <td>List configured service connectors.</td>
         </tr>
         <tr>
-          <td><code>nikcli connectors add</code></td>
+          <td><code>ragu connectors add</code></td>
           <td>Add a new connector interactively.</td>
         </tr>
         <tr>
-          <td><code>nikcli connectors auth &lt;name&gt;</code></td>
+          <td><code>ragu connectors auth &lt;name&gt;</code></td>
           <td>Authenticate an existing connector.</td>
         </tr>
         <tr>
-          <td><code>nikcli connectors logout &lt;name&gt;</code></td>
+          <td><code>ragu connectors logout &lt;name&gt;</code></td>
           <td>Revoke connector credentials.</td>
         </tr>
         <tr>
-          <td><code>nikcli bot list</code></td>
+          <td><code>ragu bot list</code></td>
           <td>List configured chat bots.</td>
         </tr>
         <tr>
-          <td><code>nikcli bot add</code></td>
+          <td><code>ragu bot add</code></td>
           <td>Add a bot for Slack, Discord, Teams, Google Chat, Linear, or GitHub.</td>
         </tr>
         <tr>
-          <td><code>nikcli bot start &lt;name&gt;</code></td>
+          <td><code>ragu bot start &lt;name&gt;</code></td>
           <td>Start a bot process.</td>
         </tr>
         <tr>
-          <td><code>nikcli bot stop &lt;name&gt;</code></td>
+          <td><code>ragu bot stop &lt;name&gt;</code></td>
           <td>Stop a running bot.</td>
         </tr>
         <tr>
-          <td><code>nikcli bot webhook</code></td>
+          <td><code>ragu bot webhook</code></td>
           <td>Configure or display webhook URLs for a bot.</td>
         </tr>
         <tr>
-          <td><code>nikcli plugin &lt;module&gt;</code></td>
+          <td><code>ragu plugin &lt;module&gt;</code></td>
           <td>Install and merge a plugin module into config. Flags: <code>--global</code>, <code>--force</code>.</td>
         </tr>
         <tr>
-          <td><code>nikcli github install</code></td>
+          <td><code>ragu github install</code></td>
           <td>Install the GitHub app integration.</td>
         </tr>
         <tr>
-          <td><code>nikcli github run</code></td>
+          <td><code>ragu github run</code></td>
           <td>Run a GitHub automation helper.</td>
         </tr>
         <tr>
-          <td><code>nikcli ads create</code></td>
+          <td><code>ragu ads create</code></td>
           <td>Create a new ad entry in config.</td>
         </tr>
         <tr>
-          <td><code>nikcli ads list</code></td>
+          <td><code>ragu ads list</code></td>
           <td>List configured ads.</td>
         </tr>
         <tr>
-          <td><code>nikcli ads remove &lt;id&gt;</code></td>
+          <td><code>ragu ads remove &lt;id&gt;</code></td>
           <td>Remove an ad by ID.</td>
         </tr>
         <tr>
-          <td><code>nikcli ads toggle &lt;id&gt;</code></td>
+          <td><code>ragu ads toggle &lt;id&gt;</code></td>
           <td>Toggle an ad on or off.</td>
         </tr>
         <tr>
-          <td><code>nikcli ads enable &lt;id&gt;</code></td>
+          <td><code>ragu ads enable &lt;id&gt;</code></td>
           <td>Enable a specific ad.</td>
         </tr>
         <tr>
-          <td><code>nikcli ads disable &lt;id&gt;</code></td>
+          <td><code>ragu ads disable &lt;id&gt;</code></td>
           <td>Disable a specific ad.</td>
         </tr>
       </tbody>
@@ -452,59 +452,59 @@ const toc = [
       </thead>
       <tbody>
         <tr>
-          <td><code>nikcli auth list</code></td>
+          <td><code>ragu auth list</code></td>
           <td>List authenticated providers.</td>
         </tr>
         <tr>
-          <td><code>nikcli auth login</code></td>
+          <td><code>ragu auth login</code></td>
           <td>Authenticate with a provider.</td>
         </tr>
         <tr>
-          <td><code>nikcli auth logout</code></td>
+          <td><code>ragu auth logout</code></td>
           <td>Revoke provider credentials.</td>
         </tr>
         <tr>
-          <td><code>nikcli account login</code></td>
-          <td>Log in to a nikcli account via device code.</td>
+          <td><code>ragu account login</code></td>
+          <td>Log in to a ragu account via device code.</td>
         </tr>
         <tr>
-          <td><code>nikcli account logout</code></td>
+          <td><code>ragu account logout</code></td>
           <td>Log out from the current account.</td>
         </tr>
         <tr>
-          <td><code>nikcli account list</code></td>
+          <td><code>ragu account list</code></td>
           <td>List stored accounts.</td>
         </tr>
         <tr>
-          <td><code>nikcli account switch</code></td>
+          <td><code>ragu account switch</code></td>
           <td>Switch the active account.</td>
         </tr>
         <tr>
-          <td><code>nikcli account orgs</code></td>
+          <td><code>ragu account orgs</code></td>
           <td>List organizations for the current account.</td>
         </tr>
         <tr>
-          <td><code>nikcli models [provider]</code></td>
+          <td><code>ragu models [provider]</code></td>
           <td>Inspect or refresh the model catalog. Flags: <code>--refresh</code>, <code>--verbose</code>.</td>
         </tr>
         <tr>
-          <td><code>nikcli agent create</code></td>
+          <td><code>ragu agent create</code></td>
           <td>Create a new agent definition.</td>
         </tr>
         <tr>
-          <td><code>nikcli agent list</code></td>
+          <td><code>ragu agent list</code></td>
           <td>List all defined agents.</td>
         </tr>
         <tr>
-          <td><code>nikcli image-model [provider] [model]</code></td>
+          <td><code>ragu image-model [provider] [model]</code></td>
           <td>List or set the default image generation provider and model.</td>
         </tr>
         <tr>
-          <td><code>nikcli speak-model [provider] [model]</code></td>
+          <td><code>ragu speak-model [provider] [model]</code></td>
           <td>List or set the default text-to-speech provider and voice.</td>
         </tr>
         <tr>
-          <td><code>nikcli locale [action]</code></td>
+          <td><code>ragu locale [action]</code></td>
           <td>
             Show, set, or reset CLI language, region, and model reply language. Actions:
             <code>show</code> (default), <code>set</code>, <code>reset</code>. See the
@@ -514,11 +514,11 @@ const toc = [
       </tbody>
     </table>
     <DocCode language="bash">
-      nikcli models anthropic --refresh
-      nikcli locale set --language ja --timezone Asia/Tokyo
-      nikcli locale set --reply-language fr
-      nikcli account login
-      nikcli account switch
+      ragu models anthropic --refresh
+      ragu locale set --language ja --timezone Asia/Tokyo
+      ragu locale set --reply-language fr
+      ragu account login
+      ragu account switch
     </DocCode>
   </section>
 
@@ -533,35 +533,35 @@ const toc = [
       </thead>
       <tbody>
         <tr>
-          <td><code>nikcli doctor [--json]</code></td>
+          <td><code>ragu doctor [--json]</code></td>
           <td>Diagnose common setup issues: version, runtime, TTY, PATH, disk, config, server. Exits non-zero on failures.</td>
         </tr>
         <tr>
-          <td><code>nikcli heap [--detailed]</code></td>
+          <td><code>ragu heap [--detailed]</code></td>
           <td>Show heap and process memory metrics. <code>--detailed</code> (alias <code>-a</code>) shows all V8/Bun memory fields.</td>
         </tr>
         <tr>
-          <td><code>nikcli usage</code></td>
+          <td><code>ragu usage</code></td>
           <td>Show token usage with charts and visual breakdowns.</td>
         </tr>
         <tr>
-          <td><code>nikcli stats</code></td>
+          <td><code>ragu stats</code></td>
           <td>Show token usage and cost statistics across sessions.</td>
         </tr>
         <tr>
-          <td><code>nikcli generate</code></td>
+          <td><code>ragu generate</code></td>
           <td>Generate OpenAPI specs and related assets.</td>
         </tr>
         <tr>
-          <td><code>nikcli export [sessionID]</code></td>
+          <td><code>ragu export [sessionID]</code></td>
           <td>Export session data as JSON. Omit the session ID to export the most recent session.</td>
         </tr>
         <tr>
-          <td><code>nikcli import &lt;file&gt;</code></td>
+          <td><code>ragu import &lt;file&gt;</code></td>
           <td>Import session data from a JSON file or URL.</td>
         </tr>
         <tr>
-          <td><code>nikcli upgrade [target]</code></td>
+          <td><code>ragu upgrade [target]</code></td>
           <td>
             Upgrade to the latest release or a specific version target. The install method is
             detected automatically and the upgrade runs through it (npm, yarn, pnpm, bun, brew,
@@ -572,9 +572,9 @@ const toc = [
           </td>
         </tr>
         <tr>
-          <td><code>nikcli uninstall</code></td>
+          <td><code>ragu uninstall</code></td>
           <td>
-            Remove nikcli. Flags: <code>--keep-config</code>, <code>--keep-data</code>,
+            Remove ragu. Flags: <code>--keep-config</code>, <code>--keep-data</code>,
             <code>--dry-run</code>, <code>--force</code>.
           </td>
         </tr>
@@ -582,29 +582,29 @@ const toc = [
     </table>
     <h3>OpenTelemetry (OTLP) and live telemetry</h3>
     <p>
-      nikcli ships a small observability layer that exports Effect spans over OTLP and publishes
+      ragu ships a small observability layer that exports Effect spans over OTLP and publishes
       them on the bus for the live TUI panel. See <a href="/docs/observability">Observability</a>
       for the full reference. Quick reference:
     </p>
     <DocCode language="bash">
       # Export to a local Jaeger collector
-      OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 nikcli run "summarize this repo"
+      OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 ragu run "summarize this repo"
 
       # Disable the live panel but keep OTLP export
       OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 \
-      NIKCLI_DISABLE_OTEL_LIVE=1 \
-      nikcli serve --port 4096
+      RAGU_DISABLE_OTEL_LIVE=1 \
+      ragu serve --port 4096
     </DocCode>
     <DocCode language="bash">
-      nikcli doctor
-      nikcli doctor --json
-      nikcli heap --detailed
-      nikcli stats
-      nikcli usage
-      nikcli export abc123 > session.json
-      nikcli import ./session.json
-      nikcli upgrade
-      nikcli uninstall --keep-config --dry-run
+      ragu doctor
+      ragu doctor --json
+      ragu heap --detailed
+      ragu stats
+      ragu usage
+      ragu export abc123 > session.json
+      ragu import ./session.json
+      ragu upgrade
+      ragu uninstall --keep-config --dry-run
     </DocCode>
   </section>
 </DocsLayout>

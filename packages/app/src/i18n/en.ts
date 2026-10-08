@@ -108,7 +108,7 @@ export const dict = {
   "dialog.provider.group.popular": "Popular",
   "dialog.provider.group.other": "Other",
   "dialog.provider.tag.recommended": "Recommended",
-  "dialog.provider.nikcli.note": "Curated models including Claude, GPT, Gemini and more",
+  "dialog.provider.ragu.note": "Curated models including Claude, GPT, Gemini and more",
   "dialog.provider.anthropic.note": "Direct access to Claude models, including Pro and Max",
   "dialog.provider.copilot.note": "Claude models for coding assistance",
   "dialog.provider.openai.note": "GPT models for fast, capable general AI tasks",
@@ -122,7 +122,7 @@ export const dict = {
   "dialog.model.manage": "Manage models",
   "dialog.model.manage.description": "Customize which models appear in the model selector.",
 
-  "dialog.model.unpaid.freeModels.title": "Free models provided by Nikcli",
+  "dialog.model.unpaid.freeModels.title": "Free models provided by Ragu",
   "dialog.model.unpaid.addMore.title": "Add more models from popular providers",
 
   "dialog.provider.viewAll": "Show more providers",
@@ -135,21 +135,21 @@ export const dict = {
   "provider.connect.status.waiting": "Waiting for authorization...",
   "provider.connect.status.failed": "Authorization failed: {{error}}",
   "provider.connect.apiKey.description":
-    "Enter your {{provider}} API key to connect your account and use {{provider}} models in Nikcli.",
+    "Enter your {{provider}} API key to connect your account and use {{provider}} models in Ragu.",
   "provider.connect.apiKey.label": "{{provider}} API key",
   "provider.connect.apiKey.placeholder": "API key",
   "provider.connect.apiKey.required": "API key is required",
-  "provider.connect.nikcliZen.line1":
-    "Nikcli Zen gives you access to a curated set of reliable optimized models for coding agents.",
-  "provider.connect.nikcliZen.line2":
+  "provider.connect.raguZen.line1":
+    "Ragu Zen gives you access to a curated set of reliable optimized models for coding agents.",
+  "provider.connect.raguZen.line2":
     "With a single API key you'll get access to models such as Claude, GPT, Gemini, GLM and more.",
-  "provider.connect.nikcliZen.visit.prefix": "Visit ",
-  "provider.connect.nikcliZen.visit.link": "nikcli-ai.dev/zen",
-  "provider.connect.nikcliZen.visit.suffix": " to collect your API key.",
+  "provider.connect.raguZen.visit.prefix": "Visit ",
+  "provider.connect.raguZen.visit.link": "nikcli-ai.dev/zen",
+  "provider.connect.raguZen.visit.suffix": " to collect your API key.",
   "provider.connect.oauth.code.visit.prefix": "Visit ",
   "provider.connect.oauth.code.visit.link": "this link",
   "provider.connect.oauth.code.visit.suffix":
-    " to collect your authorization code to connect your account and use {{provider}} models in Nikcli.",
+    " to collect your authorization code to connect your account and use {{provider}} models in Ragu.",
   "provider.connect.oauth.code.label": "{{method}} authorization code",
   "provider.connect.oauth.code.placeholder": "Authorization code",
   "provider.connect.oauth.code.required": "Authorization code is required",
@@ -157,7 +157,7 @@ export const dict = {
   "provider.connect.oauth.auto.visit.prefix": "Visit ",
   "provider.connect.oauth.auto.visit.link": "this link",
   "provider.connect.oauth.auto.visit.suffix":
-    " and enter the code below to connect your account and use {{provider}} models in Nikcli.",
+    " and enter the code below to connect your account and use {{provider}} models in Ragu.",
   "provider.connect.oauth.auto.confirmationCode": "Confirmation code",
   "provider.connect.toast.connected.title": "{{provider}} connected",
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
@@ -270,7 +270,7 @@ export const dict = {
   "prompt.example.24": "Create a CLI command for...",
   "prompt.example.25": "How do environment variables work here?",
 
-  "session.new.mode.label": "Nikcli mode",
+  "session.new.mode.label": "Ragu mode",
   "session.new.mode.chat": "Chat",
   "session.new.mode.work": "Work",
   "session.new.title.work": "What should we build?",
@@ -338,7 +338,7 @@ export const dict = {
   "dialog.status.lsp.description": "Language servers discovered for this workspace",
   "dialog.status.lsp.empty": "No LSP servers",
   "dialog.status.plugins": "{{count}} plugins",
-  "dialog.status.plugins.description": "Configured plugins loaded for nikcli",
+  "dialog.status.plugins.description": "Configured plugins loaded for ragu",
   "dialog.status.plugins.empty": "No plugins",
 
   "dialog.routines.title": "Routines",
@@ -439,7 +439,7 @@ export const dict = {
   "dialog.directory.empty": "No folders found",
 
   "dialog.server.title": "Servers",
-  "dialog.server.description": "Switch which Nikcli server this app connects to.",
+  "dialog.server.description": "Switch which Ragu server this app connects to.",
   "dialog.server.search.placeholder": "Search servers",
   "dialog.server.empty": "No servers yet",
   "dialog.server.add.title": "Add a server",
@@ -569,7 +569,7 @@ export const dict = {
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
 
   "toast.update.title": "Update available",
-  "toast.update.description": "A new version of Nikcli ({{version}}) is now available to install.",
+  "toast.update.description": "A new version of Ragu ({{version}}) is now available to install.",
   "toast.update.action.installRestart": "Install and restart",
   "toast.update.action.notYet": "Not yet",
 
@@ -580,7 +580,7 @@ export const dict = {
   "error.page.action.checking": "Checking...",
   "error.page.action.checkUpdates": "Check for updates",
   "error.page.action.updateTo": "Update to {{version}}",
-  "error.page.report.prefix": "Please report this error to the Nikcli team",
+  "error.page.report.prefix": "Please report this error to the Ragu team",
   "error.page.report.discord": "on Discord",
   "error.page.version": "Version: {{version}}",
 
@@ -599,7 +599,7 @@ export const dict = {
   "error.chain.didYouMean": "Did you mean: {{suggestions}}",
   "error.chain.modelNotFound": "Model not found: {{provider}}/{{model}}",
   "error.chain.checkConfig": "Check your config (nikcli.json) provider/model names",
-  "error.chain.mcpFailed": 'MCP server "{{name}}" failed. Note, Nikcli does not support MCP authentication yet.',
+  "error.chain.mcpFailed": 'MCP server "{{name}}" failed. Note, Ragu does not support MCP authentication yet.',
   "error.chain.providerAuthFailed": "Provider authentication failed ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Failed to initialize provider "{{provider}}". Check credentials and configuration.',
@@ -716,12 +716,12 @@ export const dict = {
   "sidebar.workspaces.enable": "Enable workspaces",
   "sidebar.workspaces.disable": "Disable workspaces",
   "sidebar.gettingStarted.title": "Getting started",
-  "sidebar.gettingStarted.line1": "Nikcli includes free models so you can start immediately.",
+  "sidebar.gettingStarted.line1": "Ragu includes free models so you can start immediately.",
   "sidebar.gettingStarted.line2": "Connect any provider to use models, inc. Claude, GPT, Gemini etc.",
   "sidebar.project.recentSessions": "Recent sessions",
   "sidebar.project.viewAllSessions": "View all sessions",
 
-  "app.name.desktop": "Nikcli Desktop",
+  "app.name.desktop": "Ragu Desktop",
 
   "settings.section.desktop": "Desktop",
   "settings.section.server": "Server",
@@ -735,11 +735,11 @@ export const dict = {
   "settings.general.section.sounds": "Sound effects",
 
   "settings.general.row.language.title": "Language",
-  "settings.general.row.language.description": "Change the display language for Nikcli",
+  "settings.general.row.language.description": "Change the display language for Ragu",
   "settings.general.row.appearance.title": "Appearance",
-  "settings.general.row.appearance.description": "Customise how Nikcli looks on your device",
+  "settings.general.row.appearance.description": "Customise how Ragu looks on your device",
   "settings.general.row.theme.title": "Theme",
-  "settings.general.row.theme.description": "Customise how Nikcli is themed.",
+  "settings.general.row.theme.description": "Customise how Ragu is themed.",
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Customise the mono font used in code blocks",
 
@@ -747,13 +747,13 @@ export const dict = {
   "settings.general.row.releaseNotes.description": "Show What's New popups after updates",
 
   "settings.updates.row.startup.title": "Check for updates on startup",
-  "settings.updates.row.startup.description": "Automatically check for updates when Nikcli launches",
+  "settings.updates.row.startup.description": "Automatically check for updates when Ragu launches",
   "settings.updates.row.check.title": "Check for updates",
   "settings.updates.row.check.description": "Manually check for updates and install if available",
   "settings.updates.action.checkNow": "Check now",
   "settings.updates.action.checking": "Checking...",
   "settings.updates.toast.latest.title": "You're up to date",
-  "settings.updates.toast.latest.description": "You're running the latest version of Nikcli.",
+  "settings.updates.toast.latest.description": "You're running the latest version of Ragu.",
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",
   "font.option.firaCode": "Fira Code",
@@ -1037,15 +1037,15 @@ export const dict = {
   "github.account.title": "GitHub account",
   "github.account.description": "Connect the host identity used for repositories, pushes, and pull requests.",
   "github.account.notConnected": "GitHub is not connected",
-  "github.account.connected": "Connected to this Nikcli host",
-  "github.account.connectHint": "Approve your GitHub account. Nikcli already uses the official GitHub App.",
+  "github.account.connected": "Connected to this Ragu host",
+  "github.account.connectHint": "Approve your GitHub account. Ragu already uses the official GitHub App.",
   "github.account.disconnect": "Disconnect",
   "github.oauth.clientTitle": "OAuth application",
   "github.oauth.clientDescription":
-    "Optional. Nikcli already uses the official GitHub App by default — set a custom client ID only if you need a different OAuth application.",
+    "Optional. Ragu already uses the official GitHub App by default — set a custom client ID only if you need a different OAuth application.",
   "github.oauth.clientId": "GitHub OAuth client ID",
   "github.oauth.title": "Device sign-in",
-  "github.oauth.description": "Authorize Nikcli in your browser. You only need to approve your GitHub account.",
+  "github.oauth.description": "Authorize Ragu in your browser. You only need to approve your GitHub account.",
   "github.oauth.connect": "Connect with GitHub",
   "github.oauth.code": "Authorization code",
   "github.oauth.open": "Open GitHub",

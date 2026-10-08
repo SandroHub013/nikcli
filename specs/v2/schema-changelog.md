@@ -2,7 +2,7 @@
 
 Status: **Compatibility ledger.** Newest first. Entries keep the names and behavior that were accurate when written; current contracts live in the `*.sql.ts` modules, `message-v2.ts`, and the HttpApi groups.
 
-Every entry corresponds to a file in `packages/nikcli/src/database/migration/`, applied in id order through the `migration` journal table by `DatabaseMigration.apply`. Migrations run inside `BEGIN IMMEDIATE` and roll back as a unit; a failure aborts startup rather than leaving a half-applied schema.
+Every entry corresponds to a file in `packages/ragu/src/database/migration/`, applied in id order through the `migration` journal table by `DatabaseMigration.apply`. Migrations run inside `BEGIN IMMEDIATE` and roll back as a unit; a failure aborts startup rather than leaving a half-applied schema.
 
 ## 2026-08-14: Instruction Sync Tables
 
@@ -173,7 +173,7 @@ Compatibility: the legacy files are read, not deleted. A downgrade still finds t
 `20260610211500_initial`
 
 - Create `nikcli.db` with `account`, `config`, `users`, `user_sessions`, `chat_contacts`, `chat_messages`, `mobile_tokens`, `workspace`.
-- Establishes the runtime that everything above depends on: one connection at `Global.Path.data/nikcli.db` (override with `NIKCLI_DB`, absolute path or `:memory:`), WAL, `synchronous=NORMAL`, `busy_timeout=5000`, `cache_size=-64000`, `foreign_keys=ON`, and `mmap_size=0` so the process footprint does not track the database file size.
+- Establishes the runtime that everything above depends on: one connection at `Global.Path.data/nikcli.db` (override with `RAGU_DB`, absolute path or `:memory:`), WAL, `synchronous=NORMAL`, `busy_timeout=5000`, `cache_size=-64000`, `foreign_keys=ON`, and `mmap_size=0` so the process footprint does not track the database file size.
 
 ## Rules For New Entries
 

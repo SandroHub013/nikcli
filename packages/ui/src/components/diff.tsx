@@ -1,4 +1,4 @@
-import { checksum } from "@nikcli-ai/util/encode"
+import { checksum } from "@ragu/util/encode"
 import { FileDiff, type SelectedLineRange } from "@pierre/diffs"
 import { createMediaQuery } from "@solid-primitives/media"
 import { createEffect, createMemo, createSignal, onCleanup, splitProps } from "solid-js"

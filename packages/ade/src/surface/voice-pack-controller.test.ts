@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import type { InstallProgress, PackState } from "@nikcli-ai/voice"
+import type { InstallProgress, PackState } from "@ragu/voice"
 import { createPackController, followInstall, installCancelled, type VoicePackHost } from "./voice-pack-controller"
 import { codeOf } from "../test-support/source-text"
 

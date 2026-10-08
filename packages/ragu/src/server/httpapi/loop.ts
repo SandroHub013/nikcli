@@ -1,0 +1,413 @@
+import { HttpApi, HttpApiBuilder, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { Effect, Layer, Schema } from "effect"
+import { Bus } from "@/bus"
+import { generateFromDescription } from "@/loop/generate"
+import * as Engine from "@/loop/engine"
+import * as Manager from "@/loop/manager"
+import { LOOP_TEMPLATES, generateID, validateDefinition, type LoopDefinition } from "@/loop/schema"
+import * as Domain from "./domain"
+import { InstanceState, type InstanceContext } from "@/effect"
+
+export namespace LoopHttpApi {
+  const BooleanResult = Schema.Boolean.annotate({
+    identifier: "LoopBooleanResult",
+  })
+
+  /**
+   * Domain schemas live in `./domain` so the mobile contract can describe the
+   * same loop objects without importing the loop engine.
+   */
+  const ListOutput = Schema.Struct({
+    loops: Schema.Array(Domain.LoopDefinition),
+    runtimes: Schema.Array(Domain.LoopRuntime),
+  }).annotate({ identifier: "LoopListOutput" })
+
+  const TemplatesOutput = Schema.Struct({
+    templates: Schema.Array(Domain.LoopTemplate),
+  }).annotate({ identifier: "LoopTemplatesOutput" })
+
+  const RunsOutput = Schema.Struct({ runs: Schema.Array(Domain.LoopRun) }).annotate({ identifier: "LoopRunsOutput" })
+
+  const GetOutput = Schema.Struct({
+    loop: Domain.LoopDefinition,
+    runtime: Domain.LoopRuntime,
+  }).annotate({ identifier: "LoopGetOutput" })
+
+  const NotFound = Schema.Struct({
+    name: Schema.Literal("NotFound"),
+    data: Schema.Record(Schema.String, Schema.Unknown),
+  }).annotate({ identifier: "LoopNotFound", httpApiStatus: 404 })
+
+  const ValidationError = Schema.Struct({
+    name: Schema.Literal("ValidationError"),
+    data: Schema.Record(Schema.String, Schema.Unknown),
+  }).annotate({ identifier: "LoopValidationError", httpApiStatus: 400 })
+
+  type NotFoundBody = typeof NotFound.Type
+  type ValidationErrorBody = typeof ValidationError.Type
+
+  const failNotFound = (message: string): Effect.Effect<never, NotFoundBody> =>
+    Effect.fail({ name: "NotFound" as const, data: { message } })
+
+  const failValidation = (message: string): Effect.Effect<never, ValidationErrorBody> =>
+    Effect.fail({ name: "ValidationError" as const, data: { message } })
+
+  const fromPromise = <A>(fn: () => Promise<A>) => Effect.promise(fn).pipe(Effect.orDie)
+
+  /**
+   * `fromPromise` for a body that needs the request's instance. The loop
+   * manager takes the project id explicitly now, so every route that reaches
+   * it resolves the instance here rather than letting the manager read the
+   * ambient scope.
+   */
+  const withInstance = <A>(fn: (instance: InstanceContext) => Promise<A>) =>
+    InstanceState.context.pipe(
+      Effect.flatMap((instance) => Effect.promise(() => fn(instance))),
+      Effect.orDie,
+    )
+
+  /**
+   * `Manager.upsert` throws when `sanitizeDefinition` rejects the definition.
+   * The handlers re-run `validateDefinition` first, but not the zod
+   * `LoopDefinitionSchema.safeParse` that `sanitizeDefinition` runs ahead of
+   * it, so a body that satisfies the route payload schema can still fail
+   * there. That is a client input error and both writing routes already
+   * declare 400 — going through `fromPromise` turned it into a 500 defect.
+   */
+  const upsertDefinition = (def: LoopDefinition): Effect.Effect<LoopDefinition, ValidationErrorBody> =>
+    InstanceState.project.pipe(
+      Effect.flatMap((project) =>
+        Effect.tryPromise({
+          try: () => Manager.upsert(project.id, def),
+          catch: (cause) => ({
+            name: "ValidationError" as const,
+            data: { message: cause instanceof Error ? cause.message : String(cause) } as Record<string, unknown>,
+          }),
+        }),
+      ),
+    )
+
+  const LoopIDPath = Schema.Struct({ id: Schema.String })
+
+  const RunsQuery = Schema.Struct({
+    limit: Schema.optionalKey(Schema.NumberFromString),
+  })
+
+  const RecentRunsQuery = Schema.Struct({
+    limit: Schema.optionalKey(Schema.NumberFromString),
+  })
+
+  const TogglePayload = Schema.Struct({
+    enabled: Schema.Boolean,
+  }).annotate({ identifier: "LoopToggleInput" })
+
+  /**
+   * Optional body for `POST /loop/:id/run`. Carries the session that fired
+   * the run, so the freshly-created loop session inherits that session's
+   * last-used model instead of falling back to the global provider default.
+   */
+  const RunPayload = Schema.Struct({
+    sessionID: Schema.optionalKey(Schema.String),
+  }).annotate({ identifier: "LoopRunInput" })
+
+  const GeneratePayload = Schema.Struct({
+    description: Schema.String,
+    model: Schema.optionalKey(Schema.String),
+    agent: Schema.optionalKey(Schema.String),
+    /**
+     * The session the request was launched from. Absent `model`, the drafting
+     * call inherits this session's model instead of the global default — the
+     * one the user has selected in front of them.
+     */
+    sessionID: Schema.optionalKey(Schema.String),
+  }).annotate({ identifier: "LoopGenerateInput" })
+
+  /**
+   * Create takes the definition minus the server-assigned fields; update takes
+   * it minus `id`, which the path carries. Both come from `Domain`, so the
+   * contract enforces what the handlers previously assumed by casting.
+   */
+  const CreatePayload = Domain.LoopCreateInput
+  const UpdatePayload = Domain.LoopUpdateInput
+
+  export const Group = HttpApiGroup.make("loop")
+    .add(HttpApiEndpoint.get("list", "/", { success: ListOutput }))
+    .add(HttpApiEndpoint.get("templates", "/templates", { success: TemplatesOutput }))
+    .add(
+      HttpApiEndpoint.post("generate", "/generate", {
+        payload: GeneratePayload,
+        success: Domain.LoopDefinition,
+        error: ValidationError,
+      }),
+    )
+    .add(
+      HttpApiEndpoint.get("recentRuns", "/runs/recent", {
+        query: RecentRunsQuery,
+        success: RunsOutput,
+      }),
+    )
+    .add(
+      HttpApiEndpoint.get("get", "/:id", {
+        params: LoopIDPath,
+        success: GetOutput,
+        error: NotFound,
+      }),
+    )
+    .add(
+      HttpApiEndpoint.put("upsert", "/", {
+        payload: CreatePayload,
+        success: Domain.LoopDefinition,
+        error: ValidationError,
+      }),
+    )
+    .add(
+      HttpApiEndpoint.post("update", "/:id", {
+        params: LoopIDPath,
+        payload: UpdatePayload,
+        success: Domain.LoopDefinition,
+        error: [NotFound, ValidationError],
+      }),
+    )
+    .add(
+      HttpApiEndpoint.delete("remove", "/:id", {
+        params: LoopIDPath,
+        success: BooleanResult,
+        error: NotFound,
+      }).annotate(OpenApi.Identifier, "loop.delete"),
+    )
+    .add(
+      HttpApiEndpoint.post("toggle", "/:id/toggle", {
+        params: LoopIDPath,
+        payload: TogglePayload,
+        success: Domain.LoopDefinition,
+        error: NotFound,
+      }),
+    )
+    .add(
+      HttpApiEndpoint.post("run", "/:id/run", {
+        params: LoopIDPath,
+        // The body is optional — the handler reads `payload?.sessionID`, and the
+        // lifecycle routes are called without one. Declaring the payload bare
+        // made a bodyless POST fail the request decode with an empty 400
+        // before the handler could answer 404.
+        payload: [HttpApiSchema.NoContent, RunPayload],
+        success: BooleanResult,
+        error: NotFound,
+      }),
+    )
+    .add(
+      HttpApiEndpoint.post("abort", "/:id/abort", {
+        params: LoopIDPath,
+        success: BooleanResult,
+        error: NotFound,
+      }),
+    )
+    .add(
+      HttpApiEndpoint.post("pause", "/:id/pause", {
+        params: LoopIDPath,
+        success: BooleanResult,
+        error: NotFound,
+      }),
+    )
+    .add(
+      HttpApiEndpoint.post("resume", "/:id/resume", {
+        params: LoopIDPath,
+        success: BooleanResult,
+        error: NotFound,
+      }),
+    )
+    .add(
+      HttpApiEndpoint.get("runs", "/:id/runs", {
+        params: LoopIDPath,
+        query: RunsQuery,
+        success: RunsOutput,
+      }),
+    )
+    .prefix("/loop")
+
+  export const Api = HttpApi.make("ragu").add(Group)
+  export const ApiLive = HttpApiBuilder.layer(Api)
+
+  export const handlers = {
+    list: () =>
+      withInstance(async (instance) => {
+        const loops = await Manager.list(instance.project.id)
+        const runtimes = loops.map((loop) => ({
+          loopID: loop.id,
+          ...Engine.getRuntime(loop.id),
+        }))
+        return { loops, runtimes }
+      }),
+
+    templates: () => Effect.succeed({ templates: LOOP_TEMPLATES }),
+
+    generate: ({ payload }: { payload: typeof GeneratePayload.Type }) =>
+      fromPromise(() =>
+        generateFromDescription(payload.description, {
+          model: payload.model,
+          agent: payload.agent,
+          sessionID: payload.sessionID,
+        }),
+      ).pipe(
+        Effect.catch((cause: unknown) => {
+          const message = cause instanceof Error ? cause.message : String(cause)
+          return failValidation(message)
+        }),
+      ),
+
+    recentRuns: ({ query }: { query: typeof RecentRunsQuery.Type }) =>
+      withInstance(async (instance) => {
+        const limit = query.limit ?? 100
+        const runs = await Manager.listAllRunsAcrossLoops(instance.project.id, limit)
+        return { runs }
+      }),
+
+    get: ({ params }: { params: { id: string } }) =>
+      withInstance(async (instance) => {
+        const loop = await Manager.get(instance.project.id, params.id)
+        if (!loop) return { notFound: true as const, id: params.id }
+        return {
+          notFound: false as const,
+          body: {
+            loop,
+            runtime: { loopID: params.id, ...Engine.getRuntime(params.id) },
+          },
+        }
+      }).pipe(
+        Effect.flatMap((result) =>
+          result.notFound ? failNotFound(`Loop "${result.id}" not found`) : Effect.succeed(result.body),
+        ),
+      ),
+
+    upsert: ({ payload }: { payload: Schema.Schema.Type<typeof Domain.LoopCreateInput> }) =>
+      Effect.gen(function* () {
+        const body = payload
+        const id = generateID()
+        const def: LoopDefinition = {
+          ...body,
+          id,
+          createdAt: Date.now(),
+          enabled: body.enabled ?? true,
+        } as LoopDefinition
+        const err = validateDefinition(def)
+        if (err) return yield* failValidation(err)
+        const saved = yield* upsertDefinition(def)
+        yield* fromPromise(() => Engine.sync(saved.id))
+        yield* Effect.promise(() => Bus.publish(Engine.LoopEvent.Upserted, { loopID: saved.id }))
+        return saved
+      }),
+
+    update: ({
+      params,
+      payload,
+    }: {
+      params: { id: string }
+      payload: Schema.Schema.Type<typeof Domain.LoopUpdateInput>
+    }) =>
+      Effect.gen(function* () {
+        const instance = yield* InstanceState.context
+        // The path is the identity. The old "path id and body id do not match"
+        // check is gone because the body can no longer carry an id to disagree
+        // with — the contract does not accept one.
+        const body = { ...payload, id: params.id } as LoopDefinition
+        const err = validateDefinition(body)
+        if (err) return yield* failValidation(err)
+        const existing = yield* fromPromise(() => Manager.get(instance.project.id, params.id))
+        if (!existing) return yield* failNotFound(`Loop "${params.id}" not found`)
+        const saved = yield* upsertDefinition(body)
+        if (saved.maxRuns !== existing.maxRuns) {
+          yield* fromPromise(() => Engine.resetRunCount(saved.id))
+        }
+        yield* fromPromise(() => Engine.sync(saved.id))
+        yield* Effect.promise(() => Bus.publish(Engine.LoopEvent.Upserted, { loopID: saved.id }))
+        return saved
+      }),
+
+    remove: ({ params }: { params: { id: string } }) =>
+      Effect.gen(function* () {
+        const instance = yield* InstanceState.context
+        const def = yield* fromPromise(() => Manager.get(instance.project.id, params.id))
+        if (!def) return yield* failNotFound(`Loop "${params.id}" not found`)
+        yield* fromPromise(() => Engine.cancelRun(params.id).catch(() => undefined))
+        const removed = yield* fromPromise(() => Manager.remove(instance.project.id, instance.directory, params.id))
+        if (!removed) return yield* failNotFound(`Loop "${params.id}" not found`)
+        Engine.disarm(params.id)
+        yield* Effect.promise(() => Bus.publish(Engine.LoopEvent.Removed, { loopID: params.id }))
+        return true
+      }),
+
+    toggle: ({ params, payload }: { params: { id: string }; payload: typeof TogglePayload.Type }) =>
+      Effect.gen(function* () {
+        const instance = yield* InstanceState.context
+        const next = yield* fromPromise(() => Manager.setEnabled(instance.project.id, params.id, payload.enabled))
+        if (!next) return yield* failNotFound(`Loop "${params.id}" not found`)
+        yield* fromPromise(() => Engine.sync(params.id))
+        yield* Effect.promise(() => Bus.publish(Engine.LoopEvent.Upserted, { loopID: params.id }))
+        return next
+      }),
+
+    run: ({ params, payload }: { params: { id: string }; payload: typeof RunPayload.Type | void }) =>
+      Effect.gen(function* () {
+        const instance = yield* InstanceState.context
+        const def = yield* fromPromise(() => Manager.get(instance.project.id, params.id))
+        if (!def) return yield* failNotFound(`Loop "${params.id}" not found`)
+        void Engine.runOnce(params.id, payload?.sessionID ? { callerSessionID: payload.sessionID } : {})
+        return true
+      }),
+
+    abort: ({ params }: { params: { id: string } }) =>
+      Effect.gen(function* () {
+        const instance = yield* InstanceState.context
+        const def = yield* fromPromise(() => Manager.get(instance.project.id, params.id))
+        if (!def) return yield* failNotFound(`Loop "${params.id}" not found`)
+        yield* fromPromise(() => Engine.cancelRun(params.id))
+        return true
+      }),
+
+    pause: ({ params }: { params: { id: string } }) =>
+      Effect.gen(function* () {
+        const instance = yield* InstanceState.context
+        const def = yield* fromPromise(() => Manager.setPaused(instance.project.id, params.id, true))
+        if (!def) return yield* failNotFound(`Loop "${params.id}" not found`)
+        Engine.disarm(params.id)
+        Engine.setRuntimeStatus(params.id, "paused")
+        return true
+      }),
+
+    resume: ({ params }: { params: { id: string } }) =>
+      Effect.gen(function* () {
+        const instance = yield* InstanceState.context
+        const def = yield* fromPromise(() => Manager.setPaused(instance.project.id, params.id, false))
+        if (!def) return yield* failNotFound(`Loop "${params.id}" not found`)
+        Engine.setRuntimeStatus(params.id, "idle")
+        yield* fromPromise(() => Engine.sync(params.id))
+        return true
+      }),
+
+    runs: ({ params, query }: { params: { id: string }; query: typeof RunsQuery.Type }) =>
+      withInstance(async (instance) => {
+        const runs = await Manager.listRuns(instance.project.id, params.id, query.limit ?? 50)
+        return { runs }
+      }),
+  }
+
+  export const HandlersLive = HttpApiBuilder.group(Api, "loop", (builder) =>
+    builder
+      .handle("list", handlers.list)
+      .handle("templates", handlers.templates)
+      .handle("generate", handlers.generate)
+      .handle("recentRuns", handlers.recentRuns)
+      .handle("get", handlers.get)
+      .handle("upsert", handlers.upsert)
+      .handle("update", handlers.update)
+      .handle("remove", handlers.remove)
+      .handle("toggle", handlers.toggle)
+      .handle("run", handlers.run)
+      .handle("abort", handlers.abort)
+      .handle("pause", handlers.pause)
+      .handle("resume", handlers.resume)
+      .handle("runs", handlers.runs),
+  )
+
+  export const layer = ApiLive.pipe(Layer.provide(HandlersLive))
+}

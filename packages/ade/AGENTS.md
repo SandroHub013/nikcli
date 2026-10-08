@@ -72,17 +72,17 @@ are real sessions on the user's subscription.
   build folder and were created after the start in `.ade-test/record.json`,
   and their children created after them, one process at a time. An instance
   whose record has no start time is not stopped: close it by hand.
-- **The user tries `feat/ade` in `nikcli-ade-prova`, never in `nikcli-ade`.**
-  `nikcli-ade` is where branches are integrated: every merge there rebuilds
+- **The user tries `feat/ade` in `ragu-ade-prova`, never in `ragu-ade`.**
+  `ragu-ade` is where branches are integrated: every merge there rebuilds
   and reloads the app under the user mid-test (a voice turn lost its history
   this way). `Desktop\ADE Test.cmd` checks out `feat/ade` detached in
-  `nikcli-ade-prova` and starts its ADE Test. Nobody edits files or commits
+  `ragu-ade-prova` and starts its ADE Test. Nobody edits files or commits
   in that worktree.
 - The first start in a new worktree compiles the Rust host (several minutes);
   later starts reuse that worktree's `src-tauri/target`.
 - The profile is new per worktree, so localStorage starts empty: open
   workspaces are not carried over. The voice OpenRouter key is read again
-  from nikcli's `auth.json`.
+  from ragu's `auth.json`.
 - `feat/ade` is where finished work is integrated; merges into it are
   announced to the other sessions first.
 

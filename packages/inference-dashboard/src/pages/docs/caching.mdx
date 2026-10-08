@@ -1,6 +1,6 @@
 ---
 layout: ../../layouts/Doc.astro
-title: Caching & Coalescing · nikcli Inference docs
+title: Caching & Coalescing · ragu Inference docs
 ---
 
 # Caching & Coalescing
@@ -17,12 +17,12 @@ curl .../chat/completions \
   -d '{"model":"nikseek","temperature":0,"messages":[{"role":"user","content":"What is 2+2?"}]}'
 ```
 
-The response will include `nikcli.cache: "hit"` for cached responses:
+The response will include `ragu.cache: "hit"` for cached responses:
 
 ```json
 {
   "choices": [{ "message": { "content": "4" } }],
-  "nikcli": {
+  "ragu": {
     "cache": "hit",
     "provider": "openrouter",
     "costUsd": 0
@@ -48,7 +48,7 @@ Default cache TTL is **1 hour** for hits. You can tune this per-request:
   "model": "nikseek",
   "temperature": 0,
   "messages": [...],
-  "nikcli": {
+  "ragu": {
     "cache": true,
     "cacheTtlSeconds": 7200
   }
@@ -74,7 +74,7 @@ Coalescing kicks in for requests with identical:
 
 ## Viewing cache status
 
-Every response includes cache info in `nikcli`:
+Every response includes cache info in `ragu`:
 
 | Value         | Meaning                                  |
 | ------------- | ---------------------------------------- |

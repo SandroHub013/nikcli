@@ -1,3 +1,3 @@
 export { ClientError, type ClientErrorReason } from "./client-error.js"
-export * as NikCli from "./client.js"
+export * as Ragu from "./client.js"
 export * from "./types.js"

@@ -23,13 +23,13 @@ const toc = [
 <DocsLayout
   title="Custom model providers"
   subtitle="Register a provider, its auth flow and its model list from a plugin — including an internal gateway that will never be in the public catalogue."
-  description="Guide to writing a nikcli provider plugin: the auth hook for API-key and OAuth methods, the loader, token refresh, dynamic model lists and per-provider request fixups."
+  description="Guide to writing a ragu provider plugin: the auth hook for API-key and OAuth methods, the loader, token refresh, dynamic model lists and per-provider request fixups."
   toc={toc}
 >
   <section id="what" class="doc-section">
     <h2>What a provider plugin does</h2>
     <p>
-      nikcli resolves models from a catalogue, but a plugin can add to it. Two hooks do the work,
+      ragu resolves models from a catalogue, but a plugin can add to it. Two hooks do the work,
       and they are independent — you can use either alone.
     </p>
     <table class="doc-table">
@@ -40,7 +40,7 @@ const toc = [
       </tbody>
     </table>
     <p>
-      The pattern covers three real situations: a provider that needs a key nikcli does not know how
+      The pattern covers three real situations: a provider that needs a key ragu does not know how
       to ask for, a provider behind OAuth, and a gateway whose model list depends on the account.
     </p>
   </section>
@@ -48,10 +48,10 @@ const toc = [
   <section id="api-key" class="doc-section">
     <h2>An API-key provider</h2>
     <p>
-      The smallest useful provider plugin declares one auth method. nikcli then offers it in the
+      The smallest useful provider plugin declares one auth method. ragu then offers it in the
       login flow and stores whatever the user enters.
     </p>
-    <DocCode language="ts" title=".nikcli/plugins/internal-gateway.ts">{`import type { Plugin } from "@nikcli-ai/plugin"
+    <DocCode language="ts" title=".nikcli/plugins/internal-gateway.ts">{`import type { Plugin } from "@ragu/plugin"
 
 export const InternalGateway: Plugin = async () => ({
   auth: {
@@ -136,7 +136,7 @@ export const InternalGateway: Plugin = async () => ({
     <h2>An OAuth provider</h2>
     <p>
       An <code>oauth</code> method returns a URL, instructions for the user, and a callback. There
-      are two shapes: <code>auto</code>, where nikcli polls your callback until the provider
+      are two shapes: <code>auto</code>, where ragu polls your callback until the provider
       completes the flow, and <code>code</code>, where the user pastes a code back.
     </p>
     <DocCode language="ts">{`auth: {

@@ -1,10 +1,10 @@
-# Contributing to Nikcli
+# Contributing to Ragu Code
 
 > Nikcli is a fork of [OpenCode](https://github.com/anomalyco/opencode). If your change fixes something that
 > also exists upstream, consider sending it to OpenCode as well — that is where the original project
-> lives and where the wider community benefits. Never open a nikcli issue on the upstream tracker.
+> lives and where the wider community benefits. Never open a ragu issue on the upstream tracker.
 
-We want to make it easy for you to contribute to Nikcli. Here are the most common type of changes that get merged:
+We want to make it easy for you to contribute to Ragu Code. Here are the most common type of changes that get merged:
 
 - Bug fixes
 - Additional LSPs / Formatters
@@ -28,7 +28,7 @@ If you are unsure if a PR would be accepted, feel free to ask a maintainer or lo
 
 Want to take on an issue? Leave a comment and a maintainer may assign it to you unless it is something we are already working on.
 
-## Developing Nikcli
+## Developing Ragu Code
 
 - Requirements: Bun 1.4.2 (see `packageManager` in `package.json`)
 - Install dependencies and start the dev server from the repo root:
@@ -40,13 +40,13 @@ Want to take on an issue? Leave a comment and a maintainer may assign it to you 
 
 ### Running against a different directory
 
-By default, `bun dev` runs Nikcli in the `packages/nikcli` directory. To run it against a different directory or repository:
+By default, `bun dev` runs Ragu Code in the `packages/ragu` directory. To run it against a different directory or repository:
 
 ```bash
 bun dev <directory>
 ```
 
-To run Nikcli in the root of the nikcli repo itself:
+To run Ragu Code in the root of the ragu repo itself:
 
 ```bash
 bun dev .
@@ -57,24 +57,24 @@ bun dev .
 To compile a standalone executable:
 
 ```bash
-./packages/nikcli/script/build.ts --single
+./packages/ragu/script/build.ts --single
 ```
 
 Then run it with:
 
 ```bash
-./packages/nikcli/dist/nikcli-<platform>/bin/nikcli
+./packages/ragu/dist/ragu-<platform>/bin/ragu
 ```
 
 Replace `<platform>` with your platform (e.g., `darwin-arm64`, `linux-x64`).
 
 - Core pieces:
-  - `packages/nikcli`: Nikcli core business logic & server.
-  - `packages/nikcli/src/cli/cmd/tui/`: The TUI code, written in SolidJS with [opentui](https://github.com/sst/opentui)
+  - `packages/ragu`: Ragu Code core business logic & server.
+  - `packages/ragu/src/cli/cmd/tui/`: The TUI code, written in SolidJS with [opentui](https://github.com/sst/opentui)
   - `packages/app`: The shared web UI components, written in SolidJS
   - `packages/desktop`: The native desktop app, built with Tauri (wraps `packages/app`)
   - `packages/mobile`: The native mobile app for iOS/Android, built with Tauri (wraps `packages/app`)
-  - `packages/plugin`: Source for `@nikcli-ai/plugin`
+  - `packages/plugin`: Source for `@ragu/plugin`
 
 ### Running the Web App
 
@@ -116,7 +116,7 @@ This runs `bun run --cwd packages/desktop build` automatically via Tauri’s `be
 > Running the desktop app requires additional Tauri dependencies (Rust toolchain, platform-specific libraries). See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for setup instructions.
 
 > [!NOTE]
-> If you make changes to the API or SDK (e.g. `packages/nikcli/src/server/server.ts`), run `./script/generate.ts` to regenerate the SDK and related files.
+> If you make changes to the API or SDK (e.g. `packages/ragu/src/server/server.ts`), run `./script/generate.ts` to regenerate the SDK and related files.
 
 Please try to follow the [style guide](./STYLE_GUIDE.md)
 
@@ -124,16 +124,16 @@ Please try to follow the [style guide](./STYLE_GUIDE.md)
 
 Bun debugging is currently rough around the edges. We hope this guide helps you get set up and avoid some pain points.
 
-The most reliable way to debug Nikcli is to run it manually in a terminal via `bun run --inspect=<url> dev ...` and attach
+The most reliable way to debug Ragu Code is to run it manually in a terminal via `bun run --inspect=<url> dev ...` and attach
 your debugger via that URL. Other methods can result in breakpoints being mapped incorrectly, at least in VSCode (YMMV).
 
 Caveats:
 
-- If you want to run the Nikcli TUI and have breakpoints triggered in the server code, you might need to run `bun dev spawn` instead of
+- If you want to run the Ragu Code TUI and have breakpoints triggered in the server code, you might need to run `bun dev spawn` instead of
   the usual `bun dev`. This is because `bun dev` runs the server in a worker thread and breakpoints might not work there.
 - If `spawn` does not work for you, you can debug the server separately:
   - Debug server: `bun run --inspect=ws://localhost:6499/ ./src/index.ts serve --port 4096`,
-    then attach TUI with `nikcli attach http://localhost:4096`
+    then attach TUI with `ragu attach http://localhost:4096`
   - Debug TUI: `bun run --inspect=ws://localhost:6499/ --conditions=browser ./src/index.ts`
 
 Other tips and tricks:
@@ -148,7 +148,7 @@ If you use VSCode, you can use our example configurations [.vscode/settings.exam
 Some debug methods that can be problematic:
 
 - Debug configurations with `"request": "launch"` can have breakpoints incorrectly mapped and thus unusable
-- The same problem arises when running Nikcli in the VSCode `JavaScript Debug Terminal`
+- The same problem arises when running Ragu Code in the VSCode `JavaScript Debug Terminal`
 
 With that said, you may want to try these methods, as they might work for you.
 
@@ -202,7 +202,7 @@ You can optionally include a scope to indicate which package is affected:
 
 - `feat(app):` feature in the app package
 - `fix(desktop):` bug fix in the desktop package
-- `chore(nikcli):` maintenance in the nikcli package
+- `chore(ragu):` maintenance in the ragu package
 
 Examples:
 
@@ -228,4 +228,4 @@ These are not strictly enforced, they are just general guidelines:
 
 ## Feature Requests
 
-For net-new functionality, start with a design conversation. Open an issue describing the problem, your proposed approach (optional), and why it belongs in Nikcli. The core team will help decide whether it should move forward; please wait for that approval instead of opening a feature PR directly.
+For net-new functionality, start with a design conversation. Open an issue describing the problem, your proposed approach (optional), and why it belongs in Ragu Code. The core team will help decide whether it should move forward; please wait for that approval instead of opening a feature PR directly.

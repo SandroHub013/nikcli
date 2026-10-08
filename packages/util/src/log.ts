@@ -67,7 +67,7 @@ export namespace Log {
   }
 
   /** Environment variable carrying the main process's log file to its worker. */
-  export const FILE_ENV = "NIKCLI_LOG_FILE"
+  export const FILE_ENV = "RAGU_LOG_FILE"
 
   let logpath = ""
   export function file() {
@@ -146,7 +146,7 @@ export namespace Log {
       // breaks cycles and caps depth/leaf so a single log line stays
       // bounded. The flag is consulted per-write so flipping it in
       // production does not require a restart.
-      const redact = process.env.NIKCLI_LOG_REDACT !== "0"
+      const redact = process.env.RAGU_LOG_REDACT !== "0"
       const stringify = (value: unknown) => (redact ? safeStringify(value) : JSON.stringify(value))
       const prefix = Object.entries({
         ...tags,

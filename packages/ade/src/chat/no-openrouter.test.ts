@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
 /*
- * C8: the chat talks to nikcli only. The OpenRouter path it had before the
+ * C8: the chat talks to ragu only. The OpenRouter path it had before the
  * store (a direct call with the voice settings' key) is gone, and nothing in
  * `chat/` reads that key again: it stays the voice's. The components cannot
  * run under `bun test`, so the sources are read, comments stripped so a note
@@ -18,7 +18,7 @@ const FORBIDDEN = [
   /\bAuthorization\b/,
   /\bBearer\s/,
   /\bvoiceSettings\b/,
-  /@nikcli-ai\/voice/,
+  /@ragu-code\/voice/,
   /\bstreamChat\b/,
 ]
 

@@ -55,49 +55,49 @@ const steps: ValidationStep[] = [
   {
     name: "Route coverage gate",
     command: ["bun", "run", "script/check-route-coverage.ts", "--strict"],
-    cwd: "packages/nikcli",
+    cwd: "packages/ragu",
     timeout: 30_000,
   },
   {
     name: "Open-payload allowlist gate",
     command: ["bun", "run", "script/check-open-payloads.ts"],
-    cwd: "packages/nikcli",
+    cwd: "packages/ragu",
     timeout: 30_000,
   },
   {
     name: "Account-required guard gate",
     command: ["bun", "run", "script/check-account-required.ts"],
-    cwd: "packages/nikcli",
+    cwd: "packages/ragu",
     timeout: 30_000,
   },
   {
     name: "Observability schema gate",
     command: ["bun", "run", "script/check-observability-schema.ts"],
-    cwd: "packages/nikcli",
+    cwd: "packages/ragu",
     timeout: 30_000,
   },
   {
     name: "Plugin v2 contract gate",
     command: ["bun", "run", "script/check-plugin-v2.ts"],
-    cwd: "packages/nikcli",
+    cwd: "packages/ragu",
     timeout: 30_000,
   },
   {
     name: "Workspace isolation gate",
     command: ["bun", "run", "script/check-workspace-isolation.ts"],
-    cwd: "packages/nikcli",
+    cwd: "packages/ragu",
     timeout: 30_000,
   },
   {
     name: "Network egress accounting gate",
     command: ["bun", "run", "script/check-network-egress.ts"],
-    cwd: "packages/nikcli",
+    cwd: "packages/ragu",
     timeout: 30_000,
   },
   {
     name: "Flag capture-at-import gate",
     command: ["bun", "run", "script/check-flag-capture.ts"],
-    cwd: "packages/nikcli",
+    cwd: "packages/ragu",
     timeout: 30_000,
   },
   {
@@ -107,7 +107,7 @@ const steps: ValidationStep[] = [
     // runner is a gate that fires for the runner's reasons.
     name: "Perf baseline gate",
     command: ["bun", "run", "script/check-perf-baseline.ts"],
-    cwd: "packages/nikcli",
+    cwd: "packages/ragu",
     timeout: 30_000,
   },
   {
@@ -116,14 +116,14 @@ const steps: ValidationStep[] = [
     // the colour.
     name: "Spec file-reference gate",
     command: ["bun", "run", "script/check-spec-paths.ts"],
-    cwd: "packages/nikcli",
+    cwd: "packages/ragu",
     critical: false,
     timeout: 30_000,
   },
   {
     name: "Spec commit-reference gate",
     command: ["bun", "run", "script/check-spec-commit-refs.ts"],
-    cwd: "packages/nikcli",
+    cwd: "packages/ragu",
     // Non-blocking: it depends on the checkout having history, and a CI
     // strategy change should not turn a documentation link into a red build.
     critical: false,
@@ -134,23 +134,23 @@ const steps: ValidationStep[] = [
     command: [
       "bash",
       "-c",
-      "bun run --cwd packages/nikcli generate:httpapi-clients && git diff --exit-code -- packages/sdk/js/src/httpapi/generated packages/nikcli/src/server/httpapi/client",
+      "bun run --cwd packages/ragu generate:httpapi-clients && git diff --exit-code -- packages/sdk/js/src/httpapi/generated packages/ragu/src/server/httpapi/client",
     ],
     timeout: 120_000,
   },
   {
     name: "Formatting",
     command: ["bun", "run", "format:check"],
-    cwd: "packages/nikcli",
+    cwd: "packages/ragu",
     timeout: 120_000,
   },
   {
     name: "Lint",
     command: ["bun", "run", "lint"],
-    cwd: "packages/nikcli",
+    cwd: "packages/ragu",
     timeout: 120_000,
   },
-  // The full nikcli suite is deliberately NOT run here. It is ~350 files that
+  // The full ragu suite is deliberately NOT run here. It is ~350 files that
   // cost this job 2.5 minutes at best, and it took the runner down outright at
   // worst: a single bun process climbed to 14.5 GB and was killed at file 175,
   // failing the job with exit 143 that `critical: false` could not contain.
@@ -161,7 +161,7 @@ const steps: ValidationStep[] = [
   // Validation runs no tests at all now: typecheck is the correctness signal
   // here, and the rest of these steps are static checks that finish in seconds.
   // No workflow runs the suite — `test.yml` was reduced to typecheck for the
-  // same reason. `bun run test:ci` in packages/nikcli runs it anywhere else,
+  // same reason. `bun run test:ci` in packages/ragu runs it anywhere else,
   // sharded so it does not OOM. See specs/v2/ci-pipeline-runtime-budgets.md.
   {
     name: "Shell syntax check (install script)",
@@ -179,10 +179,10 @@ const steps: ValidationStep[] = [
     timeout: 10_000,
   },
   {
-    // A literal NIKCLI_VERSION in a Dockerfile goes stale silently — the image
+    // A literal RAGU_VERSION in a Dockerfile goes stale silently — the image
     // keeps reporting an old release and no build ever fails over it.
     // Also reject positional Effect installs that change the validated graph.
-    name: "Docker nikcli version check",
+    name: "Docker ragu version check",
     command: ["bun", "run", "script/check-docker-versions.ts"],
     critical: true,
     timeout: 30_000,

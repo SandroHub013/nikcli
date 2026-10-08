@@ -9,7 +9,7 @@ import {
 } from "../actions"
 import { sessionItemSelector, inlineInputSelector } from "../selectors"
 
-const shareDisabled = process.env.NIKCLI_DISABLE_SHARE === "true" || process.env.NIKCLI_DISABLE_SHARE === "1"
+const shareDisabled = process.env.RAGU_DISABLE_SHARE === "true" || process.env.RAGU_DISABLE_SHARE === "1"
 
 type Sdk = Parameters<typeof withSession>[0]
 
@@ -107,7 +107,7 @@ test("session can be deleted via header menu", async ({ page, sdk, gotoSession }
 })
 
 test("session can be shared and unshared via header button", async ({ page, sdk, gotoSession }) => {
-  test.skip(shareDisabled, "Share is disabled in this environment (NIKCLI_DISABLE_SHARE).")
+  test.skip(shareDisabled, "Share is disabled in this environment (RAGU_DISABLE_SHARE).")
 
   const stamp = Date.now()
   const title = `e2e share test ${stamp}`

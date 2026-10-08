@@ -33,10 +33,10 @@ Performance-related issues:
 
 Desktop app issues:
 
-- `nikcli web` command
+- `ragu web` command
 - The desktop app itself
 
-**Only** add if it's specifically about the Desktop application or `nikcli web` view. **Do not** add for terminal, TUI, or general nikcli issues.
+**Only** add if it's specifically about the Desktop application or `ragu web` view. **Do not** add for terminal, TUI, or general ragu issues.
 
 #### nix
 
@@ -44,9 +44,9 @@ Desktop app issues:
 
 #### zen
 
-**Only** add if the issue mentions "zen" or "nikcli zen" or "nikcli black".
+**Only** add if the issue mentions "zen" or "ragu zen" or "ragu black".
 
-If the issue doesn't have "zen" or "nikcli black" in it then don't add zen label
+If the issue doesn't have "zen" or "ragu black" in it then don't add zen label
 
 #### docs
 

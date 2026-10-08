@@ -1,5 +1,5 @@
 import { REPLY_VOICES, type ReplyBackend, type ReplyVoice, type ReplyVoiceMemory, type TtsLocale } from "./model"
-import { t, type Locale, type MessageKey } from "@nikcli-ai/ade/i18n"
+import { t, type Locale, type MessageKey } from "@ragu/ade/i18n"
 
 /*
  * Nothing in this file may import a *value* from `model.ts`. `model.ts` needs

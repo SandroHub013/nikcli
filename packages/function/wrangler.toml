@@ -1,4 +1,4 @@
-name = "nikcli-function"
+name = "ragu-function"
 main = "src/api.ts"
 compatibility_date = "2025-01-25"
 compatibility_flags = ["nodejs_compat"]
@@ -30,7 +30,7 @@ new_sqlite_classes = ["SyncServer"]
 # Durable storage for shared session JSON (survives DO eviction).
 [[r2_buckets]]
 binding = "Bucket"
-bucket_name = "nikcli-share"
+bucket_name = "ragu-share"
 
 # ADMIN_SECRET is a secret; set it with `wrangler secret put ADMIN_SECRET`.
 # (Under SST it is linked via infra/app.ts instead.)

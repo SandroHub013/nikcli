@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
-import { Button } from "@nikcli-ai/ui/button"
-import { Select } from "@nikcli-ai/ui/select"
+import { Button } from "@ragu/ui/button"
+import { Select } from "@ragu/ui/select"
 import { app, createPoll } from "../lib/store"
 import { unwrap } from "../lib/api"
 import { compact, duration, num, usd, when } from "../lib/format"
@@ -42,7 +42,7 @@ export function Activity() {
   return (
     <Page
       title="Activity"
-      subtitle="Usage analytics straight from the nikcli service: tokens, cost, tools, models and sessions"
+      subtitle="Usage analytics straight from the ragu service: tokens, cost, tools, models and sessions"
       actions={
         <>
           <Select

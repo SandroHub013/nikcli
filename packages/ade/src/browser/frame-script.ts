@@ -178,7 +178,7 @@ export function frameGuard(win: any, bridge: (shim: any) => void): void {
   }
 
   // A site's own copy of the bridge stays out: this one is the one ADE trusts.
-  define(win, "__NIKCLI_INSPECTOR_ACTIVE__", { value: true, writable: false, configurable: false })
+  define(win, "__RAGU_INSPECTOR_ACTIVE__", { value: true, writable: false, configurable: false })
 
   let secret: string | undefined
   let started = false
@@ -219,7 +219,7 @@ export function frameGuard(win: any, bridge: (shim: any) => void): void {
     if (started) return
     started = true
     bridge({
-      __NIKCLI_INSPECTOR_ACTIVE__: false,
+      __RAGU_INSPECTOR_ACTIVE__: false,
       __ADE_LISTEN__: listenTrusted,
       parent: { postMessage: (message: unknown) => send(message) },
       getComputedStyle: (element: unknown, pseudo?: unknown) => computed(win, element, pseudo),

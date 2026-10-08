@@ -45,8 +45,8 @@ jobs:
             echo "No changes to commit"
             exit 0
           fi
-          git config --local user.email "nikcli-ci@users.noreply.github.com"
-          git config --local user.name "nikcli-ci[bot]"
+          git config --local user.email "ragu-ci@users.noreply.github.com"
+          git config --local user.name "ragu-ci[bot]"
           git add -A
           git commit -m "chore: generate"
           git push origin HEAD:${{ github.ref_name }} --no-verify

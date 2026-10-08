@@ -1,0 +1,262 @@
+import { BusEvent } from "@/bus/bus-event"
+import { Bus } from "@/bus"
+import path from "path"
+import { pathToFileURL, fileURLToPath } from "url"
+import type { Diagnostic as VSCodeDiagnostic } from "vscode-languageserver-types"
+import { Log } from "@ragu/util/log"
+import { LANGUAGE_EXTENSIONS } from "@ragu/util/language"
+import type { LSPServer } from "./server"
+import { withTimeout } from "../util/timeout"
+import { Schema } from "effect"
+import { Filesystem } from "@ragu/util/filesystem"
+
+const DIAGNOSTICS_DEBOUNCE_MS = 150
+
+export namespace LSPClient {
+  const log = Log.create({ service: "lsp.client" })
+
+  export type Info = NonNullable<Awaited<ReturnType<typeof create>>>
+
+  export type Diagnostic = VSCodeDiagnostic
+
+  export class InitializeError extends Schema.TaggedError<InitializeError>()("LSPInitializeError", {
+    serverID: Schema.String,
+  }) {}
+
+  /**
+   * Union of all errors that any `LSPClient` method can fail with.
+   */
+  export type Error = InitializeError
+
+  export const Event = {
+    // Internal: this module publishes it and this module waits on it (see the
+    // `Bus.subscribe` below). It is the bus used as in-process request/response,
+    // and serving it to a remote client would leak local file paths and the
+    // timing of local analysis. See `specs/v2/public-event-filter.md`.
+    Diagnostics: BusEvent.schema(
+      "lsp.client.diagnostics",
+      Schema.Struct({
+        serverID: Schema.String,
+        path: Schema.String,
+      }),
+      { visibility: "internal" },
+    ),
+  }
+
+  export async function create(input: {
+    serverID: string
+    server: LSPServer.Handle
+    root: string
+    /** Base for relative paths a caller hands to `notify.open` / `notify.change`. */
+    directory: string
+  }) {
+    const l = log.clone().tag("serverID", input.serverID)
+    const directory = input.directory
+    l.info("starting client")
+
+    // Imported here, not at module scope: `vscode-jsonrpc/node` costs ~21ms of
+    // module evaluation in every process that loads the LSP module, including
+    // the ones that never start a language server. By the time we get here the
+    // server process is already spawned, so the load is free in wall-clock terms.
+    const { createMessageConnection, StreamMessageReader, StreamMessageWriter } = await import("vscode-jsonrpc/node")
+
+    const connection = createMessageConnection(
+      new StreamMessageReader(input.server.process.stdout as any),
+      new StreamMessageWriter(input.server.process.stdin as any),
+    )
+
+    const diagnostics = new Map<string, Diagnostic[]>()
+    connection.onNotification("textDocument/publishDiagnostics", (params) => {
+      const filePath = Filesystem.normalizePath(fileURLToPath(params.uri))
+      l.info("textDocument/publishDiagnostics", {
+        path: filePath,
+        count: params.diagnostics.length,
+      })
+      const exists = diagnostics.has(filePath)
+      diagnostics.set(filePath, params.diagnostics)
+      if (!exists && input.serverID === "typescript") return
+      Bus.publish(Event.Diagnostics, { path: filePath, serverID: input.serverID })
+    })
+    connection.onRequest("window/workDoneProgress/create", (params) => {
+      l.info("window/workDoneProgress/create", params)
+      return null
+    })
+    connection.onRequest("workspace/configuration", async () => {
+      return [input.server.initialization ?? {}]
+    })
+    connection.onRequest("client/registerCapability", async () => {})
+    connection.onRequest("client/unregisterCapability", async () => {})
+    connection.onRequest("workspace/workspaceFolders", async () => [
+      {
+        name: "workspace",
+        uri: pathToFileURL(input.root).href,
+      },
+    ])
+    connection.listen()
+
+    l.info("sending initialize")
+    await withTimeout(
+      connection.sendRequest("initialize", {
+        rootUri: pathToFileURL(input.root).href,
+        processId: input.server.process.pid,
+        workspaceFolders: [
+          {
+            name: "workspace",
+            uri: pathToFileURL(input.root).href,
+          },
+        ],
+        initializationOptions: {
+          ...input.server.initialization,
+        },
+        capabilities: {
+          window: {
+            workDoneProgress: true,
+          },
+          workspace: {
+            configuration: true,
+            didChangeWatchedFiles: {
+              dynamicRegistration: true,
+            },
+          },
+          textDocument: {
+            synchronization: {
+              didOpen: true,
+              didChange: true,
+            },
+            publishDiagnostics: {
+              versionSupport: true,
+            },
+          },
+        },
+      }),
+      45_000,
+    ).catch((err) => {
+      l.error("initialize error", { error: err })
+      throw Object.assign(new InitializeError({ serverID: input.serverID }), { cause: err })
+    })
+
+    await connection.sendNotification("initialized", {})
+
+    if (input.server.initialization) {
+      await connection.sendNotification("workspace/didChangeConfiguration", {
+        settings: input.server.initialization,
+      })
+    }
+
+    const files: {
+      [path: string]: number
+    } = {}
+
+    const result = {
+      root: input.root,
+      get serverID() {
+        return input.serverID
+      },
+      get connection() {
+        return connection
+      },
+      notify: {
+        async open(input: { path: string }) {
+          input.path = path.isAbsolute(input.path) ? input.path : path.resolve(directory, input.path)
+          const file = Bun.file(input.path)
+          const text = await file.text()
+          const extension = path.extname(input.path)
+          const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
+
+          const version = files[input.path]
+          if (version !== undefined) {
+            log.info("workspace/didChangeWatchedFiles", input)
+            await connection.sendNotification("workspace/didChangeWatchedFiles", {
+              changes: [
+                {
+                  uri: pathToFileURL(input.path).href,
+                  type: 2,
+                },
+              ],
+            })
+
+            const next = version + 1
+            files[input.path] = next
+            log.info("textDocument/didChange", {
+              path: input.path,
+              version: next,
+            })
+            await connection.sendNotification("textDocument/didChange", {
+              textDocument: {
+                uri: pathToFileURL(input.path).href,
+                version: next,
+              },
+              contentChanges: [{ text }],
+            })
+            return
+          }
+
+          log.info("workspace/didChangeWatchedFiles", input)
+          await connection.sendNotification("workspace/didChangeWatchedFiles", {
+            changes: [
+              {
+                uri: pathToFileURL(input.path).href,
+                type: 1,
+              },
+            ],
+          })
+
+          log.info("textDocument/didOpen", input)
+          diagnostics.delete(input.path)
+          await connection.sendNotification("textDocument/didOpen", {
+            textDocument: {
+              uri: pathToFileURL(input.path).href,
+              languageId,
+              version: 0,
+              text,
+            },
+          })
+          files[input.path] = 0
+          return
+        },
+      },
+      get diagnostics() {
+        return diagnostics
+      },
+      async waitForDiagnostics(input: { path: string }) {
+        const normalizedPath = Filesystem.normalizePath(
+          path.isAbsolute(input.path) ? input.path : path.resolve(directory, input.path),
+        )
+        log.info("waiting for diagnostics", { path: normalizedPath })
+        let unsub: () => void
+        let debounceTimer: ReturnType<typeof setTimeout> | undefined
+        return await withTimeout(
+          new Promise<void>((resolve) => {
+            unsub = Bus.subscribe(Event.Diagnostics, (event) => {
+              if (event.properties.path === normalizedPath && event.properties.serverID === result.serverID) {
+                if (debounceTimer) clearTimeout(debounceTimer)
+                debounceTimer = setTimeout(() => {
+                  log.info("got diagnostics", { path: normalizedPath })
+                  unsub?.()
+                  resolve()
+                }, DIAGNOSTICS_DEBOUNCE_MS)
+              }
+            })
+          }),
+          3000,
+        )
+          .catch(() => {})
+          .finally(() => {
+            if (debounceTimer) clearTimeout(debounceTimer)
+            unsub?.()
+          })
+      },
+      async shutdown() {
+        l.info("shutting down")
+        connection.end()
+        connection.dispose()
+        input.server.process.kill()
+        l.info("shutdown")
+      },
+    }
+
+    l.info("initialized")
+
+    return result
+  }
+}

@@ -59,7 +59,7 @@ describe("the folder's event stream", () => {
     expect(fake.sent).toHaveLength(1)
     expect(fake.sent[0]!.path).toBe("/event")
     const headers = new Map(fake.sent[0]!.headers.map(([name, value]) => [name.toLowerCase(), value]))
-    expect(decodeURIComponent(headers.get("x-nikcli-directory")!)).toBe(PROJECT)
+    expect(decodeURIComponent(headers.get("x-ragu-directory")!)).toBe(PROJECT)
     // Leaving the loop closed the server's stream, once.
     expect(fake.aborted).toEqual([1])
   })

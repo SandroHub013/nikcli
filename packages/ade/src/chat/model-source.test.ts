@@ -20,7 +20,7 @@ function counted(results: ModelRead[]) {
     asked.push(key)
     await gate
     const next = results.shift()
-    if (!next) throw new Error("nikcli è sparito")
+    if (!next) throw new Error("ragu è sparito")
     return next
   })
   return { source, asked, release }
@@ -50,13 +50,13 @@ describe("the catalog behind a model chip (catalog review, conditions 1 and 3)",
 
   test("a failure is not kept: it says why, and the next open reads again", async () => {
     const s = counted([
-      { ok: false, reason: "nikcli models è uscito con 1: config non valida" },
+      { ok: false, reason: "ragu models è uscito con 1: config non valida" },
       { ok: true, models: [QWEN] },
     ])
     s.release()
     const failed = await s.source.read("C:/p")
-    expect(failed).toEqual({ ok: false, reason: "nikcli models è uscito con 1: config non valida" })
-    expect(stateOf(failed)).toEqual({ kind: "failed", reason: "nikcli models è uscito con 1: config non valida" })
+    expect(failed).toEqual({ ok: false, reason: "ragu models è uscito con 1: config non valida" })
+    expect(stateOf(failed)).toEqual({ kind: "failed", reason: "ragu models è uscito con 1: config non valida" })
     expect(s.source.kept("C:/p")).toBeUndefined()
     expect(await s.source.read("C:/p")).toEqual({ ok: true, models: [QWEN] })
     expect(s.asked).toEqual(["C:/p", "C:/p"])
@@ -65,7 +65,7 @@ describe("the catalog behind a model chip (catalog review, conditions 1 and 3)",
   test("a read that throws fails with its message, and is not kept either", async () => {
     const s = counted([])
     s.release()
-    expect(await s.source.read("C:/p")).toEqual({ ok: false, reason: "nikcli è sparito" })
+    expect(await s.source.read("C:/p")).toEqual({ ok: false, reason: "ragu è sparito" })
     expect(s.source.kept("C:/p")).toBeUndefined()
   })
 

@@ -132,7 +132,7 @@ describe("saving and restoring a session", () => {
      * conversation once and then opened a new one, because the id lived only
      * in the saved state and the restored pane had forgotten it.
      */
-    const first = roundTrip([session({ agent: "nikcli", model: "nikcli", resumeId: "ses_uno" })])
+    const first = roundTrip([session({ agent: "ragu", model: "ragu", resumeId: "ses_uno" })])
     expect(first.restored.panes[0].resumeId).toBe("ses_uno")
     expect(first.restored.panes[0].lines.at(-1)?.text).toContain("Riapro")
 
@@ -143,7 +143,7 @@ describe("saving and restoring a session", () => {
 
   test("the spawn's nonce is saved, so the restore can read its last report", () => {
     const first = roundTrip([
-      session({ agent: "nikcli", model: "nikcli", resumeId: "ses_uno", linkNonce: "a1b2c3d4e5f6" }),
+      session({ agent: "ragu", model: "ragu", resumeId: "ses_uno", linkNonce: "a1b2c3d4e5f6" }),
     ])
     expect(first.saved.panes[0].linkNonce).toBe("a1b2c3d4e5f6")
     expect(first.restored.panes[0].linkNonce).toBe("a1b2c3d4e5f6")
@@ -155,10 +155,10 @@ describe("saving and restoring a session", () => {
   })
 
   test("the folder of a conversation followed from another folder is saved, to be said again (review, BASSO 2)", () => {
-    const first = roundTrip([session({ agent: "nikcli", model: "nikcli", resumeId: "ses_uno", otherDir: "C:\\altro" })])
+    const first = roundTrip([session({ agent: "ragu", model: "ragu", resumeId: "ses_uno", otherDir: "C:\\altro" })])
     expect(first.saved.panes[0].otherDir).toBe("C:\\altro")
     expect(first.restored.panes[0].otherDir).toBe("C:\\altro")
-    const none = roundTrip([session({ agent: "nikcli", model: "nikcli", resumeId: "ses_uno" })])
+    const none = roundTrip([session({ agent: "ragu", model: "ragu", resumeId: "ses_uno" })])
     expect(none.saved.panes[0].otherDir).toBeUndefined()
   })
 

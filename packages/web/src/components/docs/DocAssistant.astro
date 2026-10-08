@@ -9,9 +9,9 @@ const { pathname } = Astro.props;
 const currentPage = docsIndex.find((entry) => entry.href === pathname);
 
 const suggestions = [
-  "How do I install and run nikcli?",
+  "How do I install and run ragu?",
   "How do I add a model provider API key?",
-  currentPage ? `Explain ${currentPage.title} in simple terms` : "What is nikcli?",
+  currentPage ? `Explain ${currentPage.title} in simple terms` : "What is ragu?",
   "Build me a shareable cheatsheet for permission modes",
 ];
 ---
@@ -52,7 +52,7 @@ const suggestions = [
     id="doc-assistant-panel"
     data-assistant-panel
     role="dialog"
-    aria-label="Nikcli documentation assistant"
+    aria-label="Ragu Code documentation assistant"
     class="fixed inset-x-0 bottom-0 z-[70] hidden flex-col overflow-hidden rounded-t-[var(--radius-card)] border border-b-0 border-terminal-border/80 bg-terminal-bg shadow-strong sm:inset-x-auto sm:right-5 sm:bottom-5 sm:w-[24.5rem] sm:rounded-[var(--radius-card)] sm:border-b group-data-[state=minimized]/assistant:h-auto group-data-[state=minimized]/assistant:sm:w-[20rem] group-data-[state=open]/assistant:flex group-data-[state=minimized]/assistant:flex xl:right-6 xl:bottom-6"
     style="max-height: min(85dvh, 34rem);"
   >
@@ -87,7 +87,7 @@ const suggestions = [
           {
             currentPage
               ? `Grounded in the docs · reading ${currentPage.title}`
-              : "Grounded in the nikcli documentation"
+              : "Grounded in the ragu documentation"
           }
         </span>
       </button>
@@ -146,7 +146,7 @@ const suggestions = [
     >
       <div data-assistant-empty class="space-y-3">
         <p class="text-sm leading-relaxed text-terminal-muted">
-          Ask anything about nikcli. Answers are grounded in the documentation on this site and cite the
+          Ask anything about ragu. Answers are grounded in the documentation on this site and cite the
           pages they came from — and it can publish a cheatsheet, config or checklist as a shareable
           artifact. Free for everyone, no account needed.
         </p>
@@ -177,7 +177,7 @@ const suggestions = [
           data-assistant-input
           rows="1"
           maxlength="1200"
-          placeholder="Ask about nikcli…"
+          placeholder="Ask about ragu…"
           class="max-h-32 min-h-11 flex-1 resize-none rounded-[var(--radius-md)] border border-terminal-border/70 bg-terminal-bg px-3 py-2.5 text-base text-terminal-text placeholder:text-terminal-muted/70 focus:border-terminal-accent/50 focus:outline-none focus:ring-2 focus:ring-terminal-accent/20 sm:text-sm"
         ></textarea>
         <button
@@ -215,9 +215,9 @@ const suggestions = [
   };
   type PanelState = "closed" | "open" | "minimized";
 
-  const STORE_KEY = "nikcli:docs-assistant";
-  const STATE_KEY = "nikcli:docs-assistant:state";
-  const SESSION_KEY = "nikcli:docs-assistant:session";
+  const STORE_KEY = "ragu:docs-assistant";
+  const STATE_KEY = "ragu:docs-assistant:state";
+  const SESSION_KEY = "ragu:docs-assistant:session";
   const MAX_STORED = 12;
   const MOBILE = "(max-width: 639px)";
 
@@ -529,7 +529,7 @@ const suggestions = [
         render();
         if (options.focus !== false && !mobile.matches) window.setTimeout(() => input.focus(), 60);
         window.dispatchEvent(
-          new CustomEvent("nikcli:mobile-overlay-open", { detail: { source: "assistant" } }),
+          new CustomEvent("ragu:mobile-overlay-open", { detail: { source: "assistant" } }),
         );
       }
       syncViewport();
@@ -588,7 +588,7 @@ const suggestions = [
             } else if (name === "reasoning") {
               target.reasoning = (target.reasoning ?? "") + (payload as { text: string }).text;
             }
-            // `delta` appends (Workers AI tokens), `text` replaces (nikcli
+            // `delta` appends (Workers AI tokens), `text` replaces (ragu
             // message updates, and the final normalized answer).
             else if (name === "delta") target.content += (payload as { text: string }).text;
             else if (name === "text") target.content = (payload as { text: string }).text;
@@ -603,7 +603,7 @@ const suggestions = [
               const meta = payload as { backend?: string; sessionID?: string };
               if (meta.sessionID) save(SESSION_KEY, meta.sessionID);
               if (badge && meta.backend) {
-                badge.textContent = meta.backend === "nikcli" ? "nikcli" : "cf ai";
+                badge.textContent = meta.backend === "ragu" ? "ragu" : "cf ai";
                 badge.hidden = false;
               }
             }
@@ -742,7 +742,7 @@ const suggestions = [
       setState(state === "open" ? "minimized" : "closed");
     });
 
-    on(window, "nikcli:mobile-overlay-open", (event) => {
+    on(window, "ragu:mobile-overlay-open", (event) => {
       if (event instanceof CustomEvent && event.detail?.source !== "assistant" && state === "open") {
         setState("minimized");
       }

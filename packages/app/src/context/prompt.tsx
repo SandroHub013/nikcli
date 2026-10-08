@@ -1,10 +1,10 @@
 import { createStore } from "solid-js/store"
-import { createSimpleContext } from "@nikcli-ai/ui/context"
+import { createSimpleContext } from "@ragu/ui/context"
 import { batch, createMemo, createRoot, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
-import { checksum } from "@nikcli-ai/util/encode"
+import { checksum } from "@ragu/util/encode"
 
 interface PartBase {
   content: string

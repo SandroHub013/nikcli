@@ -48,7 +48,7 @@ export function AppLockOverlay({ onUnlocked }: { onUnlocked: () => void }) {
       if (cancelled) return
       const nextLabel = biometricLabel(capability.types)
       setLabel(nextLabel)
-      await requestUnlock(`Unlock nikcli with ${nextLabel}`)
+      await requestUnlock(`Unlock ragu with ${nextLabel}`)
     }
 
     void getBiometricCapability().then((capability) => {
@@ -97,7 +97,7 @@ export function AppLockOverlay({ onUnlocked }: { onUnlocked: () => void }) {
         <View style={{ alignItems: "center", gap: 20, paddingTop: 48 }}>
           <BrandMark height={28} />
           <Text style={{ color: palette.ink, textAlign: "center", ...typeStyle(22, { weight: "600" }) }}>
-            nikcli is locked
+            ragu is locked
           </Text>
           <Text style={{ color: palette.soft, textAlign: "center", maxWidth: 280, ...typeStyle(15) }}>
             Unlock with {label} or your device passcode to continue.
@@ -108,7 +108,7 @@ export function AppLockOverlay({ onUnlocked }: { onUnlocked: () => void }) {
             label={unlockLabel}
             loading={busy}
             accessibilityLabel={unlockLabel}
-            onPress={() => void requestUnlock(`Unlock nikcli with ${label}`)}
+            onPress={() => void requestUnlock(`Unlock ragu with ${label}`)}
           />
         </View>
       </View>

@@ -7,7 +7,7 @@ const user = await getCurrentUser(Astro as any).catch(() => null)
 if (!user) return Astro.redirect("/sign-in")
 ---
 
-<Dashboard active="settings" title="Settings · nikcli Inference">
+<Dashboard active="settings" title="Settings · ragu Inference">
   <div class="app-page">
     <div class="app-header">
       <div>
@@ -48,7 +48,7 @@ if (!user) return Astro.redirect("/sign-in")
       <p class="app-kicker">Security</p>
       <h2 class="mt-2 font-display text-xl font-semibold text-terminal-text">Sign-in</h2>
       <p class="mt-3 text-sm leading-6 text-terminal-muted">
-        This dashboard uses your NikCLI identity (GitHub or email verification code) — there is no password to manage.
+        This dashboard uses your Ragu Code identity (GitHub or email verification code) — there is no password to manage.
         Sign-in and session security are handled by
         <a href="https://auth.nikcli-ai.dev" class="font-medium text-terminal-accent hover:underline">auth.nikcli-ai.dev</a>.
       </p>

@@ -1,5 +1,5 @@
 import { Show, type JSX } from "solid-js"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 import type { VoiceEngine } from "../../engine"
 import { NikMic } from "../nik-mic"
 import type { VoiceSettingsState } from "../settings-state"

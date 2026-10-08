@@ -10,6 +10,6 @@ index 0000000..0000000 100644
 +// ESM interop: expose the function as `default` so `import extend from "extend"`
 +// works under Bun's strict CJS<->ESM loader. Required by gaxios / gtoken /
 +// google-auth-library, which all do `import extend from "extend"` from their
-+// ESM builds. Without this, nikcli fails when any connector triggers loading
++// ESM builds. Without this, ragu fails when any connector triggers loading
 +// of the Google auth chain (gchat, google-vertex, etc.).
 +module.exports.default = module.exports;

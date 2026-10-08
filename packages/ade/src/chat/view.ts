@@ -6,7 +6,7 @@
  * layout.
  */
 
-import type { Part, PermissionRequest, QuestionRequest } from "@nikcli-ai/sdk/httpapi"
+import type { Part, PermissionRequest, QuestionRequest } from "@ragu/sdk/httpapi"
 import { splitSegments, type Segment } from "./segments"
 
 /** Past this a tool's output is cut, and says so. */
@@ -200,7 +200,7 @@ export function type(draft: QuestionDraft, index: number, text: string): Questio
   return { ...draft, typed: draft.typed.map((typed, at) => (at === index ? text : typed)) }
 }
 
-/** Whether question `index` lets the user type an answer (nikcli's default is yes). */
+/** Whether question `index` lets the user type an answer (ragu's default is yes). */
 export const allowsTyping = (request: QuestionRequest, index: number) => request.questions[index]?.custom !== false
 
 /**

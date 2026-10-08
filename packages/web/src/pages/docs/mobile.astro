@@ -37,15 +37,15 @@ const toc = [
 
 <DocsLayout
   title="Mobile App"
-  subtitle="A complete guide to running and managing nikcli from the Expo app in packages/mobile against a host server."
-  description="Guide to the nikcli mobile app, sessions, terminal, routines, loops, settings, and host-server integration."
+  subtitle="A complete guide to running and managing ragu from the Expo app in packages/mobile against a host server."
+  description="Guide to the ragu mobile app, sessions, terminal, routines, loops, settings, and host-server integration."
   toc={toc}
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
-      The nikcli mobile app is an Expo / React Native client that drives a running
-      <strong>nikcli mobile host</strong> over its <code>/mobile/*</code> HTTP + SSE API. You start a
+      The ragu mobile app is an Expo / React Native client that drives a running
+      <strong>ragu mobile host</strong> over its <code>/mobile/*</code> HTTP + SSE API. You start a
       host on your machine (or a cloud platform), pair the app with a token, and then work from your
       phone: run agent sessions, approve tool actions, review diffs, import GitHub repos, manage
       routines and loops, and open interactive terminals.
@@ -64,7 +64,7 @@ const toc = [
   <section id="preview" class="doc-section">
     <h2>App preview</h2>
     <p>
-      The Expo app is built for one-handed control of a running nikcli host. Pair it over a QR code,
+      The Expo app is built for one-handed control of a running ragu host. Pair it over a QR code,
       then drive sessions, terminals, repos, routines, loops, and settings from the same surface you
       already use to check your messages.
     </p>
@@ -73,10 +73,10 @@ const toc = [
     <div class="appstore-hero not-prose">
       <div class="appstore-hero__copy">
         <span class="appstore-eyebrow">iOS · Android · Expo</span>
-        <h3 class="appstore-hero__title">Run nikcli from anywhere.</h3>
+        <h3 class="appstore-hero__title">Run ragu from anywhere.</h3>
         <p class="appstore-hero__lede">
           One app, six tabs, every surface of your host in your pocket. Pair once over
-          <code>nikcli://</code>, then stream sessions, approve tool calls, browse your worktrees,
+          <code>ragu://</code>, then stream sessions, approve tool calls, browse your worktrees,
           and ship a pull request without opening a laptop.
         </p>
         <ul class="appstore-hero__chips">
@@ -194,7 +194,7 @@ const toc = [
           <span class="appstore-eyebrow appstore-eyebrow--accent">Themes & preferences</span>
           <h4>Make it yours.</h4>
           <p>
-            100+ named color themes (Nikcli default, Nord, Dracula, Tokyo Night, Catppuccin,
+            100+ named color themes (Ragu Code default, Nord, Dracula, Tokyo Night, Catppuccin,
             Gruvbox, Solarized, GitHub, One Dark, Kanagawa, Rose Pine…). System / Light / Dark
             mode and the theme apply instantly and persist on the device.
           </p>
@@ -391,7 +391,7 @@ const toc = [
     <DocCallout type="info" title="Pairing from inside the TUI">
       <p>
         You can pair the phone without touching a terminal. Inside the interactive TUI run
-        <code>/mobile</code> (alias <code>/link</code>) to open the <strong>Connect Nikcli
+        <code>/mobile</code> (alias <code>/link</code>) to open the <strong>Connect Ragu Code
         Mobile</strong> dialog — it handles local LAN pairing, cloud-server pairing, and
         session teleport from one menu. See <a href="#pair-tui">Pair from the TUI</a> for the
         full walkthrough.
@@ -401,10 +401,10 @@ const toc = [
     <p>Use this to start the host and immediately print a pairing token + QR code.</p>
     <DocCode language="bash">
 # Local network / Tailscale — no --public-url needed
-nikcli mobile serve --pair --pair-name iphone
+ragu mobile serve --pair --pair-name iphone
 
 # Public endpoint (Railway, Fly, etc.)
-nikcli mobile serve \
+ragu mobile serve \
   --hostname 0.0.0.0 \
   --port $PORT \
   --public-url https://your-host.example.com \
@@ -416,7 +416,7 @@ nikcli mobile serve \
       <code>--public-url</code> is required so the QR encodes the right address.
     </p>
     <DocCode language="bash">
-nikcli mobile pair \
+ragu mobile pair \
   --public-url https://your-host.example.com \
   --name iphone --expiry-days 90 \
   --directory /home/user/projects/myrepo
@@ -434,18 +434,18 @@ nikcli mobile pair \
     </table>
     <h3>Combined terminal + mobile host</h3>
     <p>
-      <code>nikcli remote start --mobile</code> starts the mobile host alongside a terminal remote
+      <code>ragu remote start --mobile</code> starts the mobile host alongside a terminal remote
       session (or <code>--mobile-only</code> for just the mobile host) and prints a pairing QR. It
       shares the same <code>--public-url</code>, <code>--pair</code>, and pairing flags.
     </p>
     <h3>Token management</h3>
     <DocCode language="bash">
-nikcli mobile token list           # list issued pairing tokens
-nikcli mobile token revoke &lt;id&gt;     # revoke a token by ID
+ragu mobile token list           # list issued pairing tokens
+ragu mobile token revoke &lt;id&gt;     # revoke a token by ID
     </DocCode>
     <DocCallout type="warn" title="Public hosts must be secured">
       <p>
-        Public or LAN-facing hosting requires <code>NIKCLI_SERVER_PASSWORD</code> to be set. The
+        Public or LAN-facing hosting requires <code>RAGU_SERVER_PASSWORD</code> to be set. The
         server refuses to start with a non-loopback address or <code>--public-url</code> unless this
         variable is present (or Tailscale auth is active).
       </p>
@@ -456,7 +456,7 @@ nikcli mobile token revoke &lt;id&gt;     # revoke a token by ID
     <h2>Deploy as a server</h2>
     <p>
       For phone access outside your LAN you need a publicly reachable HTTPS endpoint running
-      <code>nikcli mobile serve</code>. The repository ships two Dockerfiles that build a
+      <code>ragu mobile serve</code>. The repository ships two Dockerfiles that build a
       production-ready image; you can run it on any container host — a VPS, Fly.io, Render,
       Google Cloud Run, Kubernetes, or Railway.
     </p>
@@ -483,11 +483,11 @@ nikcli mobile token revoke &lt;id&gt;     # revoke a token by ID
       </tbody>
     </table>
     <p>
-      Both images compile the <code>nikcli</code> binary inside the container, expose port
+      Both images compile the <code>ragu</code> binary inside the container, expose port
       <code>4096</code> for the mobile API and <code>2222</code> for optional SSH, and default to:
     </p>
     <DocCode language="bash">
-nikcli mobile serve --hostname 0.0.0.0 --port 4096
+ragu mobile serve --hostname 0.0.0.0 --port 4096
     </DocCode>
     <p>
       Persistent state (sessions, config, cache) is written under <code>/data</code> via
@@ -499,16 +499,16 @@ nikcli mobile serve --hostname 0.0.0.0 --port 4096
     <h3>Build and run locally</h3>
     <DocCode language="bash">
 # From the repository root
-docker build -f Dockerfile.serve -t nikcli-mobile .
+docker build -f Dockerfile.serve -t ragu-mobile .
 
 docker run -d \
-  --name nikcli-mobile \
+  --name ragu-mobile \
   -p 4096:4096 \
-  -v nikcli-data:/data \
-  -e NIKCLI_SERVER_PASSWORD='choose-a-strong-password' \
+  -v ragu-data:/data \
+  -e RAGU_SERVER_PASSWORD='choose-a-strong-password' \
   -e PORT=4096 \
-  nikcli-mobile \
-  nikcli mobile serve \
+  ragu-mobile \
+  ragu mobile serve \
     --hostname 0.0.0.0 \
     --port 4096 \
     --public-url https://your-host.example.com \
@@ -523,7 +523,7 @@ docker run -d \
     <DocCallout type="info" title="Pair after deploy">
       <p>
         If the container is already running, mint a new token with
-        <code>nikcli mobile pair --public-url https://your-host.example.com</code> on the host
+        <code>ragu mobile pair --public-url https://your-host.example.com</code> on the host
         (or <code>docker exec</code> into the container) instead of restarting with
         <code>--pair</code>.
       </p>
@@ -534,7 +534,7 @@ docker run -d \
       <thead><tr><th>Variable</th><th>Required</th><th>Purpose</th></tr></thead>
       <tbody>
         <tr>
-          <td><code>NIKCLI_SERVER_PASSWORD</code></td>
+          <td><code>RAGU_SERVER_PASSWORD</code></td>
           <td>Yes (public)</td>
           <td>
             HTTP basic-auth password for every API request. The server refuses to bind publicly
@@ -542,9 +542,9 @@ docker run -d \
           </td>
         </tr>
         <tr>
-          <td><code>NIKCLI_SERVER_USERNAME</code></td>
+          <td><code>RAGU_SERVER_USERNAME</code></td>
           <td>No</td>
-          <td>Basic-auth username. Defaults to <code>nikcli</code>.</td>
+          <td>Basic-auth username. Defaults to <code>ragu</code>.</td>
         </tr>
         <tr>
           <td><code>PORT</code></td>
@@ -552,7 +552,7 @@ docker run -d \
           <td>HTTP listen port inside the container. Defaults to <code>4096</code>.</td>
         </tr>
         <tr>
-          <td><code>NIKCLI_SERVER_CORS_ORIGINS</code></td>
+          <td><code>RAGU_SERVER_CORS_ORIGINS</code></td>
           <td>No</td>
           <td>
             Comma-separated extra origins allowed for browser clients (e.g. your web app domain).
@@ -563,14 +563,14 @@ docker run -d \
 
     <h3>Optional: restore auth and connectors</h3>
     <p>
-      The entrypoint (<code>packages/nikcli/scripts/railway-entrypoint.sh</code>) can hydrate
+      The entrypoint (<code>packages/ragu/scripts/railway-entrypoint.sh</code>) can hydrate
       provider keys and connector credentials from base64-encoded JSON before the server starts:
     </p>
     <table class="doc-table">
       <thead><tr><th>Variable</th><th>Writes to</th></tr></thead>
       <tbody>
-        <tr><td><code>NIKCLI_AUTH_JSON</code></td><td><code>/data/nikcli/auth.json</code> (provider API keys)</td></tr>
-        <tr><td><code>NIKCLI_CONNECTORS_AUTH_JSON</code></td><td><code>/data/nikcli/connectors-auth.json</code> (Slack, GitHub, etc.)</td></tr>
+        <tr><td><code>RAGU_AUTH_JSON</code></td><td><code>/data/ragu/auth.json</code> (provider API keys)</td></tr>
+        <tr><td><code>RAGU_CONNECTORS_AUTH_JSON</code></td><td><code>/data/ragu/connectors-auth.json</code> (Slack, GitHub, etc.)</td></tr>
       </tbody>
     </table>
     <p>
@@ -586,10 +586,10 @@ docker run -d \
     </p>
     <DocCode language="bash">
 # Plain text (one or more keys, newline-separated)
-NIKCLI_SSH_AUTHORIZED_KEYS="ssh-ed25519 AAAA... you@laptop"
+RAGU_SSH_AUTHORIZED_KEYS="ssh-ed25519 AAAA... you@laptop"
 
 # Or base64-encoded authorized_keys file
-NIKCLI_SSH_AUTHORIZED_KEYS_B64="c3NoLWVkMjU1MTkgQUFBQS4uLg=="
+RAGU_SSH_AUTHORIZED_KEYS_B64="c3NoLWVkMjU1MTkgQUFBQS4uLg=="
     </DocCode>
     <p>
       Map port <code>2222</code> if your platform exposes TCP services (Railway TCP proxy, Fly
@@ -602,7 +602,7 @@ NIKCLI_SSH_AUTHORIZED_KEYS_B64="c3NoLWVkMjU1MTkgQUFBQS4uLg=="
       <li>Build from <code>Dockerfile.serve</code> (or push to a registry your platform pulls from).</li>
       <li>Expose port <code>4096</code> (or set <code>PORT</code> to match your platform's injected port).</li>
       <li>Mount persistent storage at <code>/data</code>.</li>
-      <li>Set <code>NIKCLI_SERVER_PASSWORD</code> (and provider keys via env or volume).</li>
+      <li>Set <code>RAGU_SERVER_PASSWORD</code> (and provider keys via env or volume).</li>
       <li>Terminate TLS at the platform edge so the public URL is <code>https://…</code>.</li>
       <li>Start with <code>--public-url https://your-domain</code> and pair the phone.</li>
     </ol>
@@ -621,7 +621,7 @@ NIKCLI_SSH_AUTHORIZED_KEYS_B64="c3NoLWVkMjU1MTkgQUFBQS4uLg=="
           <td><strong>Fly.io</strong></td>
           <td>
             <code>fly launch</code> with <code>dockerfile = "Dockerfile.serve"</code>, attach a
-            volume at <code>/data</code>, set secrets for <code>NIKCLI_SERVER_PASSWORD</code>.
+            volume at <code>/data</code>, set secrets for <code>RAGU_SERVER_PASSWORD</code>.
           </td>
         </tr>
         <tr>
@@ -648,12 +648,12 @@ NIKCLI_SSH_AUTHORIZED_KEYS_B64="c3NoLWVkMjU1MTkgQUFBQS4uLg=="
     </p>
     <ul>
       <li><code>railway.toml</code> — sets <code>dockerfilePath = "Dockerfile.serve"</code> and mounts <code>/data</code>.</li>
-      <li><code>script/railway-deploy.sh</code> — builds a minimal upload context (~10 MB), syncs only the packages needed to compile nikcli, and runs <code>railway up</code>.</li>
+      <li><code>script/railway-deploy.sh</code> — builds a minimal upload context (~10 MB), syncs only the packages needed to compile ragu, and runs <code>railway up</code>.</li>
     </ul>
     <DocCode language="bash">
 # One-time: link the project (railway link)
-export NIKCLI_SERVER_PASSWORD='choose-a-strong-password'
-export RAILWAY_SERVICE=nikcli-mobile   # override if your service name differs
+export RAGU_SERVER_PASSWORD='choose-a-strong-password'
+export RAILWAY_SERVICE=ragu-mobile   # override if your service name differs
 
 ./script/railway-deploy.sh          # deploy and stream logs
 ./script/railway-deploy.sh --detach # trigger deploy in background
@@ -661,9 +661,9 @@ export RAILWAY_SERVICE=nikcli-mobile   # override if your service name differs
     <p>
       Railway injects <code>RAILWAY_PUBLIC_DOMAIN</code>; the default container command uses it for
       <code>--public-url</code> and auto-pairs on boot. Set
-      <code>NIKCLI_SERVER_PASSWORD</code> in the Railway dashboard before the first deploy. For SSH,
+      <code>RAGU_SERVER_PASSWORD</code> in the Railway dashboard before the first deploy. For SSH,
       add a TCP proxy targeting port <code>2222</code> and set
-      <code>NIKCLI_SSH_AUTHORIZED_KEYS</code>.
+      <code>RAGU_SSH_AUTHORIZED_KEYS</code>.
     </p>
     <DocCallout type="warn" title="HTTPS is mandatory for mobile">
       <p>
@@ -686,7 +686,7 @@ export RAILWAY_SERVICE=nikcli-mobile   # override if your service name differs
       <tbody>
         <tr><td><strong>Server URL</strong></td><td>Yes</td><td>Base address of the running host, e.g. <code>https://your-host.example.com</code>.</td></tr>
         <tr><td><strong>Bearer token</strong></td><td>No</td><td>Pairing token; sent as <code>Authorization: Bearer …</code> on every request.</td></tr>
-        <tr><td><strong>Default server directory</strong></td><td>No</td><td>Server path that scopes file/git/session operations; sent as the <code>x-nikcli-directory</code> header.</td></tr>
+        <tr><td><strong>Default server directory</strong></td><td>No</td><td>Server path that scopes file/git/session operations; sent as the <code>x-ragu-directory</code> header.</td></tr>
       </tbody>
     </table>
     <p>
@@ -701,12 +701,12 @@ export RAILWAY_SERVICE=nikcli-mobile   # override if your service name differs
   <section id="deep-link" class="doc-section">
     <h2>Deep link & QR</h2>
     <p>
-      Scanning the pairing QR opens a <code>nikcli://</code> URL that pre-fills the Connect fields.
+      Scanning the pairing QR opens a <code>ragu://</code> URL that pre-fills the Connect fields.
       The parser accepts two equivalent forms:
     </p>
     <DocCode language="text">
-nikcli://connect?server=&lt;url&gt;&amp;token=&lt;token&gt;&amp;directory=&lt;dir&gt;
-nikcli://?server=&lt;url&gt;&amp;token=&lt;token&gt;&amp;directory=&lt;dir&gt;
+ragu://connect?server=&lt;url&gt;&amp;token=&lt;token&gt;&amp;directory=&lt;dir&gt;
+ragu://?server=&lt;url&gt;&amp;token=&lt;token&gt;&amp;directory=&lt;dir&gt;
     </DocCode>
     <table class="doc-table">
       <thead><tr><th>Parameter</th><th>Required</th><th>Maps to</th></tr></thead>
@@ -718,7 +718,7 @@ nikcli://?server=&lt;url&gt;&amp;token=&lt;token&gt;&amp;directory=&lt;dir&gt;
     </table>
     <p>
       Deep links are handled both at cold start and while the app is open, so scanning with the app
-      already running also works. URLs with a non-<code>nikcli:</code> scheme are ignored.
+      already running also works. URLs with a non-<code>ragu:</code> scheme are ignored.
     </p>
   </section>
 
@@ -740,7 +740,7 @@ nikcli://?server=&lt;url&gt;&amp;token=&lt;token&gt;&amp;directory=&lt;dir&gt;
     <table class="doc-table">
       <thead><tr><th>Layer</th><th>Created by</th><th>Sent as</th><th>Controls</th></tr></thead>
       <tbody>
-        <tr><td>Pairing token</td><td><code>nikcli mobile pair</code> / <code>serve --pair</code></td><td><code>Authorization: Bearer</code> + <code>x-nikcli-directory</code></td><td>Device access to the host API</td></tr>
+        <tr><td>Pairing token</td><td><code>ragu mobile pair</code> / <code>serve --pair</code></td><td><code>Authorization: Bearer</code> + <code>x-ragu-directory</code></td><td>Device access to the host API</td></tr>
         <tr><td>User session token</td><td><code>/user/login</code> or <code>/user/register</code></td><td>Managed by the app for user-scoped endpoints</td><td>Identity, roles, per-user data</td></tr>
       </tbody>
     </table>
@@ -752,7 +752,7 @@ nikcli://?server=&lt;url&gt;&amp;token=&lt;token&gt;&amp;directory=&lt;dir&gt;
   <section id="brand" class="doc-section">
     <h2>Brand wordmark</h2>
     <p>
-      The mobile app renders the same nikcli pixel wordmark as the docs site and the dashboard
+      The mobile app renders the same ragu pixel wordmark as the docs site and the dashboard
       connect screen. <code>components/layout/BrandMark.tsx</code> consumes
       <code>wordmark-dark.png</code> and <code>wordmark-light.png</code> from
       <code>assets/</code> and picks the right variant through <code>useAppTheme()</code>.
@@ -792,14 +792,14 @@ nikcli://?server=&lt;url&gt;&amp;token=&lt;token&gt;&amp;directory=&lt;dir&gt;
     <p>
       <code>components/session/WorkspaceSwitcherSheet.tsx</code> is the bottom sheet opened from
       the session header. It lists every workspace the host knows about, lets you pick one, and
-      forwards the selection as <code>x-nikcli-directory</code> so subsequent calls land in the
+      forwards the selection as <code>x-ragu-directory</code> so subsequent calls land in the
       right project.
     </p>
     <ul>
       <li><strong>Active highlight</strong> — the current workspace is marked with the accent color and a checkmark.</li>
       <li><strong>Status pill</strong> — connected, error, or connecting state mirrored from the host bus event.</li>
       <li><strong>Switch action</strong> — sends the new <code>directory</code> + <code>workspace</code> through the SDK, then refreshes the session list and active workspace id in the store.</li>
-      <li><strong>Refresh</strong> — pull-to-refresh re-queries the host workspace list, useful after a fresh <code>nikcli workspace create</code>.</li>
+      <li><strong>Refresh</strong> — pull-to-refresh re-queries the host workspace list, useful after a fresh <code>ragu workspace create</code>.</li>
     </ul>
     <DocCallout type="info" title="Fallback directory">
       <p>
@@ -954,7 +954,7 @@ nikcli://?server=&lt;url&gt;&amp;token=&lt;token&gt;&amp;directory=&lt;dir&gt;
       </p>
     </DocCallout>
     <ul>
-      <li><strong>Server worktrees</strong> — tap a worktree to make it the active directory (forwarded as the <code>x-nikcli-directory</code> header). The active one is highlighted.</li>
+      <li><strong>Server worktrees</strong> — tap a worktree to make it the active directory (forwarded as the <code>x-ragu-directory</code> header). The active one is highlighted.</li>
       <li><strong>New sandbox</strong> — provision a fresh isolated server worktree before starting a task.</li>
       <li><strong>Import a repo</strong> — "Import only" clones the repo to the host and sets it active without creating a session; "Use repo" switches to an already-imported clone.</li>
       <li><strong>Guided launch</strong> — "Configure session" loads branches and opens a 3-step wizard (repo → branch → launch) to create a worktree and session in one go via the host GitHub API.</li>
@@ -991,7 +991,7 @@ nikcli://?server=&lt;url&gt;&amp;token=&lt;token&gt;&amp;directory=&lt;dir&gt;
       <p>
         The API trigger token is assigned by the host when the routine is created with
         <code>--api</code> / <code>--api-token</code>. Everything here is also available via
-        <code>nikcli routine</code> — see <a href="/docs/routines">Routines</a>.
+        <code>ragu routine</code> — see <a href="/docs/routines">Routines</a>.
       </p>
     </DocCallout>
   </section>
@@ -1027,7 +1027,7 @@ nikcli://?server=&lt;url&gt;&amp;token=&lt;token&gt;&amp;directory=&lt;dir&gt;
       <p>
         The duration parser accepts bare numbers (treated as minutes) and <code>Nd/Nh/Nm/Ns</code>
         tokens, including combinations such as <code>1h30m</code>. The same parser is used by the
-        loop detail editor and the <code>nikcli loop create --every</code> flag.
+        loop detail editor and the <code>ragu loop create --every</code> flag.
       </p>
     </DocCallout>
   </section>
@@ -1058,17 +1058,17 @@ nikcli://?server=&lt;url&gt;&amp;token=&lt;token&gt;&amp;directory=&lt;dir&gt;
   <section id="teleport" class="doc-section">
     <h2>Teleport</h2>
     <p>
-      <code>nikcli teleport</code> ships a session (and optionally the working tree) to a remote
-      nikcli host so you can pick it up from your phone. The CLI archives the session messages,
+      <code>ragu teleport</code> ships a session (and optionally the working tree) to a remote
+      ragu host so you can pick it up from your phone. The CLI archives the session messages,
       uploads them through <code>POST /mobile/teleport</code>, and the remote host re-hydrates the
       session in its own storage.
     </p>
     <DocCode language="bash">
 # Pick the most recent session and ship it to a remote host
-nikcli teleport --url https://my-host.example.com --token &lt;mobile-token&gt;
+ragu teleport --url https://my-host.example.com --token &lt;mobile-token&gt;
 
 # Ship a specific session, including the source files (no binaries)
-nikcli teleport ses_abc123 \
+ragu teleport ses_abc123 \
   --url https://my-host.example.com \
   --token &lt;mobile-token&gt; \
   --content --git=false --save
@@ -1114,7 +1114,7 @@ nikcli teleport ses_abc123 \
         <tr><td><strong>GitHub</strong></td><td>Connect via OAuth device flow (or save the OAuth client ID), view the connected login, disconnect, or save a manual <code>ghp_…</code> token.</td></tr>
         <tr><td><strong>MCP</strong></td><td>Add remote (URL) or local (command) MCP servers; enable/disable, connect, authenticate (browser), or clear auth, with live status chips.</td></tr>
         <tr><td><strong>Connectors</strong></td><td>Save/remove credentials for Figma, Slack, Discord, Microsoft Teams, Linear, Lovable, and Google Chat. Stored on the host.</td></tr>
-        <tr><td><strong>Skills</strong></td><td>Browse the host skill registry (sources: <code>.nikcli</code>, <code>.claude</code>, <code>.agents</code>) with name, category, version, and tags.</td></tr>
+        <tr><td><strong>Skills</strong></td><td>Browse the host skill registry (sources: <code>.ragu</code>, <code>.claude</code>, <code>.agents</code>) with name, category, version, and tags.</td></tr>
         <tr><td><strong>Agents</strong></td><td>Browse built-in and custom agents with their tools and IDs; the default agent is marked.</td></tr>
         <tr><td><strong>Commands</strong></td><td>Add/edit/remove host slash commands (template, optional agent/model override, subtask flag); manage local prompt presets and composer defaults.</td></tr>
         <tr><td><strong>Memories</strong></td><td>Add/remove reusable host-backed snippets and browse recent prompt history.</td></tr>
@@ -1163,7 +1163,7 @@ nikcli teleport ses_abc123 \
     </table>
     <p>
       Notifications are suppressed while the app is foregrounded and deduplicated within an 8-second
-      window. Android uses a dedicated <code>nikcli-mobile</code> channel. On iOS 16.2+ the app drives
+      window. Android uses a dedicated <code>ragu-mobile</code> channel. On iOS 16.2+ the app drives
       <strong>Live Activities</strong> that show session state on the Lock Screen / Dynamic Island,
       with a color tone derived from state (attention for approvals, countdown for retries, editorial
       for GitHub publish/cleanup, work for running). Activities deep-link back into the session and are
@@ -1199,7 +1199,7 @@ nikcli teleport ses_abc123 \
     <h2>Themes & preferences</h2>
     <p>
       Settings → Appearance offers a color mode (System, Light, Dark) and a color theme picker with
-      100+ named themes (Nikcli default, plus Nord, Dracula, Tokyo Night, Catppuccin, Gruvbox,
+      100+ named themes (Ragu Code default, plus Nord, Dracula, Tokyo Night, Catppuccin, Gruvbox,
       Solarized, GitHub, One Dark, Kanagawa, Rose Pine, and many more). Mode and theme apply instantly
       and persist on the device.
     </p>

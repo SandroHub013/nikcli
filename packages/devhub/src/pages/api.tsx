@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
-import { Button } from "@nikcli-ai/ui/button"
-import { Select } from "@nikcli-ai/ui/select"
+import { Button } from "@ragu/ui/button"
+import { Select } from "@ragu/ui/select"
 import { app, toastError } from "../lib/store"
 import { native, errorText, type ApiResponse } from "../lib/native"
 import { ms } from "../lib/format"
@@ -67,13 +67,13 @@ export function ApiConsole() {
 
   const send = async (m = method(), p = path()) => {
     const s = app.service()
-    if (!s) return toastError("No service", "No nikcli service is registered")
+    if (!s) return toastError("No service", "No ragu service is registered")
     setBusy(true)
     setErr(undefined)
     try {
       const headers: Record<string, string> = {}
       if (body().trim()) headers["content-type"] = "application/json"
-      if (directory().trim()) headers["x-nikcli-directory"] = encodeURIComponent(directory().trim())
+      if (directory().trim()) headers["x-ragu-directory"] = encodeURIComponent(directory().trim())
       const r = await native.api({ serviceUrl: s.url, method: m, path: p, headers, body: body().trim() || undefined })
       setRes(r)
       const next = [
@@ -97,7 +97,7 @@ export function ApiConsole() {
   return (
     <Page
       title="API console"
-      subtitle="Authenticated requests to the local nikcli HttpApi — the channel password is attached by the native side"
+      subtitle="Authenticated requests to the local ragu HttpApi — the channel password is attached by the native side"
     >
       <div class="dh-grid" data-cols="split">
         <div style={{ display: "flex", "flex-direction": "column", gap: "12px", "min-width": 0 }}>
@@ -191,7 +191,7 @@ export function ApiConsole() {
               <input
                 class="dh-input"
                 style={{ flex: 1 }}
-                placeholder="Instance directory (x-nikcli-directory), optional"
+                placeholder="Instance directory (x-ragu-directory), optional"
                 value={directory()}
                 onInput={(e) => setDirectory(e.currentTarget.value)}
               />

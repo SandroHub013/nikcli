@@ -39,7 +39,7 @@ import { firstWords, isSendHeld, triageWhileThinking } from "../dialog/while-thi
 import { answersWithoutName, takesWithoutName } from "../dialog/name-gate"
 import { PLANNABLE_COMMANDS, type PlanStep } from "../plan/schema"
 
-import { locale as uiLocale, t as tr } from "@nikcli-ai/ade/i18n"
+import { locale as uiLocale, t as tr } from "@ragu/ade/i18n"
 import { HostActionFailed, spokenMessage, type VoiceError } from "./errors"
 import { Speaker, Transcriber, VoiceHostService, type SpeakerService, type TranscriberService } from "./services"
 

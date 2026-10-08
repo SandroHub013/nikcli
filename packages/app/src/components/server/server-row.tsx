@@ -1,4 +1,4 @@
-import { Tooltip } from "@nikcli-ai/ui/tooltip"
+import { Tooltip } from "@ragu/ui/tooltip"
 import { JSXElement, ParentProps, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { serverDisplayName } from "@/context/server"
 import type { ServerHealth } from "@/utils/server-health"

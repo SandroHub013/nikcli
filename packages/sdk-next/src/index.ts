@@ -1,5 +1,5 @@
-export * as NikCli from "./nikcli"
+export * as Ragu from "./ragu"
 export { Tool } from "./tool"
 
-export { ClientError, type ClientErrorReason } from "@nikcli-ai/sdk/httpapi"
-export type * from "@nikcli-ai/sdk/httpapi"
+export { ClientError, type ClientErrorReason } from "@ragu/sdk/httpapi"
+export type * from "@ragu/sdk/httpapi"

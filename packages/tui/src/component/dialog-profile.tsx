@@ -1,5 +1,5 @@
 import { createMemo, createResource, createSignal } from "solid-js"
-import type { NikcliClient, ProfileInfo } from "@nikcli-ai/sdk/httpapi"
+import type { RaguClient, ProfileInfo } from "@ragu/sdk/httpapi"
 
 /** The reply-length setting, as the contract spells it. */
 type ProfileVerbosity = NonNullable<NonNullable<ProfileInfo["communication"]>["verbosity"]>
@@ -28,22 +28,22 @@ import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 
 type ProfileInput = Partial<Omit<ProfileInfo, "version" | "key" | "updatedAt">>
 
-function loadProfile(client: NikcliClient) {
+function loadProfile(client: RaguClient) {
   return client.profile
     .get()
     .then((result) => result.data ?? undefined)
     .catch(() => undefined)
 }
 
-function patchProfile(client: NikcliClient, input: ProfileInput) {
-  return client.profile.patch(input as Parameters<NikcliClient["profile"]["patch"]>[0]).then((result) => result.data)
+function patchProfile(client: RaguClient, input: ProfileInput) {
+  return client.profile.patch(input as Parameters<RaguClient["profile"]["patch"]>[0]).then((result) => result.data)
 }
 
-function clearProfile(client: NikcliClient) {
+function clearProfile(client: RaguClient) {
   return client.profile.clear().then((result) => result.data?.deleted ?? false)
 }
 
-function loadHabits(client: NikcliClient, worktree: string) {
+function loadHabits(client: RaguClient, worktree: string) {
   if (!worktree) return Promise.resolve("")
   return client.profile
     .habits({ worktree })
@@ -51,11 +51,11 @@ function loadHabits(client: NikcliClient, worktree: string) {
     .catch(() => "")
 }
 
-function clearHabits(client: NikcliClient, worktree: string) {
+function clearHabits(client: RaguClient, worktree: string) {
   return client.profile.clearHabits({ worktree }).then((result) => result.data?.deleted ?? false)
 }
 
-function loadPreview(client: NikcliClient, worktree: string) {
+function loadPreview(client: RaguClient, worktree: string) {
   return client.profile
     .preview({ worktree })
     .then((result) => result.data ?? { lines: [], habitsFile: "" })

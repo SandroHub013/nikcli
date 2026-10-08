@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createRoot, createSignal, onCleanup } from "solid-js"
-import { showToast } from "@nikcli-ai/ui/toast"
+import { showToast } from "@ragu/ui/toast"
 import { clientFor } from "./api"
 import { errorText, native, type ServiceInfo, type Snapshot } from "./native"
 
@@ -10,8 +10,8 @@ export type Sample = {
   cpu: number
   mem: number
   swap: number
-  nikcliRss: number
-  nikcliCpu: number
+  raguRss: number
+  raguCpu: number
   procs: number
 }
 
@@ -128,8 +128,8 @@ function createStore() {
           cpu: snap.cpuUsage,
           mem: snap.memTotal ? (snap.memUsed / snap.memTotal) * 100 : 0,
           swap: snap.swapTotal ? (snap.swapUsed / snap.swapTotal) * 100 : 0,
-          nikcliRss: own.reduce((a, p) => a + p.rss, 0),
-          nikcliCpu: own.reduce((a, p) => a + p.cpu, 0),
+          raguRss: own.reduce((a, p) => a + p.rss, 0),
+          raguCpu: own.reduce((a, p) => a + p.cpu, 0),
           procs: own.length,
         },
       ].slice(-HISTORY),

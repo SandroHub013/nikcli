@@ -13,7 +13,7 @@
  */
 
 import { t } from "../../i18n"
-import { agentDirs, readAgentFile, type AgentFile } from "../nikcli"
+import { agentDirs, readAgentFile, type AgentFile } from "../ragu"
 import { admitProject, configGrant, isConfigFile, type AdmitProjectDeps } from "../project-trust"
 import { admit, fileFingerprint, selfApproval, type TrustStore } from "../trust"
 import { runnerById } from "../runners"
@@ -90,7 +90,7 @@ export function mayRun(runner: string, owner: boolean): { ok: true } | { ok: fal
 const normalize = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
 
 /**
- * The user's own bot only in nikcli's global agent folders (`globalRoot`, as
+ * The user's own bot only in ragu's global agent folders (`globalRoot`, as
  * the Bots panel reads them in `store.ts`); anything else is a repository's,
  * whichever repository: the path is a string the page gives, and a bot of a
  * project other than the gateway's is no more the user's for that (G4
@@ -109,7 +109,7 @@ export interface RecheckDeps {
   readonly projects: TrustStore
   readonly read: (path: string) => Promise<string>
   readonly surface: AdmitProjectDeps["surface"]
-  /** nikcli's global configuration directory (`resolveRoots`); absent, every bot is a repository's. */
+  /** ragu's global configuration directory (`resolveRoots`); absent, every bot is a repository's. */
   readonly globalRoot?: string
 }
 
@@ -132,14 +132,14 @@ export async function recheckTrust(
   }
   const bot = readAgentFile({ path, scope, text })
   /*
-   * From a chat the shell is denied through nikcli's configuration, and a
-   * bot's own file overrides it: a nikcli bot that grants itself a tool —
+   * From a chat the shell is denied through ragu's configuration, and a
+   * bot's own file overrides it: a ragu bot that grants itself a tool —
    * the user's own included — does not run from a chat (G5).
    */
-  const granted = runnerById(bot.runner).id === "nikcli" ? selfApproval(text) : undefined
+  const granted = runnerById(bot.runner).id === "ragu" ? selfApproval(text) : undefined
   if (granted !== undefined) return { ok: false, problem: t("gateway.selfGrant", bot.identifier, granted) }
   // The project's configuration can grant it too, as `agent.<name>`, merged the same way (B8c).
-  if (runnerById(bot.runner).id === "nikcli") {
+  if (runnerById(bot.runner).id === "ragu") {
     for (const config of await deps.surface()) {
       if (!isConfigFile(config.path)) continue
       const key = configGrant(config.text, bot.identifier)
@@ -152,11 +152,11 @@ export async function recheckTrust(
   const verdict = await admit(bot, { store: deps.bots, read: async () => text, confirm: never })
   if (!verdict.ok) return { ok: false, problem: verdict.problem ?? retrust }
   /*
-   * nikcli runs a chat's turn on ADE's server, which loads the project's
+   * ragu runs a chat's turn on ADE's server, which loads the project's
    * configuration whoever's the bot (B8d): the user's own bots need the
    * project's yes too, given in ADE.
    */
-  if (runnerById(bot.runner).id === "nikcli") {
+  if (runnerById(bot.runner).id === "ragu") {
     const configuration = await admitProject(project, { store: deps.projects, surface: deps.surface, confirm: never })
     if (!configuration.ok)
       return { ok: false, problem: scope === "project" ? retrust : t("bots.serve.notAdmitted", project) }

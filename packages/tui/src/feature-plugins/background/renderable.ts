@@ -1,5 +1,5 @@
 /**
- * `<nikcli_background>` — an OpenTUI renderable that paints an RGBA buffer as
+ * `<ragu_background>` — an OpenTUI renderable that paints an RGBA buffer as
  * a full-screen half-block image.
  *
  * The alternative (a grid of `<text>` cells, the way `bg-pulse.tsx` works) is
@@ -189,4 +189,4 @@ export class BackgroundRenderable extends FrameBufferRenderable {
   }
 }
 
-extend({ nikcli_background: BackgroundRenderable })
+extend({ ragu_background: BackgroundRenderable })

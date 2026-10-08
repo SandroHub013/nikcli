@@ -2,7 +2,7 @@ import type { APIRoute } from "astro"
 import { z } from "zod"
 
 /**
- * Receives an opt-in usage rollup from a nikcli install.
+ * Receives an opt-in usage rollup from a ragu install.
  *
  * Open by design, and hardened accordingly. An install running its own provider
  * keys has no account to sign with, and that is precisely the population
@@ -29,7 +29,7 @@ import { z } from "zod"
 /**
  * How far back a report may reach.
  *
- * Wide enough for a one-off backfill (`nikcli analytics publish --all`). The
+ * Wide enough for a one-off backfill (`ragu analytics publish --all`). The
  * routine path still sends a few days at a time; this is the ceiling, not the
  * norm. Without it the public page could only ever show the week just gone,
  * while every install held months the page would never see.

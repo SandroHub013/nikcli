@@ -1,0 +1,205 @@
+import { afterAll, beforeAll, describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
+import fs from "fs/promises"
+import os from "os"
+import path from "path"
+import { authorizeBashCommand, BashTool } from "@/tool/bash"
+import { Instance } from "@/project/instance"
+import { Shell } from "@/shell/shell"
+import { makeToolContext, withProjectDirectory } from "../helpers/tool-context"
+
+describe("BashTool", () => {
+  let projectDir: string
+  let def: Awaited<ReturnType<typeof BashTool.init>>
+
+  beforeAll(async () => {
+    projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "ragu-bash-test-"))
+    // The worktree is discovered by walking up for a `.git`, so without one here
+    // it lands on whatever repository happens to contain the OS temp directory.
+    // On Windows temp sits under the user's home, so a home-level repository —
+    // not unusual for dotfiles — makes the worktree the home directory and every
+    // sibling temp directory "inside" it. The external-directory cases below then
+    // silently assert nothing. Anchoring the worktree here makes them mean the
+    // same thing on every host.
+    await fs.mkdir(path.join(projectDir, ".git"), { recursive: true })
+    def = await withProjectDirectory(projectDir, () => BashTool.init())
+  })
+
+  afterAll(async () => {
+    await Instance.disposeAll().catch(() => undefined)
+    await removeTestDir(projectDir)
+  })
+
+  it("runs a simple echo command and returns stdout", async () => {
+    const { ctx, asked, recordedMetadata } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ command: "echo hello-ragu", description: "echo greeting" }, ctx),
+    )
+    expect(result.title).toBe("echo greeting")
+    expect(result.output).toContain("hello-ragu")
+    expect(asked.some((a) => a.permission === "bash")).toBe(true)
+    expect(recordedMetadata[0]?.metadata).toMatchObject({
+      command: "echo hello-ragu",
+      description: "echo greeting",
+      output: "",
+    })
+  })
+
+  it("synthesizes a title when description is omitted", async () => {
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () => def.executeAsync({ command: "echo no-desc" }, ctx))
+    expect(result.title).toBe("Shell")
+    expect(result.output).toContain("no-desc")
+  })
+
+  it("honours workdir for the child process", async () => {
+    const nested = path.join(projectDir, "nested")
+    await fs.mkdir(nested)
+    await fs.writeFile(path.join(nested, "marker.txt"), "ok\n")
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ command: "ls marker.txt", workdir: nested, description: "list marker" }, ctx),
+    )
+    expect(result.output).toContain("marker.txt")
+  })
+
+  it("reads a relative workdir against the project", async () => {
+    const nested = path.join(projectDir, "rel-nested")
+    await fs.mkdir(nested)
+    await fs.writeFile(path.join(nested, "rel-marker.txt"), "ok\n")
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ command: "ls rel-marker.txt", workdir: "rel-nested", description: "list marker" }, ctx),
+    )
+    expect(result.output).toContain("rel-marker.txt")
+  })
+
+  it.skipIf(process.platform !== "win32")("runs in an MSYS-form workdir (/c/...) as the drive path", async () => {
+    const nested = path.join(projectDir, "msys-nested")
+    await fs.mkdir(nested)
+    await fs.writeFile(path.join(nested, "msys-marker.txt"), "ok\n")
+    const msys = "/" + nested[0]!.toLowerCase() + nested.slice(2).replaceAll("\\", "/")
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ command: "ls msys-marker.txt", workdir: msys, description: "list marker" }, ctx),
+    )
+    expect(result.output).toContain("msys-marker.txt")
+  })
+
+  it("fails a workdir that does not exist before it spawns, naming the directory", async () => {
+    const { ctx } = makeToolContext()
+    const missing = path.join(projectDir, "no-such-dir")
+    await expect(
+      withProjectDirectory(projectDir, () =>
+        def.executeAsync({ command: "echo x", workdir: missing, description: "x" }, ctx),
+      ),
+    ).rejects.toThrow(/workdir does not exist: .*no-such-dir/)
+  })
+
+  it("rejects a negative timeout before spawn", async () => {
+    const { ctx } = makeToolContext()
+    await expect(
+      withProjectDirectory(projectDir, () => def.executeAsync({ command: "echo x", timeout: -1 }, ctx)),
+    ).rejects.toThrow(/Invalid timeout/)
+  })
+
+  it("reports timeout metadata when the command exceeds timeout", async () => {
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ command: "sleep 2", timeout: 50, description: "sleep briefly" }, ctx),
+    )
+    expect(result.output).toContain("bash_metadata")
+    expect(result.output).toContain("timeout")
+  })
+
+  it("propagates non-zero exit output without throwing", async () => {
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ command: "sh -c 'echo fail-out; exit 7'", description: "failing cmd" }, ctx),
+    )
+    expect(result.output).toContain("fail-out")
+  })
+
+  it("uses a clean non-interactive PowerShell invocation", () => {
+    expect(Shell.directInvocation("pwsh", "Write-Output hi")).toEqual({
+      file: "pwsh",
+      args: ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", "Write-Output hi"],
+    })
+  })
+
+  it("authorizes PowerShell pipeline commands independently", async () => {
+    const { ctx, asked } = makeToolContext()
+    await withProjectDirectory(projectDir, () =>
+      authorizeBashCommand("Get-ChildItem -Recurse | Remove-Item -Force", projectDir, ctx, "pwsh"),
+    )
+    expect(asked.find((item) => item.permission === "bash")?.patterns).toEqual([
+      "Get-ChildItem -Recurse",
+      "Remove-Item -Force",
+    ])
+  })
+
+  it("extracts PowerShell location changes without approving them as commands", async () => {
+    const outside = await fs.mkdtemp(path.join(os.tmpdir(), "ragu-powershell-outside-"))
+    try {
+      const { ctx, asked } = makeToolContext()
+      await withProjectDirectory(projectDir, () =>
+        authorizeBashCommand(`Set-Location -LiteralPath '${outside}'; Get-ChildItem`, projectDir, ctx, "pwsh"),
+      )
+      expect(asked.find((item) => item.permission === "external_directory")?.patterns).toEqual([
+        await fs.realpath(outside),
+      ])
+      expect(asked.find((item) => item.permission === "bash")?.patterns).toEqual(["Get-ChildItem"])
+    } finally {
+      const { Database } = await import("@/database/database")
+      Database.closeAll()
+      await removeTestDir(outside)
+    }
+  })
+
+  it("keeps dynamic PowerShell location changes behind shell approval", async () => {
+    const { ctx, asked } = makeToolContext()
+    await withProjectDirectory(projectDir, () =>
+      authorizeBashCommand("Set-Location $target; Remove-Item build", projectDir, ctx, "pwsh"),
+    )
+    expect(asked.find((item) => item.permission === "bash")?.patterns).toEqual([
+      "Set-Location $target",
+      "Remove-Item build",
+    ])
+  })
+
+  it("truncates long bash output over 8k chars keeping 1k head and 7k tail and saving full output", async () => {
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ command: "node -e \"process.stdout.write('START_' + 'X'.repeat(12000) + '_END')\"" }, ctx),
+    )
+    expect(result.output).toContain("START_")
+    expect(result.output).toContain("_END")
+    expect(result.output).toContain("The tool call succeeded but the output was truncated")
+    expect(result.output).toContain("Full output saved to:")
+    expect(result.output.length).toBeLessThan(10000)
+    expect(result.metadata.truncated).toBe(true)
+    expect(result.metadata.outputPath).toBeDefined()
+    const full = await fs.readFile(result.metadata.outputPath as string, "utf8")
+    expect(full).toContain("START_")
+    expect(full).toContain("_END")
+    expect(full.length).toBe(12010)
+  })
+
+  it("reports output was not saved if writing spool file fails", async () => {
+    const { Truncate } = await import("@/tool/truncation")
+    const tempFile = path.join(projectDir, "temp-file-blocking-dir")
+    await fs.writeFile(tempFile, "blocking")
+    const unwritableDir = path.join(tempFile, "sub")
+    try {
+      const result = Truncate.truncateHeadTail("START_" + "X".repeat(12000) + "_END", {
+        dir: unwritableDir,
+      })
+      expect(result.content).toContain("The tool call succeeded but the output was truncated")
+      expect(result.content).toContain("Full output was not saved to disk.")
+      expect(result.content).not.toContain("Full output saved to:")
+      expect(result.outputPath).toBeUndefined()
+    } finally {
+      await fs.unlink(tempFile).catch(() => {})
+    }
+  })
+})

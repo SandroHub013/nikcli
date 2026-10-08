@@ -2,8 +2,8 @@ import { DialogPrompt } from "@tui/ui/dialog-prompt"
 import type { DialogContext } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { UserApi } from "@tui/util/user-api"
-import { UserSession } from "@nikcli-ai/util/user-session"
-import type { UserSchema } from "@nikcli-ai/util/user-schema"
+import { UserSession } from "@ragu/util/user-session"
+import type { UserSchema } from "@ragu/util/user-schema"
 import { DialogAccountLogin } from "@tui/component/dialog-account-login"
 
 type LoginChoice = "oauth" | "local"
@@ -16,7 +16,7 @@ function choose(dialog: DialogContext, hasUsers: boolean): Promise<LoginChoice |
           title="Sign in to Ragu Code"
           options={[
             {
-              title: "Continue with nikcli",
+              title: "Continue with ragu",
               value: "oauth" as LoginChoice,
               description: "Sign in through your browser with GitHub or an email code.",
             },

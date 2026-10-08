@@ -3,7 +3,7 @@ import { ARTIFACT_TOKEN_COOKIE } from "../../lib/artifact"
 
 export const POST: APIRoute = async (context) => {
   const env = (context.locals as App.Locals).runtime?.env
-  const refresh = context.cookies.get("nikcli_refresh")?.value
+  const refresh = context.cookies.get("ragu_refresh")?.value
   if (refresh) {
     const issuer = (env?.AUTH_ISSUER ?? "https://auth.nikcli-ai.dev").replace(/\/$/, "")
     await fetch(`${issuer}/revoke`, {
@@ -13,6 +13,6 @@ export const POST: APIRoute = async (context) => {
     }).catch(() => undefined)
   }
   context.cookies.delete(ARTIFACT_TOKEN_COOKIE, { path: "/" })
-  context.cookies.delete("nikcli_refresh", { path: "/" })
+  context.cookies.delete("ragu_refresh", { path: "/" })
   return Response.json({ ok: true })
 }

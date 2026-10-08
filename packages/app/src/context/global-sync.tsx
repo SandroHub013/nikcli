@@ -4,8 +4,8 @@ import {
   type Project,
   type ProviderAuthResponse,
   type ProviderListResponse,
-  createNikcliClient,
-} from "@nikcli-ai/sdk/httpapi"
+  createRaguClient,
+} from "@ragu/sdk/httpapi"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useGlobalSDK } from "./global-sdk"
 import type { InitError } from "../pages/error"
@@ -21,8 +21,8 @@ import {
   Switch,
   Match,
 } from "solid-js"
-import { showToast } from "@nikcli-ai/ui/toast"
-import { getFilename } from "@nikcli-ai/util/path"
+import { showToast } from "@ragu/ui/toast"
+import { getFilename } from "@ragu/util/path"
 import { usePlatform } from "./platform"
 import { useLanguage } from "@/context/language"
 import { Persist, persisted } from "@/utils/persist"
@@ -59,7 +59,7 @@ function createGlobalSync() {
     loadSessionsFallback: 0,
   }
 
-  const sdkCache = new Map<string, ReturnType<typeof createNikcliClient>>()
+  const sdkCache = new Map<string, ReturnType<typeof createRaguClient>>()
   const booting = new Map<string, Promise<void>>()
   const sessionLoads = new Map<string, Promise<void>>()
   const sessionMeta = new Map<string, { limit: number }>()
@@ -83,13 +83,13 @@ function createGlobalSync() {
     if (!import.meta.env.DEV) return
     ;(
       globalThis as {
-        __NIKCLI_GLOBAL_SYNC_STATS?: {
+        __RAGU_GLOBAL_SYNC_STATS?: {
           activeDirectoryStores: number
           evictions: number
           loadSessionsFullFetchFallback: number
         }
       }
-    ).__NIKCLI_GLOBAL_SYNC_STATS = {
+    ).__RAGU_GLOBAL_SYNC_STATS = {
       activeDirectoryStores,
       evictions: stats.evictions,
       loadSessionsFullFetchFallback: stats.loadSessionsFallback,
@@ -129,7 +129,7 @@ function createGlobalSync() {
   const sdkFor = (directory: string) => {
     const cached = sdkCache.get(directory)
     if (cached) return cached
-    const sdk = createNikcliClient({
+    const sdk = createRaguClient({
       baseUrl: globalSDK.url,
       fetch: platform.fetch,
       directory,

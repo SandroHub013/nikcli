@@ -1,9 +1,9 @@
 import { batch, onCleanup, onMount } from "solid-js"
-import type { Path, Workspace } from "@nikcli-ai/sdk/httpapi"
+import type { Path, Workspace } from "@ragu/sdk/httpapi"
 import { createStore, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
-import { Log } from "@nikcli-ai/util/log"
+import { Log } from "@ragu/util/log"
 
 const log = Log.create({ service: "project-context" })
 

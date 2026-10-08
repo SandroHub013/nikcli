@@ -2,7 +2,7 @@
 
 Tracks admission, execution, recovery, and client behavior.
 
-Status: **Current semantic overview** (verified 2026-08-14 against `packages/nikcli/src/session`).
+Status: **Current semantic overview** (verified 2026-08-14 against `packages/ragu/src/session`).
 
 `MessageV2` owns the durable message and part shapes. `SessionPrompt` owns admission and the step loop.
 
@@ -106,7 +106,7 @@ The full transcript stays durable. `MessageV2.filterCompacted` is what makes the
 
 ## Rebuild instructions per request
 
-`collectSystemPaths` walks up from the instance directory to the worktree root collecting `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, and `.github/instructions/memory.instruction.md`, plus global `~/.config/nikcli/AGENTS.md` and (unless disabled) `~/.claude/CLAUDE.md`. Config-declared instructions and URLs are resolved the same way; `NIKCLI_DISABLE_PROJECT_CONFIG` and `NIKCLI_CONFIG_DIR` narrow the search.
+`collectSystemPaths` walks up from the instance directory to the worktree root collecting `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, and `.github/instructions/memory.instruction.md`, plus global `~/.config/nikcli/AGENTS.md` and (unless disabled) `~/.claude/CLAUDE.md`. Config-declared instructions and URLs are resolved the same way; `RAGU_DISABLE_PROJECT_CONFIG` and `RAGU_CONFIG_DIR` narrow the search.
 
 The result is assembled from the instruction fold (see [instruction sync](./instruction-sync-proposal.md)). Clients display changed keys from `session.instructions.updated`; they do not re-render the prose.
 

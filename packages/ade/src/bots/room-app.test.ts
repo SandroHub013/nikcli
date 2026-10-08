@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 import { EMPTY_LOG, type RoomPay } from "./room"
 import {
   createRoomRunner,

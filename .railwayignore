@@ -1,4 +1,4 @@
-# Upload context for the nikcli-mobile Railway service (Dockerfile.serve).
+# Upload context for the ragu-mobile Railway service (Dockerfile.serve).
 #
 # This is an exclusion list, deliberately not a `packages/*` blanket plus a
 # re-include allowlist. The allowlist form fails CLOSED: a package added to
@@ -70,7 +70,7 @@ packages/identity
 packages/inference
 packages/inference-dashboard
 packages/mobile
-packages/nikcli-island
+packages/ragu-island
 packages/sdk-next
 packages/slack
 packages/terminal-control

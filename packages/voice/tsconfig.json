@@ -20,7 +20,7 @@
     "types": ["bun"],
     "paths": {
       "@/*": ["./src/*"],
-      "@nikcli-ai/ade/*": ["../ade/*"]
+      "@ragu/ade/*": ["../ade/*"]
     }
   },
   "references": [{ "path": "../ade" }],

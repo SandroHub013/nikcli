@@ -1,11 +1,11 @@
 import { shortcut } from "../lib/platform"
 import { Effect } from "effect"
 import { For, Match, Show, Switch as SolidSwitch, createMemo, createSignal } from "solid-js"
-import { Button } from "@nikcli-ai/ui/button"
-import { Checkbox } from "@nikcli-ai/ui/checkbox"
-import { Select } from "@nikcli-ai/ui/select"
-import { Switch } from "@nikcli-ai/ui/switch"
-import { Tabs } from "@nikcli-ai/ui/tabs"
+import { Button } from "@ragu/ui/button"
+import { Checkbox } from "@ragu/ui/checkbox"
+import { Select } from "@ragu/ui/select"
+import { Switch } from "@ragu/ui/switch"
+import { Tabs } from "@ragu/ui/tabs"
 import { Agent, Gateway, textOf, type ModelRef } from "../lib/agent"
 import { runModelBench, summarize, percentile, type BenchSample } from "../lib/modelbench"
 import { createModels, modelKey } from "../lib/models"
@@ -247,7 +247,7 @@ function ModelBench() {
           fallback={
             <Panel title="Results">
               <Empty>
-                Select models, write a prompt and run. Every number comes from a real call to the model through nikcli.
+                Select models, write a prompt and run. Every number comes from a real call to the model through ragu.
               </Empty>
             </Panel>
           }
@@ -620,7 +620,7 @@ function LoadTest() {
 const TEMPLATES: Record<string, { kind: "script" | "test"; code: string }> = {
   "Micro-benchmark": {
     kind: "script",
-    code: `// Micro-benchmark template: warm up, sample, report. Runs with Bun inside packages/nikcli.
+    code: `// Micro-benchmark template: warm up, sample, report. Runs with Bun inside packages/ragu.
 const cases: Record<string, () => unknown> = {
   "JSON.parse(stringify)": () => JSON.parse(JSON.stringify({ a: [1, 2, 3], b: "x".repeat(64) })),
   "structuredClone": () => structuredClone({ a: [1, 2, 3], b: "x".repeat(64) }),
@@ -681,7 +681,7 @@ test("a measured assertion", () => {
 const GEN_SYSTEM = `You write self-contained Bun TypeScript files for a developer's benchmark playground. Reply with EXACTLY ONE fenced \`\`\`ts code block and no prose.
 - Benchmarks: warm up first, collect many samples with performance.now(), print median, p95, min, max and ops/sec per case with console.log. Keep total runtime under ~20 seconds.
 - Tests: use bun:test (import { test, expect } from "bun:test").
-- The file runs with Bun inside the nikcli monorepo (packages/nikcli), so it may import repo modules via relative paths. Do not install packages. No network access unless the user asks for it.`
+- The file runs with Bun inside the ragu monorepo (packages/ragu), so it may import repo modules via relative paths. Do not install packages. No network access unless the user asks for it.`
 
 function ScriptLab() {
   const [tpl, setTpl] = createSignal("Micro-benchmark")
@@ -721,7 +721,7 @@ function ScriptLab() {
         await runner.start({
           kind: kind() === "test" ? "test" : "bench",
           label: `playground · ${name}`,
-          cwd: "packages/nikcli",
+          cwd: "packages/ragu",
           args: kind() === "test" ? ["test", `../../${rel}`] : ["run", `../../${rel}`],
           junit: kind() === "test",
         }),
@@ -811,7 +811,7 @@ function ScriptLab() {
           when={run()}
           fallback={
             <Panel title="Output">
-              <Empty>{shortcut("⏎")} or Run — scripts execute with Bun inside packages/nikcli and stream here.</Empty>
+              <Empty>{shortcut("⏎")} or Run — scripts execute with Bun inside packages/ragu and stream here.</Empty>
             </Panel>
           }
         >
@@ -841,7 +841,7 @@ export function Playground() {
   return (
     <Page
       title="Playground"
-      subtitle="Benchmark models, load-test endpoints and run scripts — all against your real nikcli"
+      subtitle="Benchmark models, load-test endpoints and run scripts — all against your real ragu"
     >
       <Tabs value={tab()} onChange={(t) => (setTab(t), localStorage.setItem("devhub.play.tab", t))} variant="alt">
         <Tabs.List>

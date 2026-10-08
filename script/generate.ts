@@ -4,6 +4,6 @@ import { $ } from "bun"
 
 await $`bun ./packages/sdk/js/script/build.ts`
 
-await $`bun dev generate > ../sdk/openapi.json`.cwd("packages/nikcli")
+await $`bun dev generate > ../sdk/openapi.json`.cwd("packages/ragu")
 
 await $`./script/format.ts`

@@ -120,12 +120,12 @@ describe("expandDirectoryParents", () => {
   })
 
   test("keeps the drive of a Windows path, and stops at its root", () => {
-    const expanded = expandDirectoryParents("C:\\Users\\39349\\nikcli\\src\\main.ts", new Set<string>())
+    const expanded = expandDirectoryParents("C:\\Users\\39349\\ragu\\src\\main.ts", new Set<string>())
     expect(Array.from(expanded).sort()).toEqual([
       "C:/Users",
       "C:/Users/39349",
-      "C:/Users/39349/nikcli",
-      "C:/Users/39349/nikcli/src",
+      "C:/Users/39349/ragu",
+      "C:/Users/39349/ragu/src",
     ])
   })
 

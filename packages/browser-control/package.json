@@ -1,8 +1,8 @@
 {
-  "name": "@nikcli-ai/browser-control",
+  "name": "@ragu/browser-control",
   "version": "1.431.0",
   "private": true,
-  "description": "Control, inspect, capture and test real web pages headlessly, in the background — a browser-control engine for nikcli, sibling to @nikcli-ai/terminal-control.",
+  "description": "Control, inspect, capture and test real web pages headlessly, in the background — a browser-control engine for ragu, sibling to @ragu/terminal-control.",
   "license": "MIT",
   "bin": {
     "browser-control": "./src/cli.ts"
@@ -21,7 +21,7 @@
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "1.1.0",
-    "@nikcli-ai/util": "workspace:*"
+    "@ragu/util": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "catalog:",

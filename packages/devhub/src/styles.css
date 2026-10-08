@@ -1,7 +1,7 @@
-@import "@nikcli-ai/ui/styles/tailwind";
+@import "@ragu/ui/styles/tailwind";
 
 /*
- * DevHub — instrument-panel skin over the shared @nikcli-ai/ui tokens.
+ * DevHub — instrument-panel skin over the shared @ragu/ui tokens.
  *
  * Direction: a dense, monochrome telemetry console. The brand "N" is built from stacked offset
  * contours; that echo is the one recurring ornament (cards lift into it on hover). Numerals and

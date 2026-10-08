@@ -1,6 +1,6 @@
 import { json, query, action, useParams, createAsync, useSubmission } from "@solidjs/router"
 import { createEffect, For, Show } from "solid-js"
-import { Provider } from "@nikcli-ai/console-core/provider.js"
+import { Provider } from "@ragu/console-core/provider.js"
 import { withActor } from "~/context/auth.withActor"
 import { createStore } from "solid-js/store"
 import styles from "./provider-section.module.css"

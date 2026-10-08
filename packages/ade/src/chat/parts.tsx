@@ -9,7 +9,7 @@
  */
 
 import { createSignal, For, Index, Match, Show, Switch } from "solid-js"
-import type { Part, PermissionRequest, QuestionRequest } from "@nikcli-ai/sdk/httpapi"
+import type { Part, PermissionRequest, QuestionRequest } from "@ragu/sdk/httpapi"
 import { t } from "../i18n"
 import { CodeBlock } from "./code-block"
 import type { CodeSegment, Segment } from "./segments"
@@ -112,7 +112,7 @@ function useAnswer() {
 
 /**
  * The line the chat always shows (C5 review): the project's saved «always»
- * approvals come after the session's rules in nikcli and no route lists them,
+ * approvals come after the session's rules in ragu and no route lists them,
  * so a request they cover never reaches the chat. Mounted in the chat's head
  * by C4, when the chat runs on the store.
  */

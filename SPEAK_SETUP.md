@@ -10,10 +10,10 @@ The `speak` tool allows AI to generate voice messages that play on your device s
 
 ```bash
 # Set your OpenRouter API key
-export NIKCLI_OPENROUTER_API_KEY="your-api-key"
+export RAGU_OPENROUTER_API_KEY="your-api-key"
 
 # Or authenticate
-nikcli auth login
+ragu auth login
 # Select: openrouter
 ```
 
@@ -21,7 +21,7 @@ nikcli auth login
 
 ```bash
 # Set your ElevenLabs API key
-export NIKCLI_ELEVENLABS_API_KEY="your-api-key"
+export RAGU_ELEVENLABS_API_KEY="your-api-key"
 
 # Or create the key file
 mkdir -p ~/.config/nikcli/secrets
@@ -132,9 +132,9 @@ Install one of: `afplay`, `ffplay`, or `mpg123`
 
 ### "API key not found"
 
-- Verify env var is set: `echo $NIKCLI_OPENROUTER_API_KEY`
+- Verify env var is set: `echo $RAGU_OPENROUTER_API_KEY`
 - Check file permissions on key file
-- Run `nikcli auth login` to set credentials
+- Run `ragu auth login` to set credentials
 
 ### "All TTS providers failed"
 

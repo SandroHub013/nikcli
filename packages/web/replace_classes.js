@@ -1,7 +1,7 @@
 import fs from "fs"
 import path from "path"
 
-const docsDir = path.join("/Volumes/SSD/Projects/nikcli/packages/web/src/pages/docs")
+const docsDir = path.join("/Volumes/SSD/Projects/ragu/packages/web/src/pages/docs")
 
 function processDir(dir) {
   const files = fs.readdirSync(dir)

@@ -22,7 +22,7 @@ FROM base AS build
 
 COPY package.json bun.lock /app/
 COPY patches /app/patches
-COPY packages/nikcli/package.json /app/packages/nikcli/
+COPY packages/ragu/package.json /app/packages/ragu/
 COPY packages/script/package.json /app/packages/script/
 COPY packages/util/package.json /app/packages/util/
 COPY packages/sdk/js/package.json /app/packages/sdk/js/
@@ -42,46 +42,46 @@ COPY packages/browser-control/package.json /app/packages/browser-control/
 COPY packages/computer-use/package.json /app/packages/computer-use/
 
 # Stub package.json for workspace packages not built in this image. slack,
-# identity, terminal-control and github sit outside packages/nikcli's
+# identity, terminal-control and github sit outside packages/ragu's
 # workspace closure and nothing under src imports them; stubbing keeps the
 # workspace members that bun.lock knows about while skipping their npm deps
 # (@slack/bolt, jose, @octokit/*, @ffmpeg-installer/ffmpeg).
 RUN set -e; \
     for entry in \
-      "packages/app:@nikcli-ai/app" \
-      "packages/bench-tui:@nikcli-ai/bench-tui" \
-      "packages/cloud:@nikcli-ai/cloud" \
-      "packages/companion/ui:@nikcli-ai/companion-ui" \
-      "packages/console/app:@nikcli-ai/console-app" \
-      "packages/console/core:@nikcli-ai/console-core" \
-      "packages/console/function:@nikcli-ai/console-function" \
-      "packages/console/mail:@nikcli-ai/console-mail" \
-      "packages/console/resource:@nikcli-ai/console-resource" \
-      "packages/desktop:@nikcli-ai/desktop" \
-      "packages/enterprise:@nikcli-ai/enterprise" \
-      "packages/function:@nikcli-ai/function" \
-      "packages/identity:@nikcli-ai/identity" \
-      "packages/inference:@nikcli-ai/inference" \
-      "packages/inference-dashboard:@nikcli-ai/inference-dashboard" \
-      "packages/mobile:@nikcli-ai/mobile" \
-      "packages/nikcli-island:@nikcli-ai/nikcli-island" \
-      "packages/plugin/plugins/agent-memory:@nikcli-ai/plugin-agent-memory" \
-      "packages/plugin/plugins/background-agents:@nikcli-ai/plugin-background-agents" \
-      "packages/plugin/plugins/background:@nikcli-ai/plugin-background" \
-      "packages/plugin/plugins/context-analysis:@nikcli-ai/plugin-context-analysis" \
-      "packages/plugin/plugins/direnv:@nikcli-ai/plugin-direnv" \
-      "packages/plugin/plugins/dynamic-context-pruning:@nikcli-ai/plugin-dynamic-context-pruning" \
-      "packages/plugin/plugins/envsitter-guard:@nikcli-ai/plugin-envsitter-guard" \
-      "packages/plugin/plugins/handoff:@nikcli-ai/plugin-handoff" \
-      "packages/plugin/plugins/safety-net:@nikcli-ai/plugin-safety-net" \
-      "packages/plugin/plugins/smart-title:@nikcli-ai/plugin-smart-title" \
-      "packages/remote/web-client:@nikcli-ai/remote-client" \
-      "packages/sdk-next:@nikcli-ai/sdk-next" \
-      "packages/slack:@nikcli-ai/slack" \
-      "packages/terminal-control:@nikcli-ai/terminal-control" \
-      "packages/tui-storybook:@nikcli-ai/tui-storybook" \
-      "packages/ui:@nikcli-ai/ui" \
-      "packages/web:@nikcli-ai/web" \
+      "packages/app:@ragu/app" \
+      "packages/bench-tui:@ragu/bench-tui" \
+      "packages/cloud:@ragu/cloud" \
+      "packages/companion/ui:@ragu/companion-ui" \
+      "packages/console/app:@ragu/console-app" \
+      "packages/console/core:@ragu/console-core" \
+      "packages/console/function:@ragu/console-function" \
+      "packages/console/mail:@ragu/console-mail" \
+      "packages/console/resource:@ragu/console-resource" \
+      "packages/desktop:@ragu/desktop" \
+      "packages/enterprise:@ragu/enterprise" \
+      "packages/function:@ragu/function" \
+      "packages/identity:@ragu/identity" \
+      "packages/inference:@ragu/inference" \
+      "packages/inference-dashboard:@ragu/inference-dashboard" \
+      "packages/mobile:@ragu/mobile" \
+      "packages/ragu-island:@ragu/ragu-island" \
+      "packages/plugin/plugins/agent-memory:@ragu/plugin-agent-memory" \
+      "packages/plugin/plugins/background-agents:@ragu/plugin-background-agents" \
+      "packages/plugin/plugins/background:@ragu/plugin-background" \
+      "packages/plugin/plugins/context-analysis:@ragu/plugin-context-analysis" \
+      "packages/plugin/plugins/direnv:@ragu/plugin-direnv" \
+      "packages/plugin/plugins/dynamic-context-pruning:@ragu/plugin-dynamic-context-pruning" \
+      "packages/plugin/plugins/envsitter-guard:@ragu/plugin-envsitter-guard" \
+      "packages/plugin/plugins/handoff:@ragu/plugin-handoff" \
+      "packages/plugin/plugins/safety-net:@ragu/plugin-safety-net" \
+      "packages/plugin/plugins/smart-title:@ragu/plugin-smart-title" \
+      "packages/remote/web-client:@ragu/remote-client" \
+      "packages/sdk-next:@ragu/sdk-next" \
+      "packages/slack:@ragu/slack" \
+      "packages/terminal-control:@ragu/terminal-control" \
+      "packages/tui-storybook:@ragu/tui-storybook" \
+      "packages/ui:@ragu/ui" \
+      "packages/web:@ragu/web" \
       "packages/webrenderer:@opentui/webrenderer" \
       "github:github" \
     ; do \
@@ -92,7 +92,7 @@ RUN set -e; \
 
 RUN cd /app && bun install
 
-COPY packages/nikcli /app/packages/nikcli
+COPY packages/ragu /app/packages/ragu
 COPY packages/script /app/packages/script
 COPY packages/util /app/packages/util
 COPY packages/sdk/js /app/packages/sdk/js
@@ -111,44 +111,44 @@ COPY packages/tui-math /app/packages/tui-math
 COPY packages/browser-control /app/packages/browser-control
 COPY packages/computer-use /app/packages/computer-use
 
-ENV NIKCLI_CHANNEL=latest
+ENV RAGU_CHANNEL=latest
 # Fetch all platform variants from the workspace dependency graph. Positional
 # package arguments mutate the root manifest and can reintroduce old versions
 # after CI validated the lockfile (the Effect beta.83 override did exactly that).
 RUN cd /app && bun install --os="*" --cpu="*"
-# NIKCLI_VERSION was pinned here as a literal and went stale (the image kept
+# RAGU_VERSION was pinned here as a literal and went stale (the image kept
 # stamping 1.216.0 long after the repo moved on). Read it off the manifest that
 # is already in the layer instead: deterministic, and no npm lookup at build
 # time, which is what the pin was there to avoid.
-# NIKCLI_REVISION is the commit that passed validation. There is no .git in this context, so
-# script/railway-deploy.sh writes it into packages/nikcli/.nikcli-revision after it syncs the
+# RAGU_REVISION is the commit that passed validation. There is no .git in this context, so
+# script/railway-deploy.sh writes it into packages/ragu/.nikcli-revision after it syncs the
 # source; a build from any other context has no such file and honestly bakes "local". Without it
 # the served health response cannot distinguish two uploads of the same semver, which is the whole
 # reason a detached upload could report success while an older container kept serving.
-RUN cd /app/packages/nikcli && \
-    NIKCLI_VERSION="$(bun -e 'console.log(require("./package.json").version)')" \
-    NIKCLI_REVISION="$(cat .nikcli-revision 2>/dev/null || true)" \
+RUN cd /app/packages/ragu && \
+    RAGU_VERSION="$(bun -e 'console.log(require("./package.json").version)')" \
+    RAGU_REVISION="$(cat .nikcli-revision 2>/dev/null || true)" \
     bun run script/build.ts --single --skip-install
 
 FROM base AS runtime
 
-COPY --from=build /app/packages/nikcli/dist /tmp/nikcli-dist
+COPY --from=build /app/packages/ragu/dist /tmp/ragu-dist
 
 ARG TARGETARCH
 RUN if [ "$TARGETARCH" = "arm64" ]; then \
-        cp /tmp/nikcli-dist/nikcli-ai-linux-arm64/bin/nikcli /usr/local/bin/nikcli; \
+        cp /tmp/ragu-dist/ragu-code-linux-arm64/bin/ragu /usr/local/bin/ragu; \
     else \
-        cp /tmp/nikcli-dist/nikcli-ai-linux-x64/bin/nikcli /usr/local/bin/nikcli; \
+        cp /tmp/ragu-dist/ragu-code-linux-x64/bin/ragu /usr/local/bin/ragu; \
     fi && \
-    chmod +x /usr/local/bin/nikcli && \
-    rm -rf /tmp/nikcli-dist
+    chmod +x /usr/local/bin/ragu && \
+    rm -rf /tmp/ragu-dist
 
 # Smoke-test: fail the build immediately if the binary cannot execute,
 # instead of shipping a broken binary that crash-loops with
-# "exec: nikcli: not found" at container startup.
-RUN nikcli --version
+# "exec: ragu: not found" at container startup.
+RUN ragu --version
 
-# Headless Chromium for @nikcli-ai/browser-control (the `browser` tool). Only
+# Headless Chromium for @ragu/browser-control (the `browser` tool). Only
 # the compiled binary is copied into this stage, not node_modules, so the
 # browser and its apt-level dependencies must be installed here directly —
 # pinned to the exact playwright version browser-control depends on so the
@@ -156,30 +156,30 @@ RUN nikcli --version
 ENV PLAYWRIGHT_BROWSERS_PATH=/root/.cache/ms-playwright
 RUN bunx --bun playwright@1.61.0 install --with-deps chromium
 
-COPY packages/nikcli/scripts/railway-entrypoint.sh /usr/local/bin/nikcli-railway-entrypoint
-RUN chmod +x /usr/local/bin/nikcli-railway-entrypoint && \
-    mkdir -p /data/nikcli /data/cache /data/config /data/state
+COPY packages/ragu/scripts/railway-entrypoint.sh /usr/local/bin/ragu-railway-entrypoint
+RUN chmod +x /usr/local/bin/ragu-railway-entrypoint && \
+    mkdir -p /data/ragu /data/cache /data/config /data/state
 
 ENV PORT=4096
 ENV XDG_DATA_HOME=/data
 ENV XDG_CACHE_HOME=/data/cache
 ENV XDG_CONFIG_HOME=/data/config
 ENV XDG_STATE_HOME=/data/state
-ENV NIKCLI_SERVER_USERNAME=nikcli
-ENV NIKCLI_SERVER_SSH_ENABLED=true
-ENV NIKCLI_SERVER_SSH_PORT=2222
-ENV NIKCLI_SERVER_SSH_HOST=0.0.0.0
+ENV RAGU_SERVER_USERNAME=ragu
+ENV RAGU_SERVER_SSH_ENABLED=true
+ENV RAGU_SERVER_SSH_PORT=2222
+ENV RAGU_SERVER_SSH_HOST=0.0.0.0
 # Configure one of these Railway variables to enable key-only SSH:
-# NIKCLI_SSH_AUTHORIZED_KEYS="ssh-ed25519 AAAA..."
-# NIKCLI_SSH_AUTHORIZED_KEYS_B64="<base64 authorized_keys>"
+# RAGU_SSH_AUTHORIZED_KEYS="ssh-ed25519 AAAA..."
+# RAGU_SSH_AUTHORIZED_KEYS_B64="<base64 authorized_keys>"
 # Comma-separated list of extra origins to allow for CORS (e.g. your web domain)
-# Set NIKCLI_SERVER_CORS_ORIGINS=https://yourdomain.com in Railway environment variables
+# Set RAGU_SERVER_CORS_ORIGINS=https://yourdomain.com in Railway environment variables
 
 EXPOSE 4096 2222
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -s -o /dev/null "http://127.0.0.1:${PORT:-4096}/" || exit 1
 
-ENTRYPOINT ["/usr/local/bin/nikcli-railway-entrypoint"]
+ENTRYPOINT ["/usr/local/bin/ragu-railway-entrypoint"]
 
-CMD ["sh", "-c", "exec nikcli mobile serve --hostname 0.0.0.0 --port ${PORT:-4096} --pair --public-url https://${RAILWAY_PUBLIC_DOMAIN:-nikcli-mobile-production.up.railway.app}"]
+CMD ["sh", "-c", "exec ragu mobile serve --hostname 0.0.0.0 --port ${PORT:-4096} --pair --public-url https://${RAILWAY_PUBLIC_DOMAIN:-nikcli-mobile-production.up.railway.app}"]

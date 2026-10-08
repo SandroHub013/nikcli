@@ -49,7 +49,7 @@ export function shouldForceOverlayRepaint(platform: NodeJS.Platform = process.pl
  */
 export function terminalRendersHalfBlockQR(env: NodeJS.Dict<string> = process.env) {
   // Keep in sync with `shouldRenderCompactTerminalQR` in packages/remote/src/qrcode.ts.
-  // `@nikcli-ai/remote` cannot import this module (util already depends on remote).
+  // `@ragu/remote` cannot import this module (util already depends on remote).
   if (
     env.WEZTERM_EXECUTABLE ||
     env.WEZTERM_PANE ||
@@ -86,7 +86,7 @@ export function shouldUseAsciiQR(platform: NodeJS.Platform = process.platform, e
  * Turn on VT sequences and UTF-8 on stdout so a QR printed with `console.log`
  * is actually colored, not a soup of `←[40m` and `?`.
  *
- * OpenTUI does this for the TUI; `nikcli mobile pair` never starts a renderer
+ * OpenTUI does this for the TUI; `ragu mobile pair` never starts a renderer
  * and otherwise inherits whatever code page the console happened to have.
  */
 export function win32EnableVirtualTerminal() {

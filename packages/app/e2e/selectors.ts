@@ -30,7 +30,7 @@ export const projectCloseMenuSelector = (slug: string) => `[data-action="project
 export const projectWorkspacesToggleSelector = (slug: string) =>
   `[data-action="project-workspaces-toggle"][data-project="${slug}"]`
 
-export const titlebarRightSelector = "#nikcli-titlebar-right"
+export const titlebarRightSelector = "#ragu-titlebar-right"
 
 export const popoverBodySelector = '[data-slot="popover-body"]'
 

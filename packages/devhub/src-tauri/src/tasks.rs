@@ -17,7 +17,7 @@ pub struct Tasks(pub Arc<Mutex<HashMap<String, u32>>>);
 #[serde(rename_all = "camelCase")]
 pub struct StartTask {
     pub id: String,
-    /// Repo-relative working directory, e.g. `packages/nikcli`.
+    /// Repo-relative working directory, e.g. `packages/ragu`.
     pub cwd: String,
     /// Always run through bun; the first arg is the bun subcommand (`test`, `run`, ...).
     pub args: Vec<String>,

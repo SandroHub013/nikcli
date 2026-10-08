@@ -3,7 +3,7 @@
  *
  * `onLine` reads the pty's bytes split on newlines, and that is where the
  * requests of an agent that prints lines are found. A TUI that draws with the
- * cursor (nikcli, on the alternate screen) never writes one: it places every
+ * cursor (ragu, on the alternate screen) never writes one: it places every
  * word with a cursor move, and the stream of a whole turn reaches `onLine` as a
  * few 8 KB runs of text, the words of the screen interleaved and the spaces
  * between them gone (`@adekeysaskADE_PROVA_FINTA…`, Verifiche and Dario,
@@ -35,7 +35,7 @@ export const SCREEN_QUIET_MS = 700
 /**
  * How long a restored conversation takes to be drawn again, during which what
  * the screen shows is the old conversation: its requests were acted on when
- * they were written. A time, not the first reading: nikcli can be quiet on a
+ * they were written. A time, not the first reading: ragu can be quiet on a
  * loading screen before it draws the conversation.
  */
 export const RESTORED_MS = 10_000

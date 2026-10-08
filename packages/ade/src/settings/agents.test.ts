@@ -49,7 +49,7 @@ afterAll(() => {
 
 const { createComponent, render } = await import("solid-js/web")
 const { SettingsSheet } = await import("./settings-sheet")
-const { DEFAULT_VOICE_SETTINGS } = await import("@nikcli-ai/voice/core")
+const { DEFAULT_VOICE_SETTINGS } = await import("@ragu/voice/core")
 const { HOOK_TARGETS } = await import("../session-new/agent-hooks")
 
 let dispose: (() => void) | undefined
@@ -58,11 +58,11 @@ let hookStates: Record<string, unknown> = {}
 let closed = 0
 
 beforeEach(() => {
-  installed = { claude: true, codex: true, nikcli: true }
+  installed = { claude: true, codex: true, ragu: true }
   answers = {
     claude: { lines: ['{"loggedIn": true, "authMethod": "claude.ai"}'], code: 0 },
     codex: { lines: ["Not logged in"], code: 1 },
-    nikcli: { lines: ["anthropic oauth"], code: 0 },
+    ragu: { lines: ["anthropic oauth"], code: 0 },
   }
   botFiles = {}
   logins = []
@@ -157,8 +157,8 @@ describe("Agenti e account › Account", () => {
     expect(card("codex")?.getAttribute("data-state")).toBe("not-connected")
     expect(card("codex")?.querySelector('[data-slot="status-label"]')?.textContent).toBe("Non collegato")
     expect(buttons("codex")).toEqual(["Accedi"])
-    // nikcli ha un provider: collegato.
-    expect(card("nikcli")?.getAttribute("data-state")).toBe("connected")
+    // ragu ha un provider: collegato.
+    expect(card("ragu")?.getAttribute("data-state")).toBe("connected")
     expect(document.body.querySelectorAll('[data-slot="provider-card"]').length).toBe(3)
   })
 
@@ -402,7 +402,7 @@ describe("Agenti e account › Ripresa delle sessioni", () => {
     hookStates = {
       "claude-code": state("claude-code", { installed: true }),
       codex: state("codex", {}),
-      nikcli: state("nikcli", {}),
+      ragu: state("ragu", {}),
     }
     renderTab("agents/resume")
     await settle()
@@ -433,12 +433,12 @@ describe("Agenti e account › Ripresa delle sessioni", () => {
     expect(details?.querySelector('[data-slot="hook-paths"]')?.textContent).toContain("C:/u/claude-code.ps1")
   })
 
-  test("fuori da Windows restano solo il plugin di nikcli e la nota che dice perché", async () => {
+  test("fuori da Windows restano solo il plugin di ragu e la nota che dice perché", async () => {
     runOn("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15")
     hookStates = {
       "claude-code": state("claude-code", {}),
       codex: state("codex", {}),
-      nikcli: state("nikcli", {}),
+      ragu: state("ragu", {}),
     }
     renderTab("agents/resume")
     await settle()
@@ -455,7 +455,7 @@ describe("Agenti e account › Ripresa delle sessioni", () => {
     hookStates = {
       "claude-code": state("claude-code", { installed: true }),
       codex: state("codex", {}),
-      nikcli: state("nikcli", {}),
+      ragu: state("ragu", {}),
     }
     renderTab("agents/resume")
     await settle()

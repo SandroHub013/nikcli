@@ -1,7 +1,7 @@
 export const OAUTH_ISSUER =
-  (import.meta.env.VITE_NIKCLI_ACCOUNT_URL as string | undefined)?.trim() || "https://auth.nikcli-ai.dev"
-export const OAUTH_CLIENT_ID = "nikcli-desktop"
-export const OAUTH_REDIRECT_URI = "nikcli://auth/callback"
+  (import.meta.env.VITE_RAGU_ACCOUNT_URL as string | undefined)?.trim() || "https://auth.nikcli-ai.dev"
+export const OAUTH_CLIENT_ID = "ragu-desktop"
+export const OAUTH_REDIRECT_URI = "ragu://auth/callback"
 
 export type OAuthTokens = {
   access: string
@@ -53,7 +53,7 @@ export function parseAuthCallback(input: string) {
   } catch {
     return
   }
-  if (url.protocol !== "nikcli:" || url.hostname !== "auth" || url.pathname !== "/callback") return
+  if (url.protocol !== "ragu:" || url.hostname !== "auth" || url.pathname !== "/callback") return
   return {
     code: url.searchParams.get("code") ?? undefined,
     state: url.searchParams.get("state") ?? undefined,

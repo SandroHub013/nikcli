@@ -1,8 +1,8 @@
 /**
  * Which program a bot's turns run on.
  *
- * A bot is a nikcli agent file, and nikcli is still the default: its turns run
- * on ADE's nikcli server (B8d, `serve-turn.ts`), with the providers `nikcli
+ * A bot is a ragu agent file, and ragu is still the default: its turns run
+ * on ADE's ragu server (B8d, `serve-turn.ts`), with the providers `ragu
  * auth` knows. But the user's
  * subscriptions are not all reachable from there. An Anthropic subscription is
  * only usable through Claude Code — the Agent SDK is Claude Code as a library,
@@ -11,8 +11,8 @@
  * is Codex's. So a bot names its runner, and
  * each runner gets its turn from the CLI the user already signed in to.
  *
- * The runner is ADE's own frontmatter key (`runner:`), like `avatar:`: nikcli
- * ignores keys it does not know, so the file still runs in nikcli's TUI.
+ * The runner is ADE's own frontmatter key (`runner:`), like `avatar:`: ragu
+ * ignores keys it does not know, so the file still runs in ragu's TUI.
  *
  * Claude Code and Codex print one JSON object per line, so both adapters here
  * are the same shape: the arguments for one turn, and a fold from an event to
@@ -22,8 +22,8 @@
 import { t } from "../i18n"
 import { stripAnsi } from "../session/stream"
 import type { BotAccount } from "./account"
-import type { AgentFile } from "./nikcli"
-import { NIKCLI_COMMAND } from "./nikcli"
+import type { AgentFile } from "./ragu"
+import { RAGU_COMMAND } from "./ragu"
 import { PLAN_RUNNERS } from "./terms"
 import { claudeRefusals, classifyCommand } from "./approval"
 import {
@@ -37,7 +37,7 @@ import {
   type Talk,
 } from "./talk"
 
-export type RunnerId = "nikcli" | "claude" | "codex"
+export type RunnerId = "ragu" | "claude" | "codex"
 
 export interface Runner {
   readonly id: RunnerId
@@ -45,12 +45,12 @@ export interface Runner {
   /** The executable, as the pty allowlist names it. */
   readonly command: string
   /**
-   * Models to offer. Empty for nikcli, whose list is asked of nikcli itself.
+   * Models to offer. Empty for ragu, whose list is asked of ragu itself.
    * The field stays free text for the others: these CLIs accept aliases and
    * new names long before a list here learns them.
    */
   readonly models: readonly string[]
-  /** The effort flag's values. Empty for nikcli, whose efforts depend on the model. */
+  /** The effort flag's values. Empty for ragu, whose efforts depend on the model. */
   readonly efforts: readonly string[]
   /** How to sign in, run in a terminal pane. */
   readonly login: readonly string[]
@@ -60,11 +60,11 @@ export interface Runner {
 
 export const RUNNERS: readonly Runner[] = [
   {
-    id: "nikcli",
+    id: "ragu",
     label: "Ragu Code",
-    command: NIKCLI_COMMAND,
+    command: RAGU_COMMAND,
     models: [],
-    // A nikcli model's efforts are its own variants, read from nikcli (`effort.ts`), not a list here.
+    // A ragu model's efforts are its own variants, read from ragu (`effort.ts`), not a list here.
     efforts: [],
     login: ["auth", "login"],
     status: ["auth", "list"],
@@ -103,7 +103,7 @@ export const RUNNERS: readonly Runner[] = [
  *
  * `plan` is Claude Code or Codex: the CLI may print a dollar figure, and it
  * is not a charge on a card. `free` is a model whose id ends in `:free`.
- * `api` is a named nikcli model. No model at all is `metered`: the default
+ * `api` is a named ragu model. No model at all is `metered`: the default
  * can be paid, and calling it an API key would be a guess.
  */
 export type SpendKind = "plan" | "api" | "free" | "metered"
@@ -163,10 +163,10 @@ export function spendLine(input: {
 }
 
 /**
- * What «Genera con nikcli» spends.
+ * What «Genera con ragu» spends.
  *
  * The model named in the form is the one `agent create --model` writes the
- * file with. With none named, nikcli's own default writes it, and a default
+ * file with. With none named, ragu's own default writes it, and a default
  * is not free.
  */
 export function generationSpend(model?: string | undefined): { readonly model: string; readonly paid: boolean } {
@@ -182,7 +182,7 @@ export function runnerAccount(id: RunnerId | string): string {
     case "codex":
       return t("bots.runner.account.codex")
     default:
-      return t("bots.runner.account.nikcli")
+      return t("bots.runner.account.ragu")
   }
 }
 
@@ -212,7 +212,7 @@ export interface TurnSpec {
    */
   readonly lean?: boolean
   /**
-   * No tool at all: Claude Code gets `--tools ""`, not even `ade-msg`, and nikcli's session denies every
+   * No tool at all: Claude Code gets `--tools ""`, not even `ade-msg`, and ragu's session denies every
    * tool (`planner` in `serve-rules.ts`). For a turn that only answers from what it is given, such as the
    * voice's planner, whose input carries text others can write (pane titles). Codex has no such flag and
    * ignores it.
@@ -246,7 +246,7 @@ export interface TurnSpec {
   /**
    * The caller answers questions (B8c, the Bots panel's `controller.ts`).
    * Claude Code, which cannot ask mid-turn, is then refused only what the
-   * bot's «Sempre» does not cover. nikcli's turns run on ADE's server (B8d),
+   * bot's «Sempre» does not cover. ragu's turns run on ADE's server (B8d),
    * with the rules of `serve-rules.ts`.
    */
   readonly approvals?: boolean
@@ -254,7 +254,7 @@ export interface TurnSpec {
   readonly always?: readonly string[]
   /**
    * A turn nobody watches (B11, a routine): no shell at all, not even
-   * `ade-msg`, which can open a session with a shell of its own. nikcli gets
+   * `ade-msg`, which can open a session with a shell of its own. ragu gets
    * the `read-only` rules on ADE's server (B8d), Claude Code and Codex run
    * read-only too (B11 review:
    * Claude Code is refused Bash, Edit and Write, and edits are not accepted).
@@ -267,8 +267,8 @@ export interface TurnSpec {
 /**
  * What a turn from a chat may run (G5, D93). With `commands` off, the
  * default, no shell at all. With it on (the bot's «Comandi da remoto», the
- * owner's choice in ADE), nikcli asks about every command, and the question
- * goes to the phone. Only nikcli: Claude Code and Codex cannot ask mid-turn,
+ * owner's choice in ADE), ragu asks about every command, and the question
+ * goes to the phone. Only ragu: Claude Code and Codex cannot ask mid-turn,
  * so every command would be approved in advance, not one by one as D93
  * wants; from a chat they never have a shell (G5 review, M1).
  * Writes stay in the project, never where a file becomes a command run later
@@ -281,17 +281,17 @@ export interface RemoteTools {
 
 /**
  * Whether the runner itself refuses what `disabledTools` turns off, rather
- * than only being asked to. nikcli takes its tools from the agent file, and a
+ * than only being asked to. ragu takes its tools from the agent file, and a
  * turn has no way to hand it others without an environment the pty does not
  * pass, so a tool refused here would still run there.
  */
 export function enforcesDisabledTools(id: RunnerId): boolean {
-  return id !== "nikcli"
+  return id !== "ragu"
 }
 
 /**
- * nikcli's tool names, as Claude Code spells them. A bot with a tool turned
- * off in nikcli has it refused in Claude Code too.
+ * ragu's tool names, as Claude Code spells them. A bot with a tool turned
+ * off in ragu has it refused in Claude Code too.
  */
 const CLAUDE_TOOLS: Record<string, readonly string[]> = {
   bash: ["Bash", "PowerShell"],
@@ -321,7 +321,7 @@ const READ_ONLY_REFUSED: readonly string[] = ["edit", "write"]
  * - Codex: read-only, always. `codex exec` forces `approval_policy` to never
  *   whatever `-c` says (review B3, A1), so the sandbox is the only limit, and
  *   `workspace-write` would let it run anything inside the project.
- * - nikcli reads the file itself, so `trust.ts` refuses one that grants
+ * - ragu reads the file itself, so `trust.ts` refuses one that grants
  *   itself permissions.
  */
 function fromRepository(bot: AgentFile): boolean {
@@ -331,7 +331,7 @@ function fromRepository(bot: AgentFile): boolean {
 /*
  * Folders where a write turns into a command run later, by git, an editor, CI
  * or the next agent session (review B3, M1): hooks, tasks, workflows, and the
- * settings and plugins of Claude Code, nikcli and Codex.
+ * settings and plugins of Claude Code, ragu and Codex.
  */
 const EXECUTES_LATER = [".git", ".claude", ".nikcli", ".codex", ".husky", ".vscode", ".github/workflows"]
 const EXECUTES_LATER_RULES = EXECUTES_LATER.flatMap((path) =>
@@ -394,9 +394,9 @@ export function turnCommand(
 } {
   const { bot, message, sessionId } = spec
   switch (runner.id) {
-    case "nikcli":
-      // A bot's nikcli turn runs on ADE's server with its session's rules (B8d, `serve-turn.ts`): no process.
-      throw new Error(t("bots.turn.nikcliOnServer"))
+    case "ragu":
+      // A bot's ragu turn runs on ADE's server with its session's rules (B8d, `serve-turn.ts`): no process.
+      throw new Error(t("bots.turn.raguOnServer"))
     case "claude": {
       /*
        * `-p` cannot ask for permission, so what the bot may do is decided up
@@ -525,7 +525,7 @@ export function turnCommand(
 
 export function applyRunnerLine(runner: Runner, talk: Talk, line: string, at: number): Talk {
   switch (runner.id) {
-    case "nikcli":
+    case "ragu":
       // Its events come from ADE's server (`serve-turn.ts`), never as lines.
       return talk
     case "claude":
@@ -865,7 +865,7 @@ export function readLoginStatus(runner: Runner, output: string, code: number | n
       }
       return { state: line ? "out" : code === 0 ? "unknown" : "out", detail: first || t("bots.login.out") }
     }
-    case "nikcli": {
+    case "ragu": {
       const providers = text
         .split("\n")
         .map((l) => l.replace(/[│┌└●○◇◆]/g, "").trim())

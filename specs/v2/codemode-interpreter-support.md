@@ -6,7 +6,7 @@
 | Scope  | `src/codemode/interpreter/*`, `src/codemode/stdlib/*`, `test/codemode/*`                        |
 | Buys   | A subset that was decided rather than inherited, and refusals a model can act on the first time |
 
-`code_mode` is on by default (opt-out `NIKCLI_DISABLE_CODE_MODE`), so this interpreter is a surface the
+`code_mode` is on by default (opt-out `RAGU_DISABLE_CODE_MODE`), so this interpreter is a surface the
 model writes against on ordinary turns. What it accepts is therefore a product decision, not an
 implementation detail — and until T4 it was neither: the subset was whatever the fork happened to
 carry when `src/codemode` was taken from opencode.

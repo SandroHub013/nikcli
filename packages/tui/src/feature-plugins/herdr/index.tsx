@@ -1,10 +1,10 @@
 /**
- * nikcli Herdr — internal TUI plugin.
+ * ragu Herdr — internal TUI plugin.
  *
- * Surfaces the server-side Herdr bridge (`@nikcli-ai/util/herdr-bridge`)
+ * Surfaces the server-side Herdr bridge (`@ragu/util/herdr-bridge`)
  * as a toggleable plugin, exactly the way the Island plugin wraps its
  * bridge. The plugin is loaded unconditionally, but the bridge stays
- * dormant until the user toggles it on — keeping nikcli totally silent on
+ * dormant until the user toggles it on — keeping ragu totally silent on
  * machines without herdr installed, and never reporting phantom agents
  * when the user is just exploring the TUI.
  *
@@ -15,10 +15,10 @@
  *     flips the bridge on/off.
  *   - `herdr.refresh` that pulls a fresh snapshot and repaints the dialog.
  */
-import { HerdrBridge } from "@nikcli-ai/util/herdr-bridge"
-import type { HerdrSnapshot } from "@nikcli-ai/util/herdr-bridge"
+import { HerdrBridge } from "@ragu/util/herdr-bridge"
+import type { HerdrSnapshot } from "@ragu/util/herdr-bridge"
 import { DialogHerdrStatus } from "./dialog"
-import type { TuiPlugin, TuiPluginModule } from "@nikcli-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginModule } from "@ragu/plugin/tui"
 
 const id = "internal:herdr"
 

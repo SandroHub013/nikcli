@@ -31,7 +31,7 @@ interface CloudflareEnv {
    */
   CONSOLE_DATA_URL?: string
   /**
-   * Aggregate feed of what nikcli installs report running on their own provider
+   * Aggregate feed of what ragu installs report running on their own provider
    * keys, served by the inference dashboard. Optional for the same reason.
    */
   COMMUNITY_DATA_URL?: string
@@ -55,16 +55,16 @@ interface CloudflareEnv {
    */
   ARTIFACT_PUBLIC_ORIGIN?: string
   /**
-   * Optional nikcli server backing the docs assistant. With both the URL and a
-   * token set, questions run as a real nikcli session instead of a one-shot
+   * Optional ragu server backing the docs assistant. With both the URL and a
+   * token set, questions run as a real ragu session instead of a one-shot
    * Workers AI call; without them the free Workers AI path is used.
    */
-  NIKCLI_DOCS_SERVER?: string
-  NIKCLI_DOCS_TOKEN?: string
-  NIKCLI_DOCS_AGENT?: string
-  NIKCLI_DOCS_DIRECTORY?: string
-  /** Nikcli server that owns the canonical UserDB accounts. */
-  NIKCLI_AUTH_SERVER?: string
+  RAGU_DOCS_SERVER?: string
+  RAGU_DOCS_TOKEN?: string
+  RAGU_DOCS_AGENT?: string
+  RAGU_DOCS_DIRECTORY?: string
+  /** Ragu server that owns the canonical UserDB accounts. */
+  RAGU_AUTH_SERVER?: string
   AUTH_ISSUER?: string
   AUTH_AUDIENCE?: string
   AUTH_JWKS_URL?: string

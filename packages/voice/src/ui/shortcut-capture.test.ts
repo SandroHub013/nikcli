@@ -8,8 +8,8 @@ import {
 } from "./shortcut-capture"
 import { DEFAULT_VOICE_SETTINGS, type VoiceSettings } from "../settings/model"
 import { VOICE_COMMAND_AGENT, VOICE_COMMAND_TRANSCRIPTION } from "../settings/shortcuts"
-import { matchesChord, parseChord } from "@nikcli-ai/ade/keyboard/keymap"
-import { DEFAULT_BINDINGS } from "@nikcli-ai/ade/keyboard/bindings"
+import { matchesChord, parseChord } from "@ragu/ade/keyboard/keymap"
+import { DEFAULT_BINDINGS } from "@ragu/ade/keyboard/bindings"
 
 describe("ui/shortcut-capture", () => {
   describe("captureKeyboardEvent", () => {

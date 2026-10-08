@@ -69,7 +69,7 @@ export default function GithubSettingsScreen() {
   const profileChips = useMemo(
     () => [
       oauthConfigured ? "OAuth ready" : "Approve account",
-      bootstrap?.github?.oauthClientSource ? `Source ${bootstrap.github.oauthClientSource}` : "Nikcli GitHub App",
+      bootstrap?.github?.oauthClientSource ? `Source ${bootstrap.github.oauthClientSource}` : "Ragu GitHub App",
       githubTokenAvailable ? "GH token stored" : "GH token missing",
       githubConnected ? "GitHub linked" : reconnectRequired ? "Reconnect needed" : "GitHub offline",
     ],
@@ -150,7 +150,7 @@ export default function GithubSettingsScreen() {
       <SurfaceCard
         eyebrow="GitHub account"
         title="Approve your GitHub account"
-        description="Nikcli already uses the official GitHub App. You only need to approve your GitHub account in the browser."
+        description="Ragu already uses the official GitHub App. You only need to approve your GitHub account in the browser."
       >
         <View className="flex-row flex-wrap gap-2">
           {profileChips.map((chip) => (
@@ -194,7 +194,7 @@ export default function GithubSettingsScreen() {
       <SurfaceCard
         eyebrow="OAuth device sign-in"
         title="Connect with GitHub"
-        description="Nikcli already uses the official GitHub App. Approve your account in the browser — you do not need to type a client ID."
+        description="Ragu already uses the official GitHub App. Approve your account in the browser — you do not need to type a client ID."
       >
         <View className="gap-3">
           <View className="flex-row items-center gap-3">
@@ -202,7 +202,7 @@ export default function GithubSettingsScreen() {
               source={require("@/assets/app-icon-mark.png")}
               style={{ width: 32, height: 32, borderRadius: 8 }}
               contentFit="cover"
-              accessibilityLabel="nikcli"
+              accessibilityLabel="ragu"
             />
             <Text style={{ color: palette.soft, ...typeStyle(14) }}>→</Text>
             <View className="size-8 items-center justify-center">
@@ -297,7 +297,7 @@ export default function GithubSettingsScreen() {
               }}
             >
               <Text style={{ color: palette.soft, ...typeStyle(14) }}>
-                Nikcli already ships the official GitHub App client ID. Override it only if this host must use a
+                Ragu already ships the official GitHub App client ID. Override it only if this host must use a
                 different OAuth application.
               </Text>
               <TextField

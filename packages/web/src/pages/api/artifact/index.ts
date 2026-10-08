@@ -17,7 +17,7 @@ export const prerender = false
  * is the same read capability for clients that build the link themselves.
  *
  * Auth is optional so the CLI can always publish without a password. When a
- * verifiable nikcli token is present (Bearer + optional X-Nikcli-Server), the
+ * verifiable ragu token is present (Bearer + optional X-Ragu-Server), the
  * artifact is owned by that account and appears in its listings; otherwise it
  * is anonymous and reachable only through its viewKey capability link.
  */
@@ -84,6 +84,6 @@ export const OPTIONS: APIRoute = () =>
     headers: {
       "Access-Control-Allow-Origin": "*",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Nikcli-Server",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Ragu-Server",
     },
   })

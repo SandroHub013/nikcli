@@ -24,16 +24,16 @@ const toc = [
 
 <DocsLayout
   title="Plugins"
-  subtitle="How nikcli installs plugins, patches server/TUI config, loads built-ins, and exposes plugin hooks."
-  description="Guide to nikcli plugins, installation, built-in hooks, server/TUI patching, and plugin configuration."
+  subtitle="How ragu installs plugins, patches server/TUI config, loads built-ins, and exposes plugin hooks."
+  description="Guide to ragu plugins, installation, built-in hooks, server/TUI patching, and plugin configuration."
   toc={toc}
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
       Plugins extend server-side agent behavior and TUI behavior. Server plugin loading is in
-      <code>packages/nikcli/src/plugin/index.ts</code>. Plugin installation and config patching are
-      in <code>packages/nikcli/src/plugin/installer.ts</code>. TUI plugin runtime lives under
+      <code>packages/ragu/src/plugin/index.ts</code>. Plugin installation and config patching are
+      in <code>packages/ragu/src/plugin/installer.ts</code>. TUI plugin runtime lives under
       <code>packages/tui/src/plugin</code>.
     </p>
     <div class="doc-grid not-prose">
@@ -44,7 +44,7 @@ const toc = [
         <p>TUI plugins can register commands, routes, dialogs, keybinds, and sidebar features.</p>
       </DocCard>
       <DocCard title="Installer" eyebrow="CLI">
-        <p><code>nikcli plugin</code> installs a package, reads its manifest, and patches local or global config.</p>
+        <p><code>ragu plugin</code> installs a package, reads its manifest, and patches local or global config.</p>
       </DocCard>
       <DocCard title="Built-ins" eyebrow="Default">
         <p>Internal auth and notification plugins always load; external built-ins load unless disabled.</p>
@@ -55,9 +55,9 @@ const toc = [
   <section id="install" class="doc-section">
     <h2>Install a plugin</h2>
     <DocCode language="bash">
-nikcli plugin @scope/my-plugin
-nikcli plugin @scope/my-plugin --global
-nikcli plugin @scope/my-plugin@1.2.3 --force
+ragu plugin @scope/my-plugin
+ragu plugin @scope/my-plugin --global
+ragu plugin @scope/my-plugin@1.2.3 --force
     </DocCode>
     <p>The install task performs four steps:</p>
     <ol>
@@ -104,14 +104,14 @@ nikcli plugin @scope/my-plugin@1.2.3 --force
     <h2>Server runtime</h2>
     <p>
       Server plugin loading starts with internal plugins that are imported directly. Then configured
-      plugins plus external built-ins are loaded. If a plugin path is not <code>file://</code>, nikcli
+      plugins plus external built-ins are loaded. If a plugin path is not <code>file://</code>, ragu
       installs the package before importing it.
     </p>
     <ol>
       <li>Build plugin input, including SDK client and runtime helpers.</li>
       <li>Load internal auth/notification plugins.</li>
       <li>Copy configured plugin specifiers from config.</li>
-      <li>Add external built-ins unless <code>NIKCLI_DISABLE_DEFAULT_PLUGINS</code> is set.</li>
+      <li>Add external built-ins unless <code>RAGU_DISABLE_DEFAULT_PLUGINS</code> is set.</li>
       <li>Ignore old Codex/Copilot auth plugin specs that are now first-party.</li>
       <li>Install and import package specifiers.</li>
       <li>Load v1 <code>server</code> export when present, otherwise invoke exported plugin functions.</li>
@@ -147,8 +147,8 @@ nikcli plugin @scope/my-plugin@1.2.3 --force
     <h2>TUI plugin discovery and hot reload</h2>
     <p>
       Local TUI plugins are discovered from <code>plugin/tui/</code> and <code>plugins/tui/</code>
-      inside every config root — the project <code>.nikcli</code> directories, the global config dir,
-      <code>NIKCLI_CONFIG_DIR</code>, and the managed dir. Anything else is declared in
+      inside every config root — the project <code>.ragu</code> directories, the global config dir,
+      <code>RAGU_CONFIG_DIR</code>, and the managed dir. Anything else is declared in
       <code>tui.json</code>. The extra <code>tui</code> level matters:
       <code>&#123;plugin,plugins&#125;/*.&#123;ts,js&#125;</code> is the <em>server</em> plugin loader's
       territory, so a TUI plugin placed directly there is loaded as a server plugin and fails.
@@ -176,8 +176,8 @@ nikcli plugin @scope/my-plugin@1.2.3 --force
       </tbody>
     </table>
     <DocCallout type="note">
-      Hot reload is on by default. Set <code>NIKCLI_DISABLE_PLUGIN_RELOAD=1</code> to load plugins once
-      at startup; <code>--pure</code> / <code>NIKCLI_PURE</code> skips external TUI plugins entirely.
+      Hot reload is on by default. Set <code>RAGU_DISABLE_PLUGIN_RELOAD=1</code> to load plugins once
+      at startup; <code>--pure</code> / <code>RAGU_PURE</code> skips external TUI plugins entirely.
     </DocCallout>
   </section>
 
@@ -200,7 +200,7 @@ nikcli plugin @scope/my-plugin@1.2.3 --force
       </tbody>
     </table>
     <DocCode language="bash">
-NIKCLI_DISABLE_DEFAULT_PLUGINS=1 nikcli
+RAGU_DISABLE_DEFAULT_PLUGINS=1 ragu
     </DocCode>
     <h3>Internal TUI feature plugins</h3>
     <p>
@@ -273,7 +273,7 @@ NIKCLI_DISABLE_DEFAULT_PLUGINS=1 nikcli
         <tr><td>Runtime code</td><td>Yes, imported and executed.</td><td>No, prompt/context instructions and assets.</td></tr>
         <tr><td>Config field</td><td><code>plugin</code></td><td>Discovered from directories and external skill locations.</td></tr>
         <tr><td>TUI manager</td><td>System plugin manager and plugin APIs.</td><td>Skills dialog and skill install/search UI.</td></tr>
-        <tr><td>Disable flag</td><td><code>NIKCLI_DISABLE_DEFAULT_PLUGINS</code> for default external plugins.</td><td><code>NIKCLI_DISABLE_EXTERNAL_SKILLS</code> for external skills.</td></tr>
+        <tr><td>Disable flag</td><td><code>RAGU_DISABLE_DEFAULT_PLUGINS</code> for default external plugins.</td><td><code>RAGU_DISABLE_EXTERNAL_SKILLS</code> for external skills.</td></tr>
       </tbody>
     </table>
   </section>
@@ -324,19 +324,19 @@ NIKCLI_DISABLE_DEFAULT_PLUGINS=1 nikcli
     <table class="doc-table">
       <thead><tr><th>Need</th><th>File</th></tr></thead>
       <tbody>
-        <tr><td>Server plugin runtime</td><td><code>packages/nikcli/src/plugin/index.ts</code></td></tr>
-        <tr><td>Plugin install and patching</td><td><code>packages/nikcli/src/plugin/installer.ts</code></td></tr>
-        <tr><td>Plugin package parsing</td><td><code>@nikcli-ai/util/plugin-shared</code></td></tr>
-        <tr><td>CLI command</td><td><code>packages/nikcli/src/cli/cmd/plug.ts</code></td></tr>
+        <tr><td>Server plugin runtime</td><td><code>packages/ragu/src/plugin/index.ts</code></td></tr>
+        <tr><td>Plugin install and patching</td><td><code>packages/ragu/src/plugin/installer.ts</code></td></tr>
+        <tr><td>Plugin package parsing</td><td><code>@ragu/util/plugin-shared</code></td></tr>
+        <tr><td>CLI command</td><td><code>packages/ragu/src/cli/cmd/plug.ts</code></td></tr>
         <tr><td>TUI plugin API</td><td><code>packages/tui/src/plugin/api.tsx</code></td></tr>
         <tr><td>TUI plugin runtime</td><td><code>packages/tui/src/plugin/runtime.ts</code></td></tr>
         <tr><td>System plugin manager</td><td><code>packages/tui/src/feature-plugins/system</code></td></tr>
         <tr><td>Home, sidebar, background, loop, mission, brain, browser, chatbot, computer, connectors and observability plugins</td><td><code>packages/tui/src/feature-plugins/</code></td></tr>
         <tr><td>Internal plugin registry</td><td><code>packages/tui/src/plugin/internal.ts</code></td></tr>
-        <tr><td>Island file bridge</td><td><code>@nikcli-ai/util/island-bridge</code></td></tr>
+        <tr><td>Island file bridge</td><td><code>@ragu/util/island-bridge</code></td></tr>
         <tr><td>Island TUI plugin</td><td><code>packages/tui/src/feature-plugins/island/index.tsx</code></td></tr>
         <tr><td>Plugin contracts package</td><td><code>packages/plugin</code></td></tr>
-        <tr><td>Skills</td><td><code>packages/nikcli/src/skill/skill.ts</code></td></tr>
+        <tr><td>Skills</td><td><code>packages/ragu/src/skill/skill.ts</code></td></tr>
       </tbody>
     </table>
   </section>

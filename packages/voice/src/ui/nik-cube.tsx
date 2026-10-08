@@ -1,5 +1,5 @@
 /**
- * The nikcli mark as a cube, turning.
+ * The ragu mark as a cube, turning.
  *
  * Six faces, each carrying the letter N, rotating slowly on two axes so that
  * three of them are visible at any moment and the set of three keeps changing.

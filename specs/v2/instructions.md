@@ -3,15 +3,15 @@
 | Field  | Value                                                                        |
 | ------ | ---------------------------------------------------------------------------- |
 | Status | **Working agreement** — conventions, not a contract                          |
-| Scope  | `packages/nikcli/src/**` domain services, `packages/util`, `packages/plugin` |
+| Scope  | `packages/ragu/src/**` domain services, `packages/util`, `packages/plugin` |
 | Buys   | One shape for a service, so the next port does not invent a third            |
 
-These notes describe how to write and port services in `packages/nikcli/src` during the v2 work. They
+These notes describe how to write and port services in `packages/ragu/src` during the v2 work. They
 describe the house style that already exists in `Provider`, `Project`, `Config`, `Session`, and
 `ToolRegistry` — read one of those before starting, and follow it.
 
-This is the nikcli counterpart to opencode's `specs/v2/instructions.md`. The direction is the same;
-the mechanics are not, because nikcli has no `packages/core`.
+This is the ragu counterpart to opencode's `specs/v2/instructions.md`. The direction is the same;
+the mechanics are not, because ragu has no `packages/core`.
 
 ## Direction
 
@@ -28,7 +28,7 @@ The target shape:
 - The server (`src/server/httpapi/*`) is transport. A handler resolves a service and calls one
   method; it does not contain domain branches.
 
-There is no separate core package and **this is not a proposal to create one.** nikcli's isolation
+There is no separate core package and **this is not a proposal to create one.** ragu's isolation
 boundary is the per-instance service, not the package. A service that could live in a core package is
 already correct where it is if it takes its dependencies through Effect context.
 
@@ -75,7 +75,7 @@ methods.
 
 ## State Is Per Instance
 
-nikcli's unit of isolation is a **directory**, not a process. State that depends on the project,
+ragu's unit of isolation is a **directory**, not a process. State that depends on the project,
 worktree, config, or credentials belongs in `InstanceState.make(init, { reloadable })`, not in a
 module-level `let`.
 
@@ -100,7 +100,7 @@ Two rules that are easy to get wrong, both recorded in
   Reading it from a fiber that lost the ambient context produces "No context found for instance",
   which is a runtime failure with no compile-time signal.
 
-Singletons that hold a path must re-resolve the path on access. `bun test` swaps `NIKCLI_TEST_HOME`
+Singletons that hold a path must re-resolve the path on access. `bun test` swaps `RAGU_TEST_HOME`
 per file, so a path captured at module load is stale for every file after the first.
 
 ## Errors
@@ -159,11 +159,11 @@ event published from inside a transaction that later rolls back is a lie that cl
 
 ## Plugins
 
-`@nikcli-ai/plugin` is the public extension type. Plugin-provided behavior enters through the paths
+`@ragu/plugin` is the public extension type. Plugin-provided behavior enters through the paths
 that already exist — auth loaders, tool registration, hooks — and autoload is fail-closed with an
 allowlist and sha256 pins ([tool-plugin-autoload-security.md](./tool-plugin-autoload-security.md)).
 
-nikcli does not have upstream's `PluginV2.HookSpec` with Immer drafts and `cancel` flags. Do not
+ragu does not have upstream's `PluginV2.HookSpec` with Immer drafts and `cancel` flags. Do not
 build half of it for one service. If a real integration needs a hook, propose the hook surface as its
 own document first.
 
@@ -201,11 +201,11 @@ reproduction of the old architecture in new syntax.
   native 7.0 one. Run it **once**, after all edits.
 - `bun test <path>` for the suites you touched; `bun run test:ci` for the whole sharded suite.
 - Never verify with `packages/simulation`. It is slow and flaky; unit tests are the contract.
-- **A test that needs a `NIKCLI_*` variable must declare it.** `test/preload.ts` installs a
-  `beforeEach` that deletes every `NIKCLI_*` and `XDG_*` variable outside its captured baseline, so a
+- **A test that needs a `RAGU_*` variable must declare it.** `test/preload.ts` installs a
+  `beforeEach` that deletes every `RAGU_*` and `XDG_*` variable outside its captured baseline, so a
   plain `process.env.X = …` — at module scope or in `beforeAll` — is gone before the first `it` runs.
   Use `preserveTestEnv([...])` from `test/helpers/env.ts`. The failure is not an error: the code under
-  test falls back to its production default, which for `NIKCLI_DB` means writing test rows into the
+  test falls back to its production default, which for `RAGU_DB` means writing test rows into the
   developer's real `~/.local/share/nikcli/nikcli.db`. Assert the resolved value in the first test of
   any suite that redirects one.
 - Formatting comes from the root `package.json` `prettier` block (`semi: false`, width 120). Do not

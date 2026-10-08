@@ -23,7 +23,7 @@ Notifications.setNotificationHandler({
 
 const recentNotifications = new Map<string, number>()
 const MAX_DEDUPE_ENTRIES = 200
-const MOBILE_CHANNEL_ID = "nikcli-mobile"
+const MOBILE_CHANNEL_ID = "ragu-mobile"
 const liveActivitySessions = new Set<string>()
 const liveActivityInstances = new Map<string, SessionLiveActivityHandle>()
 const liveActivitySignatures = new Map<string, string>()
@@ -129,7 +129,7 @@ function sessionDeepLink(sessionID: string, action?: SessionDeepLinkAction, requ
     return Linking.createURL(sessionRoute(sessionID), queryParams ? { queryParams } : undefined)
   } catch {
     const query = queryParams ? `?${new URLSearchParams(queryParams).toString()}` : ""
-    return `nikcli://sessions/${encodeURIComponent(sessionID)}${query}`
+    return `ragu://sessions/${encodeURIComponent(sessionID)}${query}`
   }
 }
 
@@ -230,7 +230,7 @@ export function buildSessionLiveActivitySnapshot(
   detail: SessionDetail,
   overlays?: { publishing?: boolean; cleaning?: boolean },
 ): SessionLiveActivitySnapshot | null {
-  const title = compactActivityText(detail.info.title || "Nikcli session", 64)
+  const title = compactActivityText(detail.info.title || "Ragu session", 64)
   const runningTool = latestRunningTool(detail)
   const startedAt = sessionStartedAt(detail, runningTool)
 
@@ -349,7 +349,7 @@ export async function ensureNotificationPermissions(requestIfNeeded = false) {
   if (Platform.OS === "web") return false
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync(MOBILE_CHANNEL_ID, {
-      name: "Nikcli Mobile",
+      name: "Ragu Mobile",
       importance: Notifications.AndroidImportance.DEFAULT,
       vibrationPattern: [0, 120],
       lightColor: "#38bdf8",

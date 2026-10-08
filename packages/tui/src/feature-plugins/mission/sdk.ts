@@ -12,8 +12,8 @@
  * where `runtime` carries the live status fields.
  */
 
-import type { NikcliClient } from "@nikcli-ai/sdk/httpapi"
-import type { TuiEventBus } from "@nikcli-ai/plugin/tui"
+import type { RaguClient } from "@ragu/sdk/httpapi"
+import type { TuiEventBus } from "@ragu/plugin/tui"
 import {
   type MissionDefinition,
   type MissionExec,
@@ -244,7 +244,7 @@ export type GeneratedDraft = {
  * returns undefined/empty arrays so the UI can fall back to the local KV
  * cache instead of crashing.
  */
-type MissionSdk = NikcliClient & {
+type MissionSdk = RaguClient & {
   mission?: Record<string, ((input: Record<string, unknown>) => Promise<{ data: unknown }>) | undefined>
 }
 
@@ -255,7 +255,7 @@ type MissionSdk = NikcliClient & {
  */
 export class MissionApi {
   private readonly sdk: MissionSdk
-  constructor(client: NikcliClient) {
+  constructor(client: RaguClient) {
     this.sdk = client as unknown as MissionSdk
   }
 

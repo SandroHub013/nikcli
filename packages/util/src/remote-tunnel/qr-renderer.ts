@@ -1,6 +1,6 @@
-import { generateQR, renderSessionCard } from "@nikcli-ai/remote"
+import { generateQR, renderSessionCard } from "@ragu/remote"
 import type { RemoteSession, SessionStatus } from "./types"
-import { Log } from "@nikcli-ai/util/log"
+import { Log } from "@ragu/util/log"
 
 const log = Log.create({ service: "qr-renderer" })
 

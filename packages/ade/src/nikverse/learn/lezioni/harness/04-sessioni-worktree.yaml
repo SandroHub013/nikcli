@@ -28,7 +28,7 @@ obiettivi:
 
 fonti:
   - id: F10
-    titolo: "nikcli docs, Sessions"
+    titolo: "ragu docs, Sessions"
     url: "https://github.com/nikcli/nikcli/blob/live-main/packages/web/src/pages/docs/sessions.astro"
   - id: F11
     titolo: "git-worktree"

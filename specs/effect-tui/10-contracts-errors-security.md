@@ -21,7 +21,7 @@ without a separately scoped contract review.
 1. Domain services own reusable Effect schemas and `Schema.TaggedError` definitions. Decode unknown inputs at service or
    transport boundaries, not after mutating state. Keep pure trusted internal transformations free of redundant decoding.
    New Effect code uses `return yield*` for expected failure, not throws inside `Effect.gen`.
-2. Keep `packages/nikcli/src/server/httpapi/` the source of truth. Reuse existing service schemas and shared `domain.ts`
+2. Keep `packages/ragu/src/server/httpapi/` the source of truth. Reuse existing service schemas and shared `domain.ts`
    schemas; derive on-disk config from Zod through `fromZod`. Do not handwrite a parallel `Config.Info` or a UI copy of a
    domain union merely to avoid importing generated types.
 3. For each touched response, test absent key, present `undefined`, null, and value against actual producers and the encoded
@@ -45,7 +45,7 @@ without a separately scoped contract review.
    TUI action is not an authorization boundary. Do not expand plugin autoload or cross-workspace visibility.
 9. Log through the redacted sink. Error bodies, tokens, authorization headers, OAuth codes, prompts, and sensitive URL
    parameters cannot appear in TUI errors, stack traces, spans, or metric dimensions. EOT-13 owns the span/metric/log
-   schema and the forbidden-dimension list this rule enforces. `NIKCLI_DEBUG` remains the existing
+   schema and the forbidden-dimension list this rule enforces. `RAGU_DEBUG` remains the existing
    stack-display control; no new telemetry export or credential exposure defaults.
 
 ## Outcome Matrix
@@ -77,11 +77,11 @@ an interruption into a retryable transport error or overwrite the real failure w
   visibly degraded. Pending user input cannot disappear because its fetch failed.
 - Add redaction assertions for fake fixture secrets in error bodies/URLs/logs; use controlled local issuer responses to
   exercise auth protocol edge cases without real accounts or production DB access.
-- Extend `packages/nikcli/test/server/httpapi-encode-failure.test.ts`,
-  `packages/nikcli/test/server/httpapi-config-schema.test.ts`,
-  `packages/nikcli/test/server/httpapi-client-compat.test.ts`, `packages/nikcli/test/server/httpapi-account.test.ts`, and
-  matching `packages/nikcli/test/account/` and `packages/nikcli/test/tui/onboarding-auth.test.ts` cases.
-- From `packages/nikcli`: `bun test test/server/httpapi-encode-failure.test.ts test/server/httpapi-config-schema.test.ts test/server/httpapi-client-compat.test.ts test/server/httpapi-account.test.ts`.
+- Extend `packages/ragu/test/server/httpapi-encode-failure.test.ts`,
+  `packages/ragu/test/server/httpapi-config-schema.test.ts`,
+  `packages/ragu/test/server/httpapi-client-compat.test.ts`, `packages/ragu/test/server/httpapi-account.test.ts`, and
+  matching `packages/ragu/test/account/` and `packages/ragu/test/tui/onboarding-auth.test.ts` cases.
+- From `packages/ragu`: `bun test test/server/httpapi-encode-failure.test.ts test/server/httpapi-config-schema.test.ts test/server/httpapi-client-compat.test.ts test/server/httpapi-account.test.ts`.
   After any HTTP contract edit: `bun run generate:httpapi-clients`, `bun run check:routes`, affected tests, and one final
   root `bun run typecheck`. Review all three generated targets and include their output with the implementation change.
 - Encoding/decoding overhead stays within EOT-01 approved latency budgets. Improve schema reuse or boundary placement if
@@ -96,7 +96,7 @@ validation, or CI client-drift checks to recover from a failed release.
 
 ## Discipline Addendum — 2026-09-20
 
-`script/check-open-payloads.ts` is in CI (commit `644a8f28`), backed by `packages/nikcli/specs/httpapi-open-payloads.json`: 49 `Schema.Unknown` sites across `src/server/httpapi/`, 41 justified entries.
+`script/check-open-payloads.ts` is in CI (commit `644a8f28`), backed by `packages/ragu/specs/httpapi-open-payloads.json`: 49 `Schema.Unknown` sites across `src/server/httpapi/`, 41 justified entries.
 
 1. **The allowlist is keyed by file plus the declaring line's text, never by line number.** A line number makes every unrelated edit above a listed site fail the gate, and the repair — renumbering the allowlist — is a diff that looks like review and contains none. The snippet is also what a reviewer needs to read next to the justification. `count` covers a file that declares the same shape more than once, so a _second_ copy of an already justified declaration is still a new open payload and still needs review.
 2. **`Schema.Record(Schema.String, Schema.Unknown)` is tracked but is not a violation.** The codegen emits `{ [k: string]: unknown }`, a typed record, not an `any`. It is listed so the policy stays explicit and CI does not block on it alone.

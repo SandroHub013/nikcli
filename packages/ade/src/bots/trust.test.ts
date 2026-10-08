@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 import { admit, fileFingerprint, memoryTrustStore, reachesShell } from "./trust"
 import { t } from "../i18n"
 
@@ -110,14 +110,14 @@ describe("fiducia nei bot di progetto", () => {
 
   test("la domanda dice che cosa potrà fare, secondo il motore (review B3, BASSO 2)", async () => {
     const questions: Record<string, string> = {}
-    for (const runner of ["claude", "codex", "nikcli"]) {
+    for (const runner of ["claude", "codex", "ragu"]) {
       const s = setup({ [projectBot.path]: "contenuto" }, [false])
       await admit({ ...projectBot, runner }, s.deps)
       questions[runner] = s.asked[0]!
     }
     expect(questions["codex"]).toContain("sola lettura")
     expect(questions["claude"]).toContain(".git")
-    expect(questions["nikcli"]).toContain("configurazione di Ragu Code")
+    expect(questions["ragu"]).toContain("configurazione di Ragu Code")
     expect(new Set(Object.values(questions)).size).toBe(3)
   })
 
@@ -144,12 +144,12 @@ describe("fiducia nei bot di progetto", () => {
 })
 
 /*
- * Review B3, A2: nikcli reads the bot's file itself, frontmatter included, so
+ * Review B3, A2: ragu reads the bot's file itself, frontmatter included, so
  * a project's bot could pre-approve its own commands (`permission: bash:
  * allow`) and run them after the user was told it would ask first. Such a bot
  * does not start, and says why. Claude Code and Codex never read that key.
  */
-describe("un bot di progetto per nikcli che si pre-approva", () => {
+describe("un bot di progetto per ragu che si pre-approva", () => {
   const withFront = (front: string) => `---\ndescription: Revisore\n${front}\n---\nSei un revisore.`
   const refused = [
     "permission:\n  bash: allow",
@@ -220,7 +220,7 @@ describe("un bot di progetto per nikcli che si pre-approva", () => {
  */
 describe("un bot che si concede la shell", () => {
   const withFront = (front: string) => `---\ndescription: Revisore\n${front}\n---\nSei un revisore.`
-  test("reachesShell legge * e ? come nikcli", () => {
+  test("reachesShell legge * e ? come ragu", () => {
     expect(["bash", "*", "ba?h", "*_directory", "external_*"].map(reachesShell)).toEqual([true, true, true, true, true])
     expect(["read", "edit", "bash2", "webfetch"].map(reachesShell)).toEqual([false, false, false, false])
   })

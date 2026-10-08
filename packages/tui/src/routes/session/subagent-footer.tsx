@@ -3,10 +3,10 @@ import { useRouteData } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
 import { SplitBorder } from "@tui/component/border"
-import type { AssistantMessage } from "@nikcli-ai/sdk/httpapi"
+import type { AssistantMessage } from "@ragu/sdk/httpapi"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "../../context/keybind"
-import { Locale } from "@nikcli-ai/util/locale"
+import { Locale } from "@ragu/util/locale"
 import { useTerminalDimensions } from "@opentui/solid"
 
 export function SubagentFooter() {

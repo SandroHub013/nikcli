@@ -1,11 +1,11 @@
 ---
 layout: ../../layouts/Doc.astro
-title: API Keys · nikcli Inference docs
+title: API Keys · ragu Inference docs
 ---
 
 # API Keys
 
-API keys authenticate your requests against the nikcli inference gateway. They follow the OpenAI convention.
+API keys authenticate your requests against the ragu inference gateway. They follow the OpenAI convention.
 
 ## Key format
 
@@ -37,7 +37,7 @@ Pass your key in the `Authorization` header:
 
 ```bash
 curl https://inference.nikcli-ai.dev/v1/chat/completions \
-  -H "Authorization: Bearer $NIKCLI_API_KEY" \
+  -H "Authorization: Bearer $RAGU_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"model":"nikseek","messages":[{"role":"user","content":"Hello"}]}'
 ```

@@ -1,6 +1,6 @@
 /**
  * SessionManager — an in-memory registry of named {@link ComputerSession}s.
- * Mirrors `@nikcli-ai/browser-control`'s SessionManager one-to-one: start
+ * Mirrors `@ragu/browser-control`'s SessionManager one-to-one: start
  * with a name (auto-generated if missing), look up by name, drive via the
  * session's chosen backend (`sandbox` or `host`), record markers, and
  * forget on stop.
@@ -20,13 +20,13 @@ export class SessionManager {
 
   /** Start a new session. If `name` is omitted, one is generated. Replaces an existing same-named session. */
   async start(
-    nikcliSessionID: string,
+    raguSessionID: string,
     options: Omit<SessionOptions, "name"> & { name?: string },
   ): Promise<SessionInfo> {
     const name = options.name && options.name.length > 0 ? options.name : this.generateName()
     const existing = this.sessions.get(name)
     if (existing) await existing.stop()
-    const session = await ComputerSession.create(nikcliSessionID, {
+    const session = await ComputerSession.create(raguSessionID, {
       ...options,
       name,
     })
@@ -133,12 +133,12 @@ export class SessionManager {
   }
 
   /** Restart a session with the same mode/size. */
-  async restart(nikcliSessionID: string, name: string): Promise<SessionInfo> {
+  async restart(raguSessionID: string, name: string): Promise<SessionInfo> {
     const session = this.require(name)
     const prev = session.info()
     await session.stop()
     this.sessions.delete(name)
-    return this.start(nikcliSessionID, {
+    return this.start(raguSessionID, {
       name,
       mode: prev.mode,
       width: prev.screen.width,

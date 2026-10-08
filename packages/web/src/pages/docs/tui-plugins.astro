@@ -39,13 +39,13 @@ const toc = [
 <DocsLayout
   title="TUI feature plugins"
   subtitle="Every built-in plugin under packages/tui/src/feature-plugins — what it registers, which commands it owns, where its state lives."
-  description="Reference for nikcli's internal TUI feature plugins: home, sidebar, system, background, loops, mission, brain, browser, computer, connectors, chatbot, observability and island."
+  description="Reference for ragu's internal TUI feature plugins: home, sidebar, system, background, loops, mission, brain, browser, computer, connectors, chatbot, observability and island."
   toc={toc}
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
-      Almost nothing the nikcli TUI shows is hard-coded in <code>app.tsx</code>. The
+      Almost nothing the ragu TUI shows is hard-coded in <code>app.tsx</code>. The
       home tips, the sidebar panels, the plugin manager, the wallpaper, the loop and
       mission managers, the connector and chat-bot dashboards — each one is a
       self-contained <strong>feature plugin</strong> under
@@ -81,7 +81,7 @@ const toc = [
       <code>tui(api)</code> setup function. Everything it registers is scoped to the
       plugin's lifetime — the runtime unregisters on deactivate and on TUI shutdown.
     </p>
-    <DocCode language="tsx" title="feature-plugins/browser/index.tsx">{`import type { TuiPlugin, TuiPluginModule } from "@nikcli-ai/plugin/tui"
+    <DocCode language="tsx" title="feature-plugins/browser/index.tsx">{`import type { TuiPlugin, TuiPluginModule } from "@ragu/plugin/tui"
 import { DialogBrowserUse } from "@tui/component/dialog-browser-use"
 
 const id = "internal:browser"
@@ -109,7 +109,7 @@ export default plugin`}</DocCode>
       A pure-UI plugin has no commands at all — it only fills a slot, and uses the
       terser v2 <code>Plugin.define</code> form:
     </p>
-    <DocCode language="tsx" title="feature-plugins/sidebar/lsp.tsx">{`import { Plugin } from "@nikcli-ai/plugin/v2/tui"
+    <DocCode language="tsx" title="feature-plugins/sidebar/lsp.tsx">{`import { Plugin } from "@ragu/plugin/v2/tui"
 
 export default Plugin.define({
   id: "internal:sidebar-lsp",
@@ -151,7 +151,7 @@ export default Plugin.define({
   PluginManager, Fusion,
   Missions, Loops, Brain, Browser, Chatbot, Computer, Connectors, Observability,
   Background,
-  ...(Flag.NIKCLI_ISLAND ? [Island] : []),
+  ...(Flag.RAGU_ISLAND ? [Island] : []),
 ]`}</DocCode>
     <p>
       Only <code>island</code> is conditional: it is registered exclusively when the CLI
@@ -221,7 +221,7 @@ export default Plugin.define({
         <tr><td><code>sidebar/lsp.tsx</code></td><td><code>sidebar.content</code></td><td>Connected language servers and their roots; explains whether LSP is disabled or simply not activated yet.</td><td>never</td></tr>
         <tr><td><code>sidebar/todo.tsx</code></td><td><code>sidebar.content</code></td><td>The session's todo list via the shared <code>TodoItem</code> component.</td><td>list empty or fully completed</td></tr>
         <tr><td><code>sidebar/files.tsx</code></td><td><code>sidebar.content</code></td><td>Modified files for the session with per-file <code>+additions</code> / <code>-deletions</code>.</td><td>no diff for the session</td></tr>
-        <tr><td><code>sidebar/footer.tsx</code></td><td><code>sidebar.footer</code></td><td>Working directory (with <code>~</code> collapsing) plus branch, and the NIKCLI version line. Also the dismissible “Getting started” card when no paid provider is connected.</td><td>never</td></tr>
+        <tr><td><code>sidebar/footer.tsx</code></td><td><code>sidebar.footer</code></td><td>Working directory (with <code>~</code> collapsing) plus branch, and the RAGU version line. Also the dismissible “Getting started” card when no paid provider is connected.</td><td>never</td></tr>
       </tbody>
     </table>
     <DocCallout type="info" title="Collapsible panels">
@@ -339,9 +339,9 @@ export default Plugin.define({
     <h4>How it renders</h4>
     <ol>
       <li><strong>Resolve.</strong> <code>source.ts</code> turns the setting into one concrete location; a directory resolves to one of its images by index, which is all “shuffle” has to bump.</li>
-      <li><strong>Decode.</strong> Bytes are read (25&nbsp;MB cap for remote and local files), decoded via <code>@nikcli-ai/tui-image</code>, and cached per location so a route change or a terminal resize never re-decodes a photo.</li>
+      <li><strong>Decode.</strong> Bytes are read (25&nbsp;MB cap for remote and local files), decoded via <code>@ragu/tui-image</code>, and cached per location so a route change or a terminal resize never re-decodes a photo.</li>
       <li><strong>Compose.</strong> <code>pixels.ts</code> crops to the terminal aspect, resamples at 2× per axis, optionally desaturates, and blends over the theme background at the configured opacity — pure and synchronous, so it is unit-testable without a renderer.</li>
-      <li><strong>Paint.</strong> <code>&lt;nikcli_background&gt;</code> hands the RGBA buffer to OpenTUI's native Zig super-sampler, which writes <code>▀</code> cells with per-cell foreground/background in one call.</li>
+      <li><strong>Paint.</strong> <code>&lt;ragu_background&gt;</code> hands the RGBA buffer to OpenTUI's native Zig super-sampler, which writes <code>▀</code> cells with per-cell foreground/background in one call.</li>
     </ol>
     <DocCallout type="info" title="Why app.tsx mounts the view, not a slot">
       <p>
@@ -362,7 +362,7 @@ export default Plugin.define({
     </DocCallout>
     <DocCode language="bash" title="Terminal">
       # Trace the render path to a file while debugging
-      NIKCLI_BG_DEBUG=/tmp/bg.log nikcli
+      RAGU_BG_DEBUG=/tmp/bg.log ragu
     </DocCode>
   </section>
 
@@ -371,7 +371,7 @@ export default Plugin.define({
 
     <h3 id="loops">loops</h3>
     <p>
-      Define an objective and a trigger once; nikcli drives the Goal system toward it on a
+      Define an objective and a trigger once; ragu drives the Goal system toward it on a
       schedule or on demand. See <a href="/docs/loops">Loops</a> for the engine itself — the
       plugin is the TUI half.
     </p>
@@ -440,7 +440,7 @@ export default Plugin.define({
     <p>
       <code>/computer</code> · <code>/computer-use</code> (command
       <code>computer.capabilities</code>) probes the host through
-      <code>@nikcli-ai/computer-use</code> and reports exactly what the <code>computer</code>
+      <code>@ragu/computer-use</code> and reports exactly what the <code>computer</code>
       tool can do on this machine — platform, screenshot availability, input availability,
       and a detail line naming the helpers in use (on macOS,
       <code>screencapture + System Events + cliclick</code>) or the ones that are missing.
@@ -469,7 +469,7 @@ export default Plugin.define({
       token, then invalidate). A top-level <strong>Refresh all</strong> invalidates every
       cached status and the tool list. With nothing configured, the dialog says so and tells
       you to add one under <code>connectors</code> in <code>nikcli.json</code> or run
-      <code>nikcli connector add</code>. Full reference: <a href="/docs/connectors">Connectors</a>.
+      <code>ragu connector add</code>. Full reference: <a href="/docs/connectors">Connectors</a>.
     </p>
     <DocCallout type="note" title="Lazy imports are load-bearing here">
       <p>
@@ -490,12 +490,12 @@ export default Plugin.define({
     <table class="doc-table">
       <thead><tr><th>Action</th><th>Effect</th></tr></thead>
       <tbody>
-        <tr><td><strong>Start bot</strong></td><td>Creates the bot and registers the AI mention handler. If credentials are missing it says so and points at <code>nikcli bot auth</code> rather than failing silently.</td></tr>
+        <tr><td><strong>Start bot</strong></td><td>Creates the bot and registers the AI mention handler. If credentials are missing it says so and points at <code>ragu bot auth</code> rather than failing silently.</td></tr>
         <tr><td><strong>Stop bot</strong></td><td>Disconnects the bot from its platform.</td></tr>
         <tr><td><strong>Webhook path</strong></td><td>Shows the exact path that platform must be pointed at, derived per platform and bot name.</td></tr>
       </tbody>
     </table>
-    <p>With nothing configured, the dialog points at <code>nikcli bot add</code>.</p>
+    <p>With nothing configured, the dialog points at <code>ragu bot add</code>.</p>
 
     <h3 id="observability">observability</h3>
     <p>
@@ -524,9 +524,9 @@ export default Plugin.define({
     </p>
     <DocCallout type="info" title="Non-TUI entrypoints ignore this toggle">
       <p>
-        <code>nikcli run</code> and <code>nikcli serve</code> self-activate through
+        <code>ragu run</code> and <code>ragu serve</code> self-activate through
         <code>Bus.publish</code> independently, gated by <code>--island</code> and
-        <code>NIKCLI_ISLAND_DISABLE</code>. Turning the plugin off in the TUI does not stop them.
+        <code>RAGU_ISLAND_DISABLE</code>. Turning the plugin off in the TUI does not stop them.
       </p>
     </DocCallout>
   </section>
@@ -575,7 +575,7 @@ export default Plugin.define({
       manager, or add it to config; see <a href="/docs/plugins">Plugins &amp; Skills</a> for
       packaging and the server-side plugin target.
     </p>
-    <DocCode language="tsx" title="my-plugin/src/tui.tsx">{`import type { TuiPlugin, TuiPluginModule } from "@nikcli-ai/plugin/tui"
+    <DocCode language="tsx" title="my-plugin/src/tui.tsx">{`import type { TuiPlugin, TuiPluginModule } from "@ragu/plugin/tui"
 
 const tui: TuiPlugin = async (api) => {
   // A command with a slash alias and a reactive title.

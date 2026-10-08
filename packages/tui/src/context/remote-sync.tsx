@@ -34,7 +34,7 @@ export type SyncEventSummary = {
 }
 
 export type RemoteSyncStatus = {
-  /** Configured via NIKCLI_REMOTE_URL + NIKCLI_REMOTE_TOKEN or the config file's `sync` block. */
+  /** Configured via RAGU_REMOTE_URL + RAGU_REMOTE_TOKEN or the config file's `sync` block. */
   configured: boolean
   /** Where the effective settings came from ("env" wins over "config"). */
   source: "env" | "config" | undefined
@@ -124,7 +124,7 @@ export const { use: useRemoteSync, provider: RemoteSyncProvider } = createSimple
      * Direct fetch against the same base URL the SDK uses. We use this
      * for the `/sync/*` endpoints that are not part of the generated
      * SDK yet (the SDK is regenerated from `server.ts` separately).
-     * Must use `sdk.fetch` so embedded TUI mode (`http://nikcli.local`
+     * Must use `sdk.fetch` so embedded TUI mode (`http://ragu.local`
      * via worker RPC) works — plain `fetch` cannot reach that host.
      */
     async function syncFetch<T>(path: string, init?: RequestInit): Promise<T | undefined> {

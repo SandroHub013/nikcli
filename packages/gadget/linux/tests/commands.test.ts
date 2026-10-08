@@ -77,7 +77,7 @@ describe("system.run", () => {
 
 describe("file.read / file.write", () => {
   test("writes in chunks, replaces on final, reads back with offsets", async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), "nikcli-gadget-file-"))
+    const dir = await mkdtemp(path.join(os.tmpdir(), "ragu-gadget-file-"))
     try {
       const target = path.join(dir, "out.txt")
       const write = file.write([dir])

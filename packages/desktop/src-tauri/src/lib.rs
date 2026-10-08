@@ -375,7 +375,7 @@ pub fn run() {
 
     #[cfg(all(target_os = "macos", not(debug_assertions)))]
     let _ = std::process::Command::new("killall")
-        .arg("nikcli-cli")
+        .arg("ragu-cli")
         .output();
 
     let mut builder = tauri::Builder::default()
@@ -450,7 +450,7 @@ async fn initialize(app: AppHandle) {
 
     println!("Main and loading windows created");
 
-    let sqlite_enabled = option_env!("NIKCLI_SQLITE").is_some();
+    let sqlite_enabled = option_env!("RAGU_SQLITE").is_some();
 
     let loading_task = tokio::spawn({
         let init_tx = init_tx.clone();
@@ -477,7 +477,7 @@ async fn initialize(app: AppHandle) {
                             else {
                                 let _ = child.kill();
                                 return Err(format!(
-                                    "Failed to spawn Nikcli Server. Logs:\n{}",
+                                    "Failed to spawn Ragu Server. Logs:\n{}",
                                     get_logs(app.clone()).await.unwrap()
                                 ));
                             };
@@ -514,7 +514,7 @@ async fn initialize(app: AppHandle) {
                     if !sqlite_exists {
                         println!(
                             "Sqlite file not found at {}, waiting for it to be generated",
-                            nikcli_db_path().expect("failed to get db path").display()
+                            ragu_db_path().expect("failed to get db path").display()
                         );
                         let _ = init_tx.send(InitStep::SqliteWaiting);
 
@@ -576,13 +576,13 @@ fn setup_app(app: &tauri::AppHandle, init_rx: watch::Receiver<InitStep>) {
     let handle = app.clone();
     app.deep_link().on_open_url(move |event| {
         for url in event.urls() {
-            if url.scheme() != "nikcli"
+            if url.scheme() != "ragu"
                 || url.host_str() != Some("auth")
                 || url.path() != "/callback"
             {
                 continue;
             }
-            let _ = handle.emit("nikcli:auth-callback", url.to_string());
+            let _ = handle.emit("ragu:auth-callback", url.to_string());
             if let Some(window) = handle.get_webview_window(MainWindow::LABEL) {
                 let _ = window.show();
                 let _ = window.unminimize();
@@ -657,9 +657,9 @@ async fn setup_server_connection(app: AppHandle) -> ServerConnection {
 }
 
 fn get_sidecar_port() -> u32 {
-    option_env!("NIKCLI_PORT")
+    option_env!("RAGU_PORT")
         .map(|s| s.to_string())
-        .or_else(|| std::env::var("NIKCLI_PORT").ok())
+        .or_else(|| std::env::var("RAGU_PORT").ok())
         .and_then(|port_str| port_str.parse().ok())
         .unwrap_or_else(|| {
             TcpListener::bind("127.0.0.1:0")
@@ -671,14 +671,14 @@ fn get_sidecar_port() -> u32 {
 }
 
 fn sqlite_file_exists() -> bool {
-    let Ok(path) = nikcli_db_path() else {
+    let Ok(path) = ragu_db_path() else {
         return true;
     };
 
     path.exists()
 }
 
-fn nikcli_db_path() -> Result<PathBuf, &'static str> {
+fn ragu_db_path() -> Result<PathBuf, &'static str> {
     let xdg_data_home = env::var_os("XDG_DATA_HOME").filter(|v| !v.is_empty());
 
     let data_home = match xdg_data_home {
@@ -728,6 +728,6 @@ mod tests {
     #[test]
     fn resolves_executables_from_path() {
         assert!(resolve_command_in_path("sh").is_some());
-        assert!(resolve_command_in_path("nikcli-command-that-does-not-exist").is_none());
+        assert!(resolve_command_in_path("ragu-command-that-does-not-exist").is_none());
     }
 }

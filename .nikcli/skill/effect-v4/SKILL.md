@@ -1,6 +1,6 @@
 ---
 name: effect-v4
-description: Repo-specific Effect v4 conventions for nikcli. Use when adding Effect code, layers, tagged errors, or a nikcli.json HTTP schema. Upstream docs live in the pinned effect package.
+description: Repo-specific Effect v4 conventions for ragu. Use when adding Effect code, layers, tagged errors, or a nikcli.json HTTP schema. Upstream docs live in the pinned effect package.
 ---
 
 # Effect v4 in this repository
@@ -18,16 +18,16 @@ Use `Schema.TaggedError` for expected domain failures. The old constructor name 
 
 ## Layers and the Promise boundary
 
-Services in `packages/nikcli` export two layers:
+Services in `packages/ragu` export two layers:
 
 - `layer` — provides the service
 - `defaultLayer` — `layer` with its dependencies already provided
 
-Promise-side callers use `runPromiseWithLayer` from `packages/nikcli/src/effect/runtime.ts`. `runService(module, effect)` is the same boundary against `module.defaultLayer`. Do not add a second runtime factory or a second instance ALS.
+Promise-side callers use `runPromiseWithLayer` from `packages/ragu/src/effect/runtime.ts`. `runService(module, effect)` is the same boundary against `module.defaultLayer`. Do not add a second runtime factory or a second instance ALS.
 
 ## `nikcli.json`
 
-The on-disk config document is still zod (`packages/nikcli/src/config/config.ts`). HTTP contract schemas for that document go through `fromZod` in `packages/nikcli/src/util/zod-effect.ts`. Do not hand-write a parallel Effect copy of `Config.Info`.
+The on-disk config document is still zod (`packages/ragu/src/config/config.ts`). HTTP contract schemas for that document go through `fromZod` in `packages/ragu/src/util/zod-effect.ts`. Do not hand-write a parallel Effect copy of `Config.Info`.
 
 ## Check
 

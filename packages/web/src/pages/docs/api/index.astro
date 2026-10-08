@@ -30,14 +30,14 @@ const toc = [
 
 <DocsLayout
   title="API Reference"
-  subtitle={`Every HTTP endpoint the nikcli server exposes — ${stats.operations} operations across ${stats.paths} paths, generated from the server's own OpenAPI document.`}
-  description="Complete HTTP API reference for the nikcli server: base URL, authentication, instance selection, streaming, and every endpoint grouped by resource."
+  subtitle={`Every HTTP endpoint the ragu server exposes — ${stats.operations} operations across ${stats.paths} paths, generated from the server's own OpenAPI document.`}
+  description="Complete HTTP API reference for the ragu server: base URL, authentication, instance selection, streaming, and every endpoint grouped by resource."
   toc={toc}
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
-      The nikcli server is a single <a href="/docs/server-api">Effect <code>HttpApi</code></a>.
+      The ragu server is a single <a href="/docs/server-api">Effect <code>HttpApi</code></a>.
       Every endpoint on this page is declared as a typed <code>HttpApiEndpoint</code> with
       schema-checked request and response bodies, so the reference below, the generated SDK and the
       running server all come from the same declaration — not from three copies of it that drift.
@@ -52,7 +52,7 @@ const toc = [
       </DocCard>
       <DocCard title={`OpenAPI ${stats.version}`} eyebrow="Contract">
         <p>
-          Emitted by <code>nikcli generate</code> from the composed API, then consumed by the SDK
+          Emitted by <code>ragu generate</code> from the composed API, then consumed by the SDK
           generator and by this page.
         </p>
       </DocCard>
@@ -73,16 +73,16 @@ const toc = [
   <section id="base-url" class="doc-section">
     <h2>Base URL</h2>
     <p>
-      There is no hosted nikcli API: the server runs on your machine, or on a machine you control.
+      There is no hosted ragu API: the server runs on your machine, or on a machine you control.
       Start one and the base URL is whatever it binds to.
     </p>
     <DocCode language="bash">
 # loopback, no password needed
-nikcli serve --hostname 127.0.0.1 --port 4096
+ragu serve --hostname 127.0.0.1 --port 4096
 
 # reachable from the network — set a password first
-NIKCLI_SERVER_PASSWORD=secret \
-  nikcli serve --hostname 0.0.0.0 --port 4096
+RAGU_SERVER_PASSWORD=secret \
+  ragu serve --hostname 0.0.0.0 --port 4096
     </DocCode>
     <p>
       <code>Server.listen()</code> falls back to an ephemeral port rather than failing when the
@@ -92,7 +92,7 @@ NIKCLI_SERVER_PASSWORD=secret \
     <DocCallout type="warn" title="The TUI's server is not an HTTP server">
       <p>
         Inside the terminal UI, <code>sdk.url</code> is the synthetic origin
-        <code>http://nikcli.local</code> and requests are dispatched in process. Use
+        <code>http://ragu.local</code> and requests are dispatched in process. Use
         <code>sdk.client.*</code> there; a hand-built <code>fetch()</code> against that host fails
         DNS resolution silently.
       </p>
@@ -122,8 +122,8 @@ NIKCLI_SERVER_PASSWORD=secret \
           <td><code>basicAuth</code></td>
           <td>Username and password</td>
           <td>
-            <code>NIKCLI_SERVER_PASSWORD</code>, with the username defaulting to
-            <code>nikcli</code>.
+            <code>RAGU_SERVER_PASSWORD</code>, with the username defaulting to
+            <code>ragu</code>.
           </td>
         </tr>
         <tr>
@@ -131,16 +131,16 @@ NIKCLI_SERVER_PASSWORD=secret \
           <td><code>Tailscale-User-Login</code></td>
           <td>
             Trusted only on a loopback listener with
-            <code>NIKCLI_SERVER_TAILSCALE_AUTH</code> set.
+            <code>RAGU_SERVER_TAILSCALE_AUTH</code> set.
           </td>
         </tr>
       </tbody>
     </table>
     <DocCode language="bash">
 curl -s http://127.0.0.1:4096/session \
-  -H "Authorization: Bearer $NIKCLI_TOKEN"
+  -H "Authorization: Bearer $RAGU_TOKEN"
 
-curl -s -u nikcli:$NIKCLI_SERVER_PASSWORD \
+curl -s -u ragu:$RAGU_SERVER_PASSWORD \
   http://127.0.0.1:4096/session
     </DocCode>
     <p>
@@ -157,15 +157,15 @@ curl -s -u nikcli:$NIKCLI_SERVER_PASSWORD \
       One server hosts many project instances. Every endpoint below accepts
       <code>directory</code> and <code>workspace</code> query parameters that decide which project
       handles the request; the same values can travel as
-      <code>x-nikcli-directory</code> and <code>x-nikcli-workspace</code> headers instead.
+      <code>x-ragu-directory</code> and <code>x-ragu-workspace</code> headers instead.
     </p>
     <DocCode language="bash">
 curl -s "http://127.0.0.1:4096/session?directory=/Users/me/project" \
-  -H "Authorization: Bearer $NIKCLI_TOKEN"
+  -H "Authorization: Bearer $RAGU_TOKEN"
 
 curl -s http://127.0.0.1:4096/session \
-  -H "x-nikcli-directory: /Users/me/project" \
-  -H "Authorization: Bearer $NIKCLI_TOKEN"
+  -H "x-ragu-directory: /Users/me/project" \
+  -H "Authorization: Bearer $RAGU_TOKEN"
     </DocCode>
     <p>
       With neither set, a <code>/session/:sessionID/…</code> path recovers the directory from the
@@ -227,19 +227,19 @@ curl -s http://127.0.0.1:4096/session \
       </tbody>
     </table>
     <DocCode language="bash">
-curl -N "http://127.0.0.1:4096/event?token=$NIKCLI_TOKEN"
+curl -N "http://127.0.0.1:4096/event?token=$RAGU_TOKEN"
     </DocCode>
   </section>
 
   <section id="clients" class="doc-section">
     <h2>Clients</h2>
     <p>
-      <code>@nikcli-ai/sdk/httpapi</code> is generated from this same document, so every operation
+      <code>@ragu/sdk/httpapi</code> is generated from this same document, so every operation
       id below is a typed method on the client. Reach for it before hand-writing requests.
     </p>
-    <DocCode language="ts" title="@nikcli-ai/sdk/httpapi">{`import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
+    <DocCode language="ts" title="@ragu/sdk/httpapi">{`import { createRaguClient } from "@ragu/sdk/httpapi"
 
-const client = createNikcliClient({
+const client = createRaguClient({
   baseUrl: "http://127.0.0.1:4096",
   directory: "/Users/me/project",
 })
@@ -248,7 +248,7 @@ const client = createNikcliClient({
 const { data: sessions } = await client.session.list()
 const { data: session } = await client.session.create({ title: "from the SDK" })`}</DocCode>
     <p>
-      For code running inside the nikcli process — plugins, tools, the TUI —
+      For code running inside the ragu process — plugins, tools, the TUI —
       <a href="/docs/build/sdk">the embedded SDK</a> binds the same client to the in-process server
       instead of a socket.
     </p>
@@ -288,7 +288,7 @@ const { data: session } = await client.session.create({ title: "from the SDK" })
       language.
     </p>
     <DocCode language="bash">
-curl -s https://nikcli-ai.dev/docs/api/openapi.json -o nikcli-openapi.json
+curl -s https://nikcli-ai.dev/docs/api/openapi.json -o ragu-openapi.json
 
 # or regenerate it from a checkout
 bun run script/generate.ts

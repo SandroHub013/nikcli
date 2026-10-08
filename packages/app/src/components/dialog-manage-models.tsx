@@ -1,12 +1,12 @@
-import { Dialog } from "@nikcli-ai/ui/dialog"
-import { List } from "@nikcli-ai/ui/list"
-import { Switch } from "@nikcli-ai/ui/switch"
-import { Button } from "@nikcli-ai/ui/button"
+import { Dialog } from "@ragu/ui/dialog"
+import { List } from "@ragu/ui/list"
+import { Switch } from "@ragu/ui/switch"
+import { Button } from "@ragu/ui/button"
 import type { Component } from "solid-js"
 import { useLocal } from "@/context/local"
 import { popularProviders } from "@/hooks/use-providers"
 import { useLanguage } from "@/context/language"
-import { useDialog } from "@nikcli-ai/ui/context/dialog"
+import { useDialog } from "@ragu/ui/context/dialog"
 import { DialogSelectProvider } from "./dialog-select-provider"
 
 export const DialogManageModels: Component = () => {

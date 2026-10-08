@@ -13,9 +13,9 @@ import {
   type Chord,
   type Conflict,
   type Platform,
-} from "@nikcli-ai/ade/keyboard/keymap"
+} from "@ragu/ade/keyboard/keymap"
 import type { VoiceSettings } from "./model"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 
 export const VOICE_COMMAND_AGENT = "voice.mode.agent"
 export const VOICE_COMMAND_TRANSCRIPTION = "voice.mode.transcription"

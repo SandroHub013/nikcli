@@ -2,7 +2,7 @@ import { createEffect, createMemo, createRoot, createSignal, on, onCleanup } fro
 import { native, type StreamEvent } from "./native"
 import { app } from "./store"
 
-/** One span published by nikcli's observability layer (`telemetry.record` on the event bus). */
+/** One span published by ragu's observability layer (`telemetry.record` on the event bus). */
 export type Span = {
   id: string
   traceId: string

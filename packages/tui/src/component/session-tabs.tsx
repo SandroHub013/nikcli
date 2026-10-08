@@ -13,7 +13,7 @@ import { Logo } from "@tui/component/logo"
 import { borderCharsFor, SplitBorder } from "@tui/component/border"
 import { DialogSessionLink } from "@tui/component/dialog-session-link"
 import { sessionLinkOf } from "@tui/util/session-link"
-import { bunUtils } from "@nikcli-ai/util/bun-utils"
+import { bunUtils } from "@ragu/util/bun-utils"
 
 const TAB_MIN_WIDTH = 12
 const TAB_MAX_WIDTH = 28

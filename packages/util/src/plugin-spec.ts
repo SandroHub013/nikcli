@@ -27,4 +27,4 @@ export type PluginSpec = z.infer<typeof PluginSpec>
  * in a webview and must not bundle zod — needs exactly these two. Keeping the
  * import path callers already use means the move cost nobody anything.
  */
-export { pluginOptions, pluginSpecifier } from "@nikcli-ai/util/plugin-read"
+export { pluginOptions, pluginSpecifier } from "@ragu/util/plugin-read"

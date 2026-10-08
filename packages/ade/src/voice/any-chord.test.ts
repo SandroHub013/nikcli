@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { DEFAULT_VOICE_SETTINGS } from "@nikcli-ai/voice/core"
+import { DEFAULT_VOICE_SETTINGS } from "@ragu/voice/core"
 import { modeForGlobalChord, refusalsOf, registerVoiceShortcuts, toTauriChord } from "./global-shortcut"
 import { resolveVoiceOrAdeKey } from "./shortcuts"
 

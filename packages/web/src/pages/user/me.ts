@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro"
-import { ARTIFACT_TOKEN_COOKIE, DEFAULT_NIKCLI_AUTH_SERVER } from "../../lib/artifact"
+import { ARTIFACT_TOKEN_COOKIE, DEFAULT_RAGU_AUTH_SERVER } from "../../lib/artifact"
 
 function cookieToken(request: Request) {
   const match = request.headers.get("Cookie")?.match(new RegExp(`(?:^|;\\s*)${ARTIFACT_TOKEN_COOKIE}=([^;]+)`))
@@ -8,7 +8,7 @@ function cookieToken(request: Request) {
 
 export const GET: APIRoute = async (context) => {
   const env = (context.locals as App.Locals).runtime?.env
-  const authServer = (env?.NIKCLI_AUTH_SERVER || DEFAULT_NIKCLI_AUTH_SERVER).replace(/\/$/, "")
+  const authServer = (env?.RAGU_AUTH_SERVER || DEFAULT_RAGU_AUTH_SERVER).replace(/\/$/, "")
   const authorization = context.request.headers.get("Authorization")
   const token = authorization?.startsWith("Bearer ") ? authorization.slice(7) : cookieToken(context.request)
   if (!token)

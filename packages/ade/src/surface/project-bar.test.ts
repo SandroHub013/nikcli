@@ -3,8 +3,8 @@ import { compileSolidJsx } from "../test-support/solid-jsx"
 
 /*
  * The bar's line of facts names the version of ADE, because that is the one the
- * user is looking at: it read «v1.399.0 · 12 SESSIONI», and 1.399.0 is nikcli's.
- * One version in the text, and it is ADE's. nikcli's does not disappear: it is
+ * user is looking at: it read «v1.399.0 · 12 SESSIONI», and 1.399.0 is ragu's.
+ * One version in the text, and it is ADE's. ragu's does not disappear: it is
  * what you want in the tooltip when a session misbehaves and you have to say
  * which program started it.
  */
@@ -37,7 +37,7 @@ test("the version in the bar's text is ADE's", () => {
   const bar = mount({
     project,
     adeVersion: "1.2.3",
-    nikcliVersion: "v1.399.0",
+    raguVersion: "v1.399.0",
     sessions: 12,
   })
   try {
@@ -48,11 +48,11 @@ test("the version in the bar's text is ADE's", () => {
   }
 })
 
-test("nikcli's version is in the tooltip, where it is needed", () => {
+test("ragu's version is in the tooltip, where it is needed", () => {
   const bar = mount({
     project,
     adeVersion: "1.2.3",
-    nikcliVersion: "v1.399.0",
+    raguVersion: "v1.399.0",
     sessions: 12,
   })
   try {
@@ -62,8 +62,8 @@ test("nikcli's version is in the tooltip, where it is needed", () => {
   }
 })
 
-test("with no ADE to name, the bar says no version rather than nikcli's", () => {
-  const bar = mount({ project, nikcliVersion: "v1.399.0", sessions: 12 })
+test("with no ADE to name, the bar says no version rather than ragu's", () => {
+  const bar = mount({ project, raguVersion: "v1.399.0", sessions: 12 })
   try {
     expect([bar.text, bar.text.includes("1.399.0")]).toEqual([bar.text, false])
     expect([bar.text, bar.text.includes("12 sessioni")]).toEqual([bar.text, true])

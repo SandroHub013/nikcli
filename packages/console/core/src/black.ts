@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { fn } from "./util/fn"
-import { Resource } from "@nikcli-ai/console-resource"
+import { Resource } from "@ragu/console-resource"
 import { centsToMicroCents } from "./util/price"
 import { getWeekBounds } from "./util/date"
 import { SubscriptionPlan } from "./schema/billing.sql"

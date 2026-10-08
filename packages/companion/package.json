@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@nikcli-ai/companion",
+  "name": "@ragu/companion",
   "version": "1.431.0",
   "type": "module",
   "license": "MIT",
@@ -24,8 +24,8 @@
   ],
   "dependencies": {
     "@hono/node-server": "1.19.15",
-    "@nikcli-ai/sdk": "workspace:*",
-    "@nikcli-ai/util": "workspace:*",
+    "@ragu/sdk": "workspace:*",
+    "@ragu/util": "workspace:*",
     "@types/react": "18.0.25",
     "@types/react-dom": "18.3.7",
     "hono": "catalog:",

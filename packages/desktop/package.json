@@ -1,11 +1,11 @@
 {
-  "name": "@nikcli-ai/desktop",
+  "name": "@ragu/desktop",
   "private": true,
   "version": "1.431.0",
   "type": "module",
   "license": "MIT",
   "homepage": "https://nikcli-ai.dev",
-  "author": "Nikcli",
+  "author": "Alessandro Boni",
   "scripts": {
     "typecheck": "tsc -b",
     "prepare:sidecar": "bun ./scripts/predev.ts",
@@ -18,9 +18,9 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@nikcli-ai/app": "workspace:*",
-    "@nikcli-ai/ui": "workspace:*",
-    "@nikcli-ai/util": "workspace:*",
+    "@ragu/app": "workspace:*",
+    "@ragu/ui": "workspace:*",
+    "@ragu/util": "workspace:*",
     "@solid-primitives/i18n": "2.2.1",
     "@solid-primitives/storage": "catalog:",
     "@tauri-apps/api": "^2",

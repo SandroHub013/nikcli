@@ -1,6 +1,6 @@
-# Guida Completa: Installare nikcli su Slack
+# Guida Completa: Installare ragu su Slack
 
-Questa guida ti accompagnerà passo dopo passo per collegare nikcli al tuo workspace Slack.
+Questa guida ti accompagnerà passo dopo passo per collegare ragu al tuo workspace Slack.
 
 ---
 
@@ -11,14 +11,14 @@ Prima di iniziare, assicurati di avere:
 - Un account [Cloudflare](https://cloudflare.com/) (gratuito)
 - [Bun](https://bun.sh/) 1.1+ installato
 - Un workspace Slack dove puoi creare app
-- Un server nikcli in esecuzione (o pronto da avviare)
+- Un server ragu in esecuzione (o pronto da avviare)
 
 ---
 
 ## Indice
 
 1. [Creare la Slack App](#1-creare-la-slack-app)
-2. [Configurare il Server nikcli](#2-configurare-il-server-nikcli)
+2. [Configurare il Server ragu](#2-configurare-il-server-ragu)
 3. [Esponi il Server a Internet](#3-esponi-il-server-a-internet)
 4. [Deploy del Worker su Cloudflare](#4-deploy-del-worker-su-cloudflare)
 5. [Collegare il Worker a Slack](#5-collegare-il-worker-a-slack)
@@ -37,7 +37,7 @@ Prima di iniziare, assicurati di avere:
 
 ### 1.2 Seleziona il Workspace
 
-1. Scegli il workspace Slack dove vuoi installare nikcli
+1. Scegli il workspace Slack dove vuoi installare ragu
 2. Clicca **"Next"**
 
 ### 1.3 Inserisci il Manifest
@@ -49,18 +49,18 @@ _metadata:
   major_version: 1
   minor_version: 1
 display_information:
-  name: nikcli
+  name: ragu
   description: AI coding assistant for Slack
   background_color: "#1a1a2e"
 features:
   bot_user:
-    display_name: nikcli
+    display_name: ragu
     always_online: true
   assistant_view:
     assistant_description: AI coding assistant
     suggested_prompts: []
   slash_commands:
-    - command: /nikcli-tools
+    - command: /ragu-tools
       description: Manage per-channel tool policy (admins)
       usage_hint: "[list | allow <tool> | deny <tool> | reset]"
       should_escape: false
@@ -93,7 +93,7 @@ settings:
       - message.im
       - message.mpim
   interactivity:
-    placeholder_text: Ask nikcli...
+    placeholder_text: Ask ragu...
   org_deploy_enabled: false
   socket_mode_enabled: false
 ```
@@ -129,7 +129,7 @@ Dopo l'installazione, avrai accesso a:
 
 ---
 
-## 2. Configurare il Server nikcli
+## 2. Configurare il Server ragu
 
 ### 2.1 Crea il File di Configurazione
 
@@ -156,16 +156,16 @@ Crea o modifica `~/.config/nikcli/nikcli.jsonc` (oppure `nikcli.json`/`config.js
 
 ```bash
 # Nel tuo terminale
-export NIKCLI_SERVER_PASSWORD="una-password-sicura-qui"
-# Facoltativo: se omesso, il default è "nikcli"
-export NIKCLI_SERVER_USERNAME="slackbot"
+export RAGU_SERVER_PASSWORD="una-password-sicura-qui"
+# Facoltativo: se omesso, il default è "ragu"
+export RAGU_SERVER_USERNAME="slackbot"
 ```
 
 ### 2.3 Avvia il Server
 
 ```bash
-# Avvia nikcli in modalità server
-nikcli serve --port 4096 --hostname 0.0.0.0 --mdns
+# Avvia ragu in modalità server
+ragu serve --port 4096 --hostname 0.0.0.0 --mdns
 ```
 
 Dovresti vedere un output simile:
@@ -173,7 +173,7 @@ Dovresti vedere un output simile:
 ```
 ✓ Server avviato su http://localhost:4096
 ✓ Server disponibile su rete locale
-✓ mDNS pubblicato come nikcli-4096.local
+✓ mDNS pubblicato come ragu-4096.local
 ```
 
 **Lascia questo terminale aperto!**
@@ -182,7 +182,7 @@ Dovresti vedere un output simile:
 
 ## 3. Esponi il Server a Internet
 
-Il worker Cloudflare deve poter raggiungere il tuo server nikcli. Usa cloudflared:
+Il worker Cloudflare deve poter raggiungere il tuo server ragu. Usa cloudflared:
 
 ### 3.1 Installa cloudflared
 
@@ -212,18 +212,18 @@ Dopo pochi secondi, vedrai:
 2024-01-01T00:00:00Z INF https://random-name.trycloudflare.com
 ```
 
-**Copia questo URL!** Sarà il tuo `NIKCLI_URL`.
+**Copia questo URL!** Sarà il tuo `RAGU_URL`.
 
 ### 3.3 Aggiorna i Secrets
 
 ```bash
-bunx wrangler secret put NIKCLI_URL --name nikcli-slack
+bunx wrangler secret put RAGU_URL --name ragu-slack
 # Inserisci: https://random-name.trycloudflare.com
 
-bunx wrangler secret put NIKCLI_PASSWORD --name nikcli-slack
+bunx wrangler secret put RAGU_PASSWORD --name ragu-slack
 # Inserisci: la tua password del server
 
-bunx wrangler secret put NIKCLI_USERNAME --name nikcli-slack
+bunx wrangler secret put RAGU_USERNAME --name ragu-slack
 # Inserisci: slackbot (o il tuo username). Se non l'hai impostato sul server, puoi ometterlo.
 ```
 
@@ -254,7 +254,7 @@ Copia l'`id` restituito e mettilo in `packages/slack/wrangler.toml` sotto `[[kv_
 ### 4.3 Verifica i Secrets
 
 ```bash
-bunx wrangler secret list --name nikcli-slack
+bunx wrangler secret list --name ragu-slack
 ```
 
 Dovresti vedere:
@@ -264,9 +264,9 @@ SLACK_BOT_TOKEN
 SLACK_SIGNING_SECRET
 SLACK_CLIENT_ID
 SLACK_CLIENT_SECRET
-NIKCLI_URL
-NIKCLI_USERNAME
-NIKCLI_PASSWORD
+RAGU_URL
+RAGU_USERNAME
+RAGU_PASSWORD
 OPENAI_API_KEY
 ```
 
@@ -278,14 +278,14 @@ Se manca qualcosa, aggiungilo con `wrangler secret put`.
 cd packages/slack
 
 # Deploy con dominio personalizzato
-bunx wrangler deploy src/worker.ts --name nikcli-slack --routes 'slack.nikcli-ai.dev/*'
+bunx wrangler deploy src/worker.ts --name ragu-slack --routes 'slack.nikcli-ai.dev/*'
 ```
 
 Output atteso:
 
 ```
 ✓ Worker uploaded successfully
-✓ Deployed nikcli-slack triggers
+✓ Deployed ragu-slack triggers
   https://slack.nikcli-ai.dev/*
 ```
 
@@ -298,7 +298,7 @@ curl https://slack.nikcli-ai.dev/health
 Risposta:
 
 ```json
-{ "status": "healthy", "timestamp": 1234567890, "nikcliUrl": "https://..." }
+{ "status": "healthy", "timestamp": 1234567890, "raguUrl": "https://..." }
 ```
 
 ---
@@ -332,8 +332,8 @@ Dopo aver cambiato gli URLs, l'app deve essere reinstallata:
 ### 5.3 Aggiungi il Bot al Canale
 
 1. Apri Slack
-2. Vai nel canale dove vuoi usare nikcli
-3. Scrivi: `/invite @nikcli`
+2. Vai nel canale dove vuoi usare ragu
+3. Scrivi: `/invite @ragu`
 
 ---
 
@@ -342,22 +342,22 @@ Dopo aver cambiato gli URLs, l'app deve essere reinstallata:
 ### 6.1 Verifica i Log
 
 ```bash
-bunx wrangler tail --name nikcli-slack
+bunx wrangler tail --name ragu-slack
 ```
 
 ### 6.2 Primo Messaggio
 
-In un canale dove hai invitato nikcli, scrivi:
+In un canale dove hai invitato ragu, scrivi:
 
 ```
-@nikcli Ciao! Come funzioni?
+@ragu Ciao! Come funzioni?
 ```
 
-Dovresti vedere una risposta e un link alla sessione nikcli.
+Dovresti vedere una risposta e un link alla sessione ragu.
 
 ### 6.3 Test Voice (se hai configurato OPENAI_API_KEY)
 
-Invia un messaggio vocale nel canale. nikcli dovrebbe:
+Invia un messaggio vocale nel canale. ragu dovrebbe:
 
 1. Scaricare l'audio
 2. Trascriverlo con Whisper
@@ -369,14 +369,14 @@ Invia un messaggio vocale nel canale. nikcli dovrebbe:
 
 ### Il worker non riceve eventi
 
-**Sintomo:** Nessuna risposta da nikcli
+**Sintomo:** Nessuna risposta da ragu
 
 **Soluzioni:**
 
 1. Verifica che Event Subscriptions sia abilitato
 2. Controlla che l'URL sia `https://slack.nikcli-ai.dev/slack/events`
 3. Reinstalla l'app dopo aver modificato gli scopes
-4. Controlla i log: `bunx wrangler tail --name nikcli-slack`
+4. Controlla i log: `bunx wrangler tail --name ragu-slack`
 
 ### 401 Unauthorized
 
@@ -384,10 +384,10 @@ Invia un messaggio vocale nel canale. nikcli dovrebbe:
 
 **Soluzioni:**
 
-1. Verifica `NIKCLI_USERNAME` e `NIKCLI_PASSWORD`
+1. Verifica `RAGU_USERNAME` e `RAGU_PASSWORD`
 2. Assicurati che le password coincidano con quelle del server
-3. Il server nikcli deve essere in esecuzione
-4. Se non hai impostato `NIKCLI_SERVER_USERNAME`, usa il default `nikcli`
+3. Il server ragu deve essere in esecuzione
+4. Se non hai impostato `RAGU_SERVER_USERNAME`, usa il default `ragu`
 
 ### Le sessioni non si salvano
 
@@ -409,7 +409,7 @@ Invia un messaggio vocale nel canale. nikcli dovrebbe:
 
 1. Verifica che `OPENAI_API_KEY` sia impostato:
    ```bash
-   bunx wrangler secret list --name nikcli-slack
+   bunx wrangler secret list --name ragu-slack
    ```
 2. Controlla che l'audio sia in formato supportato (mp3, ogg, wav, m4a)
 
@@ -428,29 +428,29 @@ Invia un messaggio vocale nel canale. nikcli dovrebbe:
 ## Comandi Quick Reference
 
 ```bash
-# Avviare il server nikcli
-nikcli serve --port 4096 --hostname 0.0.0.0 --mdns
+# Avviare il server ragu
+ragu serve --port 4096 --hostname 0.0.0.0 --mdns
 
 # Avviare il tunnel cloudflared (nuovo terminale)
 cloudflared tunnel --url http://localhost:4096
 
 # Vedere i log del worker
-bunx wrangler tail --name nikcli-slack
+bunx wrangler tail --name ragu-slack
 
 # Creare KV namespace
 bunx wrangler kv:namespace create "SESSIONS" --preview=false
 
 # Aggiornare un secret
-bunx wrangler secret put NIKCLI_URL --name nikcli-slack
+bunx wrangler secret put RAGU_URL --name ragu-slack
 
 # Redeploy del worker
-cd packages/slack && bunx wrangler deploy src/worker.ts --name nikcli-slack --routes 'slack.nikcli-ai.dev/*'
+cd packages/slack && bunx wrangler deploy src/worker.ts --name ragu-slack --routes 'slack.nikcli-ai.dev/*'
 
 # Verificare health
 curl https://slack.nikcli-ai.dev/health
 
 # Lista secrets
-bunx wrangler secret list --name nikcli-slack
+bunx wrangler secret list --name ragu-slack
 ```
 
 ---
@@ -473,10 +473,10 @@ packages/slack/
 
 Se hai problemi:
 
-1. Controlla i log: `bunx wrangler tail --name nikcli-slack`
+1. Controlla i log: `bunx wrangler tail --name ragu-slack`
 2. Verifica i passaggi in questa guida
 3. Apri una [Issue su GitHub](https://github.com/nikcli/nikcli/issues)
 
 ---
 
-**Buon coding con nikcli su Slack! 🚀**
+**Buon coding con ragu su Slack! 🚀**

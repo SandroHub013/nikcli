@@ -5,7 +5,7 @@
  * agent hands over what the local grammar could not do, and reads the answer
  * aloud. Same runners and adapters as a bot conversation (`runners.ts`), so a
  * turn here is exactly a bot turn: Claude Code with the user's Anthropic
- * subscription, Codex with ChatGPT. A nikcli bot's turn runs on ADE's nikcli
+ * subscription, Codex with ChatGPT. A ragu bot's turn runs on ADE's ragu
  * server instead (`serve-turn.ts`, B8d), with its session's rules: here it is
  * refused.
  *
@@ -26,7 +26,7 @@ import { registerSender, unregisterSender } from "../session/senders"
 import { t } from "../i18n"
 import { acquireTurn, scrubSecrets } from "./terms"
 import type { BotAccount } from "./account"
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 import {
   applyRunnerLine,
   enforcesDisabledTools,
@@ -49,9 +49,9 @@ export interface TurnRequest {
   /** The conversation to continue, from a previous result. */
   readonly sessionId?: string
   readonly cwd?: string
-  /** nikcli only: the agent file to run as. Absent: nikcli's default agent. */
+  /** ragu only: the agent file to run as. Absent: ragu's default agent. */
   readonly agent?: string
-  /** Tools to refuse, as nikcli names them (`bash`, `edit`, `write`…). */
+  /** Tools to refuse, as ragu names them (`bash`, `edit`, `write`…). */
   readonly disabledTools?: readonly string[]
   /** Give the turn an `ade-msg` identity. `id` must be unique while the turn runs. */
   readonly mailbox?: { readonly id: string }
@@ -60,7 +60,7 @@ export interface TurnRequest {
   /** No tool at all, not even `ade-msg` (`TurnSpec.noTools`). */
   readonly noTools?: boolean
   /**
-   * nikcli only: the model is one of these, chosen when the turn runs, and never a paid one. The user's own
+   * ragu only: the model is one of these, chosen when the turn runs, and never a paid one. The user's own
    * configured model comes first when it is free; then the first the server's catalog has. None: the turn
    * is refused before any session.
    */
@@ -85,7 +85,7 @@ export interface TurnRequest {
   readonly remote?: RemoteTools
   /** Claude Code and Codex: subscription or one key name. Absent is a subscription. */
   readonly account?: BotAccount
-  /** The caller answers every question nikcli asks (B8c, `TurnSpec.approvals`). */
+  /** The caller answers every question ragu asks (B8c, `TurnSpec.approvals`). */
   readonly approvals?: boolean
   /** The bot's «Sempre», with `approvals` (`TurnSpec.always`). */
   readonly always?: readonly string[]
@@ -99,13 +99,13 @@ export interface TurnRequest {
    */
   readonly maxCostUsd?: number
   /**
-   * nikcli on ADE's server (B8d): each change the turn makes to a thread, as
+   * ragu on ADE's server (B8d): each change the turn makes to a thread, as
    * it happens, for the caller to make to its own. Not the user's message,
    * which the caller put there already.
    */
   readonly onChange?: (change: (talk: Talk) => Talk) => void
   /**
-   * nikcli on ADE's server (B8d): a question to answer with `Turn.answer`,
+   * ragu on ADE's server (B8d): a question to answer with `Turn.answer`,
    * one at a time. Absent, every question is refused as it comes.
    */
   readonly onPermission?: (asked: PendingPermission) => void
@@ -178,13 +178,13 @@ export interface Turn {
   /** Ends the turn early, with the CLI's child processes; the result resolves as `stopped`. */
   readonly stop: () => void
   /**
-   * The answer to the question `onPermission` gave, by its id: nikcli on ADE's
+   * The answer to the question `onPermission` gave, by its id: ragu on ADE's
    * server (B8d). An answer to a question no longer on screen goes nowhere.
    */
   readonly answer?: (requestID: string, reply: "once" | "reject") => void
 }
 
-/* See `@nikcli-ai/voice` `timing.ts`: a no-op unless a harness is measuring. */
+/* See `@ragu/voice` `timing.ts`: a no-op unless a harness is measuring. */
 export function markTurn(mark: string, detail?: string): void {
   const timeline = (globalThis as { __adeVoiceTimeline?: Array<{ at: number; mark: string; detail?: string }> })
     .__adeVoiceTimeline
@@ -222,8 +222,8 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
     })
 
     // Its rules are its session's on ADE's server, and nothing here would carry them (B8d).
-    if (runner.id === "nikcli") {
-      update(applyProblem(talk, t("bots.turn.nikcliOnServer"), Date.now()))
+    if (runner.id === "ragu") {
+      update(applyProblem(talk, t("bots.turn.raguOnServer"), Date.now()))
       return finish("error", talk.problem)
     }
     const host = await (deps.host ?? getHost)()

@@ -11,7 +11,7 @@ import type {
   MobileSessionDetail,
   MobileSessionSummary,
   QuestionRequest,
-} from "@nikcli-ai/sdk/httpapi"
+} from "@ragu/sdk/httpapi"
 import {
   clearServerConfig,
   formatRelativeTime,
@@ -24,7 +24,7 @@ import {
   sessionLocation,
   type AppServerConfig,
   type ProviderCatalog,
-  WebNikcliClient,
+  WebRaguClient,
 } from "@/app/api"
 import {
   messagePlainText,
@@ -62,7 +62,7 @@ import { GitScreen } from "@/app/GitScreen"
 import { MemoryScreen } from "@/app/MemoryScreen"
 import { TerminalScreen } from "@/app/TerminalScreen"
 
-type GithubRepo = Awaited<ReturnType<WebNikcliClient["listGithubRepos"]>>[number]
+type GithubRepo = Awaited<ReturnType<WebRaguClient["listGithubRepos"]>>[number]
 
 type AppRoute =
   | { screen: "root" }
@@ -79,7 +79,7 @@ type AppRoute =
 type AppContextValue = {
   configReady: boolean
   config: AppServerConfig | null
-  client: WebNikcliClient | null
+  client: WebRaguClient | null
   bootstrap: MobileBootstrap | null
   bootstrapLoading: boolean
   bootstrapError: string | null
@@ -238,7 +238,7 @@ function AppProvider(props: { children: ReactNode }) {
     setConfigReady(true)
   }, [])
 
-  const client = useMemo(() => (config ? new WebNikcliClient(config) : null), [config])
+  const client = useMemo(() => (config ? new WebRaguClient(config) : null), [config])
 
   const refreshBootstrap = useCallback(async () => {
     if (!client) {
@@ -351,7 +351,7 @@ function ConnectScreen(props: { navigate(path: string, options?: { replace?: boo
         const session = await loginServerAccount(next.url, email.trim(), password)
         next.token = session.token
       }
-      const client = new WebNikcliClient(next)
+      const client = new WebRaguClient(next)
       await client.bootstrap()
       save(next)
       props.navigate("/app/sessions")
@@ -377,7 +377,7 @@ function ConnectScreen(props: { navigate(path: string, options?: { replace?: boo
   return (
     <div className="space-y-6">
       <Surface
-        eyebrow="One nikcli account"
+        eyebrow="One ragu account"
         title="The same identity from CLI to web."
         description="Sign in with the UserDB account already used by the CLI, Studio, and mobile. The browser then uses that nku_ session for the existing headless routes."
       >
@@ -401,7 +401,7 @@ function ConnectScreen(props: { navigate(path: string, options?: { replace?: boo
               value={endpoint}
               onChange={setEndpoint}
               placeholder="https://nikcli-mobile-production.up.railway.app"
-              help="Supports both direct HTTPS endpoints and the `nikcli://connect` link format."
+              help="Supports both direct HTTPS endpoints and the `ragu://connect` link format."
             />
             <div className="flex gap-2 rounded-[18px] border border-terminal-border bg-terminal-code p-1">
               <Button variant={authMode === "account" ? "primary" : "secondary"} onClick={() => setAuthMode("account")}>
@@ -469,11 +469,11 @@ function ConnectScreen(props: { navigate(path: string, options?: { replace?: boo
           <Surface
             eyebrow="Hosted setup"
             title="Use the same pairing flow as mobile"
-            description="Nothing changes on the server: you keep `nikcli mobile serve` or the same Railway deployment, and the web UI consumes the same headless `/mobile/*` API surface."
+            description="Nothing changes on the server: you keep `ragu mobile serve` or the same Railway deployment, and the web UI consumes the same headless `/mobile/*` API surface."
           >
             <div className="space-y-4 rounded-[24px] border border-terminal-border bg-terminal-code px-4 py-4 font-mono text-xs leading-6 text-terminal-text">
-              <div>nikcli mobile serve --hostname 0.0.0.0 --port $PORT --public-url https://your-railway-url</div>
-              <div>nikcli mobile pair --public-url https://your-railway-url --name web --expiry-days 90</div>
+              <div>ragu mobile serve --hostname 0.0.0.0 --port $PORT --public-url https://your-railway-url</div>
+              <div>ragu mobile pair --public-url https://your-railway-url --name web --expiry-days 90</div>
             </div>
           </Surface>
 
@@ -482,7 +482,7 @@ function ConnectScreen(props: { navigate(path: string, options?: { replace?: boo
             title={bootstrap ? "Host validated" : "Waiting for validation"}
             description={
               bootstrap
-                ? `Connected to ${currentProjectLabel(bootstrap.currentProject)} on Nikcli ${bootstrap.version}.`
+                ? `Connected to ${currentProjectLabel(bootstrap.currentProject)} on Ragu ${bootstrap.version}.`
                 : "Once the bootstrap check succeeds, sessions, repos, settings, and publish flows become available."
             }
           >
@@ -765,7 +765,7 @@ function QuestionCard(props: {
   return (
     <div className="rounded-[28px] border border-terminal-accent/20 bg-terminal-panel px-4 py-4 shadow-soft">
       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-terminal-accent">
-        Question from Nikcli
+        Question from Ragu
       </div>
       <div className="mt-3 space-y-5">
         {props.request.questions.map((question, index) => {
@@ -958,7 +958,7 @@ function MessageCard(props: {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-terminal-accent">
-            {isUser ? "You" : "Nikcli"}
+            {isUser ? "You" : "Ragu"}
           </div>
           <div className="mt-1 text-xs text-terminal-muted">{formatRelativeTime(props.message.info.time.created)}</div>
           {!isUser && (cost || tokens) ? (
@@ -1356,7 +1356,7 @@ function SessionScreen(props: { sessionId: string; navigate(path: string): void 
     return (
       <EmptyState
         title="Session unavailable"
-        description="The requested session could not be loaded from the connected Nikcli host."
+        description="The requested session could not be loaded from the connected Ragu host."
       />
     )
   }
@@ -1470,7 +1470,7 @@ function SessionScreen(props: { sessionId: string; navigate(path: string): void 
           <div className="mr-auto flex w-fit items-center gap-3 rounded-[24px] rounded-bl-lg border border-terminal-border bg-terminal-panel px-4 py-3 shadow-soft">
             <span className="h-2 w-2 animate-pulse rounded-full bg-terminal-accent" />
             <span className="text-sm text-terminal-muted">
-              {detail.status?.type === "retry" ? "Retrying the last step..." : "Nikcli is working..."}
+              {detail.status?.type === "retry" ? "Retrying the last step..." : "Ragu is working..."}
             </span>
           </div>
         ) : null}
@@ -1525,7 +1525,7 @@ function SessionScreen(props: { sessionId: string; navigate(path: string): void 
           placeholder={
             cleaned
               ? "This session was cleaned and is read-only"
-              : "Message Nikcli... ( / for commands, Shift+Enter for a new line )"
+              : "Message Ragu... ( / for commands, Shift+Enter for a new line )"
           }
           className="w-full resize-none bg-transparent px-1 text-sm leading-6 text-terminal-text outline-none placeholder:text-terminal-muted/70 disabled:opacity-60"
         />
@@ -1852,7 +1852,7 @@ function ReposScreen(props: { navigate(path: string): void }) {
           <Surface
             eyebrow="Server repos"
             title="Select the current workspace"
-            description="These are the repos and sandboxes visible to the connected Nikcli host."
+            description="These are the repos and sandboxes visible to the connected Ragu host."
           >
             {loading ? (
               <Spinner label="Loading server repos" />
@@ -2018,7 +2018,7 @@ function ReposScreen(props: { navigate(path: string): void }) {
                 ) : visibleRepos.length === 0 ? (
                   <EmptyState
                     title="No repositories matched"
-                    description="Adjust the search query or verify the GitHub account connected on the Nikcli host."
+                    description="Adjust the search query or verify the GitHub account connected on the Ragu host."
                   />
                 ) : (
                   <div className="space-y-3">
@@ -2202,7 +2202,7 @@ function SettingsScreen() {
         modelProviderID: selectedProviderID || undefined,
         modelID: selectedModelID || undefined,
       }
-      const testClient = new WebNikcliClient(next)
+      const testClient = new WebRaguClient(next)
       await testClient.bootstrap()
       save(next)
       setMessage("Connection updated")
@@ -2602,7 +2602,7 @@ function ClientApp(props: { initialPath: string }) {
           <div className="flex items-center justify-between gap-4">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-terminal-accent">
-                Nikcli Web
+                Ragu Web
               </div>
               <div className="mt-1 text-xl font-semibold tracking-tight text-terminal-text sm:text-2xl">
                 Control plane
@@ -2738,7 +2738,7 @@ function ClientApp(props: { initialPath: string }) {
               <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-terminal-accent">
                 {activeLabel}
               </div>
-              <h1 className="mt-1 text-panel-title text-terminal-text">Use Nikcli from the web</h1>
+              <h1 className="mt-1 text-panel-title text-terminal-text">Use Ragu from the web</h1>
             </div>
             {bootstrapError && activeRoute.screen !== "connect" ? <Banner>{bootstrapError}</Banner> : null}
           </header>

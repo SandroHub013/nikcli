@@ -7,7 +7,7 @@
  * `42`, changing one silently mis-sized the other.
  *
  * Ported from opencode's `ui/layout.ts`, minus `sessionTabsFitVertically` —
- * nikcli's session tabs make no equivalent orientation decision, so bringing it
+ * ragu's session tabs make no equivalent orientation decision, so bringing it
  * across would be a function with no caller.
  */
 

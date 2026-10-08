@@ -25,8 +25,8 @@ const toc = [
 
 <DocsLayout
   title="Sessions"
-  subtitle="How nikcli creates, stores, streams, forks, reverts, and resumes agent sessions across CLI, TUI, mobile, and API clients."
-  description="Guide to nikcli sessions, storage, streaming, forks, reverts, resumes, and API control."
+  subtitle="How ragu creates, stores, streams, forks, reverts, and resumes agent sessions across CLI, TUI, mobile, and API clients."
+  description="Guide to ragu sessions, storage, streaming, forks, reverts, resumes, and API control."
   toc={toc}
 >
   <section id="overview" class="doc-section">
@@ -55,16 +55,16 @@ const toc = [
   <section id="create-continue" class="doc-section">
     <h2>Create or continue</h2>
     <p>
-      Sessions can be created from the root TUI command, <code>nikcli run</code>, mobile, the web
-      app, or the API. The TUI entry command is <code>nikcli [project]</code>; it starts a worker,
+      Sessions can be created from the root TUI command, <code>ragu run</code>, mobile, the web
+      app, or the API. The TUI entry command is <code>ragu [project]</code>; it starts a worker,
       validates any provided session id, then opens either a direct RPC UI or a network-backed UI.
     </p>
     <DocCode language="bash">
-nikcli                         # start TUI in the current directory
-nikcli ../repo --model openai/gpt-5
-nikcli --continue              # continue last session
-nikcli --session ses_example   # open a specific session
-nikcli run "fix the failing test"
+ragu                         # start TUI in the current directory
+ragu ../repo --model openai/gpt-5
+ragu --continue              # continue last session
+ragu --session ses_example   # open a specific session
+ragu run "fix the failing test"
     </DocCode>
     <table class="doc-table">
       <thead><tr><th>Input</th><th>Where handled</th><th>Result</th></tr></thead>
@@ -80,7 +80,7 @@ nikcli run "fix the failing test"
   <section id="session-record" class="doc-section">
     <h2>Session record</h2>
     <p>
-      The session info object is defined in <code>packages/nikcli/src/session/index.ts</code>. It
+      The session info object is defined in <code>packages/ragu/src/session/index.ts</code>. It
       carries identifiers, title, project/workspace metadata, directory, parent links, GitHub or
       container metadata, timestamps, and summary fields.
     </p>
@@ -127,7 +127,7 @@ nikcli run "fix the failing test"
     <p>
       Prompt execution combines agent config, system prompts, message history, tool registry, MCP
       and connector tools, permissions, and provider selection. The hot path reaches
-      <code>packages/nikcli/src/session/llm.ts</code>, which normalizes message shapes before
+      <code>packages/ragu/src/session/llm.ts</code>, which normalizes message shapes before
       calling the provider runtime.
     </p>
     <ol>
@@ -226,7 +226,7 @@ curl -X POST http://127.0.0.1:4096/session/ses_example/unrevert
     <h2>Sharing and export</h2>
     <p>
       Sharing is controlled by config and environment flags. New root sessions may auto-share when
-      <code>NIKCLI_AUTO_SHARE</code> is set or config <code>share</code> is <code>auto</code>. Public
+      <code>RAGU_AUTO_SHARE</code> is set or config <code>share</code> is <code>auto</code>. Public
       share reads are intentionally mounted before auth at <code>/s/:shareID</code>,
       <code>/share/:shareID</code>, and <code>/api/share/:shareID</code>.
     </p>
@@ -275,16 +275,16 @@ curl -X POST http://127.0.0.1:4096/session/ses_example/unrevert
     <table class="doc-table">
       <thead><tr><th>Need</th><th>File</th></tr></thead>
       <tbody>
-        <tr><td>Session service and schema</td><td><code>packages/nikcli/src/session/index.ts</code></td></tr>
-        <tr><td>Prompt execution</td><td><code>packages/nikcli/src/session/prompt.ts</code>, <code>packages/nikcli/src/session/runner.ts</code></td></tr>
-        <tr><td>LLM stream hot path</td><td><code>packages/nikcli/src/session/llm.ts</code></td></tr>
-        <tr><td>Message storage</td><td><code>packages/nikcli/src/session/message-v2.ts</code></td></tr>
-        <tr><td>Status</td><td><code>packages/nikcli/src/session/status.ts</code></td></tr>
-        <tr><td>Revert and diff</td><td><code>packages/nikcli/src/session/revert.ts</code>, <code>packages/nikcli/src/session/summary.ts</code></td></tr>
-        <tr><td>Typed API</td><td><code>packages/nikcli/src/server/httpapi/session.ts</code></td></tr>
-        <tr><td>Classic routes</td><td><code>packages/nikcli/src/server/httpapi/session.ts</code></td></tr>
+        <tr><td>Session service and schema</td><td><code>packages/ragu/src/session/index.ts</code></td></tr>
+        <tr><td>Prompt execution</td><td><code>packages/ragu/src/session/prompt.ts</code>, <code>packages/ragu/src/session/runner.ts</code></td></tr>
+        <tr><td>LLM stream hot path</td><td><code>packages/ragu/src/session/llm.ts</code></td></tr>
+        <tr><td>Message storage</td><td><code>packages/ragu/src/session/message-v2.ts</code></td></tr>
+        <tr><td>Status</td><td><code>packages/ragu/src/session/status.ts</code></td></tr>
+        <tr><td>Revert and diff</td><td><code>packages/ragu/src/session/revert.ts</code>, <code>packages/ragu/src/session/summary.ts</code></td></tr>
+        <tr><td>Typed API</td><td><code>packages/ragu/src/server/httpapi/session.ts</code></td></tr>
+        <tr><td>Classic routes</td><td><code>packages/ragu/src/server/httpapi/session.ts</code></td></tr>
         <tr><td>TUI session view</td><td><code>packages/tui/src/routes/session/index.tsx</code></td></tr>
-        <tr><td>Mobile session routes</td><td><code>packages/nikcli/src/server/httpapi/mobile.ts</code></td></tr>
+        <tr><td>Mobile session routes</td><td><code>packages/ragu/src/server/httpapi/mobile.ts</code></td></tr>
       </tbody>
     </table>
   </section>

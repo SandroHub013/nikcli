@@ -20,15 +20,15 @@ export const GET: APIRoute = async (context) => {
     sameSite: "lax" as const,
     maxAge: 600,
   }
-  context.cookies.set("nikcli_oauth_state", state, {
+  context.cookies.set("ragu_oauth_state", state, {
     ...cookie,
     path: "/user",
   })
-  context.cookies.set("nikcli_oauth_verifier", verifier, {
+  context.cookies.set("ragu_oauth_verifier", verifier, {
     ...cookie,
     path: "/user",
   })
-  context.cookies.set("nikcli_oauth_return", safeReturnTo, {
+  context.cookies.set("ragu_oauth_return", safeReturnTo, {
     ...cookie,
     path: "/user",
   })
@@ -36,7 +36,7 @@ export const GET: APIRoute = async (context) => {
   const authorize = new URL("/authorize", issuer)
   authorize.search = new URLSearchParams({
     response_type: "code",
-    client_id: "nikcli-web",
+    client_id: "ragu-web",
     redirect_uri: redirectUri,
     state,
     code_challenge: challenge,

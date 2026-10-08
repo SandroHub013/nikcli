@@ -13,7 +13,7 @@
  *    assignable. A plugin written against the TUI context and mounted in ADE
  *    would typecheck and then render nothing. Getting this wrong is silent, so
  *    the type has to say which surface it is for.
- *  - Its `Data` is the nikcli HTTP client's world — messages, parts, permission
+ *  - Its `Data` is the ragu HTTP client's world — messages, parts, permission
  *    requests, MCP servers, providers. ADE has no SDK client wired up at all;
  *    it drives agent CLIs through a pty and knows about a project and a list of
  *    panes. Handing a plugin a `Data` whose every method returns `undefined`

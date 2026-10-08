@@ -25,7 +25,7 @@ function world(identifier: string | Error) {
   return { deps, reads, saved }
 }
 
-describe("where nikcli keeps its key on macOS and Linux", () => {
+describe("where ragu keeps its key on macOS and Linux", () => {
   test("`~/.local/share/nikcli/auth.json` is looked at", async () => {
     const seen: string[] = []
     const outcome = await syncOpenRouterKey({
@@ -45,7 +45,7 @@ describe("where nikcli keeps its key on macOS and Linux", () => {
   })
 })
 
-describe("the voice's OpenRouter key from nikcli's auth.json", () => {
+describe("the voice's OpenRouter key from ragu's auth.json", () => {
   test("ADE Test's identity: not copied, and auth.json is not even read", async () => {
     const { deps, reads, saved } = world("ai.nikcli.ade.test")
     expect(await syncOpenRouterKey(deps)).toBe("test-identity")

@@ -1,7 +1,7 @@
 import { useRenderer } from "@opentui/solid"
 import { createSimpleContext } from "./helper"
-import { FormatError, FormatUnknownError } from "@nikcli-ai/util/cli-error"
-import { restoreTerminalState } from "@nikcli-ai/util/win32"
+import { FormatError, FormatUnknownError } from "@ragu/util/cli-error"
+import { restoreTerminalState } from "@ragu/util/win32"
 
 export const { use: useExit, provider: ExitProvider } = createSimpleContext({
   name: "Exit",

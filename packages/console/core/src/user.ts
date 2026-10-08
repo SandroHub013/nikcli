@@ -138,10 +138,10 @@ export namespace User {
             .then((rows) => rows[0]),
         )
 
-        const { InviteEmail } = await import("@nikcli-ai/console-mail/InviteEmail.jsx")
+        const { InviteEmail } = await import("@ragu/console-mail/InviteEmail.jsx")
         await AWS.sendEmail({
           to: email,
-          subject: `You've been invited to join the ${emailInfo.workspaceName} workspace on Nikcli`,
+          subject: `You've been invited to join the ${emailInfo.workspaceName} workspace on Ragu`,
           body: render(
             // @ts-ignore
             InviteEmail({

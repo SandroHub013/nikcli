@@ -6,11 +6,11 @@
 | Scope  | `src/server/server-router.ts`, `src/server/httpapi/*`, `src/server/httpapi/event-feed.ts`, `packages/tui/src/context/sync.tsx` |
 | Tests  | `test/server/server-router.test.ts`, `test/server/httpapi-session.test.ts`, `test/server/event-visibility.test.ts`             |
 
-The question this records: for any nikcli route, **where does runtime context come from** — and what
+The question this records: for any ragu route, **where does runtime context come from** — and what
 the wire looks like once it does.
 
 The important design question is not route nesting. It is context resolution. Upstream's
-`specs/v2/api.html` says the same thing and reaches three context classes; nikcli already has all
+`specs/v2/api.html` says the same thing and reaches three context classes; ragu already has all
 three, resolved in one function.
 
 ## Three Context Classes
@@ -18,7 +18,7 @@ three, resolved in one function.
 | Class       | Resolves from                                     | Mounts                                      |
 | ----------- | ------------------------------------------------- | ------------------------------------------- |
 | **Server**  | Nothing. No instance exists.                      | `/global`, `/user`, `/account`, `/instance` |
-| **Request** | `?directory=` / `x-nikcli-directory`, else cwd    | Everything else without a `:sessionID`      |
+| **Request** | `?directory=` / `x-ragu-directory`, else cwd    | Everything else without a `:sessionID`      |
 | **Session** | The session row's own `directory` / `workspaceID` | Any path containing a valid `:sessionID`    |
 
 The four server-scoped roots are declared once as `INSTANCE_LESS_ROOTS` in
@@ -32,11 +32,11 @@ normal request would have been resolved against.
 
 `ServerRouter.context(request)` runs this, in order:
 
-1. `directory = requestedDirectory(request, url)` — `?directory=`, then `x-nikcli-directory`, then
+1. `directory = requestedDirectory(request, url)` — `?directory=`, then `x-ragu-directory`, then
    `process.cwd()`. URI-decoded, falling back to the raw string when the decode throws.
 2. `sessionID = sessionIDFromPath(url.pathname)` — extracted and validated against `Session.ID`. An
    id-shaped segment that is not a valid session id is ignored rather than failing the request.
-3. `explicitWorkspace = ?workspace= || x-nikcli-workspace`.
+3. `explicitWorkspace = ?workspace= || x-ragu-workspace`.
 4. If there is a session id **and no explicit workspace**, look the session up with
    `getAnyProject(sessionID)`. The lookup is skipped entirely when the caller already pinned a
    workspace, because the only thing it would have contributed is the workspace.
@@ -49,7 +49,7 @@ So the precedence is: **workspace target > session row > request > cwd**.
 
 This is upstream's "session-pinned" model, implemented. A client that posts to
 `/session/:sessionID/prompt` does not need to send a directory, and if it sends the wrong one the
-session's own directory overrides it. The difference from upstream is that nikcli does not make that
+session's own directory overrides it. The difference from upstream is that ragu does not make that
 a _route class_ — session routes accept request context, they just lose to the session row.
 
 ## Route Surface
@@ -84,7 +84,7 @@ separate client with its own auth and its own permission-reply union, documented
 
 ## Event Envelope
 
-nikcli has **two** wire shapes, and the difference is load-bearing:
+ragu has **two** wire shapes, and the difference is load-bearing:
 
 ```ts
 // GET /event          — the instance feed
@@ -121,7 +121,7 @@ type ApiEvent<Payload> = {
 }
 ```
 
-nikcli's instance feed carries **no context at all** — the connection _is_ the context, because the
+ragu's instance feed carries **no context at all** — the connection _is_ the context, because the
 feed was opened against a resolved instance. The global feed carries `directory` but not
 `workspaceID`, and no `id` or `time`.
 
@@ -165,7 +165,7 @@ Two details that are easy to misread:
 Upstream partitions runtime data by `contextKey = ${workspaceID ?? "local"}:${directory}` and keeps
 durable entities keyed by their own ids alongside it.
 
-nikcli's store is **single-context**: one TUI process, one directory, one flat store. Multi-directory
+ragu's store is **single-context**: one TUI process, one directory, one flat store. Multi-directory
 views are separate processes, not separate partitions in one store. Adopting the partition would be
 required before one TUI window could show two worktrees at once; nothing else needs it today.
 
@@ -184,11 +184,11 @@ required before one TUI window could show two worktrees at once; nothing else ne
 
 ## Alternatives Rejected
 
-**One `/api` prefix.** Upstream mounts everything under `/api/*`. nikcli mounts at the root, and the
+**One `/api` prefix.** Upstream mounts everything under `/api/*`. ragu mounts at the root, and the
 generated SDK is the stable caller surface rather than the URL — `client-compat.ts` declares every
 endpoint's namespaced path exhaustively, and generation rejects missing, unknown, duplicate,
 colliding, or adapter-incompatible entries. Moving the prefix would change every URL and no SDK call.
 
 **Session routes as a distinct context class.** Upstream forbids context input on session routes
-entirely. nikcli accepts it and lets it lose. Same outcome for a correct client, one less rule, and a
+entirely. ragu accepts it and lets it lose. Same outcome for a correct client, one less rule, and a
 client that sends a directory out of habit still works.

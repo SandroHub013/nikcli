@@ -1,4 +1,4 @@
-# nikcli Production Deployment
+# ragu Production Deployment
 
 ## URLs
 
@@ -14,21 +14,21 @@
 
 ```bash
 # Deploy Slack
-cd packages/slack && npx wrangler deploy src/worker.ts --name nikcli-slack --routes 'slack.nikcli-ai.dev/*'
+cd packages/slack && npx wrangler deploy src/worker.ts --name ragu-slack --routes 'slack.nikcli-ai.dev/*'
 
 # Deploy Website
 cd packages/web && npm run build && npx wrangler deploy
 
 # Deploy Web App
-cd packages/app && npm run build && npx wrangler pages deploy dist --project-name=nikcli-app --branch=main
+cd packages/app && npm run build && npx wrangler pages deploy dist --project-name=ragu-app --branch=main
 
 # View Logs
-npx wrangler tail --name nikcli-slack
-npx wrangler tail --name nikcli-web
+npx wrangler tail --name ragu-slack
+npx wrangler tail --name ragu-web
 
 # Secrets
-npx wrangler secret list --name nikcli-slack
-npx wrangler secret put NIKCLI_URL --name nikcli-slack
+npx wrangler secret list --name ragu-slack
+npx wrangler secret put RAGU_URL --name ragu-slack
 ```
 
 ## Configuration

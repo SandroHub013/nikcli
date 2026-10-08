@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@nikcli-ai/plugin-gadgets",
+  "name": "@ragu/plugin-gadgets",
   "version": "1.431.0",
-  "description": "nikcli plugin: the gadgets bridge, the `gadget` tool for the agent, and /gadget commands in the TUI",
+  "description": "ragu plugin: the gadgets bridge, the `gadget` tool for the agent, and /gadget commands in the TUI",
   "type": "module",
   "license": "MIT",
   "exports": {
@@ -20,8 +20,8 @@
     "test": "bun test tests"
   },
   "dependencies": {
-    "@nikcli-ai/gadget": "workspace:*",
-    "@nikcli-ai/plugin": "workspace:*"
+    "@ragu/gadget": "workspace:*",
+    "@ragu/plugin": "workspace:*"
   },
   "devDependencies": {
     "@tsconfig/node22": "catalog:",

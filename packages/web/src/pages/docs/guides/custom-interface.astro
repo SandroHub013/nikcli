@@ -21,8 +21,8 @@ const toc = [
 
 <DocsLayout
   title="Building a custom interface"
-  subtitle="Everything a real nikcli client has to handle — streaming parts, permission prompts, questions, todos and reconnects — assembled once."
-  description="Capstone guide to building a nikcli interface: event-driven state, rendering message parts, answering permissions and questions, todos and diffs, and reconnecting without losing the transcript."
+  subtitle="Everything a real ragu client has to handle — streaming parts, permission prompts, questions, todos and reconnects — assembled once."
+  description="Capstone guide to building a ragu interface: event-driven state, rendering message parts, answering permissions and questions, todos and diffs, and reconnecting without losing the transcript."
   toc={toc}
 >
   <section id="contract" class="doc-section">
@@ -258,11 +258,11 @@ async function resync() {
       A terminal client, complete enough to use: streams output, prompts for permissions, answers
       questions, and survives a dropped feed.
     </p>
-    <DocCode language="ts" title="client.ts">{`import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
+    <DocCode language="ts" title="client.ts">{`import { createRaguClient } from "@ragu/sdk/httpapi"
 import * as readline from "node:readline/promises"
 
-const client = createNikcliClient({
-  baseUrl: process.env.NIKCLI_URL ?? "http://127.0.0.1:4096",
+const client = createRaguClient({
+  baseUrl: process.env.RAGU_URL ?? "http://127.0.0.1:4096",
   directory: process.cwd(),
 })
 

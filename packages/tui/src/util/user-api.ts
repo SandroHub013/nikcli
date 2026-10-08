@@ -1,5 +1,5 @@
-import type { UserSchema } from "@nikcli-ai/util/user-schema"
-import { UserSession } from "@nikcli-ai/util/user-session"
+import type { UserSchema } from "@ragu/util/user-schema"
+import { UserSession } from "@ragu/util/user-session"
 
 /**
  * The terminal's reader for `/user/*`.
@@ -9,7 +9,7 @@ import { UserSession } from "@nikcli-ai/util/user-session"
  * `sdk.fetch` by hand. Two things that are not optional:
  *
  * - **`sdk.fetch`, never global `fetch`.** In a normal run there is no
- *   listening HTTP server: the base URL is the synthetic `http://nikcli.local`
+ *   listening HTTP server: the base URL is the synthetic `http://ragu.local`
  *   and `sdk.fetch` marshals the request over worker RPC into `Server.fetch`.
  *   A hand-built `fetch` fails DNS silently — no error, no log line.
  * - **The bearer comes from the local token store.** The token is what this

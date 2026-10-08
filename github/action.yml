@@ -1,5 +1,5 @@
-name: "nikcli GitHub Action"
-description: "Run nikcli in GitHub Actions workflows"
+name: "ragu GitHub Action"
+description: "Run ragu in GitHub Actions workflows"
 branding:
   icon: "code"
   color: "orange"
@@ -14,7 +14,7 @@ inputs:
     required: false
 
   share:
-    description: "Share the nikcli session (defaults to true for public repos)"
+    description: "Share the ragu session (defaults to true for public repos)"
     required: false
 
   prompt:
@@ -22,12 +22,12 @@ inputs:
     required: false
 
   use_github_token:
-    description: "Use GITHUB_TOKEN directly instead of Nikcli App token exchange. When true, skips OIDC and uses the GITHUB_TOKEN env var."
+    description: "Use GITHUB_TOKEN directly instead of Ragu App token exchange. When true, skips OIDC and uses the GITHUB_TOKEN env var."
     required: false
     default: "false"
 
   mentions:
-    description: "Comma-separated list of trigger phrases (case-insensitive). Defaults to '/nikcli,/nik'"
+    description: "Comma-separated list of trigger phrases (case-insensitive). Defaults to '/ragu,/nik'"
     required: false
 
   variant:
@@ -52,9 +52,9 @@ runs:
         ACTION_ROOT: ${{ github.action_path }}/..
       run: bun install --cwd "$ACTION_ROOT" --frozen-lockfile
 
-    - name: Run nikcli
+    - name: Run ragu
       shell: bash
-      id: run_nikcli
+      id: run_ragu
       env:
         GITHUB_ACTION_PATH: ${{ github.action_path }}
         MODEL: ${{ inputs.model }}

@@ -6,7 +6,7 @@
 | Scope   | `src/config/config.ts` (`Config.Info`), `src/config/paths.ts`, `src/config/tui-schema.ts`                                                                                                                                                                                                                                                                                                                                                                             |
 | Missing | Nothing testable. The test this row asked for landed 2026-09-21 — `test/config/legacy-keys.test.ts` (pure mappings) and `test/config/legacy-keys-loader.test.ts` (the three that need a document on disk) cover **all six** mappings the loader performs today. This document stays `Proposed` because it is a ledger and **no field below has been renamed yet**, not because coverage is missing. It is promoted by executing a group, not by writing another test. |
 
-This document breaks nikcli's configuration schema into review groups. Work through one group at a
+This document breaks ragu's configuration schema into review groups. Work through one group at a
 time and decide whether each field is ported as-is, removed, or redesigned.
 
 `nikcli.json` is the one schema in the codebase that is authored in **zod** and converted to Effect
@@ -31,13 +31,13 @@ Documents are discovered as `nikcli.json` in:
 
 - the global config directory (`Global.Path.config`),
 - every ancestor directory between the instance directory and the worktree (`findUp`),
-- every `.nikcli` config directory and `NIKCLI_CONFIG_DIR`.
+- every `.nikcli` config directory and `RAGU_CONFIG_DIR`.
 
-`NIKCLI_CONFIG_CONTENT` merges last and therefore wins. Arrays concatenate rather than replace
-(`mergeConfigConcatArrays`); objects merge deeply. `NIKCLI_DISABLE_PROJECT_CONFIG` suppresses the
+`RAGU_CONFIG_CONTENT` merges last and therefore wins. Arrays concatenate rather than replace
+(`mergeConfigConcatArrays`); objects merge deeply. `RAGU_DISABLE_PROJECT_CONFIG` suppresses the
 project walk entirely.
 
-nikcli does **not** support `nikcli.jsonc`. Upstream's v2 config accepts a `.jsonc` sibling; adopting
+ragu does **not** support `nikcli.jsonc`. Upstream's v2 config accepts a `.jsonc` sibling; adopting
 that is a discovery change, listed as an open question below rather than decided here.
 
 ## Group 1: File Metadata
@@ -69,10 +69,10 @@ There is no `shell` field. If a configurable default shell is wanted, it belongs
 
 | Field          | Current Purpose                         | Status   | Notes                                                                                                                                                                                                                                                                                                                                                                                          |
 | -------------- | --------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `command`      | User-defined commands                   | pending  | Upstream removes this in favor of skills. nikcli's commands are also loaded from `{command,commands}/**/*.md` under every config directory (`loadCommand`), so removing the config field does not remove the capability — but nikcli commands carry `agent`, `model`, `subtask`, and template substitution that skills do not currently express. Decide with the skill surface, not before it. |
+| `command`      | User-defined commands                   | pending  | Upstream removes this in favor of skills. ragu's commands are also loaded from `{command,commands}/**/*.md` under every config directory (`loadCommand`), so removing the config field does not remove the capability — but ragu commands carry `agent`, `model`, `subtask`, and template substitution that skills do not currently express. Decide with the skill surface, not before it. |
 | `reference`    | Named git or local directory references | redesign | Rename to plural `references`. Keep the named local-path and git-repository entries.                                                                                                                                                                                                                                                                                                           |
 | `instructions` | Additional ambient instruction sources  | keep     | One array of local paths, globs, or URLs. Already the right shape.                                                                                                                                                                                                                                                                                                                             |
-| _(no field)_   | Skill discovery locations               | pending  | nikcli discovers skills by glob (`{skill,skills}/**/SKILL.md` for nikcli's own roots, `skills/**/SKILL.md` for external ones) with no config surface. Upstream proposes a `skills` array of local roots and remote URLs. Adding it is additive and low-risk.                                                                                                                                   |
+| _(no field)_   | Skill discovery locations               | pending  | ragu discovers skills by glob (`{skill,skills}/**/SKILL.md` for ragu's own roots, `skills/**/SKILL.md` for external ones) with no config surface. Upstream proposes a `skills` array of local roots and remote URLs. Adding it is additive and low-risk.                                                                                                                                   |
 
 Keep ambient instructions separate from skills: instructions are automatically included as model
 context, skills are loaded or invoked intentionally. Each instruction source is unambiguously either
@@ -98,12 +98,12 @@ under every config directory.
 | `formatter`  | Formatter configuration            | keep     | `boolean \| Record<string, entry>`. Singular is correct: it configures one subsystem.                                                                                              |
 | `lsp`        | Language server configuration      | keep     | Same shape and same reasoning. Custom servers must declare `extensions`.                                                                                                           |
 | `attachment` | Attachment handling                | redesign | Rename to plural `attachments`. Singular `attachment` is already a model capability flag, and the collision is live in this codebase (`Model.capabilities.attachment`).            |
-| `websearch`  | Web search configuration           | keep     | No upstream counterpart; nikcli-specific tool configuration.                                                                                                                       |
-| `rag`        | RAG embedding configuration        | keep     | nikcli-specific.                                                                                                                                                                   |
-| `image`      | Image generation configuration     | keep     | nikcli-specific.                                                                                                                                                                   |
-| `computer`   | Computer-use tool configuration    | keep     | nikcli-specific; the tool is permission-gated separately.                                                                                                                          |
-| `speak`      | Text-to-speech configuration       | keep     | nikcli-specific.                                                                                                                                                                   |
-| `mobile`     | Mobile/Tophat integration          | keep     | nikcli-specific.                                                                                                                                                                   |
+| `websearch`  | Web search configuration           | keep     | No upstream counterpart; ragu-specific tool configuration.                                                                                                                       |
+| `rag`        | RAG embedding configuration        | keep     | ragu-specific.                                                                                                                                                                   |
+| `image`      | Image generation configuration     | keep     | ragu-specific.                                                                                                                                                                   |
+| `computer`   | Computer-use tool configuration    | keep     | ragu-specific; the tool is permission-gated separately.                                                                                                                          |
+| `speak`      | Text-to-speech configuration       | keep     | ragu-specific.                                                                                                                                                                   |
+| `mobile`     | Mobile/Tophat integration          | keep     | ragu-specific.                                                                                                                                                                   |
 | `browser`    | Browser tool configuration         | remove   | Already documented in-schema as deprecated and ignored; the `browser_control` tool needs no config.                                                                                |
 | _(no field)_ | Tool output truncation limits      | pending  | Truncation is currently constant-driven in `src/tool/tool.ts`. Upstream exposes `tool_output: { max_lines?, max_bytes? }`. Worth adding only if a user actually needs to raise it. |
 
@@ -115,8 +115,8 @@ under every config directory.
 | `autoshare`  | Legacy automatic-sharing flag        | remove | Already deprecated; the loader maps `autoshare: true` to `share: "auto"` when `share` is unset. Keep the migration, drop the field from the published schema. |
 | `enterprise` | `{ url? }`                           | keep   | Selects the sharing service endpoint when no organization account is active.                                                                                  |
 | `username`   | Display name in conversations        | keep   | Defaults to the OS username at load when unset. Identity for conversation and telemetry, not HTTP auth.                                                       |
-| `analytics`  | Anonymous per-day model totals       | keep   | On by default; `false`, `DO_NOT_TRACK=1`, or the nikcli-specific env var opts out. No upstream counterpart.                                                   |
-| `sync`       | Remote sync hub URL                  | keep   | `NIKCLI_REMOTE_URL` overrides. No upstream counterpart.                                                                                                       |
+| `analytics`  | Anonymous per-day model totals       | keep   | On by default; `false`, `DO_NOT_TRACK=1`, or the ragu-specific env var opts out. No upstream counterpart.                                                   |
+| `sync`       | Remote sync hub URL                  | keep   | `RAGU_REMOTE_URL` overrides. No upstream counterpart.                                                                                                       |
 
 ## Group 7: Providers And Model Selection
 
@@ -126,7 +126,7 @@ under every config directory.
 | `disabled_providers` | Disable auto-loaded providers        | remove   | Already deprecated in-schema; `Policy.statements` translates it into deny statements.                                                                               |
 | `enabled_providers`  | Provider allowlist                   | remove   | Same — translated into a deny-all followed by allows. Keep the translation, drop the fields.                                                                        |
 | `model`              | Default model                        | keep     | Fallback when session and agent specify none.                                                                                                                       |
-| `small_model`        | Small/utility model                  | keep     | **Diverges from upstream, which removes it.** nikcli's consumers are wider than title generation, and `""` is a meaningful value meaning "no small-model fallback". |
+| `small_model`        | Small/utility model                  | keep     | **Diverges from upstream, which removes it.** ragu's consumers are wider than title generation, and `""` is a meaningful value meaning "no small-model fallback". |
 
 Provider selection rules already live in `experimental.policies` and are already implemented — see
 [provider-policy.md](./provider-policy.md). The only work left in this group is the rename and
@@ -152,8 +152,8 @@ servers, and MCP servers. Runtime state may still track `enabled`; that is not u
 
 | Field        | Current Purpose               | Status   | Notes                                                                                                                                                                                                            |
 | ------------ | ----------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mcp`        | MCP server definitions        | redesign | Nest the server map under `mcp.servers` so protocol-wide settings live in the same subsystem. Keep nikcli's explicit `type: "local"` / `type: "remote"` entries; do not adopt the copy-paste `mcpServers` shape. |
-| `connectors` | Figma, Slack, GitHub, Lovable | keep     | nikcli-specific. No upstream counterpart.                                                                                                                                                                        |
+| `mcp`        | MCP server definitions        | redesign | Nest the server map under `mcp.servers` so protocol-wide settings live in the same subsystem. Keep ragu's explicit `type: "local"` / `type: "remote"` entries; do not adopt the copy-paste `mcpServers` shape. |
+| `connectors` | Figma, Slack, GitHub, Lovable | keep     | ragu-specific. No upstream counterpart.                                                                                                                                                                        |
 
 MCP timeouts should become `{ startup, request }` in milliseconds under `mcp.timeout`, with
 per-server overrides. Today there is one flat `experimental.mcp_timeout` covering requests only.
@@ -164,15 +164,15 @@ per-server overrides. Today there is one flat `experimental.mcp_timeout` coverin
 | ------------ | ------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `compaction` | `{ auto?, prune?, reserved? }` | redesign | Rename `reserved` to `buffer`: it is the token headroom reserved so automatic compaction triggers before the input window is exhausted, and "reserved" reads like a quota. |
 
-`NIKCLI_DISABLE_AUTOCOMPACT` and `NIKCLI_DISABLE_PRUNE` override `auto` and `prune` at load; both
+`RAGU_DISABLE_AUTOCOMPACT` and `RAGU_DISABLE_PRUNE` override `auto` and `prune` at load; both
 survive the rename.
 
 Upstream additionally proposes `keep.tokens` for the verbatim-history budget written into the
-compaction checkpoint. nikcli has no config for that today; add it only alongside the rename.
+compaction checkpoint. ragu has no config for that today; add it only alongside the rename.
 
 ## Group 11: Experimental
 
-`experimental` is where nikcli has drifted furthest from a review-able shape: it currently holds
+`experimental` is where ragu has drifted furthest from a review-able shape: it currently holds
 policy statements, hooks, four feature flags for the TUI, brain settings, timeouts, and several
 one-off booleans. The group needs splitting before it can be reviewed field by field.
 
@@ -186,7 +186,7 @@ one-off booleans. The group needs splitting before it can be reviewed field by f
 | `experimental.mcp_timeout`           | redesign | Move to `mcp.timeout.request`.                                                                                                                                                                    |
 | `experimental.chatMaxRetries`        | keep     | Rename to snake_case for consistency with its neighbors.                                                                                                                                          |
 | `experimental.queued_message_wrap`   | keep     | Four-way union is unusual but each arm is load-bearing; off unless set.                                                                                                                           |
-| `experimental.nativeLlm`             | drop     | Removed 2026-10-03: native `@nikcli-ai/llm` streaming is the only runtime. The key is accepted and ignored so existing configs validate; a model with no route fails the turn with a typed error. |
+| `experimental.nativeLlm`             | drop     | Removed 2026-10-03: native `@ragu/llm` streaming is the only runtime. The key is accepted and ignored so existing configs validate; a model with no route fails the turn with a typed error. |
 | `experimental.tui.*`                 | redesign | Move to the TUI config surface with the rest of `tui`.                                                                                                                                            |
 | `experimental.requests.*`            | keep     | Narrow coalescing flags; genuinely experimental.                                                                                                                                                  |
 | `experimental.memory`                | pending  | Overlaps `brain`. Decide together.                                                                                                                                                                |
@@ -218,7 +218,7 @@ top-level shape that groups 2 and 3 are being reviewed against.
 
 ## Open Questions
 
-- Does nikcli accept `nikcli.jsonc`? Upstream v2 does. Adding it is a `findUp` change plus a
+- Does ragu accept `nikcli.jsonc`? Upstream v2 does. Adding it is a `findUp` change plus a
   JSONC parser at one call site.
 - Every plural rename above is a breaking change to a published JSON Schema. Does the loader accept
   both keys for one release, or does a migration rewrite `nikcli.json` in place the way

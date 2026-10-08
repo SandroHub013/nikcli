@@ -6,7 +6,7 @@
 | Scope  | `src/provider/schema.ts`, `src/provider/provider.ts`, `src/provider/models.ts`, `src/provider/variants.ts`, `packages/llm`                |
 | Tests  | `test/provider/core.test.ts`, `test/provider/variants.test.ts`, `test/provider/transform.test.ts`, `test/provider/effect-service.test.ts` |
 
-The question this records: what a provider and a model **are** in nikcli, how the catalog is built
+The question this records: what a provider and a model **are** in ragu, how the catalog is built
 from six ordered sources, and how a catalog model turns into something that can stream tokens.
 
 Invalidation is not covered here — see
@@ -24,7 +24,7 @@ The canonical schema lives in `schema.ts`, separate from the build pipeline in `
 consumer can import the contract without dragging the SDK factory and the models.dev loader with it.
 
 Both are Effect `Schema.Struct`s exposed as zod objects through `zodObject` from
-`@nikcli-ai/util/effect-zod`, because the HTTP boundary and the JSON Schema emitter both need the zod
+`@ragu/util/effect-zod`, because the HTTP boundary and the JSON Schema emitter both need the zod
 view. The Effect schema is the source; the zod object is derived.
 
 ## Provider
@@ -43,11 +43,11 @@ Provider.Info = {
 
 `source` is the one field that differs most from upstream's proposed `ProviderV2`. Upstream models
 availability as a union — `false | { via: "env", name } | { via: "account", service } | { via:
-"custom", data }` — so "is it usable" and "how did it become usable" are the same field. nikcli
+"custom", data }` — so "is it usable" and "how did it become usable" are the same field. ragu
 records only **how**, and answers **whether** by presence: a provider that is not usable is not in
 the map. `Policy` decides which ids are allowed to enter it at all.
 
-Models are nested under their provider because model ids are only unique within a provider. nikcli
+Models are nested under their provider because model ids are only unique within a provider. ragu
 and upstream agree on that.
 
 ## Model
@@ -80,7 +80,7 @@ Three shapes worth calling out:
   strict field in a provider schema needs checking against real payloads before it lands.
 - **`api.npm` is the routing key**, not a display field. It is what `mapToModelRef` switches on.
 - **Tiered pricing is one optional override, not a list.** Upstream models `cost` as an array of
-  tiers keyed by context size. nikcli has exactly one tier that exists in practice —
+  tiers keyed by context size. ragu has exactly one tier that exists in practice —
   `experimentalOver200K` — and names it rather than generalizing.
 
 `capabilities.interleaved` carries either a boolean or the reasoning field name, which is how a
@@ -111,13 +111,13 @@ rather than filtered downstream.
 
 `mergeProvider` also handles the provider that does not exist in models.dev at all: it synthesizes an
 entry from the config declaration plus whatever the caller supplied, which is what makes
-`nikcli-inference`, Ollama, and bare config providers visible without a catalog entry.
+`ragu-inference`, Ollama, and bare config providers visible without a catalog entry.
 
 ## Variants
 
 A variant is a named bundle of provider options — reasoning effort, thinking budget, toggles.
 
-nikcli stores them as `Record<variantName, providerOptions>`; upstream v2 uses an array of
+ragu stores them as `Record<variantName, providerOptions>`; upstream v2 uses an array of
 `{ id, ...options }`. The Record was kept because every call site — `session/llm.ts`, `acp/*`, the
 TUI variant picker — looks variants up by name.
 
@@ -152,22 +152,22 @@ interface Provider.Interface {
 **`defaultModel()`** takes `config.model` when it names an available model, and otherwise falls
 through to `bestAvailable()` — every model in the catalog run through `Provider.sort`, first one
 wins. `sort` ranks by a hardcoded `priority` id-substring list, then prefers non-`latest` ids, then
-sorts by id descending. When the catalog is empty it returns `{ providerID: "nikcli", modelID: "" }`,
+sorts by id descending. When the catalog is empty it returns `{ providerID: "ragu", modelID: "" }`,
 which is a sentinel rather than a usable model.
 
 **`getSmallModel(providerID)`** resolves `config.small_model` when set. An explicit empty string
 **disables** the small-model fallback entirely — distinct from unset, which continues to the
-heuristics: for `nikcli*` and `github-copilot*` providers it scans that provider's models for a
-`priority` substring match, and finally falls back to `nikcli/gpt-5-nano` when that provider is
+heuristics: for `ragu*` and `github-copilot*` providers it scans that provider's models for a
+`priority` substring match, and finally falls back to `ragu/gpt-5-nano` when that provider is
 present.
 
-nikcli therefore keeps `small_model`, which upstream's config review proposes to remove in favor of a
-`title` agent model override. The reason is that nikcli's consumer set is wider than title
+ragu therefore keeps `small_model`, which upstream's config review proposes to remove in favor of a
+`title` agent model override. The reason is that ragu's consumer set is wider than title
 generation.
 
 ## From Catalog Model To Wire
 
-`mapToModelRef(model, providerInfo)` is the bridge to `@nikcli-ai/llm`'s route system. It switches on
+`mapToModelRef(model, providerInfo)` is the bridge to `@ragu/llm`'s route system. It switches on
 `model.api.npm`:
 
 | npm                           | Route                                                   |
@@ -195,17 +195,17 @@ streaming is the only runtime since 2026-10-03; `experimental.nativeLlm` is acce
 ## Alternatives Rejected
 
 **Branded id schemas.** Upstream brands `ProviderV2.ID` and `ModelV2.ID` and attaches static
-constructors for known providers. nikcli keeps plain strings because provider ids arrive from config,
+constructors for known providers. ragu keeps plain strings because provider ids arrive from config,
 plugins, and discovery at runtime, where a closed static list is a liability rather than a guarantee.
 
 **An `Endpoint` union on the provider.** Upstream models the transport as
 `openai/responses | openai/completions | anthropic/messages | aisdk | unknown` on both provider and
-model, and resolves `unknown` at read time. nikcli carries the npm package name instead and resolves
+model, and resolves `unknown` at read time. ragu carries the npm package name instead and resolves
 transport once, in `mapToModelRef`. The npm field already exists in models.dev, so nothing has to be
 inferred or backfilled.
 
 **`empty()` constructors.** Upstream's update-by-draft API needs a record to mutate before it exists.
-nikcli's catalog is rebuilt, not mutated, so there is nothing for `empty()` to seed.
+ragu's catalog is rebuilt, not mutated, so there is nothing for `empty()` to seed.
 
 ## Invariants
 
@@ -221,7 +221,7 @@ nikcli's catalog is rebuilt, not mutated, so there is nothing for `empty()` to s
 
 These are known differences, not bugs. Each would be its own change.
 
-- No plugin hook surface for catalog mutation (`provider.update`, `model.update`). nikcli's
+- No plugin hook surface for catalog mutation (`provider.update`, `model.update`). ragu's
   extension points are config, auth loaders, and discovery functions, all consumed during
   `buildState`.
 - No account abstraction. Credentials are `Auth.Info` records keyed by provider id; there is no

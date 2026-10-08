@@ -37,7 +37,7 @@ const envSchema = z.object({
 
   /** Identity issuer for OAuth bearer tokens (offline JWKS verification). */
   AUTH_ISSUER: z.string().url().default("https://auth.nikcli-ai.dev"),
-  AUTH_AUDIENCE: z.string().default("nikcli-api"),
+  AUTH_AUDIENCE: z.string().default("ragu-api"),
   AUTH_JWKS_URL: z.string().url().optional(),
 
   INFERENCE_CACHE_MAX: z.coerce.number().int().positive().default(5_000),
@@ -52,7 +52,7 @@ const envSchema = z.object({
   /** Expose and serve only the models with a 0/0 billed price (verified `:free` upstreams). */
   INFERENCE_FREE_ONLY: z.coerce.boolean().default(false),
 
-  /** Provider name to prefer for ALL requests (overridable per-request via nikcli.preferProvider). */
+  /** Provider name to prefer for ALL requests (overridable per-request via ragu.preferProvider). */
   DEFAULT_PREFER_PROVIDER: z.string().optional(),
 
   LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),

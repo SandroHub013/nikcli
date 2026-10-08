@@ -104,7 +104,7 @@ export const dict = {
   "dialog.model.manage": "Zarządzaj modelami",
   "dialog.model.manage.description": "Dostosuj, które modele pojawiają się w wyborze modelu.",
 
-  "dialog.model.unpaid.freeModels.title": "Darmowe modele dostarczane przez Nikcli",
+  "dialog.model.unpaid.freeModels.title": "Darmowe modele dostarczane przez Ragu",
   "dialog.model.unpaid.addMore.title": "Dodaj więcej modeli od popularnych dostawców",
 
   "dialog.provider.viewAll": "Zobacz więcej dostawców",
@@ -117,21 +117,21 @@ export const dict = {
   "provider.connect.status.waiting": "Oczekiwanie na autoryzację...",
   "provider.connect.status.failed": "Autoryzacja nie powiodła się: {{error}}",
   "provider.connect.apiKey.description":
-    "Wprowadź swój klucz API {{provider}}, aby połączyć konto i używać modeli {{provider}} w Nikcli.",
+    "Wprowadź swój klucz API {{provider}}, aby połączyć konto i używać modeli {{provider}} w Ragu.",
   "provider.connect.apiKey.label": "Klucz API {{provider}}",
   "provider.connect.apiKey.placeholder": "Klucz API",
   "provider.connect.apiKey.required": "Klucz API jest wymagany",
-  "provider.connect.nikcliZen.line1":
-    "Nikcli Zen daje dostęp do wybranego zestawu niezawodnych, zoptymalizowanych modeli dla agentów kodujących.",
-  "provider.connect.nikcliZen.line2":
+  "provider.connect.raguZen.line1":
+    "Ragu Zen daje dostęp do wybranego zestawu niezawodnych, zoptymalizowanych modeli dla agentów kodujących.",
+  "provider.connect.raguZen.line2":
     "Z jednym kluczem API uzyskasz dostęp do modeli takich jak Claude, GPT, Gemini, GLM i więcej.",
-  "provider.connect.nikcliZen.visit.prefix": "Odwiedź ",
-  "provider.connect.nikcliZen.visit.link": "nikcli-ai.dev/zen",
-  "provider.connect.nikcliZen.visit.suffix": ", aby odebrać swój klucz API.",
+  "provider.connect.raguZen.visit.prefix": "Odwiedź ",
+  "provider.connect.raguZen.visit.link": "nikcli-ai.dev/zen",
+  "provider.connect.raguZen.visit.suffix": ", aby odebrać swój klucz API.",
   "provider.connect.oauth.code.visit.prefix": "Odwiedź ",
   "provider.connect.oauth.code.visit.link": "ten link",
   "provider.connect.oauth.code.visit.suffix":
-    ", aby odebrać kod autoryzacyjny, połączyć konto i używać modeli {{provider}} w Nikcli.",
+    ", aby odebrać kod autoryzacyjny, połączyć konto i używać modeli {{provider}} w Ragu.",
   "provider.connect.oauth.code.label": "Kod autoryzacyjny {{method}}",
   "provider.connect.oauth.code.placeholder": "Kod autoryzacyjny",
   "provider.connect.oauth.code.required": "Kod autoryzacyjny jest wymagany",
@@ -139,7 +139,7 @@ export const dict = {
   "provider.connect.oauth.auto.visit.prefix": "Odwiedź ",
   "provider.connect.oauth.auto.visit.link": "ten link",
   "provider.connect.oauth.auto.visit.suffix":
-    " i wprowadź poniższy kod, aby połączyć konto i używać modeli {{provider}} w Nikcli.",
+    " i wprowadź poniższy kod, aby połączyć konto i używać modeli {{provider}} w Ragu.",
   "provider.connect.oauth.auto.confirmationCode": "Kod potwierdzający",
   "provider.connect.toast.connected.title": "Połączono {{provider}}",
   "provider.connect.toast.connected.description": "Modele {{provider}} są teraz dostępne do użycia.",
@@ -253,7 +253,7 @@ export const dict = {
   "dialog.directory.empty": "Nie znaleziono folderów",
 
   "dialog.server.title": "Serwery",
-  "dialog.server.description": "Przełącz serwer Nikcli, z którym łączy się ta aplikacja.",
+  "dialog.server.description": "Przełącz serwer Ragu, z którym łączy się ta aplikacja.",
   "dialog.server.search.placeholder": "Szukaj serwerów",
   "dialog.server.empty": "Brak serwerów",
   "dialog.server.add.title": "Dodaj serwer",
@@ -362,7 +362,7 @@ export const dict = {
   "toast.session.listFailed.title": "Nie udało się załadować sesji dla {{project}}",
 
   "toast.update.title": "Dostępna aktualizacja",
-  "toast.update.description": "Nowa wersja Nikcli ({{version}}) jest teraz dostępna do instalacji.",
+  "toast.update.description": "Nowa wersja Ragu ({{version}}) jest teraz dostępna do instalacji.",
   "toast.update.action.installRestart": "Zainstaluj i zrestartuj",
   "toast.update.action.notYet": "Jeszcze nie",
 
@@ -373,7 +373,7 @@ export const dict = {
   "error.page.action.checking": "Sprawdzanie...",
   "error.page.action.checkUpdates": "Sprawdź aktualizacje",
   "error.page.action.updateTo": "Zaktualizuj do {{version}}",
-  "error.page.report.prefix": "Proszę zgłosić ten błąd do zespołu Nikcli",
+  "error.page.report.prefix": "Proszę zgłosić ten błąd do zespołu Ragu",
   "error.page.report.discord": "na Discordzie",
   "error.page.version": "Wersja: {{version}}",
 
@@ -392,7 +392,7 @@ export const dict = {
   "error.chain.modelNotFound": "Model nie znaleziony: {{provider}}/{{model}}",
   "error.chain.checkConfig": "Sprawdź swoją konfigurację (nikcli.json) nazwy dostawców/modeli",
   "error.chain.mcpFailed":
-    'Serwer MCP "{{name}}" nie powiódł się. Uwaga, Nikcli nie obsługuje jeszcze uwierzytelniania MCP.',
+    'Serwer MCP "{{name}}" nie powiódł się. Uwaga, Ragu nie obsługuje jeszcze uwierzytelniania MCP.',
   "error.chain.providerAuthFailed": "Uwierzytelnianie dostawcy nie powiodło się ({{provider}}): {{message}}",
   "error.chain.providerInitFailed":
     'Nie udało się zainicjować dostawcy "{{provider}}". Sprawdź poświadczenia i konfigurację.',
@@ -502,12 +502,12 @@ export const dict = {
   "sidebar.workspaces.enable": "Włącz przestrzenie robocze",
   "sidebar.workspaces.disable": "Wyłącz przestrzenie robocze",
   "sidebar.gettingStarted.title": "Pierwsze kroki",
-  "sidebar.gettingStarted.line1": "Nikcli zawiera darmowe modele, więc możesz zacząć od razu.",
+  "sidebar.gettingStarted.line1": "Ragu zawiera darmowe modele, więc możesz zacząć od razu.",
   "sidebar.gettingStarted.line2": "Połącz dowolnego dostawcę, aby używać modeli, w tym Claude, GPT, Gemini itp.",
   "sidebar.project.recentSessions": "Ostatnie sesje",
   "sidebar.project.viewAllSessions": "Zobacz wszystkie sesje",
 
-  "app.name.desktop": "Nikcli Desktop",
+  "app.name.desktop": "Ragu Desktop",
   "settings.section.desktop": "Pulpit",
   "settings.section.server": "Serwer",
   "settings.tab.general": "Ogólne",
@@ -519,11 +519,11 @@ export const dict = {
   "settings.general.section.sounds": "Efekty dźwiękowe",
 
   "settings.general.row.language.title": "Język",
-  "settings.general.row.language.description": "Zmień język wyświetlania dla Nikcli",
+  "settings.general.row.language.description": "Zmień język wyświetlania dla Ragu",
   "settings.general.row.appearance.title": "Wygląd",
-  "settings.general.row.appearance.description": "Dostosuj wygląd Nikcli na swoim urządzeniu",
+  "settings.general.row.appearance.description": "Dostosuj wygląd Ragu na swoim urządzeniu",
   "settings.general.row.theme.title": "Motyw",
-  "settings.general.row.theme.description": "Dostosuj motyw Nikcli.",
+  "settings.general.row.theme.description": "Dostosuj motyw Ragu.",
   "settings.general.row.font.title": "Czcionka",
   "settings.general.row.font.description": "Dostosuj czcionkę mono używaną w blokach kodu",
 
@@ -531,13 +531,13 @@ export const dict = {
   "settings.general.row.releaseNotes.description": 'Pokazuj wyskakujące okna "Co nowego" po aktualizacjach',
 
   "settings.updates.row.startup.title": "Sprawdzaj aktualizacje przy uruchomieniu",
-  "settings.updates.row.startup.description": "Automatycznie sprawdzaj aktualizacje podczas uruchamiania Nikcli",
+  "settings.updates.row.startup.description": "Automatycznie sprawdzaj aktualizacje podczas uruchamiania Ragu",
   "settings.updates.row.check.title": "Sprawdź aktualizacje",
   "settings.updates.row.check.description": "Ręcznie sprawdź aktualizacje i zainstaluj, jeśli są dostępne",
   "settings.updates.action.checkNow": "Sprawdź teraz",
   "settings.updates.action.checking": "Sprawdzanie...",
   "settings.updates.toast.latest.title": "Masz najnowszą wersję",
-  "settings.updates.toast.latest.description": "Korzystasz z najnowszej wersji Nikcli.",
+  "settings.updates.toast.latest.description": "Korzystasz z najnowszej wersji Ragu.",
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",
   "font.option.firaCode": "Fira Code",

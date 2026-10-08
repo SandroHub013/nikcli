@@ -193,7 +193,7 @@ export function useGithubDeviceAuth({ client, onApproved, onMessage }: UseGithub
       const text = error instanceof Error ? error.message : String(error)
       onMessageRef.current(
         /github oauth client id is not configured/i.test(text)
-          ? "This nikcli host has no GitHub client ID. Update nikcli on the computer, or set one under OAuth client ID below."
+          ? "This ragu host has no GitHub client ID. Update ragu on the computer, or set one under OAuth client ID below."
           : text,
       )
     } finally {

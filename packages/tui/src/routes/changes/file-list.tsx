@@ -2,7 +2,7 @@ import { useScrollAcceleration } from "@tui/util/scroll"
 import { For, Show, createMemo } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import { useTheme } from "@tui/context/theme"
-import type { FileDiff } from "@nikcli-ai/sdk/httpapi"
+import type { FileDiff } from "@ragu/sdk/httpapi"
 import path from "node:path"
 
 type FileItem = { file: FileDiff; index: number; name: string; directory: string }

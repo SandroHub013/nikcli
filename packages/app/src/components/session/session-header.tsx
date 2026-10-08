@@ -9,20 +9,20 @@ import { usePlatform } from "@/context/platform"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useGlobalSDK } from "@/context/global-sdk"
-import { getFilename } from "@nikcli-ai/util/path"
+import { getFilename } from "@ragu/util/path"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 
-import { Icon } from "@nikcli-ai/ui/icon"
-import { IconButton } from "@nikcli-ai/ui/icon-button"
-import { Button } from "@nikcli-ai/ui/button"
-import { AppIcon } from "@nikcli-ai/ui/app-icon"
-import { DropdownMenu } from "@nikcli-ai/ui/dropdown-menu"
-import { Tooltip, TooltipKeybind } from "@nikcli-ai/ui/tooltip"
-import { Popover } from "@nikcli-ai/ui/popover"
-import { TextField } from "@nikcli-ai/ui/text-field"
-import { Keybind } from "@nikcli-ai/ui/keybind"
-import { showToast } from "@nikcli-ai/ui/toast"
+import { Icon } from "@ragu/ui/icon"
+import { IconButton } from "@ragu/ui/icon-button"
+import { Button } from "@ragu/ui/button"
+import { AppIcon } from "@ragu/ui/app-icon"
+import { DropdownMenu } from "@ragu/ui/dropdown-menu"
+import { Tooltip, TooltipKeybind } from "@ragu/ui/tooltip"
+import { Popover } from "@ragu/ui/popover"
+import { TextField } from "@ragu/ui/text-field"
+import { Keybind } from "@ragu/ui/keybind"
+import { showToast } from "@ragu/ui/toast"
 import { StatusPopover } from "../status-popover"
 
 export function SessionHeader() {
@@ -273,8 +273,8 @@ export function SessionHeader() {
     platform.openLink(url)
   }
 
-  const centerMount = createMemo(() => document.getElementById("nikcli-titlebar-center"))
-  const rightMount = createMemo(() => document.getElementById("nikcli-titlebar-right"))
+  const centerMount = createMemo(() => document.getElementById("ragu-titlebar-center"))
+  const rightMount = createMemo(() => document.getElementById("ragu-titlebar-right"))
 
   return (
     <>

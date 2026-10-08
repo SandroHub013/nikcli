@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { searchPaths } from "./find"
 import { deserializeKinds, toggleKind } from "../sidebar/storage"
 
-const ROOT = "C:/Users/me/Favorites/nikcli"
+const ROOT = "C:/Users/me/Favorites/ragu"
 const entries = [
   { path: `${ROOT}/packages/ade/src/grid`, kind: "directory" as const },
   { path: `${ROOT}/packages/ade/src/grid/pane.tsx`, kind: "file" as const },
@@ -45,7 +45,7 @@ describe("searchPaths", () => {
   })
 
   test("Windows separators in the root still make the path relative", () => {
-    expect(searchPaths(entries, "readme", { root: "C:\\Users\\me\\Favorites\\nikcli\\" })[0]!.rel).toBe("README.md")
+    expect(searchPaths(entries, "readme", { root: "C:\\Users\\me\\Favorites\\ragu\\" })[0]!.rel).toBe("README.md")
   })
 })
 

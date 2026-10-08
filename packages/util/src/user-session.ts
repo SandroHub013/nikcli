@@ -23,7 +23,7 @@ export namespace UserSession {
    * Resolved per call, never captured at module scope.
    *
    * `Global.Path.data` is a getter precisely so that a host which sets
-   * `NIKCLI_TEST_HOME` (or `NIKCLI_DATA_DIR`) after this module loads is still
+   * `RAGU_TEST_HOME` (or `RAGU_DATA_DIR`) after this module loads is still
    * honoured. Binding it once at import time threw that away and made the answer
    * depend on which file happened to import this one first: in a shared test
    * process the earliest import fixed the path at the real machine's home, so a

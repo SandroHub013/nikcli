@@ -1,6 +1,6 @@
-# nikcli mobile
+# ragu mobile
 
-The Expo / React Native companion app. It pairs with a nikcli server over SSE
+The Expo / React Native companion app. It pairs with a ragu server over SSE
 and lets you follow and steer sessions from a phone.
 
 ## Installing a release build
@@ -10,10 +10,10 @@ carries the mobile artifacts alongside the CLI and desktop ones:
 
 | File                                         | Platform                              |
 | -------------------------------------------- | ------------------------------------- |
-| `nikcli-<version>-<build>.apk`               | Android, direct install               |
-| `nikcli-<version>-<build>.aab`               | Android, Play Store upload            |
-| `nikcli-<version>-<build>-unsigned.ipa`      | iOS, **needs re-signing** — see below |
-| `nikcli-<version>-<build>-simulator.app.zip` | iOS Simulator, macOS only             |
+| `ragu-<version>-<build>.apk`               | Android, direct install               |
+| `ragu-<version>-<build>.aab`               | Android, Play Store upload            |
+| `ragu-<version>-<build>-unsigned.ipa`      | iOS, **needs re-signing** — see below |
+| `ragu-<version>-<build>-simulator.app.zip` | iOS Simulator, macOS only             |
 
 Android is straightforward: download the `.apk`, allow installation from your
 browser, open it.

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 fn is_repo(p: &Path) -> bool {
     p.join("packages")
-        .join("nikcli")
+        .join("ragu")
         .join("package.json")
         .is_file()
 }
@@ -16,7 +16,7 @@ fn stored() -> Option<PathBuf> {
 }
 
 fn detect() -> Option<PathBuf> {
-    if let Ok(v) = std::env::var("NIKCLI_REPO") {
+    if let Ok(v) = std::env::var("RAGU_REPO") {
         let p = PathBuf::from(v);
         if is_repo(&p) {
             return Some(p);
@@ -37,7 +37,7 @@ pub fn root() -> Result<PathBuf, String> {
     stored()
         .filter(|p| is_repo(p))
         .or_else(detect)
-        .ok_or_else(|| "nikcli repository not found — choose its folder in Settings".to_string())
+        .ok_or_else(|| "ragu repository not found — choose its folder in Settings".to_string())
 }
 
 /// Windows `canonicalize` yields `\\?\C:\…`; child processes (bun) want the plain form.
@@ -71,7 +71,7 @@ pub fn repo_root() -> Result<String, String> {
 pub fn set_repo_root(path: String) -> Result<String, String> {
     let p = PathBuf::from(&path);
     if !is_repo(&p) {
-        return Err("not a nikcli repository (packages/nikcli/package.json missing)".into());
+        return Err("not a ragu repository (packages/ragu/package.json missing)".into());
     }
     let file = paths::config_file();
     if let Some(parent) = file.parent() {
@@ -161,8 +161,8 @@ pub fn list_tests() -> Result<Vec<TestFile>, String> {
 /// Stored benchmark runs (newest first) and the recorded perf baseline.
 #[tauri::command]
 pub fn read_benchmarks() -> Result<serde_json::Value, String> {
-    let nikcli = root()?.join("packages").join("nikcli");
-    let runs_dir = nikcli.join("test").join("benchmarks").join("runs");
+    let ragu = root()?.join("packages").join("ragu");
+    let runs_dir = ragu.join("test").join("benchmarks").join("runs");
     let mut files: Vec<(std::time::SystemTime, PathBuf)> = std::fs::read_dir(&runs_dir)
         .map(|rd| {
             rd.flatten()
@@ -177,7 +177,7 @@ pub fn read_benchmarks() -> Result<serde_json::Value, String> {
         .take(60)
         .filter_map(|(_, p)| serde_json::from_str(&std::fs::read_to_string(p).ok()?).ok())
         .collect();
-    let baseline = std::fs::read_to_string(nikcli.join("specs").join("perf-baseline.json"))
+    let baseline = std::fs::read_to_string(ragu.join("specs").join("perf-baseline.json"))
         .ok()
         .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
     Ok(serde_json::json!({ "runs": runs, "baseline": baseline, "runsDir": runs_dir }))
@@ -193,7 +193,7 @@ pub struct StorageEntry {
     pub is_dir: bool,
 }
 
-/// What nikcli keeps on disk: databases, logs, snapshots, worktrees.
+/// What ragu keeps on disk: databases, logs, snapshots, worktrees.
 #[tauri::command]
 pub fn storage_report() -> Vec<StorageEntry> {
     let mut out = vec![];

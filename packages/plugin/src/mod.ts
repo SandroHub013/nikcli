@@ -1,5 +1,5 @@
 /**
- * Types for writing a nikcli mod.
+ * Types for writing a ragu mod.
  *
  * A mod is a plugin module that exports `register(on, options)`. It registers
  * hooks on named events; each hook receives the mods API (`$`), the event
@@ -12,7 +12,7 @@
  * - **wrap**: `const result = await next(e)`, then return a changed result.
  *
  * ```ts
- * import type { ModRegister } from "@nikcli-ai/plugin/mod"
+ * import type { ModRegister } from "@ragu/plugin/mod"
  *
  * export const register: ModRegister = (on) => {
  *   on("tool.call", { tool: "bash" }, async ($, e, next) => {
@@ -40,7 +40,7 @@ export interface ModNext<Event, Result> {
   (event: Event): Promise<Result>
   /** Aborts when the event is abandoned or this hook times out. */
   readonly signal: AbortSignal
-  /** Who fired the event; nikcli itself is `{ plugin: "engine", tier: "core" }`. */
+  /** Who fired the event; ragu itself is `{ plugin: "engine", tier: "core" }`. */
   readonly origin: ModOrigin
   readonly budget: { readonly ms: number; readonly remainingMs: number }
   /** Skip to a later tier. Only a mod the organization lists in `prependPlugins`/`appendPlugins` may call it. */
@@ -192,7 +192,7 @@ export type SessionStartEvent = { readonly reason: "startup" | "reload" }
 export type PluginRegisterEvent = {
   readonly plugin: string
   readonly tier: ModTier
-  /** What the module asks for, read without running it (`nikcli plugin validate` prints the same). */
+  /** What the module asks for, read without running it (`ragu plugin validate` prints the same). */
   readonly uses: {
     readonly hooks: readonly string[]
     readonly calls: readonly string[]
@@ -219,7 +219,7 @@ export type CommandRunEvent = {
   readonly name: string
   readonly arguments: string
   readonly sessionID: string
-  /** `mod` for a command a mod registered, `template` for one nikcli expands into a prompt. */
+  /** `mod` for a command a mod registered, `template` for one ragu expands into a prompt. */
   readonly kind: "template" | "mod"
 }
 export type CommandRunResult = { text?: string } | Record<string, unknown>
@@ -261,7 +261,7 @@ export type ModSurface = "terminal" | "mobile" | "desktop" | "ade"
 export type UiRenderEvent = {
   /**
    * `AbovePrompt` and `Pane` are drawn by mods alone. `ToolUse` (a tool call's row), `UserMessage`,
-   * `AssistantMessage` and `Spinner` (the reasoning line) are drawn by nikcli: answer `{ tree }` to
+   * `AssistantMessage` and `Spinner` (the reasoning line) are drawn by ragu: answer `{ tree }` to
    * replace one, or pass a changed `props` (`Spinner` takes `props.word`) to adjust it.
    */
   readonly component: "AbovePrompt" | "Pane" | "ToolUse" | "UserMessage" | "AssistantMessage" | "Spinner"
@@ -398,7 +398,7 @@ export interface ModApi {
     list(): { name: string; description?: string }[]
   }
   readonly tool: {
-    /** Add a tool the model can call. `args` are zod fields, as for `tool()` from `@nikcli-ai/plugin/tool`. */
+    /** Add a tool the model can call. `args` are zod fields, as for `tool()` from `@ragu/plugin/tool`. */
     register(input: {
       name: string
       description: string
@@ -454,19 +454,19 @@ export interface ModApi {
     classify(text: string, labels: string[], options?: { model?: string }): Promise<string | undefined>
   }
   readonly settings: {
-    /** The resolved nikcli config. Values under keys that name a secret (key, token, password, ...) are redacted. */
+    /** The resolved ragu config. Values under keys that name a secret (key, token, password, ...) are redacted. */
     read(): Promise<Record<string, unknown>>
   }
   readonly mcp: {
     /** Call a tool of a connected MCP server. It asks permission like the model's own call does. */
     call(server: string, tool: string, args?: Record<string, unknown>): Promise<unknown>
-    /** Connect an MCP server your nikcli config lists. */
+    /** Connect an MCP server your ragu config lists. */
     connect(server: string): Promise<void>
   }
   readonly agent: {
     list(): Promise<{ name: string; description?: string; mode?: string }[]>
   }
-  /** Only nikcli and its built-in mods ever send a record: for an installed mod these do nothing. */
+  /** Only ragu and its built-in mods ever send a record: for an installed mod these do nothing. */
   readonly telemetry: { log(record?: unknown): void; mark(feature?: string): void }
   readonly env: { get(name: string): Promise<string | undefined>; set(name: string, value: string): Promise<void> }
   readonly fs: {

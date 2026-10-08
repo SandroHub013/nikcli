@@ -2,7 +2,7 @@ import { onMount } from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { clone } from "remeda"
 import { createSimpleContext } from "../../context/helper"
-import { PromptStashStore, type StashEntry as StoredStashEntry } from "@nikcli-ai/util/prompt-stash"
+import { PromptStashStore, type StashEntry as StoredStashEntry } from "@ragu/util/prompt-stash"
 import type { PromptInfo } from "./history"
 
 /**

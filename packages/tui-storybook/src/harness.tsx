@@ -11,7 +11,7 @@ import { RGBA } from "@opentui/core"
  *
  * Deliberately not the real providers. `SyncProvider` bootstraps against the
  * server and `KVProvider` reads the user's `kv.json`, so mounting them here
- * would make a story depend on a running nikcli and on whatever the person last
+ * would make a story depend on a running ragu and on whatever the person last
  * did in the app — the two things a storybook exists to remove. `ThemeProvider`
  * additionally resolves the *active* theme, while the whole point here is to
  * drive it.

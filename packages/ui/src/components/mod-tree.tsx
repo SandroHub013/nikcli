@@ -20,8 +20,8 @@ export * from "./mod-tree-model"
 /**
  * Draws what a mod answered with, as DOM.
  *
- * Mods run in the nikcli server and answer `POST /mod/ui/render` with an element tree: plain data,
- * already checked against the server's limits (`packages/nikcli/src/mod/ui.ts`). The terminal draws
+ * Mods run in the ragu server and answer `POST /mod/ui/render` with an element tree: plain data,
+ * already checked against the server's limits (`packages/ragu/src/mod/ui.ts`). The terminal draws
  * it with cells, the phone with native views, and the desktop and ADE with this. The same mod serves
  * all of them and tells them apart by the `surface` each one sends, so it can answer with a layout
  * made for the window it is drawing in. Nothing in a tree runs here: a `Button` carries a `key` and

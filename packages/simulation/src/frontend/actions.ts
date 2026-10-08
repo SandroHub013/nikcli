@@ -109,7 +109,7 @@ export async function screenshot(harness: Harness, name?: string) {
   if (!filename || filename.includes("/") || filename.includes("\\") || extname(filename)) {
     throw new Error("screenshot name must not contain a path or extension")
   }
-  const directory = resolve(process.env.NIKCLI_DRIVE_MEDIA_DIR ?? join(tmpdir(), "nikcli-drive", "output"))
+  const directory = resolve(process.env.RAGU_DRIVE_MEDIA_DIR ?? join(tmpdir(), "ragu-drive", "output"))
   await mkdir(directory, { recursive: true })
   const path = join(directory, `${filename}.png`)
   await Bun.write(path, image.data)

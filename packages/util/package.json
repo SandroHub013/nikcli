@@ -1,5 +1,5 @@
 {
-  "name": "@nikcli-ai/util",
+  "name": "@ragu/util",
   "version": "1.431.0",
   "type": "module",
   "license": "MIT",
@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@nikcli-ai/remote": "workspace:*",
+    "@ragu/remote": "workspace:*",
     "@silvia-odwyer/photon-node": "0.3.4",
     "effect": "4.0.0-rc.112",
     "jsonc-parser": "3.3.1",

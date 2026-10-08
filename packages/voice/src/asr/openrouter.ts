@@ -15,7 +15,7 @@
 
 import { markVoice } from "../timing"
 import { plainProblem } from "../effect/errors"
-import { t as tr } from "@nikcli-ai/ade/i18n"
+import { t as tr } from "@ragu/ade/i18n"
 import type {
   FinalTranscriptCallback,
   PartialTranscriptCallback,

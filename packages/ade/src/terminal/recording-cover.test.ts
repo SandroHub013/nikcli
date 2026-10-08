@@ -21,10 +21,10 @@ const FAKE_OPAQUE = "Zm9vYmFyMTIzNDU2Nzg5MGFiY2RlZmdoaWprbG1u"
 describe("rowIsClean (D68)", () => {
   const clean = [
     "npm test",
-    String.raw`C:\Users\39349\Favorites\nikcli-ade-d68>`,
+    String.raw`C:\Users\39349\Favorites\ragu-ade-d68>`,
     "a1b2c3d fix(ade): copy on release",
     "e7d49246f fix(ade): the main window navigates to ADE's own page only",
-    String.raw`C:\Users\39349\Favorites\nikcli-ade-d68\packages\ade\src\terminal\recording-cover.ts`,
+    String.raw`C:\Users\39349\Favorites\ragu-ade-d68\packages\ade\src\terminal\recording-cover.ts`,
     "normale",
     "",
   ]

@@ -31,7 +31,7 @@ new sst.x.DevCommand("Studio", {
   },
 })
 
-const authIssuer = process.env.NIKCLI_AUTH_ISSUER || "https://auth.nikcli-ai.dev"
+const authIssuer = process.env.RAGU_AUTH_ISSUER || "https://auth.nikcli-ai.dev"
 
 ////////////////
 // GATEWAY
@@ -68,7 +68,7 @@ export const stripeWebhook = new stripe.WebhookEndpoint("StripeWebhookEndpoint",
 })
 
 const zenProduct = new stripe.Product("ZenBlack", {
-  name: "Nikcli Black",
+  name: "Ragu Black",
 })
 new stripe.Price("ZenBlackPrice", {
   product: zenProduct.id,

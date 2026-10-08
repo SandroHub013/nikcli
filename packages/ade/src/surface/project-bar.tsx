@@ -6,8 +6,8 @@ export interface ProjectBarProps {
   project?: Project
   /** ADE's own version, the one the bar names: the user is looking at ADE. */
   adeVersion?: string
-  /** The nikcli new sessions start with. Not in the text: it is in the tooltip, where it is asked for. */
-  nikcliVersion?: string
+  /** The ragu new sessions start with. Not in the text: it is in the tooltip, where it is asked for. */
+  raguVersion?: string
   /** The sessions open in this project. */
   sessions: number
 }
@@ -16,7 +16,7 @@ export interface ProjectBarProps {
  * Which project ADE is pointed at, in the top bar.
  *
  * Two weights (DS-polish, closure 8): the name, and one line of facts under
- * the bar's voice — which nikcli, whether agents are isolated, how many
+ * the bar's voice — which ragu, whether agents are isolated, how many
  * sessions. The "senza isolamento" mark is the one that matters: outside a
  * git repository there are no worktrees to hand out, so every agent edits the
  * user's own files. It keeps its red, as a dot, not as a pink chip.
@@ -26,7 +26,7 @@ export interface ProjectBarProps {
  */
 export function ProjectBar(props: ProjectBarProps) {
   // «ADE 1.2.3»: the name already says what the number is, the «v» is noise. This is ADE's
-  // version because the bar is ADE's; the nikcli one is in the tooltip below.
+  // version because the bar is ADE's; the ragu one is in the tooltip below.
   const version = () => props.adeVersion?.replace(/^v(?=\d)/, "")
   const facts = (project: Project) =>
     [
@@ -38,19 +38,19 @@ export function ProjectBar(props: ProjectBarProps) {
     <Show when={props.project}>
       {(project) => (
         <div data-slot="ade-project">
-          <Show when={project().name && project().name.toLowerCase() !== "nikcli"}>
+          <Show when={project().name && project().name.toLowerCase() !== "ragu"}>
             <span data-slot="ade-project-name" title={project().name}>
               {project().name}
             </span>
           </Show>
           <span data-slot="ade-project-meta">
-            {/* Nothing at all when nikcli is absent or would not say: an empty
+            {/* Nothing at all when ragu is absent or would not say: an empty
                 space is the correct report. */}
             <Show when={version()}>
               {(shown) => (
                 <span
                   data-slot="ade-meta-item"
-                  title={props.nikcliVersion ? t("bar.nikcliVersion", props.nikcliVersion) : undefined}
+                  title={props.raguVersion ? t("bar.raguVersion", props.raguVersion) : undefined}
                 >
                   {t("bar.meta.ade", shown())}
                 </span>

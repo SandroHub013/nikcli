@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 import { admitProject, configGrant, projectSurface, type ProjectFs } from "./project-trust"
 import { t } from "../i18n"
 import { memoryTrustStore } from "./trust"
 
 /*
- * B3b (review B3, M2): every nikcli turn runs in the project, and nikcli loads
+ * B3b (review B3, M2): every ragu turn runs in the project, and ragu loads
  * the project's configuration: `nikcli.json`, and `.nikcli/` with its plugins
  * and tools — code, run at start — and a `package.json` whose scripts
  * `bun install` runs. That is trust in the project, not in a bot: asked once
@@ -58,17 +58,17 @@ const generated = {
   [`${ROOT}/.nikcli/package.json`]: '{"dependencies":{"@nikcli-ai/plugin":"1.384.0"}}',
   [`${ROOT}/.nikcli/.gitignore`]: "node_modules\npackage.json\nbun.lock\n.gitignore",
   [`${ROOT}/.nikcli/bun.lock`]: "{}",
-  [`${ROOT}/.nikcli/node_modules/@nikcli-ai/plugin/index.js`]: "export {}",
+  [`${ROOT}/.nikcli/node_modules/@ragu/plugin/index.js`]: "export {}",
 }
 
-describe("la fiducia nel progetto, per i turni nikcli", () => {
-  test("un progetto senza configurazione di nikcli non chiede niente", async () => {
+describe("la fiducia nel progetto, per i turni ragu", () => {
+  test("un progetto senza configurazione di ragu non chiede niente", async () => {
     const s = setup({ [`${ROOT}/src/a.ts`]: "x" })
     expect(await admitProject(ROOT, s.deps)).toEqual({ ok: true })
     expect(s.asked).toHaveLength(0)
   })
 
-  test("quello che nikcli scrive da sé in .nikcli non conta", async () => {
+  test("quello che ragu scrive da sé in .nikcli non conta", async () => {
     const s = setup(generated)
     expect(await projectSurface(ROOT, s.fs)).toEqual([])
     expect(await admitProject(ROOT, s.deps)).toEqual({ ok: true })
@@ -125,7 +125,7 @@ describe("la fiducia nel progetto, per i turni nikcli", () => {
     expect(paths.some((path) => path.includes("node_modules"))).toBe(false)
   })
 
-  test("il plugin che nikcli aggiunge al package.json non fa richiedere", async () => {
+  test("il plugin che ragu aggiunge al package.json non fa richiedere", async () => {
     const s = setup({ [`${ROOT}/.nikcli/plugin/a.ts`]: "x", [`${ROOT}/.nikcli/package.json`]: "{}" }, [true])
     await admitProject(ROOT, s.deps)
     s.fs.files[`${ROOT}/.nikcli/package.json`] = '{"dependencies":{"@nikcli-ai/plugin":"1.384.0"}}'
@@ -175,7 +175,7 @@ describe("la fiducia nel progetto, per i turni nikcli", () => {
 /*
  * B8c: a project's `nikcli.json` can grant a bot what its file does not:
  * `agent.<name>` is merged with the bot's file. The gateway does not start a
- * nikcli bot with such a grant (`gateway/policy.ts`); in the panel its
+ * ragu bot with such a grant (`gateway/policy.ts`); in the panel its
  * session's rules on ADE's server come after it (B8d).
  */
 describe("i permessi concessi dal nikcli.json del progetto", () => {
@@ -227,7 +227,7 @@ describe("i permessi concessi dal nikcli.json del progetto", () => {
     )
     expect(checks).not.toContain("grantProblem")
     expect(checks).toMatch(
-      /const nikcli = runnerById\(trusted\.runner\)\.id === "nikcli"[\s\S]*if \(root && nikcli\) \{\s*const project = await admitProject\(/,
+      /const ragu = runnerById\(trusted\.runner\)\.id === "ragu"[\s\S]*if \(root && ragu\) \{\s*const project = await admitProject\(/,
     )
     // The panel's turn and a routine's run (B11) both pass there before they start.
     const start = view.slice(view.indexOf("const start = async"), view.indexOf("return turns.send(verdict.bot"))
@@ -238,12 +238,12 @@ describe("i permessi concessi dal nikcli.json del progetto", () => {
 })
 
 /*
- * Full review 2026-10-06, bots 6: nikcli looks for `nikcli.json` and `.nikcli/` from the folder it
+ * Full review 2026-10-06, bots 6: ragu looks for `nikcli.json` and `.nikcli/` from the folder it
  * runs in up to the worktree root (the git root; outside git, the root of the disk). A project
  * opened below that, or a folder with no git of its own, runs what its ancestors bring, and the
  * trust question only looked at the folder itself.
  */
-describe("la fiducia guarda anche le cartelle superiori, come nikcli", () => {
+describe("la fiducia guarda anche le cartelle superiori, come ragu", () => {
   const SUB = "C:/work/app/sub"
 
   test("una cartella con un .nikcli sopra di sé, dentro lo stesso repository: il plugin entra nell'impronta", async () => {
@@ -267,7 +267,7 @@ describe("la fiducia guarda anche le cartelle superiori, come nikcli", () => {
     expect(surface.map((file) => file.path)).toEqual(["../../../.nikcli/plugin/evil.ts", "../nikcli.jsonc"])
   })
 
-  test("sopra la radice del repository non si guarda: nikcli lì si ferma", async () => {
+  test("sopra la radice del repository non si guarda: ragu lì si ferma", async () => {
     const fs = fakeFs({
       "C:/work/app/.git/HEAD": "ref",
       "C:/work/.nikcli/plugin/evil.ts": "export default {}",

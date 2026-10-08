@@ -1,5 +1,5 @@
-import { Select } from "@nikcli-ai/ui/select"
-import { showToast } from "@nikcli-ai/ui/toast"
+import { Select } from "@ragu/ui/select"
+import { showToast } from "@ragu/ui/toast"
 import { Component, For, createMemo, type JSX } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"

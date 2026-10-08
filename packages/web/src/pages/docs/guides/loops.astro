@@ -23,7 +23,7 @@ const toc = [
 <DocsLayout
   title="Automating with loops"
   subtitle="A loop is a staged, repeatable piece of agent work with its own budget, isolation and schedule — defined once and driven from the API."
-  description="Guide to nikcli loops: defining stages, triggers, token budgets, worktree and sandbox isolation, running and aborting, and reading run history."
+  description="Guide to ragu loops: defining stages, triggers, token budgets, worktree and sandbox isolation, running and aborting, and reading run history."
   toc={toc}
 >
   <section id="what" class="doc-section">
@@ -214,9 +214,9 @@ console.log(draft?.stages.map((stage) => stage.objective))`}</DocCode>
 
   <section id="complete" class="doc-section">
     <h2>A nightly QA loop</h2>
-    <DocCode language="ts" title="setup-nightly-qa.ts">{`import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
+    <DocCode language="ts" title="setup-nightly-qa.ts">{`import { createRaguClient } from "@ragu/sdk/httpapi"
 
-const client = createNikcliClient({
+const client = createRaguClient({
   baseUrl: "http://127.0.0.1:4096",
   directory: process.cwd(),
 })

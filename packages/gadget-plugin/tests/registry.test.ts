@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import path from "node:path"
-import { GadgetError, LIMITS } from "@nikcli-ai/gadget/protocol"
+import { GadgetError, LIMITS } from "@ragu/gadget/protocol"
 import { Registry } from "../src/registry.ts"
 import { FINGERPRINT, FakeFeed, hello, online, rejection, tempDir, throws } from "./helpers.ts"
 

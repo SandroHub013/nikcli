@@ -111,7 +111,7 @@ export function instanceProcesses(
     const exe = norm(row.exe)
     if (cmd.includes(config) || cmd.includes(profile)) return true
     if (exe.startsWith(`${target}/`)) return true
-    // `${tree}/`: `nikcli-ade` is a prefix of `nikcli-ade-testapp`.
+    // `${tree}/`: `ragu-ade` is a prefix of `ragu-ade-testapp`.
     return port !== undefined && cmd.includes(`${tree}/`) && cmd.includes("vite") && cmd.includes(`--port ${port}`)
   }
 

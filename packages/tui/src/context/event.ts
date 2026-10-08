@@ -1,4 +1,4 @@
-import type { Event } from "@nikcli-ai/sdk/httpapi"
+import type { Event } from "@ragu/sdk/httpapi"
 import { useSDK } from "./sdk"
 
 export function useEvent() {

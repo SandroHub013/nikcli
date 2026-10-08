@@ -1,0 +1,196 @@
+#!/usr/bin/env bun
+
+// Import via the package's public `exports` map (./bun-plugin) so module
+// resolution works regardless of the install linker (isolated on macOS/Linux,
+// hoisted on Windows). The relative "../node_modules/..." path breaks under
+// hoisted linking because the package is hoisted to the repo root, not kept
+// under packages/ragu/node_modules/.
+import solidPlugin from "@opentui/solid/bun-plugin"
+import path from "path"
+import { $ } from "bun"
+import { fileURLToPath } from "url"
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const dir = path.resolve(__dirname, "..")
+
+process.chdir(dir)
+
+import pkg from "../package.json"
+import { Script, signDarwinBinary } from "@ragu/script"
+
+const singleFlag = process.argv.includes("--single")
+const skipInstall = process.argv.includes("--skip-install")
+const sourcemapsFlag = process.argv.includes("--sourcemaps")
+
+// The commit this binary is compiled from, baked in the same way as the version.
+//
+// RAGU_REVISION comes first because the image that builds for Railway has no .git — the deploy
+// script writes the commit into the upload context and Dockerfile.serve passes it here. A local
+// checkout falls back to git, and anything else honestly reports "local" rather than guessing.
+// `.nothrow()` covers both a missing git and a directory that is not a repository.
+const revision = await (async () => {
+  const fromEnv = process.env["RAGU_REVISION"]?.trim()
+  if (fromEnv) return fromEnv
+  const fromGit = await $`git rev-parse HEAD`.nothrow().quiet().text()
+  return fromGit.trim() || "local"
+})()
+
+const allTargets: {
+  os: string
+  arch: "arm64" | "x64"
+  abi?: "musl"
+}[] = [
+  {
+    os: "linux",
+    arch: "arm64",
+  },
+  {
+    os: "linux",
+    arch: "x64",
+  },
+  {
+    os: "linux",
+    arch: "arm64",
+    abi: "musl",
+  },
+  {
+    os: "linux",
+    arch: "x64",
+    abi: "musl",
+  },
+  {
+    os: "darwin",
+    arch: "arm64",
+  },
+  {
+    os: "darwin",
+    arch: "x64",
+  },
+  {
+    os: "win32",
+    arch: "arm64",
+  },
+  {
+    os: "win32",
+    arch: "x64",
+  },
+]
+
+// OpenTUI resolves its tree-sitter worker through `import("@opentui/core/parser.worker",
+// { with: { type: "file" } })` and expects a *path* back. Handing the real
+// node_modules/@opentui/core/parser.worker.js to `entrypoints` made Bun compile that
+// module as code, so the asset import returned a JS namespace whose `default` is
+// undefined and OpenTUI died on `loadedPath.startsWith(...)` during module evaluation —
+// i.e. every TUI launch, while `--version`/`--help` (which never touch @opentui/core)
+// kept working. Embed the worker source as a virtual file instead, exactly like the
+// upstream opencode build, so it compiles to a stable flat path inside bunfs that the
+// OTUI_TREE_SITTER_WORKER_PATH define below can point at.
+const treeSitterWorker = await Bun.file(fileURLToPath(import.meta.resolve("@opentui/core/parser.worker"))).text()
+const treeSitterWorkerPath = "opentui-tree-sitter-worker.js"
+
+const targets = singleFlag
+  ? allTargets.filter((item) => {
+      if (item.os !== process.platform || item.arch !== process.arch) {
+        return false
+      }
+
+      // Bun 1.4 x64 is baseline-only, so there is no separate avx2 artifact.
+      // also skip abi-specific builds for the same reason
+      if (item.abi !== undefined) {
+        return false
+      }
+
+      return true
+    })
+  : allTargets
+
+await $`rm -rf dist`
+
+const binaries: Record<string, string> = {}
+// These two installs exist so a cross-platform build has every platform's
+// native binaries on disk. A --single build targets the current platform only,
+// whose natives the ordinary workspace install already provided — and re-running
+// install here relinks node_modules with the default linker, which breaks a
+// workspace installed with --linker hoisted (Windows CI): @opentui/solid's
+// nested @babel/core then cannot resolve @babel/helper-compilation-targets.
+if (!skipInstall && !singleFlag) {
+  // `process.execPath`, not the bare name: `bun run` puts node_modules/.bin
+  // first on PATH, and the `bun` npm package in the tree puts a `bun` shim
+  // there. Under the hoisted linker Windows CI uses, that shim wins the lookup
+  // and dies with "Bun failed to remap this bin to its proper location".
+  const bun = process.execPath
+  await $`${bun} install --os="*" --cpu="*" @opentui/core@${pkg.dependencies["@opentui/core"]}`
+  await $`${bun} install --os="*" --cpu="*" @parcel/watcher@${pkg.dependencies["@parcel/watcher"]}`
+}
+for (const item of targets) {
+  const name = [
+    pkg.name,
+    // changing to win32 flags npm for some reason
+    item.os === "win32" ? "windows" : item.os,
+    item.arch,
+    item.abi === undefined ? undefined : item.abi,
+  ]
+    .filter(Boolean)
+    .join("-")
+  console.log(`building ${name}`)
+  await $`mkdir -p dist/${name}/bin`
+
+  const workerPath = "./src/cli/cmd/tui/worker.ts"
+
+  // Use platform-specific bunfs root path based on target OS
+  const bunfsRoot = item.os === "win32" ? "B:/~BUN/root/" : "/$bunfs/root/"
+
+  await Bun.build({
+    conditions: ["browser"],
+    tsconfig: "./tsconfig.json",
+    plugins: [solidPlugin],
+    sourcemap: sourcemapsFlag ? "linked" : "none",
+    compile: {
+      autoloadBunfig: false,
+      autoloadDotenv: false,
+      //@ts-ignore (bun types aren't up to date)
+      autoloadTsconfig: true,
+      autoloadPackageJson: true,
+      // SAFETY: the `@ts-ignore` above says it — bun's published types lag the
+      // runtime, so the compile-target union they declare is narrower than the
+      // targets `Bun.build` actually accepts.
+      target: name.replace(pkg.name, "bun") as any,
+      outfile: `dist/${name}/bin/ragu`,
+      execArgv: [`--user-agent=ragu/${Script.version}`, "--use-system-ca", "--"],
+      windows: {},
+    },
+    files: {
+      [treeSitterWorkerPath]: treeSitterWorker,
+    },
+    entrypoints: ["./src/index.ts", treeSitterWorkerPath, workerPath],
+    define: {
+      RAGU_VERSION: `'${Script.version}'`,
+      OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + treeSitterWorkerPath,
+      RAGU_WORKER_PATH: workerPath,
+      RAGU_CHANNEL: `'${singleFlag ? "local" : Script.channel}'`,
+      RAGU_REVISION: `'${revision}'`,
+      RAGU_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
+    },
+  })
+
+  await $`rm -rf ./dist/${name}/bin/tui`
+  if (item.os === "darwin") await signDarwinBinary(`dist/${name}/bin/ragu`)
+  const binaryName = item.os === "win32" ? "ragu.exe" : "ragu"
+  await Bun.file(`dist/${name}/package.json`).write(
+    JSON.stringify(
+      {
+        name,
+        version: Script.version,
+        os: [item.os],
+        cpu: [item.arch],
+        files: [`bin/${binaryName}`],
+      },
+      null,
+      2,
+    ),
+  )
+  binaries[name] = Script.version
+}
+
+export { binaries }

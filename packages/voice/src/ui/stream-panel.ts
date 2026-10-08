@@ -9,7 +9,7 @@
  * `mai-panel.ts`.
  */
 
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 import type { StreamState } from "../asr/grok-stream"
 import type { TranscriberBackend } from "../asr/select"
 import { formatSpendCost, type DaySpend } from "../settings/spend"

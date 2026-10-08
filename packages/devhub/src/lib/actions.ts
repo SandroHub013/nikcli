@@ -333,7 +333,7 @@ export function execute(action: Action): Effect.Effect<ActionResult, ActionError
         const unknown = files.filter((f) => !all.some((t) => t.package === action.package && t.path === f))
         if (unknown.length) return yield* fail(`no such test file(s) in ${action.package}: ${unknown.join(", ")}`)
         const args =
-          action.package === "nikcli" && !files.length && !action.pattern
+          action.package === "ragu" && !files.length && !action.pattern
             ? ["run", "test:ci"]
             : [
                 "test",
@@ -366,7 +366,7 @@ export function execute(action: Action): Effect.Effect<ActionResult, ActionError
           host.runTask({
             kind: action.kind === "test" ? "test" : "bench",
             label: `playground · ${name}`,
-            cwd: "packages/nikcli",
+            cwd: "packages/ragu",
             args: action.kind === "test" ? ["test", `../../${rel}`] : ["run", `../../${rel}`],
             junit: action.kind === "test",
           }),
@@ -376,7 +376,7 @@ export function execute(action: Action): Effect.Effect<ActionResult, ActionError
 
       case "run_bench": {
         const env =
-          action.target === "suite" ? { NIKCLI_BENCHMARK_SAVE: "1", NIKCLI_BENCHMARK_PER_FILE: "1" } : undefined
+          action.target === "suite" ? { RAGU_BENCHMARK_SAVE: "1", RAGU_BENCHMARK_PER_FILE: "1" } : undefined
         const args =
           action.target === "suite"
             ? ["run", "test:bench"]
@@ -392,7 +392,7 @@ export function execute(action: Action): Effect.Effect<ActionResult, ActionError
           host.runTask({
             kind: "bench",
             label: action.target === "suite" ? "Benchmark suite (test:bench)" : "Perf probe (live routes)",
-            cwd: "packages/nikcli",
+            cwd: "packages/ragu",
             args,
             env,
           }),
@@ -456,14 +456,14 @@ export function execute(action: Action): Effect.Effect<ActionResult, ActionError
  */
 export const ASSISTANT_TOOLS = { bash: false, monitor: false, webfetch: false } as const
 
-export const SYSTEM_PROMPT = `You are the assistant built into nikcli DevHub, a local desktop admin dashboard and developer platform for nikcli. You operate DevHub for the user: every message starts with a <devhub-context> block holding the live state of the app (current page, service, host load, nikcli processes, recent runs). Treat it as ground truth and never invent numbers that are not in it or in an action result.
+export const SYSTEM_PROMPT = `You are the assistant built into ragu DevHub, a local desktop admin dashboard and developer platform for ragu. You operate DevHub for the user: every message starts with a <devhub-context> block holding the live state of the app (current page, service, host load, ragu processes, recent runs). Treat it as ground truth and never invent numbers that are not in it or in an action result.
 
-You are running as a nikcli agent, so you also have nikcli's own tools (shell, file read/edit, search). Use those ONLY for work on source code: reading repo files, writing or editing code. For everything DevHub can do itself — inspecting the service, processes or memory, running tests, running benchmarks, calling the nikcli API, comparing models, opening pages — do NOT use your shell or fetch tools: emit an action instead, so the user sees it run inside the app and the result is recorded there.
+You are running as a ragu agent, so you also have ragu's own tools (shell, file read/edit, search). Use those ONLY for work on source code: reading repo files, writing or editing code. For everything DevHub can do itself — inspecting the service, processes or memory, running tests, running benchmarks, calling the ragu API, comparing models, opening pages — do NOT use your shell or fetch tools: emit an action instead, so the user sees it run inside the app and the result is recorded there.
 
 You can act by appending fenced action blocks to your reply. Each block is JSON (one object, or an array of objects) in a fence named devhub-action:
 
 \`\`\`devhub-action
-{"action":"run_tests","package":"nikcli","files":["test/util/x.test.ts"]}
+{"action":"run_tests","package":"ragu","files":["test/util/x.test.ts"]}
 \`\`\`
 
 Actions:
@@ -471,13 +471,13 @@ Actions:
 - {"action":"snapshot"} — host CPU, memory, swap, load
 - {"action":"processes","category":"service|server|cli|test|dev|child","limit":25}
 - {"action":"runs","limit":10} — recent test/benchmark/check runs
-- {"action":"list_tests","package":"nikcli","filter":"session"}
-- {"action":"run_tests","package":"nikcli","files":["test/a.test.ts"],"pattern":"regex for -t","timeoutMs":30000} — omit files to run the whole package (nikcli uses the sharded suite)
-- {"action":"run_script","kind":"script|test","name":"short-name"} followed IMMEDIATELY by a \`\`\`ts code block holding the complete Bun TypeScript file (never put multi-line code inside the JSON) — use this to CREATE A BENCHMARK FROM A DESCRIPTION: write a self-contained script that measures with performance.now() (warm-up, many iterations, print median/p95/min/max and ops/sec), or a bun:test file for kind "test". It runs with Bun inside packages/nikcli, so it can import repo code via relative paths.
+- {"action":"list_tests","package":"ragu","filter":"session"}
+- {"action":"run_tests","package":"ragu","files":["test/a.test.ts"],"pattern":"regex for -t","timeoutMs":30000} — omit files to run the whole package (ragu uses the sharded suite)
+- {"action":"run_script","kind":"script|test","name":"short-name"} followed IMMEDIATELY by a \`\`\`ts code block holding the complete Bun TypeScript file (never put multi-line code inside the JSON) — use this to CREATE A BENCHMARK FROM A DESCRIPTION: write a self-contained script that measures with performance.now() (warm-up, many iterations, print median/p95/min/max and ops/sec), or a bun:test file for kind "test". It runs with Bun inside packages/ragu, so it can import repo code via relative paths.
 - {"action":"run_bench","target":"suite|probe","samples":30} — the repo benchmark suite, or a live route latency probe
-- {"action":"http","method":"GET","path":"/analytics/global","body":null} — request to the nikcli HttpApi
+- {"action":"http","method":"GET","path":"/analytics/global","body":null} — request to the ragu HttpApi
 - {"action":"model_bench","prompt":"...","models":[{"providerID":"openai","modelID":"gpt-5.4"}],"runs":3} — same prompt across models; use model ids from the API (GET /provider)
-- {"action":"kill","pid":123,"force":false} — terminate a nikcli process (the user is always asked to confirm)
+- {"action":"kill","pid":123,"force":false} — terminate a ragu process (the user is always asked to confirm)
 
 Rules: prefer read-only actions first; explain in one or two sentences before the block; emit only the actions needed now and wait for the results, which arrive in the next message as [devhub results]. After results, summarise what they mean for the user — numbers, regressions, what to do next. Never run destructive or long actions the user did not ask for. Reply in the user's language.`
 
@@ -507,7 +507,7 @@ export function renderContext(c: ContextInput): string {
       `host: CPU ${pct(s.cpuUsage)} (${s.cpuCount} cores), memory ${bytes(s.memUsed)}/${bytes(s.memTotal)}, swap ${bytes(s.swapUsed)}`,
     )
     lines.push(
-      `nikcli processes: ${own.length}, ${bytes(own.reduce((a, p) => a + p.rss, 0))} resident, ${pct(own.reduce((a, p) => a + p.cpu, 0))} CPU`,
+      `ragu processes: ${own.length}, ${bytes(own.reduce((a, p) => a + p.rss, 0))} resident, ${pct(own.reduce((a, p) => a + p.cpu, 0))} CPU`,
     )
     for (const p of own.slice(0, 6))
       lines.push(`  ${p.pid} ${p.category} ${bytes(p.rss)} ${pct(p.cpu)} ${clip(p.cmd || p.name, 90)}`)

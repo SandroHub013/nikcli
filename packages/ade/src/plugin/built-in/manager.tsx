@@ -13,7 +13,7 @@
  * button that forgets.
  */
 import { For, Show } from "solid-js"
-import { Plugin } from "@nikcli-ai/plugin/v2/ade"
+import { Plugin } from "@ragu/plugin/v2/ade"
 import type { PluginRegistry } from "../registry"
 import type { PluginStatus } from "../runtime"
 import { contributionLabel, managerRows, managerSummary, type ManagerRow } from "./manager-rows"

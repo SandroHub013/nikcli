@@ -1,4 +1,4 @@
-import type { PaneSummary, VoiceHost, VoiceStateSnapshot } from "@nikcli-ai/voice/core"
+import type { PaneSummary, VoiceHost, VoiceStateSnapshot } from "@ragu/voice/core"
 import type { Host, SpawnedSession } from "../host/shell"
 import type { Project } from "../host/project"
 import type { RecentEntry } from "../host/recent"
@@ -185,7 +185,7 @@ export function createAdeVoiceHost(deps: AdeVoiceHostDeps): VoiceHost {
       : Promise.all([import("../bots/serve-turn"), import("../bots/warm")]).then(
           ([{ runBotTurn }, { createWarmClaude }]) =>
             createVoiceAgent({
-              // nikcli's turn runs on ADE's server (the planner's, on a free model); the others as `runTurn` runs them.
+              // ragu's turn runs on ADE's server (the planner's, on a free model); the others as `runTurn` runs them.
               runTurn: (request) => runBotTurn(request),
               warm: warmClaude(createWarmClaude()),
               planWarm: warmClaude(createWarmClaude({ idleMs: VOICE_PLAN_IDLE_MS })),

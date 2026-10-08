@@ -10,7 +10,7 @@
  * How the bot writes it: the runner is a CLI ADE does not own, so there is
  * no tool of ours inside it. The bot writes a tag in its answer instead —
  * `<ade-memory op="add" block="notes">…</ade-memory>` — which works the same
- * on nikcli, Claude Code and Codex, and needs no shell (a routine and a chat
+ * on ragu, Claude Code and Codex, and needs no shell (a routine and a chat
  * have none). ADE takes the tags out of the answer when the turn ends and
  * applies them (`takeMemoryOps`, `applyMemoryOps`).
  *

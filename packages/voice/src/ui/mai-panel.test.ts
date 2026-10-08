@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 import { maiCapped, maiOfferShown, maiRetryShown, maiSpendText, maiStatusText, type MaiPanelInput } from "./mai-panel"
 import { MAI_DAILY_CAP_USD } from "../tts/mai"
 

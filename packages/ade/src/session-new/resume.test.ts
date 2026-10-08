@@ -5,7 +5,7 @@ import { AGENTS } from "./agents"
 import { BOT_SESSION_MARK, botPermission } from "../bots/serve-rules"
 import {
   RESUME,
-  mintedNikcliId,
+  mintedRaguId,
   newSessionId,
   planMint,
   planRestore,
@@ -13,7 +13,7 @@ import {
   planStart,
   lostConversation,
   resumePromise,
-  lastNikcliHere,
+  lastRaguHere,
   lastTakenFor,
   planLastHere,
   LAST_HERE_LIMIT,
@@ -63,7 +63,7 @@ describe("planStart", () => {
      * back would make the pane claim a precision ADE does not have: the
      * restore would look exact and would in fact be "whatever was last".
      */
-    for (const id of ["codex", "opencode", "nikcli", "hermes", "terminal"]) {
+    for (const id of ["codex", "opencode", "ragu", "hermes", "terminal"]) {
       const plan = planStart(id, "ignored")
       expect([id, plan.args]).toEqual([id, []])
       expect([id, plan.resumeId]).toEqual([id, undefined])
@@ -116,8 +116,8 @@ describe("planResume", () => {
   })
 
   test("Claude Code's transcript is looked for where Claude Code writes it", () => {
-    const path = RESUME["claude-code"]!.transcript!("C:\\Users\\me", "C:\\Users\\me\\Favorites\\nikcli", "abc")
-    expect(path).toBe("C:\\Users\\me\\.claude\\projects\\C--Users-me-Favorites-nikcli\\abc.jsonl")
+    const path = RESUME["claude-code"]!.transcript!("C:\\Users\\me", "C:\\Users\\me\\Favorites\\ragu", "abc")
+    expect(path).toBe("C:\\Users\\me\\.claude\\projects\\C--Users-me-Favorites-ragu\\abc.jsonl")
     expect(RESUME["claude-code"]!.transcript!("/home/me/", "/w/a.b", "x")).toBe(
       "/home/me/.claude/projects/-w-a-b/x.jsonl",
     )
@@ -129,10 +129,10 @@ describe("planResume", () => {
     const latest = RESUME.agy!.latest!
     const text = JSON.stringify({
       "C:\\Users\\me": "home-id",
-      "C:\\Users\\me\\Favorites\\nikcli": "nikcli-id",
+      "C:\\Users\\me\\Favorites\\ragu": "ragu-id",
     })
-    expect(latest.read(text, "C:/Users/me/Favorites/nikcli")).toBe("nikcli-id")
-    expect(latest.read(text, "c:\\users\\me\\favorites\\nikcli\\")).toBe("nikcli-id")
+    expect(latest.read(text, "C:/Users/me/Favorites/ragu")).toBe("ragu-id")
+    expect(latest.read(text, "c:\\users\\me\\favorites\\ragu\\")).toBe("ragu-id")
     expect(latest.read(text, "C:\\Users\\me\\elsewhere")).toBeUndefined()
     expect(latest.read("not json", "C:\\Users\\me")).toBeUndefined()
     expect(latest.path("C:\\Users\\me")).toBe("C:\\Users\\me\\.gemini\\antigravity-cli\\cache\\last_conversations.json")
@@ -155,11 +155,11 @@ describe("planResume", () => {
     })
   })
 
-  test("nikcli without an id asks for this folder's latest, never --continue", () => {
+  test("ragu without an id asks for this folder's latest, never --continue", () => {
     // `--continue` is the whole project's latest: in a git repository, another worktree's.
-    expect(planResume({ agentId: "nikcli" })).toEqual({ kind: "here" })
-    expect(RESUME["nikcli"]!.last).toBeUndefined()
-    expect(planResume({ agentId: "nikcli", lastTaken: true })).toEqual({ kind: "fresh" })
+    expect(planResume({ agentId: "ragu" })).toEqual({ kind: "here" })
+    expect(RESUME["ragu"]!.last).toBeUndefined()
+    expect(planResume({ agentId: "ragu", lastTaken: true })).toEqual({ kind: "fresh" })
   })
 })
 
@@ -209,15 +209,15 @@ describe("the most recent conversation, when one pane is reopened", () => {
     ...(resumeId ? { resumeId } : {}),
   })
 
-  test("nikcli: a pane in another folder, or one holding its own id, does not take it (prove dal vivo 2, B)", () => {
-    const mine = pane("b", "nikcli", "C:/proj")
-    const elsewhere = [pane("a", "nikcli", "C:/altro"), mine]
+  test("ragu: a pane in another folder, or one holding its own id, does not take it (prove dal vivo 2, B)", () => {
+    const mine = pane("b", "ragu", "C:/proj")
+    const elsewhere = [pane("a", "ragu", "C:/altro"), mine]
     expect(lastTakenFor(mine, elsewhere)).toBe(false)
-    expect(planResume({ agentId: "nikcli", lastTaken: lastTakenFor(mine, elsewhere) })).toEqual({ kind: "here" })
-    // A pane with its id is left out of nikcli's answer already.
-    expect(lastTakenFor(mine, [pane("a", "nikcli", "C:/proj", "ses_1"), mine])).toBe(false)
+    expect(planResume({ agentId: "ragu", lastTaken: lastTakenFor(mine, elsewhere) })).toEqual({ kind: "here" })
+    // A pane with its id is left out of ragu's answer already.
+    expect(lastTakenFor(mine, [pane("a", "ragu", "C:/proj", "ses_1"), mine])).toBe(false)
     // Two without an id in one folder, spelled two ways: the earlier one has it.
-    const both = [pane("a", "nikcli", "C:\\Proj\\"), mine]
+    const both = [pane("a", "ragu", "C:\\Proj\\"), mine]
     expect(lastTakenFor(mine, both)).toBe(true)
     expect(lastTakenFor(both[0]!, both)).toBe(false)
   })
@@ -226,7 +226,7 @@ describe("the most recent conversation, when one pane is reopened", () => {
     const mine = pane("b", "claude-code", "C:/proj")
     expect(lastTakenFor(mine, [pane("a", "claude-code", "C:/proj", "id-1"), mine])).toBe(true)
     expect(lastTakenFor(mine, [pane("a", "claude-code", "C:/altro"), mine])).toBe(false)
-    expect(lastTakenFor(mine, [pane("a", "nikcli", "C:/proj"), mine])).toBe(false)
+    expect(lastTakenFor(mine, [pane("a", "ragu", "C:/proj"), mine])).toBe(false)
   })
 })
 
@@ -248,51 +248,51 @@ describe("the table and the catalogue", () => {
   })
 })
 
-describe("asking nikcli for a conversation", () => {
+describe("asking ragu for a conversation", () => {
   test("the id is read out of what the command printed, noise and all", () => {
     const printed = [
       "\u001b[33mwarn\u001b[0m service starting",
       "{",
       '  "id": "ses_f3bdf150dffey1rNNrCSDNsBKu",',
       '  "slug": "neon-mountain",',
-      '  "directory": "C:\\\\Users\\\\39349\\\\Favorites\\\\nikcli-ade-s60"',
+      '  "directory": "C:\\\\Users\\\\39349\\\\Favorites\\\\ragu-ade-s60"',
       "}",
     ].join("\r\n")
-    expect(mintedNikcliId(printed)).toBe("ses_f3bdf150dffey1rNNrCSDNsBKu")
+    expect(mintedRaguId(printed)).toBe("ses_f3bdf150dffey1rNNrCSDNsBKu")
   })
 
   test("half a line is not an id, and neither is somebody else's", () => {
-    expect(mintedNikcliId('{ "id": "ses_f3bdf1')).toBeUndefined()
-    expect(mintedNikcliId('{ "id": "msg_0c3e73d64001c352ZyUcYJ9leU" }')).toBeUndefined()
-    expect(mintedNikcliId("")).toBeUndefined()
+    expect(mintedRaguId('{ "id": "ses_f3bdf1')).toBeUndefined()
+    expect(mintedRaguId('{ "id": "msg_0c3e73d64001c352ZyUcYJ9leU" }')).toBeUndefined()
+    expect(mintedRaguId("")).toBeUndefined()
   })
 
   test("the command writes the conversation where the session will run", () => {
-    const plan = planMint("nikcli", "Sessione 2 — nikcli")!
+    const plan = planMint("ragu", "Sessione 2 — ragu")!
     expect(plan.args.slice(0, 2)).toEqual(["api", "session.create"])
-    expect(plan.args.at(-1)).toBe(JSON.stringify({ title: "Sessione 2 — nikcli" }))
+    expect(plan.args.at(-1)).toBe(JSON.stringify({ title: "Sessione 2 — ragu" }))
     expect(plan.read('{ "id": "ses_aaaaaaaaaaaa" }')).toBe("ses_aaaaaaaaaaaa")
   })
 
   test("only the CLIs that need it are asked; the others are not started twice", () => {
-    expect(planMint("nikcli", "t")).toBeDefined()
+    expect(planMint("ragu", "t")).toBeDefined()
     for (const id of ["claude-code", "codex", "agy", "opencode", "terminal"]) {
       expect([id, planMint(id, "t")]).toEqual([id, undefined])
     }
   })
 
-  test("with an id of its own, nikcli is pinned like Claude Code", () => {
-    expect(planResume({ agentId: "nikcli", resumeId: "ses_one" })).toEqual({
+  test("with an id of its own, ragu is pinned like Claude Code", () => {
+    expect(planResume({ agentId: "ragu", resumeId: "ses_one" })).toEqual({
       kind: "resume",
       via: "id",
       args: ["--session", "ses_one"],
     })
   })
 
-  test("the bug this fixes: two nikcli sessions in one directory come back as two", () => {
+  test("the bug this fixes: two ragu sessions in one directory come back as two", () => {
     const plans = planRestore([
-      { agentId: "nikcli", cwd: "/p", resumeId: "ses_one" },
-      { agentId: "nikcli", cwd: "/p", resumeId: "ses_two" },
+      { agentId: "ragu", cwd: "/p", resumeId: "ses_one" },
+      { agentId: "ragu", cwd: "/p", resumeId: "ses_two" },
     ])
     expect(plans[0]!.plan).toEqual({ kind: "resume", via: "id", args: ["--session", "ses_one"] })
     expect(plans[1]!.plan).toEqual({ kind: "resume", via: "id", args: ["--session", "ses_two"] })
@@ -300,9 +300,9 @@ describe("asking nikcli for a conversation", () => {
 
   test("two panes saved on one conversation: only the first reopens it (review, point 1)", () => {
     const plans = planRestore([
-      { agentId: "nikcli", cwd: "/p", resumeId: "ses_one" },
-      { agentId: "nikcli", cwd: "/p", resumeId: "ses_one" },
-      { agentId: "nikcli", cwd: "/p", resumeId: "ses_one" },
+      { agentId: "ragu", cwd: "/p", resumeId: "ses_one" },
+      { agentId: "ragu", cwd: "/p", resumeId: "ses_one" },
+      { agentId: "ragu", cwd: "/p", resumeId: "ses_one" },
     ])
     expect(plans.filter((entry) => entry.plan.kind === "resume")).toHaveLength(1)
     expect(plans[0]!.plan).toEqual({ kind: "resume", via: "id", args: ["--session", "ses_one"] })
@@ -325,9 +325,9 @@ describe("asking nikcli for a conversation", () => {
 
   test("without ids, the folder's latest goes to one pane only", () => {
     const plans = planRestore([
-      { agentId: "nikcli", cwd: "/p" },
-      { agentId: "nikcli", cwd: "/p" },
-      { agentId: "nikcli", cwd: "/q" },
+      { agentId: "ragu", cwd: "/p" },
+      { agentId: "ragu", cwd: "/p" },
+      { agentId: "ragu", cwd: "/q" },
     ])
     expect(plans.map((entry) => entry.plan)).toEqual([{ kind: "here" }, { kind: "fresh" }, { kind: "here" }])
   })
@@ -335,13 +335,13 @@ describe("asking nikcli for a conversation", () => {
 
 describe("resumePromise", () => {
   test("an id of its own is the only exact promise", () => {
-    expect(resumePromise({ agentId: "nikcli", resumeId: "ses_one" })).toBe("exact")
+    expect(resumePromise({ agentId: "ragu", resumeId: "ses_one" })).toBe("exact")
     expect(resumePromise({ agentId: "claude-code", resumeId: "abc", sharedDirectory: true })).toBe("exact")
   })
 
   test("without one, the most recent here — and not even that with company", () => {
-    expect(resumePromise({ agentId: "nikcli" })).toBe("last")
-    expect(resumePromise({ agentId: "nikcli", sharedDirectory: true })).toBe("none")
+    expect(resumePromise({ agentId: "ragu" })).toBe("last")
+    expect(resumePromise({ agentId: "ragu", sharedDirectory: true })).toBe("none")
   })
 
   test("an agent ADE knows nothing about promises nothing", () => {
@@ -359,16 +359,16 @@ describe("resumePromise", () => {
     expect(resumePromise({ agentId: "terminal" })).toBe("none")
     expect(lostConversation("terminal", "none", false)).toBe(false)
     // An agent that does keep conversations still hears it.
-    expect(resumePromise({ agentId: "nikcli", sharedDirectory: true })).toBe("none")
-    expect(lostConversation("nikcli", "none", false)).toBe(true)
+    expect(resumePromise({ agentId: "ragu", sharedDirectory: true })).toBe("none")
+    expect(lostConversation("ragu", "none", false)).toBe(true)
     // And nothing is announced when the conversation was in fact reopened.
-    expect(lostConversation("nikcli", "none", true)).toBe(false)
+    expect(lostConversation("ragu", "none", true)).toBe(false)
     expect(resumePromise({ agentId: "gemini", resumeId: "x" })).toBe("none")
   })
 })
 
 /*
- * What `nikcli api session.list -d {"directory":…,"roots":true}` prints
+ * What `ragu api session.list -d {"directory":…,"roots":true}` prints
  * (1.399), under a pty: pretty JSON, most recent first. In a git repository
  * the command then stays up, so the list is read as it arrives.
  */
@@ -378,7 +378,7 @@ const session = (id: string, updated: number, extra: Record<string, unknown> = {
   slug: "stellar-forest",
   projectID: "3d5878689b15aed8d6226331fb5617dbc0082589",
   directory: HERE,
-  title: "Sessione 1 — nikcli · 9269-1-1",
+  title: "Sessione 1 — ragu · 9269-1-1",
   version: "1.399.0",
   time: { created: updated - 1000, updated },
   skills: [],
@@ -386,36 +386,36 @@ const session = (id: string, updated: number, extra: Record<string, unknown> = {
 })
 const listed = (...entries: unknown[]) => JSON.stringify(entries, null, 2).replace(/\n/g, "\r\n") + "\r\n"
 
-describe("nikcli's latest conversation in this folder", () => {
+describe("ragu's latest conversation in this folder", () => {
   const none = new Set<string>()
 
   test("the most recent of the folder, read from what the command printed", () => {
     const output = listed(session("ses_f22f7ce38ffetKaHXDQ4xUS0u0", 20), session("ses_f2303a230ffeVeq2JI9TTxJVBW", 10))
-    expect(lastNikcliHere(output, HERE, none)).toBe("ses_f22f7ce38ffetKaHXDQ4xUS0u0")
+    expect(lastRaguHere(output, HERE, none)).toBe("ses_f22f7ce38ffetKaHXDQ4xUS0u0")
     // With the other slash and case Windows hands back.
-    expect(lastNikcliHere(output, "c:/users/me/favorites/relbuild-tmp/p1-git/", none)).toBe(
+    expect(lastRaguHere(output, "c:/users/me/favorites/relbuild-tmp/p1-git/", none)).toBe(
       "ses_f22f7ce38ffetKaHXDQ4xUS0u0",
     )
   })
 
   test("a conversation another pane holds is left out", () => {
     const output = listed(session("ses_f22f7ce38ffetKaHXDQ4xUS0u0", 20), session("ses_f2303a230ffeVeq2JI9TTxJVBW", 10))
-    expect(lastNikcliHere(output, HERE, new Set(["ses_f22f7ce38ffetKaHXDQ4xUS0u0"]))).toBe(
+    expect(lastRaguHere(output, HERE, new Set(["ses_f22f7ce38ffetKaHXDQ4xUS0u0"]))).toBe(
       "ses_f2303a230ffeVeq2JI9TTxJVBW",
     )
     expect(
-      lastNikcliHere(output, HERE, new Set(["ses_f22f7ce38ffetKaHXDQ4xUS0u0", "ses_f2303a230ffeVeq2JI9TTxJVBW"])),
+      lastRaguHere(output, HERE, new Set(["ses_f22f7ce38ffetKaHXDQ4xUS0u0", "ses_f2303a230ffeVeq2JI9TTxJVBW"])),
     ).toBeNull()
   })
 
   test("another folder's, a child's, or a malformed id is never taken, even if the server let it through", () => {
     const output = listed(
-      session("ses_aaaaaaaaaaaaaaaaaaaaaaaaaa", 40, { directory: "C:\\Users\\me\\Favorites\\nikcli" }),
+      session("ses_aaaaaaaaaaaaaaaaaaaaaaaaaa", 40, { directory: "C:\\Users\\me\\Favorites\\ragu" }),
       session("ses_bbbbbbbbbbbbbbbbbbbbbbbbbb", 30, { parentID: "ses_cccccccccccccccccccccccccc" }),
       session("not-a-session", 25),
       session("ses_dddddddddddddddddddddddddd", 5),
     )
-    expect(lastNikcliHere(output, HERE, none)).toBe("ses_dddddddddddddddddddddddddd")
+    expect(lastRaguHere(output, HERE, none)).toBe("ses_dddddddddddddddddddddddddd")
   })
 
   test("a bot's conversation is never a pane's, however recent and whatever its title", () => {
@@ -430,44 +430,44 @@ describe("nikcli's latest conversation in this folder", () => {
         permission: [{ permission: "edit", pattern: "*", action: "ask" }],
       }),
     )
-    expect(lastNikcliHere(output, HERE, none)).toBe("ses_gggggggggggggggggggggggggg")
+    expect(lastRaguHere(output, HERE, none)).toBe("ses_gggggggggggggggggggggggggg")
   })
 
   test("an empty list is a final no; a list still arriving is not an answer yet", () => {
-    expect(lastNikcliHere("[]\r\n", HERE, none)).toBeNull()
+    expect(lastRaguHere("[]\r\n", HERE, none)).toBeNull()
     const whole = listed(session("ses_f22f7ce38ffetKaHXDQ4xUS0u0", 20))
-    expect(lastNikcliHere(whole.slice(0, whole.indexOf('"skills"') + 14), HERE, none)).toBeUndefined()
-    expect(lastNikcliHere("", HERE, none)).toBeUndefined()
+    expect(lastRaguHere(whole.slice(0, whole.indexOf('"skills"') + 14), HERE, none)).toBeUndefined()
+    expect(lastRaguHere("", HERE, none)).toBeUndefined()
   })
 
   test("a log line with a bracket after the list does not hide it (review, BASSO 3)", () => {
     const output = listed(session("ses_f22f7ce38ffetKaHXDQ4xUS0u0", 20)) + "[warn] plugin loaded [tui]\r\n"
-    expect(lastNikcliHere(output, HERE, none)).toBe("ses_f22f7ce38ffetKaHXDQ4xUS0u0")
-    expect(lastNikcliHere("[]\r\n[warn] x [y]\r\n", HERE, none)).toBeNull()
+    expect(lastRaguHere(output, HERE, none)).toBe("ses_f22f7ce38ffetKaHXDQ4xUS0u0")
+    expect(lastRaguHere("[]\r\n[warn] x [y]\r\n", HERE, none)).toBeNull()
   })
 
   test("a warning line above the list does not hide it", () => {
     const output = "[warn] something about plugins\r\n" + listed(session("ses_f22f7ce38ffetKaHXDQ4xUS0u0", 20))
-    expect(lastNikcliHere(output, HERE, none)).toBe("ses_f22f7ce38ffetKaHXDQ4xUS0u0")
+    expect(lastRaguHere(output, HERE, none)).toBe("ses_f22f7ce38ffetKaHXDQ4xUS0u0")
   })
 
   test("the command asks the server for this folder's root conversations", () => {
-    const plan = planLastHere("nikcli", HERE, none)!
+    const plan = planLastHere("ragu", HERE, none)!
     expect(plan.args.slice(0, 4)).toEqual(["api", "session.list", "--log-level", "warn"])
     expect(planLastHere("claude-code", HERE, none)).toBeUndefined()
   })
 
   /*
    * What reaches the server, not what ADE builds (lettura di Mimo, F2). The
-   * first test holds the line ADE builds; the second is a `lint:` on nikcli's
+   * first test holds the line ADE builds; the second is a `lint:` on ragu's
    * own handler, which is the only place the two rules it follows are written:
    * `--param` into the URL's query, `-d` into the body. `session.list` is a
    * GET and reads only the query, so the line must carry no `-d`.
    */
   test("roots and the limit go out as query parameters, and nothing goes in a body", () => {
     // The whole line, not a filtered view of it: the old test ran these args through a
-    // stub of nikcli's own parsing, so the prefix and any -d were invisible.
-    expect(planLastHere("nikcli", HERE, none)!.args).toEqual([
+    // stub of ragu's own parsing, so the prefix and any -d were invisible.
+    expect(planLastHere("ragu", HERE, none)!.args).toEqual([
       "api",
       "session.list",
       "--log-level",
@@ -479,42 +479,42 @@ describe("nikcli's latest conversation in this folder", () => {
     ])
   })
 
-  test("lint: nikcli's api handler turns --param into the query and leaves a GET without a body", () => {
-    const handler = readFileSync(join(import.meta.dir, "../../../nikcli/src/cli/handlers/api.ts"), "utf8")
+  test("lint: ragu's api handler turns --param into the query and leaves a GET without a body", () => {
+    const handler = readFileSync(join(import.meta.dir, "../../../ragu/src/cli/handlers/api.ts"), "utf8")
     expect(handler).toContain("if (!resolved.route.path.includes(`{${name}}`)) url.searchParams.set(name, value)")
     expect(handler).toContain("new Request(url, { method: resolved.route.method, headers, body: args.data })")
   })
 })
 
 /*
- * Lettura di Mimo, F3: two nikcli panes of one folder, neither with an id.
+ * Lettura di Mimo, F3: two ragu panes of one folder, neither with an id.
  * The live one is planned `here`; the exited one, earlier in the list, is
  * reopened at the same time, and `lastTakenFor` cannot see a claim whose
  * `session.list` has not answered: both asked for the same conversation.
  */
 describe("a restore's claims reach the panes it reopens", () => {
   const folder = "C:\\Progetti\\uno"
-  const exited = { id: "p1", agent: "nikcli", cwd: folder }
-  const live = { id: "p2", agent: "nikcli", cwd: folder }
+  const exited = { id: "p1", agent: "ragu", cwd: folder }
+  const live = { id: "p2", agent: "ragu", cwd: folder }
 
   test("the folder planned `here` is taken for the exited pane placed before it", () => {
-    const planned = planRestore([{ agentId: "nikcli", cwd: folder, pane: live }])
+    const planned = planRestore([{ agentId: "ragu", cwd: folder, pane: live }])
     expect(planned[0]!.plan.kind).toBe("here")
     // What the pane saw alone: nobody without an id before it.
     expect(lastTakenFor(exited, [exited, live])).toBe(false)
     const claims = restoreClaims(planned)
-    expect(claimedByRestore(claims, "nikcli", exited.cwd)).toBe(true)
+    expect(claimedByRestore(claims, "ragu", exited.cwd)).toBe(true)
     // The same folder spelled otherwise is the same claim; another folder or agent is not.
-    expect(claimedByRestore(claims, "nikcli", "c:/progetti/uno/")).toBe(true)
-    expect(claimedByRestore(claims, "nikcli", "C:/Progetti/due")).toBe(false)
+    expect(claimedByRestore(claims, "ragu", "c:/progetti/uno/")).toBe(true)
+    expect(claimedByRestore(claims, "ragu", "C:/Progetti/due")).toBe(false)
     expect(claimedByRestore(claims, "codex", folder)).toBe(false)
-    expect(claimedByRestore(undefined, "nikcli", folder)).toBe(false)
+    expect(claimedByRestore(undefined, "ragu", folder)).toBe(false)
   })
 
   test("a pane reopened by its own id claims nothing", () => {
-    const planned = planRestore([{ agentId: "nikcli", cwd: folder, resumeId: "ses_abcdefgh12345678", pane: live }])
+    const planned = planRestore([{ agentId: "ragu", cwd: folder, resumeId: "ses_abcdefgh12345678", pane: live }])
     expect(planned[0]!.plan.kind).toBe("resume")
-    expect(claimedByRestore(restoreClaims(planned), "nikcli", folder)).toBe(false)
+    expect(claimedByRestore(restoreClaims(planned), "ragu", folder)).toBe(false)
   })
 
   test("lint: the restore hands its claims to the exited panes it reopens", () => {
@@ -535,7 +535,7 @@ describe("a restore's claims reach the panes it reopens", () => {
  */
 describe("the conversation a start opens", () => {
   test("reopening by the saved id opens that one", () => {
-    const plan = planResume({ agentId: "nikcli", resumeId: "ses_abcdefgh12345678" })
+    const plan = planResume({ agentId: "ragu", resumeId: "ses_abcdefgh12345678" })
     expect(plan).toEqual({ kind: "resume", via: "id", args: ["--session", "ses_abcdefgh12345678"] })
     expect(openedConversation(plan, undefined, "ses_abcdefgh12345678")).toBe("ses_abcdefgh12345678")
   })
@@ -566,8 +566,8 @@ describe("the conversation a start opens", () => {
 describe("one folder rule, and a source the tools can read", () => {
   test("two panes of one folder spelled otherwise share its claim", () => {
     const planned = planRestore([
-      { agentId: "nikcli", cwd: "C:\\Progetti\\uno" },
-      { agentId: "nikcli", cwd: "c:/progetti/uno/" },
+      { agentId: "ragu", cwd: "C:\\Progetti\\uno" },
+      { agentId: "ragu", cwd: "c:/progetti/uno/" },
     ])
     expect(planned.map((entry) => entry.plan.kind)).toEqual(["here", "fresh"])
   })
@@ -600,7 +600,7 @@ describe("one folder rule, and a source the tools can read", () => {
 describe("a conversation being minted is not another pane's «here»", () => {
   const older = "ses_f22f7ce38ffetKaHXDQ4xUS0u0"
   const minted = "ses_f2187fa39ffea42ThcJIS6p5l5"
-  const read = (output: string, taken: ReadonlySet<string>) => lastNikcliHere(output, HERE, taken)
+  const read = (output: string, taken: ReadonlySet<string>) => lastRaguHere(output, HERE, taken)
   /** The CLI's list, answered at once: what `askCli` hands its reader. */
   const answering = (output: string) => async (reader: (output: string) => string | null | undefined) => reader(output)
   const later = () => new Promise((resolve) => setTimeout(resolve, 5))
@@ -689,9 +689,9 @@ describe("a conversation being minted is not another pane's «here»", () => {
     mints.track(new Promise<string | undefined>(() => {}), "p1")
     const due: (() => void)[] = []
     const timers = { set: (run: () => void) => due.push(run), clear: () => {} }
-    const marked = (output: string, taken: ReadonlySet<string>) => lastNikcliHere(output, HERE, taken, [mintMark("p1")])
+    const marked = (output: string, taken: ReadonlySet<string>) => lastRaguHere(output, HERE, taken, [mintMark("p1")])
     const list = answering(
-      listed(session(minted, 30, { title: `Sessione 1 — nikcli${mintMark("p1")}` }), session(older, 20)),
+      listed(session(minted, 30, { title: `Sessione 1 — ragu${mintMark("p1")}` }), session(older, 20)),
     )
     let settled = false
     const here = lastHereBesideMints(list, marked, new Set(), mints, open, { ms: 15_000, timers }).then(
@@ -721,26 +721,26 @@ describe("a conversation being minted is not another pane's «here»", () => {
 
 /*
  * Review of ripristino-quater, BASSO 2: a mint past MINT_MS is killed, but
- * nikcli may have written the conversation, and ADE never read its id. Empty
+ * ragu may have written the conversation, and ADE never read its id. Empty
  * and the newest of the folder, it was another pane's "here".
  */
 describe("a conversation minted for another open pane is not «here»", () => {
   const real = "ses_f22f7ce38ffetKaHXDQ4xUS0u0"
   const orphan = "ses_f2187fa39ffea42ThcJIS6p5l5"
   const output = listed(
-    session(orphan, 30, { title: `Sessione 1 — nikcli${mintMark("n1789476735968-5998-1-1")}` }),
+    session(orphan, 30, { title: `Sessione 1 — ragu${mintMark("n1789476735968-5998-1-1")}` }),
     session(real, 20),
   )
 
   test("its title says the pane, and the pane is open: left out", () => {
     expect(mintMark("n1789476735968-5998-1-1")).toBe(" · 5998-1-1")
-    expect(lastNikcliHere(output, HERE, new Set(), [mintMark("n1789476735968-5998-1-1")])).toBe(real)
-    expect(planLastHere("nikcli", HERE, new Set(), [mintMark("n1789476735968-5998-1-1")])!.read(output)).toBe(real)
+    expect(lastRaguHere(output, HERE, new Set(), [mintMark("n1789476735968-5998-1-1")])).toBe(real)
+    expect(planLastHere("ragu", HERE, new Set(), [mintMark("n1789476735968-5998-1-1")])!.read(output)).toBe(real)
   })
 
   test("a pane no longer open, or no mark, leaves it to be taken", () => {
-    expect(lastNikcliHere(output, HERE, new Set(), [mintMark("n1789476735968-7777-2-2")])).toBe(orphan)
-    expect(lastNikcliHere(output, HERE, new Set())).toBe(orphan)
+    expect(lastRaguHere(output, HERE, new Set(), [mintMark("n1789476735968-7777-2-2")])).toBe(orphan)
+    expect(lastRaguHere(output, HERE, new Set())).toBe(orphan)
   })
 
   test("lint: the workbench titles a mint with its pane's mark and reads the list by the same marks", () => {

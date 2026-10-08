@@ -8,7 +8,7 @@
  * from its identifier: the file `revisore.md` is a magenta circle on every
  * machine, in the roster, in the thread and in the sidebar, with nothing
  * written down anywhere. A field in the frontmatter would be a second thing
- * to keep in step with the first, and nikcli would not know what it was for.
+ * to keep in step with the first, and ragu would not know what it was for.
  *
  * The colours are ADE's own ANSI palette, so they follow the theme: the
  * component sets `--bot-color: var(--ade-ansi-<name>)` and the light values
@@ -44,7 +44,7 @@ export function hashIdentifier(identifier: string): number {
 
 /**
  * A face written down: `shape/color`, the form the agent file's `avatar` key
- * takes. nikcli ignores keys it does not know, so the choice travels with the
+ * takes. ragu ignores keys it does not know, so the choice travels with the
  * file — a bot copied to another machine keeps its face.
  */
 export function avatarKey(avatar: Avatar): string {

@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { launchBot, type LaunchDeps } from "./launch"
 import { admit, memoryTrustStore } from "./trust"
-import { readAgentFile } from "./nikcli"
+import { readAgentFile } from "./ragu"
 import { t } from "../i18n"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { botLaunch } from "./store"
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 
 /*
  * Full review 2026-10-06, bots 7: «Terminale» on a project's bot skipped the trust a turn asks for

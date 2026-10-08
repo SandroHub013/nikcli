@@ -36,7 +36,7 @@ export const dict = {
   "email.subscribe": "Abonnieren",
   "email.success": "Fast fertig - prufe deinen Posteingang und bestatige deine E-Mail-Adresse",
 
-  "notFound.title": "Nicht gefunden | nikcli",
+  "notFound.title": "Nicht gefunden | ragu",
   "notFound.heading": "404 - Seite nicht gefunden",
   "notFound.home": "Startseite",
   "notFound.docs": "Dokumentation",
@@ -59,7 +59,7 @@ export const dict = {
   "common.faq": "FAQ",
   "common.learnMore": "Mehr erfahren",
 
-  "home.title": "Nikcli | Der Open-Source AI-Coding-Agent",
+  "home.title": "Ragu | Der Open-Source AI-Coding-Agent",
 
   "home.banner.badge": "Neu",
   "home.banner.text": "Desktop-App als Beta verfugbar",
@@ -73,9 +73,9 @@ export const dict = {
 
   "home.install.ariaLabel": "Installationsoptionen",
 
-  "home.what.title": "Was ist Nikcli?",
+  "home.what.title": "Was ist Ragu?",
   "home.what.body":
-    "Nikcli ist ein Open-Source Agent, der dir hilft, Code im Terminal, in der IDE oder auf dem Desktop zu schreiben.",
+    "Ragu ist ein Open-Source Agent, der dir hilft, Code im Terminal, in der IDE oder auf dem Desktop zu schreiben.",
   "home.what.lsp.title": "LSP aktiviert",
   "home.what.lsp.body": "Laedt automatisch die passenden LSPs fur das LLM",
   "home.what.multiSession.title": "Mehrere Sessions",
@@ -94,42 +94,42 @@ export const dict = {
 
   "home.growth.title": "Der Open-Source AI-Coding-Agent",
   "home.growth.body":
-    "Mit uber <strong>{{stars}}</strong> GitHub-Stars, <strong>{{contributors}}</strong> Contributors und uber <strong>{{commits}}</strong> Commits wird Nikcli von uber <strong>{{monthlyUsers}}</strong> Entwickler*innen pro Monat genutzt und geschatzt.",
+    "Mit uber <strong>{{stars}}</strong> GitHub-Stars, <strong>{{contributors}}</strong> Contributors und uber <strong>{{commits}}</strong> Commits wird Ragu von uber <strong>{{monthlyUsers}}</strong> Entwickler*innen pro Monat genutzt und geschatzt.",
   "home.growth.githubStars": "GitHub-Stars",
   "home.growth.contributors": "Contributors",
   "home.growth.monthlyDevs": "Monatliche Devs",
 
   "home.privacy.title": "Privacy-first gebaut",
   "home.privacy.body":
-    "Nikcli speichert weder deinen Code noch Kontextdaten, damit es auch in datenschutzsensiblen Umgebungen eingesetzt werden kann.",
+    "Ragu speichert weder deinen Code noch Kontextdaten, damit es auch in datenschutzsensiblen Umgebungen eingesetzt werden kann.",
   "home.privacy.learnMore": "Mehr erfahren uber",
   "home.privacy.link": "Datenschutz",
 
-  "home.faq.q1": "Was ist Nikcli?",
+  "home.faq.q1": "Was ist Ragu?",
   "home.faq.a1":
-    "Nikcli ist ein Open-Source Agent, der dir hilft, Code mit jedem AI-Modell zu schreiben und auszufuhren. Es ist als Terminal-Interface, Desktop-App oder IDE-Extension verfugbar.",
-  "home.faq.q2": "Wie nutze ich Nikcli?",
+    "Ragu ist ein Open-Source Agent, der dir hilft, Code mit jedem AI-Modell zu schreiben und auszufuhren. Es ist als Terminal-Interface, Desktop-App oder IDE-Extension verfugbar.",
+  "home.faq.q2": "Wie nutze ich Ragu?",
   "home.faq.a2.before": "Der einfachste Einstieg ist, die",
   "home.faq.a2.link": "Einfuhrung",
-  "home.faq.q3": "Brauche ich zusatzliche AI-Abos, um Nikcli zu nutzen?",
-  "home.faq.a3.p1": "Nicht unbedingt: Nikcli bringt kostenlose Modelle mit, die du ohne Account nutzen kannst.",
+  "home.faq.q3": "Brauche ich zusatzliche AI-Abos, um Ragu zu nutzen?",
+  "home.faq.a3.p1": "Nicht unbedingt: Ragu bringt kostenlose Modelle mit, die du ohne Account nutzen kannst.",
   "home.faq.a3.p2.beforeZen": "Daruber hinaus kannst du beliebte Coding-Modelle nutzen, indem du einen",
   "home.faq.a3.p2.afterZen": " Account erstellst.",
   "home.faq.a3.p3":
-    "Wir empfehlen Zen, aber Nikcli funktioniert auch mit allen gängigen Anbietern wie OpenAI, Anthropic, xAI usw.",
+    "Wir empfehlen Zen, aber Ragu funktioniert auch mit allen gängigen Anbietern wie OpenAI, Anthropic, xAI usw.",
   "home.faq.a3.p4.beforeLocal": "Du kannst sogar deine",
   "home.faq.a3.p4.localLink": "lokalen Modelle",
-  "home.faq.q4": "Kann ich meine bestehenden AI-Abos mit Nikcli nutzen?",
+  "home.faq.q4": "Kann ich meine bestehenden AI-Abos mit Ragu nutzen?",
   "home.faq.a4.p1":
-    "Ja, Nikcli unterstutzt Abos von allen grossen Anbietern. Du kannst Claude Pro/Max, ChatGPT Plus/Pro oder GitHub Copilot verwenden.",
-  "home.faq.q5": "Kann ich Nikcli nur im Terminal nutzen?",
-  "home.faq.a5.beforeDesktop": "Nicht mehr! Nikcli gibt es jetzt auch als App fur",
+    "Ja, Ragu unterstutzt Abos von allen grossen Anbietern. Du kannst Claude Pro/Max, ChatGPT Plus/Pro oder GitHub Copilot verwenden.",
+  "home.faq.q5": "Kann ich Ragu nur im Terminal nutzen?",
+  "home.faq.a5.beforeDesktop": "Nicht mehr! Ragu gibt es jetzt auch als App fur",
   "home.faq.a5.desktop": "Desktop",
   "home.faq.a5.and": "und",
   "home.faq.a5.web": "Web",
-  "home.faq.q6": "Wie viel kostet Nikcli?",
+  "home.faq.q6": "Wie viel kostet Ragu?",
   "home.faq.a6":
-    "Nikcli ist zu 100% kostenlos. Es bringt ausserdem kostenlose Modelle mit. Zusatzliche Kosten konnen entstehen, wenn du einen anderen Anbieter verbindest.",
+    "Ragu ist zu 100% kostenlos. Es bringt ausserdem kostenlose Modelle mit. Zusatzliche Kosten konnen entstehen, wenn du einen anderen Anbieter verbindest.",
   "home.faq.q7": "Wie sieht es mit Daten und Datenschutz aus?",
   "home.faq.a7.p1":
     "Deine Daten werden nur gespeichert, wenn du unsere kostenlosen Modelle nutzt oder teilbare Links erstellst.",
@@ -137,8 +137,8 @@ export const dict = {
   "home.faq.a7.p2.modelsLink": "unsere Modelle",
   "home.faq.a7.p2.and": "und",
   "home.faq.a7.p2.shareLink": "Share-Seiten",
-  "home.faq.q8": "Ist Nikcli Open Source?",
-  "home.faq.a8.p1": "Ja, Nikcli ist vollstandig Open Source. Der Quellcode ist offentlich auf",
+  "home.faq.q8": "Ist Ragu Open Source?",
+  "home.faq.a8.p1": "Ja, Ragu ist vollstandig Open Source. Der Quellcode ist offentlich auf",
   "home.faq.a8.p2": "unter der",
   "home.faq.a8.mitLicense": "MIT-Lizenz",
   "home.faq.a8.p3":
@@ -146,25 +146,25 @@ export const dict = {
 
   "home.zenCta.title": "Zuverlassige, optimierte Modelle fur Coding-Agents",
   "home.zenCta.body":
-    "Zen gibt dir Zugriff auf eine handverlesene Auswahl an AI-Modellen, die Nikcli speziell fur Coding-Agents getestet und benchmarked hat. Keine Sorge uber schwankende Leistung und Qualitat zwischen Anbietern: nutze validierte Modelle, die funktionieren.",
+    "Zen gibt dir Zugriff auf eine handverlesene Auswahl an AI-Modellen, die Ragu speziell fur Coding-Agents getestet und benchmarked hat. Keine Sorge uber schwankende Leistung und Qualitat zwischen Anbietern: nutze validierte Modelle, die funktionieren.",
   "home.zenCta.link": "Mehr uber Zen",
 
-  "download.title": "Nikcli | Download",
+  "download.title": "Ragu | Download",
 
-  "zen.title": "Nikcli Zen | Eine kuratierte Auswahl an zuverlassigen, optimierten Modellen fur Coding-Agents",
+  "zen.title": "Ragu Zen | Eine kuratierte Auswahl an zuverlassigen, optimierten Modellen fur Coding-Agents",
   "zen.hero.title": "Zuverlassige, optimierte Modelle fur Coding-Agents",
   "zen.hero.body":
-    "Zen gibt dir Zugriff auf eine handverlesene Auswahl an AI-Modellen, die Nikcli speziell fur Coding-Agents getestet und benchmarked hat. Keine Sorge uber schwankende Leistung und Qualitat zwischen Anbietern: nutze validierte Modelle, die funktionieren.",
+    "Zen gibt dir Zugriff auf eine handverlesene Auswahl an AI-Modellen, die Ragu speziell fur Coding-Agents getestet und benchmarked hat. Keine Sorge uber schwankende Leistung und Qualitat zwischen Anbietern: nutze validierte Modelle, die funktionieren.",
 
-  "zen.faq.q1": "Was ist Nikcli Zen?",
+  "zen.faq.q1": "Was ist Ragu Zen?",
   "zen.faq.a1":
-    "Zen ist eine kuratierte Auswahl an AI-Modellen, die vom Team hinter Nikcli fur Coding-Agents getestet und benchmarked wurden.",
+    "Zen ist eine kuratierte Auswahl an AI-Modellen, die vom Team hinter Ragu fur Coding-Agents getestet und benchmarked wurden.",
   "zen.faq.q2": "Was macht Zen genauer?",
   "zen.faq.a2":
     "Zen bietet nur Modelle an, die speziell fur Coding-Agents getestet und benchmarked wurden. Du wurdest kein Buttermesser benutzen, um Steak zu schneiden - nutze keine schlechten Modelle zum Coden.",
   "zen.faq.q3": "Ist Zen gunstiger?",
   "zen.faq.a3":
-    "Zen ist nicht gewinnorientiert. Zen gibt die Kosten der Modellanbieter direkt an dich weiter. Je hoher die Nutzung von Zen, desto mehr kann Nikcli bessere Preise verhandeln und an dich weitergeben.",
+    "Zen ist nicht gewinnorientiert. Zen gibt die Kosten der Modellanbieter direkt an dich weiter. Je hoher die Nutzung von Zen, desto mehr kann Ragu bessere Preise verhandeln und an dich weitergeben.",
   "zen.faq.q4": "Was kostet Zen?",
   "zen.faq.a4.p1.beforePricing": "Zen",
   "zen.faq.a4.p1.pricingLink": "berechnet pro Request",
@@ -173,7 +173,7 @@ export const dict = {
     "Deine Gesamtkosten hangen von der Nutzung ab, und du kannst monatliche Ausgabenlimits in deinem",
   "zen.faq.a4.p2.accountLink": "Account",
   "zen.faq.a4.p3":
-    "Um Kosten zu decken, erhebt Nikcli nur eine kleine Zahlungsabwicklungsgebuhr von $1.23 pro $20 Guthaben-Aufladung.",
+    "Um Kosten zu decken, erhebt Ragu nur eine kleine Zahlungsabwicklungsgebuhr von $1.23 pro $20 Guthaben-Aufladung.",
   "zen.faq.q5": "Wie sieht es mit Daten und Datenschutz aus?",
   "zen.faq.a5.beforeExceptions":
     "Alle Zen-Modelle werden in den USA gehostet. Anbieter folgen einer Zero-Retention-Policy und verwenden deine Daten nicht fur Modelltraining, mit den",
@@ -184,7 +184,7 @@ export const dict = {
   "zen.faq.a7": "Ja, du kannst die Abrechnung jederzeit deaktivieren und dein verbleibendes Guthaben nutzen.",
   "zen.faq.q8": "Kann ich Zen mit anderen Coding-Agents nutzen?",
   "zen.faq.a8":
-    "Zen funktioniert grossartig mit Nikcli, aber du kannst Zen mit jedem Agent verwenden. Folge den Setup-Anweisungen in deinem bevorzugten Coding-Agent.",
+    "Zen funktioniert grossartig mit Ragu, aber du kannst Zen mit jedem Agent verwenden. Folge den Setup-Anweisungen in deinem bevorzugten Coding-Agent.",
   "zen.cta.start": "Beginnen Sie mit Zen",
   "zen.pricing.title": "Fügen Sie 20 $ Pay-as-you-go-Guthaben hinzu",
   "zen.pricing.fee": "(+1,23 $ Kartenbearbeitungsgebühr)",
@@ -193,14 +193,14 @@ export const dict = {
   "zen.problem.title": "Welches Problem löst Zen?",
   "zen.problem.body":
     "Es gibt so viele Modelle, aber nur wenige funktionieren gut mit Codierungsagenten. Die meisten Anbieter konfigurieren sie unterschiedlich und führen zu unterschiedlichen Ergebnissen.",
-  "zen.problem.subtitle": "Wir beheben dieses Problem für alle, nicht nur für Nikcli-Benutzer.",
+  "zen.problem.subtitle": "Wir beheben dieses Problem für alle, nicht nur für Ragu-Benutzer.",
   "zen.problem.item1": "Testen ausgewählter Modelle und Beratung ihrer Teams",
   "zen.problem.item2":
     "Arbeiten Sie mit Anbietern zusammen, um sicherzustellen, dass sie ordnungsgemäß geliefert werden",
   "zen.problem.item3": "Benchmarking aller von uns empfohlenen Modell-Anbieter-Kombinationen",
   "zen.how.title": "So funktioniert Zen",
   "zen.how.body":
-    "Während wir Ihnen empfehlen, Zen mit Nikcli zu verwenden, können Sie Zen mit jedem Agenten verwenden.",
+    "Während wir Ihnen empfehlen, Zen mit Ragu zu verwenden, können Sie Zen mit jedem Agenten verwenden.",
   "zen.how.step1.title": "Melden Sie sich an und fügen Sie ein Guthaben von 20 $ hinzu",
   "zen.how.step1.beforeLink": "Folgen Sie dem",
   "zen.how.step1.link": "Installationsanweisungen",
@@ -213,14 +213,14 @@ export const dict = {
   "zen.privacy.beforeExceptions":
     "Alle Zen-Modelle werden in den USA gehostet. Anbieter folgen einer Null-Aufbewahrungsrichtlinie und verwenden Ihre Daten nicht für Modellschulungen",
   "zen.privacy.exceptionsLink": "folgende Ausnahmen",
-  "download.meta.description": "Lade Nikcli fur macOS, Windows und Linux herunter",
-  "download.hero.title": "Nikcli herunterladen",
+  "download.meta.description": "Lade Ragu fur macOS, Windows und Linux herunter",
+  "download.hero.title": "Ragu herunterladen",
   "download.hero.subtitle": "Als Beta verfugbar fur macOS, Windows und Linux",
   "download.hero.button": "Download fur {{os}}",
-  "download.section.terminal": "Nikcli Terminal",
-  "download.section.desktop": "Nikcli Desktop (Beta)",
-  "download.section.extensions": "Nikcli Extensions",
-  "download.section.integrations": "Nikcli Integrations",
+  "download.section.terminal": "Ragu Terminal",
+  "download.section.desktop": "Ragu Desktop (Beta)",
+  "download.section.extensions": "Ragu Extensions",
+  "download.section.integrations": "Ragu Integrations",
   "download.action.download": "Download",
   "download.action.install": "Installieren",
 
@@ -231,26 +231,26 @@ export const dict = {
   "download.platform.linuxRpm": "Linux (.rpm)",
 
   "download.faq.a3.beforeLocal":
-    "Nicht unbedingt, aber wahrscheinlich. Du brauchst ein AI-Abo, wenn du Nikcli mit einem kostenpflichtigen Anbieter verbinden willst, obwohl du mit",
+    "Nicht unbedingt, aber wahrscheinlich. Du brauchst ein AI-Abo, wenn du Ragu mit einem kostenpflichtigen Anbieter verbinden willst, obwohl du mit",
   "download.faq.a3.localLink": "lokalen Modellen",
   "download.faq.a3.afterLocal.beforeZen": "kostenlos arbeiten kannst. Obwohl wir Nutzer ermutigen,",
   "download.faq.a3.afterZen":
-    " zu verwenden, funktioniert Nikcli mit allen popularen Anbietern wie OpenAI, Anthropic, xAI usw.",
+    " zu verwenden, funktioniert Ragu mit allen popularen Anbietern wie OpenAI, Anthropic, xAI usw.",
 
-  "download.faq.a5.p1": "Nikcli ist zu 100% kostenlos.",
+  "download.faq.a5.p1": "Ragu ist zu 100% kostenlos.",
   "download.faq.a5.p2.beforeZen":
-    "Zusatzliche Kosten entstehen durch dein Abo bei einem Modellanbieter. Nikcli funktioniert mit jedem Modellanbieter, aber wir empfehlen",
+    "Zusatzliche Kosten entstehen durch dein Abo bei einem Modellanbieter. Ragu funktioniert mit jedem Modellanbieter, aber wir empfehlen",
   "download.faq.a5.p2.afterZen": " zu nutzen.",
 
-  "download.faq.a6.p1": "Deine Daten werden nur gespeichert, wenn du in Nikcli teilbare Links erstellst.",
+  "download.faq.a6.p1": "Deine Daten werden nur gespeichert, wenn du in Ragu teilbare Links erstellst.",
   "download.faq.a6.p2.beforeShare": "Mehr erfahren uber",
   "download.faq.a6.shareLink": "Share-Seiten",
 
-  "enterprise.title": "Nikcli | Enterprise-Losungen fur Ihre Organisation",
-  "enterprise.meta.description": "Kontaktieren Sie Nikcli fur Enterprise-Losungen",
+  "enterprise.title": "Ragu | Enterprise-Losungen fur Ihre Organisation",
+  "enterprise.meta.description": "Kontaktieren Sie Ragu fur Enterprise-Losungen",
   "enterprise.hero.title": "Ihr Code gehort Ihnen",
   "enterprise.hero.body1":
-    "Nikcli arbeitet sicher innerhalb Ihrer Organisation, ohne dass Daten oder Kontext gespeichert werden, und ohne Lizenzbeschrankungen oder Eigentumsanspruche. Starten Sie einen Testlauf mit Ihrem Team und rollen Sie es anschliessend in der gesamten Organisation aus, indem Sie es in Ihr SSO und Ihr internes AI-Gateway integrieren.",
+    "Ragu arbeitet sicher innerhalb Ihrer Organisation, ohne dass Daten oder Kontext gespeichert werden, und ohne Lizenzbeschrankungen oder Eigentumsanspruche. Starten Sie einen Testlauf mit Ihrem Team und rollen Sie es anschliessend in der gesamten Organisation aus, indem Sie es in Ihr SSO und Ihr internes AI-Gateway integrieren.",
   "enterprise.hero.body2": "Sagen Sie uns, wie wir helfen konnen.",
   "enterprise.form.name.label": "Vollstandiger Name",
   "enterprise.form.name.placeholder": "Jeff Bezos",
@@ -264,28 +264,28 @@ export const dict = {
   "enterprise.form.sending": "Wird gesendet...",
   "enterprise.form.success": "Nachricht gesendet, wir melden uns bald.",
   "enterprise.faq.title": "FAQ",
-  "enterprise.faq.q1": "Was ist Nikcli Enterprise?",
+  "enterprise.faq.q1": "Was ist Ragu Enterprise?",
   "enterprise.faq.a1":
-    "Nikcli Enterprise richtet sich an Organisationen, die sicherstellen wollen, dass Code und Daten ihre Infrastruktur niemals verlassen. Das wird durch eine zentralisierte Konfiguration erreicht, die sich in Ihr SSO und Ihr internes AI-Gateway integrieren lasst.",
-  "enterprise.faq.q2": "Wie starte ich mit Nikcli Enterprise?",
+    "Ragu Enterprise richtet sich an Organisationen, die sicherstellen wollen, dass Code und Daten ihre Infrastruktur niemals verlassen. Das wird durch eine zentralisierte Konfiguration erreicht, die sich in Ihr SSO und Ihr internes AI-Gateway integrieren lasst.",
+  "enterprise.faq.q2": "Wie starte ich mit Ragu Enterprise?",
   "enterprise.faq.a2":
-    "Starten Sie einfach mit einem internen Testlauf mit Ihrem Team. Nikcli speichert standardmassig weder Code noch Kontextdaten, sodass der Einstieg leicht ist. Kontaktieren Sie uns anschliessend, um Preise und Implementierungsoptionen zu besprechen.",
+    "Starten Sie einfach mit einem internen Testlauf mit Ihrem Team. Ragu speichert standardmassig weder Code noch Kontextdaten, sodass der Einstieg leicht ist. Kontaktieren Sie uns anschliessend, um Preise und Implementierungsoptionen zu besprechen.",
   "enterprise.faq.q3": "Wie funktioniert die Enterprise-Preisgestaltung?",
   "enterprise.faq.a3":
     "Wir bieten Enterprise-Preise pro Sitz an. Wenn Sie ein eigenes LLM-Gateway haben, berechnen wir keine Kosten fur verwendete Token. Fur weitere Details kontaktieren Sie uns bitte fur ein individuelles Angebot basierend auf den Anforderungen Ihrer Organisation.",
-  "enterprise.faq.q4": "Sind meine Daten mit Nikcli Enterprise sicher?",
+  "enterprise.faq.q4": "Sind meine Daten mit Ragu Enterprise sicher?",
   "enterprise.faq.a4":
-    "Ja. Nikcli speichert weder Code noch Kontextdaten. Die Verarbeitung erfolgt lokal oder uber direkte API-Aufrufe an Ihren AI-Anbieter. Mit zentraler Konfiguration und SSO-Integration bleiben Ihre Daten sicher innerhalb Ihrer Infrastruktur.",
+    "Ja. Ragu speichert weder Code noch Kontextdaten. Die Verarbeitung erfolgt lokal oder uber direkte API-Aufrufe an Ihren AI-Anbieter. Mit zentraler Konfiguration und SSO-Integration bleiben Ihre Daten sicher innerhalb Ihrer Infrastruktur.",
 
-  "brand.title": "Nikcli | Marke",
-  "brand.meta.description": "Nikcli Markenrichtlinien",
+  "brand.title": "Ragu | Marke",
+  "brand.meta.description": "Ragu Markenrichtlinien",
   "brand.heading": "Markenrichtlinien",
-  "brand.subtitle": "Ressourcen und Assets, die dir helfen, mit der Nikcli-Marke zu arbeiten.",
+  "brand.subtitle": "Ressourcen und Assets, die dir helfen, mit der Ragu-Marke zu arbeiten.",
   "brand.downloadAll": "Alle Assets herunterladen",
-  "changelog.title": "Nikcli | Changelog",
-  "changelog.meta.description": "Nikcli Release Notes und Changelog",
+  "changelog.title": "Ragu | Changelog",
+  "changelog.meta.description": "Ragu Release Notes und Changelog",
   "changelog.hero.title": "Changelog",
-  "changelog.hero.subtitle": "Neue Updates und Verbesserungen fur Nikcli",
+  "changelog.hero.subtitle": "Neue Updates und Verbesserungen fur Ragu",
   "changelog.empty": "Keine Changelog-Eintrage gefunden.",
   "changelog.viewJson": "JSON ansehen",
   "workspace.nav.zen": "Zen",
@@ -305,15 +305,15 @@ export const dict = {
     "Für optimale Performance konfigurierte Zugangsmodelle – keine Downgrades oder Weiterleitung zu günstigeren Anbietern.",
   "workspace.newUser.feature.lockin.title": "Kein Lock-in",
   "workspace.newUser.feature.lockin.body":
-    "Verwenden Sie Zen mit einem beliebigen Codierungsagenten und nutzen Sie weiterhin andere Anbieter mit nikcli, wann immer Sie möchten.",
+    "Verwenden Sie Zen mit einem beliebigen Codierungsagenten und nutzen Sie weiterhin andere Anbieter mit ragu, wann immer Sie möchten.",
   "workspace.newUser.copyApiKey": "Kopieren Sie den Schlüssel API",
   "workspace.newUser.copyKey": "Schlüssel kopieren",
   "workspace.newUser.copied": "Kopiert!",
   "workspace.newUser.step.enableBilling": "Abrechnung aktivieren",
   "workspace.newUser.step.login.before": "Laufen",
-  "workspace.newUser.step.login.after": "und wählen Sie nikcli",
+  "workspace.newUser.step.login.after": "und wählen Sie ragu",
   "workspace.newUser.step.pasteKey": "Fügen Sie Ihren API-Schlüssel ein",
-  "workspace.newUser.step.models.before": "Starten Sie nikcli und führen Sie es aus",
+  "workspace.newUser.step.models.before": "Starten Sie ragu und führen Sie es aus",
   "workspace.newUser.step.models.after": "um ein Modell auszuwählen",
   "workspace.models.title": "Modelle",
   "workspace.models.subtitle.beforeLink":
@@ -352,10 +352,10 @@ export const dict = {
   "workspace.cost.empty": "Für den ausgewählten Zeitraum sind keine Nutzungsdaten verfügbar.",
   "workspace.cost.subscriptionShort": "sub",
   "workspace.keys.title": "API-Schlüssel",
-  "workspace.keys.subtitle": "Verwalten Sie Ihre API-Schlüssel für den Zugriff auf nikcli-Dienste.",
+  "workspace.keys.subtitle": "Verwalten Sie Ihre API-Schlüssel für den Zugriff auf ragu-Dienste.",
   "workspace.keys.create": "Erstellen Sie einen API-Schlüssel",
   "workspace.keys.placeholder": "Geben Sie den Schlüsselnamen ein",
-  "workspace.keys.empty": "Erstellen Sie einen nikcli Gateway-API-Schlüssel",
+  "workspace.keys.empty": "Erstellen Sie einen ragu Gateway-API-Schlüssel",
   "workspace.keys.table.name": "Name",
   "workspace.keys.table.key": "Schlüssel",
   "workspace.keys.table.createdBy": "Erstellt von",
@@ -454,7 +454,7 @@ export const dict = {
   "workspace.black.time.minutes": "Minuten",
   "workspace.black.time.fewSeconds": "ein paar Sekunden",
   "workspace.black.subscription.title": "Abonnement",
-  "workspace.black.subscription.message": "Sie haben Nikcli Black für {{plan}} pro Monat abonniert.",
+  "workspace.black.subscription.message": "Sie haben Ragu Black für {{plan}} pro Monat abonniert.",
   "workspace.black.subscription.manage": "Abonnement verwalten",
   "workspace.black.subscription.rollingUsage": "5-stündige Nutzung",
   "workspace.black.subscription.weeklyUsage": "Wöchentliche Nutzung",
@@ -463,9 +463,9 @@ export const dict = {
     "Nutzen Sie Ihr verfügbares Guthaben, nachdem Sie die Nutzungslimits erreicht haben",
   "workspace.black.waitlist.title": "Warteliste",
   "workspace.black.waitlist.joined":
-    "Sie stehen auf der Warteliste für den Black-Plan im Wert von ${{plan}} pro Monat Nikcli.",
+    "Sie stehen auf der Warteliste für den Black-Plan im Wert von ${{plan}} pro Monat Ragu.",
   "workspace.black.waitlist.ready":
-    "Wir sind bereit, Sie für den Black-Plan im Wert von ${{plan}} pro Monat Nikcli anzumelden.",
+    "Wir sind bereit, Sie für den Black-Plan im Wert von ${{plan}} pro Monat Ragu anzumelden.",
   "workspace.black.waitlist.leave": "Warteliste verlassen",
   "workspace.black.waitlist.leaving": "Verlassen...",
   "workspace.black.waitlist.left": "Links",

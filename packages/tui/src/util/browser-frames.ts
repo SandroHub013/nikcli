@@ -22,7 +22,7 @@ import {
   kittyIdColor,
   kittyPlaceholderGrid,
   MAX_PLACEHOLDER_DIMENSION,
-} from "@nikcli-ai/tui-image"
+} from "@ragu/tui-image"
 
 /**
  * How the pixels reach the terminal.
@@ -63,7 +63,7 @@ export interface PumpStats {
 }
 
 // Image ids are per terminal session; offsetting by pid keeps concurrent or
-// successive nikcli processes from overwriting each other's images. Kept
+// successive ragu processes from overwriting each other's images. Kept
 // distinct from `tui-image.tsx`'s counter space by starting high.
 let pumpIdCounter = 0
 const pumpIdBase = ((((typeof process !== "undefined" ? process.pid : 0) ?? 0) & 0x7f) | 0x80) << 16

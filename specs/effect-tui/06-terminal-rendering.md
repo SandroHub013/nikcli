@@ -69,9 +69,9 @@ highlighting/image work on owner or generation change; late results cannot overw
   duplicate rows, hidden decisions, or stale usage counters.
 - Assert unchanged turns keep identity and do not incur extra `Renderable.destroy` calls. Existing churn assertions must
   stay strict; capture mount/destruction counts as well as frames.
-- Extend `packages/nikcli/test/tui/streaming-churn.test.tsx`, `packages/nikcli/test/tui/streaming-cost.test.ts`,
-  `packages/nikcli/test/tui/session-view.test.ts`, and `packages/nikcli/test/tui/routes/session/`.
-- From `packages/nikcli`: `bun test test/tui/streaming-churn.test.tsx test/tui/streaming-cost.test.ts test/tui/session-view.test.ts`.
+- Extend `packages/ragu/test/tui/streaming-churn.test.tsx`, `packages/ragu/test/tui/streaming-cost.test.ts`,
+  `packages/ragu/test/tui/session-view.test.ts`, and `packages/ragu/test/tui/routes/session/`.
+- From `packages/ragu`: `bun test test/tui/streaming-churn.test.tsx test/tui/streaming-cost.test.ts test/tui/session-view.test.ts`.
   Use real `testRender` and PTY smoke at 80x24/160x48; run supported Windows terminal checks before changing defaults.
 - Meet EOT-01's 50 ms input and 22.2 ms frame-work candidate gates after ratification. Target at least 30% less streaming
   frame work versus the full-list reference at equal content fidelity; record RSS and native memory alongside JS heap.

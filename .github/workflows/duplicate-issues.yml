@@ -19,7 +19,7 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Install nikcli
+      - name: Install ragu
         run: curl -fsSL https://nikcli-ai.dev/install | bash
 
       - name: Check duplicates and compliance
@@ -27,7 +27,7 @@ jobs:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NIKCLI_PERMISSION: |
+          RAGU_PERMISSION: |
             {
               "bash": {
                 "*": "deny",
@@ -36,7 +36,7 @@ jobs:
               "webfetch": "deny"
             }
         run: |
-          nikcli run -m minimax-coding-plan/MiniMax-M3 "A new issue has been created:
+          ragu run -m minimax-coding-plan/MiniMax-M3 "A new issue has been created:
 
           Issue number: ${{ github.event.issue.number }}
 
@@ -122,7 +122,7 @@ jobs:
 
       - uses: ./.github/actions/setup-bun
 
-      - name: Install nikcli
+      - name: Install ragu
         run: curl -fsSL https://nikcli-ai.dev/install | bash
 
       - name: Recheck compliance
@@ -130,7 +130,7 @@ jobs:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NIKCLI_PERMISSION: |
+          RAGU_PERMISSION: |
             {
               "bash": {
                 "*": "deny",
@@ -139,7 +139,7 @@ jobs:
               "webfetch": "deny"
             }
         run: |
-          nikcli run -m minimax-coding-plan/MiniMax-M3 "Issue #${{ github.event.issue.number }} was previously flagged as non-compliant and has been edited.
+          ragu run -m minimax-coding-plan/MiniMax-M3 "Issue #${{ github.event.issue.number }} was previously flagged as non-compliant and has been edited.
 
           Lookup this issue with gh issue view ${{ github.event.issue.number }}.
 

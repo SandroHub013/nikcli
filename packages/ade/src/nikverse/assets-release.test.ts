@@ -100,7 +100,7 @@ describe("NikVerse's assets on the release", () => {
     expect(step(job("build"), "NikVerse assets")).not.toContain("gh release create")
   })
 
-  test("only the release run does it: attaching installers to an existing nikcli release leaves the updater feed alone", () => {
+  test("only the release run does it: attaching installers to an existing ragu release leaves the updater feed alone", () => {
     expect(step(job("build"), "NikVerse assets")).toContain("if: ${{ !inputs.attach_only }}")
     expect(step(job("draft"), "The updater release")).toContain("if: ${{ !inputs.attach_only }}")
   })

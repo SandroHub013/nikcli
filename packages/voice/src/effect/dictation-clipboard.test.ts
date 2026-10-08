@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { Effect, Layer } from "effect"
-import { resetLocaleForTests } from "@nikcli-ai/ade/i18n"
+import { resetLocaleForTests } from "@ragu/ade/i18n"
 
 import { createFakeTranscriber } from "../asr/fake"
 import { createFakeSpeaker } from "../tts/speaker"

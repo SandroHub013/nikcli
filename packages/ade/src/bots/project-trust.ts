@@ -1,23 +1,23 @@
 /**
- * Whether nikcli may load the open project's own configuration (B3b, review
+ * Whether ragu may load the open project's own configuration (B3b, review
  * B3, M2).
  *
- * Every nikcli turn runs in the project, a bot of the user's included, and
- * nikcli then loads what the project brings: `nikcli.json`, and `.nikcli/`
- * with its plugins and tools — code, run as nikcli starts — and a
+ * Every ragu turn runs in the project, a bot of the user's included, and
+ * ragu then loads what the project brings: `nikcli.json`, and `.nikcli/`
+ * with its plugins and tools — code, run as ragu starts — and a
  * `package.json` whose scripts `bun install` runs there. A cloned repository
- * can bring all of it. The user opening nikcli in that folder has decided to;
+ * can bring all of it. The user opening ragu in that folder has decided to;
  * ADE doing it on a bot's first message has not asked. So it asks, once per
  * project, and again when any of it changes: the answer holds for the
  * SHA-256 of those files as they are.
  *
- * Claude Code and Codex do not read `.nikcli/`, so only nikcli turns ask.
- * The voice never runs on nikcli (`voice/agent.ts`).
+ * Claude Code and Codex do not read `.nikcli/`, so only ragu turns ask.
+ * The voice never runs on ragu (`voice/agent.ts`).
  */
 
 import { dirname, joinPath, normalizePath } from "../host/path"
 import { t } from "../i18n"
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 import { fileFingerprint, reachesShell, selfApproval, type TrustStore } from "./trust"
 
 /** The two calls this needs from the host, as `host/shell.ts` has them. */
@@ -25,27 +25,27 @@ export interface ProjectFs {
   readDir: (path: string) => Promise<readonly { readonly name: string; readonly is_dir: boolean }[]>
   readText: (path: string) => Promise<{ readonly text: string; readonly truncated: boolean }>
   /**
-   * The user's home folder, when the host can say: nikcli reads `~/.nikcli` for every project
+   * The user's home folder, when the host can say: ragu reads `~/.nikcli` for every project
    * (it is the user's own), so the climb through the ancestors stops short of it.
    */
   home?: () => Promise<string | undefined>
 }
 
-/** One file nikcli would load, by its path under the project. */
+/** One file ragu would load, by its path under the project. */
 export interface SurfaceFile {
   readonly path: string
   readonly text: string
 }
 
-/** Written by nikcli itself when it prepares `.nikcli/`: not the project's say. */
-const NIKCLI_WRITES = new Set([".gitignore", "bun.lock", "bun.lockb"])
+/** Written by ragu itself when it prepares `.nikcli/`: not the project's say. */
+const RAGU_WRITES = new Set([".gitignore", "bun.lock", "bun.lockb"])
 /** Bots: each is asked about on its own (`trust.ts`), unless it grants itself permissions. */
 const AGENT_DIRS = new Set(["agent", "agents"])
 const MAX_DEPTH = 8
 const MAX_FILES = 400
 
 /*
- * `.nikcli/package.json` without the one dependency nikcli adds to it on the
+ * `.nikcli/package.json` without the one dependency ragu adds to it on the
  * first turn, so that turn does not make the project a stranger. Its scripts
  * stay: `bun install` runs them.
  */
@@ -89,14 +89,14 @@ async function readOrMark(fs: ProjectFs, path: string): Promise<string | undefin
 }
 
 /**
- * The folders above `root` that nikcli also reads, nearest first.
+ * The folders above `root` that ragu also reads, nearest first.
  *
- * nikcli looks for `nikcli.json` and `.nikcli/` from the folder it runs in up to the worktree
+ * ragu looks for `nikcli.json` and `.nikcli/` from the folder it runs in up to the worktree
  * root: the git root, or outside git the root of the disk (`ConfigPaths.directories`). A
  * project below the git root, or a folder with no git of its own, so runs what its ancestors
  * bring, and a clone's `repo/.nikcli/plugin` was never part of the question asked for
  * `repo/packages/app` (full review 2026-10-06, bots 6). The climb stops at the folder that
- * holds `.git` (included, as nikcli includes its worktree), and short of the user's home, whose
+ * holds `.git` (included, as ragu includes its worktree), and short of the user's home, whose
  * `.nikcli` is the user's own.
  */
 async function ancestorFolders(root: string, fs: ProjectFs): Promise<string[]> {
@@ -127,7 +127,7 @@ async function ancestorFolders(root: string, fs: ProjectFs): Promise<string[]> {
 }
 
 /**
- * What nikcli would load from the project at `root`, and from the folders above it that it also
+ * What ragu would load from the project at `root`, and from the folders above it that it also
  * reads, sorted by path (those under `../`). Empty when there is no configuration of its own.
  */
 export async function projectSurface(root: string, fs: ProjectFs): Promise<SurfaceFile[]> {
@@ -169,7 +169,7 @@ async function surfaceAt(folder: string, prefix: string, fs: ProjectFs): Promise
         await walk(path, rel, depth + 1, inAgents || (depth === 0 && AGENT_DIRS.has(entry.name)))
         continue
       }
-      if (depth === 0 && NIKCLI_WRITES.has(entry.name)) continue
+      if (depth === 0 && RAGU_WRITES.has(entry.name)) continue
       if (++count > MAX_FILES) {
         // Too many to read one by one: the count stands in for them, so the
         // question is still asked and a change in number asks again.
@@ -225,7 +225,7 @@ function listed(files: readonly SurfaceFile[]): string {
 }
 
 /**
- * Whether a nikcli turn may run in the project at `root` now. Asked when the
+ * Whether a ragu turn may run in the project at `root` now. Asked when the
  * project's configuration is new to the user or changed since the yes.
  */
 export async function admitProject(
@@ -266,18 +266,18 @@ async function checkProject(
 }
 
 /*
- * The configuration nikcli reads in the project whatever the bot: the root
+ * The configuration ragu reads in the project whatever the bot: the root
  * `nikcli.json` and `.nikcli/nikcli.json`. ADE's server loads both for every
  * bot's turn (B8d).
  */
 const CONFIG_FILES = ["nikcli.json", "nikcli.jsonc", ".nikcli/nikcli.json", ".nikcli/nikcli.jsonc"]
 
-/** Whether `path`, relative to the project as `projectSurface` names it, is one of nikcli's configuration files. */
+/** Whether `path`, relative to the project as `projectSurface` names it, is one of ragu's configuration files. */
 export function isConfigFile(path: string): boolean {
   return CONFIG_FILES.includes(path)
 }
 
-/** JSON with comments and trailing commas, as nikcli reads its configuration; `undefined` when it is not. */
+/** JSON with comments and trailing commas, as ragu reads its configuration; `undefined` when it is not. */
 export function parseJsonc(text: string): unknown {
   let plain = ""
   for (let index = 0; index < text.length; index++) {
@@ -311,7 +311,7 @@ const isMap = (value: unknown): value is Record<string, unknown> =>
 /*
  * The first grant of the shell or of a folder outside in a `permission` or
  * `tools` value, as a path to take out (`agent.revisore.permission.bash`).
- * What is neither a string nor a map counts as a grant: nikcli is the one
+ * What is neither a string nor a map counts as a grant: ragu is the one
  * that decides what it means.
  */
 function grantIn(kind: "permission" | "tools", value: unknown, at: string): string | undefined {
@@ -336,10 +336,10 @@ function grantIn(kind: "permission" | "tools", value: unknown, at: string): stri
 }
 
 /**
- * What a project's nikcli configuration grants the bot `identifier` that
+ * What a project's ragu configuration grants the bot `identifier` that
  * reaches the shell or a folder outside (B8c): its own `permission` and
  * `tools`, and those of `agent.<identifier>` (and the older `mode`), which
- * nikcli merges with the bot's file. A path to
+ * ragu merges with the bot's file. A path to
  * take out, `null` when the file cannot be read (a refusal too), or
  * `undefined`. The gateway's check (`gateway/policy.ts`); in the panel the
  * session's rules on ADE's server come after it (B8d, `serve-rules.ts`).

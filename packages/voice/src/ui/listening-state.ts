@@ -7,7 +7,7 @@
  */
 
 import { wakeWordEnabled, type VoiceMode, type VoiceSettings } from "../settings/model"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 
 export type ListeningState =
   | { kind: "hidden" }

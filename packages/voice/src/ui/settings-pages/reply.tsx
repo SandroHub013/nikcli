@@ -3,7 +3,7 @@
  * MAI or the system — and, for MAI, its question, state, spend and «Riprova».
  */
 import { Show, For, type JSX } from "solid-js"
-import { locale, t } from "@nikcli-ai/ade/i18n"
+import { locale, t } from "@ragu/ade/i18n"
 import {
   REPLY_BACKEND_CHOICES,
   replyVoiceChoicesFor,

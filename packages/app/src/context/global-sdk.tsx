@@ -1,5 +1,5 @@
-import { createNikcliClient, type Event, type NikcliClient } from "@nikcli-ai/sdk/httpapi"
-import { createSimpleContext } from "@nikcli-ai/ui/context"
+import { createRaguClient, type Event, type RaguClient } from "@ragu/sdk/httpapi"
+import { createSimpleContext } from "@ragu/ui/context"
 import { createGlobalEmitter, type GlobalEmitter } from "@solid-primitives/event-bus"
 import { batch, onCleanup } from "solid-js"
 import { usePlatform } from "./platform"
@@ -7,7 +7,7 @@ import { useServer } from "./server"
 
 export interface GlobalSDK {
   url: string
-  client: NikcliClient
+  client: RaguClient
   event: GlobalEmitter<{
     [key: string]: Event
   }>
@@ -20,7 +20,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
     const platform = usePlatform()
     const abort = new AbortController()
 
-    const eventSdk = createNikcliClient({
+    const eventSdk = createRaguClient({
       baseUrl: server.url,
       signal: abort.signal,
       fetch: platform.fetch,
@@ -105,7 +105,7 @@ export const { use: useGlobalSDK, provider: GlobalSDKProvider } = createSimpleCo
       flush()
     })
 
-    const sdk = createNikcliClient({
+    const sdk = createRaguClient({
       baseUrl: server.url,
       fetch: platform.fetch,
       throwOnError: true,

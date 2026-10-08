@@ -1,4 +1,4 @@
-import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
+import { createRaguClient } from "@ragu/sdk/httpapi"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { DialogPrompt } from "@tui/ui/dialog-prompt"
@@ -7,9 +7,9 @@ import { useSync } from "@tui/context/sync"
 import { useProject } from "@tui/context/project"
 import { createMemo, createSignal, onMount } from "solid-js"
 import { setTimeout as sleep } from "node:timers/promises"
-import { errorData, errorMessage } from "@nikcli-ai/util/error-format"
-import { Log } from "@nikcli-ai/util/log"
-import { Identifier } from "@nikcli-ai/util/id"
+import { errorData, errorMessage } from "@ragu/util/error-format"
+import { Log } from "@ragu/util/log"
+import { Identifier } from "@ragu/util/id"
 import path from "node:path"
 import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
@@ -47,7 +47,7 @@ const DEFAULT_ADAPTORS: Adaptor[] = [
 const log = Log.create({ service: "tui-workspace" })
 
 function scoped(sdk: ReturnType<typeof useSDK>, sync: ReturnType<typeof useSync>, workspaceID: string) {
-  return createNikcliClient({
+  return createRaguClient({
     baseUrl: sdk.url,
     fetch: sdk.fetch,
     directory: sync.data.path.directory || sdk.directory,
@@ -148,7 +148,7 @@ export async function restoreWorkspaceSession(input: {
 
   input.project.workspace.set(input.workspaceID)
 
-  // Not fatal: a failed refetch here must not exit nikcli, and the syncs
+  // Not fatal: a failed refetch here must not exit ragu, and the syncs
   // below still bring the workspace's session in.
   await input.sync.bootstrap({ fatal: false })
 
@@ -279,7 +279,7 @@ export function DialogWorkspaceCreate(props: {
     const client =
       scope() === "project"
         ? sdk.client
-        : createNikcliClient({ baseUrl: sdk.url, fetch: sdk.fetch, directory: ownerDirectory() })
+        : createRaguClient({ baseUrl: sdk.url, fetch: sdk.fetch, directory: ownerDirectory() })
     const result = await client.experimental.workspace
       .create({
         id,

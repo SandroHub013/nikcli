@@ -23,7 +23,7 @@ if (process.platform === "win32") {
     })
     if (raised.exitCode !== 0) {
       console.warn(
-        "ADE: non sono riuscito a cambiare l'etichetta; nikcli e gli altri agenti potrebbero non scrivere i loro file.",
+        "ADE: non sono riuscito a cambiare l'etichetta; ragu e gli altri agenti potrebbero non scrivere i loro file.",
       )
     }
   }

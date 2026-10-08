@@ -17,7 +17,7 @@ The answer is **a small explicit tool→permission map, last-match-wins evaluati
 `PermissionNext.ask` takes `{ permission, patterns, ruleset, sessionID, … }`. For each pattern it calls `evaluate(permission, pattern, ruleset, approved)`:
 
 - `deny` → `DeniedError`
-- `ask` → park on a pending map, publish `permission.asked`, wait for `reply` (unless `NIKCLI_DANGEROUSLY_SKIP_PERMISSIONS`, which skips `ask` after the deny check)
+- `ask` → park on a pending map, publish `permission.asked`, wait for `reply` (unless `RAGU_DANGEROUSLY_SKIP_PERMISSIONS`, which skips `ask` after the deny check)
 - `allow` → continue
 
 Miss (no matching rule) is `{ action: "ask", permission, pattern: "*" }`.
@@ -35,7 +35,7 @@ Miss (no matching rule) is `{ action: "ask", permission, pattern: "*" }`.
 | `multiedit`   | `edit`               | Multi-hunk string replace.                                |
 | `apply_patch` | `edit`               | Same family as `patch`.                                   |
 
-`disabled(tools, ruleset)` uses that map, then `findLast` on the **permission** (not the tool id), and only counts a hit when `pattern === "*"` and `action === "deny"`. A deny on `monitor` therefore does **not** disable `bash`. A deny on `bash` with pattern `*` disables `monitor`. That is the asymmetry documented in `packages/nikcli/AGENTS.md`.
+`disabled(tools, ruleset)` uses that map, then `findLast` on the **permission** (not the tool id), and only counts a hit when `pattern === "*"` and `action === "deny"`. A deny on `monitor` therefore does **not** disable `bash`. A deny on `bash` with pattern `*` disables `monitor`. That is the asymmetry documented in `packages/ragu/AGENTS.md`.
 
 ## How Rulesets Combine
 

@@ -3,7 +3,7 @@
 // Generated from the exhaustive declaration beside PublicApi. Every leaf is a
 // typed reference into `./generated/client.ts`, so contract drift fails client
 // generation instead of disappearing from this view or becoming a runtime 404.
-// See packages/nikcli/AGENTS.md, "HTTP integration workflow".
+// See packages/ragu/AGENTS.md, "HTTP integration workflow".
 
 import { make, type RequestOptions } from "./generated/client.js"
 import { ClientError } from "./generated/client-error.js"
@@ -15,7 +15,7 @@ export type Raw = ReturnType<typeof make>
  * Result envelope. Transport failures and declared HTTP errors resolve as
  * `error` rather than rejecting, so a failed call in a UI event handler cannot
  * become an unhandled rejection. Pass `throwOnError` to opt back into
- * rejection — per call, or once via `createNikcliClient`.
+ * rejection — per call, or once via `createRaguClient`.
  */
 export type Result<A> =
   | { data: A; error: undefined; response?: undefined }
@@ -23,14 +23,14 @@ export type Result<A> =
 
 /**
  * `directory` selects which instance serves the request (the server reads it
- * from `x-nikcli-directory`); it defaults to the client's own directory.
+ * from `x-ragu-directory`); it defaults to the client's own directory.
  */
 export type CallOptions = RequestOptions & Selector & { readonly throwOnError?: boolean }
 
 /**
  * Instance selection. `directory` picks the instance serving the request and
  * `workspace` the workspace within it; the server reads both from headers
- * (`x-nikcli-directory` / `x-nikcli-workspace`).
+ * (`x-ragu-directory` / `x-ragu-workspace`).
  */
 type Selector = { readonly directory?: string; readonly workspace?: string }
 
@@ -81,9 +81,9 @@ function helpers(defaults: CompatDefaults) {
     const headers = new Headers(options?.headers)
     // Header values are latin-1; percent-encode anything outside it.
     if (directory !== undefined) {
-      headers.set("x-nikcli-directory", /[^\x00-\x7F]/.test(directory) ? encodeURIComponent(directory) : directory)
+      headers.set("x-ragu-directory", /[^\x00-\x7F]/.test(directory) ? encodeURIComponent(directory) : directory)
     }
-    if (workspace !== undefined) headers.set("x-nikcli-workspace", workspace)
+    if (workspace !== undefined) headers.set("x-ragu-workspace", workspace)
     return { ...options, headers }
   }
 

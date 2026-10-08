@@ -1,16 +1,16 @@
-# Nikcli Mobile Memory
+# Ragu Code Mobile Memory
 
 ## Mobile IDE Backend APIs
 
 ### Routing
 
 - Backend mounts: `/mobile/*` from `src/server/routes/mobile.ts`, `/file`, `/file/content`, `/find`, `/find/file`, `/find/symbol` from `src/server/routes/file.ts`, `/pty/*` from `src/server/routes/pty.ts`
-- Requests scoped by `x-nikcli-directory` or `?directory=...`; workspaces by `x-nikcli-workspace`
-- Mobile client sends bearer auth via `Authorization: Bearer <token>` and directory via `x-nikcli-directory`
+- Requests scoped by `x-ragu-directory` or `?directory=...`; workspaces by `x-ragu-workspace`
+- Mobile client sends bearer auth via `Authorization: Bearer <token>` and directory via `x-ragu-directory`
 
 ### Client/Backend Alignment
 
-Git and worktree endpoints live under `/mobile/git/*` and `/mobile/worktree*`. The mobile client scopes requests with `x-nikcli-directory`:
+Git and worktree endpoints live under `/mobile/git/*` and `/mobile/worktree*`. The mobile client scopes requests with `x-ragu-directory`:
 
 - Session git/file ops: `sessionWorkspaceDirectory(session)` (session cwd first)
 - Worktree sandbox ops: parent project `worktree` via `withDirectory()` / `projectDirectoryForWorktree()`
@@ -24,7 +24,7 @@ getGitDiff()           -> GET /mobile/git/diff
 stageGitFiles(files)   -> POST /mobile/git/stage { files: string[] }
 createGitCommit(msg)   -> POST /mobile/git/commit { message, files?, stagedOnly? } -> { sha, message }
 checkoutGitBranch()    -> POST /mobile/git/checkout { branch, create? }
-createWorktree()       -> POST /mobile/worktree (scoped via x-nikcli-directory to parent project)
+createWorktree()       -> POST /mobile/worktree (scoped via x-ragu-directory to parent project)
 resetWorktree()        -> POST /mobile/worktree/reset { directory }
 removeWorktree()       -> DELETE /mobile/worktree { directory }
 listDirectory(dir)     -> GET /file?path
@@ -33,7 +33,7 @@ writeFile(path, content) -> PUT /file/content
 ptyConnectUrl(id)      -> ws(s)://.../mobile/pty/:id/connect?token=...
 ```
 
-Worktree create/reset/remove require `x-nikcli-directory` to point at the **parent project** worktree, not the sandbox path. Session git/file access uses `sessionWorkspaceDirectory()` for consistent scoping.
+Worktree create/reset/remove require `x-ragu-directory` to point at the **parent project** worktree, not the sandbox path. Session git/file access uses `sessionWorkspaceDirectory()` for consistent scoping.
 
 ### Git Backend Bugs
 
@@ -51,13 +51,13 @@ Worktree create/reset/remove require `x-nikcli-directory` to point at the **pare
 
 ## GitHub OAuth Persistence Bug
 
-**Root cause**: GitHub OAuth token stored server-side in `${Global.Path.data}/connectors-auth.json` (XDG: `~/.local/share/nikcli`). Mobile only stores server config in SecureStore (`nikcli_server_config`).
+**Root cause**: GitHub OAuth token stored server-side in `${Global.Path.data}/connectors-auth.json` (XDG: `~/.local/share/nikcli`). Mobile only stores server config in SecureStore (`ragu_server_config`).
 
-**Bug**: If nikcli host server restarts/redeploys or runs under different home/XDG path, `connectors-auth.json` disappears. On app reopen, `/mobile/bootstrap` recomputes `github.connected` and sees missing token → re-requests OAuth.
+**Bug**: If ragu host server restarts/redeploys or runs under different home/XDG path, `connectors-auth.json` disappears. On app reopen, `/mobile/bootstrap` recomputes `github.connected` and sees missing token → re-requests OAuth.
 
-**Fix**: Make `${Global.Path.data}` durable (persist/mount volume). Add configurable `NIKCLI_DATA_DIR` env/flag in `src/global/index.ts` for hosted deployments.
+**Fix**: Make `${Global.Path.data}` durable (persist/mount volume). Add configurable `RAGU_DATA_DIR` env/flag in `src/global/index.ts` for hosted deployments.
 
-**Relevant files**: `packages/nikcli/src/global/index.ts`, `packages/nikcli/src/connectors/auth.ts`, `packages/nikcli/src/server/routes/mobile.ts`
+**Relevant files**: `packages/ragu/src/global/index.ts`, `packages/ragu/src/connectors/auth.ts`, `packages/ragu/src/server/routes/mobile.ts`
 
 ## PTY/WebSocket Terminal
 
@@ -79,7 +79,7 @@ Terminal stuck in "Connecting..." when many agents running. Root causes:
 
 ### WebSocket Auth Fix (2026-04-30)
 
-Fixed in `packages/nikcli/src/server/server.ts:161`:
+Fixed in `packages/ragu/src/server/server.ts:161`:
 
 ```typescript
 const bearer = MobileAuth.bearer(c.req.raw) || c.req.query("token")
@@ -142,7 +142,7 @@ Stream events: `server.connected`, `server.heartbeat`, `message.updated`, `messa
 
 ## Storage
 
-- `lib/storage.ts`: SecureStore with key `nikcli_server_config` → `ServerConfig` (url, token, directory, model prefs, execution target)
+- `lib/storage.ts`: SecureStore with key `ragu_server_config` → `ServerConfig` (url, token, directory, model prefs, execution target)
 - `lib/offline.ts`: offline storage support
 - No AsyncStorage usage; all local persistence via `expo-secure-store`
 

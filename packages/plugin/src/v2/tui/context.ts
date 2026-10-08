@@ -7,7 +7,7 @@ import type {
   McpStatus,
   Message,
   Model,
-  NikcliClient,
+  RaguClient,
   Part,
   PermissionRequest,
   PermissionRule,
@@ -17,7 +17,7 @@ import type {
   ReferenceConfig,
   Session,
   SessionEntry,
-} from "@nikcli-ai/sdk/httpapi"
+} from "@ragu/sdk/httpapi"
 import type { JSX } from "@opentui/solid"
 import type { Store } from "solid-js/store"
 import type { TuiDialogAlertProps, TuiKV, TuiToast } from "../../tui"
@@ -64,7 +64,7 @@ interface LocationCollection<Value> {
   refresh(location?: LocationRef): Promise<void>
 }
 
-/** Reactive nikcli data exposed to a v2 TUI plugin. */
+/** Reactive ragu data exposed to a v2 TUI plugin. */
 export interface Data {
   readonly on: <Type extends Event["type"]>(
     type: Type,
@@ -270,7 +270,7 @@ export interface Storage {
 
 export interface Context {
   readonly options: Readonly<Record<string, unknown>>
-  readonly client: NikcliClient
+  readonly client: RaguClient
   readonly data: Data
   readonly storage: Storage
   readonly kv: KV

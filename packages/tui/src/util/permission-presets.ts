@@ -86,7 +86,7 @@ const APPROVE_FOR_ME_PERMISSIONS: PermissionMap = {
   // Opens the microphone and ships the audio off for transcription — never
   // silently allowed, even under "approve for me".
   voice: "ask",
-  // Writes code that nikcli loads and runs in-process from then on.
+  // Writes code that ragu loads and runs in-process from then on.
   plugin: "ask",
   question: "deny",
   plan_enter: "deny",
@@ -244,7 +244,7 @@ function uniformPermissionPatch(action: PermissionAction): PermissionMap {
 /**
  * The preset map plus a rewrite of every per-tool key the agent's map already
  * has. `config.update` writes with `mergeDeep`
- * (`packages/nikcli/src/config/config.ts`, `updateImpl` and
+ * (`packages/ragu/src/config/config.ts`, `updateImpl` and
  * `updateGlobalImpl`), and a patch cannot delete a key: `undefined` is dropped
  * by `JSON.stringify` on the way out, and `null` fails the config schema
  * (`Permission` is the three actions, or a map of them). So a patch that wrote

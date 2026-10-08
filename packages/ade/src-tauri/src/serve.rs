@@ -1,22 +1,22 @@
-/// The nikcli server ADE talks to.
+/// The ragu server ADE talks to.
 ///
 /// ADE drives agent CLIs through a pty, which is right for a terminal and
 /// useless for anything that needs structure: the chat section and the voice
 /// assistant both want sessions, messages, models and permissions as data, not
-/// as bytes on a screen. nikcli already serves exactly that over HTTP, so ADE
+/// as bytes on a screen. ragu already serves exactly that over HTTP, so ADE
 /// starts one and uses the SDK against it.
 ///
 /// This lives in Rust because the obvious alternative does not work. The SDK's
-/// own `createNikcliServer` spawns with `node:child_process`, and there is no
+/// own `createRaguServer` spawns with `node:child_process`, and there is no
 /// such thing inside a WebView2 renderer. The renderer gets a URL from here and
 /// speaks plain `fetch` to it from then on.
 ///
-/// One server per window: a `nikcli serve` of ADE's own, started on demand
+/// One server per window: a `ragu serve` of ADE's own, started on demand
 /// and killed — with everything it started — when ADE exits. It is
 /// deliberately not the `pty_spawn` path — that one hands a terminal to a
 /// human, and this one is a background service whose stdout is a protocol.
 ///
-/// Never the background service nikcli registers in its state folder, even
+/// Never the background service ragu registers in its state folder, even
 /// when one answers (decided in the C5 review): it was started from an
 /// environment ADE does not know, and one started with `--auto` says yes to
 /// every «ask», so the chat's permission rules would not hold there. ADE's
@@ -43,7 +43,7 @@ use crate::pty::which_on_path;
 /*
  * How long to wait for the server to announce itself.
  *
- * Generous, and it has to be: `nikcli serve` loads the config chain, the
+ * Generous, and it has to be: `ragu serve` loads the config chain, the
  * project and the provider list before it binds, and on a cold start with a
  * large workspace that is comfortably past ten seconds. A timeout that fires
  * early does not fail safely — it leaves an orphan server running on a port
@@ -58,32 +58,32 @@ const READY_TIMEOUT: Duration = Duration::from_secs(45);
 const START_WAIT: Duration = Duration::from_secs(2 * 45 + 15 + 5);
 
 /// The line `serve` prints once it is actually listening.
-const READY_PREFIX: &str = "nikcli server listening";
+const READY_PREFIX: &str = "ragu server listening";
 
 /// The user name ADE's own server is started with; the password is random.
-const USERNAME: &str = "nikcli";
+const USERNAME: &str = "ragu";
 
-/// Variables that make nikcli say yes to every «ask» (`util/src/flag.ts`,
+/// Variables that make ragu say yes to every «ask» (`util/src/flag.ts`,
 /// `permission/next.ts`): set by `--auto`, `--yolo` and
 /// `--dangerously-skip-permissions`, and inherited by ADE from any terminal
 /// that had them. With either one the chat's permission rules would not count,
 /// and the chat would not know.
-const AUTO_APPROVE: [&str; 2] = ["NIKCLI_AUTO_APPROVE", "NIKCLI_DANGEROUSLY_SKIP_PERMISSIONS"];
+const AUTO_APPROVE: [&str; 2] = ["RAGU_AUTO_APPROVE", "RAGU_DANGEROUSLY_SKIP_PERMISSIONS"];
 
 /// The small model ADE's server gets when the user has not chosen one.
 ///
-/// nikcli calls its small model on its own, without being asked: to title a
+/// ragu calls its small model on its own, without being asked: to title a
 /// session and to summarise every turn (`session/prompt-title.ts`,
 /// `session/summary.ts`). Unset, it picks one by provider, and that can be a
 /// paid one. No spending without the user's say (Master, C4): a free one here,
 /// the same for every such call. A `small_model` the user wrote — in their
-/// global config, in `NIKCLI_CONFIG` or in `NIKCLI_CONFIG_CONTENT`, even an
+/// global config, in `RAGU_CONFIG` or in `RAGU_CONFIG_CONTENT`, even an
 /// empty one, which turns it off — is left as it is.
 ///
-/// The project's config is not read here. `NIKCLI_CONFIG_CONTENT` is merged
+/// The project's config is not read here. `RAGU_CONFIG_CONTENT` is merged
 /// after `nikcli.json` at the project's root, so a `small_model` there gives
 /// way to this free one; `<project>/.nikcli/nikcli.json` and
-/// `NIKCLI_CONFIG_DIR` are merged after it (`config/config.ts`, the
+/// `RAGU_CONFIG_DIR` are merged after it (`config/config.ts`, the
 /// `directories` loop) and win.
 ///
 /// The same holds for `model` (`free_models_content`): a model chosen in the
@@ -93,7 +93,7 @@ const AUTO_APPROVE: [&str; 2] = ["NIKCLI_AUTO_APPROVE", "NIKCLI_DANGEROUSLY_SKIP
 /// reading, BASSO 2).
 ///
 /// Models leave the catalog (`nex-agi/nex-n2.5-mini:free` did), and a small
-/// model that is not there makes those calls fail quietly: nikcli does not
+/// model that is not there makes those calls fail quietly: ragu does not
 /// fall back to another. So the one ADE gives is chosen from the server's own
 /// catalog when it starts (`pick_small_model`), and this is only the fixed
 /// fallback, for a catalog that cannot be read.
@@ -140,7 +140,7 @@ impl Serving {
 
     /// Ends ADE's own server and whatever it started.
     fn end(&mut self) {
-        // `nikcli` can be an npm shim, and killing the shim alone would
+        // `ragu` can be an npm shim, and killing the shim alone would
         // leave the real server listening.
         crate::pty::kill_tree(self.child.id());
         let _ = self.child.kill();
@@ -325,7 +325,7 @@ fn claim_start(server: &Server) -> Result<Option<ServerInfo>, String> {
                 slot = next;
                 if timeout.timed_out() {
                     return Err(format!(
-                        "nikcli serve non ha risposto entro {} secondi.",
+                        "ragu serve non ha risposto entro {} secondi.",
                         START_WAIT.as_secs()
                     ));
                 }
@@ -339,21 +339,21 @@ fn install(server: &Server, mut serving: Serving) -> Result<ServerInfo, String> 
     let mut slot = server.lock();
     if !matches!(*slot, Slot::Starting) {
         /*
-         * The claim is gone, so `nikcli_serve_stop` ran — or the window closed
+         * The claim is gone, so `ragu_serve_stop` ran — or the window closed
          * — while this server was starting. Killing it is the only safe move:
          * the alternative is a server listening on a port nobody recorded.
          */
         drop(slot);
         serving.end();
-        return Err("nikcli serve è stato fermato durante l'avvio.".to_string());
+        return Err("ragu serve è stato fermato durante l'avvio.".to_string());
     }
     let info = serving.info();
     *slot = Slot::Running(serving);
     Ok(info)
 }
 
-/// Where nikcli reads the user's global config: `Global.Path.config` in
-/// `@nikcli-ai/util`, then `nikcli.json` (`config.ts`, `global()`).
+/// Where ragu reads the user's global config: `Global.Path.config` in
+/// `@ragu/util`, then `nikcli.json` (`config.ts`, `global()`).
 fn user_config_file() -> Option<PathBuf> {
     let base = if cfg!(windows) {
         std::env::var_os("APPDATA")
@@ -368,7 +368,7 @@ fn user_config_file() -> Option<PathBuf> {
     Some(base.join("nikcli").join("nikcli.json"))
 }
 
-/// `NIKCLI_CONFIG_CONTENT` for ADE's server, or `None` to leave the
+/// `RAGU_CONFIG_CONTENT` for ADE's server, or `None` to leave the
 /// environment as it is.
 ///
 /// `inherited` is the variable ADE itself was started with, `user_files` the
@@ -385,7 +385,7 @@ fn user_config_file() -> Option<PathBuf> {
 ///   leave the paid default in place. A file that cannot be read counts as
 ///   a choice.
 ///
-/// Content that is not a JSON object is not touched: nikcli refuses it anyway.
+/// Content that is not a JSON object is not touched: ragu refuses it anyway.
 fn free_models_content(inherited: Option<&str>, user_files: &[String], model: &str) -> Option<String> {
     let mut content = match inherited.map(str::trim).filter(|text| !text.is_empty()) {
         Some(text) => match serde_json::from_str::<serde_json::Value>(text) {
@@ -558,9 +558,9 @@ fn catalog_small_model(serving: &Serving) -> Option<String> {
     pick_small_model(&serde_json::from_slice(&body).ok()?)
 }
 
-/// The user's own config files, as text: the global one and `NIKCLI_CONFIG`.
+/// The user's own config files, as text: the global one and `RAGU_CONFIG`.
 fn user_config_texts() -> Vec<String> {
-    let custom = std::env::var_os("NIKCLI_CONFIG").map(PathBuf::from);
+    let custom = std::env::var_os("RAGU_CONFIG").map(PathBuf::from);
     user_config_file()
         .into_iter()
         .chain(custom)
@@ -575,7 +575,7 @@ fn random_password() -> Result<String, String> {
     Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
-/// The `nikcli serve` command line. The password goes in the environment, as
+/// The `ragu serve` command line. The password goes in the environment, as
 /// Desktop's sidecar does it, never in the arguments: those are visible to
 /// every process on the machine.
 fn serve_command(program: &str, directory: Option<&str>, password: &str, config_content: Option<&str>) -> Command {
@@ -584,10 +584,10 @@ fn serve_command(program: &str, directory: Option<&str>, password: &str, config_
         .arg("serve")
         .arg("--hostname=127.0.0.1")
         // Port 0 asks the OS for a free one; the readiness line reports which.
-        // A fixed port would collide with a nikcli the user started themselves.
+        // A fixed port would collide with a ragu the user started themselves.
         .arg("--port=0")
-        .env("NIKCLI_SERVER_USERNAME", USERNAME)
-        .env("NIKCLI_SERVER_PASSWORD", password)
+        .env("RAGU_SERVER_USERNAME", USERNAME)
+        .env("RAGU_SERVER_PASSWORD", password)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -596,7 +596,7 @@ fn serve_command(program: &str, directory: Option<&str>, password: &str, config_
         command.env_remove(name);
     }
     if let Some(content) = config_content {
-        command.env("NIKCLI_CONFIG_CONTENT", content);
+        command.env("RAGU_CONFIG_CONTENT", content);
     }
 
     if let Some(dir) = directory.filter(|d| !d.is_empty()) {
@@ -613,14 +613,14 @@ fn serve_command(program: &str, directory: Option<&str>, password: &str, config_
     command
 }
 
-/// Starts `nikcli serve`, or returns the URL of the one already running.
+/// Starts `ragu serve`, or returns the URL of the one already running.
 ///
 /// Idempotent on purpose: both the chat section and the voice assistant ask
 /// for a server, they mount independently, and neither should have to know
 /// whether the other got there first.
 ///
 /// Blocking from beginning to end, and therefore never called on the thread
-/// that draws the window — see `nikcli_serve_start`, which is the command.
+/// that draws the window — see `ragu_serve_start`, which is the command.
 fn start_blocking(server: &Server, directory: Option<String>) -> Result<ServerInfo, String> {
     if let Some(info) = claim_start(server)? {
         return Ok(info);
@@ -631,7 +631,7 @@ fn start_blocking(server: &Server, directory: Option<String>) -> Result<ServerIn
     spawn_own(server, directory)
 }
 
-/// Starts ADE's own `nikcli serve`, with a password of its own, and installs
+/// Starts ADE's own `ragu serve`, with a password of its own, and installs
 /// it. The caller holds the `Starting` claim.
 ///
 /// When the small model is ADE's to give, the server's catalog says which:
@@ -640,9 +640,9 @@ fn start_blocking(server: &Server, directory: Option<String>) -> Result<ServerIn
 /// when it is up (`replace_when_ready`). The pick is kept for the next start
 /// of this run, so the second server is the exception.
 fn spawn_own(server: &Server, directory: Option<String>) -> Result<ServerInfo, String> {
-    let program = which_on_path("nikcli")
-        .ok_or_else(|| "nikcli non è nel PATH: installalo per usare chat e assistente.".to_string())?;
-    let inherited = std::env::var("NIKCLI_CONFIG_CONTENT").ok();
+    let program = which_on_path("ragu")
+        .ok_or_else(|| "ragu non è nel PATH: installalo per usare chat e assistente.".to_string())?;
+    let inherited = std::env::var("RAGU_CONFIG_CONTENT").ok();
     let serving = start_with_small_model(
         inherited.as_deref(),
         &user_config_texts(),
@@ -654,7 +654,7 @@ fn spawn_own(server: &Server, directory: Option<String>) -> Result<ServerInfo, S
 }
 
 /// A started server with the small model `spawn_own` describes: `launch`
-/// starts one with a `NIKCLI_CONFIG_CONTENT`, `catalog` reads its pick, and
+/// starts one with a `RAGU_CONFIG_CONTENT`, `catalog` reads its pick, and
 /// `chosen` keeps the pick for the next start. Apart so that the tests can run
 /// it with their own processes and catalog.
 fn start_with_small_model(
@@ -702,7 +702,7 @@ fn replace_when_ready(serving: Serving, relaunch: impl FnOnce() -> Result<Servin
 
 /// Spawns `command` so that, on Windows, the process and what it starts end when ADE's last handle to the job
 /// closes: `app.restart()` skips `RunEvent::Exit` and the updater ends the process with `exit(0)`, and neither
-/// ran `Serving::end`, so every update left a `nikcli serve` with its LSP and MCP children behind (full review
+/// ran `Serving::end`, so every update left a `ragu serve` with its LSP and MCP children behind (full review
 /// 2026-10-06, Rust 9). The kernel closes the job when the process goes, whichever way.
 ///
 /// The process starts suspended and is resumed once in the job, so it cannot make a child outside it. A job
@@ -735,18 +735,18 @@ fn spawn_guarded(command: &mut Command) -> std::io::Result<(Child, Option<crate:
     }
 }
 
-/// Starts one `nikcli serve` and waits for it to say where it listens.
+/// Starts one `ragu serve` and waits for it to say where it listens.
 fn launch(program: &str, directory: Option<&str>, content: Option<&str>) -> Result<Serving, String> {
     let password = random_password()?;
     let mut command = serve_command(program, directory, &password, content);
 
     let (mut child, guard) =
-        spawn_guarded(&mut command).map_err(|error| format!("nikcli serve non è partito: {error}"))?;
+        spawn_guarded(&mut command).map_err(|error| format!("ragu serve non è partito: {error}"))?;
 
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| "nikcli serve non ha uno stdout leggibile".to_string())?;
+        .ok_or_else(|| "ragu serve non ha uno stdout leggibile".to_string())?;
     let stderr = child.stderr.take();
 
     let (ready_tx, ready_rx) = channel::<Result<String, String>>();
@@ -772,7 +772,7 @@ fn launch(program: &str, directory: Option<&str>, content: Option<&str>) -> Resu
             }
         }
         if !announced {
-            let _ = ready_tx.send(Err("nikcli serve è uscito senza annunciare una porta".into()));
+            let _ = ready_tx.send(Err("ragu serve è uscito senza annunciare una porta".into()));
         }
     });
 
@@ -819,7 +819,7 @@ fn launch(program: &str, directory: Option<&str>, content: Option<&str>) -> Resu
             let _ = child.kill();
             let _ = child.wait();
             Err(format!(
-                "nikcli serve non ha risposto entro {} secondi.",
+                "ragu serve non ha risposto entro {} secondi.",
                 READY_TIMEOUT.as_secs()
             ))
         }
@@ -827,7 +827,7 @@ fn launch(program: &str, directory: Option<&str>, content: Option<&str>) -> Resu
             crate::pty::kill_tree(child.id());
             let _ = child.kill();
             let _ = child.wait();
-            Err("nikcli serve è terminato durante l'avvio.".into())
+            Err("ragu serve è terminato durante l'avvio.".into())
         }
     }
 }
@@ -848,7 +848,7 @@ fn launch(program: &str, directory: Option<&str>, content: Option<&str>) -> Resu
 
 /// Finds or starts the server, and says which. Never the password.
 #[tauri::command]
-pub async fn nikcli_serve_start(
+pub async fn ragu_serve_start(
     app: tauri::AppHandle,
     directory: Option<String>,
 ) -> Result<ServerInfo, String> {
@@ -862,7 +862,7 @@ pub async fn nikcli_serve_start(
 
 /// The running server, or nothing. Never starts one.
 #[tauri::command]
-pub async fn nikcli_serve_status(state: tauri::State<'_, Server>) -> Result<Option<ServerInfo>, String> {
+pub async fn ragu_serve_status(state: tauri::State<'_, Server>) -> Result<Option<ServerInfo>, String> {
     let mut slot = state.lock();
     let Slot::Running(serving) = &mut *slot else {
         return Ok(None);
@@ -871,7 +871,7 @@ pub async fn nikcli_serve_status(state: tauri::State<'_, Server>) -> Result<Opti
 }
 
 #[tauri::command]
-pub async fn nikcli_serve_stop(app: tauri::AppHandle) {
+pub async fn ragu_serve_stop(app: tauri::AppHandle) {
     // `kill` and `wait` both block, briefly but really.
     let _ = tauri::async_runtime::spawn_blocking(move || app.state::<Server>().shutdown()).await;
 }
@@ -927,7 +927,7 @@ mod tests {
     fn own(url: &str, child: Child) -> Serving {
         Serving {
             url: url.to_string(),
-            auth: Some(("nikcli".into(), "finta".into())),
+            auth: Some(("ragu".into(), "finta".into())),
             version: None,
             child,
             guard: None,
@@ -967,7 +967,7 @@ mod tests {
 
     #[test]
     fn a_program_that_does_not_exist_is_an_error_not_a_hang() {
-        let mut command = Command::new("nikcli-che-non-esiste-12345");
+        let mut command = Command::new("ragu-che-non-esiste-12345");
         assert!(super::spawn_guarded(&mut command).is_err());
     }
 
@@ -1038,7 +1038,7 @@ mod tests {
     fn a_server_stopped_while_it_was_starting_is_killed_rather_than_installed() {
         let server = Server::default();
         assert_eq!(claim_start(&server).unwrap(), None);
-        // `nikcli_serve_stop` arriving mid-start: the claim is dropped.
+        // `ragu_serve_stop` arriving mid-start: the claim is dropped.
         server.shutdown();
 
         let child = sleeper();
@@ -1077,7 +1077,7 @@ mod tests {
     #[test]
     fn reads_the_url_out_of_the_readiness_line() {
         assert_eq!(
-            parse_ready_line("nikcli server listening on http://127.0.0.1:52341"),
+            parse_ready_line("ragu server listening on http://127.0.0.1:52341"),
             Some("http://127.0.0.1:52341".to_string())
         );
     }
@@ -1085,7 +1085,7 @@ mod tests {
     #[test]
     fn drops_a_trailing_slash_so_the_sdk_does_not_double_it() {
         assert_eq!(
-            parse_ready_line("nikcli server listening on http://127.0.0.1:4096/"),
+            parse_ready_line("ragu server listening on http://127.0.0.1:4096/"),
             Some("http://127.0.0.1:4096".to_string())
         );
     }
@@ -1093,7 +1093,7 @@ mod tests {
     #[test]
     fn accepts_https_and_trailing_words() {
         assert_eq!(
-            parse_ready_line("nikcli server listening on https://127.0.0.1:8443 (mdns)"),
+            parse_ready_line("ragu server listening on https://127.0.0.1:8443 (mdns)"),
             Some("https://127.0.0.1:8443".to_string())
         );
     }
@@ -1109,20 +1109,20 @@ mod tests {
 
     #[test]
     fn refuses_a_readiness_line_with_no_url() {
-        assert_eq!(parse_ready_line("nikcli server listening"), None);
+        assert_eq!(parse_ready_line("ragu server listening"), None);
     }
 
     #[test]
     fn the_password_goes_in_the_environment_never_in_the_arguments() {
-        let command = serve_command("nikcli", None, "finta-password", None);
+        let command = serve_command("ragu", None, "finta-password", None);
         let args: Vec<String> = command.get_args().map(|arg| arg.to_string_lossy().into_owned()).collect();
         assert_eq!(args, ["serve", "--hostname=127.0.0.1", "--port=0"]);
         let envs: Vec<(String, String)> = command
             .get_envs()
             .filter_map(|(name, value)| Some((name.to_string_lossy().into_owned(), value?.to_string_lossy().into_owned())))
             .collect();
-        assert!(envs.contains(&("NIKCLI_SERVER_PASSWORD".into(), "finta-password".into())));
-        assert!(envs.contains(&("NIKCLI_SERVER_USERNAME".into(), "nikcli".into())));
+        assert!(envs.contains(&("RAGU_SERVER_PASSWORD".into(), "finta-password".into())));
+        assert!(envs.contains(&("RAGU_SERVER_USERNAME".into(), "ragu".into())));
     }
 
     #[test]
@@ -1361,31 +1361,31 @@ mod tests {
         let env_of = |command: &std::process::Command| {
             command
                 .get_envs()
-                .find(|(name, _)| *name == "NIKCLI_CONFIG_CONTENT")
+                .find(|(name, _)| *name == "RAGU_CONFIG_CONTENT")
                 .map(|(_, value)| value.map(|v| v.to_string_lossy().into_owned()))
         };
-        let without = serve_command("nikcli", None, "finta-password", None);
+        let without = serve_command("ragu", None, "finta-password", None);
         assert_eq!(env_of(&without), None);
-        let with = serve_command("nikcli", None, "finta-password", Some(r#"{"small_model":"x/y:free"}"#));
+        let with = serve_command("ragu", None, "finta-password", Some(r#"{"small_model":"x/y:free"}"#));
         assert_eq!(env_of(&with), Some(Some(r#"{"small_model":"x/y:free"}"#.to_string())));
     }
 
     #[test]
     fn the_server_never_inherits_an_approve_everything_flag() {
-        let command = serve_command("nikcli", None, "finta-password", None);
+        let command = serve_command("ragu", None, "finta-password", None);
         let removed: Vec<String> = command
             .get_envs()
             .filter(|(_, value)| value.is_none())
             .map(|(name, _)| name.to_string_lossy().into_owned())
             .collect();
-        assert!(removed.contains(&"NIKCLI_AUTO_APPROVE".to_string()), "{removed:?}");
-        assert!(removed.contains(&"NIKCLI_DANGEROUSLY_SKIP_PERMISSIONS".to_string()), "{removed:?}");
+        assert!(removed.contains(&"RAGU_AUTO_APPROVE".to_string()), "{removed:?}");
+        assert!(removed.contains(&"RAGU_DANGEROUSLY_SKIP_PERMISSIONS".to_string()), "{removed:?}");
     }
 
     #[test]
     fn the_chat_never_looks_for_a_server_ade_did_not_start() {
         // The code of both files, doc comments and this test module left out:
-        // nothing reads nikcli's service registration or makes a server
+        // nothing reads ragu's service registration or makes a server
         // without a child of ADE's.
         let registration = ["service", ".json"].concat();
         for (name, source) in [("serve.rs", include_str!("serve.rs")), ("serve_proxy.rs", include_str!("serve_proxy.rs"))] {
@@ -1476,7 +1476,7 @@ mod tests {
         status
     }
 
-    /// The real nikcli: a server of ADE's own. Health and `provider.list`
+    /// The real ragu: a server of ADE's own. Health and `provider.list`
     /// only — no model is called.
     /// `cargo test --lib -- --ignored live_`
     #[test]

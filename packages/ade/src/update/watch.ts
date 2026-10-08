@@ -170,7 +170,7 @@ export interface UpdateWatchOptions {
  * GitHub's release list, asked for with the tag it last answered with.
  *
  * The whole list rather than `releases/latest`: this repository carries
- * nikcli's releases and other products' too, and `latest` is whichever was
+ * ragu's releases and other products' too, and `latest` is whichever was
  * published last, which is usually not ADE's. The filtering is in
  * `newerRelease`, so the list has to be the one that contains `ade-v*`.
  */

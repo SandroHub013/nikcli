@@ -31,7 +31,7 @@ class PlanningHost implements VoiceHost {
     ]
   }
   listProjects() {
-    return [{ name: "nikcli", root: "C:/Users/x/nikcli", isOpen: true }]
+    return [{ name: "ragu", root: "C:/Users/x/ragu", isOpen: true }]
   }
   async startSession(input: { agent: string; task?: string; project?: string }) {
     this.started.push(input)
@@ -107,7 +107,7 @@ async function settle() {
 describe("il pianificatore dentro il motore", () => {
   test("il pianificatore viene prima dell'agente: se il piano basta, l'agente non parte", async () => {
     const { engine, host, transcriber, speaker, prompts } = setup(
-      JSON.stringify([{ action: "start_session", agent: "claude", task: "il parser", project: "nikcli" }]),
+      JSON.stringify([{ action: "start_session", agent: "claude", task: "il parser", project: "ragu" }]),
     )
     let asked = 0
     ;(host as VoiceHost).askAgent = async () => {
@@ -116,7 +116,7 @@ describe("il pianificatore dentro il motore", () => {
     }
 
     await engine.start()
-    transcriber.emit("avvia una sessione claude sul parser nel progetto nikcli", true)
+    transcriber.emit("avvia una sessione claude sul parser nel progetto ragu", true)
     await settle()
 
     expect(prompts).toHaveLength(1)
@@ -247,7 +247,7 @@ describe("il pianificatore dentro il motore", () => {
     }
 
     await engine.start()
-    transcriber.emit("avvia una sessione claude sul parser nel progetto nikcli", true)
+    transcriber.emit("avvia una sessione claude sul parser nel progetto ragu", true)
     await settle()
 
     // Il pianificatore ha risposto vuoto una volta, prima dell'agente; dopo non viene richiamato.
@@ -264,7 +264,7 @@ describe("il pianificatore dentro il motore", () => {
     const transcriber = createFakeTranscriber()
     const speaker = createFakeSpeaker()
     const answer =
-      '{"speech":"Avvio subito Claude sul parser. Ti dico quando ha finito.","steps":[{"action":"start_session","agent":"claude","task":"il parser","project":"nikcli"}]}'
+      '{"speech":"Avvio subito Claude sul parser. Ti dico quando ha finito.","steps":[{"action":"start_session","agent":"claude","task":"il parser","project":"ragu"}]}'
     const engine = createVoiceEngine({
       host,
       transcriber,
@@ -281,7 +281,7 @@ describe("il pianificatore dentro il motore", () => {
     } as never)
 
     await engine.start()
-    transcriber.emit("avvia una sessione claude sul parser nel progetto nikcli", true)
+    transcriber.emit("avvia una sessione claude sul parser nel progetto ragu", true)
     await settle()
 
     expect(host.started).toHaveLength(1)
@@ -305,13 +305,13 @@ describe("il pianificatore dentro il motore", () => {
         new Promise((resolve) => {
           prompt.signal?.addEventListener("abort", () => (aborted = true))
           setTimeout(
-            () => resolve(JSON.stringify([{ action: "start_session", agent: "claude", task: "x", project: "nikcli" }])),
+            () => resolve(JSON.stringify([{ action: "start_session", agent: "claude", task: "x", project: "ragu" }])),
             60,
           )
         }),
     )
 
-    void engine.submitText("avvia una sessione claude sul parser nel progetto nikcli")
+    void engine.submitText("avvia una sessione claude sul parser nel progetto ragu")
     await settle()
     expect(engine.status()).toBe("executing")
     await engine.submitText("annulla")
@@ -380,16 +380,16 @@ describe("il pianificatore dentro il motore", () => {
   test("«avvia 4 sessioni claude, una per argomento» avvia quattro sessioni", async () => {
     const { engine, host, transcriber, speaker } = setup(
       JSON.stringify([
-        { action: "start_session", agent: "claude", task: "il parser", project: "nikcli" },
-        { action: "start_session", agent: "claude", task: "i test", project: "nikcli" },
-        { action: "start_session", agent: "claude", task: "la documentazione", project: "nikcli" },
-        { action: "start_session", agent: "claude", task: "la build", project: "nikcli" },
+        { action: "start_session", agent: "claude", task: "il parser", project: "ragu" },
+        { action: "start_session", agent: "claude", task: "i test", project: "ragu" },
+        { action: "start_session", agent: "claude", task: "la documentazione", project: "ragu" },
+        { action: "start_session", agent: "claude", task: "la build", project: "ragu" },
       ]),
     )
 
     await engine.start()
     transcriber.emit(
-      "avvia quattro sessioni claude nel progetto nikcli, una sul parser, una sui test, una sulla documentazione e una sulla build",
+      "avvia quattro sessioni claude nel progetto ragu, una sul parser, una sui test, una sulla documentazione e una sulla build",
       true,
     )
     await settle()
@@ -397,7 +397,7 @@ describe("il pianificatore dentro il motore", () => {
     expect(host.started).toHaveLength(4)
     expect(host.started.map((s) => s.task)).toEqual(["il parser", "i test", "la documentazione", "la build"])
     // Il progetto arriva come radice, non come la parola detta.
-    expect(host.started.every((s) => s.project === "C:/Users/x/nikcli")).toBe(true)
+    expect(host.started.every((s) => s.project === "C:/Users/x/ragu")).toBe(true)
     expect(speaker.lastSpoken).toBe("Ho avviato 4 sessioni Claude Code.")
 
     await engine.stop()
@@ -427,7 +427,7 @@ describe("il pianificatore dentro il motore", () => {
 
     expect(prompts).toHaveLength(1)
     expect(prompts[0].user).toContain("claude-code")
-    expect(prompts[0].user).toContain("nikcli")
+    expect(prompts[0].user).toContain("ragu")
     expect(prompts[0].user.endsWith("Frase dell'utente: fai una cosa complicatissima con i pannelli")).toBe(true)
     // Le regole non portano niente di questa macchina: uguali a ogni frase.
     expect(prompts[0].system).not.toContain("claude-code")
@@ -678,11 +678,11 @@ describe("il pianificatore dentro il motore", () => {
 
   test("un piano senza send_prompt si esegue subito, come prima", async () => {
     const { engine, host, transcriber } = setup(
-      JSON.stringify([{ action: "start_session", agent: "claude", task: "il parser", project: "nikcli" }]),
+      JSON.stringify([{ action: "start_session", agent: "claude", task: "il parser", project: "ragu" }]),
     )
 
     await engine.start()
-    transcriber.emit("avvia una sessione claude sul parser nel progetto nikcli", true)
+    transcriber.emit("avvia una sessione claude sul parser nel progetto ragu", true)
     await settle()
 
     expect(host.started).toHaveLength(1)

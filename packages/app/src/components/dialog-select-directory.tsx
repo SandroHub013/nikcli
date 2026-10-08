@@ -1,14 +1,14 @@
-import { useDialog } from "@nikcli-ai/ui/context/dialog"
-import { Dialog } from "@nikcli-ai/ui/dialog"
-import { FileIcon } from "@nikcli-ai/ui/file-icon"
-import { List } from "@nikcli-ai/ui/list"
-import { getDirectory, getFilename } from "@nikcli-ai/util/path"
+import { useDialog } from "@ragu/ui/context/dialog"
+import { Dialog } from "@ragu/ui/dialog"
+import { FileIcon } from "@ragu/ui/file-icon"
+import { List } from "@ragu/ui/list"
+import { getDirectory, getFilename } from "@ragu/util/path"
 import fuzzysort from "fuzzysort"
 import { createMemo, createResource, createSignal } from "solid-js"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
-import type { ListRef } from "@nikcli-ai/ui/list"
+import type { ListRef } from "@ragu/ui/list"
 
 interface DialogSelectDirectoryProps {
   title?: string

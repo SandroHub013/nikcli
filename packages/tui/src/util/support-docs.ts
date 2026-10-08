@@ -9,16 +9,16 @@ const DOC_ROOTS: Array<{ pattern: string; description: string; max?: number }> =
   { pattern: "packages/*/AGENTS.md", description: "Per-package AGENTS.md" },
   { pattern: "packages/*/README.md", description: "Per-package README" },
   {
-    pattern: "packages/nikcli/AGENTS.md",
-    description: "nikcli package guidelines",
+    pattern: "packages/ragu/AGENTS.md",
+    description: "ragu package guidelines",
   },
   {
-    pattern: "packages/nikcli/specs/**/*.md",
+    pattern: "packages/ragu/specs/**/*.md",
     description: "Architecture & protocol specs",
     max: 40,
   },
   {
-    pattern: "packages/nikcli/docs/**/*.md",
+    pattern: "packages/ragu/docs/**/*.md",
     description: "In-tree user docs",
   },
   { pattern: "docs/**/*.md", description: "Workspace user docs" },
@@ -28,7 +28,7 @@ const DOC_ROOTS: Array<{ pattern: string; description: string; max?: number }> =
 const MAX_TOTAL = 120
 
 /**
- * Build a markdown block describing the available nikcli documentation files
+ * Build a markdown block describing the available ragu documentation files
  * inside `root`. The block is injected into the support agent's system prompt
  * so it knows which files to `read` to answer user questions.
  *
@@ -43,7 +43,7 @@ export async function buildSupportDocsIndex(root: string): Promise<string> {
 
   const lines: string[] = []
   lines.push("<docs_index>")
-  lines.push("Local nikcli documentation available via `read`. Sizes are approximate.")
+  lines.push("Local ragu documentation available via `read`. Sizes are approximate.")
   lines.push("")
 
   let total = 0
@@ -70,7 +70,7 @@ export async function buildSupportDocsIndex(root: string): Promise<string> {
     lines.push("## How to use")
     lines.push("- Use `read <path>` to open a file.")
     lines.push(
-      '- Use `grep` to search across all docs for keywords (e.g. `grep -n "keybinds" packages/nikcli/specs/`).',
+      '- Use `grep` to search across all docs for keywords (e.g. `grep -n "keybinds" packages/ragu/specs/`).',
     )
     lines.push("- Use `webfetch https://nikcli-ai.dev/docs/<topic>` for the latest online docs.")
     lines.push("- Use `websearch` for release notes, GitHub issues, or recent changes.")

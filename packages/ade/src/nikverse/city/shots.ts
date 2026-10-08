@@ -18,7 +18,7 @@ export const SHOT_COUNT = 8
 
 // Six chiringuiti on the north beach, from -65° to 65°.
 const SHOP_SLOTS = [0, 1, 2, 3, 4, 5]
-const SHOP_NAMES = ["nikcli", "ade", "voice", "web", "api", "docs"]
+const SHOP_NAMES = ["ragu", "ade", "voice", "web", "api", "docs"]
 /** Three people in each shop, by shop: every state that puts somebody at a desk shows up. */
 const STATES: ReadonlyArray<ReadonlyArray<Agent["state"]>> = [
   ["work", "perm", "ask"],

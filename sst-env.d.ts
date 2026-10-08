@@ -77,23 +77,23 @@ declare module "sst" {
     "LogProcessor": {
       "type": "sst.cloudflare.Worker"
     }
-    "NIKCLI_DISCORD_WEBHOOK_URL": {
+    "RAGU_DISCORD_WEBHOOK_URL": {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "NIKCLI_FIGMA_TOKEN": {
+    "RAGU_FIGMA_TOKEN": {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "NIKCLI_GITHUB_TOKEN": {
+    "RAGU_GITHUB_TOKEN": {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "NIKCLI_SLACK_BOT_TOKEN": {
+    "RAGU_SLACK_BOT_TOKEN": {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "NIKCLI_SLACK_CHANNEL": {
+    "RAGU_SLACK_CHANNEL": {
       "type": "sst.sst.Secret"
       "value": string
     }

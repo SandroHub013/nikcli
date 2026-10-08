@@ -3,8 +3,8 @@
  * on first use, and speaks the RPC protocol implemented in `daemon.ts` over
  * that Unix socket.
  *
- * Mirrors `@nikcli-ai/browser-control`'s `daemon-client.ts` one-to-one,
- * including the in-process fallback for compiled nikcli binaries.
+ * Mirrors `@ragu/browser-control`'s `daemon-client.ts` one-to-one,
+ * including the in-process fallback for compiled ragu binaries.
  */
 import { createHash } from "node:crypto"
 import { access, constants, lstat } from "node:fs/promises"

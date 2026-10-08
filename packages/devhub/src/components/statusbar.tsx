@@ -53,7 +53,7 @@ export function StatusBar(props: { go: (id: string) => void }) {
             </span>
           }
         >
-          <span>nikcli {app.health().version}</span>
+          <span>ragu {app.health().version}</span>
           <em>
             {app.health().state === "slow"
               ? `busy · ${app.health().latency!.toFixed(0)} ms`
@@ -76,7 +76,7 @@ export function StatusBar(props: { go: (id: string) => void }) {
         </div>
       </button>
       <button class="dh-status__item" onClick={() => props.go("processes")}>
-        <span>nikcli</span>
+        <span>ragu</span>
         <strong>{bytes(rss())}</strong>
         <em>{own().length} proc</em>
       </button>

@@ -594,7 +594,7 @@ export const QUOTA_AXI_FILE = [".cache", "quota-axi", "quotas.json"] as const
  * The providers whose numbers ADE takes from quota-axi.
  *
  * quota-axi knows Claude and Codex. agy's figures come from its own status
- * line (`AGY_QUOTA_FILE`); nikcli has no source, and the bar says so rather
+ * line (`AGY_QUOTA_FILE`); ragu has no source, and the bar says so rather
  * than showing a number from anywhere else.
  */
 export const QUOTA_AXI_PROVIDERS: ReadonlySet<string> = new Set(["claude", "codex"])
@@ -840,7 +840,7 @@ export function readQuotaAxiSnapshot(raw: unknown): QuotaSnapshot {
   return { providers, ...stamp }
 }
 
-const VENDOR_NAMES: Record<string, string> = { claude: "Anthropic", codex: "OpenAI", agy: "Google", nikcli: "nikcli" }
+const VENDOR_NAMES: Record<string, string> = { claude: "Anthropic", codex: "OpenAI", agy: "Google", ragu: "ragu" }
 
 function clock(epoch: number): string {
   return new Date(epoch).toLocaleString(dateLocale(), {
@@ -962,7 +962,7 @@ function shortClock(epoch: number, now: number): string {
     : date.toLocaleString(dateLocale(), { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
 }
 
-/** The provider an agent id or model name draws its quota from: `claude`, `codex`, `agy`, `nikcli`, or itself. */
+/** The provider an agent id or model name draws its quota from: `claude`, `codex`, `agy`, `ragu`, or itself. */
 export function normalizeProviderId(agent: string): string {
   const low = agent.toLowerCase()
   /*
@@ -983,6 +983,6 @@ export function normalizeProviderId(agent: string): string {
     return "claude"
   if (low.includes("codex") || low.includes("openai") || low.includes("gpt") || openAiModel) return "codex"
   if (low.includes("agy") || low.includes("gemini") || low.includes("google")) return "agy"
-  if (low.includes("nikcli") || low.includes("openrouter")) return "nikcli"
+  if (low.includes("ragu") || low.includes("openrouter")) return "ragu"
   return low
 }

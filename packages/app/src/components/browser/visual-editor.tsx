@@ -2,18 +2,18 @@ import { createSignal, createEffect, createMemo, onCleanup, onMount, on, Show, F
 import { createStore } from "solid-js/store"
 import { useNavigate, useParams } from "@solidjs/router"
 import { appendTextToPrompt } from "@/context/prompt-append"
-import { IconButton } from "@nikcli-ai/ui/icon-button"
-import { Icon } from "@nikcli-ai/ui/icon"
-import { Select } from "@nikcli-ai/ui/select"
+import { IconButton } from "@ragu/ui/icon-button"
+import { Icon } from "@ragu/ui/icon"
+import { Select } from "@ragu/ui/select"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { usePrompt } from "@/context/prompt"
 import { useServer } from "@/context/server"
-import { showToast } from "@nikcli-ai/ui/toast"
-import { getFilename } from "@nikcli-ai/util/path"
-import { base64Encode } from "@nikcli-ai/util/encode"
+import { showToast } from "@ragu/ui/toast"
+import { getFilename } from "@ragu/util/path"
+import { base64Encode } from "@ragu/util/encode"
 import { persisted } from "@/utils/persist"
 import { decode64 } from "@/utils/base64"
 import { digestConsoleErrors } from "./console-digest"
@@ -26,7 +26,7 @@ import {
   INSPECTOR_BRIDGE_SCRIPT,
 } from "./inspector-bridge"
 
-export const VISUAL_EDITOR_PROMPT_EVENT = "nikcli:prompt-append"
+export const VISUAL_EDITOR_PROMPT_EVENT = "ragu:prompt-append"
 
 export interface BrowserVisualEditorProps {
   initialUrl?: string
@@ -343,7 +343,7 @@ export function BrowserVisualEditor(props: BrowserVisualEditorProps): JSX.Elemen
     // the bridge inlined, so this only matters for same-origin direct loads.
     try {
       const doc = iframeRef?.contentDocument
-      if (doc && !doc.getElementById("__nikcli_hover_outline")) {
+      if (doc && !doc.getElementById("__ragu_hover_outline")) {
         const script = doc.createElement("script")
         script.textContent = INSPECTOR_BRIDGE_SCRIPT
         ;(doc.head ?? doc.body)?.appendChild(script)

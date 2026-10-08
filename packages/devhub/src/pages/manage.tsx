@@ -1,7 +1,7 @@
 import { For, Match, Show, Switch as SolidSwitch, createMemo, createSignal } from "solid-js"
-import { Button } from "@nikcli-ai/ui/button"
-import { Select } from "@nikcli-ai/ui/select"
-import { Tabs } from "@nikcli-ai/ui/tabs"
+import { Button } from "@ragu/ui/button"
+import { Select } from "@ragu/ui/select"
+import { Tabs } from "@ragu/ui/tabs"
 import { Gateway, type GatewayRequest } from "../lib/agent"
 import { runApp } from "../lib/runtime"
 import { app, createPoll, toastError, toastOk } from "../lib/store"
@@ -540,7 +540,7 @@ export function Manage() {
   return (
     <Page
       title="Manage"
-      subtitle={`Everything nikcli exposes, from one place — sessions, providers, MCP servers, agents and configuration${app.service() ? "" : " (no service running)"}`}
+      subtitle={`Everything ragu exposes, from one place — sessions, providers, MCP servers, agents and configuration${app.service() ? "" : " (no service running)"}`}
     >
       <Tabs value={tab()} onChange={(t) => (setTab(t), localStorage.setItem("devhub.manage.tab", t))} variant="alt">
         <Tabs.List>

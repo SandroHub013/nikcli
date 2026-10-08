@@ -8,7 +8,7 @@
  * command that triggers a consolidation pass on demand and navigates to the
  * resulting Brain session.
  */
-import type { TuiPlugin, TuiPluginModule } from "@nikcli-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginModule } from "@ragu/plugin/tui"
 
 const id = "internal:brain"
 

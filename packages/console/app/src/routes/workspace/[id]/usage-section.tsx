@@ -1,4 +1,4 @@
-import { Billing } from "@nikcli-ai/console-core/billing.js"
+import { Billing } from "@ragu/console-core/billing.js"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, For, Show, createEffect, createSignal } from "solid-js"
 import { formatDateUTC, formatDateForTable } from "../common"

@@ -7,11 +7,11 @@ import {
   type QuestionRequest,
   TextPart,
   ToolPart,
-} from "@nikcli-ai/sdk/httpapi"
+} from "@ragu/sdk/httpapi"
 import { useData } from "../context"
 import { type UiI18nKey, type UiI18nParams, useI18n } from "../context/i18n"
 
-import { Binary } from "@nikcli-ai/util/binary"
+import { Binary } from "@ragu/util/binary"
 import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, ParentProps, Show, Switch } from "solid-js"
 import { Message, Part } from "./message-part"
 import { Markdown } from "./markdown"

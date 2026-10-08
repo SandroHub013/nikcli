@@ -1,12 +1,12 @@
 import { TextAttributes } from "@opentui/core"
 import { createSignal, For, Match, onCleanup, Show, Switch, type JSX } from "solid-js"
-import type { ModNode } from "@nikcli-ai/plugin/mod"
+import type { ModNode } from "@ragu/plugin/mod"
 import { useTheme } from "@tui/context/theme"
 
 /**
  * Draws an element tree a mod answered a `ui.render` hook with.
  *
- * The tree is plain data from the server (`packages/nikcli/src/mod/ui.ts`), already checked against its
+ * The tree is plain data from the server (`packages/ragu/src/mod/ui.ts`), already checked against its
  * limits. Nothing in it runs here: a `Button` carries a `key`, and pressing it reports the key back.
  */
 export type TreeEvents = {

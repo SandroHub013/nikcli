@@ -1,4 +1,4 @@
-import { Plugin } from "@nikcli-ai/plugin/v2/tui"
+import { Plugin } from "@ragu/plugin/v2/tui"
 import { createMemo, createSignal, For, Show } from "solid-js"
 import { TodoItem } from "@tui/component/todo-item"
 import { useSync } from "@tui/context/sync"

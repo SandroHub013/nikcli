@@ -1,9 +1,9 @@
 import { createStore } from "solid-js/store"
 import { batch, createMemo } from "solid-js"
-import { createSimpleContext } from "@nikcli-ai/ui/context"
+import { createSimpleContext } from "@ragu/ui/context"
 import { useSDK } from "./sdk"
 import { useSync } from "./sync"
-import { base64Encode } from "@nikcli-ai/util/encode"
+import { base64Encode } from "@ragu/util/encode"
 import { useProviders } from "@/hooks/use-providers"
 import { useModels } from "@/context/models"
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Script } from "@nikcli-ai/script"
+import { Script } from "@ragu/script"
 import { $ } from "bun"
 
 const dir = new URL("..", import.meta.url).pathname

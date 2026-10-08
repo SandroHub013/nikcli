@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test"
-import { resolveProviderIcon } from "@nikcli-ai/ui/provider-icon"
+import { resolveProviderIcon } from "@ragu/ui/provider-icon"
 
 describe("resolveProviderIcon", () => {
   it("keeps exact provider icons", () => {
@@ -17,7 +17,7 @@ describe("resolveProviderIcon", () => {
 
   it("supports known provider aliases and unknown custom providers", () => {
     expect(resolveProviderIcon("ollama")).toBe("ollama-cloud")
-    expect(resolveProviderIcon("nikcli-inference")).toBe("nikcli")
+    expect(resolveProviderIcon("ragu-inference")).toBe("ragu")
     expect(resolveProviderIcon("custom-provider")).toBe("synthetic")
   })
 })

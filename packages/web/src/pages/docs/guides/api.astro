@@ -25,17 +25,17 @@ const toc = [
 <DocsLayout
   title="Using the API"
   subtitle="Start a server and drive it — with curl and the typed client side by side, one task at a time."
-  description="Quickstart guide for the nikcli HTTP API: starting a server, authenticating, selecting a project, creating sessions, prompting, reading diffs, files, search, shell commands and permissions."
+  description="Quickstart guide for the ragu HTTP API: starting a server, authenticating, selecting a project, creating sessions, prompting, reading diffs, files, search, shell commands and permissions."
   toc={toc}
 >
   <section id="start" class="doc-section">
     <h2>Start a server</h2>
     <p>
-      There is no hosted API. nikcli runs on your machine and the API is how everything else talks
+      There is no hosted API. ragu runs on your machine and the API is how everything else talks
       to it — the web app, the desktop app and the mobile app are all clients of these endpoints.
     </p>
     <DocCode language="bash">
-nikcli serve --hostname 127.0.0.1 --port 4096
+ragu serve --hostname 127.0.0.1 --port 4096
     </DocCode>
     <DocCallout type="warn" title="Read the port it prints">
       <p>
@@ -55,9 +55,9 @@ curl -s http://127.0.0.1:4096/global/health
     <DocCode language="bash">
 npm install @nikcli-ai/sdk
     </DocCode>
-    <DocCode language="ts">{`import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
+    <DocCode language="ts">{`import { createRaguClient } from "@ragu/sdk/httpapi"
 
-const client = createNikcliClient({
+const client = createRaguClient({
   baseUrl: "http://127.0.0.1:4096",
   directory: process.cwd(),
 })
@@ -80,17 +80,17 @@ console.log(data)`}</DocCode>
       elsewhere, it is.
     </p>
     <DocCode language="bash">
-NIKCLI_SERVER_PASSWORD=secret nikcli serve --hostname 0.0.0.0 --port 4096
+RAGU_SERVER_PASSWORD=secret ragu serve --hostname 0.0.0.0 --port 4096
 
-curl -s -u nikcli:secret http://127.0.0.1:4096/session
-curl -s -H "Authorization: Bearer $NIKCLI_TOKEN" http://127.0.0.1:4096/session
+curl -s -u ragu:secret http://127.0.0.1:4096/session
+curl -s -H "Authorization: Bearer $RAGU_TOKEN" http://127.0.0.1:4096/session
 
 # for clients that cannot set headers, such as EventSource
-curl -s "http://127.0.0.1:4096/session?token=$NIKCLI_TOKEN"
+curl -s "http://127.0.0.1:4096/session?token=$RAGU_TOKEN"
     </DocCode>
-    <DocCode language="ts">{`const client = createNikcliClient({
+    <DocCode language="ts">{`const client = createRaguClient({
   baseUrl: "http://127.0.0.1:4096",
-  headers: { Authorization: \`Bearer \${process.env.NIKCLI_TOKEN}\` },
+  headers: { Authorization: \`Bearer \${process.env.RAGU_TOKEN}\` },
 })`}</DocCode>
   </section>
 
@@ -98,12 +98,12 @@ curl -s "http://127.0.0.1:4096/session?token=$NIKCLI_TOKEN"
     <h2>Pick the project</h2>
     <p>
       One server hosts many projects, so most endpoints need to know which. Pass
-      <code>directory</code> as a query parameter or as the <code>x-nikcli-directory</code> header —
+      <code>directory</code> as a query parameter or as the <code>x-ragu-directory</code> header —
       the client sets the header for you from its own <code>directory</code> option.
     </p>
     <DocCode language="bash">
 curl -s "http://127.0.0.1:4096/project/current?directory=$PWD"
-curl -s http://127.0.0.1:4096/project/current -H "x-nikcli-directory: $PWD"
+curl -s http://127.0.0.1:4096/project/current -H "x-ragu-directory: $PWD"
     </DocCode>
     <DocCode language="ts">{`// the client default
 await client.project.current()
@@ -188,11 +188,11 @@ const { data: status } = await client.file.status()`}</DocCode>
     <DocCode language="bash">
 curl -s "http://127.0.0.1:4096/find?pattern=TODO&directory=$PWD"
 curl -s "http://127.0.0.1:4096/find/file?query=router&directory=$PWD"
-curl -s "http://127.0.0.1:4096/find/symbol?query=createNikcliClient&directory=$PWD"
+curl -s "http://127.0.0.1:4096/find/symbol?query=createRaguClient&directory=$PWD"
     </DocCode>
     <DocCode language="ts">{`const { data: matches } = await client.find.text({ pattern: "TODO" })
 const { data: files } = await client.find.files({ query: "router" })
-const { data: symbols } = await client.find.symbols({ query: "createNikcliClient" })`}</DocCode>
+const { data: symbols } = await client.find.symbols({ query: "createRaguClient" })`}</DocCode>
   </section>
 
   <section id="shell" class="doc-section">
@@ -240,13 +240,13 @@ for (const request of pending ?? []) {
       Putting it together: open a session, ask it to do something, approve whatever it asks for, and
       print the resulting diff.
     </p>
-    <DocCode language="ts" title="review.ts">{`import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
+    <DocCode language="ts" title="review.ts">{`import { createRaguClient } from "@ragu/sdk/httpapi"
 
-const client = createNikcliClient({
-  baseUrl: process.env.NIKCLI_URL ?? "http://127.0.0.1:4096",
+const client = createRaguClient({
+  baseUrl: process.env.RAGU_URL ?? "http://127.0.0.1:4096",
   directory: process.cwd(),
-  headers: process.env.NIKCLI_TOKEN
-    ? { Authorization: \`Bearer \${process.env.NIKCLI_TOKEN}\` }
+  headers: process.env.RAGU_TOKEN
+    ? { Authorization: \`Bearer \${process.env.RAGU_TOKEN}\` }
     : undefined,
 })
 
@@ -294,7 +294,7 @@ try {
         <tr><td>Output as it is produced</td><td><a href="/docs/guides/streaming">Streaming a response</a></td></tr>
         <tr><td>The exact shape of a request or response</td><td><a href="/docs/api">API Reference</a></td></tr>
         <tr><td>Client options, errors and method naming</td><td><a href="/docs/build/client">Client</a></td></tr>
-        <tr><td>To run nikcli in your own process</td><td><a href="/docs/build/sdk">Embedded SDK</a></td></tr>
+        <tr><td>To run ragu in your own process</td><td><a href="/docs/build/sdk">Embedded SDK</a></td></tr>
         <tr><td>A client in another language</td><td><a href="/docs/api/openapi.json">The OpenAPI document</a></td></tr>
       </tbody>
     </table>

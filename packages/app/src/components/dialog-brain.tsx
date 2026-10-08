@@ -1,6 +1,6 @@
 import { Component, createMemo, createResource, createSignal, Show } from "solid-js"
-import { Dialog } from "@nikcli-ai/ui/dialog"
-import { Button } from "@nikcli-ai/ui/button"
+import { Dialog } from "@ragu/ui/dialog"
+import { Button } from "@ragu/ui/button"
 import { useSDK } from "@/context/sdk"
 import { useLanguage } from "@/context/language"
 

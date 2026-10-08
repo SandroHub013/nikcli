@@ -67,7 +67,7 @@ export function SessionTeleportSheet({ visible, busy, onClose, onTeleport }: Pro
           Send to another server
         </Text>
         <Text className="mt-1.5" style={{ color: palette.soft, ...typeStyle(13) }}>
-          Copies this conversation to a remote nikcli server so you can resume it there. The working files are only
+          Copies this conversation to a remote ragu server so you can resume it there. The working files are only
           cloned when teleporting from the desktop or CLI.
         </Text>
       </View>

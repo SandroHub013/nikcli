@@ -19,7 +19,7 @@ import {
   isWorkingAgentPane,
 } from "./before-unload"
 import { hideButtons, hideChoice, markTrayNoticed, planHide, trayNoticed } from "./tray-hide"
-import { NIKCLI_VERSION_EVERY_MS, parseNikcliVersion } from "../host/nikcli-version"
+import { RAGU_VERSION_EVERY_MS, parseRaguVersion } from "../host/ragu-version"
 import {
   agentMissing,
   isRemoteRoot,
@@ -263,7 +263,7 @@ import { appChatStore } from "../chat/store"
 import { barSessionCount } from "./bar-sessions"
 import { BotsMain, BotsRoster } from "../bots/bots"
 import { scrubSecrets } from "../bots/terms"
-import type { AgentFile } from "../bots/nikcli"
+import type { AgentFile } from "../bots/ragu"
 import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
 import { createActivityReads, type ActivityReads } from "../session/activity-reads"
@@ -601,7 +601,7 @@ import {
   settleMai,
   type MaiFailureKind,
   type StreamState,
-} from "@nikcli-ai/voice"
+} from "@ragu/voice"
 import { createPackController, followInstall, installCancelled } from "./voice-pack-controller"
 import { ShotTray, createShotSource } from "../shots"
 import {
@@ -767,9 +767,9 @@ export function Workbench() {
     const open = project()
     return { workspaceId: open?.name ?? "workspace", ...(open?.root ? { projectRoot: open.root } : {}) }
   }
-  /** The installed nikcli, read from the binary; undefined until asked, and
+  /** The installed ragu, read from the binary; undefined until asked, and
       after an answer that says nothing. */
-  const [nikcliVersion, setNikcliVersion] = createSignal<string>()
+  const [raguVersion, setRaguVersion] = createSignal<string>()
   const [recents, setRecents] = createSignal<RecentEntry[]>([])
   /* The recent projects whose folder is gone, marked in the sidebar and the palette; never removed on their own. */
   const [missingRoots, setMissingRoots] = createSignal<ReadonlySet<string>>(new Set())
@@ -960,7 +960,7 @@ export function Workbench() {
   /*
    * The page's saves and deletions also reach the voice when they touch its
    * key (`OPENROUTER_API_KEY`): removed here, the voice stops spending it at
-   * the next sentence and nikcli's copy does not bring it back; saved here,
+   * the next sentence and ragu's copy does not bring it back; saved here,
    * the voice uses it from the next sentence. The xAI key (`XAI_API_KEY`) is
    * read by Rust at each socket, so the page only lifts a refusal when a new
    * one is saved, and closes the open socket when it is removed.
@@ -2172,7 +2172,7 @@ export function Workbench() {
   const pendingPanelReplies = createPendingPanelReplies<SpawnedSession>()
 
   /*
-   * The requests of an agent that draws its screen with the cursor (nikcli),
+   * The requests of an agent that draws its screen with the cursor (ragu),
    * which never reach `onLine` as a line: read from the screen once the pane
    * goes quiet (`panels/screen-requests.ts`, which says why each rule is there).
    */
@@ -5222,21 +5222,21 @@ export function Workbench() {
     // Usage only feeds what is on screen and `ade-msg stats`: paused while hidden.
     onCleanup(every(15_000, () => refreshUsage()))
     /*
-     * Which nikcli is installed, for the top bar.
+     * Which ragu is installed, for the top bar.
      *
      * Asked of the binary, not of any package.json: the project open here is
-     * usually not nikcli's own. Once at startup and then very rarely, because
-     * the answer only changes when nikcli updates itself, and paused while the
+     * usually not ragu's own. Once at startup and then very rarely, because
+     * the answer only changes when ragu updates itself, and paused while the
      * window is hidden. Every failure is the same silence.
      */
     onCleanup(
       every(
-        NIKCLI_VERSION_EVERY_MS,
+        RAGU_VERSION_EVERY_MS,
         async () => {
           const host = await getHost()
-          if (!host?.nikcliBot) return
-          const answer = await host.nikcliBot(["--version"]).catch(() => null)
-          setNikcliVersion(parseNikcliVersion(answer))
+          if (!host?.raguBot) return
+          const answer = await host.raguBot(["--version"]).catch(() => null)
+          setRaguVersion(parseRaguVersion(answer))
         },
         { immediate: true },
       ),
@@ -6024,7 +6024,7 @@ export function Workbench() {
   /*
    * At start: the key moves out of browser storage into the keychain (once),
    * the keychain's is read into memory, and only when there is none is
-   * nikcli's `auth.json` copied, into the keychain too. Never under ADE Test's
+   * ragu's `auth.json` copied, into the keychain too. Never under ADE Test's
    * identity (`syncOpenRouterKey`): its profiles would get the user's paid key.
    */
   const startVoiceKey = async () => {
@@ -7247,7 +7247,7 @@ export function Workbench() {
    * Split out of `switchProject` for voice, which resolves a spoken project
    * name to a root of its own and must not go through
    * `runCommand("project.recent.…")`: that one rebuilds the workbench from
-   * scratch, and a spoken "apri nikcli e avvia due sessioni" would throw away
+   * scratch, and a spoken "apri ragu e avvia due sessioni" would throw away
    * every pane of the project being left.
    */
   const switchProjectTo = async (root: string) => {
@@ -7869,7 +7869,7 @@ export function Workbench() {
     const path = home ? RESUME[agentId]?.transcript?.(home, root, resumeId) : undefined
     // A check that fails says nothing: the conversation is taken as there.
     if (path) return !(await host.exists(path).catch(() => true))
-    // No file to look for (nikcli): the CLI is asked. No answer in time, and the id is reopened as before.
+    // No file to look for (ragu): the CLI is asked. No answer in time, and the id is reopened as before.
     const exists = RESUME[agentId]?.exists
     const command = agentById(agentId)?.command
     if (!exists || !command) return false
@@ -8040,7 +8040,7 @@ export function Workbench() {
       agentId,
       ...(pane.resumeId ? { resumeId: pane.resumeId } : {}),
       // "The most recent one here" unless another pane of this folder may be
-      // in it: per folder, and for nikcli only a pane without an id of its own.
+      // in it: per folder, and for ragu only a pane without an id of its own.
       lastTaken: lastTakenFor(pane, wb().panes) || claimedByRestore(claims, agentId, pane.cwd || project()?.root),
       missing,
     })
@@ -8190,7 +8190,7 @@ export function Workbench() {
      * Arguments this particular session needs, on top of whatever opening the
      * agent's own plan asks for.
      *
-     * Used by the bot section, where a session is `nikcli --agent <name>`: the
+     * Used by the bot section, where a session is `ragu --agent <name>`: the
      * bot *is* those two arguments, and starting the CLI bare would open a
      * plain session that has never heard of it.
      */
@@ -8258,7 +8258,7 @@ export function Workbench() {
      * And the id asked of the CLI, when that is the only way to have one.
      *
      * Before the real session starts, so it can be started *as* that
-     * conversation: nikcli's `--session` continues one, it does not open one.
+     * conversation: ragu's `--session` continues one, it does not open one.
      * When the ask fails the session still starts — just without a
      * conversation ADE can name, which the pane then says out loud rather
      * than discovering at the next restart.
@@ -8266,7 +8266,7 @@ export function Workbench() {
     const recipe = RESUME[agentId]
     /*
      * "The most recent conversation here", asked of the CLI for this folder
-     * rather than left to its `--continue`, which for nikcli is the whole
+     * rather than left to its `--continue`, which for ragu is the whole
      * repository's latest: another worktree's conversation. The ids other
      * panes hold are left out. None found: a new one, asked for below.
      */
@@ -8284,7 +8284,7 @@ export function Workbench() {
       } else tellPane(paneId, t("resume.noneHere", agent.label || agentId))
     }
     /*
-     * A conversation the CLI no longer has (deleted from nikcli): not reopened,
+     * A conversation the CLI no longer has (deleted from ragu): not reopened,
      * which failed on the raw NotFoundError, and not kept, or every restart
      * would ask for it again. The pane starts a new one and says so.
      */
@@ -8300,7 +8300,7 @@ export function Workbench() {
     } else if (!resumed && !opening.resumeId && recipe?.mint) {
       /*
        * A title that tells the conversations apart inside the CLI, where they
-       * are listed together: panes are often all called "Sessione 1 — nikcli".
+       * are listed together: panes are often all called "Sessione 1 — ragu".
        */
       const title = `${launched?.title || agent.label || agentId}${mintMark(paneId)}`
       appendLine(paneId, t("resume.asking", agent.label || agentId), "note", "ade")
@@ -8324,7 +8324,7 @@ export function Workbench() {
      *
      * A pane that cannot be reopened by id looks exactly like one that can
      * until the day ADE is restarted — which is the bug this was written for:
-     * two nikcli sessions in one directory, and the second one came back as a
+     * two ragu sessions in one directory, and the second one came back as a
      * new conversation with the old title.
      */
     const others = wb().panes.some(
@@ -8338,7 +8338,7 @@ export function Workbench() {
      */
     const promise = resumePromise({ agentId, ...(mintedId ? { resumeId: mintedId } : {}), sharedDirectory: others })
     if (lostConversation(agentId, promise, resumed)) tellPane(paneId, t("resume.none"))
-    // Reopening a conversation of another folder, followed from nikcli's shared tabs: said again.
+    // Reopening a conversation of another folder, followed from ragu's shared tabs: said again.
     if (resumed && launched?.otherDir && openedId !== undefined && openedId === launched.resumeId) {
       tellPane(paneId, t("resume.otherFolder", launched.otherDir))
     }
@@ -8956,11 +8956,11 @@ export function Workbench() {
   }
 
   /**
-   * Opens a session as one of the bots — which is to say, as a nikcli agent.
+   * Opens a session as one of the bots — which is to say, as a ragu agent.
    *
-   * `nikcli --agent <name>` and nothing else: the same line the user would
+   * `ragu --agent <name>` and nothing else: the same line the user would
    * type, in a real terminal, with the bot's persona and its tools and its
-   * pinned model already in the file nikcli reads. The view switches to the
+   * pinned model already in the file ragu reads. The view switches to the
    * grid because otherwise the session starts somewhere the user is not
    * looking, and a button that appears to do nothing is worse than one that
    * takes you where it went.
@@ -9223,7 +9223,7 @@ export function Workbench() {
           <ProjectBar
             project={project()}
             adeVersion={installedVersion()}
-            nikcliVersion={nikcliVersion()}
+            raguVersion={raguVersion()}
             sessions={barSessionCount(wb().panes, project(), chatStore)}
           />
           <SidebarToggle
@@ -9884,8 +9884,8 @@ export function Workbench() {
           </Show>
 
           <Show when={wb().view === "bot" && isViewVisible("bot")}>
-            {/* A bot is a nikcli agent, so there is no key to ask for and no
-                roster of ADE's own: the section reads the files nikcli reads,
+            {/* A bot is a ragu agent, so there is no key to ask for and no
+                roster of ADE's own: the section reads the files ragu reads,
                 and starting one is the session the user would start. */}
             <BotsMain
               {...(project()?.root ? { projectRoot: project()!.root } : {})}

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process"
-import { createNikcliClient } from "./httpapi/client.js"
+import { createRaguClient } from "./httpapi/client.js"
 import { type Config } from "./httpapi/generated/types.js"
 
 export type ServerOptions = {
@@ -19,7 +19,7 @@ export type TuiOptions = {
   config?: Config
 }
 
-export async function createNikcliServer(options?: ServerOptions) {
+export async function createRaguServer(options?: ServerOptions) {
   options = Object.assign(
     {
       hostname: "127.0.0.1",
@@ -32,11 +32,11 @@ export async function createNikcliServer(options?: ServerOptions) {
   const args = [`serve`, `--hostname=${options.hostname}`, `--port=${options.port}`]
   if (options.config?.logLevel) args.push(`--log-level=${options.config.logLevel}`)
 
-  const proc = spawn(`nikcli`, args, {
+  const proc = spawn(`ragu`, args, {
     signal: options.signal,
     env: {
       ...process.env,
-      NIKCLI_CONFIG_CONTENT: JSON.stringify(options.config ?? {}),
+      RAGU_CONFIG_CONTENT: JSON.stringify(options.config ?? {}),
     },
   })
 
@@ -49,7 +49,7 @@ export async function createNikcliServer(options?: ServerOptions) {
       output += chunk.toString()
       const lines = output.split("\n")
       for (const line of lines) {
-        if (line.startsWith("nikcli server listening")) {
+        if (line.startsWith("ragu server listening")) {
           const match = line.match(/on\s+(https?:\/\/[^\s]+)/)
           if (!match) {
             throw new Error(`Failed to parse server url from output: ${line}`)
@@ -91,16 +91,16 @@ export async function createNikcliServer(options?: ServerOptions) {
   }
 }
 
-/** Starts a local `nikcli serve` and returns a client bound to it. */
-export async function createNikcli(options?: ServerOptions) {
-  const server = await createNikcliServer(options)
+/** Starts a local `ragu serve` and returns a client bound to it. */
+export async function createRagu(options?: ServerOptions) {
+  const server = await createRaguServer(options)
   return {
-    client: createNikcliClient({ baseUrl: server.url }),
+    client: createRaguClient({ baseUrl: server.url }),
     server,
   }
 }
 
-export function createNikcliTui(options?: TuiOptions) {
+export function createRaguTui(options?: TuiOptions) {
   const args = []
 
   if (options?.project) {
@@ -116,12 +116,12 @@ export function createNikcliTui(options?: TuiOptions) {
     args.push(`--agent=${options.agent}`)
   }
 
-  const proc = spawn(`nikcli`, args, {
+  const proc = spawn(`ragu`, args, {
     signal: options?.signal,
     stdio: "inherit",
     env: {
       ...process.env,
-      NIKCLI_CONFIG_CONTENT: JSON.stringify(options?.config ?? {}),
+      RAGU_CONFIG_CONTENT: JSON.stringify(options?.config ?? {}),
     },
   })
 

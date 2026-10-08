@@ -1,6 +1,6 @@
 import { bodyColumns, type StyleOf } from "@tui/context/component-tokens"
 import { use } from "../session-context"
-import { Locale } from "@nikcli-ai/util/locale"
+import { Locale } from "@ragu/util/locale"
 import { borderCharsFor } from "@tui/component/border"
 import { DISCLOSURE, hiddenRows, LESS, more, summaryLine, worthCollapsing } from "@tui/component/disclosure"
 import { TuiImageList } from "@tui/component/tui-image"

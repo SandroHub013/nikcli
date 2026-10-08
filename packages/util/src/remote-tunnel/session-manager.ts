@@ -8,13 +8,13 @@ import type {
   SessionOptions,
   SessionStatus,
 } from "./types"
-import { Log } from "@nikcli-ai/util/log"
+import { Log } from "@ragu/util/log"
 
 const log = Log.create({ service: "session-manager" })
 
-type RemoteServer = import("@nikcli-ai/remote").RemoteServer
-type NativeSession = import("@nikcli-ai/remote").RemoteSession
-type CloudAgent = import("@nikcli-ai/remote/cloud-agent").CloudAgent
+type RemoteServer = import("@ragu/remote").RemoteServer
+type NativeSession = import("@ragu/remote").RemoteSession
+type CloudAgent = import("@ragu/remote/cloud-agent").CloudAgent
 
 interface RelayTerminalMessage {
   from?: {
@@ -46,7 +46,7 @@ export class SessionManager extends EventEmitter {
   }
 
   async start(options?: SessionOptions): Promise<RemoteSession> {
-    const { RemoteServer } = await import("@nikcli-ai/remote")
+    const { RemoteServer } = await import("@ragu/remote")
     this.stopEmitted = false
 
     log.debug("Starting session", { options })
@@ -257,7 +257,7 @@ export class SessionManager extends EventEmitter {
       return
     }
 
-    const { CloudAgent } = await import("@nikcli-ai/remote/cloud-agent")
+    const { CloudAgent } = await import("@ragu/remote/cloud-agent")
     const sessionID = options.cloud.sessionID || this.session.id
 
     log.debug("Starting cloud agent", { sessionID, url: options.cloud.url })
@@ -294,7 +294,7 @@ export class SessionManager extends EventEmitter {
     if (options.cloud.publicKey) {
       try {
         await agent.registerDevice({
-          name: "nikcli-desktop",
+          name: "ragu-desktop",
           platform: "desktop",
           publicKey: options.cloud.publicKey,
         })

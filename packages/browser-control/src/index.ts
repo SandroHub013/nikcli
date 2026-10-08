@@ -1,8 +1,8 @@
 /**
- * @nikcli-ai/browser-control
+ * @ragu/browser-control
  *
  * Control, inspect, capture and test real web pages headlessly, in the
- * background — sibling to @nikcli-ai/terminal-control, but driving a
+ * background — sibling to @ragu/terminal-control, but driving a
  * Bun.WebView page (WebKit on macOS) instead of a PTY.
  */
 export * from "./frame"

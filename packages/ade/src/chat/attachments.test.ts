@@ -61,7 +61,7 @@ describe("a file of the project, and nothing else", () => {
     expect(mimeOf("Makefile")).toBe("text/plain")
   })
 
-  test("the part nikcli receives: a file:// URL it reads back to the same path", () => {
+  test("the part ragu receives: a file:// URL it reads back to the same path", () => {
     const attachment = attachmentFor(ROOT, "src/con spazio #1.ts")!
     const [part] = attachmentParts([attachment])
     expect(part).toEqual({
@@ -110,7 +110,7 @@ describe("a file of the project, and nothing else", () => {
     expect(view).toContain("setMentionResults(mentionCandidates(paths, found.query))")
   })
 
-  /* chat-bot-facili, prove: nikcli's finder forgives typos, and `@som` offered README.md. */
+  /* chat-bot-facili, prove: ragu's finder forgives typos, and `@som` offered README.md. */
   test("@ offers only what has the typed letters in order, case aside", () => {
     const found = ["README.md", "somma.ts", "src/Somma.test.ts", "docs/sommario.md", "mos.ts"]
     expect(mentionCandidates(found, "som")).toEqual(["somma.ts", "src/Somma.test.ts", "docs/sommario.md"])

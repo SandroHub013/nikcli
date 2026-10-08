@@ -63,7 +63,7 @@ describe("the notes over a terminal", () => {
       id: "p1",
       title: "T",
       status: "idle",
-      model: "nikcli",
+      model: "ragu",
       mode: "auto",
       lines: [],
       workspaceId: "w1",
@@ -82,12 +82,12 @@ describe("the notes over a terminal", () => {
 
 /*
  * Verifiche, live 4: after a restore «here» the pane's header stayed on «Cerco
- * l'ultima conversazione di nikcli» with the conversation found and open. The
+ * l'ultima conversazione di ragu» with the conversation found and open. The
  * header shows the agent's reported activity, and ADE's own note read as one.
  */
 describe("ADE's own notes are not the agent's report", () => {
   test("the note reads as an activity, which is why it must not be read", () => {
-    const note = "Cerco l'ultima conversazione di nikcli in questa cartella…"
+    const note = "Cerco l'ultima conversazione di ragu in questa cartella…"
     expect(readReportLine({}, note).activity).toBeDefined()
   })
 

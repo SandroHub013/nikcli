@@ -14,7 +14,7 @@ export namespace ChannelMemory {
   }
 
   const enabled =
-    process.env.DISCORD_CHANNEL_MEMORY !== "false" && process.env.NIKCLI_DISCORD_CHANNEL_MEMORY !== "false"
+    process.env.DISCORD_CHANNEL_MEMORY !== "false" && process.env.RAGU_DISCORD_CHANNEL_MEMORY !== "false"
   const MAX_MESSAGES = Math.max(1, Number(process.env.DISCORD_CHANNEL_MEMORY_SIZE ?? "12"))
   const MAX_LEN = 280
   const FILE = process.env.CHANNEL_MEMORY_FILE ?? "/tmp/discord-channel-memory.json"

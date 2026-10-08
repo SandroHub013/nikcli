@@ -1,7 +1,7 @@
 /**
  * Streaming spec compiler — the real-time engine behind generative TUIs.
  *
- * This is nikcli's analogue to json-render's `createSpecStreamCompiler`: it
+ * This is ragu's analogue to json-render's `createSpecStreamCompiler`: it
  * takes the *partial* JSON text of an `opentui` tool call as it streams from the
  * model and projects it into a best-effort {@link PartialVizSpec} that the
  * existing `DialogOpenTUIViz` renderer can mount incrementally.
@@ -21,7 +21,7 @@
  * layer wraps the latest snapshot in a store so SolidJS reactivity re-renders
  * only what changed.
  */
-import { decodeVizComponent, type VizComponent } from "@nikcli-ai/util/viz"
+import { decodeVizComponent, type VizComponent } from "@ragu/util/viz"
 
 export type PartialVizSpec = {
   title: string

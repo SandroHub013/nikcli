@@ -39,7 +39,7 @@ export function mapAgentStatus(status: WorkspaceSessionStatus, suspended?: boole
 }
 
 export function normalizeAgentId(raw?: string): string {
-  if (!raw) return "nikcli"
+  if (!raw) return "ragu"
   const s = raw.toLowerCase().trim()
   if (s.includes("claude")) return "claude-code"
   if (s.includes("codex") || s.includes("openai")) return "codex"
@@ -62,8 +62,8 @@ export function normalizeAgentId(raw?: string): string {
   if (s.includes("pi")) return "pi"
   if (s.includes("shell") || s.includes("term") || s.includes("bash") || s.includes("zsh") || s.includes("powershell"))
     return "terminal"
-  if (s.includes("nik")) return "nikcli"
-  return "nikcli"
+  if (s.includes("nik")) return "ragu"
+  return "ragu"
 }
 
 export interface SidebarSession {

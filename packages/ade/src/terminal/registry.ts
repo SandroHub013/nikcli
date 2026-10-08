@@ -244,7 +244,7 @@ export function isCopyShortcut(event: KeyboardEvent): boolean {
  * xterm consults this only while the program has mouse reporting on; in a
  * shell, or in Claude Code, Kimi and pi, which do not ask, the left button
  * selects as before. It was ADE's always, the program getting it only with
- * Alt: the clickable menus of OpenCode, nikcli and Grok, which were measured
+ * Alt: the clickable menus of OpenCode, ragu and Grok, which were measured
  * to act on a click (ade-team/results/mouse-sessioni-misura.md), could not be
  * clicked. xterm's own rule is Shift, but Option on a Mac; ADE says Shift
  * everywhere, as its hint does. The wheel and the right and middle buttons

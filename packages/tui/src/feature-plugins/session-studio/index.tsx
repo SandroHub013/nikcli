@@ -1,4 +1,4 @@
-import type { TuiPlugin, TuiPluginModule } from "@nikcli-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginModule } from "@ragu/plugin/tui"
 
 const tui: TuiPlugin = async (api) => {
   let disposed = false

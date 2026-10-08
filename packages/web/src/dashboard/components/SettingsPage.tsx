@@ -149,7 +149,7 @@ function SettingsPageInner() {
           Server &amp; pairing token
         </h2>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-terminal-muted">
-          The Studio reads your sessions, config, MCP servers, skills and more from your nikcli server using the shared
+          The Studio reads your sessions, config, MCP servers, skills and more from your ragu server using the shared
           pairing token — the same credential used by the CLI, mobile, and web app.
         </p>
       </div>
@@ -166,7 +166,7 @@ function SettingsPageInner() {
       )}
 
       {isAccount && (
-        <SettingsSection title="Profile" description="Your account in the nikcli server database.">
+        <SettingsSection title="Profile" description="Your account in the ragu server database.">
           <div className="grid gap-4 lg:grid-cols-[auto_1fr]">
             <div className="flex h-16 w-16 items-center justify-center rounded-[var(--radius-md)] border border-terminal-accent/25 bg-terminal-accent/10 text-2xl font-bold text-terminal-accent">
               {(displayName || user?.username || "U")[0].toUpperCase()}
@@ -273,7 +273,7 @@ function SettingsPageInner() {
 
       <SettingsSection
         title="Server"
-        description="Point the Studio at your nikcli server — the Railway deployment, or a local nikcli serve."
+        description="Point the Studio at your ragu server — the Railway deployment, or a local ragu serve."
       >
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[var(--radius-md)] border border-terminal-border/60 bg-terminal-bg px-3.5 py-2.5">
           <span className="text-xs font-semibold uppercase tracking-[0.16em] text-terminal-muted">Active server</span>
@@ -320,7 +320,7 @@ function SettingsPageInner() {
 
       <SettingsSection
         title="Pairing token"
-        description="The Bearer token your server accepts. Create one with nikcli mobile pair, or reuse the web/mobile app token."
+        description="The Bearer token your server accepts. Create one with ragu mobile pair, or reuse the web/mobile app token."
       >
         <label className="block space-y-1.5">
           <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-terminal-muted">Token</span>
