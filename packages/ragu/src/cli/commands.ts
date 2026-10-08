@@ -637,6 +637,19 @@ const SpecDoctor = Spec.make("doctor", {
   },
 })
 
+const SpecMigrate = Spec.make("migrate", {
+  description:
+    "rename your nikcli folders (data, cache, config, state) to ragu, once: a dry run unless --apply; undo with --rollback --apply",
+  params: {
+    apply: Flag.boolean("apply").pipe(Flag.withDescription("do it: without, only say what would move"), Flag.optional),
+    rollback: Flag.boolean("rollback").pipe(
+      Flag.withDescription("rename back the folders a migrate moved (a dry run unless --apply)"),
+      Flag.optional,
+    ),
+    json: Flag.boolean("json").pipe(Flag.withDescription("emit the report as JSON"), Flag.optional),
+  },
+})
+
 const SpecUninstall = Spec.make("uninstall", {
   description: "uninstall ragu and remove all related files",
   params: {
@@ -1608,6 +1621,7 @@ export const Commands = Spec.make("ragu", {
     SpecUpgrade,
     SpecQuickstart,
     SpecDoctor,
+    SpecMigrate,
     SpecUninstall,
     SpecServe,
     SpecService,

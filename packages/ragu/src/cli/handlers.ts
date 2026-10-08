@@ -91,6 +91,7 @@ export const Handlers = Runtime.handlers(Commands, {
   upgrade: () => import("./handlers/upgrade"),
   quickstart: () => import("./handlers/quickstart"),
   doctor: () => import("./handlers/doctor"),
+  migrate: () => import("./handlers/migrate"),
   uninstall: () => import("./handlers/uninstall"),
   serve: () => import("./handlers/serve"),
   service: {
