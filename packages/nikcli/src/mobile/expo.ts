@@ -41,26 +41,48 @@ export namespace Expo {
    */
   const PROBE_TIMEOUT_MS = 3_000
 
-  function killProc(proc: { pid: number; kill: () => void }) {
-    proc.kill()
+  async function killProc(proc: { pid: number; kill: () => void }) {
     if (process.platform === "win32") {
-      Bun.spawn(["taskkill", "/pid", String(proc.pid), "/T", "/F"], { windowsHide: true })
+      try {
+        const killer = Bun.spawn(["taskkill", "/pid", String(proc.pid), "/T", "/F"], {
+          windowsHide: true,
+          stdout: "ignore",
+          stderr: "ignore",
+        })
+        const timer = setTimeout(() => killer.kill(), 2000)
+        await killer.exited.catch(() => undefined)
+        clearTimeout(timer)
+      } catch {}
+      try {
+        proc.kill()
+      } catch {}
+    } else {
+      proc.kill()
     }
   }
 
-  async function exec(args: string[], opts?: { cwd?: string; timeout?: number }): Promise<string> {
-    const proc = Bun.spawn(["npx", ...args], {
+  async function exec(
+    args: string[],
+    opts?: {
+      cwd?: string
+      timeout?: number
+      command?: string[]
+      onSpawn?: (proc: { pid: number }) => void
+    },
+  ): Promise<string> {
+    const proc = Bun.spawn(opts?.command ?? ["npx", ...args], {
       windowsHide: true,
       stdout: "pipe",
       stderr: "pipe",
       cwd: opts?.cwd,
       env: process.env as Record<string, string>,
     })
+    opts?.onSpawn?.(proc)
 
     const timeout = opts?.timeout ?? 120000
     let timer: ReturnType<typeof setTimeout> | undefined
 
-    const run = async () => {
+    const runPromise = (async () => {
       const [exitCode, stdout, stderr] = await Promise.all([
         proc.exited,
         new Response(proc.stdout).text(),
@@ -70,14 +92,19 @@ export namespace Expo {
         throw new Error(stderr.trim() || stdout.trim() || `npx ${args.join(" ")} exited with code ${exitCode}`)
       }
       return stdout.trim()
-    }
+    })()
+
+    // When the timeout branch wins and kills the child, runPromise will reject
+    // because exitCode is non-zero. Attach an empty catch so it does not become
+    // an unhandled promise rejection.
+    runPromise.catch(() => undefined)
 
     try {
       return await Promise.race([
-        run(),
+        runPromise,
         new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            killProc(proc)
+          timer = setTimeout(async () => {
+            await killProc(proc)
             reject(new Error(`npx ${args.join(" ")} timed out after ${timeout}ms`))
           }, timeout)
         }),
@@ -86,6 +113,9 @@ export namespace Expo {
       if (timer) clearTimeout(timer)
     }
   }
+
+  export const _internalExec = exec
+  export const _internalKillProc = killProc
 
   export async function version(): Promise<string> {
     try {
@@ -218,7 +248,7 @@ export namespace Expo {
       (async () => {
         try {
           const proc = Bun.spawn(["node", "--version"], { windowsHide: true, stdout: "pipe", stderr: "pipe" })
-          const timer = setTimeout(() => killProc(proc), PROBE_TIMEOUT_MS)
+          const timer = setTimeout(() => void killProc(proc), PROBE_TIMEOUT_MS)
           const [code, out] = await Promise.all([proc.exited, new Response(proc.stdout).text()])
           clearTimeout(timer)
           return code === 0 ? out.trim() : undefined
