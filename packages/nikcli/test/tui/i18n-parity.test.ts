@@ -56,19 +56,26 @@ describe("TUI i18n", () => {
   })
 
   it("resolveLocale normalizes env values to a supported locale", () => {
-    expect(resolveLocale("zh_CN.UTF-8")).toBe("zh")
-    expect(resolveLocale("en_US.UTF-8")).toBe("en")
-    expect(resolveLocale("fr_FR")).toBe("fr")
-    expect(resolveLocale("de_DE.UTF-8")).toBe("de")
-    expect(resolveLocale("it_IT")).toBe("it")
-    expect(resolveLocale("pt_BR.UTF-8")).toBe("pt")
-    expect(resolveLocale("ja_JP.UTF-8")).toBe("ja")
-    expect(resolveLocale("ko_KR.UTF-8")).toBe("ko")
-    expect(resolveLocale("ru_RU.UTF-8")).toBe("ru")
-    expect(resolveLocale("ar_SA.UTF-8")).toBe("ar")
-    expect(resolveLocale("hi_IN.UTF-8")).toBe("hi")
-    expect(resolveLocale("sv_SE")).toBe("en") // unsupported -> default
-    expect(resolveLocale(undefined)).toBeDefined()
+    const originalLang = process.env.LANG
+    try {
+      process.env.LANG = "en_US.UTF-8"
+      expect(resolveLocale("zh_CN.UTF-8")).toBe("zh")
+      expect(resolveLocale("en_US.UTF-8")).toBe("en")
+      expect(resolveLocale("fr_FR")).toBe("fr")
+      expect(resolveLocale("de_DE.UTF-8")).toBe("de")
+      expect(resolveLocale("it_IT")).toBe("it")
+      expect(resolveLocale("pt_BR.UTF-8")).toBe("pt")
+      expect(resolveLocale("ja_JP.UTF-8")).toBe("ja")
+      expect(resolveLocale("ko_KR.UTF-8")).toBe("ko")
+      expect(resolveLocale("ru_RU.UTF-8")).toBe("ru")
+      expect(resolveLocale("ar_SA.UTF-8")).toBe("ar")
+      expect(resolveLocale("hi_IN.UTF-8")).toBe("hi")
+      expect(resolveLocale("sv_SE")).toBe("en") // unsupported -> default
+      expect(resolveLocale(undefined)).toBeDefined()
+    } finally {
+      if (originalLang === undefined) delete process.env.LANG
+      else process.env.LANG = originalLang
+    }
   })
 
   it("resolveLocale respects NIKCLI_LOCALE / NIKCLI_LANGUAGE / NIKCLI_LANG overrides", () => {
