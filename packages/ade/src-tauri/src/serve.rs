@@ -82,14 +82,14 @@ const AUTO_APPROVE: [&str; 2] = ["RAGU_AUTO_APPROVE", "RAGU_DANGEROUSLY_SKIP_PER
 /// empty one, which turns it off — is left as it is.
 ///
 /// The project's config is not read here. `RAGU_CONFIG_CONTENT` is merged
-/// after `nikcli.json` at the project's root, so a `small_model` there gives
-/// way to this free one; `<project>/.nikcli/nikcli.json` and
-/// `RAGU_CONFIG_DIR` are merged after it (`config/config.ts`, the
-/// `directories` loop) and win.
+/// after every config file and folder (`config/config.ts`, after the
+/// `directories` loop): a `small_model` in the project's `nikcli.json`, its
+/// `.nikcli/nikcli.json` or `RAGU_CONFIG_DIR` gives way to this free one.
 ///
 /// The same holds for `model` (`free_models_content`): a model chosen in the
-/// project's root `nikcli.json` does not count for ADE's server, which uses
-/// the free one; to choose one for it, put it in `<project>/.nikcli/nikcli.json`.
+/// project's config does not count for ADE's server, which uses the free one;
+/// to choose one for it, put it in the global config or in `RAGU_CONFIG`,
+/// which are read here and left in charge.
 /// It errs on the free side, as for `small_model` (modello assente, second
 /// reading, BASSO 2).
 ///

@@ -7,10 +7,9 @@ import os from "os"
 import path from "path"
 
 /*
- * Brief (10): the config folders merged nearest first, so the farthest `.nikcli` won over the project's own,
- * and `RAGU_CONFIG_CONTENT` was merged before them, so any folder won over it. The last one merged wins:
- * the global folder, the home's, the project's from the farthest to the nearest, `RAGU_CONFIG_DIR`, and
- * `RAGU_CONFIG_CONTENT` after all of them.
+ * Brief (10): `RAGU_CONFIG_CONTENT` was merged before the config folders, so any folder won over it; it is merged
+ * after every file and folder now. The folders keep their order (review of correction 2, point 2): the outermost
+ * one, the user's own, wins over a project's, so a downloaded repository's `.nikcli` cannot undo the user's.
  */
 const testHome = await fs.mkdtemp(path.join(os.tmpdir(), "ragu-config-order-home-"))
 process.env.RAGU_TEST_HOME = testHome
@@ -62,21 +61,6 @@ function loaded(directory: string) {
 }
 
 describe("the order config folders merge in", () => {
-  it("lists the global folder, the home's, the project's from the farthest to the nearest, then RAGU_CONFIG_DIR", () => {
-    const home = path.join("/h")
-    const global = path.join("/h/.config/ragu")
-    const near = path.join("/h/w/repo/sub/.ragu")
-    const far = path.join("/h/w/repo/.nikcli")
-    const mine = path.join("/h/.nikcli")
-    const custom = path.join("/elsewhere/conf")
-    // As `ConfigPaths.directories` lists them: the project's nearest first.
-    const listed = [global, near, far, mine, custom]
-    expect(Config.mergeOrder(listed, home, custom)).toEqual([global, mine, far, near, custom])
-    expect(Config.mergeOrder([global, near, far, mine], home, undefined)).toEqual([global, mine, far, near])
-    // A folder listed twice is merged once, in its first place.
-    expect(Config.mergeOrder([global, near, near, mine], home, undefined)).toEqual([global, mine, near])
-  })
-
   it("RAGU_CONFIG_CONTENT wins over the project's folder", async () => {
     const directory = await project({ ".nikcli/nikcli.json": { theme: "folder", username: "folder" } })
     process.env.RAGU_CONFIG_CONTENT = JSON.stringify({ theme: "content" })
@@ -94,7 +78,7 @@ describe("the order config folders merge in", () => {
     expect((await loaded(directory)).theme).toBe("content")
   })
 
-  it("the project's folder wins over the home's", async () => {
+  it("the user's home folder still wins over the project's", async () => {
     // `Global.Path.home` is the test home.
     const mine = path.join(testHome, ".nikcli")
     await fs.mkdir(mine, { recursive: true })
@@ -102,8 +86,7 @@ describe("the order config folders merge in", () => {
     try {
       const directory = await project({ ".nikcli/nikcli.json": { theme: "project" } })
       const config = await loaded(directory)
-      expect(config.theme).toBe("project")
-      expect(config.username).toBe("home")
+      expect(config.theme).toBe("home")
     } finally {
       await fs.rm(mine, { recursive: true, force: true })
     }

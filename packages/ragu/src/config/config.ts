@@ -148,7 +148,7 @@ export namespace Config {
       })
     }
 
-    for (const dir of mergeOrder(directories, Global.Path.home, Flag.RAGU_CONFIG_DIR)) {
+    for (const dir of unique(directories)) {
       if (isDotFolder(dir) || dir === Flag.RAGU_CONFIG_DIR) {
         log.debug(`loading config from ${configFile(dir)}`)
         result = mergeConfigConcatArrays(result, await loadFile(configFile(dir)))
@@ -255,23 +255,6 @@ export namespace Config {
       // the new agents/commands/permissions without a process restart.
       { reloadable: true },
     )
-  }
-
-  /**
-   * The order config folders merge in, the last one winning: the global folder, the home's `.ragu`, the
-   * project's from the farthest to the nearest, then `RAGU_CONFIG_DIR`. `ConfigPaths.directories` lists the
-   * project's nearest first, and merged in that order the farthest won (brief (10)). A folder listed twice
-   * is merged once, in its first place.
-   */
-  export function mergeOrder(directories: readonly string[], home: string, configDir: string | undefined) {
-    const listed = unique(directories).filter((dir) => dir !== configDir)
-    const mine = (dir: string) => isDotFolder(dir) && path.dirname(dir) === home
-    return [
-      ...listed.filter((dir) => !isDotFolder(dir)),
-      ...listed.filter(mine),
-      ...listed.filter((dir) => isDotFolder(dir) && !mine(dir)).toReversed(),
-      ...(configDir && directories.includes(configDir) ? [configDir] : []),
-    ]
   }
 
   /** Config dirs a reinstall was already attempted for in this process. */
