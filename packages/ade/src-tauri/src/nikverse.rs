@@ -392,82 +392,6 @@ fn respond_with(request: &Request<Vec<u8>>, source: &Source, manifest: &[Manifes
         .unwrap_or_else(|_| deny(StatusCode::INTERNAL_SERVER_ERROR))
 }
 
-/// Discards any path inside `node_modules`.
-///
-/// Tauri and npm/bun scripts prepend project and monorepo `node_modules/.bin` to `PATH`.
-/// On Windows with Bun's hoisted linker (`bun install --linker hoisted`), `node_modules/.bin`
-/// contains broken `.exe`/`.bunx` shims that fail to remap to their targets:
-/// `bun: error: could not create process / Bun failed to remap this bin to its proper location within node_modules`.
-/// We discard any `node_modules` directory so we find the real global bun toolchain binary.
-pub fn is_node_modules(path: &Path) -> bool {
-    path.components().any(|c| {
-        c.as_os_str()
-            .to_str()
-            .map(|s| s.eq_ignore_ascii_case("node_modules"))
-            .unwrap_or(false)
-    })
-}
-
-/// Discovers candidate paths for the real `bun` executable, ignoring any `node_modules` shims.
-pub fn find_bun_candidates() -> Vec<PathBuf> {
-    let mut candidates = Vec::new();
-
-    if let Some(bin) = std::env::var_os("BUN_BIN") {
-        let p = PathBuf::from(bin);
-        if !is_node_modules(&p) && p.is_file() {
-            candidates.push(p);
-        }
-    }
-
-    if let Some(path_var) = std::env::var_os("PATH") {
-        for dir in std::env::split_paths(&path_var) {
-            if is_node_modules(&dir) {
-                continue;
-            }
-            for name in ["bun.exe", "bun.cmd", "bun"] {
-                let candidate = dir.join(name);
-                if candidate.is_file() {
-                    candidates.push(candidate);
-                }
-            }
-        }
-    }
-
-    if let Some(install) = std::env::var_os("BUN_INSTALL") {
-        let bin_dir = PathBuf::from(install).join("bin");
-        if !is_node_modules(&bin_dir) {
-            for name in ["bun.exe", "bun"] {
-                let candidate = bin_dir.join(name);
-                if candidate.is_file() {
-                    candidates.push(candidate);
-                }
-            }
-        }
-    }
-    if let Some(home) = std::env::var_os("USERPROFILE").or_else(|| std::env::var_os("HOME")) {
-        let bin_dir = PathBuf::from(home).join(".bun").join("bin");
-        if !is_node_modules(&bin_dir) {
-            for name in ["bun.exe", "bun"] {
-                let candidate = bin_dir.join(name);
-                if candidate.is_file() {
-                    candidates.push(candidate);
-                }
-            }
-        }
-    }
-
-    let mut seen = std::collections::HashSet::new();
-    candidates.retain(|c| seen.insert(c.clone()));
-
-    if candidates.is_empty() {
-        for name in ["bun", "bun.cmd", "bun.exe"] {
-            candidates.push(PathBuf::from(name));
-        }
-    }
-
-    candidates
-}
-
 #[cfg(test)]
 mod tests {
     // Full review 2026-10-06, rust 17: framed anywhere, the world is the same opaque origin the panel gives it.
@@ -902,51 +826,6 @@ mod tests {
             &before,
         );
         assert_eq!(response.status(), StatusCode::NOT_FOUND);
-    }
-
-    #[test]
-    fn is_node_modules_identifies_node_modules_dirs() {
-        assert!(super::is_node_modules(Path::new("node_modules/.bin")));
-        assert!(super::is_node_modules(Path::new("packages/ade/node_modules/.bin")));
-        assert!(super::is_node_modules(Path::new(r"C:\repo\packages\ade\node_modules\.bin")));
-        assert!(super::is_node_modules(Path::new(r"D:\a\nikcli\nikcli\node_modules\.bin")));
-        assert!(!super::is_node_modules(Path::new(r"C:\Users\runneradmin\.bun\bin")));
-        assert!(!super::is_node_modules(Path::new("/usr/local/bin")));
-        assert!(!super::is_node_modules(Path::new("~/.bun/bin")));
-    }
-
-    #[test]
-    fn find_bun_candidates_skips_broken_node_modules_shim() {
-        let temp = std::env::temp_dir().join(format!("ade-test-bun-{}", std::process::id()));
-        let node_modules_bin = temp.join("packages").join("ade").join("node_modules").join(".bin");
-        let real_bun_dir = temp.join(".bun").join("bin");
-        let _ = std::fs::create_dir_all(&node_modules_bin);
-        let _ = std::fs::create_dir_all(&real_bun_dir);
-
-        #[cfg(windows)]
-        let (shim_name, real_name) = ("bun.exe", "bun.exe");
-        #[cfg(not(windows))]
-        let (shim_name, real_name) = ("bun", "bun");
-
-        let fake_shim = node_modules_bin.join(shim_name);
-        let real_bun = real_bun_dir.join(real_name);
-        let _ = std::fs::write(&fake_shim, b"fake broken shim");
-        let _ = std::fs::write(&real_bun, b"real bun binary");
-
-        let fake_path = std::env::join_paths([&node_modules_bin, &real_bun_dir]).expect("join_paths");
-        let original_path = std::env::var_os("PATH");
-        std::env::set_var("PATH", fake_path);
-
-        let candidates = super::find_bun_candidates();
-
-        if let Some(orig) = original_path {
-            std::env::set_var("PATH", orig);
-        }
-
-        let _ = std::fs::remove_dir_all(&temp);
-
-        assert!(!candidates.contains(&fake_shim), "candidates should not contain node_modules shim: {:?}", candidates);
-        assert!(candidates.contains(&real_bun), "candidates should contain real bun: {:?}", candidates);
     }
 }
 
