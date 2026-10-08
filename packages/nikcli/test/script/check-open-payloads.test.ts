@@ -25,7 +25,7 @@ function runScript(options: { dir?: string; allowlist?: string } = {}): Run {
   return { status: result.status ?? -1, stdout: result.stdout, stderr: result.stderr }
 }
 
-describe("check-open-payloads.ts (EOT-10)", { timeout: 30_000 }, () => {
+describe("check-open-payloads.ts (EOT-10)", () => {
   it("passes on the real allowlist (no violations, no stale entries)", () => {
     const { status, stdout, stderr } = runScript()
     if (status !== 0) {
@@ -36,7 +36,7 @@ describe("check-open-payloads.ts (EOT-10)", { timeout: 30_000 }, () => {
     expect(stdout).toContain("open-payload check")
     expect(stdout).not.toContain("FAIL:")
     expect(stdout).not.toContain("WARN:")
-  })
+  }, 30_000)
 
   describe("against a synthetic tree", () => {
     let dir: string
