@@ -8,6 +8,7 @@
  */
 import { Installation } from "@/installation"
 import { Global } from "@ragu/util/global"
+import { configFile as userConfigFile } from "@ragu/util/app-folder"
 import { statfsSync } from "fs"
 import path from "path"
 
@@ -106,7 +107,8 @@ async function checkConfig(record: Record) {
     // We just check the raw JSON file for now — the full validation runs on
     // the next `ragu` invocation.
     const fs = await import("fs")
-    const configFile = path.join(Global.Path.config, "config.json")
+    // The file `Config.global()` loads: `ragu.json`, else `nikcli.json` (rule B).
+    const configFile = userConfigFile(Global.Path.config)
     if (!fs.existsSync(configFile)) {
       record(true, "Config", "no user config file (defaults in use)")
       return
@@ -135,7 +137,8 @@ async function checkDeprecatedConfigKeys(record: Record) {
   ]
   try {
     const fs = await import("fs")
-    const configFile = path.join(Global.Path.config, "config.json")
+    // The file `Config.global()` loads: `ragu.json`, else `nikcli.json` (rule B).
+    const configFile = userConfigFile(Global.Path.config)
     if (!fs.existsSync(configFile)) {
       record(true, "Deprecated keys", "no user config file — nothing to check")
       return
