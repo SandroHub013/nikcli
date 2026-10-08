@@ -28,6 +28,21 @@ describe("the managed mod policy under both names", () => {
     expect(system("win32").some((dir) => dir.endsWith("/nikcli/managed"))).toBe(true)
   })
 
+  /*
+   * Review of correction 2, point 3: the user's own managed folder, under the config folder, binds from both
+   * names, joined, not from rule B's pick: a policy left in nikcli/managed still binds once a ragu folder exists.
+   */
+  test("the user's managed folder, from both config folders", () => {
+    const roaming = path.join("C:", "Users", "u", "AppData", "Roaming")
+    const both = [path.join(roaming, "ragu", "managed"), path.join(roaming, "nikcli", "managed")]
+    expect(ModGuard.userManagedDirs(path.join(roaming, "ragu"))).toEqual(both)
+    expect(ModGuard.userManagedDirs(path.join(roaming, "nikcli"))).toEqual(both)
+    // A config folder that is neither (the test home's): itself only.
+    expect(ModGuard.userManagedDirs(path.join("/t", "config"))).toEqual([path.join("/t", "config", "managed")])
+    const user = ModGuard.managedDirs("win32", path.join(roaming, "ragu")).filter((entry) => !entry.org)
+    expect(user.map((entry) => entry.dir)).toEqual(both)
+  })
+
   for (const name of ["ragu.json", "nikcli.json"]) {
     test(`a policy in ${name} binds`, async () => {
       await fs.rm(path.join(managedDir, "ragu.json"), { force: true })

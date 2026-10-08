@@ -64,7 +64,20 @@ export namespace ModGuard {
    * admin-owned and also hold the organization's own mods; the legacy
    * `~/.config/nikcli/managed` carries policy only, because the user owns it.
    */
-  export function managedDirs(platform: NodeJS.Platform = process.platform): { dir: string; org: boolean }[] {
+  /**
+   * The user's managed folders: `managed` under the config folder of both names, joined, not rule B's pick, so
+   * a policy left in `nikcli/managed` still binds once a `ragu` folder exists. A config folder of neither name
+   * (a test home's) is itself only.
+   */
+  export function userManagedDirs(config: string = Global.Path.config): string[] {
+    if (!(CONFIG_STEMS as readonly string[]).includes(path.basename(config))) return [path.join(config, "managed")]
+    return CONFIG_STEMS.map((stem) => path.join(path.dirname(config), stem, "managed"))
+  }
+
+  export function managedDirs(
+    platform: NodeJS.Platform = process.platform,
+    config: string = Global.Path.config,
+  ): { dir: string; org: boolean }[] {
     const root =
       platform === "darwin"
         ? "/Library/Application Support"
@@ -76,7 +89,7 @@ export namespace ModGuard {
     if (extra) dirs.push({ dir: extra, org: true })
     // Both names, not rule B: the policy fails closed, so one an admin left under either binds.
     for (const name of CONFIG_STEMS) dirs.push({ dir: path.join(root, name, "managed"), org: true })
-    dirs.push({ dir: path.join(Global.Path.config, "managed"), org: false })
+    for (const dir of userManagedDirs(config)) dirs.push({ dir, org: false })
     return dirs
   }
 
