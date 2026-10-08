@@ -195,14 +195,21 @@ export const LINE_EXCLUSIONS: readonly Exclusion[] = [
     why: "the plugin package ragu adds from npm to a user's config folder (config.ts `bun add`, the pin it checks, ADE's project trust that discounts it): @ragu/plugin is not on npm; it moves when we publish one, in the services brief",
   },
   {
+    id: "npm-plugin-import",
+    find: /from "@nikcli-ai\/plugin"/,
+    files: /^packages\/(?:nikcli|ragu)\/src\/tool\/plugin\.txt$/,
+    why: "the import the plugin tool tells the model to write in a user's plugin: that folder gets @nikcli-ai/plugin from npm (npm-plugin), so @ragu/plugin would not resolve there",
+  },
+  {
     id: "publisher",
     find: /"publisher"\s*:\s*"nikcli"|"copyright"\s*:\s*"[^"]*\bnikcli"/,
     why: "ADE's publisher (brand.json, tauri.conf.json, and the copyright made from it): the NSIS install folder and registry keys hang off it; it moves with the ADE id, last",
   },
   {
-    id: "prompt",
+    id: "prompt-fixture",
     find: /\b[Yy]ou are nikcli\b|[Yy]our name is nikcli/,
-    why: "an identity the model reads: in the separate commit the lab measures",
+    files: /\/test\//,
+    why: "a system prompt a test feeds as data (cache diagnostics): the identity commit changed the prompts the model reads, not test inputs",
   },
   {
     id: "logo-glyphs",
@@ -231,11 +238,6 @@ export const LINE_EXCLUSIONS: readonly Exclusion[] = [
 export const SKIP_FILES: readonly PathExclusion[] = [
   { id: "license", find: /(?:^|\/)(?:LICENSE|NOTICE|COPYING)(?:\.[a-z]+)?$/i, why: "copyright lines of OpenCode and nikcli stay (MIT); kokoro-host stays GPL-3 with its NOTICE" },
   { id: "history", find: /^(?:CHANGELOG\.md|\.nikcli\/plans\/)/, why: "history: release notes and old plans say what nikcli was" },
-  {
-    id: "prompt",
-    find: /^packages\/(?:nikcli|ragu)\/src\/(?:session\/prompt\/|agent\/prompt\/|command\/template\/|tool\/[^/]+\.txt$)/,
-    why: "text the model reads (system prompts, tool descriptions, command templates): a separate commit the lab measures",
-  },
   {
     id: "upstream-install",
     find: /^(?:install|install\.ps1|packages\/web\/(?:public\/)?install(?:\.sh|\.ps1)?)$|^homebrew-tap\//,
