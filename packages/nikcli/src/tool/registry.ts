@@ -36,7 +36,6 @@ import { ContextRelatedTool } from "./context_related"
 import { ContextDiagnosticsTool } from "./context_diagnostics"
 import { MemorySearchTool } from "./memory_search"
 import { GenerateImageTool } from "./generate_image"
-import { ArtifactTool } from "./artifact"
 import { Flag } from "@nikcli-ai/util/flag"
 import { Log } from "@nikcli-ai/util/log"
 import { LspTool } from "./lsp"
@@ -123,7 +122,6 @@ export namespace ToolRegistry {
    */
   export const DEFERRED = new Set([
     "advisor",
-    "artifact",
     "batch",
     "browser_control",
     "code_mode",
@@ -660,7 +658,6 @@ export namespace ToolRegistry {
           ContextDiagnosticsTool,
           MemorySearchTool,
           GenerateImageTool,
-          ArtifactTool,
 
           WebFetchTool,
           TodoWriteTool,

@@ -101,3 +101,32 @@ describe("ArtifactTool", () => {
     })
   })
 })
+
+describe("ToolRegistry exclusion", () => {
+  it(
+    "does not include artifact in the tool registry or deferred set",
+    async () => {
+      const { ToolRegistry } = await import("@/tool/registry")
+      expect(ToolRegistry.DEFERRED.has("artifact")).toBe(false)
+      expect(ToolRegistry.deferred("artifact")).toBe(false)
+
+      await withIsolatedDatabase(async ({ home }) => {
+        const { InstanceScope } = await import("@/effect")
+        const { Effect } = await import("effect")
+        const ids = await Effect.runPromise(
+          InstanceScope.with(
+            { directory: home },
+            Effect.gen(function* () {
+              const registry = yield* ToolRegistry.Service
+              return yield* registry.ids()
+            }).pipe(Effect.provide(ToolRegistry.defaultLayer)),
+          ),
+        )
+        expect(ids).not.toContain("artifact")
+      })
+    },
+    15000,
+  )
+})
+
+
