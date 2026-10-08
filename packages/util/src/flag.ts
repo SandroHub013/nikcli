@@ -99,7 +99,8 @@ export namespace Flag {
   }
   /**
    * The cache keeper (`session/cache-keeper.ts`): keeps an idle session's prompt-cache entry alive with one hidden request shortly
-   * before it would expire. Off unless `RAGU_CACHE_KEEPALIVE=1`. Read on every use, like `cacheRetention`.
+   * before it would expire. `RAGU_CACHE_KEEPALIVE=1` as a plain switch; unset, the keeper is on for Codex and off elsewhere
+   * (`cacheKeepaliveSetting`, `CacheKeeper.settings`). Read on every use, like `cacheRetention`.
    */
   export function cacheKeepalive() {
     return truthy("RAGU_CACHE_KEEPALIVE")
@@ -120,7 +121,8 @@ export namespace Flag {
   }
   /**
    * Compaction that reuses the prefix of the conversation's last request (same system, tools and messages, the summary instruction as
-   * the last user message) so the provider reads it from cache. Off unless `RAGU_COMPACTION_SHARED_PREFIX=1`.
+   * the last user message) so the provider reads it from cache. `RAGU_COMPACTION_SHARED_PREFIX=1` as a plain switch; unset, it is on
+   * for a Codex session and off elsewhere (`compactionSharedPrefixSetting`, `CacheKeeper.sharedPrefix`).
    */
   export function compactionSharedPrefix() {
     return truthy("RAGU_COMPACTION_SHARED_PREFIX")

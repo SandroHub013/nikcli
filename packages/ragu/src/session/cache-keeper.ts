@@ -8,8 +8,9 @@
 //
 // What it is, and is not:
 //
-// - Off unless `RAGU_CACHE_KEEPALIVE` is set, and then only for a session of a process with a client attached (the TUI, or a server
-//   with an event stream open) and never in `ragu run` (`disableForProcess`, called by the run handler).
+// - On for a Codex session and off elsewhere, unless `RAGU_CACHE_KEEPALIVE` says otherwise (`settings`); and then only for a
+//   session of a process with a client attached (the TUI, or a server with an event stream open) and never in `ragu run`
+//   (`disableForProcess`, called by the run handler).
 // - Never during a turn: the session must be `idle` with nothing queued when it fires, and any real request cancels the timer and
 //   aborts a keep-alive in flight, so the keeper can only ever make a turn start from a warmer cache, never later.
 // - Never in the session's history: the hidden request is the last real `LLMRequest` itself with only its output cap changed, sent
