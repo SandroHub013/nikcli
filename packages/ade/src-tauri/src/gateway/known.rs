@@ -19,14 +19,21 @@ const MIN_ENV_LEN: usize = 8;
 /// Where ragu keeps `auth.json`, on each system.
 fn ragu_auth_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
+    // Both names (`app_folder.rs`): a key is hidden wherever either folder holds it.
     for dir in [dirs::data_local_dir(), dirs::data_dir()].into_iter().flatten() {
-        paths.push(dir.join("nikcli").join("auth.json"));
+        for stem in crate::app_folder::STEMS {
+            paths.push(dir.join(stem).join("auth.json"));
+        }
     }
     if let Some(home) = dirs::home_dir() {
-        paths.push(home.join(".config").join("nikcli").join("auth.json"));
+        for stem in crate::app_folder::STEMS {
+            paths.push(home.join(".config").join(stem).join("auth.json"));
+        }
         paths.push(home.join(".nikcli").join("auth.json"));
     }
-    paths.dedup();
+    // On Linux the two data folders are one: each path once, in its first place.
+    let mut seen = std::collections::HashSet::new();
+    paths.retain(|path| seen.insert(path.clone()));
     paths
 }
 
@@ -186,7 +193,10 @@ mod tests {
         assert!(!paths.is_empty());
         for path in &paths {
             let folder = path.parent().and_then(|dir| dir.file_name()).and_then(|name| name.to_str());
-            assert!(path.ends_with("auth.json") && matches!(folder, Some("ragu" | ".nikcli")), "{path:?}");
+            assert!(path.ends_with("auth.json") && matches!(folder, Some("ragu" | "nikcli" | ".nikcli")), "{path:?}");
         }
+        // Both names, in each place: the new one and the one a user who has not migrated still has.
+        let named = |stem: &str| paths.iter().filter(|path| path.parent().and_then(|dir| dir.file_name()) == Some(std::ffi::OsStr::new(stem))).count();
+        assert!(named("ragu") > 0 && named("ragu") == named("nikcli"), "{paths:?}");
     }
 }

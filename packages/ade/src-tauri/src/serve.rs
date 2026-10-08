@@ -354,7 +354,8 @@ fn install(server: &Server, mut serving: Serving) -> Result<ServerInfo, String> 
 }
 
 /// Where ragu reads the user's global config: `Global.Path.config` in
-/// `@ragu/util`, then `nikcli.json` (`config.ts`, `global()`).
+/// `@ragu/util`, then its config file (`config.ts`, `global()`), both by rule B
+/// (`app_folder.rs`): `ragu` and `ragu.json` when they are there, else `nikcli`.
 fn user_config_file() -> Option<PathBuf> {
     let base = if cfg!(windows) {
         std::env::var_os("APPDATA")
@@ -366,7 +367,7 @@ fn user_config_file() -> Option<PathBuf> {
             .filter(|path| path.is_absolute())
             .or_else(|| dirs::home_dir().map(|home| home.join(".config")))?
     };
-    Some(base.join("nikcli").join("nikcli.json"))
+    Some(crate::app_folder::config_file(&crate::app_folder::app_folder(&base)))
 }
 
 /// `RAGU_CONFIG_CONTENT` for ADE's server, or `None` to leave the

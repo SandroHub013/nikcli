@@ -335,7 +335,30 @@ fn under_base(base: Base, segments: &[&str]) -> Result<PathBuf, String> {
         ),
     }
     .ok_or_else(|| "cartella utente non trovata".to_string())?;
-    Ok(segments.iter().fold(root, |path, segment| path.join(segment)))
+    Ok(path_under(base, &root, segments))
+}
+
+/// A target's path under its base's folder. Under ragu's configuration folder
+/// the first segment is ragu's own folder, by rule B (`app_folder.rs`): `ragu`
+/// when it is there, else `nikcli`, where ragu's TUI scans for plugins.
+fn path_under(base: Base, root: &Path, segments: &[&str]) -> PathBuf {
+    match (base, segments.split_first()) {
+        (Base::ConfigHome, Some((first, rest))) if crate::app_folder::STEMS.contains(first) => {
+            path_in(&crate::app_folder::app_folder(root), rest)
+        }
+        _ => path_in(root, segments),
+    }
+}
+
+/// Every place a target's file can be: under ragu's configuration folder, the
+/// folder of either name (a plugin installed before the rename, or after it).
+fn every_path(base: Base, root: &Path, segments: &[&str]) -> Vec<PathBuf> {
+    match (base, segments.split_first()) {
+        (Base::ConfigHome, Some((first, rest))) if crate::app_folder::STEMS.contains(first) => {
+            crate::app_folder::STEMS.iter().map(|stem| path_in(&root.join(stem), rest)).collect()
+        }
+        _ => vec![path_in(root, segments)],
+    }
 }
 
 /// The folder ragu's configuration lives under, as `@ragu/util`'s
@@ -894,15 +917,19 @@ fn unlink_target(target: &HookTarget, home: &Path, config_home: &Path) -> Result
         Base::Home => home,
         Base::ConfigHome => config_home,
     };
-    let script = path_in(base, target.script);
     if target.config.is_empty() {
-        // A plugin: one file, and the two folders the install made if they are empty.
-        if !script.is_file() {
-            return Ok(Unlinked::Nothing);
+        // A plugin: one file, and the two folders the install made if they are empty; in the folder of
+        // either name, since one installed before the rename is in `nikcli` (`app_folder.rs`).
+        let mut removed = false;
+        for script in every_path(target.base, base, target.script) {
+            if script.is_file() {
+                write_plugin_file(&script, None, |_| false)?;
+                removed = true;
+            }
         }
-        write_plugin_file(&script, None, |_| false)?;
-        return Ok(Unlinked::Removed);
+        return Ok(if removed { Unlinked::Removed } else { Unlinked::Nothing });
     }
+    let script = path_under(target.base, base, target.script);
     let config = path_in(base, target.config);
     let current = fs::read_to_string(&config).ok();
     let next = match current.as_deref() {
@@ -1154,8 +1181,10 @@ mod tests {
         let ragu = target("ragu").expect("ragu is a target");
         assert!(ragu.config.is_empty());
         let path = under_base(ragu.base, ragu.script).expect("a path");
-        assert!(path.ends_with(Path::new("ragu").join("plugin").join("tui").join(PLUGIN_NAME)), "{}", path.display());
         let roaming = std::env::var("APPDATA").map(PathBuf::from).unwrap_or_else(|_| dirs_home().unwrap().join("AppData").join("Roaming"));
+        // `ragu` or `nikcli`, whichever ragu reads on this machine (rule B, `app_folder.rs`).
+        let folder = crate::app_folder::app_folder(&roaming);
+        assert_eq!(path, folder.join("plugin").join("tui").join(PLUGIN_NAME));
         assert!(path.starts_with(&roaming), "{} is not under {}", path.display(), roaming.display());
     }
 
@@ -1560,6 +1589,30 @@ mod tests {
         assert!(done[0].1.is_err());
         assert_eq!(fs::read_to_string(home.join(".claude").join("settings.json")).unwrap(), text);
         assert!(script.exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_plugin_goes_in_the_folder_ragu_reads_and_comes_out_of_either() {
+        let (dir, home, config) = fake_home("rule-b");
+        let ragu = target("ragu").unwrap();
+        // Neither folder yet, or only the old one: `nikcli`, where the plugin of before the rename is.
+        assert_eq!(path_under(ragu.base, &config, ragu.script), config.join("nikcli").join("plugin").join("tui").join(PLUGIN_NAME));
+        install_everywhere(&home, &config);
+        assert_eq!(path_under(ragu.base, &config, ragu.script), config.join("nikcli").join("plugin").join("tui").join(PLUGIN_NAME));
+        // With a `ragu` folder, there.
+        let new = config.join("ragu").join("plugin").join("tui").join(PLUGIN_NAME);
+        fs::create_dir_all(new.parent().unwrap()).unwrap();
+        assert_eq!(path_under(ragu.base, &config, ragu.script), new);
+        fs::write(&new, "// ade").unwrap();
+        // Uninstalling takes it out of both.
+        let done = unlink_all(&home, &config);
+        assert!(matches!(done[2], ("ragu", Ok(Unlinked::Removed))));
+        assert!(!new.exists());
+        assert!(!config.join("nikcli").join("plugin").exists());
+        // Other targets keep their own paths.
+        let claude = target("claude-code").unwrap();
+        assert_eq!(path_under(claude.base, &home, claude.script), path_in(&home, claude.script));
         let _ = fs::remove_dir_all(&dir);
     }
 

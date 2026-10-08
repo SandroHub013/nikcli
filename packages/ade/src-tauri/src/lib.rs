@@ -15,6 +15,7 @@
 mod ade_prune;
 mod ask;
 mod agent_link;
+mod app_folder;
 mod brand;
 mod append;
 mod browse;
@@ -185,6 +186,7 @@ fn runs_by_itself(resolved: &Path, home: Option<&Path>, path_dirs: &[PathBuf]) -
     }
     if let Some(home) = home.and_then(|h| h.canonicalize().ok()) {
         for bin in [
+            ".ragu/bin",
             ".nikcli/bin",
             ".bun/bin",
             ".local/bin",
@@ -235,6 +237,7 @@ fn too_broad_root_in(dir: &Path, home: Option<&Path>) -> Option<&'static str> {
         }
         // A folder the shell or the system looks in by itself: the root or anything above it.
         for bin in [
+            ".ragu/bin",
             ".nikcli/bin",
             ".bun/bin",
             ".local/bin",
@@ -717,14 +720,15 @@ fn write_atomic(roots: &WriteRoots, path: &str, bytes: &[u8]) -> Result<(), Stri
 // Bots: ragu agent files, and the two ragu commands the panel needs
 // ---------------------------------------------------------------------------
 
-/// ragu's global configuration directory. Mirrors `globalConfigDir` in `bots/ragu.ts`.
+/// ragu's global configuration directory, `ragu` or `nikcli` by rule B (`app_folder.rs`). Mirrors
+/// `globalConfigDir` in `bots/ragu.ts`.
 fn ragu_global_dir() -> Option<PathBuf> {
     let home = dirs::home_dir()?;
     #[cfg(windows)]
-    let dir = home.join("AppData").join("Roaming").join("nikcli");
+    let base = home.join("AppData").join("Roaming");
     #[cfg(not(windows))]
-    let dir = home.join(".config").join("nikcli");
-    Some(dir)
+    let base = home.join(".config");
+    Some(app_folder::app_folder(&base))
 }
 
 /// True for `<config>/agent(s)/**/<name>.md`: the shape of a bot's file.
@@ -753,13 +757,13 @@ fn global_bot_file(path: &str) -> Option<PathBuf> {
     is_bot_path(&resolved, &config).then_some(resolved)
 }
 
-/// Deletes a bot's file: a project one inside an open project's `.nikcli`, or a global one.
+/// Deletes a bot's file: a project one inside an open project's `.ragu` or `.nikcli`, or a global one.
 #[tauri::command]
 async fn bot_delete(roots: tauri::State<'_, WriteRoots>, path: String) -> Result<(), String> {
     let project = within_roots(&roots, &path).ok().filter(|target| {
         target
             .ancestors()
-            .any(|dir| dir.file_name().is_some_and(|n| n == ".nikcli") && is_bot_path(target, dir))
+            .any(|dir| dir.file_name().is_some_and(|n| app_folder::DOT_FOLDERS.iter().any(|dot| n == *dot)) && is_bot_path(target, dir))
     });
     let target = project
         .or_else(|| global_bot_file(&path))
@@ -3358,6 +3362,9 @@ mod tests {
             ".nikcli",
             ".nikcli/bin",
             ".nikcli/bin/x",
+            ".ragu",
+            ".ragu/bin",
+            ".ragu/bin/x",
             ".bun",
             ".bun/bin",
             ".local",
@@ -3374,6 +3381,7 @@ mod tests {
             "OneDrive/Documents/app",
             "code/app",
             ".nikcli/projects/app",
+            ".ragu/projects/app",
             "tools/app",
             "tools",
             "go/src/app",
@@ -3394,7 +3402,7 @@ mod tests {
             roots.0.lock().expect("roots").push(root);
             roots
         };
-        for dir in ["tools/bin", "Documents/WindowsPowerShell", "OneDrive/Documents/PowerShell", ".nikcli/bin"] {
+        for dir in ["tools/bin", "Documents/WindowsPowerShell", "OneDrive/Documents/PowerShell", ".nikcli/bin", ".ragu/bin"] {
             std::fs::create_dir_all(at(dir)).expect("dir");
         }
         // The roots a page could register: the home's child that holds the folder, or the home's OneDrive.
@@ -3408,6 +3416,7 @@ mod tests {
             ("Documents", "Documents/PowerShell/profile.ps1"),
             ("Documents", "documents/windowspowershell/x.ps1"),
             (".nikcli", ".nikcli/bin/ragu.cmd"),
+            (".ragu", ".ragu/bin/ragu.cmd"),
         ] {
             let roots = roots_at(at(root));
             let error = within_roots_with(&roots, &at(file).to_string_lossy(), Some(&home), &path_dirs)
