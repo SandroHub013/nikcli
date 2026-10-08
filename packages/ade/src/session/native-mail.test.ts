@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { createLineAccumulator } from "../host/line-stream"
 import { stripAnsi } from "../host/ansi"
 import { modeBarRaw } from "./fixtures/mode-bar-raw"
+import { afterHeldDialogRaw, heldDialogRaw } from "./fixtures/held-dialog-raw"
+import { deliveryResult, typeThenEnter } from "./enter"
 
 import {
   formatFallbackLine,
@@ -137,6 +139,91 @@ describe("the mode bar in a raw pty chunk (no newline)", () => {
   test("cursor moves and carriage returns are spaces, not nothing: words from two cells are not glued", () => {
     expect(permissionClassIn("bypass\u001b[1Cpermissions\ron")).toBe("bypass")
     expect(permissionClassIn("manual\u001b[2Cmode on")).toBe("prompting")
+  })
+})
+
+/**
+ * The «Held message from another session» window: its Enter would pick «Deny — drop it», so nothing is typed into a pane that shows it.
+ * Read from the raw chunks like the mode bar (`rawWindows` is lines, and this window arrives painted with cursor moves).
+ */
+describe("the Held message window in the raw pty chunks", () => {
+  const [top, bottom] = heldDialogRaw
+  const settled = (modes: ReturnType<typeof createModeTracker>) => modes.push("p1", afterHeldDialogRaw)
+
+  test("a pane that shows it is held, a pane that does not is not", () => {
+    const modes = createModeTracker()
+    expect(modes.heldOpen("p1")).toBe(false)
+    modes.push("p1", top!)
+    modes.push("p1", bottom!)
+    expect(modes.heldOpen("p1")).toBe(true)
+    expect(modes.heldOpen("p2")).toBe(false)
+  })
+
+  test("the heading cut between two chunks, or with cursor moves between its words, is still read", () => {
+    const modes = createModeTracker()
+    const cut = top!.indexOf("another") + 3
+    modes.push("p1", top!.slice(0, cut))
+    modes.push("p1", top!.slice(cut))
+    expect(modes.heldOpen("p1")).toBe(true)
+  })
+
+  test("it stays open while the pane repaints other things, even after the heading has left the tail", () => {
+    const modes = createModeTracker(200)
+    modes.push("p1", top!)
+    modes.push("p1", "\u001b[10;1H" + "spinner ".repeat(60))
+    expect(modes.heldOpen("p1")).toBe(true)
+  })
+
+  test("it ends when the input box and the mode bar are painted again", () => {
+    const modes = createModeTracker()
+    modes.push("p1", top!)
+    modes.push("p1", bottom!)
+    settled(modes)
+    expect(modes.heldOpen("p1")).toBe(false)
+  })
+
+  test("a mode bar from before the window does not close it", () => {
+    const modes = createModeTracker()
+    modes.push("p1", modeBarRaw[1]!)
+    modes.push("p1", top!)
+    expect(modes.heldOpen("p1")).toBe(true)
+  })
+
+  test("a second window after the bar opens it again, and forgetting the pane clears it", () => {
+    const modes = createModeTracker()
+    modes.push("p1", top!)
+    settled(modes)
+    modes.push("p1", top!)
+    expect(modes.heldOpen("p1")).toBe(true)
+    modes.forget("p1")
+    expect(modes.heldOpen("p1")).toBe(false)
+  })
+
+  test("the mode class is still read while the window is open", () => {
+    const modes = createModeTracker()
+    expect(modes.push("p1", modeBarRaw[1]!)).toBe("prompting")
+    expect(modes.push("p1", top!)).toBe("prompting")
+  })
+
+  test("a line is not typed while it shows: the text and its Enter wait, then go once", async () => {
+    const modes = createModeTracker()
+    modes.push("p1", top!)
+    modes.push("p1", bottom!)
+    const written: string[] = []
+    const type = () =>
+      typeThenEnter({
+        text: "[ade-msg] ping",
+        write: (data) => void written.push(data),
+        wait: async () => {},
+        alive: () => true,
+        permissionOpen: () => modes.heldOpen("p1"),
+      })
+    expect(await type()).toBe("not-typed")
+    expect(written).toEqual([])
+    expect(deliveryResult("not-typed", true)).toBe("held")
+    settled(modes)
+    expect(await type()).toBe("sent")
+    expect(written).toEqual(["[ade-msg] ping", "\r"])
   })
 })
 

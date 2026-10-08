@@ -111,8 +111,16 @@ export type PermissionClass = "bypass" | "prompting"
  * the words are ignored. Anything else (`auto mode`, no bar seen) is unknown, and unknown goes to the keyboard.
  */
 export function permissionClassIn(text: string): PermissionClass | undefined {
-  // A space, not nothing: a cursor move or a carriage return between two cells separates words, it does not erase them.
-  const plain = text.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]|\r/g, " ")
+  return lastModeBar(plainOf(text))?.class
+}
+
+/** Raw pty text with its escape sequences taken out. A space, not nothing: a cursor move or a carriage return between two cells separates words, it does not erase them. */
+function plainOf(text: string): string {
+  return text.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]|\r/g, " ")
+}
+
+/** The last mode bar in plain text, and where it starts. */
+function lastModeBar(plain: string): { at: number; class: PermissionClass } | undefined {
   let found: { at: number; class: PermissionClass } | undefined
   const patterns: [RegExp, PermissionClass][] = [
     [/bypass\s+permissions\s+on/gi, "bypass"],
@@ -123,7 +131,14 @@ export function permissionClassIn(text: string): PermissionClass | undefined {
       if (!found || match.index > found.at) found = { at: match.index, class: kind }
     }
   }
-  return found?.class
+  return found
+}
+
+/** Where the last «Held message from another session» heading starts in plain text, or -1. */
+function lastHeldHeading(plain: string): number {
+  let at = -1
+  for (const match of plain.matchAll(/Held\s+message\s+from\s+another\s+session/gi)) at = match.index
+  return at
 }
 
 /** How much raw output each pane keeps for reading its mode bar: a few repaints of the bar, escape sequences included. */
@@ -136,15 +151,31 @@ const MODE_TAIL = 1200
  */
 export function createModeTracker(limit: number = MODE_TAIL) {
   const tails = new Map<string, string>()
+  const held = new Set<string>()
   return {
     /** Adds a raw chunk to the pane's tail and returns the class its last mode bar says, if the tail holds one. */
     push(paneId: string, chunk: string): PermissionClass | undefined {
       const tail = ((tails.get(paneId) ?? "") + chunk).slice(-limit)
       tails.set(paneId, tail)
-      return permissionClassIn(tail)
+      const plain = plainOf(tail)
+      const bar = lastModeBar(plain)
+      /*
+       * The «Held message from another session» window takes the place of the input box and of the mode bar under it, and both are
+       * painted again when it closes. So it is open from its heading until the next mode bar, and the state is kept: the heading may
+       * leave the tail while the window is still on screen and the pane repaints around it.
+       */
+      const heading = lastHeldHeading(plain)
+      if (heading >= 0 && (!bar || heading > bar.at)) held.add(paneId)
+      else if (bar) held.delete(paneId)
+      return bar?.class
+    },
+    /** Whether the pane shows the «Held message» window: its Enter would pick «Deny — drop it», so nothing is typed while it is up. */
+    heldOpen(paneId: string): boolean {
+      return held.has(paneId)
     },
     forget(paneId: string): void {
       tails.delete(paneId)
+      held.delete(paneId)
     },
   }
 }

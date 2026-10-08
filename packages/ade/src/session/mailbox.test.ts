@@ -31,6 +31,7 @@ import {
   formatUnread,
   goesToInbox,
   formatHeld,
+  formatHeldDialogReceipt,
   formatHeldReceipt,
   HELD_TELL_MS,
   inboxAction,
@@ -1188,6 +1189,14 @@ describe("una riga iniziata dall'utente", () => {
     expect(formatHeldReceipt({ id: "p1", title: "Dario" })).toBe(
       'ok: in coda, "Dario" ha una riga iniziata e non inviata: arriva appena è libera',
     )
+  })
+
+  test("a target showing the Held message window gets its own receipt, not the half-written line one", () => {
+    const text = formatHeldDialogReceipt({ id: "p1", title: "Dario" })
+    expect(text).toContain('"Dario"')
+    expect(text).toContain("Held message from another session")
+    expect(text).toContain("arriva appena è chiusa")
+    expect(text).not.toContain("riga iniziata")
   })
 })
 
