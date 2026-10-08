@@ -34,6 +34,7 @@ const projectDirs: string[] = []
 
 async function makeProjectDir() {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-profile-prompt-project-"))
+  await fs.mkdir(path.join(dir, ".git"), { recursive: true })
   const resolved = await fs.realpath(dir)
   projectDirs.push(resolved)
   return resolved
