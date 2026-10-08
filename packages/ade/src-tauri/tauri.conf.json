@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Ragu Code",
+  "productName": "ADE",
   "version": "0.0.0",
   "identifier": "ai.nikcli.ade",
   "build": {
@@ -23,7 +23,7 @@
     "copyright": "© 2025-2026 nikcli",
     "homepage": "https://github.com/SandroHub013/nikcli/releases",
     "shortDescription": "Agent Development Environment",
-    "longDescription": "Ragu Code runs coding agents side by side in one window: sessions, files, browser and voice.",
+    "longDescription": "ADE runs coding agents side by side in one window: sessions, files, browser and voice.",
     "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
     "windows": {
       "nsis": {
