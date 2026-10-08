@@ -131,8 +131,9 @@ for (const [name, covered] of patchedVersions) {
 const referenced = new Set(Object.values(declared))
 const glob = new Bun.Glob("patches/*.patch")
 for await (const file of glob.scan({ cwd: root })) {
-  if (!referenced.has(file)) {
-    problems.push(`${file}: present in patches/ but not referenced by patchedDependencies`)
+  const normalized = file.replaceAll("\\", "/")
+  if (!referenced.has(normalized)) {
+    problems.push(`${normalized}: present in patches/ but not referenced by patchedDependencies`)
   }
 }
 

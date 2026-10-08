@@ -69,7 +69,7 @@ export namespace ProcessJob {
       k.symbols.CloseHandle(job)
       return undefined
     }
-    return job
+    return job as Handle
   }
 
   /** Puts the process in the job. Whatever it starts from now on joins the job; what it started before does not. */

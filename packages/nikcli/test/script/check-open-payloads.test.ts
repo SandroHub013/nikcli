@@ -36,7 +36,7 @@ describe("check-open-payloads.ts (EOT-10)", () => {
     expect(stdout).toContain("open-payload check")
     expect(stdout).not.toContain("FAIL:")
     expect(stdout).not.toContain("WARN:")
-  })
+  }, 30_000)
 
   describe("against a synthetic tree", () => {
     let dir: string

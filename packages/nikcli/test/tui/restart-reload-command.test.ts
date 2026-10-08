@@ -90,9 +90,10 @@ describe("restart command", () => {
     for await (const file of new Bun.Glob("**/*.{ts,tsx}").scan({
       cwd: TUI_SRC,
     })) {
-      if (file === "context/sync.tsx") continue
+      const normalized = file.replaceAll("\\", "/")
+      if (normalized === "context/sync.tsx") continue
       const text = stripComments(await tuiSource(file))
-      if (/\bbootstrap\(\s*\)/.test(text)) offenders.push(file)
+      if (/\bbootstrap\(\s*\)/.test(text)) offenders.push(normalized)
     }
     expect(offenders).toEqual([])
     const sync = stripComments(await tuiSource("context/sync.tsx"))
