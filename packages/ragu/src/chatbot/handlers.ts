@@ -14,7 +14,7 @@ import { runPromiseWithLayer, withCurrentInstance, withInstanceAsync, type Insta
 const log = Log.create({ service: "chatbot-handlers" })
 
 export namespace BotHandlers {
-  const DEFAULT_PROMPT = `You are nikcli, an AI coding assistant. You help users with software engineering tasks including writing code, debugging, answering questions, and more. Be concise and helpful.`
+  const DEFAULT_PROMPT = `You are ragu, an AI coding assistant. You help users with software engineering tasks including writing code, debugging, answering questions, and more. Be concise and helpful.`
   const registeredBots = new WeakSet<Chat>()
 
   function runPlugin<A, E>(effect: Effect.Effect<A, E, Plugin.Service>) {

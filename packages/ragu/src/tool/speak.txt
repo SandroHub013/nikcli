@@ -15,4 +15,4 @@ Parameters:
 Usage guidance:
 - Short bursts for important state changes — completion, errors requiring attention, questions needing user input
 - Keep messages concise (1–2 sentences)
-- Audio plays on the device running nikcli
+- Audio plays on the device running ragu

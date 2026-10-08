@@ -6,7 +6,7 @@ Use this tool when you need to:
 - Perform data transformation on tool outputs before returning them
 - Execute complex multi-step operations where only the final result matters
 
-All standard nikcli tools are available as async functions inside the code. Use console.log() for your final output — everything logged is returned as the result.
+All standard ragu tools are available as async functions inside the code. Use console.log() for your final output — everything logged is returned as the result.
 
 Example:
   const files = await glob({ pattern: "src/**/*.ts" })

@@ -66,31 +66,31 @@ Use the same `<timestamp>` (e.g. `$(date +%s)`) in both filenames so agents can 
 
 Use the `monitor` tool to launch **all 4 reviewers simultaneously** (one call per reviewer, all in the same message turn).
 
-Each monitor command runs: `nikcli run --agent ultrareview-reviewer --no-tui`
+Each monitor command runs: `ragu run --agent ultrareview-reviewer --no-tui`
 
 Pass the role and file paths as environment variables in the command. Use `wake: true` on all 4 so the session is notified when each finishes.
 
 **Reviewer 1 — Bugs**
 ```
-ULTRAREVIEW_ROLE=bugs ULTRAREVIEW_DIFF=/tmp/ultrareview_diff_<timestamp>.patch ULTRAREVIEW_CTX=/tmp/ultrareview_ctx_<timestamp>.txt nikcli run --agent ultrareview-reviewer --no-tui
+ULTRAREVIEW_ROLE=bugs ULTRAREVIEW_DIFF=/tmp/ultrareview_diff_<timestamp>.patch ULTRAREVIEW_CTX=/tmp/ultrareview_ctx_<timestamp>.txt ragu run --agent ultrareview-reviewer --no-tui
 ```
 Title: `ultrareview: bugs`
 
 **Reviewer 2 — Security**
 ```
-ULTRAREVIEW_ROLE=security ULTRAREVIEW_DIFF=/tmp/ultrareview_diff_<timestamp>.patch ULTRAREVIEW_CTX=/tmp/ultrareview_ctx_<timestamp>.txt nikcli run --agent ultrareview-reviewer --no-tui
+ULTRAREVIEW_ROLE=security ULTRAREVIEW_DIFF=/tmp/ultrareview_diff_<timestamp>.patch ULTRAREVIEW_CTX=/tmp/ultrareview_ctx_<timestamp>.txt ragu run --agent ultrareview-reviewer --no-tui
 ```
 Title: `ultrareview: security`
 
 **Reviewer 3 — Performance**
 ```
-ULTRAREVIEW_ROLE=performance ULTRAREVIEW_DIFF=/tmp/ultrareview_diff_<timestamp>.patch ULTRAREVIEW_CTX=/tmp/ultrareview_ctx_<timestamp>.txt nikcli run --agent ultrareview-reviewer --no-tui
+ULTRAREVIEW_ROLE=performance ULTRAREVIEW_DIFF=/tmp/ultrareview_diff_<timestamp>.patch ULTRAREVIEW_CTX=/tmp/ultrareview_ctx_<timestamp>.txt ragu run --agent ultrareview-reviewer --no-tui
 ```
 Title: `ultrareview: performance`
 
 **Reviewer 4 — Patterns & Conventions**
 ```
-ULTRAREVIEW_ROLE=patterns ULTRAREVIEW_DIFF=/tmp/ultrareview_diff_<timestamp>.patch ULTRAREVIEW_CTX=/tmp/ultrareview_ctx_<timestamp>.txt nikcli run --agent ultrareview-reviewer --no-tui
+ULTRAREVIEW_ROLE=patterns ULTRAREVIEW_DIFF=/tmp/ultrareview_diff_<timestamp>.patch ULTRAREVIEW_CTX=/tmp/ultrareview_ctx_<timestamp>.txt ragu run --agent ultrareview-reviewer --no-tui
 ```
 Title: `ultrareview: patterns`
 
