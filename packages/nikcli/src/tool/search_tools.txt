@@ -1,5 +1,5 @@
 Search the tools available in this session by name or capability keyword, and get the parameters of the ones you need.
 
-Your tool list holds a core set; more tools are registered and cost nothing until you ask for them: image generation, artifacts, browser and computer control, web search, code search, memory search, LSP diagnostics, repo clone and overview, speech and voice, goals, delegation, batch execution, code_mode, and the plugin tools.
+Your tool list holds a core set; more tools are registered and cost nothing until you ask for them: image generation, browser and computer control, web search, code search, memory search, LSP diagnostics, repo clone and overview, speech and voice, goals, delegation, batch execution, code_mode, and the plugin tools.
 
 The query matches tool names and descriptions, so a capability word works ("git", "screenshot"). Disabled or denied tools are left out. Each result gives the tool name, a one-line summary and, for a tool not in your list, its parameter schema and the exact call_tool invocation. One search is enough. Not for tools already in your list, and not for codebase searches (use grep or glob).
