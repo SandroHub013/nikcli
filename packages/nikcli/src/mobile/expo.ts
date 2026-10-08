@@ -114,7 +114,7 @@ export namespace Expo {
       ])
     } catch (error) {
       if (timedOut) {
-        await killPromise
+        await killPromise?.catch(() => {})
         throw new Error(`npx ${args.join(" ")} timed out after ${timeout}ms`)
       }
       throw error
