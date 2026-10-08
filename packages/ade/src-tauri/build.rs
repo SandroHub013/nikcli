@@ -17,6 +17,90 @@ fn main() {
 /// Bundles NikVerse's 3D city into `nikverse-assets/world/city.js` (`scripts/build-nikverse-world.ts`),
 /// before the folder is listed, so the bundle is hashed into the manifest like every other asset.
 ///
+/// Discards any path inside `node_modules`.
+///
+/// Tauri and npm/bun scripts prepend project and monorepo `node_modules/.bin` to `PATH`.
+/// On Windows with Bun's hoisted linker (`bun install --linker hoisted`), `node_modules/.bin`
+/// contains broken `.exe`/`.bunx` shims that fail to remap to their targets:
+/// `bun: error: could not create process / Bun failed to remap this bin to its proper location within node_modules`.
+/// We discard any `node_modules` directory so we find the real global bun toolchain binary.
+fn is_node_modules(path: &Path) -> bool {
+    path.components().any(|c| {
+        c.as_os_str()
+            .to_str()
+            .map(|s| s.eq_ignore_ascii_case("node_modules"))
+            .unwrap_or(false)
+    })
+}
+
+/// Discovers candidate paths for the real `bun` executable.
+fn find_bun_candidates() -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+
+    // 1. Explicit override if set by workflow or caller.
+    if let Some(bin) = env::var_os("BUN_BIN") {
+        let p = PathBuf::from(bin);
+        if !is_node_modules(&p) && p.is_file() {
+            candidates.push(p);
+        }
+    }
+
+    // 2. Scan `PATH`, skipping any directory inside `node_modules`.
+    if let Some(path_var) = env::var_os("PATH") {
+        for dir in env::split_paths(&path_var) {
+            if is_node_modules(&dir) {
+                continue;
+            }
+            for name in ["bun.exe", "bun.cmd", "bun"] {
+                let candidate = dir.join(name);
+                if candidate.is_file() {
+                    candidates.push(candidate);
+                }
+            }
+        }
+    }
+
+    // 3. Known global installation locations if PATH only had node_modules shims.
+    if let Some(install) = env::var_os("BUN_INSTALL") {
+        let bin_dir = PathBuf::from(install).join("bin");
+        if !is_node_modules(&bin_dir) {
+            for name in ["bun.exe", "bun"] {
+                let candidate = bin_dir.join(name);
+                if candidate.is_file() {
+                    candidates.push(candidate);
+                }
+            }
+        }
+    }
+    if let Some(home) = env::var_os("USERPROFILE").or_else(|| env::var_os("HOME")) {
+        let bin_dir = PathBuf::from(home).join(".bun").join("bin");
+        if !is_node_modules(&bin_dir) {
+            for name in ["bun.exe", "bun"] {
+                let candidate = bin_dir.join(name);
+                if candidate.is_file() {
+                    candidates.push(candidate);
+                }
+            }
+        }
+    }
+
+    // Deduplicate while preserving order.
+    let mut seen = std::collections::HashSet::new();
+    candidates.retain(|c| seen.insert(c.clone()));
+
+    // 4. Fallback to bare names if no candidate was found on disk.
+    if candidates.is_empty() {
+        for name in ["bun", "bun.cmd", "bun.exe"] {
+            candidates.push(PathBuf::from(name));
+        }
+    }
+
+    candidates
+}
+
+/// Bundles NikVerse's 3D city into `nikverse-assets/world/city.js` (`scripts/build-nikverse-world.ts`),
+/// before the folder is listed, so the bundle is hashed into the manifest like every other asset.
+///
 /// Every way ADE is built goes through cargo, so this is the one place that cannot be forgotten
 /// (`tauri dev`, `tauri build`, the test app, `cargo test`). Without `bun` the world keeps working as
 /// its plain list (the page falls back when the module is missing) and the build says so; set
@@ -26,25 +110,34 @@ fn build_nikverse_world() {
     println!("cargo:rerun-if-changed=../scripts/build-nikverse-world.ts");
     println!("cargo:rerun-if-env-changed=NIKVERSE_WORLD_REQUIRED");
     println!("cargo:rerun-if-env-changed=NIKVERSE_SKIP_WORLD");
+    println!("cargo:rerun-if-env-changed=BUN_BIN");
     if env::var_os("NIKVERSE_SKIP_WORLD").is_some() {
         return;
     }
     let required = env::var_os("NIKVERSE_WORLD_REQUIRED").is_some();
     let app = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR")).join("..");
-    // `bun` is a `.cmd` shim on a Windows machine that installed it with npm.
     let mut last = String::from("bun non trovato");
-    for program in ["bun", "bun.cmd", "bun.exe"] {
-        match std::process::Command::new(program)
+
+    for program in find_bun_candidates() {
+        match std::process::Command::new(&program)
             .arg("scripts/build-nikverse-world.ts")
             .current_dir(&app)
             .output()
         {
             Ok(out) if out.status.success() => return,
             Ok(out) => {
-                last = format!("{program}: {}", String::from_utf8_lossy(&out.stderr).trim());
-                break;
+                let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                let msg = if !stderr.is_empty() {
+                    stderr
+                } else if !stdout.is_empty() {
+                    stdout
+                } else {
+                    format!("exit code {}", out.status)
+                };
+                last = format!("{}: {}", program.display(), msg);
             }
-            Err(error) => last = format!("{program}: {error}"),
+            Err(error) => last = format!("{}: {error}", program.display()),
         }
     }
     if required {

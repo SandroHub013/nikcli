@@ -91,4 +91,12 @@ describe("the workflows that build ADE", () => {
     const rs = readFileSync(join(import.meta.dir, "..", "..", "src-tauri", "build.rs"), "utf8")
     expect(rs).toContain('env::var_os("NIKVERSE_WORLD_REQUIRED")')
   })
+
+  test("build.rs discards node_modules shims and seeks real bun candidates", () => {
+    const rs = readFileSync(join(import.meta.dir, "..", "..", "src-tauri", "build.rs"), "utf8")
+    expect(rs).toContain("is_node_modules")
+    expect(rs).toContain("find_bun_candidates")
+    expect(rs).toContain("node_modules")
+  })
 })
+
