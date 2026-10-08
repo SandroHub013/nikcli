@@ -41,6 +41,7 @@ Source: the `commands` field of the root `Spec.make("ragu", …)` in `src/cli/co
 | `upgrade`         | `[target]`                                                                                         | Replaces the binary                                    |
 | `uninstall`       | —                                                                                                  |                                                        |
 | `doctor`          | —                                                                                                  | Diagnostic                                             |
+| `migrate`         | `--apply`, `--rollback`, `--json` (flags)                                                          | nikcli folders to ragu; dry run by default             |
 | `quickstart`      | —                                                                                                  |                                                        |
 | `models`          | `[provider]`                                                                                       |                                                        |
 | `image-model`     | `[provider] [model]`                                                                               |                                                        |

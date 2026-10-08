@@ -1,5 +1,4 @@
-import { EOL, tmpdir } from "os"
-import path from "path"
+import { EOL } from "os"
 import { Effect } from "effect"
 import { BunRuntime, BunServices } from "@effect/platform-bun"
 import { Log } from "@ragu/util/log"
@@ -43,6 +42,10 @@ async function bootstrap(): Promise<void> {
   const argv = process.argv.slice(2)
   const has = (...names: string[]) => names.some((name) => argv.includes(name))
 
+  // `ragu migrate` renames the folders `initialize()` makes and `Log.init` writes in: a dry run must leave the
+  // disk as it was, and on Windows a log file this process holds open would stop the rename. It starts bare.
+  if (argv[0] === "migrate") return
+
   await initialize()
   // Armed after `initialize()` because the capture paths write into
   // `Global.Path.log`. See `cli/diagnostics.ts` for the two signals.
@@ -68,9 +71,6 @@ async function bootstrap(): Promise<void> {
   const level = levelIndex === -1 ? undefined : argv[levelIndex + 1]
   await Log.init({
     print: has("--print-logs"),
-    // `ragu migrate` renames the data folder the log lives in, and a file this process holds open there would
-    // stop the rename on Windows: its log goes to the temp folder.
-    ...(argv[0] === "migrate" ? { file: path.join(tmpdir(), `ragu-migrate-${process.pid}.log`) } : {}),
     dev: Installation.isLocal(),
     level: (() => {
       if (level) return level as Log.Level
