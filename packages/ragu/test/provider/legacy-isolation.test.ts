@@ -18,7 +18,7 @@ const SDK =
 async function offenders(root: string) {
   const found: string[] = []
   for await (const file of new Glob("**/*.{ts,tsx}").scan({ cwd: root })) {
-    if (SDK.test(await Bun.file(path.join(root, file)).text())) found.push(file)
+    if (SDK.test(await Bun.file(path.join(root, file)).text())) found.push(file.replaceAll("\\", "/"))
   }
   return found
 }

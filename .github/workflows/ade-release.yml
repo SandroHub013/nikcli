@@ -236,6 +236,17 @@ jobs:
         working-directory: packages/ade
         run: bun x vite build
 
+      # Second defense for NikVerse bundling: pass the global toolchain bun path directly
+      # before Tauri runs with node_modules/.bin prepended to PATH.
+      - name: Locate toolchain bun
+        shell: bash
+        run: |
+          BUN_PATH="$(command -v bun)"
+          if command -v cygpath >/dev/null 2>&1; then
+            BUN_PATH="$(cygpath -w "$BUN_PATH")"
+          fi
+          echo "BUN_BIN=$BUN_PATH" >> "$GITHUB_ENV"
+
       # macOS: `app` only. Tauri's dmg step drives Finder through AppleScript
       # and fails on headless runners; the dmg is made with hdiutil below.
       - name: Build app
@@ -259,6 +270,7 @@ jobs:
             exit 1
           fi
           CONFIG_JSON="{\"version\":\"$VERSION\",\"build\":{\"beforeBuildCommand\":\"\"},\"bundle\":{\"createUpdaterArtifacts\":$UPDATER,\"macOS\":{\"signingIdentity\":\"-\"}}}"
+          export BUN_BIN="${BUN_BIN:-$(command -v bun)}"
           bun x tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config "$CONFIG_JSON"
 
       # NikVerse's assets are not in the installer: the app fetches them the first time the world opens, by the hash its own list carries

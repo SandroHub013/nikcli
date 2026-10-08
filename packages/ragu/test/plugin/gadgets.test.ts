@@ -1,4 +1,5 @@
 import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -54,9 +55,11 @@ async function withProject<T>(fn: () => Promise<T>): Promise<T> {
 
 afterAll(async () => {
   await Instance.disposeAll().catch(() => undefined)
-  await Promise.all(projectDirs.map((dir) => fs.rm(dir, { recursive: true, force: true })))
-  await fs.rm(testHome, { recursive: true, force: true })
-  await fs.rm(stateDir, { recursive: true, force: true })
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
+  await Promise.all(projectDirs.map((dir) => removeTestDir(dir)))
+  await removeTestDir(testHome)
+  await removeTestDir(stateDir)
 })
 
 type Execute = (
@@ -111,7 +114,7 @@ describe("gadgets plugin loaded by ragu", () => {
           await Bun.sleep(20)
         }
         const ran = await tool!.execute(
-          { action: "run", device: pairing.id, command: "system.run", args: { argv: ["echo", "through the loader"] } },
+          { action: "run", device: pairing.id, command: "system.run", args: { argv: [process.execPath, "-e", "console.log('through the loader')"] } },
           ctx,
         )
         expect(ran.output).toContain("through the loader")

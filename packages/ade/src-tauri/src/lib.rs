@@ -17,6 +17,8 @@ mod ask;
 mod agent_link;
 mod app_folder;
 mod brand;
+#[cfg(test)]
+mod bun_lookup;
 mod append;
 mod browse;
 mod browser_shot;

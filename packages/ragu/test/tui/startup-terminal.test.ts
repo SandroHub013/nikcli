@@ -5,6 +5,7 @@ import { spawnPty } from "@ragu/util/pty"
 import { mkdtempSync, writeFileSync, readFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { fileURLToPath } from "node:url"
 
 /**
  * `timeoutMs` is the probe's own stall deadline, and it is not cosmetic: the
@@ -23,18 +24,29 @@ async function fixture(
   } = {},
 ) {
   const dir = mkdtempSync(path.join(tmpdir(), "ragu-startup-evidence-"))
-  const binary = path.join(dir, "fixture")
+  const isWindows = process.platform === "win32"
+  const binary = path.join(dir, isWindows ? "fixture.cmd" : "fixture")
   const reportPath = path.join(dir, "report.json")
   const baseline = path.join(dir, "baseline.json")
-  writeFileSync(
-    binary,
-    `#!/bin/sh\nwhile :; do ${options.stalled ? "printf '\\033]10;?\\007'" : `printf '%s' '${"x".repeat(220)}Ask anything'`}; sleep 0.1; done\n`,
-    { mode: 0o755 },
-  )
+  if (isWindows) {
+    const jsFile = path.join(dir, "run.js")
+    writeFileSync(
+      jsFile,
+      `while (true) {\n  process.stdout.write(${JSON.stringify(options.stalled ? "\x1b]10;?\x07" : "x".repeat(220) + "Ask anything")});\n  Bun.sleepSync(100);\n}\n`,
+    )
+    writeFileSync(binary, `@echo off\r\n"${process.execPath}" "${jsFile}"\r\n`)
+  } else {
+    writeFileSync(
+      binary,
+      `#!/bin/sh\nwhile :; do ${options.stalled ? "printf '\\033]10;?\\007'" : `printf '%s' '${"x".repeat(220)}Ask anything'`}; sleep 0.1; done\n`,
+      { mode: 0o755 },
+    )
+  }
   if (options.baseline !== undefined) writeFileSync(baseline, JSON.stringify(options.baseline))
   try {
+    const tuiStartup = fileURLToPath(new URL("../../script/tui-startup.ts", import.meta.url))
     const child = Bun.spawn(
-      [process.execPath, "run", new URL("../../script/tui-startup.ts", import.meta.url).pathname, binary],
+      [process.execPath, "run", tuiStartup, binary],
       {
         env: {
           ...process.env,
@@ -124,9 +136,9 @@ describe("startup terminal evidence", () => {
   })
 
   test("relay carries output and replies through real PTYs and restores input ownership", async () => {
-    const module = new URL("../../script/tui-startup-terminal.ts", import.meta.url).pathname
-    const ptyModule = new URL("../../../util/src/pty.ts", import.meta.url).pathname
-    const inner = `process.stdin.setRawMode(true); process.stdin.once('data', (data) => { process.stdout.write('REPLY:' + data.toString().trim()); process.exit(0) }); process.stdout.write('PROBE_READY')`
+    const module = fileURLToPath(new URL("../../script/tui-startup-terminal.ts", import.meta.url)).replaceAll("\\", "/")
+    const ptyModule = fileURLToPath(new URL("../../../util/src/pty.ts", import.meta.url)).replaceAll("\\", "/")
+    const inner = `process.stdin.setRawMode(true); process.stdin.once('data', (data) => { process.stdout.write('REPLY:' + data.toString().trim() + '\\n'); process.exit(0) }); process.stdout.write('PROBE_READY')`
     const script = `
       import { spawnPty } from ${JSON.stringify(ptyModule)};
       import { relayStartupTerminal } from ${JSON.stringify(module)};
@@ -136,7 +148,7 @@ describe("startup terminal evidence", () => {
       const restore = relayStartupTerminal(child);
       child.onExit(() => {
         restore(); restore();
-        console.log('RESTORED:' + (process.stdin.isRaw === raw && process.stdin.listenerCount('data') === listeners));
+        console.log('\\r\\nRESTORED:' + (process.stdin.isRaw === raw && process.stdin.listenerCount('data') === listeners));
         process.exit(0);
       });
     `
@@ -166,7 +178,7 @@ describe("startup terminal evidence", () => {
           resolve(exitCode)
         })
       })
-      expect(exit).toBe(0)
+      expect(exit, output).toBe(0)
       expect(output).toContain("REPLY:terminal-response")
       expect(output).toContain("RESTORED:true")
     } finally {

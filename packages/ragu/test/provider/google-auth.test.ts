@@ -31,6 +31,8 @@ function harness(files: Record<string, string>, env: Record<string, string> = {}
     env,
     now: () => clock,
     readFile: async (file) => {
+      const normalized = file.replaceAll("\\", "/")
+      if (normalized in files) return files[normalized]!
       if (file in files) return files[file]!
       throw new Error("ENOENT")
     },

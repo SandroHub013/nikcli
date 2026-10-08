@@ -36,6 +36,8 @@ function deferred<T = void>() {
 
 afterAll(async () => {
   await Instance.disposeAll()
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
   for (const dir of created) await removeTestDir(dir)
   await removeTestDir(testHome)
 })
@@ -89,7 +91,7 @@ describe("Instance lifecycle — concurrent acquisition", () => {
   it("keys the instance by realpath, so an alias joins rather than duplicates", async () => {
     const dir = await directory("alias")
     const link = path.join(path.dirname(dir), `${path.basename(dir)}-link`)
-    await fs.symlink(dir, link)
+    await fs.symlink(dir, link, process.platform === "win32" ? "junction" : "dir")
     created.push(link)
 
     let inits = 0

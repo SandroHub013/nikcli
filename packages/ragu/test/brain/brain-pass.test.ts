@@ -45,6 +45,7 @@ for (const dir of ["data", "cache", "config", "state"]) {
 }
 
 const projectDir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "ragu-brain-pass-project-")))
+await fs.mkdir(path.join(projectDir, ".git"), { recursive: true })
 const memoryFile = path.join(projectDir, ".github", "instructions", "memory.instruction.md")
 const habitsFile = path.join(projectDir, ".nikcli", "habits.md")
 
@@ -65,6 +66,8 @@ beforeEach(() => {
 afterAll(async () => {
   Brain._internalSetExecutor(undefined)
   await Instance.disposeAll().catch(() => undefined)
+  const { Database } = await import("@/database/database")
+  Database.closeAll()
   await removeTestDir(testHome)
   await removeTestDir(projectDir)
 })

@@ -70,6 +70,7 @@ afterEach(async () => {
 
 afterAll(async () => {
   await Instance.disposeAll().catch(() => undefined)
+  Database.closeAll()
   await removeTestDir(testHome)
   await removeTestDir(projectDir)
 })
@@ -146,7 +147,7 @@ describe("mission/orchestrator · sandbox", () => {
         .split("\n")
         .filter((line) => line.startsWith("worktree "))
         .map((line) => line.slice("worktree ".length).trim())
-      expect(worktrees.filter((dir) => dir === first!.directory)).toHaveLength(1)
+      expect(worktrees.filter((dir) => path.resolve(dir) === path.resolve(first!.directory))).toHaveLength(1)
       expect(worktrees.filter((dir) => path.basename(dir).includes("resumed"))).toHaveLength(1)
     })
   })

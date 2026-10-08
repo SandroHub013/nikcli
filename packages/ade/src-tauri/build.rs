@@ -14,6 +14,9 @@ fn main() {
     tauri_build::build()
 }
 
+#[path = "src/bun_lookup.rs"]
+mod bun_lookup;
+
 /// Bundles NikVerse's 3D city into `nikverse-assets/world/city.js` (`scripts/build-nikverse-world.ts`),
 /// before the folder is listed, so the bundle is hashed into the manifest like every other asset.
 ///
@@ -24,16 +27,19 @@ fn main() {
 fn build_nikverse_world() {
     println!("cargo:rerun-if-changed=../src/nikverse/city");
     println!("cargo:rerun-if-changed=../scripts/build-nikverse-world.ts");
+    println!("cargo:rerun-if-changed=src/bun_lookup.rs");
     println!("cargo:rerun-if-env-changed=NIKVERSE_WORLD_REQUIRED");
     println!("cargo:rerun-if-env-changed=NIKVERSE_SKIP_WORLD");
+    println!("cargo:rerun-if-env-changed=BUN_BIN");
     if env::var_os("NIKVERSE_SKIP_WORLD").is_some() {
         return;
     }
     let required = env::var_os("NIKVERSE_WORLD_REQUIRED").is_some();
     let app = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR")).join("..");
-    // `bun` is a `.cmd` shim on a Windows machine that installed it with npm.
-    let mut last = String::from("bun non trovato");
-    for program in ["bun", "bun.cmd", "bun.exe"] {
+    let candidates = bun_lookup::find_bun_candidates_from_env();
+    let mut failures = Vec::new();
+
+    for program in &candidates {
         match std::process::Command::new(program)
             .arg("scripts/build-nikverse-world.ts")
             .current_dir(&app)
@@ -41,16 +47,31 @@ fn build_nikverse_world() {
         {
             Ok(out) if out.status.success() => return,
             Ok(out) => {
-                last = format!("{program}: {}", String::from_utf8_lossy(&out.stderr).trim());
-                break;
+                let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                let msg = if !stderr.is_empty() {
+                    stderr
+                } else if !stdout.is_empty() {
+                    stdout
+                } else {
+                    format!("exit code {}", out.status)
+                };
+                failures.push(format!("{}: {msg}", program.display()));
             }
-            Err(error) => last = format!("{program}: {error}"),
+            Err(error) => failures.push(format!("{}: {error}", program.display())),
         }
     }
+
+    let summary = if failures.is_empty() {
+        String::from("nessun candidato bun trovato")
+    } else {
+        failures.join("; ")
+    };
+
     if required {
-        panic!("NikVerse: il mondo 3D non si e costruito: {last}");
+        panic!("NikVerse: il mondo 3D non si e costruito: {summary}");
     }
-    println!("cargo:warning=NikVerse: il mondo 3D non si e costruito ({last}); il pannello mostrera la lista");
+    println!("cargo:warning=NikVerse: il mondo 3D non si e costruito ({summary}); il pannello mostrera la lista");
 }
 
 /// Lists every file of the assets folder with its SHA-256 and size, and writes the list as Rust

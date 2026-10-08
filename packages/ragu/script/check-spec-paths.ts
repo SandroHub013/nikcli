@@ -102,7 +102,7 @@ async function main() {
       for (const match of lines[i].matchAll(CITATION)) {
         const cited = match[1]
         if (resolves(cited)) continue
-        const where = `${path.relative(REPO_ROOT, file)}:${i + 1}`
+        const where = `${path.relative(REPO_ROOT, file).replaceAll("\\", "/")}:${i + 1}`
         found.set(cited, [...(found.get(cited) ?? []), where])
       }
     }
