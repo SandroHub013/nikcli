@@ -93,7 +93,7 @@ const LINE: Record<string, Glyph> = {
   L: ["│   ", "│   ", "│   ", "╰───"],
 }
 
-const WORD = "RAGU"
+const WORD = "NIKCLI"
 
 function compose(set: Record<string, Glyph>, gap = " "): string[] {
   const glyphs = [...WORD].map((char) => set[char]!)

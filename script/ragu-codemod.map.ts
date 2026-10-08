@@ -205,6 +205,12 @@ export const LINE_EXCLUSIONS: readonly Exclusion[] = [
     why: "an identity the model reads: in the separate commit the lab measures",
   },
   {
+    id: "logo-glyphs",
+    find: /const WORD = "NIKCLI"/,
+    files: /^packages\/(?:nikcli|ragu)\/script\/logo-lab\.ts$/,
+    why: "the logo lab draws the wordmark from glyph tables that have only N, I, K, C and L: renamed, the word has letters no table draws and the lab throws; it moves with the ADE brand brief, which draws the new letters",
+  },
+  {
     id: "both-names",
     find: /(?=[^\n]*ragu)(?=[^\n]*nikcli)/i,
     files: /^(?!script\/ragu-codemod)/,
