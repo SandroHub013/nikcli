@@ -181,13 +181,16 @@ export const LINE_EXCLUSIONS: readonly Exclusion[] = [
   },
 ]
 
-/** Files whose content and own name stay: kept as they are by law, by history, or for their own brief. */
+/**
+ * Files whose content and own name stay: kept as they are by law, by history, or for their own brief. A pattern
+ * under a renamed folder names both its old and its new path, or the second run converts what the first kept.
+ */
 export const SKIP_FILES: readonly PathExclusion[] = [
   { id: "license", find: /(?:^|\/)(?:LICENSE|NOTICE|COPYING)(?:\.[a-z]+)?$/i, why: "copyright lines of OpenCode and nikcli stay (MIT); kokoro-host stays GPL-3 with its NOTICE" },
   { id: "history", find: /^(?:CHANGELOG\.md|\.nikcli\/plans\/)/, why: "history: release notes and old plans say what nikcli was" },
   {
     id: "prompt",
-    find: /^packages\/nikcli\/src\/(?:session\/prompt\/|agent\/prompt\/|command\/template\/|tool\/[^/]+\.txt$)/,
+    find: /^packages\/(?:nikcli|ragu)\/src\/(?:session\/prompt\/|agent\/prompt\/|command\/template\/|tool\/[^/]+\.txt$)/,
     why: "text the model reads (system prompts, tool descriptions, command templates): a separate commit the lab measures",
   },
   {
@@ -197,7 +200,7 @@ export const SKIP_FILES: readonly PathExclusion[] = [
   },
   {
     id: "upstream-registry",
-    find: /^(?:script\/publish-registries\.ts|packages\/nikcli\/src\/installation\/index\.ts)$/,
+    find: /^(?:script\/publish-registries\.ts|packages\/(?:nikcli|ragu)\/src\/installation\/index\.ts)$/,
     onlyRules: ["scope", "env"],
     why: "upgrade and publishing code that names nikcli's packages on npm, brew, scoop and choco: only the imports and the env names change, so it still compiles; the names stay until the autoupdate/services brief",
   },

@@ -158,17 +158,25 @@ for (const path of files) {
     continue
   }
   if (!OLD.test(text)) continue
+  // The rerun guarantee, checked on every file without writing: the output, at its new path and with the skip
+  // that path gets, through the map again is itself.
+  const rerun = SKIP_FILES.find((entry) => entry.find.test(target))
+  const stable = (out: string) => {
+    if (rerun && !rerun.onlyRules) return true
+    counting = false
+    const again = convertText(out, target, rerun?.onlyRules)
+    counting = true
+    return again === out
+  }
   if (skip && !skip.onlyRules) {
     const count = text.match(new RegExp(OLD.source, "gi"))?.length ?? 0
     note(skippedTally, skip.id, path, 0, "", count)
+    if (!stable(text)) notIdempotent.push(path)
     continue
   }
   const out = convertText(text, path, skip?.onlyRules)
   if (skip) note(skippedTally, skip.id, path, 0, "", out.match(new RegExp(OLD.source, "gi"))?.length ?? 0)
-  // The rerun guarantee, checked on every file without writing: the output through the map again is itself.
-  counting = false
-  if (convertText(out, target, skip?.onlyRules) !== out) notIdempotent.push(path)
-  counting = true
+  if (!stable(out)) notIdempotent.push(path)
   if (out !== text) {
     changedFiles.push(path)
     if (APPLY) writeFileSync(join(ROOT, path), out)
