@@ -1,17 +1,15 @@
-# Nikcli
+# Ragu Code
 
-> **Nikcli is a fork of [OpenCode](https://github.com/anomalyco/opencode)** — the open source coding agent. AI-powered development tool: CLI, TUI, server, web, mobile, bots.
+> **Ragu Code is a fork of [nikcli](https://github.com/nikcli/nikcli), which is itself a fork of [OpenCode](https://github.com/anomalyco/opencode)** — the open source coding agent, with ADE, the desktop app that runs coding agents side by side.
 
-Nikcli is a **fork of [OpenCode](https://github.com/anomalyco/opencode)**, the open source coding agent (the repo previously lived at `sst/opencode` — same project, same org). **All credit for the original project goes to the OpenCode authors and its community** — nikcli exists only because that work is open source, and every part of nikcli that came from OpenCode remains theirs.
+Ragu Code is maintained by **Alessandro Boni** ([SandroHub013](https://github.com/SandroHub013)). It is not affiliated with, endorsed by, or supported by nikcli or OpenCode: report Ragu Code issues here, never upstream.
 
-This fork is maintained by **nikomatt69**. On top of the OpenCode base, nikcli adds new commands (`goal`, `routine`, `mobile`, `ads`, `heap`, `locale`, `brain-model` / `image-model` / `speak-model`, `workspace-serve`, …), ACP integration, the Loops/Goal/Routines system, mobile pairing with a dedicated Expo app, the web companion UI, multi-channel bots, the Session v2 engine, and Effect Schema throughout the HTTP contract.
+**All credit for the original work goes to its authors.** nikcli is maintained by **nikomatt69** ([GitHub](https://github.com/nikomatt69)); on top of OpenCode it adds new commands (`goal`, `routine`, `mobile`, `ads`, `heap`, `locale`, `brain-model` / `image-model` / `speak-model`, `workspace-serve`, …), ACP integration, the Loops/Goal/Routines system, mobile pairing with a dedicated Expo app, the web companion UI, multi-channel bots, the Session v2 engine, and Effect Schema throughout the HTTP contract. OpenCode (previously `sst/opencode`) is the base of both: its architecture, its terminal-first idea and a large share of the code.
 
-> Nikcli is **not** affiliated with, endorsed by, or supported by the OpenCode project. Please report nikcli issues here, not upstream. Full credits, history, and the original license live in the upstream repository: [https://github.com/anomalyco/opencode](https://github.com/anomalyco/opencode).
-
-- **Upstream project**: OpenCode — [github.com/anomalyco/opencode](https://github.com/anomalyco/opencode)
-- **Maintainer of this fork**: nikomatt69 — [GitHub](https://github.com/nikomatt69) · [X](https://x.com/nikomatt69)
-- **Release**: see [GitHub Releases](https://github.com/nikcli/nikcli/releases/latest) · Package manager: `bun@1.4.2`
-- **License**: MIT — see `LICENSE`, which retains the upstream OpenCode copyright.
+- **Command**: `ragu`. `nikcli` stays as an alias of the same program, so scripts and tools that call it keep working. The rest of this README documents the nikcli base: every `nikcli` command below also runs as `ragu`.
+- **Upstream projects**: nikcli — [github.com/nikcli/nikcli](https://github.com/nikcli/nikcli) · OpenCode — [github.com/anomalyco/opencode](https://github.com/anomalyco/opencode)
+- **Package manager**: `bun@1.4.2`
+- **License**: MIT — see `LICENSE`, which retains the OpenCode and nikcli copyrights.
 
 ---
 
@@ -702,15 +700,16 @@ Useful repository files:
 
 ## Credits
 
-Nikcli is a fork of **[OpenCode](https://github.com/anomalyco/opencode)**, the open source coding agent
-(the repo previously lived at `sst/opencode`). The core architecture, the terminal-first
-product idea, and a large share of the code in this repository originate there. Thanks to the OpenCode
-authors, maintainers, and contributors for releasing it under a permissive license.
+Ragu Code is a fork of **[nikcli](https://github.com/nikcli/nikcli)** by nikomatt69, which is a fork of
+**[OpenCode](https://github.com/anomalyco/opencode)**, the open source coding agent (the repo previously lived at
+`sst/opencode`). The core architecture, the terminal-first product idea, and most of the code in this repository
+originate there. Thanks to the nikcli and OpenCode authors, maintainers, and contributors for releasing their work
+under a permissive license.
 
-Nikcli is an independent fork, not affiliated with or endorsed by the OpenCode project. Any bug you hit
-in nikcli should be reported to this repository, never upstream.
+Ragu Code is an independent fork, not affiliated with or endorsed by either project. Any bug you hit in Ragu Code
+should be reported to this repository, never upstream.
 
 ## License
 
-MIT — see `LICENSE`. The license file retains the upstream OpenCode copyright alongside the
-copyright for this fork's changes.
+MIT — see `LICENSE`. The license file retains the OpenCode and nikcli copyrights alongside the
+copyright for this fork's changes. `packages/kokoro-host` is GPL-3.0, with its own `NOTICE`.

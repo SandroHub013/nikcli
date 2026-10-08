@@ -108,7 +108,7 @@ export function DialogAccountLogin(props: {
       if (stale()) return
       if (!localUser) throw new Error("Signed in, but this install could not be provisioned — try again")
       toast.show({
-        message: session.data.email ? `Signed in as ${session.data.email}` : "Signed in to your nikcli account",
+        message: session.data.email ? `Signed in as ${session.data.email}` : "Signed in to your Ragu Code account",
         variant: "success",
       })
       props.onComplete?.(localUser)
@@ -180,7 +180,7 @@ export function DialogAccountLogin(props: {
 
   return (
     <box paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} gap={1} flexDirection="column">
-      <DialogHeader title="Sign in to nikcli" hint="esc close" />
+      <DialogHeader title="Sign in to Ragu Code" hint="esc close" />
 
       <Show when={active()}>
         {(value) => (

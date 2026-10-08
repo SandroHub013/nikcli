@@ -93,7 +93,7 @@ export function DialogOpenTelemetry() {
       {
         title: "Service",
         value: "service",
-        description: "nikcli — set OTEL_RESOURCE_ATTRIBUTES to add custom resource attributes",
+        description: "Ragu Code — set OTEL_RESOURCE_ATTRIBUTES to add custom resource attributes",
         category: "Export",
         disabled: true,
       },

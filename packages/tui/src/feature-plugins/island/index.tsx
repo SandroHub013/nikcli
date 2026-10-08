@@ -26,7 +26,7 @@ const tui: TuiPlugin = async (api) => {
     commands: [
       {
         name: "island.status",
-        title: "nikcli Island",
+        title: "Ragu Code Island",
         namespace: "System",
         description: "Check the macOS notch companion app bridge status",
         slashName: "island",
@@ -40,8 +40,8 @@ const tui: TuiPlugin = async (api) => {
                   `App running: ${status.appRunning ? "yes" : "no"}`,
                   `Live sessions: ${status.sessions}`,
                 ]
-              : ["nikcli Island is macOS-only; unavailable on this platform."]
-            api.ui.dialog.replace(() => <Alert title="nikcli Island" message={lines.join("\n")} />)
+              : ["Ragu Code Island is macOS-only; unavailable on this platform."]
+            api.ui.dialog.replace(() => <Alert title="Ragu Code Island" message={lines.join("\n")} />)
           })().catch((error) => {
             api.ui.toast({
               message: error instanceof Error ? error.message : "Island status check failed",

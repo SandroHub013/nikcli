@@ -165,7 +165,7 @@ import { ProjectBar } from "./project-bar"
 import { SidebarToggle, readSidebarHidden, writeSidebarHidden } from "./sidebar-toggle"
 import { PillTabs, type PillTabItem } from "../ui/pill-tabs"
 import { queueItemLabel, createOpenKeyTracker } from "./bar-queue"
-import { NikChromeLogo } from "./nik-chrome-logo"
+import { RaguPotMark } from "./ragu-pot-mark"
 const isTauriDesktop = () => typeof window !== "undefined" && ("__TAURI_INTERNALS__" in window || "__TAURI__" in window)
 
 /**
@@ -9210,20 +9210,14 @@ export function Workbench() {
             first, so nothing is ever laid over anything (DS-polish). */}
         <div data-slot="ade-bar-side" data-side="start">
           {/*
-            The mark, not the word.
-            It draws in `currentColor`, so the ink the bar spends on it
-            follows the theme — which a pair of baked assets never managed.
+            The mark, not the word: the Ragu Code pot, in its own colours
+            on any theme, still (no loop).
             The name stays in the accessibility tree: the mark is decorative
             and the label is on the box around it.
           */}
           <Show when={!(isTauriDesktop() && isMacOS())}>
             <span data-slot="ade-brand" role="img" aria-label={BRAND.name}>
-              {/*
-                Concept 03: Molten Chrome Mercury (N).
-                Continuous liquid metal ribbon with animated caustic sheen
-                and floating mercury micro-droplets.
-              */}
-              <NikChromeLogo size={30} />
+              <RaguPotMark size={30} />
             </span>
           </Show>
           <ProjectBar
@@ -9431,7 +9425,7 @@ export function Workbench() {
             the place the window controls have elsewhere. */}
           <Show when={isTauriDesktop() && isMacOS()}>
             <span data-slot="ade-brand" data-place="end" role="img" aria-label={BRAND.name}>
-              <NikChromeLogo size={30} />
+              <RaguPotMark size={30} />
             </span>
           </Show>
 

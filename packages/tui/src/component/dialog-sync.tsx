@@ -97,7 +97,7 @@ export function DialogSync() {
     }
     const token = form.token.trim()
     if (!token && !status().configured) {
-      setForm("status", "Enter a cli-sync token (nikcli sync token create)")
+      setForm("status", "Enter a cli-sync token (ragu sync token create)")
       focusField("token")
       return
     }

@@ -53,7 +53,7 @@ const tui: TuiPlugin = async (api) => {
         name: "herdr.toggle",
         title: "Herdr bridge",
         namespace: "Integrations",
-        description: "Toggle the bridge that reports nikcli sessions to a running Herdr server",
+        description: "Toggle the bridge that reports Ragu Code sessions to a running Herdr server",
         run() {
           const next = !HerdrBridge.isEnabled()
           HerdrBridge.setEnabled(next)

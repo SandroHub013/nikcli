@@ -38,7 +38,7 @@ interface Device {
  */
 function TerminalView(props: { connection: TerminalConnection }) {
   const [output, setOutput] = createSignal<string[]>([
-    "Connected to NikCLI remote terminal",
+    "Connected to Ragu Code remote terminal",
     "Type 'q' to disconnect",
     "",
   ])

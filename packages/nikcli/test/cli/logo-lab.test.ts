@@ -1,17 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
-import { logo as productionLogo } from "@/cli/logo"
 import { DEFAULT_STYLE_ID, STYLES, logoHeight, logoWidth, mountLab, rowRamp, styleById } from "../../script/logo-lab"
 
-/** Drop ANSI CSI and OSC so cell text reassembles into plain lines. */
-const ESC = String.fromCharCode(27)
-const BEL = String.fromCharCode(7)
-const ANSI = new RegExp(
-  [`${ESC}\\][^${BEL}${ESC}]*(?:${BEL}|${ESC}\\\\)?`, `${ESC}\\[[0-9;?]*[ -/]*[@-~]`, `${ESC}[@-Z\\\\-_]`].join("|"),
-  "g",
-)
-
-const plain = (raw: string) => raw.replace(ANSI, "")
 const FRAME_WIDTH = 100
 
 describe("logo lab styles", () => {
@@ -48,16 +38,6 @@ describe("logo lab styles", () => {
       expect(logoWidth(style)).toBeLessThanOrEqual(FRAME_WIDTH)
       expect(logoWidth(style)).toBeGreaterThan(0)
     }
-  })
-
-  it("keeps the 'shadow' style byte-identical to the shipped logo", () => {
-    const shipped = plain(productionLogo(""))
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-    const shadow = styleById("shadow").lines.map((line) => line.trim())
-    expect(shadow).toEqual(shipped.slice(0, shadow.length))
-    expect(shadow).toHaveLength(6)
   })
 
   /**

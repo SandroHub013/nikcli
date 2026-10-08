@@ -604,7 +604,7 @@ function App(props: {
       toast.show({
         variant: "success",
         title: `Updated to v${version}`,
-        message: "Restart nikcli to use the new version.",
+        message: "Restart Ragu Code to use the new version.",
         duration: 10_000,
       })
     }
@@ -651,7 +651,7 @@ function App(props: {
       ? `${Usage.formatTokens(usage.tokens)} / ${Usage.formatTokens(usage.model.contextLimit)} (${Usage.formatPct(usage.tokens, usage.model.contextLimit)})`
       : Usage.formatTokens(usage.tokens)
     const model = usage.model ? `${usage.model.providerID}/${usage.model.modelID}` : "—"
-    const resume = `nikcli --session ${sessionID}`
+    const resume = `ragu --session ${sessionID}`
 
     const asciiLogo = `
 ███╗   ██╗██╗██╗  ██╗ ██████╗██╗     ██╗
@@ -855,27 +855,27 @@ function App(props: {
         }
 
         if (state.type === "home") {
-          renderer.setTerminalTitle("Nikcli")
+          renderer.setTerminalTitle("Ragu Code")
           return
         }
 
         if (state.type === "session" && state.sessionID) {
           if (!state.title || SessionPrimitives.isDefaultTitle(state.title)) {
-            renderer.setTerminalTitle("Nikcli")
+            renderer.setTerminalTitle("Ragu Code")
             return
           }
           const title = state.title.length > 40 ? state.title.slice(0, 37) + "..." : state.title
-          renderer.setTerminalTitle(`Nikcli | ${title}`)
+          renderer.setTerminalTitle(`Ragu Code | ${title}`)
           return
         }
 
         if (state.type === "git-graph" || state.type === "github") {
-          renderer.setTerminalTitle("Nikcli | GitHub")
+          renderer.setTerminalTitle("Ragu Code | GitHub")
           return
         }
 
         if (state.type === "workspace") {
-          renderer.setTerminalTitle("Nikcli | Workspace")
+          renderer.setTerminalTitle("Ragu Code | Workspace")
           return
         }
       },
@@ -1056,7 +1056,7 @@ function App(props: {
       },
     },
     {
-      title: "Run nikcli doctor",
+      title: "Run ragu doctor",
       value: "support.doctor",
       category: "Support",
       slash: { name: "doctor" },
@@ -1475,7 +1475,7 @@ function App(props: {
       category: "Provider",
     },
     {
-      title: "Sign in to nikcli",
+      title: "Sign in to Ragu Code",
       value: "account.login",
       category: "Account",
       slash: {
@@ -1487,7 +1487,7 @@ function App(props: {
       },
     },
     {
-      title: "Personalize nikcli",
+      title: "Personalize Ragu Code",
       value: "account.profile",
       category: "Account",
       slash: {
@@ -1694,7 +1694,7 @@ function App(props: {
       },
     },
     {
-      title: "Restart nikcli",
+      title: "Restart Ragu Code",
       value: "nikcli.restart",
       category: "System",
       slash: {

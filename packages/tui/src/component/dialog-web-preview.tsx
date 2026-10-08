@@ -305,7 +305,7 @@ export function DialogWebPreview(props: DialogWebPreviewProps) {
 
   /** Why WebView is not on offer here, said once and plainly. */
   const noGraphicsNote = () =>
-    `▀ ${capabilities.terminal ?? "this terminal"} cannot composite a live page, so pages are read as markdown. Run nikcli in Ghostty or Kitty for the live WebView.`
+    `▀ ${capabilities.terminal ?? "this terminal"} cannot composite a live page, so pages are read as markdown. Run Ragu Code in Ghostty or Kitty for the live WebView.`
 
   // Reader first: fetching a page and rendering its markdown costs one request
   // and works in every terminal, where live mode starts a headless WebView and

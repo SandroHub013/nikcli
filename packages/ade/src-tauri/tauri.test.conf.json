@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "ADE Test",
+  "productName": "Ragu Code Test",
   "identifier": "ai.nikcli.ade.test",
   "mainBinaryName": "ade-test",
   "bundle": {

@@ -13,7 +13,7 @@ interface Step {
 
 const STEPS: Step[] = [
   {
-    title: "Welcome to nikcli",
+    title: "Welcome to Ragu Code",
     body: "You're in the TUI — a focused, keyboard-first place to talk to AI about your project. This 6-step tour shows you around in under a minute. Press → to advance, ← to go back, esc to exit.",
   },
   {
@@ -22,7 +22,7 @@ const STEPS: Step[] = [
   },
   {
     title: "Command palette",
-    body: "Every action in nikcli lives behind the command palette. Press the shortcut below to open it — search for anything (models, agents, sessions, themes, settings).",
+    body: "Every action in Ragu Code lives behind the command palette. Press the shortcut below to open it — search for anything (models, agents, sessions, themes, settings).",
   },
   {
     title: "Slash commands",
@@ -34,7 +34,7 @@ const STEPS: Step[] = [
   },
   {
     title: "Help & docs",
-    body: "Press the help shortcut below any time to open the full help dialog. The README, this tour, and the nikcli docs are also linked from the dialog. Have fun!",
+    body: "Press the help shortcut below any time to open the full help dialog. The README, this tour, and the Ragu Code docs are also linked from the dialog. Have fun!",
   },
 ]
 

@@ -67,7 +67,7 @@ function openBot(api: TuiPluginApi, entry: BotEntry): void {
                   if (result.data?.running !== true) {
                     api.ui.toast({
                       message:
-                        result.data?.error ?? `Could not start ${entry.name} — check credentials (nikcli bot auth)`,
+                        result.data?.error ?? `Could not start ${entry.name} — check credentials (ragu bot auth)`,
                       variant: "error",
                       duration: 5000,
                     })
@@ -119,7 +119,7 @@ export function openManager(api: TuiPluginApi): void {
         <Alert
           title="Chat Bots"
           message={
-            "No chat bots configured.\nAdd a webhook bot with: nikcli bot add\nFor Discord Gateway, run /discord"
+            "No chat bots configured.\nAdd a webhook bot with: ragu bot add\nFor Discord Gateway, run /discord"
           }
         />
       ))

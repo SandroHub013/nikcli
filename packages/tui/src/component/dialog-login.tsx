@@ -13,7 +13,7 @@ function choose(dialog: DialogContext, hasUsers: boolean): Promise<LoginChoice |
     dialog.replace(
       () => (
         <DialogSelect
-          title="Sign in to nikcli"
+          title="Sign in to Ragu Code"
           options={[
             {
               title: "Continue with nikcli",
@@ -74,17 +74,17 @@ export const DialogLogin = {
 
     if (!hasUsers) {
       // Registration flow — first user becomes admin
-      const username = await DialogPrompt.show(dialog, "Create nikcli account — Username", {
+      const username = await DialogPrompt.show(dialog, "Create Ragu Code account — Username", {
         placeholder: "Enter a username (min 2 chars)",
       })
       if (!username || username.trim().length < 2) return null
 
-      const email = await DialogPrompt.show(dialog, "Create nikcli account — Email", {
+      const email = await DialogPrompt.show(dialog, "Create Ragu Code account — Email", {
         placeholder: "Enter your email address",
       })
       if (!email || !email.includes("@")) return null
 
-      const password = await DialogPrompt.show(dialog, "Create nikcli account — Password", {
+      const password = await DialogPrompt.show(dialog, "Create Ragu Code account — Password", {
         placeholder: "Enter a password (min 8 chars)",
       })
       if (!password || password.trim().length < 8) return null
@@ -105,12 +105,12 @@ export const DialogLogin = {
       return created.data.user
     } else {
       // Login flow
-      const email = await DialogPrompt.show(dialog, "Sign in to nikcli — Email", {
+      const email = await DialogPrompt.show(dialog, "Sign in to Ragu Code — Email", {
         placeholder: "Enter your email address",
       })
       if (!email) return null
 
-      const password = await DialogPrompt.show(dialog, "Sign in to nikcli — Password", {
+      const password = await DialogPrompt.show(dialog, "Sign in to Ragu Code — Password", {
         placeholder: "Enter your password",
       })
       if (password === null) return null

@@ -212,7 +212,7 @@ export function DialogProfile() {
       dialog,
       "Learned habits",
       content ||
-        "Nothing learned yet. nikcli fills this in during a Brain pass, once it has enough recent sessions in this project to see a pattern.",
+        "Nothing learned yet. Ragu Code fills this in during a Brain pass, once it has enough recent sessions in this project to see a pattern.",
     )
     reopen()
   }
@@ -221,7 +221,7 @@ export function DialogProfile() {
     const confirmed = await DialogConfirm.show(
       dialog,
       "Forget learned habits",
-      `Delete ${promptBlock()?.habitsFile ?? worktree()}? Everything nikcli learned about how you work in this project is lost.`,
+      `Delete ${promptBlock()?.habitsFile ?? worktree()}? Everything Ragu Code learned about how you work in this project is lost.`,
       "cancel",
     )
     if (confirmed) {
@@ -302,7 +302,7 @@ export function DialogProfile() {
     result.push({
       title: "Answer length",
       value: "communication.verbosity",
-      description: info?.communication?.verbosity ?? "not set — nikcli defaults apply",
+      description: info?.communication?.verbosity ?? "not set — Ragu Code defaults apply",
       category: "Communication",
       onSelect: () => dialog.replace(() => <DialogProfileVerbosity />),
     })
@@ -378,7 +378,7 @@ export function DialogProfile() {
     result.push({
       title: "Forget learned habits",
       value: "habits.forget",
-      description: "Delete the file — nikcli starts learning again from here",
+      description: "Delete the file — Ragu Code starts learning again from here",
       category: "Learned habits",
       onSelect: () => void forgetHabits(),
     })
@@ -403,7 +403,7 @@ export function DialogProfile() {
 
   const title = createMemo(() => {
     const who = email()
-    return who ? `Your nikcli profile — ${who}` : "Your nikcli profile — not signed in (saved locally)"
+    return who ? `Your Ragu Code profile — ${who}` : "Your Ragu Code profile — not signed in (saved locally)"
   })
 
   return <DialogSelect title={title()} placeholder="Search settings" options={options()} />
@@ -671,7 +671,7 @@ function DialogProfileVerbosity() {
     {
       title: "Not set",
       value: "unset",
-      description: "Fall back to nikcli defaults",
+      description: "Fall back to Ragu Code defaults",
       category: "Answer length",
     },
   ])
