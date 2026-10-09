@@ -182,9 +182,9 @@ describe("ci-autofix.ts", () => {
       expect(content).toContain("process.exit(0)")
     })
 
-    it("installs ragu via shell installer", async () => {
+    it("installs ragu with the repository's own installer", async () => {
       const content = await fs.readFile(path.join(scriptsDir, "ci-autofix.ts"), "utf8")
-      expect(content).toContain("https://nikcli-ai.dev/install")
+      expect(content).toContain('["bash", "./install"]')
     })
 
     it("calls ragu run headlessly with --command, --model, --format json", async () => {
