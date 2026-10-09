@@ -25,6 +25,7 @@ export function runProject<A, E>(effect: Effect.Effect<A, E, Project.Service>) {
 export async function maybeStartRemoteSync(): Promise<{ stop(): Promise<void> } | undefined> {
   const { SyncConfig } = await import("@/sync/sync-config")
   const resolved = await SyncConfig.resolve()
+  if (resolved.reason) Log.Default.warn("remote sync not started", { reason: resolved.reason })
   if (!resolved.url || !resolved.token) return undefined
   // Lazy import to avoid pulling the remote client into the local-only path
   const { SyncCliInit } = await import("@/sync/cli-init")
@@ -222,8 +223,8 @@ export default Runtime.handler(Commands.commands["serve"], async (input) => {
       workspaceSync = projects.map((project) => Workspace.startSyncing(project))
     }
 
-    // Phase 2: optional bidirectional sync to a remote hub
-    // (e.g. https://s.nikcli-ai.dev). Activated by RAGU_REMOTE_URL +
+    // Phase 2: optional bidirectional sync to a remote hub — another
+    // `ragu serve` the user runs. Activated by RAGU_REMOTE_URL +
     // RAGU_REMOTE_TOKEN or the config file's `sync` block. Zero impact
     // when neither is set.
     remoteSync = await maybeStartRemoteSync()

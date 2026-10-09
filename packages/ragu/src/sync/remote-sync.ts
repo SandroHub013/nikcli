@@ -4,7 +4,7 @@
  *
  * Usage:
  *   const stop = await RemoteSync.start({
- *     url: "https://s.nikcli-ai.dev",
+ *     url: "http://127.0.0.1:4096",
  *     token: process.env.RAGU_REMOTE_TOKEN!,
  *     projectID: Instance.project.id,
  *   })

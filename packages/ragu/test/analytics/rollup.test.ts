@@ -116,14 +116,6 @@ function read(from: string, to: string) {
   return Instance.provide({ directory: projectDir, fn: () => AnalyticsRollup.read({ from, to }) })
 }
 
-function pending(from: string, to: string) {
-  return Instance.provide({ directory: projectDir, fn: () => AnalyticsRollup.pending({ from, to }) })
-}
-
-function markPublished(periods: string[]) {
-  return Instance.provide({ directory: projectDir, fn: () => AnalyticsRollup.markPublished(periods) })
-}
-
 /**
  * `AnalyticsData` lives in this file rather than its own because the database
  * path comes from a process-wide `RAGU_DB`, and the connection behind it is
@@ -154,13 +146,7 @@ function ago(days: number) {
   return dayKey(NOW - days * DAY)
 }
 
-/**
- * Clear the derived tables between tests.
- *
- * Deliberately not part of `seed`: one test seeds twice inside its own body to
- * prove a published day becomes pending again when it is recomputed, and that
- * only means something if the publish record survives the second seed.
- */
+/** Clear the derived tables between tests. */
 async function resetAnalytics() {
   await runPromiseWithLayer(
     Database.layerFromPath(dbPath),
@@ -281,34 +267,6 @@ describe("AnalyticsRollup", () => {
     await seed([{ session: "s1", day: "2026-08-06", provider: "", model: "", input: 999 }])
     await rebuild("2026-08-06", "2026-08-06")
     expect(await read("2026-08-06", "2026-08-06")).toEqual([])
-  })
-
-  it("stops offering a period once it has been published", async () => {
-    await seed([{ session: "s1", day: "2026-08-09", provider: "anthropic", model: "opus", input: 1 }])
-    await rebuild("2026-08-09", "2026-08-09")
-
-    expect(await pending("2026-08-09", "2026-08-09")).toEqual(["2026-08-09"])
-    await markPublished(["2026-08-09"])
-    expect(await pending("2026-08-09", "2026-08-09")).toEqual([])
-  })
-
-  it("offers a published period again once it is recomputed with new messages", async () => {
-    await seed([{ session: "s1", day: "2026-08-10", provider: "anthropic", model: "opus", input: 1 }])
-    await rebuild("2026-08-10", "2026-08-10")
-    await markPublished(["2026-08-10"])
-    expect(await pending("2026-08-10", "2026-08-10")).toEqual([])
-
-    // A session resumed just before midnight lands on a day already reported. A
-    // high-water mark on the last day sent would keep the stale numbers forever.
-    await seed([
-      { session: "s1", day: "2026-08-10", provider: "anthropic", model: "opus", input: 1 },
-      { session: "s2", day: "2026-08-10", provider: "anthropic", model: "opus", input: 99 },
-    ])
-    await new Promise((resolve) => setTimeout(resolve, 2))
-    await rebuild("2026-08-10", "2026-08-10")
-
-    expect(await pending("2026-08-10", "2026-08-10")).toEqual(["2026-08-10"])
-    expect((await read("2026-08-10", "2026-08-10"))[0]!.inputTokens).toBe(100)
   })
 
   it("only rebuilds the requested window", async () => {
@@ -481,22 +439,15 @@ describe("AnalyticsRollup.bounds", () => {
     await resetAnalytics()
   })
 
-  it("reports the first recorded day and whether anything has been published", async () => {
+  it("reports the first recorded day and whether any rollup exists", async () => {
     await seed([
       { session: "s1", day: "2026-07-04", provider: "anthropic", model: "opus", input: 10 },
       { session: "s2", day: "2026-07-09", provider: "anthropic", model: "opus", input: 10 },
     ])
     await rebuild("2026-07-01", "2026-07-31")
 
-    const before = await Instance.provide({ directory: projectDir, fn: () => AnalyticsRollup.bounds() })
-    expect(before.earliestDay).toBe("2026-07-04")
-    expect(before.rollupRows).toBeGreaterThan(0)
-    // Nothing published yet: this is what tells a first run from a routine one,
-    // and so what makes the first automatic report a backfill.
-    expect(before.publishedPeriods).toBe(0)
-
-    await markPublished(["2026-07-04"])
-    const after = await Instance.provide({ directory: projectDir, fn: () => AnalyticsRollup.bounds() })
-    expect(after.publishedPeriods).toBe(1)
+    const bounds = await Instance.provide({ directory: projectDir, fn: () => AnalyticsRollup.bounds() })
+    expect(bounds.earliestDay).toBe("2026-07-04")
+    expect(bounds.rollupRows).toBeGreaterThan(0)
   })
 })

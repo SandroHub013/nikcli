@@ -58,7 +58,6 @@ const sandbox = await fs.mkdtemp(path.join(os.tmpdir(), "ragu-e2e-"))
 
 const serverEnv = {
   ...process.env,
-  RAGU_DISABLE_SHARE: process.env.RAGU_DISABLE_SHARE ?? "true",
   RAGU_DISABLE_LSP_DOWNLOAD: "true",
   RAGU_DISABLE_DEFAULT_PLUGINS: "true",
   RAGU_EXPERIMENTAL_DISABLE_FILEWATCHER: "true",

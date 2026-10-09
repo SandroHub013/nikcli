@@ -696,11 +696,6 @@ async function getSession(
   rt.sessions.set(sessionKey, session)
   schedulePersist(rt)
 
-  const shareResult = await rt.ragu.client.session.share({ sessionID: createResult.data.id, ...rt.dirQuery })
-  if (!shareResult.error && shareResult.data?.share?.url) {
-    await sendChunks(channel, `[Open session in ragu](${shareResult.data.share.url})`).catch(() => {})
-  }
-
   return session
 }
 

@@ -68,20 +68,6 @@ export type Transport = {
 }
 
 /**
- * Runs the update check once the TUI is actually up, and hands back what it
- * found so the caller can open the dialog. The result is returned rather than
- * awaited for an event: the check runs in the CLI process, not in the server
- * this stream comes from.
- */
-export async function checkUpgradeWhenSubscriptionReady<T>(
-  subscriptionReady: Promise<void>,
-  checkUpgrade: (() => Promise<T>) | undefined,
-): Promise<T | undefined> {
-  await subscriptionReady
-  return checkUpgrade?.()
-}
-
-/**
  * Drain one `/global/event` stream.
  *
  * `onConnected` fires on the first frame the stream delivers — the server's

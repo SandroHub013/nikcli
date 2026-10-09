@@ -172,7 +172,7 @@ export namespace AnalyticsRollup {
    * for. Lifetime figures would silently start at whenever the feature was first
    * used, so the first build backfills from here instead.
    */
-  export function bounds(): Promise<{ earliestDay?: string; rollupRows: number; publishedPeriods: number }> {
+  export function bounds(): Promise<{ earliestDay?: string; rollupRows: number }> {
     return runPromiseWithLayer(
       Database.defaultLayer,
       withCurrentInstance(
@@ -186,13 +186,9 @@ export namespace AnalyticsRollup {
               >(`SELECT ${DAY_OF} AS day FROM message_info WHERE ${HAS_MODEL} ORDER BY created_at ASC LIMIT 1`)
               .get()
             const counted = native.query<{ n: number }, []>(`SELECT COUNT(*) AS n FROM analytics_stat`).get()
-            // Zero published periods means this install has never reported, which
-            // is what distinguishes a first run from a routine one.
-            const published = native.query<{ n: number }, []>(`SELECT COUNT(*) AS n FROM analytics_publish`).get()
             return {
               earliestDay: earliest?.day ?? undefined,
               rollupRows: counted?.n ?? 0,
-              publishedPeriods: published?.n ?? 0,
             }
           })
         }),
@@ -200,7 +196,7 @@ export namespace AnalyticsRollup {
     )
   }
 
-  /** Read rollups back, oldest first — what the publisher sends and `/data` shows. */
+  /** Read rollups back, oldest first — what `/data` shows. */
   export function read(input: { from: string; to: string }): Promise<Row[]> {
     return runPromiseWithLayer(
       Database.defaultLayer,
@@ -224,80 +220,6 @@ export namespace AnalyticsRollup {
               )
               .all(GRAIN_DAY, input.from, input.to),
           )
-        }),
-      ),
-    )
-  }
-
-  /**
-   * Periods in `[from, to]` that still need publishing.
-   *
-   * A period is pending when it has never been sent, or when it has been
-   * recomputed since it was — a day can gain messages after it was first
-   * reported (a session resumed just before midnight, an install that was
-   * offline), and a high-water mark on the last day sent would silently keep the
-   * stale numbers.
-   */
-  export function pending(input: { from: string; to: string }): Promise<string[]> {
-    return runPromiseWithLayer(
-      Database.defaultLayer,
-      withCurrentInstance(
-        Effect.gen(function* () {
-          const { native } = yield* Database.Service
-          return yield* Effect.sync(() =>
-            native
-              .query<{ periodKey: string }, [string, string, string]>(
-                `SELECT s.period_key AS periodKey
-                 FROM analytics_stat s
-                 LEFT JOIN analytics_publish p
-                   ON p.grain = s.grain AND p.period_key = s.period_key
-                 WHERE s.grain = ? AND s.period_key BETWEEN ? AND ?
-                 GROUP BY s.period_key
-                 HAVING p.published_revision IS NULL
-                     OR MAX(s.updated_at) > p.published_revision
-                 ORDER BY s.period_key ASC`,
-              )
-              .all(GRAIN_DAY, input.from, input.to)
-              .map((row) => row.periodKey),
-          )
-        }),
-      ),
-    )
-  }
-
-  /**
-   * Record that `periods` were accepted, stamping the revision that was sent so a
-   * later rebuild of the same day makes it pending again.
-   */
-  export function markPublished(periods: string[]): Promise<void> {
-    if (periods.length === 0) return Promise.resolve()
-    return runPromiseWithLayer(
-      Database.defaultLayer,
-      withCurrentInstance(
-        Effect.gen(function* () {
-          const { native } = yield* Database.Service
-          const now = Date.now()
-          yield* Effect.sync(() => {
-            native.transaction(() => {
-              for (const period of periods) {
-                const revision = native
-                  .query<
-                    { revision: number | null },
-                    [string, string]
-                  >(`SELECT MAX(updated_at) AS revision FROM analytics_stat WHERE grain = ? AND period_key = ?`)
-                  .get(GRAIN_DAY, period)
-                native
-                  .query(
-                    `INSERT INTO analytics_publish (grain, period_key, published_revision, published_at)
-                     VALUES (?,?,?,?)
-                     ON CONFLICT(grain, period_key) DO UPDATE SET
-                       published_revision = excluded.published_revision,
-                       published_at = excluded.published_at`,
-                  )
-                  .run(GRAIN_DAY, period, revision?.revision ?? now, now)
-              }
-            })()
-          })
         }),
       ),
     )

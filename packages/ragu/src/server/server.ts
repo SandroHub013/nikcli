@@ -1,4 +1,3 @@
-import { AnalyticsShare } from "@/analytics/share"
 import { runPromiseWithLayer } from "@/effect"
 import { Flag } from "@ragu/util/flag"
 import { bunUtils, onMemoryPressure } from "@/bun"
@@ -12,7 +11,6 @@ import { HttpApiBridge } from "./httpapi/bridge"
 import { isInstanceLessPath } from "./httpapi/instance-less"
 import { PublicApi } from "./httpapi/public"
 import { MDNS } from "./mdns"
-import { PublicRoutes } from "./public"
 import { ServerRouter } from "./server-router"
 import { Auth } from "./httpapi/auth"
 import { BackgroundService } from "@/service/service"
@@ -53,9 +51,8 @@ export namespace Server {
     const response = isInstanceLessPath(pathname)
       ? await HttpApiBridge.handleGlobal(request, { upstreamAuthVerified: true, pathname })
       : await HttpApiBridge.handle(request, { upstreamAuthVerified: true, pathname })
-    if (response.status !== 404) return response
-    if (pathname.startsWith("/mobile/") || pathname === "/mobile") return response
-    return PublicRoutes.proxy(request)
+    // What no route serves is a local 404: there is no web app behind this server.
+    return response
   }
 
   function pipeline() {
@@ -149,7 +146,6 @@ export namespace Server {
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
     _url = server.url
-    AnalyticsShare.start()
     if (!memoryPressureBound) {
       memoryPressureBound = true
       onMemoryPressure(() => {

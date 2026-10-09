@@ -50,18 +50,9 @@ This allows for more targeted requests without needing to specify file paths or 
 
 ## Installation
 
-Run the following command in the terminal from your GitHub repo:
+The action works with the workflow's own `GITHUB_TOKEN`: there is no app to install.
 
-```bash
-ragu github install
-```
-
-This will walk you through installing the GitHub app, creating the workflow, and setting up secrets.
-
-### Manual Setup
-
-1. Install the GitHub app https://github.com/apps/nikcli-agent. Make sure it is installed on the target repository.
-2. Add the following workflow file to `.github/workflows/ragu.yml` in your repo. Set the appropriate `model` and required API keys in `env`.
+1. Add the following workflow file to `.github/workflows/ragu.yml` in your repo. Set the appropriate `model` and required API keys in `env`, and point `uses` at the repository and ref of this fork.
 
    ```yml
    name: ragu
@@ -75,11 +66,13 @@ This will walk you through installing the GitHub app, creating the workflow, and
    jobs:
      ragu:
        if: |
-         contains(github.event.comment.body, '/nik') ||
-         contains(github.event.comment.body, '/ragu')
+         contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
+         (contains(github.event.comment.body, '/nik') || contains(github.event.comment.body, '/ragu'))
        runs-on: ubuntu-latest
        permissions:
-         id-token: write
+         contents: write
+         pull-requests: write
+         issues: write
        steps:
           - name: Checkout repository
             uses: actions/checkout@v6
@@ -88,16 +81,16 @@ This will walk you through installing the GitHub app, creating the workflow, and
               persist-credentials: false
 
           - name: Run ragu
-           uses: nikcli/nikcli/github@latest
+           uses: <owner>/<repo>/github@<ref>
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
            with:
              model: anthropic/claude-sonnet-4-20250514
-             use_github_token: true
    ```
 
-3. Store the API keys in secrets. In your organization or project **settings**, expand **Secrets and variables** on the left and select **Actions**. Add the required API keys.
+   The `permissions` block is what the token may do: comment, push branches, open PRs. To act as another identity, pass a token of your own as `github_token`.
+
+2. Store the API keys in secrets. In your organization or project **settings**, expand **Secrets and variables** on the left and select **Actions**. Add the required API keys.
 
 ## Support
 
@@ -127,7 +120,7 @@ To test locally:
    - `MODEL`: The model used by ragu. Same as the `MODEL` defined in the GitHub workflow.
    - `ANTHROPIC_API_KEY`: Your model provider API key. Same as the keys defined in the GitHub workflow.
    - `GITHUB_RUN_ID`: Dummy value to emulate GitHub action environment.
-   - `MOCK_TOKEN`: A GitHub personal access token. This token is used to verify you have `admin` or `write` access to the test repo. Generate a token [here](https://github.com/settings/personal-access-tokens).
+   - `MOCK_TOKEN`: A GitHub personal access token. The mock run comments and pushes with it, and checks with it that you have `admin` or `write` access to the test repo. Generate a token [here](https://github.com/settings/personal-access-tokens).
    - `MOCK_EVENT`: Mock GitHub event payload (see templates below).
    - `/path/to/ragu`: Path to your cloned ragu repo. `bun /path/to/ragu/github/index.ts` runs your local version of `ragu`.
 

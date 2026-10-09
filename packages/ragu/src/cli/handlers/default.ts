@@ -313,22 +313,6 @@ export default Runtime.handler(Commands, async (input) => {
       Log.Default.info("using background service", { url: registration.url, pid: registration.pid })
       const { tui } = await import("@ragu/tui/app")
       const tuiConfig = await TuiConfig.get().catch(() => undefined)
-      // Upgrade runs in *this* process, not the service: it replaces the
-      // installed binary, and the service is a different (older) copy of it.
-      // Imported inside the callbacks so the upgrade chain stays out of the
-      // boot graph.
-      //
-      // The check runs on every start, so it gets an instance scope and
-      // nothing more: `upgrade` reads the global config, asks the registry and
-      // publishes on the Bus, none of which needs `InstanceBootstrap`. With it,
-      // this client booted a second engine beside the service's — plugins,
-      // LSP, file watcher, provider state, the brain scheduler, and restored
-      // loops and missions — on the thread that draws the terminal.
-      const withUpgradeInstance = async <T>(fn: () => Promise<T>): Promise<T> => {
-        const { withInstanceAsync } = await import("@/effect")
-        return withInstanceAsync({ directory: cwd }, fn)
-      }
-
       await tui({
         url: registration.url,
         fetch: connection.fetch,
@@ -341,43 +325,6 @@ export default Runtime.handler(Commands, async (input) => {
           agent: args.agent,
           model: args.model,
           prompt: args.prompt,
-        },
-        checkUpgrade: async () => {
-          return withUpgradeInstance(async () => {
-            const { upgrade } = await import("@/cli/upgrade")
-            return upgrade()
-          }).catch((error) => {
-            Log.Default.debug("upgrade check failed", { error: errorMessage(error) })
-            return undefined
-          })
-        },
-        upgradeNow: async (method: string, version: string) => {
-          await withUpgradeInstance(async () => {
-            const { upgradeNow } = await import("@/cli/upgrade")
-            await upgradeNow(method as import("@/installation").Installation.Method, version)
-          })
-        },
-        enableAutoUpdate: async () => {
-          await withUpgradeInstance(async () => {
-            const { enableAutoUpdate } = await import("@/cli/upgrade")
-            await enableAutoUpdate()
-          })
-        },
-        // After an upgrade: move the service onto the binary just installed and
-        // hand the terminal the new transport, as `/restart` does. `undefined`
-        // while a Windows swap is still pending — the service would come back
-        // on the old binary, and the next start moves it on its own.
-        onUpgraded: async () => {
-          const { restartServiceAfterUpgrade } = await import("@/cli/upgrade")
-          const next = await restartServiceAfterUpgrade("always")
-          if (!next || next === "pending") return undefined
-          return {
-            url: next.url,
-            fetch: BackgroundService.authorizedFetch(
-              next.url,
-              BackgroundService.authorization(await BackgroundService.password()),
-            ),
-          }
         },
         // `/restart` in the TUI. The service is the thing being restarted here:
         // a separate process, whose live sessions are suspended on SIGTERM and
@@ -566,34 +513,6 @@ export default Runtime.handler(Commands, async (input) => {
         return { url, fetch: customFetch, events }
       },
       restartTarget: "server",
-      checkUpgrade: async () => {
-        return client.call("checkUpgrade", { directory: cwd }).catch((error) => {
-          Log.Default.warn("upgrade check failed", {
-            error: errorMessage(error),
-          })
-          return undefined
-        })
-      },
-      upgradeNow: async (method: string, version: string) => {
-        // Re-throw worker errors so the TUI toast in app.tsx can show the
-        // real reason. Without this, a failed upgrade silently disappears:
-        // the toast "Updating to v..." shows for 30s and the user is left
-        // with the old version and no explanation. The RPC layer preserves
-        // UpgradeFailedError.stderr across the worker hop (see
-        // test/tui/rpc-error.test.ts), so the toast only needs the error
-        // to actually reach it.
-        await client.call("upgradeNow", { directory: cwd, method, version }).catch((error) => {
-          Log.Default.error("upgrade failed", {
-            error: errorMessage(error),
-          })
-          throw error
-        })
-      },
-      // No `onUpgraded`: the server is this process's own worker, running the
-      // binary the upgrade just replaced, so only a new launch picks it up.
-      enableAutoUpdate: async () => {
-        await client.call("enableAutoUpdate", undefined)
-      },
       startServer: !shouldStartServer
         ? async (options = {}) => {
             const result = await client.call("server", {

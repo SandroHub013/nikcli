@@ -27,7 +27,7 @@ import { Policy } from "@/policy/policy"
  * and the rest) stays inside `nikcli.json`. So the mechanism is the first one,
  * and this file is the shape each of those renames gets tested in.
  *
- * Scope note: the three top-level mappings (`mode`, `tools`, `autoshare`) run
+ * Scope note: the two top-level mappings (`mode`, `tools`) run
  * inside the file-loading pipeline and need a directory fixture, so they are not
  * here yet. The two agent-level ones and the provider pair are pure and are.
  */

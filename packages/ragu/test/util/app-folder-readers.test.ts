@@ -31,7 +31,7 @@ const ALLOWED: Record<string, string> = {
   "tui/src/context/theme-catalog.ts": "the bundled theme file ./theme/nikcli.json, not a user's",
   "ragu/src/tool/plugin.txt": "text the model reads: the prompt commit",
   "ragu/src/installation/index.ts":
-    "kept whole for the services brief (codemod upstream-registry): it names nikcli's install in ~/.nikcli/bin and its registry manifests",
+    "it detects nikcli's install in ~/.nikcli/bin, for ragu uninstall: a path it recognises, not a folder it reads",
   "tui/src/component/dialog-config.tsx": "text shown to the user, not a path read: the brand commit",
   "tui/src/component/dialog-onboarding.tsx": "text shown to the user, not a path read: the brand commit",
 }

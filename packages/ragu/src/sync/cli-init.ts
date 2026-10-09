@@ -24,6 +24,7 @@ export namespace SyncCliInit {
    */
   export async function initRemoteSyncFromEnv(instance: InstanceContext): Promise<(() => Promise<void>) | undefined> {
     const resolved = await SyncConfig.resolve()
+    if (resolved.reason) log.warn("remote sync not started", { reason: resolved.reason })
     if (!resolved.url || !resolved.token) return undefined
     if (!resolved.autostart) {
       log.info("remote sync configured but autostart disabled")

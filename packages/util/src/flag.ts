@@ -51,12 +51,10 @@ export namespace Flag {
     return process.env["RAGU_MANAGED_CONFIG_DIR"]
   }
 
-  export const RAGU_AUTO_SHARE = truthy("RAGU_AUTO_SHARE")
   export const RAGU_GIT_BASH_PATH = process.env["RAGU_GIT_BASH_PATH"]
   export const RAGU_CONFIG = process.env["RAGU_CONFIG"]
   export declare const RAGU_CONFIG_DIR: string | undefined
   export declare const RAGU_CONFIG_CONTENT: string | undefined
-  export const RAGU_DISABLE_AUTOUPDATE = truthy("RAGU_DISABLE_AUTOUPDATE")
   export const RAGU_DISABLE_PRUNE = truthy("RAGU_DISABLE_PRUNE")
   export const RAGU_DISABLE_TERMINAL_TITLE = truthy("RAGU_DISABLE_TERMINAL_TITLE")
   export const RAGU_PERMISSION = process.env["RAGU_PERMISSION"]
@@ -172,8 +170,7 @@ export namespace Flag {
   export const RAGU_CLIENT = process.env["RAGU_CLIENT"] ?? "cli"
   export const RAGU_SERVER_PASSWORD = process.env["RAGU_SERVER_PASSWORD"]
   export const RAGU_SERVER_USERNAME = process.env["RAGU_SERVER_USERNAME"]
-  // Max HTTP request body in bytes (defaults applied at the serve site). Lets
-  // large teleport uploads through Bun's 128MB default when needed.
+  // Max HTTP request body in bytes (defaults applied at the serve site).
   export const RAGU_SERVER_MAX_BODY = process.env["RAGU_SERVER_MAX_BODY"]
     ? parseInt(process.env["RAGU_SERVER_MAX_BODY"]!, 10)
     : undefined

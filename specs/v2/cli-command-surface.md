@@ -38,7 +38,7 @@ Source: the `commands` field of the root `Spec.make("ragu", …)` in `src/cli/co
 | `auth`            | `list`, `login [url]`, `logout`                                                                    | Credentials                                            |
 | `account`         | `login`, `logout`, `list`, `switch`, `orgs`                                                        |                                                        |
 | `agent`           | `create`, `list`                                                                                   |                                                        |
-| `upgrade`         | `[target]`                                                                                         | Replaces the binary                                    |
+| `upgrade`         | —                                                                                                  | Says where updates come from; installs nothing         |
 | `uninstall`       | —                                                                                                  |                                                        |
 | `doctor`          | —                                                                                                  | Diagnostic                                             |
 | `migrate`         | `--apply`, `--rollback`, `--json` (flags)                                                          | nikcli folders to ragu; dry run by default             |
@@ -52,7 +52,6 @@ Source: the `commands` field of the root `Spec.make("ragu", …)` in `src/cli/co
 | `usage`           | —                                                                                                  |                                                        |
 | `export`          | `[sessionID]`                                                                                      |                                                        |
 | `import`          | `<file>`                                                                                           | Persists through `SessionV2Write.persist`              |
-| `github`          | `install`, `run`                                                                                   |                                                        |
 | `pr`              | `<number>`                                                                                         |                                                        |
 | `session`         | `list`                                                                                             | No `show` / `delete` on this command                   |
 | `debug`           | `config`, `lsp`, `search`, `file`, `scrap`, `skill`, `snapshot`, `agent`, `paths`, `wait`          |                                                        |
@@ -62,7 +61,6 @@ Source: the `commands` field of the root `Spec.make("ragu", …)` in `src/cli/co
 | `connectors`      | `list`, `auth [name]`, `logout [name]`, `add`                                                      |                                                        |
 | `sync`            | `status`, `connect`, `disconnect`, `token create`                                                  |                                                        |
 | `remote`          | `start`, `stop`, `status`, `share`, `attach <sessionId>`                                           |                                                        |
-| `teleport`        | `[sessionID]`                                                                                      |                                                        |
 | `companion`       | `serve`, `open`                                                                                    |                                                        |
 | `mobile`          | `serve`, `pair`, `token list`, `token revoke <id>`                                                 |                                                        |
 | `routine`         | `list`, `create`, `get <id>`, `run <id>`, `pause <id>`, `resume <id>`, `delete <id>`               |                                                        |
@@ -70,7 +68,6 @@ Source: the `commands` field of the root `Spec.make("ragu", …)` in `src/cli/co
 | `goal`            | `[condition..]`                                                                                    |                                                        |
 | `analytics`       | `<subcommand>`                                                                                     |                                                        |
 | `api`             | `[request..]`, `--list`, `--param`, `--header`, `--data`                                           | Resolves against `publicRoutes()` (X3)                 |
-| `artifact`        | `login`, `logout`, `list [session-id]`                                                             |                                                        |
 | `ads`             | `create`, `list`, `remove [id]`, `toggle [id]`, `enable`, `disable`                                |                                                        |
 | `bot`             | `list`, `add`, `start [name]`, `stop [name]`, `webhook [name]`                                     | Chatbot                                                |
 | `auto-mode`       | `defaults`, `config`, `critique`, `reset`                                                          | Permission auto-mode classifier rules                  |

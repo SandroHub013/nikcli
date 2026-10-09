@@ -608,17 +608,5 @@ async function getSession(sessionKey: string, channel: string, thread: string, s
   sessions.set(sessionKey, session)
   schedulePersist()
 
-  const shareResult = await ragu.client.session.share({ sessionID: createResult.data.id, ...dirQuery })
-  if (!shareResult.error && shareResult.data?.share?.url) {
-    await app.client.chat
-      .postMessage({
-        channel,
-        thread_ts: thread,
-        text: `<${shareResult.data.share.url}|Open session in ragu>`,
-        ...botUsernameOpts,
-      })
-      .catch(() => {})
-  }
-
   return session
 }

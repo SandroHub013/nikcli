@@ -325,8 +325,6 @@ export type RemoteConfig = {
   askOnExistingSession?: boolean | undefined
 }
 
-export type TeleportConfig = { url?: string | undefined; token?: string | undefined }
-
 export type ReferenceConfig =
   | { type: "git"; repository: string; branch?: string | undefined; description?: string | undefined }
   | { type: "local"; path: string; description?: string | undefined }
@@ -898,8 +896,6 @@ export type RemoteConfig1 = {
   provider?: "localtunnel" | "cloudflared" | "ngrok" | "remotosh" | "none" | undefined
   askOnExistingSession?: boolean | undefined
 }
-
-export type TeleportConfig1 = { url?: string | undefined; token?: string | undefined }
 
 export type ReferenceConfig1 =
   | { type: "git"; repository: string; branch?: string | undefined; description?: string | undefined }
@@ -1478,22 +1474,6 @@ export type APIError1 = {
 
 export type CompactionPart = { id: string; sessionID: string; messageID: string; type: "compaction"; auto: boolean }
 
-export type MobileArtifact = {
-  id: string
-  title: string
-  description?: string | undefined
-  filename: string
-  contentType: string
-  kind: "html" | "markdown" | "image" | "video" | "text"
-  url: string
-  viewerUrl: string
-  previewUrl: string
-  version: number
-  sessionID: string
-  size: number
-  time: { created: number; updated: number }
-}
-
 export type PermissionRequest = {
   id: string
   sessionID: string
@@ -1641,14 +1621,6 @@ export type MobileGithubPublishResult = {
 }
 
 export type Todo = { content: string; status: string; priority: string; id: string }
-
-export type MobileTeleportResult = {
-  sessionID: string
-  title?: string | undefined
-  messageCount: number
-  directory?: string | undefined
-  workspace: boolean
-}
 
 export type Worktree2 = { name: string; branch?: string | undefined; directory: string }
 
@@ -2246,17 +2218,6 @@ export type QuestionAnswer = Array<string>
 
 export type EventQuestionRejected = { type: "question.rejected"; properties: { sessionID: string; requestID: string } }
 
-export type EventInstallationUpdated = { type: "installation.updated"; properties: { version: string } }
-
-export type EventInstallationUpdateAvailable = {
-  type: "installation.update-available"
-  properties: {
-    version: string
-    method?: "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown" | undefined
-    current?: string | undefined
-  }
-}
-
 export type EventServerConnected = { type: "server.connected"; properties: {} }
 
 export type EventGlobalDisposed = { type: "global.disposed"; properties: {} }
@@ -2401,7 +2362,6 @@ export type EventTuiCommandExecute = {
     command:
       | "session.list"
       | "session.new"
-      | "session.share"
       | "session.interrupt"
       | "session.compact"
       | "session.page.up"
@@ -3892,7 +3852,7 @@ export type Config = {
   ads?: AdsConfig | undefined
   server?: ServerConfig | undefined
   remote?: RemoteConfig | undefined
-  teleport?: TeleportConfig | undefined
+  teleport?: unknown | undefined
   command?:
     | {
         [x: string]: {
@@ -3919,10 +3879,10 @@ export type Config = {
     | undefined
   snapshot?: boolean | undefined
   sync?: { url?: string | undefined; token?: string | undefined; autostart?: boolean | undefined } | undefined
-  analytics?: { share?: boolean | undefined; endpoint?: string | undefined } | undefined
-  share?: "manual" | "auto" | "disabled" | undefined
-  autoshare?: boolean | undefined
-  autoupdate?: boolean | "notify" | undefined
+  analytics?: unknown | undefined
+  share?: unknown | undefined
+  autoshare?: unknown | undefined
+  autoupdate?: unknown | undefined
   disabled_providers?: Array<string> | undefined
   enabled_providers?: Array<string> | undefined
   model?: string | undefined
@@ -4009,9 +3969,24 @@ export type Config = {
       }
     | undefined
   enterprise?: { url?: string | undefined } | undefined
-  compaction?: { auto?: boolean | undefined; prune?: boolean | undefined; reserved?: number | undefined } | undefined
+  compaction?:
+    | {
+        auto?: boolean | undefined
+        prune?: boolean | undefined
+        reserved?: number | undefined
+        pruneBudget?: number | undefined
+        pruneKeep?: number | undefined
+        pruneReasoning?: boolean | undefined
+        pruneDigest?: boolean | undefined
+        pruneDigestKeep?: number | undefined
+        threshold?: number | undefined
+      }
+    | undefined
   experimental?:
     | {
+        deferredTools?: boolean | undefined
+        toolset?: "default" | "a1" | "t5" | undefined
+        rateLimitBudgetMs?: number | undefined
         policies?: Array<PolicyStatementConfig> | undefined
         hook?:
           | {
@@ -4154,7 +4129,7 @@ export type MobileConfigInfo = {
   ads?: AdsConfig1 | undefined
   server?: ServerConfig1 | undefined
   remote?: RemoteConfig1 | undefined
-  teleport?: TeleportConfig1 | undefined
+  teleport?: unknown | undefined
   command?:
     | {
         [x: string]: {
@@ -4181,10 +4156,10 @@ export type MobileConfigInfo = {
     | undefined
   snapshot?: boolean | undefined
   sync?: { url?: string | undefined; token?: string | undefined; autostart?: boolean | undefined } | undefined
-  analytics?: { share?: boolean | undefined; endpoint?: string | undefined } | undefined
-  share?: "manual" | "auto" | "disabled" | undefined
-  autoshare?: boolean | undefined
-  autoupdate?: boolean | "notify" | undefined
+  analytics?: unknown | undefined
+  share?: unknown | undefined
+  autoshare?: unknown | undefined
+  autoupdate?: unknown | undefined
   disabled_providers?: Array<string> | undefined
   enabled_providers?: Array<string> | undefined
   model?: string | undefined
@@ -4273,9 +4248,24 @@ export type MobileConfigInfo = {
       }
     | undefined
   enterprise?: { url?: string | undefined } | undefined
-  compaction?: { auto?: boolean | undefined; prune?: boolean | undefined; reserved?: number | undefined } | undefined
+  compaction?:
+    | {
+        auto?: boolean | undefined
+        prune?: boolean | undefined
+        reserved?: number | undefined
+        pruneBudget?: number | undefined
+        pruneKeep?: number | undefined
+        pruneReasoning?: boolean | undefined
+        pruneDigest?: boolean | undefined
+        pruneDigestKeep?: number | undefined
+        threshold?: number | undefined
+      }
+    | undefined
   experimental?:
     | {
+        deferredTools?: boolean | undefined
+        toolset?: "default" | "a1" | "t5" | undefined
+        rateLimitBudgetMs?: number | undefined
         policies?: Array<PolicyStatementConfig1> | undefined
         hook?:
           | {
@@ -4500,7 +4490,6 @@ export type MobileSessionDetail = {
   info: Session3
   status?: SessionStatus1 | undefined
   messages: Array<{ info: Message; parts: Array<Part> }>
-  artifacts: Array<MobileArtifact>
   permissions: Array<PermissionRequest>
   questions: Array<QuestionRequest>
 }
@@ -4510,14 +4499,6 @@ export type MessageWithParts = { info: Message1; parts: Array<Part1> }
 export type MessageList = Array<{ info: Message1; parts: Array<Part1> }>
 
 export type SessionPromptResponse = { info: Message1; parts: Array<Part1> }
-
-export type ShareData = Array<
-  | { type: "session"; data: Session2 }
-  | { type: "message"; data: Message1 }
-  | { type: "part"; data: Part1 }
-  | { type: "session_diff"; data: Array<FileDiff2> }
-  | { type: "model"; data: Array<Model> }
->
 
 export type EventMessagePartUpdated = { type: "message.part.updated"; properties: { part: Part2; delta?: string } }
 
@@ -4534,8 +4515,6 @@ export type Event =
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
-  | EventInstallationUpdated
-  | EventInstallationUpdateAvailable
   | EventServerConnected
   | EventGlobalDisposed
   | EventLspUpdated
@@ -4543,6 +4522,7 @@ export type Event =
   | EventMessageRemoved
   | EventMessagePartUpdated
   | EventMessagePartRemoved
+  | EventSessionCache
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
@@ -4573,7 +4553,6 @@ export type Event =
   | EventFileEdited
   | EventMonitorCreated
   | EventMonitorUpdated
-  | EventSessionCache
   | EventMonitorOutput
   | EventMonitorCompleted
   | EventLoopUpserted
@@ -4607,8 +4586,6 @@ export type Event1 =
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
-  | EventInstallationUpdated
-  | EventInstallationUpdateAvailable
   | EventServerConnected
   | EventGlobalDisposed
   | EventLspUpdated
@@ -4616,6 +4593,7 @@ export type Event1 =
   | EventMessageRemoved
   | EventMessagePartUpdated
   | EventMessagePartRemoved
+  | EventSessionCache
   | EventSessionCreated
   | EventSessionUpdated
   | EventSessionDeleted
@@ -4646,7 +4624,6 @@ export type Event1 =
   | EventFileEdited
   | EventMonitorCreated
   | EventMonitorUpdated
-  | EventSessionCache
   | EventMonitorOutput
   | EventMonitorCompleted
   | EventLoopUpserted
@@ -5106,346 +5083,6 @@ export type MobileSessionPublishPayload = {
 }
 
 export type MobileSessionRenamePayload = { readonly title: string }
-
-export type MobileTeleportInPayload = {
-  readonly title?: string | undefined
-  readonly name?: string | undefined
-  readonly origin?: string | undefined
-  readonly permission?:
-    | ReadonlyArray<{
-        readonly permission: string
-        readonly pattern: string
-        readonly action: "allow" | "deny" | "ask"
-      }>
-    | undefined
-  readonly messages: ReadonlyArray<{
-    readonly info:
-      | {
-          readonly id: string
-          readonly sessionID: string
-          readonly role: "user"
-          readonly time: { readonly created: number }
-          readonly format?:
-            | (
-                | { readonly type: "text" }
-                | {
-                    readonly type: "json_schema"
-                    readonly schema: { readonly [x: string]: any }
-                    readonly retryCount?: number | undefined
-                  }
-              )
-            | undefined
-          readonly summary?:
-            | {
-                readonly title?: string | undefined
-                readonly body?: string | undefined
-                readonly diffs: ReadonlyArray<{
-                  readonly file: string
-                  readonly patch: string
-                  readonly additions: number
-                  readonly deletions: number
-                  readonly status?: "added" | "deleted" | "modified" | undefined
-                  readonly before: string
-                  readonly after: string
-                }>
-              }
-            | undefined
-          readonly agent: string
-          readonly model: { readonly providerID: string; readonly modelID: string }
-          readonly system?: string | undefined
-          readonly tools?: { readonly [x: string]: boolean } | undefined
-          readonly variant?: string | undefined
-        }
-      | {
-          readonly id: string
-          readonly sessionID: string
-          readonly role: "assistant"
-          readonly time: { readonly created: number; readonly completed?: number | undefined }
-          readonly error?:
-            | {
-                readonly name: "ProviderAuthError"
-                readonly data: { readonly providerID: string; readonly message: string }
-              }
-            | { readonly name: "UnknownError"; readonly data: { readonly message: string } }
-            | { readonly name: "MessageOutputLengthError"; readonly data: {} }
-            | {
-                readonly name: "MessageContextOverflowError"
-                readonly data: {
-                  readonly message: string
-                  readonly statusCode?: number | undefined
-                  readonly responseBody?: string | undefined
-                }
-              }
-            | { readonly name: "MessageAbortedError"; readonly data: { readonly message: string } }
-            | {
-                readonly name: "StructuredOutputError"
-                readonly data: { readonly message: string; readonly retries: number }
-              }
-            | {
-                readonly name: "APIError"
-                readonly data: {
-                  readonly message: string
-                  readonly statusCode?: number | undefined
-                  readonly isRetryable: boolean
-                  readonly responseHeaders?: { readonly [x: string]: string } | undefined
-                  readonly responseBody?: string | undefined
-                  readonly metadata?: { readonly [x: string]: string } | undefined
-                  readonly classification?: "payload-too-large" | undefined
-                }
-              }
-            | undefined
-          readonly parentID: string
-          readonly modelID: string
-          readonly providerID: string
-          readonly mode: string
-          readonly agent: string
-          readonly path: { readonly cwd: string; readonly root: string }
-          readonly summary?: boolean | undefined
-          readonly cost: number
-          readonly tokens: {
-            readonly total?: number | undefined
-            readonly input: number
-            readonly output: number
-            readonly reasoning: number
-            readonly cache: { readonly read: number; readonly write: number }
-          }
-          readonly structured?: unknown | undefined
-          readonly finish?: string | undefined
-        }
-    readonly parts: ReadonlyArray<
-      | {
-          readonly id: string
-          readonly sessionID: string
-          readonly messageID: string
-          readonly type: "text"
-          readonly text: string
-          readonly synthetic?: boolean | undefined
-          readonly ignored?: boolean | undefined
-          readonly time?: { readonly start: number; readonly end?: number | undefined } | undefined
-          readonly metadata?: { readonly [x: string]: any } | undefined
-        }
-      | {
-          readonly id: string
-          readonly sessionID: string
-          readonly messageID: string
-          readonly type: "subtask"
-          readonly prompt: string
-          readonly description: string
-          readonly agent: string
-          readonly model?: { readonly providerID: string; readonly modelID: string } | undefined
-          readonly command?: string | undefined
-          readonly background?: boolean | undefined
-        }
-      | {
-          readonly id: string
-          readonly sessionID: string
-          readonly messageID: string
-          readonly type: "reasoning"
-          readonly text: string
-          readonly metadata?: { readonly [x: string]: any } | undefined
-          readonly time: { readonly start: number; readonly end?: number | undefined }
-        }
-      | {
-          readonly id: string
-          readonly sessionID: string
-          readonly messageID: string
-          readonly type: "file"
-          readonly mime: string
-          readonly filename?: string | undefined
-          readonly url: string
-          readonly source?:
-            | (
-                | {
-                    readonly text: { readonly value: string; readonly start: number; readonly end: number }
-                    readonly type: "file"
-                    readonly path: string
-                  }
-                | {
-                    readonly text: { readonly value: string; readonly start: number; readonly end: number }
-                    readonly type: "symbol"
-                    readonly path: string
-                    readonly range: {
-                      readonly start: { readonly line: number; readonly character: number }
-                      readonly end: { readonly line: number; readonly character: number }
-                    }
-                    readonly name: string
-                    readonly kind: number
-                  }
-                | {
-                    readonly text: { readonly value: string; readonly start: number; readonly end: number }
-                    readonly type: "resource"
-                    readonly clientName: string
-                    readonly uri: string
-                  }
-              )
-            | undefined
-        }
-      | {
-          readonly id: string
-          readonly sessionID: string
-          readonly messageID: string
-          readonly type: "tool"
-          readonly callID: string
-          readonly tool: string
-          readonly state:
-            | { readonly status: "pending"; readonly input: { readonly [x: string]: any }; readonly raw: string }
-            | {
-                readonly status: "running"
-                readonly input: { readonly [x: string]: any }
-                readonly title?: string | undefined
-                readonly metadata?: { readonly [x: string]: any } | undefined
-                readonly structured?: { readonly [x: string]: any } | undefined
-                readonly content?:
-                  | ReadonlyArray<
-                      | { readonly type: "text"; readonly text: string }
-                      | {
-                          readonly type: "file"
-                          readonly data: string
-                          readonly mime: string
-                          readonly name?: string | undefined
-                        }
-                    >
-                  | undefined
-                readonly time: { readonly start: number }
-              }
-            | {
-                readonly status: "completed"
-                readonly input: { readonly [x: string]: any }
-                readonly output: string
-                readonly title: string
-                readonly metadata: { readonly [x: string]: any }
-                readonly time: { readonly start: number; readonly end: number; readonly compacted?: number | undefined }
-                readonly attachments?:
-                  | ReadonlyArray<{
-                      readonly id: string
-                      readonly sessionID: string
-                      readonly messageID: string
-                      readonly type: "file"
-                      readonly mime: string
-                      readonly filename?: string | undefined
-                      readonly url: string
-                      readonly source?:
-                        | (
-                            | {
-                                readonly text: { readonly value: string; readonly start: number; readonly end: number }
-                                readonly type: "file"
-                                readonly path: string
-                              }
-                            | {
-                                readonly text: { readonly value: string; readonly start: number; readonly end: number }
-                                readonly type: "symbol"
-                                readonly path: string
-                                readonly range: {
-                                  readonly start: { readonly line: number; readonly character: number }
-                                  readonly end: { readonly line: number; readonly character: number }
-                                }
-                                readonly name: string
-                                readonly kind: number
-                              }
-                            | {
-                                readonly text: { readonly value: string; readonly start: number; readonly end: number }
-                                readonly type: "resource"
-                                readonly clientName: string
-                                readonly uri: string
-                              }
-                          )
-                        | undefined
-                    }>
-                  | undefined
-              }
-            | {
-                readonly status: "error"
-                readonly input: { readonly [x: string]: any }
-                readonly error: string
-                readonly metadata?: { readonly [x: string]: any } | undefined
-                readonly time: { readonly start: number; readonly end: number }
-              }
-          readonly metadata?: { readonly [x: string]: any } | undefined
-        }
-      | {
-          readonly id: string
-          readonly sessionID: string
-          readonly messageID: string
-          readonly type: "step-start"
-          readonly snapshot?: string | undefined
-        }
-      | {
-          readonly id: string
-          readonly sessionID: string
-          readonly messageID: string
-          readonly type: "step-finish"
-          readonly reason: string
-          readonly snapshot?: string | undefined
-          readonly cost: number
-          readonly tokens: {
-            readonly total?: number | undefined
-            readonly input: number
-            readonly output: number
-            readonly reasoning: number
-            readonly cache: { readonly read: number; readonly write: number }
-          }
-        }
-      | {
-          readonly id: string
-          readonly sessionID: string
-          readonly messageID: string
-          readonly type: "snapshot"
-          readonly snapshot: string
-        }
-      | {
-          readonly id: string
-          readonly sessionID: string
-          readonly messageID: string
-          readonly type: "patch"
-          readonly hash: string
-          readonly files: ReadonlyArray<string>
-        }
-      | {
-          readonly id: string
-          readonly sessionID: string
-          readonly messageID: string
-          readonly type: "agent"
-          readonly name: string
-          readonly source?: { readonly value: string; readonly start: number; readonly end: number } | undefined
-        }
-      | {
-          readonly id: string
-          readonly sessionID: string
-          readonly messageID: string
-          readonly type: "retry"
-          readonly attempt: number
-          readonly error: {
-            readonly name: "APIError"
-            readonly data: {
-              readonly message: string
-              readonly statusCode?: number | undefined
-              readonly isRetryable: boolean
-              readonly responseHeaders?: { readonly [x: string]: string } | undefined
-              readonly responseBody?: string | undefined
-              readonly metadata?: { readonly [x: string]: string } | undefined
-              readonly classification?: "payload-too-large" | undefined
-            }
-          }
-          readonly time: { readonly created: number }
-        }
-      | {
-          readonly id: string
-          readonly sessionID: string
-          readonly messageID: string
-          readonly type: "compaction"
-          readonly auto: boolean
-        }
-    >
-  }>
-  readonly uploadID?: string | undefined
-}
-
-export type MobileTeleportOutPayload = {
-  readonly url: string
-  readonly token: string
-  readonly content?: boolean | undefined
-  readonly includeGit?: boolean | undefined
-}
 
 export type MobileWorktreeCreatePayload = {
   readonly name?: string | undefined
@@ -6399,7 +6036,7 @@ export type ConfigUpdateInput = {
           readonly askOnExistingSession?: boolean | undefined
         }
       | undefined
-    readonly teleport?: { readonly url?: string | undefined; readonly token?: string | undefined } | undefined
+    readonly teleport?: unknown | undefined
     readonly command?:
       | {
           readonly [x: string]: {
@@ -6443,10 +6080,10 @@ export type ConfigUpdateInput = {
           readonly autostart?: boolean | undefined
         }
       | undefined
-    readonly analytics?: { readonly share?: boolean | undefined; readonly endpoint?: string | undefined } | undefined
-    readonly share?: "manual" | "auto" | "disabled" | undefined
-    readonly autoshare?: boolean | undefined
-    readonly autoupdate?: boolean | "notify" | undefined
+    readonly analytics?: unknown | undefined
+    readonly share?: unknown | undefined
+    readonly autoshare?: unknown | undefined
+    readonly autoupdate?: unknown | undefined
     readonly disabled_providers?: ReadonlyArray<string> | undefined
     readonly enabled_providers?: ReadonlyArray<string> | undefined
     readonly model?: string | undefined
@@ -7040,10 +6677,19 @@ export type ConfigUpdateInput = {
           readonly auto?: boolean | undefined
           readonly prune?: boolean | undefined
           readonly reserved?: number | undefined
+          readonly pruneBudget?: number | undefined
+          readonly pruneKeep?: number | undefined
+          readonly pruneReasoning?: boolean | undefined
+          readonly pruneDigest?: boolean | undefined
+          readonly pruneDigestKeep?: number | undefined
+          readonly threshold?: number | undefined
         }
       | undefined
     readonly experimental?:
       | {
+          readonly deferredTools?: boolean | undefined
+          readonly toolset?: "default" | "a1" | "t5" | undefined
+          readonly rateLimitBudgetMs?: number | undefined
           readonly policies?:
             | ReadonlyArray<{ readonly effect: "allow" | "deny"; readonly action: string; readonly resource: string }>
             | undefined
@@ -7736,33 +7382,6 @@ export type MobileSessionRenameOutput = MobileSuccess
 export type MobileSessionTodoInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
 export type MobileSessionTodoOutput = { todos: Array<Todo> }
-
-export type MobileTeleportUploadBeginOutput = { uploadID: string }
-
-export type MobileTeleportUploadChunkInput = { readonly uploadID: { readonly uploadID: string }["uploadID"] }
-
-export type MobileTeleportUploadChunkOutput = { ok: boolean }
-
-export type MobileTeleportInInput = {
-  readonly title?: MobileTeleportInPayload["title"]
-  readonly name?: MobileTeleportInPayload["name"]
-  readonly origin?: MobileTeleportInPayload["origin"]
-  readonly permission?: MobileTeleportInPayload["permission"]
-  readonly messages: MobileTeleportInPayload["messages"]
-  readonly uploadID?: MobileTeleportInPayload["uploadID"]
-}
-
-export type MobileTeleportInOutput = MobileTeleportResult
-
-export type MobileTeleportOutInput = {
-  readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly url: MobileTeleportOutPayload["url"]
-  readonly token: MobileTeleportOutPayload["token"]
-  readonly content?: MobileTeleportOutPayload["content"]
-  readonly includeGit?: MobileTeleportOutPayload["includeGit"]
-}
-
-export type MobileTeleportOutOutput = MobileTeleportResult
 
 export type MobileWorktreeCreateInput = {
   readonly name?: MobileWorktreeCreatePayload["name"]
@@ -8533,14 +8152,6 @@ export type SessionUnrevertInput = { readonly sessionID: { readonly sessionID: s
 
 export type SessionUnrevertOutput = Session2
 
-export type SessionShareInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
-
-export type SessionShareOutput = Session2
-
-export type SessionUnshareInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
-
-export type SessionUnshareOutput = Session2
-
 export type SessionSummarizeInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly providerID: SessionSummarizePayload["providerID"]
@@ -9226,22 +8837,6 @@ export type SessionPromptPromptAsyncInput = {
 }
 
 export type SessionPromptPromptAsyncOutput = void
-
-export type ShareShortInput = { readonly shareID: { readonly shareID: string }["shareID"] }
-
-export type ShareShortOutput = { readonly body: void; readonly headers: { readonly location: string } }
-
-export type SharePageInput = { readonly shareID: { readonly shareID: string }["shareID"] }
-
-export type SharePageOutput = ShareData
-
-export type ShareApiInput = { readonly shareID: { readonly shareID: string }["shareID"] }
-
-export type ShareApiOutput = ShareData
-
-export type ShareDataInput = { readonly shareID: { readonly shareID: string }["shareID"] }
-
-export type ShareDataOutput = ShareData
 
 export type EventsSubscribeOutput = Event
 

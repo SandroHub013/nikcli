@@ -32,6 +32,22 @@ import { CONFIG_STEMS, DOT_FOLDERS, configFile, isDotFolder, preferNew } from "@
 export namespace Config {
   const log = Log.create({ service: "config" })
 
+  /**
+   * Keys of the services that talked to Nik's servers and were removed (brief ragu-via-servizi-nik). The schema
+   * still accepts them, so a ragu.json / nikcli.json that has one keeps loading; the loaded config drops them,
+   * with a warning in the log.
+   */
+  export const REMOVED_KEYS: Record<string, string> = {
+    analytics: "it sent usage totals to Nik's dashboard (dashboard.nikcli-ai.dev)",
+    teleport: "teleport, which sent a session and its workspace to a remote server, is gone",
+    autoupdate: "updates came from upstream's release feeds and installers; Ragu Code does not update itself",
+    share: "sharing published sessions on Nik's share service (s.nikcli-ai.dev), removed",
+    autoshare: "sharing published sessions on Nik's share service (s.nikcli-ai.dev), removed",
+  }
+
+  /** Keybinds of removed features: accepted in `keybinds` and ignored, like `REMOVED_KEYS`. */
+  export const REMOVED_KEYBINDS = ["session_share", "session_unshare"] as const
+
   function runAuth<A, E>(effect: Effect.Effect<A, E, Auth.Service>) {
     return runPromiseWithLayer(Auth.defaultLayer, effect)
   }
@@ -181,6 +197,17 @@ export namespace Config {
       log.debug("loaded custom config from RAGU_CONFIG_CONTENT")
     }
 
+    for (const [key, why] of Object.entries(REMOVED_KEYS)) {
+      if (!(key in result)) continue
+      log.warn("config key removed and ignored", { key, why })
+      delete (result as Record<string, unknown>)[key]
+    }
+    for (const key of REMOVED_KEYBINDS) {
+      if (!result.keybinds || !(key in result.keybinds)) continue
+      log.warn("keybind removed and ignored", { key })
+      delete (result.keybinds as Record<string, unknown>)[key]
+    }
+
     // Migrate deprecated mode field to agent field
     for (const [name, mode] of Object.entries(result.mode)) {
       result.agent = mergeDeep(result.agent ?? {}, {
@@ -210,11 +237,6 @@ export namespace Config {
     }
 
     if (!result.username) result.username = os.userInfo().username
-
-    // Handle migration from autoshare to share field
-    if (result.autoshare === true && !result.share) {
-      result.share = "auto"
-    }
 
     if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
@@ -1093,8 +1115,9 @@ export namespace Config {
       stash_delete: z.string().optional().default("ctrl+d").describe("Delete stash entry"),
       model_provider_list: z.string().optional().default("ctrl+a").describe("Open provider list from model dialog"),
       model_favorite_toggle: z.string().optional().default("ctrl+f").describe("Toggle model favorite status"),
-      session_share: z.string().optional().default("none").describe("Share current session"),
-      session_unshare: z.string().optional().default("none").describe("Unshare current session"),
+      // Accepted so an old config still loads, then dropped: see `REMOVED_KEYBINDS`.
+      session_share: z.string().optional().describe(`Removed and ignored: ${REMOVED_KEYS.share}`),
+      session_unshare: z.string().optional().describe(`Removed and ignored: ${REMOVED_KEYS.share}`),
       session_interrupt: z.string().optional().default("escape").describe("Interrupt current session"),
       session_codebro_open: z.string().optional().default("<leader>i").describe("Open the Codebro dossier"),
       subtask_background: z
@@ -1326,17 +1349,6 @@ export namespace Config {
       ref: "RemoteConfig",
     })
   export type Remote = z.infer<typeof Remote>
-
-  export const Teleport = z
-    .object({
-      url: z.string().optional().describe("Last used teleport server base URL (e.g. a Railway deploy)"),
-      token: z.string().optional().describe("Last used teleport mobile Bearer token"),
-    })
-    .strict()
-    .meta({
-      ref: "TeleportConfig",
-    })
-  export type Teleport = z.infer<typeof Teleport>
 
   export const Layout = z.enum(["auto", "stretch"]).meta({
     ref: "LayoutConfig",
@@ -1633,7 +1645,7 @@ export namespace Config {
       ads: Ads.optional().describe("User-defined ads shown in the TUI tips area"),
       server: Server.optional().describe("Server configuration for ragu serve and web commands"),
       remote: Remote.optional().describe("Remote Control defaults and behavior"),
-      teleport: Teleport.optional().describe("Teleport server defaults for sending sessions to a remote server"),
+      teleport: z.unknown().optional().describe(`Removed and ignored: ${REMOVED_KEYS.teleport}`),
       command: z
         .record(z.string(), Command)
         .optional()
@@ -1677,7 +1689,7 @@ export namespace Config {
           url: z
             .string()
             .optional()
-            .describe("Remote sync hub URL, e.g. https://s.nikcli-ai.dev. RAGU_REMOTE_URL overrides this."),
+            .describe("Remote sync hub URL: another `ragu serve`, e.g. http://127.0.0.1:4096. RAGU_REMOTE_URL overrides this."),
           token: z
             .string()
             .optional()
@@ -1692,38 +1704,10 @@ export namespace Config {
         .strict()
         .optional()
         .describe("Optional hub-and-spoke remote sync settings, manageable from the TUI /sync dialog"),
-      analytics: z
-        .object({
-          share: z
-            .boolean()
-            .optional()
-            .describe(
-              "Contribute anonymous per-day model totals to the public stats at nikcli-ai.dev/data. On by default; set false to opt out, or set DO_NOT_TRACK=1 / RAGU_DISABLE_ANALYTICS=1. Only day, provider, model, session count, message count, token count and cost are sent, under a random identifier — never prompts, paths, repositories, session titles or account.",
-            ),
-          endpoint: z
-            .string()
-            .optional()
-            .describe("Where reports are sent. Defaults to the public ragu endpoint; set this to self-host them."),
-        })
-        .strict()
-        .optional()
-        .describe("Opt-in anonymous usage reporting"),
-      share: z
-        .enum(["manual", "auto", "disabled"])
-        .optional()
-        .describe(
-          "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",
-        ),
-      autoshare: z
-        .boolean()
-        .optional()
-        .describe("@deprecated Use 'share' field instead. Share newly created sessions automatically"),
-      autoupdate: z
-        .union([z.boolean(), z.literal("notify")])
-        .optional()
-        .describe(
-          "Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications",
-        ),
+      analytics: z.unknown().optional().describe(`Removed and ignored: ${REMOVED_KEYS.analytics}`),
+      share: z.unknown().optional().describe(`Removed and ignored: ${REMOVED_KEYS.share}`),
+      autoshare: z.unknown().optional().describe(`Removed and ignored: ${REMOVED_KEYS.autoshare}`),
+      autoupdate: z.unknown().optional().describe(`Removed and ignored: ${REMOVED_KEYS.autoupdate}`),
       disabled_providers: z
         .array(z.string())
         .optional()

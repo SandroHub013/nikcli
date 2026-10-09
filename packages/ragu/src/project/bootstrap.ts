@@ -11,7 +11,6 @@ import { InstanceReload } from "./reload"
 import { Vcs } from "./vcs"
 import { Flag } from "@ragu/util/flag"
 import { Log } from "@ragu/util/log"
-import { ShareNext } from "@/share/share-next"
 import { Snapshot } from "../snapshot"
 import { Truncate } from "../tool/truncation"
 import { Todo } from "../session/todo"
@@ -54,16 +53,6 @@ export async function InstanceBootstrap(instance: InstanceContext) {
       const plugin = yield* Plugin.Service
       yield* plugin.init()
     }),
-  )
-  background(
-    "share",
-    runPromiseWithLayer(
-      ShareNext.defaultLayer,
-      Effect.gen(function* () {
-        const shareNext = yield* ShareNext.Service
-        yield* shareNext.init()
-      }),
-    ),
   )
   background(
     "format",

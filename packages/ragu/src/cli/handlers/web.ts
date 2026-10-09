@@ -16,6 +16,14 @@ export function getNetworkIPs() {
   return getLocalIPs()
 }
 
+/**
+ * The web interface the server serves itself. `/` used to be answered by the proxy to Nik's hosted app, which is
+ * gone, so `/` is a 404.
+ */
+export function webInterfaceUrl(base: string) {
+  return new URL("/companion", base).toString()
+}
+
 export default Runtime.handler(Commands.commands["web"], async (input) => {
   const args = {
     _: [],
@@ -52,7 +60,7 @@ export default Runtime.handler(Commands.commands["web"], async (input) => {
   UI.empty()
 
   if (opts.hostname === "0.0.0.0") {
-    const localhostUrl = `http://localhost:${server.port}`
+    const localhostUrl = webInterfaceUrl(`http://localhost:${server.port}`)
     UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, localhostUrl)
 
     const networkIPs = getNetworkIPs()
@@ -70,9 +78,9 @@ export default Runtime.handler(Commands.commands["web"], async (input) => {
       UI.println(UI.Style.TEXT_INFO_BOLD + "  mDNS:              ", UI.Style.TEXT_NORMAL, `ragu.local:${server.port}`)
     }
 
-    open(localhostUrl.toString()).catch(() => {})
+    open(localhostUrl).catch(() => {})
   } else {
-    const displayUrl = server.url.toString()
+    const displayUrl = webInterfaceUrl(server.url.toString())
     UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, displayUrl)
     open(displayUrl).catch(() => {})
   }

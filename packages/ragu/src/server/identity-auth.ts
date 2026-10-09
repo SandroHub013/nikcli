@@ -6,8 +6,6 @@ import { AccountDB } from "@/account/db"
 import { runPromiseWithLayer } from "@/effect"
 import { UserDB } from "@/user/users"
 
-const DEFAULT_ISSUER = "https://auth.nikcli-ai.dev"
-
 /**
  * The server is the single trust boundary in
  * `specs/effect-tui/12-identity-onboarding-auth.md`: it verifies the issuer JWT
@@ -16,13 +14,13 @@ const DEFAULT_ISSUER = "https://auth.nikcli-ai.dev"
  * one state machine on top of this verifier; it does not replace it.
  */
 export function identityVerifierOptions(): VerifyAccessTokenOptions | undefined {
-  // Default-on: every ragu server accepts issuer JWTs. Verification is
-  // lazy — the JWKS is only fetched when a JWT-shaped bearer arrives, so
-  // offline/local servers with no OAuth clients never touch the network.
-  // Set RAGU_AUTH_ISSUER=off (or 0/false) to disable entirely.
-  const raw = Flag.authIssuer()?.trim()
-  if (raw && ["off", "0", "false", "none"].includes(raw.toLowerCase())) return
-  const issuer = raw || DEFAULT_ISSUER
+  // Off unless RAGU_AUTH_ISSUER names an issuer. It used to default to Nik's
+  // (https://auth.nikcli-ai.dev), so every server turned a bearer signed there
+  // into one of its users and fetched Nik's JWKS to check it. A JWKS url or a
+  // secret alone does not switch it on: the issuer is what the `iss` claim is
+  // checked against. "off", "0", "false" and "none" still mean off.
+  const issuer = Flag.authIssuer()?.trim()
+  if (!issuer || ["off", "0", "false", "none"].includes(issuer.toLowerCase())) return
   const jwksUrl = Flag.authJwksUrl() ?? new URL("/.well-known/jwks.json", issuer).toString()
   return {
     issuer,

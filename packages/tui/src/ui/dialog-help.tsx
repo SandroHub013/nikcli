@@ -58,7 +58,7 @@ const CLI_COMMANDS: Array<{ name: string; description: string }> = [
   { name: "ragu models", description: "List configured models" },
   { name: "ragu agent list", description: "List configured agents" },
   { name: "ragu session", description: "Manage sessions" },
-  { name: "ragu upgrade", description: "Self-upgrade" },
+  { name: "ragu upgrade", description: "Where new versions come from" },
   { name: "ragu --help", description: "Show all CLI commands" },
 ]
 

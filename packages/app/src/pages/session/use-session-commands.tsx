@@ -38,7 +38,7 @@ export const useSessionCommands = (input: {
   navigate: ReturnType<typeof useNavigate>
   tabs: () => ReturnType<ReturnType<typeof useLayout>["tabs"]>
   view: () => ReturnType<ReturnType<typeof useLayout>["view"]>
-  info: () => { revert?: { messageID?: string }; share?: { url?: string } } | undefined
+  info: () => { revert?: { messageID?: string } } | undefined
   status: () => { type: string }
   userMessages: () => UserMessage[]
   visibleUserMessages: () => UserMessage[]
@@ -371,85 +371,6 @@ export const useSessionCommands = (input: {
     },
   ])
 
-  const shareCommands = createMemo(() => {
-    if (input.sync.data.config.share === "disabled") return []
-    return [
-      {
-        id: "session.share",
-        title: input.info()?.share?.url ? "Copy share link" : input.language.t("command.session.share"),
-        description: input.info()?.share?.url
-          ? "Copy share URL to clipboard"
-          : input.language.t("command.session.share.description"),
-        category: input.language.t("command.category.session"),
-        slash: "share",
-        disabled: !input.params.id,
-        onSelect: async () => {
-          if (!input.params.id) return
-          const copy = (url: string, existing: boolean) =>
-            navigator.clipboard
-              .writeText(url)
-              .then(() =>
-                showToast({
-                  title: existing
-                    ? input.language.t("session.share.copy.copied")
-                    : input.language.t("toast.session.share.success.title"),
-                  description: input.language.t("toast.session.share.success.description"),
-                  variant: "success",
-                }),
-              )
-              .catch(() =>
-                showToast({
-                  title: input.language.t("toast.session.share.copyFailed.title"),
-                  variant: "error",
-                }),
-              )
-          const url = input.info()?.share?.url
-          if (url) {
-            await copy(url, true)
-            return
-          }
-          await input.sdk.client.session
-            .share({ sessionID: input.params.id })
-            .then((res) => copy(res.data!.share!.url, false))
-            .catch(() =>
-              showToast({
-                title: input.language.t("toast.session.share.failed.title"),
-                description: input.language.t("toast.session.share.failed.description"),
-                variant: "error",
-              }),
-            )
-        },
-      },
-      {
-        id: "session.unshare",
-        title: input.language.t("command.session.unshare"),
-        description: input.language.t("command.session.unshare.description"),
-        category: input.language.t("command.category.session"),
-        slash: "unshare",
-        disabled: !input.params.id || !input.info()?.share?.url,
-        onSelect: async () => {
-          if (!input.params.id) return
-          await input.sdk.client.session
-            .unshare({ sessionID: input.params.id })
-            .then(() =>
-              showToast({
-                title: input.language.t("toast.session.unshare.success.title"),
-                description: input.language.t("toast.session.unshare.success.description"),
-                variant: "success",
-              }),
-            )
-            .catch(() =>
-              showToast({
-                title: input.language.t("toast.session.unshare.failed.title"),
-                description: input.language.t("toast.session.unshare.failed.description"),
-                variant: "error",
-              }),
-            )
-        },
-      },
-    ]
-  })
-
   input.command.register("session", () =>
     combineCommandSections([
       sessionCommands(),
@@ -460,7 +381,6 @@ export const useSessionCommands = (input: {
       agentCommands(),
       permissionCommands(),
       sessionActionCommands(),
-      shareCommands(),
     ]),
   )
 }

@@ -333,22 +333,6 @@ async function createSession(
 
     await saveToKv(env, sessionKey, session)
 
-    const shareResult = await fetch(`${raguUrl}/session/${createData.data.id}/share`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...auth,
-      },
-      signal: controller.signal,
-    })
-
-    if (shareResult.ok) {
-      const shareData = unwrapRaguResponse((await shareResult.json()) as RaguResponse<RaguSessionInfo>)
-      if (!shareData.error && shareData.data?.share?.url) {
-        await postMessage(env.SLACK_BOT_TOKEN, channel, thread, `Session: ${shareData.data.share.url}`)
-      }
-    }
-
     return session
   } catch (err) {
     const errorMessage =

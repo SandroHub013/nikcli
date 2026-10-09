@@ -180,7 +180,6 @@ const SpecRun = Spec.make("run", {
       Flag.withDescription("session id to continue"),
       Flag.optional,
     ),
-    share: Flag.boolean("share").pipe(Flag.withDescription("share the session"), Flag.optional),
     model: Flag.string("model").pipe(
       Flag.withAlias("m"),
       Flag.withDescription("model to use in the format of provider/model"),
@@ -264,19 +263,9 @@ const SpecAnalyticsShow = Spec.make("show", {
   },
 })
 
-const SpecAnalyticsPublish = Spec.make("publish", {
-  description: "send this install's rollups to the collector now",
-  params: {
-    today: Flag.boolean("today").pipe(Flag.withDescription("just today"), Flag.withDefault(false)),
-    week: Flag.boolean("week").pipe(Flag.withDescription("the last 7 days"), Flag.withDefault(false)),
-    month: Flag.boolean("month").pipe(Flag.withDescription("the last 30 days"), Flag.withDefault(false)),
-    all: Flag.boolean("all").pipe(Flag.withDescription("every day on record (default)"), Flag.withDefault(false)),
-  },
-})
-
 const SpecAnalytics = Spec.make("analytics", {
-  description: "inspect and publish local usage rollups",
-  commands: [SpecAnalyticsShow, SpecAnalyticsPublish],
+  description: "inspect local usage rollups",
+  commands: [SpecAnalyticsShow],
 })
 
 const SpecApi = Spec.make("api", {
@@ -546,29 +535,6 @@ const SpecAccount = Spec.make("account", {
   commands: [SpecAccountLogin, SpecAccountLogout, SpecAccountList, SpecAccountSwitch, SpecAccountOrgs],
 })
 
-const SpecArtifactLogin = Spec.make("login", {
-  description: "verify the active CLI user used for artifact publishing",
-})
-
-const SpecArtifactLogout = Spec.make("logout", {
-  description: "explain how artifact authentication follows the CLI account",
-})
-
-const SpecArtifactList = Spec.make("list", {
-  description: "list artifacts published from a session",
-  params: {
-    "session-id": Argument.string("session-id").pipe(
-      Argument.withDescription("Session ID (lists artifacts for this session)"),
-      Argument.optional,
-    ),
-  },
-})
-
-const SpecArtifact = Spec.make("artifact", {
-  description: "manage published artifacts (nikcli-ai.dev/artifact)",
-  commands: [SpecArtifactLogin, SpecArtifactLogout, SpecArtifactList],
-})
-
 const SpecAgentCreate = Spec.make("create", {
   description: "create a new agent",
   params: {
@@ -599,18 +565,7 @@ const SpecAgent = Spec.make("agent", {
 })
 
 const SpecUpgrade = Spec.make("upgrade", {
-  description: "upgrade ragu to the latest or a specific version",
-  params: {
-    target: Argument.string("target").pipe(
-      Argument.withDescription("version to upgrade to, for ex '0.1.48' or 'v0.1.48'"),
-      Argument.optional,
-    ),
-    method: Flag.choice("method", ["curl", "npm", "yarn", "pnpm", "bun", "brew", "choco", "scoop"]).pipe(
-      Flag.withAlias("m"),
-      Flag.withDescription("installation method to use"),
-      Flag.optional,
-    ),
-  },
+  description: "say where Ragu Code updates come from",
 })
 
 const SpecQuickstart = Spec.make("quickstart", {
@@ -887,30 +842,10 @@ const SpecExport = Spec.make("export", {
 })
 
 const SpecImport = Spec.make("import", {
-  description: "import session data from JSON file or URL",
+  description: "import session data from a JSON file",
   params: {
-    file: Argument.string("file").pipe(Argument.withDescription("path to JSON file or share URL")),
+    file: Argument.string("file").pipe(Argument.withDescription("path to the JSON file")),
   },
-})
-
-const SpecGithubInstall = Spec.make("install", {
-  description: "install the GitHub agent",
-})
-
-const SpecGithubRun = Spec.make("run", {
-  description: "run the GitHub agent",
-  params: {
-    event: Flag.string("event").pipe(Flag.withDescription("GitHub mock event to run the agent for"), Flag.optional),
-    token: Flag.string("token").pipe(
-      Flag.withDescription("GitHub personal access token (github_pat_********)"),
-      Flag.optional,
-    ),
-  },
-})
-
-const SpecGithub = Spec.make("github", {
-  description: "manage GitHub agent",
-  commands: [SpecGithubInstall, SpecGithubRun],
 })
 
 const SpecPr = Spec.make("pr", {
@@ -1106,38 +1041,6 @@ const SpecRemote = Spec.make("remote", {
     command: Argument.string("command").pipe(Argument.withDescription("subcommand to run"), Argument.optional),
   },
   commands: [SpecRemoteStart, SpecRemoteStop, SpecRemoteStatus, SpecRemoteShare, SpecRemoteAttach],
-})
-
-const SpecTeleport = Spec.make("teleport", {
-  description: "teleport a session to a remote ragu server to continue it from mobile",
-  params: {
-    sessionID: Argument.string("sessionID").pipe(
-      Argument.withDescription("session id to teleport (defaults to interactive selection)"),
-      Argument.optional,
-    ),
-    url: Flag.string("url").pipe(
-      Flag.withAlias("u"),
-      Flag.withDescription("remote server base URL (e.g. https://my-app.up.railway.app)"),
-      Flag.optional,
-    ),
-    token: Flag.string("token").pipe(
-      Flag.withAlias("t"),
-      Flag.withDescription("mobile Bearer token for the remote server"),
-      Flag.optional,
-    ),
-    content: Flag.boolean("content").pipe(
-      Flag.withDescription("clone the working directory (source files, no binaries) to the server"),
-      Flag.withDefault(true),
-    ),
-    git: Flag.boolean("git").pipe(
-      Flag.withDescription("also include the full .git history (large — off by default)"),
-      Flag.withDefault(false),
-    ),
-    save: Flag.boolean("save").pipe(
-      Flag.withDescription("remember the server URL and token for next time"),
-      Flag.withDefault(true),
-    ),
-  },
 })
 
 const SpecCompanionServe = Spec.make("serve", {
@@ -1501,7 +1404,7 @@ const SpecSyncToken = Spec.make("token", {
 })
 
 const SpecSync = Spec.make("sync", {
-  description: "manage optional remote hub sync (e.g. https://s.nikcli-ai.dev)",
+  description: "manage optional remote hub sync (e.g. http://127.0.0.1:4096)",
   commands: [SpecSyncStatus, SpecSyncConnect, SpecSyncDisconnect, SpecSyncToken],
 })
 
@@ -1616,7 +1519,6 @@ export const Commands = Spec.make("ragu", {
     SpecDebug,
     SpecAuth,
     SpecAccount,
-    SpecArtifact,
     SpecAgent,
     SpecUpgrade,
     SpecQuickstart,
@@ -1633,14 +1535,12 @@ export const Commands = Spec.make("ragu", {
     SpecStats,
     SpecExport,
     SpecImport,
-    SpecGithub,
     SpecPr,
     SpecSession,
     SpecImageModel,
     SpecSpeakModel,
     SpecBrainModel,
     SpecRemote,
-    SpecTeleport,
     SpecCompanion,
     SpecMobile,
     SpecRoutine,

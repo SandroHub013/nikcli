@@ -17,14 +17,11 @@ import { runPromiseWithLayer } from "@/effect"
  * design, and switching it on would convert working behaviour into 401s:
  *
  *  - **sync** — `server/httpapi/sync.ts` identifies an unauthenticated local
- *    caller as `"operator"`, and `sync/sync-config.ts` reports
- *    `configured: false` with no account so remote sync simply does not run.
- *    Requiring an account here would break local-only sync, which works.
- *  - **share** — `share/share-next.ts` POSTs to `s.nikcli-ai.dev/api/share`
- *    with no authorization header at all. The share service is anonymous.
+ *    caller as `"operator"`, and remote sync needs the hub's own token
+ *    (`sync/sync-config.ts`), never the account's. Requiring an account here
+ *    would break local-only sync, which works.
  *  - **mobile companion** — carries its own `nkm_` capability tokens
- *    (`MobileAuth`), and teleport takes the *target* server's token in the
- *    request body. Neither reads this machine's account.
+ *    (`MobileAuth`) and does not read this machine's account.
  *
  * The one surface that does answer "who is signed in on this machine" —
  * `/user/me` and `/account` — is served by `localAccountSession` in

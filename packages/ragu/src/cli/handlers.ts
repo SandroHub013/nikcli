@@ -34,7 +34,6 @@ export const Handlers = Runtime.handlers(Commands, {
   goal: () => import("./handlers/goal"),
   analytics: {
     show: () => import("./handlers/analytics/show"),
-    publish: () => import("./handlers/analytics/publish"),
   },
   api: () => import("./handlers/api"),
   debug: {
@@ -79,11 +78,6 @@ export const Handlers = Runtime.handlers(Commands, {
     switch: () => import("./handlers/account/switch"),
     orgs: () => import("./handlers/account/orgs"),
   },
-  artifact: {
-    login: () => import("./handlers/artifact/login"),
-    logout: () => import("./handlers/artifact/logout"),
-    list: () => import("./handlers/artifact/list"),
-  },
   agent: {
     create: () => import("./handlers/agent/create"),
     list: () => import("./handlers/agent/list"),
@@ -112,10 +106,6 @@ export const Handlers = Runtime.handlers(Commands, {
   stats: () => import("./handlers/stats"),
   export: () => import("./handlers/export"),
   import: () => import("./handlers/import"),
-  github: {
-    install: () => import("./handlers/github/install"),
-    run: () => import("./handlers/github/run"),
-  },
   pr: () => import("./handlers/pr"),
   session: {
     list: () => import("./handlers/session/list"),
@@ -130,7 +120,6 @@ export const Handlers = Runtime.handlers(Commands, {
     share: () => import("./handlers/remote/share"),
     attach: () => import("./handlers/remote/attach"),
   },
-  teleport: () => import("./handlers/teleport"),
   companion: {
     serve: () => import("./handlers/companion/serve"),
     open: () => import("./handlers/companion/open"),

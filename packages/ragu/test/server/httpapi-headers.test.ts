@@ -24,7 +24,6 @@ preserveTestEnv([
 
 const { OpenApi } = await import("effect/unstable/httpapi")
 const { PublicApi } = await import("@/server/httpapi/public")
-const { createRaguClient } = await import("@ragu/sdk/httpapi")
 
 type Operation = {
   readonly responses?: Record<
@@ -50,38 +49,11 @@ afterAll(async () => {
 })
 
 describe("H9 declared response headers", () => {
-  it("puts location on the share short redirect", () => {
-    expect(responseHeaders("/s/{shareID}", "get", "308")).toHaveProperty("location")
-  })
-
   it("puts retry-after on the sync push 429", () => {
     expect(responseHeaders("/sync/event", "post", "429")).toHaveProperty("retry-after")
   })
 
   it("puts www-authenticate on the documented 401", () => {
     expect(responseHeaders("/sync/event", "post", "401")).toHaveProperty("www-authenticate")
-  })
-
-  it("round-trips a declared location header through the generated client", async () => {
-    const requests: Request[] = []
-    const client = createRaguClient({
-      baseUrl: "http://ragu.local",
-      fetch: Object.assign(
-        async (input: RequestInfo | URL, init?: RequestInit) => {
-          requests.push(new Request(input, init))
-          return new Response(null, {
-            status: 308,
-            headers: { location: "/share/abc" },
-          })
-        },
-        { preconnect: () => undefined },
-      ),
-    })
-
-    const result = await client.getSShareId({ shareID: "abc" })
-    expect(requests).toHaveLength(1)
-    expect(new URL(requests[0]!.url).pathname).toBe("/s/abc")
-    expect(result.error).toBeUndefined()
-    expect(result.data).toEqual({ body: undefined, headers: { location: "/share/abc" } })
   })
 })

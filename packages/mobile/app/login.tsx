@@ -13,14 +13,14 @@ import {
   View,
 } from "react-native"
 import { Image } from "expo-image"
-import { useServer, userMe, userStatus } from "@/lib/server-context"
-import { loginWithOAuth } from "@/lib/oauth"
+import { useServer, userLogin, userRegister, userStatus } from "@/lib/server-context"
 import { router } from "expo-router"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { Check, KeyRound } from "lucide-react-native"
 import { ActionButton } from "@/components/ui/ActionButton"
 import { ErrorBanner } from "@/components/ui/ErrorBanner"
 import { SurfaceCard } from "@/components/ui/SurfaceCard"
+import { TextField } from "@/components/ui/TextField"
 import { contrastOn, hexToRgba, useAppTheme } from "@/lib/theme"
 import { type as typeStyle } from "@/lib/typography"
 import { triggerHaptic } from "@/lib/haptics"
@@ -141,12 +141,15 @@ export default function LoginScreen() {
   const { palette, isDark } = useAppTheme()
   const prefersReducedMotion = usePrefersReducedMotion()
   const { top, bottom } = useSafeAreaInsets()
-  const { config, setOAuthSession } = useServer()
+  const { config, setUserSession } = useServer()
 
   const [mode, setMode] = useState<"signin" | "signup">("signin")
   const [checkingStatus, setCheckingStatus] = useState(true)
 
-  const [oauthLoading, setOauthLoading] = useState(false)
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [username, setUsername] = useState("")
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
@@ -259,22 +262,24 @@ export default function LoginScreen() {
     }
   }, [error, prefersReducedMotion, shakeAnim])
 
-  async function handleOAuth() {
+  async function handleSubmit() {
     if (!config) return
     setError(null)
-    setOauthLoading(true)
+    setLoading(true)
     try {
-      const tokens = await loginWithOAuth(config.authIssuer)
-      const user = await userMe(config.url, tokens.access)
+      const result =
+        mode === "signup"
+          ? await userRegister(config.url, { username: username.trim(), email: email.trim(), password })
+          : await userLogin(config.url, email.trim(), password)
       setSuccess(true)
       void triggerHaptic("success")
-      await setOAuthSession(tokens, user)
+      await setUserSession(result.token, result.user)
       router.replace("/sessions")
     } catch (err) {
       setError(err instanceof Error ? err.message : mode === "signup" ? "Sign up failed" : "Sign in failed")
       void triggerHaptic("error")
     } finally {
-      setOauthLoading(false)
+      setLoading(false)
     }
   }
 
@@ -376,23 +381,50 @@ export default function LoginScreen() {
                     ...typeStyle(16, { weight: "700" }),
                   }}
                 >
-                  {isSignup ? "Sign up with Ragu" : "Sign in with Ragu"}
+                  {isSignup ? "Create an account on this host" : "Sign in to this host"}
                 </Text>
                 <Text style={{ color: palette.muted, ...typeStyle(13) }}>
                   {isSignup
-                    ? "Create your Ragu account securely in your browser with GitHub or an email code."
-                    : "Continue securely in your browser with GitHub or an email code."}
+                    ? "The account lives on the ragu host you paired with, not on any outside service."
+                    : "Use the email and password of your account on the ragu host you paired with."}
                 </Text>
+
+                {isSignup ? (
+                  <TextField
+                    label="Username"
+                    value={username}
+                    onChangeText={setUsername}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    textContentType="username"
+                  />
+                ) : null}
+                <TextField
+                  label="Email"
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                />
+                <TextField
+                  label="Password"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  textContentType={isSignup ? "newPassword" : "password"}
+                />
 
                 <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
                   {error ? <ErrorBanner message={error} /> : null}
                 </Animated.View>
 
                 <ActionButton
-                  label={isSignup ? "Sign up with Ragu" : "Sign in with Ragu"}
-                  loading={oauthLoading}
-                  onPress={handleOAuth}
-                  disabled={oauthLoading || !config}
+                  label={isSignup ? "Sign up" : "Sign in"}
+                  loading={loading}
+                  onPress={handleSubmit}
+                  disabled={loading || !config || !email.trim() || !password || (isSignup && !username.trim())}
                 />
 
                 <Pressable

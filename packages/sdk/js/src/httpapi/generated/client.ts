@@ -219,13 +219,6 @@ import type {
   MobileSessionRenameOutput,
   MobileSessionTodoInput,
   MobileSessionTodoOutput,
-  MobileTeleportUploadBeginOutput,
-  MobileTeleportUploadChunkInput,
-  MobileTeleportUploadChunkOutput,
-  MobileTeleportInInput,
-  MobileTeleportInOutput,
-  MobileTeleportOutInput,
-  MobileTeleportOutOutput,
   MobileWorktreeCreateInput,
   MobileWorktreeCreateOutput,
   MobileWorktreeRemoveInput,
@@ -444,10 +437,6 @@ import type {
   SessionRevertOutput,
   SessionUnrevertInput,
   SessionUnrevertOutput,
-  SessionShareInput,
-  SessionShareOutput,
-  SessionUnshareInput,
-  SessionUnshareOutput,
   SessionSummarizeInput,
   SessionSummarizeOutput,
   SessionGenerateInput,
@@ -581,14 +570,6 @@ import type {
   SessionPromptPromptOutput,
   SessionPromptPromptAsyncInput,
   SessionPromptPromptAsyncOutput,
-  ShareShortInput,
-  ShareShortOutput,
-  SharePageInput,
-  SharePageOutput,
-  ShareApiInput,
-  ShareApiOutput,
-  ShareDataInput,
-  ShareDataOutput,
   EventsSubscribeOutput,
   EventsGlobalOutput,
   WorkspaceExtraEventsInput,
@@ -2156,58 +2137,6 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      teleportUploadBegin: (requestOptions?: RequestOptions) =>
-        request<MobileTeleportUploadBeginOutput>(
-          { method: "POST", path: `/mobile/teleport/upload`, successStatus: 200, declaredStatuses: [], empty: false },
-          requestOptions,
-        ),
-      teleportUploadChunk: (input: MobileTeleportUploadChunkInput, requestOptions?: RequestOptions) =>
-        request<MobileTeleportUploadChunkOutput>(
-          {
-            method: "POST",
-            path: `/mobile/teleport/upload/${encodeURIComponent(input.uploadID)}`,
-            successStatus: 200,
-            declaredStatuses: [],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      teleportIn: (input: MobileTeleportInInput, requestOptions?: RequestOptions) =>
-        request<MobileTeleportInOutput>(
-          {
-            method: "POST",
-            path: `/mobile/teleport`,
-            body: {
-              title: input["title"],
-              name: input["name"],
-              origin: input["origin"],
-              permission: input["permission"],
-              messages: input["messages"],
-              uploadID: input["uploadID"],
-            },
-            successStatus: 200,
-            declaredStatuses: [400],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      teleportOut: (input: MobileTeleportOutInput, requestOptions?: RequestOptions) =>
-        request<MobileTeleportOutOutput>(
-          {
-            method: "POST",
-            path: `/mobile/session/${encodeURIComponent(input.sessionID)}/teleport`,
-            body: {
-              url: input["url"],
-              token: input["token"],
-              content: input["content"],
-              includeGit: input["includeGit"],
-            },
-            successStatus: 200,
-            declaredStatuses: [400, 404],
-            empty: false,
-          },
-          requestOptions,
-        ),
       worktreeCreate: (input?: MobileWorktreeCreateInput, requestOptions?: RequestOptions) =>
         request<MobileWorktreeCreateOutput>(
           {
@@ -3604,28 +3533,6 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      share: (input: SessionShareInput, requestOptions?: RequestOptions) =>
-        request<SessionShareOutput>(
-          {
-            method: "POST",
-            path: `/session/${encodeURIComponent(input.sessionID)}/share`,
-            successStatus: 200,
-            declaredStatuses: [404, 409],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      unshare: (input: SessionUnshareInput, requestOptions?: RequestOptions) =>
-        request<SessionUnshareOutput>(
-          {
-            method: "DELETE",
-            path: `/session/${encodeURIComponent(input.sessionID)}/share`,
-            successStatus: 200,
-            declaredStatuses: [404, 409],
-            empty: false,
-          },
-          requestOptions,
-        ),
       summarize: (input: SessionSummarizeInput, requestOptions?: RequestOptions) =>
         request<SessionSummarizeOutput>(
           {
@@ -4459,53 +4366,6 @@ export function make(options: ClientOptions) {
             successStatus: 204,
             declaredStatuses: [],
             empty: true,
-          },
-          requestOptions,
-        ),
-    },
-    share: {
-      short: (input: ShareShortInput, requestOptions?: RequestOptions) =>
-        request<ShareShortOutput>(
-          {
-            method: "GET",
-            path: `/s/${encodeURIComponent(input.shareID)}`,
-            successStatus: 308,
-            declaredStatuses: [],
-            responseHeaders: ["location"],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      page: (input: SharePageInput, requestOptions?: RequestOptions) =>
-        request<SharePageOutput>(
-          {
-            method: "GET",
-            path: `/share/${encodeURIComponent(input.shareID)}`,
-            successStatus: 200,
-            declaredStatuses: [],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      api: (input: ShareApiInput, requestOptions?: RequestOptions) =>
-        request<ShareApiOutput>(
-          {
-            method: "GET",
-            path: `/api/share/${encodeURIComponent(input.shareID)}`,
-            successStatus: 200,
-            declaredStatuses: [],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      data: (input: ShareDataInput, requestOptions?: RequestOptions) =>
-        request<ShareDataOutput>(
-          {
-            method: "GET",
-            path: `/api/share/${encodeURIComponent(input.shareID)}/data`,
-            successStatus: 200,
-            declaredStatuses: [],
-            empty: false,
           },
           requestOptions,
         ),

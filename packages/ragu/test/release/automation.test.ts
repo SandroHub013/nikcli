@@ -23,7 +23,9 @@ describe("release automation", () => {
 
   it("keeps the GitHub comment runner executable and mention filters exact", async () => {
     const action = await readRoot("github/action.yml")
-    const command = await readRoot("packages/ragu/src/cli/handlers/github/install.ts")
+    // `ragu github install`, which wrote this workflow for users, went with Nik's App backend; the
+    // repository's own workflow keeps the exact mention filters.
+    const command = await readRoot(".github/workflows/ragu.yml")
 
     expect(action).toContain('bun "$GITHUB_ACTION_PATH/index.ts"')
     expect(action).not.toContain("ragu github run")
@@ -161,15 +163,6 @@ describe("release automation", () => {
     const workflow = await readRoot(".github/workflows/windows-compat.yml")
     expect(workflow).toContain("defers the swap when the target exe is locked")
     expect(workflow).toContain("$env:NIKCLI_UPGRADE_PID = $running.Id")
-  })
-
-  it("clears leaked mouse reporting before the upgrade command prints", async () => {
-    // An older build could exit leaving mouse tracking on, which turns every
-    // mouse move during `ragu upgrade` into escape-sequence noise.
-    const command = await readRoot("packages/ragu/src/cli/handlers/upgrade.ts")
-
-    expect(command).toContain("TERMINAL_RESET_SEQUENCE")
-    expect(command).toContain("process.stdout.isTTY")
   })
 
   it("publishes the per-platform binary packages the npm wrapper depends on", async () => {

@@ -65,7 +65,7 @@ function checkTty(record: Record) {
 
 function checkPath(record: Record) {
   // `Installation.Path.bin` resolves to the directory holding the current
-  // executable. If it isn't on $PATH, upgrades via curl/bun won't work.
+  // executable. If it isn't on $PATH, a shell will not find `ragu`.
   try {
     const execDir = path.dirname(process.execPath)
     const onPath = (process.env.PATH ?? "").split(path.delimiter).some((p) => p === execDir)
@@ -73,9 +73,7 @@ function checkPath(record: Record) {
       onPath,
       "PATH",
       onPath ? `exec dir (${execDir}) is on $PATH` : `exec dir (${execDir}) is NOT on $PATH`,
-      onPath
-        ? undefined
-        : `Add ${execDir} to your PATH, or run \`ragu upgrade\` with the same package manager you used to install.`,
+      onPath ? undefined : `Add ${execDir} to your PATH, or put this build in a folder that is already on it.`,
     )
   } catch (err) {
     record(false, "PATH", `could not resolve exec dir: ${err instanceof Error ? err.message : "unknown"}`)

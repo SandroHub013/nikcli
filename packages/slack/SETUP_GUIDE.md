@@ -144,7 +144,6 @@ Crea o modifica `~/.config/nikcli/nikcli.jsonc` (oppure `nikcli.json`/`config.js
     "mdns": true,
     "cors": ["https://*.slack.com", "https://api.slack.com"]
   },
-  "share": "manual",
   "compaction": {
     "auto": true,
     "prune": true

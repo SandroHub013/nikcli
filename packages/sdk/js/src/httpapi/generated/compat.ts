@@ -77,10 +77,6 @@ export const makeCompat = (raw: Raw, helpers: CompatHelpers) => {
       text: result(raw["file"]["findText"]),
     },
     formatter: { status: result0(raw["top-level"]["formatter"]) },
-    getApiShareShareId: result(raw["share"]["api"]),
-    getApiShareShareIdData: result(raw["share"]["data"]),
-    getShareShareId: result(raw["share"]["page"]),
-    getSShareId: result(raw["share"]["short"]),
     global: {
       dispose: result0(raw["global"]["dispose"]),
       event: stream0(raw["events"]["global"]),
@@ -286,14 +282,6 @@ export const makeCompat = (raw: Raw, helpers: CompatHelpers) => {
         message: result(raw["mobile"]["sessionMessage"]),
         rename: result(raw["mobile"]["sessionRename"]),
         stream: stream(raw["mobile"]["sessionStream"]),
-        teleport: result(raw["mobile"]["teleportIn"]),
-        teleport2: {
-          out: result(raw["mobile"]["teleportOut"]),
-          upload: {
-            begin: result0(raw["mobile"]["teleportUploadBegin"]),
-            chunk: result(raw["mobile"]["teleportUploadChunk"]),
-          },
-        },
         todo: result(raw["mobile"]["sessionTodo"]),
       },
       worktree: {
@@ -397,13 +385,11 @@ export const makeCompat = (raw: Raw, helpers: CompatHelpers) => {
       prompt: result(raw["session-prompt"]["prompt"]),
       promptAsync: result(raw["session-prompt"]["promptAsync"]),
       revert: result(raw["session"]["revert"]),
-      share: result(raw["session"]["share"]),
       shell: result(raw["session"]["shell"]),
       status: result0(raw["session"]["status"]),
       summarize: result(raw["session"]["summarize"]),
       todo: result(raw["session"]["todo"]),
       unrevert: result(raw["session"]["unrevert"]),
-      unshare: result(raw["session"]["unshare"]),
       update: result(raw["session"]["update"]),
       v2: {
         entries: result(raw["session"]["v2Entries"]),

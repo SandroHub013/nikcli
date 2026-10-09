@@ -13,7 +13,6 @@ import { Effect } from "effect"
 import { Config } from "@/config/config"
 import { Flag } from "@ragu/util/flag"
 import { runPromiseWithLayer } from "@/effect"
-import { Account } from "@/account"
 
 export namespace SyncConfig {
   export type Resolved = {
@@ -22,7 +21,9 @@ export namespace SyncConfig {
     /** true when both url and token are present */
     configured: boolean
     /** where the effective url + token came from */
-    source?: "env" | "config" | "account"
+    source?: "env" | "config"
+    /** why a hub URL alone does not start remote sync */
+    reason?: string
     /** bootstrap may auto-connect (RAGU_REMOTE_AUTOSTART and config `sync.autostart`) */
     autostart: boolean
   }
@@ -51,14 +52,19 @@ export namespace SyncConfig {
     const envToken = Flag.RAGU_REMOTE_TOKEN
     const saved = envUrl && envToken ? undefined : await readGlobal()
     const url = envUrl ?? saved?.url?.replace(/\/$/, "")
-    const accountToken = !envToken && !saved?.token && url ? await readAccountToken() : undefined
-    const token = envToken ?? saved?.token ?? accountToken
+    // The token is the hub's own: RAGU_REMOTE_TOKEN or `sync.token`. It used to fall back to the token of the
+    // signed-in Nik account, which only Nik's hub would accept.
+    const token = envToken ?? saved?.token
     const configured = Boolean(url && token)
     return {
       url,
       token,
       configured,
-      source: configured ? (envUrl && envToken ? "env" : saved?.token ? "config" : "account") : undefined,
+      source: configured ? (envUrl && envToken ? "env" : "config") : undefined,
+      reason:
+        url && !token
+          ? "a hub URL is set but no token: remote sync needs RAGU_REMOTE_TOKEN or `sync.token` in the global config"
+          : undefined,
       autostart: configured && Flag.RAGU_REMOTE_AUTOSTART && (saved?.autostart ?? true),
     }
   }
@@ -69,18 +75,6 @@ export namespace SyncConfig {
       Effect.gen(function* () {
         const config = yield* Config.Service
         return (yield* config.getGlobal()).sync
-      }),
-    ).catch(() => undefined)
-  }
-
-  async function readAccountToken() {
-    return runPromiseWithLayer(
-      Account.defaultLayer,
-      Effect.gen(function* () {
-        const account = yield* Account.Service
-        const active = yield* account.active()
-        if (!active) return undefined
-        return yield* account.token(active.id)
       }),
     ).catch(() => undefined)
   }

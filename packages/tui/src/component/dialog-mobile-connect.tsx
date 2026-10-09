@@ -9,10 +9,8 @@ import { useTheme } from "@tui/context/theme"
 import { useSDK } from "@tui/context/sdk"
 import { useToast } from "@tui/ui/toast"
 import { Clipboard } from "@tui/util/clipboard"
-import { useSync } from "@tui/context/sync"
 import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { QRCode, qrCanImageFit, qrDialogBudget, qrFittedSize, useQRRepaint } from "@tui/component/qr"
-import { createWorkspaceArchive, uploadWorkspaceArchive } from "@ragu/util/teleport-archive"
 import { isPlainShortcut } from "@tui/util/keys"
 
 type Pairing = {
@@ -25,14 +23,7 @@ type Pairing = {
   expiresAt?: number
 }
 
-export type MobileDialogMode = "choose" | "cloud" | "local" | "teleport"
-
-type RemoteServerConfig = {
-  teleport?: {
-    url?: string
-    token?: string
-  }
-}
+export type MobileDialogMode = "choose" | "cloud" | "local"
 
 export function normalizeMobileServerUrl(raw: string): string | null {
   let value = raw.trim()
@@ -42,23 +33,11 @@ export function normalizeMobileServerUrl(raw: string): string | null {
   try {
     const url = new URL(value)
     if (url.protocol !== "http:" && url.protocol !== "https:") return null
-    const pathname = url.pathname.replace(/\/+$/, "").replace(/\/mobile(?:\/teleport)?$/, "")
+    const pathname = url.pathname.replace(/\/+$/, "").replace(/\/mobile$/, "")
     return `${url.origin}${pathname}`
   } catch {
     return null
   }
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  const units = ["KB", "MB", "GB", "TB"]
-  let value = bytes / 1024
-  let unit = 0
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024
-    unit++
-  }
-  return `${value.toFixed(value >= 100 ? 0 : 1)} ${units[unit]}`
 }
 
 function pairingUrls(baseUrl: string): string[] {
@@ -120,7 +99,7 @@ function PairingLink(props: { deepLink: string }) {
   )
 }
 
-export function DialogMobileConnect(props: { sessionID?: string; initialMode?: MobileDialogMode }) {
+export function DialogMobileConnect(props: { initialMode?: MobileDialogMode }) {
   const [mode, setMode] = createSignal<MobileDialogMode>(props.initialMode ?? "choose")
 
   const options = createMemo<DialogSelectOption<MobileDialogMode>[]>(() => [
@@ -133,14 +112,6 @@ export function DialogMobileConnect(props: { sessionID?: string; initialMode?: M
       title: "Connect local server",
       value: "local",
       description: "Start a protected LAN server and create a mobile pairing token automatically.",
-    },
-    {
-      title: "Teleport session",
-      value: "teleport",
-      description: props.sessionID
-        ? "Send the current session and workspace to a remote Ragu Code server."
-        : "Open this dialog from an active session to use Teleport.",
-      disabled: !props.sessionID,
     },
   ])
 
@@ -161,20 +132,15 @@ export function DialogMobileConnect(props: { sessionID?: string; initialMode?: M
         <LocalMobileConnect onBack={() => setMode("choose")} />
       </Show>
       <Show when={mode() === "cloud"}>
-        <RemoteServerPanel mode="cloud" onBack={() => setMode("choose")} />
-      </Show>
-      <Show when={mode() === "teleport" && props.sessionID}>
-        <RemoteServerPanel mode="teleport" sessionID={props.sessionID} onBack={() => setMode("choose")} />
+        <RemoteServerPanel onBack={() => setMode("choose")} />
       </Show>
     </Show>
   )
 }
 
-function RemoteServerPanel(props: { mode: "cloud" | "teleport"; sessionID?: string; onBack: () => void }) {
+function RemoteServerPanel(props: { onBack: () => void }) {
   const { theme } = useTheme()
   const dialog = useDialog()
-  const sdk = useSDK()
-  const sync = useSync()
   const toast = useToast()
   const dimensions = useTerminalDimensions()
   let urlInput: any
@@ -202,19 +168,12 @@ function RemoteServerPanel(props: { mode: "cloud" | "teleport"; sessionID?: stri
   onMount(() => {
     repaintOnQR()
     dialog.setSize(dimensions().width >= 100 ? "xlarge" : "large")
-    const saved = (sync.data.config as RemoteServerConfig | undefined)?.teleport
-    if (saved?.url) setForm("url", saved.url)
-    if (saved?.token) setForm("token", saved.token)
     setTimeout(() => urlInput?.focus?.(), 1)
   })
 
   function focusField(field: "url" | "token") {
     setForm("focus", field)
     setTimeout(() => (field === "url" ? urlInput : tokenInput)?.focus?.(), 1)
-  }
-
-  async function saveRemoteServer(url: string, token: string) {
-    await sdk.client.config.update({ payload: { teleport: { url, token } } as any }).catch(() => undefined)
   }
 
   async function connectCloud() {
@@ -253,7 +212,6 @@ function RemoteServerPanel(props: { mode: "cloud" | "teleport"; sessionID?: stri
       })
       const matrix = await generateQRMatrix(deepLink)
       if (!matrix) throw new Error("QR generation is unavailable")
-      await saveRemoteServer(base, token)
       setPairing({
         serverUrl: base,
         urls: [base],
@@ -270,96 +228,8 @@ function RemoteServerPanel(props: { mode: "cloud" | "teleport"; sessionID?: stri
     }
   }
 
-  async function teleport() {
-    if (form.busy || !props.sessionID) return
-    const base = normalizeMobileServerUrl(form.url)
-    if (!base) {
-      setForm("status", "Enter a valid HTTP or HTTPS server URL")
-      focusField("url")
-      return
-    }
-    const token = form.token.trim()
-    if (!token) {
-      setForm("status", "Enter a mobile auth token")
-      focusField("token")
-      return
-    }
-
-    setForm("busy", true)
-    setForm("status", "Collecting session…")
-    try {
-      const [info, messages] = await Promise.all([
-        sdk.client.session.get({ sessionID: props.sessionID }).then((response) => response.data),
-        sdk.client.session.messages({ sessionID: props.sessionID }).then((response) => response.data ?? []),
-      ])
-      if (!info) throw new Error("Could not load the current session")
-
-      let uploadID: string | undefined
-      if (info.directory) {
-        setForm("status", "Archiving workspace…")
-        const archive = await createWorkspaceArchive(info.directory).catch(() => null)
-        if (archive) {
-          const size = formatBytes(archive.bytes)
-          try {
-            uploadID = await uploadWorkspaceArchive({
-              base,
-              token,
-              archivePath: archive.path,
-              onProgress: (sent, total) => {
-                const percent = total ? Math.floor((sent / total) * 100) : 100
-                setForm("status", `Uploading workspace ${size}… ${percent}%`)
-              },
-            })
-          } finally {
-            await archive.cleanup()
-          }
-        }
-      }
-
-      setForm("status", `Teleporting ${messages.length} messages${uploadID ? " + workspace" : ""}…`)
-      const response = await fetch(`${base}/mobile/teleport`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          title: info.title,
-          name: info.directory ? info.directory.split(/[\\/]/).filter(Boolean).pop() : undefined,
-          origin: sdk.directory,
-          permission: info.permission,
-          messages,
-          uploadID,
-        }),
-      })
-      if (!response.ok) {
-        const detail = await response.text().catch(() => "")
-        throw new Error(
-          response.status === 401 || response.status === 403
-            ? "Unauthorized — use a mobile-scoped auth token"
-            : `Server error ${response.status}${detail ? `: ${detail.slice(0, 120)}` : ""}`,
-        )
-      }
-
-      const result = (await response.json().catch(() => null)) as {
-        sessionID?: string
-      } | null
-      await saveRemoteServer(base, token)
-      toast.show({
-        message: result?.sessionID ? `Teleported to ${new URL(base).host} — open it on mobile` : "Session teleported",
-        variant: "success",
-      })
-      dialog.clear()
-    } catch (cause) {
-      setForm("status", cause instanceof Error ? cause.message : "Failed to teleport session")
-    } finally {
-      setForm("busy", false)
-    }
-  }
-
   async function submit() {
-    if (props.mode === "cloud") await connectCloud()
-    else await teleport()
+    await connectCloud()
   }
 
   async function copyDeepLink() {
@@ -404,7 +274,7 @@ function RemoteServerPanel(props: { mode: "cloud" | "teleport"; sessionID?: stri
   return (
     <box paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} gap={1} flexDirection="column">
       <DialogHeader
-        title={props.mode === "cloud" ? "Connect cloud server" : "Teleport session"}
+        title="Connect cloud server"
         hint="esc back"
         onClose={() => props.onBack()}
       />
@@ -414,9 +284,7 @@ function RemoteServerPanel(props: { mode: "cloud" | "teleport"; sessionID?: stri
         fallback={
           <>
             <text fg={theme.foreground.muted} wrapMode="word">
-              {props.mode === "cloud"
-                ? "Use a mobile-scoped Bearer token from the remote Ragu Code server."
-                : "Send the current session and workspace to a remote Ragu Code server."}
+              Use a mobile-scoped Bearer token from the remote Ragu Code server.
             </text>
             <box flexDirection="row" gap={1} alignItems="center">
               <text fg={theme.foreground.muted}>Server URL:</text>
@@ -473,13 +341,7 @@ function RemoteServerPanel(props: { mode: "cloud" | "teleport"; sessionID?: stri
                 onMouseUp={() => !form.busy && void submit()}
               >
                 <text fg={form.busy ? theme.foreground.muted : theme.badge.fg}>
-                  {form.busy
-                    ? props.mode === "cloud"
-                      ? "Verifying…"
-                      : "Teleporting…"
-                    : props.mode === "cloud"
-                      ? "Create QR"
-                      : "Teleport"}
+                  {form.busy ? "Verifying…" : "Create QR"}
                 </text>
               </box>
             </box>
@@ -697,8 +559,7 @@ function LocalMobileConnect(props: { onBack: () => void }) {
                 Scan from Ragu Mobile
               </text>
               <text fg={theme.foreground.muted} wrapMode="word">
-                The QR securely pairs this server and workspace. It enables mobile sessions, approvals, remote actions
-                and Teleport workflows.
+                The QR securely pairs this server and workspace. It enables mobile sessions, approvals and remote actions.
               </text>
               <box marginTop={1} flexDirection="column">
                 <text fg={theme.foreground.muted}>Server URL</text>

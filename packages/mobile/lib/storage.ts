@@ -1,5 +1,4 @@
 import * as SecureStore from "expo-secure-store"
-import { parseStoredTokenTriple, type OAuthTokenTriple } from "./oauth-core"
 import type {
   AppPreferences,
   ComposerPreferences,
@@ -18,17 +17,12 @@ export { normalizeWallpaper }
 const SERVER_CONFIG_KEY = "ragu_server_config"
 const APP_PREFERENCES_KEY = "ragu_app_preferences"
 const USER_TOKEN_KEY = "ragu_user_token"
-const OAUTH_TOKENS_KEY = "ragu_oauth_tokens"
-const OAUTH_ISSUER_KEY = "ragu_oauth_issuer"
 const REMEMBERED_USER_KEY = "ragu_remembered_user"
 const LIVE_ACTIVITY_REGISTRY_KEY = "ragu_live_activity_registry"
 const THEME_ID_KEY = "ragu_theme_id"
 const COLOR_SCHEME_KEY = "ragu_color_scheme"
-const TELEPORT_TARGET_KEY = "ragu_teleport_target"
 const SESSION_SEEN_KEY = "ragu_session_seen"
 const GITHUB_DEVICE_AUTH_PENDING_KEY = "ragu_github_device_auth_pending"
-
-export type TeleportTarget = { url: string; token: string }
 
 export type GithubDeviceAuthPending = {
   deviceCode: string
@@ -96,25 +90,6 @@ export async function setUserToken(token: string): Promise<void> {
 
 export async function clearUserToken(): Promise<void> {
   await SecureStore.deleteItemAsync(USER_TOKEN_KEY)
-}
-
-export async function getOAuthTokens(): Promise<OAuthTokenTriple | null> {
-  return parseStoredTokenTriple(await SecureStore.getItemAsync(OAUTH_TOKENS_KEY))
-}
-
-export async function getOAuthIssuer(): Promise<string | null> {
-  return SecureStore.getItemAsync(OAUTH_ISSUER_KEY)
-}
-
-export async function setOAuthSession(tokens: OAuthTokenTriple, issuer: string): Promise<void> {
-  await Promise.all([
-    SecureStore.setItemAsync(OAUTH_TOKENS_KEY, JSON.stringify(tokens)),
-    SecureStore.setItemAsync(OAUTH_ISSUER_KEY, issuer),
-  ])
-}
-
-export async function clearOAuthSession(): Promise<void> {
-  await Promise.all([SecureStore.deleteItemAsync(OAUTH_TOKENS_KEY), SecureStore.deleteItemAsync(OAUTH_ISSUER_KEY)])
 }
 
 const DEFAULT_SETTINGS_SECTIONS: Record<SettingsSectionID, boolean> = {
@@ -232,24 +207,6 @@ export async function setServerConfig(config: ServerConfig): Promise<void> {
 
 export async function clearServerConfig(): Promise<void> {
   await SecureStore.deleteItemAsync(SERVER_CONFIG_KEY)
-}
-
-export async function getTeleportTarget(): Promise<TeleportTarget | null> {
-  const raw = await SecureStore.getItemAsync(TELEPORT_TARGET_KEY)
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw) as Partial<TeleportTarget>
-    if (typeof parsed.url === "string" && typeof parsed.token === "string") {
-      return { url: parsed.url, token: parsed.token }
-    }
-    return null
-  } catch {
-    return null
-  }
-}
-
-export async function setTeleportTarget(target: TeleportTarget): Promise<void> {
-  await SecureStore.setItemAsync(TELEPORT_TARGET_KEY, JSON.stringify(target))
 }
 
 /**

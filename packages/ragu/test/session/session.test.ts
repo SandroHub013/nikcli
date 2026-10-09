@@ -376,26 +376,6 @@ describe("Session", () => {
     })
   })
 
-  describe("ShareInfo schema", () => {
-    it("validates valid share info", () => {
-      const validShare = {
-        id: "share_123",
-        mode: "local" as const,
-        url: "https://nikcli-ai.dev/s/share123",
-      }
-
-      const parsed = Session.ShareInfo.parse(validShare)
-      expect(parsed.mode).toBe("local")
-      expect(parsed.url).toBe("https://nikcli-ai.dev/s/share123")
-    })
-
-    it("accepts minimal share info with only url", () => {
-      const minimalShare = { url: "https://example.com/share" }
-      const parsed = Session.ShareInfo.parse(minimalShare)
-      expect(parsed.url).toBe("https://example.com/share")
-    })
-  })
-
   describe("Event definitions", () => {
     it("has Created event defined", () => {
       expect(Session.Event.Created).toBeDefined()

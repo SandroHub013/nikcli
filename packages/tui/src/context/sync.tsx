@@ -1223,8 +1223,8 @@ export const {
           // Entries ride along with the messages rather than being fetched by
           // whoever happens to render the session. This function is the one
           // seam every open path goes through — the tab switch, the tab
-          // prefetch, a warp, a workspace create/attach, resuming a teleported
-          // or backgrounded session — so seeding here is what guarantees there
+          // prefetch, a warp, a workspace create/attach, resuming a
+          // backgrounded session — so seeding here is what guarantees there
           // is no path that opens a session with messages loaded and entries
           // missing.
           const [session, messages, todo, diff, backgroundJobs, goal, entries, pending] = await Promise.all([

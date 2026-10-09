@@ -355,8 +355,6 @@ export type ModelRef = {
 
 export type ServerConfig = {
   url: string
-  /** OAuth issuer override for self-hosted deployments. */
-  authIssuer?: string
   /** Bearer token — takes precedence over username/password */
   token?: string
   /** Basic auth username */
@@ -586,27 +584,10 @@ export type SessionSummary = {
   status?: SessionStatus
 }
 
-export type SessionArtifact = {
-  id: string
-  title: string
-  description?: string
-  filename: string
-  contentType: string
-  kind: "html" | "markdown" | "image" | "video" | "text"
-  url: string
-  viewerUrl: string
-  previewUrl: string
-  version: number
-  sessionID: string
-  size: number
-  time: { created: number; updated: number }
-}
-
 export type SessionDetail = {
   info: Session
   status?: SessionStatus
   messages: MessageWithParts[]
-  artifacts?: SessionArtifact[]
   permissions: PermissionRequest[]
   questions: QuestionRequest[]
 }
@@ -615,14 +596,6 @@ export type WorktreeInfo = {
   name: string
   branch?: string
   directory: string
-}
-
-export type TeleportResult = {
-  sessionID: string
-  title?: string
-  messageCount: number
-  directory?: string
-  workspace: boolean
 }
 
 export type GitHubRepo = {

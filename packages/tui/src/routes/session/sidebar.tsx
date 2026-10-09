@@ -45,9 +45,6 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
                 <text fg={theme.foreground.default}>
                   <b>{current().title}</b>
                 </text>
-                <Show when={current().share?.url}>
-                  <text fg={theme.foreground.muted}>{current().share!.url}</text>
-                </Show>
               </box>
               <TuiPluginRuntime.Slot name="sidebar.content" sessionID={props.sessionID} />
               <TuiPluginRuntime.Slot name="sidebar_content" session_id={props.sessionID} />

@@ -93,10 +93,6 @@ export const dict = {
   "command.session.compact.description": "Summarize the session to reduce context size",
   "command.session.fork": "Fork from message",
   "command.session.fork.description": "Create a new session from a previous message",
-  "command.session.share": "Share session",
-  "command.session.share.description": "Share this session and copy the URL to clipboard",
-  "command.session.unshare": "Unshare session",
-  "command.session.unshare.description": "Stop sharing this session",
 
   "palette.search.placeholder": "Search files, commands, and sessions",
   "palette.empty": "No results found",
@@ -555,17 +551,6 @@ export const dict = {
   "toast.context.noLineSelection.title": "No line selection",
   "toast.context.noLineSelection.description": "Select a line range in a file tab first.",
 
-  "toast.session.share.copyFailed.title": "Failed to copy URL to clipboard",
-  "toast.session.share.success.title": "Session shared",
-  "toast.session.share.success.description": "Share URL copied to clipboard!",
-  "toast.session.share.failed.title": "Failed to share session",
-  "toast.session.share.failed.description": "An error occurred while sharing the session",
-
-  "toast.session.unshare.success.title": "Session unshared",
-  "toast.session.unshare.success.description": "Session unshared successfully!",
-  "toast.session.unshare.failed.title": "Failed to unshare session",
-  "toast.session.unshare.failed.description": "An error occurred while unsharing the session",
-
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
 
   "toast.update.title": "Update available",
@@ -669,19 +654,7 @@ export const dict = {
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Manage servers",
 
-  "session.share.popover.title": "Publish on web",
-  "session.share.popover.description.shared":
-    "This session is public on the web. It is accessible to anyone with the link.",
-  "session.share.popover.description.unshared":
-    "Share session publicly on the web. It will be accessible to anyone with the link.",
-  "session.share.action.share": "Share",
-  "session.share.action.publish": "Publish",
-  "session.share.action.publishing": "Publishing...",
-  "session.share.action.unpublish": "Unpublish",
-  "session.share.action.unpublishing": "Unpublishing...",
-  "session.share.action.view": "View",
   "session.share.copy.copied": "Copied",
-  "session.share.copy.copyLink": "Copy link",
 
   "lsp.tooltip.none": "No LSP servers",
   "lsp.label.connected": "{{count}} LSP",

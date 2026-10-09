@@ -4,7 +4,6 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from "bun:test"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
-import type { MessageV2 } from "@/session/message-v2"
 
 /** File name prefixed with `_` so this module loads before other cli tests that static-import config (Global.Path.config is fixed at first xdg import). */
 const testHome = await fs.mkdtemp(path.join(os.tmpdir(), "ragu-net-precise-"))
@@ -20,7 +19,7 @@ const { ConfigMarkdown } = await import("@/config/markdown")
 const { FormatError } = await import("@ragu/util/cli-error")
 const { MCP } = await import("@/mcp")
 const { Provider } = await import("@/provider/provider")
-const { extractResponseText, parseGitHubRemote } = await import("@/cli/handlers/github/shared")
+const { parseGitHubRemote } = await import("@/util/repository")
 const { resolveNetworkOptions } = await import("@/cli/network")
 const { UI } = await import("@/cli/ui")
 
@@ -200,76 +199,4 @@ describe("parseGitHubRemote — exact owner/repo matrix", () => {
       expect(parseGitHubRemote(url)).toBeNull()
     })
   }
-})
-
-describe("extractResponseText — precise ordering and errors", () => {
-  it("last text wins among three text parts", () => {
-    const parts = [
-      { ...basePart, id: "a", type: "text" as const, text: "a" },
-      { ...basePart, id: "b", type: "text" as const, text: "b" },
-      { ...basePart, id: "c", type: "text" as const, text: "c" },
-    ] as MessageV2.Part[]
-    expect(extractResponseText(parts)).toBe("c")
-  })
-
-  it("single text returns that text", () => {
-    const parts = [{ ...basePart, type: "text" as const, text: "only" }] as MessageV2.Part[]
-    expect(extractResponseText(parts)).toBe("only")
-  })
-
-  it("throws with exact part-type list for subtask-only", () => {
-    const parts = [
-      {
-        ...basePart,
-        type: "subtask" as const,
-        prompt: "p",
-        description: "d",
-        agent: "a",
-      },
-    ] as MessageV2.Part[]
-    expect(() => extractResponseText(parts)).toThrow("Part types found: [subtask]")
-  })
-
-  it("throws for file-only parts", () => {
-    const parts = [
-      {
-        ...basePart,
-        type: "file" as const,
-        mime: "text/plain",
-        url: "file:///x",
-      },
-    ] as MessageV2.Part[]
-    expect(() => extractResponseText(parts)).toThrow("Part types found: [file]")
-  })
-
-  it("pending tool does not count as completed — throws listing tool", () => {
-    const parts = [
-      {
-        ...basePart,
-        type: "tool" as const,
-        callID: "c",
-        tool: "t",
-        state: {
-          status: "pending" as const,
-          input: {},
-          raw: "",
-        },
-      },
-    ] as MessageV2.Part[]
-    expect(() => extractResponseText(parts)).toThrow("Part types found: [tool]")
-  })
-
-  it("reasoning after text still returns last text", () => {
-    const parts = [
-      { ...basePart, id: "t", type: "text" as const, text: "out" },
-      {
-        ...basePart,
-        id: "r",
-        type: "reasoning" as const,
-        text: "think",
-        time: { start: 1, end: 2 },
-      },
-    ] as MessageV2.Part[]
-    expect(extractResponseText(parts)).toBe("out")
-  })
 })

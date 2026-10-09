@@ -95,7 +95,6 @@ export namespace TuiHttpApi {
   /** The execute-command alias table from the Hono route, kept verbatim. */
   const commandAliases: Record<string, string> = {
     session_new: "session.new",
-    session_share: "session.share",
     session_interrupt: "session.interrupt",
     session_compact: "session.compact",
     messages_page_up: "session.page.up",

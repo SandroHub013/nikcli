@@ -8,7 +8,7 @@ import type { TuiConfig as TuiConfigContract } from "@ragu/sdk/httpapi"
  * config surface — enumerate the files to watch, force a re-read after one
  * changes, wait for a plugin's dependencies to finish installing — and each is
  * bound to a project directory. That is host work, and it is inverted the way
- * `upgradeNow` and `startServer` already are: `thread.ts` supplies them, and
+ * `startServer` already is: `thread.ts` supplies them, and
  * this module never learns which backend answers.
  *
  * Every operation takes its directory rather than running inside an ambient
