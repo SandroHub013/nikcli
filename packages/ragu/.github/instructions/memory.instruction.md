@@ -96,10 +96,9 @@ A focused code-reviewer + architecture-mapping pass produced prioritized, verifi
 
 ## Known Technical Work
 
-- **OAuth onboarding (2026-07-17 review, status verified 2026-08-24).** Three items, mixed state:
+- **OAuth onboarding (2026-07-17 review, status verified 2026-08-24).** Two items, mixed state:
   - (a) `DialogLogin.run()` loop guard — **obsolete.** The `DialogLogin` symbol no longer exists in `packages/ragu/src/`; `app.tsx:435` was refactored away. Bug path no longer present at the original location.
   - (b) OAuth cancellation — **partially fixed.** `account/index.ts:390` passes `signal: options.signal` to the `/userinfo` fetch, and `:393` has a `signal?.throwIfAborted()` guard. **Polling sleeps at `:401`, `:418-419`, `:439`, `:450`, `:459` are still bare `Bun.sleep` — a cancel does not interrupt them.** Cancellation behaviour is partial: the round-trip stops, but the user keeps waiting through several stale polls before the next loop iteration checks the signal.
-  - (c) Identity email refresh — **still present.** `packages/identity/src/database.ts:30` still has `if (linked) return linked` without updating the linked account's normalized verified email before returning. A user who fixes a typo in their OAuth provider's email does not see the new address in ragu until they unlink and re-link.
 - TUI `parsers-config.ts:145-148` has `// TODO: Injections not working for some reason` with the `injections` array commented out for HTML tree-sitter. `:240` has `// TODO: Replace with official tree-sitter-nix WASM when published`.
 - TUI `wake-dedup.ts:33-36` has `TODO(livello 2):` for SSE `id:` reconnect — server SSE envelope does not currently carry `id:`, so reconnect relies on TTL-bounded first-seen heuristic.
 - The `opentui` tool has a schema/input-transform bug: component collection fields such as `items`, `nodes`, and table arrays may validate as objects rather than arrays. Proposed fix is a discriminated Zod union plus actionable validation errors; not confirmed implemented.

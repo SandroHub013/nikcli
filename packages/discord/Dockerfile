@@ -49,13 +49,8 @@ RUN set -e; \
     for entry in \
       "packages/app:@ragu/app" \
       "packages/bench-tui:@ragu/bench-tui" \
-      "packages/cloud:@ragu/cloud" \
       "packages/companion/ui:@ragu/companion-ui" \
       "packages/desktop:@ragu/desktop" \
-      "packages/enterprise:@ragu/enterprise" \
-      "packages/identity:@ragu/identity" \
-      "packages/inference:@ragu/inference" \
-      "packages/inference-dashboard:@ragu/inference-dashboard" \
       "packages/mobile:@ragu/mobile" \
       "packages/ragu-island:@ragu/ragu-island" \
       "packages/plugin/plugins/agent-memory:@ragu/plugin-agent-memory" \
@@ -72,7 +67,6 @@ RUN set -e; \
       "packages/sdk-next:@ragu/sdk-next" \
       "packages/terminal-control:@ragu/terminal-control" \
       "packages/ui:@ragu/ui" \
-      "packages/web:@ragu/web" \
       "packages/webrenderer:@opentui/webrenderer" \
       "github:github" \
     ; do \

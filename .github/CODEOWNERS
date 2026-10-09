@@ -10,11 +10,8 @@
 /packages/bench-tui/ @SandroHub013
 /packages/companion/ @SandroHub013
 /packages/containers/ @SandroHub013
-/packages/enterprise/ @SandroHub013
 /packages/http-recorder/ @SandroHub013
 /packages/httpapi-codegen/ @SandroHub013
-/packages/identity/ @SandroHub013
-/packages/inference/ @SandroHub013
 /packages/llm/ @SandroHub013
 /packages/ragu/ @SandroHub013
 /packages/plugin/ @SandroHub013
@@ -26,4 +23,3 @@
 /packages/tui/ @SandroHub013
 /packages/tui-storybook/ @SandroHub013
 /packages/util/ @SandroHub013
-/packages/web/ @SandroHub013

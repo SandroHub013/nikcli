@@ -59,19 +59,13 @@ packages/mobile/android/.gradle
 # under packages/sdk are not worth a negation rule to drop.
 packages/app
 packages/bench-tui
-packages/cloud
 packages/containers
 packages/desktop
-packages/enterprise
 packages/extensions
-packages/identity
-packages/inference
-packages/inference-dashboard
 packages/mobile
 packages/ragu-island
 packages/sdk-next
 packages/terminal-control
 packages/ui
-packages/web
 packages/webrenderer
 /github

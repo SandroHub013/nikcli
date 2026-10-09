@@ -115,7 +115,6 @@ Useful development scripts:
 | `bun run dev`                                            | Start the ragu CLI/TUI from source                           |
 | `bun run typecheck`                                      | `bun turbo typecheck` across the whole workspace               |
 | `bun run build`                                          | Build all packages                                             |
-| `bun run web:dev`                                        | Dev server for the `packages/web` site                         |
 | `bun run --cwd packages/ragu generate:httpapi-clients` | Regenerate clients after modifying the Effect HttpApi contract |
 | `cd packages/ragu && bun run bench`                    | TUI bench (`test/bench/viz.tsx`)                               |
 | `cd packages/ragu && bun run sandbox:vercel`           | Vercel sandbox smoke test                                      |
@@ -161,14 +160,10 @@ Bun workspace with centralized version catalog (`bunfig.toml`, `package.json`).
 | `packages/terminal-control`                  | Terminal abstraction reused by CLI and IDE                                                    |
 | `packages/mobile`                            | Mobile Expo / React Native app with realtime SSE                                              |
 | `packages/app`                               | Main web app (SolidStart)                                                                     |
-| `packages/web`                               | Documentation site + installer + landing                                                      |
 | `packages/desktop`                           | Tauri desktop app                                                                             |
-| `packages/enterprise`                        | Enterprise SSO / multi-tenant build                                                           |
-| `packages/cloud`                             | Cloudflare worker (KV, Durable Objects)                                                       |
 | `packages/script`                            | Shared build/release scripts                                                                  |
 | `packages/util`                              | Shared utilities (effect-zod, locale, log, retry, …)                                          |
 | `packages/llm`                               | Additional AI SDK adapters (e.g. GitLab)                                                      |
-| `packages/inference` · `inference-dashboard` | Inference telemetry and dashboard                                                             |
 | `packages/webrenderer` · `tui-image`         | Experimental TUI renderers                                                                    |
 | `packages/http-recorder`                     | HTTP recorder for test/replay                                                                 |
 | `packages/containers`                        | Container bundles for deploy                                                                  |
@@ -544,7 +539,6 @@ First-class MCP server with OAuth auth (`packages/ragu/src/mcp`):
 
 ### Web apps
 
-- `packages/web` (Astro + Tailwind) — public site, install script, docs (hosted on Cloudflare Pages).
 - `packages/app` (SolidStart) — full web application.
 - `packages/companion` — companion UI and server routes for `ragu companion serve`.
 

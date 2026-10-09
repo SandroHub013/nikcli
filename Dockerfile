@@ -19,7 +19,6 @@ COPY packages/remote/package.json packages/remote/
 COPY packages/plugin/package.json packages/plugin/
 COPY packages/companion/package.json packages/companion/
 COPY packages/discord/package.json packages/discord/
-COPY packages/identity/package.json packages/identity/
 COPY packages/auth/package.json packages/auth/
 COPY packages/llm/package.json packages/llm/
 COPY packages/http-recorder/package.json packages/http-recorder/
@@ -54,7 +53,6 @@ COPY packages/sdk/js packages/sdk/js
 COPY packages/remote packages/remote
 COPY packages/plugin packages/plugin
 COPY packages/companion packages/companion
-COPY packages/identity packages/identity
 COPY packages/auth packages/auth
 COPY packages/llm packages/llm
 COPY packages/http-recorder packages/http-recorder

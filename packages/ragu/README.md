@@ -63,7 +63,6 @@ Local development runs the CLI entrypoint at `packages/ragu/src/index.ts`.
 | ----------------- | ------------------------------------------ |
 | `packages/ragu` | CLI, TUI, agent engine, server, connectors |
 | `packages/mobile` | Expo mobile companion app                  |
-| `packages/web`    | Documentation site                         |
 | `packages/sdk`    | Shared TypeScript SDK                      |
 
 ## Resources

@@ -4,22 +4,12 @@ import path from "path"
 
 /*
  * The install scripts in the repository. Ragu Code no longer runs them to update itself (see
- * test/via-nik/autoupdate.test.ts); these checks only keep the served copies consistent.
+ * test/via-nik/autoupdate.test.ts); these checks keep the Windows installer's swap safe.
  */
 const root = path.resolve(import.meta.dir, "../../../..")
 const readSrc = (rel: string) => fs.readFile(path.join(root, rel), "utf8")
 
 describe("deferred Windows swap (install.ps1)", () => {
-  it("stays in sync across all served copies of the installer", async () => {
-    const [root_, web, publicCopy] = await Promise.all([
-      readSrc("install.ps1"),
-      readSrc("packages/web/install.ps1"),
-      readSrc("packages/web/public/install.ps1"),
-    ])
-    expect(web).toBe(root_)
-    expect(publicCopy).toBe(root_)
-  })
-
   it("retries long enough to move a large binary and falls back to rename-aside", async () => {
     const ps1 = await readSrc("install.ps1")
     // 100 x 100ms (~10s) was not enough to move a ~160MB exe on a slow disk.

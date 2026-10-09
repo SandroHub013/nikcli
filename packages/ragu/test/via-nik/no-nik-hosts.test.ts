@@ -7,7 +7,7 @@ import path from "path"
  * scope by the brief: LICENSE, the codemod (script/ragu-codemod*), and the tests, which name the hosts to prove they
  * are never called.
  *
- * Three lists are still allowed, each with its owner. A file leaves its list when its owner removes the hosts; an
+ * Two lists are still allowed, each with its owner. A file leaves its list when its owner removes the hosts; an
  * entry that no longer matches does not fail the test, so the lists only shrink. Any other file with a Nik host fails.
  */
 const ROOT = path.join(import.meta.dir, "../../../..")
@@ -29,16 +29,6 @@ const PACKAGE_A = [
   "packages/tui/src/component/dialog-provider.tsx",
 ]
 
-// Nik's backends and sites that no package imports: waiting for the decision to remove them like packages/console.
-const WAITING = [
-  "packages/cloud/",
-  "packages/enterprise/",
-  "packages/identity/",
-  "packages/inference/",
-  "packages/inference-dashboard/",
-  "packages/web/",
-]
-
 // Records of what was done or planned at the time: they are history, not instructions.
 const HISTORY = ["CHANGELOG.md", "specs/", ".nikcli/plans/"]
 
@@ -49,9 +39,7 @@ const OUT_OF_SCOPE = (file: string) =>
   /\.(test|spec)\.[cm]?[jt]sx?$/.test(file)
 
 const allowed = (file: string) =>
-  [...PACKAGE_A, ...WAITING, ...HISTORY].some((entry) =>
-    entry.endsWith("/") ? file.startsWith(entry) : file === entry,
-  )
+  [...PACKAGE_A, ...HISTORY].some((entry) => (entry.endsWith("/") ? file.startsWith(entry) : file === entry))
 
 function tracked(): string[] {
   const out = Bun.spawnSync(["git", "ls-files", "-z"], { cwd: ROOT, stdout: "pipe", stderr: "pipe" })
