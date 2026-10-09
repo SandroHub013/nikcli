@@ -14,7 +14,7 @@ use std::path::Path;
 /// What to launch: a program and its arguments, each passed as written.
 #[derive(Debug, PartialEq)]
 pub struct Reveal {
-    pub program: &'static str,
+    pub program: String,
     pub args: Vec<String>,
 }
 
@@ -36,10 +36,16 @@ pub fn plan(path: &str) -> Result<Reveal, String> {
     Ok(native(path, target))
 }
 
+/*
+ * Explorer by its full path: `Command::new("explorer.exe")` looks in the
+ * folder ADE runs from before the system's, and a file by that name there
+ * would be what runs.
+ */
 #[cfg(windows)]
 fn native(path: &str, _target: &Path) -> Reveal {
+    let windows = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
     Reveal {
-        program: "explorer.exe",
+        program: format!(r"{windows}\explorer.exe"),
         args: vec![format!("/select,\"{}\"", path.replace('/', "\\"))],
     }
 }
@@ -47,7 +53,7 @@ fn native(path: &str, _target: &Path) -> Reveal {
 #[cfg(target_os = "macos")]
 fn native(path: &str, _target: &Path) -> Reveal {
     Reveal {
-        program: "open",
+        program: "open".into(),
         args: vec!["-R".into(), path.into()],
     }
 }
@@ -57,7 +63,7 @@ fn native(path: &str, _target: &Path) -> Reveal {
 fn native(_path: &str, target: &Path) -> Reveal {
     let folder = target.parent().unwrap_or(target);
     Reveal {
-        program: "xdg-open",
+        program: "xdg-open".into(),
         args: vec![folder.to_string_lossy().into_owned()],
     }
 }
@@ -66,7 +72,7 @@ fn native(_path: &str, target: &Path) -> Reveal {
 #[tauri::command]
 pub async fn reveal_in_folder(path: String) -> Result<(), String> {
     let reveal = plan(&path)?;
-    let mut command = std::process::Command::new(reveal.program);
+    let mut command = std::process::Command::new(&reveal.program);
     /*
      * As written, not re-quoted: Rust would put quotes around the whole
      * `/select,"…"` argument because of the spaces, and Explorer then opens
@@ -119,7 +125,9 @@ mod tests {
 
         let reveal = plan(&path).expect("a local file is revealed");
         if cfg!(windows) {
-            assert_eq!(reveal.program, "explorer.exe");
+            // By its full path: a bare name is looked up in ADE's own folder first.
+            let windows = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
+            assert_eq!(reveal.program, format!(r"{windows}\explorer.exe"));
             // Explorer reads `/select,` and a quoted path with backslashes, and nothing else.
             let native = file.to_string_lossy().replace('/', "\\");
             assert_eq!(reveal.args, vec![format!("/select,\"{native}\"")]);
