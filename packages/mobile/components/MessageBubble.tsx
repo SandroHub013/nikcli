@@ -318,13 +318,7 @@ function MessageArtifactSection(props: { artifacts: SessionPreview[]; onOpen(pre
           </Text>
         </View>
         {primary ? <InlineArtifactCard preview={primary} onPress={() => props.onOpen(primary)} /> : null}
-        <View
-          className={
-            rest.length || props.artifacts.some((artifact) => artifact.viewerUrl || artifact.url)
-              ? "mt-3 gap-2"
-              : undefined
-          }
-        >
+        <View className={rest.length || props.artifacts.some((artifact) => artifact.url) ? "mt-3 gap-2" : undefined}>
           {rest.map((artifact) => (
             <Pressable
               key={artifact.id}
@@ -375,9 +369,9 @@ function MessageArtifactSection(props: { artifacts: SessionPreview[]; onOpen(pre
             </Pressable>
           ))}
           {props.artifacts
-            .filter((artifact) => Boolean(artifact.viewerUrl || artifact.url))
+            .filter((artifact) => Boolean(artifact.url))
             .map((artifact) => {
-              const href = artifact.viewerUrl || artifact.url!
+              const href = artifact.url!
               return (
                 <Pressable
                   key={`${artifact.id}:link`}

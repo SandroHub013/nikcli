@@ -66,7 +66,6 @@ import type {
   SessionDetail,
   SessionSummary,
   SkillInfo,
-  TeleportResult,
   WorktreeInfo,
 } from "@/lib/types"
 
@@ -195,22 +194,6 @@ export function projectDirectoryForWorktree(
     return item.worktree === selectedDirectory || sandboxes.includes(selectedDirectory || "")
   })
   return selected?.worktree || fallback?.worktree
-}
-
-/**
- * Normalize a user-entered teleport server URL into a base origin we can append
- * `/mobile/teleport` to. Accepts values with or without a scheme/trailing slash.
- */
-export function normalizeTeleportBaseUrl(raw: string): string | null {
-  let value = raw.trim()
-  if (!value) return null
-  if (!/^https?:\/\//i.test(value)) value = `https://${value}`
-  try {
-    const url = new URL(value)
-    return url.origin + url.pathname.replace(/\/+$/, "").replace(/\/mobile(\/teleport)?$/, "")
-  } catch {
-    return null
-  }
 }
 
 export class MobileClient {
@@ -395,36 +378,6 @@ export class MobileClient {
 
   sessionStreamUrl(sessionID: string) {
     return this.url(`/mobile/session/${encodeURIComponent(sessionID)}/stream`)
-  }
-
-  /**
-   * Teleport a session living on this server to another ragu server (e.g. a
-   * Railway deploy) so it can be resumed there — including its working directory.
-   * The phone has no filesystem, so this delegates to the connected server, which
-   * archives the session's working dir and ships both content and transcript to
-   * the target. The target also gets a project entry in its repo list.
-   */
-  async teleport(
-    sessionID: string,
-    target: {
-      url: string
-      token: string
-      content?: boolean
-      includeGit?: boolean
-    },
-  ): Promise<TeleportResult> {
-    const base = normalizeTeleportBaseUrl(target.url)
-    if (!base) throw new Error("Invalid teleport server URL")
-
-    return this.request<TeleportResult>(`/mobile/session/${encodeURIComponent(sessionID)}/teleport`, {
-      method: "POST",
-      body: JSON.stringify({
-        url: base,
-        token: target.token.trim(),
-        content: target.content,
-        includeGit: target.includeGit,
-      }),
-    })
   }
 
   listProjects() {

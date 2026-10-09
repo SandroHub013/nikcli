@@ -1,6 +1,5 @@
-import type { MessageWithParts, SessionArtifact, ToolState } from "@/lib/types"
+import type { MessageWithParts, ToolState } from "@/lib/types"
 
-export type PublishedArtifactKind = "html" | "markdown" | "image" | "video" | "text"
 export type SessionPreviewKind = "url" | "html" | "svg" | "mermaid" | "markdown" | "image" | "video" | "text"
 
 export type SessionPreview = {
@@ -8,23 +7,10 @@ export type SessionPreview = {
   kind: SessionPreviewKind
   title: string
   messageId: string
-  /** Canonical nikcli-ai.dev link, safe to copy and share. */
+  /** Link found in the chat, safe to copy and share. */
   url?: string
-  /** Capability URL used only to render the preview inside the connected session. */
-  previewUrl?: string
-  /** Capability URL for opening the full artifact viewer without another login. */
-  viewerUrl?: string
   source?: "local" | "web"
   content?: string
-  artifact?: {
-    id: string
-    kind: PublishedArtifactKind
-    version: number
-    filename?: string
-    contentType?: string
-    size?: number
-    description?: string
-  }
 }
 
 const URL_PATTERN = /\bhttps?:\/\/[^\s<>"'`)\]}]+/gi
@@ -119,13 +105,6 @@ function isSessionWorkspacePreviewUrl(raw: string, normalized: string, serverUrl
 
   const rawHost = rawParsed.hostname.toLowerCase()
   const normHost = normParsed.hostname.toLowerCase()
-
-  if (
-    (rawHost === "nikcli-ai.dev" || rawHost.endsWith(".nikcli-ai.dev")) &&
-    /^\/artifact\/[^/]+/.test(rawParsed.pathname)
-  ) {
-    return true
-  }
 
   if (isBlockedPreviewDocumentationHost(rawHost) || isBlockedPreviewDocumentationHost(normHost)) return false
   if (isLoopbackPreviewHost(rawHost)) return true
@@ -248,7 +227,7 @@ export function previewSourceText(preview: SessionPreview): string {
 }
 
 export function previewDocumentHtml(preview: SessionPreview, isDark: boolean): string | null {
-  if (preview.url || preview.previewUrl || preview.viewerUrl) return null
+  if (preview.url) return null
 
   const content = preview.content?.trim() ?? ""
   if (!content) return null
@@ -269,83 +248,7 @@ export function previewDocumentHtml(preview: SessionPreview, isDark: boolean): s
 }
 
 export function previewAllowsNetwork(preview: SessionPreview) {
-  return Boolean(preview.url || preview.previewUrl || preview.viewerUrl) || preview.kind === "mermaid"
-}
-
-function stringValue(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value : undefined
-}
-
-function numberValue(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined
-}
-
-function publishedKind(value: unknown): PublishedArtifactKind | null {
-  if (value === "html" || value === "markdown" || value === "image" || value === "video" || value === "text") {
-    return value
-  }
-  return null
-}
-
-function extractPublishedArtifact(part: MessageWithParts["parts"][number], messageId: string): SessionPreview | null {
-  if (part.type !== "tool" || part.tool !== "artifact") return null
-  const state = asToolState(part.state)
-  if (state?.status !== "completed") return null
-
-  const metadata = state.metadata
-  if (!isRecord(metadata)) return null
-
-  const artifactId = stringValue(metadata.id)
-  const url = stringValue(metadata.url)
-  const kind = publishedKind(metadata.kind)
-  if (!artifactId || !url || !kind) return null
-
-  const rawUrl = stringValue(metadata.previewUrl)
-  const viewerUrl = stringValue(metadata.viewerUrl)
-  const previewUrl = kind === "markdown" || kind === "text" ? (viewerUrl ?? rawUrl) : (rawUrl ?? viewerUrl)
-
-  return {
-    id: `artifact:${artifactId}`,
-    kind,
-    title: stringValue(metadata.title) ?? state.title ?? labelForUrl(viewerUrl ?? url),
-    messageId,
-    url: viewerUrl ?? url,
-    previewUrl,
-    viewerUrl,
-    source: "web",
-    artifact: {
-      id: artifactId,
-      kind,
-      version: numberValue(metadata.version) ?? 1,
-      filename: stringValue(metadata.filename),
-      contentType: stringValue(metadata.contentType),
-      size: numberValue(metadata.size),
-      description: stringValue(metadata.description),
-    },
-  }
-}
-
-function previewFromSessionArtifact(artifact: SessionArtifact): SessionPreview {
-  const previewUrl = artifact.kind === "markdown" || artifact.kind === "text" ? artifact.viewerUrl : artifact.previewUrl
-  return {
-    id: `artifact:${artifact.id}`,
-    kind: artifact.kind,
-    title: artifact.title,
-    messageId: `artifact:${artifact.id}`,
-    url: artifact.viewerUrl || artifact.url,
-    previewUrl,
-    viewerUrl: artifact.viewerUrl,
-    source: "web",
-    artifact: {
-      id: artifact.id,
-      kind: artifact.kind,
-      version: artifact.version,
-      filename: artifact.filename,
-      contentType: artifact.contentType,
-      size: artifact.size,
-      description: artifact.description,
-    },
-  }
+  return Boolean(preview.url) || preview.kind === "mermaid"
 }
 
 function extractFromText(
@@ -399,51 +302,17 @@ function messageTexts(message: MessageWithParts) {
     .filter(Boolean)
 }
 
-function rememberPreviewUrls(preview: SessionPreview, seen: Set<string>) {
-  for (const value of [preview.url, preview.viewerUrl, preview.previewUrl]) {
-    if (!value) continue
-    seen.add(value)
-    try {
-      const next = new URL(value)
-      next.search = ""
-      seen.add(next.toString())
-    } catch {
-      // ignore invalid URLs
-    }
-  }
-}
-
 /** Newest messages first; dedupes URLs and generated blocks. */
-export function extractSessionPreviews(
-  messages: MessageWithParts[],
-  serverUrl?: string,
-  persistedArtifacts: SessionArtifact[] = [],
-): SessionPreview[] {
+export function extractSessionPreviews(messages: MessageWithParts[], serverUrl?: string): SessionPreview[] {
   const seenUrls = new Set<string>()
   const seenContent = new Set<string>()
-  const seenArtifacts = new Set<string>()
   const previews: SessionPreview[] = []
 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index]!
-    for (const part of message.parts) {
-      const artifact = extractPublishedArtifact(part, message.info.id)
-      if (!artifact || !artifact.artifact || seenArtifacts.has(artifact.artifact.id)) continue
-      seenArtifacts.add(artifact.artifact.id)
-      rememberPreviewUrls(artifact, seenUrls)
-      previews.push(artifact)
-    }
     for (const text of messageTexts(message)) {
       extractFromText(text, message.info.id, serverUrl, seenUrls, seenContent, previews)
     }
-  }
-
-  for (const artifact of persistedArtifacts) {
-    if (seenArtifacts.has(artifact.id)) continue
-    seenArtifacts.add(artifact.id)
-    const preview = previewFromSessionArtifact(artifact)
-    rememberPreviewUrls(preview, seenUrls)
-    previews.push(preview)
   }
 
   return previews
@@ -455,11 +324,6 @@ export function extractMessageArtifacts(message: MessageWithParts): SessionPrevi
 
   const seenContent = new Set<string>()
   const artifacts: SessionPreview[] = []
-
-  for (const part of message.parts) {
-    const artifact = extractPublishedArtifact(part, message.info.id)
-    if (artifact) artifacts.push(artifact)
-  }
 
   for (const text of messageTexts(message)) {
     for (const match of text.matchAll(FENCE_PATTERN)) {
@@ -491,5 +355,5 @@ export function extractInlineArtifact(message: MessageWithParts): SessionPreview
 }
 
 export function isGeneratedPreview(preview: SessionPreview) {
-  return preview.kind !== "url" && !preview.artifact
+  return preview.kind !== "url"
 }

@@ -24,11 +24,8 @@ const REMEMBERED_USER_KEY = "ragu_remembered_user"
 const LIVE_ACTIVITY_REGISTRY_KEY = "ragu_live_activity_registry"
 const THEME_ID_KEY = "ragu_theme_id"
 const COLOR_SCHEME_KEY = "ragu_color_scheme"
-const TELEPORT_TARGET_KEY = "ragu_teleport_target"
 const SESSION_SEEN_KEY = "ragu_session_seen"
 const GITHUB_DEVICE_AUTH_PENDING_KEY = "ragu_github_device_auth_pending"
-
-export type TeleportTarget = { url: string; token: string }
 
 export type GithubDeviceAuthPending = {
   deviceCode: string
@@ -232,24 +229,6 @@ export async function setServerConfig(config: ServerConfig): Promise<void> {
 
 export async function clearServerConfig(): Promise<void> {
   await SecureStore.deleteItemAsync(SERVER_CONFIG_KEY)
-}
-
-export async function getTeleportTarget(): Promise<TeleportTarget | null> {
-  const raw = await SecureStore.getItemAsync(TELEPORT_TARGET_KEY)
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw) as Partial<TeleportTarget>
-    if (typeof parsed.url === "string" && typeof parsed.token === "string") {
-      return { url: parsed.url, token: parsed.token }
-    }
-    return null
-  } catch {
-    return null
-  }
-}
-
-export async function setTeleportTarget(target: TeleportTarget): Promise<void> {
-  await SecureStore.setItemAsync(TELEPORT_TARGET_KEY, JSON.stringify(target))
 }
 
 /**

@@ -50,8 +50,7 @@ import {
   type PermissionModeSetting,
   type PermissionPreset,
 } from "@/lib/permission-presets"
-import { SessionTeleportSheet } from "@/components/session/SessionTeleportSheet"
-import { markSessionSeen, setTeleportTarget } from "@/lib/storage"
+import { markSessionSeen } from "@/lib/storage"
 import { type as typeStyle } from "@/lib/typography"
 import { setTerminalLaunchIntent } from "@/lib/terminal-launch"
 import {
@@ -252,8 +251,6 @@ export default function SessionScreen() {
   const [activeMessageID, setActiveMessageID] = useState<string | null>(null)
   const [renameOpen, setRenameOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
-  const [teleportOpen, setTeleportOpen] = useState(false)
-  const [teleporting, setTeleporting] = useState(false)
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([])
   const [attachmentPickerOpen, setAttachmentPickerOpen] = useState(false)
   const [gitState, setGitState] = useState<GitState | null>(null)
@@ -658,10 +655,7 @@ export default function SessionScreen() {
     }),
     [activeMessageID, diffs, diffLoaded, diffLoading, pendingAssistantId],
   )
-  const previews = useMemo(
-    () => extractSessionPreviews(messages, config?.url, detail?.artifacts),
-    [config?.url, detail?.artifacts, messages],
-  )
+  const previews = useMemo(() => extractSessionPreviews(messages, config?.url), [config?.url, messages])
   const sessionBlocked = sessionIsProcessing(detail?.status)
   const cleaned = Boolean(detail?.info.github?.worktree.cleanedAt ?? detail?.info.worktree?.cleanedAt)
   const hasCleanableWorktree = Boolean(detail?.info.github?.worktree ?? detail?.info.worktree)
@@ -900,22 +894,6 @@ export default function SessionScreen() {
       setError(error instanceof Error ? error.message : String(error))
     } finally {
       setRenaming(false)
-    }
-  }
-
-  async function handleTeleport(target: { url: string; token: string }) {
-    if (!client || !sessionId) return
-    try {
-      setTeleporting(true)
-      await client.teleport(sessionId, target)
-      await setTeleportTarget(target)
-      setTeleportOpen(false)
-      void triggerHaptic("success")
-    } catch (error) {
-      setError(error instanceof Error ? error.message : String(error))
-      void triggerHaptic("error")
-    } finally {
-      setTeleporting(false)
     }
   }
 
@@ -1939,9 +1917,6 @@ export default function SessionScreen() {
         }}
         compacting={compacting}
         compactDisabled={sessionBlocked || cleaned}
-        onTeleport={() => {
-          actionsSheetRef.current?.dismiss(() => setTeleportOpen(true))
-        }}
         onOpenPreview={() => {
           previewSheetRef.current?.present()
           void triggerHaptic("selection")
@@ -1987,13 +1962,6 @@ export default function SessionScreen() {
         saving={renaming}
         onClose={() => setRenameOpen(false)}
         onSave={(title) => void handleRename(title)}
-      />
-
-      <SessionTeleportSheet
-        visible={teleportOpen}
-        busy={teleporting}
-        onClose={() => setTeleportOpen(false)}
-        onTeleport={(target) => void handleTeleport(target)}
       />
 
       <GitReviewModal

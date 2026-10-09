@@ -57,20 +57,6 @@ function sourceLabel(source: SessionPreview["source"]) {
   return source === "local" ? "Local" : "Remote"
 }
 
-function formatBytes(value: number | undefined) {
-  if (value === undefined) return null
-  if (value >= 1024 * 1024) return `${(value / (1024 * 1024)).toFixed(1)} MB`
-  if (value >= 1024) return `${Math.round(value / 1024)} KB`
-  return `${value} B`
-}
-
-function artifactDetail(preview: SessionPreview) {
-  if (!preview.artifact) return null
-  return [preview.artifact.filename, `v${preview.artifact.version}`, formatBytes(preview.artifact.size)]
-    .filter(Boolean)
-    .join(" · ")
-}
-
 async function openPreviewExternally(url: string) {
   try {
     await WebBrowser.openBrowserAsync(url)
@@ -223,7 +209,7 @@ function PreviewViewport(props: {
   onError(): void
 }) {
   const documentHtml = useMemo(() => previewDocumentHtml(props.preview, props.isDark), [props.isDark, props.preview])
-  const mediaUrl = props.preview.previewUrl ?? props.preview.viewerUrl ?? props.preview.url
+  const mediaUrl = props.preview.url
 
   if (props.preview.kind === "image" && mediaUrl) {
     return (
@@ -418,9 +404,7 @@ export function InlineArtifactCard(props: { preview: SessionPreview; onPress(): 
                 {props.preview.title}
               </Text>
             </View>
-            <Text className="text-[11px] font-semibold text-muted">
-              {props.preview.artifact ? `v${props.preview.artifact.version}` : "Expand"}
-            </Text>
+            <Text className="text-[11px] font-semibold text-muted">{"Expand"}</Text>
           </View>
         </View>
       </Pressable>
@@ -441,9 +425,8 @@ export function SessionPreviewStrip({
   const [reloadKeys, setReloadKeys] = useState<Record<string, number>>({})
   const [previewStates, setPreviewStates] = useState<Record<string, "loading" | "ready" | "failed">>({})
   const visible = useMemo(() => previews.slice(0, 6), [previews])
-  const publishedCount = visible.filter((item) => item.artifact).length
-  const liveCount = visible.filter((item) => item.kind === "url" && !item.artifact).length
-  const generatedCount = visible.length - publishedCount - liveCount
+  const liveCount = visible.filter((item) => item.kind === "url").length
+  const generatedCount = visible.length - liveCount
 
   if (!project && !visible.length) return null
 
@@ -465,11 +448,7 @@ export function SessionPreviewStrip({
           <SectionHeader
             icon={<MonitorPlay size={15} color={palette.accentLight} strokeWidth={2.2} />}
             title="Artifacts & previews"
-            right={[
-              publishedCount ? `${publishedCount} published` : null,
-              liveCount ? `${liveCount} live` : null,
-              generatedCount ? `${generatedCount} generated` : null,
-            ]
+            right={[liveCount ? `${liveCount} live` : null, generatedCount ? `${generatedCount} generated` : null]
               .filter(Boolean)
               .join(" · ")}
             palette={palette}
@@ -549,7 +528,7 @@ export const SessionPreviewSheet = forwardRef<ActionSheetRef, SessionPreviewShee
         ) : (
           <EmptyState
             title="No artifacts yet"
-            description="Published nikcli-ai.dev artifacts, dev server links, and generated previews from the chat appear here."
+            description="Dev server links and generated previews from the chat appear here."
           />
         )}
       </ScrollView>
@@ -617,18 +596,6 @@ export const ArtifactViewerSheet = forwardRef<ActionSheetRef, ArtifactViewerShee
                 <Text className="mt-1.5 text-lg font-bold leading-6 tracking-tight text-ink" numberOfLines={2}>
                   {preview.title}
                 </Text>
-                {preview.artifact ? (
-                  <>
-                    <Text className="mt-1 text-[11px] font-semibold text-muted" numberOfLines={1}>
-                      {artifactDetail(preview)}
-                    </Text>
-                    {preview.artifact.description ? (
-                      <Text className="mt-1 text-[12px] leading-4 text-soft" numberOfLines={2}>
-                        {preview.artifact.description}
-                      </Text>
-                    ) : null}
-                  </>
-                ) : null}
               </View>
               <View style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 2 }}>
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
@@ -690,7 +657,7 @@ export const ArtifactViewerSheet = forwardRef<ActionSheetRef, ArtifactViewerShee
                           textTransform: "capitalize",
                         }}
                       >
-                        {value === "source" && preview.artifact ? "link" : value}
+                        {value}
                       </Text>
                     </View>
                   </Pressable>
@@ -764,12 +731,12 @@ export const ArtifactViewerSheet = forwardRef<ActionSheetRef, ArtifactViewerShee
               palette={palette}
               isDark={isDark}
             />
-            {preview.viewerUrl || preview.url ? (
+            {preview.url ? (
               <ActionChip
                 label="Browser"
                 icon={ExternalLink}
                 accent
-                onPress={() => void openPreviewExternally(preview.viewerUrl ?? preview.url!)}
+                onPress={() => void openPreviewExternally(preview.url!)}
                 palette={palette}
                 isDark={isDark}
               />
@@ -855,8 +822,7 @@ function PreviewCard(props: {
   const status = statusTone(props.status, props.palette)
   const subtitle =
     props.preview.kind === "url" && props.preview.url ? labelForUrl(props.preview.url) : props.preview.title
-  const browserUrl = props.preview.viewerUrl ?? (props.preview.kind === "url" ? props.preview.url : undefined)
-  const detail = artifactDetail(props.preview)
+  const browserUrl = props.preview.kind === "url" ? props.preview.url : undefined
 
   return (
     <View
@@ -949,14 +915,6 @@ function PreviewCard(props: {
           <Text numberOfLines={1} style={{ marginTop: 3, color: props.palette.ink, fontSize: 13, fontWeight: "800" }}>
             {subtitle}
           </Text>
-          {detail ? (
-            <Text
-              numberOfLines={1}
-              style={{ marginTop: 3, color: props.palette.muted, fontSize: 10, fontWeight: "600" }}
-            >
-              {detail}
-            </Text>
-          ) : null}
         </View>
 
         <View style={{ flexDirection: "row", gap: 8 }}>

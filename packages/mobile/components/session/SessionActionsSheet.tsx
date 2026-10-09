@@ -11,7 +11,6 @@ import {
   MonitorPlay,
   Activity,
   PencilLine,
-  Rocket,
   Shrink,
   TerminalSquare,
   type LucideIcon,
@@ -32,7 +31,6 @@ type Props = {
   onCompact(): void
   compacting?: boolean
   compactDisabled?: boolean
-  onTeleport?(): void
   onOpenTerminal?(): void
   onOpenPreview?(): void
   previewCount?: number
@@ -173,7 +171,6 @@ export function SessionActionsSheet({
   onCompact,
   compacting = false,
   compactDisabled = false,
-  onTeleport,
   onOpenTerminal,
   onOpenPreview,
   previewCount = 0,
@@ -261,15 +258,6 @@ export function SessionActionsSheet({
           loading={compacting}
           tone="accent"
         />
-        {onTeleport ? (
-          <SheetRow
-            Icon={Rocket}
-            label="Teleport session"
-            description="Copy this session to another ragu server"
-            onPress={onTeleport}
-            tone="accent"
-          />
-        ) : null}
 
         {onPublish || onReview || onCleanup ? (
           <>
@@ -333,7 +321,7 @@ export function SessionActionsSheet({
           description={
             previewCount > 0
               ? `${previewCount} artifact${previewCount === 1 ? "" : "s"}, media, and live preview${previewCount === 1 ? "" : "s"}`
-              : "Published artifacts, images, video, and live previews"
+              : "Generated artifacts, images, video, and live previews"
           }
           onPress={() => {
             sheetRef.current?.dismiss(() => onOpenPreview?.())
