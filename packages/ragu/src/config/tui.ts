@@ -225,7 +225,11 @@ export namespace TuiConfig {
 
     const merged = dedupePlugins([...discovered, ...acc.entries])
     acc.result.keybinds = Config.Keybinds.parse(acc.result.keybinds ?? {})
-    for (const key of Config.REMOVED_KEYBINDS) delete acc.result.keybinds[key]
+    for (const key of Config.REMOVED_KEYBINDS) {
+      if (!(key in acc.result.keybinds)) continue
+      log.warn("keybind removed and ignored", { key })
+      delete acc.result.keybinds[key]
+    }
     acc.result.plugin = merged.map((item) => item.item)
     // Assign the key only when there is something to put in it. The HttpApi
     // response schema declares `plugin_meta` as `optionalKey`, which rejects a

@@ -1,6 +1,6 @@
 import { preserveTestEnv } from "../helpers/env"
 import { removeTestDir } from "../helpers/fs"
-import { afterAll, describe, expect, it } from "bun:test"
+import { afterAll, describe, expect, it, spyOn } from "bun:test"
 import { Effect } from "effect"
 import fs from "fs/promises"
 import os from "os"
@@ -33,6 +33,8 @@ preserveTestEnv([
 const { InstanceScope } = await import("@/effect")
 const { Config } = await import("@/config/config")
 const { Instance } = await import("@/project/instance")
+const { TuiConfig } = await import("@/config/tui")
+const { Log } = await import("@ragu/util/log")
 
 const made: string[] = [testHome]
 afterAll(async () => {
@@ -72,10 +74,35 @@ describe("config keys of Nik's removed services", () => {
     })
 
   it("the keybinds of removed features are accepted and ignored", async () => {
-    const config = await loaded({ keybinds: { session_share: "<leader>s", session_unshare: "none", session_new: "<leader>n" } })
+    const config = await loaded({
+      keybinds: { session_share: "<leader>s", session_unshare: "none", session_new: "<leader>n" },
+    })
     const keybinds = config.keybinds as Record<string, unknown>
     expect(keybinds.session_new).toBe("<leader>n")
     expect("session_share" in keybinds).toBe(false)
     expect("session_unshare" in keybinds).toBe(false)
+  })
+
+  it("the keybinds of removed features in tui.json are accepted and ignored, with a warning", async () => {
+    const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "ragu-removed-keybinds-tui-")))
+    made.push(root)
+    await fs.writeFile(
+      path.join(root, "tui.json"),
+      JSON.stringify({ keybinds: { session_share: "<leader>s", session_unshare: "none", session_new: "<leader>n" } }),
+    )
+    const warn = spyOn(Log.create({ service: "tui.config" }), "warn")
+    try {
+      const config = await Instance.provide({ directory: root, fn: () => TuiConfig.get() })
+      const keybinds = config.keybinds as Record<string, unknown>
+      expect(keybinds.session_new).toBe("<leader>n")
+      expect("session_share" in keybinds).toBe(false)
+      expect("session_unshare" in keybinds).toBe(false)
+      const warned = warn.mock.calls
+        .filter(([message]) => message === "keybind removed and ignored")
+        .map(([, extra]) => (extra as { key: string }).key)
+      expect(warned.sort()).toEqual(["session_share", "session_unshare"])
+    } finally {
+      warn.mockRestore()
+    }
   })
 })
