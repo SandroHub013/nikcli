@@ -1,4 +1,3 @@
-import { AnalyticsShare } from "@/analytics/share"
 import { runPromiseWithLayer } from "@/effect"
 import { Flag } from "@ragu/util/flag"
 import { bunUtils, onMemoryPressure } from "@/bun"
@@ -147,7 +146,6 @@ export namespace Server {
     if (!server) throw new Error(`Failed to start server on port ${opts.port}`)
 
     _url = server.url
-    AnalyticsShare.start()
     if (!memoryPressureBound) {
       memoryPressureBound = true
       onMemoryPressure(() => {

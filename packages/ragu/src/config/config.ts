@@ -32,6 +32,15 @@ import { CONFIG_STEMS, DOT_FOLDERS, configFile, isDotFolder, preferNew } from "@
 export namespace Config {
   const log = Log.create({ service: "config" })
 
+  /**
+   * Keys of the services that talked to Nik's servers and were removed (brief ragu-via-servizi-nik). The schema
+   * still accepts them, so a ragu.json / nikcli.json that has one keeps loading; the loaded config drops them,
+   * with a warning in the log.
+   */
+  export const REMOVED_KEYS: Record<string, string> = {
+    analytics: "it sent usage totals to Nik's dashboard (dashboard.nikcli-ai.dev)",
+  }
+
   function runAuth<A, E>(effect: Effect.Effect<A, E, Auth.Service>) {
     return runPromiseWithLayer(Auth.defaultLayer, effect)
   }
@@ -179,6 +188,12 @@ export namespace Config {
       result.mode ??= {}
       result.plugin ??= []
       log.debug("loaded custom config from RAGU_CONFIG_CONTENT")
+    }
+
+    for (const [key, why] of Object.entries(REMOVED_KEYS)) {
+      if (!(key in result)) continue
+      log.warn("config key removed and ignored", { key, why })
+      delete (result as Record<string, unknown>)[key]
     }
 
     // Migrate deprecated mode field to agent field
@@ -1692,22 +1707,7 @@ export namespace Config {
         .strict()
         .optional()
         .describe("Optional hub-and-spoke remote sync settings, manageable from the TUI /sync dialog"),
-      analytics: z
-        .object({
-          share: z
-            .boolean()
-            .optional()
-            .describe(
-              "Contribute anonymous per-day model totals to the public stats at nikcli-ai.dev/data. On by default; set false to opt out, or set DO_NOT_TRACK=1 / RAGU_DISABLE_ANALYTICS=1. Only day, provider, model, session count, message count, token count and cost are sent, under a random identifier — never prompts, paths, repositories, session titles or account.",
-            ),
-          endpoint: z
-            .string()
-            .optional()
-            .describe("Where reports are sent. Defaults to the public ragu endpoint; set this to self-host them."),
-        })
-        .strict()
-        .optional()
-        .describe("Opt-in anonymous usage reporting"),
+      analytics: z.unknown().optional().describe(`Removed and ignored: ${REMOVED_KEYS.analytics}`),
       share: z
         .enum(["manual", "auto", "disabled"])
         .optional()

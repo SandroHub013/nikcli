@@ -257,7 +257,7 @@ describe("analytics SQL", () => {
     })
   })
 
-  it("backfills the install UUID from leftover JSON and then ignores it", async () => {
+  it("backfills the install UUID from leftover JSON", async () => {
     await withIsolatedDatabase(async ({ home }) => {
       const storage = path.join(home, "data", "storage", "analytics")
       await fs.mkdir(storage, { recursive: true })
@@ -278,20 +278,6 @@ describe("analytics SQL", () => {
       expect(Database.syncNative().query<{ n: number }, []>(`SELECT COUNT(*) AS n FROM analytics_share`).get()?.n).toBe(
         1,
       )
-
-      await fs.writeFile(
-        path.join(storage, "share-state.json"),
-        JSON.stringify({ installID: "22222222-2222-4222-8222-222222222222" }),
-      )
-      const { AnalyticsShare } = await import("@/analytics/share")
-      // enabled() does not read state; run() would. Probe the table again after a
-      // leftover JSON rewrite — runtime must not pick up the new id.
-      expect(
-        Database.syncNative()
-          .query<{ install_id: string }, []>(`SELECT install_id FROM analytics_share WHERE id = 'local'`)
-          .get()?.install_id,
-      ).toBe("11111111-1111-4111-8111-111111111111")
-      expect(AnalyticsShare.enabled(undefined)).toBe(true)
     })
   })
 })

@@ -264,19 +264,9 @@ const SpecAnalyticsShow = Spec.make("show", {
   },
 })
 
-const SpecAnalyticsPublish = Spec.make("publish", {
-  description: "send this install's rollups to the collector now",
-  params: {
-    today: Flag.boolean("today").pipe(Flag.withDescription("just today"), Flag.withDefault(false)),
-    week: Flag.boolean("week").pipe(Flag.withDescription("the last 7 days"), Flag.withDefault(false)),
-    month: Flag.boolean("month").pipe(Flag.withDescription("the last 30 days"), Flag.withDefault(false)),
-    all: Flag.boolean("all").pipe(Flag.withDescription("every day on record (default)"), Flag.withDefault(false)),
-  },
-})
-
 const SpecAnalytics = Spec.make("analytics", {
-  description: "inspect and publish local usage rollups",
-  commands: [SpecAnalyticsShow, SpecAnalyticsPublish],
+  description: "inspect local usage rollups",
+  commands: [SpecAnalyticsShow],
 })
 
 const SpecApi = Spec.make("api", {

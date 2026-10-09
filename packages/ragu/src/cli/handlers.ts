@@ -34,7 +34,6 @@ export const Handlers = Runtime.handlers(Commands, {
   goal: () => import("./handlers/goal"),
   analytics: {
     show: () => import("./handlers/analytics/show"),
-    publish: () => import("./handlers/analytics/publish"),
   },
   api: () => import("./handlers/api"),
   debug: {
