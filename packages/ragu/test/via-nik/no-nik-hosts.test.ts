@@ -7,27 +7,11 @@ import path from "path"
  * scope by the brief: LICENSE, the codemod (script/ragu-codemod*), and the tests, which name the hosts to prove they
  * are never called.
  *
- * Two lists are still allowed, each with its owner. A file leaves its list when its owner removes the hosts; an
- * entry that no longer matches does not fail the test, so the lists only shrink. Any other file with a Nik host fails.
+ * The history (CHANGELOG, specs, plans) is allowed: it records what was done or planned at the time. Package A's
+ * leftovers were closed when it was merged with package C, so no list of owners is left. Any other file fails.
  */
 const ROOT = path.join(import.meta.dir, "../../../..")
 const NIK = /nikcli-ai\.dev|nikcli\.store/
-
-// Package A (Nik's account and Zen), still on its own branch.
-const PACKAGE_A = [
-  "packages/llm/src/providers/ragu-inference.ts",
-  "packages/ragu/src/account/index.ts",
-  "packages/ragu/src/account/url.ts",
-  "packages/ragu/src/auth/index.ts",
-  "packages/ragu/src/cli/handlers/auth/login.ts",
-  "packages/ragu/src/provider/ragu-inference.ts",
-  "packages/ragu/src/session/llm/llm-event-adapter.ts",
-  "packages/ragu/src/session/retry.ts",
-  "packages/tui/src/app.tsx",
-  "packages/tui/src/component/dialog-account-login.tsx",
-  "packages/tui/src/component/dialog-login.tsx",
-  "packages/tui/src/component/dialog-provider.tsx",
-]
 
 // Records of what was done or planned at the time: they are history, not instructions.
 const HISTORY = ["CHANGELOG.md", "specs/", ".nikcli/plans/"]
@@ -39,7 +23,7 @@ const OUT_OF_SCOPE = (file: string) =>
   /\.(test|spec)\.[cm]?[jt]sx?$/.test(file)
 
 const allowed = (file: string) =>
-  [...PACKAGE_A, ...HISTORY].some((entry) => (entry.endsWith("/") ? file.startsWith(entry) : file === entry))
+  HISTORY.some((entry) => (entry.endsWith("/") ? file.startsWith(entry) : file === entry))
 
 function tracked(): string[] {
   const out = Bun.spawnSync(["git", "ls-files", "-z"], { cwd: ROOT, stdout: "pipe", stderr: "pipe" })
@@ -48,7 +32,7 @@ function tracked(): string[] {
 }
 
 describe("no host of Nik", () => {
-  test("no tracked source names nikcli-ai.dev or nikcli.store, but the listed leftovers", () => {
+  test("no tracked source names nikcli-ai.dev or nikcli.store, but the history", () => {
     const hits = tracked()
       .filter((file) => !OUT_OF_SCOPE(file) && !allowed(file))
       .filter((file) => {
