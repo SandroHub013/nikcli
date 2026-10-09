@@ -13,12 +13,12 @@ export const WebSearchConfigSchema = z
     provider: z
       .enum(["exa", "parallel", "mcp"])
       .optional()
-      .describe('Web search backend. Defaults to "exa" (hosted endpoint, no key required).'),
+      .describe('Web search backend. Defaults to "exa" (hosted endpoint, requires API key).'),
     apiKey: z
       .string()
       .optional()
       .describe(
-        "API key for the selected provider. Falls back to EXA_API_KEY or PARALLEL_API_KEY. Optional for exa, required for parallel.",
+        "API key for the selected provider. Falls back to EXA_API_KEY or PARALLEL_API_KEY. Required for exa and parallel.",
       ),
     url: z
       .string()
