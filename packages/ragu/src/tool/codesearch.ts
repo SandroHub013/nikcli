@@ -60,7 +60,7 @@ export const CodeSearchTool = Tool.define("codesearch", {
     }
 
     const cfg = await websearchConfig().catch(() => undefined)
-    const exaConfigKey = !cfg?.provider || cfg.provider === "exa" ? cfg.apiKey : undefined
+    const exaConfigKey = cfg && (!cfg.provider || cfg.provider === "exa") ? cfg.apiKey : undefined
     const apiKey = exaConfigKey ?? process.env["EXA_API_KEY"]
 
     const text = await callTool({
