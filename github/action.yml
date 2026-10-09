@@ -17,10 +17,10 @@ inputs:
     description: "Custom prompt to override the default prompt"
     required: false
 
-  use_github_token:
-    description: "Use GITHUB_TOKEN directly instead of Ragu App token exchange. When true, skips OIDC and uses the GITHUB_TOKEN env var."
+  github_token:
+    description: "GitHub token the action comments, pushes and opens PRs with. Defaults to the workflow's GITHUB_TOKEN."
     required: false
-    default: "false"
+    default: "${{ github.token }}"
 
   mentions:
     description: "Comma-separated list of trigger phrases (case-insensitive). Defaults to '/ragu,/nik'"
@@ -28,10 +28,6 @@ inputs:
 
   variant:
     description: "Model variant for provider-specific reasoning effort (e.g., high, max, minimal)"
-    required: false
-
-  oidc_base_url:
-    description: "Base URL for OIDC token exchange API. Only required when running a custom GitHub App install. Defaults to https://api.nikcli-ai.dev"
     required: false
 
 runs:
@@ -56,11 +52,9 @@ runs:
         MODEL: ${{ inputs.model }}
         AGENT: ${{ inputs.agent }}
         PROMPT: ${{ inputs.prompt }}
-        USE_GITHUB_TOKEN: ${{ inputs.use_github_token }}
         MENTIONS: ${{ inputs.mentions }}
         VARIANT: ${{ inputs.variant }}
-        OIDC_BASE_URL: ${{ inputs.oidc_base_url }}
-        TOKEN: ${{ inputs.use_github_token == 'true' && github.token || '' }}
-        GITHUB_TOKEN: ${{ inputs.use_github_token == 'true' && github.token || '' }}
-        GH_TOKEN: ${{ inputs.use_github_token == 'true' && github.token || '' }}
+        TOKEN: ${{ inputs.github_token }}
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        GH_TOKEN: ${{ inputs.github_token }}
       run: bun "$GITHUB_ACTION_PATH/index.ts"

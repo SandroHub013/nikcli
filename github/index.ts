@@ -242,7 +242,6 @@ try {
 } finally {
   server?.close()
   await restoreGitConfig()
-  await revokeAppToken()
 }
 process.exit(exitCode)
 
@@ -480,38 +479,15 @@ function useIssueId() {
   return payload.issue.number
 }
 
+/**
+ * The GitHub token the action works with: the workflow's GITHUB_TOKEN, or a token passed as the
+ * `github_token` input (TOKEN), or a personal access token in a mock run. It used to be traded for a
+ * token of Nik's GitHub App on Nik's own backend, which is not this fork's.
+ */
 async function getAccessToken() {
-  const { repo } = useContext()
-
-  const envToken = useEnvGithubToken()
-  if (envToken) return envToken
-
-  let response
-  if (isMock()) {
-    response = await fetch("https://api.nikcli-ai.dev/exchange_github_app_token_with_pat", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${useEnvMock().mockToken}`,
-      },
-      body: JSON.stringify({ owner: repo.owner, repo: repo.repo }),
-    })
-  } else {
-    const oidcToken = await core.getIDToken("ragu-github-action")
-    response = await fetch("https://api.nikcli-ai.dev/exchange_github_app_token", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${oidcToken}`,
-      },
-    })
-  }
-
-  if (!response.ok) {
-    const responseJson = (await response.json()) as { error?: string }
-    throw new Error(`App token exchange failed: ${response.status} ${response.statusText} - ${responseJson.error}`)
-  }
-
-  const responseJson = (await response.json()) as { token: string }
-  return responseJson.token
+  const token = useEnvGithubToken() || (isMock() ? useEnvMock().mockToken : undefined)
+  if (token) return token
+  throw new Error("No GitHub token: pass `github_token` to the action, or set TOKEN to the workflow's GITHUB_TOKEN")
 }
 
 async function createComment() {
@@ -923,11 +899,6 @@ async function assertPermissions() {
 
   console.log(`Asserting permissions for user ${actor}...`)
 
-  if (useEnvGithubToken()) {
-    console.log("  skipped (using github token)")
-    return
-  }
-
   let permission
   try {
     const response = await octoRest.repos.getCollaboratorPermissionLevel({
@@ -1189,16 +1160,3 @@ function buildPromptDataForPR(pr: GitHubPullRequest) {
   ].join("\n")
 }
 
-async function revokeAppToken() {
-  if (!accessToken) return
-  console.log("Revoking app token...")
-
-  await fetch("https://api.github.com/installation/token", {
-    method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-  })
-}
