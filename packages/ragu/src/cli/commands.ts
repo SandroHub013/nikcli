@@ -476,14 +476,12 @@ const SpecDebug = Spec.make("debug", {
 })
 
 const SpecAuthLogin = Spec.make("login", {
-  description: "log in to a provider",
+  description: "log in to an AI provider",
   params: {
-    url: Argument.string("url").pipe(Argument.withDescription("ragu auth provider"), Argument.optional),
-    provider: Flag.boolean("provider").pipe(
-      Flag.withDescription("Log in to an LLM provider instead of your ragu account"),
-      Flag.withDefault(false),
+    provider: Argument.string("provider").pipe(
+      Argument.withDescription("Provider ID (e.g. openai, anthropic) or well-known auth URL"),
+      Argument.optional,
     ),
-    server: Flag.string("server").pipe(Flag.withAlias("s"), Flag.withDescription("Identity issuer URL"), Flag.optional),
   },
 })
 
