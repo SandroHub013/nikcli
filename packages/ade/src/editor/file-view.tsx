@@ -9,6 +9,7 @@
 import { Match, Show, Switch, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { Editor } from "./editor"
 import type { Buffer } from "./buffer"
+import type { BinaryFile } from "./binary-file"
 import { folderOf, handlePreviewClick, joinPath, renderMarkdown, safeDecodeURI } from "./markdown"
 import type { ViewKind } from "../surface/open-route"
 import { mediaUrl } from "../video/video"
@@ -26,6 +27,8 @@ export interface FileViewProps {
   loading?: boolean
   /** Why there is no buffer: the read's error. */
   error?: string
+  /** The read failed because the file is not text: what the host knows of it. */
+  binary?: BinaryFile
   goTo?: { line: number; at: number }
   onChange: (draft: string) => void
   onSave: () => void
@@ -37,9 +40,9 @@ export interface FileViewProps {
   openFile?: (path: string) => void
 }
 
-/** What the pane says when the read failed: a binary gets the sentence the brief asks for. */
-export function readFailure(error: string): string {
-  return /^file binario/.test(error) ? t("file.binary", error) : error
+/** What the pane says when the read failed: a binary is told by its fields, not by the error's words. */
+export function readFailure(error: string, binary?: BinaryFile): string {
+  return binary ? t("file.binary", binary.bytes) : error
 }
 
 export function FileView(props: FileViewProps) {
@@ -61,7 +64,7 @@ export function FileView(props: FileViewProps) {
   const editor = () => (
     <Show
       when={!props.error || props.buffer}
-      fallback={<div data-slot="file-message">{readFailure(props.error ?? "")}</div>}
+      fallback={<div data-slot="file-message">{readFailure(props.error ?? "", props.binary)}</div>}
     >
       <Editor
         buffer={props.buffer}
@@ -147,7 +150,7 @@ function MarkdownView(props: FileViewProps) {
   return (
     <Show
       when={props.buffer}
-      fallback={<Show when={props.error}>{(error) => <div data-slot="file-message">{readFailure(error())}</div>}</Show>}
+      fallback={<Show when={props.error}>{(error) => <div data-slot="file-message">{readFailure(error(), props.binary)}</div>}</Show>}
     >
       <div
         data-slot="file-markdown"

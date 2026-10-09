@@ -450,6 +450,7 @@ import { keyError, type KeyDraft, type KeyInfo } from "../secrets/keys"
 import type { QualityLevel, RecordTarget, RecordingState } from "../record/recording"
 import type { AssetsStatus } from "../nikverse/assets"
 import { t } from "../i18n"
+import { BinaryFileError, binaryFromHost } from "../editor/binary-file"
 
 const inTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)
@@ -758,8 +759,17 @@ export async function getHost(): Promise<Host | undefined> {
        * file saw `false` and stayed out of the way, and one keystroke plus a
        * save wrote the blank buffer over the user's file. Every caller here
        * already has a catch that puts the message on screen.
+       *
+       * A binary file fails as fields (`binary-file.ts`), turned here into an
+       * `Error` whose message is still the sentence the search and the links
+       * skip on; the file pane reads the fields.
        */
-      return await invoke<FileRead>("read_text_file", { path, maxBytes })
+      try {
+        return await invoke<FileRead>("read_text_file", { path, maxBytes })
+      } catch (error) {
+        const binary = binaryFromHost(error)
+        throw binary ? new BinaryFileError(binary) : error
+      }
     },
 
     async writeTextFile(path, contents) {

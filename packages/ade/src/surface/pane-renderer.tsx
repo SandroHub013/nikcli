@@ -164,7 +164,7 @@ export interface PaneRendererDeps {
 
 export function createPaneRenderer(deps: PaneRendererDeps) {
   const { wb, setWb, project, records, panels, pluginRuntime } = deps
-  const { buffers, bufferLoading, bufferError, reports, permissions } = records
+  const { buffers, bufferLoading, bufferError, bufferBinary, reports, permissions } = records
   /* Panes of one kind share a panel name; see `panels/stack.ts`. */
   const stacks = {
     video: createPanelStack(panels, "video"),
@@ -241,6 +241,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         buffer={buffers()[current().id]}
         loading={bufferLoading()[current().id]}
         error={bufferError()[current().id]}
+        binary={bufferBinary()[current().id]}
         readBytes={deps.readBytes}
         openUrl={(url) => deps.openFileLink(current().id, { kind: "url", url })}
         openFile={(path) => deps.openFileLink(current().id, { kind: "file", path })}

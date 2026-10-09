@@ -1,6 +1,6 @@
 import type { TypedLine } from "../session/typed-line"
 import { createSignal } from "solid-js"
-import type { Buffer } from "../editor"
+import type { BinaryFile, Buffer } from "../editor"
 import type { PermissionRequest } from "../session/permission"
 import type { SessionReport } from "../session/report"
 import type { SessionDiff } from "../review"
@@ -82,6 +82,8 @@ export interface PaneRecords {
   bufferLoading: PaneRecord<boolean>
   /** Why a file pane has no buffer: the read's own error, shown in the pane. */
   bufferError: PaneRecord<string>
+  /** The same failure, when it was a binary file: what the pane's card is drawn from. */
+  bufferBinary: PaneRecord<BinaryFile>
   /** The question each pane is currently stopped on, if any. */
   permissions: PaneRecord<PermissionRequest>
   /**
@@ -108,6 +110,7 @@ export function createPaneRecords(): PaneRecords {
     buffers: createPaneRecord<Buffer>(),
     bufferLoading: createPaneRecord<boolean>(),
     bufferError: createPaneRecord<string>(),
+    bufferBinary: createPaneRecord<BinaryFile>(),
     permissions: createPaneRecord<PermissionRequest>(),
     typed: createPaneRecord<TypedLine>(),
     paneView: createPaneRecord<"transcript" | "diff">(),

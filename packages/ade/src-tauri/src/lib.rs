@@ -591,19 +591,63 @@ struct FileRead {
     bytes: usize,
 }
 
+/// Why `read_text` gave no text.
+///
+/// A binary file is described in fields, so the file pane draws its card
+/// without matching the words of an error: the sentence was Italian, built
+/// here, and the English pane showed it half translated. Every other failure
+/// stays the plain message it always was, for the callers that print it.
+#[derive(Serialize, Debug)]
+#[serde(untagged)]
+enum ReadFailure {
+    Message(String),
+    Binary(BinaryRead),
+}
+
+#[derive(Serialize, Debug)]
+struct BinaryRead {
+    /// Always `"binary"`: what the page tells this shape by.
+    kind: &'static str,
+    bytes: u64,
+    /// Last modification, milliseconds since the epoch, when the disk says.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    modified: Option<u64>,
+    /// The first bytes, for the format's magic number. Not the file.
+    head: Vec<u8>,
+}
+
+/// How many leading bytes travel with a binary failure.
+const BINARY_HEAD_BYTES: usize = 16;
+
+impl From<String> for ReadFailure {
+    fn from(message: String) -> Self {
+        ReadFailure::Message(message)
+    }
+}
+
+impl std::fmt::Display for ReadFailure {
+    /// The sentence the search and the links still skip on.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReadFailure::Message(message) => f.write_str(message),
+            ReadFailure::Binary(binary) => write!(f, "file binario, {} byte", binary.bytes),
+        }
+    }
+}
+
 /// Reads up to `max_bytes` of a text file. Returns an explicit error for
 /// binary content so the frontend can tell the user instead of showing
 /// mojibake.
 #[tauri::command]
-async fn read_text_file(path: String, max_bytes: usize) -> Result<FileRead, String> {
+async fn read_text_file(path: String, max_bytes: usize) -> Result<FileRead, ReadFailure> {
     read_text(&path, max_bytes)
 }
 
 /// The reading itself, as a plain function so the tests below can call it.
-fn read_text(path: &str, max_bytes: usize) -> Result<FileRead, String> {
+fn read_text(path: &str, max_bytes: usize) -> Result<FileRead, ReadFailure> {
     refuse_network_path(path)?;
     if is_credential_path(Path::new(path), dirs::home_dir().as_deref()) {
-        return Err(format!("credenziali dell'utente: lettura non consentita: {path}"));
+        return Err(format!("credenziali dell'utente: lettura non consentita: {path}").into());
     }
     /*
      * One byte past the cap, rather than the whole file. The sidebar makes it
@@ -614,7 +658,7 @@ fn read_text(path: &str, max_bytes: usize) -> Result<FileRead, String> {
     let file = std::fs::File::open(path).map_err(|e| format!("{path}: {e}"))?;
     let meta = file.metadata().map_err(|e| format!("{path}: {e}"))?;
     if meta.is_dir() {
-        return Err(format!("il percorso è una directory: {path}"));
+        return Err(format!("il percorso è una directory: {path}").into());
     }
     let total = meta.len() as usize;
 
@@ -643,8 +687,19 @@ fn read_text(path: &str, max_bytes: usize) -> Result<FileRead, String> {
         {
             String::from_utf8_lossy(&slice[..error.valid_up_to()]).into_owned()
         }
-        // The size travels with it: the file pane says what it could not show.
-        Err(_) => return Err(format!("file binario, {total} byte")),
+        // The file pane describes what it could not show.
+        Err(_) => {
+            return Err(ReadFailure::Binary(BinaryRead {
+                kind: "binary",
+                bytes: meta.len(),
+                modified: meta
+                    .modified()
+                    .ok()
+                    .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                    .map(|d| d.as_millis() as u64),
+                head: data[..data.len().min(BINARY_HEAD_BYTES)].to_vec(),
+            }))
+        }
     };
 
     Ok(FileRead { text, truncated, bytes: total })
@@ -3687,7 +3742,7 @@ mod tests {
         ] {
             assert!(is_network_path(unc), "{unc}");
             assert!(refuse_network_path(unc).is_err(), "{unc}");
-            assert!(read_text(unc, 10).is_err_and(|e| e.contains("percorso di rete non consentito")), "{unc}");
+            assert!(read_text(unc, 10).is_err_and(|e| e.to_string().contains("percorso di rete non consentito")), "{unc}");
             assert!(resolve_for_check(Path::new(unc)).is_err_and(|e| e.contains("percorso di rete non consentito")), "{unc}");
         }
         for local in [
@@ -3791,7 +3846,31 @@ mod tests {
 
         let error = read_text(&path.to_string_lossy(), 1024)
             .expect_err("invalid bytes are not a truncated character");
-        assert_eq!(error, "file binario, 5 byte");
+        assert_eq!(error.to_string(), "file binario, 5 byte");
+    }
+
+    /// A binary fails as fields, not as a sentence: the pane draws its card
+    /// from them, in either language (pannello-file-binario, point 1).
+    #[test]
+    fn a_binary_fails_with_its_size_time_and_first_bytes() {
+        let dir = TempDir::new("binaryfields");
+        let path = dir.join("app.apk");
+        let mut bytes = vec![0x50, 0x4b, 0x03, 0x04];
+        bytes.extend(std::iter::repeat_n(0xffu8, 40));
+        std::fs::write(&path, &bytes).expect("write");
+
+        let error = read_text(&path.to_string_lossy(), 1024).expect_err("binary");
+        let json = serde_json::to_value(&error).expect("serialize");
+        assert_eq!(json["kind"], "binary");
+        assert_eq!(json["bytes"], 44);
+        assert!(json["modified"].as_u64().is_some_and(|ms| ms > 1_600_000_000_000), "{json}");
+        let head: Vec<u64> = json["head"].as_array().expect("head").iter().filter_map(|b| b.as_u64()).collect();
+        assert_eq!(head.len(), 16, "only the first bytes travel");
+        assert_eq!(&head[..4], &[0x50, 0x4b, 0x03, 0x04]);
+
+        // Any other failure is still the sentence it always was.
+        let missing = read_text(&dir.join("missing.txt").to_string_lossy(), 10).expect_err("missing");
+        assert!(serde_json::to_value(&missing).expect("serialize").is_string());
     }
 
     #[test]

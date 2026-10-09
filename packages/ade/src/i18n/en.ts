@@ -589,7 +589,7 @@ export const en: Messages = {
   "file.text": "Text",
   "file.showPreview": "Show the preview",
   "file.showText": "Show the text",
-  "file.binary": (error) => `${error}: ADE has no viewer for this format`,
+  "file.binary": (bytes) => `binary file, ${bytes} bytes: ADE has no viewer for this format`,
   "file.imageFailed": "image not readable",
   "file.fontFailed": "font not readable",
   "file.fontSample": "The quick brown fox jumps over the lazy dog",

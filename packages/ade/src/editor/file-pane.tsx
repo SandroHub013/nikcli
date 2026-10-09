@@ -1,5 +1,6 @@
 import { Show, createEffect, createSignal, onCleanup } from "solid-js"
 import type { Buffer } from "./buffer"
+import type { BinaryFile } from "./binary-file"
 import { showTextFor, type GoTo } from "./go-to"
 import { FileView } from "./file-view"
 import { flashRefusal, viewKind } from "../surface/open-route"
@@ -14,6 +15,8 @@ export interface FilePaneProps {
   loading?: boolean
   /** Why the file could not be read as text, shown instead of an empty editor. */
   error?: string
+  /** The file is not text: what the host knows of it, for the card shown instead. */
+  binary?: BinaryFile
   /** A line to put the cursor on, from a link clicked in a session. */
   goTo?: GoTo
   focused?: boolean
@@ -166,6 +169,7 @@ export function FilePane(props: FilePaneProps) {
           buffer={props.buffer}
           loading={props.loading}
           error={props.error}
+          binary={props.binary}
           goTo={props.goTo}
           onChange={props.onChange}
           onSave={props.onSave}

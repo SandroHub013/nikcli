@@ -604,7 +604,7 @@ export const it = {
   "file.text": "Testo",
   "file.showPreview": "Mostra l'anteprima",
   "file.showText": "Mostra il testo",
-  "file.binary": (error: string) => `${error}: ADE non ha un visore per questo formato`,
+  "file.binary": (bytes: number) => `file binario, ${bytes} byte: ADE non ha un visore per questo formato`,
   "file.imageFailed": "immagine non leggibile",
   "file.fontFailed": "font non leggibile",
   "file.fontSample": "Ma la volpe, col suo balzo, ha raggiunto il quieto Fido",
