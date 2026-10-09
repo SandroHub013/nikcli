@@ -64,7 +64,6 @@ export function ArchiveList(props: { path: string; listArchive: (path: string) =
     const current = listing()
     return current ? current.total - Math.min(current.entries.length, SHOWN_ENTRIES) : 0
   }
-  const count = (n: number) => n.toLocaleString(locale() === "it" ? "it-IT" : "en-US")
   const android = () => {
     const manifest = listing()?.android
     return manifest && ANDROID_FIELDS.some(([field]) => manifest[field]) ? manifest : undefined
@@ -98,7 +97,7 @@ export function ArchiveList(props: { path: string; listArchive: (path: string) =
                   </dl>
                 )}
               </Show>
-              <div data-slot="archive-count">{t("file.archive.count", count(current().total))}</div>
+              <div data-slot="archive-count">{t("file.archive.count", current().total)}</div>
               <table data-slot="archive-table">
                 <thead>
                   <tr>
@@ -126,7 +125,7 @@ export function ArchiveList(props: { path: string; listArchive: (path: string) =
                 </tbody>
               </table>
               <Show when={more() > 0}>
-                <div data-slot="archive-more">{t("file.archive.more", count(more()))}</div>
+                <div data-slot="archive-more">{t("file.archive.more", more())}</div>
               </Show>
             </>
           )}

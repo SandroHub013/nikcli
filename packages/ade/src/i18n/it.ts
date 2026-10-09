@@ -611,9 +611,10 @@ export const it = {
   "file.binary.copyPath": "Copia percorso",
   "file.archive.loading": "Lettura del contenuto…",
   "file.archive.failed": (reason: string) => `Contenuto non leggibile: ${reason}`,
-  "file.archive.count": (count: string) => `${count} file`,
+  "file.archive.count": (count: number) => `${count.toLocaleString("it-IT")} file`,
   "file.archive.path": "Percorso",
-  "file.archive.more": (count: string) => `e altre ${count} voci`,
+  "file.archive.more": (count: number) =>
+    count === 1 ? "e un'altra voce" : `e altre ${count.toLocaleString("it-IT")} voci`,
   "file.android.package": "Pacchetto",
   "file.android.versionName": "Versione",
   "file.android.versionCode": "Codice versione",

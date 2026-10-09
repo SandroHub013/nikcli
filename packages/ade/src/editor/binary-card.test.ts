@@ -191,6 +191,23 @@ describe("an archive's contents in the card", () => {
     expect(host.querySelector('[data-slot="android-package"]')).toBeNull()
   })
 
+  test("one file and one more entry are said in the singular", async () => {
+    const one = Array.from({ length: 2001 }, (_, i) => ({ path: `f/${String(i).padStart(4, "0")}`, size: i }))
+    const english = mount("en", { listArchive: async () => ({ entries: one, total: 2001 }) })
+    await flush()
+    expect(english.slot("archive-more")).toBe("and 1 more entry")
+    dispose?.()
+    document.body.innerHTML = ""
+    const italian = mount("it", { listArchive: async () => ({ entries: one, total: 2001 }) })
+    await flush()
+    expect(italian.slot("archive-more")).toBe("e un'altra voce")
+    dispose?.()
+    document.body.innerHTML = ""
+    const single = mount("en", { listArchive: async () => ({ entries: [{ path: "a", size: 1 }], total: 1 }) })
+    await flush()
+    expect(single.slot("archive-count")).toBe("1 file")
+  })
+
   test("an archive that cannot be read leaves the card, with the reason, and no manifest", async () => {
     const { host, slot } = mount("en", {
       listArchive: async () => {
