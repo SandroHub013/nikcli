@@ -28,6 +28,7 @@ import { zod, zodObject, zodObjectMode, type DeepMutable } from "@ragu/util/effe
 import { Analytics } from "../analytics/analytics"
 import { SessionRepo } from "./repo"
 import { GoalRepo } from "./goal-repo"
+import { ShareRows } from "@/share/share-rows"
 import { InstructionRepo } from "./instruction-repo"
 import { SessionDiffRepo } from "./diff-repo"
 import { SessionSync } from "./projectors"
@@ -674,6 +675,11 @@ export namespace Session {
         Effect.runSync(GoalRepo.remove(sessionID))
       } catch (err) {
         log.error("Failed to remove session goal", { error: err })
+      }
+      try {
+        Effect.runSync(ShareRows.removeForSession(sessionID))
+      } catch (err) {
+        log.error("Failed to remove session share rows", { error: err })
       }
       SessionSync.install()
       SyncEvent.run(SessionSync.Deleted, { sessionID, info: session }, { projectID: ctx.project.id })

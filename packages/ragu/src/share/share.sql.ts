@@ -5,7 +5,7 @@ import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core"
 //
 // Sharing is gone (it published sessions on Nik's share service). The tables
 // stay so existing databases and their migration keep their shape; nothing
-// reads or writes them any more.
+// writes them any more, and deleting a session deletes its rows (ShareRows).
 // ============================================================================
 
 /**
