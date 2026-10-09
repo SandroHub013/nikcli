@@ -1478,22 +1478,6 @@ export type APIError1 = {
 
 export type CompactionPart = { id: string; sessionID: string; messageID: string; type: "compaction"; auto: boolean }
 
-export type MobileArtifact = {
-  id: string
-  title: string
-  description?: string | undefined
-  filename: string
-  contentType: string
-  kind: "html" | "markdown" | "image" | "video" | "text"
-  url: string
-  viewerUrl: string
-  previewUrl: string
-  version: number
-  sessionID: string
-  size: number
-  time: { created: number; updated: number }
-}
-
 export type PermissionRequest = {
   id: string
   sessionID: string
@@ -4500,7 +4484,6 @@ export type MobileSessionDetail = {
   info: Session3
   status?: SessionStatus1 | undefined
   messages: Array<{ info: Message; parts: Array<Part> }>
-  artifacts: Array<MobileArtifact>
   permissions: Array<PermissionRequest>
   questions: Array<QuestionRequest>
 }

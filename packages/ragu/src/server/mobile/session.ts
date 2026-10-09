@@ -1,5 +1,4 @@
 import { Effect } from "effect"
-import { Artifact } from "@/artifact"
 import { Bus } from "@/bus"
 import { Command } from "@/command"
 import { withInstanceAsync } from "@/effect"
@@ -36,7 +35,6 @@ import {
   runWorktree,
   runWorktreeForDirectory,
   statusForSession,
-  toMobileArtifact,
 } from "./helpers"
 
 const getSession = (id: string) =>
@@ -108,14 +106,13 @@ export async function sessionCreate(host: string, input: typeof MobileSessionCre
 export async function sessionDetail(sessionID: string) {
   const info = await getSession(sessionID)
   return withInstanceAsync({ directory: info.directory }, async () => {
-    const [messages, artifacts, permissions, questions] = await Promise.all([
+    const [messages, permissions, questions] = await Promise.all([
       runSessionForSession(
         info,
         Effect.gen(function* () {
           return yield* (yield* Session.Service).messages({ sessionID: info.id })
         }),
       ),
-      Artifact.list(info.id).then((items) => items.map(toMobileArtifact)),
       runPermission(
         Effect.gen(function* () {
           return (yield* (yield* PermissionNext.Service).list()).filter((item) => item.sessionID === info.id)
@@ -132,7 +129,7 @@ export async function sessionDetail(sessionID: string) {
         return yield* (yield* SessionStatus.Service).get(info.id)
       }),
     )
-    return { info, messages, artifacts, permissions, questions, status }
+    return { info, messages, permissions, questions, status }
   })
 }
 

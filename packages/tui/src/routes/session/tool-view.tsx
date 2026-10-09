@@ -44,10 +44,8 @@ import { Locale } from "@ragu/util/locale"
 import { reasoningSummary } from "@tui/context/thinking"
 import { Token } from "@ragu/util/token"
 import {
-  artifactPublishedHref,
   diagnosticMessage,
   type ApplyPatchShape,
-  type ArtifactShape,
   type BashShape,
   type BrowserControlShape,
   type ComputerShape,
@@ -114,7 +112,6 @@ import {
   undismissBackground as undismissBackgroundUtil,
 } from "../../util/background"
 import { friendlyErrorMessage, shareErrorMessage } from "../../util/error-message"
-import { Link } from "../../ui/link"
 import { use } from "./session-context"
 import { Replace } from "../../feature-plugins/mods/render"
 
@@ -293,9 +290,6 @@ function ToolPartViewDefault(props: { last: boolean; streaming: boolean; entry: 
           <Match when={toolName() === "computer"}>
             <ComputerUse {...toolprops} />
           </Match>
-          <Match when={toolName() === "artifact"}>
-            <ArtifactView {...toolprops} />
-          </Match>
           <Match when={toolName() === "plugin"}>
             <PluginView {...toolprops} />
           </Match>
@@ -386,46 +380,6 @@ function ComputerUse(props: ToolProps<ComputerShape>) {
           part={props.part}
         >
           {label()} · {action()}
-        </InlineTool>
-      </Match>
-    </Switch>
-  )
-}
-
-function ArtifactView(props: ToolProps<ArtifactShape>) {
-  const { theme } = useTheme()
-  const title = createMemo(() => props.metadata.title ?? props.input.title ?? "Artifact")
-  const url = createMemo(() => artifactPublishedHref(props.metadata, props.output))
-  const detail = createMemo(() => {
-    const kind = props.metadata.kind ? String(props.metadata.kind).toUpperCase() : "ARTIFACT"
-    const version = props.metadata.version ? ` · v${props.metadata.version}` : ""
-    return `${kind}${version}`
-  })
-
-  return (
-    <Switch>
-      <Match when={props.output !== undefined}>
-        <BlockTool
-          title={`# Published · ${title()}`}
-          titleColor={theme.accent.fg}
-          accentColor={theme.accent.fg}
-          part={props.part}
-        >
-          <box gap={1}>
-            <text fg={theme.foreground.muted}>{detail()}</text>
-            <Show when={url()}>{(value) => <Link href={value()} fg={theme.accent.fg} />}</Show>
-          </box>
-        </BlockTool>
-      </Match>
-      <Match when={true}>
-        <InlineTool
-          icon="◇"
-          iconColor={theme.accent.fg}
-          pending={`Publishing ${title()}...`}
-          complete={title()}
-          part={props.part}
-        >
-          Artifact · {title()}
         </InlineTool>
       </Match>
     </Switch>

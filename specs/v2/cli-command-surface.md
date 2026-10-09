@@ -70,7 +70,6 @@ Source: the `commands` field of the root `Spec.make("ragu", …)` in `src/cli/co
 | `goal`            | `[condition..]`                                                                                    |                                                        |
 | `analytics`       | `<subcommand>`                                                                                     |                                                        |
 | `api`             | `[request..]`, `--list`, `--param`, `--header`, `--data`                                           | Resolves against `publicRoutes()` (X3)                 |
-| `artifact`        | `login`, `logout`, `list [session-id]`                                                             |                                                        |
 | `ads`             | `create`, `list`, `remove [id]`, `toggle [id]`, `enable`, `disable`                                |                                                        |
 | `bot`             | `list`, `add`, `start [name]`, `stop [name]`, `webhook [name]`                                     | Chatbot                                                |
 | `auto-mode`       | `defaults`, `config`, `critique`, `reset`                                                          | Permission auto-mode classifier rules                  |

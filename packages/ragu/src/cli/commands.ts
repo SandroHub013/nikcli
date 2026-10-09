@@ -546,29 +546,6 @@ const SpecAccount = Spec.make("account", {
   commands: [SpecAccountLogin, SpecAccountLogout, SpecAccountList, SpecAccountSwitch, SpecAccountOrgs],
 })
 
-const SpecArtifactLogin = Spec.make("login", {
-  description: "verify the active CLI user used for artifact publishing",
-})
-
-const SpecArtifactLogout = Spec.make("logout", {
-  description: "explain how artifact authentication follows the CLI account",
-})
-
-const SpecArtifactList = Spec.make("list", {
-  description: "list artifacts published from a session",
-  params: {
-    "session-id": Argument.string("session-id").pipe(
-      Argument.withDescription("Session ID (lists artifacts for this session)"),
-      Argument.optional,
-    ),
-  },
-})
-
-const SpecArtifact = Spec.make("artifact", {
-  description: "manage published artifacts (nikcli-ai.dev/artifact)",
-  commands: [SpecArtifactLogin, SpecArtifactLogout, SpecArtifactList],
-})
-
 const SpecAgentCreate = Spec.make("create", {
   description: "create a new agent",
   params: {
@@ -1616,7 +1593,6 @@ export const Commands = Spec.make("ragu", {
     SpecDebug,
     SpecAuth,
     SpecAccount,
-    SpecArtifact,
     SpecAgent,
     SpecUpgrade,
     SpecQuickstart,
