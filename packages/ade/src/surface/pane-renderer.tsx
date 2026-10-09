@@ -100,6 +100,8 @@ export interface PaneRendererDeps {
   pickModel: () => Promise<string | undefined>
   /** A project file's bytes, for the 3D panel; absent when the host cannot. */
   readBytes?: (path: string, maxBytes: number) => Promise<Uint8Array>
+  /** Shows a file selected in the system's file manager: the binary card's «Mostra nella cartella». */
+  revealFile?: (path: string) => Promise<void>
   /** A directory listing, for the 3D panel's change watcher. */
   readDir?: (path: string) => Promise<DirEntry[]>
   /** Where the open project's dev server probably is, for the simulator. */
@@ -243,6 +245,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         error={bufferError()[current().id]}
         binary={bufferBinary()[current().id]}
         readBytes={deps.readBytes}
+        revealFile={deps.revealFile}
         openUrl={(url) => deps.openFileLink(current().id, { kind: "url", url })}
         openFile={(path) => deps.openFileLink(current().id, { kind: "file", path })}
         focused={isFocused()}

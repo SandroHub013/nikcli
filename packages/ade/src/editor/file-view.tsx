@@ -35,6 +35,8 @@ export interface FileViewProps {
   onSave: () => void
   onRevert?: () => void
   readBytes?: (path: string, maxBytes: number) => Promise<Uint8Array>
+  /** Shows a file selected in the system's file manager, for the binary card. */
+  revealFile?: (path: string) => Promise<void>
   /** A web link clicked in a markdown preview. */
   openUrl?: (url: string) => void
   /** A file linked from a markdown preview. */
@@ -63,7 +65,7 @@ export function FileView(props: FileViewProps) {
       when={!props.error || props.buffer}
       fallback={
         <Show when={props.binary} fallback={<div data-slot="file-message">{props.error}</div>}>
-          {(binary) => <BinaryCard path={props.path} binary={binary()} />}
+          {(binary) => <BinaryCard path={props.path} binary={binary()} revealFile={props.revealFile} />}
         </Show>
       }
     >

@@ -32,6 +32,7 @@ mod nikverse_assets;
 mod project_bytes;
 mod pty;
 mod record;
+mod reveal;
 mod secrets;
 mod serve;
 mod serve_proxy;
@@ -2762,6 +2763,7 @@ pub fn run() {
             shots::shot_bytes,
             shots::shot_delete,
             project_bytes::read_project_bytes,
+            reveal::reveal_in_folder,
             append::append_text_file,
             ask::ade_ask,
             ask::ade_ask_front,

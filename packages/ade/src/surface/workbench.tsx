@@ -9139,6 +9139,11 @@ export function Workbench() {
         return host.readBytes(path, maxBytes)
       }),
     readDir: (path) => getHost().then((host) => (host?.readDir ? host.readDir(path) : [])),
+    revealFile: (path) =>
+      getHost().then((host) => {
+        if (!host?.revealInFolder) throw new Error(t("host.error.cannotReveal"))
+        return host.revealInFolder(path)
+      }),
     captureFrame,
     world: {
       picture: worldPicture,

@@ -4,7 +4,7 @@
  * It says what the file is and how big, from the fields the host sent with
  * the failed read (`binary-file.ts`). Nothing here opens or runs the file.
  */
-import { Show, type JSX } from "solid-js"
+import { Show, createSignal, type JSX } from "solid-js"
 import { binaryType, formatSize, type BinaryFile, type BinaryType } from "./binary-file"
 import { locale, t } from "../i18n"
 
@@ -58,7 +58,16 @@ const ICONS: Record<Family, () => JSX.Element> = {
 export interface BinaryCardProps {
   path: string
   binary: BinaryFile
+  /** Shows the file selected in the system's file manager; absent when the host cannot. */
+  revealFile?: (path: string) => Promise<void>
 }
+
+/** A drive path as Windows writes it, for pasting into Explorer or a prompt; any other path as it is. */
+export function nativePath(path: string): string {
+  return /^[A-Za-z]:[\\/]/.test(path) ? path.replace(/\//g, "\\") : path
+}
+
+const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
 export function BinaryCard(props: BinaryCardProps) {
   const name = () => props.path.split(/[\\/]/).pop() ?? props.path
@@ -71,6 +80,18 @@ export function BinaryCard(props: BinaryCardProps) {
           dateStyle: "medium",
           timeStyle: "short",
         })
+  /* What the last action did: «Copiato», or why it failed. */
+  const [status, setStatus] = createSignal<string>()
+  const reveal = () =>
+    props.revealFile?.(props.path).then(
+      () => setStatus(undefined),
+      (error) => setStatus(messageOf(error)),
+    )
+  const copy = () =>
+    navigator.clipboard.writeText(nativePath(props.path)).then(
+      () => setStatus(t("pane.copied")),
+      (error) => setStatus(messageOf(error)),
+    )
   return (
     <div data-slot="file-view" data-kind="binary">
       <section data-slot="binary-card" data-type={type()}>
@@ -93,6 +114,22 @@ export function BinaryCard(props: BinaryCardProps) {
             <dd data-slot="binary-modified">{modified()}</dd>
           </Show>
         </dl>
+        {/* Never «Apri» or «Esegui»: the pane does not run what it shows. */}
+        <div data-slot="binary-actions">
+          <Show when={props.revealFile}>
+            <button type="button" data-slot="binary-reveal" onClick={reveal}>
+              {t("file.binary.reveal")}
+            </button>
+          </Show>
+          <button type="button" data-slot="binary-copy" onClick={copy}>
+            {t("file.binary.copyPath")}
+          </button>
+          <Show when={status()}>
+            <span data-slot="binary-status" role="status">
+              {status()}
+            </span>
+          </Show>
+        </div>
         <p data-slot="binary-note">{t("file.binary.note")}</p>
       </section>
     </div>

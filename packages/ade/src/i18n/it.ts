@@ -607,6 +607,8 @@ export const it = {
   "file.binary.size": "Dimensione",
   "file.binary.modified": "Modificato",
   "file.binary.note": "ADE non apre e non esegue questo file.",
+  "file.binary.reveal": "Mostra nella cartella",
+  "file.binary.copyPath": "Copia percorso",
   "file.type.apk": "Pacchetto Android (APK)",
   "file.type.aab": "Bundle di app Android (AAB)",
   "file.type.jar": "Archivio Java (JAR)",
@@ -2301,6 +2303,7 @@ export const it = {
     `non chiudo: ${reasons}. Integra o committa prima, oppure usa --force (la worktree resta su disco)`,
   "plugins.error.noDesktopHost": "nessun host desktop",
   "host.error.cannotReadBinary": "questo host non può leggere file binari",
+  "host.error.cannotReveal": "questo host non può mostrare i file nella loro cartella",
 
   // F7a2: Update & Browser
   "update.skip.rateLimited": "GitHub ha chiesto di aspettare: riprovo più tardi.",

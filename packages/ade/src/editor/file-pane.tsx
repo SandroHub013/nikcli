@@ -28,6 +28,8 @@ export interface FilePaneProps {
   onExpand?: () => void
   /** A font's bytes, for the font viewer. */
   readBytes?: (path: string, maxBytes: number) => Promise<Uint8Array>
+  /** Shows a file selected in the system's file manager, for the binary card. */
+  revealFile?: (path: string) => Promise<void>
   /** A web link clicked in a markdown preview: ADE's browser. */
   openUrl?: (url: string) => void
   /** A file linked from a markdown preview; answers with a note when the link was refused. */
@@ -175,6 +177,7 @@ export function FilePane(props: FilePaneProps) {
           onSave={props.onSave}
           onRevert={props.onRevert}
           readBytes={props.readBytes}
+          revealFile={props.revealFile}
           openUrl={props.openUrl}
           openFile={flashRefusal(props.openFile, flash)}
         />

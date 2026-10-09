@@ -319,6 +319,8 @@ export interface Host {
    * above `maxBytes`. For the 3D panel, whose models and textures are binary.
    */
   readBytes?: (path: string, maxBytes: number) => Promise<Uint8Array>
+  /** Shows a file selected in the system's file manager, without opening it; rejects with the reason. */
+  revealInFolder?: (path: string) => Promise<void>
   currentDir?: () => Promise<string>
   homeDir?: () => Promise<string>
   exists?: (path: string) => Promise<boolean>
@@ -810,6 +812,11 @@ export async function getHost(): Promise<Host | undefined> {
       // A raw IPC response arrives as an ArrayBuffer, not as JSON numbers.
       const buffer = await invoke<ArrayBuffer>("read_project_bytes", { path, maxBytes })
       return new Uint8Array(buffer)
+    },
+
+    async revealInFolder(path) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      await invoke("reveal_in_folder", { path })
     },
 
     async currentDir() {

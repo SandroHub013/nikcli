@@ -592,6 +592,8 @@ export const en: Messages = {
   "file.binary.size": "Size",
   "file.binary.modified": "Modified",
   "file.binary.note": "ADE does not open or run this file.",
+  "file.binary.reveal": "Show in folder",
+  "file.binary.copyPath": "Copy path",
   "file.type.apk": "Android package (APK)",
   "file.type.aab": "Android App Bundle (AAB)",
   "file.type.jar": "Java archive (JAR)",
@@ -2237,6 +2239,7 @@ export const en: Messages = {
     `will not close: ${reasons}. Merge or commit first, or use --force (worktree remains on disk)`,
   "plugins.error.noDesktopHost": "no desktop host",
   "host.error.cannotReadBinary": "this host cannot read binary files",
+  "host.error.cannotReveal": "this host cannot show files in their folder",
 
   // F7a2: Update & Browser
   "update.skip.rateLimited": "GitHub asked to wait: trying again later.",

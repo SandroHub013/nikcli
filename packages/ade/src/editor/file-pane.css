@@ -233,3 +233,30 @@
   font-size: var(--ade-font-sm);
   color: var(--ade-text-weak);
 }
+
+[data-component="file-pane"] [data-slot="binary-actions"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ade-space-3);
+}
+
+[data-component="file-pane"] [data-slot="binary-actions"] button {
+  padding: var(--ade-space-2) var(--ade-space-4);
+  border: 1px solid var(--ade-border-subtle);
+  border-radius: var(--ade-radius-md);
+  background: transparent;
+  color: var(--ade-text);
+  font: inherit;
+  font-size: var(--ade-font-md);
+  cursor: pointer;
+}
+
+[data-component="file-pane"] [data-slot="binary-actions"] button:hover {
+  background: var(--ade-active);
+}
+
+[data-component="file-pane"] [data-slot="binary-status"] {
+  font-size: var(--ade-font-sm);
+  color: var(--ade-text-soft);
+}
