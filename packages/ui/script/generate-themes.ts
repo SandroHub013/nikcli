@@ -234,7 +234,6 @@ for (const dir of sources) {
     }
 
     const theme = {
-      $schema: "https://nikcli-ai.dev/desktop-theme.json",
       name: pretty(id),
       id,
       light,
@@ -250,7 +249,6 @@ for (const extra of EXTRA_THEMES) {
   const dark = colorsFromPalette(extra.dark)
   const light = extra.light ? colorsFromPalette(extra.light) : deriveLight(dark)
   const theme = {
-    $schema: "https://nikcli-ai.dev/desktop-theme.json",
     name: extra.name,
     id: extra.id,
     light: build(light, "light"),

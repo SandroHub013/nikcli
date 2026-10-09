@@ -122,8 +122,6 @@ export namespace Config {
           config?: Record<string, unknown>
         }
         const remoteConfig = wellknown.config ?? {}
-        // Add $schema to prevent load() from trying to write back to a non-existent file
-        if (!remoteConfig.$schema) remoteConfig.$schema = "https://nikcli-ai.dev/config.json"
         result = mergeConfigConcatArrays(
           result,
           await load(
@@ -2224,7 +2222,6 @@ export namespace Config {
     allowProcessEnv = true,
     allowFileRefs = true,
   ) {
-    const original = text
     // Opencode #21197: load .env files from the config directory and merge them
     // into the lookup chain for {env:VAR}. Process env still wins (later wins).
     if (allowProcessEnv && allowFileRefs) {
@@ -2308,34 +2305,6 @@ export namespace Config {
 
     const parsed = Info.safeParse(data)
     if (parsed.success) {
-      if (!parsed.data.$schema) {
-        parsed.data.$schema = "https://nikcli-ai.dev/config.json"
-        // Write the $schema to the original text to preserve variables like {env:VAR}
-        const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://nikcli-ai.dev/config.json",')
-        let tmp: string | undefined
-        try {
-          const target = await fs.realpath(configFilepath).catch(() => configFilepath)
-          const stat = await fs.stat(target).catch(() => undefined)
-          if (stat?.isFile()) {
-            tmp = target + ".tmp"
-            await Bun.write(tmp, updated)
-            // chmod is Unix-only, skip on Windows
-            if (process.platform !== "win32") {
-              await fs.chmod(tmp, stat.mode & 0o777)
-            }
-            await fs.rename(tmp, target)
-          }
-        } catch (error) {
-          log.debug("failed to persist config schema hint", {
-            path: configFilepath,
-            error,
-          })
-        } finally {
-          if (tmp) {
-            await fs.unlink(tmp).catch(() => undefined)
-          }
-        }
-      }
       const data = parsed.data
       if (data.plugin) {
         for (let i = 0; i < data.plugin.length; i++) {

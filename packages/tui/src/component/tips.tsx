@@ -125,7 +125,6 @@ const TIPS = [
   "Press {highlight}Ctrl+X Right/Left{/highlight} to cycle through parent and child sessions",
   "Create {highlight}nikcli.json{/highlight} in project root for project-specific settings",
   "Place settings in {highlight}~/.config/nikcli/nikcli.json{/highlight} for global config",
-  "Add {highlight}$schema{/highlight} to your config for autocomplete in your editor",
   "Configure {highlight}model{/highlight} in config to set your default model",
   "Override any keybind in config via the {highlight}keybinds{/highlight} section",
   "Set any keybind to {highlight}none{/highlight} to disable it completely",
