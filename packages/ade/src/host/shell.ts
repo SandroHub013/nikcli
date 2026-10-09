@@ -321,6 +321,8 @@ export interface Host {
   readBytes?: (path: string, maxBytes: number) => Promise<Uint8Array>
   /** Shows a file selected in the system's file manager, without opening it; rejects with the reason. */
   revealInFolder?: (path: string) => Promise<void>
+  /** The files of a ZIP-built archive and an APK's manifest, read without extracting anything. */
+  listArchive?: (path: string) => Promise<ArchiveListing>
   currentDir?: () => Promise<string>
   homeDir?: () => Promise<string>
   exists?: (path: string) => Promise<boolean>
@@ -452,7 +454,7 @@ import { keyError, type KeyDraft, type KeyInfo } from "../secrets/keys"
 import type { QualityLevel, RecordTarget, RecordingState } from "../record/recording"
 import type { AssetsStatus } from "../nikverse/assets"
 import { t } from "../i18n"
-import { BinaryFileError, binaryFromHost } from "../editor/binary-file"
+import { BinaryFileError, binaryFromHost, type ArchiveListing } from "../editor/binary-file"
 
 const inTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in (window as unknown as Record<string, unknown>)
@@ -817,6 +819,11 @@ export async function getHost(): Promise<Host | undefined> {
     async revealInFolder(path) {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("reveal_in_folder", { path })
+    },
+
+    async listArchive(path) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      return invoke<ArchiveListing>("list_archive", { path })
     },
 
     async currentDir() {

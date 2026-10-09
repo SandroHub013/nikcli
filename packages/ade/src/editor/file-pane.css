@@ -260,3 +260,86 @@
   font-size: var(--ade-font-sm);
   color: var(--ade-text-soft);
 }
+
+/* What an archive holds: the APK's identity, then its files. */
+[data-component="file-pane"] [data-slot="archive"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-3);
+  padding-top: var(--ade-space-4);
+  border-top: 1px solid var(--ade-border-subtle);
+  font-size: var(--ade-font-md);
+}
+
+[data-component="file-pane"] [data-slot="archive-loading"],
+[data-component="file-pane"] [data-slot="archive-failed"],
+[data-component="file-pane"] [data-slot="archive-count"],
+[data-component="file-pane"] [data-slot="archive-more"] {
+  color: var(--ade-text-soft);
+}
+
+[data-component="file-pane"] [data-slot="archive-android"] {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--ade-space-2) var(--ade-space-5);
+  margin: 0;
+}
+
+[data-component="file-pane"] [data-slot="archive-android"] dt {
+  color: var(--ade-text-soft);
+}
+
+[data-component="file-pane"] [data-slot="archive-android"] dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+[data-component="file-pane"] [data-slot="archive-table"] {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+[data-component="file-pane"] [data-slot="archive-table"] th {
+  position: sticky;
+  top: 0;
+  background: var(--ade-raised);
+  text-align: left;
+  border-bottom: 1px solid var(--ade-border-subtle);
+}
+
+[data-component="file-pane"] [data-slot="archive-table"] th:last-child {
+  width: 96px;
+}
+
+[data-component="file-pane"] [data-slot="archive-table"] th button {
+  width: 100%;
+  padding: var(--ade-space-2) 0;
+  border: 0;
+  background: transparent;
+  color: var(--ade-text-soft);
+  font: inherit;
+  font-weight: var(--ade-weight-medium);
+  text-align: inherit;
+  cursor: pointer;
+}
+
+[data-component="file-pane"] [data-slot="archive-table"] th[aria-sort="ascending"] button::after {
+  content: " \2191";
+}
+
+[data-component="file-pane"] [data-slot="archive-table"] th[aria-sort="descending"] button::after {
+  content: " \2193";
+}
+
+[data-component="file-pane"] [data-slot="archive-table"] td {
+  padding: 2px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-component="file-pane"] [data-slot="archive-table"] [data-align="end"] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

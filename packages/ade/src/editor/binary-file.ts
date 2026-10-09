@@ -151,3 +151,41 @@ export function formatSize(bytes: number, language: "it" | "en"): string {
   )
   return `${number} ${UNITS[unit]}`
 }
+
+/** One file inside an archive, as `list_archive` reports it. */
+export interface ArchiveEntry {
+  path: string
+  /** Uncompressed size. */
+  size: number
+}
+
+/** Who an APK says it is, from its binary manifest; any field may be missing. */
+export interface AndroidManifest {
+  package?: string
+  versionName?: string
+  versionCode?: string
+  minSdk?: string
+  targetSdk?: string
+}
+
+/** What a ZIP-built file holds: up to 50000 of its files, how many it has, and an APK's manifest. */
+export interface ArchiveListing {
+  entries: ArchiveEntry[]
+  total: number
+  android?: AndroidManifest
+}
+
+/** The most rows the card draws; the rest are counted. */
+export const SHOWN_ENTRIES = 2000
+
+export type SortKey = "path" | "size"
+export type SortOrder = { key: SortKey; descending: boolean }
+
+/** The entries in the order the card shows them; a tie in size goes by path. */
+export function sortEntries(entries: readonly ArchiveEntry[], order: SortOrder): ArchiveEntry[] {
+  const byPath = (a: ArchiveEntry, b: ArchiveEntry) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)
+  const compare =
+    order.key === "path" ? byPath : (a: ArchiveEntry, b: ArchiveEntry) => a.size - b.size || byPath(a, b)
+  const sorted = [...entries].sort(compare)
+  return order.descending ? sorted.reverse() : sorted
+}

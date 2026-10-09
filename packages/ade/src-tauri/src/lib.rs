@@ -20,6 +20,7 @@ mod brand;
 #[cfg(test)]
 mod bun_lookup;
 mod append;
+mod archive;
 mod browse;
 mod browser_shot;
 mod frontend;
@@ -2764,6 +2765,7 @@ pub fn run() {
             shots::shot_delete,
             project_bytes::read_project_bytes,
             reveal::reveal_in_folder,
+            archive::list_archive,
             append::append_text_file,
             ask::ade_ask,
             ask::ade_ask_front,

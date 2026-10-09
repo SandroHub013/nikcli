@@ -9144,6 +9144,11 @@ export function Workbench() {
         if (!host?.revealInFolder) throw new Error(t("host.error.cannotReveal"))
         return host.revealInFolder(path)
       }),
+    listArchive: (path) =>
+      getHost().then((host) => {
+        if (!host?.listArchive) throw new Error(t("host.error.cannotReadBinary"))
+        return host.listArchive(path)
+      }),
     captureFrame,
     world: {
       picture: worldPicture,

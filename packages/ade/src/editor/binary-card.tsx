@@ -5,7 +5,8 @@
  * the failed read (`binary-file.ts`). Nothing here opens or runs the file.
  */
 import { Show, createSignal, type JSX } from "solid-js"
-import { binaryType, formatSize, type BinaryFile, type BinaryType } from "./binary-file"
+import { binaryType, formatSize, isArchive, type ArchiveListing, type BinaryFile, type BinaryType } from "./binary-file"
+import { ArchiveList } from "./archive-list"
 import { locale, t } from "../i18n"
 
 type Family = "package" | "program" | "document" | "data"
@@ -60,6 +61,8 @@ export interface BinaryCardProps {
   binary: BinaryFile
   /** Shows the file selected in the system's file manager; absent when the host cannot. */
   revealFile?: (path: string) => Promise<void>
+  /** What a ZIP-built file holds; absent when the host cannot read it. */
+  listArchive?: (path: string) => Promise<ArchiveListing>
 }
 
 /** A drive path as Windows writes it, for pasting into Explorer or a prompt; any other path as it is. */
@@ -131,6 +134,9 @@ export function BinaryCard(props: BinaryCardProps) {
           </Show>
         </div>
         <p data-slot="binary-note">{t("file.binary.note")}</p>
+        <Show when={isArchive(type()) && props.listArchive}>
+          {(listArchive) => <ArchiveList path={props.path} listArchive={listArchive()} />}
+        </Show>
       </section>
     </div>
   )

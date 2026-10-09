@@ -1,6 +1,6 @@
 import { Show, createEffect, createSignal, onCleanup } from "solid-js"
 import type { Buffer } from "./buffer"
-import type { BinaryFile } from "./binary-file"
+import type { ArchiveListing, BinaryFile } from "./binary-file"
 import { showTextFor, type GoTo } from "./go-to"
 import { FileView } from "./file-view"
 import { flashRefusal, viewKind } from "../surface/open-route"
@@ -30,6 +30,8 @@ export interface FilePaneProps {
   readBytes?: (path: string, maxBytes: number) => Promise<Uint8Array>
   /** Shows a file selected in the system's file manager, for the binary card. */
   revealFile?: (path: string) => Promise<void>
+  /** What a ZIP-built file holds, for the binary card. */
+  listArchive?: (path: string) => Promise<ArchiveListing>
   /** A web link clicked in a markdown preview: ADE's browser. */
   openUrl?: (url: string) => void
   /** A file linked from a markdown preview; answers with a note when the link was refused. */
@@ -178,6 +180,7 @@ export function FilePane(props: FilePaneProps) {
           onRevert={props.onRevert}
           readBytes={props.readBytes}
           revealFile={props.revealFile}
+          listArchive={props.listArchive}
           openUrl={props.openUrl}
           openFile={flashRefusal(props.openFile, flash)}
         />

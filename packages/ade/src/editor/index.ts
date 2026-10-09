@@ -15,4 +15,4 @@ export {
 
 export { Editor, type EditorProps } from "./editor"
 export { FilePane, type FilePaneProps } from "./file-pane"
-export { type BinaryFile, BinaryFileError, binaryFromHost } from "./binary-file"
+export { type ArchiveListing, type BinaryFile, BinaryFileError, binaryFromHost } from "./binary-file"

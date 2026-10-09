@@ -1,6 +1,6 @@
 import { Show, createMemo } from "solid-js"
 import { BrowserPane } from "../browser"
-import { FilePane, editBuffer, revertBuffer } from "../editor"
+import { FilePane, editBuffer, revertBuffer, type ArchiveListing } from "../editor"
 import { SessionPane } from "../grid/pane"
 import type { GridPane } from "../grid/session-grid"
 import type { LinkRequest } from "../terminal/links"
@@ -102,6 +102,8 @@ export interface PaneRendererDeps {
   readBytes?: (path: string, maxBytes: number) => Promise<Uint8Array>
   /** Shows a file selected in the system's file manager: the binary card's «Mostra nella cartella». */
   revealFile?: (path: string) => Promise<void>
+  /** What a ZIP, APK, JAR or AAB holds, for the binary card. */
+  listArchive?: (path: string) => Promise<ArchiveListing>
   /** A directory listing, for the 3D panel's change watcher. */
   readDir?: (path: string) => Promise<DirEntry[]>
   /** Where the open project's dev server probably is, for the simulator. */
@@ -246,6 +248,7 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         binary={bufferBinary()[current().id]}
         readBytes={deps.readBytes}
         revealFile={deps.revealFile}
+        listArchive={deps.listArchive}
         openUrl={(url) => deps.openFileLink(current().id, { kind: "url", url })}
         openFile={(path) => deps.openFileLink(current().id, { kind: "file", path })}
         focused={isFocused()}

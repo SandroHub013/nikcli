@@ -124,3 +124,110 @@ describe("the binary file card's actions", () => {
     expect(labels).toEqual(["Mostra nella cartella", "Copia percorso"])
   })
 })
+
+/*
+ * A ZIP, APK, JAR or AAB lists what it holds, from the host, sortable, at
+ * most 2000 rows; an APK says who it is first (pannello-file-binario, point 4).
+ */
+describe("an archive's contents in the card", () => {
+  const entries = [
+    { path: "res/b.png", size: 300 },
+    { path: "AndroidManifest.xml", size: 5 },
+    { path: "classes.dex", size: 4096 },
+  ]
+  const listing = {
+    entries,
+    total: 3,
+    android: { package: "com.fabioland.app", versionName: "0.2.0", versionCode: "1", minSdk: "24", targetSdk: "36" },
+  }
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
+  const rows = (host: HTMLElement) =>
+    Array.from(host.querySelectorAll('[data-slot="archive-row"]'), (row) =>
+      Array.from(row.querySelectorAll("td"), (cell) => cell.textContent),
+    )
+
+  test("the files are listed by path, with their sizes, and the APK's identity on top", async () => {
+    const asked: string[] = []
+    const { host, slot } = mount("it", {
+      listArchive: async (path: string) => {
+        asked.push(path)
+        return listing
+      },
+    })
+    await flush()
+    expect(asked).toEqual(["C:/Users/me/Fabioland/Fabioland-0.1.1-preview.apk"])
+    expect(rows(host)).toEqual([
+      ["AndroidManifest.xml", "5 byte"],
+      ["classes.dex", "4 KB"],
+      ["res/b.png", "300 byte"],
+    ])
+    expect(slot("android-package")).toBe("com.fabioland.app")
+    expect(slot("android-version-name")).toBe("0.2.0")
+    expect(slot("android-version-code")).toBe("1")
+    expect(slot("android-min-sdk")).toBe("24")
+    expect(slot("android-target-sdk")).toBe("36")
+    expect(slot("archive-count")).toBe("3 file")
+    expect(slot("archive-more")).toBeNull()
+  })
+
+  test("a header click sorts by size, largest first, and a second click reverses it", async () => {
+    const { host } = mount("en", { listArchive: async () => listing })
+    await flush()
+    const size = host.querySelector<HTMLButtonElement>('[data-slot="archive-sort-size"]')!
+    size.click()
+    expect(rows(host).map(([path]) => path)).toEqual(["classes.dex", "res/b.png", "AndroidManifest.xml"])
+    size.click()
+    expect(rows(host).map(([path]) => path)).toEqual(["AndroidManifest.xml", "res/b.png", "classes.dex"])
+    host.querySelector<HTMLButtonElement>('[data-slot="archive-sort-path"]')!.click()
+    expect(rows(host).map(([path]) => path)).toEqual(["AndroidManifest.xml", "classes.dex", "res/b.png"])
+  })
+
+  test("past 2000 rows the card says how many more there are", async () => {
+    const many = Array.from({ length: 2500 }, (_, i) => ({ path: `f/${String(i).padStart(4, "0")}`, size: i }))
+    const { host, slot } = mount("it", { listArchive: async () => ({ entries: many, total: 2600 }) })
+    await flush()
+    expect(rows(host).length).toBe(2000)
+    expect(slot("archive-more")).toBe("e altre 600 voci")
+    expect(host.querySelector('[data-slot="android-package"]')).toBeNull()
+  })
+
+  test("an archive that cannot be read leaves the card, with the reason, and no manifest", async () => {
+    const { host, slot } = mount("en", {
+      listArchive: async () => {
+        throw new Error("invalid Zip archive")
+      },
+    })
+    await flush()
+    expect(slot("binary-name")).toBe("Fabioland-0.1.1-preview.apk")
+    expect(slot("archive-failed")).toBe("Contents not readable: invalid Zip archive")
+    expect(rows(host)).toEqual([])
+  })
+
+  test("a file that is not an archive is not listed", async () => {
+    const asked: string[] = []
+    resetLocaleForTests("it")
+    const host = document.createElement("div")
+    document.body.append(host)
+    dispose = render(
+      () =>
+        createComponent(FileView, {
+          path: "C:/p/setup.exe",
+          kind: "text",
+          asText: false,
+          buffer: undefined,
+          error: "file binario, 10 byte",
+          binary: { bytes: 10, head: [0x4d, 0x5a] },
+          onChange: () => {},
+          onSave: () => {},
+          listArchive: async (path: string) => {
+            asked.push(path)
+            return listing
+          },
+        }),
+      host,
+    )
+    await flush()
+    expect(asked).toEqual([])
+    expect(host.querySelector('[data-slot="archive"]')).toBeNull()
+  })
+})

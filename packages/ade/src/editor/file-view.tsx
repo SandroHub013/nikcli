@@ -9,7 +9,7 @@
 import { Match, Show, Switch, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { Editor } from "./editor"
 import type { Buffer } from "./buffer"
-import type { BinaryFile } from "./binary-file"
+import type { ArchiveListing, BinaryFile } from "./binary-file"
 import { BinaryCard } from "./binary-card"
 import { folderOf, handlePreviewClick, joinPath, renderMarkdown, safeDecodeURI } from "./markdown"
 import type { ViewKind } from "../surface/open-route"
@@ -37,6 +37,8 @@ export interface FileViewProps {
   readBytes?: (path: string, maxBytes: number) => Promise<Uint8Array>
   /** Shows a file selected in the system's file manager, for the binary card. */
   revealFile?: (path: string) => Promise<void>
+  /** What a ZIP-built file holds, for the binary card. */
+  listArchive?: (path: string) => Promise<ArchiveListing>
   /** A web link clicked in a markdown preview. */
   openUrl?: (url: string) => void
   /** A file linked from a markdown preview. */
@@ -65,7 +67,7 @@ export function FileView(props: FileViewProps) {
       when={!props.error || props.buffer}
       fallback={
         <Show when={props.binary} fallback={<div data-slot="file-message">{props.error}</div>}>
-          {(binary) => <BinaryCard path={props.path} binary={binary()} revealFile={props.revealFile} />}
+          {(binary) => <BinaryCard path={props.path} binary={binary()} revealFile={props.revealFile} listArchive={props.listArchive} />}
         </Show>
       }
     >

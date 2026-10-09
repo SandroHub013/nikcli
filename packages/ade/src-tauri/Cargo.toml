@@ -95,6 +95,12 @@ tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 # Splitting a WebSocket into a reader and a writer needs the futures the
 # socket is built on.
 futures-util = { version = "0.3", default-features = false, features = ["sink"] }
+# The binary file pane lists what a ZIP, APK, JAR or AAB holds, from its
+# central directory, without extracting anything (same version already in the
+# lock). No compression features: an APK's manifest is inflated with flate2,
+# also already in the tree.
+zip = { version = "4", default-features = false }
+flate2 = "1"
 
 [target.'cfg(windows)'.dependencies]
 windows-version = "0.1"
