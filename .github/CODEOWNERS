@@ -9,10 +9,8 @@
 /packages/auth/ @SandroHub013
 /packages/bench-tui/ @SandroHub013
 /packages/companion/ @SandroHub013
-/packages/console/ @SandroHub013
 /packages/containers/ @SandroHub013
 /packages/enterprise/ @SandroHub013
-/packages/function/ @SandroHub013
 /packages/http-recorder/ @SandroHub013
 /packages/httpapi-codegen/ @SandroHub013
 /packages/identity/ @SandroHub013
@@ -25,7 +23,6 @@
 /packages/sdk/ @SandroHub013
 /packages/sdk-next/ @SandroHub013
 /packages/simulation/ @SandroHub013
-/packages/slack/ @SandroHub013
 /packages/tui/ @SandroHub013
 /packages/tui-storybook/ @SandroHub013
 /packages/util/ @SandroHub013

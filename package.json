@@ -25,10 +25,8 @@
   "workspaces": {
     "packages": [
       "packages/*",
-      "packages/console/*",
       "packages/remote",
       "packages/sdk/js",
-      "packages/slack",
       "github"
     ],
     "catalog": {
@@ -81,7 +79,6 @@
     "oxlint": "1.79.0",
     "prettier": "3.8.4",
     "semver": "^7.6.0",
-    "sst": "3.19.3",
     "turbo": "2.9.18"
   },
   "dependencies": {
@@ -92,7 +89,6 @@
     "@ragu/sdk": "workspace:*",
     "@opentui/core": "0.5.11",
     "@parcel/watcher": "2.5.1",
-    "@slack/bolt": "4.6.0",
     "@types/bun": "1.4.2",
     "@vercel/sandbox": "1.10.0",
     "cli-sound": "1.1.3",

@@ -5,7 +5,7 @@ import { join } from "node:path"
 import { SVGLoader } from "three/addons/loaders/SVGLoader.js"
 import { LOGO_SCALE, LOGO_SVG, logoVoxels, parseLogo, voxelRect, type LogoRect } from "./logo"
 
-const BRAND = join(import.meta.dir, "..", "..", "..", "..", "console", "app", "src", "asset", "brand")
+const BRAND = join(import.meta.dir, "..", "..", "..", "..", "ui", "src", "assets", "brand")
 const hash = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex")
 const order = (a: LogoRect, b: LogoRect) => a.color.localeCompare(b.color) || a.y - b.y || a.x - b.x
 

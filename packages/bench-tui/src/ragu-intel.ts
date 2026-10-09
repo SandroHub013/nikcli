@@ -46,8 +46,6 @@ const PACKAGE_JSON_CANDIDATES = [
   "packages/companion/package.json",
   "packages/enterprise/package.json",
   "packages/cloud/package.json",
-  "packages/function/package.json",
-  "packages/slack/package.json",
   "packages/llm/package.json",
   "packages/inference/package.json",
   "packages/inference-dashboard/package.json",
@@ -56,11 +54,6 @@ const PACKAGE_JSON_CANDIDATES = [
   "packages/tui-image/package.json",
   "packages/webrenderer/package.json",
   "packages/bench-tui/package.json",
-  "packages/console/app/package.json",
-  "packages/console/core/package.json",
-  "packages/console/function/package.json",
-  "packages/console/mail/package.json",
-  "packages/console/resource/package.json",
 ]
 
 function readJsonSafe<T>(filePath: string): T | null {
@@ -82,9 +75,7 @@ function categorize(relPath: string, name: string): { category: string; runtime:
   if (p.includes("mobile")) return { category: "mobile", runtime: "expo" }
   if (p.includes("desktop")) return { category: "desktop", runtime: "tauri" }
   if (p.includes("remote") || p.includes("companion")) return { category: "companion", runtime: "vite + server" }
-  if (p.includes("cloud") || p.includes("function") || p.includes("slack") || p.includes("inference"))
-    return { category: "cloud/edge", runtime: "cloudflare/workers" }
-  if (p.includes("console")) return { category: "console", runtime: "sst/aws" }
+  if (p.includes("cloud") || p.includes("inference")) return { category: "cloud/edge", runtime: "cloudflare/workers" }
   if (p.includes("bench-tui") || p.includes("terminal-control") || p.includes("tui-image"))
     return { category: "tui", runtime: "bun + opentui" }
   if (p.includes("containers")) return { category: "infra", runtime: "docker" }
@@ -196,9 +187,8 @@ function staticStructure(packages: MonorepoPackageIntel[]): RaguIntelSnapshot["s
     {
       title: "Workspace & tooling",
       lines: [
-        "Root: bun workspaces (packages/*, console/*, sdk/js, slack, github)",
+        "Root: bun workspaces (packages/*, remote, sdk/js, github)",
         "turbo: typecheck, build (^build), ragu#test",
-        "sst.config.ts + infra/* → console/enterprise deploy",
         "script/* publish, release, ci; homebrew-tap; nix; containers/",
       ],
     },

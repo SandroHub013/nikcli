@@ -6,8 +6,6 @@ services:
     ports:
       - "4096:4096"
       - "2222:2222"
-    env_file:
-      - packages/slack/.env
     environment:
       - RAGU_SERVER_SSH_ENABLED=true
       - RAGU_SERVER_TAILSCALE_AUTH=${RAGU_SERVER_TAILSCALE_AUTH:-false}
@@ -22,26 +20,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-
-  slack-bot:
-    build:
-      context: .
-      dockerfile: packages/slack/Dockerfile
-    env_file:
-      - packages/slack/.env
-    environment:
-      # Always points to the ragu-serve container on the internal Docker network
-      - RAGU_URL=http://ragu-serve:4096
-    depends_on:
-      ragu-serve:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
 
   discord-bot:
     build:

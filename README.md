@@ -165,17 +165,14 @@ Bun workspace with centralized version catalog (`bunfig.toml`, `package.json`).
 | `packages/desktop`                           | Tauri desktop app                                                                             |
 | `packages/enterprise`                        | Enterprise SSO / multi-tenant build                                                           |
 | `packages/cloud`                             | Cloudflare worker (KV, Durable Objects)                                                       |
-| `packages/slack`                             | Slack Bolt adapter and health check                                                           |
 | `packages/script`                            | Shared build/release scripts                                                                  |
 | `packages/util`                              | Shared utilities (effect-zod, locale, log, retry, …)                                          |
 | `packages/llm`                               | Additional AI SDK adapters (e.g. GitLab)                                                      |
-| `packages/function`                          | FaaS helpers and queue workers                                                                |
 | `packages/inference` · `inference-dashboard` | Inference telemetry and dashboard                                                             |
-| `packages/console`                           | Administration panel                                                                          |
 | `packages/webrenderer` · `tui-image`         | Experimental TUI renderers                                                                    |
 | `packages/http-recorder`                     | HTTP recorder for test/replay                                                                 |
 | `packages/containers`                        | Container bundles for deploy                                                                  |
-| `homebrew-tap` · `infra` · `nix` · `script`  | Packaging and IaC                                                                             |
+| `homebrew-tap` · `nix` · `script`            | Packaging and IaC                                                                             |
 
 Internal layout of the core (`packages/ragu/src`):
 
@@ -572,7 +569,6 @@ First-class MCP server with OAuth auth (`packages/ragu/src/mcp`):
 
 `packages/ragu/src/chatbot/` orchestrates multi-platform bots thanks to `@chat-adapter/*`:
 
-- **Slack** (`packages/slack`, deployed on `slack.nikcli-ai.dev` via Wrangler).
 - **Discord Gateway** (`packages/discord`, `@ragu/discord`) — native Gateway bot. In the TUI, `/discord` (alias `/discord-setup`) walks through the bot token, invite URL, and start/stop. HTTP: `GET /discord`, `POST /discord/setup`, `/start`, `/stop`.
 - **Discord webhooks** (`@chat-adapter/discord`) — the Chat SDK adapter, managed with `/bots`.
 - **Microsoft Teams** (`@chat-adapter/teams`).
@@ -691,7 +687,7 @@ Useful repository files:
 
 - `AGENTS.md` — conventions for coding agents.
 - `STYLE_GUIDE.md` — code style (function-first, no `let`, avoid `else`, single-word naming, prefer `Bun.*`).
-- `CONTRIBUTING.md` · `SECURITY.md` · `DEPLOYMENT.md` · `SPEAK_SETUP.md` · `STATS.md`.
+- `CONTRIBUTING.md` · `SECURITY.md` · `SPEAK_SETUP.md` · `STATS.md`.
 - `install` — bash install script.
 - `Dockerfile` · `Dockerfile.serve` — container images.
 - `sst.config.ts` · `fly.toml` · `railway.toml` · `wrangler.toml` — deploy configs.

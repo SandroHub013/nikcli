@@ -40,25 +40,19 @@ COPY packages/tui-math/package.json packages/tui-math/
 COPY packages/browser-control/package.json packages/browser-control/
 COPY packages/computer-use/package.json packages/computer-use/
 
-# Stub package.json for workspace packages not built in this image. slack,
+# Stub package.json for workspace packages not built in this image.
 # identity, terminal-control and github sit outside packages/ragu's
 # workspace closure and nothing under src imports them; stubbing keeps the
 # workspace members that bun.lock knows about while skipping their npm deps
-# (@slack/bolt, jose, @octokit/*, @ffmpeg-installer/ffmpeg).
+# (jose, @octokit/*, @ffmpeg-installer/ffmpeg).
 RUN set -e; \
     for entry in \
       "packages/app:@ragu/app" \
       "packages/bench-tui:@ragu/bench-tui" \
       "packages/cloud:@ragu/cloud" \
       "packages/companion/ui:@ragu/companion-ui" \
-      "packages/console/app:@ragu/console-app" \
-      "packages/console/core:@ragu/console-core" \
-      "packages/console/function:@ragu/console-function" \
-      "packages/console/mail:@ragu/console-mail" \
-      "packages/console/resource:@ragu/console-resource" \
       "packages/desktop:@ragu/desktop" \
       "packages/enterprise:@ragu/enterprise" \
-      "packages/function:@ragu/function" \
       "packages/identity:@ragu/identity" \
       "packages/inference:@ragu/inference" \
       "packages/inference-dashboard:@ragu/inference-dashboard" \
@@ -76,7 +70,6 @@ RUN set -e; \
       "packages/plugin/plugins/smart-title:@ragu/plugin-smart-title" \
       "packages/remote/web-client:@ragu/remote-client" \
       "packages/sdk-next:@ragu/sdk-next" \
-      "packages/slack:@ragu/slack" \
       "packages/terminal-control:@ragu/terminal-control" \
       "packages/ui:@ragu/ui" \
       "packages/web:@ragu/web" \

@@ -3,7 +3,7 @@
  * brand's own SVG, never redrawn.
  *
  * `ragu-logo-dark.svg` next to this file is a byte-for-byte copy of
- * `packages/console/app/src/asset/brand/ragu-logo-dark.svg` (a test holds the
+ * `packages/ui/src/assets/brand/ragu-logo-dark.svg` (a test holds the
  * two to the same hash, so a change to the brand's file that is not copied here
  * fails). Its paths are made only of axis-aligned squares on a 60-unit grid; this
  * reads each subpath as one rectangle and refuses a path that is anything else,
