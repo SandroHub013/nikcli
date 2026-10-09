@@ -492,8 +492,6 @@ export const dict = {
   "settings.general.row.font.title": "글꼴",
   "settings.general.row.font.description": "코드 블록에 사용되는 고정폭 글꼴 사용자 지정",
 
-  "settings.general.row.releaseNotes.title": "릴리스 노트",
-  "settings.general.row.releaseNotes.description": "업데이트 후 '새 소식' 팝업 표시",
 
   "settings.updates.row.startup.title": "시작 시 업데이트 확인",
   "settings.updates.row.startup.description": "Ragu를 실행할 때 업데이트를 자동으로 확인합니다",

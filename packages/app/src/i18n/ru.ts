@@ -494,8 +494,6 @@ export const dict = {
   "settings.general.row.font.title": "Шрифт",
   "settings.general.row.font.description": "Настройте моноширинный шрифт для блоков кода",
 
-  "settings.general.row.releaseNotes.title": "Примечания к выпуску",
-  "settings.general.row.releaseNotes.description": 'Показывать всплывающие окна "Что нового" после обновлений',
 
   "settings.updates.row.startup.title": "Проверять обновления при запуске",
   "settings.updates.row.startup.description": "Автоматически проверять обновления при запуске Ragu",

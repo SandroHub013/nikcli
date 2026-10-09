@@ -518,8 +518,6 @@ export const dict = {
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Prilagodi monospace font koji se koristi u blokovima koda",
 
-  "settings.general.row.releaseNotes.title": "Bilješke o izdanju",
-  "settings.general.row.releaseNotes.description": 'Prikaži iskačuće prozore "Šta je novo" nakon ažuriranja',
 
   "settings.updates.row.startup.title": "Provjeri ažuriranja pri pokretanju",
   "settings.updates.row.startup.description": "Automatski provjerava ažuriranja kada se Ragu pokrene",

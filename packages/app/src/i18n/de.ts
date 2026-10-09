@@ -533,8 +533,6 @@ export const dict = {
   "settings.general.row.font.title": "Schriftart",
   "settings.general.row.font.description": "Die in Codeblöcken verwendete Monospace-Schriftart anpassen",
 
-  "settings.general.row.releaseNotes.title": "Versionshinweise",
-  "settings.general.row.releaseNotes.description": '"Neuigkeiten"-Pop-ups nach Updates anzeigen',
 
   "settings.updates.row.startup.title": "Beim Start nach Updates suchen",
   "settings.updates.row.startup.description": "Beim Start von Ragu automatisch nach Updates suchen",

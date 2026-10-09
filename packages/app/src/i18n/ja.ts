@@ -485,8 +485,6 @@ export const dict = {
   "settings.general.row.font.title": "フォント",
   "settings.general.row.font.description": "コードブロックで使用する等幅フォントをカスタマイズします",
 
-  "settings.general.row.releaseNotes.title": "リリースノート",
-  "settings.general.row.releaseNotes.description": "アップデート後に「新機能」ポップアップを表示",
 
   "settings.updates.row.startup.title": "起動時にアップデートを確認",
   "settings.updates.row.startup.description": "Ragu の起動時に自動でアップデートを確認します",

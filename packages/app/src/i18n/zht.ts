@@ -525,8 +525,6 @@ export const dict = {
   "settings.general.row.font.title": "字型",
   "settings.general.row.font.description": "自訂程式碼區塊使用的等寬字型",
 
-  "settings.general.row.releaseNotes.title": "發行說明",
-  "settings.general.row.releaseNotes.description": "更新後顯示「新功能」彈出視窗",
 
   "settings.updates.row.startup.title": "啟動時檢查更新",
   "settings.updates.row.startup.description": "在 Ragu 啟動時自動檢查更新",

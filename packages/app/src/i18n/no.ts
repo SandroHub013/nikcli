@@ -492,8 +492,6 @@ export const dict = {
   "settings.general.row.font.title": "Skrift",
   "settings.general.row.font.description": "Tilpass mono-skriften som brukes i kodeblokker",
 
-  "settings.general.row.releaseNotes.title": "Utgivelsesnotater",
-  "settings.general.row.releaseNotes.description": 'Vis "Hva er nytt"-vinduer etter oppdateringer',
 
   "settings.updates.row.startup.title": "Se etter oppdateringer ved oppstart",
   "settings.updates.row.startup.description": "Se automatisk etter oppdateringer når Ragu starter",

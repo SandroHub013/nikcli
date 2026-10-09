@@ -486,8 +486,6 @@ export const dict = {
   "settings.general.row.font.title": "الخط",
   "settings.general.row.font.description": "تخصيص الخط الأحادي المستخدم في كتل التعليمات البرمجية",
 
-  "settings.general.row.releaseNotes.title": "ملاحظات الإصدار",
-  "settings.general.row.releaseNotes.description": 'عرض نوافذ "ما الجديد" المنبثقة بعد التحديثات',
 
   "settings.updates.row.startup.title": "التحقق من التحديثات عند بدء التشغيل",
   "settings.updates.row.startup.description": "التحقق تلقائيًا من التحديثات عند تشغيل Ragu",

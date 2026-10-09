@@ -498,8 +498,6 @@ export const dict = {
   "settings.general.row.font.title": "Police",
   "settings.general.row.font.description": "Personnaliser la police mono utilisée dans les blocs de code",
 
-  "settings.general.row.releaseNotes.title": "Notes de version",
-  "settings.general.row.releaseNotes.description": 'Afficher des pop-ups "Quoi de neuf" après les mises à jour',
 
   "settings.updates.row.startup.title": "Vérifier les mises à jour au démarrage",
   "settings.updates.row.startup.description": "Vérifier automatiquement les mises à jour au lancement d'Ragu",

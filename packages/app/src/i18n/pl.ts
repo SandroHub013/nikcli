@@ -491,8 +491,6 @@ export const dict = {
   "settings.general.row.font.title": "Czcionka",
   "settings.general.row.font.description": "Dostosuj czcionkę mono używaną w blokach kodu",
 
-  "settings.general.row.releaseNotes.title": "Informacje o wydaniu",
-  "settings.general.row.releaseNotes.description": 'Pokazuj wyskakujące okna "Co nowego" po aktualizacjach',
 
   "settings.updates.row.startup.title": "Sprawdzaj aktualizacje przy uruchomieniu",
   "settings.updates.row.startup.description": "Automatycznie sprawdzaj aktualizacje podczas uruchamiania Ragu",

@@ -705,8 +705,6 @@ export const dict = {
   "settings.general.row.font.title": "Font",
   "settings.general.row.font.description": "Customise the mono font used in code blocks",
 
-  "settings.general.row.releaseNotes.title": "Release notes",
-  "settings.general.row.releaseNotes.description": "Show What's New popups after updates",
 
   "settings.updates.row.startup.title": "Check for updates on startup",
   "settings.updates.row.startup.description": "Automatically check for updates when Ragu launches",

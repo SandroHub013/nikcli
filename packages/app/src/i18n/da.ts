@@ -489,8 +489,6 @@ export const dict = {
   "settings.general.row.font.title": "Skrifttype",
   "settings.general.row.font.description": "Tilpas mono-skrifttypen brugt i kodeblokke",
 
-  "settings.general.row.releaseNotes.title": "Udgivelsesnoter",
-  "settings.general.row.releaseNotes.description": 'Vis "Hvad er nyt"-popups efter opdateringer',
 
   "settings.updates.row.startup.title": "Tjek for opdateringer ved opstart",
   "settings.updates.row.startup.description": "Tjek automatisk for opdateringer, når Ragu starter",

@@ -27,7 +27,6 @@ import { DialogProvider } from "@ragu/ui/context/dialog"
 import { CommandProvider } from "@/context/command"
 import { LanguageProvider, useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
-import { HighlightsProvider } from "@/context/highlights"
 import Layout from "@/pages/layout"
 import DirectoryLayout from "@/pages/directory-layout"
 import { ErrorPage } from "./pages/error"
@@ -124,12 +123,10 @@ export function AppInterface(props: { defaultUrl?: string; children?: JSX.Elemen
                         <NotificationProvider>
                           <ModelsProvider>
                             <CommandProvider>
-                              <HighlightsProvider>
-                                <Layout>
-                                  {props.children}
-                                  {routerProps.children}
-                                </Layout>
-                              </HighlightsProvider>
+                              <Layout>
+                                {props.children}
+                                {routerProps.children}
+                              </Layout>
                             </CommandProvider>
                           </ModelsProvider>
                         </NotificationProvider>

@@ -489,8 +489,6 @@ export const dict = {
   "settings.general.row.font.title": "Fonte",
   "settings.general.row.font.description": "Personalize a fonte monoespaçada usada em blocos de código",
 
-  "settings.general.row.releaseNotes.title": "Notas da versão",
-  "settings.general.row.releaseNotes.description": 'Mostrar pop-ups de "Novidades" após atualizações',
 
   "settings.updates.row.startup.title": "Verificar atualizações ao iniciar",
   "settings.updates.row.startup.description": "Verificar atualizações automaticamente quando o Ragu iniciar",

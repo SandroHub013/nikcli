@@ -494,8 +494,6 @@ export const dict = {
   "settings.general.row.font.title": "ฟอนต์",
   "settings.general.row.font.description": "ปรับแต่งฟอนต์โมโนที่ใช้ในบล็อกโค้ด",
 
-  "settings.general.row.releaseNotes.title": "บันทึกการอัปเดต",
-  "settings.general.row.releaseNotes.description": "แสดงป๊อปอัพ What's New หลังจากอัปเดต",
   "font.option.ibmPlexMono": "IBM Plex Mono",
   "font.option.cascadiaCode": "Cascadia Code",
   "font.option.firaCode": "Fira Code",
