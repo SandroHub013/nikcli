@@ -23,7 +23,9 @@ describe("release automation", () => {
 
   it("keeps the GitHub comment runner executable and mention filters exact", async () => {
     const action = await readRoot("github/action.yml")
-    const command = await readRoot("packages/ragu/src/cli/handlers/github/install.ts")
+    // `ragu github install`, which wrote this workflow for users, went with Nik's App backend; the
+    // repository's own workflow keeps the exact mention filters.
+    const command = await readRoot(".github/workflows/ragu.yml")
 
     expect(action).toContain('bun "$GITHUB_ACTION_PATH/index.ts"')
     expect(action).not.toContain("ragu github run")
