@@ -50,7 +50,7 @@ jobs:
       - uses: ./.github/actions/setup-bun
 
       - name: Install ragu
-        run: curl -fsSL https://nikcli-ai.dev/install | bash
+        run: bash ./install
 
       - name: Get PR details
         id: pr-details

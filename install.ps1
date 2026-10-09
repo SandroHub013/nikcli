@@ -1,7 +1,7 @@
 # Cache-bust: 2026-08-03T00-00-00Z
 # nikcli installer for Windows (PowerShell 5.1+ / pwsh 7+)
 #
-#   irm https://nikcli-ai.dev/install.ps1 | iex
+#   .\install.ps1
 #
 # Configuration (env vars, because `iex` cannot forward parameters):
 #   $env:NIKCLI_VERSION      install a specific version instead of the latest
@@ -105,13 +105,11 @@ if ($requested) {
   Step "Latest version: $version"
 }
 
-# GitHub first: nikcli-ai.dev does not proxy release assets today, and the bash
-# installer keeps it only as a legacy primary.
+# Release assets come from GitHub releases.
 $urls = @()
 foreach ($candidate in $targets) {
   $candidateFile = "$AssetPrefix-$candidate.zip"
   $urls += "https://github.com/$Repo/releases/download/$tag/$candidateFile"
-  $urls += "https://nikcli-ai.dev/releases/download/$tag/$candidateFile"
 }
 
 # ---------------------------------------------------------------------------
@@ -403,6 +401,4 @@ Write-Host ""
 Write-Host "   Next steps"
 Write-Host "   cd <project>          # open your project"
 Write-Host "   nikcli                # start nikcli"
-Write-Host ""
-Write-Host "   Docs: https://nikcli-ai.dev/docs"
 Write-Host ""

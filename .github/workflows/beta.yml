@@ -27,7 +27,7 @@ jobs:
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Install ragu
-        run: bun i -g nikcli@latest || curl -fsSL https://nikcli-ai.dev/install | bash || true
+        run: bun i -g nikcli@latest || bash ./install || true
 
       - name: Sync beta branch
         if: hashFiles('script/beta.ts') != ''

@@ -24,7 +24,7 @@ jobs:
             host: ubuntu-latest
             workdir: .
             command: |
-              git config --global user.email "bot@nikcli-ai.dev"
+              git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
               git config --global user.name "ragu"
               bun turbo typecheck
     runs-on: ${{ matrix.settings.host }}
