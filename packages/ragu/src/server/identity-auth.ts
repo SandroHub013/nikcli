@@ -6,23 +6,10 @@ import { AccountDB } from "@/account/db"
 import { runPromiseWithLayer } from "@/effect"
 import { UserDB } from "@/user/users"
 
-const DEFAULT_ISSUER = "https://auth.nikcli-ai.dev"
-
-/**
- * The server is the single trust boundary in
- * `specs/effect-tui/12-identity-onboarding-auth.md`: it verifies the issuer JWT
- * and the TUI/SDK/CLI consume its typed answers rather than re-validating the
- * signature themselves. That spec turns login/refresh/expiry/revocation into
- * one state machine on top of this verifier; it does not replace it.
- */
 export function identityVerifierOptions(): VerifyAccessTokenOptions | undefined {
-  // Default-on: every ragu server accepts issuer JWTs. Verification is
-  // lazy — the JWKS is only fetched when a JWT-shaped bearer arrives, so
-  // offline/local servers with no OAuth clients never touch the network.
-  // Set RAGU_AUTH_ISSUER=off (or 0/false) to disable entirely.
   const raw = Flag.authIssuer()?.trim()
-  if (raw && ["off", "0", "false", "none"].includes(raw.toLowerCase())) return
-  const issuer = raw || DEFAULT_ISSUER
+  if (!raw || ["off", "0", "false", "none"].includes(raw.toLowerCase())) return
+  const issuer = raw
   const jwksUrl = Flag.authJwksUrl() ?? new URL("/.well-known/jwks.json", issuer).toString()
   return {
     issuer,

@@ -500,51 +500,7 @@ const SpecAuth = Spec.make("auth", {
   commands: [SpecAuthLogin, SpecAuthLogout, SpecAuthList],
 })
 
-const SpecAccountLogin = Spec.make("login", {
-  description: "log in with device code",
-  params: {
-    server: Flag.string("server").pipe(Flag.withAlias("s"), Flag.withDescription("Auth server URL"), Flag.optional),
-  },
-})
 
-const SpecAccountLogout = Spec.make("logout", {
-  description: "log out from an account",
-  params: {
-    "account-id": Argument.string("account-id").pipe(
-      Argument.withDescription("Account ID to log out from"),
-      Argument.optional,
-    ),
-  },
-})
-
-const SpecAccountList = Spec.make("list", {
-  description: "list accounts",
-})
-
-const SpecAccountSwitch = Spec.make("switch", {
-  description: "switch active account",
-  params: {
-    "account-id": Argument.string("account-id").pipe(
-      Argument.withDescription("Account ID to switch to"),
-      Argument.optional,
-    ),
-  },
-})
-
-const SpecAccountOrgs = Spec.make("orgs", {
-  description: "list organizations for an account",
-  params: {
-    "account-id": Argument.string("account-id").pipe(
-      Argument.withDescription("Account ID to list orgs for (defaults to active)"),
-      Argument.optional,
-    ),
-  },
-})
-
-const SpecAccount = Spec.make("account", {
-  description: "manage accounts",
-  commands: [SpecAccountLogin, SpecAccountLogout, SpecAccountList, SpecAccountSwitch, SpecAccountOrgs],
-})
 
 const SpecArtifactLogin = Spec.make("login", {
   description: "verify the active CLI user used for artifact publishing",
@@ -1615,7 +1571,6 @@ export const Commands = Spec.make("ragu", {
     SpecApi,
     SpecDebug,
     SpecAuth,
-    SpecAccount,
     SpecArtifact,
     SpecAgent,
     SpecUpgrade,

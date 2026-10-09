@@ -72,13 +72,6 @@ export const Handlers = Runtime.handlers(Commands, {
     logout: () => import("./handlers/auth/logout"),
     list: () => import("./handlers/auth/list"),
   },
-  account: {
-    login: () => import("./handlers/account/login"),
-    logout: () => import("./handlers/account/logout"),
-    list: () => import("./handlers/account/list"),
-    switch: () => import("./handlers/account/switch"),
-    orgs: () => import("./handlers/account/orgs"),
-  },
   artifact: {
     login: () => import("./handlers/artifact/login"),
     logout: () => import("./handlers/artifact/logout"),

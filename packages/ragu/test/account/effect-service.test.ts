@@ -42,7 +42,7 @@ describe("Account.Service", () => {
       }),
     )
 
-    expect(result.config.serverUrl).toContain("https://")
+    expect(result.config.serverUrl).toBe("")
     expect(result.list).toEqual([])
     expect(result.active).toBeUndefined()
     expect(result.removed).toBe(false)
@@ -75,8 +75,8 @@ describe("Account.Service", () => {
       const result = await runAccount(
         Effect.gen(function* () {
           const account = yield* Account.Service
-          const first = yield* account.poll("device-code-1" as never)
-          const second = yield* account.poll("device-code-2" as never)
+          const first = yield* account.poll("device-code-1" as never, { serverUrl: "https://issuer.test" })
+          const second = yield* account.poll("device-code-2" as never, { serverUrl: "https://issuer.test" })
           return {
             first,
             second,
@@ -87,10 +87,10 @@ describe("Account.Service", () => {
       )
 
       expect(requests).toEqual([
-        "https://auth.nikcli-ai.dev/oauth/device/token",
-        "https://auth.nikcli-ai.dev/userinfo",
-        "https://auth.nikcli-ai.dev/oauth/device/token",
-        "https://auth.nikcli-ai.dev/userinfo",
+        "https://issuer.test/oauth/device/token",
+        "https://issuer.test/userinfo",
+        "https://issuer.test/oauth/device/token",
+        "https://issuer.test/userinfo",
       ])
       expect(result.second.accountID).toBe(result.first.accountID)
       expect(result.accounts).toHaveLength(1)
@@ -107,8 +107,8 @@ describe("Account.Service", () => {
       Response.json({
         device_code: "device-code",
         user_code: "1234-5678",
-        verification_url: "https://auth.nikcli-ai.dev/device",
-        verification_uri_complete: "https://auth.nikcli-ai.dev/device?user_code=1234-5678",
+        verification_url: "https://issuer.test/device",
+        verification_uri_complete: "https://issuer.test/device?user_code=1234-5678",
         interval: 5,
         expires_in: 600,
       })) as typeof fetch
@@ -117,10 +117,10 @@ describe("Account.Service", () => {
       const start = await runAccount(
         Effect.gen(function* () {
           const account = yield* Account.Service
-          return yield* account.login()
+          return yield* account.login({ serverUrl: "https://issuer.test" })
         }),
       )
-      expect(start.verificationUrlComplete).toBe("https://auth.nikcli-ai.dev/device?user_code=1234-5678")
+      expect(start.verificationUrlComplete).toBe("https://issuer.test/device?user_code=1234-5678")
       expect(start.expiresAt).toBeGreaterThan(Date.now())
     } finally {
       globalThis.fetch = originalFetch
@@ -133,7 +133,7 @@ describe("Account.Service", () => {
       Response.json({
         device_code: "device-code",
         user_code: "1234-5678",
-        verification_url: "https://auth.nikcli-ai.dev/device",
+        verification_url: "https://issuer.test/device",
         interval: 5,
         expires_in: 600,
       })) as typeof fetch
@@ -142,10 +142,10 @@ describe("Account.Service", () => {
       const start = await runAccount(
         Effect.gen(function* () {
           const account = yield* Account.Service
-          return yield* account.login()
+          return yield* account.login({ serverUrl: "https://issuer.test" })
         }),
       )
-      expect(start.verificationUrlComplete).toBe("https://auth.nikcli-ai.dev/device?user_code=1234-5678")
+      expect(start.verificationUrlComplete).toBe("https://issuer.test/device?user_code=1234-5678")
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -161,7 +161,7 @@ describe("Account.Service", () => {
         runAccount(
           Effect.gen(function* () {
             const account = yield* Account.Service
-            return yield* account.login()
+            return yield* account.login({ serverUrl: "https://issuer.test" })
           }),
         ),
       ).rejects.toThrow(/unexpected device-code response/)
@@ -196,7 +196,7 @@ describe("Account.Service", () => {
           const account = yield* Account.Service
           // A 1s lifetime keeps the retry backoff short; the deadline is only
           // checked after a poll returns a verdict.
-          return yield* account.poll("device-code" as never, { expiresIn: 1 })
+          return yield* account.poll("device-code" as never, { serverUrl: "https://issuer.test", expiresIn: 1 })
         }),
       )
       expect(attempts).toBe(3)
@@ -215,7 +215,7 @@ describe("Account.Service", () => {
         runAccount(
           Effect.gen(function* () {
             const account = yield* Account.Service
-            return yield* account.poll("device-code" as never)
+            return yield* account.poll("device-code" as never, { serverUrl: "https://issuer.test" })
           }),
         ),
       ).rejects.toThrow(/denied in the browser/)
@@ -233,6 +233,7 @@ describe("Account.Service", () => {
         Effect.gen(function* () {
           const account = yield* Account.Service
           return yield* account.poll("cancelled-device-code" as never, {
+            serverUrl: "https://issuer.test",
             signal: controller.signal,
           })
         }),
@@ -241,11 +242,7 @@ describe("Account.Service", () => {
   })
 
   /**
-   * `auth.nikcli-ai.dev` serves no `/api/user/orgs` and has no orgs table, so
-   * the only answer this call ever got in production was a 404 — which the
-   * service raised as `AccountFetchOrgs` and `ragu account orgs` printed as
-   * "Failed to fetch orgs: 404 404 Not Found". An issuer with no organizations
-   * endpoint has no organizations, which is an empty list.
+   * An issuer without an organizations endpoint has no organizations, which is an empty list.
    */
   it("reads an issuer without an organizations endpoint as having none", async () => {
     const originalFetch = globalThis.fetch
@@ -268,7 +265,7 @@ describe("Account.Service", () => {
       const orgs = await runAccount(
         Effect.gen(function* () {
           const account = yield* Account.Service
-          const session = yield* account.poll("device-code" as never)
+          const session = yield* account.poll("device-code" as never, { serverUrl: "https://issuer.test" })
           return yield* account.orgs(session.accountID)
         }),
       )
@@ -300,7 +297,7 @@ describe("Account.Service", () => {
         runAccount(
           Effect.gen(function* () {
             const account = yield* Account.Service
-            const session = yield* account.poll("device-code" as never)
+            const session = yield* account.poll("device-code" as never, { serverUrl: "https://issuer.test" })
             return yield* account.orgs(session.accountID)
           }),
         ),
