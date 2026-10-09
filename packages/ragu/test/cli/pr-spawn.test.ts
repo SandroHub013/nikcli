@@ -5,10 +5,9 @@ import path from "path"
 const root = path.resolve(import.meta.dir, "../..")
 
 describe("PrCommand subprocess wiring", () => {
-  it("uses process.execPath for import and TUI re-exec", async () => {
+  it("uses process.execPath for the TUI re-exec", async () => {
     const source = await fs.readFile(path.join(root, "src/cli/handlers/pr.ts"), "utf8")
     expect(source).toContain("process.execPath")
-    expect(source).toContain('"import"')
     expect(source).not.toMatch(/spawn\(\s*["']ragu["']/)
     expect(source).toContain("process.argv.slice(1, 2)")
   })

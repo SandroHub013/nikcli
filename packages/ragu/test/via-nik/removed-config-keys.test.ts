@@ -59,6 +59,8 @@ const REMOVED: Record<string, unknown> = {
   analytics: { share: true, endpoint: "https://dashboard.nikcli-ai.dev/api/community/report" },
   teleport: { url: "https://my-server.up.railway.app", token: "mobile-token" },
   autoupdate: true,
+  share: "auto",
+  autoshare: true,
 }
 
 describe("config keys of Nik's removed services", () => {
@@ -68,4 +70,12 @@ describe("config keys of Nik's removed services", () => {
       expect(config.theme).toBe("kept")
       expect(key in config).toBe(false)
     })
+
+  it("the keybinds of removed features are accepted and ignored", async () => {
+    const config = await loaded({ keybinds: { session_share: "<leader>s", session_unshare: "none", session_new: "<leader>n" } })
+    const keybinds = config.keybinds as Record<string, unknown>
+    expect(keybinds.session_new).toBe("<leader>n")
+    expect("session_share" in keybinds).toBe(false)
+    expect("session_unshare" in keybinds).toBe(false)
+  })
 })

@@ -79,10 +79,6 @@ export const dict = {
   "command.session.compact.description": "セッションを要約してコンテキストサイズを削減",
   "command.session.fork": "メッセージからフォーク",
   "command.session.fork.description": "以前のメッセージから新しいセッションを作成",
-  "command.session.share": "セッションを共有",
-  "command.session.share.description": "このセッションを共有しURLをクリップボードにコピー",
-  "command.session.unshare": "セッションの共有を停止",
-  "command.session.unshare.description": "このセッションの共有を停止",
 
   "palette.search.placeholder": "ファイル、コマンド、セッションを検索",
   "palette.empty": "結果が見つかりません",
@@ -342,16 +338,6 @@ export const dict = {
   "toast.file.listFailed.title": "ファイル一覧の取得に失敗しました",
   "toast.context.noLineSelection.title": "行が選択されていません",
   "toast.context.noLineSelection.description": "まずファイルタブで行範囲を選択してください。",
-  "toast.session.share.copyFailed.title": "URLのコピーに失敗しました",
-  "toast.session.share.success.title": "セッションを共有しました",
-  "toast.session.share.success.description": "共有URLをクリップボードにコピーしました！",
-  "toast.session.share.failed.title": "セッションの共有に失敗しました",
-  "toast.session.share.failed.description": "セッションの共有中にエラーが発生しました",
-
-  "toast.session.unshare.success.title": "セッションの共有を解除しました",
-  "toast.session.unshare.success.description": "セッションの共有解除に成功しました！",
-  "toast.session.unshare.failed.title": "セッションの共有解除に失敗しました",
-  "toast.session.unshare.failed.description": "セッションの共有解除中にエラーが発生しました",
 
   "toast.session.listFailed.title": "{{project}}のセッション読み込みに失敗しました",
 
@@ -448,19 +434,7 @@ export const dict = {
   "status.popover.tab.plugins": "プラグイン",
   "status.popover.action.manageServers": "サーバーを管理",
 
-  "session.share.popover.title": "ウェブで公開",
-  "session.share.popover.description.shared":
-    "このセッションはウェブで公開されています。リンクを知っている人なら誰でもアクセスできます。",
-  "session.share.popover.description.unshared":
-    "セッションをウェブで公開します。リンクを知っている人なら誰でもアクセスできるようになります。",
-  "session.share.action.share": "共有",
-  "session.share.action.publish": "公開",
-  "session.share.action.publishing": "公開中...",
-  "session.share.action.unpublish": "非公開にする",
-  "session.share.action.unpublishing": "非公開にしています...",
-  "session.share.action.view": "表示",
   "session.share.copy.copied": "コピーしました",
-  "session.share.copy.copyLink": "リンクをコピー",
 
   "lsp.tooltip.none": "LSPサーバーなし",
   "lsp.label.connected": "{{count}} LSP",

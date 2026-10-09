@@ -2362,7 +2362,6 @@ export type EventTuiCommandExecute = {
     command:
       | "session.list"
       | "session.new"
-      | "session.share"
       | "session.interrupt"
       | "session.compact"
       | "session.page.up"
@@ -3881,8 +3880,8 @@ export type Config = {
   snapshot?: boolean | undefined
   sync?: { url?: string | undefined; token?: string | undefined; autostart?: boolean | undefined } | undefined
   analytics?: unknown | undefined
-  share?: "manual" | "auto" | "disabled" | undefined
-  autoshare?: boolean | undefined
+  share?: unknown | undefined
+  autoshare?: unknown | undefined
   autoupdate?: unknown | undefined
   disabled_providers?: Array<string> | undefined
   enabled_providers?: Array<string> | undefined
@@ -4158,8 +4157,8 @@ export type MobileConfigInfo = {
   snapshot?: boolean | undefined
   sync?: { url?: string | undefined; token?: string | undefined; autostart?: boolean | undefined } | undefined
   analytics?: unknown | undefined
-  share?: "manual" | "auto" | "disabled" | undefined
-  autoshare?: boolean | undefined
+  share?: unknown | undefined
+  autoshare?: unknown | undefined
   autoupdate?: unknown | undefined
   disabled_providers?: Array<string> | undefined
   enabled_providers?: Array<string> | undefined
@@ -4500,14 +4499,6 @@ export type MessageWithParts = { info: Message1; parts: Array<Part1> }
 export type MessageList = Array<{ info: Message1; parts: Array<Part1> }>
 
 export type SessionPromptResponse = { info: Message1; parts: Array<Part1> }
-
-export type ShareData = Array<
-  | { type: "session"; data: Session2 }
-  | { type: "message"; data: Message1 }
-  | { type: "part"; data: Part1 }
-  | { type: "session_diff"; data: Array<FileDiff2> }
-  | { type: "model"; data: Array<Model> }
->
 
 export type EventMessagePartUpdated = { type: "message.part.updated"; properties: { part: Part2; delta?: string } }
 
@@ -6090,8 +6081,8 @@ export type ConfigUpdateInput = {
         }
       | undefined
     readonly analytics?: unknown | undefined
-    readonly share?: "manual" | "auto" | "disabled" | undefined
-    readonly autoshare?: boolean | undefined
+    readonly share?: unknown | undefined
+    readonly autoshare?: unknown | undefined
     readonly autoupdate?: unknown | undefined
     readonly disabled_providers?: ReadonlyArray<string> | undefined
     readonly enabled_providers?: ReadonlyArray<string> | undefined
@@ -8161,14 +8152,6 @@ export type SessionUnrevertInput = { readonly sessionID: { readonly sessionID: s
 
 export type SessionUnrevertOutput = Session2
 
-export type SessionShareInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
-
-export type SessionShareOutput = Session2
-
-export type SessionUnshareInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
-
-export type SessionUnshareOutput = Session2
-
 export type SessionSummarizeInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly providerID: SessionSummarizePayload["providerID"]
@@ -8854,22 +8837,6 @@ export type SessionPromptPromptAsyncInput = {
 }
 
 export type SessionPromptPromptAsyncOutput = void
-
-export type ShareShortInput = { readonly shareID: { readonly shareID: string }["shareID"] }
-
-export type ShareShortOutput = { readonly body: void; readonly headers: { readonly location: string } }
-
-export type SharePageInput = { readonly shareID: { readonly shareID: string }["shareID"] }
-
-export type SharePageOutput = ShareData
-
-export type ShareApiInput = { readonly shareID: { readonly shareID: string }["shareID"] }
-
-export type ShareApiOutput = ShareData
-
-export type ShareDataInput = { readonly shareID: { readonly shareID: string }["shareID"] }
-
-export type ShareDataOutput = ShareData
 
 export type EventsSubscribeOutput = Event
 

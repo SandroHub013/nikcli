@@ -79,10 +79,6 @@ export const dict = {
   "command.session.compact.description": "Podsumuj sesję, aby zmniejszyć rozmiar kontekstu",
   "command.session.fork": "Rozwidlij od wiadomości",
   "command.session.fork.description": "Utwórz nową sesję od poprzedniej wiadomości",
-  "command.session.share": "Udostępnij sesję",
-  "command.session.share.description": "Udostępnij tę sesję i skopiuj URL do schowka",
-  "command.session.unshare": "Przestań udostępniać sesję",
-  "command.session.unshare.description": "Zatrzymaj udostępnianie tej sesji",
 
   "palette.search.placeholder": "Szukaj plików, poleceń i sesji",
   "palette.empty": "Brak wyników",
@@ -348,16 +344,6 @@ export const dict = {
   "toast.file.listFailed.title": "Nie udało się wyświetlić listy plików",
   "toast.context.noLineSelection.title": "Brak zaznaczenia linii",
   "toast.context.noLineSelection.description": "Najpierw wybierz zakres linii w zakładce pliku.",
-  "toast.session.share.copyFailed.title": "Nie udało się skopiować URL do schowka",
-  "toast.session.share.success.title": "Sesja udostępniona",
-  "toast.session.share.success.description": "Link udostępniania skopiowany do schowka!",
-  "toast.session.share.failed.title": "Nie udało się udostępnić sesji",
-  "toast.session.share.failed.description": "Wystąpił błąd podczas udostępniania sesji",
-
-  "toast.session.unshare.success.title": "Zatrzymano udostępnianie sesji",
-  "toast.session.unshare.success.description": "Udostępnianie sesji zostało pomyślnie zatrzymane!",
-  "toast.session.unshare.failed.title": "Nie udało się zatrzymać udostępniania sesji",
-  "toast.session.unshare.failed.description": "Wystąpił błąd podczas zatrzymywania udostępniania sesji",
 
   "toast.session.listFailed.title": "Nie udało się załadować sesji dla {{project}}",
 
@@ -455,19 +441,7 @@ export const dict = {
   "status.popover.tab.plugins": "Wtyczki",
   "status.popover.action.manageServers": "Zarządzaj serwerami",
 
-  "session.share.popover.title": "Opublikuj w sieci",
-  "session.share.popover.description.shared":
-    "Ta sesja jest publiczna w sieci. Jest dostępna dla każdego, kto posiada link.",
-  "session.share.popover.description.unshared":
-    "Udostępnij sesję publicznie w sieci. Będzie dostępna dla każdego, kto posiada link.",
-  "session.share.action.share": "Udostępnij",
-  "session.share.action.publish": "Opublikuj",
-  "session.share.action.publishing": "Publikowanie...",
-  "session.share.action.unpublish": "Cofnij publikację",
-  "session.share.action.unpublishing": "Cofanie publikacji...",
-  "session.share.action.view": "Widok",
   "session.share.copy.copied": "Skopiowano",
-  "session.share.copy.copyLink": "Kopiuj link",
 
   "lsp.tooltip.none": "Brak serwerów LSP",
   "lsp.label.connected": "{{count}} LSP",

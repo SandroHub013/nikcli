@@ -625,12 +625,13 @@ describe("Session HttpApi bridge", () => {
     expect(String(body.data.message)).toContain("ses_does_not_exist")
   })
 
-  it("bridges share/unshare/summarize and returns the declared 404 for a missing session", async () => {
+  it("bridges summarize, no longer share/unshare, and returns the declared 404 for a missing session", async () => {
     const directory = await makeProjectDir()
     await request("/session", directory)
 
-    expect(HttpApiBridge.supports("/session/ses_x/share", "POST")).toBe(true)
-    expect(HttpApiBridge.supports("/session/ses_x/share", "DELETE")).toBe(true)
+    // Sharing is gone (it published on Nik's share service).
+    expect(HttpApiBridge.supports("/session/ses_x/share", "POST")).toBe(false)
+    expect(HttpApiBridge.supports("/session/ses_x/share", "DELETE")).toBe(false)
     expect(HttpApiBridge.supports("/session/ses_x/summarize", "POST")).toBe(true)
 
     // summarize hits session.get first — a missing session is the declared 404

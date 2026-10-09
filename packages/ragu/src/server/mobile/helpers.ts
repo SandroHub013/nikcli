@@ -1269,12 +1269,7 @@ export async function createSessionWorktreeContext(hostDirectory: string): Promi
 }
 
 export function defaultPullRequestBody(session: Session.Info) {
-  return [
-    `Generated from mobile session \`${session.id}\`.`,
-    session.share?.url ? `Session share: ${session.share.url}` : "",
-  ]
-    .filter(Boolean)
-    .join("\n\n")
+  return `Generated from mobile session \`${session.id}\`.`
 }
 
 export function toHeadersObject(headers: Headers) {

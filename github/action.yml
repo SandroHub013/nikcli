@@ -13,10 +13,6 @@ inputs:
     description: "Agent to use. Must be a primary agent. Falls back to default_agent from config or 'build' if not found."
     required: false
 
-  share:
-    description: "Share the ragu session (defaults to true for public repos)"
-    required: false
-
   prompt:
     description: "Custom prompt to override the default prompt"
     required: false
@@ -59,7 +55,6 @@ runs:
         GITHUB_ACTION_PATH: ${{ github.action_path }}
         MODEL: ${{ inputs.model }}
         AGENT: ${{ inputs.agent }}
-        SHARE: ${{ inputs.share }}
         PROMPT: ${{ inputs.prompt }}
         USE_GITHUB_TOKEN: ${{ inputs.use_github_token }}
         MENTIONS: ${{ inputs.mentions }}

@@ -7,12 +7,12 @@ import os from "os"
 import path from "path"
 
 /**
- * The three top-level legacy keys, through the real loader.
+ * The top-level legacy keys, through the real loader.
  *
  * `test/config/legacy-keys.test.ts` covers the mappings that are pure — the
  * agent schema's `.transform()` and `Policy.legacyProviderStatements`. These
- * three (`mode` → `agent`, top-level `tools` → `permission`, `autoshare` →
- * `share`) run inside the file-loading pipeline, so they cannot be reached by
+ * two (`mode` → `agent`, top-level `tools` → `permission`) run inside the
+ * file-loading pipeline, so they cannot be reached by
  * parsing a literal: they need a document on disk and an instance to read it.
  * That is the gap `specs/v2/config.md`'s `Missing` row named, and this file is
  * it.
@@ -84,31 +84,6 @@ async function loadGlobal(document: Record<string, unknown>) {
     ),
   )
 }
-
-describe("autoshare → share", () => {
-  it('maps `autoshare: true` to `share: "auto"`', async () => {
-    const config = await loadGlobal({ autoshare: true })
-
-    expect(config.share).toBe("auto")
-  })
-
-  it("leaves an explicit `share` alone", async () => {
-    // The guard is `!result.share`, so this is the half that breaks if someone
-    // simplifies the condition away: a user who set both would silently get the
-    // legacy answer.
-    const config = await loadGlobal({ autoshare: true, share: "manual" })
-
-    expect(config.share).toBe("manual")
-  })
-
-  it("maps nothing when `autoshare` is false", async () => {
-    // `autoshare: false` is not "share manually", it is the absence of the
-    // opt-in — mapping it would invent a setting the user never chose.
-    const config = await loadGlobal({ autoshare: false })
-
-    expect(config.share).toBeUndefined()
-  })
-})
 
 describe("mode → agent", () => {
   it("moves a legacy mode into `agent` and marks it primary", async () => {

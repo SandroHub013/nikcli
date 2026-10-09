@@ -75,17 +75,11 @@ describe("HttpApi security contract", () => {
       .map((row) => `${row.method} ${row.path}`)
       .sort()
 
-    // Two sources of "reachable without credentials", and both are here:
-    // `Auth.isPublicPath` (health probe, browser sign-in, account creation)
-    // and `PublicRoutes.publicRequest`, which answers the share routes ahead
-    // of authentication entirely.
+    // `Auth.isPublicPath` (health probe, browser sign-in, account creation) is
+    // the one source of "reachable without credentials" in the contract.
     expect(open).toEqual([
       "GET /account",
-      "GET /api/share/{shareID}",
-      "GET /api/share/{shareID}/data",
       "GET /global/health",
-      "GET /s/{shareID}",
-      "GET /share/{shareID}",
       "POST /account/login",
       "POST /account/login/complete",
       "POST /user/login",

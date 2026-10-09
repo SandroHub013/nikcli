@@ -5,6 +5,43 @@ import fs from "fs/promises"
 import path from "path"
 import { withIsolatedDatabase } from "../helpers/sqlite"
 
+/**
+ * Sharing is gone (brief ragu-via-servizi-nik) and its repository with it. The `session_share` and `local_share`
+ * tables and their migration stay, so these tests read and write the rows in SQL.
+ */
+async function shareTables() {
+  const { Database } = await import("@/database/database")
+  const db = () => Database.syncNative()
+  const data = (sql: string, id: string) => {
+    const row = db().query(sql).get(id) as { data: string } | null
+    return row ? JSON.parse(row.data) : undefined
+  }
+  return {
+    get: (sessionID: string) => data("SELECT data FROM session_share WHERE session_id = ?", sessionID),
+    getLocal: (id: string) => data("SELECT data FROM local_share WHERE id = ?", id),
+    put: (sessionID: string, share: { url: string; mode?: string; id?: string }) =>
+      db().run("INSERT OR REPLACE INTO session_share (session_id, mode, data) VALUES (?, ?, ?)", [
+        sessionID,
+        share.mode ?? null,
+        JSON.stringify(share),
+      ]),
+    putLocal: (share: {
+      id: string
+      sessionID: string
+      url: string
+      time: { created: number; updated: number }
+      items: Record<string, unknown>
+    }) =>
+      db().run("INSERT OR REPLACE INTO local_share (id, session_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)", [
+        share.id,
+        share.sessionID,
+        JSON.stringify(share),
+        share.time.created,
+        share.time.updated,
+      ]),
+  }
+}
+
 function missionDef(id = "mission_sql_1") {
   return {
     id,
@@ -121,15 +158,15 @@ describe("domain SQL (missions, monitors, shares, artifacts)", () => {
       const { Database } = await import("@/database/database")
       const { MissionRepo } = await import("@/mission/repo")
       const { MonitorRepo } = await import("@/monitor/repo")
-      const { ShareRepo } = await import("@/share/repo")
+      const shares = await shareTables()
 
       Database.syncDb()
 
       expect(Effect.runSync(MissionRepo.get("proj_sql", def.id))?.name).toBe("sql mission")
       expect(Effect.runSync(MissionRepo.listExecs("proj_sql", def.id)).map((row) => row.id)).toEqual([exec.id])
       expect(Effect.runSync(MonitorRepo.get(monitor.sessionID, monitor.id))?.title).toBe("echo")
-      expect(Effect.runSync(ShareRepo.get(local.sessionID))?.url).toBe(share.url)
-      expect(Effect.runSync(ShareRepo.getLocal(local.id))?.sessionID).toBe(local.sessionID)
+      expect(shares.get(local.sessionID)?.url).toBe(share.url)
+      expect(shares.getLocal(local.id)?.sessionID).toBe(local.sessionID)
       // The artifact module is gone (brief ragu-via-servizi-nik); the migration still moves the old rows to SQL.
       const artifactRows = Database.syncNative()
         .query("SELECT id, data FROM artifact WHERE session_id = ?")
@@ -164,7 +201,7 @@ describe("domain SQL (missions, monitors, shares, artifacts)", () => {
       const { Database } = await import("@/database/database")
       const { MissionRepo } = await import("@/mission/repo")
       const { MonitorRepo } = await import("@/monitor/repo")
-      const { ShareRepo } = await import("@/share/repo")
+      const shares = await shareTables()
       Database.syncDb()
 
       const def = missionDef("mission_no_json")
@@ -191,18 +228,14 @@ describe("domain SQL (missions, monitors, shares, artifacts)", () => {
           time: { created: 1, updated: 1 },
         }),
       )
-      Effect.runSync(
-        ShareRepo.put("ses_no_json", { url: "http://local/share/no-json", mode: "local", id: "share_no_json" }),
-      )
-      Effect.runSync(
-        ShareRepo.putLocal({
+      shares.put("ses_no_json", { url: "http://local/share/no-json", mode: "local", id: "share_no_json" })
+      shares.putLocal({
           id: "share_no_json",
           sessionID: "ses_no_json",
           url: "http://local/share/no-json",
           time: { created: 1, updated: 1 },
           items: {},
-        }),
-      )
+        })
 
       const storage = path.join(home, "data", "storage")
       expect(existsSync(storage)).toBe(false)
@@ -214,7 +247,7 @@ describe("domain SQL (missions, monitors, shares, artifacts)", () => {
       const { Database } = await import("@/database/database")
       const { MissionRepo } = await import("@/mission/repo")
       const { MonitorRepo } = await import("@/monitor/repo")
-      const { ShareRepo } = await import("@/share/repo")
+      const shares = await shareTables()
       Database.syncDb()
 
       const def = missionDef("mission_trap")
@@ -241,16 +274,14 @@ describe("domain SQL (missions, monitors, shares, artifacts)", () => {
           time: { created: 1, updated: 1 },
         }),
       )
-      Effect.runSync(ShareRepo.put("ses_trap", { url: "http://sql/share", mode: "local", id: "share_sql_trap" }))
-      Effect.runSync(
-        ShareRepo.putLocal({
+      shares.put("ses_trap", { url: "http://sql/share", mode: "local", id: "share_sql_trap" })
+      shares.putLocal({
           id: "share_sql_trap",
           sessionID: "ses_trap",
           url: "http://sql/share",
           time: { created: 1, updated: 1 },
           items: {},
-        }),
-      )
+        })
       Database.syncNative().run(
         "INSERT INTO artifact (id, session_id, data, created_at, updated_at) VALUES (?, ?, ?, 1, 1)",
         ["art_trap", "ses_trap", JSON.stringify({ title: "sql-page", secret: "sql-secret" })],
@@ -292,8 +323,8 @@ describe("domain SQL (missions, monitors, shares, artifacts)", () => {
       expect(Effect.runSync(MissionRepo.listExecs("proj_trap", def.id))[0]?.targetName).toBe("feature-1")
       expect(Effect.runSync(MonitorRepo.get("ses_trap", "mon_trap"))?.title).toBe("sql-title")
       expect(Effect.runSync(MonitorRepo.listRunning()).map((row) => row.title)).toEqual(["sql-title"])
-      expect(Effect.runSync(ShareRepo.get("ses_trap"))?.url).toBe("http://sql/share")
-      expect(Effect.runSync(ShareRepo.getLocal("share_sql_trap"))?.sessionID).toBe("ses_trap")
+      expect(shares.get("ses_trap")?.url).toBe("http://sql/share")
+      expect(shares.getLocal("share_sql_trap")?.sessionID).toBe("ses_trap")
       const trapRow = Database.syncNative()
         .query("SELECT data FROM artifact WHERE session_id = ? AND id = ?")
         .get("ses_trap", "art_trap") as { data: string }
@@ -301,11 +332,10 @@ describe("domain SQL (missions, monitors, shares, artifacts)", () => {
     })
   })
 
-  it("round-trips monitor and share records in SQL", async () => {
+  it("round-trips monitor records in SQL", async () => {
     await withIsolatedDatabase(async () => {
       const { Database } = await import("@/database/database")
       const { MonitorRepo } = await import("@/monitor/repo")
-      const { ShareRepo } = await import("@/share/repo")
       Database.syncDb()
 
       const monitor = {
@@ -335,25 +365,6 @@ describe("domain SQL (missions, monitors, shares, artifacts)", () => {
       )
       expect(Effect.runSync(MonitorRepo.listRunning())).toEqual([])
 
-      const share = { url: "http://local/share/x", mode: "local" as const, id: "share_live" }
-      Effect.runSync(ShareRepo.put("ses_share_live", share))
-      Effect.runSync(
-        ShareRepo.putLocal({
-          id: "share_live",
-          sessionID: "ses_share_live",
-          url: share.url,
-          time: { created: 1, updated: 1 },
-          items: {},
-        }),
-      )
-      expect(Effect.runSync(ShareRepo.get("ses_share_live"))?.id).toBe("share_live")
-      expect(Effect.runSync(ShareRepo.getLocal("share_live"))?.sessionID).toBe("ses_share_live")
-      Effect.runSync(ShareRepo.remove("ses_share_live"))
-      Effect.runSync(ShareRepo.removeLocal("share_live"))
-      expect(Effect.runSync(ShareRepo.get("ses_share_live"))).toBeUndefined()
-      expect(Effect.runSync(ShareRepo.getLocal("share_live"))).toBeUndefined()
-
-      expect(Effect.runSync(ShareRepo.get("ses_missing"))).toBeUndefined()
       expect(Effect.runSync(MonitorRepo.get("ses_missing", "mon_missing"))).toBeUndefined()
     })
   })

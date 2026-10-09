@@ -2,6 +2,10 @@ import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core"
 
 // ============================================================================
 // Shares — SQL backend for ["session_share", sessionID] + ["local_share", id]
+//
+// Sharing is gone (it published sessions on Nik's share service). The tables
+// stay so existing databases and their migration keep their shape; nothing
+// reads or writes them any more.
 // ============================================================================
 
 /**
@@ -17,7 +21,7 @@ export const sessionShare = sqliteTable("session_share", {
 })
 
 /**
- * The local-mode payload served at `/share/:id` when the remote hub is down.
+ * The local-mode payload that was served at `/share/:id` when the remote hub was down.
  *
  * Keyed by share id (the public identifier), not session id. `items` lives
  * inside `data` because nothing queries it independently.

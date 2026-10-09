@@ -8877,298 +8877,6 @@
         ]
       }
     },
-    "/mobile/teleport/upload": {
-      "post": {
-        "tags": ["mobile"],
-        "operationId": "mobile.session.teleport.upload.begin",
-        "parameters": [
-          {
-            "name": "directory",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "auth_token": []
-          },
-          {
-            "basicAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "uploadID": {
-                      "type": "string"
-                    }
-                  },
-                  "required": ["uploadID"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.teleport.upload.begin({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/mobile/teleport/upload/{uploadID}": {
-      "post": {
-        "tags": ["mobile"],
-        "operationId": "mobile.session.teleport.upload.chunk",
-        "parameters": [
-          {
-            "name": "uploadID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "auth_token": []
-          },
-          {
-            "basicAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "ok": {
-                      "type": "boolean"
-                    }
-                  },
-                  "required": ["ok"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.teleport.upload.chunk({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/mobile/teleport": {
-      "post": {
-        "tags": ["mobile"],
-        "operationId": "mobile.session.teleport",
-        "parameters": [
-          {
-            "name": "directory",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "auth_token": []
-          },
-          {
-            "basicAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "MobileTeleportResult",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MobileTeleportResult"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "MobileBadRequest",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MobileBadRequest"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MobileTeleportInput"
-              }
-            }
-          },
-          "required": true
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.teleport({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/mobile/session/{sessionID}/teleport": {
-      "post": {
-        "tags": ["mobile"],
-        "operationId": "mobile.session.teleport.out",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "auth_token": []
-          },
-          {
-            "basicAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "MobileTeleportResult",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MobileTeleportResult"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "MobileBadRequest",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MobileBadRequest"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MobileNotFound",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/MobileNotFound"
-                }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MobileTeleportOutInput"
-              }
-            }
-          },
-          "required": true
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.teleport.out({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/mobile/worktree": {
       "post": {
         "tags": ["mobile"],
@@ -18736,166 +18444,6 @@
         ]
       }
     },
-    "/session/{sessionID}/share": {
-      "post": {
-        "tags": ["session"],
-        "operationId": "session.share",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "auth_token": []
-          },
-          {
-            "basicAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Session",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Session_2"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionNotFoundError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "SessionBusyErrorBody",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionBusyErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.share({\n  ...\n})"
-          }
-        ]
-      },
-      "delete": {
-        "tags": ["session"],
-        "operationId": "session.unshare",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "security": [
-          {
-            "bearerAuth": []
-          },
-          {
-            "auth_token": []
-          },
-          {
-            "basicAuth": []
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Session",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Session_2"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionNotFoundError"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "SessionBusyErrorBody",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionBusyErrorBody"
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.unshare({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/session/{sessionID}/summarize": {
       "post": {
         "tags": ["session"],
@@ -24449,211 +23997,6 @@
         ]
       }
     },
-    "/s/{shareID}": {
-      "get": {
-        "tags": ["share"],
-        "operationId": "getS:shareID",
-        "parameters": [
-          {
-            "name": "shareID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "security": [],
-        "responses": {
-          "308": {
-            "description": "308 redirect to /share/:shareID",
-            "headers": {
-              "location": {
-                "schema": {
-                  "type": "string"
-                },
-                "required": true
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.getS:shareID({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/share/{shareID}": {
-      "get": {
-        "tags": ["share"],
-        "operationId": "getShare:shareID",
-        "parameters": [
-          {
-            "name": "shareID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "ShareData",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ShareData"
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.getShare:shareID({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/api/share/{shareID}": {
-      "get": {
-        "tags": ["share"],
-        "operationId": "getApiShare:shareID",
-        "parameters": [
-          {
-            "name": "shareID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "ShareData",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ShareData"
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.getApiShare:shareID({\n  ...\n})"
-          }
-        ]
-      }
-    },
-    "/api/share/{shareID}/data": {
-      "get": {
-        "tags": ["share"],
-        "operationId": "getApiShare:shareIDData",
-        "parameters": [
-          {
-            "name": "shareID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          },
-          {
-            "name": "directory",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "ShareData",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ShareData"
-                }
-              }
-            }
-          }
-        },
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.getApiShare:shareIDData({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/event": {
       "get": {
         "tags": ["events"],
@@ -29903,32 +29246,6 @@
         },
         "additionalProperties": false
       },
-      "TeleportConfig": {
-        "type": "object",
-        "properties": {
-          "url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "token": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "additionalProperties": false
-      },
       "ReferenceConfig": {
         "anyOf": [
           {
@@ -32147,9 +31464,7 @@
           },
           "teleport": {
             "anyOf": [
-              {
-                "$ref": "#/components/schemas/TeleportConfig"
-              },
+              {},
               {
                 "type": "null"
               }
@@ -32410,32 +31725,7 @@
           },
           "analytics": {
             "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "share": {
-                    "anyOf": [
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "endpoint": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                },
-                "additionalProperties": false
-              },
+              {},
               {
                 "type": "null"
               }
@@ -32443,10 +31733,7 @@
           },
           "share": {
             "anyOf": [
-              {
-                "type": "string",
-                "enum": ["manual", "auto", "disabled"]
-              },
+              {},
               {
                 "type": "null"
               }
@@ -32454,9 +31741,7 @@
           },
           "autoshare": {
             "anyOf": [
-              {
-                "type": "boolean"
-              },
+              {},
               {
                 "type": "null"
               }
@@ -32464,17 +31749,7 @@
           },
           "autoupdate": {
             "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "type": "boolean"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["notify"]
-                  }
-                ]
-              },
+              {},
               {
                 "type": "null"
               }
@@ -33227,6 +32502,98 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "pruneBudget": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "pruneKeep": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "pruneReasoning": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "pruneDigest": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "pruneDigestKeep": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "threshold": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -33241,6 +32608,45 @@
               {
                 "type": "object",
                 "properties": {
+                  "deferredTools": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "toolset": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["default", "a1", "t5"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rateLimitBudgetMs": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "policies": {
                     "anyOf": [
                       {
@@ -39632,32 +39038,6 @@
         },
         "additionalProperties": false
       },
-      "TeleportConfig_1": {
-        "type": "object",
-        "properties": {
-          "url": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "token": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "additionalProperties": false
-      },
       "ReferenceConfig_1": {
         "anyOf": [
           {
@@ -41843,9 +41223,7 @@
           },
           "teleport": {
             "anyOf": [
-              {
-                "$ref": "#/components/schemas/TeleportConfig_1"
-              },
+              {},
               {
                 "type": "null"
               }
@@ -42106,32 +41484,7 @@
           },
           "analytics": {
             "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "share": {
-                    "anyOf": [
-                      {
-                        "type": "boolean"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "endpoint": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                },
-                "additionalProperties": false
-              },
+              {},
               {
                 "type": "null"
               }
@@ -42139,10 +41492,7 @@
           },
           "share": {
             "anyOf": [
-              {
-                "type": "string",
-                "enum": ["manual", "auto", "disabled"]
-              },
+              {},
               {
                 "type": "null"
               }
@@ -42150,9 +41500,7 @@
           },
           "autoshare": {
             "anyOf": [
-              {
-                "type": "boolean"
-              },
+              {},
               {
                 "type": "null"
               }
@@ -42160,17 +41508,7 @@
           },
           "autoupdate": {
             "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "type": "boolean"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["notify"]
-                  }
-                ]
-              },
+              {},
               {
                 "type": "null"
               }
@@ -42923,6 +42261,98 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "pruneBudget": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "pruneKeep": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "pruneReasoning": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "pruneDigest": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "pruneDigestKeep": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "threshold": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -42937,6 +42367,45 @@
               {
                 "type": "object",
                 "properties": {
+                  "deferredTools": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "toolset": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": ["default", "a1", "t5"]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "rateLimitBudgetMs": {
+                    "anyOf": [
+                      {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "policies": {
                     "anyOf": [
                       {
@@ -50514,115 +49983,6 @@
           }
         ]
       },
-      "MobileArtifact": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "description": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "filename": {
-            "type": "string"
-          },
-          "contentType": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string",
-            "enum": ["html", "markdown", "image", "video", "text"]
-          },
-          "url": {
-            "type": "string"
-          },
-          "viewerUrl": {
-            "type": "string"
-          },
-          "previewUrl": {
-            "type": "string"
-          },
-          "version": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "sessionID": {
-            "type": "string"
-          },
-          "size": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "created": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              "updated": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              }
-            },
-            "required": ["created", "updated"],
-            "additionalProperties": false
-          }
-        },
-        "required": [
-          "id",
-          "title",
-          "filename",
-          "contentType",
-          "kind",
-          "url",
-          "viewerUrl",
-          "previewUrl",
-          "version",
-          "sessionID",
-          "size",
-          "time"
-        ],
-        "additionalProperties": false
-      },
       "PermissionRequest": {
         "type": "object",
         "properties": {
@@ -50800,12 +50160,6 @@
               "additionalProperties": false
             }
           },
-          "artifacts": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/MobileArtifact"
-            }
-          },
           "permissions": {
             "type": "array",
             "items": {
@@ -50819,7 +50173,7 @@
             }
           }
         },
-        "required": ["info", "messages", "artifacts", "permissions", "questions"],
+        "required": ["info", "messages", "permissions", "questions"],
         "additionalProperties": false
       },
       "MobileSessionCommandInput": {
@@ -53235,2569 +52589,6 @@
           }
         },
         "required": ["content", "status", "priority", "id"],
-        "additionalProperties": false
-      },
-      "PermissionAction_5": {
-        "type": "string",
-        "enum": ["allow", "deny", "ask"]
-      },
-      "PermissionRule_5": {
-        "type": "object",
-        "properties": {
-          "permission": {
-            "type": "string"
-          },
-          "pattern": {
-            "type": "string"
-          },
-          "action": {
-            "$ref": "#/components/schemas/PermissionAction_5"
-          }
-        },
-        "required": ["permission", "pattern", "action"],
-        "additionalProperties": false
-      },
-      "PermissionRuleset_5": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/PermissionRule_5"
-        }
-      },
-      "OutputFormatText_3": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["text"]
-          }
-        },
-        "required": ["type"],
-        "additionalProperties": false
-      },
-      "JSONSchema_3": {
-        "type": "object"
-      },
-      "OutputFormatJsonSchema_3": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["json_schema"]
-          },
-          "schema": {
-            "$ref": "#/components/schemas/JSONSchema_3"
-          },
-          "retryCount": {
-            "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": ["type", "schema"],
-        "additionalProperties": false
-      },
-      "OutputFormat_3": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/OutputFormatText_3"
-          },
-          {
-            "$ref": "#/components/schemas/OutputFormatJsonSchema_3"
-          }
-        ]
-      },
-      "FileDiff_5": {
-        "type": "object",
-        "properties": {
-          "file": {
-            "type": "string"
-          },
-          "patch": {
-            "type": "string"
-          },
-          "additions": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "deletions": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "status": {
-            "anyOf": [
-              {
-                "type": "string",
-                "enum": ["added", "deleted", "modified"]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "before": {
-            "type": "string"
-          },
-          "after": {
-            "type": "string"
-          }
-        },
-        "required": ["file", "patch", "additions", "deletions", "before", "after"],
-        "additionalProperties": false
-      },
-      "UserMessage_2": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "sessionID": {
-            "type": "string"
-          },
-          "role": {
-            "type": "string",
-            "enum": ["user"]
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "created": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              }
-            },
-            "required": ["created"],
-            "additionalProperties": false
-          },
-          "format": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/OutputFormat_3"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "summary": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "title": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "body": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "diffs": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/FileDiff_5"
-                    }
-                  }
-                },
-                "required": ["diffs"],
-                "additionalProperties": false
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "agent": {
-            "type": "string"
-          },
-          "model": {
-            "type": "object",
-            "properties": {
-              "providerID": {
-                "type": "string"
-              },
-              "modelID": {
-                "type": "string"
-              }
-            },
-            "required": ["providerID", "modelID"],
-            "additionalProperties": false
-          },
-          "system": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "tools": {
-            "anyOf": [
-              {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "boolean"
-                }
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "variant": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": ["id", "sessionID", "role", "time", "agent", "model"],
-        "additionalProperties": false
-      },
-      "ProviderAuthError_2": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "enum": ["ProviderAuthError"]
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "providerID": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["providerID", "message"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["name", "data"],
-        "additionalProperties": false
-      },
-      "UnknownError_2": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "enum": ["UnknownError"]
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["message"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["name", "data"],
-        "additionalProperties": false
-      },
-      "MessageOutputLengthError_2": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "enum": ["MessageOutputLengthError"]
-          },
-          "data": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "array"
-              }
-            ]
-          }
-        },
-        "required": ["name", "data"],
-        "additionalProperties": false
-      },
-      "MessageContextOverflowError_2": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "enum": ["MessageContextOverflowError"]
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "message": {
-                "type": "string"
-              },
-              "statusCode": {
-                "anyOf": [
-                  {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "responseBody": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              }
-            },
-            "required": ["message"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["name", "data"],
-        "additionalProperties": false
-      },
-      "MessageAbortedError_2": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "enum": ["MessageAbortedError"]
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["message"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["name", "data"],
-        "additionalProperties": false
-      },
-      "StructuredOutputError_2": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "enum": ["StructuredOutputError"]
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "message": {
-                "type": "string"
-              },
-              "retries": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              }
-            },
-            "required": ["message", "retries"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["name", "data"],
-        "additionalProperties": false
-      },
-      "APIError_3": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "enum": ["APIError"]
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "message": {
-                "type": "string"
-              },
-              "statusCode": {
-                "anyOf": [
-                  {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "isRetryable": {
-                "type": "boolean"
-              },
-              "responseHeaders": {
-                "anyOf": [
-                  {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    }
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "responseBody": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    }
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "classification": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "enum": ["payload-too-large"]
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              }
-            },
-            "required": ["message", "isRetryable"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["name", "data"],
-        "additionalProperties": false
-      },
-      "AssistantMessage_2": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "sessionID": {
-            "type": "string"
-          },
-          "role": {
-            "type": "string",
-            "enum": ["assistant"]
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "created": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              "completed": {
-                "anyOf": [
-                  {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              }
-            },
-            "required": ["created"],
-            "additionalProperties": false
-          },
-          "error": {
-            "anyOf": [
-              {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/ProviderAuthError_2"
-                  },
-                  {
-                    "$ref": "#/components/schemas/UnknownError_2"
-                  },
-                  {
-                    "$ref": "#/components/schemas/MessageOutputLengthError_2"
-                  },
-                  {
-                    "$ref": "#/components/schemas/MessageContextOverflowError_2"
-                  },
-                  {
-                    "$ref": "#/components/schemas/MessageAbortedError_2"
-                  },
-                  {
-                    "$ref": "#/components/schemas/StructuredOutputError_2"
-                  },
-                  {
-                    "$ref": "#/components/schemas/APIError_3"
-                  }
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "parentID": {
-            "type": "string"
-          },
-          "modelID": {
-            "type": "string"
-          },
-          "providerID": {
-            "type": "string"
-          },
-          "mode": {
-            "type": "string"
-          },
-          "agent": {
-            "type": "string"
-          },
-          "path": {
-            "type": "object",
-            "properties": {
-              "cwd": {
-                "type": "string"
-              },
-              "root": {
-                "type": "string"
-              }
-            },
-            "required": ["cwd", "root"],
-            "additionalProperties": false
-          },
-          "summary": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "cost": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "tokens": {
-            "type": "object",
-            "properties": {
-              "total": {
-                "anyOf": [
-                  {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "input": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              "output": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              "reasoning": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              "cache": {
-                "type": "object",
-                "properties": {
-                  "read": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  "write": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  }
-                },
-                "required": ["read", "write"],
-                "additionalProperties": false
-              }
-            },
-            "required": ["input", "output", "reasoning", "cache"],
-            "additionalProperties": false
-          },
-          "structured": {
-            "anyOf": [
-              {},
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "finish": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "id",
-          "sessionID",
-          "role",
-          "time",
-          "parentID",
-          "modelID",
-          "providerID",
-          "mode",
-          "agent",
-          "path",
-          "cost",
-          "tokens"
-        ],
-        "additionalProperties": false
-      },
-      "Message_2": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/UserMessage_2"
-          },
-          {
-            "$ref": "#/components/schemas/AssistantMessage_2"
-          }
-        ]
-      },
-      "TextPart_2": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "sessionID": {
-            "type": "string"
-          },
-          "messageID": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["text"]
-          },
-          "text": {
-            "type": "string"
-          },
-          "synthetic": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "ignored": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "time": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "start": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  "end": {
-                    "anyOf": [
-                      {
-                        "anyOf": [
-                          {
-                            "type": "number"
-                          },
-                          {
-                            "type": "string",
-                            "enum": ["Infinity", "-Infinity", "NaN"]
-                          }
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  }
-                },
-                "required": ["start"],
-                "additionalProperties": false
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "metadata": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": ["id", "sessionID", "messageID", "type", "text"],
-        "additionalProperties": false
-      },
-      "SubtaskPart_2": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "sessionID": {
-            "type": "string"
-          },
-          "messageID": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["subtask"]
-          },
-          "prompt": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "agent": {
-            "type": "string"
-          },
-          "model": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "providerID": {
-                    "type": "string"
-                  },
-                  "modelID": {
-                    "type": "string"
-                  }
-                },
-                "required": ["providerID", "modelID"],
-                "additionalProperties": false
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "command": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "background": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": ["id", "sessionID", "messageID", "type", "prompt", "description", "agent"],
-        "additionalProperties": false
-      },
-      "ReasoningPart_2": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "sessionID": {
-            "type": "string"
-          },
-          "messageID": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["reasoning"]
-          },
-          "text": {
-            "type": "string"
-          },
-          "metadata": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "start": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              "end": {
-                "anyOf": [
-                  {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              }
-            },
-            "required": ["start"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "sessionID", "messageID", "type", "text", "time"],
-        "additionalProperties": false
-      },
-      "FilePartSourceText_10": {
-        "type": "object",
-        "properties": {
-          "value": {
-            "type": "string"
-          },
-          "start": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "end": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          }
-        },
-        "required": ["value", "start", "end"],
-        "additionalProperties": false
-      },
-      "FileSource_4": {
-        "type": "object",
-        "properties": {
-          "text": {
-            "$ref": "#/components/schemas/FilePartSourceText_10"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["file"]
-          },
-          "path": {
-            "type": "string"
-          }
-        },
-        "required": ["text", "type", "path"],
-        "additionalProperties": false
-      },
-      "FilePartSourceText_11": {
-        "type": "object",
-        "properties": {
-          "value": {
-            "type": "string"
-          },
-          "start": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "end": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          }
-        },
-        "required": ["value", "start", "end"],
-        "additionalProperties": false
-      },
-      "Range_4": {
-        "type": "object",
-        "properties": {
-          "start": {
-            "type": "object",
-            "properties": {
-              "line": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              "character": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              }
-            },
-            "required": ["line", "character"],
-            "additionalProperties": false
-          },
-          "end": {
-            "type": "object",
-            "properties": {
-              "line": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              "character": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              }
-            },
-            "required": ["line", "character"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["start", "end"],
-        "additionalProperties": false
-      },
-      "SymbolSource_4": {
-        "type": "object",
-        "properties": {
-          "text": {
-            "$ref": "#/components/schemas/FilePartSourceText_11"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["symbol"]
-          },
-          "path": {
-            "type": "string"
-          },
-          "range": {
-            "$ref": "#/components/schemas/Range_4"
-          },
-          "name": {
-            "type": "string"
-          },
-          "kind": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          }
-        },
-        "required": ["text", "type", "path", "range", "name", "kind"],
-        "additionalProperties": false
-      },
-      "FilePartSourceText_12": {
-        "type": "object",
-        "properties": {
-          "value": {
-            "type": "string"
-          },
-          "start": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "end": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          }
-        },
-        "required": ["value", "start", "end"],
-        "additionalProperties": false
-      },
-      "ResourceSource_4": {
-        "type": "object",
-        "properties": {
-          "text": {
-            "$ref": "#/components/schemas/FilePartSourceText_12"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["resource"]
-          },
-          "clientName": {
-            "type": "string"
-          },
-          "uri": {
-            "type": "string"
-          }
-        },
-        "required": ["text", "type", "clientName", "uri"],
-        "additionalProperties": false
-      },
-      "FilePartSource_4": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/FileSource_4"
-          },
-          {
-            "$ref": "#/components/schemas/SymbolSource_4"
-          },
-          {
-            "$ref": "#/components/schemas/ResourceSource_4"
-          }
-        ]
-      },
-      "FilePart_3": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "sessionID": {
-            "type": "string"
-          },
-          "messageID": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["file"]
-          },
-          "mime": {
-            "type": "string"
-          },
-          "filename": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "url": {
-            "type": "string"
-          },
-          "source": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/FilePartSource_4"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": ["id", "sessionID", "messageID", "type", "mime", "url"],
-        "additionalProperties": false
-      },
-      "ToolStatePending_2": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string",
-            "enum": ["pending"]
-          },
-          "input": {
-            "type": "object"
-          },
-          "raw": {
-            "type": "string"
-          }
-        },
-        "required": ["status", "input", "raw"],
-        "additionalProperties": false
-      },
-      "ToolStateRunning_2": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string",
-            "enum": ["running"]
-          },
-          "input": {
-            "type": "object"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "metadata": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "structured": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "content": {
-            "anyOf": [
-              {
-                "type": "array",
-                "items": {
-                  "anyOf": [
-                    {
-                      "type": "object",
-                      "properties": {
-                        "type": {
-                          "type": "string",
-                          "enum": ["text"]
-                        },
-                        "text": {
-                          "type": "string"
-                        }
-                      },
-                      "required": ["type", "text"],
-                      "additionalProperties": false
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "type": {
-                          "type": "string",
-                          "enum": ["file"]
-                        },
-                        "data": {
-                          "type": "string"
-                        },
-                        "mime": {
-                          "type": "string"
-                        },
-                        "name": {
-                          "anyOf": [
-                            {
-                              "type": "string"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        }
-                      },
-                      "required": ["type", "data", "mime"],
-                      "additionalProperties": false
-                    }
-                  ]
-                }
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "start": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              }
-            },
-            "required": ["start"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["status", "input", "time"],
-        "additionalProperties": false
-      },
-      "FilePartSourceText_13": {
-        "type": "object",
-        "properties": {
-          "value": {
-            "type": "string"
-          },
-          "start": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "end": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          }
-        },
-        "required": ["value", "start", "end"],
-        "additionalProperties": false
-      },
-      "FileSource_5": {
-        "type": "object",
-        "properties": {
-          "text": {
-            "$ref": "#/components/schemas/FilePartSourceText_13"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["file"]
-          },
-          "path": {
-            "type": "string"
-          }
-        },
-        "required": ["text", "type", "path"],
-        "additionalProperties": false
-      },
-      "FilePartSourceText_14": {
-        "type": "object",
-        "properties": {
-          "value": {
-            "type": "string"
-          },
-          "start": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "end": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          }
-        },
-        "required": ["value", "start", "end"],
-        "additionalProperties": false
-      },
-      "Range_5": {
-        "type": "object",
-        "properties": {
-          "start": {
-            "type": "object",
-            "properties": {
-              "line": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              "character": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              }
-            },
-            "required": ["line", "character"],
-            "additionalProperties": false
-          },
-          "end": {
-            "type": "object",
-            "properties": {
-              "line": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              "character": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              }
-            },
-            "required": ["line", "character"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["start", "end"],
-        "additionalProperties": false
-      },
-      "SymbolSource_5": {
-        "type": "object",
-        "properties": {
-          "text": {
-            "$ref": "#/components/schemas/FilePartSourceText_14"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["symbol"]
-          },
-          "path": {
-            "type": "string"
-          },
-          "range": {
-            "$ref": "#/components/schemas/Range_5"
-          },
-          "name": {
-            "type": "string"
-          },
-          "kind": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          }
-        },
-        "required": ["text", "type", "path", "range", "name", "kind"],
-        "additionalProperties": false
-      },
-      "FilePartSourceText_15": {
-        "type": "object",
-        "properties": {
-          "value": {
-            "type": "string"
-          },
-          "start": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "end": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          }
-        },
-        "required": ["value", "start", "end"],
-        "additionalProperties": false
-      },
-      "ResourceSource_5": {
-        "type": "object",
-        "properties": {
-          "text": {
-            "$ref": "#/components/schemas/FilePartSourceText_15"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["resource"]
-          },
-          "clientName": {
-            "type": "string"
-          },
-          "uri": {
-            "type": "string"
-          }
-        },
-        "required": ["text", "type", "clientName", "uri"],
-        "additionalProperties": false
-      },
-      "FilePartSource_5": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/FileSource_5"
-          },
-          {
-            "$ref": "#/components/schemas/SymbolSource_5"
-          },
-          {
-            "$ref": "#/components/schemas/ResourceSource_5"
-          }
-        ]
-      },
-      "FilePart_4": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "sessionID": {
-            "type": "string"
-          },
-          "messageID": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["file"]
-          },
-          "mime": {
-            "type": "string"
-          },
-          "filename": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "url": {
-            "type": "string"
-          },
-          "source": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/FilePartSource_5"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": ["id", "sessionID", "messageID", "type", "mime", "url"],
-        "additionalProperties": false
-      },
-      "ToolStateCompleted_2": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string",
-            "enum": ["completed"]
-          },
-          "input": {
-            "type": "object"
-          },
-          "output": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "start": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              "end": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              "compacted": {
-                "anyOf": [
-                  {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              }
-            },
-            "required": ["start", "end"],
-            "additionalProperties": false
-          },
-          "attachments": {
-            "anyOf": [
-              {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/FilePart_4"
-                }
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": ["status", "input", "output", "title", "metadata", "time"],
-        "additionalProperties": false
-      },
-      "ToolStateError_2": {
-        "type": "object",
-        "properties": {
-          "status": {
-            "type": "string",
-            "enum": ["error"]
-          },
-          "input": {
-            "type": "object"
-          },
-          "error": {
-            "type": "string"
-          },
-          "metadata": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "start": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              "end": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              }
-            },
-            "required": ["start", "end"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["status", "input", "error", "time"],
-        "additionalProperties": false
-      },
-      "ToolState_2": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/ToolStatePending_2"
-          },
-          {
-            "$ref": "#/components/schemas/ToolStateRunning_2"
-          },
-          {
-            "$ref": "#/components/schemas/ToolStateCompleted_2"
-          },
-          {
-            "$ref": "#/components/schemas/ToolStateError_2"
-          }
-        ]
-      },
-      "ToolPart_2": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "sessionID": {
-            "type": "string"
-          },
-          "messageID": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["tool"]
-          },
-          "callID": {
-            "type": "string"
-          },
-          "tool": {
-            "type": "string"
-          },
-          "state": {
-            "$ref": "#/components/schemas/ToolState_2"
-          },
-          "metadata": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": ["id", "sessionID", "messageID", "type", "callID", "tool", "state"],
-        "additionalProperties": false
-      },
-      "StepStartPart_2": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "sessionID": {
-            "type": "string"
-          },
-          "messageID": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["step-start"]
-          },
-          "snapshot": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": ["id", "sessionID", "messageID", "type"],
-        "additionalProperties": false
-      },
-      "StepFinishPart_2": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "sessionID": {
-            "type": "string"
-          },
-          "messageID": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["step-finish"]
-          },
-          "reason": {
-            "type": "string"
-          },
-          "snapshot": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "cost": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "tokens": {
-            "type": "object",
-            "properties": {
-              "total": {
-                "anyOf": [
-                  {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "input": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              "output": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              "reasoning": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              },
-              "cache": {
-                "type": "object",
-                "properties": {
-                  "read": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  "write": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  }
-                },
-                "required": ["read", "write"],
-                "additionalProperties": false
-              }
-            },
-            "required": ["input", "output", "reasoning", "cache"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "sessionID", "messageID", "type", "reason", "cost", "tokens"],
-        "additionalProperties": false
-      },
-      "SnapshotPart_2": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "sessionID": {
-            "type": "string"
-          },
-          "messageID": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["snapshot"]
-          },
-          "snapshot": {
-            "type": "string"
-          }
-        },
-        "required": ["id", "sessionID", "messageID", "type", "snapshot"],
-        "additionalProperties": false
-      },
-      "PatchPart_2": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "sessionID": {
-            "type": "string"
-          },
-          "messageID": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["patch"]
-          },
-          "hash": {
-            "type": "string"
-          },
-          "files": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": ["id", "sessionID", "messageID", "type", "hash", "files"],
-        "additionalProperties": false
-      },
-      "AgentPart_2": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "sessionID": {
-            "type": "string"
-          },
-          "messageID": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["agent"]
-          },
-          "name": {
-            "type": "string"
-          },
-          "source": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "value": {
-                    "type": "string"
-                  },
-                  "start": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  "end": {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  }
-                },
-                "required": ["value", "start", "end"],
-                "additionalProperties": false
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": ["id", "sessionID", "messageID", "type", "name"],
-        "additionalProperties": false
-      },
-      "APIError_4": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "enum": ["APIError"]
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "message": {
-                "type": "string"
-              },
-              "statusCode": {
-                "anyOf": [
-                  {
-                    "anyOf": [
-                      {
-                        "type": "number"
-                      },
-                      {
-                        "type": "string",
-                        "enum": ["Infinity", "-Infinity", "NaN"]
-                      }
-                    ]
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "isRetryable": {
-                "type": "boolean"
-              },
-              "responseHeaders": {
-                "anyOf": [
-                  {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    }
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "responseBody": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "metadata": {
-                "anyOf": [
-                  {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    }
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "classification": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "enum": ["payload-too-large"]
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              }
-            },
-            "required": ["message", "isRetryable"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["name", "data"],
-        "additionalProperties": false
-      },
-      "RetryPart_2": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "sessionID": {
-            "type": "string"
-          },
-          "messageID": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["retry"]
-          },
-          "attempt": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "error": {
-            "$ref": "#/components/schemas/APIError_4"
-          },
-          "time": {
-            "type": "object",
-            "properties": {
-              "created": {
-                "anyOf": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "string",
-                    "enum": ["Infinity", "-Infinity", "NaN"]
-                  }
-                ]
-              }
-            },
-            "required": ["created"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "sessionID", "messageID", "type", "attempt", "error", "time"],
-        "additionalProperties": false
-      },
-      "CompactionPart_2": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "sessionID": {
-            "type": "string"
-          },
-          "messageID": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["compaction"]
-          },
-          "auto": {
-            "type": "boolean"
-          }
-        },
-        "required": ["id", "sessionID", "messageID", "type", "auto"],
-        "additionalProperties": false
-      },
-      "Part_2": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/TextPart_2"
-          },
-          {
-            "$ref": "#/components/schemas/SubtaskPart_2"
-          },
-          {
-            "$ref": "#/components/schemas/ReasoningPart_2"
-          },
-          {
-            "$ref": "#/components/schemas/FilePart_3"
-          },
-          {
-            "$ref": "#/components/schemas/ToolPart_2"
-          },
-          {
-            "$ref": "#/components/schemas/StepStartPart_2"
-          },
-          {
-            "$ref": "#/components/schemas/StepFinishPart_2"
-          },
-          {
-            "$ref": "#/components/schemas/SnapshotPart_2"
-          },
-          {
-            "$ref": "#/components/schemas/PatchPart_2"
-          },
-          {
-            "$ref": "#/components/schemas/AgentPart_2"
-          },
-          {
-            "$ref": "#/components/schemas/RetryPart_2"
-          },
-          {
-            "$ref": "#/components/schemas/CompactionPart_2"
-          }
-        ]
-      },
-      "MobileTeleportInput": {
-        "type": "object",
-        "properties": {
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "origin": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "permission": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/PermissionRuleset_5"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "messages": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "info": {
-                  "$ref": "#/components/schemas/Message_2"
-                },
-                "parts": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Part_2"
-                  }
-                }
-              },
-              "required": ["info", "parts"],
-              "additionalProperties": false
-            }
-          },
-          "uploadID": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": ["messages"],
-        "additionalProperties": false
-      },
-      "MobileTeleportResult": {
-        "type": "object",
-        "properties": {
-          "sessionID": {
-            "type": "string"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "messageCount": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "string",
-                "enum": ["Infinity", "-Infinity", "NaN"]
-              }
-            ]
-          },
-          "directory": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "workspace": {
-            "type": "boolean"
-          }
-        },
-        "required": ["sessionID", "messageCount", "workspace"],
-        "additionalProperties": false
-      },
-      "MobileTeleportOutInput": {
-        "type": "object",
-        "properties": {
-          "url": {
-            "type": "string"
-          },
-          "token": {
-            "type": "string"
-          },
-          "content": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "includeGit": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": ["url", "token"],
         "additionalProperties": false
       },
       "MobileWorktreeCreateInput": {
@@ -64233,89 +61024,6 @@
         "required": ["info", "parts"],
         "additionalProperties": false
       },
-      "ShareData": {
-        "type": "array",
-        "items": {
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "enum": ["session"]
-                },
-                "data": {
-                  "$ref": "#/components/schemas/Session_2"
-                }
-              },
-              "required": ["type", "data"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "enum": ["message"]
-                },
-                "data": {
-                  "$ref": "#/components/schemas/Message_1"
-                }
-              },
-              "required": ["type", "data"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "enum": ["part"]
-                },
-                "data": {
-                  "$ref": "#/components/schemas/Part_1"
-                }
-              },
-              "required": ["type", "data"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "enum": ["session_diff"]
-                },
-                "data": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/FileDiff_2"
-                  }
-                }
-              },
-              "required": ["type", "data"],
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "enum": ["model"]
-                },
-                "data": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Model"
-                  }
-                }
-              },
-              "required": ["type", "data"],
-              "additionalProperties": false
-            }
-          ]
-        }
-      },
       "EventEncoded": {
         "type": "string",
         "contentMediaType": "application/json"
@@ -64569,9 +61277,6 @@
     },
     {
       "name": "session-prompt"
-    },
-    {
-      "name": "share"
     },
     {
       "name": "events"

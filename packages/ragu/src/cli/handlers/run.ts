@@ -15,21 +15,12 @@ import { createRaguClient, type Event as SdkEvent, type RaguClient } from "@ragu
 import { Server } from "@/server/server"
 import { Provider } from "@/provider/provider"
 import { Agent } from "@/agent/agent"
-import { SessionRepo } from "@/session/repo"
-import type { Project } from "@/project/project"
 import { InstanceReload } from "@/project/reload"
 import { CacheKeeper } from "@/session/cache-keeper"
-import { SessionDiffRepo } from "@/session/diff-repo"
-import { SessionV2Write } from "@/session/v2/write"
-import type { Session } from "@/session"
-import type { MessageV2 } from "@/session/message-v2"
-import type { Snapshot } from "@/snapshot"
 import { Config } from "@/config/config"
-import { ShareNext } from "@/share/share-next"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
 import { Effect } from "effect"
 import { Log } from "@ragu/util/log"
-import z from "zod"
 
 export const log = Log.create({ service: "run-command" })
 
@@ -85,13 +76,6 @@ export const TOOL = new Map<string, [string, string]>(
   } satisfies Record<string, [string, string]>),
 )
 
-export const SHARE_ID = /^[0-9a-z]{26}$/i
-
-export const ShareReferenceSchema = z.object({
-  shareID: z.string().regex(SHARE_ID),
-  origins: z.array(z.string().url()).default([]),
-})
-
 export function commandGet(name: string) {
   return runPromiseWithLayer(
     Command.defaultLayer,
@@ -102,10 +86,6 @@ export function commandGet(name: string) {
       }),
     ),
   )
-}
-
-export function runShareNext<A, E>(effect: Effect.Effect<A, E, ShareNext.Service>): Promise<A> {
-  return runPromiseWithLayer(ShareNext.defaultLayer, effect)
 }
 
 export function configGet() {
@@ -132,273 +112,9 @@ export function agentGet(name: string) {
   )
 }
 
-export const ShareErrorBody = z.object({
-  error: z.object({ message: z.string().optional() }).catch({}).optional(),
-  data: z.object({ message: z.string().optional() }).catch({}).optional(),
-  message: z.string().optional().catch(undefined),
-})
-export type ShareErrorBody = z.infer<typeof ShareErrorBody>
-
-export function shareErrorMessage(error: Error | ShareErrorBody): string {
-  if (error instanceof Error && error.message) return error.message
-  const parsed = ShareErrorBody.safeParse(error)
-  if (parsed.success) {
-    const message = parsed.data.error?.message ?? parsed.data.data?.message ?? parsed.data.message
-    if (message && message.trim()) return message.trim()
-  }
-  return "Failed to share session"
-}
-
 export function invalidSessionReference(): never {
-  UI.error("Invalid --session value. Use a `ses_...` session ID or a share URL/ID.")
+  UI.error("Invalid --session value. Use a `ses_...` session ID.")
   process.exit(1)
-}
-
-export function resolveEnterpriseOrigin(hostname: string): string | undefined {
-  if (hostname === "nikcli-ai.dev") return "https://s.nikcli-ai.dev"
-  if (hostname === "dev.nikcli-ai.dev") return "https://dev.s.nikcli-ai.dev"
-  if (hostname.endsWith(".dev.nikcli-ai.dev")) {
-    const stage = hostname.slice(0, -".dev.nikcli-ai.dev".length)
-    if (stage) return `https://${stage}.dev.s.nikcli-ai.dev`
-  }
-  return undefined
-}
-
-export function parseShareReference(input: string): z.infer<typeof ShareReferenceSchema> | undefined {
-  if (SHARE_ID.test(input)) {
-    return {
-      shareID: input.toLowerCase(),
-      origins: [],
-    }
-  }
-
-  if (!input.startsWith("http://") && !input.startsWith("https://")) return undefined
-
-  let parsed: URL
-  try {
-    parsed = new URL(input)
-  } catch {
-    return undefined
-  }
-
-  const parts = parsed.pathname.split("/").filter(Boolean)
-  if (parts.length !== 2) return undefined
-
-  const [prefix, shareID] = parts
-  if (prefix !== "share" && prefix !== "s") return undefined
-  if (!SHARE_ID.test(shareID)) return undefined
-
-  const origins = new Set<string>()
-  const enterpriseOrigin = resolveEnterpriseOrigin(parsed.hostname)
-  if (enterpriseOrigin) origins.add(enterpriseOrigin)
-  origins.add(parsed.origin)
-
-  return {
-    shareID: shareID.toLowerCase(),
-    origins: Array.from(origins),
-  }
-}
-
-export const ShareTime = z.looseObject({ created: z.number().optional() }).catch({})
-
-export const ShareSessionInfo = z.looseObject({ id: z.string() })
-export type ShareSessionInfo = z.infer<typeof ShareSessionInfo>
-
-export const ShareMessageInfo = z.looseObject({
-  id: z.string().optional().catch(undefined),
-  time: ShareTime.optional(),
-})
-export type ShareMessageInfo = z.infer<typeof ShareMessageInfo>
-
-export const SharePartData = z.looseObject({
-  messageID: z.string().optional().catch(undefined),
-})
-
-export const ShareEntry = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("session"), data: ShareSessionInfo }),
-  z.object({ type: z.literal("session_diff"), data: z.array(z.unknown()) }),
-  z.object({ type: z.literal("message"), data: ShareMessageInfo }),
-  z.object({ type: z.literal("part"), data: SharePartData }),
-])
-
-export const ShareStreamPayload = z.array(ShareEntry.nullable().catch(null))
-
-export const ShareObjectPayload = z.looseObject({
-  info: ShareSessionInfo,
-  messages: z.record(z.string(), z.looseObject({ parts: z.array(z.unknown()).optional() })),
-  diff: z.array(z.unknown()).optional().catch(undefined),
-})
-
-export const SharePayload = z.union([ShareStreamPayload, ShareObjectPayload])
-export type SharePayload = z.infer<typeof SharePayload>
-
-export async function fetchSharePayload(origins: string[], shareID: string): Promise<SharePayload | undefined> {
-  const urls = origins.flatMap((origin) => [`${origin}/api/share/${shareID}/data`, `${origin}/api/share/${shareID}`])
-
-  for (const url of urls) {
-    try {
-      const response = await fetch(url)
-      if (!response.ok) continue
-      const json = await response.json().catch(() => undefined)
-      if (!json) continue
-      const parsed = SharePayload.safeParse(json)
-      if (parsed.success) return parsed.data
-    } catch (error) {
-      log.debug("Failed to fetch share payload", { url, error })
-    }
-  }
-  return undefined
-}
-
-export interface SharePayloadMessage {
-  info: ShareMessageInfo
-  parts: unknown[]
-}
-
-export interface NormalizedSharePayload {
-  info: ShareSessionInfo
-  messages: SharePayloadMessage[]
-  diff?: unknown[]
-}
-
-export function normalizeSharePayload(payload: SharePayload): NormalizedSharePayload | undefined {
-  if (Array.isArray(payload)) {
-    let info: ShareSessionInfo | undefined
-    let diff: unknown[] | undefined
-    const messages = new Map<string, { info?: ShareMessageInfo; parts: unknown[] }>()
-
-    for (const item of payload) {
-      if (!item) continue
-
-      if (item.type === "session") {
-        info = item.data
-        continue
-      }
-      if (item.type === "session_diff") {
-        diff = item.data
-        continue
-      }
-      if (item.type === "message") {
-        const messageID = item.data.id
-        if (!messageID) continue
-        const existing = messages.get(messageID)
-        messages.set(messageID, {
-          info: item.data,
-          parts: existing?.parts ?? [],
-        })
-        continue
-      }
-      if (item.type === "part") {
-        const messageID = item.data.messageID
-        if (!messageID) continue
-        const existing = messages.get(messageID)
-        if (existing) {
-          existing.parts.push(item.data)
-        } else {
-          messages.set(messageID, {
-            parts: [item.data],
-          })
-        }
-      }
-    }
-
-    if (!info) return undefined
-
-    return {
-      info,
-      diff,
-      messages: Array.from(messages.values())
-        .filter((item): item is { info: ShareMessageInfo; parts: unknown[] } => Boolean(item.info))
-        .sort((a, b) => (a.info.time?.created ?? 0) - (b.info.time?.created ?? 0))
-        .map((item) => ({
-          info: item.info,
-          parts: item.parts,
-        })),
-    }
-  }
-
-  return {
-    info: payload.info,
-    diff: payload.diff,
-    messages: Object.values(payload.messages).map((msg) => {
-      const { parts, ...info } = msg
-      return {
-        info: ShareMessageInfo.parse(info),
-        parts: parts ?? [],
-      }
-    }),
-  }
-}
-
-export async function importShareReference(project: Project.Info, input: string): Promise<string | undefined> {
-  const parsed = parseShareReference(input)
-  if (!parsed) return undefined
-
-  log.debug("Importing share reference", { shareID: parsed.shareID })
-
-  const local = await runShareNext(
-    Effect.gen(function* () {
-      const shareNext = yield* ShareNext.Service
-      return yield* shareNext.publicData(parsed.shareID)
-    }),
-  ).catch(() => undefined)
-
-  let payload: SharePayload | undefined
-  if (local) {
-    const parsedLocal = SharePayload.safeParse(local)
-    if (parsedLocal.success) payload = parsedLocal.data
-  } else {
-    const configOrigin = await configGet()
-      .then((config) => config.enterprise?.url ?? "https://s.nikcli-ai.dev")
-      .catch(() => "https://s.nikcli-ai.dev")
-    payload = await fetchSharePayload(parsed.origins.length ? parsed.origins : [configOrigin], parsed.shareID)
-  }
-
-  const normalized = payload ? normalizeSharePayload(payload) : undefined
-  if (!normalized) {
-    throw new Error(`Share not found: ${parsed.shareID}`)
-  }
-
-  const info = normalized.info
-  Effect.runSync(
-    SessionRepo.upsert({
-      ...(info as Session.Info),
-      projectID: project.id,
-    }),
-  )
-
-  if (normalized.diff) {
-    Effect.runSync(SessionDiffRepo.upsert(info.id, normalized.diff as Snapshot.FileDiff[]))
-  }
-
-  const projectID = project.id
-  for (const msg of normalized.messages) {
-    const messageInfo = {
-      ...(msg.info as MessageV2.Info),
-      sessionID: info.id,
-    }
-    const parts = msg.parts.map(
-      (part) =>
-        ({
-          ...(part as MessageV2.Part),
-          sessionID: info.id,
-          messageID: msg.info.id as string,
-        }) as MessageV2.Part,
-    )
-    // Entry-first persist: a projection throw cannot commit v1 rows the
-    // entry table cannot represent.
-    SessionV2Write.persist({
-      prepared: { info: messageInfo, parts },
-      promptData: "",
-      projectID,
-    })
-  }
-
-  log.info("Share imported successfully", {
-    shareID: parsed.shareID,
-    sessionID: info.id,
-  })
-  return info.id
 }
 
 /**
@@ -712,11 +428,6 @@ export async function runWithArgs(args: any): Promise<void> {
         return result.data?.find((s) => !s.parentID)?.id
       }
       if (args.session) {
-        const share = parseShareReference(args.session)
-        if (share) {
-          UI.error("Share IDs/URLs are not supported with --attach yet. Import the share locally first.")
-          process.exit(1)
-        }
         if (!args.session.startsWith("ses_")) invalidSessionReference()
         return args.session
       }
@@ -737,17 +448,6 @@ export async function runWithArgs(args: any): Promise<void> {
     if (!sessionID) {
       UI.error("Session not found")
       process.exit(1)
-    }
-
-    const cfgResult = await sdk.config.get()
-    if (cfgResult.data && (cfgResult.data.share === "auto" || Flag.RAGU_AUTO_SHARE || args.share)) {
-      const shareResult = await sdk.session.share({ sessionID }, { throwOnError: true }).catch((error) => {
-        UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + shareErrorMessage(error))
-        return { data: undefined, error }
-      })
-      if (!shareResult.error && shareResult.data?.share?.url) {
-        UI.println(UI.Style.TEXT_INFO_BOLD + "~  " + shareResult.data.share.url)
-      }
     }
 
     // `runWithArgs` is `Promise<void>`, and `executeTurn` already exits the
@@ -798,10 +498,8 @@ export async function runWithArgs(args: any): Promise<void> {
         return result.data?.find((s) => !s.parentID)?.id
       }
       if (args.session) {
-        if (args.session.startsWith("ses_")) return args.session
-        const imported = await importShareReference(instance.project, args.session)
-        if (!imported) invalidSessionReference()
-        return imported
+        if (!args.session.startsWith("ses_")) invalidSessionReference()
+        return args.session
       }
 
       const title =
@@ -824,17 +522,6 @@ export async function runWithArgs(args: any): Promise<void> {
       process.exit(1)
     }
 
-    const cfgResult = await sdk.config.get()
-    if (cfgResult.data && (cfgResult.data.share === "auto" || Flag.RAGU_AUTO_SHARE || args.share)) {
-      const shareResult = await sdk.session.share({ sessionID }, { throwOnError: true }).catch((error) => {
-        UI.println(UI.Style.TEXT_DANGER_BOLD + "!  " + shareErrorMessage(error))
-        return { data: undefined, error }
-      })
-      if (!shareResult.error && shareResult.data?.share?.url) {
-        UI.println(UI.Style.TEXT_INFO_BOLD + "~  " + shareResult.data.share.url)
-      }
-    }
-
     await execute(sdk, sessionID)
     // The work is done. Arm the watchdog before the instance is disposed, not after: a hang inside
     // the dispose (a language server, monitor or plugin that never stops) would otherwise never
@@ -852,7 +539,6 @@ export default Runtime.handler(Commands.commands["run"], async (input) => {
     command: Option.getOrUndefined(input["command"]),
     continue: Option.getOrUndefined(input["continue"]),
     session: Option.getOrUndefined(input["session"]),
-    share: Option.getOrUndefined(input["share"]),
     model: Option.getOrUndefined(input["model"]),
     agent: Option.getOrUndefined(input["agent"]),
     format: input["format"],

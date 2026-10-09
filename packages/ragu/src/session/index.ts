@@ -6,7 +6,6 @@ import z from "zod"
 import type { LanguageModelUsage, ProviderMetadata } from "@/session/llm/types"
 import { iife } from "@ragu/util/iife"
 import { Config } from "../config/config"
-import { Flag } from "@ragu/util/flag"
 import { Identifier } from "@ragu/util/id"
 import { Installation } from "../installation"
 
@@ -31,19 +30,10 @@ import { SessionRepo } from "./repo"
 import { GoalRepo } from "./goal-repo"
 import { InstructionRepo } from "./instruction-repo"
 import { SessionDiffRepo } from "./diff-repo"
-import { ShareRepo } from "@/share/repo"
 import { SessionSync } from "./projectors"
 import { SyncEvent } from "@/sync/sync-event"
 import { MessageRepo } from "./message-repo"
 import { dotFolder } from "@ragu/util/app-folder"
-
-function configGet(ctx: InstanceContext) {
-  const effect = Effect.gen(function* () {
-    const config = yield* Config.Service
-    return yield* config.get()
-  })
-  return runPromiseWithLayer(Config.defaultLayer, locallyInstance(ctx, effect))
-}
 
 export namespace Session {
   const log = Log.create({ service: "session" })
@@ -193,15 +183,6 @@ export namespace Session {
   }).annotate({ ...strip, identifier: "Session" })
   export const Info = zodObject(InfoSchema)
   export type Info = DeepMutable<Schema.Schema.Type<typeof InfoSchema>>
-
-  export const ShareInfoSchema = Schema.Struct({
-    id: Schema.optional(Schema.String),
-    mode: Schema.optional(Schema.Literals(["remote", "local"])),
-    secret: Schema.optional(Schema.String),
-    url: Schema.String,
-  }).annotate({ ...strip, identifier: "SessionShare" })
-  export const ShareInfo = zodObject(ShareInfoSchema)
-  export type ShareInfo = DeepMutable<Schema.Schema.Type<typeof ShareInfoSchema>>
 
   export const ID = SessionPrimitives.ID
 
@@ -394,51 +375,6 @@ export namespace Session {
     return result
   }
 
-  async function shareImpl(ctx: InstanceContext, id: string) {
-    const cfg = await configGet(ctx)
-    if (cfg.share === "disabled") {
-      throw new Error("Sharing is disabled in configuration")
-    }
-    const { ShareNext } = await import("@/share/share-next")
-    const share = await runPromiseWithLayer(
-      ShareNext.defaultLayer,
-      Effect.gen(function* () {
-        const shareNext = yield* ShareNext.Service
-        return yield* shareNext.create(id)
-      }),
-    )
-    await updateImpl(
-      ctx,
-      id,
-      (draft) => {
-        draft.share = {
-          url: share.url,
-        }
-      },
-      { touch: false },
-    )
-    return share
-  }
-
-  async function unshareImpl(ctx: InstanceContext, id: string) {
-    const { ShareNext } = await import("@/share/share-next")
-    await runPromiseWithLayer(
-      ShareNext.defaultLayer,
-      Effect.gen(function* () {
-        const shareNext = yield* ShareNext.Service
-        yield* shareNext.remove(id)
-      }),
-    )
-    await updateImpl(
-      ctx,
-      id,
-      (draft) => {
-        delete draft.share
-      },
-      { touch: false },
-    )
-  }
-
   /** `Title (fork #N)`, counting up when the source is itself a fork — upstream's naming. */
   export function forkedTitle(title: string) {
     const match = title.match(/^(.+) \(fork #(\d+)\)$/)
@@ -564,21 +500,6 @@ export namespace Session {
     SessionSync.install()
     SyncEvent.run(SessionSync.Created, { sessionID: result.id, info: result }, { projectID: ctx.project.id })
     if (result.workspaceID) Effect.runSync(WorkspaceDB.touch(result.workspaceID, result.time.created))
-    const cfg = await configGet(ctx)
-    if (!result.parentID && (Flag.RAGU_AUTO_SHARE || cfg.share === "auto"))
-      shareImpl(ctx, result.id)
-        .then((share) => {
-          return updateImpl(ctx, result.id, (draft) => {
-            draft.share = share
-          })
-        })
-        .catch((error) => {
-          // Auto-share is best-effort during session creation, but keep a trace.
-          log.warn("failed to auto-share session", {
-            sessionID: result.id,
-            error,
-          })
-        })
     SyncEvent.run(SessionSync.Updated, { sessionID: result.id, info: result }, { projectID: ctx.project.id })
 
     // Record session creation for analytics
@@ -740,12 +661,6 @@ export namespace Session {
       for (const child of await childrenImpl(ctx, sessionID)) {
         await removeImpl(ctx, child.id)
       }
-      await unshareImpl(ctx, sessionID).catch((err) => {
-        log.warn("Failed to unshare session during deletion", {
-          sessionID,
-          error: err,
-        })
-      })
       // Remove all messages and their parts via SQL
       for (const msg of sessionMessages) {
         Effect.runSync(MessageRepo.removeMessage(sessionID, msg.id))
@@ -989,9 +904,6 @@ export namespace Session {
     plan(input: { slug: string; time: { created: number } }): Effect.Effect<string>
     get(id: string): Effect.Effect<Info, Error>
     getAnyProject(id: string): Effect.Effect<Info, Error>
-    getShare(id: string): Effect.Effect<ShareInfo, Error>
-    share(id: string): Effect.Effect<ShareInfo, Error>
-    unshare(id: string): Effect.Effect<void, Error>
     update(id: string, editor: (session: Info) => void, options?: { touch?: boolean }): Effect.Effect<Info, Error>
     diff(sessionID: string): Effect.Effect<Snapshot.FileDiff[], Error>
     messages(input: MessagesInput): Effect.Effect<MessageV2.WithParts[], Error>
@@ -1099,36 +1011,6 @@ export namespace Session {
           Effect.flatMap((ctx) =>
             Effect.tryPromise({
               try: () => getAnyProjectImpl(ctx, id),
-              catch: asSessionError,
-            }),
-          ),
-        ),
-      getShare: (id) =>
-        Effect.tryPromise({
-          try: async () => {
-            const share = Effect.runSync(ShareRepo.get(id))
-            if (!share)
-              throw new SessionError.NotFoundError({
-                message: `Share not found: ${id}`,
-              })
-            return share
-          },
-          catch: asSessionError,
-        }),
-      share: (id) =>
-        InstanceState.context.pipe(
-          Effect.flatMap((ctx) =>
-            Effect.tryPromise({
-              try: () => shareImpl(ctx, id),
-              catch: asSessionError,
-            }),
-          ),
-        ),
-      unshare: (id) =>
-        InstanceState.context.pipe(
-          Effect.flatMap((ctx) =>
-            Effect.tryPromise({
-              try: () => unshareImpl(ctx, id),
               catch: asSessionError,
             }),
           ),

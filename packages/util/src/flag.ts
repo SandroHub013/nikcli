@@ -51,7 +51,6 @@ export namespace Flag {
     return process.env["RAGU_MANAGED_CONFIG_DIR"]
   }
 
-  export const RAGU_AUTO_SHARE = truthy("RAGU_AUTO_SHARE")
   export const RAGU_GIT_BASH_PATH = process.env["RAGU_GIT_BASH_PATH"]
   export const RAGU_CONFIG = process.env["RAGU_CONFIG"]
   export declare const RAGU_CONFIG_DIR: string | undefined

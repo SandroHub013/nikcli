@@ -42,7 +42,6 @@ import { TodoItem } from "../../component/todo-item"
 import { MessageMarkdown } from "@tui/feature-plugins/math/markdown"
 import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
-import { DialogConfirm } from "@tui/ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
@@ -83,7 +82,7 @@ import {
   getBackgroundDismissed,
   undismissBackground as undismissBackgroundUtil,
 } from "../../util/background"
-import { friendlyErrorMessage, shareErrorMessage } from "../../util/error-message"
+import { friendlyErrorMessage } from "../../util/error-message"
 import { Link } from "../../ui/link"
 import { context, use } from "./session-context"
 import {
@@ -610,90 +609,6 @@ export function Session() {
       },
     },
     {
-      title: session()?.share?.url ? commandLabels.copyShareLink : commandLabels.share,
-      value: "session.share",
-      suggested: route.type === "session",
-      keybind: "session_share",
-      category: commandLabels.category,
-      enabled: sync.data.config.share !== "disabled",
-      slash: {
-        name: "share",
-      },
-      onSelect: async (dialog) => {
-        const copy = (url: string) =>
-          Clipboard.copy(url)
-            .then(() =>
-              toast.show({
-                message: lang.t("session.share.copied"),
-                variant: "success",
-              }),
-            )
-            .catch(() =>
-              toast.show({
-                message: "Failed to copy URL to clipboard",
-                variant: "error",
-              }),
-            )
-
-        const shareSession = async (client = sdk.client) => {
-          const result = await client.session.share(
-            {
-              sessionID: route.sessionID,
-            },
-            { throwOnError: true },
-          )
-          const next = result.data?.share?.url
-          if (!next) throw new Error("Share URL missing from session response")
-          await copy(next)
-        }
-
-        const url = session()?.share?.url
-        const shouldRefreshLocalShare =
-          !!url &&
-          /^https?:\/\/(?:127\.0\.0\.1|localhost|ragu\.local)(?::\d+)?\//i.test(url) &&
-          /^https?:\/\/ragu\.local(?::\d+)?$/i.test(sdk.url)
-
-        if (url && !shouldRefreshLocalShare) {
-          await copy(url)
-          dialog.clear()
-          return
-        }
-
-        try {
-          await shareSession()
-        } catch (error) {
-          const canStartLocalServer = /^https?:\/\/ragu\.local(?::\d+)?$/i.test(sdk.url) && !!server.startServer
-          if (!canStartLocalServer) {
-            toast.show({
-              message: shareErrorMessage(error),
-              variant: "error",
-              duration: 5000,
-            })
-            dialog.clear()
-            return
-          }
-
-          try {
-            const baseUrl = await server.startServer?.()
-            if (!baseUrl) throw new Error("Failed to start local share server")
-            const client = createRaguClient({
-              baseUrl,
-              directory: sdk.directory,
-              fetch: sdk.fetch,
-            })
-            await shareSession(client)
-          } catch (retryError) {
-            toast.show({
-              message: shareErrorMessage(retryError),
-              variant: "error",
-              duration: 5000,
-            })
-          }
-        }
-        dialog.clear()
-      },
-    },
-    {
       title: commandLabels.rename,
       value: "session.rename",
       keybind: "session_rename",
@@ -768,43 +683,6 @@ export function Session() {
           modelID: selectedModel.modelID,
           providerID: selectedModel.providerID,
         })
-        dialog.clear()
-      },
-    },
-    {
-      title: commandLabels.unshare,
-      value: "session.unshare",
-      keybind: "session_unshare",
-      category: commandLabels.category,
-      enabled: !!session()?.share?.url,
-      slash: {
-        name: "unshare",
-      },
-      onSelect: async (dialog) => {
-        const ok = await DialogConfirm.show(
-          dialog,
-          "Unshare session?",
-          "This will revoke the public share URL. Anyone with the old link will no longer be able to view this session.",
-          "confirm",
-        )
-        if (!ok) return
-        await sdk.client.session
-          .unshare({
-            sessionID: route.sessionID,
-          })
-          .then(() =>
-            toast.show({
-              message: "Session unshared successfully",
-              variant: "success",
-            }),
-          )
-          .catch((error) =>
-            toast.show({
-              message: shareErrorMessage(error),
-              variant: "error",
-              duration: 5000,
-            }),
-          )
         dialog.clear()
       },
     },

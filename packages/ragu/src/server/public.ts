@@ -1,6 +1,3 @@
-import { Effect } from "effect"
-import { runPromiseWithLayer } from "@/effect"
-import { ShareNext } from "@/share/share-next"
 import { ChatbotHttp } from "./httpapi/chatbot"
 import { HttpApiEvent } from "./httpapi/event"
 import { HttpApiPrompt } from "./httpapi/prompt"
@@ -12,16 +9,6 @@ import { SyncHttpApi } from "./httpapi/sync"
 import { INSPECTOR_BRIDGE_SCRIPT } from "@ragu/util/visual-editor-bridge"
 
 export namespace PublicRoutes {
-  function share(shareID: string) {
-    return runPromiseWithLayer(
-      ShareNext.defaultLayer,
-      Effect.gen(function* () {
-        const service = yield* ShareNext.Service
-        return yield* service.publicData(shareID)
-      }),
-    )
-  }
-
   export async function publicRequest(request: Request): Promise<Response | undefined> {
     if (request.method !== "GET") return
     const pathname = new URL(request.url).pathname
@@ -38,19 +25,6 @@ export namespace PublicRoutes {
         },
       })
     }
-
-    const short = pathname.match(/^\/s\/([^/]+)$/)
-    if (short) {
-      return new Response(null, {
-        status: 308,
-        headers: { location: `/share/${encodeURIComponent(decodeURIComponent(short[1]))}` },
-      })
-    }
-    const match = pathname.match(/^\/(?:share\/([^/]+)|api\/share\/([^/]+)(?:\/data)?)$/)
-    if (!match) return
-    const data = await share(decodeURIComponent(match[1] ?? match[2]))
-    if (!data) return new Response("Share not found", { status: 404 })
-    return Response.json(data)
   }
 
   export async function globalRequest(request: Request): Promise<Response | undefined> {

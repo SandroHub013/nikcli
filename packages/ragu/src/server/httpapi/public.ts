@@ -350,8 +350,6 @@ export namespace PublicHttpApi {
       .handle("abort", (request) => SessionHttpApi.handlers.abort(request))
       .handle("revert", (request) => SessionHttpApi.handlers.revert(request))
       .handle("unrevert", (request) => SessionHttpApi.handlers.unrevert(request))
-      .handle("share", (request) => SessionHttpApi.handlers.share(request))
-      .handle("unshare", (request) => SessionHttpApi.handlers.unshare(request))
       .handle("summarize", (request) => SessionHttpApi.handlers.summarize(request))
       .handle("generate", (request) => SessionHttpApi.handlers.generate(request))
       .handle("command", (request) => SessionHttpApi.handlers.command(request))
@@ -469,11 +467,6 @@ export namespace PublicHttpApi {
 export const PublicApi = PublicHttpApi.Api.add(ContractExtraHttpApi.AuthGroup.middleware(HttpApiAuth.Middleware))
   .add(ContractExtraHttpApi.ConfigManagementGroup.middleware(HttpApiAuth.Middleware))
   .add(ContractExtraHttpApi.SessionPromptGroup.middleware(HttpApiAuth.Middleware))
-  // `/s/:id`, `/share/:id` and `/api/share/:id` are answered by
-  // `PublicRoutes.publicRequest`, which runs *ahead* of authentication — a
-  // shared conversation opens without credentials, so the contract must not
-  // claim otherwise.
-  .add(ContractExtraHttpApi.ShareGroup)
   .add(ContractExtraHttpApi.EventsGroup.middleware(HttpApiAuth.Middleware))
   .add(ContractExtraHttpApi.WorkspaceExtraGroup.middleware(HttpApiAuth.Middleware))
   .add(ContractExtraHttpApi.UsersGroup)

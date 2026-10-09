@@ -41,7 +41,12 @@ export namespace Config {
     analytics: "it sent usage totals to Nik's dashboard (dashboard.nikcli-ai.dev)",
     teleport: "teleport, which sent a session and its workspace to a remote server, is gone",
     autoupdate: "updates came from upstream's release feeds and installers; Ragu Code does not update itself",
+    share: "sharing published sessions on Nik's share service (s.nikcli-ai.dev), removed",
+    autoshare: "sharing published sessions on Nik's share service (s.nikcli-ai.dev), removed",
   }
+
+  /** Keybinds of removed features: accepted in `keybinds` and ignored, like `REMOVED_KEYS`. */
+  export const REMOVED_KEYBINDS = ["session_share", "session_unshare"] as const
 
   function runAuth<A, E>(effect: Effect.Effect<A, E, Auth.Service>) {
     return runPromiseWithLayer(Auth.defaultLayer, effect)
@@ -197,6 +202,11 @@ export namespace Config {
       log.warn("config key removed and ignored", { key, why })
       delete (result as Record<string, unknown>)[key]
     }
+    for (const key of REMOVED_KEYBINDS) {
+      if (!result.keybinds || !(key in result.keybinds)) continue
+      log.warn("keybind removed and ignored", { key })
+      delete (result.keybinds as Record<string, unknown>)[key]
+    }
 
     // Migrate deprecated mode field to agent field
     for (const [name, mode] of Object.entries(result.mode)) {
@@ -227,11 +237,6 @@ export namespace Config {
     }
 
     if (!result.username) result.username = os.userInfo().username
-
-    // Handle migration from autoshare to share field
-    if (result.autoshare === true && !result.share) {
-      result.share = "auto"
-    }
 
     if (!result.keybinds) result.keybinds = Info.shape.keybinds.parse({})
 
@@ -1110,8 +1115,9 @@ export namespace Config {
       stash_delete: z.string().optional().default("ctrl+d").describe("Delete stash entry"),
       model_provider_list: z.string().optional().default("ctrl+a").describe("Open provider list from model dialog"),
       model_favorite_toggle: z.string().optional().default("ctrl+f").describe("Toggle model favorite status"),
-      session_share: z.string().optional().default("none").describe("Share current session"),
-      session_unshare: z.string().optional().default("none").describe("Unshare current session"),
+      // Accepted so an old config still loads, then dropped: see `REMOVED_KEYBINDS`.
+      session_share: z.string().optional().describe(`Removed and ignored: ${REMOVED_KEYS.share}`),
+      session_unshare: z.string().optional().describe(`Removed and ignored: ${REMOVED_KEYS.share}`),
       session_interrupt: z.string().optional().default("escape").describe("Interrupt current session"),
       session_codebro_open: z.string().optional().default("<leader>i").describe("Open the Codebro dossier"),
       subtask_background: z
@@ -1699,16 +1705,8 @@ export namespace Config {
         .optional()
         .describe("Optional hub-and-spoke remote sync settings, manageable from the TUI /sync dialog"),
       analytics: z.unknown().optional().describe(`Removed and ignored: ${REMOVED_KEYS.analytics}`),
-      share: z
-        .enum(["manual", "auto", "disabled"])
-        .optional()
-        .describe(
-          "Control sharing behavior:'manual' allows manual sharing via commands, 'auto' enables automatic sharing, 'disabled' disables all sharing",
-        ),
-      autoshare: z
-        .boolean()
-        .optional()
-        .describe("@deprecated Use 'share' field instead. Share newly created sessions automatically"),
+      share: z.unknown().optional().describe(`Removed and ignored: ${REMOVED_KEYS.share}`),
+      autoshare: z.unknown().optional().describe(`Removed and ignored: ${REMOVED_KEYS.autoshare}`),
       autoupdate: z.unknown().optional().describe(`Removed and ignored: ${REMOVED_KEYS.autoupdate}`),
       disabled_providers: z
         .array(z.string())

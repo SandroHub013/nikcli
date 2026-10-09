@@ -11,7 +11,6 @@ import { PermissionNext } from "@/permission/next"
 import { Session } from "@/session"
 import { SessionContext } from "@/session/context-breakdown"
 import { SessionGoal } from "@/session/goal"
-import { ShareNext } from "@/share/share-next"
 import { Snapshot } from "@/snapshot"
 import { SessionError } from "@/session/error"
 import { MessageV2 } from "@/session/message-v2"
@@ -503,20 +502,6 @@ export namespace SessionHttpApi {
       }),
     )
     .add(
-      HttpApiEndpoint.post("share", "/:sessionID/share", {
-        params: SessionIDPath,
-        success: SessionInfo,
-        error: [NotFound, Busy],
-      }),
-    )
-    .add(
-      HttpApiEndpoint.delete("unshare", "/:sessionID/share", {
-        params: SessionIDPath,
-        success: SessionInfo,
-        error: [NotFound, Busy],
-      }),
-    )
-    .add(
       HttpApiEndpoint.post("summarize", "/:sessionID/summarize", {
         params: SessionIDPath,
         payload: SummarizePayload,
@@ -826,45 +811,6 @@ export namespace SessionHttpApi {
           sessionID: params.sessionID,
         })
         return reverted
-      }).pipe(declaredErrors),
-    share: ({
-      params,
-      request,
-    }: {
-      params: typeof SessionIDPath.Type
-      request: { headers: Record<string, string | undefined> }
-    }) =>
-      Effect.gen(function* () {
-        const configService = yield* Config.Service
-        const config = yield* configService.get()
-        if (config.share === "disabled") {
-          return yield* Effect.die(new Error("Sharing is disabled in configuration"))
-        }
-        // Mirror the Hono route's origin handling: local ragu.local hosts
-        // use the default share base URL, anything else passes its origin.
-        const host = request.headers["host"]
-        const proto = request.headers["x-forwarded-proto"] ?? "http"
-        const origin = host ? `${proto}://${host}` : undefined
-        const shareNext = yield* ShareNext.Service
-        const share = yield* shareNext.create(
-          params.sessionID,
-          origin && !/^https?:\/\/ragu\.local(?::\d+)?$/i.test(origin) ? { baseUrl: origin } : undefined,
-        )
-        const session = yield* Session.Service
-        yield* session.update(
-          params.sessionID,
-          (draft) => {
-            draft.share = { url: share.url }
-          },
-          { touch: false },
-        )
-        return yield* session.get(params.sessionID)
-      }).pipe(declaredErrors),
-    unshare: ({ params }: { params: typeof SessionIDPath.Type }) =>
-      Effect.gen(function* () {
-        const session = yield* Session.Service
-        yield* session.unshare(params.sessionID)
-        return yield* session.get(params.sessionID)
       }).pipe(declaredErrors),
     command: ({ params, payload }: { params: typeof SessionIDPath.Type; payload: typeof CommandPayload.Type }) =>
       Effect.gen(function* () {
@@ -1235,8 +1181,6 @@ export namespace SessionHttpApi {
       .handle("abort", (request) => handlers.abort(request))
       .handle("revert", (request) => handlers.revert(request))
       .handle("unrevert", (request) => handlers.unrevert(request))
-      .handle("share", (request) => handlers.share(request))
-      .handle("unshare", (request) => handlers.unshare(request))
       .handle("summarize", (request) => handlers.summarize(request))
       .handle("generate", (request) => handlers.generate(request))
       .handle("command", (request) => handlers.command(request))
@@ -1276,7 +1220,6 @@ export namespace SessionHttpApi {
     SessionSummary.defaultLayer,
     SessionStatus.defaultLayer,
     Todo.defaultLayer,
-    ShareNext.defaultLayer,
     SessionCompaction.defaultLayer,
     Agent.defaultLayer,
     Config.defaultLayer,
@@ -1290,7 +1233,6 @@ export namespace SessionHttpApi {
     | SessionSummary.Service
     | SessionStatus.Service
     | Todo.Service
-    | ShareNext.Service
     | SessionCompaction.Service
     | Agent.Service
     | Config.Service

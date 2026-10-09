@@ -33,9 +33,7 @@ export default Runtime.handler(Commands.commands["pr"], async (input) => {
       }
 
       const prInfoResult =
-        await $`gh pr view ${prNumber} --json headRepository,headRepositoryOwner,isCrossRepository,headRefName,body`.nothrow()
-
-      let sessionId: string | undefined
+        await $`gh pr view ${prNumber} --json headRepository,headRepositoryOwner,isCrossRepository,headRefName`.nothrow()
 
       if (prInfoResult.exitCode === 0) {
         const prInfoText = prInfoResult.text()
@@ -57,34 +55,6 @@ export default Runtime.handler(Commands.commands["pr"], async (input) => {
             const headRefName = prInfo.headRefName
             await Git.branchSetUpstream(cwd, `${remoteName}/${headRefName}`, localBranchName)
           }
-
-          if (prInfo && prInfo.body) {
-            const sessionMatch = prInfo.body.match(/https:\/\/(?:ragu-code\.dev|ragu\.store)\/s\/([a-zA-Z0-9_-]+)/)
-            if (sessionMatch) {
-              // Links from before the domain move point at nikcli.store; the share lives on nikcli-ai.dev.
-              const sessionUrl = `https://nikcli-ai.dev/s/${sessionMatch[1]}`
-              UI.println(`Found ragu session: ${sessionUrl}`)
-              UI.println(`Importing session...`)
-
-              const importProc = Bun.spawn({
-                windowsHide: true,
-                cmd: [process.execPath, ...process.argv.slice(1, 2), "import", sessionUrl],
-                stdout: "pipe",
-                stderr: "pipe",
-                cwd: process.cwd(),
-                env: process.env,
-              })
-              const importExit = await importProc.exited
-              if (importExit === 0) {
-                const importOutput = (await new Response(importProc.stdout).text()).trim()
-                const sessionIdMatch = importOutput.match(/Imported session: ([a-zA-Z0-9_-]+)/)
-                if (sessionIdMatch) {
-                  sessionId = sessionIdMatch[1]
-                  UI.println(`Session imported: ${sessionId}`)
-                }
-              }
-            }
-          }
         }
       }
 
@@ -95,7 +65,7 @@ export default Runtime.handler(Commands.commands["pr"], async (input) => {
 
       const raguProcess = Bun.spawn({
         windowsHide: true,
-        cmd: [process.execPath, ...process.argv.slice(1, 2), ...(sessionId ? ["-s", sessionId] : [])],
+        cmd: [process.execPath, ...process.argv.slice(1, 2)],
         stdin: "inherit",
         stdout: "inherit",
         stderr: "inherit",

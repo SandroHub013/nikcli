@@ -180,7 +180,6 @@ const SpecRun = Spec.make("run", {
       Flag.withDescription("session id to continue"),
       Flag.optional,
     ),
-    share: Flag.boolean("share").pipe(Flag.withDescription("share the session"), Flag.optional),
     model: Flag.string("model").pipe(
       Flag.withAlias("m"),
       Flag.withDescription("model to use in the format of provider/model"),
@@ -843,9 +842,9 @@ const SpecExport = Spec.make("export", {
 })
 
 const SpecImport = Spec.make("import", {
-  description: "import session data from JSON file or URL",
+  description: "import session data from a JSON file",
   params: {
-    file: Argument.string("file").pipe(Argument.withDescription("path to JSON file or share URL")),
+    file: Argument.string("file").pipe(Argument.withDescription("path to the JSON file")),
   },
 })
 

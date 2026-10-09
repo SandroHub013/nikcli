@@ -8,14 +8,11 @@ import "@/bus/all-events"
 import { BusEvent } from "@/bus/bus-event"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPending } from "@/session/pending"
-import { Session } from "@/session"
-import { Snapshot } from "@/snapshot"
 import { HttpApiAuth } from "./security"
 import { Config } from "@/config/config"
 import { InstanceState, runPromiseWithLayer, type InstanceContext } from "@/effect"
 import { InstanceReload } from "@/project/reload"
 import { Provider } from "@/provider/provider"
-import { ShareNext } from "@/share/share-next"
 import { Workspace } from "@/workspace"
 import { HttpApiEvent } from "./event"
 import { HttpApiPrompt } from "./prompt"
@@ -167,71 +164,6 @@ export namespace ContractExtraHttpApi {
     .prefix("/session")
 
   // --- share — public share pages/data (server.ts) ---
-
-  const SharePath = Schema.Struct({
-    shareID: Schema.String,
-  })
-
-  /**
-   * `ShareNext.Data` — the discriminated union stored per share item. All
-   * three JSON share endpoints return `Object.values(share.items)`, so they
-   * share one schema. Members reuse the services' own Effect Schemas.
-   */
-  const ShareData = Schema.Array(
-    Schema.Union([
-      Schema.Struct({
-        type: Schema.Literal("session"),
-        data: Session.InfoSchema,
-      }),
-      Schema.Struct({
-        type: Schema.Literal("message"),
-        data: MessageV2.InfoSchema,
-      }),
-      Schema.Struct({
-        type: Schema.Literal("part"),
-        data: MessageV2.PartSchema,
-      }),
-      Schema.Struct({
-        type: Schema.Literal("session_diff"),
-        data: Schema.Array(Snapshot.FileDiffSchema),
-      }),
-      Schema.Struct({
-        type: Schema.Literal("model"),
-        data: Schema.Array(Provider.ModelSchema),
-      }),
-    ]),
-  ).annotate({ identifier: "ShareData" })
-
-  export const ShareGroup = HttpApiGroup.make("share")
-    .add(
-      HttpApiEndpoint.get("short", "/s/:shareID", {
-        params: SharePath,
-        success: HttpApiSchema.WithHeaders(HttpApiSchema.Empty(308), {
-          location: Schema.String,
-        }).annotate({
-          identifier: "ShareShortRedirect",
-          description: "308 redirect to /share/:shareID",
-        }),
-      }).annotate(OpenApi.Identifier, "getS:shareID"),
-    )
-    .add(
-      HttpApiEndpoint.get("page", "/share/:shareID", {
-        params: SharePath,
-        success: ShareData,
-      }).annotate(OpenApi.Identifier, "getShare:shareID"),
-    )
-    .add(
-      HttpApiEndpoint.get("api", "/api/share/:shareID", {
-        params: SharePath,
-        success: ShareData,
-      }).annotate(OpenApi.Identifier, "getApiShare:shareID"),
-    )
-    .add(
-      HttpApiEndpoint.get("data", "/api/share/:shareID/data", {
-        params: SharePath,
-        success: ShareData,
-      }).annotate(OpenApi.Identifier, "getApiShare:shareIDData"),
-    )
 
   // --- SSE event feeds — served raw by the bridge specials (`HttpApiEvent`);
   // the instance feed emits plain {type, properties}, the global feed wraps
@@ -406,7 +338,6 @@ export namespace ContractExtraHttpApi {
     .add(AuthGroup)
     .add(ConfigManagementGroup)
     .add(SessionPromptGroup)
-    .add(ShareGroup)
     .add(EventsGroup)
     .add(WorkspaceExtraGroup)
     .add(UsersGroup)
@@ -637,50 +568,6 @@ export namespace ContractExtraHttpApi {
       ),
   )
 
-  const ShareHandlersLive = HttpApiBuilder.group(Api, "share", (handlers) => {
-    const read = async (shareID: string) =>
-      runPromiseWithLayer(
-        ShareNext.defaultLayer,
-        Effect.gen(function* () {
-          const share = yield* ShareNext.Service
-          return yield* share.publicData(shareID)
-        }),
-      )
-    return handlers
-      .handleRaw(
-        "short",
-        raw((request) => {
-          const id = decodeURIComponent(new URL(request.url).pathname.split("/").at(-1) ?? "")
-          return new Response(null, {
-            status: 308,
-            headers: { location: `/share/${encodeURIComponent(id)}` },
-          })
-        }),
-      )
-      .handleRaw(
-        "page",
-        raw(async (request) =>
-          shareResponse(await read(decodeURIComponent(new URL(request.url).pathname.split("/").at(-1) ?? ""))),
-        ),
-      )
-      .handleRaw(
-        "api",
-        raw(async (request) =>
-          shareResponse(await read(decodeURIComponent(new URL(request.url).pathname.split("/").at(-1) ?? ""))),
-        ),
-      )
-      .handleRaw(
-        "data",
-        raw(async (request) =>
-          shareResponse(await read(decodeURIComponent(new URL(request.url).pathname.split("/").at(-2) ?? ""))),
-        ),
-      )
-  })
-
-  function shareResponse(data: unknown) {
-    return data ? json(data) : new Response("Share not found", { status: 404 })
-  }
-
   const EventsHandlersLive = HttpApiBuilder.group(Api, "events", (handlers) =>
     handlers
       .handleRaw(
@@ -719,7 +606,6 @@ export namespace ContractExtraHttpApi {
     AuthHandlersLive,
     ConfigHandlersLive,
     PromptHandlersLive,
-    ShareHandlersLive.pipe(Layer.provide(ShareNext.defaultLayer)),
     EventsHandlersLive,
     WorkspaceHandlersLive,
     UsersHandlersLive,

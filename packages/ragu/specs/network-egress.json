@@ -24,8 +24,6 @@
     "connector": "Third-party service REST APIs reached through configured connectors (Figma, GitHub, Lovable, Slack).",
     "install": "Downloading a binary or archive (LSP servers, auto-update) from a vendor or GitHub release.",
     "tool": "Network work done on behalf of a tool call the user (or agent) explicitly requested.",
-    "share": "Publishing or fetching a share/artifact on the ragu store.",
-    "telemetry": "Anonymous usage reporting (opt-out, never prompts or paths).",
     "notify": "User-configured webhook delivery (todo notifications, plugin notify).",
     "sync": "Hub-and-spoke session/workspace sync — the remote journal transport.",
     "proxy": "Server-side forwarding to a remote workspace, companion or share target.",
@@ -39,29 +37,9 @@
       "note": "Device-code start/poll and bearer refresh against the ragu auth issuer."
     },
     {
-      "file": "packages/ragu/src/analytics/share.ts",
-      "purpose": "telemetry",
-      "note": "Posts anonymous per-day model totals to the public stats endpoint."
-    },
-    {
-      "file": "packages/ragu/src/artifact/index.ts",
-      "purpose": "share",
-      "note": "Uploads and downloads artifacts on the ragu store."
-    },
-    {
       "file": "packages/ragu/src/auth/index.ts",
       "purpose": "auth",
       "note": "Provider OAuth token exchange and refresh."
-    },
-    {
-      "file": "packages/ragu/src/cli/handlers/github/install.ts",
-      "purpose": "connector",
-      "note": "Probes the GitHub app installation after a CLI-driven install."
-    },
-    {
-      "file": "packages/ragu/src/cli/handlers/import.ts",
-      "purpose": "session",
-      "note": "Imports a session or config from a user-supplied URL."
     },
     {
       "file": "packages/ragu/src/cli/handlers/mcp/debug.ts",
@@ -69,19 +47,9 @@
       "note": "Probes a configured MCP server during `mcp debug`."
     },
     {
-      "file": "packages/ragu/src/cli/handlers/run.ts",
-      "purpose": "probe",
-      "note": "Health/readiness probe for a URL passed to `ragu run`."
-    },
-    {
       "file": "packages/ragu/src/cli/handlers/serve.ts",
       "purpose": "probe",
       "note": "Waits for the served instance to answer its health endpoint."
-    },
-    {
-      "file": "packages/ragu/src/cli/handlers/teleport.ts",
-      "purpose": "sync",
-      "note": "Sends a session to a remote ragu teleport server."
     },
     {
       "file": "packages/ragu/src/connectors/api/base.ts",
@@ -92,11 +60,6 @@
     { "file": "packages/ragu/src/connectors/api/github.ts", "purpose": "connector", "note": "GitHub REST API." },
     { "file": "packages/ragu/src/connectors/api/lovable.ts", "purpose": "connector", "note": "Lovable API." },
     { "file": "packages/ragu/src/connectors/api/slack.ts", "purpose": "connector", "note": "Slack Web API." },
-    {
-      "file": "packages/ragu/src/installation/index.ts",
-      "purpose": "install",
-      "note": "Version check and auto-update download."
-    },
     {
       "file": "packages/ragu/src/lsp/server.ts",
       "purpose": "install",
@@ -160,16 +123,10 @@
       "note": "Mobile companion upstream calls."
     },
     {
-      "file": "packages/ragu/src/server/mobile/teleport.ts",
-      "purpose": "proxy",
-      "note": "Mobile-initiated teleport to a remote server."
-    },
-    {
       "file": "packages/ragu/src/server/proxy.ts",
       "purpose": "proxy",
       "note": "Remote workspace HTTP + WebSocket proxy."
     },
-    { "file": "packages/ragu/src/server/public.ts", "purpose": "proxy", "note": "Public share/proxy fetch." },
     { "file": "packages/ragu/src/service/service.ts", "purpose": "probe", "note": "Service-registry health probe." },
     {
       "file": "packages/ragu/src/session/instruction.ts",
@@ -180,11 +137,6 @@
       "file": "packages/ragu/src/session/todo.ts",
       "purpose": "notify",
       "note": "Posts todo notifications to a user-configured webhook."
-    },
-    {
-      "file": "packages/ragu/src/share/share-next.ts",
-      "purpose": "share",
-      "note": "Uploads a shared session to the share service."
     },
     {
       "file": "packages/ragu/src/sync/remote-client.ts",

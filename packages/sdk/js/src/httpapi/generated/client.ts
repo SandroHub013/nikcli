@@ -437,10 +437,6 @@ import type {
   SessionRevertOutput,
   SessionUnrevertInput,
   SessionUnrevertOutput,
-  SessionShareInput,
-  SessionShareOutput,
-  SessionUnshareInput,
-  SessionUnshareOutput,
   SessionSummarizeInput,
   SessionSummarizeOutput,
   SessionGenerateInput,
@@ -574,14 +570,6 @@ import type {
   SessionPromptPromptOutput,
   SessionPromptPromptAsyncInput,
   SessionPromptPromptAsyncOutput,
-  ShareShortInput,
-  ShareShortOutput,
-  SharePageInput,
-  SharePageOutput,
-  ShareApiInput,
-  ShareApiOutput,
-  ShareDataInput,
-  ShareDataOutput,
   EventsSubscribeOutput,
   EventsGlobalOutput,
   WorkspaceExtraEventsInput,
@@ -3545,28 +3533,6 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
-      share: (input: SessionShareInput, requestOptions?: RequestOptions) =>
-        request<SessionShareOutput>(
-          {
-            method: "POST",
-            path: `/session/${encodeURIComponent(input.sessionID)}/share`,
-            successStatus: 200,
-            declaredStatuses: [404, 409],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      unshare: (input: SessionUnshareInput, requestOptions?: RequestOptions) =>
-        request<SessionUnshareOutput>(
-          {
-            method: "DELETE",
-            path: `/session/${encodeURIComponent(input.sessionID)}/share`,
-            successStatus: 200,
-            declaredStatuses: [404, 409],
-            empty: false,
-          },
-          requestOptions,
-        ),
       summarize: (input: SessionSummarizeInput, requestOptions?: RequestOptions) =>
         request<SessionSummarizeOutput>(
           {
@@ -4400,53 +4366,6 @@ export function make(options: ClientOptions) {
             successStatus: 204,
             declaredStatuses: [],
             empty: true,
-          },
-          requestOptions,
-        ),
-    },
-    share: {
-      short: (input: ShareShortInput, requestOptions?: RequestOptions) =>
-        request<ShareShortOutput>(
-          {
-            method: "GET",
-            path: `/s/${encodeURIComponent(input.shareID)}`,
-            successStatus: 308,
-            declaredStatuses: [],
-            responseHeaders: ["location"],
-            empty: true,
-          },
-          requestOptions,
-        ),
-      page: (input: SharePageInput, requestOptions?: RequestOptions) =>
-        request<SharePageOutput>(
-          {
-            method: "GET",
-            path: `/share/${encodeURIComponent(input.shareID)}`,
-            successStatus: 200,
-            declaredStatuses: [],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      api: (input: ShareApiInput, requestOptions?: RequestOptions) =>
-        request<ShareApiOutput>(
-          {
-            method: "GET",
-            path: `/api/share/${encodeURIComponent(input.shareID)}`,
-            successStatus: 200,
-            declaredStatuses: [],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      data: (input: ShareDataInput, requestOptions?: RequestOptions) =>
-        request<ShareDataOutput>(
-          {
-            method: "GET",
-            path: `/api/share/${encodeURIComponent(input.shareID)}/data`,
-            successStatus: 200,
-            declaredStatuses: [],
-            empty: false,
           },
           requestOptions,
         ),

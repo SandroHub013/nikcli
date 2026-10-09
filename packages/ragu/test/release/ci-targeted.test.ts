@@ -292,7 +292,6 @@ describe("workflow failure regressions", () => {
     const src = await read("github/index.ts")
     expect(src).toContain("createRaguClient({ baseUrl: url, throwOnError: true })")
     expect(src).toContain('client.app.log({\n          service: "github-workflow"')
-    expect(src).toContain("client.session.share({ sessionID: session.id })")
     expect(src).toContain("client.session.prompt({\n      sessionID: session.id")
     expect(src).not.toMatch(/client\.[A-Za-z0-9_.]+<true>/)
     expect(src).not.toContain("path: session")

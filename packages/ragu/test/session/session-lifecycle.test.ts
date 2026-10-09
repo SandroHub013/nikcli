@@ -21,7 +21,6 @@ const [
   { Session },
   { SessionError },
   { SessionRevert },
-  { ShareRepo },
   { SessionDiffRepo },
   { Global },
 ] = await Promise.all([
@@ -31,7 +30,6 @@ const [
   import("../../src/session"),
   import("../../src/session/error"),
   import("../../src/session/revert"),
-  import("../../src/share/repo"),
   import("../../src/session/diff-repo"),
   import("@ragu/util/global"),
 ])
@@ -222,47 +220,6 @@ describe("session lifecycle", () => {
       )
 
       expect(Effect.runSync(SessionDiffRepo.get(session.id))).toEqual([])
-    })
-  })
-
-  it("getShare reads SQL and ignores leftover session_share JSON", async () => {
-    await withProject(async () => {
-      const session = await createSession()
-      await writeLeftoverJson(["session_share", session.id], {
-        url: "http://json-trap/share",
-        mode: "local",
-        id: "share_json_trap",
-      })
-      Effect.runSync(
-        ShareRepo.put(session.id, {
-          url: "http://sql/share",
-          mode: "local",
-          id: "share_sql",
-        }),
-      )
-
-      const share = await runSession(
-        Effect.gen(function* () {
-          const sessionService = yield* Session.Service
-          return yield* sessionService.getShare(session.id)
-        }),
-      )
-      expect(share.url).toBe("http://sql/share")
-      expect(share.id).toBe("share_sql")
-    })
-  })
-
-  it("getShare throws SessionNotFoundError when the share row is missing", async () => {
-    await withProject(async () => {
-      const session = await createSession()
-      await expect(
-        runSession(
-          Effect.gen(function* () {
-            const sessionService = yield* Session.Service
-            return yield* sessionService.getShare(session.id)
-          }),
-        ),
-      ).rejects.toBeInstanceOf(SessionError.NotFoundError)
     })
   })
 
