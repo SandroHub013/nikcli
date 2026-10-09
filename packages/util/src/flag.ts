@@ -172,8 +172,7 @@ export namespace Flag {
   export const RAGU_CLIENT = process.env["RAGU_CLIENT"] ?? "cli"
   export const RAGU_SERVER_PASSWORD = process.env["RAGU_SERVER_PASSWORD"]
   export const RAGU_SERVER_USERNAME = process.env["RAGU_SERVER_USERNAME"]
-  // Max HTTP request body in bytes (defaults applied at the serve site). Lets
-  // large teleport uploads through Bun's 128MB default when needed.
+  // Max HTTP request body in bytes (defaults applied at the serve site).
   export const RAGU_SERVER_MAX_BODY = process.env["RAGU_SERVER_MAX_BODY"]
     ? parseInt(process.env["RAGU_SERVER_MAX_BODY"]!, 10)
     : undefined

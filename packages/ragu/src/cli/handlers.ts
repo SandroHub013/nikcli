@@ -120,7 +120,6 @@ export const Handlers = Runtime.handlers(Commands, {
     share: () => import("./handlers/remote/share"),
     attach: () => import("./handlers/remote/attach"),
   },
-  teleport: () => import("./handlers/teleport"),
   companion: {
     serve: () => import("./handlers/companion/serve"),
     open: () => import("./handlers/companion/open"),

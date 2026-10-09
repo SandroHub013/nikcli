@@ -50,10 +50,6 @@ import {
   MobileWorktreeRemoveInput,
   MobileWorktreeResetInput,
 } from "@/server/mobile/helpers"
-import {
-  TeleportInput as MobileTeleportInput,
-  TeleportOutInput as MobileTeleportOutInput,
-} from "@/server/mobile/teleport"
 import { MobileAuth } from "@/mobile/auth"
 import { fromZod } from "@/util/zod-effect"
 import { MissionDefinitionSchema, MissionExecSchema } from "@/mission/schema"
@@ -112,8 +108,7 @@ export namespace MobileHttpApi {
   // Domain objects reuse the Effect Schemas the services already own, so the
   // generated clients get real types and there is a single definition per
   // domain object. Every `/mobile/*` endpoint that answers JSON is an encoded
-  // `.handle` (see `mobile-handlers.ts`); SSE, teleport chunk upload and the
-  // pty upgrade stay raw.
+  // `.handle` (see `mobile-handlers.ts`); SSE and the pty upgrade stay raw.
   const SessionInfo = Session.InfoSchema
   const WorktreeInfo = Worktree.InfoSchema
   const ProjectInfo = Project.InfoSchema
@@ -229,12 +224,6 @@ export namespace MobileHttpApi {
   const MobileRoutineTriggerInputEffect = fromZod(MobileRoutineTriggerInput).annotate({
     identifier: "MobileRoutineTriggerInput",
   })
-  const MobileTeleportInputEffect = fromZod(MobileTeleportInput).annotate({
-    identifier: "MobileTeleportInput",
-  })
-  const MobileTeleportOutInputEffect = fromZod(MobileTeleportOutInput).annotate({
-    identifier: "MobileTeleportOutInput",
-  })
   const MobileWorktreeCreateInputEffect = fromZod(MobileWorktreeCreateInput).annotate({
     identifier: "MobileWorktreeCreateInput",
   })
@@ -324,14 +313,6 @@ export namespace MobileHttpApi {
       }),
     ),
   }).annotate({ identifier: "MobileBootstrap" })
-
-  const TeleportResult = Schema.Struct({
-    sessionID: Schema.String,
-    title: Schema.optional(Schema.String),
-    messageCount: Schema.Number,
-    directory: Schema.optional(Schema.String),
-    workspace: Schema.Boolean,
-  }).annotate({ identifier: "MobileTeleportResult" })
 
   const GitChange = Schema.Struct({
     status: Schema.Literals(["added", "modified", "deleted", "renamed"]),
@@ -759,33 +740,6 @@ export namespace MobileHttpApi {
         params: SessionIDPath,
         success: Schema.Struct({ todos: Schema.Array(Todo.InfoSchema) }),
       }).annotate(OpenApi.Identifier, "mobile.session.todo"),
-    )
-    // --- teleport ---
-    .add(
-      HttpApiEndpoint.post("teleportUploadBegin", "/teleport/upload", {
-        success: Schema.Struct({ uploadID: Schema.String }),
-      }).annotate(OpenApi.Identifier, "mobile.session.teleport.upload.begin"),
-    )
-    .add(
-      HttpApiEndpoint.post("teleportUploadChunk", "/teleport/upload/:uploadID", {
-        params: Schema.Struct({ uploadID: Schema.String }),
-        success: Schema.Struct({ ok: Schema.Boolean }),
-      }).annotate(OpenApi.Identifier, "mobile.session.teleport.upload.chunk"),
-    )
-    .add(
-      HttpApiEndpoint.post("teleportIn", "/teleport", {
-        payload: MobileTeleportInputEffect,
-        success: TeleportResult,
-        error: BadRequest,
-      }).annotate(OpenApi.Identifier, "mobile.session.teleport"),
-    )
-    .add(
-      HttpApiEndpoint.post("teleportOut", "/session/:sessionID/teleport", {
-        params: SessionIDPath,
-        payload: MobileTeleportOutInputEffect,
-        success: TeleportResult,
-        error: [BadRequest, NotFound],
-      }).annotate(OpenApi.Identifier, "mobile.session.teleport.out"),
     )
     // --- worktree ---
     .add(

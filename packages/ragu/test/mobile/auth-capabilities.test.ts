@@ -12,7 +12,6 @@ import { MobileAuth } from "@/mobile/auth"
 describe("MobileAuth capabilities", () => {
   it("gives a paired phone the full operator set", () => {
     expect(MobileAuth.can("mobile", "pty")).toBe(true)
-    expect(MobileAuth.can("mobile", "teleport")).toBe(true)
     expect(MobileAuth.can("mobile", "git")).toBe(true)
   })
 
@@ -21,7 +20,6 @@ describe("MobileAuth capabilities", () => {
     // reading a working tree.
     expect(MobileAuth.can("cli-sync", "read")).toBe(true)
     expect(MobileAuth.can("cli-sync", "pty")).toBe(false)
-    expect(MobileAuth.can("cli-sync", "teleport")).toBe(false)
     expect(MobileAuth.can("cli-sync", "git")).toBe(false)
   })
 
@@ -39,7 +37,7 @@ describe("MobileAuth capabilities", () => {
   })
 
   it("advertises the set the handshake will send", () => {
-    expect([...MobileAuth.capabilities("mobile")].sort()).toEqual(["git", "pty", "read", "teleport", "write"])
+    expect([...MobileAuth.capabilities("mobile")].sort()).toEqual(["git", "pty", "read", "write"])
   })
 })
 
@@ -61,12 +59,6 @@ describe("MobileAuth.requiredCapability", () => {
     expect(MobileAuth.requiredCapability("/pty/pty_123/connect")).toBe("pty")
   })
 
-  it("guards teleport wherever it appears in the path", () => {
-    expect(MobileAuth.requiredCapability("/mobile/teleport")).toBe("teleport")
-    expect(MobileAuth.requiredCapability("/mobile/teleport/upload")).toBe("teleport")
-    expect(MobileAuth.requiredCapability("/mobile/session/ses_1/teleport")).toBe("teleport")
-  })
-
   it("guards the git and github surfaces", () => {
     expect(MobileAuth.requiredCapability("/mobile/git/status")).toBe("git")
     expect(MobileAuth.requiredCapability("/mobile/github/repos")).toBe("git")
@@ -84,7 +76,7 @@ describe("MobileAuth.requiredCapability", () => {
   it("leaves a paired phone able to reach everything it is guarded on", () => {
     // The regression that matters most: this pairing must not lock out the
     // device it was written for.
-    for (const pathname of ["/mobile/pty", "/mobile/teleport", "/mobile/git/status", "/pty/p/connect"]) {
+    for (const pathname of ["/mobile/pty", "/mobile/git/status", "/pty/p/connect"]) {
       const required = MobileAuth.requiredCapability(pathname)
       expect(required).toBeTruthy()
       expect(MobileAuth.can("mobile", required!)).toBe(true)
@@ -92,7 +84,7 @@ describe("MobileAuth.requiredCapability", () => {
   })
 
   it("stops a sync token on every guarded path", () => {
-    for (const pathname of ["/mobile/pty", "/mobile/teleport", "/mobile/git/status"]) {
+    for (const pathname of ["/mobile/pty", "/mobile/git/status"]) {
       expect(MobileAuth.can("cli-sync", MobileAuth.requiredCapability(pathname)!)).toBe(false)
     }
   })

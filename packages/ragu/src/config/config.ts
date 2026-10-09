@@ -39,6 +39,7 @@ export namespace Config {
    */
   export const REMOVED_KEYS: Record<string, string> = {
     analytics: "it sent usage totals to Nik's dashboard (dashboard.nikcli-ai.dev)",
+    teleport: "teleport, which sent a session and its workspace to a remote server, is gone",
   }
 
   function runAuth<A, E>(effect: Effect.Effect<A, E, Auth.Service>) {
@@ -1342,17 +1343,6 @@ export namespace Config {
     })
   export type Remote = z.infer<typeof Remote>
 
-  export const Teleport = z
-    .object({
-      url: z.string().optional().describe("Last used teleport server base URL (e.g. a Railway deploy)"),
-      token: z.string().optional().describe("Last used teleport mobile Bearer token"),
-    })
-    .strict()
-    .meta({
-      ref: "TeleportConfig",
-    })
-  export type Teleport = z.infer<typeof Teleport>
-
   export const Layout = z.enum(["auto", "stretch"]).meta({
     ref: "LayoutConfig",
   })
@@ -1648,7 +1638,7 @@ export namespace Config {
       ads: Ads.optional().describe("User-defined ads shown in the TUI tips area"),
       server: Server.optional().describe("Server configuration for ragu serve and web commands"),
       remote: Remote.optional().describe("Remote Control defaults and behavior"),
-      teleport: Teleport.optional().describe("Teleport server defaults for sending sessions to a remote server"),
+      teleport: z.unknown().optional().describe(`Removed and ignored: ${REMOVED_KEYS.teleport}`),
       command: z
         .record(z.string(), Command)
         .optional()

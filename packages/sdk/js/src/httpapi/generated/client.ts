@@ -219,13 +219,6 @@ import type {
   MobileSessionRenameOutput,
   MobileSessionTodoInput,
   MobileSessionTodoOutput,
-  MobileTeleportUploadBeginOutput,
-  MobileTeleportUploadChunkInput,
-  MobileTeleportUploadChunkOutput,
-  MobileTeleportInInput,
-  MobileTeleportInOutput,
-  MobileTeleportOutInput,
-  MobileTeleportOutOutput,
   MobileWorktreeCreateInput,
   MobileWorktreeCreateOutput,
   MobileWorktreeRemoveInput,
@@ -2152,58 +2145,6 @@ export function make(options: ClientOptions) {
             path: `/mobile/session/${encodeURIComponent(input.sessionID)}/todo`,
             successStatus: 200,
             declaredStatuses: [],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      teleportUploadBegin: (requestOptions?: RequestOptions) =>
-        request<MobileTeleportUploadBeginOutput>(
-          { method: "POST", path: `/mobile/teleport/upload`, successStatus: 200, declaredStatuses: [], empty: false },
-          requestOptions,
-        ),
-      teleportUploadChunk: (input: MobileTeleportUploadChunkInput, requestOptions?: RequestOptions) =>
-        request<MobileTeleportUploadChunkOutput>(
-          {
-            method: "POST",
-            path: `/mobile/teleport/upload/${encodeURIComponent(input.uploadID)}`,
-            successStatus: 200,
-            declaredStatuses: [],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      teleportIn: (input: MobileTeleportInInput, requestOptions?: RequestOptions) =>
-        request<MobileTeleportInOutput>(
-          {
-            method: "POST",
-            path: `/mobile/teleport`,
-            body: {
-              title: input["title"],
-              name: input["name"],
-              origin: input["origin"],
-              permission: input["permission"],
-              messages: input["messages"],
-              uploadID: input["uploadID"],
-            },
-            successStatus: 200,
-            declaredStatuses: [400],
-            empty: false,
-          },
-          requestOptions,
-        ),
-      teleportOut: (input: MobileTeleportOutInput, requestOptions?: RequestOptions) =>
-        request<MobileTeleportOutOutput>(
-          {
-            method: "POST",
-            path: `/mobile/session/${encodeURIComponent(input.sessionID)}/teleport`,
-            body: {
-              url: input["url"],
-              token: input["token"],
-              content: input["content"],
-              includeGit: input["includeGit"],
-            },
-            successStatus: 200,
-            declaredStatuses: [400, 404],
             empty: false,
           },
           requestOptions,

@@ -146,7 +146,7 @@ describe("mobile pairing", () => {
 
   test("normalizes cloud server and mobile endpoint URLs", () => {
     expect(normalizeMobileServerUrl("cloud.example.com/")).toBe("https://cloud.example.com")
-    expect(normalizeMobileServerUrl("https://cloud.example.com/base/mobile/teleport")).toBe(
+    expect(normalizeMobileServerUrl("https://cloud.example.com/base/mobile")).toBe(
       "https://cloud.example.com/base",
     )
     expect(normalizeMobileServerUrl("ftp://cloud.example.com")).toBeNull()

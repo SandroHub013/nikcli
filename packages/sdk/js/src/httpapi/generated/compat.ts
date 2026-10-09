@@ -286,14 +286,6 @@ export const makeCompat = (raw: Raw, helpers: CompatHelpers) => {
         message: result(raw["mobile"]["sessionMessage"]),
         rename: result(raw["mobile"]["sessionRename"]),
         stream: stream(raw["mobile"]["sessionStream"]),
-        teleport: result(raw["mobile"]["teleportIn"]),
-        teleport2: {
-          out: result(raw["mobile"]["teleportOut"]),
-          upload: {
-            begin: result0(raw["mobile"]["teleportUploadBegin"]),
-            chunk: result(raw["mobile"]["teleportUploadChunk"]),
-          },
-        },
         todo: result(raw["mobile"]["sessionTodo"]),
       },
       worktree: {

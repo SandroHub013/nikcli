@@ -57,6 +57,7 @@ async function loaded(config: Record<string, unknown>) {
 /** A removed key: loading a config that has it works, keeps the rest, and drops the key. */
 const REMOVED: Record<string, unknown> = {
   analytics: { share: true, endpoint: "https://dashboard.nikcli-ai.dev/api/community/report" },
+  teleport: { url: "https://my-server.up.railway.app", token: "mobile-token" },
 }
 
 describe("config keys of Nik's removed services", () => {

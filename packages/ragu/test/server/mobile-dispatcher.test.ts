@@ -6,16 +6,12 @@ describe("mobile framework-neutral dispatcher", () => {
     expect(await dispatchMobileRequest(new Request("http://ragu.local/project"))).toBeUndefined()
   })
 
-  it("preserves unknown upload status and JSON headers", async () => {
-    const response = await dispatchMobileRequest(
-      new Request("http://ragu.local/mobile/teleport/upload/missing", {
-        method: "POST",
-        body: new Uint8Array([1, 2, 3]),
-      }),
-    )
-    expect(response?.status).toBe(404)
-    expect(response?.headers.get("content-type")).toContain("application/json")
-    expect(await response?.json()).toEqual({ error: "Unknown upload" })
+  it("does not serve the old teleport chunk upload", async () => {
+    const request = new Request("http://ragu.local/mobile/teleport/upload/missing", {
+      method: "POST",
+      body: new Uint8Array([1, 2, 3]),
+    })
+    expect(await dispatchMobileRequest(request)).toBeUndefined()
   })
 
   it("returns undefined for an unmatched mobile route", async () => {
@@ -28,8 +24,8 @@ describe("mobile framework-neutral dispatcher", () => {
 
   it("does not claim JSON routes that moved to the encoded router", async () => {
     // H7: every JSON /mobile/* endpoint is an encoded `.handle` on the mobile
-    // group; the dispatcher only answers the SSE streams and the teleport
-    // chunk upload, so these all fall through.
+    // group; the dispatcher only answers the SSE streams, so these all fall
+    // through.
     const jsonRoutes: Array<[path: string, init: RequestInit]> = [
       ["/mobile/worktree/reset", { method: "POST", headers: { "content-type": "application/json" }, body: "{" }],
       ["/mobile/pty", { method: "POST", headers: { "content-type": "application/json" }, body: "{" }],

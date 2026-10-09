@@ -1570,9 +1570,8 @@ function App(props: {
         // Lazy: pairing a phone is not on the path to the first frame, and this
         // dialog's chain is the most expensive of the eager component imports.
         // See `script/import-cost.ts` for the measurement.
-        const sessionID = sessionIDFromRoute(route.data)
         void import("@tui/component/dialog-mobile-connect").then(({ DialogMobileConnect }) => {
-          dialog.replace(() => <DialogMobileConnect sessionID={sessionID} />)
+          dialog.replace(() => <DialogMobileConnect />)
         })
       },
     },

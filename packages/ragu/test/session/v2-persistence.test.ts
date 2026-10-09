@@ -232,13 +232,10 @@ describe("SessionV2 write API", () => {
     expect(engine).toContain("SessionV2Write.persist")
     const run = await Bun.file(root + "cli/handlers/run.ts").text()
     const imported = await Bun.file(root + "cli/handlers/import.ts").text()
-    const teleport = await Bun.file(root + "server/mobile/teleport.ts").text()
     expect(run).toContain("SessionV2Write.persist")
     expect(imported).toContain("SessionV2Write.persist")
-    expect(teleport).toContain("SessionV2Write.persist")
     expect(run).not.toContain("SessionEntryProjection.rebuild")
     expect(imported).not.toContain("SessionEntryProjection.rebuild")
-    expect(teleport).not.toContain("SessionEntryProjection.rebuild")
   })
 
   it("create uses the instance directory", async () => {

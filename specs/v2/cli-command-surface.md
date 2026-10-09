@@ -61,7 +61,6 @@ Source: the `commands` field of the root `Spec.make("ragu", …)` in `src/cli/co
 | `connectors`      | `list`, `auth [name]`, `logout [name]`, `add`                                                      |                                                        |
 | `sync`            | `status`, `connect`, `disconnect`, `token create`                                                  |                                                        |
 | `remote`          | `start`, `stop`, `status`, `share`, `attach <sessionId>`                                           |                                                        |
-| `teleport`        | `[sessionID]`                                                                                      |                                                        |
 | `companion`       | `serve`, `open`                                                                                    |                                                        |
 | `mobile`          | `serve`, `pair`, `token list`, `token revoke <id>`                                                 |                                                        |
 | `routine`         | `list`, `create`, `get <id>`, `run <id>`, `pause <id>`, `resume <id>`, `delete <id>`               |                                                        |

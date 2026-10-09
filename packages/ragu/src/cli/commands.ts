@@ -1055,38 +1055,6 @@ const SpecRemote = Spec.make("remote", {
   commands: [SpecRemoteStart, SpecRemoteStop, SpecRemoteStatus, SpecRemoteShare, SpecRemoteAttach],
 })
 
-const SpecTeleport = Spec.make("teleport", {
-  description: "teleport a session to a remote ragu server to continue it from mobile",
-  params: {
-    sessionID: Argument.string("sessionID").pipe(
-      Argument.withDescription("session id to teleport (defaults to interactive selection)"),
-      Argument.optional,
-    ),
-    url: Flag.string("url").pipe(
-      Flag.withAlias("u"),
-      Flag.withDescription("remote server base URL (e.g. https://my-app.up.railway.app)"),
-      Flag.optional,
-    ),
-    token: Flag.string("token").pipe(
-      Flag.withAlias("t"),
-      Flag.withDescription("mobile Bearer token for the remote server"),
-      Flag.optional,
-    ),
-    content: Flag.boolean("content").pipe(
-      Flag.withDescription("clone the working directory (source files, no binaries) to the server"),
-      Flag.withDefault(true),
-    ),
-    git: Flag.boolean("git").pipe(
-      Flag.withDescription("also include the full .git history (large — off by default)"),
-      Flag.withDefault(false),
-    ),
-    save: Flag.boolean("save").pipe(
-      Flag.withDescription("remember the server URL and token for next time"),
-      Flag.withDefault(true),
-    ),
-  },
-})
-
 const SpecCompanionServe = Spec.make("serve", {
   description: "Start the ragu server with companion UI",
   params: {
@@ -1585,7 +1553,6 @@ export const Commands = Spec.make("ragu", {
     SpecSpeakModel,
     SpecBrainModel,
     SpecRemote,
-    SpecTeleport,
     SpecCompanion,
     SpecMobile,
     SpecRoutine,

@@ -13,7 +13,6 @@ import * as misc from "../mobile/misc"
 import * as github from "../mobile/github"
 import * as session from "../mobile/session"
 import * as lifecycle from "../mobile/session-lifecycle"
-import * as teleport from "../mobile/teleport"
 import * as worktree from "../mobile/worktree"
 import * as git from "../mobile/git"
 import * as loops from "../mobile/loops"
@@ -23,10 +22,9 @@ import * as hostStatus from "../mobile/host-status"
 import * as pty from "../mobile/pty"
 
 /**
- * Three `/mobile/*` routes stay raw — the two SSE streams and the binary
- * teleport chunk upload. Everything else is an encoded `.handle` that receives
- * the decoded contract payload and answers through the group's response
- * schemas. (`ptyConnect`, the contract-only WebSocket upgrade, also stays raw;
+ * Two `/mobile/*` routes stay raw — the two SSE streams. Everything else is an
+ * encoded `.handle` that receives the decoded contract payload and answers
+ * through the group's response schemas. (`ptyConnect`, the contract-only WebSocket upgrade, also stays raw;
  * the dispatcher has never served it.)
  */
 function forward({ request }: { readonly request: HttpServerRequest.HttpServerRequest }) {
@@ -237,15 +235,6 @@ const MobileHandlers = HttpApiBuilder.group(MobileHttpApi.Api, "mobile", (handle
       route(() => lifecycle.sessionRename(params.sessionID, payload), catchNotFound),
     )
     .handle("sessionTodo", ({ params }) => fromPromise(() => session.sessionTodo(params.sessionID)))
-    // --- teleport ---
-    .handle("teleportUploadBegin", () => fromPromise(() => teleport.teleportUploadBegin()))
-    .handleRaw("teleportUploadChunk", forward)
-    .handle("teleportIn", ({ payload }) =>
-      routeWithDirectory((directory) => teleport.teleportIn(directory, mutable(payload)), catchBad),
-    )
-    .handle("teleportOut", ({ params, payload }) =>
-      route(() => teleport.teleportOut(params.sessionID, mutable(payload)), catchBadOrNotFound),
-    )
     // --- worktree ---
     .handle("worktreeCreate", ({ payload }) => fromPromise(() => worktree.create(mutable(payload))))
     .handle("worktreeRemove", ({ payload }) => fromPromise(() => worktree.remove(mutable(payload))))

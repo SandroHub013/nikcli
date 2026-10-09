@@ -159,7 +159,6 @@ const cliModulePaths = [
   "@/cli/handlers/sync/shared",
   "@/cli/handlers/sync/status",
   "@/cli/handlers/sync/token/create",
-  "@/cli/handlers/teleport",
   "@/cli/handlers/uninstall",
   "@/cli/handlers/upgrade",
   "@/cli/handlers/usage",

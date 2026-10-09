@@ -261,7 +261,7 @@ describe("mobile bearer authentication", () => {
         }
 
         // And the device the capability was written for is not locked out.
-        for (const pathname of ["/mobile/pty", "/mobile/teleport", "/mobile/git/status"]) {
+        for (const pathname of ["/mobile/pty", "/mobile/git/status"]) {
           const ok = await attempt(phone.token, pathname)
           expect(ok.ok).toBe(true)
         }
