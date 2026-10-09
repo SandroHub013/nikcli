@@ -63,9 +63,12 @@ describe("removal of Zen promotions and small_model fallback", () => {
   })
 
   it("native failure message for QuotaExceeded does not include Zen url", () => {
+    // The runtime's failure carries its typed reason under `reason`, as in native-retry-after.test.ts.
     const error = {
-      _tag: "QuotaExceeded",
-      status: 429,
+      reason: {
+        _tag: "QuotaExceeded",
+        status: 429,
+      },
     }
     const apiError = nativeErrorToAPICallError(error)
     expect(apiError?.message).toBe("Free usage exceeded")
