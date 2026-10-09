@@ -7,7 +7,6 @@ import { TextField } from "@ragu/ui/text-field"
 import { showToast } from "@ragu/ui/toast"
 import { For } from "solid-js"
 import { createStore, produce } from "solid-js/store"
-import { Link } from "@/components/link"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -284,9 +283,7 @@ export function DialogCustomProvider(props: Props) {
         <form onSubmit={save} class="flex flex-col gap-6">
           <p class="text-14-regular text-text-base">
             {language.t("provider.custom.description.prefix")}
-            <Link href="https://nikcli-ai.dev/docs/providers/#custom-provider" tabIndex={-1}>
-              {language.t("provider.custom.description.link")}
-            </Link>
+            {language.t("provider.custom.description.link")}
             {language.t("provider.custom.description.suffix")}
           </p>
 

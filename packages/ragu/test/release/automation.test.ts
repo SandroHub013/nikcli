@@ -61,13 +61,9 @@ describe("release automation", () => {
   })
 
   it("keeps non-critical scheduled automations from making CI noisy", async () => {
-    const docsWorkflow = await readRoot(".github/workflows/docs-update.yml")
     const statsWorkflow = await readRoot(".github/workflows/stats.yml")
     const nixWorkflow = await readRoot(".github/workflows/update-nix-hashes.yml")
 
-    expect(docsWorkflow).toContain("continue-on-error: true")
-    expect(docsWorkflow).toContain("src/index.ts run")
-    expect(docsWorkflow).toContain("MINIMAX_API_KEY")
     expect(statsWorkflow).toContain("continue-on-error: true")
     expect(statsWorkflow).toContain("oven-sh/setup-bun@v2")
     expect(statsWorkflow).toContain("git pull --rebase --autostash")
@@ -109,26 +105,9 @@ describe("release automation", () => {
     // v-prefixed tag at resolution time, and `$filename` is appended at the
     // download site, once the baseline/musl target has been picked.
     expect(installer).toContain("releases/download/${release_tag}")
-    expect(installer).toContain('"$release_url_primary/$filename"')
-    expect(installer).toContain('"$release_url_fallback/$filename"')
+    expect(installer).toContain('"$release_url/$filename"')
     expect(installer).toContain("releases/tag/${release_tag}")
     expect(installer).not.toContain("releases/download/${requested_version}")
-  })
-
-  it("serves the same installer scripts the repo root holds", async () => {
-    // The web package ships its own copies (Astro imports `../../install`, and
-    // `public/` is the static fallback). They silently drifted once already —
-    // `packages/web/install` stayed on a version that predated the Windows fixes.
-    const pairs = [
-      ["install", "packages/web/install"],
-      ["install", "packages/web/public/install.sh"],
-      ["install.ps1", "packages/web/install.ps1"],
-      ["install.ps1", "packages/web/public/install.ps1"],
-    ] as const
-
-    for (const [source, copy] of pairs) {
-      expect(await readRoot(copy)).toBe(await readRoot(source))
-    }
   })
 
   it("resolves Windows release assets with the .exe suffix", async () => {

@@ -17,8 +17,6 @@ import { type Message, type Session, type TextPart } from "@ragu/sdk/httpapi"
 import { For, Match, Show, Switch, createMemo, onCleanup, type Accessor, type JSX } from "solid-js"
 import { agentColor } from "@/utils/agent"
 
-const RAGU_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
-
 export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
   const notification = useNotification()
   const unseenCount = createMemo(() => notification.project.unseenCount(props.project.worktree))
@@ -29,9 +27,7 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
       <div class="size-full rounded overflow-clip">
         <Avatar
           fallback={name()}
-          src={
-            props.project.id === RAGU_PROJECT_ID ? "https://nikcli-ai.dev/favicon.svg" : props.project.icon?.override
-          }
+          src={props.project.icon?.override}
           {...getAvatarColors(props.project.icon?.color)}
           class="size-full rounded"
           classList={{ "badge-mask": unseenCount() > 0 && props.notify }}

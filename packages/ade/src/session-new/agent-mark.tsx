@@ -34,7 +34,7 @@
  *   prime        PrimeIntellect-ai/prime-agent, `assets/brand/prime-butterfly.svg`
  *   pi           `pi.dev/logo-auto.svg`
  *   ohmypi       can1357/oh-my-pi, `assets/icon.svg`
- *   ragu       `packages/console/app/src/asset/brand/ragu-logo-dark.svg`
+ *   ragu       `packages/ui/src/assets/brand/ragu-logo-dark.svg`
  *   grok         xAI's Grok mark, from `@lobehub/icons-static-svg`, kept in
  *                `vendor-paths.ts`. The product's mark, not the company's
  *   hermes       Nous Research's profile portrait, from `@lobehub/icons-static-svg`,

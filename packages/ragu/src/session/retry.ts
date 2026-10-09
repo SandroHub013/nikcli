@@ -247,7 +247,7 @@ export namespace SessionRetry {
         error.data.responseBody?.includes("FreeUsageLimitError") ||
         error.data.message.includes("FreeUsageLimitError")
       ) {
-        return `Free usage exceeded, add credits https://nikcli-ai.dev/zen`
+        return `Free usage exceeded`
       }
       const body = error.data.responseBody
       if (typeof body === "string") {

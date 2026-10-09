@@ -637,6 +637,15 @@ export namespace ToolRegistry {
         // "every registered tool in the schema".
         setDeferralEnabled(config.experimental?.deferredTools !== false)
         setToolset(Flag.RAGU_TOOLSET || config.experimental?.toolset)
+        const websearchProvider = config.websearch?.provider ?? "exa"
+        const hasExaKey = !!(
+          process.env["EXA_API_KEY"] ||
+          ((!config.websearch?.provider || config.websearch.provider === "exa") && config.websearch?.apiKey)
+        )
+        const hasWebSearch =
+          hasExaKey ||
+          (websearchProvider === "parallel" && !!(config.websearch?.apiKey || process.env["PARALLEL_API_KEY"])) ||
+          (websearchProvider === "mcp" && !!config.websearch?.url)
 
         return lastWins([
           InvalidTool,
@@ -665,8 +674,8 @@ export namespace ToolRegistry {
           CreateGoalTool,
           GetGoalTool,
           UpdateGoalTool,
-          WebSearchTool,
-          CodeSearchTool,
+          ...(hasWebSearch ? [WebSearchTool] : []),
+          ...(hasExaKey ? [CodeSearchTool] : []),
           RepoCloneTool,
           RepoOverviewTool,
           SkillTool,
@@ -719,10 +728,6 @@ export namespace ToolRegistry {
             tools
               .filter((t) => {
                 if (options?.exclude?.has(t.id)) return false
-
-                if (t.id === "codesearch" || t.id === "websearch") {
-                  return model.providerID === "ragu" || Flag.RAGU_ENABLE_EXA
-                }
 
                 const usePatch =
                   model.modelID.includes("gpt-") && !model.modelID.includes("oss") && !model.modelID.includes("gpt-4")

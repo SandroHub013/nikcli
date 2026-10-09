@@ -5,7 +5,6 @@ sst-env.d.ts
 .github/workflows/
 .github/actions/
 install
-packages/web/install
 # Expo CNG output. Gitignored, but `prettier --write .` still walks it and dies
 # on the multi-GB Xcode compilation cache, so ./script/format.ts fails for
 # anyone who has built the iOS app locally.

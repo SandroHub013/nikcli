@@ -56,7 +56,19 @@ const NON_TOOL_PERMISSIONS = new Set([
  * Registered only when a flag or client mode is on, so they may be legitimately
  * absent from `registry.ids()` in some builds.
  */
-const FLAG_GATED = new Set(["lsp", "browser_control", "computer", "code_mode", "batch", "plan_enter", "plan_exit"])
+// `websearch` and `codesearch` are registered only with an Exa key (EXA_API_KEY or the websearch config), which a
+// test machine does not have.
+const FLAG_GATED = new Set([
+  "lsp",
+  "browser_control",
+  "computer",
+  "code_mode",
+  "batch",
+  "plan_enter",
+  "plan_exit",
+  "websearch",
+  "codesearch",
+])
 
 async function registryIds(): Promise<Set<string>> {
   const directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "ragu-permission-surface-project-")))

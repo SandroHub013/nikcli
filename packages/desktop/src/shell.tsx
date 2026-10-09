@@ -460,20 +460,6 @@ function DesktopAccount() {
     displayName: "",
   })
   const [busy, setBusy] = createSignal(false)
-  const [oauthBusy, setOauthBusy] = createSignal(false)
-
-  const oauthLogin = async () => {
-    if (oauthBusy()) return
-    account.clearError()
-    setOauthBusy(true)
-    try {
-      await account.loginWithOAuth()
-    } catch {
-      // Failure is surfaced through account.error below.
-    } finally {
-      setOauthBusy(false)
-    }
-  }
 
   const displayName = createMemo(() => {
     const user = account.user
@@ -549,11 +535,6 @@ function DesktopAccount() {
             <strong>
               {mode() === "register" ? t("desktop.account.signUpTitle") : t("desktop.account.signInTitle")}
             </strong>
-            <Button type="button" disabled={oauthBusy()} onClick={oauthLogin}>
-              {oauthBusy() ? t("desktop.account.oauthWaiting") : t("desktop.account.oauth")}
-            </Button>
-            <span class="desktop-account__hint">{t("desktop.account.oauthHint")}</span>
-            <span class="desktop-account__divider">{t("desktop.account.legacyDivider")}</span>
             <Show when={mode() === "register"}>
               <TextField
                 label={t("desktop.account.username")}
@@ -633,13 +614,6 @@ function DesktopAccount() {
                 <Icon name="settings-gear" size="small" />
                 <DropdownMenu.ItemLabel>{t("desktop.account.settings")}</DropdownMenu.ItemLabel>
                 <kbd class="desktop-account__menu-kbd">⌘,</kbd>
-              </DropdownMenu.Item>
-              <DropdownMenu.Item
-                class="desktop-account__menu-item"
-                onSelect={() => platform.openLink("https://nikcli-ai.dev")}
-              >
-                <Icon name="share" size="small" />
-                <DropdownMenu.ItemLabel>{t("desktop.account.invite")}</DropdownMenu.ItemLabel>
               </DropdownMenu.Item>
               <DropdownMenu.Separator />
               <DropdownMenu.Item class="desktop-account__menu-item" onSelect={() => command.trigger("analytics.view")}>

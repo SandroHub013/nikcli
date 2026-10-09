@@ -30,12 +30,6 @@ type CommandExport = {
  * handlers, so this is the same measurement of the same code.
  */
 const cliModulePaths = [
-  "@/cli/handlers/account/list",
-  "@/cli/handlers/account/login",
-  "@/cli/handlers/account/logout",
-  "@/cli/handlers/account/orgs",
-  "@/cli/handlers/account/shared",
-  "@/cli/handlers/account/switch",
   "@/cli/handlers/acp",
   "@/cli/handlers/ads/create",
   "@/cli/handlers/ads/disable",

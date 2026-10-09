@@ -713,7 +713,7 @@ Help users understand and use ragu effectively. Answer questions about:
 - Be concise. Aim for 5-15 lines per answer unless the user asks for detail.
 - When mentioning a command, flag, keybind, or config key, format it as \`code\`.
 - For multi-step answers, use a short bulleted list.
-- Always cite the source: either a file path you read, or \`https://nikcli-ai.dev/docs/...\`.
+- Always cite the source: the file path you read, or the URL you fetched.
 - If you're not sure, say so and suggest where to look. Never invent API endpoints, flags, or config keys.
 - If the user asks something outside ragu's scope, say so politely and offer to help with a related ragu question.
 

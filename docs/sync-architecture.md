@@ -63,7 +63,7 @@ to 500; snapshots make that safe (below).
 Disabled unless configured — ragu is 100% local by default.
 
 ```sh
-export RAGU_REMOTE_URL=https://s.nikcli-ai.dev
+export RAGU_REMOTE_URL=https://sync.example.com
 export RAGU_REMOTE_TOKEN=<token with cli-sync scope>
 # optional: keep bootstrap from autostarting (explicit commands still work)
 export RAGU_REMOTE_AUTOSTART=false

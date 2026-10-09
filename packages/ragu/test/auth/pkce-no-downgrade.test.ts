@@ -5,15 +5,10 @@ import path from "node:path"
 /**
  * EOT-12 PKCE no-downgrade regression.
  *
- * The ragu server consumes the issuer's OAuth flow (`packages/identity`,
- * a Cloudflare Worker) which enforces PKCE S256 at `packages/identity/src/index.ts:114`:
- *
- *     if (challengeMethod !== "S256" || !/^[A-Za-z0-9_-]{43,128}$/.test(challenge)) {
- *       return oauthError(c, "invalid_request", "PKCE S256 is required")
- *     }
- *
  * EOT-12 says: "no PKCE downgrade." This test makes sure ragu never
- * introduces a parallel path that talks to the issuer without S256.
+ * introduces a parallel path that talks to an OAuth issuer without S256.
+ * (The issuer it was written for, Nik's `packages/identity`, is gone with
+ * the brief ragu-via-servizi-nik; the checks on ragu's own source stay.)
  *
  * Two assertions:
  *
@@ -31,7 +26,6 @@ import path from "node:path"
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..", "..", "..")
 const RAGU_SRC = path.join(REPO_ROOT, "packages", "ragu", "src")
-const IDENTITY_AUTH_PATH = path.join(REPO_ROOT, "packages", "identity", "src", "index.ts")
 
 /**
  * `rg -l` semantics over the source tree, done natively.
@@ -71,17 +65,6 @@ function grep(pattern: RegExp, dir: string, include = "*.ts"): string[] {
 }
 
 describe("EOT-12 PKCE no-downgrade", () => {
-  it("identity server still enforces S256 PKCE on the /authorize route", () => {
-    const source = readFileSync(IDENTITY_AUTH_PATH, "utf8")
-    // Hard require: the issuer must reject anything but S256 with the
-    // standard error message we use elsewhere. A downgrade to `plain` or
-    // removing the regex check would be a security regression.
-    expect(source).toMatch(/challengeMethod\s*!==\s*"S256"/)
-    expect(source).toMatch(/PKCE S256 is required/)
-    // The OAuth discovery document advertises only S256, not plain.
-    expect(source).toMatch(/code_challenge_methods_supported.*S256/)
-  })
-
   it("ragu source does not pin `code_challenge_method=plain` anywhere", () => {
     // PKCE S256 only. A `plain` method anywhere in ragu/src is a
     // downgrade we want to catch at code-review time.

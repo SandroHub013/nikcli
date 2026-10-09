@@ -61,19 +61,19 @@ Everything is orchestrated by an internal **event bus**, a **SQLite/Drizzle pers
 
 ## Installation
 
-The install script downloads release binaries from `nikcli-ai.dev` with GitHub releases as fallback (`packages/web/install`).
+The install scripts at the root of this repository download the release binaries from GitHub releases.
 
 **macOS / Linux**
 
 ```bash
-curl -fsSL https://nikcli-ai.dev/install | bash
+./install
 ragu
 ```
 
 **Windows** (PowerShell 5.1+ or pwsh 7+ — `curl | bash` needs a bash to pipe into, so use this instead):
 
 ```powershell
-irm https://nikcli-ai.dev/install.ps1 | iex
+.\install.ps1
 ragu
 ```
 
@@ -115,7 +115,6 @@ Useful development scripts:
 | `bun run dev`                                            | Start the ragu CLI/TUI from source                           |
 | `bun run typecheck`                                      | `bun turbo typecheck` across the whole workspace               |
 | `bun run build`                                          | Build all packages                                             |
-| `bun run web:dev`                                        | Dev server for the `packages/web` site                         |
 | `bun run --cwd packages/ragu generate:httpapi-clients` | Regenerate clients after modifying the Effect HttpApi contract |
 | `cd packages/ragu && bun run bench`                    | TUI bench (`test/bench/viz.tsx`)                               |
 | `cd packages/ragu && bun run sandbox:vercel`           | Vercel sandbox smoke test                                      |
@@ -161,21 +160,14 @@ Bun workspace with centralized version catalog (`bunfig.toml`, `package.json`).
 | `packages/terminal-control`                  | Terminal abstraction reused by CLI and IDE                                                    |
 | `packages/mobile`                            | Mobile Expo / React Native app with realtime SSE                                              |
 | `packages/app`                               | Main web app (SolidStart)                                                                     |
-| `packages/web`                               | Documentation site + installer + landing (`nikcli-ai.dev`)                                    |
 | `packages/desktop`                           | Tauri desktop app                                                                             |
-| `packages/enterprise`                        | Enterprise SSO / multi-tenant build                                                           |
-| `packages/cloud`                             | Cloudflare worker (KV, Durable Objects)                                                       |
-| `packages/slack`                             | Slack Bolt adapter and health check                                                           |
 | `packages/script`                            | Shared build/release scripts                                                                  |
 | `packages/util`                              | Shared utilities (effect-zod, locale, log, retry, …)                                          |
 | `packages/llm`                               | Additional AI SDK adapters (e.g. GitLab)                                                      |
-| `packages/function`                          | FaaS helpers and queue workers                                                                |
-| `packages/inference` · `inference-dashboard` | Inference telemetry and dashboard                                                             |
-| `packages/console`                           | Administration panel                                                                          |
 | `packages/webrenderer` · `tui-image`         | Experimental TUI renderers                                                                    |
 | `packages/http-recorder`                     | HTTP recorder for test/replay                                                                 |
 | `packages/containers`                        | Container bundles for deploy                                                                  |
-| `homebrew-tap` · `infra` · `nix` · `script`  | Packaging and IaC                                                                             |
+| `homebrew-tap` · `nix` · `script`            | Packaging and IaC                                                                             |
 
 Internal layout of the core (`packages/ragu/src`):
 
@@ -306,8 +298,7 @@ The flag applies to the whole process, including the session worker the TUI runs
 
 ### OpenTelemetry / observability flags
 
-These environment variables configure the observability layer described in the
-[Observability docs](https://nikcli-ai.dev/docs/observability). They are read at process start
+These environment variables configure the observability layer. They are read at process start
 and are not hot-reloadable.
 
 | Variable                      | Default | Purpose                                                             |
@@ -514,7 +505,7 @@ First-class MCP server with OAuth auth (`packages/ragu/src/mcp`):
 
 ### Sharing
 
-`share/` and `share-next.ts` generate public/enterprise URLs to read sessions. `ragu export` and `ragu import` allow JSON serialization. The `ragu import` command also accepts share URLs, normalizing enterprise hosts (`nikcli-ai.dev`, `*.dev.nikcli-ai.dev`).
+`ragu export` and `ragu import` allow JSON serialization of a session.
 
 ### Loop, Background, Brain
 
@@ -548,7 +539,6 @@ First-class MCP server with OAuth auth (`packages/ragu/src/mcp`):
 
 ### Web apps
 
-- `packages/web` (Astro + Tailwind) — public site, install script, docs (hosted on Cloudflare Pages).
 - `packages/app` (SolidStart) — full web application.
 - `packages/companion` — companion UI and server routes for `ragu companion serve`.
 
@@ -572,7 +562,6 @@ First-class MCP server with OAuth auth (`packages/ragu/src/mcp`):
 
 `packages/ragu/src/chatbot/` orchestrates multi-platform bots thanks to `@chat-adapter/*`:
 
-- **Slack** (`packages/slack`, deployed on `slack.nikcli-ai.dev` via Wrangler).
 - **Discord Gateway** (`packages/discord`, `@ragu/discord`) — native Gateway bot. In the TUI, `/discord` (alias `/discord-setup`) walks through the bot token, invite URL, and start/stop. HTTP: `GET /discord`, `POST /discord/setup`, `/start`, `/stop`.
 - **Discord webhooks** (`@chat-adapter/discord`) — the Chat SDK adapter, managed with `/bots`.
 - **Microsoft Teams** (`@chat-adapter/teams`).
@@ -637,13 +626,10 @@ Config resolution (in order of increasing priority):
 3. **Custom**: env vars `RAGU_CONFIG` (path) or `RAGU_CONFIG_CONTENT` (string).
 4. **Project**: `nikcli.jsonc` or `nikcli.json` walking up the directory tree.
 
-Schema published at: [https://nikcli-ai.dev/config.json](https://nikcli-ai.dev/config.json)
-
 Minimal example:
 
 ```jsonc
 {
-  "$schema": "https://nikcli-ai.dev/config.json",
   "theme": "ragu",
   "provider": {
     "openai": { "options": { "apiKey": "sk-..." } },
@@ -676,13 +662,8 @@ Recognized env flags (see `flag/flag.ts`): `RAGU_SERVER_PASSWORD`, `RAGU_SERVER_
 
 ## Documentation and resources
 
-- **Site & docs**: [https://nikcli-ai.dev/docs](https://nikcli-ai.dev/docs)
-- **Config schema**: [https://nikcli-ai.dev/config.json](https://nikcli-ai.dev/config.json)
-- **Quickstart**: [https://nikcli-ai.dev/docs/quickstart](https://nikcli-ai.dev/docs/quickstart)
-- **Web app**: [https://app.nikcli-ai.dev](https://app.nikcli-ai.dev)
-- **Slack bot**: [https://slack.nikcli-ai.dev](https://slack.nikcli-ai.dev)
 - **Upstream project (OpenCode)**: [https://github.com/anomalyco/opencode](https://github.com/anomalyco/opencode)
-- **This fork**: [https://github.com/nikcli/nikcli](https://github.com/nikcli/nikcli)
+- **This fork**: [https://github.com/SandroHub013/nikcli](https://github.com/SandroHub013/nikcli)
 - **Issue tracker & discussions**: GitHub repository.
 - **Internal specs** (in `specs/`): start at `specs/README.md` and `specs/ROADMAP.md` for the Effect/TUI architecture program.
 - **Changelog**: `CHANGELOG.md` (v1.5.0 — Effect Schema migration, Feb 2026 milestone).
@@ -691,7 +672,7 @@ Useful repository files:
 
 - `AGENTS.md` — conventions for coding agents.
 - `STYLE_GUIDE.md` — code style (function-first, no `let`, avoid `else`, single-word naming, prefer `Bun.*`).
-- `CONTRIBUTING.md` · `SECURITY.md` · `DEPLOYMENT.md` · `SPEAK_SETUP.md` · `STATS.md`.
+- `CONTRIBUTING.md` · `SECURITY.md` · `SPEAK_SETUP.md` · `STATS.md`.
 - `install` — bash install script.
 - `Dockerfile` · `Dockerfile.serve` — container images.
 - `sst.config.ts` · `fly.toml` · `railway.toml` · `wrangler.toml` — deploy configs.

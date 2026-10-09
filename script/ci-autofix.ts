@@ -114,7 +114,7 @@ async function main() {
 
   // Step 2: Install ragu
   console.log("▸ Installing ragu...")
-  const installProc = Bun.spawn(["bash", "-c", "curl -fsSL https://nikcli-ai.dev/install | bash"], {
+  const installProc = Bun.spawn(["bash", "./install"], {
     stdout: "pipe",
     stderr: "pipe",
     env: { ...process.env, TERM: "dumb" },

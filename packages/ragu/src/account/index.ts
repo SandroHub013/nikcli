@@ -115,7 +115,32 @@ export namespace Account {
   // Configuration
   // ============================================================================
 
-  const DEFAULT_ACCOUNT_URL = process.env.RAGU_ACCOUNT_URL ?? "https://auth.nikcli-ai.dev"
+  /** The account server RAGU_ACCOUNT_URL names, normalized; empty when it is not set. */
+  function configuredServer(): string {
+    return normalizeServerUrl(process.env.RAGU_ACCOUNT_URL ?? "")
+  }
+
+  /**
+   * The only server the account service talks to is the one RAGU_ACCOUNT_URL names. A URL handed in by a caller,
+   * or saved in an account row by an older version (Nik's issuer, before the brief ragu-via-servizi-nik), is used
+   * only when it is that server; otherwise nothing is sent and the error says what to set.
+   */
+  function accountServer(url?: string): string {
+    const configured = configuredServer()
+    if (!configured) {
+      throw new LoginFlowError({
+        message: "No account server is configured: set RAGU_ACCOUNT_URL to the server you sign in to.",
+        status: 400,
+      })
+    }
+    if (url !== undefined && normalizeServerUrl(url) !== configured) {
+      throw new LoginFlowError({
+        message: `${normalizeServerUrl(url)} is not the account server in RAGU_ACCOUNT_URL (${configured}): sign in again, or set RAGU_ACCOUNT_URL to it.`,
+        status: 400,
+      })
+    }
+    return configured
+  }
 
   /** Fallback poll cadence when the issuer does not send one. */
   const DEFAULT_POLL_INTERVAL_SECONDS = 5
@@ -287,11 +312,11 @@ export namespace Account {
    * Returns the device code info needed for polling.
    */
   async function loginImpl(options: LoginOptions = {}): Promise<LoginStartResult> {
-    const serverUrl = normalizeServerUrl(options.serverUrl ?? DEFAULT_ACCOUNT_URL)
+    const serverUrl = accountServer(options.serverUrl)
     log.info("starting device code login", { serverUrl })
 
     const request: DeviceCodeRequest = {
-      client_id: "nikcli",
+      client_id: "ragu",
       scope: "openid profile email offline_access",
     }
 
@@ -362,7 +387,7 @@ export namespace Account {
     refreshToken: RefreshToken
     expiresIn: number
   }> {
-    const serverUrl = normalizeServerUrl(options.serverUrl ?? DEFAULT_ACCOUNT_URL)
+    const serverUrl = accountServer(options.serverUrl)
     const startTime = Date.now()
     const deadline = startTime + (options.expiresIn ?? 600) * 1000
     let interval = DEFAULT_POLL_INTERVAL_SECONDS
@@ -387,7 +412,7 @@ export namespace Account {
           },
           body: JSON.stringify({
             grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-            client_id: "nikcli",
+            client_id: "ragu",
             device_code: deviceCode,
           }),
           signal: options.signal,
@@ -626,7 +651,7 @@ export namespace Account {
     // Refresh the token
     log.info("refreshing account token", { accountID })
 
-    const serverUrl = normalizeServerUrl(recheck.url)
+    const serverUrl = accountServer(recheck.url)
     const response = await fetch(`${serverUrl}oauth/token`, {
       method: "POST",
       headers: {
@@ -635,7 +660,7 @@ export namespace Account {
       body: new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token: recheck.refresh_token,
-        client_id: "nikcli",
+        client_id: "ragu",
       }).toString(),
     })
 
@@ -646,7 +671,7 @@ export namespace Account {
       // instead of surfacing the raw OAuth error body.
       if (response.status === 400 || response.status === 401) {
         throw new TokenExpiredError({
-          message: "Your ragu session expired. Run `ragu account login` to sign in again.",
+          message: "Your ragu session expired. Run `ragu auth login` to sign in again.",
         })
       }
       throw new TokenRefreshError({
@@ -699,14 +724,13 @@ export namespace Account {
    * Uses the cached account row from token() to avoid double-reads.
    */
   async function orgsImpl(accountID: AccountID): Promise<Org[]> {
-    const accessToken = await tokenImpl(accountID)
-    // Reuse the cached account row instead of reading from DB again
-    const account = getAccountRowCached(accountID)
-    if (!account) {
+    // The server is checked before the token: a valid token saved for another server must not be sent there.
+    const saved = getAccountRowCached(accountID)
+    if (!saved) {
       throw new NotFoundError({ message: `Account not found: ${accountID}`, accountID })
     }
-
-    const serverUrl = normalizeServerUrl(account.url)
+    const serverUrl = accountServer(saved.url)
+    const accessToken = await tokenImpl(accountID)
 
     const response = await fetch(`${serverUrl}api/user/orgs`, {
       headers: {
@@ -715,7 +739,7 @@ export namespace Account {
       },
     })
 
-    // The ragu issuer has no organizations: `auth.nikcli-ai.dev` publishes no
+    // An issuer may have no organizations: Nik's issuer, for one, published no
     // `/api/user/orgs` route and its schema has no orgs table, so every call
     // here answered 404 and `ragu account orgs` could only ever print
     // "Failed to fetch orgs: 404 404 Not Found" — never its own "No
@@ -797,7 +821,7 @@ export namespace Account {
    */
   function configImpl(): { serverUrl: string } {
     return {
-      serverUrl: DEFAULT_ACCOUNT_URL,
+      serverUrl: process.env.RAGU_ACCOUNT_URL ?? "",
     }
   }
 

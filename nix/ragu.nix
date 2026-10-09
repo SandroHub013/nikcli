@@ -93,7 +93,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   meta = {
     description = "The open source coding agent";
-    homepage = "https://nikcli-ai.dev/";
+    homepage = "https://github.com/SandroHub013/nikcli";
     license = lib.licenses.mit;
     mainProgram = "ragu";
     inherit (node_modules.meta) platforms;

@@ -190,10 +190,6 @@ export async function createMenu(trigger: (id: string) => void) {
         text: t("desktop.menu.help"),
         items: [
           await MenuItem.new({
-            action: () => openUrl("https://nikcli-ai.dev/docs"),
-            text: t("desktop.menu.documentation"),
-          }),
-          await MenuItem.new({
             action: () => openUrl("https://discord.com/invite/ragu"),
             text: t("desktop.menu.supportForum"),
           }),

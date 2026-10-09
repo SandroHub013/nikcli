@@ -1,5 +1,4 @@
 {
-  "$schema": "https://nikcli-ai.dev/theme.json",
   "defs": {
     "darkStep1": "#070707",
     "darkStep2": "#121212",

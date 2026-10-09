@@ -265,23 +265,6 @@ export function DialogConnectProvider(props: { provider: string }) {
                 return (
                   <div class="flex flex-col gap-6">
                     <Switch>
-                      <Match when={provider().id === "ragu"}>
-                        <div class="flex flex-col gap-4">
-                          <div class="text-14-regular text-text-base">
-                            {language.t("provider.connect.raguZen.line1")}
-                          </div>
-                          <div class="text-14-regular text-text-base">
-                            {language.t("provider.connect.raguZen.line2")}
-                          </div>
-                          <div class="text-14-regular text-text-base">
-                            {language.t("provider.connect.raguZen.visit.prefix")}
-                            <Link href="https://nikcli-ai.dev/zen" tabIndex={-1}>
-                              {language.t("provider.connect.raguZen.visit.link")}
-                            </Link>
-                            {language.t("provider.connect.raguZen.visit.suffix")}
-                          </div>
-                        </div>
-                      </Match>
                       <Match when={true}>
                         <div class="text-14-regular text-text-base">
                           {language.t("provider.connect.apiKey.description", { provider: provider().name })}

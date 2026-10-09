@@ -229,7 +229,6 @@ export function DialogThemeCreate() {
     const lightPrefix = "lightStep"
 
     return {
-      $schema: "https://nikcli-ai.dev/theme.json",
       defs: {
         [`${darkPrefix}1`]: bgHex("dark"),
         [`${darkPrefix}2`]: rgbaToHex(grays().dark[2]!),

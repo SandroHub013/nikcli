@@ -6,7 +6,6 @@ import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { useTheme } from "@tui/context/theme"
 import { useDialog, type DialogContext } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList } from "@tui/component/dialog-provider"
-import { DialogAccountLogin } from "@tui/component/dialog-account-login"
 import { Spinner } from "@tui/component/spinner"
 import { Global } from "@ragu/util/global"
 import { useSync } from "@tui/context/sync"
@@ -80,19 +79,18 @@ function TwoColRow(props: { width: number; label: string; desc: string; labelFg?
 
 // ─── Step breadcrumb ──────────────────────────────────────────────────────────
 
-const STEP_NAMES = ["Welcome", "Account", "Filesystem", "AI provider", "Extras", "Image", "TTS", "Remote", "Test"]
+const STEP_NAMES = ["Welcome", "Filesystem", "AI provider", "Extras", "Image", "TTS", "Remote", "Test"]
 
 // Step indices — keep in sync with STEP_NAMES above
 const STEP = {
   WELCOME: 0,
-  ACCOUNT: 1,
-  FILESYSTEM: 2,
-  AI_PROVIDER: 3,
-  EXTRAS: 4,
-  IMAGE: 5,
-  TTS: 6,
-  REMOTE: 7,
-  TEST: 8,
+  FILESYSTEM: 1,
+  AI_PROVIDER: 2,
+  EXTRAS: 3,
+  IMAGE: 4,
+  TTS: 5,
+  REMOTE: 6,
+  TEST: 7,
 } as const
 
 type FeatureKey = "image" | "tts" | "remote"
@@ -318,12 +316,7 @@ function FilesystemContent() {
 
 // ─── Step 4: Connect provider ─────────────────────────────────────────────────
 
-const PROVIDERS_INFO = [
-  {
-    name: "Ragu Zen",
-    desc: "All top models with a single API key — recommended for new users",
-    recommended: true,
-  },
+const PROVIDERS_INFO: Array<{ name: string; desc: string; recommended?: boolean }> = [
   {
     name: "Anthropic",
     desc: "Claude Sonnet, Haiku, Opus — best overall for coding tasks",
@@ -887,7 +880,6 @@ function RemoteContent(props: {
 
 const STEP_TITLES = [
   "Welcome to Ragu Code",
-  "Sign in or create your account",
   "Filesystem Footprint",
   "Connect a provider",
   "Optional extras",
@@ -900,14 +892,13 @@ const STEP_TITLES = [
 // Continue hint for the static (no-list) steps. List-driven steps set their
 // own footer hint inline.
 const STEP_CONTINUE_LABELS = [
-  "sign in on the web",
-  "", // account step handles its own status
   "view filesystem",
   "choose provider",
   "configure extras",
   "pick an image model",
   "pick a TTS voice",
   "pick a tunnel provider",
+  "test your setup",
   "finish",
 ]
 
@@ -941,7 +932,7 @@ function OnboardingWizard(props: { onComplete: () => void }) {
   // Number of steps we will actually visit, given the enabled extras.
   // Used for the breadcrumb and footer "step X/Y" counter.
   const visibleSteps = createMemo(() => {
-    const out: number[] = [STEP.WELCOME, STEP.ACCOUNT, STEP.FILESYSTEM, STEP.AI_PROVIDER, STEP.EXTRAS]
+    const out: number[] = [STEP.WELCOME, STEP.FILESYSTEM, STEP.AI_PROVIDER, STEP.EXTRAS]
     if (extras.image) out.push(STEP.IMAGE)
     if (extras.tts) out.push(STEP.TTS)
     if (extras.remote) out.push(STEP.REMOTE)
@@ -1100,8 +1091,6 @@ function OnboardingWizard(props: { onComplete: () => void }) {
   // ─── Keyboard navigation ───────────────────────────────────────────────────
 
   useKeyboard((evt) => {
-    if (step() === STEP.ACCOUNT) return // textarea captures Enter
-
     // Back navigation
     if ((evt.name === "escape" || evt.name === "backspace") && step() > 0) {
       evt.preventDefault()
@@ -1154,7 +1143,7 @@ function OnboardingWizard(props: { onComplete: () => void }) {
   const handleContinue = () => {
     const current = step()
     if (current === STEP.WELCOME) {
-      return setStep(STEP.ACCOUNT)
+      return setStep(STEP.FILESYSTEM)
     }
     if (current === STEP.FILESYSTEM) {
       return setStep(STEP.AI_PROVIDER)
@@ -1267,10 +1256,6 @@ function OnboardingWizard(props: { onComplete: () => void }) {
     }
   }
 
-  const handleAccountComplete = () => {
-    setStep(STEP.FILESYSTEM)
-  }
-
   // Continue hint shown in the footer for static steps. List/text steps
   // override this with a more specific hint.
   const continueHint = createMemo(() => {
@@ -1313,83 +1298,71 @@ function OnboardingWizard(props: { onComplete: () => void }) {
       </box>
 
       {/* Content */}
-      <Switch>
-        <Match when={step() !== STEP.ACCOUNT}>
-          <scrollbox
-            scrollAcceleration={scrollAcceleration()}
-            paddingLeft={2}
-            paddingRight={2}
-            paddingTop={1}
-            paddingBottom={1}
-            maxHeight={contentMaxHeight()}
-            scrollbarOptions={{ visible: false }}
-          >
-            <Switch>
-              <Match when={step() === STEP.WELCOME}>
-                <WelcomeContent />
-              </Match>
-              <Match when={step() === STEP.FILESYSTEM}>
-                <FilesystemContent />
-              </Match>
-              <Match when={step() === STEP.AI_PROVIDER}>
-                <ProviderContent />
-              </Match>
-              <Match when={step() === STEP.EXTRAS}>
-                <ExtrasContent
-                  enabled={extras}
-                  cursor={extrasCursor()}
-                  setCursor={setExtrasCursor}
-                  toggle={(k) => setExtras(k, (v) => !v)}
-                />
-              </Match>
-              <Match when={step() === STEP.IMAGE}>
-                <ImageContent
-                  cursor={imageCursor()}
-                  setCursor={setImageCursor}
-                  onPick={(p, m) => {
-                    void persistImage(p, m).then((ok) => ok && advance())
-                  }}
-                  onSkip={() => advance()}
-                />
-              </Match>
-              <Match when={step() === STEP.TTS}>
-                <TTSContent
-                  cursor={ttsCursor()}
-                  setCursor={setTtsCursor}
-                  onPick={(p, v, name) => {
-                    void persistSpeak(p, v, name).then((ok) => {
-                      if (ok) advance()
-                    })
-                  }}
-                  onSkip={() => advance()}
-                  status={ttsStatus()}
-                />
-              </Match>
-              <Match when={step() === STEP.REMOTE}>
-                <RemoteContent
-                  cursor={remoteCursor()}
-                  setCursor={setRemoteCursor}
-                  onPick={(id) => {
-                    void persistRemote(id).then((ok) => ok && advance())
-                  }}
-                  onSkip={() => advance()}
-                />
-              </Match>
-              <Match when={step() === STEP.TEST}>
-                <TestContent />
-              </Match>
-            </Switch>
-          </scrollbox>
-        </Match>
-        <Match when={step() === STEP.ACCOUNT}>
-          <DialogAccountLogin
-            clearOnComplete={false}
-            onComplete={(user) => {
-              if (user) handleAccountComplete()
-            }}
-          />
-        </Match>
-      </Switch>
+      <scrollbox
+        scrollAcceleration={scrollAcceleration()}
+        paddingLeft={2}
+        paddingRight={2}
+        paddingTop={1}
+        paddingBottom={1}
+        maxHeight={contentMaxHeight()}
+        scrollbarOptions={{ visible: false }}
+      >
+        <Switch>
+          <Match when={step() === STEP.WELCOME}>
+            <WelcomeContent />
+          </Match>
+          <Match when={step() === STEP.FILESYSTEM}>
+            <FilesystemContent />
+          </Match>
+          <Match when={step() === STEP.AI_PROVIDER}>
+            <ProviderContent />
+          </Match>
+          <Match when={step() === STEP.EXTRAS}>
+            <ExtrasContent
+              enabled={extras}
+              cursor={extrasCursor()}
+              setCursor={setExtrasCursor}
+              toggle={(k) => setExtras(k, (v) => !v)}
+            />
+          </Match>
+          <Match when={step() === STEP.IMAGE}>
+            <ImageContent
+              cursor={imageCursor()}
+              setCursor={setImageCursor}
+              onPick={(p, m) => {
+                void persistImage(p, m).then((ok) => ok && advance())
+              }}
+              onSkip={() => advance()}
+            />
+          </Match>
+          <Match when={step() === STEP.TTS}>
+            <TTSContent
+              cursor={ttsCursor()}
+              setCursor={setTtsCursor}
+              onPick={(p, v, name) => {
+                void persistSpeak(p, v, name).then((ok) => {
+                  if (ok) advance()
+                })
+              }}
+              onSkip={() => advance()}
+              status={ttsStatus()}
+            />
+          </Match>
+          <Match when={step() === STEP.REMOTE}>
+            <RemoteContent
+              cursor={remoteCursor()}
+              setCursor={setRemoteCursor}
+              onPick={(id) => {
+                void persistRemote(id).then((ok) => ok && advance())
+              }}
+              onSkip={() => advance()}
+            />
+          </Match>
+          <Match when={step() === STEP.TEST}>
+            <TestContent />
+          </Match>
+        </Switch>
+      </scrollbox>
 
       {/* Bottom separator */}
       <box paddingLeft={2} paddingRight={2}>
@@ -1398,17 +1371,12 @@ function OnboardingWizard(props: { onComplete: () => void }) {
 
       {/* Footer */}
       <box paddingLeft={2} paddingRight={2} paddingTop={1} flexDirection="row" justifyContent="space-between">
-        <Show when={step() !== STEP.ACCOUNT}>
-          <text fg={theme.foreground.muted}>
-            {"↵ "}
-            <span style={{ fg: theme.foreground.default }}>{continueHint()}</span>
-          </text>
-        </Show>
-        <Show when={step() === STEP.ACCOUNT}>
-          <text fg={theme.foreground.muted}>Complete sign-in or registration in your browser · esc cancel</text>
-        </Show>
+        <text fg={theme.foreground.muted}>
+          {"↵ "}
+          <span style={{ fg: theme.foreground.default }}>{continueHint()}</span>
+        </text>
         <box flexDirection="row" gap={2} alignItems="center">
-          <Show when={step() !== STEP.WELCOME && step() !== STEP.ACCOUNT && step() !== STEP.AI_PROVIDER}>
+          <Show when={step() !== STEP.WELCOME && step() !== STEP.AI_PROVIDER}>
             <box
               paddingLeft={2}
               paddingRight={2}

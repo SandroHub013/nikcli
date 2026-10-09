@@ -129,8 +129,8 @@ export function describeDenial(result: Extract<AccountGuardResult, { kind: "deny
     case "no_active_account":
       return "Sign in to ragu to use this endpoint."
     case "token_unavailable":
-      return "Your ragu session expired. Run `ragu account login` to sign in again."
+      return "Your ragu session expired. Run `ragu auth login` to sign in again."
     case "identity_unverified":
-      return "Your ragu session could not be verified. Run `ragu account login` to sign in again."
+      return "Your ragu session could not be verified. Run `ragu auth login` to sign in again."
   }
 }

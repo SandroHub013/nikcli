@@ -12,7 +12,7 @@ ragu is an AI-powered development tool with connectors, a mobile companion, and 
 
 ```bash
 # 1. Install (one of the methods below)
-curl -fsSL https://nikcli-ai.dev/install | bash
+./install
 
 # 2. Run the TUI
 ragu
@@ -38,7 +38,7 @@ Run `ragu --help` to see all available commands.
 
 | Method | Command                                                           |
 | ------ | ----------------------------------------------------------------- |
-| curl   | `curl -fsSL https://nikcli-ai.dev/install \| bash`                |
+| script | `./install` (or `.\install.ps1`) from the repository root          |
 | npm    | `npm install -g nikcli-ai`                                        |
 | pnpm   | `pnpm install -g nikcli-ai`                                       |
 | bun    | `bun install -g nikcli-ai`                                        |
@@ -63,14 +63,11 @@ Local development runs the CLI entrypoint at `packages/ragu/src/index.ts`.
 | ----------------- | ------------------------------------------ |
 | `packages/ragu` | CLI, TUI, agent engine, server, connectors |
 | `packages/mobile` | Expo mobile companion app                  |
-| `packages/web`    | Documentation site (nikcli-ai.dev)         |
 | `packages/sdk`    | Shared TypeScript SDK                      |
 
 ## Resources
 
-- [Documentation](https://nikcli-ai.dev/docs)
-- [Configuration reference](https://nikcli-ai.dev/docs/configuration)
-- [CLI reference](https://nikcli-ai.dev/docs/cli)
+- [Repository README](../../README.md)
 
 ## Specs
 

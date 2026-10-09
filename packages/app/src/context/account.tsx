@@ -1,19 +1,9 @@
 import { createSimpleContext } from "@ragu/ui/context"
-import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "./platform"
 import { useServer } from "./server"
 import { Persist, persisted } from "@/utils/persist"
-import {
-  createAuthorizationRequest,
-  exchangeAuthorizationCode,
-  isOAuthTokens,
-  parseAuthCallback,
-  refreshOAuthTokens,
-  OAuthTokenError,
-  type OAuthPending,
-  type OAuthTokens,
-} from "./account-oauth"
 
 /**
  * Public shape of a ragu account, mirroring `UserDB.PublicUser` on the
@@ -46,15 +36,15 @@ export const { use: useAccount, provider: AccountProvider } = createSimpleContex
     const server = useServer()
     const platform = usePlatform()
     const fetcher = platform.fetch ?? globalThis.fetch
-    const oauthFetcher = platform.externalFetch ?? globalThis.fetch
 
     // Tokens are persisted per server so the session survives restarts and a
-    // user can be signed into different servers independently.
+    // user can be signed into different servers independently. An entry that is
+    // not a string is an OAuth session of Nik's account from an older version:
+    // it is not a session of this server, so it is read as signed out.
     const [store, setStore, , ready] = persisted(
       Persist.global("account", ["account.v1"]),
       createStore({
-        tokens: {} as Record<string, string | OAuthTokens>,
-        pending: {} as Record<string, OAuthPending>,
+        tokens: {} as Record<string, unknown>,
       }),
     )
 
@@ -66,50 +56,15 @@ export const { use: useAccount, provider: AccountProvider } = createSimpleContex
     const [canRegister, setCanRegister] = createSignal(false)
 
     const key = createMemo(() => serverKey(server.url))
-    const credentials = createMemo(() => (ready() ? store.tokens[key()] : undefined))
     const token = createMemo(() => {
-      const value = credentials()
-      return isOAuthTokens(value) ? value.access : value
+      const value = ready() ? store.tokens[key()] : undefined
+      return typeof value === "string" ? value : undefined
     })
-    const refreshFlights = new Map<string, Promise<OAuthTokens>>()
 
-    function persistToken(value: string | OAuthTokens | undefined, target = key()) {
+    function persistToken(value: string | undefined, target = key()) {
       const k = target
       if (!k) return
-      setStore("tokens", k, value as string | OAuthTokens)
-    }
-
-    async function getValidAccessToken(force = false) {
-      const current = credentials()
-      if (!isOAuthTokens(current)) return current
-      if (!force && current.expires > Date.now() + 60_000) return current.access
-      const target = key()
-      let flight = refreshFlights.get(target)
-      if (!flight) {
-        flight = refreshOAuthTokens(current, oauthFetcher)
-          .then((next) => {
-            persistToken(next, target)
-            return next
-          })
-          .catch((cause) => {
-            if (cause instanceof OAuthTokenError && (cause.status === 400 || cause.status === 401)) {
-              persistToken(undefined, target)
-            }
-            throw cause
-          })
-          .finally(() => {
-            refreshFlights.delete(target)
-          })
-        refreshFlights.set(target, flight)
-      }
-      return (await flight).access
-    }
-
-    async function refreshAccessToken(rejected: string | undefined) {
-      const current = credentials()
-      if (!isOAuthTokens(current)) return current
-      if (rejected && current.access !== rejected) return current.access
-      return getValidAccessToken(true)
+      setStore("tokens", k, value)
     }
 
     async function request(path: string, init?: RequestInit & { auth?: boolean }) {
@@ -117,7 +72,7 @@ export const { use: useAccount, provider: AccountProvider } = createSimpleContex
       if (!base) throw new Error("No active server")
       const headers = new Headers(init?.headers)
       headers.set("Content-Type", "application/json")
-      const current = init?.auth === false ? undefined : await getValidAccessToken()
+      const current = init?.auth === false ? undefined : token()
       if (current) headers.set("Authorization", `Bearer ${current}`)
       return fetcher(`${base}${path}`, { ...init, headers })
     }
@@ -193,32 +148,6 @@ export const { use: useAccount, provider: AccountProvider } = createSimpleContex
       })
     }
 
-    async function loginWithOAuth() {
-      if (!ready()) throw new Error("Account storage is not ready")
-      setError(undefined)
-      const authorization = await createAuthorizationRequest()
-      setStore("pending", key(), authorization.pending)
-      setStatus("loading")
-      platform.openLink(authorization.url)
-    }
-
-    async function handleAuthCallback(input: string) {
-      const callback = parseAuthCallback(input)
-      if (!callback) return false
-      if (!ready()) throw new Error("Account storage is not ready")
-      const entry = Object.entries(store.pending).find(([, pending]) => pending.state === callback.state)
-      if (!entry) throw new Error("OAuth callback state does not match the pending sign-in")
-      const [target, pending] = entry
-      setStore("pending", target, undefined as unknown as OAuthPending)
-      if (Date.now() - pending.created > 10 * 60_000) throw new Error("OAuth sign-in expired; start again")
-      if (callback.error) throw new Error(callback.error)
-      if (!callback.code || !callback.state) throw new Error("OAuth callback is missing code or state")
-      const next = await exchangeAuthorizationCode(callback.code, pending.verifier, oauthFetcher)
-      persistToken(next, target)
-      if (target === key()) await loadMe()
-      return true
-    }
-
     async function register(input: { username: string; email: string; password: string; displayName?: string }) {
       setError(undefined)
       const res = await request("/user/register", {
@@ -265,32 +194,6 @@ export const { use: useAccount, provider: AccountProvider } = createSimpleContex
       void loadMe()
     })
 
-    const deepLinkEvent = "ragu:deep-link"
-    const receiveDeepLinks = (urls: string[]) => {
-      if (!ready()) return
-      for (const url of urls) {
-        if (!parseAuthCallback(url)) continue
-        void handleAuthCallback(url).catch((cause) => {
-          const message = cause instanceof Error ? cause.message : String(cause)
-          batch(() => {
-            setError(message)
-            setStatus(token() ? "authenticated" : "anonymous")
-          })
-        })
-      }
-    }
-    const onDeepLink = (event: Event) => {
-      const detail = (event as CustomEvent<{ urls?: string[] }>).detail
-      receiveDeepLinks(detail?.urls ?? [])
-    }
-    window.addEventListener(deepLinkEvent, onDeepLink)
-    onCleanup(() => window.removeEventListener(deepLinkEvent, onDeepLink))
-    createEffect(() => {
-      if (!ready()) return
-      const pending = window.__RAGU__?.deepLinks ?? []
-      receiveDeepLinks(pending)
-    })
-
     createEffect(() => {
       void key()
       if (server.url) void refreshStatus()
@@ -316,15 +219,9 @@ export const { use: useAccount, provider: AccountProvider } = createSimpleContex
         return server.name
       },
       login,
-      loginWithOAuth,
       register,
       logout,
       refresh: loadMe,
-      getValidAccessToken,
-      refreshAccessToken,
-      get hasRefreshToken() {
-        return isOAuthTokens(credentials())
-      },
       clearError: () => setError(undefined),
     }
   },

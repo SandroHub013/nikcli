@@ -13,7 +13,6 @@ import { CONFIG_STEMS, configStem, preferNew } from "@ragu/util/app-folder"
 
 const log = Log.create({ service: "tui.migrate" })
 
-const TUI_SCHEMA_URL = "https://nikcli-ai.dev/tui.json"
 
 const LegacyTheme = ThemeField
 const LegacyRecord = z.record(z.string(), z.unknown()).optional()
@@ -69,9 +68,7 @@ export async function migrateTuiConfig(input: MigrateInput) {
     const targetExists = await Filesystem.exists(target)
     if (targetExists) continue
 
-    const payload: Record<string, unknown> = {
-      $schema: TUI_SCHEMA_URL,
-    }
+    const payload: Record<string, unknown> = {}
     if (extracted.theme !== undefined) payload.theme = extracted.theme
     if (extracted.keybinds !== undefined) payload.keybinds = extracted.keybinds
     if (tui) Object.assign(payload, tui)

@@ -177,8 +177,9 @@ describe("release identity wiring", () => {
     expect(confirmIndex).toBeGreaterThan(deployIndex)
     expect(yml).toContain('RAGU_REVISION="$GITHUB_SHA" ./script/railway-deploy.sh --detach')
     expect(yml).toContain("Expected identity: revision=${GITHUB_SHA}")
-    expect(yml).toContain("https://nikcli-mobile-production.up.railway.app")
-    // GitHub expressions treat `//` as a comment, so the default URL cannot live inside ${{ }}.
+    // The health URL comes from the repository's variables, with no fallback to another service.
+    expect(yml).toContain("RAGU_HEALTH_URL: ${{ vars.RAILWAY_HEALTH_URL }}")
+    // GitHub expressions treat `//` as a comment, so a URL cannot live inside ${{ }}.
     expect(yml).not.toMatch(/\$\{\{[^}\n]*https:\/\//)
   })
 })

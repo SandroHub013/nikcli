@@ -314,16 +314,6 @@ describe("workflow failure regressions", () => {
     expect(src).not.toContain("best of")
   })
 
-  it("the site deployment only unlocks SST after detecting a persisted lock", async () => {
-    const yml = await read(".github/workflows/deploy.yml")
-    const detection = yml.indexOf("A concurrent update was detected")
-    const unlock = yml.indexOf('bun sst unlock --stage="${{ github.ref_name }}"')
-    expect(detection).toBeGreaterThan(-1)
-    expect(unlock).toBeGreaterThan(detection)
-    expect(yml).toContain('bun sst deploy --stage="${{ github.ref_name }}"')
-    expect(yml).toContain("cancel-in-progress: false")
-  })
-
   it("the Discord release notification is optional when its webhook is absent", async () => {
     const yml = await read(".github/workflows/notify-discord.yml")
     expect(yml).toContain("configured=false")

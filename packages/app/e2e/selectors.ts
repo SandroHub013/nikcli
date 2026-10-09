@@ -13,7 +13,6 @@ export const settingsSoundsAgentSelector = '[data-action="settings-sounds-agent"
 export const settingsSoundsPermissionsSelector = '[data-action="settings-sounds-permissions"]'
 export const settingsSoundsErrorsSelector = '[data-action="settings-sounds-errors"]'
 export const settingsUpdatesStartupSelector = '[data-action="settings-updates-startup"]'
-export const settingsReleaseNotesSelector = '[data-action="settings-release-notes"]'
 
 export const sidebarNavSelector = '[data-component="sidebar-nav-desktop"]'
 

@@ -4,68 +4,8 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { UserApi } from "@tui/util/user-api"
 import { UserSession } from "@ragu/util/user-session"
 import type { UserSchema } from "@ragu/util/user-schema"
-import { DialogAccountLogin } from "@tui/component/dialog-account-login"
-
-type LoginChoice = "oauth" | "local"
-
-function choose(dialog: DialogContext, hasUsers: boolean): Promise<LoginChoice | null> {
-  return new Promise((resolve) => {
-    dialog.replace(
-      () => (
-        <DialogSelect
-          title="Sign in to Ragu Code"
-          options={[
-            {
-              title: "Continue with ragu",
-              value: "oauth" as LoginChoice,
-              description: "Sign in through your browser with GitHub or an email code.",
-            },
-            {
-              title: hasUsers ? "Use a local password" : "Create a local account",
-              value: "local" as LoginChoice,
-              description: hasUsers
-                ? "Legacy sign-in against this machine's local account."
-                : "Offline fallback — a password-based account stored on this machine.",
-            },
-          ]}
-          onSelect={(option) => resolve(option.value)}
-        />
-      ),
-      () => resolve(null),
-    )
-  })
-}
-
-function oauthLogin(dialog: DialogContext): Promise<UserSchema.PublicUser | null> {
-  return new Promise((resolve) => {
-    dialog.replace(
-      () => <DialogAccountLogin onComplete={resolve} />,
-      () => resolve(null),
-    )
-  })
-}
-
-/**
- * Startup sign-in flow. OAuth (device code against auth.nikcli-ai.dev) is the
- * primary path — it links the identity to the local user database so the TUI
- * session works exactly as before. The password flow remains as the offline
- * fallback for self-hosted machines.
- * Returns the authenticated PublicUser or null if the user cancels.
- */
 export const DialogLogin = {
   async run(dialog: DialogContext, sdk: UserApi.Sdk): Promise<UserSchema.PublicUser | null> {
-    // `useSDK()` cannot be read here: this runs from an async continuation, where
-    // Solid's owner is gone and `useContext` would return undefined. The caller
-    // holds the context and passes the transport in.
-    const hasUsers = (await UserApi.hasUsers(sdk)) ?? false
-    const choice = await choose(dialog, hasUsers)
-    if (choice === null) return null
-    if (choice === "oauth") {
-      const user = await oauthLogin(dialog)
-      if (user) return user
-      // Cancelled or failed — back to the chooser rather than dead-ending.
-      return DialogLogin.run(dialog, sdk)
-    }
     return DialogLogin.runLocal(dialog, sdk)
   },
 

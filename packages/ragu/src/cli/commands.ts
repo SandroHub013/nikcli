@@ -465,14 +465,12 @@ const SpecDebug = Spec.make("debug", {
 })
 
 const SpecAuthLogin = Spec.make("login", {
-  description: "log in to a provider",
+  description: "log in to an AI provider",
   params: {
-    url: Argument.string("url").pipe(Argument.withDescription("ragu auth provider"), Argument.optional),
-    provider: Flag.boolean("provider").pipe(
-      Flag.withDescription("Log in to an LLM provider instead of your ragu account"),
-      Flag.withDefault(false),
+    provider: Argument.string("provider").pipe(
+      Argument.withDescription("Provider ID (e.g. openai, anthropic) or well-known auth URL"),
+      Argument.optional,
     ),
-    server: Flag.string("server").pipe(Flag.withAlias("s"), Flag.withDescription("Identity issuer URL"), Flag.optional),
   },
 })
 
@@ -487,52 +485,6 @@ const SpecAuthList = Spec.make("list", {
 const SpecAuth = Spec.make("auth", {
   description: "manage credentials",
   commands: [SpecAuthLogin, SpecAuthLogout, SpecAuthList],
-})
-
-const SpecAccountLogin = Spec.make("login", {
-  description: "log in with device code",
-  params: {
-    server: Flag.string("server").pipe(Flag.withAlias("s"), Flag.withDescription("Auth server URL"), Flag.optional),
-  },
-})
-
-const SpecAccountLogout = Spec.make("logout", {
-  description: "log out from an account",
-  params: {
-    "account-id": Argument.string("account-id").pipe(
-      Argument.withDescription("Account ID to log out from"),
-      Argument.optional,
-    ),
-  },
-})
-
-const SpecAccountList = Spec.make("list", {
-  description: "list accounts",
-})
-
-const SpecAccountSwitch = Spec.make("switch", {
-  description: "switch active account",
-  params: {
-    "account-id": Argument.string("account-id").pipe(
-      Argument.withDescription("Account ID to switch to"),
-      Argument.optional,
-    ),
-  },
-})
-
-const SpecAccountOrgs = Spec.make("orgs", {
-  description: "list organizations for an account",
-  params: {
-    "account-id": Argument.string("account-id").pipe(
-      Argument.withDescription("Account ID to list orgs for (defaults to active)"),
-      Argument.optional,
-    ),
-  },
-})
-
-const SpecAccount = Spec.make("account", {
-  description: "manage accounts",
-  commands: [SpecAccountLogin, SpecAccountLogout, SpecAccountList, SpecAccountSwitch, SpecAccountOrgs],
 })
 
 const SpecAgentCreate = Spec.make("create", {
@@ -1518,7 +1470,6 @@ export const Commands = Spec.make("ragu", {
     SpecApi,
     SpecDebug,
     SpecAuth,
-    SpecAccount,
     SpecAgent,
     SpecUpgrade,
     SpecQuickstart,

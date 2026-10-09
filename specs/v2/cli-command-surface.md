@@ -36,7 +36,6 @@ Source: the `commands` field of the root `Spec.make("ragu", …)` in `src/cli/co
 | `acp`             | —                                                                                                  | Agent Client Protocol                                  |
 | `mcp`             | `list`, `auth [name]`, `logout [name]`, `add`, `debug <name>`                                      |                                                        |
 | `auth`            | `list`, `login [url]`, `logout`                                                                    | Credentials                                            |
-| `account`         | `login`, `logout`, `list`, `switch`, `orgs`                                                        |                                                        |
 | `agent`           | `create`, `list`                                                                                   |                                                        |
 | `upgrade`         | —                                                                                                  | Says where updates come from; installs nothing         |
 | `uninstall`       | —                                                                                                  |                                                        |

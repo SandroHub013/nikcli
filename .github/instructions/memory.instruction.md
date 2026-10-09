@@ -71,7 +71,6 @@ Dependency versions and older module inventories below are historical notes from
 | `packages/sdk/js`                                              | `@ragu/sdk`                 | Generated HttpApi clients; consumers use `@ragu/sdk/httpapi`                                             |
 | `packages/tui`                                                 |                                  | Shared TUI components, including QR rendering                                                                 |
 | `packages/studio`                                              |                                  | Desktop UI                                                                                                    |
-| `packages/identity`                                            |                                  | Browser identity, database, and authentication contracts                                                      |
 | `packages/llm`                                                 | `@ragu/llm`                 | LLM provider factories (modular, used by `provider/`)                                                         |
 | `packages/util`                                                | `@ragu/util`                | Shared utilities (fn, error, retry, slug, path — Zod-based)                                                   |
 | `packages/app`                                                 | `@ragu/app`                 | Shared web UI (SolidJS)                                                                                       |
@@ -80,15 +79,9 @@ Dependency versions and older module inventories below are historical notes from
 | `packages/plugin`                                              | `@ragu/plugin`              | Plugin system core + bundled plugins (codex, cursor, github-copilot, openai, cloudflare, xai)                 |
 | `packages/desktop`                                             | `@ragu/desktop`             | Tauri v2 desktop app (16 languages)                                                                           |
 | `packages/mobile`                                              | `@ragu/mobile`              | Expo/React Native mobile (iOS + Android) — companion with QR pairing                                          |
-| `packages/enterprise`                                          | `@ragu/enterprise`          | Enterprise web app (SolidStart + Nitro)                                                                       |
-| `packages/cloud`                                               | `@ragu/cloud`               | Cloudflare Workers backend (D1, Durable Objects, jose JWT)                                                    |
 | `packages/companion`                                           | `@ragu/companion`           | Companion server (Hono + WebSocket + Cloudflare Workers)                                                      |
 | `packages/remote`                                              | `@ragu/remote`              | Remote terminal via WebSocket + QR code + tunnels                                                             |
-| `packages/slack`                                               | `@ragu/slack`               | Slack bot (@slack/bolt + Cloudflare Workers)                                                                  |
 | `packages/discord`                                             | `@ragu/discord`             | Discord Gateway bot (discord.js) + invite helpers; TUI `/discord` wizard via HttpApi                          |
-| `packages/web`                                                 | `@ragu/web`                 | Marketing/docs site at `nikcli-ai.dev` (Astro + React + Cloudflare)                                           |
-| `packages/inference`                                           | `@ragu/inference`           | Inference service                                                                                             |
-| `packages/inference-dashboard`                                 | `@ragu/inference-dashboard` | Analytics dashboard (Astro)                                                                                   |
 | `packages/webrenderer`                                         | `@opentui/webrenderer`           | Native Rust web renderer (wry/tao) for TUI bridge                                                             |
 | `packages/tui-image`                                           | `@ragu/tui-image`           | TUI image rendering helpers                                                                                   |
 | `packages/terminal-control`                                    | `@ragu/terminal-control`    | Terminal control primitives                                                                                   |
@@ -246,7 +239,6 @@ Zod schema `Agent.Info` with fields: name, description, mode, native, hidden, to
 - **SessionV2** (`session/v2/`): event-sourced engine (newer than legacy session/) — projector fired in `InstanceBootstrap`
 - **SessionProcessor** (`processor.ts`): doom loop detection (threshold: 3), compaction check, permission deny handling, retry logic
 - **LLM streaming** (`llm.ts`): full stream with reasoning-start/delta/end, text-delta, tool-call, tool-result, error, finish; `looksLikeUIMessage()` + `repairMessage()` for malformed UI-shaped messages (fixes `AI_InvalidPromptError`); drops unrecoverable messages with warning
-- **ShareNext** (`share-next.ts`): syncs session data to enterprise endpoint (`s.nikcli-ai.dev`), with local fallback
 - **SessionPrompt** (`prompt.ts`): system prompts per provider (anthropic, gemini, qwen, beast, copilot-gpt-5, etc.)
 - **SessionCompaction** (`compaction.ts`): auto-compaction based on token usage
 - **SessionSummary** (`summary.ts`): session summarization
@@ -370,7 +362,7 @@ Generic interval-based task scheduler with `Instance.state` scoping:
 - `packages/ragu/src/server/httpapi/` is the source of truth for endpoints, OpenAPI, and generated clients; runtime is Effect HttpApi on `Bun.serve`.
 - Endpoint changes require `bun run generate:httpapi-clients` from `packages/ragu` and inclusion of generated output. Schema rules and verification are in `packages/ragu/AGENTS.md`.
 - `bun run check:routes` runs route coverage there. `--strict` is honored as of 2026-08-17; it currently applies the same rules as default.
-- `Account.Service` and related Effect services are canonical authentication boundaries; identity changes can span `packages/ragu` and `packages/identity`.
+- `Account.Service` and related Effect services are canonical authentication boundaries.
 
 ### Workspace System (`src/workspace/`)
 
@@ -539,28 +531,21 @@ External TUI plugin package using OpenTUI SolidJS components:
 - **Nested manifests below declared workspace globs** (e.g., `packages/remote/web-client/package.json`) are internal/build-only, not first-class workspaces
 - **Config loading is side-effectful**: reading config can trigger npm package installation logic; `src/config/config.ts:203`
 
-## Install/Release System (`packages/web/install`, `packages/web/public/install.sh`)
+## Install/Release System (`install`, `install.ps1` at the repository root)
 
-Two install scripts exist with different feature sets:
-
-- `packages/web/install` (cache-bust 2026-04-16): older, no `--local` flag, no GitHub `v` prefix fallback
-- `packages/web/public/install.sh` (cache-bust 2026-01-31): newer, has `--local [dist-dir]` and `v` prefix fallback
-
-Both support:
+The installers support:
 
 - Platform detection: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`, `windows-x64`
 - Archive formats: `.tar.gz` (Linux), `.zip` (macOS/Windows)
 - Special targets: `baseline` (no AVX2), `musl` (Alpine/musl libc)
 - Version stripping: leading `v` stripped from `--version` argument
-- Dual download: `nikcli-ai.dev` (primary) + GitHub (fallback)
+- Download: GitHub releases
 - Shell support: fish, zsh, bash, ash, sh
 
 Archive structure: top-level `bin/ragu` (not nested in `ragu-<target>/`)
 Post-install: updates `/usr/local/bin/ragu` if running as root on Unix.
 
-**Important**: `packages/web/install` (served at `/install`) lacks the `--local` flag and GitHub `v` prefix fallback that `public/install.sh` has. Align before future releases.
-
-Release archive naming: `ragu-code-<target>.<ext>` (e.g., `ragu-code-linux-x64.tar.gz`) — prefix comes from `pkg.name` (`ragu-code`) in `packages/ragu/package.json` and is used by `script/build.ts` for dist dir names, by `script/release-github.ts` for archive names, and must match the `ASSET_PREFIX` in both `install` and `packages/web/public/install.sh`.
+Release archive naming: `ragu-code-<target>.<ext>` (e.g., `ragu-code-linux-x64.tar.gz`) — prefix comes from `pkg.name` (`ragu-code`) in `packages/ragu/package.json` and is used by `script/build.ts` for dist dir names, by `script/release-github.ts` for archive names, and must match the `ASSET_PREFIX` in both `install` and `install.ps1`.
 GitHub release tag format: `vX.Y.Z`; installer also accepts bare `X.Y.Z` as fallback for legacy tags.
 
 ## Workspace Catalog (shared dependency versions)

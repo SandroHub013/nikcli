@@ -36,7 +36,7 @@ import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogSettings } from "@tui/component/dialog-settings"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogTour } from "@tui/component/dialog-tour"
-import { DialogQuickstartInfo, DialogDoctorInfo, DialogSupport, openExternal } from "@tui/component/dialog-support"
+import { DialogQuickstartInfo, DialogDoctorInfo, DialogSupport } from "@tui/component/dialog-support"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogPermissionMode } from "@tui/component/dialog-permission-mode"
 import { DialogAdvisorModel } from "@tui/component/dialog-advisor-model"
@@ -82,8 +82,6 @@ import { StartupLoading } from "./component/startup-loading"
 import { DialogRestart } from "./component/dialog-restart"
 import { SessionTabs } from "./component/session-tabs"
 import { DialogOnboarding } from "@tui/component/dialog-onboarding"
-import { DialogLogin } from "@tui/component/dialog-login"
-import { DialogAccountLogin } from "@tui/component/dialog-account-login"
 import { DialogProfile } from "@tui/component/dialog-profile"
 import { DialogAuthManage } from "@tui/component/dialog-auth-manage"
 import { BRAIN_SESSION_TITLE } from "@ragu/util/brain-constants"
@@ -123,7 +121,6 @@ import type { EventSource, Transport } from "./context/sdk"
 import { Log } from "@ragu/util/log"
 import { errorMessage } from "@ragu/util/error-format"
 import { classifyConfigFailure } from "@tui/util/config-failure"
-import { ensureOnboarded } from "@tui/util/onboarding"
 
 const log = Log.create({ service: "tui.app" })
 
@@ -542,61 +539,17 @@ function App(props: {
     void (async () => {
       // Drive instances use an injected local provider and must not depend on
       // interactive account/onboarding state from the host machine.
-      //
-      // The session is asked for now, alongside `hasUsers`, and nothing before
-      // the plugins waits for it: onboarding never read it. Answering it can
-      // mean renewing and verifying the issuer token over the network — a
-      // second or more on every launch after the token's quarter hour — and a
-      // returning user's plugins, config and prompt have no use for the answer.
-      // What it decides (the sign-in dialog) is applied once they are up.
-      let returningAccount: Promise<Awaited<ReturnType<typeof UserApi.session>>> | undefined
       if (!process.env.RAGU_DRIVE) {
-        // Account state comes from `/user/*` — the transport is up by now, as
-        // the `sdk.client.tui.config` call a few lines below has always relied on.
-        const accountRequest = UserApi.session(sdk)
-        // A first run never awaits it; a returning one does, below, and sees any failure there.
-        accountRequest.catch(() => {})
-
-        // `null` means the question could not be asked. Treating that as "no
-        // users" would restart onboarding for someone who already has an
-        // account, so only an explicit `false` counts as first run.
-        const isFirstRun = (await UserApi.hasUsers(sdk)) === false
-
-        if (isFirstRun && !kv.get("onboarding_complete", false)) {
-          // First-time user: unified onboarding handles account creation + provider setup
+        if (!kv.get("onboarding_complete", false)) {
+          // First-time user: onboarding handles filesystem + provider setup
           setOnboardingActive(true)
-          const outcome = await ensureOnboarded({
-            runOnboarding: () => DialogOnboarding.run(dialog),
-            currentUser: () => UserApi.me(sdk),
-            onAttemptFailed: (attempt) =>
-              log.warn("onboarding closed without an account", {
-                attempt,
-                service: "tui.onboarding",
-              }),
-          })
+          await DialogOnboarding.run(dialog)
           setOnboardingActive(false)
-          if (outcome.status === "complete") {
-            kv.set("onboarding_complete", true)
-            const needsProvider = untrack(() => sync.status === "complete" && sync.data.provider.length === 0)
-            if (needsProvider && dialog.stack.length === 0) {
-              dialog.replace(() => <DialogProviderList />)
-            }
-          } else {
-            // Not signed in, and startup must not pretend otherwise: the flag
-            // stays unset so the next launch asks again. It also must not park
-            // here — the config load and renderer wiring below never ran while
-            // this loop spun, which left the user with a frozen screen and no
-            // reason for it. Say what happened and let startup finish.
-            log.error("onboarding did not produce an account", {
-              attempts: outcome.attempts,
-            })
-            toast.show({
-              message: "Account setup didn't complete — run /signin to finish signing in.",
-              variant: "error",
-            })
+          kv.set("onboarding_complete", true)
+          const needsProvider = untrack(() => sync.status === "complete" && sync.data.provider.length === 0)
+          if (needsProvider && dialog.stack.length === 0) {
+            dialog.replace(() => <DialogProviderList />)
           }
-        } else {
-          returningAccount = accountRequest
         }
       }
 
@@ -650,20 +603,7 @@ function App(props: {
       })
       setPluginsReady(true)
 
-      // Three answers, and only one of them is a reason to interrupt. The
-      // server is asked whether this machine holds a session; while it is
-      // still booting — or being restarted by an auto-update — it cannot
-      // answer, and reading that silence as "signed out" is what put the
-      // sign-in dialog in front of someone who had never signed out.
-      const account = await returningAccount
-      if (account?.status === "signed-out") {
-        // Returning user with no active session: standard login
-        await DialogLogin.run(dialog, sdk)
-      } else if (account?.status === "unknown") {
-        log.warn("could not read the account session at startup; not prompting", {
-          service: "tui.account",
-        })
-      }
+      // Startup does not prompt for account login.
     })().catch((error) => {
       dbgApp("init chain error", String(error))
       setOnboardingActive(false)
@@ -921,15 +861,6 @@ function App(props: {
       slash: { name: "doctor" },
       onSelect: () => {
         dialog.replace(() => <DialogDoctorInfo />)
-      },
-    },
-    {
-      title: "Open the docs",
-      value: "support.docs",
-      category: "Support",
-      slash: { name: "docs" },
-      onSelect: () => {
-        openExternal("https://nikcli-ai.dev/docs")
       },
     },
     {
@@ -1342,7 +1273,7 @@ function App(props: {
         aliases: ["account-login"],
       },
       onSelect: () => {
-        dialog.replace(() => <DialogAccountLogin />)
+        dialog.replace(() => <DialogAuthManage />)
       },
     },
     {
@@ -1520,15 +1451,6 @@ function App(props: {
       category: "System",
     },
     {
-      title: "Open docs",
-      value: "docs.open",
-      onSelect: () => {
-        open("https://nikcli-ai.dev/docs").catch(() => {})
-        dialog.clear()
-      },
-      category: "System",
-    },
-    {
       title: "Open WebUI",
       value: "webui.open",
       onSelect: () => {
@@ -1647,25 +1569,6 @@ function App(props: {
       },
     },
   ])
-
-  createEffect(
-    on(
-      () => local.model.current(),
-      (currentModel) => {
-        if (!currentModel) return
-        if (currentModel.providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
-          untrack(() => {
-            DialogAlert.show(
-              dialog,
-              "Warning",
-              "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out Ragu Zen\nhttps://nikcli-ai.dev/zen",
-            ).then(() => kv.set("openrouter_warning", true))
-          })
-        }
-      },
-      { defer: true },
-    ),
-  )
 
   onMount(() => {
     const refocusPrompt = () => {

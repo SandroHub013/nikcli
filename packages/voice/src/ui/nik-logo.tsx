@@ -1,7 +1,7 @@
 /**
  * The ragu mark.
  *
- * The block N from `packages/console/app/src/asset/brand/ragu-logo-*.svg`,
+ * The block N from `packages/ui/src/assets/brand/ragu-logo-*.svg`,
  * as a component rather than an imported file: the widget draws it inside a
  * filled disc, where it has to take the disc's foreground colour instead of
  * the two greys the asset ships baked in. An <img> cannot be recoloured, and a

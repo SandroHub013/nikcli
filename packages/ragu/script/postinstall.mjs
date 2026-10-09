@@ -208,7 +208,7 @@ function main() {
   throw new Error(
     `could not resolve a native binary for ${platform}-${arch}. Tried: ${names.join(", ")}.\n` +
       `The 'ragu' command will try again at runtime. To fix it now, install one of those packages manually,\n` +
-      `or use the standalone installer: https://nikcli-ai.dev/install`,
+      `or use the install script of the repository: install (macOS, Linux) or install.ps1 (Windows)`,
   )
 }
 
