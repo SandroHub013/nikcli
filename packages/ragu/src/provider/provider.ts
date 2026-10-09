@@ -31,13 +31,6 @@ import * as CachePolicy from "./cache-policy"
 import { ProviderError } from "./error"
 import { Policy } from "@/policy/policy"
 import { spreadIf } from "@/util/optional-key"
-import {
-  RAGU_INFERENCE_DEFAULT_URL,
-  RAGU_INFERENCE_ENV,
-  RAGU_INFERENCE_ID,
-  toModelsDevModel,
-  type GatewayModel,
-} from "./ragu-inference"
 
 // @ragu/llm provider factories for the new route-based model ref system
 import {
@@ -335,108 +328,7 @@ export namespace Provider {
     }
   }
 
-  /** Access token for the active ragu account (issuer sign-in). Cached + auto-refreshed by Account. */
-  async function accountAccessToken(): Promise<string | undefined> {
-    return runPromiseWithLayer(
-      Account.defaultLayer,
-      Effect.gen(function* () {
-        const account = yield* Account.Service
-        const active = yield* account.active()
-        if (!active) return undefined
-        return yield* account.token(active.id)
-      }),
-    ).catch(() => undefined)
-  }
 
-  /**
-   * Credential precedence mirrors the other providers: explicit config, env,
-   * `ragu auth login ragu-inference` API key, then the account OAuth
-   * sign-in (the same identity as the rest of ragu).
-   */
-  async function raguInferenceCredential(ctx: InstanceContext) {
-    const config = await configGet(ctx)
-    const configured = config.provider?.[RAGU_INFERENCE_ID]
-    // SAFETY: provider option and env values are strings when present, widened by the loose config options shape
-    const baseURL = normalizeBaseURL(
-      (configured?.options?.baseURL as string | undefined) ??
-        Env.get("RAGU_INFERENCE_URL") ??
-        RAGU_INFERENCE_DEFAULT_URL,
-    )
-    const auth = await authGet(RAGU_INFERENCE_ID)
-    // SAFETY: apiKey comes from user config or process env, both string-valued when set
-    const explicitKey =
-      (configured?.options?.apiKey as string | undefined) ??
-      Env.get(RAGU_INFERENCE_ENV) ??
-      (auth?.type === "api" ? auth.key : undefined)
-    const apiKey = explicitKey ?? (await accountAccessToken())
-    return { baseURL, apiKey, explicitKey }
-  }
-
-  /**
-   * Live catalog from the gateway; undefined when it cannot be reached.
-   * Custom loaders receive the already-parsed internal `Model` shape (with
-   * `api`/`capabilities`), not the models.dev shape used to seed the database.
-   */
-  async function fetchRaguInferenceModels(baseURL: string, apiKey: string): Promise<Record<string, Model> | undefined> {
-    const res = await fetch(`${baseURL}/models`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      signal: AbortSignal.timeout(4000),
-    }).catch(() => undefined)
-    if (!res?.ok) return undefined
-    // SAFETY: res.ok was checked above; res.json() is untyped so data is accessed defensively below
-    const json = (await res.json().catch(() => undefined)) as { data?: GatewayModel[] } | undefined
-    const data = json?.data
-    if (!data?.length) return undefined
-    const models: Record<string, Model> = {}
-    for (const m of data) {
-      if (!m.id) continue
-      const seed = toModelsDevModel(m)
-      // SAFETY: seed.limit is built by toModelsDevModel above; context/output are numeric there
-      const context = (seed.limit as { context: number }).context
-      // SAFETY: seed fields come from toModelsDevModel(m), which normalizes each gateway model
-      // to the internal Model shape (family/release_date strings, reasoning/attachment booleans)
-      models[m.id] = {
-        id: m.id,
-        providerID: RAGU_INFERENCE_ID,
-        name: m.id,
-        family: seed.family as string,
-        api: { id: m.id, url: baseURL, npm: "@ai-sdk/openai-compatible" },
-        status: "active",
-        headers: {},
-        options: {},
-        cost: {
-          input: m.pricing?.input ?? 0,
-          output: m.pricing?.output ?? 0,
-          cache: { read: 0, write: 0 },
-        },
-        limit: { context, output: (seed.limit as { output: number }).output },
-        capabilities: {
-          temperature: true,
-          reasoning: seed.reasoning as boolean,
-          attachment: seed.attachment as boolean,
-          toolcall: true,
-          input: {
-            text: true,
-            audio: false,
-            image: seed.attachment as boolean,
-            video: false,
-            pdf: false,
-          },
-          output: {
-            text: true,
-            audio: false,
-            image: false,
-            video: false,
-            pdf: false,
-          },
-          interleaved: false,
-        },
-        release_date: seed.release_date as string,
-        variants: {},
-      }
-    }
-    return models
-  }
 
   function isGpt5OrLater(modelID: string): boolean {
     const match = /^gpt-(\d+)/.exec(modelID)
@@ -500,44 +392,7 @@ export namespace Provider {
         options: hasKey ? {} : { apiKey: "public" },
       }
     },
-    async [RAGU_INFERENCE_ID](
-      input: { id: string; env: string[]; models: Record<string, Model> },
-      ctx: InstanceContext,
-    ) {
-      const { baseURL, apiKey, explicitKey } = await raguInferenceCredential(ctx)
-      // No credential at all: leave the seed catalog in place but stay dormant,
-      // exactly like a provider whose API key has not been set yet.
-      if (!apiKey) return { autoload: false, options: { baseURL } }
 
-      const live = await fetchRaguInferenceModels(baseURL, apiKey).catch(() => undefined)
-      if (live) {
-        for (const key of Object.keys(input.models)) delete input.models[key]
-        Object.assign(input.models, live)
-      }
-
-      return {
-        autoload: true,
-        options: {
-          baseURL,
-          apiKey,
-          // OAuth access tokens expire (~15 min): when the credential comes from
-          // the account sign-in, re-resolve it per request. Account.token caches
-          // and refreshes transparently.
-          ...(!explicitKey && {
-            fetch: async (url: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
-              const token = (await accountAccessToken()) ?? apiKey
-              const headers = new Headers(init?.headers)
-              headers.set("Authorization", `Bearer ${token}`)
-              return globalThis.fetch(url, {
-                ...init,
-                headers,
-                compress: "gzip",
-              } as RequestInit)
-            },
-          }),
-        },
-      }
-    },
     openai: async () => {
       return {
         autoload: false,
@@ -1416,6 +1271,10 @@ export namespace Provider {
 
     // extend database from config
     for (const [providerID, provider] of configProviders) {
+      if (providerID === "ragu-inference" || providerID === "nikcli-inference") {
+        log.warn(`Ignoring removed inference gateway provider in config: ${providerID}`)
+        continue
+      }
       const existing = database[providerID]
       const parsed: Info = {
         id: providerID,
@@ -1634,6 +1493,9 @@ export namespace Provider {
 
     // load config
     for (const [providerID, provider] of configProviders) {
+      if (providerID === "ragu-inference" || providerID === "nikcli-inference") {
+        continue
+      }
       const partial: Partial<Info> = { source: "config" }
       if (provider.env) partial.env = provider.env
       if (provider.name) partial.name = provider.name
@@ -2395,6 +2257,10 @@ export namespace Provider {
         // small-model fallback (e.g. user wants to skip Haiku entirely).
         if (cfg.small_model && cfg.small_model !== "") {
           const parsed = parseModel(cfg.small_model)
+          if (parsed.providerID === "ragu-inference" || parsed.providerID === "nikcli-inference") {
+            log.warn("ignoring removed inference gateway in small_model", { small_model: cfg.small_model })
+            return undefined
+          }
           return yield* getModelEffect(parsed.providerID, parsed.modelID)
         }
         if (cfg.small_model === "") {
@@ -2451,6 +2317,10 @@ export namespace Provider {
 
         if (cfg.model) {
           const parsed = parseModel(cfg.model)
+          if (parsed.providerID === "ragu-inference" || parsed.providerID === "nikcli-inference") {
+            log.warn("ignoring removed inference gateway in model", { model: cfg.model })
+            return bestAvailable()
+          }
           if (isAvailable(parsed.providerID, parsed.modelID)) return parsed
           return bestAvailable() ?? parsed
         }
