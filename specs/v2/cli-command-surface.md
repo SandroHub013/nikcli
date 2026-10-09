@@ -52,7 +52,6 @@ Source: the `commands` field of the root `Spec.make("ragu", …)` in `src/cli/co
 | `usage`           | —                                                                                                  |                                                        |
 | `export`          | `[sessionID]`                                                                                      |                                                        |
 | `import`          | `<file>`                                                                                           | Persists through `SessionV2Write.persist`              |
-| `github`          | `install`, `run`                                                                                   |                                                        |
 | `pr`              | `<number>`                                                                                         |                                                        |
 | `session`         | `list`                                                                                             | No `show` / `delete` on this command                   |
 | `debug`           | `config`, `lsp`, `search`, `file`, `scrap`, `skill`, `snapshot`, `agent`, `paths`, `wait`          |                                                        |

@@ -106,10 +106,6 @@ export const Handlers = Runtime.handlers(Commands, {
   stats: () => import("./handlers/stats"),
   export: () => import("./handlers/export"),
   import: () => import("./handlers/import"),
-  github: {
-    install: () => import("./handlers/github/install"),
-    run: () => import("./handlers/github/run"),
-  },
   pr: () => import("./handlers/pr"),
   session: {
     list: () => import("./handlers/session/list"),

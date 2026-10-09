@@ -860,26 +860,6 @@ const SpecImport = Spec.make("import", {
   },
 })
 
-const SpecGithubInstall = Spec.make("install", {
-  description: "install the GitHub agent",
-})
-
-const SpecGithubRun = Spec.make("run", {
-  description: "run the GitHub agent",
-  params: {
-    event: Flag.string("event").pipe(Flag.withDescription("GitHub mock event to run the agent for"), Flag.optional),
-    token: Flag.string("token").pipe(
-      Flag.withDescription("GitHub personal access token (github_pat_********)"),
-      Flag.optional,
-    ),
-  },
-})
-
-const SpecGithub = Spec.make("github", {
-  description: "manage GitHub agent",
-  commands: [SpecGithubInstall, SpecGithubRun],
-})
-
 const SpecPr = Spec.make("pr", {
   description: "fetch and checkout a GitHub PR branch, then run ragu",
   params: {
@@ -1599,7 +1579,6 @@ export const Commands = Spec.make("ragu", {
     SpecStats,
     SpecExport,
     SpecImport,
-    SpecGithub,
     SpecPr,
     SpecSession,
     SpecImageModel,
