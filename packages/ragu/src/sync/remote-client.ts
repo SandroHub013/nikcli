@@ -1,6 +1,6 @@
 /**
- * RemoteSyncClient — HTTPS client for the optional remote hub server
- * (e.g. https://s.nikcli-ai.dev). Used by the local CLI to push events
+ * RemoteSyncClient — HTTP client for the optional remote hub server
+ * (another `ragu serve`). Used by the local CLI to push events
  * it produced and to subscribe to events the remote server produced
  * for the same project.
  *

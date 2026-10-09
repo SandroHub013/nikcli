@@ -225,7 +225,7 @@ export function DialogSync() {
                     setForm("url", v)
                     setForm("status", "")
                   }}
-                  placeholder="https://s.nikcli-ai.dev"
+                  placeholder="http://127.0.0.1:4096"
                   cursorColor={theme.accent.fg}
                   focusedTextColor={theme.foreground.default}
                   ref={(r: any) => (urlInput = r)}

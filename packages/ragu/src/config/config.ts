@@ -1689,7 +1689,7 @@ export namespace Config {
           url: z
             .string()
             .optional()
-            .describe("Remote sync hub URL, e.g. https://s.nikcli-ai.dev. RAGU_REMOTE_URL overrides this."),
+            .describe("Remote sync hub URL: another `ragu serve`, e.g. http://127.0.0.1:4096. RAGU_REMOTE_URL overrides this."),
           token: z
             .string()
             .optional()
