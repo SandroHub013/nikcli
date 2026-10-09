@@ -9,7 +9,6 @@ import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSettings, monoFontFamily } from "@/context/settings"
 import { playSound, SOUND_OPTIONS } from "@/utils/sound"
-import { Link } from "./link"
 
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
@@ -184,12 +183,7 @@ export const SettingsGeneral: Component = () => {
 
             <SettingsRow
               title={language.t("settings.general.row.theme.title")}
-              description={
-                <>
-                  {language.t("settings.general.row.theme.description")}{" "}
-                  <Link href="https://nikcli-ai.dev/docs/themes/">{language.t("common.learnMore")}</Link>
-                </>
-              }
+              description={language.t("settings.general.row.theme.description")}
             >
               <Select
                 data-action="settings-theme"
