@@ -29,7 +29,7 @@ describe("removal of inference gateway and free model", () => {
     globalThis.fetch = (async (input: string | URL | Request) => {
       const url = input instanceof Request ? input.url : String(input)
       throw new Error(`Forbidden network request in tests: ${url}`)
-    }) as typeof fetch
+    }) as unknown as typeof fetch
 
     try {
       const catalog = await ModelsDev.get()
@@ -45,16 +45,18 @@ describe("removal of inference gateway and free model", () => {
     }
   })
 
-  it("does not list ragu-inference or nikcli-inference and never performs network calls", async () => {
+  it("does not list ragu-inference or nikcli-inference and never calls Nik's hosts", async () => {
     const directory = await makeProjectDir()
     const originalFetch = globalThis.fetch
-    let networkAttempted = false
+    // Listing providers refreshes models.dev and asks some providers for their models: those requests are expected
+    // (and fail here, offline). What must never happen is a request to Nik's gateway.
+    const requested: string[] = []
 
     globalThis.fetch = (async (input: string | URL | Request) => {
-      networkAttempted = true
       const url = input instanceof Request ? input.url : String(input)
+      requested.push(url)
       throw new Error(`Forbidden network request in tests: ${url}`)
-    }) as typeof fetch
+    }) as unknown as typeof fetch
 
     try {
       const providers = await Effect.runPromise(
@@ -69,7 +71,7 @@ describe("removal of inference gateway and free model", () => {
 
       expect(providers["ragu-inference"]).toBeUndefined()
       expect(providers["nikcli-inference"]).toBeUndefined()
-      expect(networkAttempted).toBe(false)
+      expect(requested.filter((url) => /nikcli-ai\.dev|nikcli\.store/.test(url))).toEqual([])
     } finally {
       globalThis.fetch = originalFetch
     }

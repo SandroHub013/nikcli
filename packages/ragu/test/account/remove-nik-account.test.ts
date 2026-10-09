@@ -13,7 +13,7 @@ describe("removal of Nik account and device-code login", () => {
   })
 
   it("does not register the account CLI command group", () => {
-    expect(Commands.commands["account"]).toBeUndefined()
+    expect((Commands.commands as Record<string, unknown>)["account"]).toBeUndefined()
   })
 
   it("fails if any network request attempts to call auth.nikcli-ai.dev on login", async () => {
@@ -26,7 +26,7 @@ describe("removal of Nik account and device-code login", () => {
         nikHostCalled = true
       }
       throw new Error(`Forbidden network request in tests: ${url}`)
-    }) as typeof fetch
+    }) as unknown as typeof fetch
 
     try {
       await expect(
@@ -52,7 +52,7 @@ describe("removal of Nik account and device-code login", () => {
       fetchCalled = true
       const url = input instanceof Request ? input.url : String(input)
       throw new Error(`Unexpected network call: ${url}`)
-    }) as typeof fetch
+    }) as unknown as typeof fetch
 
     try {
       await expect(

@@ -6,13 +6,14 @@ import { UserFacingError } from "@ragu/util/user-error"
 import loginHandler from "@/cli/handlers/auth/login"
 
 describe("ragu auth login provider selection and arguments", () => {
-  it("defines provider as an argument and removes server and url options", () => {
-    const loginSpec = Commands.commands["auth"].commands["login"]
-    expect(loginSpec).toBeDefined()
-    expect(loginSpec.description).toContain("provider")
-    expect(loginSpec.params["provider"]).toBeDefined()
-    expect(loginSpec.params["server"]).toBeUndefined()
-    expect(loginSpec.params["url"]).toBeUndefined()
+  it("defines provider as its only argument, with no server or url flags", () => {
+    const login = Commands.commands["auth"].commands["login"].spec
+    expect(login.description).toContain("provider")
+    // The `provider` argument is the only parameter: the --server and --url flags of the Nik account login are gone.
+    // `config` is the parsed parameter list Effect keeps on the command; it is not part of the public type.
+    const config = (login as unknown as { config: { arguments: unknown[]; flags: unknown[] } }).config
+    expect(config.arguments).toHaveLength(1)
+    expect(config.flags).toHaveLength(0)
   })
 
   it("enters provider API key prompt when provider argument is supplied and never calls well-known or Nik hosts", async () => {
@@ -23,7 +24,7 @@ describe("ragu auth login provider selection and arguments", () => {
       networkAttempted = true
       const url = input instanceof Request ? input.url : String(input)
       throw new Error(`Forbidden network request in tests: ${url}`)
-    }) as typeof fetch
+    }) as unknown as typeof fetch
 
     try {
       // In headless test mode, the provider branch reaches prompts.password which rejects with UI.HeadlessFailure

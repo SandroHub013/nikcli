@@ -49,12 +49,12 @@ describe("websearch and codesearch Exa key gate", () => {
         { directory },
         Effect.gen(function* () {
           const registry = yield* ToolRegistry.Service
-          return yield* registry.all()
+          return yield* registry.ids()
         }).pipe(Effect.provide(ToolRegistry.defaultLayer)),
       ),
     )
 
-    const ids = tools.map((t) => t.id)
+    const ids = tools
     expect(ids.includes("websearch")).toBe(false)
     expect(ids.includes("codesearch")).toBe(false)
   })
@@ -69,19 +69,19 @@ describe("websearch and codesearch Exa key gate", () => {
       networkAttempted = true
       const url = input instanceof Request ? input.url : String(input)
       throw new Error(`Forbidden network request in tests: ${url}`)
-    }) as typeof fetch
+    }) as unknown as typeof fetch
 
     const tools = await Effect.runPromise(
       InstanceScope.with(
         { directory },
         Effect.gen(function* () {
           const registry = yield* ToolRegistry.Service
-          return yield* registry.all()
+          return yield* registry.ids()
         }).pipe(Effect.provide(ToolRegistry.defaultLayer)),
       ),
     )
 
-    const ids = tools.map((t) => t.id)
+    const ids = tools
     expect(ids.includes("websearch")).toBe(true)
     expect(ids.includes("codesearch")).toBe(true)
 
@@ -120,12 +120,12 @@ describe("websearch and codesearch Exa key gate", () => {
         { directory },
         Effect.gen(function* () {
           const registry = yield* ToolRegistry.Service
-          return yield* registry.all()
+          return yield* registry.ids()
         }).pipe(Effect.provide(ToolRegistry.defaultLayer)),
       ),
     )
 
-    const ids = tools.map((t) => t.id)
+    const ids = tools
     expect(ids.includes("websearch")).toBe(true)
     expect(ids.includes("codesearch")).toBe(false)
   })
@@ -148,12 +148,12 @@ describe("websearch and codesearch Exa key gate", () => {
         { directory },
         Effect.gen(function* () {
           const registry = yield* ToolRegistry.Service
-          return yield* registry.all()
+          return yield* registry.ids()
         }).pipe(Effect.provide(ToolRegistry.defaultLayer)),
       ),
     )
 
-    const ids = tools.map((t) => t.id)
+    const ids = tools
     expect(ids.includes("websearch")).toBe(true)
     expect(ids.includes("codesearch")).toBe(false)
   })
