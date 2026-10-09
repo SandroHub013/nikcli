@@ -97,7 +97,7 @@ export default Runtime.handler(Commands.commands["auth"].commands["login"], asyn
         openrouter: 5,
         vercel: 6,
       }
-      provider = await prompts.autocomplete({
+      const picked = await prompts.autocomplete({
         message: "Select provider",
         maxItems: 8,
         options: [
@@ -124,10 +124,11 @@ export default Runtime.handler(Commands.commands["auth"].commands["login"], asyn
         ],
       })
 
-      if (prompts.isCancel(provider)) {
+      if (prompts.isCancel(picked)) {
         prompts.outro("Done")
         return
       }
+      provider = picked
     }
 
     const plugin = await pluginList().then((x) => x.find((x) => x.auth?.provider === provider))
@@ -137,15 +138,15 @@ export default Runtime.handler(Commands.commands["auth"].commands["login"], asyn
     }
 
     if (provider === "other") {
-      provider = await prompts.text({
+      const id = await prompts.text({
         message: "Enter provider id",
         validate: (x) => (x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
       })
-      if (prompts.isCancel(provider)) {
+      if (prompts.isCancel(id)) {
         prompts.outro("Done")
         return
       }
-      provider = provider.replace(/^@ai-sdk\//, "")
+      provider = id.replace(/^@ai-sdk\//, "")
 
       if (!Policy.allowsProvider(config, provider)) {
         prompts.log.error(`Provider "${provider}" is disabled by policy`)
