@@ -13,7 +13,8 @@ $ProgressPreference = "SilentlyContinue"
 
 $App = "nikcli"
 $AssetPrefix = "nikcli-ai"
-$Repo = "nikcli/nikcli"
+# The GitHub repository the releases come from: change it here when the repository moves.
+$Repo = "SandroHub013/nikcli"
 
 # Windows PowerShell 5.1 still defaults to TLS 1.0, which GitHub refuses.
 try {
