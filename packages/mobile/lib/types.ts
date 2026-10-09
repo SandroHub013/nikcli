@@ -355,8 +355,6 @@ export type ModelRef = {
 
 export type ServerConfig = {
   url: string
-  /** OAuth issuer override for self-hosted deployments. */
-  authIssuer?: string
   /** Bearer token — takes precedence over username/password */
   token?: string
   /** Basic auth username */

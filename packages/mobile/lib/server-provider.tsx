@@ -7,11 +7,8 @@ import {
   getUserToken,
   setUserToken,
   clearUserToken,
-  getOAuthTokens,
 } from "@/lib/storage"
 import { MobileClient, MobileResponseError } from "@/lib/client"
-import { getValidOAuthTokens, revokeOAuthSession } from "@/lib/oauth"
-import type { OAuthTokenTriple } from "@/lib/oauth-core"
 import type { MobileBootstrap, ServerConfig } from "@/lib/types"
 import { ServerContext, type ServerContextValue, userLogoutApi, userMe, type UserProfile } from "@/lib/server-context"
 
@@ -32,36 +29,27 @@ export function ServerProvider(props: PropsWithChildren) {
     return null
   }
 
-  const refreshOAuth = useCallback(async (force: boolean): Promise<string | null> => {
-    const version = generation.current
-    const tokens = await getValidOAuthTokens(force)
-    if (!tokens || version !== generation.current) return null
-    setUserTokenState(tokens.access)
-    return tokens.access
-  }, [])
-
   const client = useMemo(
     () =>
       config
         ? new MobileClient(
             { ...config, token: userToken ?? config.token },
-            { onUnauthorized: () => refreshOAuth(true), fallbackToken: config.token },
+            { onUnauthorized: async () => null, fallbackToken: config.token },
           )
         : null,
-    [config, refreshOAuth, userToken],
+    [config, userToken],
   )
   currentClient.current = client
 
   useEffect(() => {
     let mounted = true
-    Promise.all([getServerConfig(), getOAuthTokens(), getUserToken()])
-      .then(([cfg, oauth, legacyToken]) => {
+    Promise.all([getServerConfig(), getUserToken()])
+      .then(([cfg, token]) => {
         if (!mounted) return
         setConfig(cfg)
-        const token = oauth?.access ?? legacyToken
         if (token && cfg) {
           setUserTokenState(token)
-          userMe(cfg.url, token, () => refreshOAuth(true))
+          userMe(cfg.url, token)
             .then((user) => {
               if (mounted) setCurrentUser(user)
             })
@@ -91,28 +79,7 @@ export function ServerProvider(props: PropsWithChildren) {
       mounted = false
       generation.current++
     }
-  }, [refreshOAuth])
-
-  useEffect(() => {
-    let active = true
-    const subscription = AppState.addEventListener("change", (state) => {
-      if (state !== "active") return
-      void refreshOAuth(false)
-        .then((token) => {
-          if (!active || !token || !config) return
-          void userMe(config.url, token)
-            .then((user) => {
-              if (active) setCurrentUser(user)
-            })
-            .catch(() => undefined)
-        })
-        .catch(() => undefined)
-    })
-    return () => {
-      active = false
-      subscription.remove()
-    }
-  }, [config, refreshOAuth])
+  }, [])
 
   useEffect(() => {
     if (!config || !client) {
@@ -244,14 +211,8 @@ export function ServerProvider(props: PropsWithChildren) {
         setUserTokenState(token)
         setCurrentUser(user)
       },
-      async setOAuthSession(tokens: OAuthTokenTriple, user: UserProfile) {
-        generation.current++
-        setUserTokenState(tokens.access)
-        setCurrentUser(user)
-      },
       async signOut() {
         generation.current++
-        await revokeOAuthSession().catch(() => undefined)
         if (userToken && config) await userLogoutApi(config.url, userToken).catch(() => undefined)
         await clearUserToken()
         setUserTokenState(null)

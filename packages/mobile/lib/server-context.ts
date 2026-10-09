@@ -1,7 +1,6 @@
 import { createContext, useContext } from "react"
 import { buildMobileUrl, MobileResponseError, type MobileClient, parseMobileResponse } from "@/lib/client"
 import type { MobileBootstrap, ServerConfig } from "@/lib/types"
-import type { OAuthTokenTriple } from "@/lib/oauth-core"
 
 export type UserProfile = {
   id: string
@@ -113,7 +112,6 @@ export type ServerContextValue = {
   save(config: ServerConfig): Promise<void>
   clear(): Promise<void>
   setUserSession(token: string, user: UserProfile): Promise<void>
-  setOAuthSession(tokens: OAuthTokenTriple, user: UserProfile): Promise<void>
   signOut(): Promise<void>
 }
 

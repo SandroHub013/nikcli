@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { ActivityIndicator, FlatList, Modal, Pressable, ScrollView, Text, View } from "react-native"
 import * as WebBrowser from "expo-web-browser"
-import { Link, useFocusEffect, type Href } from "expo-router"
+import { Link, router, useFocusEffect, type Href } from "expo-router"
 import { SettingsGroup, SettingsNavCard } from "@/components/settings/SettingsNavCard"
 import { useColorScheme } from "nativewind"
 import { ActionButton } from "@/components/ui/ActionButton"
@@ -12,8 +12,7 @@ import { TextField } from "@/components/ui/TextField"
 import { CenteredScreenHeader } from "@/components/layout/CenteredScreenHeader"
 import { SectionHeader } from "@/components/ui/SectionHeader"
 import { useGithubDeviceAuth } from "@/hooks/use-github-device-auth"
-import { useServer, userMe } from "@/lib/server-context"
-import { loginWithOAuth } from "@/lib/oauth"
+import { useServer } from "@/lib/server-context"
 import { setAppPreferencesWith } from "@/lib/storage"
 import { ensureNotificationPermissions } from "@/lib/notifications"
 import { useUIStore } from "@/lib/store"
@@ -107,18 +106,8 @@ function githubConnectorKey(snapshot: HostConfigSnapshot | null) {
 }
 
 export default function SettingsScreen() {
-  const {
-    client,
-    config,
-    bootstrap,
-    bootstrapLoading,
-    refreshBootstrap,
-    save,
-    clear,
-    currentUser,
-    signOut,
-    setOAuthSession,
-  } = useServer()
+  const { client, config, bootstrap, bootstrapLoading, refreshBootstrap, save, clear, currentUser, signOut } =
+    useServer()
   const { palette, colorScheme } = useAppTheme()
   const { themeId, themeName, setTheme } = useTheme()
   const { setColorScheme } = useColorScheme()
@@ -157,7 +146,6 @@ export default function SettingsScreen() {
   const [mcpUrl, setMcpUrl] = useState("")
   const [mcpCommand, setMcpCommand] = useState("")
   const [saving, setSaving] = useState(false)
-  const [accountOauthLoading, setAccountOauthLoading] = useState(false)
   const [providerLoading, setProviderLoading] = useState(false)
   const [providerSaving, setProviderSaving] = useState(false)
   const [defaultsSaving, setDefaultsSaving] = useState(false)
@@ -297,25 +285,6 @@ export default function SettingsScreen() {
       setMessage(error instanceof Error ? error.message : String(error))
     } finally {
       setSaving(false)
-    }
-  }
-
-  async function signInWithAccount() {
-    if (!config) {
-      setMessage("Save a host first, then sign in.")
-      return
-    }
-    setAccountOauthLoading(true)
-    setMessage(null)
-    try {
-      const tokens = await loginWithOAuth(config.authIssuer)
-      const user = await userMe(config.url, tokens.access)
-      await setOAuthSession(tokens, user)
-      setMessage(`Signed in as ${user.display_name || user.username}`)
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Sign in failed")
-    } finally {
-      setAccountOauthLoading(false)
     }
   }
 
@@ -945,10 +914,7 @@ export default function SettingsScreen() {
                 description="Inspect the host, token posture, active workspace, and connected GitHub identity from one compact profile surface."
               >
                 <View className="flex-row flex-wrap gap-2">
-                  <InfoChip
-                    label={bootstrap?.version ? `Ragu ${bootstrap.version}` : "Ragu unknown"}
-                    tone="accent"
-                  />
+                  <InfoChip label={bootstrap?.version ? `Ragu ${bootstrap.version}` : "Ragu unknown"} tone="accent" />
                   <InfoChip label={config?.url ? config.url.replace(/^https?:\/\//, "") : "No server"} />
                   <InfoChip label={themeMode === "system" ? `Theme: ${colorScheme}` : `Theme: ${themeMode}`} />
                   <InfoChip
@@ -962,24 +928,23 @@ export default function SettingsScreen() {
                       <ActionButton
                         label={`Sign out (${currentUser.display_name || currentUser.username})`}
                         variant="secondary"
-                        disabled={accountOauthLoading || oauthBusy}
+                        disabled={oauthBusy}
                         onPress={() => {
                           void signOut().then(() => setMessage("Signed out"))
                         }}
                       />
                     ) : (
                       <ActionButton
-                        label="Sign in with Ragu"
-                        loading={accountOauthLoading}
+                        label="Sign in to this host"
                         disabled={!config || oauthBusy}
-                        onPress={() => void signInWithAccount()}
+                        onPress={() => router.push("/login")}
                       />
                     )}
                     <ActionButton
                       label={githubConnected ? "Reconnect GitHub" : "Sign in with GitHub"}
                       variant={currentUser ? "primary" : "secondary"}
                       loading={oauthBusy}
-                      disabled={!config || accountOauthLoading}
+                      disabled={!config}
                       onPress={() => void startGithubOAuth()}
                     />
                   </View>
@@ -1442,19 +1407,11 @@ export default function SettingsScreen() {
                     ) : null}
                   </View>
                   <View className="gap-2">
-                    {currentUser ? null : (
-                      <ActionButton
-                        label="Sign in with Ragu"
-                        loading={accountOauthLoading}
-                        disabled={!config?.url || oauthBusy}
-                        onPress={() => void signInWithAccount()}
-                      />
-                    )}
                     <ActionButton
                       label={githubConnected ? "Reconnect GitHub" : "Sign in with GitHub"}
                       variant="secondary"
                       loading={oauthBusy}
-                      disabled={!config?.url || accountOauthLoading}
+                      disabled={!config?.url}
                       onPress={() => void startGithubOAuth()}
                     />
                   </View>

@@ -33,6 +33,25 @@ describe("the mobile app without teleport and published artifacts", () => {
     expect(read("components/session/SessionPreviewStrip.tsx")).not.toContain("nikcli-ai.dev")
   })
 
+  /*
+   * The app signed in with Nik's account: OAuth at auth.nikcli-ai.dev, then the token sent to the paired server.
+   * It goes; what stays is the paired server's own accounts (email and password) and the pairing token.
+   */
+  test("no sign-in with Nik's account", () => {
+    expect(exists("lib/oauth.ts")).toBe(false)
+    expect(exists("lib/oauth-core.ts")).toBe(false)
+    const hits = [...sources("app"), ...sources("components"), ...sources("lib"), ...sources("hooks")].filter((file) =>
+      /auth\.nikcli|expo-auth-session|loginWithOAuth|OAuthTokenTriple|setOAuthSession|authIssuer/.test(read(file)),
+    )
+    expect(hits).toEqual([])
+  })
+
+  test("the login screen signs in to the paired server's own accounts", () => {
+    const login = read("app/login.tsx")
+    expect(login).toContain("userLogin(")
+    expect(login).toContain("userRegister(")
+  })
+
   test("LAN pairing is still there", () => {
     expect(read("lib/client.ts")).toMatch(/pair/i)
   })
