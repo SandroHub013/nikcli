@@ -2263,27 +2263,6 @@ export namespace Provider {
           }
           return yield* getModelEffect(parsed.providerID, parsed.modelID)
         }
-        if (cfg.small_model === "") {
-          return undefined
-        }
-
-        const s = yield* getState()
-        const provider = s.providers[providerID]
-        if (provider) {
-          if (providerID.startsWith("ragu") || providerID.startsWith("github-copilot")) {
-            for (const item of priority) {
-              for (const model of Object.keys(provider.models)) {
-                if (model.includes(item)) return yield* getModelEffect(providerID, model)
-              }
-            }
-          }
-        }
-
-        const raguProvider = s.providers["ragu"]
-        if (raguProvider && raguProvider.models["gpt-5-nano"]) {
-          return yield* getModelEffect("ragu", "gpt-5-nano")
-        }
-
         return undefined
       })
 

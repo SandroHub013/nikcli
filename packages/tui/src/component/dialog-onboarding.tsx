@@ -316,12 +316,7 @@ function FilesystemContent() {
 
 // ─── Step 4: Connect provider ─────────────────────────────────────────────────
 
-const PROVIDERS_INFO = [
-  {
-    name: "Ragu Zen",
-    desc: "All top models with a single API key — recommended for new users",
-    recommended: true,
-  },
+const PROVIDERS_INFO: Array<{ name: string; desc: string; recommended?: boolean }> = [
   {
     name: "Anthropic",
     desc: "Claude Sonnet, Haiku, Opus — best overall for coding tasks",

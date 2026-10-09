@@ -188,7 +188,7 @@ const TIPS = [
   "Enable {highlight}tui.scroll_acceleration{/highlight} for smooth macOS-style scrolling",
   "Toggle username display in chat via command palette ({highlight}Ctrl+P{/highlight})",
   "Run {highlight}docker run -it --rm ghcr.io/nikcli/nikcli{/highlight} for containerized use",
-  "Use {highlight}/connect{/highlight} with Ragu Zen for curated, tested models",
+  "Use {highlight}/connect{/highlight} to configure your model providers",
   "Commit your project's {highlight}AGENTS.md{/highlight} file to Git for team sharing",
   "Use {highlight}/review{/highlight} to review uncommitted changes, branches, or PRs",
   "Use {highlight}/ultrareview{/highlight} for a deep parallel review with 4 specialized agents",

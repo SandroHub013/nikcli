@@ -1730,25 +1730,6 @@ function App(props: {
     },
   ])
 
-  createEffect(
-    on(
-      () => local.model.current(),
-      (currentModel) => {
-        if (!currentModel) return
-        if (currentModel.providerID === "openrouter" && !kv.get("openrouter_warning", false)) {
-          untrack(() => {
-            DialogAlert.show(
-              dialog,
-              "Warning",
-              "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out Ragu Zen\nhttps://nikcli-ai.dev/zen",
-            ).then(() => kv.set("openrouter_warning", true))
-          })
-        }
-      },
-      { defer: true },
-    ),
-  )
-
   onMount(() => {
     const refocusPrompt = () => {
       if (route.data.type !== "session" && route.data.type !== "home") return
