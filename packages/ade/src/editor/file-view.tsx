@@ -9,6 +9,8 @@
 import { Match, Show, Switch, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { Editor } from "./editor"
 import type { Buffer } from "./buffer"
+import type { ArchiveListing, BinaryFile } from "./binary-file"
+import { BinaryCard } from "./binary-card"
 import { folderOf, handlePreviewClick, joinPath, renderMarkdown, safeDecodeURI } from "./markdown"
 import type { ViewKind } from "../surface/open-route"
 import { mediaUrl } from "../video/video"
@@ -26,21 +28,23 @@ export interface FileViewProps {
   loading?: boolean
   /** Why there is no buffer: the read's error. */
   error?: string
+  /** The read failed because the file is not text: what the host knows of it. */
+  binary?: BinaryFile
   goTo?: { line: number; at: number }
   onChange: (draft: string) => void
   onSave: () => void
   onRevert?: () => void
   readBytes?: (path: string, maxBytes: number) => Promise<Uint8Array>
+  /** Shows a file selected in the system's file manager, for the binary card. */
+  revealFile?: (path: string) => Promise<void>
+  /** What a ZIP-built file holds, for the binary card. */
+  listArchive?: (path: string) => Promise<ArchiveListing>
   /** A web link clicked in a markdown preview. */
   openUrl?: (url: string) => void
   /** A file linked from a markdown preview. */
   openFile?: (path: string) => void
 }
 
-/** What the pane says when the read failed: a binary gets the sentence the brief asks for. */
-export function readFailure(error: string): string {
-  return /^file binario/.test(error) ? t("file.binary", error) : error
-}
 
 export function FileView(props: FileViewProps) {
   /*
@@ -61,7 +65,11 @@ export function FileView(props: FileViewProps) {
   const editor = () => (
     <Show
       when={!props.error || props.buffer}
-      fallback={<div data-slot="file-message">{readFailure(props.error ?? "")}</div>}
+      fallback={
+        <Show when={props.binary} fallback={<div data-slot="file-message">{props.error}</div>}>
+          {(binary) => <BinaryCard path={props.path} binary={binary()} revealFile={props.revealFile} listArchive={props.listArchive} />}
+        </Show>
+      }
     >
       <Editor
         buffer={props.buffer}
@@ -147,7 +155,7 @@ function MarkdownView(props: FileViewProps) {
   return (
     <Show
       when={props.buffer}
-      fallback={<Show when={props.error}>{(error) => <div data-slot="file-message">{readFailure(error())}</div>}</Show>}
+      fallback={<Show when={props.error}>{(error) => <div data-slot="file-message">{error()}</div>}</Show>}
     >
       <div
         data-slot="file-markdown"

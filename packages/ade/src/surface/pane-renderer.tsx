@@ -1,6 +1,6 @@
 import { Show, createMemo } from "solid-js"
 import { BrowserPane } from "../browser"
-import { FilePane, editBuffer, revertBuffer } from "../editor"
+import { FilePane, editBuffer, revertBuffer, type ArchiveListing } from "../editor"
 import { SessionPane } from "../grid/pane"
 import type { GridPane } from "../grid/session-grid"
 import type { LinkRequest } from "../terminal/links"
@@ -100,6 +100,10 @@ export interface PaneRendererDeps {
   pickModel: () => Promise<string | undefined>
   /** A project file's bytes, for the 3D panel; absent when the host cannot. */
   readBytes?: (path: string, maxBytes: number) => Promise<Uint8Array>
+  /** Shows a file selected in the system's file manager: the binary card's «Mostra nella cartella». */
+  revealFile?: (path: string) => Promise<void>
+  /** What a ZIP, APK, JAR or AAB holds, for the binary card. */
+  listArchive?: (path: string) => Promise<ArchiveListing>
   /** A directory listing, for the 3D panel's change watcher. */
   readDir?: (path: string) => Promise<DirEntry[]>
   /** Where the open project's dev server probably is, for the simulator. */
@@ -164,7 +168,7 @@ export interface PaneRendererDeps {
 
 export function createPaneRenderer(deps: PaneRendererDeps) {
   const { wb, setWb, project, records, panels, pluginRuntime } = deps
-  const { buffers, bufferLoading, bufferError, reports, permissions } = records
+  const { buffers, bufferLoading, bufferError, bufferBinary, reports, permissions } = records
   /* Panes of one kind share a panel name; see `panels/stack.ts`. */
   const stacks = {
     video: createPanelStack(panels, "video"),
@@ -241,7 +245,10 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         buffer={buffers()[current().id]}
         loading={bufferLoading()[current().id]}
         error={bufferError()[current().id]}
+        binary={bufferBinary()[current().id]}
         readBytes={deps.readBytes}
+        revealFile={deps.revealFile}
+        listArchive={deps.listArchive}
         openUrl={(url) => deps.openFileLink(current().id, { kind: "url", url })}
         openFile={(path) => deps.openFileLink(current().id, { kind: "file", path })}
         focused={isFocused()}

@@ -1,5 +1,6 @@
 import { Show, createEffect, createSignal, onCleanup } from "solid-js"
 import type { Buffer } from "./buffer"
+import type { ArchiveListing, BinaryFile } from "./binary-file"
 import { showTextFor, type GoTo } from "./go-to"
 import { FileView } from "./file-view"
 import { flashRefusal, viewKind } from "../surface/open-route"
@@ -14,6 +15,8 @@ export interface FilePaneProps {
   loading?: boolean
   /** Why the file could not be read as text, shown instead of an empty editor. */
   error?: string
+  /** The file is not text: what the host knows of it, for the card shown instead. */
+  binary?: BinaryFile
   /** A line to put the cursor on, from a link clicked in a session. */
   goTo?: GoTo
   focused?: boolean
@@ -25,6 +28,10 @@ export interface FilePaneProps {
   onExpand?: () => void
   /** A font's bytes, for the font viewer. */
   readBytes?: (path: string, maxBytes: number) => Promise<Uint8Array>
+  /** Shows a file selected in the system's file manager, for the binary card. */
+  revealFile?: (path: string) => Promise<void>
+  /** What a ZIP-built file holds, for the binary card. */
+  listArchive?: (path: string) => Promise<ArchiveListing>
   /** A web link clicked in a markdown preview: ADE's browser. */
   openUrl?: (url: string) => void
   /** A file linked from a markdown preview; answers with a note when the link was refused. */
@@ -166,11 +173,14 @@ export function FilePane(props: FilePaneProps) {
           buffer={props.buffer}
           loading={props.loading}
           error={props.error}
+          binary={props.binary}
           goTo={props.goTo}
           onChange={props.onChange}
           onSave={props.onSave}
           onRevert={props.onRevert}
           readBytes={props.readBytes}
+          revealFile={props.revealFile}
+          listArchive={props.listArchive}
           openUrl={props.openUrl}
           openFile={flashRefusal(props.openFile, flash)}
         />

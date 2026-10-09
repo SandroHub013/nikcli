@@ -298,7 +298,7 @@ import { parseCommandId } from "../plugin/trust"
 import { CONSENT_KEY, consentQuestion, hasConsent, withConsent } from "../plugin/consent"
 import { toPluginSession } from "../plugin/session"
 import type { DiscoveryIO } from "../plugin/discovery"
-import { markSaved, openBuffer, saveBlockedReason, toLf, withEol } from "../editor"
+import { binaryFromHost, markSaved, openBuffer, saveBlockedReason, toLf, withEol } from "../editor"
 import {
   answerLabel,
   detectPermission,
@@ -876,7 +876,7 @@ export function Workbench() {
    * See `pane-records.ts` for why that matters.
    */
   const records = createPaneRecords()
-  const { reports, buffers, bufferLoading, bufferError, permissions } = records
+  const { reports, buffers, bufferLoading, bufferError, bufferBinary, permissions } = records
 
   /*
    * One line for things the user has to be told but must not be stopped for.
@@ -7550,6 +7550,8 @@ export function Workbench() {
     } catch (error) {
       // Into the pane's own state: `appendLine` wrote it to lines a file pane never shows.
       bufferError.set(id, error instanceof Error ? error.message : String(error))
+      const binary = binaryFromHost(error)
+      if (binary) bufferBinary.set(id, binary)
     } finally {
       bufferLoading.set(id, false)
     }
@@ -9137,6 +9139,16 @@ export function Workbench() {
         return host.readBytes(path, maxBytes)
       }),
     readDir: (path) => getHost().then((host) => (host?.readDir ? host.readDir(path) : [])),
+    revealFile: (path) =>
+      getHost().then((host) => {
+        if (!host?.revealInFolder) throw new Error(t("host.error.cannotReveal"))
+        return host.revealInFolder(path)
+      }),
+    listArchive: (path) =>
+      getHost().then((host) => {
+        if (!host?.listArchive) throw new Error(t("host.error.cannotReadBinary"))
+        return host.listArchive(path)
+      }),
     captureFrame,
     world: {
       picture: worldPicture,
