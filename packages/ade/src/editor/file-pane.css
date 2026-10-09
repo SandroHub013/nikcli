@@ -153,3 +153,83 @@
 [data-component="file-pane"] [data-slot="file-audio"] {
   width: min(100%, 420px);
 }
+
+/* A file that is not text: a card that says what it is, in the sans of the panels. */
+[data-component="file-pane"] [data-slot="file-view"][data-kind="binary"] {
+  justify-content: flex-start;
+  align-items: stretch;
+}
+
+[data-component="file-pane"] [data-slot="binary-card"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-4);
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--ade-space-5);
+  border: 1px solid var(--ade-border-subtle);
+  border-radius: var(--ade-radius-lg);
+  background: var(--ade-raised);
+  font-family: var(--ade-sans);
+  color: var(--ade-text);
+}
+
+[data-component="file-pane"] [data-slot="binary-head"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-4);
+  min-width: 0;
+}
+
+[data-component="file-pane"] [data-slot="binary-icon"] {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-active);
+  color: var(--ade-text-soft);
+}
+
+[data-component="file-pane"] [data-slot="binary-title"] {
+  min-width: 0;
+}
+
+[data-component="file-pane"] [data-slot="binary-name"] {
+  margin: 0;
+  font-size: var(--ade-font-lg);
+  font-weight: var(--ade-weight-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-component="file-pane"] [data-slot="binary-type"] {
+  font-size: var(--ade-font-md);
+  color: var(--ade-text-soft);
+}
+
+[data-component="file-pane"] [data-slot="binary-facts"] {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--ade-space-2) var(--ade-space-5);
+  margin: 0;
+  font-size: var(--ade-font-md);
+}
+
+[data-component="file-pane"] [data-slot="binary-facts"] dt {
+  color: var(--ade-text-soft);
+}
+
+[data-component="file-pane"] [data-slot="binary-facts"] dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-component="file-pane"] [data-slot="binary-note"] {
+  margin: 0;
+  font-size: var(--ade-font-sm);
+  color: var(--ade-text-weak);
+}

@@ -10,6 +10,7 @@ import { Match, Show, Switch, createEffect, createMemo, createSignal, on, onClea
 import { Editor } from "./editor"
 import type { Buffer } from "./buffer"
 import type { BinaryFile } from "./binary-file"
+import { BinaryCard } from "./binary-card"
 import { folderOf, handlePreviewClick, joinPath, renderMarkdown, safeDecodeURI } from "./markdown"
 import type { ViewKind } from "../surface/open-route"
 import { mediaUrl } from "../video/video"
@@ -40,10 +41,6 @@ export interface FileViewProps {
   openFile?: (path: string) => void
 }
 
-/** What the pane says when the read failed: a binary is told by its fields, not by the error's words. */
-export function readFailure(error: string, binary?: BinaryFile): string {
-  return binary ? t("file.binary", binary.bytes) : error
-}
 
 export function FileView(props: FileViewProps) {
   /*
@@ -64,7 +61,11 @@ export function FileView(props: FileViewProps) {
   const editor = () => (
     <Show
       when={!props.error || props.buffer}
-      fallback={<div data-slot="file-message">{readFailure(props.error ?? "", props.binary)}</div>}
+      fallback={
+        <Show when={props.binary} fallback={<div data-slot="file-message">{props.error}</div>}>
+          {(binary) => <BinaryCard path={props.path} binary={binary()} />}
+        </Show>
+      }
     >
       <Editor
         buffer={props.buffer}
@@ -150,7 +151,7 @@ function MarkdownView(props: FileViewProps) {
   return (
     <Show
       when={props.buffer}
-      fallback={<Show when={props.error}>{(error) => <div data-slot="file-message">{readFailure(error(), props.binary)}</div>}</Show>}
+      fallback={<Show when={props.error}>{(error) => <div data-slot="file-message">{error()}</div>}</Show>}
     >
       <div
         data-slot="file-markdown"
