@@ -61,19 +61,19 @@ Everything is orchestrated by an internal **event bus**, a **SQLite/Drizzle pers
 
 ## Installation
 
-The install script downloads release binaries from `nikcli-ai.dev` with GitHub releases as fallback (`packages/web/install`).
+The install scripts at the root of this repository download the release binaries from GitHub releases.
 
 **macOS / Linux**
 
 ```bash
-curl -fsSL https://nikcli-ai.dev/install | bash
+./install
 ragu
 ```
 
 **Windows** (PowerShell 5.1+ or pwsh 7+ — `curl | bash` needs a bash to pipe into, so use this instead):
 
 ```powershell
-irm https://nikcli-ai.dev/install.ps1 | iex
+.\install.ps1
 ragu
 ```
 
@@ -161,7 +161,7 @@ Bun workspace with centralized version catalog (`bunfig.toml`, `package.json`).
 | `packages/terminal-control`                  | Terminal abstraction reused by CLI and IDE                                                    |
 | `packages/mobile`                            | Mobile Expo / React Native app with realtime SSE                                              |
 | `packages/app`                               | Main web app (SolidStart)                                                                     |
-| `packages/web`                               | Documentation site + installer + landing (`nikcli-ai.dev`)                                    |
+| `packages/web`                               | Documentation site + installer + landing                                                      |
 | `packages/desktop`                           | Tauri desktop app                                                                             |
 | `packages/enterprise`                        | Enterprise SSO / multi-tenant build                                                           |
 | `packages/cloud`                             | Cloudflare worker (KV, Durable Objects)                                                       |
@@ -303,8 +303,7 @@ The flag applies to the whole process, including the session worker the TUI runs
 
 ### OpenTelemetry / observability flags
 
-These environment variables configure the observability layer described in the
-[Observability docs](https://nikcli-ai.dev/docs/observability). They are read at process start
+These environment variables configure the observability layer. They are read at process start
 and are not hot-reloadable.
 
 | Variable                      | Default | Purpose                                                             |
@@ -511,7 +510,7 @@ First-class MCP server with OAuth auth (`packages/ragu/src/mcp`):
 
 ### Sharing
 
-`share/` and `share-next.ts` generate public/enterprise URLs to read sessions. `ragu export` and `ragu import` allow JSON serialization. The `ragu import` command also accepts share URLs, normalizing enterprise hosts (`nikcli-ai.dev`, `*.dev.nikcli-ai.dev`).
+`ragu export` and `ragu import` allow JSON serialization of a session.
 
 ### Loop, Background, Brain
 
@@ -633,13 +632,10 @@ Config resolution (in order of increasing priority):
 3. **Custom**: env vars `RAGU_CONFIG` (path) or `RAGU_CONFIG_CONTENT` (string).
 4. **Project**: `nikcli.jsonc` or `nikcli.json` walking up the directory tree.
 
-Schema published at: [https://nikcli-ai.dev/config.json](https://nikcli-ai.dev/config.json)
-
 Minimal example:
 
 ```jsonc
 {
-  "$schema": "https://nikcli-ai.dev/config.json",
   "theme": "ragu",
   "provider": {
     "openai": { "options": { "apiKey": "sk-..." } },
@@ -672,13 +668,8 @@ Recognized env flags (see `flag/flag.ts`): `RAGU_SERVER_PASSWORD`, `RAGU_SERVER_
 
 ## Documentation and resources
 
-- **Site & docs**: [https://nikcli-ai.dev/docs](https://nikcli-ai.dev/docs)
-- **Config schema**: [https://nikcli-ai.dev/config.json](https://nikcli-ai.dev/config.json)
-- **Quickstart**: [https://nikcli-ai.dev/docs/quickstart](https://nikcli-ai.dev/docs/quickstart)
-- **Web app**: [https://app.nikcli-ai.dev](https://app.nikcli-ai.dev)
-- **Slack bot**: [https://slack.nikcli-ai.dev](https://slack.nikcli-ai.dev)
 - **Upstream project (OpenCode)**: [https://github.com/anomalyco/opencode](https://github.com/anomalyco/opencode)
-- **This fork**: [https://github.com/nikcli/nikcli](https://github.com/nikcli/nikcli)
+- **This fork**: [https://github.com/SandroHub013/nikcli](https://github.com/SandroHub013/nikcli)
 - **Issue tracker & discussions**: GitHub repository.
 - **Internal specs** (in `specs/`): start at `specs/README.md` and `specs/ROADMAP.md` for the Effect/TUI architecture program.
 - **Changelog**: `CHANGELOG.md` (v1.5.0 — Effect Schema migration, Feb 2026 milestone).

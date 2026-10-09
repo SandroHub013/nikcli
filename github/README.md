@@ -1,6 +1,6 @@
 # ragu GitHub Action
 
-A GitHub Action that integrates [ragu](https://nikcli-ai.dev) directly into your GitHub workflow.
+A GitHub Action that integrates [ragu](https://github.com/SandroHub013/nikcli) directly into your GitHub workflow.
 
 Mention `/ragu` in your comment, and ragu will execute tasks within your GitHub Actions runner.
 
