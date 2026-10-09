@@ -58,6 +58,7 @@ async function loaded(config: Record<string, unknown>) {
 const REMOVED: Record<string, unknown> = {
   analytics: { share: true, endpoint: "https://dashboard.nikcli-ai.dev/api/community/report" },
   teleport: { url: "https://my-server.up.railway.app", token: "mobile-token" },
+  autoupdate: true,
 }
 
 describe("config keys of Nik's removed services", () => {

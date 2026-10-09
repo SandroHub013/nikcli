@@ -566,18 +566,7 @@ const SpecAgent = Spec.make("agent", {
 })
 
 const SpecUpgrade = Spec.make("upgrade", {
-  description: "upgrade ragu to the latest or a specific version",
-  params: {
-    target: Argument.string("target").pipe(
-      Argument.withDescription("version to upgrade to, for ex '0.1.48' or 'v0.1.48'"),
-      Argument.optional,
-    ),
-    method: Flag.choice("method", ["curl", "npm", "yarn", "pnpm", "bun", "brew", "choco", "scoop"]).pipe(
-      Flag.withAlias("m"),
-      Flag.withDescription("installation method to use"),
-      Flag.optional,
-    ),
-  },
+  description: "say where Ragu Code updates come from",
 })
 
 const SpecQuickstart = Spec.make("quickstart", {

@@ -2,11 +2,8 @@ import { Installation } from "@/installation"
 import { Server } from "@/server/server"
 import { Log } from "@ragu/util/log"
 import { Instance } from "@/project/instance"
-import { InstanceBootstrap } from "@/project/bootstrap"
-import { withInstanceAsync } from "@/effect"
 import { Rpc } from "@tui/util/rpc"
 import { setMainThreadDaemonHost } from "@ragu/browser-control/daemon-client"
-import { enableAutoUpdate, upgrade, upgradeNow } from "@/cli/upgrade"
 import { GlobalBus } from "@ragu/util/global-bus"
 import { createRaguClient, type Event } from "@ragu/sdk/httpapi"
 import { Process } from "@ragu/util/process"
@@ -143,27 +140,6 @@ export const rpc = {
     if (server) await server.stop(true)
     server = Server.listen(input)
     return { url: server.url.toString() }
-  },
-  async checkUpgrade(input: { directory: string }) {
-    // Returns the result rather than relying on the published event: the TUI
-    // runs on the other side of this RPC hop and `Bus` does not cross it in
-    // the background-service path. See `upgrade()`'s doc.
-    return withInstanceAsync({ directory: input.directory, init: InstanceBootstrap }, async () => {
-      return upgrade().catch((error) => {
-        Log.Default.debug("upgrade check failed", {
-          error: error instanceof Error ? error.message : String(error),
-        })
-        return undefined
-      })
-    })
-  },
-  async upgradeNow(input: { directory: string; method: string; version: string }) {
-    await withInstanceAsync({ directory: input.directory, init: InstanceBootstrap }, async () => {
-      await upgradeNow(input.method as Installation.Method, input.version)
-    })
-  },
-  async enableAutoUpdate() {
-    await enableAutoUpdate()
   },
   async reload() {
     await Instance.disposeAll()

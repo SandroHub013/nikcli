@@ -34,16 +34,5 @@ export function hasRevision() {
   return REVISION !== "local" && REVISION.length > 0
 }
 
-/** How ragu was installed. Clients need the union to label an update, not the upgrade logic. */
+/** How ragu was installed: `ragu uninstall` removes it the same way. */
 export type InstallMethod = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown"
-
-/**
- * Bus event names the terminal subscribes to.
- *
- * Same split as `tui-event-schema`: the name is a string on the wire, and reaching for it should
- * not pull in the upgrade subsystem that publishes it.
- */
-export const InstallationEventName = {
-  updated: "installation.updated",
-  updateAvailable: "installation.update-available",
-} as const

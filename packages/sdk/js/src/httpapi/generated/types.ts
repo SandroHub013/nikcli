@@ -2218,17 +2218,6 @@ export type QuestionAnswer = Array<string>
 
 export type EventQuestionRejected = { type: "question.rejected"; properties: { sessionID: string; requestID: string } }
 
-export type EventInstallationUpdated = { type: "installation.updated"; properties: { version: string } }
-
-export type EventInstallationUpdateAvailable = {
-  type: "installation.update-available"
-  properties: {
-    version: string
-    method?: "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown" | undefined
-    current?: string | undefined
-  }
-}
-
 export type EventServerConnected = { type: "server.connected"; properties: {} }
 
 export type EventGlobalDisposed = { type: "global.disposed"; properties: {} }
@@ -3894,7 +3883,7 @@ export type Config = {
   analytics?: unknown | undefined
   share?: "manual" | "auto" | "disabled" | undefined
   autoshare?: boolean | undefined
-  autoupdate?: boolean | "notify" | undefined
+  autoupdate?: unknown | undefined
   disabled_providers?: Array<string> | undefined
   enabled_providers?: Array<string> | undefined
   model?: string | undefined
@@ -4171,7 +4160,7 @@ export type MobileConfigInfo = {
   analytics?: unknown | undefined
   share?: "manual" | "auto" | "disabled" | undefined
   autoshare?: boolean | undefined
-  autoupdate?: boolean | "notify" | undefined
+  autoupdate?: unknown | undefined
   disabled_providers?: Array<string> | undefined
   enabled_providers?: Array<string> | undefined
   model?: string | undefined
@@ -4535,8 +4524,6 @@ export type Event =
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
-  | EventInstallationUpdated
-  | EventInstallationUpdateAvailable
   | EventServerConnected
   | EventGlobalDisposed
   | EventLspUpdated
@@ -4608,8 +4595,6 @@ export type Event1 =
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
-  | EventInstallationUpdated
-  | EventInstallationUpdateAvailable
   | EventServerConnected
   | EventGlobalDisposed
   | EventLspUpdated
@@ -6107,7 +6092,7 @@ export type ConfigUpdateInput = {
     readonly analytics?: unknown | undefined
     readonly share?: "manual" | "auto" | "disabled" | undefined
     readonly autoshare?: boolean | undefined
-    readonly autoupdate?: boolean | "notify" | undefined
+    readonly autoupdate?: unknown | undefined
     readonly disabled_providers?: ReadonlyArray<string> | undefined
     readonly enabled_providers?: ReadonlyArray<string> | undefined
     readonly model?: string | undefined

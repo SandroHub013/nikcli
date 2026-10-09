@@ -38,9 +38,9 @@ export namespace Rpc {
 
   function serializeError(error: unknown) {
     if (error instanceof Error) {
-      // Carry the extra fields too. Effect's tagged errors keep the actual reason in one of them
-      // — `UpgradeFailedError.stderr` is the whole message, while `.message` is empty — so
-      // name/message/stack alone arrives on the other side as a failure with nothing to show.
+      // Carry the extra fields too. Effect's tagged errors can keep the actual reason in one of
+      // them while `.message` is empty, so name/message/stack alone arrives on the other side as
+      // a failure with nothing to show.
       const { name: _n, message: _m, stack: _s, ...rest } = error as Error & Record<string, unknown>
       const data = JSON.parse(JSON.stringify(rest ?? {})) as Record<string, unknown>
       return {

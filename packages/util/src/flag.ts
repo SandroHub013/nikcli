@@ -56,7 +56,6 @@ export namespace Flag {
   export const RAGU_CONFIG = process.env["RAGU_CONFIG"]
   export declare const RAGU_CONFIG_DIR: string | undefined
   export declare const RAGU_CONFIG_CONTENT: string | undefined
-  export const RAGU_DISABLE_AUTOUPDATE = truthy("RAGU_DISABLE_AUTOUPDATE")
   export const RAGU_DISABLE_PRUNE = truthy("RAGU_DISABLE_PRUNE")
   export const RAGU_DISABLE_TERMINAL_TITLE = truthy("RAGU_DISABLE_TERMINAL_TITLE")
   export const RAGU_PERMISSION = process.env["RAGU_PERMISSION"]

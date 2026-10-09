@@ -17,11 +17,10 @@ import {
   batch,
   on,
 } from "solid-js"
-import { VERSION, type InstallMethod } from "@ragu/util/version"
 import { Flag } from "@ragu/util/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList, DialogProviderDisconnect } from "@tui/component/dialog-provider"
-import { checkUpgradeWhenSubscriptionReady, SDKProvider, useSDK } from "@tui/context/sdk"
+import { SDKProvider, useSDK } from "@tui/context/sdk"
 import { ProjectProvider } from "@tui/context/project"
 import { ServerProvider } from "@tui/context/server"
 import { SyncProvider, useSync } from "@tui/context/sync"
@@ -54,8 +53,6 @@ import { PromptHistoryProvider } from "./component/prompt/history"
 import { FrecencyProvider } from "./component/prompt/frecency"
 import { PromptStashProvider } from "./component/prompt/stash"
 import { DialogAlert } from "./ui/dialog-alert"
-import { DialogConfirm } from "./ui/dialog-confirm"
-import { UpgradeProvider, useUpgrade } from "./context/upgrade"
 import { AttentionProvider, useAttention } from "./context/attention"
 import { SessionTabsProvider, useSessionTabs } from "./context/session-tabs"
 import { ToastProvider, useToast } from "./ui/toast"
@@ -127,22 +124,6 @@ import { Log } from "@ragu/util/log"
 import { errorMessage } from "@ragu/util/error-format"
 import { classifyConfigFailure } from "@tui/util/config-failure"
 import { ensureOnboarded } from "@tui/util/onboarding"
-
-/**
- * What an update check found.
- *
- * Mirrors the payload of `installation.update-available`, but reaches the TUI as the *return
- * value* of `checkUpgrade` rather than over the event stream: the check runs in the CLI process
- * (the upgrade replaces the installed binary, so it cannot run in the long-lived background
- * service) while the event stream comes from that service, and the Bus does not cross processes.
- */
-export type UpdateAvailable = {
-  version: string
-  method?: InstallMethod
-  current: string
-  /** Install without asking: the user chose "Auto-update" (`autoupdate: true`). */
-  auto?: boolean
-}
 
 const log = Log.create({ service: "tui.app" })
 
@@ -236,12 +217,6 @@ export function tui(input: {
    * the restart dialog uses, so a client that has no backend says neither.
    */
   restartTarget?: string
-  checkUpgrade?: () => Promise<UpdateAvailable | undefined>
-  upgradeNow?: (method: string, version: string) => Promise<void>
-  /** Persist "Auto-update" (`autoupdate: true` in the global config). */
-  enableAutoUpdate?: () => Promise<void>
-  /** See `UpgradeProvider`'s `onUpgraded`. */
-  onUpgraded?: () => Promise<Transport | undefined>
   startServer?: (options?: StartServerOptions) => Promise<string>
   /**
    * Config-surface operations the plugin runtime cannot perform itself.
@@ -346,21 +321,11 @@ export function tui(input: {
                                                         <FrecencyProvider>
                                                           <PromptHistoryProvider>
                                                             <PromptRefProvider>
-                                                              <UpgradeProvider
-                                                                upgradeNow={input.upgradeNow}
-                                                                enableAutoUpdate={input.enableAutoUpdate}
-                                                                onUpgraded={input.onUpgraded}
-                                                              >
-                                                                <AttentionProvider renderer={renderer}>
-                                                                  <SessionTabsProvider>
-                                                                    <App
-                                                                      checkUpgrade={input.checkUpgrade}
-                                                                      onRestart={input.onRestart}
-                                                                      restartTarget={input.restartTarget}
-                                                                    />
-                                                                  </SessionTabsProvider>
-                                                                </AttentionProvider>
-                                                              </UpgradeProvider>
+                                                              <AttentionProvider renderer={renderer}>
+                                                                <SessionTabsProvider>
+                                                                  <App onRestart={input.onRestart} restartTarget={input.restartTarget} />
+                                                                </SessionTabsProvider>
+                                                              </AttentionProvider>
                                                             </PromptRefProvider>
                                                           </PromptHistoryProvider>
                                                         </FrecencyProvider>
@@ -474,7 +439,6 @@ function waitAtMost(promise: Promise<void>, timeoutMs: number) {
 }
 
 function App(props: {
-  checkUpgrade?: () => Promise<UpdateAvailable | undefined>
   /**
    * What "restart" means for the host this terminal is attached to.
    *
@@ -497,7 +461,6 @@ function App(props: {
   const sdk = useSDK()
   const toast = useToast()
   const themeCtx = useTheme()
-  const upgradeCtx = useUpgrade()
   const { theme, mode, setMode } = themeCtx
   const sync = useSync()
   const tabs = useSessionTabs()
@@ -505,110 +468,6 @@ function App(props: {
   const promptRef = usePromptRef()
   const attention = useAttention()
   const keybind = useKeybind()
-
-  /**
-   * Offer the update the check found, and install it if the user agrees — or
-   * without asking, once they chose "Auto-update".
-   *
-   * Driven by `checkUpgrade`'s return value rather than by the `installation.update-available`
-   * event: that event is published on the Bus of whichever process ran the check, and since the
-   * background service became the default that process is this CLI — not the server the event
-   * stream comes from, so the TUI never saw it. See `UpdateAvailable`.
-   *
-   * After installing, the background service is moved onto the new version and this terminal
-   * reconnects to it in place, as `/restart` does. The terminal itself keeps running the code it
-   * started with; the new interface loads on the next launch.
-   */
-  async function offerUpdate(available: UpdateAvailable) {
-    const { version, method } = available
-    const currentVersion = available.current || VERSION
-
-    if (!available.auto) {
-      // Skip version already dismissed by the user
-      const skipped = kv.get("skipped_version")
-      if (skipped && version === skipped) return
-
-      const hint = method ? ` via ${method}` : ""
-      const choice = await DialogConfirm.choose(dialog, {
-        title: "Update Available",
-        message: `A new release v${version} is available. You have v${currentVersion}.\n\nInstall the update${hint} now? Auto-update installs this and every later release without asking.`,
-        labels: { cancel: "Skip", extra: "Auto-update", confirm: "Update" },
-        defaultFocus: "confirm",
-      })
-
-      if (choice === "cancel") {
-        kv.set("skipped_version", version)
-        return
-      }
-
-      if (choice === "extra") {
-        // Saved before installing: the preference stands even if this install fails.
-        await upgradeCtx.enableAutoUpdate?.().catch((error) => {
-          log.error("enabling auto-update failed", {
-            error: errorMessage(error),
-          })
-          toast.error(error)
-        })
-      }
-    }
-
-    // No detected installation method (e.g. running from source / unknown
-    // package manager). The TUI still shows the dialog so the user is
-    // aware, but the actual install has to be triggered manually.
-    if (!method) {
-      await DialogAlert.show(
-        dialog,
-        "Update Available",
-        `Version v${version} is available, but your install method (${VERSION === "local" ? "local build" : process.execPath}) could not be detected automatically.\n\nRun \`ragu upgrade ${version}\` to install.`,
-      )
-      return
-    }
-
-    toast.show({
-      variant: "info",
-      message: `Updating to v${version}...`,
-      duration: 30_000,
-    })
-
-    try {
-      await upgradeCtx.upgradeNow?.(method, version)
-    } catch (error) {
-      // UpgradeFailedError carries the real reason in `stderr`; its `message` is empty, which
-      // is what made this toast show a blank body for every failed update.
-      //
-      // Match on the name, not `instanceof`: the upgrade runs in the worker and the error
-      // comes back over RPC as a plain `Error`, so the class check was always false and this
-      // toast still said "Update failed". `Rpc` now carries the tagged error's own fields.
-      const stderr = (error as { stderr?: unknown }).stderr
-      const message =
-        error instanceof Error && error.name === "UpgradeFailedError" && typeof stderr === "string"
-          ? stderr
-          : error instanceof Error
-            ? error.message || (error.cause instanceof Error ? error.cause.message : "Update failed")
-            : "Update failed"
-      toast.show({
-        variant: "error",
-        title: "Update Failed",
-        message,
-        duration: 10_000,
-      })
-      return
-    }
-
-    const onUpgraded = upgradeCtx.onUpgraded
-    const restarted = onUpgraded
-      ? await runRestart(onUpgraded, { success: `Updated to v${version}` })
-      : ("skipped" as const)
-    if (restarted === "failed") return
-    if (restarted === "skipped") {
-      toast.show({
-        variant: "success",
-        title: `Updated to v${version}`,
-        message: "Restart Ragu Code to use the new version.",
-        duration: 10_000,
-      })
-    }
-  }
 
   // Plugin routes — mutable map + reactive stamp for re-renders
   const routes: RouteMap = new Map()
@@ -994,7 +853,7 @@ function App(props: {
     beginRestart()
     try {
       const next = await restartBackend()
-      // The host had nothing to restart onto (see `onUpgraded`).
+      // The host had nothing to restart onto.
       if (!next) return "skipped"
       await waitAtMost(sdk.reconnect(next), RESTART_CONNECT_TIMEOUT_MS).catch((error) => {
         // The backend registered but its stream has not answered yet. Requests
@@ -1908,10 +1767,6 @@ function App(props: {
         Sound.pulse(0.8)
       }),
     ]
-
-    void checkUpgradeWhenSubscriptionReady(sdk.subscriptionReady, props.checkUpgrade)
-      .then((available) => (available ? offerUpdate(available) : undefined))
-      .catch(() => undefined)
 
     onCleanup(() => {
       renderer.off("focus", refocusPrompt)

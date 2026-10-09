@@ -40,6 +40,7 @@ export namespace Config {
   export const REMOVED_KEYS: Record<string, string> = {
     analytics: "it sent usage totals to Nik's dashboard (dashboard.nikcli-ai.dev)",
     teleport: "teleport, which sent a session and its workspace to a remote server, is gone",
+    autoupdate: "updates came from upstream's release feeds and installers; Ragu Code does not update itself",
   }
 
   function runAuth<A, E>(effect: Effect.Effect<A, E, Auth.Service>) {
@@ -1708,12 +1709,7 @@ export namespace Config {
         .boolean()
         .optional()
         .describe("@deprecated Use 'share' field instead. Share newly created sessions automatically"),
-      autoupdate: z
-        .union([z.boolean(), z.literal("notify")])
-        .optional()
-        .describe(
-          "Automatically update to the latest version. Set to true to auto-update, false to disable, or 'notify' to show update notifications",
-        ),
+      autoupdate: z.unknown().optional().describe(`Removed and ignored: ${REMOVED_KEYS.autoupdate}`),
       disabled_providers: z
         .array(z.string())
         .optional()

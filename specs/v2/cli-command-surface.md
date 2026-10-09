@@ -38,7 +38,7 @@ Source: the `commands` field of the root `Spec.make("ragu", …)` in `src/cli/co
 | `auth`            | `list`, `login [url]`, `logout`                                                                    | Credentials                                            |
 | `account`         | `login`, `logout`, `list`, `switch`, `orgs`                                                        |                                                        |
 | `agent`           | `create`, `list`                                                                                   |                                                        |
-| `upgrade`         | `[target]`                                                                                         | Replaces the binary                                    |
+| `upgrade`         | —                                                                                                  | Says where updates come from; installs nothing         |
 | `uninstall`       | —                                                                                                  |                                                        |
 | `doctor`          | —                                                                                                  | Diagnostic                                             |
 | `migrate`         | `--apply`, `--rollback`, `--json` (flags)                                                          | nikcli folders to ragu; dry run by default             |
