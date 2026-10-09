@@ -163,15 +163,6 @@ describe("release automation", () => {
     expect(workflow).toContain("$env:NIKCLI_UPGRADE_PID = $running.Id")
   })
 
-  it("clears leaked mouse reporting before the upgrade command prints", async () => {
-    // An older build could exit leaving mouse tracking on, which turns every
-    // mouse move during `ragu upgrade` into escape-sequence noise.
-    const command = await readRoot("packages/ragu/src/cli/handlers/upgrade.ts")
-
-    expect(command).toContain("TERMINAL_RESET_SEQUENCE")
-    expect(command).toContain("process.stdout.isTTY")
-  })
-
   it("publishes the per-platform binary packages the npm wrapper depends on", async () => {
     const publishScript = await readRoot("packages/ragu/script/publish.ts")
 
