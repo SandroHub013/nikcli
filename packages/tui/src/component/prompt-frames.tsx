@@ -17,7 +17,7 @@ import { Spinner } from "./spinner"
 import { TextAttributes } from "@opentui/core"
 import { getMonitorsSorted, type MonitorInfo } from "../util/monitor-helpers"
 import { dismissBackground, getBackgroundDismissed } from "../util/background"
-import { Locale } from "@nikcli-ai/util/locale"
+import { Locale } from "@ragu/util/locale"
 
 // Job item type from sync.background
 export type JobItem = {

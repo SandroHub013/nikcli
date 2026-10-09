@@ -1,6 +1,6 @@
 # Linux SDK — for coding agents
 
-`@nikcli-ai/gadget`, TypeScript on Bun. Source in `src/`, tests in `tests/`, runnable gadgets in `examples/`.
+`@ragu/gadget`, TypeScript on Bun. Source in `src/`, tests in `tests/`, runnable gadgets in `examples/`.
 
 ## Layout
 
@@ -12,7 +12,7 @@
 - `src/commands/{system,file,health}.ts` — the four built-ins. Each exports a `spec` and a handler.
 - `src/display/` — `layout` (tree → lines), `rasterize` (lines → 1-bit), `font.ts`, `terminal` and `framebuffer` drivers.
 - `src/button/` — `keyboard`, `gpio` (sysfs), `all`.
-- `src/cli.ts` — `nikcli-gadget pair|run|send|health|status|unpair|init`.
+- `src/cli.ts` — `ragu-gadget pair|run|send|health|status|unpair|init`.
 
 ## Adding a built-in command
 

@@ -5,10 +5,11 @@ import path from "path"
 import { mkdir } from "fs/promises"
 import { createMemo, For, Show, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Global } from "@nikcli-ai/util/global"
-import { Filesystem } from "@nikcli-ai/util/filesystem"
+import { Global } from "@ragu/util/global"
+import { Filesystem } from "@ragu/util/filesystem"
 import { reservedThemeNames, useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
+import { DOT_FOLDERS, dotFolder, preferNew } from "@ragu/util/app-folder"
 
 interface ColorDef {
   key: string
@@ -371,12 +372,12 @@ export function DialogThemeCreate() {
     if (store.scope === "global") return path.join(Global.Path.config, "themes")
     const found = await Array.fromAsync(
       Filesystem.up({
-        targets: [".nikcli"],
+        targets: [...DOT_FOLDERS],
         start: process.cwd(),
       }),
-    ).then((x) => x[0])
-    const nikcliDir = found ?? path.join(process.cwd(), ".nikcli")
-    return path.join(nikcliDir, "themes")
+    ).then((x) => preferNew(x)[0])
+    const raguDir = found ?? dotFolder(process.cwd())
+    return path.join(raguDir, "themes")
   }
 
   const handleSave = async () => {

@@ -1,4 +1,4 @@
-import type { AssistantMessage, Message, Provider, Model } from "@nikcli-ai/sdk/httpapi"
+import type { AssistantMessage, Message, Provider, Model } from "@ragu/sdk/httpapi"
 
 const COMPACTION_BUFFER = 20_000
 

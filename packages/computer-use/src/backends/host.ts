@@ -109,7 +109,7 @@ export async function capabilities(): Promise<Capabilities> {
 /** Capture the primary screen; returns PNG bytes. */
 export async function screenshot(): Promise<Uint8Array> {
   const platform = os.platform()
-  const dir = await mkdtemp(path.join(os.tmpdir(), "nikcli-shot-"))
+  const dir = await mkdtemp(path.join(os.tmpdir(), "ragu-shot-"))
   const file = path.join(dir, "screen.png")
   try {
     if (platform === "darwin") {

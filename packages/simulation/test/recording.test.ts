@@ -8,7 +8,7 @@ import { SimulationRenderer } from "../src/frontend/renderer"
 import { Timeline, type Event } from "../src/recording"
 
 test("streams ANSI chunks and resizes into a versioned JSONL timeline", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "nikcli-simulation-recording-"))
+  const directory = await mkdtemp(join(tmpdir(), "ragu-simulation-recording-"))
   const path = join(directory, "nested", "timeline.jsonl")
   try {
     const timeline = await Timeline.create(path, 80, 24)
@@ -32,13 +32,13 @@ test("streams ANSI chunks and resizes into a versioned JSONL timeline", async ()
 })
 
 test("records native OpenTUI output and preserves the live screen", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "nikcli-simulation-renderer-"))
+  const directory = await mkdtemp(join(tmpdir(), "ragu-simulation-renderer-"))
   const path = join(directory, "timeline.jsonl")
   const renderer = await SimulationRenderer.create({}, path, { cols: 40, rows: 6 })
   try {
-    renderer.root.add(new TextRenderable(renderer, { content: "recorded nikcli screen" }))
+    renderer.root.add(new TextRenderable(renderer, { content: "recorded ragu screen" }))
     await SimulationRenderer.setupFor(renderer)?.renderOnce()
-    expect(matches(createHarness(renderer), "recorded nikcli screen")).toBe(true)
+    expect(matches(createHarness(renderer), "recorded ragu screen")).toBe(true)
     renderer.destroy()
     expect(await SimulationRenderer.finish(renderer)).toBe(path)
     const events = (await Bun.file(path).text())

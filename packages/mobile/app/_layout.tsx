@@ -36,7 +36,7 @@ function AuthGuard() {
     // Don't redirect if already on login or connect screen
     if (pathname === "/login" || pathname === "/" || pathname === "" || pathname === "/connect") return
     // A pairing token is authentication too. Gating on the account token alone
-    // bounced anyone who had paired with the QR but never signed in to a nikcli
+    // bounced anyone who had paired with the QR but never signed in to a ragu
     // account straight back to /login, from a session the host would have
     // served perfectly well.
     if (!userToken && !config.token) {

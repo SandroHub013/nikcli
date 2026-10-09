@@ -1,8 +1,8 @@
 # Tools
 
-Status: **Current semantic overview** (verified 2026-08-14 against `packages/nikcli/src/tool`).
+Status: **Current semantic overview** (verified 2026-08-14 against `packages/ragu/src/tool`).
 
-`Tool` (`src/tool/tool.ts`) owns the authoring contract and the wrapper that normalizes it. `ToolRegistry` (`src/tool/registry.ts`) owns discovery, filtering, ordering, and resolution. `SessionTools` and `SessionProcessor` own invocation and the durable tool state machine. `@nikcli-ai/plugin` owns the public plugin tool type.
+`Tool` (`src/tool/tool.ts`) owns the authoring contract and the wrapper that normalizes it. `ToolRegistry` (`src/tool/registry.ts`) owns discovery, filtering, ordering, and resolution. `SessionTools` and `SessionProcessor` own invocation and the durable tool state machine. `@ragu/plugin` owns the public plugin tool type.
 
 ## One Structural Tool Value
 
@@ -83,7 +83,7 @@ Permissions are formulated by the tool through `ctx.ask`, which merges the agent
 
 The registry keeps two per-instance caches:
 
-1. **Derived** (reloadable). Config-directory `{tool,tools}/*.{js,ts}` files — **only** when `NIKCLI_ALLOW_PLUGIN_AUTOLOAD` is set or `tool.allow` is non-empty. Each candidate must match the allowlist by absolute path, basename, or stem, and if `tool.pin[...]` names it, its SHA-256 must match or it is refused. Then tools contributed by loaded plugins via `plugin.tool`.
+1. **Derived** (reloadable). Config-directory `{tool,tools}/*.{js,ts}` files — **only** when `RAGU_ALLOW_PLUGIN_AUTOLOAD` is set or `tool.allow` is non-empty. Each candidate must match the allowlist by absolute path, basename, or stem, and if `tool.pin[...]` names it, its SHA-256 must match or it is refused. Then tools contributed by loaded plugins via `plugin.tool`.
 2. **Runtime** (not reloadable). Registrations through `register(tool)` — the sdk-next `tools.register` path.
 
 `register` always appends and returns a `Handle`. Closing the handle removes exactly that stack entry. Resolution is last-wins by id across built-ins, then derived, then runtime, so a later registration shadows the earlier occupant of the same name and closing it reveals the next-latest. The derived cache is `reloadable: true`; invalidating it rebuilds config-dir and plugin tools from disk without dropping the runtime stack.
@@ -93,8 +93,8 @@ The registry keeps two per-instance caches:
 `tools(model, agent, options)` returns the resolved set for one request:
 
 - **Client filter.** `question` is registered only for the `app`, `cli`, and `desktop` clients.
-- **Flag filters.** `lsp`, `plan_enter`/`plan_exit`, `browser_control`, and `computer` are flag-gated. `code_mode` is default-on and opts out through `NIKCLI_DISABLE_CODE_MODE`; the unconfined `exec_code` predecessor is deprecated and no longer registered. `batch` is config-gated.
-- **Provider filter.** `codesearch` and `websearch` require the `nikcli` provider or `NIKCLI_ENABLE_EXA`.
+- **Flag filters.** `lsp`, `plan_enter`/`plan_exit`, `browser_control`, and `computer` are flag-gated. `code_mode` is default-on and opts out through `RAGU_DISABLE_CODE_MODE`; the unconfined `exec_code` predecessor is deprecated and no longer registered. `batch` is config-gated.
+- **Provider filter.** `codesearch` and `websearch` require the `ragu` provider or `RAGU_ENABLE_EXA`.
 - **Model-family filter.** GPT models (excluding `gpt-4` and `oss`) get `apply_patch` and lose `edit`/`write`/`multiedit`; every other model gets the reverse. A model that received both would be offered two ways to write the same file.
 - **Agent filter.** `advisor` requires `agent.advisor`.
 - **Explicit exclusion.** `options.exclude` removes ids the caller already handled.
@@ -114,9 +114,9 @@ Only then does each `Tool.Info.init({ agent })` run, timed per tool.
 
 ## Plugin Tools Use The Same Shape
 
-`fromPlugin(id, def)` adapts a `ToolDefinition` from `@nikcli-ai/plugin` into a `Tool.Info`: `z.object(def.args)` becomes the schema, a string result becomes `{ title: "", output, metadata: {} }`, and returned attachments are stamped with the current session and message ids. Config-directory tools are namespaced by filename (`default` export takes the bare stem, named exports become `stem_export`).
+`fromPlugin(id, def)` adapts a `ToolDefinition` from `@ragu/plugin` into a `Tool.Info`: `z.object(def.args)` becomes the schema, a string result becomes `{ title: "", output, metadata: {} }`, and returned attachments are stamped with the current session and message ids. Config-directory tools are namespaced by filename (`default` export takes the bare stem, named exports become `stem_export`).
 
-A Bun `plugin()` resolver is installed at module load so config-directory tools can `import "@nikcli-ai/plugin"` and resolve it against the installed CLI rather than their own directory.
+A Bun `plugin()` resolver is installed at module load so config-directory tools can `import "@ragu/plugin"` and resolve it against the installed CLI rather than their own directory.
 
 ## Laws
 

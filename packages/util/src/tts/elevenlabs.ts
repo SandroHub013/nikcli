@@ -53,7 +53,7 @@ export class ElevenLabsProvider implements TTSProvider {
     const apiKeyFilePath = path.join(Global.Path.config, "secrets/elevenlabs-key")
 
     const envKey =
-      process.env.NIKCLI_ELEVENLABS_API_KEY ??
+      process.env.RAGU_ELEVENLABS_API_KEY ??
       process.env.ELEVENLABS_API_KEY ??
       process.env.XI_API_KEY ??
       process.env.ELEVENLABS_KEY
@@ -72,7 +72,7 @@ export class ElevenLabsProvider implements TTSProvider {
         [
           "ElevenLabs API key not found.",
           "",
-          "Set NIKCLI_ELEVENLABS_API_KEY (or ELEVENLABS_API_KEY), or create:",
+          "Set RAGU_ELEVENLABS_API_KEY (or ELEVENLABS_API_KEY), or create:",
           apiKeyFilePath,
           "with your API key.",
         ].join("\n"),
@@ -81,7 +81,7 @@ export class ElevenLabsProvider implements TTSProvider {
 
     this.config = {
       apiKey: this.apiKey,
-      baseURL: process.env.NIKCLI_ELEVENLABS_BASE_URL ?? BASE_URL,
+      baseURL: process.env.RAGU_ELEVENLABS_BASE_URL ?? BASE_URL,
       timeout: 30000,
     }
 

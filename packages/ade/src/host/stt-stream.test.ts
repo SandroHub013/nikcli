@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createSttStreamTransport, type SttStreamBridge } from "./stt-stream"
-import type { SttStreamEvent, SttStreamOpenOptions } from "@nikcli-ai/voice"
-import { STT_STREAM_CANCELLED } from "@nikcli-ai/voice/core"
+import type { SttStreamEvent, SttStreamOpenOptions } from "@ragu/voice"
+import { STT_STREAM_CANCELLED } from "@ragu/voice/core"
 
 /** A fake Rust side: every call recorded, every open released by hand. */
 function fakeBridge() {

@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { t } from "../i18n"
 import { agentDisplayName } from "./model"
 
-/* Review of chat-chip, b: the agent chip showed nikcli's raw «build». */
+/* Review of chat-chip, b: the agent chip showed ragu's raw «build». */
 describe("an agent as the user reads it", () => {
-  test("nikcli's own agents by a name in the user's language", () => {
+  test("ragu's own agents by a name in the user's language", () => {
     expect(agentDisplayName("build")).toBe(t("chat.agent.name.build"))
     expect(agentDisplayName("build")).not.toBe("build")
     expect(agentDisplayName("plan")).toBe(t("chat.agent.name.plan"))

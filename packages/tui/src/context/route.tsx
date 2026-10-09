@@ -80,12 +80,12 @@ const RouteCtx = createContext<RouteContext>()
 export function RouteProvider(props: ParentProps) {
   const [store, setStore] = createStore<Route>(
     (() => {
-      const raw = process.env["NIKCLI_ROUTE"]
+      const raw = process.env["RAGU_ROUTE"]
       if (raw) {
         try {
           return JSON.parse(raw) as Route
         } catch (err) {
-          console.warn("[route] Failed to parse NIKCLI_ROUTE, falling back to home:", err)
+          console.warn("[route] Failed to parse RAGU_ROUTE, falling back to home:", err)
           return { type: "home" } as Route
         }
       }

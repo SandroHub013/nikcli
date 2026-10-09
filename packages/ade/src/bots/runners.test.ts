@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 import {
   answerSoFar,
   applyRunnerLine,
@@ -31,25 +31,25 @@ function fold(runnerId: string, lines: readonly string[]): Talk {
 }
 
 describe("il motore di un bot", () => {
-  test("senza chiave è nikcli, e una chiave sconosciuta pure", () => {
-    expect(runnerById(undefined).id).toBe("nikcli")
-    expect(runnerById("boh").id).toBe("nikcli")
+  test("senza chiave è ragu, e una chiave sconosciuta pure", () => {
+    expect(runnerById(undefined).id).toBe("ragu")
+    expect(runnerById("boh").id).toBe("ragu")
     expect(runnerById("claude").label).toBe("Claude Code")
   })
 })
 
 describe("gli argomenti di un turno", () => {
-  /* B8d: a nikcli turn runs on ADE's server; there is no `nikcli run` to build. */
-  test("nikcli non ha un comando: il suo turno gira sul server di ADE", () => {
+  /* B8d: a ragu turn runs on ADE's server; there is no `ragu run` to build. */
+  test("ragu non ha un comando: il suo turno gira sul server di ADE", () => {
     expect(() =>
-      turnCommand(runnerById("nikcli"), { bot: { ...bot, model: "openai/gpt-5.5" }, message: "ciao" }),
-    ).toThrow(t("bots.turn.nikcliOnServer"))
+      turnCommand(runnerById("ragu"), { bot: { ...bot, model: "openai/gpt-5.5" }, message: "ciao" }),
+    ).toThrow(t("bots.turn.raguOnServer"))
   })
 
-  test("una riga JSON non cambia il filo di nikcli: i suoi eventi vengono dal server", () => {
+  test("una riga JSON non cambia il filo di ragu: i suoi eventi vengono dal server", () => {
     const talk = sendMessage(emptyTalk(), "ciao", 1)
     const line = '{"type":"text","sessionID":"ses_finta","part":{"type":"text","text":"Ciao!"}}'
-    expect(applyRunnerLine(runnerById("nikcli"), talk, line, 2)).toBe(talk)
+    expect(applyRunnerLine(runnerById("ragu"), talk, line, 2)).toBe(talk)
   })
 
   test("Claude Code: stream-json, persona come system prompt, sessione ripresa, messaggio dopo --", () => {
@@ -136,7 +136,7 @@ describe("gli argomenti di un turno", () => {
 
     expect(enforcesDisabledTools("claude")).toBe(true)
     expect(enforcesDisabledTools("codex")).toBe(true)
-    expect(enforcesDisabledTools("nikcli")).toBe(false)
+    expect(enforcesDisabledTools("ragu")).toBe(false)
   })
 })
 
@@ -145,8 +145,8 @@ describe("gli eventi di Claude Code", () => {
     '{"type":"system","subtype":"init","cwd":"C:\\\\p","session_id":"25013bee","tools":["Read"]}',
     '{"type":"assistant","message":{"content":[{"type":"thinking","thinking":""}]},"session_id":"25013bee"}',
     '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"C:\\\\p\\\\package.json"}}]},"session_id":"25013bee"}',
-    '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_1","type":"tool_result","content":"1\\t{\\n2\\t  \\"name\\": \\"@nikcli-ai/ade\\""}]},"session_id":"25013bee"}',
-    '{"type":"assistant","message":{"content":[{"type":"text","text":"`@nikcli-ai/ade`"}]},"session_id":"25013bee"}',
+    '{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_1","type":"tool_result","content":"1\\t{\\n2\\t  \\"name\\": \\"@ragu/ade\\""}]},"session_id":"25013bee"}',
+    '{"type":"assistant","message":{"content":[{"type":"text","text":"`@ragu/ade`"}]},"session_id":"25013bee"}',
     '{"type":"result","subtype":"success","is_error":false,"session_id":"25013bee","total_cost_usd":0.04,"usage":{"input_tokens":18,"cache_creation_input_tokens":100,"cache_read_input_tokens":200,"output_tokens":6,"server_tool_use":{"web_search_requests":0}},"permission_denials":[]}',
   ]
 
@@ -155,8 +155,8 @@ describe("gli eventi di Claude Code", () => {
     expect(talk.sessionId).toBe("25013bee")
     const [, tool, reply] = talk.messages
     expect(tool).toMatchObject({ role: "tool", tool: "Read", text: "C:\\p\\package.json" })
-    expect(tool?.output).toContain("@nikcli-ai/ade")
-    expect(reply).toMatchObject({ role: "bot", text: "`@nikcli-ai/ade`" })
+    expect(tool?.output).toContain("@ragu/ade")
+    expect(reply).toMatchObject({ role: "bot", text: "`@ragu/ade`" })
     expect(talk.tokens).toBe(324)
     expect(talk.costUsd).toBeCloseTo(0.04)
   })
@@ -263,12 +263,12 @@ describe("lo stato di accesso", () => {
     expect(readLoginStatus(runnerById("codex"), "Not logged in", 1).state).toBe("out")
   })
 
-  test("nikcli che si ferma prima dell'elenco non dice «non collegato»", () => {
-    expect(readLoginStatus(runnerById("nikcli"), "ERROR EPERM: operation not permitted fatal", 1).state).toBe("unknown")
-    expect(readLoginStatus(runnerById("nikcli"), "└  0 credentials", 0).state).toBe("out")
+  test("ragu che si ferma prima dell'elenco non dice «non collegato»", () => {
+    expect(readLoginStatus(runnerById("ragu"), "ERROR EPERM: operation not permitted fatal", 1).state).toBe("unknown")
+    expect(readLoginStatus(runnerById("ragu"), "└  0 credentials", 0).state).toBe("out")
   })
 
-  test("nikcli elenca i provider, colori e cornici tolti", () => {
+  test("ragu elenca i provider, colori e cornici tolti", () => {
     const output = [
       "\u001b[90m┌\u001b[39m  Credentials \u001b[90m~\\AppData\\Local\\nikcli\\auth.json",
       "\u001b[90m│\u001b[39m",
@@ -276,7 +276,7 @@ describe("lo stato di accesso", () => {
       "\u001b[34m●\u001b[39m  Z.AI Coding Plan \u001b[90mapi",
       "\u001b[90m└\u001b[39m  2 credentials",
     ].join("\r\n")
-    expect(readLoginStatus(runnerById("nikcli"), output, 0)).toEqual({
+    expect(readLoginStatus(runnerById("ragu"), output, 0)).toEqual({
       state: "in",
       detail: "OpenAI, Z.AI Coding Plan",
     })
@@ -465,7 +465,7 @@ describe("un bot di progetto non ha pre-approvazioni", () => {
   test("Claude: niente scritture nei percorsi che poi eseguono codice (review B3, M1)", () => {
     const { args } = turnCommand(runnerById("claude"), { bot: fromRepo, message: "x", lean: true })
     const disallowed = (args[args.indexOf("--disallowedTools") + 1] ?? "").split(",")
-    for (const path of [".git", ".claude", ".nikcli", ".codex", ".husky", ".vscode", ".github/workflows"]) {
+    for (const path of [".git", ".claude", ".ragu", ".nikcli", ".codex", ".husky", ".vscode", ".github/workflows"]) {
       for (const tool of ["Edit", "Write", "NotebookEdit"]) expect(disallowed).toContain(`${tool}(./${path}/**)`)
     }
     // Writing elsewhere is still what the user accepted.
@@ -484,15 +484,15 @@ describe("un bot di progetto non ha pre-approvazioni", () => {
 })
 
 /*
- * B3b review, M1: nikcli merges the project's `.nikcli/` over the user's own
+ * B3b review, M1: ragu merges the project's `.nikcli/` over the user's own
  * configuration, so a project agent of the same name took the place of the
  * user's bot, and the project's plugins ran, with no question asked. A bot of
  * the user's runs without the project's configuration; a project's bot needs
  * it, and `project-trust.ts` asks about it.
  */
-describe("un bot dell'utente su nikcli non carica la configurazione del progetto", () => {
-  /* B8d: nikcli's rules are its session's on ADE's server (`serve-rules.ts`), not a spawn flag. */
-  test("Claude Code e Codex non ricevono l'opzione di nikcli", () => {
+describe("un bot dell'utente su ragu non carica la configurazione del progetto", () => {
+  /* B8d: ragu's rules are its session's on ADE's server (`serve-rules.ts`), not a spawn flag. */
+  test("Claude Code e Codex non ricevono l'opzione di ragu", () => {
     for (const runner of ["claude", "codex"]) {
       const flags = turnCommand(runnerById(runner), {
         bot: { ...bot, scope: "global" },
@@ -515,7 +515,7 @@ describe("un bot dell'utente su nikcli non carica la configurazione del progetto
 /*
  * G5, D93: a turn from a chat, through a bot's gateway. Nobody is at the
  * computer, so no shell unless the owner turned on the bot's remote commands;
- * with them on, nikcli asks on the phone, Claude Code runs only a list, and
+ * with them on, ragu asks on the phone, Claude Code runs only a list, and
  * Codex stays read-only.
  */
 describe("un turno da chat non ha la shell", () => {
@@ -586,16 +586,16 @@ describe("il costo di un turno", () => {
     }
   })
 
-  test("nikcli mostra il costo del turno, e un modello :free no", () => {
-    const paid = spendLine({ runnerId: "nikcli", model: "openai/gpt-4o", tokens: 800, costUsd: 0.04 })
+  test("ragu mostra il costo del turno, e un modello :free no", () => {
+    const paid = spendLine({ runnerId: "ragu", model: "openai/gpt-4o", tokens: 800, costUsd: 0.04 })
     expect(paid).toMatchObject({ kind: "api", model: "openai/gpt-4o", usd: "$0.04" })
-    const free = spendLine({ runnerId: "nikcli", model: "google/gemini-2.0-flash:free", tokens: 800, costUsd: 0.5 })
+    const free = spendLine({ runnerId: "ragu", model: "google/gemini-2.0-flash:free", tokens: 800, costUsd: 0.5 })
     expect(free.kind).toBe("free")
     expect(free.usd).toBeUndefined()
-    const unnamed = spendLine({ runnerId: "nikcli", tokens: 10, costUsd: 0.004 })
+    const unnamed = spendLine({ runnerId: "ragu", tokens: 10, costUsd: 0.004 })
     expect(unnamed.kind).toBe("metered")
     expect(unnamed.usd).toBe("$0.004")
-    expect(spendLine({ runnerId: "nikcli", model: "openai/gpt-4o", tokens: 1, costUsd: 0 }).usd).toBeUndefined()
+    expect(spendLine({ runnerId: "ragu", model: "openai/gpt-4o", tokens: 1, costUsd: 0 }).usd).toBeUndefined()
   })
 
   test("con la chiave Claude mostra i dollari, Codex i token e nessun dollaro, l'abbonamento niente", () => {
@@ -679,7 +679,7 @@ describe("il costo di un turno", () => {
     expect(talk.lastTurn).toEqual({ model: "gpt-5.5", tokens: 4, costUsd: 0 })
   })
 
-  test("Genera con nikcli: senza modello è il predefinito, a pagamento; :free no", () => {
+  test("Genera con ragu: senza modello è il predefinito, a pagamento; :free no", () => {
     expect(generationSpend()).toEqual({ model: "", paid: true })
     expect(generationSpend("  ")).toEqual({ model: "", paid: true })
     expect(generationSpend("openai/gpt-4o")).toEqual({ model: "openai/gpt-4o", paid: true })
@@ -745,7 +745,7 @@ describe("B8c: Claude Code e le approvazioni", () => {
 })
 
 describe("a turn nobody watches (B11, a routine)", () => {
-  /* nikcli's routine runs on ADE's server with the `read-only` rules (B8d, `serve-rules.test.ts`). */
+  /* ragu's routine runs on ADE's server with the `read-only` rules (B8d, `serve-rules.test.ts`). */
   test("no shell on Claude Code or Codex, Codex read-only", () => {
     const own = { ...bot, scope: "global" as const }
     const codex = turnCommand(runnerById("codex"), { bot: { ...own, runner: "codex" }, message: "x", unattended: true })

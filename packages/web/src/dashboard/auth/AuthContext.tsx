@@ -31,7 +31,7 @@ interface AuthContextValue {
   connected: boolean
   loading: boolean
   error: string | null
-  /** Connect with the shared nikcli pairing token (Authorization: Bearer nkm_…). */
+  /** Connect with the shared ragu pairing token (Authorization: Bearer nkm_…). */
   connect(token: string): Promise<void>
   loginWithOAuth(): Promise<void>
   /** Legacy email/password sign-in (kept for back-compat; the server still supports it). */
@@ -50,7 +50,7 @@ function getStoredServerUrl(): string | null {
 /** A lightweight identity derived from the active connection (the pairing token
  *  carries no user account), so display code that expects a `user` keeps working. */
 function connectionIdentity(serverUrl: string | null): User {
-  let label = "nikcli server"
+  let label = "ragu server"
   if (serverUrl) {
     try {
       label = new URL(serverUrl).host
@@ -60,7 +60,7 @@ function connectionIdentity(serverUrl: string | null): User {
   }
   return {
     id: "self",
-    username: "nikcli",
+    username: "ragu",
     email: label,
     displayName: undefined,
     role: "user",
@@ -99,7 +99,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         throw new Error("No server configured")
       }
       if (!value) {
-        setError("Paste your nikcli pairing token")
+        setError("Paste your ragu pairing token")
         throw new Error("Missing token")
       }
       setLoading(true)

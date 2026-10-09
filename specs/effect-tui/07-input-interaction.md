@@ -67,10 +67,10 @@ success. Permission denial must remain visible and may not be bypassed by altern
   tests cover transitions; source text scans and snapshots alone do not prove event consumption.
 - Verify every interaction-matrix row, including an event that would trigger two handlers without consumption.
 - After 100 open/close cycles, registered handlers return to baseline and focus points to a live renderable.
-- Extend `packages/nikcli/test/tui/select-controller.test.ts`, `packages/nikcli/test/tui/plugin-keymap.test.ts`,
-  `packages/nikcli/test/tui/prompt-session-context.test.ts`, `packages/nikcli/test/tui/i18n-parity.test.ts`, and
-  `packages/nikcli/test/tui/dialog-lifecycle.test.ts`.
-- From `packages/nikcli`: `bun test test/tui/select-controller.test.ts test/tui/plugin-keymap.test.ts test/tui/prompt-session-context.test.ts test/tui/i18n-parity.test.ts`.
+- Extend `packages/ragu/test/tui/select-controller.test.ts`, `packages/ragu/test/tui/plugin-keymap.test.ts`,
+  `packages/ragu/test/tui/prompt-session-context.test.ts`, `packages/ragu/test/tui/i18n-parity.test.ts`, and
+  `packages/ragu/test/tui/dialog-lifecycle.test.ts`.
+- From `packages/ragu`: `bun test test/tui/select-controller.test.ts test/tui/plugin-keymap.test.ts test/tui/prompt-session-context.test.ts test/tui/i18n-parity.test.ts`.
   Add focus/propagation behavioral cases in the existing component/PTY harness and run `bun run smoke:tui`.
 - Meet EOT-01's key-to-paint budget under simultaneous streaming/search and large paste. No dropped Unicode content or
   delayed permission interaction is acceptable as a performance trade-off.
@@ -105,10 +105,10 @@ order cannot serve both, and expressing the dialog's rule through `ownerOf` mean
 
 So the precedence is **key-aware or wrong**, and that decision comes before any call site. Until it is made:
 
-- `packages/nikcli/test/tui/input-precedence.test.ts` pins the mismatch, so nobody closes the gap by making the
+- `packages/ragu/test/tui/input-precedence.test.ts` pins the mismatch, so nobody closes the gap by making the
   dialog follow the flat table — which would send Ctrl+C to the modal while the user is typing, the behaviour the
   comment in `ui/dialog.tsx` records having already been fixed once.
-- `packages/nikcli/test/tui/dialog-ctrl-c.test.ts` already characterises the shipped arbitration, which is the
+- `packages/ragu/test/tui/dialog-ctrl-c.test.ts` already characterises the shipped arbitration, which is the
   precondition requirement 3 asks for before any refactor.
 
 The next slice here is therefore a decision, not a migration: rewrite requirement 2 as a per-key precedence (at

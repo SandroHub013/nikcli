@@ -10,13 +10,13 @@
  * graph of anything that wanted a string in a footer.
  */
 declare global {
-  const NIKCLI_VERSION: string
-  const NIKCLI_CHANNEL: string
-  const NIKCLI_REVISION: string
+  const RAGU_VERSION: string
+  const RAGU_CHANNEL: string
+  const RAGU_REVISION: string
 }
 
-export const VERSION = typeof NIKCLI_VERSION === "string" ? NIKCLI_VERSION : "local"
-export const CHANNEL = typeof NIKCLI_CHANNEL === "string" ? NIKCLI_CHANNEL : "local"
+export const VERSION = typeof RAGU_VERSION === "string" ? RAGU_VERSION : "local"
+export const CHANNEL = typeof RAGU_CHANNEL === "string" ? RAGU_CHANNEL : "local"
 
 /**
  * The commit this binary was compiled from, or `"local"` in a dev checkout.
@@ -27,14 +27,14 @@ export const CHANNEL = typeof NIKCLI_CHANNEL === "string" ? NIKCLI_CHANNEL : "lo
  * from the environment at startup — an environment variable can be set on an image that does not
  * contain that code.
  */
-export const REVISION = typeof NIKCLI_REVISION === "string" ? NIKCLI_REVISION : "local"
+export const REVISION = typeof RAGU_REVISION === "string" ? RAGU_REVISION : "local"
 
 /** Whether this binary carries a real commit identity (a release build) rather than a dev fallback. */
 export function hasRevision() {
   return REVISION !== "local" && REVISION.length > 0
 }
 
-/** How nikcli was installed. Clients need the union to label an update, not the upgrade logic. */
+/** How ragu was installed. Clients need the union to label an update, not the upgrade logic. */
 export type InstallMethod = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown"
 
 /**

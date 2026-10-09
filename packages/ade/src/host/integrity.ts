@@ -5,7 +5,7 @@
  * which Windows labels Low on purpose (it is Internet Explorer's bookmarks
  * folder). The label is inherited by everything created inside, including
  * the `ade-desktop.exe` cargo builds. A process started from a Low image runs
- * at Low integrity, and so does everything it starts: nikcli then dies on
+ * at Low integrity, and so does everything it starts: ragu then dies on
  * `EPERM` opening its log in `%LOCALAPPDATA%`, Claude Code cannot save its
  * transcript, Codex finds its database read-only. The fix is to label the
  * build output Medium before the binary is built.

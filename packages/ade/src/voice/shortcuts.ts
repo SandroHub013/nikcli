@@ -14,7 +14,7 @@ import {
   VOICE_COMMAND_TRANSCRIPTION,
   type VoiceMode,
   type VoiceSettings,
-} from "@nikcli-ai/voice/core"
+} from "@ragu/voice/core"
 import {
   matchesChord,
   normalizeKeyName,

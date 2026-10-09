@@ -3,7 +3,7 @@
  *
  * Mirrors `feature-plugins/background`: a self-contained plugin that owns one
  * feature end to end. It renders LaTeX math in assistant messages (`$…$`,
- * `$$…$$`) as Unicode formulas through `@nikcli-ai/tui-math` instead of
+ * `$$…$$`) as Unicode formulas through `@ragu/tui-math` instead of
  * painting the raw source, and registers the `/math` command that toggles it.
  *
  * Off by default: while a message streams, the math path re-splits the whole
@@ -18,7 +18,7 @@
  * `SlotRenderable` between the message and the markdown and break the
  * streaming fast path.
  */
-import type { TuiPlugin, TuiPluginModule } from "@nikcli-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginModule } from "@ragu/plugin/tui"
 import { readEnabled, writeEnabled } from "./store"
 
 const id = "internal:math"

@@ -1,4 +1,4 @@
-import type { TuiConfig } from "@nikcli-ai/sdk/httpapi"
+import type { TuiConfig } from "@ragu/sdk/httpapi"
 import { MacOSScrollAccel, type ScrollAcceleration, type ScrollBoxRenderable } from "@opentui/core"
 import { createMemo } from "solid-js"
 import { useSync } from "@tui/context/sync"

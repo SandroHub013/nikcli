@@ -12,7 +12,7 @@
 
 [event-stream-architecture.md](./event-stream-architecture.md) §"Not implemented: public filtering" left one stage unbuilt: the feed forwards **every** event the bus publishes. `Bus.subscribeAll` hands each event to `EventFeed.broadcast`, which encodes and fans it out. Nothing marks an event as internal, so nothing can be withheld.
 
-The cost is not hypothetical. Measured 2026-08-16 against `packages/nikcli/src`, of the 64 declared `BusEvent.schema` types, **six reach every SSE client and no client anywhere reads them**:
+The cost is not hypothetical. Measured 2026-08-16 against `packages/ragu/src`, of the 64 declared `BusEvent.schema` types, **six reach every SSE client and no client anywhere reads them**:
 
 | Type                      | Published by                           | Who reads it                               |
 | ------------------------- | -------------------------------------- | ------------------------------------------ |
@@ -27,7 +27,7 @@ The cost is not hypothetical. Measured 2026-08-16 against `packages/nikcli/src`,
 
 ```sh
 grep -rn '"command.executed"' packages --include='*.ts' --include='*.tsx' \
-  | grep -v node_modules | grep -v sdk/js/src/httpapi/generated | grep -v packages/nikcli/src
+  | grep -v node_modules | grep -v sdk/js/src/httpapi/generated | grep -v packages/ragu/src
 ```
 
 Two distinct kinds are mixed in that table, and the distinction is the spec:
@@ -129,4 +129,4 @@ All verified 2026-08-16:
 - `project.directories.updated` is deleted.
 - `test/server/event-visibility.test.ts` asserts the withholding on **both** envelopes, that a public event still arrives on both, that an unregistered type stays public, and that the marked set is exactly the six the spec names.
 - `bun run typecheck` passes across all 34 packages — `packages/tui`, `packages/app` and `packages/mobile` needed no edits against the narrowed union.
-- `bun test` in `packages/nikcli`: 3990 pass, 2 fail, both the pre-existing baseline (`test/tui/profile-command.test.ts`'s source-reading assertion, and `EditTool`, which passes in isolation).
+- `bun test` in `packages/ragu`: 3990 pass, 2 fail, both the pre-existing baseline (`test/tui/profile-command.test.ts`'s source-reading assertion, and `EditTool`, which passes in isolation).

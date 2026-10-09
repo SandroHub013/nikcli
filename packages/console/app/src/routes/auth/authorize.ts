@@ -24,7 +24,7 @@ export async function GET(input: APIEvent) {
   const authorize = new URL("/authorize", issuer)
   authorize.search = new URLSearchParams({
     response_type: "code",
-    client_id: "nikcli-console",
+    client_id: "ragu-console",
     redirect_uri: callbackUrl.toString(),
     state,
     code_challenge: challenge,

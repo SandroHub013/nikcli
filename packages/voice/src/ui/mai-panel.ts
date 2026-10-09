@@ -7,7 +7,7 @@
  * reads — is a plain function, so it is tested without mounting Solid.
  */
 
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 import type { ReplyVoice } from "../settings/model"
 import { isMaiVoice, maiVoiceOfferPending } from "../settings/reply-voices"
 import { formatSpendCost, type DaySpend } from "../settings/spend"

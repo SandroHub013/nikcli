@@ -37,7 +37,7 @@ describe("provider option typing", () => {
     type Fallback = ProviderOptionsOf<typeof model>
     type _fallback = Expect<Equals<Fallback, ProviderOptions>>
 
-    // Unknown provider keys must still be accepted — nikcli cannot know every provider's knobs.
+    // Unknown provider keys must still be accepted — ragu cannot know every provider's knobs.
     const request = LLM.request({
       model,
       prompt: "hi",

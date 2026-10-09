@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package",
-  "name": "@nikcli-ai/script",
+  "name": "@ragu/script",
   "license": "MIT",
   "devDependencies": {
     "@types/bun": "catalog:"

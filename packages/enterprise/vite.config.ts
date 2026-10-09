@@ -4,7 +4,7 @@ import { nitro } from "nitro/vite"
 import tailwindcss from "@tailwindcss/vite"
 
 const nitroConfig: any = (() => {
-  const target = process.env.NIKCLI_DEPLOYMENT_TARGET
+  const target = process.env.RAGU_DEPLOYMENT_TARGET
   if (target === "cloudflare") {
     return {
       compatibilityDate: "2024-09-19",
@@ -23,7 +23,7 @@ export default defineConfig({
     solidStart(),
     nitro({
       ...nitroConfig,
-      baseURL: process.env.NIKCLI_BASE_URL,
+      baseURL: process.env.RAGU_BASE_URL,
     }),
   ] as any,
   server: {

@@ -15,7 +15,7 @@ import type {
   AnalyticsGlobal as GlobalAnalytics,
   AnalyticsSession as SessionAnalytics,
   AnalyticsTokenBreakdown as TokenBreakdown,
-} from "@nikcli-ai/sdk/httpapi"
+} from "@ragu/sdk/httpapi"
 
 export type { DailyAnalytics, GlobalAnalytics, SessionAnalytics, TokenBreakdown }
 

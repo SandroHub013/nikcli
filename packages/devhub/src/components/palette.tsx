@@ -1,6 +1,6 @@
 import { shortcut } from "../lib/platform"
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
-import { Icon, type IconProps } from "@nikcli-ai/ui/icon"
+import { Icon, type IconProps } from "@ragu/ui/icon"
 import { assistant } from "../lib/assistant"
 import { app } from "../lib/store"
 import type { PageId } from "../lib/actions"

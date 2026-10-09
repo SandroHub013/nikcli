@@ -1,14 +1,14 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
-import { Button } from "@nikcli-ai/ui/button"
-import { Checkbox } from "@nikcli-ai/ui/checkbox"
-import { Select } from "@nikcli-ai/ui/select"
+import { Button } from "@ragu/ui/button"
+import { Checkbox } from "@ragu/ui/checkbox"
+import { Select } from "@ragu/ui/select"
 import { createPoll, toastError } from "../lib/store"
 import { native, type TestFile } from "../lib/native"
 import { runner, type Run } from "../lib/tasks"
 import { bytes, duration, ms, when } from "../lib/format"
 import { Empty, Loading, Page, Panel, Problem, Stat } from "../components/kit"
 
-/** stderr is not "red": nikcli and bun log INFO/WARN there. Only lines that look like failures are. */
+/** stderr is not "red": ragu and bun log INFO/WARN there. Only lines that look like failures are. */
 export const isErrorLine = (line: string) =>
   /(^|\s)(ERROR|FATAL|error:|Error:|TypeError|ReferenceError|SyntaxError|panic|✗|\(fail\)|FAIL\b|Uncaught)/.test(line)
 
@@ -117,7 +117,7 @@ export function RunSummary(props: { run: Run }) {
 
 export function Tests() {
   const files = createPoll(() => native.tests(), 0)
-  const [pkg, setPkg] = createSignal("nikcli")
+  const [pkg, setPkg] = createSignal("ragu")
   const [filter, setFilter] = createSignal("")
   const [picked, setPicked] = createSignal<Set<string>>(new Set())
   const [timeout, setTimeoutMs] = createSignal("30000")
@@ -161,8 +161,8 @@ export function Tests() {
       ...list.map((f) => `./${f.path}`),
     ])
   const runPackage = () =>
-    pkg() === "nikcli"
-      ? launch("nikcli · full suite (sharded)", ["run", "test:ci"])
+    pkg() === "ragu"
+      ? launch("ragu · full suite (sharded)", ["run", "test:ci"])
       : launch(`${pkg()} · all tests`, ["test", ...flags()])
 
   return (

@@ -54,10 +54,10 @@ export async function runBenchmarks(callbacks: RunnerCallbacks, baselinePath?: s
     env: {
       ...process.env,
       FORCE_COLOR: "0",
-      NIKCLI_BENCHMARK_SAVE: "1",
-      NIKCLI_BENCHMARK_RUN_ID: runId,
-      NIKCLI_BENCHMARK_OUTPUT_DIR: OUTPUT_DIR,
-      ...(baselinePath ? { NIKCLI_BENCHMARK_BASELINE_PATH: baselinePath } : {}),
+      RAGU_BENCHMARK_SAVE: "1",
+      RAGU_BENCHMARK_RUN_ID: runId,
+      RAGU_BENCHMARK_OUTPUT_DIR: OUTPUT_DIR,
+      ...(baselinePath ? { RAGU_BENCHMARK_BASELINE_PATH: baselinePath } : {}),
     },
   })
 
@@ -94,10 +94,10 @@ export async function runSingleBenchmark(
     env: {
       ...process.env,
       FORCE_COLOR: "0",
-      NIKCLI_BENCHMARK_SAVE: "1",
-      NIKCLI_BENCHMARK_RUN_ID: runId,
-      NIKCLI_BENCHMARK_OUTPUT_DIR: OUTPUT_DIR,
-      ...(baselinePath ? { NIKCLI_BENCHMARK_BASELINE_PATH: baselinePath } : {}),
+      RAGU_BENCHMARK_SAVE: "1",
+      RAGU_BENCHMARK_RUN_ID: runId,
+      RAGU_BENCHMARK_OUTPUT_DIR: OUTPUT_DIR,
+      ...(baselinePath ? { RAGU_BENCHMARK_BASELINE_PATH: baselinePath } : {}),
     },
   })
 

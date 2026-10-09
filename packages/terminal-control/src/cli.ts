@@ -12,7 +12,7 @@ terminal-control COMMAND --help for native command details.
 
 terminal-control install-skill [--workspace DIR] [--json]
 
-Register the bundled skill in WORKSPACE/.agents/skills so nikcli discovers it.
+Register the bundled skill in WORKSPACE/.agents/skills so ragu discovers it.
 WORKSPACE defaults to the nearest Git worktree. The installation is an
 idempotent relative symlink back to this package.
 
@@ -266,7 +266,7 @@ export async function main(argv = Bun.argv.slice(2)): Promise<void> {
         return
       }
       const action = installation.installed ? "Installed" : "Already installed"
-      process.stdout.write(`${action}: ${installation.target}\nRestart nikcli to load the skill.\n`)
+      process.stdout.write(`${action}: ${installation.target}\nRestart ragu to load the skill.\n`)
     } catch (error) {
       if (error instanceof HelpRequested) {
         process.stdout.write(HELP)

@@ -4,7 +4,7 @@ import { ARTIFACT_MARKER, type ArtifactRequest, extractArtifact, publishArtifact
 import { type DocFetcher, docsFetcher, fetchDocMarkdown, normalizeDocsPath } from "../../lib/docsMarkdown"
 import { type ToolCall, planDocs } from "../../lib/docsPlanner"
 import { condenseMarkdown, selectDocs, tokenize } from "../../lib/docsRetrieval"
-import { nikcliBackendConfig, runNikcliTurn } from "../../lib/nikcliDocsSession"
+import { raguBackendConfig, runRaguTurn } from "../../lib/raguDocsSession"
 
 export const prerender = false
 
@@ -15,8 +15,8 @@ export const prerender = false
  * grounding reuses the Markdown pipeline behind `/.llm`, and generation runs on
  * a Cloudflare Workers AI model covered by the free daily Neuron allocation.
  *
- * When the deployment configures a nikcli server (NIKCLI_DOCS_SERVER +
- * NIKCLI_DOCS_TOKEN) the same request is answered by a real nikcli session
+ * When the deployment configures a ragu server (RAGU_DOCS_SERVER +
+ * RAGU_DOCS_TOKEN) the same request is answered by a real ragu session
  * instead, and follow-ups reuse it. Either way the assistant can publish an
  * artifact from its answer.
  */
@@ -59,7 +59,7 @@ const RATE_LIMIT_PER_HOUR = 20
 type ChatRole = "user" | "assistant"
 type ChatMessage = { role: ChatRole; content: string }
 type Source = { title: string; href: string }
-type Backend = "nikcli" | "workers-ai"
+type Backend = "ragu" | "workers-ai"
 
 const json = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), {
@@ -163,7 +163,7 @@ const ARTIFACT_INSTRUCTIONS = [
  * guide. The chat model only supplies content, so the look stays consistent
  * and does not depend on a small model inventing a layout.
  */
-const HTML_BUILDER_PROMPT = `You build interactive HTML guides about nikcli, an open-source terminal-native AI development agent.
+const HTML_BUILDER_PROMPT = `You build interactive HTML guides about ragu, an open-source terminal-native AI development agent.
 
 Output raw HTML only: one complete <!doctype html> document. No Markdown, no code fence, no commentary before or after.
 
@@ -230,9 +230,9 @@ function systemPrompt(context: string, currentPage?: Source) {
   const pages = docsIndex.map((entry) => `- ${entry.title} — ${entry.href}`).join("\n")
 
   return [
-    "You are the Nikcli documentation assistant, embedded in the official docs at nikcli-ai.dev.",
-    "Nikcli is an open-source, terminal-native AI development agent (CLI, TUI, server, web app and mobile app).",
-    "You help users understand and use nikcli. You are support, not a code-writing agent.",
+    "You are the Ragu documentation assistant, embedded in the official docs at nikcli-ai.dev.",
+    "Ragu is an open-source, terminal-native AI development agent (CLI, TUI, server, web app and mobile app).",
+    "You help users understand and use ragu. You are support, not a code-writing agent.",
     "",
     "Rules:",
     "- Answer ONLY from the documentation excerpts below. They are the source of truth.",
@@ -263,7 +263,7 @@ const slugify = (value: string) =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 60) || "nikcli-guide"
+    .slice(0, 60) || "ragu-guide"
 
 /** Title for a guide the user asked for but the model did not name. */
 function guideTitle(question: string) {
@@ -417,7 +417,7 @@ function eventStream(input: {
             emit("status", { message: "Building a shareable artifact…" })
           }
 
-          // nikcli reports the whole message, so replace; Workers AI streams
+          // ragu reports the whole message, so replace; Workers AI streams
           // tokens, so append. Either way an in-progress artifact fence is held
           // back until the block is complete and can be stripped.
           if (input.mode === "replace") {
@@ -476,8 +476,8 @@ function eventStream(input: {
 
 export const POST: APIRoute = async ({ request, locals, url }) => {
   const env = locals.runtime?.env as CloudflareEnv | undefined
-  const nikcli = env ? nikcliBackendConfig(env) : null
-  if (!env?.AI && !nikcli) {
+  const ragu = env ? raguBackendConfig(env) : null
+  if (!env?.AI && !ragu) {
     return json(
       {
         error: "The docs assistant is not configured on this deployment (missing Workers AI binding).",
@@ -641,11 +641,11 @@ export const POST: APIRoute = async ({ request, locals, url }) => {
     "X-Accel-Buffering": "no",
   }
 
-  // Preferred backend: a real nikcli session, when the deployment has one.
-  if (nikcli) {
+  // Preferred backend: a real ragu session, when the deployment has one.
+  if (ragu) {
     try {
-      const turn = await runNikcliTurn({
-        config: nikcli,
+      const turn = await runRaguTurn({
+        config: ragu,
         sessionID: typeof body.sessionID === "string" ? body.sessionID : undefined,
         prompt: `${system}\n\n---\n\nUser question: ${question}`,
         signal: request.signal,
@@ -659,7 +659,7 @@ export const POST: APIRoute = async ({ request, locals, url }) => {
           mode: "replace",
           sources,
           tools,
-          backend: "nikcli",
+          backend: "ragu",
           forceArtifact: wantsGuide,
           titleHint: guideTitle(question),
           sessionID: turn.sessionID,
@@ -668,12 +668,12 @@ export const POST: APIRoute = async ({ request, locals, url }) => {
         { headers: streamHeaders },
       )
     } catch {
-      // nikcli server unreachable — fall through to Workers AI.
+      // ragu server unreachable — fall through to Workers AI.
     }
   }
 
   if (!env?.AI) {
-    return json({ error: "The nikcli backend is unavailable right now." }, 502)
+    return json({ error: "The ragu backend is unavailable right now." }, 502)
   }
 
   try {

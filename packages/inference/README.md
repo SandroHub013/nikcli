@@ -1,4 +1,4 @@
-# @nikcli-ai/inference
+# @ragu/inference
 
 Multi-provider, OpenAI-compatible AI inference gateway. Routes every request to the cheapest healthy upstream (Together, Fireworks, DeepInfra, Groq, Cerebras, SambaNova, Hyperbolic, Nebius, OpenRouter, DeepSeek, Mistral, Moonshot, Zhipu, or self-hosted vLLM), caches results, and exposes a fixed sell price — the spread is the margin.
 
@@ -32,7 +32,7 @@ curl -X POST http://localhost:3000/v1/chat/completions \
   -d '{"model":"llama-3.3-70b","messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-The response includes a `nikcli` envelope showing which provider served the request, cache status, and margin per call.
+The response includes a `ragu` envelope showing which provider served the request, cache status, and margin per call.
 
 ## Production
 

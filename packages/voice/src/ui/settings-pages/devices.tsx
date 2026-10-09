@@ -1,6 +1,6 @@
 /** Voce › Audio: the microphone and the speaker. */
 import { Show, For, type JSX } from "solid-js"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 import { describeChoice } from "../../audio/devices"
 import type { VoiceSettingsState } from "../settings-state"
 import { PageHead } from "./head"

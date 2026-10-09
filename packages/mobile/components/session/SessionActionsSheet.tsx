@@ -265,7 +265,7 @@ export function SessionActionsSheet({
           <SheetRow
             Icon={Rocket}
             label="Teleport session"
-            description="Copy this session to another nikcli server"
+            description="Copy this session to another ragu server"
             onPress={onTeleport}
             tone="accent"
           />

@@ -224,7 +224,7 @@ export function fetchCompressed(input: RequestInfo | URL, init?: FetchInit): Pro
 
 /** WebKit on macOS (nothing to install). Chrome/Edge/Chromium elsewhere — WebKit is macOS-only. */
 export function defaultWebViewBackend(): "webkit" | "chrome" {
-  const override = process.env.NIKCLI_WEBVIEW_BACKEND?.trim().toLowerCase()
+  const override = process.env.RAGU_WEBVIEW_BACKEND?.trim().toLowerCase()
   if (override === "chrome" || override === "webkit") return override
   return process.platform === "darwin" ? "webkit" : "chrome"
 }

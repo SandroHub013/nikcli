@@ -1,4 +1,4 @@
-const CACHE_NAME = "nikcli-remote-v1"
+const CACHE_NAME = "ragu-remote-v1"
 
 const STATIC_ASSETS = ["/", "/index.html", "/ghostty-web.js", "/ghostty-vt.wasm", "/manifest.webmanifest"]
 

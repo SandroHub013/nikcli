@@ -6,7 +6,7 @@ import { join, resolve } from "node:path"
 import { connect, type DriverSocket } from "../src/driver"
 import type { SimulationProtocol } from "../src/protocol"
 
-const nikcli = resolve(import.meta.dir, "../../nikcli")
+const ragu = resolve(import.meta.dir, "../../ragu")
 
 async function freePort() {
   return new Promise<number>((resolvePort, reject) => {
@@ -98,19 +98,19 @@ async function bootTui(root: string, name: string) {
           "simulation/deterministic",
         ],
         {
-          // Run from the nikcli package so its bunfig/tsconfig (JSX runtime)
+          // Run from the ragu package so its bunfig/tsconfig (JSX runtime)
           // apply; the TUI chdirs into the project directory passed as the arg.
-          cwd: nikcli,
+          cwd: ragu,
           env: {
             ...process.env,
-            NIKCLI_DRIVE: name,
-            NIKCLI_DRIVE_REGISTRY_DIR: registry,
-            NIKCLI_DRIVE_RENDERER: "headless",
-            NIKCLI_DRIVE_MEDIA_DIR: media,
-            NIKCLI_TEST_HOME: join(root, "home"),
-            NIKCLI_SKIP_PLUGIN_INSTALL: "1",
-            NIKCLI_DISABLE_DEFAULT_PLUGINS: "1",
-            NIKCLI_DISABLE_LSP_DOWNLOAD: "1",
+            RAGU_DRIVE: name,
+            RAGU_DRIVE_REGISTRY_DIR: registry,
+            RAGU_DRIVE_RENDERER: "headless",
+            RAGU_DRIVE_MEDIA_DIR: media,
+            RAGU_TEST_HOME: join(root, "home"),
+            RAGU_SKIP_PLUGIN_INSTALL: "1",
+            RAGU_DISABLE_DEFAULT_PLUGINS: "1",
+            RAGU_DISABLE_LSP_DOWNLOAD: "1",
             XDG_DATA_HOME: join(root, "xdg-data"),
             XDG_CACHE_HOME: join(root, "xdg-cache"),
             XDG_CONFIG_HOME: join(root, "xdg-config"),
@@ -167,7 +167,7 @@ async function bootTui(root: string, name: string) {
 // each other and turned the file flaky.
 
 test("hot-reloads edited plugins in place, keeping the rest of the TUI untouched", async () => {
-  const root = await mkdtemp(join(tmpdir(), "nikcli-plugin-reload-"))
+  const root = await mkdtemp(join(tmpdir(), "ragu-plugin-reload-"))
   const app = await bootTui(root, "reload")
 
   const markerA = join(root, "a.txt")
@@ -247,12 +247,12 @@ export default {
     throw await tui.report(error)
   } finally {
     await tui.stop()
-    if (!process.env.NIKCLI_E2E_KEEP) await rm(root, { recursive: true, force: true })
+    if (!process.env.RAGU_E2E_KEEP) await rm(root, { recursive: true, force: true })
   }
 }, 300_000)
 
 test("follows tui.json changes: added, removed, discovered late, and disabled plugins", async () => {
-  const root = await mkdtemp(join(tmpdir(), "nikcli-plugin-config-"))
+  const root = await mkdtemp(join(tmpdir(), "ragu-plugin-config-"))
   const app = await bootTui(root, "config")
 
   const markerA = join(root, "a.txt")
@@ -299,12 +299,12 @@ test("follows tui.json changes: added, removed, discovered late, and disabled pl
     throw await tui.report(error)
   } finally {
     await tui.stop()
-    if (!process.env.NIKCLI_E2E_KEEP) await rm(root, { recursive: true, force: true })
+    if (!process.env.RAGU_E2E_KEEP) await rm(root, { recursive: true, force: true })
   }
 }, 300_000)
 
 test("storage.store persists plugin state across TUI restarts", async () => {
-  const root = await mkdtemp(join(tmpdir(), "nikcli-plugin-store-"))
+  const root = await mkdtemp(join(tmpdir(), "ragu-plugin-store-"))
   const app = await bootTui(root, "store")
 
   const marker = join(root, "runs.txt")
@@ -344,6 +344,6 @@ export default {
     throw await second.report(error)
   } finally {
     await second.stop()
-    if (!process.env.NIKCLI_E2E_KEEP) await rm(root, { recursive: true, force: true })
+    if (!process.env.RAGU_E2E_KEEP) await rm(root, { recursive: true, force: true })
   }
 }, 300_000)

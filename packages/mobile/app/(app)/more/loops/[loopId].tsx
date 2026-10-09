@@ -602,7 +602,7 @@ export default function LoopDetailScreen() {
       ) : null}
 
       <Text className="text-center text-xs text-muted">
-        Loop intervals keep running on the connected nikcli server, even when this screen is closed.
+        Loop intervals keep running on the connected ragu server, even when this screen is closed.
       </Text>
     </ScrollView>
   )

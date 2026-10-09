@@ -1,5 +1,5 @@
 import fs from "fs"
-const FILE = process.env.NIKCLI_BG_DEBUG
+const FILE = process.env.RAGU_BG_DEBUG
 export function dbg(...args: unknown[]) {
   if (!FILE) return
   try {

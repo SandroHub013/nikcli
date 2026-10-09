@@ -1,6 +1,6 @@
 import { useScrollAcceleration } from "@tui/util/scroll"
 import { createMemo, createResource, createSignal, For, Show } from "solid-js"
-import { formatInstructionDelta, visibleInstructionNotices } from "@nikcli-ai/util/instruction-delta"
+import { formatInstructionDelta, visibleInstructionNotices } from "@ragu/util/instruction-delta"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"

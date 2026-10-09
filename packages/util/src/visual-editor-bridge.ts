@@ -101,8 +101,8 @@ export type BridgeMessage =
 
 export const INSPECTOR_BRIDGE_SCRIPT = `
 (function() {
-  if (window.__NIKCLI_INSPECTOR_ACTIVE__) return;
-  window.__NIKCLI_INSPECTOR_ACTIVE__ = true;
+  if (window.__RAGU_INSPECTOR_ACTIVE__) return;
+  window.__RAGU_INSPECTOR_ACTIVE__ = true;
 
   // Only real input selects, drags or hovers: a page's dispatchEvent does not.
   // ADE's frame script hands over a listener taken before the page could
@@ -178,22 +178,22 @@ export const INSPECTOR_BRIDGE_SCRIPT = `
 
   // Highlight overlays
   var hoverOutline = document.createElement('div');
-  hoverOutline.id = '__nikcli_hover_outline';
+  hoverOutline.id = '__ragu_hover_outline';
   hoverOutline.style.cssText = 'position:fixed;pointer-events:none;border:2px solid #3b82f6;background:rgba(59,130,246,0.12);z-index:999999;display:none;border-radius:3px;transition:all 0.05s ease;';
   
   var hoverBadge = document.createElement('div');
-  hoverBadge.id = '__nikcli_hover_badge';
+  hoverBadge.id = '__ragu_hover_badge';
   hoverBadge.style.cssText = 'position:fixed;pointer-events:none;background:#2563eb;color:#ffffff;font-size:11px;font-weight:600;font-family:ui-sans-serif,system-ui,sans-serif;line-height:1;padding:4px 7px;border-radius:3px 3px 0 0;z-index:1000000;display:none;';
 
   var dropIndicator = document.createElement('div');
-  dropIndicator.id = '__nikcli_drop_indicator';
+  dropIndicator.id = '__ragu_drop_indicator';
   dropIndicator.style.cssText = 'position:fixed;pointer-events:none;background:#10b981;z-index:999999;display:none;border-radius:2px;box-shadow:0 0 8px rgba(16,185,129,0.8);';
 
   // Elements the host has attached to the chat stay outlined so a multi-element
   // selection is visible while the user keeps clicking.
   var selectedEls = [];
   var selectionLayer = document.createElement('div');
-  selectionLayer.id = '__nikcli_selection_layer';
+  selectionLayer.id = '__ragu_selection_layer';
   selectionLayer.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:999998;display:block;';
 
   function renderSelection() {
@@ -211,7 +211,7 @@ export const INSPECTOR_BRIDGE_SCRIPT = `
   window.addEventListener('resize', renderSelection);
 
   function attachOverlays() {
-    if (document.body && !document.getElementById('__nikcli_hover_outline')) {
+    if (document.body && !document.getElementById('__ragu_hover_outline')) {
       document.body.appendChild(hoverOutline);
       document.body.appendChild(hoverBadge);
       document.body.appendChild(dropIndicator);
@@ -254,7 +254,7 @@ export const INSPECTOR_BRIDGE_SCRIPT = `
         break;
       } else if (el.className && typeof el.className === 'string') {
         var classes = el.className.trim().split(/\\s+/).filter(function(c) {
-          return c && !c.startsWith('__nikcli');
+          return c && !c.startsWith('__ragu');
         });
         if (classes.length > 0) {
           selector += '.' + CSS.escape(classes[0]);

@@ -1,11 +1,11 @@
 name: "Setup Git Committer"
 description: "Create app token and configure git user"
 inputs:
-  nikcli-app-id:
-    description: "NikCLI GitHub App ID"
+  ragu-app-id:
+    description: "Ragu GitHub App ID"
     required: true
-  nikcli-app-secret:
-    description: "NikCLI GitHub App private key"
+  ragu-app-secret:
+    description: "Ragu GitHub App private key"
     required: true
 outputs:
   token:
@@ -21,8 +21,8 @@ runs:
       id: apptoken
       uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
       with:
-        app-id: ${{ inputs.nikcli-app-id }}
-        private-key: ${{ inputs.nikcli-app-secret }}
+        app-id: ${{ inputs.ragu-app-id }}
+        private-key: ${{ inputs.ragu-app-secret }}
         owner: ${{ github.repository_owner }}
 
     - name: Configure git user

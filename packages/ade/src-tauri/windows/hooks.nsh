@@ -19,7 +19,7 @@
 !macro NSIS_HOOK_PREUNINSTALL
   ${If} $UpdateMode <> 1
     !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
-    ; ADE's hooks and plugin out of Claude Code, Codex and nikcli.
+    ; ADE's hooks and plugin out of Claude Code, Codex and ragu.
     ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --unlink-agents'
     ; What it downloaded and can download again: the voices, NikVerse's assets, the plugins' files, the WebView caches.
     ; (The plugins' folder is A1's, removed on 2026-10-06: the cleanup stays for whoever had them.)

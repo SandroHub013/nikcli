@@ -1,12 +1,12 @@
 import { createMemo, For, Show, type ComponentProps } from "solid-js"
 import { useParams } from "@solidjs/router"
-import { Button } from "@nikcli-ai/ui/button"
-import { BasicTool } from "@nikcli-ai/ui/basic-tool"
+import { Button } from "@ragu/ui/button"
+import { BasicTool } from "@ragu/ui/basic-tool"
 import { PromptInput } from "@/components/prompt-input"
 import { QuestionDock } from "@/components/question-dock"
 import { questionSubtitle } from "@/pages/session/session-prompt-helpers"
 import { useSync } from "@/context/sync"
-import { formatInstructionDelta, visibleInstructionNotices } from "@nikcli-ai/util/instruction-delta"
+import { formatInstructionDelta, visibleInstructionNotices } from "@ragu/util/instruction-delta"
 
 const questionDockRequest = (value: unknown) => value as ComponentProps<typeof QuestionDock>["request"]
 

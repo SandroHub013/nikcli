@@ -1,7 +1,7 @@
 import path from "path"
 import { createStore, produce } from "solid-js/store"
 import { batch } from "solid-js"
-import { Global } from "@nikcli-ai/util/global"
+import { Global } from "@ragu/util/global"
 import { createSimpleContext } from "./helper"
 import { useSDK } from "./sdk"
 

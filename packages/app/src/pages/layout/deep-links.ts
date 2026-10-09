@@ -1,7 +1,7 @@
-export const deepLinkEvent = "nikcli:deep-link"
+export const deepLinkEvent = "ragu:deep-link"
 
 export const parseDeepLink = (input: string) => {
-  if (!input.startsWith("nikcli://")) return
+  if (!input.startsWith("ragu://")) return
   const url = new URL(input)
   if (url.hostname !== "open-project") return
   const directory = url.searchParams.get("directory")
@@ -12,15 +12,15 @@ export const parseDeepLink = (input: string) => {
 export const collectOpenProjectDeepLinks = (urls: string[]) =>
   urls.map(parseDeepLink).filter((directory): directory is string => !!directory)
 
-type NikcliWindow = Window & {
-  __NIKCLI__?: {
+type RaguWindow = Window & {
+  __RAGU__?: {
     deepLinks?: string[]
   }
 }
 
-export const drainPendingDeepLinks = (target: NikcliWindow) => {
-  const pending = target.__NIKCLI__?.deepLinks ?? []
+export const drainPendingDeepLinks = (target: RaguWindow) => {
+  const pending = target.__RAGU__?.deepLinks ?? []
   if (pending.length === 0) return []
-  if (target.__NIKCLI__) target.__NIKCLI__.deepLinks = []
+  if (target.__RAGU__) target.__RAGU__.deepLinks = []
   return pending
 }

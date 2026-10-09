@@ -41,15 +41,15 @@ const tables = [
   { table: "sync_event, sync_sequence, sync_snapshot, sync_outbox", owner: "src/sync/sync.sql.ts", purpose: "The sync event journal, sequences, snapshots, and idempotent outbox." },
   { table: "workspace", owner: "src/workspace/workspace.sql.ts", purpose: "Workspace records, target config, and status." },
   { table: "users, user_sessions, chat_contacts, chat_messages", owner: "src/user/users.sql.ts", purpose: "Local server accounts and the chat surface." },
-  { table: "account, config", owner: "src/account/account.sql.ts", purpose: "nikcli account records, tokens, and the active account." },
+  { table: "account, config", owner: "src/account/account.sql.ts", purpose: "ragu account records, tokens, and the active account." },
   { table: "mobile_tokens", owner: "src/mobile/auth.sql.ts", purpose: "Hashed mobile bearer tokens with creation, last-used, and expiry." },
 ];
 ---
 
 <DocsLayout
   title="Storage"
-  subtitle="Where nikcli keeps persistent data: one SQLite database, the repository layer above it, migrations, and the files that stay on disk."
-  description="Reference for nikcli persistent storage — the nikcli.db SQLite database, Drizzle schema, repositories, migrations, and data roots."
+  subtitle="Where ragu keeps persistent data: one SQLite database, the repository layer above it, migrations, and the files that stay on disk."
+  description="Reference for ragu persistent storage — the nikcli.db SQLite database, Drizzle schema, repositories, migrations, and data roots."
   toc={toc}
 >
   <section id="overview" class="doc-section">
@@ -75,14 +75,14 @@ const tables = [
       <DocCard title="Data root" eyebrow="Global.Path.data">
         <p>
           Holds <code>nikcli.db</code>, <code>log/</code>, <code>bin/</code>, <code>repos/</code>,
-          and snapshots. Override with <code>NIKCLI_DATA_DIR</code>, or isolate in tests with
-          <code>NIKCLI_TEST_HOME</code>.
+          and snapshots. Override with <code>RAGU_DATA_DIR</code>, or isolate in tests with
+          <code>RAGU_TEST_HOME</code>.
         </p>
       </DocCard>
       <DocCard title="One database" eyebrow="src/database/database.ts">
         <p>
           <code>bun:sqlite</code> in WAL mode behind a Drizzle client, opened once per filename and
-          shared by every domain module. <code>NIKCLI_DB</code> overrides the filename.
+          shared by every domain module. <code>RAGU_DB</code> overrides the filename.
         </p>
       </DocCard>
       <DocCard title="Repositories" eyebrow="*.sql.ts + *-repo.ts">
@@ -103,7 +103,7 @@ const tables = [
   <section id="path-roots" class="doc-section">
     <h2>Path roots</h2>
     <p>
-      <code>@nikcli-ai/util/global</code> owns the global directory model. On startup,
+      <code>@ragu/util/global</code> owns the global directory model. On startup,
       <code>initialize()</code> creates the data, cache, config, state, log, bin, and repos
       directories. macOS and Linux follow XDG roots; Windows uses the native AppData layout instead
       of POSIX dotfiles.
@@ -113,7 +113,7 @@ const tables = [
       <tbody>
         <tr><td><code>Global.Path.data</code></td><td>Long-lived user data</td><td><code>nikcli.db</code> (plus its <code>-wal</code>/<code>-shm</code> siblings), <code>auth.json</code>, <code>snapshot/</code>, <code>plans/</code>.</td></tr>
         <tr><td><code>Global.Path.log</code></td><td>Logs</td><td><code>data/log</code>. Where <code>--print-logs</code> output is also written.</td></tr>
-        <tr><td><code>Global.Path.bin</code></td><td>nikcli-managed binaries</td><td><code>data/bin</code>: LSP downloads, language servers, support binaries.</td></tr>
+        <tr><td><code>Global.Path.bin</code></td><td>ragu-managed binaries</td><td><code>data/bin</code>: LSP downloads, language servers, support binaries.</td></tr>
         <tr><td><code>Global.Path.repos</code></td><td>Hosted repositories</td><td><code>data/repos</code>: imported or managed repositories.</td></tr>
         <tr><td><code>Global.Path.cache</code></td><td>Disposable cache</td><td>Model lists, package cache, file search indexes. A cache-version bump clears the directory.</td></tr>
         <tr><td><code>Global.Path.config</code></td><td>User config</td><td><code>nikcli.json</code>, managed config, global themes, global skills.</td></tr>
@@ -121,14 +121,14 @@ const tables = [
       </tbody>
     </table>
     <DocCode language="bash">
-NIKCLI_DATA_DIR=/srv/nikcli-data nikcli serve --hostname 0.0.0.0 --port 4096
-NIKCLI_DB=:memory: bun test test/path/file.test.ts
-NIKCLI_TEST_HOME=/tmp/nikcli-test bun test test/path/file.test.ts
+RAGU_DATA_DIR=/srv/ragu-data ragu serve --hostname 0.0.0.0 --port 4096
+RAGU_DB=:memory: bun test test/path/file.test.ts
+RAGU_TEST_HOME=/tmp/ragu-test bun test test/path/file.test.ts
     </DocCode>
     <DocCallout type="warn" title="Path holders must re-resolve">
       <p>
         <code>Global.Path.*</code> are getters, and the test suite swaps
-        <code>NIKCLI_TEST_HOME</code> per file. A singleton that captures a path at module load will
+        <code>RAGU_TEST_HOME</code> per file. A singleton that captures a path at module load will
         keep writing to the previous home — resolve paths on access, not at import time.
       </p>
     </DocCallout>
@@ -137,7 +137,7 @@ NIKCLI_TEST_HOME=/tmp/nikcli-test bun test test/path/file.test.ts
   <section id="database" class="doc-section">
     <h2>The database</h2>
     <p>
-      <code>Database.path()</code> resolves the filename: <code>NIKCLI_DB</code> when set (absolute,
+      <code>Database.path()</code> resolves the filename: <code>RAGU_DB</code> when set (absolute,
       relative to the data root, or the literal <code>:memory:</code>), otherwise
       <code>&lt;data&gt;/nikcli.db</code>. Opening applies a fixed set of PRAGMAs, runs pending
       migrations, and checkpoints the WAL.
@@ -275,9 +275,9 @@ NIKCLI_TEST_HOME=/tmp/nikcli-test bun test test/path/file.test.ts
       <tbody>
         <tr><td>Config</td><td><code>nikcli.json</code> in the config dir and project roots</td><td>Users edit and version-control it. See <a href="/docs/configuration">Configuration</a>.</td></tr>
         <tr><td>Provider auth</td><td><code>auth.json</code> under the data root</td><td>Credentials with their own read/write path and permissions.</td></tr>
-        <tr><td>Plans</td><td><code>.nikcli/plans</code> in the worktree, or <code>data/plans</code> for non-VCS sessions</td><td>Markdown meant to be read, diffed, and committed.</td></tr>
+        <tr><td>Plans</td><td><code>.ragu/plans</code> in the worktree, or <code>data/plans</code> for non-VCS sessions</td><td>Markdown meant to be read, diffed, and committed.</td></tr>
         <tr><td>Snapshots</td><td><code>data/snapshot</code></td><td>Content-addressed file trees for revert.</td></tr>
-        <tr><td>Skills, commands, agents, themes</td><td>Config directories and <code>.nikcli/</code></td><td>Authored as files by users and plugins.</td></tr>
+        <tr><td>Skills, commands, agents, themes</td><td>Config directories and <code>.ragu/</code></td><td>Authored as files by users and plugins.</td></tr>
         <tr><td>Brain memory</td><td><code>.github/instructions/memory.instruction.md</code></td><td>An instruction file the model reads. See <a href="/docs/brain">Brain</a>.</td></tr>
         <tr><td>Logs</td><td><code>data/log</code></td><td>Append-only and read with ordinary tooling.</td></tr>
       </tbody>
@@ -287,7 +287,7 @@ NIKCLI_TEST_HOME=/tmp/nikcli-test bun test test/path/file.test.ts
   <section id="operational-checks" class="doc-section">
     <h2>Operational checks</h2>
     <DocCode language="bash">
-nikcli debug paths
+ragu debug paths
 
 DB="$HOME/.local/share/nikcli/nikcli.db"
 sqlite3 "$DB" ".tables"
@@ -298,7 +298,7 @@ sqlite3 "$DB" "pragma integrity_check;"
     </DocCode>
     <p>
       On macOS and Linux the default data root follows the XDG data location; on Windows it is the
-      nikcli directory under Local AppData. If <code>NIKCLI_DATA_DIR</code> or <code>NIKCLI_DB</code>
+      ragu directory under Local AppData. If <code>RAGU_DATA_DIR</code> or <code>RAGU_DB</code>
       is set, inspect that path instead.
     </p>
   </section>
@@ -308,12 +308,12 @@ sqlite3 "$DB" "pragma integrity_check;"
     <table class="doc-table">
       <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
       <tbody>
-        <tr><td>Session list is empty</td><td>Wrong data root, or sessions belong to a different project/worktree.</td><td><code>nikcli debug paths</code>, then query <code>session_info</code> for the project id you expect.</td></tr>
-        <tr><td>Sessions vanished after upgrading</td><td>The JSON import migration did not run — usually a different <code>NIKCLI_DATA_DIR</code> than the old install used.</td><td>Point the data root at the old location and restart so the import migration sees <code>data/storage</code>.</td></tr>
+        <tr><td>Session list is empty</td><td>Wrong data root, or sessions belong to a different project/worktree.</td><td><code>ragu debug paths</code>, then query <code>session_info</code> for the project id you expect.</td></tr>
+        <tr><td>Sessions vanished after upgrading</td><td>The JSON import migration did not run — usually a different <code>RAGU_DATA_DIR</code> than the old install used.</td><td>Point the data root at the old location and restart so the import migration sees <code>data/storage</code>.</td></tr>
         <tr><td>Startup throws from a migration</td><td>A migration failed and rolled back; it will retry on every open.</td><td>Read the <code>database-migration</code> log lines, fix the source data or permissions, restart.</td></tr>
         <tr><td>Writes wait or fail</td><td>Another process holds the write lock past <code>busy_timeout</code>, or the file is on a filesystem that does not do WAL cleanly.</td><td>Close competing processes; move the data root to a local filesystem.</td></tr>
-        <tr><td>Database is locked in tests</td><td>A stray <code>nikcli</code> binary is still running against the same file.</td><td>Kill leftover processes, remove <code>dist/</code>, re-run the file alone.</td></tr>
-        <tr><td>Mobile token works once then fails</td><td>Token expired or was revoked.</td><td><code>nikcli mobile token list</code>, then issue a new token.</td></tr>
+        <tr><td>Database is locked in tests</td><td>A stray <code>ragu</code> binary is still running against the same file.</td><td>Kill leftover processes, remove <code>dist/</code>, re-run the file alone.</td></tr>
+        <tr><td>Mobile token works once then fails</td><td>Token expired or was revoked.</td><td><code>ragu mobile token list</code>, then issue a new token.</td></tr>
         <tr><td>Manual SQL edits are not visible</td><td>The process holds an open connection with its own page cache.</td><td>Restart the process after editing the database out of band.</td></tr>
       </tbody>
     </table>
@@ -324,17 +324,17 @@ sqlite3 "$DB" "pragma integrity_check;"
     <table class="doc-table">
       <thead><tr><th>File</th><th>What to inspect</th></tr></thead>
       <tbody>
-        <tr><td><code>packages/nikcli/src/database/database.ts</code></td><td>Filename resolution, PRAGMAs, singleton client, transactions, post-commit effects, WAL checkpoint loop.</td></tr>
-        <tr><td><code>packages/nikcli/src/database/schema.ts</code></td><td>The complete table surface, re-exported from every domain module.</td></tr>
-        <tr><td><code>packages/nikcli/src/database/migration.ts</code></td><td>Migration table, applied-id set, transactional apply loop.</td></tr>
-        <tr><td><code>packages/nikcli/src/database/migration/</code></td><td>The migrations themselves, including the legacy JSON and per-domain database imports.</td></tr>
-        <tr><td><code>@nikcli-ai/util/global</code></td><td>XDG/AppData path resolution, <code>NIKCLI_DATA_DIR</code>, <code>NIKCLI_TEST_HOME</code>, cache versioning.</td></tr>
-        <tr><td><code>packages/nikcli/src/session/repo.ts</code>, <code>session.sql.ts</code></td><td>The canonical repository + schema pair, including the hot-column/JSON-blob split.</td></tr>
-        <tr><td><code>packages/nikcli/src/session/message-repo.ts</code>, <code>message.sql.ts</code></td><td>Message and part persistence.</td></tr>
-        <tr><td><code>packages/nikcli/src/session/v2/</code></td><td>The event-sourced entry log and its persisted projection. See <a href="/docs/sessions">Sessions</a>.</td></tr>
-        <tr><td><code>packages/nikcli/src/sync/</code></td><td>Event journal, projectors, snapshots, and the idempotent outbox. See <a href="/docs/sync">Sync</a>.</td></tr>
-        <tr><td><code>packages/nikcli/src/mobile/auth.ts</code>, <code>auth.sql.ts</code></td><td>Mobile token hashing, caching, and bearer parsing.</td></tr>
-        <tr><td><code>packages/nikcli/src/workspace/workspace.sql.ts</code></td><td>Workspace records, targets, and status.</td></tr>
+        <tr><td><code>packages/ragu/src/database/database.ts</code></td><td>Filename resolution, PRAGMAs, singleton client, transactions, post-commit effects, WAL checkpoint loop.</td></tr>
+        <tr><td><code>packages/ragu/src/database/schema.ts</code></td><td>The complete table surface, re-exported from every domain module.</td></tr>
+        <tr><td><code>packages/ragu/src/database/migration.ts</code></td><td>Migration table, applied-id set, transactional apply loop.</td></tr>
+        <tr><td><code>packages/ragu/src/database/migration/</code></td><td>The migrations themselves, including the legacy JSON and per-domain database imports.</td></tr>
+        <tr><td><code>@ragu/util/global</code></td><td>XDG/AppData path resolution, <code>RAGU_DATA_DIR</code>, <code>RAGU_TEST_HOME</code>, cache versioning.</td></tr>
+        <tr><td><code>packages/ragu/src/session/repo.ts</code>, <code>session.sql.ts</code></td><td>The canonical repository + schema pair, including the hot-column/JSON-blob split.</td></tr>
+        <tr><td><code>packages/ragu/src/session/message-repo.ts</code>, <code>message.sql.ts</code></td><td>Message and part persistence.</td></tr>
+        <tr><td><code>packages/ragu/src/session/v2/</code></td><td>The event-sourced entry log and its persisted projection. See <a href="/docs/sessions">Sessions</a>.</td></tr>
+        <tr><td><code>packages/ragu/src/sync/</code></td><td>Event journal, projectors, snapshots, and the idempotent outbox. See <a href="/docs/sync">Sync</a>.</td></tr>
+        <tr><td><code>packages/ragu/src/mobile/auth.ts</code>, <code>auth.sql.ts</code></td><td>Mobile token hashing, caching, and bearer parsing.</td></tr>
+        <tr><td><code>packages/ragu/src/workspace/workspace.sql.ts</code></td><td>Workspace records, targets, and status.</td></tr>
       </tbody>
     </table>
   </section>

@@ -11,7 +11,7 @@
 
 import { calculateRms } from "./level"
 import { MicPermissionDenied, MicUnavailable } from "../effect/errors"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 
 export type MicLevelCallback = (level: number) => void
 

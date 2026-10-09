@@ -1,5 +1,5 @@
 /**
- * Registers the global `/nikcli` slash command used by the Cloudflare
+ * Registers the global `/ragu` slash command used by the Cloudflare
  * Interactions Worker (`src/worker.ts`).
  *
  * The Gateway bot registers its own commands on ready; the Worker cannot,
@@ -31,12 +31,12 @@ if (!applicationId) {
 
 const commands = [
   {
-    name: "nikcli",
-    description: "Ask nikcli to work on something",
+    name: "ragu",
+    description: "Ask ragu to work on something",
     options: [
       {
         name: "prompt",
-        description: "What should nikcli do?",
+        description: "What should ragu do?",
         type: 3, // STRING
         required: true,
       },
@@ -59,7 +59,7 @@ if (!response.ok) {
   process.exit(1)
 }
 
-console.log(guildId ? `Registered /nikcli in guild ${guildId}` : "Registered /nikcli globally (up to 1h to appear)")
+console.log(guildId ? `Registered /ragu in guild ${guildId}` : "Registered /ragu globally (up to 1h to appear)")
 
 async function lookupApplicationId(botToken: string): Promise<string | null> {
   const response = await fetch(`${DISCORD_API}/users/@me`, {

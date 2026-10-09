@@ -29,7 +29,7 @@ export interface Interface {
   readonly scan: (cassette: Cassette) => ReadonlyArray<SecretFinding>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@nikcli-ai/http-recorder/Cassette") {}
+export class Service extends Context.Service<Service, Interface>()("@ragu/http-recorder/Cassette") {}
 
 export const layer = (options: { readonly directory?: string } = {}) =>
   Layer.effect(

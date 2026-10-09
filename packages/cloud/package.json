@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@nikcli-ai/cloud",
+  "name": "@ragu/cloud",
   "version": "1.431.0",
   "private": true,
   "type": "module",
@@ -8,10 +8,10 @@
     "dev": "wrangler dev",
     "typecheck": "tsc --noEmit",
     "deploy": "wrangler deploy",
-    "db:migrate:local": "wrangler d1 migrations apply nikcli-cloud --local"
+    "db:migrate:local": "wrangler d1 migrations apply ragu-cloud --local"
   },
   "dependencies": {
-    "@nikcli-ai/auth": "workspace:*",
+    "@ragu/auth": "workspace:*",
     "hono": "catalog:",
     "jose": "5.9.6",
     "zod": "catalog:"

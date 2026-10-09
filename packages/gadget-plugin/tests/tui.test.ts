@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import path from "node:path"
-import { parseManifest } from "@nikcli-ai/plugin/v2/manifest"
+import { parseManifest } from "@ragu/plugin/v2/manifest"
 import tui, { setup } from "../src/tui.tsx"
 import { Bridge } from "../src/bridge.ts"
-import { Gadget } from "@nikcli-ai/gadget"
-import type { Context } from "@nikcli-ai/plugin/v2/tui/context"
+import { Gadget } from "@ragu/gadget"
+import type { Context } from "@ragu/plugin/v2/tui/context"
 import { tempDir, until } from "./helpers.ts"
 
 interface Seen {
@@ -46,11 +46,11 @@ function context(url: string): { context: Context; seen: Seen } {
 let temp: ReturnType<typeof tempDir>
 let bridge: Bridge
 let aborts: Array<() => void> = []
-const saved = process.env.NIKCLI_GADGET_STATE
+const saved = process.env.RAGU_GADGET_STATE
 
 beforeEach(() => {
   temp = tempDir()
-  process.env.NIKCLI_GADGET_STATE = path.join(temp.dir, "device")
+  process.env.RAGU_GADGET_STATE = path.join(temp.dir, "device")
   bridge = new Bridge({ port: 0, host: "127.0.0.1", file: path.join(temp.dir, "devices.json"), log: () => undefined })
   bridge.start()
 })
@@ -60,8 +60,8 @@ afterEach(() => {
   aborts = []
   bridge.stop()
   temp.cleanup()
-  if (saved === undefined) delete process.env.NIKCLI_GADGET_STATE
-  else process.env.NIKCLI_GADGET_STATE = saved
+  if (saved === undefined) delete process.env.RAGU_GADGET_STATE
+  else process.env.RAGU_GADGET_STATE = saved
 })
 
 const url = () => `http://127.0.0.1:${bridge.port}`
@@ -82,7 +82,7 @@ function slash(seen: Seen) {
 
 describe("the TUI plugin", () => {
   test("its manifest is valid and asks only for what the TUI host supplies", () => {
-    const manifest = parseManifest(tui.manifest, "nikcli:gadgets")
+    const manifest = parseManifest(tui.manifest, "ragu:gadgets")
     expect(manifest.capabilities).toEqual(["commands", "routes"])
     expect(tui.id).toBe(manifest.id)
   })

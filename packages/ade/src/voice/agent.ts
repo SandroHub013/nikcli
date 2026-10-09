@@ -3,7 +3,7 @@
  *
  * It is a coding agent's CLI running one turn per sentence (`bots/turn.ts`),
  * signed in with the user's own account — Claude Code with an Anthropic
- * subscription, Codex with ChatGPT, nikcli with its providers — so a spoken
+ * subscription, Codex with ChatGPT, ragu with its providers — so a spoken
  * request costs the subscription the user already has, not a key billed per
  * call. A voice turn runs under the CLI's own sign-in (account-plan): an
  * ANTHROPIC_API_KEY or ANTHROPIC_BASE_URL inherited from ADE's environment is
@@ -22,22 +22,22 @@ import { answerSoFar, type RunnerId } from "../bots/runners"
 import type { Talk } from "../bots/talk"
 import type { TurnRequest, TurnResult } from "../bots/turn"
 import { locale as currentAppLocale, t, translate } from "../i18n"
-import { PLANNER_SYSTEM } from "@nikcli-ai/voice/core"
+import { PLANNER_SYSTEM } from "@ragu/voice/core"
 
-export type VoiceAgentEngine = "auto" | "claude" | "codex" | "nikcli"
+export type VoiceAgentEngine = "auto" | "claude" | "codex" | "ragu"
 
 /** Runner id to the catalogue id whose PATH probe says whether it is installed. */
 const CATALOGUE_ID: Record<RunnerId, string> = {
   claude: "claude-code",
   codex: "codex",
-  nikcli: "nikcli",
+  ragu: "ragu",
 }
 
 /**
  * `auto` tries these in order: the subscriptions most users have first.
  *
- * nikcli is not among them. A voice turn must not change the project, and
- * nikcli cannot be told so for one turn (`enforcesDisabledTools`): it would
+ * ragu is not among them. A voice turn must not change the project, and
+ * ragu cannot be told so for one turn (`enforcesDisabledTools`): it would
  * only have the instructions asking it not to.
  */
 const AUTO_ORDER: readonly RunnerId[] = ["claude", "codex"]
@@ -58,7 +58,7 @@ export const VOICE_AGENT_TIMEOUT_MS = 150_000
 export const VOICE_AGENT_FAST: Record<RunnerId, { readonly model?: string; readonly effort?: string }> = {
   claude: { model: "claude-sonnet-5-5", effort: "low" },
   codex: { effort: "low" },
-  nikcli: {},
+  ragu: {},
 }
 
 /**
@@ -81,11 +81,11 @@ export const VOICE_PLAN_FIRST_TOKEN_MS = { warm: 4_000, cold: 8_000 } as const
 export const VOICE_PLAN_IDLE_MS = 3 * 60_000
 
 /**
- * The free models nikcli's planner may use, in order of preference. The turn picks one when it runs, from
+ * The free models ragu's planner may use, in order of preference. The turn picks one when it runs, from
  * the server's catalog (`TurnRequest.freeModels`): a list, because a free model leaves the catalog one day.
  * The user's own model comes first when it is free. A paid one is never used.
  */
-export const VOICE_PLAN_NIKCLI_FREE_MODELS: readonly string[] = [
+export const VOICE_PLAN_RAGU_FREE_MODELS: readonly string[] = [
   "openrouter/google/gemma-4-31b-it:free",
   "openrouter/google/gemma-4-26b-a4b-it:free",
   "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
@@ -118,12 +118,12 @@ export function resolveVoiceAgentRunner(
   statuses: readonly AgentStatus[] | undefined,
   lang: "it" | "en" = "it",
 ): { runner: RunnerId } | { problem: string } {
-  if (engine === "nikcli") {
+  if (engine === "ragu") {
     return {
       problem:
         lang === "en"
-          ? "nikcli cannot answer voice in read-only mode: choose Claude Code or Codex."
-          : "nikcli non può rispondere alla voce in sola lettura: scegli Claude Code o Codex.",
+          ? "ragu cannot answer voice in read-only mode: choose Claude Code or Codex."
+          : "ragu non può rispondere alla voce in sola lettura: scegli Claude Code o Codex.",
     }
   }
   if (engine !== "auto") return { runner: engine }
@@ -371,8 +371,8 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
 
     async plan({ system, user, engine, speed, signal, onText }) {
       const resolved =
-        engine === "nikcli"
-          ? { runner: "nikcli" as RunnerId }
+        engine === "ragu"
+          ? { runner: "ragu" as RunnerId }
           : resolveVoiceAgentRunner(engine, deps.statuses(), currentLocale())
       if ("problem" in resolved) throw new Error(translate(currentLocale(), "voice.msg.plan.cant", resolved.problem))
       const runner = resolved.runner
@@ -387,12 +387,12 @@ export function createVoiceAgent(deps: VoiceAgentDeps): VoiceAgent {
         )
       }
       const base =
-        runner === "nikcli"
-          ? // Nothing to refuse: nikcli would refuse the turn for want of a way to enforce it.
+        runner === "ragu"
+          ? // Nothing to refuse: ragu would refuse the turn for want of a way to enforce it.
             {
               ...planFor(runner, deps.cwd(), speed, system),
               disabledTools: [],
-              freeModels: VOICE_PLAN_NIKCLI_FREE_MODELS,
+              freeModels: VOICE_PLAN_RAGU_FREE_MODELS,
             }
           : planFor(runner, deps.cwd(), speed, system)
       let last = ""

@@ -16,8 +16,8 @@
  * routing a frame to the wrong socket if that ever stops being true.
  */
 
-import type { SttStreamEvent, SttStreamOpenOptions, SttStreamTransport } from "@nikcli-ai/voice"
-import { STT_STREAM_CANCELLED } from "@nikcli-ai/voice/core"
+import type { SttStreamEvent, SttStreamOpenOptions, SttStreamTransport } from "@ragu/voice"
+import { STT_STREAM_CANCELLED } from "@ragu/voice/core"
 
 /** The four Rust commands, as the page sees them. Tests pass a fake. */
 export interface SttStreamBridge {

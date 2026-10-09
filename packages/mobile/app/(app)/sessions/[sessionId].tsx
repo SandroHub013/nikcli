@@ -1746,7 +1746,7 @@ export default function SessionScreen() {
               source={isDark ? MARK_DARK : MARK_LIGHT}
               style={{ width: 56, height: 56 }}
               resizeMode="contain"
-              accessibilityLabel="NIKCLI"
+              accessibilityLabel="RAGU"
             />
             <Text style={{ color: palette.ink, textAlign: "center", ...typeStyle(24, { weight: "600" }) }}>
               What are we building?

@@ -1,4 +1,4 @@
-import { verifyAccessToken } from "@nikcli-ai/auth"
+import { verifyAccessToken } from "@ragu/auth"
 import type { APIContext, AstroCookies } from "astro"
 import { getEnv, type RuntimeEnv } from "./env"
 
@@ -17,7 +17,7 @@ function verifier(env: RuntimeEnv) {
   const issuer = env.AUTH_ISSUER || "https://auth.nikcli-ai.dev"
   return {
     issuer,
-    audience: env.AUTH_AUDIENCE || "nikcli-api",
+    audience: env.AUTH_AUDIENCE || "ragu-api",
     jwksUrl: env.AUTH_JWKS_URL || `${issuer.replace(/\/$/, "")}/.well-known/jwks.json`,
   }
 }
@@ -109,7 +109,7 @@ export async function getCurrentUser(ctx: APIContext): Promise<AuthUser | null> 
     body: new URLSearchParams({
       grant_type: "refresh_token",
       refresh_token: refresh,
-      client_id: "nikcli-inference-dashboard",
+      client_id: "ragu-inference-dashboard",
     }),
   })
   if (!response.ok) {

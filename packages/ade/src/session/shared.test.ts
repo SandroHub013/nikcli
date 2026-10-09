@@ -100,22 +100,22 @@ describe("kv locks of the machine (pc:)", () => {
     who: { id: string; title: string },
     request: KvRequest,
     now = 1000,
-  ) => applyKvAcross(store, { sender: project, ui: "nikcli" }, request, who, now, everyoneAlive)
+  ) => applyKvAcross(store, { sender: project, ui: "ragu" }, request, who, now, everyoneAlive)
 
   test("kvSpaceFor: a pc: key is one space for every project, the others are the sender's project", () => {
-    expect(kvSpaceFor("pc:sweep", "nikcli", "ui")).toBe(KV_MACHINE_SPACE)
+    expect(kvSpaceFor("pc:sweep", "ragu", "ui")).toBe(KV_MACHINE_SPACE)
     expect(kvSpaceFor("pc:sweep", "sandrobench", "ui")).toBe(KV_MACHINE_SPACE)
-    expect(kvSpaceFor("sweep", "nikcli", "ui")).toBe("nikcli")
+    expect(kvSpaceFor("sweep", "ragu", "ui")).toBe("ragu")
     expect(kvSpaceFor("sweep", "sandrobench", "ui")).toBe("sandrobench")
     expect(kvSpaceFor("sweep", undefined, "ui")).toBe("ui")
     expect(kvSpaceFor("sweep", undefined, undefined)).toBe("workspace")
     // Not a prefix of the middle of a key.
-    expect(kvSpaceFor("src/pc:x", "nikcli", "ui")).toBe("nikcli")
+    expect(kvSpaceFor("src/pc:x", "ragu", "ui")).toBe("ragu")
   })
 
   test("two projects on pc:sweep: the second gets the error", () => {
     let store: Store = {}
-    const first = call(store, "nikcli", alice, req("lock", "pc:sweep"))
+    const first = call(store, "ragu", alice, req("lock", "pc:sweep"))
     expect(first.reply).toStartWith("ok")
     store = first.store
     const second = call(store, "sandrobench", bob, req("lock", "pc:sweep"))
@@ -125,26 +125,26 @@ describe("kv locks of the machine (pc:)", () => {
 
   test("two projects on sweep without the prefix: both get ok, as before", () => {
     let store: Store = {}
-    store = call(store, "nikcli", alice, req("lock", "sweep")).store
+    store = call(store, "ragu", alice, req("lock", "sweep")).store
     expect(call(store, "sandrobench", bob, req("lock", "sweep")).reply).toStartWith("ok")
   })
 
   test("the reply says where the lock holds", () => {
-    expect(call({}, "nikcli", alice, req("lock", "pc:sweep")).reply).toContain("su tutta la macchina")
-    const own = call({}, "nikcli", alice, req("lock", "sweep")).reply
-    expect(own).toContain("nel progetto nikcli")
+    expect(call({}, "ragu", alice, req("lock", "pc:sweep")).reply).toContain("su tutta la macchina")
+    const own = call({}, "ragu", alice, req("lock", "sweep")).reply
+    expect(own).toContain("nel progetto ragu")
     expect(own).not.toContain("su tutta la macchina")
   })
 
   test("list from another project shows the pc: lock, and the project's own keys too", () => {
     let store: Store = {}
-    store = call(store, "nikcli", alice, req("lock", "pc:ade-test", "Brief 34")).store
+    store = call(store, "ragu", alice, req("lock", "pc:ade-test", "Brief 34")).store
     store = call(store, "sandrobench", bob, req("set", "build/status", "verde")).store
     const seen = call(store, "sandrobench", bob, req("list", "")).reply
     expect(seen).toContain("lock pc:ade-test: alice")
     expect(seen).toContain("build/status = verde")
     // The project's keys of another project are not shown.
-    expect(call(store, "nikcli", alice, req("list", "")).reply).not.toContain("build/status")
+    expect(call(store, "ragu", alice, req("list", "")).reply).not.toContain("build/status")
     // A prefix narrows both.
     expect(call(store, "sandrobench", bob, req("list", "pc:")).reply).toContain("lock pc:ade-test")
     expect(call(store, "sandrobench", bob, req("list", "build/")).reply).not.toContain("pc:ade-test")
@@ -156,41 +156,41 @@ describe("kv locks of the machine (pc:)", () => {
       entries: {},
       locks: { "pc:ade-test": { owner: "p9", ownerTitle: "vecchio", until: 1000 + 10_000 } },
     }
-    let store: Store = { nikcli: old }
+    let store: Store = { ragu: old }
     store = call(store, "sandrobench", alice, req("lock", "pc:ade-test"), 1000).store
-    const seen = call(store, "nikcli", bob, req("list", ""), 2000).reply
+    const seen = call(store, "ragu", bob, req("list", ""), 2000).reply
     expect(seen).toContain("lock pc:ade-test: alice")
     expect(seen).not.toContain("vecchio")
   })
 
   test("values under pc: are one for the machine too", () => {
     let store: Store = {}
-    store = call(store, "nikcli", alice, req("set", "pc:gpu", "libera")).store
+    store = call(store, "ragu", alice, req("set", "pc:gpu", "libera")).store
     expect(call(store, "sandrobench", bob, req("get", "pc:gpu")).reply).toBe("ok\nlibera")
   })
 
   test("the owner renews its own pc: lock and the expiry moves", () => {
     let store: Store = {}
-    store = call(store, "nikcli", alice, req("lock", "pc:sweep", "", { ttl: 60 }), 1000).store
+    store = call(store, "ragu", alice, req("lock", "pc:sweep", "", { ttl: 60 }), 1000).store
     const until = store[KV_MACHINE_SPACE]!.locks["pc:sweep"]!.until
-    const renewed = call(store, "nikcli", alice, req("lock", "pc:sweep", "", { ttl: 600 }), 30_000)
+    const renewed = call(store, "ragu", alice, req("lock", "pc:sweep", "", { ttl: 600 }), 30_000)
     expect(renewed.reply).toStartWith("ok")
     expect(renewed.store[KV_MACHINE_SPACE]!.locks["pc:sweep"]!.until).toBeGreaterThan(until)
   })
 
   test("the expiry frees it for another project", () => {
     let store: Store = {}
-    store = call(store, "nikcli", alice, req("lock", "pc:sweep", "", { ttl: 60 }), 1000).store
+    store = call(store, "ragu", alice, req("lock", "pc:sweep", "", { ttl: 60 }), 1000).store
     expect(call(store, "sandrobench", bob, req("lock", "pc:sweep"), 30_000).reply).toStartWith("errore")
     expect(call(store, "sandrobench", bob, req("lock", "pc:sweep"), 61_001).reply).toStartWith("ok")
   })
 
   test("unlock from another project releases only the owner's lock, with --force the other's", () => {
     let store: Store = {}
-    store = call(store, "nikcli", alice, req("lock", "pc:sweep")).store
+    store = call(store, "ragu", alice, req("lock", "pc:sweep")).store
     expect(call(store, "sandrobench", bob, req("unlock", "pc:sweep")).reply).toStartWith("errore")
     expect(call(store, "sandrobench", bob, req("unlock", "pc:sweep", "", { force: true })).reply).toStartWith("ok")
-    expect(call(store, "nikcli", alice, req("unlock", "pc:sweep")).reply).toBe("ok: pc:sweep rilasciata")
+    expect(call(store, "ragu", alice, req("unlock", "pc:sweep")).reply).toBe("ok: pc:sweep rilasciata")
   })
 })
 
@@ -229,7 +229,7 @@ describe("cache stats", () => {
       {
         title: "orchestra",
         agent: "claude-code",
-        project: "nikcli",
+        project: "ragu",
         usage: { input: 100, cacheRead: 9900, cacheWrite: 0, output: 50, requests: 4 },
       },
       {
@@ -239,7 +239,7 @@ describe("cache stats", () => {
       },
     ])
     expect(table).toContain("99%")
-    expect(table).toContain("nikcli/orchestra (claude-code)")
+    expect(table).toContain("ragu/orchestra (claude-code)")
     expect(table).toContain("totale")
     expect(statsTable([])).toContain("nessun dato")
   })

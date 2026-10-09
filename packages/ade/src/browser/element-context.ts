@@ -70,7 +70,7 @@ export function describeElement(element: Partial<InspectedElement> | null | unde
   if (className) {
     const classList = className
       .split(/\s+/)
-      .filter((c) => c && !c.startsWith("__nikcli"))
+      .filter((c) => c && !c.startsWith("__ragu"))
       .slice(0, 3)
     if (classList.length > 0) {
       classes = `.${classList.join(".")}`

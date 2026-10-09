@@ -2,7 +2,7 @@ export type TerminalLaunchIntent = {
   cwd?: string
   title?: string
   sessionId?: string
-  /** Optional command to spawn instead of the login shell (e.g. "nikcli"). */
+  /** Optional command to spawn instead of the login shell (e.g. "ragu"). */
   command?: string
   args?: string[]
 }

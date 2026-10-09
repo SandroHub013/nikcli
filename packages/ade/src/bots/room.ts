@@ -30,7 +30,7 @@ import { t } from "../i18n"
  * Deliberately narrower than a bot. A room decides who speaks, and that needs
  * an identity to address and a name the user can type after an `@`; nothing
  * here has any business knowing which model a bot runs on or where its file
- * is. Narrow enough that both a nikcli agent — where the identity is the
+ * is. Narrow enough that both a ragu agent — where the identity is the
  * filename — and anything later can be a member without this file changing.
  */
 export interface RoomMember {

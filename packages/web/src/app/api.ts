@@ -1,6 +1,6 @@
 import {
-  createNikcliClient,
-  type Event as NikcliEvent,
+  createRaguClient,
+  type Event as RaguEvent,
   type FileDiff,
   type MobileAuthTokenPublic,
   type MobileBootstrap,
@@ -41,7 +41,7 @@ import {
   type Pty,
   type Session,
   type Worktree,
-} from "@nikcli-ai/sdk/httpapi"
+} from "@ragu/sdk/httpapi"
 
 export type {
   MobileGitBranchesResponse,
@@ -83,8 +83,8 @@ export type AppAccountUser = {
 
 export type ProviderCatalog = ProviderListResponse
 
-export const SERVER_CONFIG_STORAGE_KEY = "nikcli_server_config"
-export const SERVER_TOKEN_STORAGE_KEY = "nikcli_server_token"
+export const SERVER_CONFIG_STORAGE_KEY = "ragu_server_config"
+export const SERVER_TOKEN_STORAGE_KEY = "ragu_server_token"
 
 export function normalizeServerUrl(input: string) {
   const url = new URL(input.trim())
@@ -113,7 +113,7 @@ export async function loginServerAccount(serverUrl: string, email: string, passw
 export function parsePairingLink(input: string): Partial<AppServerConfig> | null {
   try {
     const parsed = new URL(input.trim())
-    if (parsed.protocol !== "nikcli:") return null
+    if (parsed.protocol !== "ragu:") return null
     const isLegacyConnect = parsed.hostname === "connect"
     const isRootConnect = !parsed.hostname && (parsed.pathname === "/" || parsed.pathname === "")
     if (!isLegacyConnect && !isRootConnect) return null
@@ -244,7 +244,7 @@ async function unwrap<T>(value: Promise<unknown>): Promise<T> {
   return resolved as T
 }
 
-export class WebNikcliClient {
+export class WebRaguClient {
   private readonly sdk
   private readonly baseUrl: string
   private readonly token?: string
@@ -252,7 +252,7 @@ export class WebNikcliClient {
   constructor(config: AppServerConfig) {
     this.baseUrl = normalizeServerUrl(config.url)
     this.token = config.token
-    this.sdk = createNikcliClient({
+    this.sdk = createRaguClient({
       baseUrl: this.baseUrl,
       directory: config.directory,
       headers: authorizationHeaders(config),
@@ -623,7 +623,7 @@ export class WebNikcliClient {
   async streamSession(input: {
     sessionID: string
     signal?: AbortSignal
-    onEvent(event: NikcliEvent): void
+    onEvent(event: RaguEvent): void
     onError?(error: string): void
   }) {
     const streamResult = await this.sdk.mobile.session.stream(
@@ -639,7 +639,7 @@ export class WebNikcliClient {
     for await (const event of streamResult.stream) {
       if (input.signal?.aborted) break
       if (event && typeof event === "object" && "type" in (event as object)) {
-        input.onEvent(event as NikcliEvent)
+        input.onEvent(event as RaguEvent)
       }
     }
   }

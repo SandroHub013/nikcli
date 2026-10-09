@@ -2,7 +2,7 @@
  * Loops — internal TUI plugin.
  *
  * Adds first-class autonomous loops to the TUI: define an objective + trigger
- * once, and nikcli drives the existing Goal system toward it on a schedule (or
+ * once, and ragu drives the existing Goal system toward it on a schedule (or
  * on demand), with a live sidebar and a `/loops` manager.
  *
  * Loops are persisted server-side (see `src/loop/`) so they keep running with
@@ -10,7 +10,7 @@
  * the engine's bus events for live updates. A local cache keeps the sidebar
  * snappy when the server is unreachable.
  */
-import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@nikcli-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@ragu/plugin/tui"
 import { createMemo, For, Show } from "solid-js"
 import * as Store from "./store"
 import * as Runner from "./runner"

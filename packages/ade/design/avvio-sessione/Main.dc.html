@@ -428,7 +428,7 @@
               d: "M8 2.8a5.2 5.2 0 1 1 0 10.4 5.2 5.2 0 0 1 0-10.4zM8 6.4a1.6 1.6 0 1 1 0 3.2 1.6 1.6 0 0 1 0-3.2z",
             },
             { id: "cursor-agent", label: "Cursor Agent", d: "M4 2.8l8.4 5-3.6 1.2-1.6 3.6z" },
-            { id: "nikcli", label: "nikcli", d: "M4.4 12.2V3.8l7.2 8.4V3.8" },
+            { id: "ragu", label: "ragu", d: "M4.4 12.2V3.8l7.2 8.4V3.8" },
             {
               id: "droid",
               label: "Droid",
@@ -506,7 +506,7 @@
           const preset = this.presets().find((p) => p.id === this.state.preset)
           const name = preset && preset.sessions === this.state.count ? preset.label : "Personalizzata"
           const word = this.state.count === 1 ? "sessione" : "sessioni"
-          return name + " · " + this.state.count + " " + word + " in nikcli"
+          return name + " · " + this.state.count + " " + word + " in ragu"
         }
 
         renderVals() {
@@ -514,8 +514,8 @@
           const selected = this.state.agentId
 
           return {
-            workspace: "nikcli",
-            path: "~/Favorites/nikcli",
+            workspace: "ragu",
+            path: "~/Favorites/ragu",
             sectionGap: compact ? "16px" : "24px",
             task: this.state.task,
             launchLabel: this.state.count === 1 ? "Avvia 1 sessione" : "Avvia " + this.state.count + " sessioni",

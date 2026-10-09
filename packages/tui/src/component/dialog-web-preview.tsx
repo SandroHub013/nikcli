@@ -8,7 +8,7 @@ import {
   detectCapabilities,
   supportsKittyUnicodePlaceholders,
   type LiveCapabilities,
-} from "@nikcli-ai/tui-image"
+} from "@ragu/tui-image"
 import { DialogHeader, useDialog } from "@tui/ui/dialog"
 import { useTheme } from "@tui/context/theme"
 import {
@@ -210,7 +210,7 @@ async function fetchPage(url: string, signal: AbortSignal): Promise<PageState> {
     signal,
     redirect: "follow",
     headers: {
-      "User-Agent": "nikcli-preview/1.0",
+      "User-Agent": "ragu-preview/1.0",
       Accept: "text/html,application/xhtml+xml,text/markdown,text/plain;q=0.9,*/*;q=0.8",
     },
   })
@@ -297,11 +297,11 @@ export function DialogWebPreview(props: DialogWebPreviewProps) {
    * dialog — Esc closed the chrome and left Google on the grid. That path is
    * off: Cursor stays in the markdown reader, like before overlay support.
    *
-   * `NIKCLI_BROWSER_LIVE=1` forces the Kitty path when detection is wrong
+   * `RAGU_BROWSER_LIVE=1` forces the Kitty path when detection is wrong
    * (a multiplexer that swallowed the capability query, say).
    */
   const liveRenderer: SurfaceRenderer | undefined =
-    process.env["NIKCLI_BROWSER_LIVE"] === "1" || supportsKittyUnicodePlaceholders(capabilities) ? "kitty" : undefined
+    process.env["RAGU_BROWSER_LIVE"] === "1" || supportsKittyUnicodePlaceholders(capabilities) ? "kitty" : undefined
 
   /** Why WebView is not on offer here, said once and plainly. */
   const noGraphicsNote = () =>

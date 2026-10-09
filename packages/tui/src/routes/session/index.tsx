@@ -25,13 +25,13 @@ import { useTheme, selectedForeground } from "@tui/context/theme"
 import { ScrollBoxRenderable, addDefaultParsers, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "@tui/component/prompt"
 import { TuiPluginRuntime } from "@tui/plugin"
-import { createNikcliClient, type Part, type SessionPendingInput2 } from "@nikcli-ai/sdk/httpapi"
+import { createRaguClient, type Part, type SessionPendingInput2 } from "@ragu/sdk/httpapi"
 import { useLocal } from "@tui/context/local"
-import { Locale } from "@nikcli-ai/util/locale"
+import { Locale } from "@ragu/util/locale"
 import { reasoningSummary } from "@tui/context/thinking"
-import { Token } from "@nikcli-ai/util/token"
+import { Token } from "@ragu/util/token"
 
-import { normalizeVizComponents } from "@nikcli-ai/util/viz"
+import { normalizeVizComponents } from "@ragu/util/viz"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -47,7 +47,7 @@ import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
-import { LANGUAGE_EXTENSIONS } from "@nikcli-ai/util/language"
+import { LANGUAGE_EXTENSIONS } from "@ragu/util/language"
 import parsers from "../../../parsers-config.ts"
 import { Clipboard } from "../../util/clipboard"
 import { Toast, useToast } from "../../ui/toast"
@@ -57,8 +57,8 @@ import { Editor } from "../../util/editor"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
-import { Filesystem } from "@nikcli-ai/util/filesystem"
-import { Global } from "@nikcli-ai/util/global"
+import { Filesystem } from "@ragu/util/filesystem"
+import { Global } from "@ragu/util/global"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
@@ -70,7 +70,7 @@ import { compilePartialSpec } from "@tui/util/spec-stream"
 import { TuiImageList } from "@tui/component/tui-image"
 import { DialogSelect } from "../../ui/dialog-select"
 import { DialogBgAgents } from "./dialog-bg-agents"
-import { features } from "@nikcli-ai/util/features"
+import { features } from "@ragu/util/features"
 import { useLanguage } from "@tui/context/language"
 import { spacerHeights, visibleRange } from "./message-window"
 import { groupParts, type ExplorationGroup } from "./rows"
@@ -97,7 +97,7 @@ import {
 import { bodyColumns, chromeRows, type StyleOf } from "@tui/context/component-tokens"
 import { AssistantMessage, PendingUserMessage, UserMessage } from "./parts"
 import { Replace } from "../../feature-plugins/mods/render"
-import { formatInstructionDelta, visibleInstructionNotices } from "@nikcli-ai/util/instruction-delta"
+import { formatInstructionDelta, visibleInstructionNotices } from "@ragu/util/instruction-delta"
 import { getScrollAcceleration, scrollChildIntoView } from "@tui/util/scroll"
 
 /** The file fields the user-message badge row and image preview read. */
@@ -321,7 +321,7 @@ export function Session() {
     if (workspaceID !== previousWorkspace) {
       project.workspace.set(workspaceID)
       // Not fatal: a worktree instance that does not answer must not exit
-      // nikcli; the session sync below still runs.
+      // ragu; the session sync below still runs.
       await sync.bootstrap({ fatal: false })
     }
     if (route.sessionID !== sessionID) return
@@ -650,8 +650,8 @@ export function Session() {
         const url = session()?.share?.url
         const shouldRefreshLocalShare =
           !!url &&
-          /^https?:\/\/(?:127\.0\.0\.1|localhost|nikcli\.local)(?::\d+)?\//i.test(url) &&
-          /^https?:\/\/nikcli\.local(?::\d+)?$/i.test(sdk.url)
+          /^https?:\/\/(?:127\.0\.0\.1|localhost|ragu\.local)(?::\d+)?\//i.test(url) &&
+          /^https?:\/\/ragu\.local(?::\d+)?$/i.test(sdk.url)
 
         if (url && !shouldRefreshLocalShare) {
           await copy(url)
@@ -662,7 +662,7 @@ export function Session() {
         try {
           await shareSession()
         } catch (error) {
-          const canStartLocalServer = /^https?:\/\/nikcli\.local(?::\d+)?$/i.test(sdk.url) && !!server.startServer
+          const canStartLocalServer = /^https?:\/\/ragu\.local(?::\d+)?$/i.test(sdk.url) && !!server.startServer
           if (!canStartLocalServer) {
             toast.show({
               message: shareErrorMessage(error),
@@ -676,7 +676,7 @@ export function Session() {
           try {
             const baseUrl = await server.startServer?.()
             if (!baseUrl) throw new Error("Failed to start local share server")
-            const client = createNikcliClient({
+            const client = createRaguClient({
               baseUrl,
               directory: sdk.directory,
               fetch: sdk.fetch,

@@ -1,5 +1,5 @@
 {
-  "name": "@nikcli-ai/ade",
+  "name": "@ragu/ade",
   "version": "1.431.0",
   "description": "Agent development environment: many live agent sessions, side by side.",
   "type": "module",
@@ -56,11 +56,11 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
-    "@nikcli-ai/plugin": "workspace:*",
-    "@nikcli-ai/sdk": "workspace:*",
-    "@nikcli-ai/ui": "workspace:*",
-    "@nikcli-ai/util": "workspace:*",
-    "@nikcli-ai/voice": "workspace:*",
+    "@ragu/plugin": "workspace:*",
+    "@ragu/sdk": "workspace:*",
+    "@ragu/ui": "workspace:*",
+    "@ragu/util": "workspace:*",
+    "@ragu/voice": "workspace:*",
     "@solid-primitives/storage": "catalog:",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-shell": "~2",

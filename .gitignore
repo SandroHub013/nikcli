@@ -26,11 +26,11 @@ target
 .direnv/
 
 # Local dev files
-nikcli-dev
+ragu-dev
 logs/
 .ade-test/
 *.bun-build
-packages/nikcli/bun/
+packages/ragu/bun/
 
 # Local RAG index (auto-generated)
 .nikcli/rag/
@@ -87,7 +87,7 @@ test-results/
 .claude/worktrees/
 .claude/settings.local.json
 
-# nikcli devhub scratch (junit reports, perf probes, playground scripts)
+# ragu devhub scratch (junit reports, perf probes, playground scripts)
 .devhub/
 packages/devhub/src-tauri/target/
 packages/devhub/src-tauri/gen/

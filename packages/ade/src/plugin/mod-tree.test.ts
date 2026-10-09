@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { modAnswerFrom, modColor, modInvalidates, modSafeHref, type ModNode } from "@nikcli-ai/ui/mod-tree-model"
+import { modAnswerFrom, modColor, modInvalidates, modSafeHref, type ModNode } from "@ragu/ui/mod-tree-model"
 
 describe("modAnswerFrom", () => {
   test("a default answer is no drawing", () => {

@@ -1,7 +1,7 @@
 /**
  * The project's mods, drawn in ADE.
  *
- * A mod is a plugin that runs in the nikcli server and answers "what do I draw here?" with a tree of
+ * A mod is a plugin that runs in the ragu server and answers "what do I draw here?" with a tree of
  * plain data. The terminal draws that tree with cells, the phone with native views, and ADE with the
  * DOM — from the same mod, which is told it is drawing for the `ade` surface and can answer with a
  * layout made for a window like this one. Edit the mod on disk and the server reloads it; the
@@ -14,9 +14,9 @@
  * Like the plugin manager, it is a v2 plugin that registers a pane, a sidebar section and a command.
  */
 import { batch, createEffect, createSignal, For, on, onCleanup, Show } from "solid-js"
-import { Plugin } from "@nikcli-ai/plugin/v2/ade"
-import { ModSite, type ModInfo, type ModPane } from "@nikcli-ai/ui/mod-tree"
-import "@nikcli-ai/ui/mod-tree.css"
+import { Plugin } from "@ragu/plugin/v2/ade"
+import { ModSite, type ModInfo, type ModPane } from "@ragu/ui/mod-tree"
+import "@ragu/ui/mod-tree.css"
 import { appChatConnectionDeps, openChat, type ChatConnection } from "../../chat/connection"
 import { t } from "../../i18n"
 import { adeModSource, type AdeModSource } from "./mods-source"

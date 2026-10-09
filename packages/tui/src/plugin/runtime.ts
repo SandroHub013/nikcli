@@ -8,15 +8,15 @@ import {
   type TuiPluginMeta,
   type TuiPluginStatus,
   type TuiTheme,
-} from "@nikcli-ai/plugin/tui"
+} from "@ragu/plugin/tui"
 import path from "path"
 import { fileURLToPath } from "url"
 
-import { pluginOptions, pluginSpecifier, type PluginOptions, type PluginSpec } from "@nikcli-ai/util/plugin-spec"
+import { pluginOptions, pluginSpecifier, type PluginOptions, type PluginSpec } from "@ragu/util/plugin-spec"
 import { pluginHost, type PluginConfigInfo, type PluginConfigMeta } from "./host"
-import { Log } from "@nikcli-ai/util/log"
-import { errorData, errorMessage } from "@nikcli-ai/util/error-format"
-import { isRecord } from "@nikcli-ai/util/record"
+import { Log } from "@ragu/util/log"
+import { errorData, errorMessage } from "@ragu/util/error-format"
+import { isRecord } from "@ragu/util/record"
 import {
   checkPluginCompatibility,
   getPluginIdFromPackage,
@@ -30,20 +30,20 @@ import {
   resolvePluginId,
   resolvePluginTarget,
   type PluginSource,
-} from "@nikcli-ai/util/plugin-shared"
-import { PluginMeta } from "@nikcli-ai/util/plugin-meta"
+} from "@ragu/util/plugin-shared"
+import { PluginMeta } from "@ragu/util/plugin-meta"
 import {
   installPlugin as installModulePlugin,
   patchPluginConfig,
   readPluginManifest,
-} from "@nikcli-ai/util/plugin-install"
+} from "@ragu/util/plugin-install"
 import { addTheme, hasTheme } from "../context/theme"
 import { createKeymapApi } from "./keymap"
-import { Global } from "@nikcli-ai/util/global"
-import { Filesystem } from "@nikcli-ai/util/filesystem"
-import { Process } from "@nikcli-ai/util/process"
-import { Flag } from "@nikcli-ai/util/flag"
-import { VERSION } from "@nikcli-ai/util/version"
+import { Global } from "@ragu/util/global"
+import { Filesystem } from "@ragu/util/filesystem"
+import { Process } from "@ragu/util/process"
+import { Flag } from "@ragu/util/flag"
+import { VERSION } from "@ragu/util/version"
 import { INTERNAL_TUI_PLUGINS, type InternalTuiPlugin } from "./internal"
 import { clearSlotErrors, setupSlots, Slot as View } from "./slots"
 import type { HostPluginApi, HostSlots } from "./slots"
@@ -51,6 +51,7 @@ import { adaptValidatedV2TuiPlugin, readV2TuiPlugin } from "./v2"
 import { evictPluginStorage, pluginStorage } from "./storage"
 import { createSourceWatcher, entrypointMtime, freshSpecifier, type SourceWatcher } from "./reload"
 import { dbg } from "../feature-plugins/background/__debug"
+import { dotFolder, isDotFolder } from "@ragu/util/app-folder"
 
 type PluginLoad = {
   item?: PluginSpec
@@ -237,9 +238,7 @@ function createThemeInstaller(meta: PluginConfigMeta, root: string, spec: string
 
     const source_dir = path.dirname(meta.source)
     const local_dir =
-      path.basename(source_dir) === ".nikcli"
-        ? path.join(source_dir, "themes")
-        : path.join(source_dir, ".nikcli", "themes")
+      isDotFolder(source_dir) ? path.join(source_dir, "themes") : path.join(dotFolder(source_dir), "themes")
     const dest_dir = meta.scope === "local" ? local_dir : path.join(Global.Path.config, "themes")
     const dest = path.join(dest_dir, `${theme}.json`)
     if (!(await Filesystem.exists(dest))) {
@@ -1131,7 +1130,7 @@ async function removePluginEntry(state: RuntimeState, plugin: PluginEntry) {
  * plugins keep their registration order.
  */
 async function reconcileConfiguredPlugins(state: RuntimeState) {
-  if (Flag.NIKCLI_PURE) return
+  if (Flag.RAGU_PURE) return
 
   const config = await pluginHost()
     .reload(state.directory)
@@ -1358,7 +1357,7 @@ async function addExternalPluginEntries(state: RuntimeState, ready: PluginLoad[]
 function defaultPluginMeta(state: RuntimeState): PluginConfigMeta {
   return {
     scope: "local",
-    source: state.api.state.path.config || path.join(state.directory, ".nikcli", "tui.json"),
+    source: state.api.state.path.config || path.join(dotFolder(state.directory), "tui.json"),
   }
 }
 
@@ -1679,8 +1678,8 @@ export namespace TuiPluginRuntime {
     try {
       {
         const config = await pluginHost().get(cwd)
-        const plugins = Flag.NIKCLI_PURE ? [] : (config.plugin ?? [])
-        if (Flag.NIKCLI_PURE && config.plugin?.length) {
+        const plugins = Flag.RAGU_PURE ? [] : (config.plugin ?? [])
+        if (Flag.RAGU_PURE && config.plugin?.length) {
           log.info("skipping external tui plugins in pure mode", {
             count: config.plugin.length,
           })
@@ -1744,7 +1743,7 @@ export namespace TuiPluginRuntime {
     // Hot reload: watch local plugin sources so editing one swaps that plugin
     // in place, without restarting the TUI or any other plugin. npm packages
     // resolve into the package cache and are immutable for the session.
-    if (!Flag.NIKCLI_PURE && !Flag.NIKCLI_DISABLE_PLUGIN_RELOAD) {
+    if (!Flag.RAGU_PURE && !Flag.RAGU_DISABLE_PLUGIN_RELOAD) {
       next.watcher = createSourceWatcher({
         onChange: () => {
           if (runtime !== next) return

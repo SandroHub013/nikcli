@@ -105,7 +105,7 @@ describe("specToUrl", () => {
     expect(isPathSpec("/a")).toBe(true)
     expect(isPathSpec("C:\\a")).toBe(true)
     expect(isPathSpec("file:///a")).toBe(true)
-    expect(isPathSpec("nikcli-plugin-foo")).toBe(false)
+    expect(isPathSpec("ragu-plugin-foo")).toBe(false)
     expect(isPathSpec("@scope/plugin@1.2.3")).toBe(false)
   })
 })
@@ -174,7 +174,7 @@ describe("network paths are not plugins", () => {
     "file:///C:/p",
     "file:///home/u/p",
     "file://localhost/p",
-    "nikcli-plugin-foo",
+    "ragu-plugin-foo",
   ]
 
   test("isUncSpec names every spelling of a remote share", () => {
@@ -235,7 +235,7 @@ describe("resolveDeclaredPlugin", () => {
    * failed with something about a module not being found.
    */
   test("an npm specifier is refused with a reason a user can act on", async () => {
-    const outcome = await resolveDeclaredPlugin({ spec: "nikcli-plugin-foo" }, "C:/repo", io({}))
+    const outcome = await resolveDeclaredPlugin({ spec: "ragu-plugin-foo" }, "C:/repo", io({}))
     expect("reason" in outcome && outcome.reason).toContain("terminale")
   })
 })
@@ -247,12 +247,12 @@ describe("discoverPlugins", () => {
     const found = await discoverPlugins(
       "C:/repo",
       io({
-        "C:/repo/.nikcli/tui.json": config(["./good.js", "./missing.js", "nikcli-plugin-foo"]),
+        "C:/repo/.nikcli/tui.json": config(["./good.js", "./missing.js", "ragu-plugin-foo"]),
         "C:/repo/good.js": "",
       }),
     )
     expect(found.resolved).toEqual([{ spec: "./good.js", entry: "file:///C:/repo/good.js" }])
-    expect(found.rejected.map((item) => item.spec)).toEqual(["./missing.js", "nikcli-plugin-foo"])
+    expect(found.rejected.map((item) => item.spec)).toEqual(["./missing.js", "ragu-plugin-foo"])
   })
 
   test("no config is not an error", async () => {

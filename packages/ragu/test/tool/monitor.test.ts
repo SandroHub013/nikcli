@@ -1,0 +1,181 @@
+import { preserveTestEnv } from "../helpers/env"
+import { removeTestDir } from "../helpers/fs"
+import { afterAll, describe, expect, it } from "bun:test"
+import fs from "fs/promises"
+import os from "os"
+import path from "path"
+import { makeToolContext, withProjectDirectory } from "../helpers/tool-context"
+
+const testHome = await fs.mkdtemp(path.join(os.tmpdir(), "ragu-monitor-home-"))
+process.env.RAGU_TEST_HOME = testHome
+process.env.RAGU_DISABLE_PROJECT_CONFIG = "1"
+process.env.RAGU_DB = path.join(testHome, "data", "nikcli.db")
+
+preserveTestEnv(["RAGU_TEST_HOME", "RAGU_DISABLE_PROJECT_CONFIG", "RAGU_DB"])
+
+const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "ragu-monitor-proj-"))
+
+const { MonitorTool } = await import("@/tool/monitor")
+const { Monitor } = await import("@/monitor/manager")
+const { SessionError } = await import("@/session/error")
+const { Instance } = await import("@/project/instance")
+const { Database } = await import("@/database/database")
+
+const def = await withProjectDirectory(projectDir, () => MonitorTool.init())
+
+describe("MonitorTool", () => {
+  afterAll(async () => {
+    await Instance.disposeAll().catch(() => undefined)
+    Database.closeAll()
+    Database.close(path.join(testHome, "data", "nikcli.db"))
+    await removeTestDir(projectDir)
+    await removeTestDir(testHome)
+  })
+
+  it("rejects non-positive timeout before starting", async () => {
+    const { ctx } = makeToolContext()
+    await expect(
+      withProjectDirectory(projectDir, () =>
+        def.executeAsync({ command: "echo x", timeout: 0, title: "bad timeout" }, ctx),
+      ),
+    ).rejects.toThrow(/Invalid timeout/)
+  })
+
+  it("returns a command that finishes quickly in the same call", async () => {
+    const { ctx, asked } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ command: "echo monitor-inline-ok", title: "quick", wake: false }, ctx),
+    )
+
+    expect(result.output).toContain("Command finished in")
+    expect(result.output).toContain("exit code 0")
+    expect(result.output).toContain("monitor-inline-ok")
+    expect(result.output).not.toContain("Started monitor")
+    expect(result.metadata.status).toBe("complete")
+    expect(asked.some((a) => a.permission === "bash")).toBe(true)
+  })
+
+  it("reports the exit code of a quick command that fails", async () => {
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ command: "echo failing-now; exit 3", title: "quick failure", wake: false }, ctx),
+    )
+
+    expect(result.output).toContain("exit code 3")
+    expect(result.output).toContain("failing-now")
+    expect(result.metadata.status).toBe("error")
+  })
+
+  it("starts a background command and asks bash permission", async () => {
+    const { ctx, asked } = makeToolContext()
+    const previous = process.env.RAGU_MONITOR_INLINE_MS
+    process.env.RAGU_MONITOR_INLINE_MS = "50"
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ command: "sleep 2 && echo monitor-ok", title: "echo monitor", wake: false }, ctx),
+    ).finally(() => {
+      if (previous === undefined) delete process.env.RAGU_MONITOR_INLINE_MS
+      else process.env.RAGU_MONITOR_INLINE_MS = previous
+    })
+
+    expect(result.output).toContain('Started monitor "echo monitor"')
+    expect(result.output).toContain("Log file:")
+    expect(result.metadata.monitorId).toBeTruthy()
+    expect(result.metadata.command).toBe("sleep 2 && echo monitor-ok")
+    expect(result.metadata.status).toBe("running")
+    expect(asked.some((a) => a.permission === "bash")).toBe(true)
+
+    // Wait briefly for the short command to finish, then cancel if still up.
+    await new Promise((r) => setTimeout(r, 200))
+    await withProjectDirectory(projectDir, async () => {
+      const record = await Monitor.get(ctx.sessionID, result.metadata.monitorId).catch(() => undefined)
+      if (record?.status === "running") {
+        await Monitor.cancel(ctx.sessionID, result.metadata.monitorId).catch(() => undefined)
+      }
+    })
+  })
+
+  it("defaults title from the command when omitted", async () => {
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ command: "echo titled-from-cmd", wake: false }, ctx),
+    )
+    expect(result.title).toBe("echo titled-from-cmd")
+    await withProjectDirectory(projectDir, async () => {
+      await Monitor.cancel(ctx.sessionID, result.metadata.monitorId).catch(() => undefined)
+    })
+  })
+
+  it("honours workdir for the monitored process", async () => {
+    const nested = path.join(projectDir, "nested-mon")
+    await fs.mkdir(nested)
+    await fs.writeFile(path.join(nested, "flag.txt"), "yes\n")
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync(
+        { command: "test -f flag.txt && echo found", workdir: nested, title: "workdir check", wake: false },
+        ctx,
+      ),
+    )
+    expect(result.metadata.cwd).toBe(nested)
+    await withProjectDirectory(projectDir, async () => {
+      await Monitor.cancel(ctx.sessionID, result.metadata.monitorId).catch(() => undefined)
+    })
+  })
+
+  it("throws SessionNotFoundError for a missing monitor", async () => {
+    await expect(
+      withProjectDirectory(projectDir, () => Monitor.get("ses_missing", "mon_missing")),
+    ).rejects.toBeInstanceOf(SessionError.NotFoundError)
+  })
+
+  it("truncates quick command output over 8k chars", async () => {
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync(
+        {
+          command: "node -e \"process.stdout.write('MON_START_' + 'Z'.repeat(12000) + '_MON_END')\"",
+          title: "long output test",
+          wake: false,
+        },
+        ctx,
+      ),
+    )
+    expect(result.output).toContain("MON_START_")
+    expect(result.output).toContain("_MON_END")
+    expect(result.output).toContain("The tool call succeeded but the output was truncated")
+    expect(result.output.length).toBeLessThan(10000)
+    expect(result.metadata.truncated).toBe(true)
+    expect(result.metadata.outputPath).toBeDefined()
+    const full = await fs.readFile(result.metadata.outputPath as string, "utf8")
+    expect(full).toContain("MON_START_")
+    expect(full).toContain("_MON_END")
+    expect(full.length).toBe(12018)
+  })
+
+  it("handles log already truncated by monitor capture keeping only tail and avoiding false character count", async () => {
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync(
+        {
+          command:
+            "node -e \"process.stdout.write(String.fromCharCode(66,73,71,95,83,84,65,82,84,95) + 'W'.repeat(100000) + '_BIG_END')\"",
+          title: "huge output test",
+          wake: false,
+        },
+        ctx,
+      ),
+    )
+    expect(result.output).toContain("_BIG_END")
+    expect(result.output).not.toContain("BIG_START_")
+    expect(result.output).toContain("initial output was omitted")
+    expect(result.output).toContain("Full log:")
+    expect(result.output).not.toContain("characters omitted")
+    expect(result.output.length).toBeLessThan(10000)
+    expect(result.metadata.truncated).toBe(true)
+    expect(result.metadata.outputPath).toBeDefined()
+    const full = await fs.readFile(result.metadata.outputPath as string, "utf8")
+    expect(full).toContain("BIG_START_")
+    expect(full).toContain("_BIG_END")
+    expect(full.length).toBe(100018)
+  })
+})

@@ -19,7 +19,7 @@ const usage = await env.DB.prepare(
   .first<{ calls: number; tokens: number; billed_usd: number }>()
 
 const curlExample = `curl https://inference.nikcli-ai.dev/v1/chat/completions \\
-  -H "Authorization: Bearer $NIKCLI_API_KEY" \\
+  -H "Authorization: Bearer $RAGU_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{"model":"nikseek","messages":[{"role":"user","content":"Hello"}]}'`
 ---
@@ -30,7 +30,7 @@ const curlExample = `curl https://inference.nikcli-ai.dev/v1/chat/completions \\
       <div>
         <p class="app-kicker">Overview</p>
         <h1 class="app-title">Welcome, {user.name ?? user.email.split("@")[0]}</h1>
-        <p class="app-subtitle">Your nikcli inference account at a glance.</p>
+        <p class="app-subtitle">Your ragu inference account at a glance.</p>
       </div>
       <a href="/dashboard/keys" class="app-button-primary w-full sm:w-fit">Create API key</a>
     </div>

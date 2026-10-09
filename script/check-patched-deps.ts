@@ -21,7 +21,7 @@
  *    but resolves to a *different* version than the one patched, so it runs
  *    without the fix while the patch entry suggests otherwise. `packages/app`
  *    was on `ghostty-web@0.4.0` while the codepoint-guard patch covered only
- *    the `0.3.0` that nikcli and remote use.
+ *    the `0.3.0` that ragu and remote use.
  *
  *    Scoped to workspaces on purpose. A second copy pulled in by some
  *    unrelated third-party dependency is not evidence of anything — flagging

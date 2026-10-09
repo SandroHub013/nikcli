@@ -5,7 +5,7 @@ import {
   type MobileMemorySearchHit,
   type MobilePromptHistoryEntry,
   type MobilePromptStashEntry,
-  WebNikcliClient,
+  WebRaguClient,
 } from "@/app/api"
 import { Banner, Button, Chip, EmptyState, Field, Spinner, Surface, TextAreaField } from "@/app/ui"
 
@@ -15,7 +15,7 @@ function copyToClipboard(text: string) {
   }
 }
 
-export function MemoryScreen(props: { client: WebNikcliClient | null; navigate(path: string): void }) {
+export function MemoryScreen(props: { client: WebRaguClient | null; navigate(path: string): void }) {
   const { client } = props
   const [history, setHistory] = useState<MobilePromptHistoryEntry[]>([])
   const [stash, setStash] = useState<MobilePromptStashEntry[]>([])

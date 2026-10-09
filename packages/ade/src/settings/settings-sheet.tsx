@@ -15,7 +15,7 @@ import {
   type PackState,
   type MaiFailureKind,
   type StreamState,
-} from "@nikcli-ai/voice"
+} from "@ragu/voice"
 import type { Binding } from "../keyboard/keymap"
 import { getHost } from "../host/shell"
 import type { KeysHost } from "../secrets/keys-section"

@@ -7,9 +7,9 @@ import DocCallout from "../../../components/docs/DocCallout.astro";
 import DocRelated from "../../../components/docs/DocRelated.astro";
 
 const toc = [
-  { title: "Extend nikcli", href: "#extend", depth: 2 },
-  { title: "Integrate nikcli", href: "#integrate", depth: 2 },
-  { title: "Automate nikcli", href: "#automate", depth: 2 },
+  { title: "Extend ragu", href: "#extend", depth: 2 },
+  { title: "Integrate ragu", href: "#integrate", depth: 2 },
+  { title: "Automate ragu", href: "#automate", depth: 2 },
   { title: "How these differ from the reference", href: "#difference", depth: 2 },
 ];
 ---
@@ -17,11 +17,11 @@ const toc = [
 <DocsLayout
   title="Guides"
   subtitle="Eleven step-by-step walkthroughs, every snippet checked against the real types: build a plugin, register a provider, drive the API, stream a response, orchestrate missions, run in CI."
-  description="Task-oriented guides for nikcli: writing plugins, plugin recipes, custom providers, using the HTTP API, streaming, building an interface, terminals, loops, missions, workspaces and CI."
+  description="Task-oriented guides for ragu: writing plugins, plugin recipes, custom providers, using the HTTP API, streaming, building an interface, terminals, loops, missions, workspaces and CI."
   toc={toc}
 >
   <section id="extend" class="doc-section">
-    <h2>Extend nikcli</h2>
+    <h2>Extend ragu</h2>
     <p>Your code runs inside the agent: new tools, new policy, new providers.</p>
     <div class="doc-grid not-prose">
       <DocCard title="Writing a plugin" eyebrow="Start here" href="/docs/guides/plugins">
@@ -46,7 +46,7 @@ const toc = [
   </section>
 
   <section id="integrate" class="doc-section">
-    <h2>Integrate nikcli</h2>
+    <h2>Integrate ragu</h2>
     <p>Your code runs outside and drives the agent over its API.</p>
     <div class="doc-grid not-prose">
       <DocCard title="Using the API" eyebrow="Quickstart" href="/docs/guides/api">
@@ -83,7 +83,7 @@ const toc = [
   </section>
 
   <section id="automate" class="doc-section">
-    <h2>Automate nikcli</h2>
+    <h2>Automate ragu</h2>
     <p>Work that runs without you sitting in front of it.</p>
     <div class="doc-grid not-prose">
       <DocCard title="Automating with loops" eyebrow="Cadence" href="/docs/guides/loops">
@@ -124,7 +124,7 @@ const toc = [
       <thead><tr><th>You want</th><th>Go to</th></tr></thead>
       <tbody>
         <tr><td>To get something working</td><td>These guides</td></tr>
-        <tr><td>The three ways to build on nikcli, compared</td><td><a href="/docs/build">Build</a></td></tr>
+        <tr><td>The three ways to build on ragu, compared</td><td><a href="/docs/build">Build</a></td></tr>
         <tr><td>Every field of every endpoint</td><td><a href="/docs/api">API Reference</a></td></tr>
         <tr><td>How the server itself works</td><td><a href="/docs/server-api">Server &amp; API</a></td></tr>
         <tr><td>How plugins are installed and configured</td><td><a href="/docs/plugins">Plugins &amp; Skills</a></td></tr>
@@ -140,7 +140,7 @@ const toc = [
 
   <DocRelated
     links={[
-      { title: "Build", href: "/docs/build", description: "The three ways to build on nikcli, and which to pick." },
+      { title: "Build", href: "/docs/build", description: "The three ways to build on ragu, and which to pick." },
       { title: "API Reference", href: "/docs/api", description: "Every endpoint, generated from the server contract." },
       { title: "Client", href: "/docs/build/client", description: "The typed HTTP client these guides use." },
       { title: "Plugins & Skills", href: "/docs/plugins", description: "Installing and configuring plugins." },

@@ -1,3 +1,4 @@
+import { currentAgentId } from "../../session/legacy-agent-id"
 /**
  * A chat's conversation with a bot, across turns (G4).
  *
@@ -42,7 +43,7 @@ function parse(value: unknown): ChatSession | undefined {
   if (!value || typeof value !== "object") return undefined
   const { project, runner, sessionId } = value as Record<string, unknown>
   return typeof project === "string" && typeof runner === "string" && typeof sessionId === "string" && sessionId
-    ? { project, runner, sessionId }
+    ? { project, runner: currentAgentId(runner), sessionId }
     : undefined
 }
 

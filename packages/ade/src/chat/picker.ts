@@ -185,7 +185,7 @@ type EffortKey =
   | "effort.max"
   | "effort.thinking"
 
-/* The ids nikcli's models use, in words (model-picker review, BASSO a): «none» and «thinking» were shown raw. */
+/* The ids ragu's models use, in words (model-picker review, BASSO a): «none» and «thinking» were shown raw. */
 const EFFORT_NAMES: Readonly<Record<string, EffortKey>> = {
   none: "effort.none",
   thinking: "effort.thinking",
@@ -205,7 +205,7 @@ export function effortLabel(level: string): string {
 
 /**
  * A model id as a name, for a model the catalog no longer lists: its last
- * part, without the `:free` kind of suffix, in words. The id is what nikcli
+ * part, without the `:free` kind of suffix, in words. The id is what ragu
  * reads; this is what the user reads (review of bot-riquadro, a).
  * «openrouter/nex-agi/nex-n2.5-mini:free» reads «Nex N2.5 Mini».
  */
@@ -223,7 +223,7 @@ export function readableModelName(id: string): string {
 
 /**
  * Whether the chosen model has left the catalog: the list is read, and it
- * does not have it. nikcli answers such a turn mute («prompt loop failed»),
+ * does not have it. ragu answers such a turn mute («prompt loop failed»),
  * so the chip says so. Not read yet, or no model chosen: not known, false.
  */
 export function modelGoneFrom(

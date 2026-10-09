@@ -8,8 +8,8 @@ import {
   type DragEvent,
 } from "@thisbeyond/solid-dnd"
 import { ConstrainDragXAxis } from "@/utils/solid-dnd"
-import { IconButton } from "@nikcli-ai/ui/icon-button"
-import { Tooltip, TooltipKeybind } from "@nikcli-ai/ui/tooltip"
+import { IconButton } from "@ragu/ui/icon-button"
+import { Tooltip, TooltipKeybind } from "@ragu/ui/tooltip"
 import { type LocalProject } from "@/context/layout"
 import { sidebarExpanded } from "./sidebar-shell-helpers"
 

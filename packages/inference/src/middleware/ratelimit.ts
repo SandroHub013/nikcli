@@ -118,7 +118,7 @@ async function validateOauthToken(token: string): Promise<AuthenticatedKey | nul
 
 /**
  * Resolve an Authorization header to an authenticated identity.
- * - OAuth bearer JWTs (issuer sign-in, same login as the rest of nikcli) are
+ * - OAuth bearer JWTs (issuer sign-in, same login as the rest of ragu) are
  *   verified offline against the issuer JWKS.
  * - Everything else is validated against the dashboard (`nik_live_…` keys).
  * - The static demo keys only work when no dashboard is configured (dev).
@@ -273,25 +273,25 @@ class UpstashLimiter implements RateLimiter {
       free: new Ratelimit({
         redis: this.redis,
         limiter: Ratelimit.fixedWindow(TIER_LIMITS.free.reqPerDay, "86400 s"),
-        prefix: "nikcli:rl:free",
+        prefix: "ragu:rl:free",
         analytics: true,
       }),
       starter: new Ratelimit({
         redis: this.redis,
         limiter: Ratelimit.fixedWindow(TIER_LIMITS.starter.reqPerDay, "86400 s"),
-        prefix: "nikcli:rl:starter",
+        prefix: "ragu:rl:starter",
         analytics: true,
       }),
       pro: new Ratelimit({
         redis: this.redis,
         limiter: Ratelimit.fixedWindow(TIER_LIMITS.pro.reqPerDay, "86400 s"),
-        prefix: "nikcli:rl:pro",
+        prefix: "ragu:rl:pro",
         analytics: true,
       }),
       business: new Ratelimit({
         redis: this.redis,
         limiter: Ratelimit.fixedWindow(TIER_LIMITS.business.reqPerDay, "86400 s"),
-        prefix: "nikcli:rl:biz",
+        prefix: "ragu:rl:biz",
         analytics: true,
       }),
     }
@@ -328,7 +328,7 @@ class UpstashLimiter implements RateLimiter {
     }
 
     // Token quota tracked separately with INCRBY + EXPIRE.
-    const tokenKey = `nikcli:tokens:${tier}:${key.key}:${dayBucket()}`
+    const tokenKey = `ragu:tokens:${tier}:${key.key}:${dayBucket()}`
     const limits = TIER_LIMITS[tier]
     const after = (await this.redis.incrby(tokenKey, estimatedTokens)) as number
     if (after === estimatedTokens) {

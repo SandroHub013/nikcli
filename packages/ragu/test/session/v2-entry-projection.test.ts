@@ -1,0 +1,804 @@
+import { preserveTestEnv } from "../helpers/env"
+import { afterAll, describe, expect, it } from "bun:test"
+import fs from "fs/promises"
+import os from "os"
+import path from "path"
+import { removeTestDir } from "../helpers/fs"
+import { Effect } from "effect"
+import { runPromiseWithLayer, withCurrentInstance } from "../../src/effect"
+import type { SessionEntry as SessionEntryTypes } from "../../src/session/v2/entry"
+
+const testHome = await fs.mkdtemp(path.join(os.tmpdir(), "ragu-entry-projection-home-"))
+process.env.RAGU_TEST_HOME = testHome
+process.env.RAGU_DISABLE_PROJECT_CONFIG = "1"
+
+preserveTestEnv(["RAGU_TEST_HOME", "RAGU_DISABLE_PROJECT_CONFIG"])
+
+const [
+  { Identifier },
+  { Instance },
+  { Session },
+  { SessionV2 },
+  { SessionEntryRepo },
+  { SessionEntry },
+  { MessageRepo },
+  { SessionEntryProjection },
+  { Database },
+  { Bus },
+  { SessionProjector },
+] = await Promise.all([
+  import("@ragu/util/id"),
+  import("../../src/project/instance"),
+  import("../../src/session"),
+  import("../../src/session/v2"),
+  import("../../src/session/v2/entry-repo"),
+  import("../../src/session/v2/entry"),
+  import("../../src/session/message-repo"),
+  import("../../src/session/v2/projection"),
+  import("../../src/database/database"),
+  import("../../src/bus"),
+  import("../../src/session/v2/projector"),
+])
+
+const projectDir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "ragu-entry-projection-project-")))
+
+function runSession<A, E>(effect: Effect.Effect<A, E, any>) {
+  return runPromiseWithLayer(Session.defaultLayer, withCurrentInstance(effect))
+}
+
+const service = () =>
+  Effect.gen(function* () {
+    return yield* Session.Service
+  })
+
+afterAll(async () => {
+  Database.closeAll()
+  await removeTestDir(projectDir)
+  await removeTestDir(testHome)
+})
+
+/** Drive one user turn + one assistant step through the real Session service. */
+async function conversation() {
+  const session = await runSession(
+    Effect.gen(function* () {
+      const s = yield* service()
+      return yield* s.createNext({ directory: projectDir, title: "entries" })
+    }),
+  )
+
+  const userID = Identifier.ascending("message")
+  await runSession(
+    Effect.gen(function* () {
+      const s = yield* service()
+      yield* s.updateMessage({
+        id: userID,
+        sessionID: session.id,
+        role: "user",
+        time: { created: 1 },
+        agent: "build",
+        model: { providerID: "p", modelID: "m" },
+      } as any)
+      yield* s.updatePart({
+        id: Identifier.ascending("part"),
+        sessionID: session.id,
+        messageID: userID,
+        type: "text",
+        text: "do the thing",
+      } as any)
+    }),
+  )
+
+  const assistantID = Identifier.ascending("message")
+  const assistant = {
+    id: assistantID,
+    sessionID: session.id,
+    role: "assistant",
+    time: { created: 2 },
+    parentID: userID,
+    modelID: "test-model",
+    providerID: "test-provider",
+    mode: "build",
+    agent: "build",
+    path: { cwd: projectDir, root: projectDir },
+    cost: 0,
+    tokens: { input: 1, output: 2, reasoning: 0, cache: { read: 0, write: 0 } },
+  }
+
+  await runSession(
+    Effect.gen(function* () {
+      const s = yield* service()
+      yield* s.updateMessage(assistant as any)
+    }),
+  )
+
+  return { session, userID, assistantID, assistant }
+}
+
+describe("v2 entry projection", () => {
+  it("projects a conversation into flat entries, in conversation order", async () => {
+    await Instance.provide({
+      directory: projectDir,
+      fn: async () => {
+        const { session, assistantID, assistant } = await conversation()
+
+        // part ids are ascending, and the sort key is derived from them —
+        // so the entries come back in the order the parts were minted
+        const textPart = {
+          id: Identifier.ascending("part"),
+          sessionID: session.id,
+          messageID: assistantID,
+          type: "text",
+          text: "here you go",
+        }
+        const toolPart = {
+          id: Identifier.ascending("part"),
+          sessionID: session.id,
+          messageID: assistantID,
+          type: "tool",
+          callID: "c1",
+          tool: "read",
+          state: { status: "pending", input: {}, raw: "" },
+        }
+
+        await runSession(
+          Effect.gen(function* () {
+            const s = yield* service()
+            yield* s.updatePart(textPart as any)
+            yield* s.updatePart(toolPart as any)
+          }),
+        )
+
+        expect((await SessionV2.entries(session.id)).map((e) => e.type)).toEqual(["user", "start", "text", "tool"])
+
+        // the tool's state transitions collapse onto the one entry
+        await runSession(
+          Effect.gen(function* () {
+            const s = yield* service()
+            yield* s.updatePart({
+              ...toolPart,
+              state: {
+                status: "completed",
+                input: {},
+                output: "ok",
+                title: "t",
+                metadata: {},
+                time: { start: 1, end: 2 },
+              },
+            } as any)
+          }),
+        )
+
+        const withTool = await SessionV2.entries(session.id)
+        expect(withTool.map((e) => e.type)).toEqual(["user", "start", "text", "tool"])
+        const tool = withTool[3] as SessionEntryTypes.Tool
+        expect(tool.state.status).toBe("completed")
+
+        // completing the message seals the step
+        await runSession(
+          Effect.gen(function* () {
+            const s = yield* service()
+            yield* s.updateMessage({
+              ...assistant,
+              time: { created: 2, completed: 3 },
+              finish: "stop",
+            } as any)
+          }),
+        )
+
+        const sealed = await SessionV2.entries(session.id)
+        expect(sealed.map((e) => e.type)).toEqual(["user", "start", "text", "tool", "complete"])
+        const complete = sealed[4] as SessionEntryTypes.Complete
+        expect(complete.finish).toBe("stop")
+        expect(complete.tokens.output).toBe(2)
+      },
+    })
+  })
+
+  it("keeps one row and a stable id across streaming updates", async () => {
+    await Instance.provide({
+      directory: projectDir,
+      fn: async () => {
+        const { session, assistantID } = await conversation()
+
+        const part = {
+          id: Identifier.ascending("part"),
+          sessionID: session.id,
+          messageID: assistantID,
+          type: "text",
+          text: "",
+        }
+
+        const ids: string[] = []
+        for (const text of ["a", "ab", "abc"]) {
+          await runSession(
+            Effect.gen(function* () {
+              const s = yield* service()
+              yield* s.updatePart({ ...part, text } as any)
+            }),
+          )
+          const entries = await SessionV2.entries(session.id)
+          const streamed = entries.find((e) => e.type === "text") as SessionEntryTypes.Text
+          ids.push(streamed.id)
+        }
+
+        const entries = await SessionV2.entries(session.id)
+        expect(entries.filter((e) => e.type === "text")).toHaveLength(1)
+        expect((entries.find((e) => e.type === "text") as SessionEntryTypes.Text).text).toBe("abc")
+        // a churning id would remount the row in every consumer on every delta
+        expect(new Set(ids).size).toBe(1)
+      },
+    })
+  })
+
+  it("keeps a synthetic part appended to a user message out of the user entry", async () => {
+    await Instance.provide({
+      directory: projectDir,
+      fn: async () => {
+        const { session, userID } = await conversation()
+
+        // What plan mode does: append its reminder to the user's own message.
+        await runSession(
+          Effect.gen(function* () {
+            const s = yield* service()
+            yield* s.updatePart({
+              id: Identifier.ascending("part"),
+              sessionID: session.id,
+              messageID: userID,
+              type: "text",
+              text: "<system-reminder>\nPlan mode is active.\n</system-reminder>",
+              synthetic: true,
+            } as any)
+          }),
+        )
+
+        const entries = await SessionV2.entries(session.id)
+        const user = entries.find((e) => e.type === "user") as SessionEntryTypes.User
+        expect(user.text).toBe("do the thing")
+      },
+    })
+  })
+
+  it("removing a part drops its entry", async () => {
+    await Instance.provide({
+      directory: projectDir,
+      fn: async () => {
+        const { session, assistantID } = await conversation()
+        const partID = Identifier.ascending("part")
+
+        await runSession(
+          Effect.gen(function* () {
+            const s = yield* service()
+            yield* s.updatePart({
+              id: partID,
+              sessionID: session.id,
+              messageID: assistantID,
+              type: "text",
+              text: "regrettable",
+            } as any)
+          }),
+        )
+        expect((await SessionV2.entries(session.id)).some((e) => e.type === "text")).toBe(true)
+
+        await runSession(
+          Effect.gen(function* () {
+            const s = yield* service()
+            yield* s.removePart({
+              sessionID: session.id,
+              messageID: assistantID,
+              partID,
+            })
+          }),
+        )
+        expect((await SessionV2.entries(session.id)).some((e) => e.type === "text")).toBe(false)
+      },
+    })
+  })
+
+  it("backfills a session that predates the entry table", async () => {
+    await Instance.provide({
+      directory: projectDir,
+      fn: async () => {
+        const { session, assistantID } = await conversation()
+        await runSession(
+          Effect.gen(function* () {
+            const s = yield* service()
+            yield* s.updatePart({
+              id: Identifier.ascending("part"),
+              sessionID: session.id,
+              messageID: assistantID,
+              type: "text",
+              text: "legacy",
+            } as any)
+          }),
+        )
+
+        const before = (await SessionV2.entries(session.id)).map((e) => e.type)
+        expect(before.length).toBeGreaterThan(0)
+
+        // simulate a session written before session_entry existed
+        Effect.runSync(SessionEntryRepo.clear(session.id))
+        expect(SessionV2.entryCount(session.id)).toBe(0)
+
+        const after = await SessionV2.entries(session.id)
+        expect(after.map((e) => e.type)).toEqual(before)
+        // the backfill persisted, so the next read is a plain row read
+        expect(SessionV2.entryCount(session.id)).toBe(after.length)
+      },
+    })
+  })
+
+  /**
+   * A leftover `MessageRepo` insert (or a session written before
+   * `session_entry` existed) can leave *some* entries that do not cover
+   * every message. That is the case a "backfill only when the table is
+   * empty" guard gets wrong: it hands the renderer a half-drawn transcript.
+   */
+  it("rebuilds a session whose entries do not cover every message", async () => {
+    await Instance.provide({
+      directory: projectDir,
+      fn: async () => {
+        const { session } = await conversation()
+        const projected = await SessionV2.entries(session.id)
+        expect(projected.length).toBeGreaterThan(0)
+
+        const smuggledID = Identifier.ascending("message")
+        Effect.runSync(
+          MessageRepo.upsertMessage({
+            id: smuggledID,
+            sessionID: session.id,
+            role: "assistant",
+            time: { created: 2, completed: 3 },
+            providerID: "p",
+            modelID: "m",
+            agent: "build",
+            mode: "build",
+            cost: 0,
+            tokens: {
+              input: 1,
+              output: 1,
+              reasoning: 0,
+              cache: { read: 0, write: 0 },
+            },
+            path: { cwd: projectDir, root: projectDir },
+          } as any),
+        )
+        Effect.runSync(
+          MessageRepo.upsertPart({
+            id: Identifier.ascending("part"),
+            sessionID: session.id,
+            messageID: smuggledID,
+            type: "text",
+            text: "imported",
+          } as any),
+        )
+
+        const entries = await SessionV2.entries(session.id)
+        expect(entries.some((e) => e.messageID === smuggledID)).toBe(true)
+        expect(entries.some((e) => e.type === "text" && (e as SessionEntryTypes.Text).text === "imported")).toBe(true)
+        // the rebuild persisted, so the next read is a plain row read
+        expect(SessionV2.entryCount(session.id)).toBe(entries.length)
+      },
+    })
+  })
+
+  /**
+   * `rebuild` is the repair path for a session whose entries drifted from
+   * its v1 rows. Whatever it produces has to be indistinguishable from what
+   * the projectors would have written had the rows gone through persist —
+   * otherwise a repaired session renders differently from a live one.
+   */
+  it("the bulk-import path projects what the write path would have", async () => {
+    await Instance.provide({
+      directory: projectDir,
+      fn: async () => {
+        const { session } = await conversation()
+        const projected = await SessionV2.entries(session.id)
+
+        const messages = await runSession(
+          Effect.gen(function* () {
+            const s = yield* service()
+            return yield* s.messages({ sessionID: session.id })
+          }),
+        )
+        SessionEntryProjection.rebuild(session.id, messages)
+
+        expect(await SessionV2.entries(session.id)).toEqual(projected)
+      },
+    })
+  })
+
+  it("removing a message with its parts drops that message's entries", async () => {
+    await Instance.provide({
+      directory: projectDir,
+      fn: async () => {
+        const { session, userID, assistantID } = await conversation()
+        await runSession(
+          Effect.gen(function* () {
+            const s = yield* service()
+            yield* s.updatePart({
+              id: Identifier.ascending("part"),
+              sessionID: session.id,
+              messageID: assistantID,
+              type: "text",
+              text: "goes away with its message",
+            } as any)
+          }),
+        )
+        expect((await SessionV2.entries(session.id)).some((e) => e.messageID === assistantID)).toBe(true)
+
+        await runSession(
+          Effect.gen(function* () {
+            const s = yield* service()
+            yield* s.removeMessageWithParts(session.id, assistantID)
+          }),
+        )
+
+        const remaining = await SessionV2.entries(session.id)
+        expect(remaining.some((e) => e.messageID === assistantID)).toBe(false)
+        // and it took only that message with it
+        expect(remaining.some((e) => e.messageID === userID)).toBe(true)
+      },
+    })
+  })
+
+  /**
+   * Fork clones a transcript into a new session. It clones through the session
+   * service, so the clone's entries are projected as they are written — this
+   * pins that, because a fork opened straight from the "created" event would
+   * otherwise be one of the paths that renders empty.
+   */
+  it("a forked session gets its own entries, without a backfill", async () => {
+    await Instance.provide({
+      directory: projectDir,
+      fn: async () => {
+        const { session, assistantID } = await conversation()
+        await runSession(
+          Effect.gen(function* () {
+            const s = yield* service()
+            yield* s.updatePart({
+              id: Identifier.ascending("part"),
+              sessionID: session.id,
+              messageID: assistantID,
+              type: "text",
+              text: "worth forking",
+            } as any)
+          }),
+        )
+        const original = (await SessionV2.entries(session.id)).map((e) => e.type)
+
+        const forked = await runSession(
+          Effect.gen(function* () {
+            const s = yield* service()
+            return yield* s.fork({ sessionID: session.id })
+          }),
+        )
+
+        // projected by the write path, so the rows are already there
+        expect(SessionV2.entryCount(forked.id)).toBeGreaterThan(0)
+        expect((await SessionV2.entries(forked.id)).map((e) => e.type)).toEqual(original)
+        // and they belong to the fork, not the original
+        expect((await SessionV2.entries(forked.id)).every((e) => e.sessionID === forked.id)).toBe(true)
+      },
+    })
+  })
+
+  it("deleting a session clears its entries", async () => {
+    await Instance.provide({
+      directory: projectDir,
+      fn: async () => {
+        const { session } = await conversation()
+        expect(SessionV2.entryCount(session.id)).toBeGreaterThan(0)
+
+        await runSession(
+          Effect.gen(function* () {
+            const s = yield* service()
+            yield* s.remove(session.id)
+          }),
+        )
+
+        expect(SessionV2.entryCount(session.id)).toBe(0)
+      },
+    })
+  })
+})
+
+/**
+ * The load-bearing invariant of the whole design: the live projection (bus →
+ * `session.entry.updated`) and the persisted one (`session_entry`, written in
+ * the v1 write transaction) never coordinate, and must still agree. They do
+ * because entry ids are derived from the v1 ids — and because those ids are
+ * also the sort key, so a client ordering by id gets the same order the server
+ * serves.
+ *
+ * If someone ever replaces the derived ids with generated ones, this fails.
+ */
+describe("live and persisted projections agree", () => {
+  it("a client applying only live events reconstructs exactly /v2/entries", async () => {
+    await Instance.provide({
+      directory: projectDir,
+      fn: async () => {
+        SessionProjector.init()
+
+        // A client's view: a map keyed by entry id, ordered by id — which is
+        // precisely what the TUI sync store does.
+        const client = new Map<string, SessionEntryTypes.Entry>()
+        const unsubscribes = [
+          Bus.subscribe(SessionProjector.Event.EntryUpdated, (event) => {
+            const { entry } = event.properties as {
+              entry: SessionEntryTypes.Entry
+            }
+            client.set(entry.id, entry)
+          }),
+          Bus.subscribe(SessionProjector.Event.EntryRemoved, (event) => {
+            client.delete((event.properties as { entryID: string }).entryID)
+          }),
+        ]
+
+        const { session, assistantID, assistant } = await conversation()
+
+        const textPart = {
+          id: Identifier.ascending("part"),
+          sessionID: session.id,
+          messageID: assistantID,
+          type: "text",
+          text: "",
+        }
+        const toolPart = {
+          id: Identifier.ascending("part"),
+          sessionID: session.id,
+          messageID: assistantID,
+          type: "tool",
+          callID: "c1",
+          tool: "read",
+          state: { status: "pending", input: {}, raw: "" },
+        }
+        const doomedPart = {
+          id: Identifier.ascending("part"),
+          sessionID: session.id,
+          messageID: assistantID,
+          type: "text",
+          text: "removed later",
+        }
+
+        await runSession(
+          Effect.gen(function* () {
+            const s = yield* service()
+            // a stream of deltas on one part
+            for (const text of ["a", "ab", "abc"]) yield* s.updatePart({ ...textPart, text } as any)
+            // a tool moving through its states
+            yield* s.updatePart(toolPart as any)
+            yield* s.updatePart({
+              ...toolPart,
+              state: {
+                status: "running",
+                input: { filePath: "a.ts" },
+                time: { start: 1 },
+              },
+            } as any)
+            yield* s.updatePart({
+              ...toolPart,
+              state: {
+                status: "completed",
+                input: { filePath: "a.ts" },
+                output: "ok",
+                title: "a.ts",
+                metadata: {},
+                time: { start: 1, end: 2 },
+              },
+            } as any)
+            // a part that appears and then goes away
+            yield* s.updatePart(doomedPart as any)
+            yield* s.removePart({
+              sessionID: session.id,
+              messageID: assistantID,
+              partID: doomedPart.id,
+            })
+            // seal the step
+            yield* s.updateMessage({
+              ...assistant,
+              time: { created: 2, completed: 3 },
+              finish: "stop",
+            } as any)
+          }),
+        )
+
+        const persisted = await SessionV2.entries(session.id)
+        // The live entry is compared in its wire form: `session.entry.updated`
+        // reaches clients as JSON over SSE, and the persisted side has been
+        // through the same round trip on its way into the row. Comparing the
+        // in-memory object instead would fail on nothing but `k: undefined`
+        // vs. absent `k`, which no client can observe.
+        const live = [...client.values()]
+          .filter((entry) => entry.sessionID === session.id)
+          .map((entry) => JSON.parse(JSON.stringify(entry)) as SessionEntryTypes.Entry)
+          .toSorted((a, b) => a.id.localeCompare(b.id))
+
+        expect(live.map((e) => e.id)).toEqual(persisted.map((e) => e.id))
+        expect(live.map((e) => e.type)).toEqual(persisted.map((e) => e.type))
+        expect(live).toEqual(persisted)
+
+        for (const unsubscribe of unsubscribes) unsubscribe()
+      },
+    })
+  })
+
+  it("projects a user part before upsertPart", async () => {
+    await Instance.provide({
+      directory: projectDir,
+      fn: async () => {
+        const session = await runSession(
+          Effect.gen(function* () {
+            const s = yield* service()
+            return yield* s.createNext({
+              directory: projectDir,
+              title: "payload-pure",
+            })
+          }),
+        )
+        const userID = Identifier.ascending("message")
+        const info = {
+          id: userID,
+          sessionID: session.id,
+          role: "user" as const,
+          time: { created: 1 },
+          agent: "build",
+          model: { providerID: "p", modelID: "m" },
+        }
+        const part = {
+          id: Identifier.ascending("part"),
+          sessionID: session.id,
+          messageID: userID,
+          type: "text" as const,
+          text: "from payload",
+        }
+
+        Effect.runSync(
+          Database.transaction((tx) =>
+            Effect.sync(() => {
+              SessionEntryProjection.message(tx, info as any)
+              Effect.runSync(MessageRepo.upsertMessage(info as any, tx))
+              SessionEntryProjection.part(tx, part as any)
+            }),
+          ),
+        )
+
+        expect(Effect.runSync(MessageRepo.listParts(userID))).toEqual([])
+        const user = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "user")
+        expect(user).toMatchObject({ type: "user", text: "from payload" })
+        expect(SessionEntry.toV1WrittenPart(user!, part as any)).toMatchObject({
+          id: part.id,
+          text: "from payload",
+        })
+      },
+    })
+  })
+
+  it("rebuilds a user entry when the part is not yet deleted", async () => {
+    await Instance.provide({
+      directory: projectDir,
+      fn: async () => {
+        const { session, userID } = await conversation()
+        const parts = Effect.runSync(MessageRepo.listParts(userID))
+        expect(parts.length).toBeGreaterThan(0)
+        const partID = parts[0]!.id
+
+        Effect.runSync(
+          Database.transaction((tx) =>
+            Effect.sync(() => SessionEntryProjection.partRemoved(tx, session.id, userID, partID)),
+          ),
+        )
+
+        expect(Effect.runSync(MessageRepo.listParts(userID)).some((part) => part.id === partID)).toBe(true)
+        const user = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "user")
+        expect(user).toMatchObject({ type: "user", text: "" })
+      },
+    })
+  })
+
+  it("rolls back the v1 row when entry projection throws", async () => {
+    await Instance.provide({
+      directory: projectDir,
+      fn: async () => {
+        const session = await runSession(
+          Effect.gen(function* () {
+            const s = yield* service()
+            return yield* s.createNext({
+              directory: projectDir,
+              title: "rollback",
+            })
+          }),
+        )
+        const userID = Identifier.ascending("message")
+        await expect(
+          runSession(
+            Effect.gen(function* () {
+              const s = yield* service()
+              yield* s.updateMessage({
+                id: userID,
+                sessionID: session.id,
+                role: "user",
+                time: { created: "bad" },
+                agent: "build",
+                model: { providerID: "p", modelID: "m" },
+              } as any)
+            }),
+          ),
+        ).rejects.toThrow()
+        expect(Effect.runSync(MessageRepo.getMessage(session.id, userID))).toBeUndefined()
+      },
+    })
+  })
+
+  it("persists v1 as toV1 of the entries just written", async () => {
+    await Instance.provide({
+      directory: projectDir,
+      fn: async () => {
+        const { session, userID, assistantID, assistant } = await conversation()
+
+        const userInfo = Effect.runSync(MessageRepo.getMessage(session.id, userID))
+        const userEntry = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "user")
+        expect(userInfo).toEqual(JSON.parse(JSON.stringify(SessionEntry.toV1Message([userEntry!]))))
+        expect(userInfo).toMatchObject({
+          role: "user",
+          agent: "build",
+          model: { providerID: "p", modelID: "m" },
+        })
+
+        const start = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "start")
+        expect(Effect.runSync(MessageRepo.getMessage(session.id, assistantID))).toEqual(
+          JSON.parse(JSON.stringify(SessionEntry.toV1Message([start!]))),
+        )
+        expect(Effect.runSync(MessageRepo.getMessage(session.id, assistantID))).toMatchObject({
+          parentID: userID,
+          path: { cwd: projectDir, root: projectDir },
+        })
+
+        const stepStart = {
+          id: Identifier.ascending("part"),
+          sessionID: session.id,
+          messageID: assistantID,
+          type: "step-start" as const,
+          snapshot: "snap-a",
+        }
+        const patch = {
+          id: Identifier.ascending("part"),
+          sessionID: session.id,
+          messageID: assistantID,
+          type: "patch" as const,
+          hash: "hash-a",
+          files: ["a.ts"],
+        }
+
+        await runSession(
+          Effect.gen(function* () {
+            const s = yield* service()
+            yield* s.updatePart(stepStart as any)
+            yield* s.updatePart(patch as any)
+            yield* s.updateMessage({
+              ...assistant,
+              time: { created: 2, completed: 3 },
+              finish: "stop",
+            } as any)
+          }),
+        )
+
+        const storedStart = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "start")
+        const storedComplete = Effect.runSync(SessionEntryRepo.list(session.id)).find(
+          (entry) => entry.type === "complete",
+        )
+        expect(Effect.runSync(MessageRepo.getMessage(session.id, assistantID))).toEqual(
+          JSON.parse(JSON.stringify(SessionEntry.toV1Message([storedStart!, storedComplete!]))),
+        )
+
+        const stepEntry = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "step-start")
+        const patchEntry = Effect.runSync(SessionEntryRepo.list(session.id)).find((entry) => entry.type === "patch")
+        expect(Effect.runSync(MessageRepo.listParts(assistantID)).find((part) => part.id === stepStart.id)).toEqual(
+          SessionEntry.toV1Part(stepEntry!),
+        )
+        expect(Effect.runSync(MessageRepo.listParts(assistantID)).find((part) => part.id === patch.id)).toEqual(
+          SessionEntry.toV1Part(patchEntry!),
+        )
+      },
+    })
+  })
+})

@@ -623,7 +623,7 @@ export const it = {
   "pane.close": "Chiudi",
   "hooks.foreign":
     "Di un'altra build di ADE, non di questa: questa non lo aggiorna e non lo rimuove, perché con quel file ci lavorano le sessioni dell'ADE ufficiale",
-  "bar.nikcliVersion": (v: string) => `Ragu Code ${v}: è il programma con cui partono le sessioni, non ADE`,
+  "bar.raguVersion": (v: string) => `Ragu Code ${v}: è il programma con cui partono le sessioni, non ADE`,
   "bar.sessions": (count: number) => `${count} ${count === 1 ? "sessione" : "sessioni"}`,
   "bar.meta.ade": (version: string) => `ADE ${version}`,
   "bar.info": (facts: string) => `Dettagli del progetto: ${facts}`,
@@ -752,7 +752,7 @@ export const it = {
   "bots.trust.can.claude":
     "Non potrà eseguire comandi né toccare .git e le impostazioni degli strumenti (.claude, .nikcli, .codex, .vscode, .husky, .github/workflows), ma potrà modificare gli altri file del progetto.",
   "bots.trust.can.claudeReadOnly": "Non potrà eseguire comandi né modificare file: potrà solo leggere il progetto.",
-  "bots.trust.can.nikcli":
+  "bots.trust.can.ragu":
     "Potrà fare quello che la tua configurazione di Ragu Code concede: il file del bot non può concedersi altro.",
   "bots.trust.selfApproves": (name: string, what: string, line: string) =>
     `Il bot «${name}» di questo progetto si concede da solo «${what}» nel suo file, con la riga «${line}», e Ragu Code lo eseguirebbe senza chiedere: non lo avvio. Togli quella riga dal file, oppure copia il bot tra i tuoi.`,
@@ -1721,9 +1721,9 @@ export const it = {
   "effort.xhigh": "molto alto",
   "effort.max": "massimo",
   "bots.models.noHost": "ADE non può eseguire Ragu Code qui",
-  "bots.models.notFound": "Ragu Code non si avvia (nikcli è nel PATH?)",
+  "bots.models.notFound": "Ragu Code non si avvia (ragu è nel PATH?)",
   "bots.models.exit": (code: string, detail: string) =>
-    `nikcli models è uscito con ${code}${detail ? `: ${detail}` : ""}`,
+    `ragu models è uscito con ${code}${detail ? `: ${detail}` : ""}`,
   "bots.models.empty": "Ragu Code non ha elencato nessun modello",
   "chat.model.choose": "Scegli un modello",
   "chat.model.none": "Nessun modello disponibile",
@@ -2045,7 +2045,7 @@ export const it = {
   "bots.turn.noHost": "Nessun host: un turno si esegue solo nell'app desktop.",
   "bots.turn.cannotRefuse": (label: string) => `${label} non può rifiutare gli strumenti che questo turno esclude.`,
   "bots.turn.didNotStart": (label: string, why: string) => `${label} non si avvia: ${why}`,
-  "bots.turn.nikcliOnServer":
+  "bots.turn.raguOnServer":
     "Un turno di Ragu Code gira sul server di Ragu Code di ADE, con le regole della sua sessione: qui non parte.",
   "bots.serve.noFolder": "Un bot Ragu Code risponde da un progetto: apri una cartella per parlargli.",
   "bots.serve.notAdmitted": (root: string) =>
@@ -2090,14 +2090,14 @@ export const it = {
   "bots.store.noHost": "Nessun host: i bot si creano solo nell'app desktop.",
   "bots.store.noProject": "Nessun progetto aperto: scegli «globale» o apri un progetto.",
   "bots.store.noGlobal": "Cartella di configurazione di Ragu Code non trovata.",
-  "bots.store.noNikcli": "Questo host non può eseguire Ragu Code.",
+  "bots.store.noRagu": "Questo host non può eseguire Ragu Code.",
   "bots.store.noWrite": "Questo host non può scrivere file.",
   "bots.store.noRead": "Questo host non può leggere file.",
   "bots.store.noDir": "Questo host non può leggere cartelle.",
   "bots.store.hostMissing": "Nessun host.",
   "bots.store.gatewayKept": (error: string) =>
     `Non ho tolto i token e i gateway di questo bot (${error}): il bot non è cancellato. Riprova: toglie quello che è rimasto.`,
-  "bots.store.nikcliExited": (code: string) => `Ragu Code è uscito con codice ${code}.`,
+  "bots.store.raguExited": (code: string) => `Ragu Code è uscito con codice ${code}.`,
   "bots.store.unknownCode": "sconosciuto",
   "bots.spend.plan": "abbonamento",
   "bots.spend.api": "chiave API",
@@ -2161,11 +2161,11 @@ export const it = {
     "Lascia vuoto e la scrive Ragu Code dalla descrizione. Oppure scrivila tu: come deve comportarsi, e cosa non deve fare.",
   "bots.form.cancel": "Annulla",
   "bots.form.creating": "Creazione…",
-  "bots.form.generateWithNikcli": "Genera con Ragu Code",
+  "bots.form.generateWithRagu": "Genera con Ragu Code",
   "bots.form.create": "Crea",
   "bots.form.generatingHint": "Ragu Code sta scrivendo l'agente. Ci vuole qualche secondo.",
   "bots.engine.label": "Motore",
-  "bots.runner.account.nikcli": "I provider collegati a Ragu Code (ragu auth).",
+  "bots.runner.account.ragu": "I provider collegati a Ragu Code (ragu auth).",
   "bots.runner.account.claude": "L'abbonamento Anthropic o la chiave API di Claude Code.",
   "bots.runner.account.codex": "L'abbonamento ChatGPT o la chiave API di Codex.",
   "bots.engine.accountHint": "Gli accessi si controllano in Impostazioni › Provider.",
@@ -2173,7 +2173,7 @@ export const it = {
     "ADE avvia la CLI ufficiale installata sul tuo computer, con l'account con cui vi hai fatto l'accesso, e non vede le tue credenziali. L'abbonamento è per uso personale e consuma i limiti del tuo piano: per automazioni intensive o non presidiate usa una chiave API nella CLI.",
   "bots.engine.model": "Modello",
   "bots.engine.modelDefaultOf": (label: string) => `predefinito di ${label}`,
-  "bots.engine.nikcliDefault": "Predefinito di Ragu Code",
+  "bots.engine.raguDefault": "Predefinito di Ragu Code",
   "bots.engine.effort": "Sforzo",
   "bots.engine.effortNotSupported": "non previsto",
   "bots.engine.effortDefault": "predefinito",

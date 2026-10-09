@@ -3,7 +3,7 @@ import * as SecureStore from "expo-secure-store"
 import { getMobileClient } from "./client"
 import { useUIStore } from "./store"
 
-const QUEUE_KEY = "nikcli_offline_queue"
+const QUEUE_KEY = "ragu_offline_queue"
 const MAX_ENTRIES = 50
 
 type OfflineOp = {

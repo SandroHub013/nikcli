@@ -26,7 +26,7 @@ impl MainWindow {
             WebviewWindowBuilder::new(app, Self::LABEL, WebviewUrl::App("/".into())),
             app,
         )
-        .title("Nikcli")
+        .title("Ragu")
         .decorations(true)
         .disable_drag_drop_handler()
         .min_inner_size(820.0, 620.0)
@@ -35,8 +35,8 @@ impl MainWindow {
         .maximized(true)
         .initialization_script(format!(
             r#"
-            window.__NIKCLI__ ??= {{}};
-            window.__NIKCLI__.updaterEnabled = {UPDATER_ENABLED};
+            window.__RAGU__ ??= {{}};
+            window.__RAGU__.updaterEnabled = {UPDATER_ENABLED};
           "#
         ));
 

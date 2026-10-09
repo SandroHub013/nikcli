@@ -2,7 +2,7 @@
  * Which ADE release is newer than the one running.
  *
  * ADE releases are GitHub releases on the fork, tagged `ade-v<major>.<minor>.<patch>`.
- * The same repository carries nikcli's own `v*` tags and other products'
+ * The same repository carries ragu's own `v*` tags and other products'
  * prefixed ones, so the prefix is the whole filter: a release without it is
  * somebody else's.
  *

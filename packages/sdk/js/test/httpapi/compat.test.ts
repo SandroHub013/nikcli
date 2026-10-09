@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createNikcliClient } from "../../src/httpapi/client.js"
+import { createRaguClient } from "../../src/httpapi/client.js"
 
 const json = (value: unknown, status = 200) =>
   new Response(JSON.stringify(value), {
@@ -14,8 +14,8 @@ const asFetch = (
 describe("HTTP compatibility adapter", () => {
   test("forwards inline selectors without leaking them into endpoint input", async () => {
     const requests: Array<{ url: URL; headers: Headers }> = []
-    const client = createNikcliClient({
-      baseUrl: "http://nikcli.test",
+    const client = createRaguClient({
+      baseUrl: "http://ragu.test",
       fetch: asFetch(async (input, init) => {
         requests.push({
           url: new URL(input.toString()),
@@ -33,14 +33,14 @@ describe("HTTP compatibility adapter", () => {
 
     expect(requests[0]?.url.pathname).toBe("/session/ses_test")
     expect(requests[0]?.url.search).toBe("")
-    expect(requests[0]?.headers.get("x-nikcli-directory")).toBe("/inline")
-    expect(requests[0]?.headers.get("x-nikcli-workspace")).toBe("workspace-inline")
+    expect(requests[0]?.headers.get("x-ragu-directory")).toBe("/inline")
+    expect(requests[0]?.headers.get("x-ragu-workspace")).toBe("workspace-inline")
   })
 
   test("keeps resultAt selector fields while options select the instance", async () => {
     let request: { url: URL; headers: Headers } | undefined
-    const client = createNikcliClient({
-      baseUrl: "http://nikcli.test",
+    const client = createRaguClient({
+      baseUrl: "http://ragu.test",
       fetch: asFetch(async (input, init) => {
         request = {
           url: new URL(input.toString()),
@@ -57,14 +57,14 @@ describe("HTTP compatibility adapter", () => {
 
     expect(request?.url.searchParams.get("directory")).toBe("/listed")
     expect(request?.url.searchParams.get("search")).toBe("needle")
-    expect(request?.headers.get("x-nikcli-directory")).toBe("/instance")
-    expect(request?.headers.get("x-nikcli-workspace")).toBe("workspace-option")
+    expect(request?.headers.get("x-ragu-directory")).toBe("/instance")
+    expect(request?.headers.get("x-ragu-workspace")).toBe("workspace-option")
   })
 
   test("forwards selectors to input and inputless streams", async () => {
     const requests: Array<{ url: URL; headers: Headers }> = []
-    const client = createNikcliClient({
-      baseUrl: "http://nikcli.test",
+    const client = createRaguClient({
+      baseUrl: "http://ragu.test",
       fetch: asFetch(async (input, init) => {
         requests.push({
           url: new URL(input.toString()),
@@ -84,17 +84,17 @@ describe("HTTP compatibility adapter", () => {
     })
     expect(await Array.fromAsync(session.stream)).toEqual([{ kind: "ready" }])
 
-    expect(requests[0]?.headers.get("x-nikcli-directory")).toBe("/events")
+    expect(requests[0]?.headers.get("x-ragu-directory")).toBe("/events")
     expect(requests[1]?.url.pathname).toBe("/mobile/session/ses_stream/stream")
-    expect(requests[1]?.headers.get("x-nikcli-directory")).toBe("/session-stream")
+    expect(requests[1]?.headers.get("x-ragu-directory")).toBe("/session-stream")
   })
 
   test("settles errors and honors default and per-call throwOnError", async () => {
     const fetch = asFetch(async () => {
       throw new Error("offline")
     })
-    const settled = createNikcliClient({
-      baseUrl: "http://nikcli.test",
+    const settled = createRaguClient({
+      baseUrl: "http://ragu.test",
       fetch,
     })
     const result = await settled.global.health()
@@ -102,8 +102,8 @@ describe("HTTP compatibility adapter", () => {
     expect(result.error).toHaveProperty("name", "ClientError")
 
     await expect(settled.global.health({ throwOnError: true })).rejects.toHaveProperty("name", "ClientError")
-    const throwing = createNikcliClient({
-      baseUrl: "http://nikcli.test",
+    const throwing = createRaguClient({
+      baseUrl: "http://ragu.test",
       fetch,
       throwOnError: true,
     })
@@ -112,8 +112,8 @@ describe("HTTP compatibility adapter", () => {
   })
 
   test("includes unexpected response status when settling", async () => {
-    const client = createNikcliClient({
-      baseUrl: "http://nikcli.test",
+    const client = createRaguClient({
+      baseUrl: "http://ragu.test",
       fetch: asFetch(async () => json({ message: "unavailable" }, 503)),
     })
 

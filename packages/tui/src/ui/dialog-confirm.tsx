@@ -3,7 +3,7 @@ import { DialogHeader, useDialog, type DialogContext } from "./dialog"
 import { createStore } from "solid-js/store"
 import { For } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
-import { Locale } from "@nikcli-ai/util/locale"
+import { Locale } from "@ragu/util/locale"
 
 type ConfirmKey = "cancel" | "extra" | "confirm"
 

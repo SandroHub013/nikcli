@@ -39,7 +39,7 @@ export interface TranscriberService {
   readonly idle?: Effect.Effect<boolean>
 }
 
-export const Transcriber = Context.GenericTag<TranscriberService>("@nikcli-ai/voice/Transcriber")
+export const Transcriber = Context.GenericTag<TranscriberService>("@ragu/voice/Transcriber")
 
 /**
  * Text-to-speech speaker service interface.
@@ -57,7 +57,7 @@ export interface SpeakerService {
   readonly append?: (text: string) => Effect.Effect<void, VoiceError>
 }
 
-export const Speaker = Context.GenericTag<SpeakerService>("@nikcli-ai/voice/Speaker")
+export const Speaker = Context.GenericTag<SpeakerService>("@ragu/voice/Speaker")
 
 /**
  * Microphone hardware capture and audio processing pipeline service interface.
@@ -75,9 +75,9 @@ export interface MicCaptureService {
   readonly segments: Stream.Stream<CapturedSegment, VoiceError>
 }
 
-export const MicCapture = Context.GenericTag<MicCaptureService>("@nikcli-ai/voice/MicCapture")
+export const MicCapture = Context.GenericTag<MicCaptureService>("@ragu/voice/MicCapture")
 
 /**
  * VoiceHost service tag directly exposing the existing VoiceHost contract.
  */
-export const VoiceHostService = Context.GenericTag<VoiceHost>("@nikcli-ai/voice/VoiceHostService")
+export const VoiceHostService = Context.GenericTag<VoiceHost>("@ragu/voice/VoiceHostService")

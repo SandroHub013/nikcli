@@ -1,5 +1,5 @@
 {
-  "name": "@nikcli-ai/console-app",
+  "name": "@ragu/console-app",
   "version": "1.431.0",
   "type": "module",
   "license": "MIT",
@@ -7,7 +7,7 @@
     "typecheck": "tsc --noEmit",
     "dev": "vite dev --host 0.0.0.0",
     "dev:remote": "VITE_AUTH_URL=https://auth.dev.nikcli-ai.dev VITE_STRIPE_PUBLISHABLE_KEY=pk_test_51RtuLNE7fOCwHSD4mewwzFejyytjdGoSDK7CAvhbffwaZnPbNb2rwJICw6LTOXCmWO320fSNXvb5NzI08RZVkAxd00syfqrW7t bun sst shell --stage=dev bun dev",
-    "build": "./script/generate-sitemap.ts && vite build && ../../nikcli/script/schema.ts ./.output/public/config.json",
+    "build": "./script/generate-sitemap.ts && vite build && ../../ragu/script/schema.ts ./.output/public/config.json",
     "start": "vite start"
   },
   "dependencies": {
@@ -15,11 +15,11 @@
     "@ibm/plex": "6.4.1",
     "@jsx-email/render": "1.1.1",
     "@kobalte/core": "catalog:",
-    "@nikcli-ai/auth": "workspace:*",
-    "@nikcli-ai/console-core": "workspace:*",
-    "@nikcli-ai/console-mail": "workspace:*",
-    "@nikcli-ai/console-resource": "workspace:*",
-    "@nikcli-ai/ui": "workspace:*",
+    "@ragu/auth": "workspace:*",
+    "@ragu/console-core": "workspace:*",
+    "@ragu/console-mail": "workspace:*",
+    "@ragu/console-resource": "workspace:*",
+    "@ragu/ui": "workspace:*",
     "@smithy/eventstream-codec": "4.2.7",
     "@smithy/util-utf8": "4.2.0",
     "@solidjs/meta": "catalog:",

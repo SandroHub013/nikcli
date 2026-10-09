@@ -3,11 +3,11 @@ import { t } from "../../i18n"
 import { approveOnPhone, permissionAnswerer } from "./approval"
 
 /*
- * B8d: the question on the phone is nikcli's own event, with the whole
+ * B8d: the question on the phone is ragu's own event, with the whole
  * command: nothing read off a terminal, nothing cut, so nothing to warn about.
  */
 describe("the command shown on the phone", () => {
-  test("the whole command, as nikcli asked about it, with no warning that it may be cut", async () => {
+  test("the whole command, as ragu asked about it, with no warning that it may be cut", async () => {
     let asked = ""
     const ask = async (question: string) => {
       asked = question

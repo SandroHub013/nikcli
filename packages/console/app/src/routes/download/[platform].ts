@@ -2,19 +2,19 @@ import { APIEvent } from "@solidjs/start"
 import { DownloadPlatform } from "./types"
 
 const assetNames: Record<string, string> = {
-  "darwin-aarch64-dmg": "nikcli-desktop-darwin-aarch64.dmg",
-  "darwin-x64-dmg": "nikcli-desktop-darwin-x64.dmg",
-  "windows-x64-nsis": "nikcli-desktop-windows-x64.exe",
-  "linux-x64-deb": "nikcli-desktop-linux-amd64.deb",
-  "linux-x64-appimage": "nikcli-desktop-linux-amd64.AppImage",
-  "linux-x64-rpm": "nikcli-desktop-linux-x86_64.rpm",
+  "darwin-aarch64-dmg": "ragu-desktop-darwin-aarch64.dmg",
+  "darwin-x64-dmg": "ragu-desktop-darwin-x64.dmg",
+  "windows-x64-nsis": "ragu-desktop-windows-x64.exe",
+  "linux-x64-deb": "ragu-desktop-linux-amd64.deb",
+  "linux-x64-appimage": "ragu-desktop-linux-amd64.AppImage",
+  "linux-x64-rpm": "ragu-desktop-linux-x86_64.rpm",
 } satisfies Record<DownloadPlatform, string>
 
 // Doing this on the server lets us preserve the original name for platforms we don't care to rename for
 const downloadNames: Record<string, string> = {
-  "darwin-aarch64-dmg": "Nikcli Desktop.dmg",
-  "darwin-x64-dmg": "Nikcli Desktop.dmg",
-  "windows-x64-nsis": "Nikcli Desktop Installer.exe",
+  "darwin-aarch64-dmg": "Ragu Desktop.dmg",
+  "darwin-x64-dmg": "Ragu Desktop.dmg",
+  "windows-x64-nsis": "Ragu Desktop Installer.exe",
 } satisfies { [K in DownloadPlatform]?: string }
 
 export async function GET({ params: { platform } }: APIEvent) {

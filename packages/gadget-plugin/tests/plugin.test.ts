@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import path from "node:path"
-import type { Hooks, PluginInput } from "@nikcli-ai/plugin"
-import { Gadget } from "@nikcli-ai/gadget"
+import type { Hooks, PluginInput } from "@ragu/plugin"
+import { Gadget } from "@ragu/gadget"
 import plugin from "../src/index.ts"
 import { rejection, tempDir, until } from "./helpers.ts"
 
@@ -71,11 +71,11 @@ type Execute = (
 let temp: ReturnType<typeof tempDir>
 let hooks: Hooks[] = []
 let aborts: Array<() => void> = []
-const saved = { state: process.env.NIKCLI_GADGET_STATE }
+const saved = { state: process.env.RAGU_GADGET_STATE }
 
 beforeEach(() => {
   temp = tempDir()
-  process.env.NIKCLI_GADGET_STATE = path.join(temp.dir, "device")
+  process.env.RAGU_GADGET_STATE = path.join(temp.dir, "device")
 })
 
 afterEach(async () => {
@@ -84,8 +84,8 @@ afterEach(async () => {
   for (const hook of hooks) await hook.dispose?.()
   hooks = []
   temp.cleanup()
-  if (saved.state === undefined) delete process.env.NIKCLI_GADGET_STATE
-  else process.env.NIKCLI_GADGET_STATE = saved.state
+  if (saved.state === undefined) delete process.env.RAGU_GADGET_STATE
+  else process.env.RAGU_GADGET_STATE = saved.state
 })
 
 async function load(h = harness(), options: Record<string, unknown> = {}) {
@@ -119,7 +119,7 @@ async function pairDevice(execute: Execute, gadget: Gadget, asks: Ask[] = []) {
 
 describe("the plugin", () => {
   test("is a v1 server plugin that registers the gadget tool", async () => {
-    expect(plugin.id).toBe("nikcli:gadgets")
+    expect(plugin.id).toBe("ragu:gadgets")
     const { hook } = await load()
     expect(Object.keys(hook.tool ?? {})).toEqual(["gadget"])
     expect(typeof hook.dispose).toBe("function")
@@ -159,7 +159,7 @@ describe("the gadget tool", () => {
     const result = await execute({ action: "pair" }, context(asks))
     expect(asks).toEqual([{ permission: "gadget", patterns: ["pair"], always: [], metadata: { action: "pair" } }])
     expect(result.output).toMatch(/Code: \d{6}/)
-    expect(result.output).toContain("nikcli-gadget pair --server http://127.0.0.1:")
+    expect(result.output).toContain("ragu-gadget pair --server http://127.0.0.1:")
   })
 
   test("a denied pairing opens no window", async () => {

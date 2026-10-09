@@ -22,8 +22,8 @@ const toc = [
 
 <DocsLayout
   title="Missions"
-  subtitle="High-altitude workflows: decompose a goal into milestones, each holding a DAG of features, with a validation checkpoint per milestone. Source: packages/nikcli/src/mission/."
-  description="Guide to nikcli missions, milestones, feature DAGs, validation workers, and long-running workflows."
+  subtitle="High-altitude workflows: decompose a goal into milestones, each holding a DAG of features, with a validation checkpoint per milestone. Source: packages/ragu/src/mission/."
+  description="Guide to ragu missions, milestones, feature DAGs, validation workers, and long-running workflows."
   toc={toc}
 >
   <section id="overview" class="doc-section">
@@ -90,7 +90,7 @@ const toc = [
   <section id="schema" class="doc-section">
     <h2>Mission schema</h2>
     <p>
-      All persisted types are defined in <code>packages/nikcli/src/mission/schema.ts</code> as
+      All persisted types are defined in <code>packages/ragu/src/mission/schema.ts</code> as
       zod schemas. The shape is deliberately close to the Loop schema so the two engines can share
       tooling.
     </p>
@@ -139,7 +139,7 @@ const toc = [
     <h2>Lifecycle</h2>
     <p>
       A mission moves through these states as the orchestrator walks it. The full
-      <code>MissionStatus</code> schema in <code>packages/nikcli/src/mission/schema.ts</code> also
+      <code>MissionStatus</code> schema in <code>packages/ragu/src/mission/schema.ts</code> also
       carries <code>planning</code> and <code>ready</code> for the brief-to-milestones phase; the
       states below are the ones you see in the TUI and in bus events.
     </p>
@@ -197,37 +197,37 @@ const toc = [
   <section id="cli" class="doc-section">
     <h2>CLI subcommands</h2>
     <p>
-      <code>nikcli mission</code> is a thin headless wrapper over the orchestrator. It accepts
+      <code>ragu mission</code> is a thin headless wrapper over the orchestrator. It accepts
       a brief from a file or flag, generates a draft plan, and lets you start, pause, resume,
       or cancel execution.
     </p>
     <table class="doc-table">
       <thead><tr><th>Subcommand</th><th>Purpose</th></tr></thead>
       <tbody>
-        <tr><td><code>nikcli mission</code></td><td>Open the headless mission manager: list, status, quick actions.</td></tr>
-        <tr><td><code>nikcli mission new [-f file] [--model …] [--agent …]</code></td><td>Create a mission from a brief. With <code>-f</code>, the brief is read from a Markdown or text file; otherwise it is read from <code>--brief</code> or stdin.</td></tr>
-        <tr><td><code>nikcli mission start &lt;id&gt;</code></td><td>Begin orchestrating the mission. The mission moves from <code>pending</code> to <code>running</code>.</td></tr>
-        <tr><td><code>nikcli mission pause &lt;id&gt;</code></td><td>Pause a running mission. In-flight features finish; no new features start.</td></tr>
-        <tr><td><code>nikcli mission resume &lt;id&gt;</code></td><td>Resume a paused mission.</td></tr>
-        <tr><td><code>nikcli mission cancel &lt;id&gt;</code></td><td>Cancel a mission. In-flight workers are aborted via <code>prompt.cancel</code>.</td></tr>
-        <tr><td><code>nikcli mission get &lt;id&gt;</code></td><td>Show progress, current milestone, current feature, statuses, and last error.</td></tr>
-        <tr><td><code>nikcli mission list</code></td><td>List all missions in the current project with their runtime status.</td></tr>
+        <tr><td><code>ragu mission</code></td><td>Open the headless mission manager: list, status, quick actions.</td></tr>
+        <tr><td><code>ragu mission new [-f file] [--model …] [--agent …]</code></td><td>Create a mission from a brief. With <code>-f</code>, the brief is read from a Markdown or text file; otherwise it is read from <code>--brief</code> or stdin.</td></tr>
+        <tr><td><code>ragu mission start &lt;id&gt;</code></td><td>Begin orchestrating the mission. The mission moves from <code>pending</code> to <code>running</code>.</td></tr>
+        <tr><td><code>ragu mission pause &lt;id&gt;</code></td><td>Pause a running mission. In-flight features finish; no new features start.</td></tr>
+        <tr><td><code>ragu mission resume &lt;id&gt;</code></td><td>Resume a paused mission.</td></tr>
+        <tr><td><code>ragu mission cancel &lt;id&gt;</code></td><td>Cancel a mission. In-flight workers are aborted via <code>prompt.cancel</code>.</td></tr>
+        <tr><td><code>ragu mission get &lt;id&gt;</code></td><td>Show progress, current milestone, current feature, statuses, and last error.</td></tr>
+        <tr><td><code>ragu mission list</code></td><td>List all missions in the current project with their runtime status.</td></tr>
       </tbody>
     </table>
     <DocCode language="bash">
 # Draft a mission from a brief file and start it
-nikcli mission new -f ./brief.md --agent build --model anthropic/claude-sonnet-4.5
-nikcli mission start mss_abc123
+ragu mission new -f ./brief.md --agent build --model anthropic/claude-sonnet-4.5
+ragu mission start mss_abc123
 
 # Watch progress
-nikcli mission get mss_abc123
+ragu mission get mss_abc123
 
 # Pause and resume
-nikcli mission pause mss_abc123
-nikcli mission resume mss_abc123
+ragu mission pause mss_abc123
+ragu mission resume mss_abc123
 
 # Cancel
-nikcli mission cancel mss_abc123
+ragu mission cancel mss_abc123
     </DocCode>
     <DocCallout type="info" title="Reserved objectives">
       <p>
@@ -243,7 +243,7 @@ nikcli mission cancel mss_abc123
     <p>
       The orchestrator publishes typed bus events for the TUI, mobile, and SDK clients to
       subscribe to. They live next to the orchestrator in
-      <code>packages/nikcli/src/mission/orchestrator.ts</code>.
+      <code>packages/ragu/src/mission/orchestrator.ts</code>.
     </p>
     <table class="doc-table">
       <thead><tr><th>Event</th><th>Payload</th><th>Use</th></tr></thead>
@@ -298,12 +298,12 @@ nikcli mission cancel mss_abc123
     <table class="doc-table">
       <thead><tr><th>File</th><th>What to inspect</th></tr></thead>
       <tbody>
-        <tr><td><code>packages/nikcli/src/mission/schema.ts</code></td><td>Zod schemas and pure helpers for <code>Mission</code>, <code>Milestone</code>, <code>Feature</code>, <code>MissionModels</code>, <code>ValidationPolicy</code>.</td></tr>
-        <tr><td><code>packages/nikcli/src/mission/manager.ts</code></td><td>CRUD and execution-record persistence.</td></tr>
-        <tr><td><code>packages/nikcli/src/mission/orchestrator.ts</code></td><td>Headless engine, lease/heartbeat, single-flight, bus events.</td></tr>
-        <tr><td><code>packages/nikcli/src/cli/cmd/mission.ts</code></td><td>CLI surface (<code>nikcli mission …</code>).</td></tr>
+        <tr><td><code>packages/ragu/src/mission/schema.ts</code></td><td>Zod schemas and pure helpers for <code>Mission</code>, <code>Milestone</code>, <code>Feature</code>, <code>MissionModels</code>, <code>ValidationPolicy</code>.</td></tr>
+        <tr><td><code>packages/ragu/src/mission/manager.ts</code></td><td>CRUD and execution-record persistence.</td></tr>
+        <tr><td><code>packages/ragu/src/mission/orchestrator.ts</code></td><td>Headless engine, lease/heartbeat, single-flight, bus events.</td></tr>
+        <tr><td><code>packages/ragu/src/cli/cmd/mission.ts</code></td><td>CLI surface (<code>ragu mission …</code>).</td></tr>
         <tr><td><code>packages/tui/src/feature-plugins/mission/</code></td><td>TUI feature plugin: store, SDK, runner, dialogs.</td></tr>
-        <tr><td><code>packages/nikcli/src/loop/engine.ts</code></td><td>The Loop engine whose operational guarantees the orchestrator reuses verbatim.</td></tr>
+        <tr><td><code>packages/ragu/src/loop/engine.ts</code></td><td>The Loop engine whose operational guarantees the orchestrator reuses verbatim.</td></tr>
       </tbody>
     </table>
   </section>

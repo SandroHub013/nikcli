@@ -71,7 +71,7 @@ const REDACT_PATTERNS: RegExp[] = [
   /xox[abprs]-[A-Za-z0-9-]{10,}/g,
   // JWT shape (three dot-separated base64url segments)
   /eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
-  // nikcli account tokens. `UserDB` mints these as `nku_` + 32 random bytes of
+  // ragu account tokens. `UserDB` mints these as `nku_` + 32 random bytes of
   // base64url (`src/user/users.ts`), so the redactor has to know the one
   // credential format this product issues itself.
   /nku_[A-Za-z0-9_-]{16,}/g,

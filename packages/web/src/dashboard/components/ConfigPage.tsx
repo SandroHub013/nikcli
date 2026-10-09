@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { AuthProvider, useAuth } from "../auth/AuthContext"
-import { studioApi, type NikcliConfig, type ConfigPathsData } from "../lib/studio-api"
+import { studioApi, type RaguConfig, type ConfigPathsData } from "../lib/studio-api"
 import {
   Card,
   EmptyState,
@@ -19,7 +19,7 @@ const isDev = typeof import.meta !== "undefined" && (import.meta as any).env?.DE
 function ConfigPageInner() {
   const { token, serverUrl } = useAuth()
   const isConnected = isDev || (!!token && !!serverUrl)
-  const [config, setConfig] = useState<NikcliConfig | null>(null)
+  const [config, setConfig] = useState<RaguConfig | null>(null)
   const [paths, setPaths] = useState<ConfigPathsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -40,7 +40,7 @@ function ConfigPageInner() {
       .finally(() => setLoading(false))
   }, [token, serverUrl])
 
-  const save = async (patch: Partial<NikcliConfig>) => {
+  const save = async (patch: Partial<RaguConfig>) => {
     setSaving(true)
     setSaved(false)
     try {

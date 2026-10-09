@@ -50,7 +50,7 @@ export const chatCompletionsSchema = z.object({
   stop: z.union([z.string(), z.array(z.string())]).optional(),
   seed: z.number().int().optional(),
   user: z.string().optional(),
-  nikcli: z
+  ragu: z
     .object({
       cache: z.boolean().optional(),
       cacheTtlSeconds: z.number().int().positive().optional(),

@@ -113,7 +113,7 @@ export async function startHarness(options: HarnessOptions) {
   if (!POLICY) throw new Error("no CSP found in nikverse.rs")
   const CSP = POLICY.replaceAll("http://nikverse.localhost nikverse:", "'self'")
   const LEVELS_DIR = join(root, "src-tauri", "nikverse-assets", "levels")
-  const LOGO = readFileSync(join(root, "src", "nikverse", "city", "nikcli-logo-dark.svg"), "utf8")
+  const LOGO = readFileSync(join(root, "src", "nikverse", "city", "ragu-logo-dark.svg"), "utf8")
   const text = (path: string) => readFileSync(join(world, path), "utf8")
 
   const server = Bun.serve({

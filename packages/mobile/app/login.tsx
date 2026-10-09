@@ -44,7 +44,7 @@ function AnimatedLogo({ scale, opacity }: { scale: Animated.Value; opacity: Anim
         source={require("@/assets/app-icon-mark.png")}
         style={{ width: 56, height: 56 }}
         contentFit="cover"
-        accessibilityLabel="nikcli"
+        accessibilityLabel="ragu"
       />
     </Animated.View>
   )
@@ -357,7 +357,7 @@ export default function LoginScreen() {
                   ...typeStyle(26, { weight: "700" }),
                 }}
               >
-                nikcli
+                ragu
               </Text>
             </Animated.View>
             <Animated.View style={{ opacity: logoOpacity, marginTop: 4 }}>
@@ -376,11 +376,11 @@ export default function LoginScreen() {
                     ...typeStyle(16, { weight: "700" }),
                   }}
                 >
-                  {isSignup ? "Sign up with Nikcli" : "Sign in with Nikcli"}
+                  {isSignup ? "Sign up with Ragu" : "Sign in with Ragu"}
                 </Text>
                 <Text style={{ color: palette.muted, ...typeStyle(13) }}>
                   {isSignup
-                    ? "Create your Nikcli account securely in your browser with GitHub or an email code."
+                    ? "Create your Ragu account securely in your browser with GitHub or an email code."
                     : "Continue securely in your browser with GitHub or an email code."}
                 </Text>
 
@@ -389,7 +389,7 @@ export default function LoginScreen() {
                 </Animated.View>
 
                 <ActionButton
-                  label={isSignup ? "Sign up with Nikcli" : "Sign in with Nikcli"}
+                  label={isSignup ? "Sign up with Ragu" : "Sign in with Ragu"}
                   loading={oauthLoading}
                   onPress={handleOAuth}
                   disabled={oauthLoading || !config}
@@ -429,7 +429,7 @@ export default function LoginScreen() {
                       </>
                     ) : (
                       <>
-                        New to nikcli?{" "}
+                        New to ragu?{" "}
                         <Text
                           style={{
                             color: palette.accentLight,

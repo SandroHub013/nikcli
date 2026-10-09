@@ -16,7 +16,7 @@ export async function createMenu(trigger: (id: string) => void) {
   const menu = await Menu.new({
     items: [
       await Submenu.new({
-        text: "Nikcli",
+        text: "Ragu",
         items: [
           await PredefinedMenuItem.new({
             item: { About: null },
@@ -177,7 +177,7 @@ export async function createMenu(trigger: (id: string) => void) {
             item: "Separator",
           }),
           await MenuItem.new({
-            action: () => trigger("nikcli.status"),
+            action: () => trigger("ragu.status"),
             text: t("command.status.open"),
           }),
           await MenuItem.new({
@@ -194,7 +194,7 @@ export async function createMenu(trigger: (id: string) => void) {
             text: t("desktop.menu.documentation"),
           }),
           await MenuItem.new({
-            action: () => openUrl("https://discord.com/invite/nikcli"),
+            action: () => openUrl("https://discord.com/invite/ragu"),
             text: t("desktop.menu.supportForum"),
           }),
           await PredefinedMenuItem.new({

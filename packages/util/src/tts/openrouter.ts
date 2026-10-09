@@ -1,4 +1,4 @@
-import type { TTSProvider, TTSProviderConfig, TTSRequest, TTSResponse, TTSVoice } from "@nikcli-ai/util/tts/provider"
+import type { TTSProvider, TTSProviderConfig, TTSRequest, TTSResponse, TTSVoice } from "@ragu/util/tts/provider"
 
 const OPENROUTER_VOICES: TTSVoice[] = [
   { id: "alloy", name: "Alloy" },
@@ -90,8 +90,8 @@ export class OpenRouterProvider implements TTSProvider {
    */
   protected async resolveCredentials(): Promise<{ apiKey?: string; baseURL?: string }> {
     return {
-      apiKey: process.env.NIKCLI_OPENROUTER_API_KEY ?? process.env.OPENROUTER_API_KEY,
-      baseURL: process.env.NIKCLI_OPENROUTER_BASE_URL,
+      apiKey: process.env.RAGU_OPENROUTER_API_KEY ?? process.env.OPENROUTER_API_KEY,
+      baseURL: process.env.RAGU_OPENROUTER_BASE_URL,
     }
   }
 
@@ -106,8 +106,8 @@ export class OpenRouterProvider implements TTSProvider {
         [
           "OpenRouter API key not found.",
           "",
-          "Set NIKCLI_OPENROUTER_API_KEY (or OPENROUTER_API_KEY),",
-          "or run `nikcli auth login` and choose openrouter.",
+          "Set RAGU_OPENROUTER_API_KEY (or OPENROUTER_API_KEY),",
+          "or run `ragu auth login` and choose openrouter.",
         ].join("\n"),
       )
     }
@@ -143,7 +143,7 @@ export class OpenRouterProvider implements TTSProvider {
         Authorization: `Bearer ${config.apiKey}`,
         "Content-Type": "application/json",
         "HTTP-Referer": "https://nikcli-ai.dev/",
-        "X-Title": "nikcli",
+        "X-Title": "ragu",
       },
       body: JSON.stringify({
         model: modelId,

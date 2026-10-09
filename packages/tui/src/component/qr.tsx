@@ -10,8 +10,8 @@ import {
   kittyPlaceholderGrid,
   setPixel,
   supportsKittyUnicodePlaceholders,
-} from "@nikcli-ai/tui-image"
-import { shouldUseAsciiQR } from "@nikcli-ai/util/win32"
+} from "@ragu/tui-image"
+import { shouldUseAsciiQR } from "@ragu/util/win32"
 import { cellSize } from "@tui/util/browser-frames"
 import { scheduleOverlayRepaint } from "@tui/util/repaint"
 

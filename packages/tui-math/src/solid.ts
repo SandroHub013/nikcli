@@ -1,7 +1,7 @@
 /**
- * `<nikcli_latex>` — the Solid intrinsic wrapping {@link LatexRenderable}.
+ * `<ragu_latex>` — the Solid intrinsic wrapping {@link LatexRenderable}.
  *
- * The element name is prefixed for the same reason `<nikcli_background>` is:
+ * The element name is prefixed for the same reason `<ragu_background>` is:
  * `extend()` writes into one process-wide catalogue shared with plugins, and
  * a bare `latex` would be the kind of name a plugin might reasonably claim.
  *
@@ -13,10 +13,10 @@ import { LatexRenderable } from "./renderable"
 
 declare module "@opentui/solid" {
   interface OpenTUIComponents {
-    nikcli_latex: typeof LatexRenderable
+    ragu_latex: typeof LatexRenderable
   }
 }
 
-extend({ nikcli_latex: LatexRenderable })
+extend({ ragu_latex: LatexRenderable })
 
 export * from "./index"

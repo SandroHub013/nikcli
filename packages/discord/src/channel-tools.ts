@@ -1,6 +1,6 @@
 import { JsonStore } from "./persist"
 
-// Per-channel tool policy. An admin decides which nikcli tools the bot may use
+// Per-channel tool policy. An admin decides which ragu tools the bot may use
 // in each channel (the "tools and access an admin set up for that channel" part
 // of Claude Tag). The resulting allow/deny map is passed to body.tools on every
 // prompt.
@@ -63,7 +63,7 @@ export namespace ChannelTools {
   }
 
   /**
-   * Handle the `/nikcli-tools` slash command body. Returns the text to reply with.
+   * Handle the `/ragu-tools` slash command body. Returns the text to reply with.
    * Subcommands: (empty)/list, allow <tool>, deny <tool>, reset.
    */
   export function handleCommand(rawText: string, key: string, userId: string | undefined): string {
@@ -77,13 +77,13 @@ export namespace ChannelTools {
     switch ((sub ?? "list").toLowerCase()) {
       case "allow":
       case "enable": {
-        if (!arg) return "Usage: `/nikcli-tools allow <tool>`"
+        if (!arg) return "Usage: `/ragu-tools allow <tool>`"
         set(key, arg, true)
         return `✅ Enabled **${arg}** in this channel.\n${describe(key)}`
       }
       case "deny":
       case "disable": {
-        if (!arg) return "Usage: `/nikcli-tools deny <tool>`"
+        if (!arg) return "Usage: `/ragu-tools deny <tool>`"
         set(key, arg, false)
         return `🚫 Disabled **${arg}** in this channel.\n${describe(key)}`
       }

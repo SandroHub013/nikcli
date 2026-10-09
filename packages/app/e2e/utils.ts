@@ -1,5 +1,5 @@
-import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
-import { base64Encode } from "@nikcli-ai/util/encode"
+import { createRaguClient } from "@ragu/sdk/httpapi"
+import { base64Encode } from "@ragu/util/encode"
 
 export const serverHost = process.env.PLAYWRIGHT_SERVER_HOST ?? "localhost"
 export const serverPort = process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"
@@ -11,7 +11,7 @@ export const modKey = process.platform === "darwin" ? "Meta" : "Control"
 export const terminalToggleKey = "Control+Backquote"
 
 export function createSdk(directory?: string) {
-  return createNikcliClient({ baseUrl: serverUrl, directory, throwOnError: true })
+  return createRaguClient({ baseUrl: serverUrl, directory, throwOnError: true })
 }
 
 export async function getWorktree() {

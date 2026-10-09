@@ -1,4 +1,4 @@
-import type { PermissionRequest, Session } from "@nikcli-ai/sdk/httpapi"
+import type { PermissionRequest, Session } from "@ragu/sdk/httpapi"
 import { cmp } from "./utils"
 import { SESSION_RECENT_LIMIT, SESSION_RECENT_WINDOW } from "./types"
 

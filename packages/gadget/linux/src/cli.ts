@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 /**
- * `nikcli-gadget` — pair, run, send, health.
+ * `ragu-gadget` — pair, run, send, health.
  *
  * Runs on Bun or Node ≥ 20 (`node --experimental-strip-types` or a compiled
  * build). Subcommands mirror what Muse's `musegadget` offers, with the one
- * difference that matters: the other end is a nikcli server you run, so
- * `pair` takes the server URL and the code `nikcli` printed, not a cloud token.
+ * difference that matters: the other end is a ragu server you run, so
+ * `pair` takes the server URL and the code `ragu` printed, not a cloud token.
  */
 import { parseArgs } from "node:util"
 import path from "node:path"
@@ -16,18 +16,18 @@ import { clearPairing, readPairing, stateFile } from "./state.ts"
 import { collect } from "./commands/health.ts"
 import { GadgetError } from "./protocol.ts"
 
-const USAGE = `nikcli-gadget — a device that works for a nikcli agent
+const USAGE = `ragu-gadget — a device that works for a ragu agent
 
 Usage:
-  nikcli-gadget pair --server <url> --code <code> [--name <name>] [gadget.ts]
-  nikcli-gadget run [gadget.ts]
-  nikcli-gadget send "<text>" [--session-id <id>]
-  nikcli-gadget health
-  nikcli-gadget status
-  nikcli-gadget unpair
-  nikcli-gadget init [gadget.ts]
+  ragu-gadget pair --server <url> --code <code> [--name <name>] [gadget.ts]
+  ragu-gadget run [gadget.ts]
+  ragu-gadget send "<text>" [--session-id <id>]
+  ragu-gadget health
+  ragu-gadget status
+  ragu-gadget unpair
+  ragu-gadget init [gadget.ts]
 
-The gadget file default-exports a Gadget (see \`nikcli-gadget init\`). Without one, the
+The gadget file default-exports a Gadget (see \`ragu-gadget init\`). Without one, the
 four built-in commands (system.run, file.read, file.write, device.health) are served.
 
 State: ${stateFile()}
@@ -50,7 +50,7 @@ async function loadGadget(file: string | undefined, name?: string): Promise<Gadg
   return new Gadget(name ? { name } : {})
 }
 
-const TEMPLATE = `import { Gadget, display, button } from "@nikcli-ai/gadget"
+const TEMPLATE = `import { Gadget, display, button } from "@ragu/gadget"
 
 export default new Gadget({
   name: "my-gadget",

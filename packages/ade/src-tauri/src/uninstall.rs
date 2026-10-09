@@ -1,7 +1,7 @@
 //! What ADE takes off the computer when it is uninstalled, run by the installer's PREUNINSTALL hook (`windows/hooks.nsh`) as the app's own
 //! executable with one flag, before anything of the app starts: no window, no second instance forwarded to a running one, no network.
 //!
-//! - `--unlink-agents`: ADE's hooks and plugin out of Claude Code, Codex and nikcli (`agent_link::unlink_all`), only for the released
+//! - `--unlink-agents`: ADE's hooks and plugin out of Claude Code, Codex and ragu (`agent_link::unlink_all`), only for the released
 //!   identity (`unlink_allowed`): they are global, and a build of another identity must not strip the installed ADE of them;
 //! - `--clean-caches`: what the app downloaded and can download again, out of its local data folder (below);
 //! - `--delete-secrets`: the API keys and the bots' tokens out of the system keychain; the hook runs it only when the user ticked «elimina

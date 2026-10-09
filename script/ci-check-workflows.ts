@@ -22,9 +22,9 @@ export {} // mark as module so top-level await is allowed
 // ─── Config ─────────────────────────────────────────────────────────────────
 
 const WINDOW_HOURS = 6 // look at the last 6h (slightly wider than the 5h cron)
-const STICKY_MARKER = "<!-- nikcli-ci-check -->"
+const STICKY_MARKER = "<!-- ragu-ci-check -->"
 const ISSUE_TITLE = "CI workflow health check"
-const ISSUE_LABELS = ["nikcli-ci-check", "ci"]
+const ISSUE_LABELS = ["ragu-ci-check", "ci"]
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -72,7 +72,7 @@ const headers: Record<string, string> = {
   Authorization: `Bearer ${token}`,
   Accept: "application/vnd.github+json",
   "X-GitHub-Api-Version": "2022-11-28",
-  "User-Agent": "nikcli-ci-check",
+  "User-Agent": "ragu-ci-check",
 }
 
 let Octokit: any = null

@@ -1,4 +1,4 @@
-import { Global } from "@nikcli-ai/util/global"
+import { Global } from "@ragu/util/global"
 import { createSignal, onCleanup, type Setter } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"

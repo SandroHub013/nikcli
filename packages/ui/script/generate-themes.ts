@@ -223,7 +223,7 @@ for (const dir of sources) {
     const id = file.replace(/\.json$/, "")
     if (seen.has(id)) continue
     seen.add(id)
-    if (protectedIds.has(id) || id === "nikcli") continue
+    if (protectedIds.has(id) || id === "ragu") continue
 
     const src = JSON.parse(readFileSync(path.join(dir, file), "utf8")) as Source
     const dark = variant(src, "dark")

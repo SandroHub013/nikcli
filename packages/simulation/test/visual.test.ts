@@ -23,7 +23,7 @@ visualTest("renders a deterministic OpenTUI frame to the visual golden", async (
     })
     panel.add(
       new TextRenderable(renderer, {
-        content: "◇ nikcli simulation\noffline · deterministic · replay",
+        content: "◇ ragu simulation\noffline · deterministic · replay",
         fg: "#d6e1e8",
       }),
     )

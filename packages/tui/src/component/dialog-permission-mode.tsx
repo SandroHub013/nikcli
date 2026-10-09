@@ -1,6 +1,6 @@
 import { createMemo, createSignal, onMount } from "solid-js"
 import { TextAttributes } from "@opentui/core"
-import type { PermissionBlocked } from "@nikcli-ai/sdk/httpapi"
+import type { PermissionBlocked } from "@ragu/sdk/httpapi"
 import { useLocal } from "@tui/context/local"
 import { useSync } from "@tui/context/sync"
 import { useSDK } from "@tui/context/sdk"
@@ -9,9 +9,9 @@ import { useToast } from "@tui/ui/toast"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect, type DialogSelectOption, type DialogSelectRef } from "@tui/ui/dialog-select"
 import { Keybind } from "@tui/util/keybind"
-import { Identifier } from "@nikcli-ai/util/id"
-import { Locale } from "@nikcli-ai/util/locale"
-import { Flag } from "@nikcli-ai/util/flag"
+import { Identifier } from "@ragu/util/id"
+import { Locale } from "@ragu/util/locale"
+import { Flag } from "@ragu/util/flag"
 import {
   PERMISSION_ITEMS,
   PERMISSION_PRESETS,

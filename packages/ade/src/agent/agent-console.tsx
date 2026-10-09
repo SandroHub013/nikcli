@@ -12,12 +12,12 @@
  *
  * No test mounts this file: a `.tsx` has no automatic JSX runtime under
  * `bun test` in this repo. The logic that would be worth asserting lives in
- * `./status.ts` and in `@nikcli-ai/voice`'s `agent/log.ts`, both imported here
+ * `./status.ts` and in `@ragu/voice`'s `agent/log.ts`, both imported here
  * and both tested directly.
  */
 
 import { createEffect, createSignal, on, For, Show, onCleanup } from "solid-js"
-import { groupIntoTurns, type AgentEntry, type AgentTurn } from "@nikcli-ai/voice"
+import { groupIntoTurns, type AgentEntry, type AgentTurn } from "@ragu/voice"
 import { presenceLabel, presenceOf } from "./status"
 import { isVoiceReady, voicePrerequisitesList } from "./onboarding"
 import "./agent-console.css"

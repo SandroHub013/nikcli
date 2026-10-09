@@ -8,7 +8,7 @@ import { KEY_REASON_MAX, keyRequestAgents, keyRequestText } from "./keys"
  * reason as the agent's words, and say where the key goes.
  */
 
-const label = (id: string) => ({ "claude-code": "Claude Code", nikcli: "nikcli" })[id] ?? id
+const label = (id: string) => ({ "claude-code": "Claude Code", ragu: "ragu" })[id] ?? id
 const ASKER = { title: "Sessione 2 — Claude Code", agentId: "claude-code" }
 
 describe("the key request dialog (keys ask)", () => {

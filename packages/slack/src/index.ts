@@ -1,21 +1,21 @@
 import { App, Assistant, type SayFn } from "@slack/bolt"
 import {
-  createNikcliClient,
+  createRaguClient,
   type Part,
   type SessionPromptResponse,
   type TextPart,
   type ToolPart,
   type ToolStateCompleted,
-} from "@nikcli-ai/sdk/httpapi"
-import { createNikcli } from "@nikcli-ai/sdk/server"
+} from "@ragu/sdk/httpapi"
+import { createRagu } from "@ragu/sdk/server"
 import { ChannelMemory } from "./channel-memory"
 import { ChannelTools } from "./channel-tools"
 import { FollowUps } from "./followups"
 
-const NIKCLI_MODEL = process.env.NIKCLI_MODEL ?? "minimax-coding-plan/MiniMax-M2.5"
+const RAGU_MODEL = process.env.RAGU_MODEL ?? "minimax-coding-plan/MiniMax-M2.5"
 const allowedChannels = new Set((process.env.SLACK_ALLOWED_CHANNELS ?? "").split(/[\s,]+/).filter(Boolean))
 const taskNotificationsEnabled =
-  process.env.NIKCLI_SLACK_TASK_NOTIFICATIONS !== "false" &&
+  process.env.RAGU_SLACK_TASK_NOTIFICATIONS !== "false" &&
   process.env.SLACK_TASK_NOTIFICATIONS !== "false" &&
   process.env.SLACK_TASK_NOTIFICATIONS !== "0"
 const rateLimitPerUser = Math.max(1, Number(process.env.SLACK_RATE_LIMIT_PER_USER ?? "2000"))
@@ -24,13 +24,13 @@ const botUsernameOpts = BOT_USERNAME ? { username: BOT_USERNAME } : {}
 const RATE_WINDOW_MS = 60_000
 
 // Parse model once
-const [providerID, ...modelParts] = NIKCLI_MODEL.split("/")
+const [providerID, ...modelParts] = RAGU_MODEL.split("/")
 const modelID = modelParts.join("/")
 const modelBody = providerID && modelID ? { model: { providerID, modelID } } : {}
 
 // Working repository the agent operates on (the entrypoint clones it here).
-// When unset (local dev), nikcli falls back to its own cwd.
-const WORKDIR = process.env.NIKCLI_WORKDIR
+// When unset (local dev), ragu falls back to its own cwd.
+const WORKDIR = process.env.RAGU_WORKDIR
 const dirQuery = WORKDIR ? { directory: WORKDIR } : {}
 
 type Session = { sessionId: string; channel: string; thread: string }
@@ -89,28 +89,28 @@ console.log("Bot configuration:")
 console.log("- Bot token present:", !!process.env.SLACK_BOT_TOKEN)
 console.log("- Signing secret present:", !!process.env.SLACK_SIGNING_SECRET)
 console.log("- App token present:", !!process.env.SLACK_APP_TOKEN)
-console.log("- Model:", NIKCLI_MODEL)
+console.log("- Model:", RAGU_MODEL)
 console.log("- Allowed channels:", allowedChannels.size > 0 ? [...allowedChannels].join(", ") : "all")
 console.log("- Task notifications:", taskNotificationsEnabled)
 console.log("- Rate limit:", rateLimitPerUser, "req/min")
 
-const NIKCLI_URL = process.env.NIKCLI_URL
+const RAGU_URL = process.env.RAGU_URL
 
-let nikcli: { client: ReturnType<typeof createNikcliClient>; server: { url: string; close(): void } }
+let ragu: { client: ReturnType<typeof createRaguClient>; server: { url: string; close(): void } }
 
-if (NIKCLI_URL) {
-  console.log(`Connecting to remote nikcli server: ${NIKCLI_URL}`)
-  const client = createNikcliClient({ baseUrl: NIKCLI_URL })
-  nikcli = { client, server: { url: NIKCLI_URL, close() {} } }
-  console.log("Nikcli remote server ready")
+if (RAGU_URL) {
+  console.log(`Connecting to remote ragu server: ${RAGU_URL}`)
+  const client = createRaguClient({ baseUrl: RAGU_URL })
+  ragu = { client, server: { url: RAGU_URL, close() {} } }
+  console.log("Ragu remote server ready")
 } else {
-  console.log("Starting local nikcli server...")
-  nikcli = await createNikcli({
+  console.log("Starting local ragu server...")
+  ragu = await createRagu({
     port: 0,
-    timeout: Number(process.env.NIKCLI_START_TIMEOUT_MS ?? "120000"),
-    config: { model: NIKCLI_MODEL },
+    timeout: Number(process.env.RAGU_START_TIMEOUT_MS ?? "120000"),
+    config: { model: RAGU_MODEL },
   })
-  console.log("Nikcli server ready")
+  console.log("Ragu server ready")
 }
 
 // Whisper: model format is "openrouter/openai/whisper-1" (provider/subprovider/model)
@@ -229,7 +229,7 @@ console.log("Health endpoint ready on port", port)
 async function subscribeToEvents(): Promise<void> {
   while (true) {
     try {
-      const events = await nikcli.client.event.subscribe()
+      const events = await ragu.client.event.subscribe()
       for await (const event of events.stream) {
         if (event.type === "session.idle") {
           FollowUps.onSessionIdle(event.properties.sessionID)
@@ -392,8 +392,8 @@ async function processPrompt(
     let retries = 2
     while (retries >= 0) {
       try {
-        console.log("Sending to nikcli:", prompt)
-        const result = await nikcli.client.session.prompt({
+        console.log("Sending to ragu:", prompt)
+        const result = await ragu.client.session.prompt({
           sessionID: session.sessionId,
           ...dirQuery,
           parts: [{ type: "text", text: prompt }],
@@ -404,7 +404,7 @@ async function processPrompt(
 
         if (result.error) {
           const errorStr = String(result.error)
-          console.error("Nikcli error:", errorStr)
+          console.error("Ragu error:", errorStr)
           if (retries > 0 && errorStr.includes("rate")) {
             await new Promise((resolve) => setTimeout(resolve, 1000))
             retries--
@@ -412,11 +412,11 @@ async function processPrompt(
           }
         } else {
           responseText = extractResponseText(result.data)
-          console.log("Nikcli response:", responseText.slice(0, 80))
+          console.log("Ragu response:", responseText.slice(0, 80))
         }
         break
       } catch (err) {
-        console.error("nikcli prompt exception:", err)
+        console.error("ragu prompt exception:", err)
         if (retries > 0) {
           await new Promise((resolve) => setTimeout(resolve, 1000))
           retries--
@@ -447,8 +447,8 @@ app.command("/test", async (args) => {
   await args.say("Bot is working!")
 })
 
-// Admin-managed per-channel tool policy: /nikcli-tools [list|allow <tool>|deny <tool>|reset]
-app.command("/nikcli-tools", async (args) => {
+// Admin-managed per-channel tool policy: /ragu-tools [list|allow <tool>|deny <tool>|reset]
+app.command("/ragu-tools", async (args) => {
   await args.ack()
   const key = ChannelTools.keyOf(args.command.team_id, args.command.channel_id)
   const reply = ChannelTools.handleCommand(args.command.text ?? "", key, args.command.user_id)
@@ -458,7 +458,7 @@ app.command("/nikcli-tools", async (args) => {
 // AI Assistant panel surface (the Claude-icon side panel in Slack).
 const assistant = new Assistant({
   threadStarted: async ({ say, setSuggestedPrompts }) => {
-    await say("Hi, I'm nikcli. Tell me what to build, debug, or investigate and I'll get to work.")
+    await say("Hi, I'm ragu. Tell me what to build, debug, or investigate and I'll get to work.")
     await setSuggestedPrompts({
       title: "Try asking:",
       prompts: [
@@ -496,7 +496,7 @@ async function shutdown(): Promise<void> {
   FollowUps.stop()
   await Promise.all([ChannelMemory.flush(), ChannelTools.flush()]).catch(() => {})
   await app.stop().catch(() => {})
-  nikcli.server.close()
+  ragu.server.close()
   process.exit(0)
 }
 
@@ -589,9 +589,9 @@ async function getSession(sessionKey: string, channel: string, thread: string, s
   const cached = sessions.get(sessionKey)
   if (cached) return cached
 
-  console.log("Creating new nikcli session...")
+  console.log("Creating new ragu session...")
 
-  const createResult = await nikcli.client.session.create({
+  const createResult = await ragu.client.session.create({
     title: `Slack thread ${thread}`,
     ...dirQuery,
   })
@@ -602,19 +602,19 @@ async function getSession(sessionKey: string, channel: string, thread: string, s
     return null
   }
 
-  console.log("Created nikcli session:", createResult.data.id)
+  console.log("Created ragu session:", createResult.data.id)
 
   const session: PersistedSession = { sessionId: createResult.data.id, channel, thread, createdAt: Date.now() }
   sessions.set(sessionKey, session)
   schedulePersist()
 
-  const shareResult = await nikcli.client.session.share({ sessionID: createResult.data.id, ...dirQuery })
+  const shareResult = await ragu.client.session.share({ sessionID: createResult.data.id, ...dirQuery })
   if (!shareResult.error && shareResult.data?.share?.url) {
     await app.client.chat
       .postMessage({
         channel,
         thread_ts: thread,
-        text: `<${shareResult.data.share.url}|Open session in nikcli>`,
+        text: `<${shareResult.data.share.url}|Open session in ragu>`,
         ...botUsernameOpts,
       })
       .catch(() => {})

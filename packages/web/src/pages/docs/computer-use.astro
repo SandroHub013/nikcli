@@ -20,21 +20,21 @@ const toc = [
 
 <DocsLayout
   title="Computer-use"
-  subtitle="A first-class engine for driving real desktop sessions, packaged as a sibling of @nikcli-ai/browser-control and @nikcli-ai/terminal-control."
+  subtitle="A first-class engine for driving real desktop sessions, packaged as a sibling of @ragu/browser-control and @ragu/terminal-control."
   toc={toc}
-  description="How @nikcli-ai/computer-use powers the computer tool and the computer TUI plugin: daemon, sandbox/host backends, recording, and PR-ready evidence bundles."
+  description="How @ragu/computer-use powers the computer tool and the computer TUI plugin: daemon, sandbox/host backends, recording, and PR-ready evidence bundles."
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
-      <code>@nikcli-ai/computer-use</code> is the dedicated engine that drives real desktop
-      sessions. It sits next to <code>@nikcli-ai/browser-control</code> (which drives
-      Chromium pages) and <code>@nikcli-ai/terminal-control</code> (which drives PTY-backed
+      <code>@ragu/computer-use</code> is the dedicated engine that drives real desktop
+      sessions. It sits next to <code>@ragu/browser-control</code> (which drives
+      Chromium pages) and <code>@ragu/terminal-control</code> (which drives PTY-backed
       TUI sessions) — three sibling engines that share the same CLI shape, the same
       per-workspace background daemon, and the same evidence-bundle output.
     </p>
     <p>
-      The package was extracted from <code>packages/nikcli/src/computer/</code> in commit
+      The package was extracted from <code>packages/ragu/src/computer/</code> in commit
       <code>9b378dac</code>: the in-tree <code>computer.ts</code> shrinks from a 669-line
       monolith to ~54 lines of glue, while the package gains its own CLI, daemon, host and
       sandbox backends, recording pipeline, and <code>bun test</code> suite.
@@ -50,7 +50,7 @@ const toc = [
   <section id="why" class="doc-section">
     <h2>Why a separate package</h2>
     <p>
-      Pulling <code>computer-use</code> out of <code>packages/nikcli</code> accomplishes three
+      Pulling <code>computer-use</code> out of <code>packages/ragu</code> accomplishes three
       things at once:
     </p>
     <ul>
@@ -62,7 +62,7 @@ const toc = [
       </li>
       <li>
         <strong>Independent release.</strong> The package bumps its own semver on the same
-        cadence as nikcli but ships with its own <code>bun test</code> suite and its own
+        cadence as ragu but ships with its own <code>bun test</code> suite and its own
         <code>package.json</code> dependency surface
         (<code>@ffmpeg-installer/ffmpeg</code> 1.1.0 for MP4 export, <code>playwright</code>
         1.61.0 and <code>chromium-bidi</code> 0.4.33 for the headless recording layer).
@@ -79,25 +79,25 @@ const toc = [
   <section id="install" class="doc-section">
     <h2>Install & skill</h2>
     <p>
-      The package is published as <code>@nikcli-ai/computer-use</code> and exposes the
-      <code>computer-use</code> binary. Inside the nikcli monorepo it is a workspace package
-      consumed by <code>packages/nikcli/src/tool/computer.ts</code>.
+      The package is published as <code>@ragu/computer-use</code> and exposes the
+      <code>computer-use</code> binary. Inside the ragu monorepo it is a workspace package
+      consumed by <code>packages/ragu/src/tool/computer.ts</code>.
     </p>
     <DocCode language="bash" title="Terminal">
-      # Inside the nikcli monorepo
+      # Inside the ragu monorepo
       bun run --cwd packages/computer-use control
       # Or, after a workspace install, as the binary:
       computer-use --help
     </DocCode>
     <p>
-      The package ships a skill that nikcli discovers automatically when installed. Register
-      it once per workspace, or globally for every nikcli session on the machine:
+      The package ships a skill that ragu discovers automatically when installed. Register
+      it once per workspace, or globally for every ragu session on the machine:
     </p>
     <DocCode language="bash" title="Terminal">
       # Per-workspace (default)
       computer-use install-skill
 
-      # Global — installs into ~/.agents/skills so nikcli discovers it everywhere
+      # Global — installs into ~/.agents/skills so ragu discovers it everywhere
       computer-use install-skill --global
     </DocCode>
     <DocCallout type="note" title="Daemon lifecycle">
@@ -154,7 +154,7 @@ const toc = [
       Every action is invoked the same way: target the session by <code>NAME</code>, then a
       verb. Coordinates are screen pixels unless the backend reports otherwise. Keys use
       the <code>translateKey</code> / <code>translateKeys</code> helpers in
-      <code>src/keys.ts</code> so chord names match the rest of nikcli.
+      <code>src/keys.ts</code> so chord names match the rest of ragu.
     </p>
     <DocCode language="bash" title="Terminal">
       computer-use click NAME X Y [--button left|right|middle] [--double]
@@ -246,8 +246,8 @@ const toc = [
     <DocCallout type="success" title="Evidence manifest">
       Every <code>bundle</code> writes a <code>manifest.json</code> plus a
       <code>pr.md</code> ready to be appended to a pull request description. The format is
-      the same as <code>@nikcli-ai/browser-control bundle</code> and
-      <code>@nikcli-ai/terminal-control bundle</code>, so PR bots can treat all three the
+      the same as <code>@ragu/browser-control bundle</code> and
+      <code>@ragu/terminal-control bundle</code>, so PR bots can treat all three the
       same way.
     </DocCallout>
   </section>
@@ -268,7 +268,7 @@ const toc = [
       </li>
       <li>
         <strong>Agent-side.</strong> The <code>computer</code> tool in
-        <code>packages/nikcli/src/tool/computer.ts</code> wraps the package's
+        <code>packages/ragu/src/tool/computer.ts</code> wraps the package's
         <code>ComputerSession</code> and forwards every permission-aware action through the
         existing <a href="/docs/permissions">permission</a> pipeline.
       </li>
@@ -354,7 +354,7 @@ const toc = [
         </tr>
         <tr>
           <td>Agent tool wrapper</td>
-          <td><code>packages/nikcli/src/tool/computer.ts</code></td>
+          <td><code>packages/ragu/src/tool/computer.ts</code></td>
         </tr>
         <tr>
           <td>TUI plugin</td>

@@ -1,12 +1,12 @@
 /**
  * Discord Gateway bot — internal TUI plugin.
  *
- * Surfaces `@nikcli-ai/discord` through the generated HTTP client. Registers
+ * Surfaces `@ragu/discord` through the generated HTTP client. Registers
  * `/discord` (alias `/discord-setup`): an unconfigured instance opens the
  * token wizard immediately; a configured one opens a manager for status,
  * start/stop, invite URL, and re-setup. No discord.js in this process.
  */
-import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@nikcli-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@ragu/plugin/tui"
 import { Clipboard } from "@tui/util/clipboard"
 
 const id = "internal:discord"

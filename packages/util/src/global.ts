@@ -2,8 +2,7 @@ import fs from "fs/promises"
 import { xdgData, xdgCache, xdgConfig, xdgState } from "xdg-basedir"
 import path from "path"
 import os from "os"
-
-const app = "nikcli"
+import { appFolder } from "./app-folder"
 
 const home = os.homedir()
 
@@ -17,7 +16,7 @@ const winRoamingAppData = process.env.APPDATA || path.join(home, "AppData", "Roa
 
 function xdgPath(xdgValue: string | undefined, posixFallback: string, windowsRoot: string) {
   const base = isWindows ? windowsRoot : xdgValue || posixFallback
-  return path.join(base, app)
+  return appFolder(base)
 }
 
 const data = xdgPath(xdgData, path.join(home, ".local", "share"), winLocalAppData)
@@ -26,15 +25,15 @@ const config = xdgPath(xdgConfig, path.join(home, ".config"), winRoamingAppData)
 const state = xdgPath(xdgState, path.join(home, ".local", "state"), path.join(winLocalAppData, "State"))
 
 function testPath(name: string, fallback: string) {
-  return process.env.NIKCLI_TEST_HOME ? path.join(process.env.NIKCLI_TEST_HOME, name) : fallback
+  return process.env.RAGU_TEST_HOME ? path.join(process.env.RAGU_TEST_HOME, name) : fallback
 }
 
-/** Primary data root: `<XDG_DATA_HOME>/nikcli/` — holds `storage/`, `snapshot/`, DBs, etc. */
+/** Primary data root: `<XDG_DATA_HOME>/ragu/` or `/nikcli/` (rule B, `app-folder.ts`) — holds `storage/`, `snapshot/`, DBs, etc. */
 function resolveDataDir(): string {
-  if (process.env.NIKCLI_TEST_HOME) {
-    return path.join(process.env.NIKCLI_TEST_HOME, "data")
+  if (process.env.RAGU_TEST_HOME) {
+    return path.join(process.env.RAGU_TEST_HOME, "data")
   }
-  const override = process.env.NIKCLI_DATA_DIR?.trim()
+  const override = process.env.RAGU_DATA_DIR?.trim()
   if (override) {
     return path.resolve(override)
   }
@@ -43,9 +42,9 @@ function resolveDataDir(): string {
 
 export namespace Global {
   export const Path = {
-    // Allow override via NIKCLI_TEST_HOME for test isolation
+    // Allow override via RAGU_TEST_HOME for test isolation
     get home() {
-      return process.env.NIKCLI_TEST_HOME || os.homedir()
+      return process.env.RAGU_TEST_HOME || os.homedir()
     },
     get data() {
       return resolveDataDir()
@@ -69,7 +68,7 @@ export namespace Global {
       return testPath("state", state)
     },
     get modelsDevUrl() {
-      return process.env.NIKCLI_MODELS_URL || "https://models.dev"
+      return process.env.RAGU_MODELS_URL || "https://models.dev"
     },
   }
 }

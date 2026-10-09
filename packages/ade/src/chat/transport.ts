@@ -1,5 +1,5 @@
 /**
- * How the chat reaches the nikcli server: through ADE's Rust side, never with
+ * How the chat reaches the ragu server: through ADE's Rust side, never with
  * the WebView's own `fetch` (C1).
  *
  * A release page's origin is `tauri.localhost`, which the server's CORS does
@@ -19,9 +19,9 @@
 import { t } from "../i18n"
 
 /** The base URL the SDK is given. Not an address anything listens on. */
-export const SERVER_BASE = "http://nikcli.ade"
+export const SERVER_BASE = "http://ragu.ade"
 
-/** What `nikcli_serve_start` says about the server. Never a password. */
+/** What `ragu_serve_start` says about the server. Never a password. */
 export interface ServerInfo {
   readonly url: string
   readonly version: string | null
@@ -35,7 +35,7 @@ export interface ProxyRequest {
   readonly body?: string
 }
 
-/** What `nikcli_serve_fetch` streams back: one head, chunks, then end — or an error. */
+/** What `ragu_serve_fetch` streams back: one head, chunks, then end — or an error. */
 export type ProxyEvent =
   | { readonly kind: "head"; readonly status: number; readonly headers: readonly (readonly [string, string])[] }
   | { readonly kind: "chunk"; readonly bytes: readonly number[] }
@@ -55,17 +55,17 @@ export function tauriServerBridge(): ServerBridge {
   return {
     async start(directory) {
       const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<ServerInfo>("nikcli_serve_start", { directory: directory ?? null })
+      return invoke<ServerInfo>("ragu_serve_start", { directory: directory ?? null })
     },
     async send(request, onEvent) {
       const { invoke, Channel } = await import("@tauri-apps/api/core")
       const channel = new Channel<ProxyEvent>()
       channel.onmessage = onEvent
-      return invoke<number>("nikcli_serve_fetch", { request, onEvent: channel })
+      return invoke<number>("ragu_serve_fetch", { request, onEvent: channel })
     },
     async abort(id) {
       const { invoke } = await import("@tauri-apps/api/core")
-      await invoke("nikcli_serve_abort", { id })
+      await invoke("ragu_serve_abort", { id })
     },
   }
 }
@@ -82,7 +82,7 @@ function abortError(): Error {
  *
  * The server is found or started on the first call, once; a start that fails
  * is tried again on the next call rather than remembered, because the usual
- * cause — nikcli not installed yet, a server still loading — does not last.
+ * cause — ragu not installed yet, a server still loading — does not last.
  */
 export function serverFetch(bridge: ServerBridge, options: { directory?: string } = {}): typeof globalThis.fetch {
   const base = new URL(SERVER_BASE)

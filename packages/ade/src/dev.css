@@ -263,13 +263,13 @@
 /*
  * The orb, sized for the bar.
  *
- * The drawing lives in `@nikcli-ai/voice` and is one number wide; here it is
+ * The drawing lives in `@ragu/voice` and is one number wide; here it is
  * 26px, which is a hair larger than the icon buttons beside it. That is
  * deliberate — it is the only control in the bar that is *doing* something
  * while nobody is touching it, and it gets to be the thing the eye lands on.
  *
  * The sphere used to be this file's job, painted onto the microphone button:
- * the button was made round, filled with the accent when live, and the nikcli
+ * the button was made round, filled with the accent when live, and the ragu
  * mic mark sat in the middle of it. That made one control wear two meanings.
  * The orb is now its own component and the microphone is the microphone.
  */
@@ -281,7 +281,7 @@
  * `[data-component="voice-button"]` used to be styled here too — first as the
  * sphere, then as a flat dictation key beside the orb. The bar carries one
  * voice control now, so the rules went with the button. The component still
- * ships from `@nikcli-ai/voice` for hosts that want a plain microphone
+ * ships from `@ragu/voice` for hosts that want a plain microphone
  * toggle; ADE is not one of them.
  */
 
@@ -754,7 +754,7 @@
 
 /*
  * The second weight: one line of facts, small and soft (closure 8) —
- * «nikcli 1.398.0 · ● senza isolamento · 0 sessioni». No capitals spaced
+ * «ragu 1.398.0 · ● senza isolamento · 0 sessioni». No capitals spaced
  * out, no chip: the red of the isolation is a dot.
  */
 [data-slot="ade-project-meta"] {

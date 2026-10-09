@@ -23,16 +23,16 @@ const toc = [
 
 <DocsLayout
   title="LSP"
-  subtitle="A practical reference for nikcli language-server discovery, startup, diagnostics, and the gated LSP tool."
-  description="Reference for nikcli language-server discovery, startup, diagnostics, and the gated LSP tool."
+  subtitle="A practical reference for ragu language-server discovery, startup, diagnostics, and the gated LSP tool."
+  description="Reference for ragu language-server discovery, startup, diagnostics, and the gated LSP tool."
   toc={toc}
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
-      nikcli uses Language Server Protocol servers as an optional code-intelligence layer for tools,
+      ragu uses Language Server Protocol servers as an optional code-intelligence layer for tools,
       diagnostics, symbols, definitions, references, hover information, implementations, and call
-      hierarchy. The service lives under <code>packages/nikcli/src/lsp</code> and is loaded through an
+      hierarchy. The service lives under <code>packages/ragu/src/lsp</code> and is loaded through an
       Effect service, so every project instance gets its own LSP state, root detection, client list,
       and shutdown finalizer.
     </p>
@@ -57,13 +57,13 @@ const toc = [
     <p>
       The service state is created from the current instance context and current config. If
       <code>lsp</code> is set to <code>false</code>, the service keeps an empty server map and all
-      operations become unavailable. Otherwise nikcli loads every built-in server from
+      operations become unavailable. Otherwise ragu loads every built-in server from
       <code>LSPServer</code>, filters experimental servers, applies config overrides, and records a
       finalizer that shuts down every connected client when the instance is disposed.
     </p>
     <ol>
       <li><strong>Resolve config</strong> from global, project, and remote sources through <code>Config.defaultLayer</code>.</li>
-      <li><strong>Build the server map</strong> from <code>packages/nikcli/src/lsp/server.ts</code>.</li>
+      <li><strong>Build the server map</strong> from <code>packages/ragu/src/lsp/server.ts</code>.</li>
       <li><strong>Apply experimental filtering</strong>: <code>ty</code> replaces <code>pyright</code> only when the Python flag is set.</li>
       <li><strong>Merge overrides</strong>: disabled entries are removed; command overrides replace spawn behavior.</li>
       <li><strong>Spawn on demand</strong> when <code>touchFile</code>, <code>hasClients</code>, or an LSP operation needs a matching extension.</li>
@@ -82,17 +82,17 @@ const toc = [
   <section id="servers" class="doc-section">
     <h2>Supported servers</h2>
     <p>
-      The built-in catalog is declared in <code>packages/nikcli/src/lsp/server.ts</code>. Each entry
+      The built-in catalog is declared in <code>packages/ragu/src/lsp/server.ts</code>. Each entry
       has an id, extension list, root strategy, and spawn function.
     </p>
     <table class="doc-table">
       <thead><tr><th>Area</th><th>Server ids</th><th>Notes</th></tr></thead>
       <tbody>
         <tr><td>JavaScript and web</td><td><code>typescript</code>, <code>deno</code>, <code>eslint</code>, <code>oxlint</code>, <code>biome</code>, <code>vue</code>, <code>svelte</code>, <code>astro</code></td><td>TypeScript uses the workspace <code>typescript/lib/tsserver.js</code>. Deno only activates when a Deno config file is found.</td></tr>
-        <tr><td>Python</td><td><code>pyright</code>, <code>ty</code></td><td><code>ty</code> is hidden unless <code>NIKCLI_EXPERIMENTAL_LSP_TY</code> is enabled; when enabled it disables <code>pyright</code>.</td></tr>
-        <tr><td>Systems</td><td><code>rust</code>, <code>clangd</code>, <code>zls</code>, <code>terraform</code></td><td>Rust requires <code>rust-analyzer</code> in PATH. Several binary servers can auto-download into the nikcli bin directory.</td></tr>
+        <tr><td>Python</td><td><code>pyright</code>, <code>ty</code></td><td><code>ty</code> is hidden unless <code>RAGU_EXPERIMENTAL_LSP_TY</code> is enabled; when enabled it disables <code>pyright</code>.</td></tr>
+        <tr><td>Systems</td><td><code>rust</code>, <code>clangd</code>, <code>zls</code>, <code>terraform</code></td><td>Rust requires <code>rust-analyzer</code> in PATH. Several binary servers can auto-download into the ragu bin directory.</td></tr>
         <tr><td>JVM and .NET</td><td><code>jdtls</code>, <code>kotlin-ls</code>, <code>csharp</code>, <code>fsharp</code></td><td>Java requires Java 21 or newer for JDTLS. .NET languages install tools through <code>dotnet tool</code> when allowed.</td></tr>
-        <tr><td>Other languages</td><td><code>gopls</code>, <code>ruby-lsp</code>, <code>elixir-ls</code>, <code>sourcekit-lsp</code>, <code>yaml-ls</code>, <code>lua-ls</code>, <code>php intelephense</code>, <code>prisma</code>, <code>dart</code>, <code>ocaml-lsp</code>, <code>bash</code>, <code>texlab</code>, <code>dockerfile</code>, <code>gleam</code>, <code>clojure-lsp</code>, <code>nixd</code>, <code>tinymist</code>, <code>haskell-language-server</code></td><td>Many use PATH first, then nikcli-managed binaries, then optional auto-install depending on the server.</td></tr>
+        <tr><td>Other languages</td><td><code>gopls</code>, <code>ruby-lsp</code>, <code>elixir-ls</code>, <code>sourcekit-lsp</code>, <code>yaml-ls</code>, <code>lua-ls</code>, <code>php intelephense</code>, <code>prisma</code>, <code>dart</code>, <code>ocaml-lsp</code>, <code>bash</code>, <code>texlab</code>, <code>dockerfile</code>, <code>gleam</code>, <code>clojure-lsp</code>, <code>nixd</code>, <code>tinymist</code>, <code>haskell-language-server</code></td><td>Many use PATH first, then ragu-managed binaries, then optional auto-install depending on the server.</td></tr>
       </tbody>
     </table>
   </section>
@@ -101,7 +101,7 @@ const toc = [
     <h2>Root detection</h2>
     <p>
       Root selection is server-specific. Most entries use <code>NearestRoot</code>, which walks upward
-      from the file directory toward the current nikcli instance directory and returns the directory
+      from the file directory toward the current ragu instance directory and returns the directory
       containing a matching marker file. If no marker exists, some servers fall back to the current
       instance directory; others return no root and do not start.
     </p>
@@ -111,7 +111,7 @@ const toc = [
         <tr><td>Package roots</td><td><code>bun.lock</code>, <code>package-lock.json</code>, <code>pnpm-lock.yaml</code>, <code>yarn.lock</code></td><td>Used by TypeScript, web framework servers, YAML, and format/lint servers.</td></tr>
         <tr><td>Language manifests</td><td><code>Cargo.toml</code>, <code>go.mod</code>, <code>pyproject.toml</code>, <code>mix.exs</code>, <code>composer.json</code></td><td>Keep language servers scoped to the real project or module root.</td></tr>
         <tr><td>Workspace-aware roots</td><td><code>go.work</code>, Rust workspace <code>Cargo.toml</code>, Gradle settings files</td><td>Prefer multi-module roots before module-local fallbacks.</td></tr>
-        <tr><td>Fixed instance roots</td><td><code>bash</code>, <code>dockerfile</code></td><td>Use the active nikcli directory directly.</td></tr>
+        <tr><td>Fixed instance roots</td><td><code>bash</code>, <code>dockerfile</code></td><td>Use the active ragu directory directly.</td></tr>
       </tbody>
     </table>
   </section>
@@ -119,7 +119,7 @@ const toc = [
   <section id="agent-tool" class="doc-section">
     <h2>Agent tool</h2>
     <p>
-      The <code>lsp</code> tool in <code>packages/nikcli/src/tool/lsp.ts</code> exposes editor-like
+      The <code>lsp</code> tool in <code>packages/ragu/src/tool/lsp.ts</code> exposes editor-like
       navigation to agents. It accepts a file path, one-based line and character values, asks for
       <code>lsp</code> permission, opens the file through the LSP client, waits briefly for
       diagnostics, and then runs the selected operation.
@@ -140,7 +140,7 @@ const toc = [
     </table>
     <DocCallout type="warn" title="The tool is experimental">
       <p>
-        The agent tool is registered only when <code>NIKCLI_EXPERIMENTAL_LSP_TOOL</code> is enabled,
+        The agent tool is registered only when <code>RAGU_EXPERIMENTAL_LSP_TOOL</code> is enabled,
         or when global experimental mode enables experimental tools. Without that gate the service
         can still power debug/status flows, but the agent cannot call <code>lsp</code>.
       </p>
@@ -155,9 +155,9 @@ const toc = [
       calls.
     </p>
     <DocCode language="bash">
-nikcli debug lsp diagnostics packages/nikcli/src/lsp/index.ts
-nikcli debug lsp symbols Session
-nikcli debug lsp document-symbols file:///absolute/path/to/file.ts
+ragu debug lsp diagnostics packages/ragu/src/lsp/index.ts
+ragu debug lsp symbols Session
+ragu debug lsp document-symbols file:///absolute/path/to/file.ts
     </DocCode>
     <p>
       Diagnostics waits for a publish event after opening the file, sleeps briefly, and then prints
@@ -170,7 +170,7 @@ nikcli debug lsp document-symbols file:///absolute/path/to/file.ts
     <p>
       The <code>lsp</code> config field accepts <code>false</code> to disable all language servers, or
       a server-id map to disable, override, or add servers. Custom server ids must declare
-      <code>extensions</code>, because nikcli otherwise cannot know which files should start them.
+      <code>extensions</code>, because ragu otherwise cannot know which files should start them.
     </p>
     <table class="doc-table">
       <thead><tr><th>Field</th><th>Applies to</th><th>Meaning</th></tr></thead>
@@ -198,14 +198,14 @@ lsp.my-language.initialization.workspaceMode = full
     <p>
       Some servers require a system binary in PATH. Others install language-server packages or
       release binaries into <code>Global.Path.bin</code>, which resolves to the <code>bin</code>
-      directory under nikcli's data root. Auto-downloads are skipped when
-      <code>NIKCLI_DISABLE_LSP_DOWNLOAD</code> is set.
+      directory under ragu's data root. Auto-downloads are skipped when
+      <code>RAGU_DISABLE_LSP_DOWNLOAD</code> is set.
     </p>
     <table class="doc-table">
       <thead><tr><th>Resolution path</th><th>Examples</th><th>Operational note</th></tr></thead>
       <tbody>
         <tr><td>PATH only</td><td><code>deno</code>, <code>rust-analyzer</code>, <code>dart</code>, <code>gleam</code>, <code>ocamllsp</code></td><td>Install the binary yourself before using the file type.</td></tr>
-        <tr><td>Bun package install</td><td><code>pyright</code>, <code>svelte-language-server</code>, <code>@astrojs/language-server</code>, <code>bash-language-server</code></td><td>nikcli installs into its data bin area when downloads are allowed.</td></tr>
+        <tr><td>Bun package install</td><td><code>pyright</code>, <code>svelte-language-server</code>, <code>@astrojs/language-server</code>, <code>bash-language-server</code></td><td>ragu installs into its data bin area when downloads are allowed.</td></tr>
         <tr><td>Release archive</td><td><code>clangd</code>, <code>zls</code>, <code>lua-ls</code>, <code>terraform-ls</code>, <code>texlab</code>, <code>tinymist</code></td><td>Archives are fetched, extracted, marked executable, and reused.</td></tr>
         <tr><td>Language toolchain</td><td><code>gopls</code>, <code>rubocop</code>, <code>csharp-ls</code>, <code>fsautocomplete</code></td><td>Requires the matching language toolchain, such as Go, Ruby, or .NET.</td></tr>
       </tbody>
@@ -215,7 +215,7 @@ lsp.my-language.initialization.workspaceMode = full
   <section id="diagnostics" class="doc-section">
     <h2>Diagnostics and symbols</h2>
     <p>
-      When a file is opened, nikcli sends <code>workspace/didChangeWatchedFiles</code> and
+      When a file is opened, ragu sends <code>workspace/didChangeWatchedFiles</code> and
       <code>textDocument/didOpen</code>. If the same file is touched again, it sends a watched-file
       change plus <code>textDocument/didChange</code> with an incremented version. Published
       diagnostics are normalized to filesystem paths and stored per client.
@@ -234,11 +234,11 @@ lsp.my-language.initialization.workspaceMode = full
       <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
       <tbody>
         <tr><td><code>No LSP server available for this file type.</code></td><td>No enabled server matched the extension, or root detection returned no root.</td><td>Check the extension, language manifest, and <code>lsp</code> config overrides.</td></tr>
-        <tr><td>Server never starts</td><td>Required binary is missing, download is disabled, or the language toolchain is absent.</td><td>Install the binary or unset <code>NIKCLI_DISABLE_LSP_DOWNLOAD</code> for supported auto-download servers.</td></tr>
-        <tr><td>Server starts once and then stays unavailable</td><td>The root plus server id was marked broken after spawn or initialize failed.</td><td>Fix the binary/config issue and dispose or restart the nikcli instance.</td></tr>
+        <tr><td>Server never starts</td><td>Required binary is missing, download is disabled, or the language toolchain is absent.</td><td>Install the binary or unset <code>RAGU_DISABLE_LSP_DOWNLOAD</code> for supported auto-download servers.</td></tr>
+        <tr><td>Server starts once and then stays unavailable</td><td>The root plus server id was marked broken after spawn or initialize failed.</td><td>Fix the binary/config issue and dispose or restart the ragu instance.</td></tr>
         <tr><td>Diagnostics are empty</td><td>The server did not publish diagnostics within the wait window, or the file opened before analysis completed.</td><td>Run the diagnostics debug command again, or check the language server logs and project root.</td></tr>
         <tr><td>Tool call denied</td><td>The agent-facing tool asks for <code>lsp</code> permission.</td><td>Approve the request or update the session permission rules.</td></tr>
-        <tr><td>Python server differs from expected</td><td><code>NIKCLI_EXPERIMENTAL_LSP_TY</code> switches Python from <code>pyright</code> to <code>ty</code>.</td><td>Unset the flag for pyright or install <code>ty</code> for the experimental path.</td></tr>
+        <tr><td>Python server differs from expected</td><td><code>RAGU_EXPERIMENTAL_LSP_TY</code> switches Python from <code>pyright</code> to <code>ty</code>.</td><td>Unset the flag for pyright or install <code>ty</code> for the experimental path.</td></tr>
       </tbody>
     </table>
   </section>
@@ -248,13 +248,13 @@ lsp.my-language.initialization.workspaceMode = full
     <table class="doc-table">
       <thead><tr><th>File</th><th>What to inspect</th></tr></thead>
       <tbody>
-        <tr><td><code>packages/nikcli/src/lsp/index.ts</code></td><td>Effect service, config merging, client cache, operations, and status.</td></tr>
-        <tr><td><code>packages/nikcli/src/lsp/client.ts</code></td><td>JSON-RPC connection, initialize payload, open/change notifications, diagnostics handling, shutdown.</td></tr>
-        <tr><td><code>packages/nikcli/src/lsp/server.ts</code></td><td>Built-in server catalog, root detection, spawn commands, downloads, experimental Python server selection.</td></tr>
-        <tr><td><code>@nikcli-ai/util/language</code></td><td>File extension to language id mapping used when opening documents.</td></tr>
-        <tr><td><code>packages/nikcli/src/tool/lsp.ts</code></td><td>Agent tool parameters, permission request, one-based to zero-based position conversion, and operation dispatch.</td></tr>
-        <tr><td><code>packages/nikcli/src/cli/cmd/debug/lsp.ts</code></td><td>Diagnostics and symbol debug commands.</td></tr>
-        <tr><td><code>packages/nikcli/src/config/config.ts</code></td><td><code>lsp</code> schema, validation, and custom-server extension requirement.</td></tr>
+        <tr><td><code>packages/ragu/src/lsp/index.ts</code></td><td>Effect service, config merging, client cache, operations, and status.</td></tr>
+        <tr><td><code>packages/ragu/src/lsp/client.ts</code></td><td>JSON-RPC connection, initialize payload, open/change notifications, diagnostics handling, shutdown.</td></tr>
+        <tr><td><code>packages/ragu/src/lsp/server.ts</code></td><td>Built-in server catalog, root detection, spawn commands, downloads, experimental Python server selection.</td></tr>
+        <tr><td><code>@ragu/util/language</code></td><td>File extension to language id mapping used when opening documents.</td></tr>
+        <tr><td><code>packages/ragu/src/tool/lsp.ts</code></td><td>Agent tool parameters, permission request, one-based to zero-based position conversion, and operation dispatch.</td></tr>
+        <tr><td><code>packages/ragu/src/cli/cmd/debug/lsp.ts</code></td><td>Diagnostics and symbol debug commands.</td></tr>
+        <tr><td><code>packages/ragu/src/config/config.ts</code></td><td><code>lsp</code> schema, validation, and custom-server extension requirement.</td></tr>
       </tbody>
     </table>
   </section>

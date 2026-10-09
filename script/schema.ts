@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { z } from "zod"
-import { Config } from "../packages/nikcli/src/config/config"
+import { Config } from "../packages/ragu/src/config/config"
 
 const file = process.argv[2]
 console.log(file)

@@ -121,7 +121,7 @@ if (flag("--start") && !((cdpPortOf() ?? 0) > 0 && (await answers(cdpPortOf()!))
   log("avvio ADE Test (voce spenta): la prima volta compila il Rust")
   spawn("bun", ["scripts/test-app.ts", "--cdp"], {
     cwd: adeDir,
-    env: { ...process.env, NIKCLI_SERVICE: "0" },
+    env: { ...process.env, RAGU_SERVICE: "0" },
     stdio: "ignore",
     detached: true,
   }).unref()

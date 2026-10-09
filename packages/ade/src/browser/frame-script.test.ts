@@ -301,9 +301,9 @@ describe("frameGuard: a browser pane's frame", () => {
     expect(heard.at(-1)).toEqual({ type: FRAME_ENVELOPE, secret, message: { type: "visual-editor:dom-changed" } })
     // Nothing of it on the window.
     expect(frame.topPosted).toEqual([{ type: "ade-browser:ask" }])
-    expect(shim.__NIKCLI_INSPECTOR_ACTIVE__).toBe(false)
+    expect(shim.__RAGU_INSPECTOR_ACTIVE__).toBe(false)
     // The page's own copy of the bridge stays out.
-    expect(frame.win.__NIKCLI_INSPECTOR_ACTIVE__).toBe(true)
+    expect(frame.win.__RAGU_INSPECTOR_ACTIVE__).toBe(true)
   })
 
   test("the address it reports is the one the document had before the page ran", () => {

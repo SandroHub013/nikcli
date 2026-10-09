@@ -3,7 +3,7 @@
  * component only acts on what these return.
  */
 
-import type { Part } from "@nikcli-ai/sdk/httpapi"
+import type { Part } from "@ragu/sdk/httpapi"
 import { t } from "../i18n"
 import type { Attachment } from "./attachments"
 import { messageError, type Turn } from "./sessions"

@@ -6,7 +6,7 @@ import { join, resolve } from "node:path"
 import { connect, type DriverSocket } from "../src/driver"
 import type { SimulationProtocol } from "../src/protocol"
 
-const nikcli = resolve(import.meta.dir, "../../nikcli")
+const ragu = resolve(import.meta.dir, "../../ragu")
 
 async function freePort() {
   return new Promise<number>((resolvePort, reject) => {
@@ -41,8 +41,8 @@ async function eventually<T>(fn: () => Promise<T | undefined>, timeoutMs = 20_00
   })
 }
 
-test("drives the real nikcli TUI through a deterministic OpenAI exchange and captures PNG", async () => {
-  const root = await mkdtemp(join(tmpdir(), "nikcli-simulation-e2e-"))
+test("drives the real ragu TUI through a deterministic OpenAI exchange and captures PNG", async () => {
+  const root = await mkdtemp(join(tmpdir(), "ragu-simulation-e2e-"))
   const registry = join(root, "registry")
   const media = join(root, "media")
   const project = join(root, "project")
@@ -61,17 +61,17 @@ test("drives the real nikcli TUI through a deterministic OpenAI exchange and cap
   const child = Bun.spawn(
     [process.execPath, "run", "--conditions=browser", "./src/index.ts", project, "--model", "simulation/deterministic"],
     {
-      cwd: nikcli,
+      cwd: ragu,
       env: {
         ...process.env,
-        NIKCLI_DRIVE: "e2e",
-        NIKCLI_DRIVE_REGISTRY_DIR: registry,
-        NIKCLI_DRIVE_RENDERER: "headless",
-        NIKCLI_DRIVE_MEDIA_DIR: media,
-        NIKCLI_TEST_HOME: join(root, "home"),
-        NIKCLI_DISABLE_PROJECT_CONFIG: "1",
-        NIKCLI_DISABLE_DEFAULT_PLUGINS: "1",
-        NIKCLI_DISABLE_LSP_DOWNLOAD: "1",
+        RAGU_DRIVE: "e2e",
+        RAGU_DRIVE_REGISTRY_DIR: registry,
+        RAGU_DRIVE_RENDERER: "headless",
+        RAGU_DRIVE_MEDIA_DIR: media,
+        RAGU_TEST_HOME: join(root, "home"),
+        RAGU_DISABLE_PROJECT_CONFIG: "1",
+        RAGU_DISABLE_DEFAULT_PLUGINS: "1",
+        RAGU_DISABLE_LSP_DOWNLOAD: "1",
         XDG_DATA_HOME: join(root, "xdg-data"),
         XDG_CACHE_HOME: join(root, "xdg-cache"),
         XDG_CONFIG_HOME: join(root, "xdg-config"),
@@ -96,7 +96,7 @@ test("drives the real nikcli TUI through a deterministic OpenAI exchange and cap
       const state = await ui!.call<SimulationProtocol.Frontend.State>("ui.state")
       return state.screen.includes("Ask anything") ? state : undefined
     })
-    expect(home.screen).toContain("nikcli")
+    expect(home.screen).toContain("ragu")
     expect(home.screen).toContain("+ new")
 
     await ui.call("ui.type", { text: "Reply with the deterministic fixture" })
@@ -131,7 +131,7 @@ test("drives the real nikcli TUI through a deterministic OpenAI exchange and cap
     const sessionScreen = await ui.call<SimulationProtocol.Frontend.State>("ui.state")
     // The session view shows the compact logo ("NIK" + "CLI"); the ASCII-art
     // wordmark asserted on the home screen only exists there.
-    expect(sessionScreen.screen).toContain("NIKCLI")
+    expect(sessionScreen.screen).toContain("RAGU")
     expect(sessionScreen.screen).toContain("×")
     expect(sessionScreen.screen).toContain("+ new")
     expect(
@@ -146,8 +146,8 @@ test("drives the real nikcli TUI through a deterministic OpenAI exchange and cap
     const screenshot = await ui.call<string>("ui.screenshot", {
       name: "real-tui",
     })
-    if (process.env.NIKCLI_E2E_SCREENSHOT_OUT) {
-      await Bun.write(process.env.NIKCLI_E2E_SCREENSHOT_OUT, Bun.file(screenshot))
+    if (process.env.RAGU_E2E_SCREENSHOT_OUT) {
+      await Bun.write(process.env.RAGU_E2E_SCREENSHOT_OUT, Bun.file(screenshot))
     }
     expect(screenshot).toBe(join(media, "real-tui.png"))
     expect([...(await readFile(screenshot)).subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10])

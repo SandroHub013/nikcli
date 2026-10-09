@@ -7,9 +7,9 @@ import { useSync } from "@tui/context/sync"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useSDK } from "@tui/context/sdk"
 import { useToast } from "@tui/ui/toast"
-import { connectToTerminal, generateQRMatrix, type TunnelProvider, type TerminalConnection } from "@nikcli-ai/remote"
+import { connectToTerminal, generateQRMatrix, type TunnelProvider, type TerminalConnection } from "@ragu/remote"
 import { QRCode, useQRRepaint } from "@tui/component/qr"
-import { remoteService, type RemoteSession } from "@nikcli-ai/util/remote-tunnel"
+import { remoteService, type RemoteSession } from "@ragu/util/remote-tunnel"
 
 interface RemoteConfig {
   enableTunnel?: boolean
@@ -20,7 +20,7 @@ interface ConfigWithRemote {
   remote?: RemoteConfig
 }
 
-const REMOTE_BRIDGE_MARKER = "__nikcliRemoteBridge"
+const REMOTE_BRIDGE_MARKER = "__raguRemoteBridge"
 
 interface Device {
   id: string

@@ -1,6 +1,6 @@
-import { Plugin } from "@nikcli-ai/plugin/v2/tui"
+import { Plugin } from "@ragu/plugin/v2/tui"
 import { createSignal, For, onCleanup, Show, type JSX } from "solid-js"
-import type { ModNode } from "@nikcli-ai/plugin/mod"
+import type { ModNode } from "@ragu/plugin/mod"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
@@ -21,7 +21,7 @@ import { Tree } from "./tree"
 
 type Pane = { id: string; plugin: string; title: string; placement: "dock" | "inline"; rows?: number }
 
-/** A render site the mods draw alone (nikcli draws nothing there): the band above the prompt, a pane. */
+/** A render site the mods draw alone (ragu draws nothing there): the band above the prompt, a pane. */
 export function Site(props: {
   component: "AbovePrompt" | "Pane"
   requestId: string

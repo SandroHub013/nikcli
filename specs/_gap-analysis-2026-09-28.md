@@ -1,7 +1,7 @@
 # Spec Gap Analysis — 2026-09-28
 
 A cross-reference of every spec under `specs/effect-tui/`, `specs/v2/`,
-`specs/storage/`, and the top-level `specs/*.md` against the current nikcli
+`specs/storage/`, and the top-level `specs/*.md` against the current ragu
 codebase (HEAD = `e4c37b0f18`, branch `live-main`, v1.406.0).
 
 The premise this catalog operates under — stated explicitly in
@@ -30,7 +30,7 @@ codebase rather than a prose claim.
 | ID      | Spec                            | Evidence in tree                                                                                                               | Status                                                                                                  |
 | ------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
 | EOT-00  | Startup hang — handshake fix    | `packages/tui/src/util/rpc.ts` (handshake), `c004b6ae8d` (`repro:startup-hang`), 603 starts @ hangRate 0 across 3 TERMs        | **✓ Shipped (gate open on Ghostty only)**                                                               |
-| EOT-01  | Performance baseline            | `packages/nikcli/script/perf-baseline.ts`, `specs/perf-baseline.json`, `script/check-perf-baseline.ts`                         | **✓ P0 closed 2026-09-20** (artifact + gate; wall-clock intentionally not gated)                        |
+| EOT-01  | Performance baseline            | `packages/ragu/script/perf-baseline.ts`, `specs/perf-baseline.json`, `script/check-perf-baseline.ts`                         | **✓ P0 closed 2026-09-20** (artifact + gate; wall-clock intentionally not gated)                        |
 | EOT-02  | Effect boundaries               | `runService` / `runPromiseWithLayer` typed; `test/effect/runtime.test.ts`, `test/effect/multi-instance-teardown.test.ts` green | **✓ Shipped (limit: defect vs interruption still indistinguishable on promise bridge)**                 |
 | EOT-03  | TUI async lifecycle             | `useAbortOnCleanup`, `useAttempts`, `attempt.adopt` landed; `test/tui/dialog-lifecycle.test.ts`, `lifecycle-attempts.test.ts`  | **✓ Shipped (chaining-dialog primitive still missing — recorded as the gap)**                           |
 | EOT-04  | Event delivery                  | `BYTE_BUDGET`, `LAG_BUDGET`, `EventFeed`, `reconnect-gate.test.ts`, eviction table driven as a table                           | **✓ Shipped (no-silent-loss invariant, EOF-wait)**                                                      |
@@ -53,7 +53,7 @@ codebase rather than a prose claim.
 ### What `script/check-*` confirms vs what doesn't
 
 These gates run in CI and are structurally enforceable. Every spec that
-committed to a structural check has one in `packages/nikcli/script/`:
+committed to a structural check has one in `packages/ragu/script/`:
 
 ```
 check-account-required.ts
@@ -332,7 +332,7 @@ on a real terminal. That is a Tier 3 item, not a defect.
 Two changes, both found by auditing the _live_ surface rather than the surface
 each spec named.
 
-### 1. `nikcli upgrade` installed over a package-manager binary when the prompt was cancelled
+### 1. `ragu upgrade` installed over a package-manager binary when the prompt was cancelled
 
 **Severity: high.** `src/cli/handlers/upgrade.ts` asked "Install anyways?" with
 `initialValue: false` and guarded only `if (!install)`.

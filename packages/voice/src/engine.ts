@@ -16,7 +16,7 @@
  */
 
 import { createSignal } from "solid-js"
-import { locale as uiLocale, t as tr } from "@nikcli-ai/ade/i18n"
+import { locale as uiLocale, t as tr } from "@ragu/ade/i18n"
 import { Effect, Exit, Scope, Stream } from "effect"
 import type { PermissionSpeechKind, VoiceHost } from "./bridge/host"
 import type { DispatchOutcome } from "./bridge/dispatch"

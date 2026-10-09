@@ -93,6 +93,6 @@ describe("desktop session previews", () => {
     ])
 
     expect(preview).toBeDefined()
-    expect(sessionPreviewFrameUrl(preview!)).toBe("https://nikcli-ai.dev/artifact/same?key=view-key&_nikcli_preview=2")
+    expect(sessionPreviewFrameUrl(preview!)).toBe("https://nikcli-ai.dev/artifact/same?key=view-key&_ragu_preview=2")
   })
 })

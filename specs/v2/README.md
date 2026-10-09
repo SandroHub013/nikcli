@@ -2,7 +2,7 @@
 
 These documents explain V2 behavior that is difficult to recover from one source file. They are not API reference and not a backlog.
 
-"V2" in nikcli names three separate, partially-landed things. Keep them apart when reading:
+"V2" in ragu names three separate, partially-landed things. Keep them apart when reading:
 
 | Name           | What it is                                                                                                                            | Where                       |
 | -------------- | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
@@ -17,7 +17,7 @@ These documents explain V2 behavior that is difficult to recover from one source
 | [Session](./session.md)                             | Explain admission, the step loop, retry, compaction, cancellation, and recovery boundaries.                                                              |
 | [Session v2 write path](./session-v2-write-path.md) | Entries persist first; v1 is `toV1*` of those entries. HTTP create/prompt share `SessionV2`. `prompt_data` stays on `message_info`. Implemented.         |
 | [Tools](./tools.md)                                 | Explain tool construction, registration, execution, truncation, and outcome laws.                                                                        |
-| [Provider and model catalog](./provider-model.md)   | What a provider and a model are, the six ordered build sources, variants, and the route to `@nikcli-ai/llm`.                                             |
+| [Provider and model catalog](./provider-model.md)   | What a provider and a model are, the six ordered build sources, variants, and the route to `@ragu/llm`.                                             |
 | [API map and context model](./api.md)               | Where runtime context comes from for any route: server-scoped, request, or session-pinned. The route inventory, the two event envelopes, the sync store. |
 
 ## Decisions And Proposals
@@ -44,7 +44,7 @@ These documents explain V2 behavior that is difficult to recover from one source
 | [Observability / OTLP / live panel](./observability-otlp-and-in-process-panel.md) | Accepted and implemented | In-process capture by default, OTLP on an endpoint, and the empty layer when neither is on.                                                         |
 | [Workspace request proxy](./workspace-trust-lattice.md)                           | Accepted and implemented | Which requests are forwarded to a remote workspace, and what the local path answers.                                                                |
 | [Share v2 contract](./share-v2-contract.md)                                       | Accepted and implemented | The envelope list, `remote` vs `local`, local-only public reads, and delete-not-tombstone.                                                          |
-| [CLI command surface](./cli-command-surface.md)                                   | Accepted and implemented | What `nikcli …` actually registers; the command table is gated by a test.                                                                           |
+| [CLI command surface](./cli-command-surface.md)                                   | Accepted and implemented | What `ragu …` actually registers; the command table is gated by a test.                                                                           |
 | [Brain consolidation pass](./brain-consolidation-pass.md)                         | Accepted and implemented | What the scheduled pass reads and writes, and when it counts as having run.                                                                         |
 | [Config review](./config.md)                                                      | **Proposed**             | Per-field keep/remove/redesign ledger for `nikcli.json`. Its legacy-key tests landed; what keeps it proposed is that no field has been renamed yet. |
 
@@ -61,7 +61,7 @@ These are not contracts. They carry no invariants and pin no tests; they exist s
 | Document                                  | Job                                                                                             |
 | ----------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | [Service instructions](./instructions.md) | How to write and port a service here: shape, per-instance state, errors, schemas, verification. |
-| [Open work](./todo.md)                    | What is left of the v2 port, what nikcli already passed, and what it deliberately diverged on.  |
+| [Open work](./todo.md)                    | What is left of the v2 port, what ragu already passed, and what it deliberately diverged on.  |
 
 ## Status Rule
 

@@ -1,6 +1,6 @@
-# @nikcli-ai/tui-math
+# @ragu/tui-math
 
-LaTeX math rendering for NikCLI and OpenTUI applications.
+LaTeX math rendering for Ragu Code and OpenTUI applications.
 
 The package parses a formula, lays it out on a character grid with a baseline,
 and paints that grid into an OpenTUI buffer. The glyphs are plain Unicode, so
@@ -23,7 +23,7 @@ feature universal.
 ## Render A Formula
 
 ```ts
-import { renderLatexToString } from "@nikcli-ai/tui-math"
+import { renderLatexToString } from "@ragu/tui-math"
 
 console.log(renderLatexToString(String.raw`\begin{pmatrix}a & b \\ c & d\end{pmatrix}`))
 ```
@@ -45,21 +45,21 @@ tests and custom composition.
 The package deliberately ships no Solid entry point: `extend()` writes into a
 process-wide catalogue, and the copy that must be written is the host
 application's `@opentui/solid`, not one resolved from here. So the host owns
-the binding — in nikcli that is
+the binding — in ragu that is
 `src/cli/cmd/tui/feature-plugins/math/renderable.ts`:
 
 ```tsx
 import { extend } from "@opentui/solid"
-import { LatexRenderable } from "@nikcli-ai/tui-math/renderable"
+import { LatexRenderable } from "@ragu/tui-math/renderable"
 
 declare module "@opentui/solid" {
   interface OpenTUIComponents {
-    nikcli_latex: typeof LatexRenderable
+    ragu_latex: typeof LatexRenderable
   }
 }
 
-extend({ nikcli_latex: LatexRenderable })
-;<nikcli_latex content={String.raw`\int_0^\infty e^{-x}\,dx = 1`} foregroundColor="#cdd6f4" />
+extend({ ragu_latex: LatexRenderable })
+;<ragu_latex content={String.raw`\int_0^\infty e^{-x}\,dx = 1`} foregroundColor="#cdd6f4" />
 ```
 
 | Option            | Default     | Purpose                                               |
@@ -81,7 +81,7 @@ It finds formulas in markdown and splits the message into blocks the caller
 renders with its own markdown renderer and this one:
 
 ```ts
-import { buildMathBlocks } from "@nikcli-ai/tui-math"
+import { buildMathBlocks } from "@ragu/tui-math"
 
 buildMathBlocks("The probability is $\\frac{1}{6}$ per roll.")
 // [{ type: "markdown", content: "The probability is 1/6 per roll." }]
@@ -124,7 +124,7 @@ target does need to be driven directly from a token stream,
 replacing the last renderable frame:
 
 ```ts
-import { completeLatexPrefix, LatexStreamController } from "@nikcli-ai/tui-math"
+import { completeLatexPrefix, LatexStreamController } from "@ragu/tui-math"
 
 const stream = new LatexStreamController(renderable, {
   incompletePolicy: "apply",

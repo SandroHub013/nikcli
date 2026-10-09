@@ -23,15 +23,15 @@ const toc = [
 
 <DocsLayout
   title="Connectors"
-  subtitle="How nikcli connects external services, stores credentials, exposes connector tools, and receives bot webhooks."
-  description="Documentation for nikcli connectors, credential storage, connector tools, webhooks, and auth flows."
+  subtitle="How ragu connects external services, stores credentials, exposes connector tools, and receives bot webhooks."
+  description="Documentation for ragu connectors, credential storage, connector tools, webhooks, and auth flows."
   toc={toc}
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
       Connectors are service-specific integrations configured under <code>connectors</code> in
-      <code>nikcli.json</code>. The runtime lives in <code>packages/nikcli/src/connectors</code>.
+      <code>nikcli.json</code>. The runtime lives in <code>packages/ragu/src/connectors</code>.
       It checks credentials, runs health checks, creates AI SDK tools for services with operations,
       exposes prompts, and caches status/tool results.
     </p>
@@ -71,15 +71,15 @@ const toc = [
   <section id="add-auth" class="doc-section">
     <h2>Add and authenticate</h2>
     <p>
-      <code>nikcli connectors add</code> patches either the current project config or global config.
+      <code>ragu connectors add</code> patches either the current project config or global config.
       If you provide a credential during the wizard, it writes the credential to the connector auth
       store, not into the config file. <code>auth</code> and <code>logout</code> manage that store.
     </p>
     <DocCode language="bash">
-nikcli connectors add
-nikcli connectors list
-nikcli connectors auth github
-nikcli connectors logout github
+ragu connectors add
+ragu connectors list
+ragu connectors auth github
+ragu connectors logout github
     </DocCode>
     <table class="doc-table">
       <thead><tr><th>Command</th><th>Behavior</th></tr></thead>
@@ -101,10 +101,10 @@ nikcli connectors logout github
     <table class="doc-table">
       <thead><tr><th>Type</th><th>Env flag</th><th>Config field</th><th>Saved field</th></tr></thead>
       <tbody>
-        <tr><td><code>figma</code></td><td><code>NIKCLI_FIGMA_TOKEN</code></td><td><code>token</code></td><td><code>token</code></td></tr>
-        <tr><td><code>github</code></td><td><code>NIKCLI_GITHUB_TOKEN</code></td><td><code>token</code></td><td><code>token</code></td></tr>
-        <tr><td><code>slack</code></td><td><code>NIKCLI_SLACK_BOT_TOKEN</code></td><td><code>botToken</code></td><td><code>botToken</code></td></tr>
-        <tr><td><code>lovable</code></td><td><code>NIKCLI_LOVABLE_TOKEN</code> or <code>NIKCLI_LOVABLE_API_KEY</code></td><td><code>token</code> or <code>apiKey</code></td><td><code>token</code> or <code>apiKey</code></td></tr>
+        <tr><td><code>figma</code></td><td><code>RAGU_FIGMA_TOKEN</code></td><td><code>token</code></td><td><code>token</code></td></tr>
+        <tr><td><code>github</code></td><td><code>RAGU_GITHUB_TOKEN</code></td><td><code>token</code></td><td><code>token</code></td></tr>
+        <tr><td><code>slack</code></td><td><code>RAGU_SLACK_BOT_TOKEN</code></td><td><code>botToken</code></td><td><code>botToken</code></td></tr>
+        <tr><td><code>lovable</code></td><td><code>RAGU_LOVABLE_TOKEN</code> or <code>RAGU_LOVABLE_API_KEY</code></td><td><code>token</code> or <code>apiKey</code></td><td><code>token</code> or <code>apiKey</code></td></tr>
       </tbody>
     </table>
     <DocCallout type="warn" title="Inline config credentials are supported but not preferred">
@@ -232,7 +232,7 @@ curl -X POST http://127.0.0.1:4096/connectors/github/invalidate
     <table class="doc-table">
       <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
       <tbody>
-        <tr><td><code>needs_auth</code></td><td>No env, config, or saved credential resolved.</td><td>Run <code>nikcli connectors auth &lt;name&gt;</code> or set the provider env flag.</td></tr>
+        <tr><td><code>needs_auth</code></td><td>No env, config, or saved credential resolved.</td><td>Run <code>ragu connectors auth &lt;name&gt;</code> or set the provider env flag.</td></tr>
         <tr><td><code>failed</code></td><td>Health check failed or connector type is unknown.</td><td>Check token scope and service API response.</td></tr>
         <tr><td>Tools missing</td><td>Connector disabled, not authenticated, or type has no operations.</td><td>Check status and remember bot-only connectors have no agent tools.</td></tr>
         <tr><td>Old credential still used</td><td>Status/tool cache was not invalidated after credential change.</td><td>Invalidate connector or restart the process.</td></tr>
@@ -246,14 +246,14 @@ curl -X POST http://127.0.0.1:4096/connectors/github/invalidate
     <table class="doc-table">
       <thead><tr><th>Need</th><th>File</th></tr></thead>
       <tbody>
-        <tr><td>Connector service</td><td><code>packages/nikcli/src/connectors/index.ts</code></td></tr>
-        <tr><td>Connector registry and tools</td><td><code>packages/nikcli/src/connectors/registry.ts</code></td></tr>
-        <tr><td>Credential resolution</td><td><code>packages/nikcli/src/connectors/credentials.ts</code></td></tr>
-        <tr><td>Credential store</td><td><code>packages/nikcli/src/connectors/auth.ts</code></td></tr>
-        <tr><td>CLI command</td><td><code>packages/nikcli/src/cli/cmd/connectors.ts</code></td></tr>
-        <tr><td>Server routes</td><td><code>packages/nikcli/src/server/httpapi/connectors.ts</code></td></tr>
-        <tr><td>Chatbot routes</td><td><code>packages/nikcli/src/server/httpapi/chatbot.ts</code></td></tr>
-        <tr><td>Service APIs</td><td><code>packages/nikcli/src/connectors/api</code></td></tr>
+        <tr><td>Connector service</td><td><code>packages/ragu/src/connectors/index.ts</code></td></tr>
+        <tr><td>Connector registry and tools</td><td><code>packages/ragu/src/connectors/registry.ts</code></td></tr>
+        <tr><td>Credential resolution</td><td><code>packages/ragu/src/connectors/credentials.ts</code></td></tr>
+        <tr><td>Credential store</td><td><code>packages/ragu/src/connectors/auth.ts</code></td></tr>
+        <tr><td>CLI command</td><td><code>packages/ragu/src/cli/cmd/connectors.ts</code></td></tr>
+        <tr><td>Server routes</td><td><code>packages/ragu/src/server/httpapi/connectors.ts</code></td></tr>
+        <tr><td>Chatbot routes</td><td><code>packages/ragu/src/server/httpapi/chatbot.ts</code></td></tr>
+        <tr><td>Service APIs</td><td><code>packages/ragu/src/connectors/api</code></td></tr>
       </tbody>
     </table>
   </section>

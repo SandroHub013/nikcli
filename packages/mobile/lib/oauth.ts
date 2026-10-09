@@ -6,8 +6,8 @@ import { clearOAuthSession, getOAuthIssuer, getOAuthTokens, setOAuthSession } fr
 
 WebBrowser.maybeCompleteAuthSession()
 
-export const OAUTH_CLIENT_ID = "nikcli-mobile"
-export const OAUTH_REDIRECT_URI = "nikcli://auth/callback"
+export const OAUTH_CLIENT_ID = "ragu-mobile"
+export const OAUTH_REDIRECT_URI = "ragu://auth/callback"
 export const DEFAULT_OAUTH_ISSUER = "https://auth.nikcli-ai.dev"
 
 let refreshPromise: Promise<OAuthTokenTriple> | null = null
@@ -29,7 +29,7 @@ const LEGACY_ISSUER_HOSTS: Record<string, string> = {
 }
 
 function normalizedIssuer(override?: string): string {
-  const value = (override || process.env.EXPO_PUBLIC_NIKCLI_AUTH_ISSUER || DEFAULT_OAUTH_ISSUER)
+  const value = (override || process.env.EXPO_PUBLIC_RAGU_AUTH_ISSUER || DEFAULT_OAUTH_ISSUER)
     .trim()
     .replace(/\/+$/, "")
   let url: URL

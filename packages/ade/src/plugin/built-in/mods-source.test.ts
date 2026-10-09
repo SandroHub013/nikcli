@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { ModHostEvent } from "@nikcli-ai/ui/mod-tree-model"
+import type { ModHostEvent } from "@ragu/ui/mod-tree-model"
 import type { ChatConnection } from "../../chat/connection"
 import { adeModSource } from "./mods-source"
 
@@ -74,7 +74,7 @@ describe("adeModSource", () => {
         { type: "mod.ui.invalidate", properties: { component: "Pane", requestID: "p1" } },
       ])
       // The folder's own stream: its directory goes in the header, percent-encoded.
-      expect(requests[0]!.headers.get("x-nikcli-directory")).toBe(encodeURIComponent("/work/app"))
+      expect(requests[0]!.headers.get("x-ragu-directory")).toBe(encodeURIComponent("/work/app"))
     } finally {
       off()
       source.close()

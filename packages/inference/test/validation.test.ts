@@ -29,14 +29,14 @@ describe("validateChatBody", () => {
     expect(r.ok).toBe(false)
   })
 
-  it("accepts nikcli envelope", () => {
+  it("accepts ragu envelope", () => {
     const r = validateChatBody({
       model: "kimi-k2.6",
       messages: [{ role: "user", content: "hi" }],
-      nikcli: { cache: true, preferProvider: "groq" },
+      ragu: { cache: true, preferProvider: "groq" },
     })
     expect(r.ok).toBe(true)
-    if (r.ok) expect(r.data.nikcli?.preferProvider).toBe("groq")
+    if (r.ok) expect(r.data.ragu?.preferProvider).toBe("groq")
   })
 
   it("accepts tools array", () => {

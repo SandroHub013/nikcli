@@ -32,7 +32,7 @@ import type {
   QuestionRequest,
   Session,
   SessionStatus,
-} from "@nikcli-ai/sdk/httpapi"
+} from "@ragu/sdk/httpapi"
 import { createStore, reconcile, type SetStoreFunction } from "solid-js/store"
 import { t } from "../i18n"
 import {
@@ -158,7 +158,7 @@ const TITLE_LIMIT = 60
 
 /**
  * A new session's title: the first line of what was sent. Given at creation
- * because nikcli titles an untitled session with the provider's small model,
+ * because ragu titles an untitled session with the provider's small model,
  * which ADE's server does not pin and which on OpenRouter is a paid one: a
  * session that already has a title is never titled by a model.
  */
@@ -395,7 +395,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
         const path = pathOfFileUrl(file.url)
         if (!path || !insideProject(folder, path)) throw new Error(t("chat.attach.outside", path ?? file.url))
         if (isEnvFile(path)) throw new Error(t("chat.attach.env", path))
-        // nikcli reads it without asking: Rust follows links and junctions before it goes.
+        // ragu reads it without asking: Rust follows links and junctions before it goes.
         const check = await checkAttachment(folder, path)
         if (check === "notFile") throw new Error(t("chat.attach.notFile", path))
         if (check === "env") throw new Error(t("chat.attach.env", path))
@@ -412,7 +412,7 @@ export function createChatStore(deps: ChatStoreDeps): ChatStore {
       } else mustBeOurs(id)
       // Another folder opened meanwhile: the answer goes on in the first one, whose session it is.
       if (mine === generation) watched.add(id)
-      // A level the model does not have is not sent: nikcli would drop it without a word (`bots/effort.ts`).
+      // A level the model does not have is not sent: ragu would drop it without a word (`bots/effort.ts`).
       const level = effortToSend(variant, modelVariants((await catalog()).configProviders, model)).variant
       await connection.client.session.promptAsync({
         sessionID: id,

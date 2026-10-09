@@ -9,8 +9,8 @@
     "noUncheckedIndexedAccess": false,
     "customConditions": ["browser"],
     "paths": {
-      "@/*": ["../nikcli/src/*"],
-      "#fff": ["../nikcli/src/file/fff.bun.ts"]
+      "@/*": ["../ragu/src/*"],
+      "#fff": ["../ragu/src/file/fff.bun.ts"]
     }
   }
 }

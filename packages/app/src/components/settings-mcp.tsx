@@ -1,4 +1,4 @@
-import { Switch } from "@nikcli-ai/ui/switch"
+import { Switch } from "@ragu/ui/switch"
 import { For, Show, type Component, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useGlobalSDK } from "@/context/global-sdk"

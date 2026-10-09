@@ -47,7 +47,7 @@ jobs:
             } >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Run nikcli
+      - name: Run ragu
         if: steps.commits.outputs.has_commits == 'true'
         env:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
@@ -76,7 +76,7 @@ jobs:
             Try to keep documentation only for large features or changes that already have a good spot to be documented.
           EOF
           )
-          bun run --cwd packages/nikcli --conditions=browser src/index.ts run \
+          bun run --cwd packages/ragu --conditions=browser src/index.ts run \
             --agent docs \
             --model minimax-coding-plan/MiniMax-M3 \
             "$PROMPT"
@@ -96,7 +96,7 @@ jobs:
             exit 0
           fi
 
-          BRANCH="nikcli/docs-update-${GITHUB_RUN_ID}"
+          BRANCH="ragu/docs-update-${GITHUB_RUN_ID}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git switch -c "$BRANCH"

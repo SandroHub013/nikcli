@@ -62,7 +62,7 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           COUNT=$(gh api "/repos/$REPO/pulls/$PR_NUMBER/commits" --paginate \
-            | jq '[.[] | select(.commit.message | contains("[nikcli autofix]"))] | length')
+            | jq '[.[] | select(.commit.message | contains("[ragu autofix]"))] | length')
           echo "attempts=$COUNT" >> "$GITHUB_OUTPUT"
           if [ "$COUNT" -ge 3 ]; then
             gh api "/repos/$REPO/issues/$PR_NUMBER/comments" \
@@ -99,15 +99,15 @@ jobs:
       - name: Setup Git identity
         if: steps.pr.outputs.is_fork != 'true' && steps.cap.outputs.exhausted != 'true'
         run: |
-          git config --global user.email "nikcli-ci@users.noreply.github.com"
-          git config --global user.name "nikcli-ci[bot]"
+          git config --global user.email "ragu-ci@users.noreply.github.com"
+          git config --global user.name "ragu-ci[bot]"
 
       - name: Run autofix
         if: steps.pr.outputs.is_fork != 'true' && steps.cap.outputs.exhausted != 'true'
         id: autofix
         env:
           MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
-          NIKCLI_AUTOFIX_MODEL: ${{ vars.NIKCLI_AUTOFIX_MODEL || 'minimax-coding-plan/MiniMax-M3' }}
+          RAGU_AUTOFIX_MODEL: ${{ vars.RAGU_AUTOFIX_MODEL || 'minimax-coding-plan/MiniMax-M3' }}
           GITHUB_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.SST_GITHUB_TOKEN }}
           GITHUB_REF: ${{ format('refs/heads/{0}', steps.pr.outputs.ref) }}
@@ -134,7 +134,7 @@ jobs:
           fi
           if [ -n "$(git status --porcelain)" ]; then
             git add -A
-            git commit -m "fix(ci): on-demand autofix via /autofix [nikcli autofix]"
+            git commit -m "fix(ci): on-demand autofix via /autofix [ragu autofix]"
             git push origin "HEAD:$REF"
             NEXT=$((ATTEMPT + 1))
             gh api "/repos/$REPO/issues/comments/$COMMENT_ID/reactions" \

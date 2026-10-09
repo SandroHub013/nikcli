@@ -7,7 +7,7 @@ const context: PlanContext = {
     { id: "claude-code", label: "Claude Code", available: true },
     { id: "codex", label: "Codex", available: false },
   ],
-  projects: [{ name: "nikcli", root: "C:/Users/x/nikcli", isOpen: true }],
+  projects: [{ name: "ragu", root: "C:/Users/x/ragu", isOpen: true }],
   paneCount: 1,
   commands: ["palette.open"],
 }
@@ -21,7 +21,7 @@ describe("buildPlannerPrompt", () => {
     const { user } = buildPlannerPrompt("avvia due sessioni", context)
 
     expect(user).toContain("claude-code")
-    expect(user).toContain("nikcli")
+    expect(user).toContain("ragu")
     expect(user).toContain("palette.open")
     // E cosa NON esiste, altrimenti lo propone e basta.
     expect(user).toContain("NON installato")
@@ -283,8 +283,8 @@ describe("planUtterance streams the speech", () => {
       async ({ onText }) => {
         onText?.('{"speech":"Apro')
         onText?.('{"speech":"Apro il progetto ade.","steps":[')
-        onText?.('{"speech":"Apro il progetto ade.","steps":[{"action":"open_project","project":"nikcli"}]}')
-        return '{"speech":"Apro il progetto ade.","steps":[{"action":"open_project","project":"nikcli"}]}'
+        onText?.('{"speech":"Apro il progetto ade.","steps":[{"action":"open_project","project":"ragu"}]}')
+        return '{"speech":"Apro il progetto ade.","steps":[{"action":"open_project","project":"ragu"}]}'
       },
       { onSpeech: (soFar) => void heard.push(soFar) },
     )

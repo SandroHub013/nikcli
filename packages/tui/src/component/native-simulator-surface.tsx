@@ -1,8 +1,8 @@
 import { RGBA, type BoxRenderable } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js"
-import { applyLiveCapabilities, detectCapabilities, encodeSixel, pickDecoder, resize } from "@nikcli-ai/tui-image"
-import type { NativeDevice } from "@nikcli-ai/simulation/native"
+import { applyLiveCapabilities, detectCapabilities, encodeSixel, pickDecoder, resize } from "@ragu/tui-image"
+import type { NativeDevice } from "@ragu/simulation/native"
 import { BrowserFramePump, cellSize } from "@tui/util/browser-frames"
 import { fitOverlayCells, registerNativeOverlay, type NativeOverlay } from "@tui/util/native-overlay"
 import { useTheme } from "@tui/context/theme"
@@ -58,7 +58,7 @@ export function NativeSimulatorSurface(props: {
     }
     report(`Booting ${device.label}...`)
     void (async () => {
-      const native = await import("@nikcli-ai/simulation/native")
+      const native = await import("@ragu/simulation/native")
       if (!current()) return
       await native.bootNativeDevice(device, abort.signal)
       if (!current()) return

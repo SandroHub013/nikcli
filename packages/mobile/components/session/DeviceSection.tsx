@@ -54,7 +54,7 @@ export function DeviceSection({ url, connected, version }: DeviceSectionProps) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Add device"
-          accessibilityHint="Connect this app to another nikcli host"
+          accessibilityHint="Connect this app to another ragu host"
           onPressIn={press.onPressIn}
           onPressOut={press.onPressOut}
           onPress={() => {

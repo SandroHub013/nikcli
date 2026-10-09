@@ -21,8 +21,8 @@ const toc = [
 
 <DocsLayout
   title="Streaming a response"
-  subtitle="Subscribe to the event feed, submit a prompt asynchronously, print tokens as they arrive — the pattern every nikcli interface is built on."
-  description="Guide to streaming nikcli responses: the event feed, promptAsync, message.part.updated deltas, session.idle, and the same flow with curl."
+  subtitle="Subscribe to the event feed, submit a prompt asynchronously, print tokens as they arrive — the pattern every ragu interface is built on."
+  description="Guide to streaming ragu responses: the event feed, promptAsync, message.part.updated deltas, session.idle, and the same flow with curl."
   toc={toc}
 >
   <section id="shape" class="doc-section">
@@ -124,9 +124,9 @@ for await (const event of stream) {
 
   <section id="complete" class="doc-section">
     <h2>The whole thing</h2>
-    <DocCode language="ts" title="stream.ts">{`import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
+    <DocCode language="ts" title="stream.ts">{`import { createRaguClient } from "@ragu/sdk/httpapi"
 
-const client = createNikcliClient({
+const client = createRaguClient({
   baseUrl: "http://127.0.0.1:4096",
   directory: process.cwd(),
 })

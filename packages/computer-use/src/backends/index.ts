@@ -1,8 +1,8 @@
 /**
  * Backend selector — return the right `Backend` for a mode + conversation,
- * the way `@nikcli-ai/browser-control`'s `SessionManager` picks a backend per
+ * the way `@ragu/browser-control`'s `SessionManager` picks a backend per
  * session. `sandbox` (default) keeps one Docker-managed Linux desktop per
- * nikcli conversation; `host` drives the user's real desktop in real time.
+ * ragu conversation; `host` drives the user's real desktop in real time.
  */
 import type { Mode } from "../frame"
 import type { Backend } from "./host"

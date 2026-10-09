@@ -4,7 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { Bridge, type BridgeHooks } from "../src/bridge.ts"
 import { hello as helloFixture, until } from "./helpers.ts"
-import type { DeviceEvent, GadgetInfo } from "@nikcli-ai/gadget/protocol"
+import type { DeviceEvent, GadgetInfo } from "@ragu/gadget/protocol"
 
 /**
  * The C client against the real bridge.
@@ -17,7 +17,7 @@ import type { DeviceEvent, GadgetInfo } from "@nikcli-ai/gadget/protocol"
  */
 const root = path.resolve(import.meta.dir, "../../gadget/c")
 const compiler = Bun.which("cc") ?? Bun.which("gcc") ?? Bun.which("clang")
-const built = mkdtempSync(path.join(os.tmpdir(), "nikcli-c-client-"))
+const built = mkdtempSync(path.join(os.tmpdir(), "ragu-c-client-"))
 const binary = path.join(built, "host_gadget")
 let compiled = false
 
@@ -35,7 +35,7 @@ beforeAll(async () => {
       "-fsanitize=address,undefined",
       "-fno-sanitize-recover=undefined",
       `-I${path.join(root, "include")}`,
-      path.join(root, "src/nikcli_gadget.c"),
+      path.join(root, "src/ragu_gadget.c"),
       path.join(root, "src/ng_json.c"),
       path.join(root, "platform/posix.c"),
       path.join(root, "examples/host_gadget.c"),

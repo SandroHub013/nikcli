@@ -18,7 +18,7 @@
   pointer-events: none;
 
   /*
-   * The widget wears nikcli's colours, not ADE's.
+   * The widget wears ragu's colours, not ADE's.
    *
    * ADE's accent is a teal it chose for itself; the product's mark is
    * monochrome — warm near-black against warm off-white, with one held-back
@@ -78,7 +78,7 @@
  *
  * The pill used to be sized by its contents, and its contents include the
  * name of the pane the dictation is aimed at: switching between a session
- * called `nikcli` and one called `feat/browser-visual-editor-cursor` resized
+ * called `ragu` and one called `feat/browser-visual-editor-cursor` resized
  * the widget under the user's eyes, and so did every state change that
  * added or removed a button. A heads-up widget that moves while you are
  * speaking to it is one you have to keep re-finding.

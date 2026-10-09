@@ -1,19 +1,19 @@
 #!/usr/bin/env bun
-// Bundles the embedded nikcli host (packages/nikcli/src) and the HttpApi client into dist/ so the
+// Bundles the embedded ragu host (packages/ragu/src) and the HttpApi client into dist/ so the
 // published package does not need the monorepo sources. Third-party packages stay external and are
 // listed in dist/package.json; workspace packages are inlined.
 import path from "path"
 import { fileURLToPath } from "url"
 import { $ } from "bun"
 import pkg from "../package.json"
-import host from "../../nikcli/package.json"
+import host from "../../ragu/package.json"
 import root from "../../../package.json"
 
 const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 process.chdir(dir)
 
 // The solid transform lives with the host sources it compiles, not in this package.
-const solidPlugin = (await import(Bun.resolveSync("@opentui/solid/bun-plugin", path.join(dir, "../nikcli")))).default
+const solidPlugin = (await import(Bun.resolveSync("@opentui/solid/bun-plugin", path.join(dir, "../ragu")))).default
 
 const version = pkg.version
 // Dependencies the repo patches (patches/*.patch) cannot be patched for a consumer, so the pure-JS
@@ -41,10 +41,10 @@ const result = await Bun.build({
   tsconfig: "./tsconfig.json",
   external,
   define: {
-    NIKCLI_VERSION: `'${version}'`,
-    NIKCLI_CHANNEL: `'latest'`,
-    NIKCLI_REVISION: `'sdk-next'`,
-    NIKCLI_LIBC: `''`,
+    RAGU_VERSION: `'${version}'`,
+    RAGU_CHANNEL: `'latest'`,
+    RAGU_REVISION: `'sdk-next'`,
+    RAGU_LIBC: `''`,
   },
 })
 if (!result.success) {
@@ -64,7 +64,7 @@ await Bun.write(
     {
       name: pkg.name,
       version,
-      description: "Effect-native embedded nikcli host for in-process applications",
+      description: "Effect-native embedded ragu host for in-process applications",
       type: "module",
       license: pkg.license,
       main: "./index.js",

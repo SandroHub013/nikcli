@@ -1,7 +1,7 @@
 /**
- * The wire contract between a gadget and the nikcli gadgets bridge.
+ * The wire contract between a gadget and the ragu gadgets bridge.
  *
- * This file is the whole protocol: the bridge (the nikcli plugin) and every
+ * This file is the whole protocol: the bridge (the ragu plugin) and every
  * device SDK import it, so a change here is a change on both ends at once.
  * It is plain JSON over HTTP, with one server-sent-events stream per device
  * for what the bridge pushes. No binary framing, no custom transport: an
@@ -35,7 +35,7 @@ export const LIMITS = {
   FEED_LAG_FRAMES: 256,
   /** The largest request body the bridge reads. */
   MAX_BODY_BYTES: 4 * 1024 * 1024 + 256 * 1024,
-  /** Drawing bounds — the same the nikcli mod surface enforces. */
+  /** Drawing bounds — the same the ragu mod surface enforces. */
   TREE_MAX_DEPTH: 16,
   /** A Box's `gap` and `padding`, in cells: layout work grows with them. */
   TREE_MAX_SPACING: 16,
@@ -196,7 +196,7 @@ export interface MessageResponse {
 }
 
 // ---------------------------------------------------------------------------
-// What the operator (the nikcli tool, the TUI) sees
+// What the operator (the ragu tool, the TUI) sees
 
 export interface HealthInfo {
   readonly uptimeSec: number
@@ -310,7 +310,7 @@ export class GadgetError extends Error {
 }
 
 // ---------------------------------------------------------------------------
-// Drawing: plain data, the subset of nikcli's mod trees a panel can lay out.
+// Drawing: plain data, the subset of ragu's mod trees a panel can lay out.
 
 export type TreeNode = Tree | string | number | false | null | undefined
 

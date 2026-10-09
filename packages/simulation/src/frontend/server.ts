@@ -62,7 +62,7 @@ export function start(harness: Harness, endpoint: string, finishRecording?: () =
     port: Number(url.port),
     fetch(request, server) {
       if (server.upgrade(request, { data: { drive: true } })) return undefined
-      return new Response("nikcli drive ui websocket", { status: 426 })
+      return new Response("ragu drive ui websocket", { status: 426 })
     },
     websocket: {
       async message(socket, message) {

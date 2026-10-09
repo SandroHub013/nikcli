@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { CHAT_PERMISSION, type PermissionRule } from "../chat/rules"
 import type { ChatEvent } from "../chat/events"
-import type { ConfigProviders, NikcliClient, ProviderList } from "@nikcli-ai/sdk/client"
+import type { ConfigProviders, RaguClient, ProviderList } from "@ragu/sdk/client"
 import { t } from "../i18n"
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 import { BOT_SESSION_MARK, botPermission } from "./serve-rules"
 import {
   agentProblem,
@@ -20,7 +20,7 @@ import { emptyTalk, type PendingPermission, type Talk } from "./talk"
 import type { TurnRequest } from "./turn"
 
 /*
- * B8d: a nikcli bot's turn as a prompt to ADE's server. The events are the
+ * B8d: a ragu bot's turn as a prompt to ADE's server. The events are the
  * server's own, recorded by the Chat (`chat/fixtures`, C2): one turn of them
  * is played back when the prompt arrives.
  */
@@ -92,7 +92,7 @@ const BOT: AgentFile = {
   disabledTools: [],
   model: "openrouter/nvidia/nemotron-3-super-120b-a12b:free",
   effort: "high",
-  runner: "nikcli",
+  runner: "ragu",
 }
 
 /** A catalog with these models, their providers connected. */
@@ -191,7 +191,7 @@ async function settleUntil(done: () => boolean) {
 }
 
 const panel = (extra: Partial<TurnRequest> = {}): TurnRequest => ({
-  runner: "nikcli",
+  runner: "ragu",
   bot: BOT,
   message: "ciao",
   cwd: "C:/progetto",
@@ -284,7 +284,7 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(fake.calls.connect).toEqual([{ directory: "C:/progetto", interactive: true }])
   })
 
-  test("a new session has the profile's rules; one that has them goes on; one of `nikcli run` or the Chat starts over, said once", async () => {
+  test("a new session has the profile's rules; one that has them goes on; one of `ragu run` or the Chat starts over, said once", async () => {
     const fake = server({ events: FIRST, session: FIRST_SESSION })
     const fresh = thread()
     await runServeTurn(panel({ onChange: fresh.onChange }), fake.deps).result
@@ -358,7 +358,7 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(agentProblem([{ name: "alfa" }], BOT)).toBe(t("bots.serve.agentTaken", "alfa"))
   })
 
-  /* A model the server does not have: nikcli 1.398 would end the turn without a word. */
+  /* A model the server does not have: ragu 1.398 would end the turn without a word. */
   test("a model missing from the catalog is refused before any session: the bot's, else its agent's, else the configured one", async () => {
     const gone = server({ catalog: { providerList: catalogOf("openrouter/nvidia/nemotron-3.5-lightning:free") } })
     const result = await runServeTurn(panel(), gone.deps).result
@@ -635,7 +635,7 @@ describe("B8d: a bot's turn on ADE's server", () => {
   })
 
   /*
-   * Full review 2026-10-06, bots 1: nikcli's bash tool sends one pattern per command, so
+   * Full review 2026-10-06, bots 1: ragu's bash tool sends one pattern per command, so
    * `npm test && rm -rf src` arrives as two. Joined with ", " the second one did not follow a
    * separator `decide` knows, and the line was let through unasked.
    */
@@ -753,7 +753,7 @@ describe("B8d: a bot's turn on ADE's server", () => {
     const slow = server({ onPrompt: (stream) => stream.push(busy) })
     const late = await runServeTurn(panel({ timeoutMs: 20 }), slow.deps).result
     expect(late.status).toBe("error")
-    expect(late.problem).toContain("nikcli")
+    expect(late.problem).toContain("ragu")
     await Promise.resolve()
     expect(slow.calls.aborted).toEqual([SESSION])
 
@@ -764,7 +764,7 @@ describe("B8d: a bot's turn on ADE's server", () => {
     const dear = server({ onPrompt: (stream) => stream.push(busy, spending) })
     const capped = await runServeTurn(panel({ maxCostUsd: 0.2 }), dear.deps).result
     expect(capped.status).toBe("error")
-    expect(capped.problem).toBe(t("bots.turn.overBudget", "nikcli", "0.30 $", "0.20 $"))
+    expect(capped.problem).toBe(t("bots.turn.overBudget", "ragu", "0.30 $", "0.20 $"))
     await Promise.resolve()
     expect(dear.calls.aborted).toEqual([SESSION])
   })
@@ -799,7 +799,7 @@ describe("B8d: a bot's turn on ADE's server", () => {
 describe("the bot's catalog read has a time limit", () => {
   test("a server that never answers gives an unknown catalog, in time", async () => {
     const never = () => new Promise<never>(() => {})
-    const client = { provider: { list: never }, config: { get: never, providers: never } } as unknown as NikcliClient
+    const client = { provider: { list: never }, config: { get: never, providers: never } } as unknown as RaguClient
     const started = Date.now()
     expect(await serveClientOf(client, 20).catalog()).toEqual({})
     expect(Date.now() - started).toBeLessThan(1000)
@@ -855,7 +855,7 @@ describe("the bots' catalog is kept", () => {
 })
 
 /*
- * chat-bot-facili, pezzo 0: nikcli drops a variant its model does not have
+ * chat-bot-facili, pezzo 0: ragu drops a variant its model does not have
  * without a word (`session/llm.ts`), and the turn ran at the default as if
  * the bot's effort had been used. The variants are the server's own, after
  * the configuration (`GET /config/providers`).
@@ -958,7 +958,7 @@ describe("a bot's effort is one its model has", () => {
     const client = {
       provider: { list: async () => ({ data: catalogOf(BOT.model!) }) },
       config: { get: async () => ({ data: {} }), providers: async () => ({ data: providers }) },
-    } as unknown as NikcliClient
+    } as unknown as RaguClient
     expect((await serveClientOf(client, 1_000).catalog()).configProviders).toBe(providers)
   })
 })

@@ -3,14 +3,14 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
 import { createMemo, createSignal, createResource, onMount } from "solid-js"
-import { Locale } from "@nikcli-ai/util/locale"
+import { Locale } from "@ragu/util/locale"
 import { useKeybind } from "../context/keybind"
 import { useTheme } from "../context/theme"
 import { useLocal } from "../context/local"
 import { useSDK } from "../context/sdk"
 import { DialogSessionRename } from "./dialog-session-rename"
 import { createDebouncedSignal } from "../util/signal"
-import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
+import { createRaguClient } from "@ragu/sdk/httpapi"
 import { useToast } from "../ui/toast"
 import { Keybind } from "@tui/util/keybind"
 import { Spinner } from "./spinner"
@@ -56,7 +56,7 @@ export function DialogSessionList(
 
   /**
    * The filesystem root has no `.git` above it, so the server resolves it to
-   * the global project — the same project a `nikcli` started outside a repo
+   * the global project — the same project a `ragu` started outside a repo
    * binds to.
    */
   const globalDirectory = createMemo(() => path.parse(sync.data.path.directory || sdk.directory || ".").root || "/")
@@ -75,7 +75,7 @@ export function DialogSessionList(
 
   const workspaceClient = () => {
     if (!props.workspaceID) return sdk.client
-    return createNikcliClient({
+    return createRaguClient({
       baseUrl: sdk.url,
       fetch: sdk.fetch,
       directory: ownerDirectory(),
@@ -84,7 +84,7 @@ export function DialogSessionList(
   }
 
   const globalClient = createMemo(() =>
-    createNikcliClient({
+    createRaguClient({
       baseUrl: sdk.url,
       fetch: sdk.fetch,
       directory: globalDirectory(),
@@ -95,7 +95,7 @@ export function DialogSessionList(
   const scopeClient = () => (globalScope() ? globalClient() : workspaceClient())
 
   async function restoreWorkspace(workspaceID: string) {
-    const restored = await createNikcliClient({ baseUrl: sdk.url, fetch: sdk.fetch, directory: ownerDirectory() })
+    const restored = await createRaguClient({ baseUrl: sdk.url, fetch: sdk.fetch, directory: ownerDirectory() })
       .experimental.workspace.restore({ id: workspaceID })
       .catch(() => undefined)
     if (restored?.data) return true

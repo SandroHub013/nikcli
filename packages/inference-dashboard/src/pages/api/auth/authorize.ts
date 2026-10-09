@@ -33,7 +33,7 @@ export const GET: APIRoute = async (ctx) => {
   const url = new URL("/authorize", issuer)
   url.search = new URLSearchParams({
     response_type: "code",
-    client_id: "nikcli-inference-dashboard",
+    client_id: "ragu-inference-dashboard",
     redirect_uri: redirectUri,
     state,
     code_challenge: challenge,

@@ -1,8 +1,8 @@
-# nikcli Cloudflare Deployment Guide
+# ragu Cloudflare Deployment Guide
 
 ## Overview
 
-This document describes the complete deployment infrastructure for nikcli on Cloudflare.
+This document describes the complete deployment infrastructure for ragu on Cloudflare.
 
 ## Deployed Resources
 
@@ -10,14 +10,14 @@ This document describes the complete deployment infrastructure for nikcli on Clo
 
 | Worker         | Domain              | Status    | Environment Variables                   |
 | -------------- | ------------------- | --------- | --------------------------------------- |
-| `nikcli-slack` | slack.nikcli-ai.dev | ✅ Online | NODE_ENV, CF_REGION, WRANGLER_LOG_LEVEL |
-| `nikcli-web`   | nikcli-ai.dev       | ✅ Online | ASSETS binding (dist)                   |
+| `ragu-slack` | slack.nikcli-ai.dev | ✅ Online | NODE_ENV, CF_REGION, WRANGLER_LOG_LEVEL |
+| `ragu-web`   | nikcli-ai.dev       | ✅ Online | ASSETS binding (dist)                   |
 
 ### Pages
 
 | Project      | Domain            | Status    | Build Output |
 | ------------ | ----------------- | --------- | ------------ |
-| `nikcli-app` | app.nikcli-ai.dev | ✅ Online | dist/        |
+| `ragu-app` | app.nikcli-ai.dev | ✅ Online | dist/        |
 
 ### KV Namespaces
 
@@ -34,7 +34,7 @@ This document describes the complete deployment infrastructure for nikcli on Clo
 ```bash
 # Slack Bot
 cd packages/slack
-bunx wrangler deploy src/worker.ts --name nikcli-slack --routes 'slack.nikcli-ai.dev/*'
+bunx wrangler deploy src/worker.ts --name ragu-slack --routes 'slack.nikcli-ai.dev/*'
 
 # Website
 cd packages/web
@@ -44,28 +44,28 @@ bunx wrangler deploy
 # Web App
 cd packages/app
 bun run build
-bunx wrangler pages deploy dist --project-name=nikcli-app --branch=main
+bunx wrangler pages deploy dist --project-name=ragu-app --branch=main
 ```
 
 ### Secrets Management
 
 ```bash
 # List secrets
-bunx wrangler secret list --name nikcli-slack
+bunx wrangler secret list --name ragu-slack
 
 # Set secret
-bunx wrangler secret put SECRET_NAME --name nikcli-slack
+bunx wrangler secret put SECRET_NAME --name ragu-slack
 
 # Delete secret
-bunx wrangler secret delete SECRET_NAME --name nikcli-slack
+bunx wrangler secret delete SECRET_NAME --name ragu-slack
 ```
 
 ### Logs
 
 ```bash
 # Tail logs
-bunx wrangler tail --name nikcli-slack
-bunx wrangler tail --name nikcli-web
+bunx wrangler tail --name ragu-slack
+bunx wrangler tail --name ragu-web
 ```
 
 ---
@@ -88,14 +88,14 @@ WRANGLER_LOG_LEVEL = "info"
 - `SLACK_CLIENT_ID` - Slack OAuth Client ID
 - `SLACK_CLIENT_SECRET` - Slack OAuth Client Secret
 - `OPENAI_API_KEY` - OpenAI API key for voice transcription (optional)
-- `NIKCLI_URL` - URL of nikcli server
-- `NIKCLI_USERNAME` - Username for Basic Auth (default: nikcli)
-- `NIKCLI_PASSWORD` - Password for Basic Auth
+- `RAGU_URL` - URL of ragu server
+- `RAGU_USERNAME` - Username for Basic Auth (default: ragu)
+- `RAGU_PASSWORD` - Password for Basic Auth
 
 ### Web Worker (`wrangler.toml`)
 
 ```toml
-name = "nikcli-web"
+name = "ragu-web"
 main = "./dist/_worker.js"
 compatibility_date = "2025-01-25"
 
@@ -122,7 +122,7 @@ CF_REGION = "us"
 | nikcli-ai.dev       | A     | Worker               | N/A     |
 | slack.nikcli-ai.dev | A     | Worker               | N/A     |
 | app.nikcli-ai.dev   | CNAME | nikcli-app.pages.dev | ✅      |
-| docs.nikcli-ai.dev  | A     | nikcli-web           | ✅      |
+| docs.nikcli-ai.dev  | A     | ragu-web           | ✅      |
 
 ---
 
@@ -162,10 +162,10 @@ CF_REGION = "us"
 curl https://slack.nikcli-ai.dev/health
 
 # View logs
-bunx wrangler tail --name nikcli-slack
+bunx wrangler tail --name ragu-slack
 
 # Check deployment
-bunx wrangler deployments list --name nikcli-slack
+bunx wrangler deployments list --name ragu-slack
 ```
 
 ### DNS Not Resolving
@@ -194,7 +194,7 @@ Ensure the following origins are allowed in your CORS configuration:
 
 ```bash
 cd packages/slack
-bunx wrangler deploy src/worker.ts --name nikcli-slack --routes 'slack.nikcli-ai.dev/*'
+bunx wrangler deploy src/worker.ts --name ragu-slack --routes 'slack.nikcli-ai.dev/*'
 ```
 
 ### Redeploy Website
@@ -210,7 +210,7 @@ bunx wrangler deploy
 ```bash
 cd packages/app
 bun run build
-bunx wrangler pages deploy dist --project-name=nikcli-app --branch=main
+bunx wrangler pages deploy dist --project-name=ragu-app --branch=main
 ```
 
 ---
@@ -244,7 +244,7 @@ bun sst deploy --stage=production  # Production
 
 - All secrets are stored via Cloudflare Secrets
 - Workers use HTTPS only
-- Basic Auth protects nikcli server access
+- Basic Auth protects ragu server access
 - CORS is configured for allowed origins only
 
 ---

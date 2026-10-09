@@ -1,10 +1,10 @@
 import path from "path"
-import { Global } from "@nikcli-ai/util/global"
+import { Global } from "@ragu/util/global"
 import { onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "../../context/helper"
 import { appendFile } from "fs/promises"
-import { parseJsonl } from "@nikcli-ai/util/bun-utils"
+import { parseJsonl } from "@ragu/util/bun-utils"
 
 function calculateFrecency(entry?: { frequency: number; lastOpen: number }): number {
   if (!entry) return 0

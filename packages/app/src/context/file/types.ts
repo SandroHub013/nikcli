@@ -1,4 +1,4 @@
-import type { FileContent } from "@nikcli-ai/sdk/httpapi"
+import type { FileContent } from "@ragu/sdk/httpapi"
 
 export type FileSelection = {
   startLine: number

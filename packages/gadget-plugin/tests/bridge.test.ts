@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
 import path from "node:path"
-import { Gadget, display, type PairingState } from "@nikcli-ai/gadget"
+import { Gadget, display, type PairingState } from "@ragu/gadget"
 import {
   GadgetError,
   type DeviceEvent,
   type GadgetInfo,
   type InvokeResult,
   type Tree,
-} from "@nikcli-ai/gadget/protocol"
+} from "@ragu/gadget/protocol"
 import { Bridge, type BridgeHooks } from "../src/bridge.ts"
 import { FakeFeed, rejection, tempDir, until } from "./helpers.ts"
 
@@ -20,7 +20,7 @@ let bridge: Bridge
 let calls: Calls
 let temp: ReturnType<typeof tempDir>
 let stop: Array<() => void> = []
-const state = process.env.NIKCLI_GADGET_STATE
+const state = process.env.RAGU_GADGET_STATE
 
 function hooks(): BridgeHooks {
   return {
@@ -37,7 +37,7 @@ function hooks(): BridgeHooks {
 
 beforeEach(() => {
   temp = tempDir()
-  process.env.NIKCLI_GADGET_STATE = path.join(temp.dir, "device")
+  process.env.RAGU_GADGET_STATE = path.join(temp.dir, "device")
   calls = { messages: [], presses: [] }
   bridge = new Bridge({
     port: 0,
@@ -54,8 +54,8 @@ afterEach(() => {
   stop = []
   bridge.stop()
   temp.cleanup()
-  if (state === undefined) delete process.env.NIKCLI_GADGET_STATE
-  else process.env.NIKCLI_GADGET_STATE = state
+  if (state === undefined) delete process.env.RAGU_GADGET_STATE
+  else process.env.RAGU_GADGET_STATE = state
 })
 
 function server() {
@@ -314,7 +314,7 @@ describe("a gadget end to end", () => {
   })
 
   test("a silent connection is noticed by the transport", async () => {
-    const { Transport } = await import("@nikcli-ai/gadget")
+    const { Transport } = await import("@ragu/gadget")
     const silent = Object.assign(
       async () => new Response(new ReadableStream<Uint8Array>({ start() {} }), { status: 200 }),
       { preconnect: () => undefined },
@@ -337,7 +337,7 @@ describe("a gadget end to end", () => {
 describe("the routes", () => {
   test("the root says what it is and whether pairing is open", async () => {
     const closed = await (await admin("/")).json()
-    expect(closed).toMatchObject({ name: "nikcli-gadgets", protocol: 1, pairing: false })
+    expect(closed).toMatchObject({ name: "ragu-gadgets", protocol: 1, pairing: false })
     bridge.registry.openPairing()
     expect(await (await admin("/")).json()).toMatchObject({ pairing: true })
   })

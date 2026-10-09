@@ -6,13 +6,13 @@ import {
   type ProviderAuthResponse,
   type ProviderListResponse,
   type QuestionRequest,
-  createNikcliClient,
-} from "@nikcli-ai/sdk/httpapi"
+  createRaguClient,
+} from "@ragu/sdk/httpapi"
 import { batch } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
-import { retry } from "@nikcli-ai/util/retry"
-import { getFilename } from "@nikcli-ai/util/path"
-import { showToast } from "@nikcli-ai/ui/toast"
+import { retry } from "@ragu/util/retry"
+import { getFilename } from "@ragu/util/path"
+import { showToast } from "@ragu/ui/toast"
 import { cmp, normalizeProviderList } from "./utils"
 import type { State, VcsCache } from "./types"
 
@@ -27,7 +27,7 @@ type GlobalStore = {
 }
 
 export async function bootstrapGlobal(input: {
-  globalSDK: ReturnType<typeof createNikcliClient>
+  globalSDK: ReturnType<typeof createRaguClient>
   connectErrorTitle: string
   connectErrorDescription: string
   requestFailedTitle: string
@@ -62,7 +62,7 @@ export async function bootstrapGlobal(input: {
       input.globalSDK.project.list().then((x) => {
         const projects = (x.data ?? [])
           .filter((p) => !!p?.id)
-          .filter((p) => !!p.worktree && !p.worktree.includes("nikcli-test"))
+          .filter((p) => !!p.worktree && !p.worktree.includes("ragu-test"))
           .slice()
           .sort((a, b) => cmp(a.id, b.id))
         input.setGlobalStore("project", projects)
@@ -106,7 +106,7 @@ function groupBySession<T extends { id: string; sessionID: string }>(input: T[])
 
 export async function bootstrapDirectory(input: {
   directory: string
-  sdk: ReturnType<typeof createNikcliClient>
+  sdk: ReturnType<typeof createRaguClient>
   store: Store<State>
   setStore: SetStoreFunction<State>
   vcsCache: VcsCache

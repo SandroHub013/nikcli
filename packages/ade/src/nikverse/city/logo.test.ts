@@ -28,8 +28,8 @@ function viaLoader(svg: string): LogoRect[] {
 
 describe("the logo is the brand's own file", () => {
   test("the copy in the package has the same hash as the brand's logo, byte for byte", () => {
-    const brand = readFileSync(join(BRAND, "nikcli-logo-dark.svg"))
-    const copy = readFileSync(join(import.meta.dir, "nikcli-logo-dark.svg"))
+    const brand = readFileSync(join(BRAND, "ragu-logo-dark.svg"))
+    const copy = readFileSync(join(import.meta.dir, "ragu-logo-dark.svg"))
     expect(hash(copy)).toBe(hash(brand))
     expect(hash(LOGO_SVG)).toBe(hash(brand))
   })
@@ -51,7 +51,7 @@ describe("the logo is the brand's own file", () => {
   })
 
   test("the light logo, which the daytime will use, reads the same way", () => {
-    const light = readFileSync(join(BRAND, "nikcli-logo-light.svg"), "utf8")
+    const light = readFileSync(join(BRAND, "ragu-logo-light.svg"), "utf8")
     expect([...parseLogo(light).rects].sort(order)).toEqual(viaLoader(light).sort(order))
   })
 

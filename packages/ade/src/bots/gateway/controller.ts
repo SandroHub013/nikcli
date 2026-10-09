@@ -20,7 +20,7 @@
  *   likes. Anything else pressed is ignored.
  * - the turn gets the tools of a turn from a chat (G5, `RemoteTools`): no
  *   shell unless the owner turned on the bot's remote commands, and then
- *   nikcli's question, an event with its id on ADE's server (B8d), goes to
+ *   ragu's question, an event with its id on ADE's server (B8d), goes to
  *   the phone (`approval.ts`).
  *
  * Nothing is read from a chat before this listens: `gateway_ready` is called
@@ -28,7 +28,7 @@
  */
 
 import { t } from "../../i18n"
-import type { AgentFile } from "../nikcli"
+import type { AgentFile } from "../ragu"
 import { runnerById } from "../runners"
 import type { Turn, TurnRequest } from "../turn"
 import { BOT_TURN_TIMEOUT_MS } from "../controller"
@@ -290,9 +290,9 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         loaded.fingerprint,
       )
       let turn: Turn | undefined
-      // nikcli's questions, by their id on ADE's server (B8d): answered on the phone, or no at once.
+      // ragu's questions, by their id on ADE's server (B8d): answered on the phone, or no at once.
       const onPermission =
-        runner === "nikcli"
+        runner === "ragu"
           ? permissionAnswerer({
               ask: (question, choices, signal) =>
                 ask(message, question, choices, deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS, signal),

@@ -12,7 +12,7 @@ import { type MonitorInfo } from "../util/monitor-helpers"
 import { Spinner } from "./spinner"
 import { useCommandDialog } from "./dialog-command"
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { Locale } from "@nikcli-ai/util/locale"
+import { Locale } from "@ragu/util/locale"
 import { type JobItem } from "./prompt-frames"
 export type { JobItem }
 

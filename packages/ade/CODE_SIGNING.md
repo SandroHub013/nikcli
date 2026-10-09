@@ -35,7 +35,7 @@ ADE contacts the network on its own for exactly one thing: every 30 minutes it
 reads the list of this repository's releases from the GitHub API, and when the
 user chooses to update, it downloads `latest.json` and the release bundle from
 GitHub. No usage data, identifiers or telemetry are sent. Agents started from
-ADE (Claude Code, Codex, nikcli and others) talk to their own providers under
+ADE (Claude Code, Codex, ragu and others) talk to their own providers under
 their own terms.
 
 ## macOS

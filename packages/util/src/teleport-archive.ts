@@ -137,7 +137,7 @@ export async function createWorkspaceArchive(
   }
 
   const maxFileSize = options.maxFileSize ?? DEFAULT_MAX_FILE_SIZE
-  const work = await mkdtemp(path.join(tmpdir(), "nikcli-teleport-"))
+  const work = await mkdtemp(path.join(tmpdir(), "ragu-teleport-"))
   const archivePath = path.join(work, "workspace.tar.gz")
   const cleanup = () => rm(work, { recursive: true, force: true }).catch(() => undefined)
 
@@ -224,7 +224,7 @@ export async function createWorkspaceArchive(
 }
 
 /**
- * Stream a workspace tarball to a remote nikcli server in chunks, so a large
+ * Stream a workspace tarball to a remote ragu server in chunks, so a large
  * archive (working tree + .git) is never sent as one oversized request body.
  * Returns the server's `uploadID`, to be passed to `POST /mobile/teleport`.
  */

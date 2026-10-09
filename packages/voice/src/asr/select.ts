@@ -32,7 +32,7 @@ import {
   type StreamState,
   type SttStreamTransport,
 } from "./grok-stream"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 
 // ---------------------------------------------------------------------------
 // Backend Identifier & Status Types

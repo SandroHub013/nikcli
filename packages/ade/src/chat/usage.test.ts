@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import type { Message } from "@nikcli-ai/sdk/httpapi"
+import type { Message } from "@ragu/sdk/httpapi"
 import { setLocalePreference } from "../i18n/locale"
 import { modelsFromProviderList } from "./model"
 import { answerUsage, answerUsageText, formatCost, sessionUsage, sessionUsageText } from "./usage"

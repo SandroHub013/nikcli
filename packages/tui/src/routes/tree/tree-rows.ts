@@ -1,4 +1,4 @@
-import type { Message, Part, Session, TextPart } from "@nikcli-ai/sdk/httpapi"
+import type { Message, Part, Session, TextPart } from "@ragu/sdk/httpapi"
 import { formatMessageLineForTimeline } from "@tui/util/timeline-style-text"
 
 export type TreeRow =

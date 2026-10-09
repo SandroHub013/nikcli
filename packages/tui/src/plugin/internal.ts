@@ -25,12 +25,12 @@ import DevTools from "../feature-plugins/devtools"
 import SessionStudio from "../feature-plugins/session-studio"
 import Btw from "../feature-plugins/btw"
 import Mods from "../feature-plugins/mods"
-import { Flag } from "@nikcli-ai/util/flag"
+import { Flag } from "@ragu/util/flag"
 import { dbg } from "../feature-plugins/background/__debug"
 dbg("internal.ts imported")
 
-import type { TuiPlugin, TuiPluginModule } from "@nikcli-ai/plugin/tui"
-import type { Definition } from "@nikcli-ai/plugin/v2/tui/plugin"
+import type { TuiPlugin, TuiPluginModule } from "@ragu/plugin/tui"
+import type { Definition } from "@ragu/plugin/v2/tui/plugin"
 
 export type InternalTuiPlugin =
   | (TuiPluginModule & {
@@ -68,5 +68,5 @@ export const INTERNAL_TUI_PLUGINS: InternalTuiPlugin[] = [
   // Herdr TUI plugin is loaded by default. It auto-enables the bridge
   // when running inside a Herdr pane and stays dormant otherwise.
   Herdr,
-  ...(Flag.NIKCLI_ISLAND ? [Island] : []),
+  ...(Flag.RAGU_ISLAND ? [Island] : []),
 ]

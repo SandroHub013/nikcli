@@ -22,31 +22,31 @@ import type {
   MobileGitBranchesOutput,
 } from "./generated/types.js"
 
-export type NikcliClient = ReturnType<typeof compat>
+export type RaguClient = ReturnType<typeof compat>
 
-export type NikcliClientConfig = {
+export type RaguClientConfig = {
   readonly baseUrl: string
   /** Applied to every request; combined with any per-request signal. */
   readonly signal?: AbortSignal
   readonly fetch?: typeof globalThis.fetch
   readonly headers?: RequestInit["headers"]
-  /** Binds the client to an instance directory via `x-nikcli-directory`. */
+  /** Binds the client to an instance directory via `x-ragu-directory`. */
   readonly directory?: string
-  /** Binds the client to a workspace via `x-nikcli-workspace`. */
+  /** Binds the client to a workspace via `x-ragu-workspace`. */
   readonly workspace?: string
   /** Reject on failure instead of resolving with `{ error }`. Per-call overridable. */
   readonly throwOnError?: boolean
 }
 
-export function createNikcliClient(config: NikcliClientConfig): NikcliClient {
+export function createRaguClient(config: RaguClientConfig): RaguClient {
   const headers = new Headers(config.headers)
   if (config.directory !== undefined) {
     // Header values are latin-1; percent-encode anything outside it so a
     // non-ASCII project path does not throw on Headers.set.
     const encoded = /[^\x00-\x7F]/.test(config.directory) ? encodeURIComponent(config.directory) : config.directory
-    headers.set("x-nikcli-directory", encoded)
+    headers.set("x-ragu-directory", encoded)
   }
-  if (config.workspace !== undefined) headers.set("x-nikcli-workspace", config.workspace)
+  if (config.workspace !== undefined) headers.set("x-ragu-workspace", config.workspace)
 
   const base = config.fetch ?? globalThis.fetch
   const signal = config.signal
@@ -96,7 +96,7 @@ export type FilePartInput = Extract<PromptPartInput, { type: "file" }>
 export type AgentPartInput = Extract<PromptPartInput, { type: "agent" }>
 
 /** Provider credentials as stored by `auth.set`. */
-export type Auth = Parameters<NikcliClient["auth"]["set"]>[0]["payload"]
+export type Auth = Parameters<RaguClient["auth"]["set"]>[0]["payload"]
 
 /** The full `nikcli.json` document. */
-export type NikcliConfig = Config
+export type RaguConfig = Config

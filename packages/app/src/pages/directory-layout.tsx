@@ -4,13 +4,13 @@ import { SDKProvider, useSDK } from "@/context/sdk"
 import { SyncProvider, useSync } from "@/context/sync"
 import { LocalProvider } from "@/context/local"
 
-import { DataProvider } from "@nikcli-ai/ui/context"
-import { iife } from "@nikcli-ai/util/iife"
-import type { QuestionAnswer } from "@nikcli-ai/sdk/httpapi"
+import { DataProvider } from "@ragu/ui/context"
+import { iife } from "@ragu/util/iife"
+import type { QuestionAnswer } from "@ragu/sdk/httpapi"
 import { decode64 } from "@/utils/base64"
-import { showToast } from "@nikcli-ai/ui/toast"
+import { showToast } from "@ragu/ui/toast"
 import { useLanguage } from "@/context/language"
-import { useDialog } from "@nikcli-ai/ui/context/dialog"
+import { useDialog } from "@ragu/ui/context/dialog"
 import { useCommand, type CommandOption } from "@/context/command"
 import { DialogStatus } from "@/components/dialog-status"
 import { DialogRoutines } from "@/components/dialog-routines"
@@ -30,7 +30,7 @@ function DirectoryCommands() {
   command.register("directory-tools", () => {
     const commands: CommandOption[] = [
       {
-        id: "nikcli.status",
+        id: "ragu.status",
         title: language.t("command.status.open"),
         category: language.t("command.category.system"),
         slash: "status",

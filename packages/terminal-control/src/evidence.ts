@@ -91,8 +91,8 @@ export interface GitHubTuiEvidence {
 
 export type GitHubTuiEvidenceSnapshot = ReadonlyMap<string, string>
 
-export const GITHUB_TUI_EVIDENCE_START = "<!-- nikcli-tui-evidence:start -->"
-export const GITHUB_TUI_EVIDENCE_END = "<!-- nikcli-tui-evidence:end -->"
+export const GITHUB_TUI_EVIDENCE_START = "<!-- ragu-tui-evidence:start -->"
+export const GITHUB_TUI_EVIDENCE_END = "<!-- ragu-tui-evidence:end -->"
 const MAX_GITHUB_ARTIFACT_BYTES = 95 * 1024 * 1024
 
 class EvidenceCommandError extends Error {

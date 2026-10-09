@@ -26,7 +26,7 @@ type WebSocketConstructorWithHeaders = new (
   options?: { readonly headers?: Headers.Headers },
 ) => globalThis.WebSocket
 
-export class Service extends Context.Service<Service, Interface>()("@nikcli/LLM/WebSocketExecutor") {}
+export class Service extends Context.Service<Service, Interface>()("@ragu/LLM/WebSocketExecutor") {}
 
 const transportError = (
   method: string,

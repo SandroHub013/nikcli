@@ -1,7 +1,7 @@
 // Autonomous follow-ups: the bot checks in on its own — it pings the requester
 // when a long-running job finishes, and warns (tagging them) when a job is
 // taking unusually long. This is the "Claude can also check in on its own"
-// behaviour from Claude Tag, driven by nikcli's session.idle events.
+// behaviour from Claude Tag, driven by ragu's session.idle events.
 
 type PostFn = (channel: string, thread: string, text: string) => Promise<void>
 
@@ -32,7 +32,7 @@ export namespace FollowUps {
     enabled =
       opts.enabled !== false &&
       process.env.DISCORD_FOLLOWUPS !== "false" &&
-      process.env.NIKCLI_DISCORD_FOLLOWUPS !== "false"
+      process.env.RAGU_DISCORD_FOLLOWUPS !== "false"
     if (enabled && !heartbeat) {
       heartbeat = setInterval(tick, HEARTBEAT_MS)
       // Don't keep the process alive solely for the heartbeat.

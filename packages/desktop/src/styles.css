@@ -4,9 +4,9 @@
   --desktop-files-width: 760px;
 }
 
-html[data-nikcli-desktop="true"],
-html[data-nikcli-desktop="true"] body,
-html[data-nikcli-desktop="true"] #root {
+html[data-ragu-desktop="true"],
+html[data-ragu-desktop="true"] body,
+html[data-ragu-desktop="true"] #root {
   width: 100%;
   height: 100%;
   overflow: hidden;
@@ -2589,7 +2589,7 @@ html[data-native-glass="true"] [data-component="desktop-shell"]:has(.desktop-too
 }
 
 /* ─── Refinement layer ─────────────────────────────────────────────────────────
- * Shared rules so every desktop surface speaks the same language as @nikcli-ai/ui:
+ * Shared rules so every desktop surface speaks the same language as @ragu/ui:
  * half-pixel hairlines, squircle-ish radii, glass for anything floating over content,
  * instant press feedback and eased release.
  */

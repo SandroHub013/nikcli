@@ -5,7 +5,7 @@ import { useTerminalDimensions } from "@opentui/solid"
 import { GlassBorder } from "../component/border"
 import { TextAttributes } from "@opentui/core"
 import z from "zod"
-import { TuiEventZod } from "@nikcli-ai/util/tui-event-schema"
+import { TuiEventZod } from "@ragu/util/tui-event-schema"
 
 // `duration` stays optional at the call site: the zod schema fills the 5000ms
 // default at parse time, but the walker types the field as required.

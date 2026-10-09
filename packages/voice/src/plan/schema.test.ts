@@ -8,7 +8,7 @@ const context: PlanContext = {
     { id: "gemini", label: "Gemini CLI", available: false },
   ],
   projects: [
-    { name: "nikcli", root: "C:/Users/x/nikcli", isOpen: true },
+    { name: "ragu", root: "C:/Users/x/ragu", isOpen: true },
     { name: "altro", root: "C:/Users/x/altro", isOpen: false },
   ],
   paneCount: 2,
@@ -122,8 +122,8 @@ describe("validatePlan", () => {
   })
 
   test("il progetto viene passato come radice, non come nome detto", () => {
-    const plan = validatePlan([{ action: "start_session", agent: "codex", project: "nikcli" }], context)
-    expect(plan.steps[0]).toMatchObject({ project: "C:/Users/x/nikcli" })
+    const plan = validatePlan([{ action: "start_session", agent: "codex", project: "ragu" }], context)
+    expect(plan.steps[0]).toMatchObject({ project: "C:/Users/x/ragu" })
   })
 
   test("un indice di pannello fuori intervallo viene rifiutato con il conteggio vero", () => {

@@ -3,15 +3,15 @@
  * a live {@link Screen}. Provides input ({@link Session.send}), synchronization
  * ({@link Session.wait}), screen capture ({@link Session.snapshot}) and lifecycle.
  */
-import { spawnPty, type NativePty } from "@nikcli-ai/util/pty"
-import { stripAnsi } from "@nikcli-ai/util/bun-utils"
+import { spawnPty, type NativePty } from "@ragu/util/pty"
+import { stripAnsi } from "@ragu/util/bun-utils"
 import type { Frame } from "./frame"
 import { Screen } from "./vt/screen"
 import { translateKeys } from "./keys"
 import { renderText } from "./render/text"
 import { Recorder, type RecordingData, type RecordingMarker } from "./recording"
 
-const RAW_LOG_LIMIT = 2 * 1024 * 1024 // 2 MB, matching nikcli's Pty buffer cap.
+const RAW_LOG_LIMIT = 2 * 1024 * 1024 // 2 MB, matching ragu's Pty buffer cap.
 
 export type SessionStatus = "running" | "exited"
 
@@ -79,7 +79,7 @@ export class Session {
       ...process.env,
       ...options.env,
       TERM: "xterm-256color",
-      NIKCLI_TERMINAL: "1",
+      RAGU_TERMINAL: "1",
     } as Record<string, string>
 
     this.pty = spawnPty({

@@ -20,10 +20,10 @@ body:
       required: false
 
   - type: input
-    id: nikcli-version
+    id: ragu-version
     attributes:
-      label: Nikcli version
-      description: What version of Nikcli are you using?
+      label: Ragu version
+      description: What version of Ragu are you using?
     validations:
       required: false
 

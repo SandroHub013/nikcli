@@ -134,7 +134,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
           request("initialize", {
             protocolVersion: MCP_PROTOCOL_VERSION,
             capabilities: {},
-            clientInfo: { name: "nikcli", version: "0.0.0" },
+            clientInfo: { name: "ragu", version: "0.0.0" },
           })
         })
 
@@ -224,12 +224,12 @@ function parsePort(value: string | undefined) {
 }
 
 function resolveEditorConnection(): EditorConnection | undefined {
-  // The lock files live under the user's home, not the project, so a nikcli
+  // The lock files live under the user's home, not the project, so a ragu
   // started anywhere attaches to whatever editor the developer has open — and
   // the selection it reports gets prepended to their next prompt. Harnessed
   // runs need to opt out of that: a golden screen would otherwise contain the
   // file the developer happened to be looking at.
-  if (process.env.NIKCLI_DISABLE_EDITOR_CONTEXT === "1") return
+  if (process.env.RAGU_DISABLE_EDITOR_CONTEXT === "1") return
 
   const lock = resolveEditorLockFile()
   if (lock) {
@@ -240,7 +240,7 @@ function resolveEditorConnection(): EditorConnection | undefined {
     }
   }
 
-  const port = parsePort(process.env.NIKCLI_EDITOR_SSE_PORT || process.env.CLAUDE_CODE_SSE_PORT)
+  const port = parsePort(process.env.RAGU_EDITOR_SSE_PORT || process.env.CLAUDE_CODE_SSE_PORT)
   if (!port) return
   return {
     url: `ws://127.0.0.1:${port}`,

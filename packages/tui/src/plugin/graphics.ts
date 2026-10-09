@@ -16,7 +16,7 @@
  * (the `backdrop` slot is the only place it can be behind the interface).
  */
 import { RGBA } from "@opentui/core"
-import type { TuiGraphicsApi, TuiKittyPlacement, TuiPluginApi } from "@nikcli-ai/plugin/tui"
+import type { TuiGraphicsApi, TuiKittyPlacement, TuiPluginApi } from "@ragu/plugin/tui"
 import {
   applyLiveCapabilities,
   deleteKittyVirtual,
@@ -27,8 +27,8 @@ import {
   kittyPlaceholderGrid,
   supportsKittyUnicodePlaceholders,
   type LiveCapabilities,
-} from "@nikcli-ai/tui-image"
-import { Log } from "@nikcli-ai/util/log"
+} from "@ragu/tui-image"
+import { Log } from "@ragu/util/log"
 
 const log = Log.create({ service: "tui.plugin.graphics" })
 

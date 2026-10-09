@@ -1,15 +1,15 @@
 import type { ServerConfig } from "@/lib/types"
 
 /**
- * Decode a pairing payload from a QR, a pasted `nikcli://` link, or a raw
+ * Decode a pairing payload from a QR, a pasted `ragu://` link, or a raw
  * http(s) server URL. The CLI / TUI encode the same shape:
- * `nikcli://connect?server=...&token=...&directory=...`
+ * `ragu://connect?server=...&token=...&directory=...`
  */
 export function parsePairingPayload(input: string): ServerConfig | null {
   const trimmed = input.trim()
   if (!trimmed) return null
 
-  const embedded = trimmed.match(/nikcli:\/\/[^\s]+/)
+  const embedded = trimmed.match(/ragu:\/\/[^\s]+/)
   if (embedded) {
     const fromLink = parseDeepLink(embedded[0])
     if (fromLink) return fromLink
@@ -21,7 +21,7 @@ export function parsePairingPayload(input: string): ServerConfig | null {
 function parseDeepLink(value: string): ServerConfig | null {
   try {
     const parsed = new URL(value)
-    if (parsed.protocol !== "nikcli:") return null
+    if (parsed.protocol !== "ragu:") return null
 
     const host = parsed.hostname.toLowerCase()
     const path = parsed.pathname.replace(/\/+$/, "")

@@ -1,5 +1,5 @@
 import { Effect, Schema, Stream } from "effect"
-import { OpenAIChatEvent } from "@nikcli-ai/llm/protocols/openai-chat"
+import { OpenAIChatEvent } from "@ragu/llm/protocols/openai-chat"
 import { SimulationLLMExchange } from "./llm-exchange"
 
 const encodeChunk = Schema.encodeUnknownSync(OpenAIChatEvent)

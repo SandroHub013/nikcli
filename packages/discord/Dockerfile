@@ -2,12 +2,12 @@
 #
 # The install stage mirrors Dockerfile.serve — same workspace manifest set and
 # the same stubs for workspace members that are not built here — because
-# packages/nikcli depends on @nikcli-ai/tui, @nikcli-ai/tui-math and friends as
+# packages/ragu depends on @ragu/tui, @ragu/tui-math and friends as
 # `workspace:*`, so `bun install` fails if any of them is missing.
 #
-# With NIKCLI_URL set the bot talks to a remote nikcli server and never spawns
-# one locally; the nikcli source below is what makes the standalone mode (no
-# NIKCLI_URL) work.
+# With RAGU_URL set the bot talks to a remote ragu server and never spawns
+# one locally; the ragu source below is what makes the standalone mode (no
+# RAGU_URL) work.
 FROM oven/bun:1.4.2-debian
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -21,7 +21,7 @@ COPY package.json bun.lock ./
 COPY patches patches
 
 # Package manifests (dep cache layer)
-COPY packages/nikcli/package.json packages/nikcli/
+COPY packages/ragu/package.json packages/ragu/
 COPY packages/script/package.json packages/script/
 COPY packages/util/package.json packages/util/
 COPY packages/sdk/js/package.json packages/sdk/js/
@@ -41,45 +41,45 @@ COPY packages/browser-control/package.json packages/browser-control/
 COPY packages/computer-use/package.json packages/computer-use/
 
 # Stub package.json for workspace packages not built in this image. slack,
-# identity, terminal-control and github sit outside packages/nikcli's
+# identity, terminal-control and github sit outside packages/ragu's
 # workspace closure and nothing under src imports them; stubbing keeps the
 # workspace members that bun.lock knows about while skipping their npm deps
 # (@slack/bolt, jose, @octokit/*, @ffmpeg-installer/ffmpeg).
 RUN set -e; \
     for entry in \
-      "packages/app:@nikcli-ai/app" \
-      "packages/bench-tui:@nikcli-ai/bench-tui" \
-      "packages/cloud:@nikcli-ai/cloud" \
-      "packages/companion/ui:@nikcli-ai/companion-ui" \
-      "packages/console/app:@nikcli-ai/console-app" \
-      "packages/console/core:@nikcli-ai/console-core" \
-      "packages/console/function:@nikcli-ai/console-function" \
-      "packages/console/mail:@nikcli-ai/console-mail" \
-      "packages/console/resource:@nikcli-ai/console-resource" \
-      "packages/desktop:@nikcli-ai/desktop" \
-      "packages/enterprise:@nikcli-ai/enterprise" \
-      "packages/function:@nikcli-ai/function" \
-      "packages/identity:@nikcli-ai/identity" \
-      "packages/inference:@nikcli-ai/inference" \
-      "packages/inference-dashboard:@nikcli-ai/inference-dashboard" \
-      "packages/mobile:@nikcli-ai/mobile" \
-      "packages/nikcli-island:@nikcli-ai/nikcli-island" \
-      "packages/plugin/plugins/agent-memory:@nikcli-ai/plugin-agent-memory" \
-      "packages/plugin/plugins/background-agents:@nikcli-ai/plugin-background-agents" \
-      "packages/plugin/plugins/background:@nikcli-ai/plugin-background" \
-      "packages/plugin/plugins/context-analysis:@nikcli-ai/plugin-context-analysis" \
-      "packages/plugin/plugins/direnv:@nikcli-ai/plugin-direnv" \
-      "packages/plugin/plugins/dynamic-context-pruning:@nikcli-ai/plugin-dynamic-context-pruning" \
-      "packages/plugin/plugins/envsitter-guard:@nikcli-ai/plugin-envsitter-guard" \
-      "packages/plugin/plugins/handoff:@nikcli-ai/plugin-handoff" \
-      "packages/plugin/plugins/safety-net:@nikcli-ai/plugin-safety-net" \
-      "packages/plugin/plugins/smart-title:@nikcli-ai/plugin-smart-title" \
-      "packages/remote/web-client:@nikcli-ai/remote-client" \
-      "packages/sdk-next:@nikcli-ai/sdk-next" \
-      "packages/slack:@nikcli-ai/slack" \
-      "packages/terminal-control:@nikcli-ai/terminal-control" \
-      "packages/ui:@nikcli-ai/ui" \
-      "packages/web:@nikcli-ai/web" \
+      "packages/app:@ragu/app" \
+      "packages/bench-tui:@ragu/bench-tui" \
+      "packages/cloud:@ragu/cloud" \
+      "packages/companion/ui:@ragu/companion-ui" \
+      "packages/console/app:@ragu/console-app" \
+      "packages/console/core:@ragu/console-core" \
+      "packages/console/function:@ragu/console-function" \
+      "packages/console/mail:@ragu/console-mail" \
+      "packages/console/resource:@ragu/console-resource" \
+      "packages/desktop:@ragu/desktop" \
+      "packages/enterprise:@ragu/enterprise" \
+      "packages/function:@ragu/function" \
+      "packages/identity:@ragu/identity" \
+      "packages/inference:@ragu/inference" \
+      "packages/inference-dashboard:@ragu/inference-dashboard" \
+      "packages/mobile:@ragu/mobile" \
+      "packages/ragu-island:@ragu/ragu-island" \
+      "packages/plugin/plugins/agent-memory:@ragu/plugin-agent-memory" \
+      "packages/plugin/plugins/background-agents:@ragu/plugin-background-agents" \
+      "packages/plugin/plugins/background:@ragu/plugin-background" \
+      "packages/plugin/plugins/context-analysis:@ragu/plugin-context-analysis" \
+      "packages/plugin/plugins/direnv:@ragu/plugin-direnv" \
+      "packages/plugin/plugins/dynamic-context-pruning:@ragu/plugin-dynamic-context-pruning" \
+      "packages/plugin/plugins/envsitter-guard:@ragu/plugin-envsitter-guard" \
+      "packages/plugin/plugins/handoff:@ragu/plugin-handoff" \
+      "packages/plugin/plugins/safety-net:@ragu/plugin-safety-net" \
+      "packages/plugin/plugins/smart-title:@ragu/plugin-smart-title" \
+      "packages/remote/web-client:@ragu/remote-client" \
+      "packages/sdk-next:@ragu/sdk-next" \
+      "packages/slack:@ragu/slack" \
+      "packages/terminal-control:@ragu/terminal-control" \
+      "packages/ui:@ragu/ui" \
+      "packages/web:@ragu/web" \
       "packages/webrenderer:@opentui/webrenderer" \
       "github:github" \
     ; do \
@@ -91,7 +91,7 @@ RUN set -e; \
 RUN bun install
 
 # Full source
-COPY packages/nikcli packages/nikcli
+COPY packages/ragu packages/ragu
 COPY packages/script packages/script
 COPY packages/util packages/util
 COPY packages/sdk/js packages/sdk/js
@@ -112,13 +112,13 @@ COPY packages/computer-use packages/computer-use
 
 RUN mkdir -p /app/repos
 
-# The SDK's createNikcli spawns `nikcli serve` in standalone mode. The published
+# The SDK's createRagu spawns `ragu serve` in standalone mode. The published
 # bin is a node launcher that needs a prebuilt platform binary; in-container we
-# run nikcli straight from source via bun instead. Run from the nikcli package
+# run ragu straight from source via bun instead. Run from the ragu package
 # dir so bun picks up its tsconfig (jsxImportSource=@opentui/solid); otherwise
 # bun defaults JSX to react.
-RUN printf '#!/bin/sh\ncd /app/packages/nikcli && exec bun --conditions=browser ./src/index.ts "$@"\n' > /usr/local/bin/nikcli \
-    && chmod +x /usr/local/bin/nikcli
+RUN printf '#!/bin/sh\ncd /app/packages/ragu && exec bun --conditions=browser ./src/index.ts "$@"\n' > /usr/local/bin/ragu \
+    && chmod +x /usr/local/bin/ragu
 
 ENV PATH="/app/node_modules/.bin:${PATH}"
 ENV HEALTH_PORT=3000

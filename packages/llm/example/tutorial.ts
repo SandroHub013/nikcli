@@ -1,7 +1,7 @@
 import { Config, Effect, Formatter, Layer, Schema, Stream } from "effect"
-import { LLM, LLMClient, Provider, ProviderID, Tool, type ProviderModelOptions } from "@nikcli-ai/llm"
-import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor } from "@nikcli-ai/llm/route"
-import { OpenAI } from "@nikcli-ai/llm/providers"
+import { LLM, LLMClient, Provider, ProviderID, Tool, type ProviderModelOptions } from "@ragu/llm"
+import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor } from "@ragu/llm/route"
+import { OpenAI } from "@ragu/llm/providers"
 
 /**
  * A runnable walkthrough of the LLM package use-site API.
@@ -57,7 +57,7 @@ const rawOverlayExample = LLM.request({
   prompt: "Show the final HTTP overlay shape.",
   http: {
     body: { metadata: { example: "tutorial" } },
-    headers: { "x-nikcli-tutorial": "1" },
+    headers: { "x-ragu-tutorial": "1" },
     query: { debug: "1" },
   },
 })

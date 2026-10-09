@@ -4,11 +4,11 @@
 | ------ | --------------------------------------------------------------------------------------------- |
 | Status | **Accepted and implemented** (promoted 2026-09-10)                                            |
 | Scope  | `packages/util/src/redact.ts`, `packages/util/src/log.ts`, `packages/util/src/cli-error.ts`   |
-| Tests  | `packages/nikcli/test/util/redact.test.ts`, `packages/nikcli/test/util/log-redaction.test.ts` |
+| Tests  | `packages/ragu/test/util/redact.test.ts`, `packages/ragu/test/util/log-redaction.test.ts` |
 
-The question this records: what nikcli guarantees about secrets in logs, and the one escape hatch.
+The question this records: what ragu guarantees about secrets in logs, and the one escape hatch.
 
-The answer is **default-on redaction in `@nikcli-ai/util`**: `Log` serializes through `safeStringify` unless `NIKCLI_LOG_REDACT=0`. The token is `[REDACTED]`. There is no `packages/nikcli/src/util/redact.ts`.
+The answer is **default-on redaction in `@ragu/util`**: `Log` serializes through `safeStringify` unless `RAGU_LOG_REDACT=0`. The token is `[REDACTED]`. There is no `packages/ragu/src/util/redact.ts`.
 
 ## The Surface
 
@@ -40,7 +40,7 @@ Numbers and booleans under a credential key are still masked, matching `redactVa
 
 ## Escape hatch
 
-`NIKCLI_LOG_REDACT=0` makes `Log` use `JSON.stringify` and skip the scalar rules. Consulted per write, so it does not require a restart, and flipping it between two writes on the same logger changes only the second one. The operator then owns the line: do not ship it to a public sink. Error messages stay redacted regardless.
+`RAGU_LOG_REDACT=0` makes `Log` use `JSON.stringify` and skip the scalar rules. Consulted per write, so it does not require a restart, and flipping it between two writes on the same logger changes only the second one. The operator then owns the line: do not ship it to a public sink. Error messages stay redacted regardless.
 
 ## What is not redacted
 
@@ -49,7 +49,7 @@ By design the logger does not rewrite:
 - File paths
 - Model ids
 - Tool output / user prompt text, except where a value matches a key or pattern above
-- Stack traces (`formatStack` in `cli-error.ts` is gated by `NIKCLI_DEBUG=1`, which is visibility, not redaction)
+- Stack traces (`formatStack` in `cli-error.ts` is gated by `RAGU_DEBUG=1`, which is visibility, not redaction)
 
 A string that is not a named key and not pattern-shaped stays.
 

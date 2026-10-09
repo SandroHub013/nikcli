@@ -1,5 +1,5 @@
 {
-  "name": "@nikcli-ai/enterprise",
+  "name": "@ragu/enterprise",
   "version": "1.431.0",
   "private": true,
   "type": "module",
@@ -8,14 +8,14 @@
     "typecheck": "tsc --noEmit",
     "dev": "vite dev",
     "build": "vite build",
-    "build:cloudflare": "NIKCLI_DEPLOYMENT_TARGET=cloudflare vite build",
+    "build:cloudflare": "RAGU_DEPLOYMENT_TARGET=cloudflare vite build",
     "start": "vite start",
     "shell-prod": "sst shell --target Teams --stage production"
   },
   "dependencies": {
-    "@nikcli-ai/sdk": "workspace:*",
-    "@nikcli-ai/ui": "workspace:*",
-    "@nikcli-ai/util": "workspace:*",
+    "@ragu/sdk": "workspace:*",
+    "@ragu/ui": "workspace:*",
+    "@ragu/util": "workspace:*",
     "@pierre/diffs": "catalog:",
     "@solidjs/meta": "catalog:",
     "@solidjs/router": "catalog:",

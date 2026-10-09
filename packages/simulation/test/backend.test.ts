@@ -38,15 +38,15 @@ const prompt = (url: string, body: unknown = { model: "sim-model", messages: [],
   })
 
 describe("driver-backed OpenAI mock", () => {
-  test("injects an isolated deterministic provider into the nikcli worker", () => {
+  test("injects an isolated deterministic provider into the ragu worker", () => {
     const env = workerEnv("http://127.0.0.1:40960", JSON.stringify({ theme: "system" }))
-    const config = JSON.parse(env.NIKCLI_CONFIG_CONTENT!)
+    const config = JSON.parse(env.RAGU_CONFIG_CONTENT!)
 
     expect(config.theme).toBe("system")
     expect(config.model).toBe("simulation/deterministic")
     expect(config.provider.simulation.options.baseURL).toBe("http://127.0.0.1:40960/v1")
     expect(config.provider.simulation.models.deterministic).toMatchObject({ cost: { input: 0, output: 0 } })
-    expect(env.NIKCLI_DISABLE_MODELS_FETCH).toBe("1")
+    expect(env.RAGU_DISABLE_MODELS_FETCH).toBe("1")
   })
 
   test("streams driver chunks through real OpenAI SSE framing", async () => {
@@ -83,7 +83,7 @@ describe("driver-backed OpenAI mock", () => {
 
 describe("network cassette record/replay", () => {
   test("records once and replays without touching the upstream network", async () => {
-    const directory = await mkdtemp(join(tmpdir(), "nikcli-simulation-cassettes-"))
+    const directory = await mkdtemp(join(tmpdir(), "ragu-simulation-cassettes-"))
     let upstreamCalls = 0
     const upstreamEndpoint = new URL(await freeEndpoint())
     const upstream = Bun.serve({

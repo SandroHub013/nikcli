@@ -1,4 +1,4 @@
-import { createSimpleContext } from "@nikcli-ai/ui/context"
+import { createSimpleContext } from "@ragu/ui/context"
 import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { usePlatform } from "./platform"
@@ -16,10 +16,10 @@ import {
 } from "./account-oauth"
 
 /**
- * Public shape of a nikcli account, mirroring `UserDB.PublicUser` on the
- * server (packages/nikcli/src/db/users.ts). This is the same account the CLI
+ * Public shape of a ragu account, mirroring `UserDB.PublicUser` on the
+ * server (packages/ragu/src/db/users.ts). This is the same account the CLI
  * authenticates against — the desktop/web/mobile surfaces all talk to the same
- * nikcli server, so logging in here is logging in with the CLI account.
+ * ragu server, so logging in here is logging in with the CLI account.
  */
 export type AccountUser = {
   id: string
@@ -265,7 +265,7 @@ export const { use: useAccount, provider: AccountProvider } = createSimpleContex
       void loadMe()
     })
 
-    const deepLinkEvent = "nikcli:deep-link"
+    const deepLinkEvent = "ragu:deep-link"
     const receiveDeepLinks = (urls: string[]) => {
       if (!ready()) return
       for (const url of urls) {
@@ -287,7 +287,7 @@ export const { use: useAccount, provider: AccountProvider } = createSimpleContex
     onCleanup(() => window.removeEventListener(deepLinkEvent, onDeepLink))
     createEffect(() => {
       if (!ready()) return
-      const pending = window.__NIKCLI__?.deepLinks ?? []
+      const pending = window.__RAGU__?.deepLinks ?? []
       receiveDeepLinks(pending)
     })
 

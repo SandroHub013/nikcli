@@ -1,5 +1,5 @@
-name = "nikcli-slack-bot"
-app = "nikcli-slack-bot"
+name = "ragu-slack-bot"
+app = "ragu-slack-bot"
 primaryRegion = "iad"
 
 [build]

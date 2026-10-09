@@ -13,7 +13,7 @@
  * command knows to fall back to a dialog instead of toggling a panel nobody
  * can see.
  */
-import { Plugin } from "@nikcli-ai/plugin/v2/tui"
+import { Plugin } from "@ragu/plugin/v2/tui"
 import { SimulatorSidebar } from "@tui/component/simulator-sidebar"
 import { createSignal, onCleanup, onMount, Show } from "solid-js"
 

@@ -1,8 +1,8 @@
 /**
- * `@nikcli-ai/gadget` — build a device that works for a nikcli agent.
+ * `@ragu/gadget` — build a device that works for a ragu agent.
  *
  * ```ts
- * import { Gadget, display, button } from "@nikcli-ai/gadget"
+ * import { Gadget, display, button } from "@ragu/gadget"
  *
  * export default new Gadget({
  *   name: "pi-office",
@@ -18,8 +18,8 @@
  * })
  * ```
  *
- * `nikcli-gadget pair --server http://host:4097 --code 123456` once, then
- * `nikcli-gadget run gadget.ts` for as long as the device should serve.
+ * `ragu-gadget pair --server http://host:4097 --code 123456` once, then
+ * `ragu-gadget run gadget.ts` for as long as the device should serve.
  */
 export {
   Gadget,

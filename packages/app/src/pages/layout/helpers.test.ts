@@ -4,31 +4,31 @@ import { displayName, errorMessage, getDraggableId, syncWorkspaceOrder, workspac
 
 describe("layout deep links", () => {
   test("parses open-project deep links", () => {
-    expect(parseDeepLink("nikcli://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
+    expect(parseDeepLink("ragu://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
   })
 
   test("ignores non-project deep links", () => {
-    expect(parseDeepLink("nikcli://other?directory=/tmp/demo")).toBeUndefined()
+    expect(parseDeepLink("ragu://other?directory=/tmp/demo")).toBeUndefined()
     expect(parseDeepLink("https://example.com")).toBeUndefined()
   })
 
   test("collects only valid open-project directories", () => {
     const result = collectOpenProjectDeepLinks([
-      "nikcli://open-project?directory=/a",
-      "nikcli://other?directory=/b",
-      "nikcli://open-project?directory=/c",
+      "ragu://open-project?directory=/a",
+      "ragu://other?directory=/b",
+      "ragu://open-project?directory=/c",
     ])
     expect(result).toEqual(["/a", "/c"])
   })
 
   test("drains global deep links once", () => {
     const target = {
-      __NIKCLI__: {
-        deepLinks: ["nikcli://open-project?directory=/a"],
+      __RAGU__: {
+        deepLinks: ["ragu://open-project?directory=/a"],
       },
-    } as unknown as Window & { __NIKCLI__?: { deepLinks?: string[] } }
+    } as unknown as Window & { __RAGU__?: { deepLinks?: string[] } }
 
-    expect(drainPendingDeepLinks(target)).toEqual(["nikcli://open-project?directory=/a"])
+    expect(drainPendingDeepLinks(target)).toEqual(["ragu://open-project?directory=/a"])
     expect(drainPendingDeepLinks(target)).toEqual([])
   })
 })

@@ -2,8 +2,8 @@ import { TextAttributes } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Clipboard } from "@tui/util/clipboard"
 import { createSignal } from "solid-js"
-import { VERSION } from "@nikcli-ai/util/version"
-import { restoreTerminalState } from "@nikcli-ai/util/win32"
+import { VERSION } from "@ragu/util/version"
+import { restoreTerminalState } from "@ragu/util/win32"
 
 export function ErrorComponent(props: {
   error: Error
@@ -41,7 +41,7 @@ export function ErrorComponent(props: {
   }
 
   if (props.error.message) {
-    issueURL.searchParams.set("title", `nikcli: fatal: ${props.error.message}`)
+    issueURL.searchParams.set("title", `ragu: fatal: ${props.error.message}`)
   }
 
   if (props.error.stack) {
@@ -51,7 +51,7 @@ export function ErrorComponent(props: {
     )
   }
 
-  issueURL.searchParams.set("nikcli-version", VERSION)
+  issueURL.searchParams.set("ragu-version", VERSION)
 
   const copyIssueURL = () => {
     Clipboard.copy(issueURL.toString()).then(() => {

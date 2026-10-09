@@ -21,14 +21,14 @@ const toc = [
 
 <DocsLayout
   title="Brand assets"
-  subtitle="The nikcli wordmark variants, how they're themed across surfaces, and where the assets live in each package."
-  description="Reference for nikcli wordmark files, theme variants, asset locations, and usage guidelines."
+  subtitle="The ragu wordmark variants, how they're themed across surfaces, and where the assets live in each package."
+  description="Reference for ragu wordmark files, theme variants, asset locations, and usage guidelines."
   toc={toc}
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
-      nikcli ships three pixel wordmark variants, all derived from a single master
+      ragu ships three pixel wordmark variants, all derived from a single master
       (<code>packages/mobile/assets/wordmark.png</code>). The web package, the mobile app, and the
       Studio / dashboard reuse the same files so the brand stays consistent across surfaces.
     </p>
@@ -74,7 +74,7 @@ const toc = [
           </svg>
         </span>
         <span class="brand-kit__copy">
-          <span class="brand-kit__title">nikcli-brandkit.zip</span>
+          <span class="brand-kit__title">ragu-brandkit.zip</span>
           <span class="brand-kit__meta">~986 KB · 17 files · 15 PNGs + README + MANIFEST</span>
         </span>
         <span class="brand-kit__action">Download</span>
@@ -236,7 +236,7 @@ export function BrandMark(&#123; height = 18 &#125;: &#123; height?: number &#12
       source=&#123;isDark ? WORDMARK_DARK : WORDMARK_LIGHT&#125;
       style=&#123;&#123; width, height &#125;&#125;
       resizeMode="contain"
-      accessibilityLabel="NIKCLI"
+      accessibilityLabel="RAGU"
     /&gt;
   )
 &#125;
@@ -278,10 +278,10 @@ export function BrandMark(&#123; height = 18 &#125;: &#123; height?: number &#12
       swapped by Tailwind's <code>dark:</code> selector:
     </p>
     <DocCode language="html">
-&lt;a href="/" class="group flex items-center shrink-0" aria-label="nikcli home"&gt;
-  &lt;img src="/brand/wordmark-light.png" alt="nikcli" width="158" height="52"
+&lt;a href="/" class="group flex items-center shrink-0" aria-label="ragu home"&gt;
+  &lt;img src="/brand/wordmark-light.png" alt="ragu" width="158" height="52"
        loading="eager" decoding="async" class="h-8 w-auto dark:hidden" /&gt;
-  &lt;img src="/brand/wordmark-dark.png"  alt="nikcli" width="158" height="52"
+  &lt;img src="/brand/wordmark-dark.png"  alt="ragu" width="158" height="52"
        loading="eager" decoding="async" class="h-8 w-auto hidden dark:block" /&gt;
 &lt;/a&gt;
     </DocCode>

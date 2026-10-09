@@ -11,7 +11,7 @@ import {
   summarizeVoiceShortcutConflicts,
 } from "./shortcuts"
 import { DEFAULT_VOICE_SETTINGS } from "./model"
-import { parseChord } from "@nikcli-ai/ade/keyboard/keymap"
+import { parseChord } from "@ragu/ade/keyboard/keymap"
 
 describe("settings/shortcuts", () => {
   test("constructs ADE keymap bindings for agent and transcription chords", () => {

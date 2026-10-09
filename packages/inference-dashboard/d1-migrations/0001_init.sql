@@ -1,4 +1,4 @@
--- nikcli-inference dashboard initial schema
+-- ragu-inference dashboard initial schema
 
 CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,

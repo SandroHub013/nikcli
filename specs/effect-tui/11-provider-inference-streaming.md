@@ -1,11 +1,11 @@
 # EOT-11: Provider Streaming and Inference Pipeline
 
 Status: proposed. Tier: 1. Phase: P2. Dependencies: EOT-01, EOT-02, EOT-10.
-Owner: provider and session/llm maintainers, `@nikcli-ai/llm` core. [Roadmap](../ROADMAP.md).
+Owner: provider and session/llm maintainers, `@ragu/llm` core. [Roadmap](../ROADMAP.md).
 
 ## Problem and Evidence
 
-Evidence B20, B21, B22, B23 in the [register](../README.md): the new `@nikcli-ai/llm` package is a typed Effect Schema-first
+Evidence B20, B21, B22, B23 in the [register](../README.md): the new `@ragu/llm` package is a typed Effect Schema-first
 core with `Protocol`/`Endpoint`/`Auth`/`Framing` composition and `LLMEvent` streams, but the production request path still
 runs through `session/llm/*` and `provider/provider.ts` via Promises and AI SDK adapters. Streaming deltas currently travel
 across two boundaries (AI SDK → `session/llm` adapters → bus → `Bus.publish` → SSE → TUI), and each boundary has its own
@@ -19,7 +19,7 @@ compatibility or the Bus publish shape. No second LLM runtime; no replacement of
 ## Scope and Non-Goals
 
 Apply the Effect `Stream` model to provider streaming, model selection, and inference caching across the existing
-`session/llm/*`, `provider/*`, and `@nikcli-ai/llm/*` packages. Keep the existing AI SDK providers (Anthropic, OpenAI,
+`session/llm/*`, `provider/*`, and `@ragu/llm/*` packages. Keep the existing AI SDK providers (Anthropic, OpenAI,
 Google, Bedrock, Azure, XAI, OpenRouter, Copilot, OpenAI-compatible) working without code changes for callers. Preserve
 bus/SSE wire compatibility and the existing `SessionMessage` event timeline. Do not introduce a new provider abstraction,
 a second AI SDK route, a global model router, distributed inference, or a fresh cache layer that competes with the existing
@@ -27,7 +27,7 @@ provider cache policy.
 
 ## Design and Requirements
 
-1. Adopt `@nikcli-ai/llm`'s `LLMEvent` and `LLMRequest` as the canonical schema for new producer code. Existing AI SDK
+1. Adopt `@ragu/llm`'s `LLMEvent` and `LLMRequest` as the canonical schema for new producer code. Existing AI SDK
    providers keep producing AI SDK streams; an adapter inside `provider/provider.ts` converts `LanguageModelV2` streams into
    `LLMEvent` streams, not into a third wire format. Wire schemas in `server/httpapi/session.ts` stay unchanged unless EOT-10
    requires them.
@@ -55,7 +55,7 @@ provider cache policy.
    must not produce a partial response visible to the user.
 8. Rate limit handling: provider signals (HTTP 429, `quota_exceeded`, `rate_limit_exceeded`) decode into
    `ProviderError.RateLimited` with `retryAfter`, surfaced to the user as a typed failure, never as a silent retry loop.
-   Local quota (`nikcli-inference`) is checked synchronously before the request is constructed; a denied quota returns
+   Local quota (`ragu-inference`) is checked synchronously before the request is constructed; a denied quota returns
    `ProviderError.QuotaDenied` without burning a request.
 9. Streaming observability: every LLM call yields a span with `provider`, `model`, `route`, `stream.tokens.in`,
    `stream.tokens.out`, `stream.duration`, `stream.first_token_ms`, `stream.interruptions`. Cardinality is fixed; no
@@ -103,9 +103,9 @@ not invent partial-success.
   on a fixed corpus. Missing `usage` chunks are flagged, not interpolated.
 - Spans correlate with the session's parent span; trace ids are stable across provider/SDK/bus/SSE/TUI hops; no high-card
   dimensions appear.
-- Extend `packages/nikcli/test/provider/`, `packages/nikcli/test/session/`, `packages/nikcli/test/llm/` (or
-  `packages/llm/test/`), `packages/nikcli/test/server/event-feed.test.ts`, and `packages/nikcli/test/tui/streaming-cost.test.ts`.
-- From `packages/nikcli`: `bun test test/provider/ test/session/ test/server/event-feed.test.ts test/tui/streaming-cost.test.ts`.
+- Extend `packages/ragu/test/provider/`, `packages/ragu/test/session/`, `packages/ragu/test/llm/` (or
+  `packages/llm/test/`), `packages/ragu/test/server/event-feed.test.ts`, and `packages/ragu/test/tui/streaming-cost.test.ts`.
+- From `packages/ragu`: `bun test test/provider/ test/session/ test/server/event-feed.test.ts test/tui/streaming-cost.test.ts`.
   One final root `bun run typecheck` after the slice, not per-file.
 - Meet EOT-01 budgets; target at least 30% reduction in per-token cost for the workloads that hit cache, with at least 95%
   cache hit rate on the second identical request in the test fixture.
@@ -195,7 +195,7 @@ times before giving up. When it gave up it threw `LLMError` whose `reason` was a
 **`UnknownError`**, which classifies as non-retryable. So a throttled turn showed an untyped failure, and
 `SessionRetry.delay` never saw the header the provider had sent — the opposite of what requirement 6 asks for.
 
-`packages/nikcli/src/session/llm/llm-event-adapter.ts` now maps a thrown native `LLMError` to `APICallError` at the one
+`packages/ragu/src/session/llm/llm-event-adapter.ts` now maps a thrown native `LLMError` to `APICallError` at the one
 seam every native failure crosses, preserving `statusCode`, the response headers, the parsed `retryAfterMs` under the
 `retry-after-ms` key `SessionRetry.delay` reads first, and the runtime's own `retryable` verdict. The gate for applying
 it is "an HTTP response actually exists", with `Transport` and `NoRoute` excluded on purpose: a network reset carries a
@@ -203,7 +203,7 @@ request-only context, and mapping it would invent a status for a request that ne
 request, content policy and 5xx reasons all come back as `APIError` with their status intact, so a 400 stays terminal
 and a 429 stays retryable.
 
-- `packages/nikcli/test/session/native-retry-after.test.ts` serves real 429 and 400 responses through the native route
+- `packages/ragu/test/session/native-retry-after.test.ts` serves real 429 and 400 responses through the native route
   and asserts `APIError`, `statusCode`, the `Retry-After` header surviving as `retry-after-ms: 1000`,
   `SessionRetry.retryable` returning a reason for the 429 and `undefined` for the 400, `SessionRetry.delay(1, …)`
   returning exactly 1000, and exactly three server hits so the runtime's retries stay its own business.
@@ -216,7 +216,7 @@ of leaving a zero-billed turn looking like a free request. Nothing is reconstruc
 substitutes zeros, and the counter exists precisely so that the result is counted rather than invisible. Two integers,
 no provider or model ids, because the observation happens below the model reference.
 
-- `packages/nikcli/test/session/llm-event-adapter.test.ts` replaces the "currently reports no gap" characterization with
+- `packages/ragu/test/session/llm-event-adapter.test.ts` replaces the "currently reports no gap" characterization with
   assertions that the gap is counted and warned while `usage` stays `undefined`, that a finish carrying usage counts no
   gap, and that a turn finishing twice is counted once — a gap tally that disagreed with the turns would be its own lie.
 
@@ -233,20 +233,20 @@ counter is a stopgap standing in for the second, not an implementation of it.
 2026-09-30: test-only characterization, not production implementation or promotion. Status remains proposed,
 Tier 1/P2 and dependencies unchanged; EOT-00's real Ghostty/tmux matrix remains open.
 
-- `packages/nikcli/test/session/processor-retry.test.ts` pins transient recovery, exhaustion, non-retryable failures
+- `packages/ragu/test/session/processor-retry.test.ts` pins transient recovery, exhaustion, non-retryable failures
   and backoff cancellation; cancellation leaves terminal persistence to the caller.
 - The same processor tests pin partial text/reasoning published to Bus, then removed before retry output appears.
   Removal does not undo publication: this is a requirement 6 gap, not compliance.
-- `packages/nikcli/test/session/session.test.ts` pins cache normalization, metadata precedence and pricing.
+- `packages/ragu/test/session/session.test.ts` pins cache normalization, metadata precedence and pricing.
   Missing usage fields default to zero, but Anthropic/Bedrock recompute zero totals while OpenAI/Google leave absent totals undefined.
-- `packages/nikcli/test/session/llm-event-adapter.test.ts` pins step billing without double-counting request totals,
+- `packages/ragu/test/session/llm-event-adapter.test.ts` pins step billing without double-counting request totals,
   cache-write metadata, failure propagation without finish events and early iterator release.
 - Those adapter tests also pin absent native finish usage as undefined, without a gap signal, and dropped
   `Retry-After` metadata at the API error boundary; neither satisfies the missing-usage or header requirements.
-- `packages/nikcli/test/session/retry.test.ts` and `packages/nikcli/test/session/retry-precise.test.ts` pin classification,
+- `packages/ragu/test/session/retry.test.ts` and `packages/ragu/test/session/retry-precise.test.ts` pin classification,
   backoff, header delays and abort cleanup, not a partial-output safety guard.
 
-User-supplied verified result from `packages/nikcli`: **120 pass, 0 fail, exit 0** across
+User-supplied verified result from `packages/ragu`: **120 pass, 0 fail, exit 0** across
 `test/session/{session,llm-event-adapter,retry,retry-precise}.test.ts`; not a new run here.
 Processor tests were inspected without a confirmed run count.
 
@@ -257,21 +257,21 @@ Processor tests were inspected without a confirmed run count.
 2026-10-02: partial-output safety slice, not full spec promotion. Status remains proposed, Tier 1/P2 and dependencies
 unchanged; EOT-00's real Ghostty/tmux gate remains open.
 
-`packages/nikcli/src/session/processor.ts` now stops retries after published text, reasoning, tool or billed step output.
+`packages/ragu/src/session/processor.ts` now stops retries after published text, reasoning, tool or billed step output.
 It preserves partial content and the terminal `APIError`; deleting a part is no longer treated as undoing publication.
 
-- `packages/nikcli/test/session/processor-retry.test.ts` asserts one provider call, no backoff or part removal, preserved
+- `packages/ragu/test/session/processor-retry.test.ts` asserts one provider call, no backoff or part removal, preserved
   partial text/reasoning and a persisted `APIError`, including native provider errors through the adapter.
 - The same suite covers published pending tools and retains pre-output transient retries, empty unpublished starts/deltas,
   retry exhaustion and cancellation persistence; billed step output is guarded by the processor's non-`step-start` updates.
-- `packages/nikcli/test/session/native-runtime.test.ts` asserts lazy iteration after `LLM.stream` returns, propagation of
+- `packages/ragu/test/session/native-runtime.test.ts` asserts lazy iteration after `LLM.stream` returns, propagation of
   failures after text/reasoning/tool events, iterator closure, no synthetic finish and no AI SDK fallback.
 - Native safety tests also cover cancellation and preserve preflight/late refusal and non-cancellation setup fallback.
   Iteration failures never enter the setup fallback catch; this is not a new midstream fallback mechanism.
-- `packages/nikcli/test/session/llm-event-adapter.test.ts` retains failure propagation without finish events and the
+- `packages/ragu/test/session/llm-event-adapter.test.ts` retains failure propagation without finish events and the
   existing missing-usage and `Retry-After` gap characterizations.
 
-Baseline before changes, from `packages/nikcli`:
+Baseline before changes, from `packages/ragu`:
 `bun test test/session/processor-retry.test.ts test/session/native-runtime.test.ts test/session/llm-event-adapter.test.ts`
 reported **49 pass, 0 fail, exit 0**. After the slice,
 `bun test test/session/processor-retry.test.ts test/session/native-runtime.test.ts test/session/llm-event-adapter.test.ts test/session/processor-effect-service.test.ts test/session/retry.test.ts test/session/retry-precise.test.ts`
@@ -290,12 +290,12 @@ and expectation problems, not product defects, and both are now gone rather than
 
 The three PKCE failures were a test defect, not a missing dependency. `test/auth/pkce-no-downgrade.test.ts` shelled out to
 `rg`, which this repository treats as an _optional_ accelerator: production resolves it with `Bun.which("rg")` and disables the
-tier when it is absent (`packages/nikcli/src/file/ripgrep.ts:41-49`). Requiring the binary in a test made an optional tool
+tier when it is absent (`packages/ragu/src/file/ripgrep.ts:41-49`). Requiring the binary in a test made an optional tool
 mandatory and pushed the fix toward "install ripgrep in CI" instead of "the test needs no external tool". The helper is now a
 native `readdirSync` walk, matching the existing precedent in `test/plugin/autoload-safety.test.ts`. That also closed a silent
 hole: the old helper mapped **both** exit 1 (no match) and exit 2 (bad pattern) to "no offenders", so a pattern that failed to
 compile turned a security assertion into a vacuous pass. It now throws instead. Revert-verified: planting
-`code_challenge_method="plain"` under `packages/nikcli/src` turns the file red (2 fail, 2 pass) and removing it returns
+`code_challenge_method="plain"` under `packages/ragu/src` turns the file red (2 fail, 2 pass) and removing it returns
 4 pass.
 
 The `automation.test.ts` failure was stale expectation, not a broken workflow. Commit `0384786e75` (ADE 0.9.0) migrated
@@ -322,7 +322,7 @@ Existing cache, usage and error helper modules are not these services, and passi
 Typecheck note: `bun run typecheck` from the repository root exits 0 (`Tasks: 39 successful, 39 total`). Two runs earlier in
 this session failed for reasons that had nothing to do with this work — twelve errors in
 the vendored Copilot chat language model (since removed with the AI SDK) from a duplicated `@ai-sdk/provider` in the
-installed tree, and `@nikcli-ai/identity`'s `wrangler types --check`. `bun install --frozen-lockfile` cleared both, which
+installed tree, and `@ragu/identity`'s `wrangler types --check`. `bun install --frozen-lockfile` cleared both, which
 is worth recording because the two look like code faults and are install drift.
 
 ### A `Usage` accumulator cannot reconstruct the native gap — 2026-10-03
@@ -348,7 +348,7 @@ a billable number, which is the failure requirement 10 was written against. That
 leaves a protocol change.
 
 The spec's naming is also a category error for this tree: there is no
-`Effect.Service` anywhere in `packages/nikcli/src`. The house idiom is
+`Effect.Service` anywhere in `packages/ragu/src`. The house idiom is
 `export namespace X` with `defaultLayer` and `runPromiseWithLayer`
 (`src/effect/runtime.ts`), as in `background/run.ts:16-18`.
 

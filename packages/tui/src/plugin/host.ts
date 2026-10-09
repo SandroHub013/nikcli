@@ -1,4 +1,4 @@
-import type { TuiConfig as TuiConfigContract } from "@nikcli-ai/sdk/httpapi"
+import type { TuiConfig as TuiConfigContract } from "@ragu/sdk/httpapi"
 
 /**
  * The config-surface operations the plugin runtime cannot perform itself.

@@ -9,7 +9,7 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
 import path from "node:path"
-import { renderBitmap } from "@nikcli-ai/gadget/display"
+import { renderBitmap } from "@ragu/gadget/display"
 import {
   GadgetError,
   LIMITS,
@@ -28,7 +28,7 @@ import {
   type Platform,
   type ResultBody,
   type Tree,
-} from "@nikcli-ai/gadget/protocol"
+} from "@ragu/gadget/protocol"
 
 /** Where the bridge pushes frames. `send` returns false when the feed is too far behind to take it. */
 export interface Feed {
@@ -160,7 +160,7 @@ export class Registry {
     const window = this.window
     if (!window || window.expiresAt <= this.now()) {
       this.window = undefined
-      throw new GadgetError("PairingClosed", "no pairing window is open: ask nikcli to pair a gadget first")
+      throw new GadgetError("PairingClosed", "no pairing window is open: ask ragu to pair a gadget first")
     }
     if (typeof request?.code !== "string" || !same(request.code.trim(), window.code)) {
       window.failures++

@@ -1,6 +1,6 @@
 ---
 layout: ../../layouts/Doc.astro
-title: Reasoning / :thinking · nikcli Inference docs
+title: Reasoning / :thinking · ragu Inference docs
 ---
 
 # Reasoning / `:thinking`
@@ -44,7 +44,7 @@ Effort levels (only for `:thinking` variants):
 
 ## Response shape
 
-For reasoning calls, the gateway adds a `nikcli.thinking` block:
+For reasoning calls, the gateway adds a `ragu.thinking` block:
 
 ```json
 {
@@ -55,7 +55,7 @@ For reasoning calls, the gateway adds a `nikcli.thinking` block:
       "reasoning": "Need to compute 2+7 = 9. So the answer is 9."
     }
   }],
-  "nikcli": {
+  "ragu": {
     "thinking": { "requested": true, "native": false, "effort": "medium" },
     "resolvedModel": "deepseek-v4-pro",
     ...

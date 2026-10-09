@@ -1,7 +1,7 @@
 /**
  * Video export — transcode the periodic sampled PNG sequence from
  * {@link Recorder} into watchable formats via the `ffmpeg` binary. Mirrors
- * `@nikcli-ai/browser-control`'s `exportVideoFromFrames` (since a desktop
+ * `@ragu/browser-control`'s `exportVideoFromFrames` (since a desktop
  * session has no native video file the way Playwright produces a webm;
  * the sampled screenshots are the only honest source of truth).
  */

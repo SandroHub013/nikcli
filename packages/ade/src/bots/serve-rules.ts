@@ -1,14 +1,14 @@
 /**
- * The permission rules of a bot's session on ADE's nikcli server (B8d).
+ * The permission rules of a bot's session on ADE's ragu server (B8d).
  *
  * A bot's turn is a prompt to a session of the server the Chat uses
- * (`chat/connection.ts`), with the bot as its agent. nikcli decides a tool
+ * (`chat/connection.ts`), with the bot as its agent. ragu decides a tool
  * call with the last rule that matches: the agent's rules, then the
  * session's, then what the user approved for the project with «always»
  * (`permission/next.ts`, `evaluate`). So the rules put on the session here
  * come after the bot's own file and win over it: a file that grants itself
  * the shell no longer shades ADE's denials, as it did when they were merged
- * into the configuration (`NIKCLI_PERMISSION`, B8c second look).
+ * into the configuration (`RAGU_PERMISSION`, B8c second look).
  *
  * The profiles are the spawn flags of `pty.rs` they replace, rule for rule:
  *
@@ -27,11 +27,12 @@
  * own configuration (`configDenials`).
  *
  * What these rules do not cover, said where it matters (`bots.serve.rulesNote`):
- * an «always» the user gave in the project, in nikcli's TUI too, comes last
+ * an «always» the user gave in the project, in ragu's TUI too, comes last
  * and still wins, as for the Chat.
  */
 
 import type { PermissionRule } from "../chat/rules"
+import { CONFIG_STEMS } from "./app-folder"
 
 export type BotProfile = "ask" | "ask-outside" | "no-shell" | "read-only" | "remote-ask" | "remote-none" | "planner"
 
@@ -42,10 +43,10 @@ const rule = (permission: string, action: PermissionRule["action"], pattern = "*
 })
 
 /*
- * The block list (`BLOCKED` in `approval.ts`) as nikcli's own denials, the
- * same list `pty.rs` put under `b?sh` (B8c review, M1): nikcli refuses these
+ * The block list (`BLOCKED` in `approval.ts`) as ragu's own denials, the
+ * same list `pty.rs` put under `b?sh` (B8c review, M1): ragu refuses these
  * before asking, so no answer from ADE can let one through. Patterns are
- * nikcli's: `*` any text, `?` one character, matched on the command's words
+ * ragu's: `*` any text, `?` one character, matched on the command's words
  * joined by one space, quotes kept, case counted. What they cannot see — a
  * command inside `bash -c "…"`, a variable — ADE asks about (M2).
  */
@@ -53,7 +54,7 @@ export function blockedBashDenials(): string[] {
   const PREFIXES = ["", "sudo ", "*/", "\\"]
   const ROOTS = ["/", "/?", "~", "~/", "~/?", "$HOME", "$HOME/", "${HOME}", "?:", "?:/", "?:\\", "?:/?", "?:\\?"]
   const QUOTES = ["", '"', "'"]
-  // An rm with no target nikcli can see: `rm -rf $HOME` reaches it as `rm -rf`.
+  // An rm with no target ragu can see: `rm -rf $HOME` reaches it as `rm -rf`.
   const BARE = [
     "-r",
     "-rf",
@@ -148,31 +149,32 @@ function spellings(word: string): string[] {
  * server reads them again by itself when they change.
  *
  * Every tool that writes a file asks `edit`: `write`, `patch`, `multiedit`
- * and `apply_patch` are `edit` to nikcli (`TOOL_PERMISSION`, ruleset.ts), so
+ * and `apply_patch` are `edit` to ragu (`TOOL_PERMISSION`, ruleset.ts), so
  * a rule named after them would never match. The pattern is the path as the
  * tool resolved it, relative to the worktree (`path.relative`): `./` gone,
  * backslashes on Windows, absolute on another drive, `..` outside, and the
  * case as the model typed it. The glob counts case and Windows does not, so
- * every casing of «nikcli» is spelled out (64), with `?` for the separator
- * and for the extension's letters, and the short 8.3 names (`NIKCLI~1`) are
+ * every casing of «ragu» is spelled out (64), with `?` for the separator
+ * and for the extension's letters, and the short 8.3 names (`RAGU~1`) are
  * denied too. So is any path with `::`: on NTFS `nikcli.json::$DATA` is the
  * file's own content, and no name pattern ends there; no real path has it
  * (bot-config-chiusa review, MEDIO).
  *
- * Wider than needed, on the safe side: any `nikcli.` with four or five
- * characters after it (`nikcli.yaml`, `docs/nikcli.html`) and any `x.nikcli…`.
+ * Wider than needed, on the safe side: any `ragu.` with four or five
+ * characters after it (`ragu.yaml`, `docs/ragu.html`) and any `x.ragu…`.
  * The path is the one written, not the one resolved: a link already in the
  * repository that points at `.nikcli` under another name is not seen. A bot
  * cannot make one without the shell.
  *
  * They open the session's rules rather than close them: any session rule
  * comes after the bot's file and wins over it, and a routine's `edit` denied
- * whole must stay the last `edit` rule, the one nikcli reads to hide the tool
+ * whole must stay the last `edit` rule, the one ragu reads to hide the tool
  * from the model (`disabled`, ruleset.ts).
  */
 export function configDenials(): string[] {
   const denied: string[] = ["*::*"]
-  for (const name of casings("nikcli")) {
+  // Rule B (`app-folder.ts`): ragu reads `.ragu` and `ragu.json` first, `.nikcli` and `nikcli.json` otherwise.
+  for (const name of CONFIG_STEMS.flatMap(casings)) {
     denied.push(`*.${name}?*`, `*${name}.????`, `*${name}.?????`, `*${name}~*`)
   }
   return denied

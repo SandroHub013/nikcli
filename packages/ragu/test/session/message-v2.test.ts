@@ -1,0 +1,488 @@
+import { describe, expect, it } from "bun:test"
+import { APICallError } from "@/provider/error"
+import type { ModelMessage } from "@/session/llm/types"
+import { Identifier } from "@ragu/util/id"
+import { MessageV2 } from "@/session/message-v2"
+
+describe("MessageV2 schemas and helpers", () => {
+  it("parses OutputFormat text", () => {
+    const parsed = MessageV2.Format.parse({ type: "text" })
+    expect(parsed.type).toBe("text")
+  })
+
+  it("parses OutputFormat json_schema with defaults", () => {
+    const parsed = MessageV2.Format.parse({
+      type: "json_schema",
+      schema: { type: "object" },
+    })
+    expect(parsed.type).toBe("json_schema")
+    if (parsed.type === "json_schema") {
+      expect(parsed.retryCount).toBe(2)
+    }
+  })
+
+  it("parses TextPart", () => {
+    const part = MessageV2.TextPart.parse({
+      id: Identifier.ascending("part"),
+      sessionID: Identifier.descending("session"),
+      messageID: Identifier.ascending("message"),
+      type: "text",
+      text: "hello",
+    })
+    expect(part.text).toBe("hello")
+  })
+
+  it("parses User message info", () => {
+    const info = MessageV2.User.parse({
+      id: Identifier.ascending("message"),
+      role: "user",
+      sessionID: Identifier.descending("session"),
+      time: { created: 1 },
+      agent: "build",
+      model: { providerID: "p", modelID: "m" },
+    })
+    expect(info.role).toBe("user")
+  })
+
+  it("fromError maps AbortError to aborted shape", () => {
+    const err = new DOMException("x", "AbortError")
+    const out = MessageV2.fromError(err, { providerID: "minimax-coding-plan" })
+    expect(out.name).toBe("MessageAbortedError")
+  })
+
+  it("fromError maps JSONParseError to retryable APIError (opencode #38041)", () => {
+    const longMessage = "x".repeat(500)
+    // What a malformed SSE chunk raises: the AI SDK's JSONParseError, or a native decode failure named alike.
+    const err = Object.assign(new Error(`JSON parsing failed: Text: bad-stream.\nError message: ${longMessage}`), {
+      name: "AI_JSONParseError",
+    })
+    const out = MessageV2.fromError(err, {
+      providerID: "minimax-coding-plan",
+    }) as {
+      name: string
+      data: { message: string; isRetryable: boolean }
+    }
+    expect(out.name).toBe("APIError")
+    expect(out.data.isRetryable).toBe(true)
+    // message must be truncated to 200 chars (the wrapper prefix + truncated cause)
+    expect(out.data.message.startsWith("Provider returned malformed JSON stream:")).toBe(true)
+    expect(out.data.message.length).toBeLessThanOrEqual("Provider returned malformed JSON stream: ".length + 200)
+  })
+
+  it("fromError preserves status and separates payload size from context overflow", () => {
+    const makeError = (message: string, statusCode: number) =>
+      new APICallError({
+        message,
+        url: "https://example.com/v1/messages",
+        requestBodyValues: {},
+        statusCode,
+        responseHeaders: {},
+        responseBody: undefined,
+        isRetryable: false,
+      })
+
+    const payload = MessageV2.fromError(makeError("request too large", 413), { providerID: "anthropic" })
+    expect(payload).toMatchObject({
+      name: "APIError",
+      data: { statusCode: 413, classification: "payload-too-large" },
+    })
+
+    const overflow = MessageV2.fromError(makeError("maximum context length is 8192 tokens", 400), {
+      providerID: "openai",
+    })
+    expect(overflow).toMatchObject({
+      name: "MessageContextOverflowError",
+      data: { statusCode: 400 },
+    })
+  })
+
+  it("boundImagePayload removes oldest images without mutating source messages", () => {
+    const image = "a".repeat(9 * 1024 * 1024)
+    const messages = ["first", "second", "third"].map(
+      (name): ModelMessage => ({
+        role: "user",
+        content: [{ type: "image", image, mediaType: "image/png", providerOptions: { test: { name } } }],
+      }),
+    )
+
+    const bounded = MessageV2.boundImagePayload(messages)
+    expect(bounded[0]?.content[0]).toMatchObject({ type: "text" })
+    expect(bounded[1]?.content[0]).toMatchObject({ type: "text" })
+    expect(bounded[2]?.content[0]).toMatchObject({ type: "image", providerOptions: { test: { name: "third" } } })
+    expect(messages[0]?.content[0]).toMatchObject({ type: "image", providerOptions: { test: { name: "first" } } })
+  })
+
+  it("boundImagePayload preserves history at or below the trigger", () => {
+    const messages: ModelMessage[] = [
+      {
+        role: "user",
+        content: [{ type: "image", image: "aGVsbG8=", mediaType: "image/png" }],
+      },
+    ]
+    expect(MessageV2.boundImagePayload(messages)).toBe(messages)
+  })
+
+  it("boundImagePayload replaces data-URI images nested in tool results", () => {
+    const image = "a".repeat(13 * 1024 * 1024)
+    const messages = [
+      {
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call-1",
+            toolName: "read",
+            output: {
+              type: "content",
+              value: [
+                { type: "media", mediaType: "image/png", data: `data:image/png;base64,${image}` },
+                { type: "media", mediaType: "image/png", data: `data:image/png;base64,${image}` },
+              ],
+            },
+          },
+        ],
+      },
+    ] as unknown as ModelMessage[]
+
+    const bounded = MessageV2.boundImagePayload(messages) as any
+    expect(bounded[0].content[0].output.value).toEqual([
+      expect.objectContaining({ type: "text" }),
+      expect.objectContaining({ type: "media" }),
+    ])
+    expect((messages[0] as any).content[0].output.value[0].type).toBe("media")
+  })
+
+  it("toModelMessages maps a minimal user thread for OpenAI-compatible model", () => {
+    const sessionID = Identifier.descending("session")
+    const messageID = Identifier.ascending("message")
+    const user: MessageV2.WithParts = {
+      info: {
+        id: messageID,
+        role: "user",
+        sessionID,
+        time: { created: 1 },
+        agent: "a",
+        model: { providerID: "minimax-coding-plan", modelID: "MiniMax-M2.7" },
+      },
+      parts: [
+        {
+          id: Identifier.ascending("part"),
+          sessionID,
+          messageID,
+          type: "text",
+          text: "ping",
+        },
+      ],
+    }
+    const model = {
+      api: { npm: "@ai-sdk/anthropic", id: "minimax-coding-plan" },
+      id: "MiniMax-M2.7",
+      cost: { input: 1, output: 1, cache: { read: 0, write: 0 } },
+    } as Parameters<typeof MessageV2.toModelMessages>[1]
+
+    const out = MessageV2.toModelMessages([user], model)
+    expect(out.length).toBeGreaterThanOrEqual(1)
+    expect(out[0]?.role).toBe("user")
+  })
+
+  it("toModelMessages wraps queued user text only when remindAfter is set (cache-stable)", () => {
+    const sessionID = Identifier.descending("session")
+    const finishedID = Identifier.ascending("message")
+    const queuedID = Identifier.ascending("message")
+    const user: MessageV2.WithParts = {
+      info: {
+        id: queuedID,
+        role: "user",
+        sessionID,
+        time: { created: 2 },
+        agent: "a",
+        model: { providerID: "minimax-coding-plan", modelID: "MiniMax-M2.7" },
+      },
+      parts: [
+        {
+          id: Identifier.ascending("part"),
+          sessionID,
+          messageID: queuedID,
+          type: "text",
+          text: "please continue",
+        },
+        {
+          id: Identifier.ascending("part"),
+          sessionID,
+          messageID: queuedID,
+          type: "text",
+          text: "synthetic note",
+          synthetic: true,
+        },
+      ],
+    }
+    const model = {
+      api: { npm: "@ai-sdk/anthropic", id: "minimax-coding-plan" },
+      id: "MiniMax-M2.7",
+      cost: { input: 1, output: 1, cache: { read: 0, write: 0 } },
+    } as Parameters<typeof MessageV2.toModelMessages>[1]
+
+    const plain = MessageV2.toModelMessages([user], model)
+    const plainText = JSON.stringify(plain)
+    expect(plainText).toContain("please continue")
+    expect(plainText).not.toContain("<system-reminder>")
+
+    const reminded = MessageV2.toModelMessages([user], model, {
+      remindAfter: finishedID,
+    })
+    const remindedText = JSON.stringify(reminded)
+    expect(remindedText).toContain("<system-reminder>")
+    expect(remindedText).toContain("please continue")
+    // Synthetic parts must not be wrapped — appear as plain text content
+    expect(remindedText).toContain('"text":"synthetic note"')
+    expect(remindedText).not.toContain("synthetic note\\n\\nPlease address")
+
+    // Stored part text is never mutated
+    expect(user.parts[0]?.type === "text" && user.parts[0].text).toBe("please continue")
+  })
+
+  it("toModelMessages supports custom queued-message wrap template", () => {
+    const sessionID = Identifier.descending("session")
+    const finishedID = Identifier.ascending("message")
+    const queuedID = Identifier.ascending("message")
+    const user: MessageV2.WithParts = {
+      info: {
+        id: queuedID,
+        role: "user",
+        sessionID,
+        time: { created: 2 },
+        agent: "a",
+        model: { providerID: "minimax-coding-plan", modelID: "MiniMax-M2.7" },
+      },
+      parts: [
+        {
+          id: Identifier.ascending("part"),
+          sessionID,
+          messageID: queuedID,
+          type: "text",
+          text: "custom body",
+        },
+      ],
+    }
+    const model = {
+      api: { npm: "@ai-sdk/anthropic", id: "minimax-coding-plan" },
+      id: "MiniMax-M2.7",
+      cost: { input: 1, output: 1, cache: { read: 0, write: 0 } },
+    } as Parameters<typeof MessageV2.toModelMessages>[1]
+
+    const out = MessageV2.toModelMessages([user], model, {
+      remindAfter: finishedID,
+      wrap: { header: "<custom>", footer: "</custom>" },
+    })
+    expect(JSON.stringify(out)).toContain("<custom>\\ncustom body\\n\\n</custom>")
+  })
+
+  it("toModelMessages disables queued-message wrap when wrap=false", () => {
+    const sessionID = Identifier.descending("session")
+    const finishedID = Identifier.ascending("message")
+    const queuedID = Identifier.ascending("message")
+    const user: MessageV2.WithParts = {
+      info: {
+        id: queuedID,
+        role: "user",
+        sessionID,
+        time: { created: 2 },
+        agent: "a",
+        model: { providerID: "minimax-coding-plan", modelID: "MiniMax-M2.7" },
+      },
+      parts: [
+        {
+          id: Identifier.ascending("part"),
+          sessionID,
+          messageID: queuedID,
+          type: "text",
+          text: "plain queued text",
+        },
+      ],
+    }
+    const model = {
+      api: { npm: "@ai-sdk/anthropic", id: "minimax-coding-plan" },
+      id: "MiniMax-M2.7",
+      cost: { input: 1, output: 1, cache: { read: 0, write: 0 } },
+    } as Parameters<typeof MessageV2.toModelMessages>[1]
+
+    const out = MessageV2.toModelMessages([user], model, {
+      remindAfter: finishedID,
+      wrap: false,
+    })
+    expect(JSON.stringify(out)).toContain("plain queued text")
+    expect(JSON.stringify(out)).not.toContain("system-reminder")
+
+    const disabledWithNull = MessageV2.toModelMessages([user], model, {
+      remindAfter: finishedID,
+      wrap: null,
+    })
+    expect(JSON.stringify(disabledWithNull)).not.toContain("system-reminder")
+  })
+
+  it("toModelMessages forwards reasoning parts as content (opencode PR #25303)", () => {
+    // Regression for cross-model reasoning forwarding: when the destination model
+    // differs from the source, anthropic-shaped reasoning parts are collapsed to
+    // plain text content to avoid AI_InvalidPromptError on providers that can't
+    // validate a foreign signature.
+    //
+    // We assert on the *content* shape returned by convertToModelMessages, since
+    // the ai SDK converts UIMessage parts into ModelMessage content blocks.
+    const sessionID = Identifier.descending("session")
+    const messageID = Identifier.ascending("message")
+    const reasoningText = "I am thinking about this carefully"
+    const assistant: MessageV2.WithParts = {
+      info: {
+        id: messageID,
+        sessionID,
+        role: "assistant",
+        time: { created: 1 },
+        parentID: messageID,
+        // Source provider/model differs from the destination model below so
+        // `differentModel` is true inside toModelMessages.
+        providerID: "anthropic",
+        modelID: "claude-opus-4.1",
+        mode: "build",
+        agent: "build",
+        path: { cwd: "/repo", root: "/repo" },
+        cost: 0,
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+      },
+      parts: [
+        {
+          id: Identifier.ascending("part"),
+          sessionID,
+          messageID,
+          type: "reasoning",
+          text: reasoningText,
+          metadata: { signature: "anthropic-only-sig" },
+          time: { start: 1, end: 2 },
+        },
+      ],
+    }
+    const model = {
+      api: { npm: "@ai-sdk/openai", id: "openai" },
+      id: "gpt-5",
+      cost: { input: 1, output: 1, cache: { read: 0, write: 0 } },
+    } as Parameters<typeof MessageV2.toModelMessages>[1]
+
+    const out = MessageV2.toModelMessages([assistant], model)
+    expect(out.length).toBe(1)
+    const content = (out[0] as { content: unknown }).content
+    // The ai SDK normalizes reasoning to text content blocks at conversion time;
+    // the key behavior we want to lock in is that the foreign reasoning signature
+    // is NOT carried over as a providerMetadata that the receiving model would
+    // later reject.
+    const serialized = JSON.stringify(content)
+    expect(serialized).toContain(reasoningText)
+    expect(serialized).not.toContain("anthropic-only-sig")
+  })
+
+  it("toModelMessages drops empty cross-model reasoning entirely (opencode PR #25303)", () => {
+    // A reasoning part with whitespace-only text should not produce any content
+    // on cross-model forwarding — emitting a blank text part would still bloat
+    // the request and confuse the destination model.
+    const sessionID = Identifier.descending("session")
+    const messageID = Identifier.ascending("message")
+    const assistant: MessageV2.WithParts = {
+      info: {
+        id: messageID,
+        sessionID,
+        role: "assistant",
+        time: { created: 1 },
+        parentID: messageID,
+        providerID: "anthropic",
+        modelID: "claude-opus-4.1",
+        mode: "build",
+        agent: "build",
+        path: { cwd: "/repo", root: "/repo" },
+        cost: 0,
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+      },
+      parts: [
+        {
+          id: Identifier.ascending("part"),
+          sessionID,
+          messageID,
+          type: "reasoning",
+          text: "   \n  ",
+          metadata: { signature: "anthropic-only-sig" },
+          time: { start: 1, end: 2 },
+        },
+      ],
+    }
+    const model = {
+      api: { npm: "@ai-sdk/openai", id: "openai" },
+      id: "gpt-5",
+      cost: { input: 1, output: 1, cache: { read: 0, write: 0 } },
+    } as Parameters<typeof MessageV2.toModelMessages>[1]
+
+    const out = MessageV2.toModelMessages([assistant], model)
+    expect(out.length).toBe(0)
+  })
+
+  it("toModelMessages preserves reasoning text when the destination model matches the source (opencode PR #25303)", () => {
+    // When source and destination match, reasoning is passed through (collapsed
+    // to text by convertToModelMessages, but with no foreign-signature risk).
+    const sessionID = Identifier.descending("session")
+    const messageID = Identifier.ascending("message")
+    const reasoningText = "let me think... 2 + 2 = 4"
+    const assistant: MessageV2.WithParts = {
+      info: {
+        id: messageID,
+        sessionID,
+        role: "assistant",
+        time: { created: 1 },
+        parentID: messageID,
+        providerID: "anthropic",
+        modelID: "claude-opus-4.1",
+        mode: "build",
+        agent: "build",
+        path: { cwd: "/repo", root: "/repo" },
+        cost: 0,
+        tokens: {
+          input: 0,
+          output: 0,
+          reasoning: 0,
+          cache: { read: 0, write: 0 },
+        },
+      },
+      parts: [
+        {
+          id: Identifier.ascending("part"),
+          sessionID,
+          messageID,
+          type: "reasoning",
+          text: reasoningText,
+          metadata: { signature: "sig-abc" },
+          time: { start: 1, end: 2 },
+        },
+      ],
+    }
+    const model = {
+      api: { npm: "@ai-sdk/anthropic", id: "anthropic" },
+      id: "claude-opus-4.1",
+      cost: { input: 1, output: 1, cache: { read: 0, write: 0 } },
+    } as Parameters<typeof MessageV2.toModelMessages>[1]
+
+    const out = MessageV2.toModelMessages([assistant], model)
+    expect(out.length).toBe(1)
+    const serialized = JSON.stringify(out[0])
+    expect(serialized).toContain(reasoningText)
+  })
+
+  it("exposes bus-backed part events", () => {
+    expect(MessageV2.Event.PartUpdated.type).toBe("message.part.updated")
+    expect(MessageV2.Event.PartRemoved.type).toBe("message.part.removed")
+  })
+})

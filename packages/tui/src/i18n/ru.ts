@@ -1,5 +1,5 @@
 /**
- * Russian catalog for the nikcli TUI. Key set MUST match `en.ts` exactly
+ * Russian catalog for the ragu TUI. Key set MUST match `en.ts` exactly
  * (enforced by `test/tui/i18n-parity.test.ts`).
  */
 import type { TuiMessageKey } from "./en"

@@ -662,7 +662,7 @@ export function GitActionsPanel({
   const loadRuns = useCallback(async () => {
     const client = await resolveClient()
     if (!client) {
-      setError("No connection to the nikcli host.")
+      setError("No connection to the ragu host.")
       return
     }
     try {

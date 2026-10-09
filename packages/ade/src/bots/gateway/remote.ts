@@ -2,8 +2,8 @@
  * «Comandi da remoto», per bot (G5, D93).
  *
  * Off by default: a turn from a chat has no shell. The owner turns it on for
- * one bot, in ADE (the panel, G6), and never from a chat. With it on, nikcli
- * asks about every command on the phone. Offered for nikcli only: Claude Code
+ * one bot, in ADE (the panel, G6), and never from a chat. With it on, ragu
+ * asks about every command on the phone. Offered for ragu only: Claude Code
  * and Codex cannot ask mid-turn, and from a chat they never have a shell.
  *
  * Kept in the renderer's storage, by the bot file's path and the platform (`remoteKey`): a file cannot turn
@@ -46,7 +46,7 @@ export function remoteTools(setting: RemoteSetting | undefined, fingerprint: str
 
 /** Whether the switch means anything for a bot on `runner`: the panel offers it only then. */
 export function offersRemoteCommands(runner: string | undefined): boolean {
-  return runnerById(runner).id === "nikcli"
+  return runnerById(runner).id === "ragu"
 }
 
 const STORAGE_KEY = "ade.gateway.remote"

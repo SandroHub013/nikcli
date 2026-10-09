@@ -1,4 +1,4 @@
-import { ClientError } from "@nikcli-ai/sdk/httpapi"
+import { ClientError } from "@ragu/sdk/httpapi"
 
 /** Why the server could not supply a usable TUI config. */
 export type TuiConfigFailure = "unauthorized" | "unavailable" | "malformed"

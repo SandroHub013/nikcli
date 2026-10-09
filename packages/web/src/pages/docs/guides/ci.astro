@@ -20,9 +20,9 @@ const toc = [
 ---
 
 <DocsLayout
-  title="Running nikcli in CI"
+  title="Running ragu in CI"
   subtitle="Mention it on a pull request with the GitHub Action, or drive a headless server from any CI with the API."
-  description="Guide to running nikcli in CI: the GitHub Action and its inputs, OIDC token exchange, scheduled runs, and driving a headless server over the API from any provider."
+  description="Guide to running ragu in CI: the GitHub Action and its inputs, OIDC token exchange, scheduled runs, and driving a headless server over the API from any provider."
   toc={toc}
 >
   <section id="two-ways" class="doc-section">
@@ -46,10 +46,10 @@ const toc = [
   <section id="action" class="doc-section">
     <h2>The GitHub Action</h2>
     <p>
-      The action runs nikcli inside a workflow and answers when someone mentions it in a comment.
-      The default triggers are <code>/nikcli</code> and <code>/nik</code>.
+      The action runs ragu inside a workflow and answers when someone mentions it in a comment.
+      The default triggers are <code>/ragu</code> and <code>/nik</code>.
     </p>
-    <DocCode language="yaml" title=".github/workflows/nikcli.yml">{`name: nikcli
+    <DocCode language="yaml" title=".github/workflows/ragu.yml">{`name: ragu
 
 on:
   issue_comment:
@@ -58,10 +58,10 @@ on:
     types: [created]
 
 jobs:
-  nikcli:
+  ragu:
     if: |
       contains(github.event.comment.body, '/nik') ||
-      contains(github.event.comment.body, '/nikcli')
+      contains(github.event.comment.body, '/ragu')
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -72,7 +72,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Run nikcli
+      - name: Run ragu
         uses: nikcli/nikcli/github@latest
         env:
           ANTHROPIC_API_KEY: \${{ secrets.ANTHROPIC_API_KEY }}
@@ -95,7 +95,7 @@ jobs:
         <tr><td><code>model</code></td><td>yes</td><td>The model to run, as <code>provider/model</code>.</td></tr>
         <tr><td><code>agent</code></td><td>no</td><td>A primary agent. Falls back to the configured default, then <code>build</code>.</td></tr>
         <tr><td><code>prompt</code></td><td>no</td><td>Overrides the default prompt — this is how a scheduled job says what to do.</td></tr>
-        <tr><td><code>mentions</code></td><td>no</td><td>Comma-separated trigger phrases, case-insensitive. Defaults to <code>/nikcli,/nik</code>.</td></tr>
+        <tr><td><code>mentions</code></td><td>no</td><td>Comma-separated trigger phrases, case-insensitive. Defaults to <code>/ragu,/nik</code>.</td></tr>
         <tr><td><code>share</code></td><td>no</td><td>Share the session. Defaults to true on public repositories.</td></tr>
         <tr><td><code>variant</code></td><td>no</td><td>Provider-specific reasoning effort, such as <code>high</code> or <code>minimal</code>.</td></tr>
         <tr><td><code>use_github_token</code></td><td>no</td><td>Use <code>GITHUB_TOKEN</code> directly and skip OIDC exchange. Defaults to <code>false</code>.</td></tr>
@@ -123,13 +123,13 @@ jobs:
       <thead><tr><th></th><th>OIDC exchange (default)</th><th><code>use_github_token: true</code></th></tr></thead>
       <tbody>
         <tr><td>Needs</td><td><code>id-token: write</code> and the app installed</td><td>Only <code>GITHUB_TOKEN</code></td></tr>
-        <tr><td>Comments appear as</td><td>The nikcli app</td><td><code>github-actions[bot]</code></td></tr>
+        <tr><td>Comments appear as</td><td>The ragu app</td><td><code>github-actions[bot]</code></td></tr>
         <tr><td>Good for</td><td>Normal use</td><td>Forks, self-hosted, no app install</td></tr>
       </tbody>
     </table>
     <DocCallout type="info" title="A bare Transport error means the child died">
       <p>
-        If a run fails with nothing but <code>##[error]Transport</code>, the nikcli server the
+        If a run fails with nothing but <code>##[error]Transport</code>, the ragu server the
         action started exited — the transport error is the symptom, not the cause. Look above it in
         the log for the child's own output.
       </p>
@@ -189,7 +189,7 @@ jobs:
   image: oven/bun:1
   script:
     - bun add -g nikcli-ai
-    - nikcli serve --hostname 127.0.0.1 --port 4096 &
+    - ragu serve --hostname 127.0.0.1 --port 4096 &
     - until curl -sf http://127.0.0.1:4096/global/health; do sleep 1; done
     - bun run ci/review.ts
   variables:
@@ -198,7 +198,7 @@ jobs:
       <p>
         The server picks an ephemeral port if the requested one is taken, and starts in variable
         time. Poll <code>/global/health</code> rather than guessing a sleep — a fixed sleep is the
-        single most common cause of a flaky nikcli CI job.
+        single most common cause of a flaky ragu CI job.
       </p>
     </DocCallout>
   </section>
@@ -232,9 +232,9 @@ const pump = setInterval(async () => {
       Reviews the diff against the base branch, prints the findings, and fails the build if the
       agent reports something blocking.
     </p>
-    <DocCode language="ts" title="ci/review.ts">{`import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
+    <DocCode language="ts" title="ci/review.ts">{`import { createRaguClient } from "@ragu/sdk/httpapi"
 
-const client = createNikcliClient({
+const client = createRaguClient({
   baseUrl: "http://127.0.0.1:4096",
   directory: process.cwd(),
 })
@@ -298,7 +298,7 @@ try {
       <thead><tr><th>Symptom</th><th>Cause</th></tr></thead>
       <tbody>
         <tr><td>Job hangs, no output</td><td>A permission request nobody answered.</td></tr>
-        <tr><td><code>##[error]Transport</code> alone</td><td>The nikcli child process died; the real error is earlier in the log.</td></tr>
+        <tr><td><code>##[error]Transport</code> alone</td><td>The ragu child process died; the real error is earlier in the log.</td></tr>
         <tr><td>Connection refused</td><td>Started the script before the server was healthy, or it fell back to another port.</td></tr>
         <tr><td>Action never triggers</td><td>The <code>if:</code> guard does not match the mention, or <code>mentions</code> was changed.</td></tr>
         <tr><td>OIDC exchange fails</td><td>Missing <code>permissions: id-token: write</code>, or the app is not installed.</td></tr>
@@ -312,7 +312,7 @@ try {
     links={[
       { title: "Using the API", href: "/docs/guides/api", description: "The client and endpoints this guide drives." },
       { title: "Permissions", href: "/docs/permissions", description: "What you are approving or rejecting." },
-      { title: "Automating with loops", href: "/docs/guides/loops", description: "Scheduled work that lives in nikcli rather than in CI." },
+      { title: "Automating with loops", href: "/docs/guides/loops", description: "Scheduled work that lives in ragu rather than in CI." },
       { title: "Sessions API", href: "/docs/api/session", description: "Every session endpoint." },
     ]}
   />

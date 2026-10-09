@@ -24,7 +24,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "nikcli_gadget.h"
+#include "ragu_gadget.h"
 #include "ng_json.h"
 
 static volatile int stop_flag = 0;

@@ -6,7 +6,7 @@
 import { mkdtemp, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { createWebView, type WebViewInstance, type WebViewModifier } from "@nikcli-ai/util/bun-utils"
+import { createWebView, type WebViewInstance, type WebViewModifier } from "@ragu/util/bun-utils"
 import type { BrowserFrame, ConsoleEntry, Viewport } from "./frame"
 import { parseKeyChord } from "./keys"
 import { Recorder, type RecordingData, type RecordingMarker, type StartRecordingOptions } from "./recording"

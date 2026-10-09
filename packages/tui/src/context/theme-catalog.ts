@@ -1,4 +1,4 @@
-import nikcli from "./theme/nikcli.json" with { type: "json" }
+import ragu from "./theme/nikcli.json" with { type: "json" }
 
 type JsonModule = { default: unknown }
 
@@ -106,7 +106,7 @@ const LOADERS: Record<string, () => Promise<JsonModule>> = {
   neutral: () => import("./theme/neutral.json", { with: { type: "json" } }),
   newsprint: () => import("./theme/newsprint.json", { with: { type: "json" } }),
   nightowl: () => import("./theme/nightowl.json", { with: { type: "json" } }),
-  nikcli: () => import("./theme/nikcli.json", { with: { type: "json" } }),
+  ragu: () => import("./theme/nikcli.json", { with: { type: "json" } }),
   nord: () => import("./theme/nord.json", { with: { type: "json" } }),
   nordic: () => import("./theme/nordic.json", { with: { type: "json" } }),
   nova: () => import("./theme/nova.json", { with: { type: "json" } }),
@@ -159,8 +159,8 @@ const LOADERS: Record<string, () => Promise<JsonModule>> = {
   zinc: () => import("./theme/zinc.json", { with: { type: "json" } }),
 }
 
-export const FALLBACK_THEME_ID = "nikcli" as const
-export const FALLBACK_THEME = nikcli
+export const FALLBACK_THEME_ID = "ragu" as const
+export const FALLBACK_THEME = ragu
 
 export const BUILT_IN_THEME_IDS: readonly string[] = Object.freeze(
   Object.keys(LOADERS).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" })),

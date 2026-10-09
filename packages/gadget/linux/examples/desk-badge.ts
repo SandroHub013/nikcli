@@ -7,7 +7,7 @@
  * `display.bitmap({ width, height, push })`: the bridge lays the tree out and
  * sends finished 1-bit pixels, and `push` hands them to the vendor's library.
  */
-import { Gadget, display, button } from "@nikcli-ai/gadget"
+import { Gadget, display, button } from "@ragu/gadget"
 
 export default new Gadget({
   name: "desk-badge",

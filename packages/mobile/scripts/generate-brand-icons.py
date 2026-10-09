@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate nikcli brand icons + themed splash screens from the wordmark."""
+"""Generate ragu brand icons + themed splash screens from the wordmark."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "assets"
 # Optional high-res mark source produced by design tooling / GenerateImage.
 MARK_CANDIDATES = [
-    Path.home() / ".cursor/projects/Volumes-SSD-Projects-nikcli/assets/nikcli-icon-mark-source.png",
+    Path.home() / ".cursor/projects/Volumes-SSD-Projects-ragu/assets/ragu-icon-mark-source.png",
     ASSETS / "icon-dark.png",
 ]
 
@@ -111,7 +111,7 @@ def save(img: Image.Image, path: Path) -> None:
 def main() -> None:
     mark_path = next((p for p in MARK_CANDIDATES if p.exists()), None)
     if mark_path is None:
-        raise SystemExit("No mark source found. Place nikcli-icon-mark-source.png or icon-dark.png.")
+        raise SystemExit("No mark source found. Place ragu-icon-mark-source.png or icon-dark.png.")
 
     mark_dark = trim_content(ensure_rgba(Image.open(mark_path)))
     # If source is already a full icon with padding, trim again after opening icon-dark

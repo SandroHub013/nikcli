@@ -400,7 +400,7 @@ app.get("/.well-known/nikcli", (c) =>
     jwks_uri: new URL("/.well-known/jwks.json", c.env.ISSUER).toString(),
     auth: {
       command: ["curl", "-fsS", new URL("/.well-known/nikcli/issuer", c.env.ISSUER).toString()],
-      env: "NIKCLI_ACCOUNT_URL",
+      env: "RAGU_ACCOUNT_URL",
     },
   }),
 )

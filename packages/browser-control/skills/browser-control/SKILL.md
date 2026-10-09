@@ -5,7 +5,7 @@ description: Autonomously control, inspect, test, and record real web pages thro
 
 # Browser Control
 
-Operate real, visible page state with `browser-control`. Never infer a UI outcome from server logs alone. Inside the nikcli monorepo, where the package binary is not installed globally, replace `browser-control` with `bun run --cwd packages/browser-control control --`.
+Operate real, visible page state with `browser-control`. Never infer a UI outcome from server logs alone. Inside the ragu monorepo, where the package binary is not installed globally, replace `browser-control` with `bun run --cwd packages/browser-control control --`.
 
 Sessions run headlessly in a per-workspace background daemon that survives across separate CLI calls (auto-spawned on first use, self-terminating after 10 idle minutes) — start a session in one command, drive and inspect it across several more, then stop it.
 
@@ -13,7 +13,7 @@ Sessions run headlessly in a per-workspace background daemon that survives acros
 
 When the user asks to test a web UI, inspect the project to identify how to run it locally (dev server URL, port) and the acceptance criteria, then run the verification without asking for commands that are already discoverable. Translate the requested interactions into deterministic `wait`, `click`, `fill`, and `send` operations. Do not claim success unless a captured snapshot proves the expected result.
 
-Restarted nikcli processes discover this skill through `.agents/skills/browser-control`. If the skill is not registered in the current workspace, install it once from the worktree root:
+Restarted ragu processes discover this skill through `.agents/skills/browser-control`. If the skill is not registered in the current workspace, install it once from the worktree root:
 
 ```bash
 bun run --cwd packages/browser-control install-skill
@@ -58,7 +58,7 @@ browser-control bundle \
 
 The bundle contains `screenshot.png`, `demo.mp4`, `preview.gif`, `manifest.json`, and `pr.md`.
 
-Use `pr.md` as the PR section; it embeds the GIF preview and links the full MP4. The bundle command also prints an absolute `file://` preview Markdown line — include that exact line in the final assistant response so nikcli can render the local preview inline, but never paste that `file://` URL into a pull request.
+Use `pr.md` as the PR section; it embeds the GIF preview and links the full MP4. The bundle command also prints an absolute `file://` preview Markdown line — include that exact line in the final assistant response so ragu can render the local preview inline, but never paste that `file://` URL into a pull request.
 
 When the user explicitly requests PR evidence or the task is already operating on a pull request:
 

@@ -23,7 +23,7 @@ type DocsIndexMeta = { summary: string; keywords: string[] }
 const meta: Record<string, DocsIndexMeta> = {
   "/docs": {
     summary:
-      "Source-of-truth overview of nikcli across the CLI, server, connectors and mobile app: what it is, how to install it, and how the pieces fit together.",
+      "Source-of-truth overview of ragu across the CLI, server, connectors and mobile app: what it is, how to install it, and how the pieces fit together.",
     keywords: [
       "overview",
       "getting started",
@@ -34,14 +34,14 @@ const meta: Record<string, DocsIndexMeta> = {
       "bun",
       "quickstart",
       "setup",
-      "what is nikcli",
+      "what is ragu",
       "first run",
       "onboarding",
     ],
   },
   "/docs/architecture": {
     summary:
-      "Map of the nikcli monorepo, CLI lifecycle, server stack, session runtime, storage model, integrations, mobile host and SDK boundary.",
+      "Map of the ragu monorepo, CLI lifecycle, server stack, session runtime, storage model, integrations, mobile host and SDK boundary.",
     keywords: [
       "architecture",
       "monorepo",
@@ -56,7 +56,7 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/cli": {
     summary:
-      "Complete command surface of the nikcli binary: every command, subcommand and flag exposed by the CLI entrypoint.",
+      "Complete command surface of the ragu binary: every command, subcommand and flag exposed by the CLI entrypoint.",
     keywords: [
       "cli",
       "command",
@@ -74,7 +74,7 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/configuration": {
     summary:
-      "How nikcli discovers, parses, merges, validates and applies configuration across global, project and runtime sources, including config file locations and precedence.",
+      "How ragu discovers, parses, merges, validates and applies configuration across global, project and runtime sources, including config file locations and precedence.",
     keywords: [
       "config",
       "configuration",
@@ -128,7 +128,7 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/providers": {
     summary:
-      "How nikcli builds its model catalog, resolves credentials, selects runtime adapters and streams requests to model providers.",
+      "How ragu builds its model catalog, resolves credentials, selects runtime adapters and streams requests to model providers.",
     keywords: [
       "provider",
       "providers",
@@ -155,7 +155,7 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/connectors": {
     summary:
-      "How nikcli connects external services, stores credentials, exposes connector tools and receives bot webhooks (GitHub, Slack, Linear, Notion and friends).",
+      "How ragu connects external services, stores credentials, exposes connector tools and receives bot webhooks (GitHub, Slack, Linear, Notion and friends).",
     keywords: [
       "connector",
       "connectors",
@@ -173,7 +173,7 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/routines": {
     summary:
-      "Saved prompts with schedule or API triggers, scoped per project — cron-style automation for recurring nikcli work.",
+      "Saved prompts with schedule or API triggers, scoped per project — cron-style automation for recurring ragu work.",
     keywords: [
       "routine",
       "routines",
@@ -208,7 +208,7 @@ const meta: Record<string, DocsIndexMeta> = {
     ],
   },
   "/docs/localization": {
-    summary: "Language, region, timezone and model reply-language settings managed through the nikcli locale command.",
+    summary: "Language, region, timezone and model reply-language settings managed through the ragu locale command.",
     keywords: [
       "locale",
       "localization",
@@ -224,7 +224,7 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/sessions": {
     summary:
-      "How nikcli creates, stores, streams, forks, reverts and resumes agent sessions across CLI, TUI, mobile and API clients.",
+      "How ragu creates, stores, streams, forks, reverts and resumes agent sessions across CLI, TUI, mobile and API clients.",
     keywords: [
       "session",
       "sessions",
@@ -267,7 +267,7 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/guides/plugins": {
     summary:
-      "Step-by-step guide to writing a nikcli plugin: asking nikcli to write one with the plugin tool, folder plugins and hot reload, the local file, the config entry, the two accepted module shapes, the plugin input, every hook, adding a custom tool with tool(), publishing to npm and debugging.",
+      "Step-by-step guide to writing a ragu plugin: asking ragu to write one with the plugin tool, folder plugins and hot reload, the local file, the config entry, the two accepted module shapes, the plugin input, every hook, adding a custom tool with tool(), publishing to npm and debugging.",
     keywords: [
       "write a plugin",
       "create plugin",
@@ -279,7 +279,7 @@ const meta: Record<string, DocsIndexMeta> = {
       "plugin module",
       "publish plugin",
       "plugin not loading",
-      "extend nikcli",
+      "extend ragu",
       "plugin tool",
       "self-extending",
       "hot reload plugin",
@@ -306,7 +306,7 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/guides/api": {
     summary:
-      "Quickstart for driving the nikcli HTTP API with curl and the typed client side by side: starting a server, authenticating, selecting a project, creating and prompting sessions, diffs, files, search, shell commands, permission replies, and a complete script.",
+      "Quickstart for driving the ragu HTTP API with curl and the typed client side by side: starting a server, authenticating, selecting a project, creating and prompting sessions, diffs, files, search, shell commands, permission replies, and a complete script.",
     keywords: [
       "api guide",
       "api tutorial",
@@ -340,13 +340,13 @@ const meta: Record<string, DocsIndexMeta> = {
       "error response",
       "404",
       "validation error",
-      "NIKCLI_TEST_HOME",
+      "RAGU_TEST_HOME",
       "throwaway server",
     ],
   },
   "/docs/guides/streaming": {
     summary:
-      "Streaming nikcli output: subscribing to the event feed before submitting, promptAsync, printing message.part.updated deltas, detecting session.idle, the useful event types, and the same flow with curl.",
+      "Streaming ragu output: subscribing to the event feed before submitting, promptAsync, printing message.part.updated deltas, detecting session.idle, the useful event types, and the same flow with curl.",
     keywords: [
       "streaming",
       "stream response",
@@ -380,7 +380,7 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/guides/custom-interface": {
     summary:
-      "Building a nikcli client: event-driven state keyed by part id, rendering parts, answering permission requests and questions, todos and diffs, reconnecting without losing the transcript, and a complete working terminal client.",
+      "Building a ragu client: event-driven state keyed by part id, rendering parts, answering permission requests and questions, todos and diffs, reconnecting without losing the transcript, and a complete working terminal client.",
     keywords: [
       "custom interface",
       "build a client",
@@ -462,7 +462,7 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/guides/ci": {
     summary:
-      "Running nikcli in CI: the GitHub Action and every input, OIDC token exchange versus GITHUB_TOKEN, scheduled unattended runs, starting a headless server on any CI, filtering permissions in an unattended run, and a review job that fails the build.",
+      "Running ragu in CI: the GitHub Action and every input, OIDC token exchange versus GITHUB_TOKEN, scheduled unattended runs, starting a headless server on any CI, filtering permissions in an unattended run, and a review job that fails the build.",
     keywords: [
       "ci",
       "github actions",
@@ -480,7 +480,7 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/build": {
     summary:
-      "The three ways to build on nikcli without forking it: plugins that run inside the agent, the typed HTTP client that drives a running server, and the embedded host that runs nikcli in your own process.",
+      "The three ways to build on ragu without forking it: plugins that run inside the agent, the typed HTTP client that drives a running server, and the embedded host that runs ragu in your own process.",
     keywords: [
       "build",
       "extend",
@@ -498,12 +498,12 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/build/client": {
     summary:
-      "Driving a running nikcli server with @nikcli-ai/sdk: creating a client, the { data, error } result envelope and throwOnError, instance selection, method naming, streaming event feeds, authentication headers and ClientError.",
+      "Driving a running ragu server with @ragu/sdk: creating a client, the { data, error } result envelope and throwOnError, instance selection, method naming, streaming event feeds, authentication headers and ClientError.",
     keywords: [
       "client",
       "sdk",
-      "createNikcliClient",
-      "@nikcli-ai/sdk",
+      "createRaguClient",
+      "@ragu/sdk",
       "http client",
       "typed client",
       "throwOnError",
@@ -511,14 +511,14 @@ const meta: Record<string, DocsIndexMeta> = {
       "event stream",
       "sse",
       "bearer token",
-      "script nikcli",
+      "script ragu",
       "automation",
       "ci",
     ],
   },
   "/docs/build/sdk": {
     summary:
-      "Embedding nikcli in-process with @nikcli-ai/sdk-next: creating a host, the Effect layer, directory binding, registering tools locally, and the process-global instance state caveat.",
+      "Embedding ragu in-process with @ragu/sdk-next: creating a host, the Effect layer, directory binding, registering tools locally, and the process-global instance state caveat.",
     keywords: [
       "embedded",
       "embed",
@@ -526,7 +526,7 @@ const meta: Record<string, DocsIndexMeta> = {
       "in-process",
       "no server",
       "effect layer",
-      "NikCli.create",
+      "Ragu.create",
       "register tool",
       "tool registry",
       "host",
@@ -534,7 +534,7 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/plugins": {
     summary:
-      "How nikcli installs plugins, patches server and TUI config, loads built-ins and exposes plugin hooks, plus skills.",
+      "How ragu installs plugins, patches server and TUI config, loads built-ins and exposes plugin hooks, plus skills.",
     keywords: [
       "plugin",
       "plugins",
@@ -550,7 +550,7 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/server-api": {
     summary:
-      "How the nikcli Hono server exposes CLI, TUI, mobile, workspace and generated HttpApi routes, including the OpenAPI surface and SDK.",
+      "How the ragu Hono server exposes CLI, TUI, mobile, workspace and generated HttpApi routes, including the OpenAPI surface and SDK.",
     keywords: [
       "server",
       "api",
@@ -572,17 +572,17 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/web-app": {
     summary:
-      "Browser-based access to nikcli sessions, the Studio management dashboard and the companion UI served from the web package.",
+      "Browser-based access to ragu sessions, the Studio management dashboard and the companion UI served from the web package.",
     keywords: ["web", "web app", "browser", "studio", "dashboard", "companion", "ui", "online", "cloud"],
   },
   "/docs/mobile": {
     summary:
-      "Running and managing nikcli from the Expo mobile app against a host server, including pairing and remote sessions.",
+      "Running and managing ragu from the Expo mobile app against a host server, including pairing and remote sessions.",
     keywords: ["mobile", "ios", "android", "expo", "phone", "app", "remote", "pair", "teleport", "push notification"],
   },
   "/docs/sync": {
     summary:
-      "How nikcli journals local events, projects them into typed snapshots, ships them through an idempotent outbox and replays them onto an optional remote hub.",
+      "How ragu journals local events, projects them into typed snapshots, ships them through an idempotent outbox and replays them onto an optional remote hub.",
     keywords: [
       "sync",
       "synchronization",
@@ -598,7 +598,7 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/mcp": {
     summary:
-      "How nikcli connects local and remote Model Context Protocol servers, authenticates OAuth servers and exposes MCP tools to agent sessions.",
+      "How ragu connects local and remote Model Context Protocol servers, authenticates OAuth servers and exposes MCP tools to agent sessions.",
     keywords: [
       "mcp",
       "model context protocol",
@@ -628,7 +628,7 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/storage": {
     summary:
-      "Persistent data layout, migrations, locks, caches and SQLite stores used by nikcli, and where files live on disk.",
+      "Persistent data layout, migrations, locks, caches and SQLite stores used by ragu, and where files live on disk.",
     keywords: [
       "storage",
       "database",
@@ -671,7 +671,7 @@ const meta: Record<string, DocsIndexMeta> = {
     keywords: ["brain", "memory", "consolidate", "context", "recall", "long term", "knowledge", "embedding"],
   },
   "/docs/island": {
-    summary: "NikcliIsland.app, the macOS Dynamic-Island-style notch HUD showing live nikcli session state.",
+    summary: "RaguIsland.app, the macOS Dynamic-Island-style notch HUD showing live ragu session state.",
     keywords: ["island", "macos", "notch", "hud", "menu bar", "desktop app", "status"],
   },
   "/docs/observability": {
@@ -726,12 +726,12 @@ const meta: Record<string, DocsIndexMeta> = {
   },
   "/docs/packages": {
     summary:
-      "The nikcli monorepo package map: the core CLI/TUI/server package plus supporting infrastructure, provider integrations and surface-area extensions.",
+      "The ragu monorepo package map: the core CLI/TUI/server package plus supporting infrastructure, provider integrations and surface-area extensions.",
     keywords: ["package", "packages", "monorepo", "workspace", "npm package", "sdk", "suite", "dependencies"],
   },
   "/docs/brand": {
     summary:
-      "The nikcli wordmark variants, how they are themed across surfaces and where the brand assets live in each package.",
+      "The ragu wordmark variants, how they are themed across surfaces and where the brand assets live in each package.",
     keywords: ["brand", "logo", "wordmark", "assets", "colors", "press kit"],
   },
   "/docs/source-map": {
@@ -767,7 +767,7 @@ const meta: Record<string, DocsIndexMeta> = {
 const apiMeta: Record<string, DocsIndexMeta> = {
   "/docs/api": {
     summary:
-      "Complete HTTP API reference for the nikcli server: base URL, the four authentication schemes, instance selection, streaming endpoints, the generated SDK client, and every resource group.",
+      "Complete HTTP API reference for the ragu server: base URL, the four authentication schemes, instance selection, streaming endpoints, the generated SDK client, and every resource group.",
     keywords: [
       "api",
       "http api",

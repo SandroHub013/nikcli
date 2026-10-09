@@ -1,5 +1,5 @@
 import { Component, Show } from "solid-js"
-import { Icon } from "@nikcli-ai/ui/icon"
+import { Icon } from "@ragu/ui/icon"
 
 type PromptDragOverlayProps = {
   type: "image" | "@mention" | null

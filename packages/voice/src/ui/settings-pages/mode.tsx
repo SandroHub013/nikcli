@@ -1,6 +1,6 @@
 /** Voce › Modalità: what the microphone does by default, and how the agent answers. */
 import { Show, For, type JSX } from "solid-js"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 import { describeShortcut } from "../../settings/shortcuts"
 import type { AgentEngine, AgentSpeed } from "../../settings/model"
 import type { VoiceSettingsState } from "../settings-state"
@@ -32,10 +32,10 @@ const AGENT_ENGINE_CHOICES: readonly { value: AgentEngine; readonly title: strin
     },
   },
   {
-    value: "nikcli",
-    title: "nikcli",
+    value: "ragu",
+    title: "ragu",
     get desc() {
-      return t("vui.engine.nikcli.desc")
+      return t("vui.engine.ragu.desc")
     },
   },
   {

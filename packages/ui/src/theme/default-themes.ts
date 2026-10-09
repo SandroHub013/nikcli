@@ -1,5 +1,5 @@
 import type { DesktopTheme } from "./types"
-import nikCliDefaultThemeJson from "./themes/nikcli-default.json"
+import raguDefaultThemeJson from "./themes/ragu-default.json"
 import tokyoThemeJson from "./themes/tokyonight.json"
 import draculaThemeJson from "./themes/dracula.json"
 import monokaiThemeJson from "./themes/monokai.json"
@@ -16,7 +16,7 @@ import gruvboxThemeJson from "./themes/gruvbox.json"
 import auraThemeJson from "./themes/aura.json"
 import { GENERATED_THEMES } from "./themes.generated"
 
-export const nikCliDefaultTheme = nikCliDefaultThemeJson as DesktopTheme
+export const raguDefaultTheme = raguDefaultThemeJson as DesktopTheme
 export const tokyonightTheme = tokyoThemeJson as DesktopTheme
 export const draculaTheme = draculaThemeJson as DesktopTheme
 export const monokaiTheme = monokaiThemeJson as DesktopTheme
@@ -34,7 +34,7 @@ export const auraTheme = auraThemeJson as DesktopTheme
 
 export const DEFAULT_THEMES: Record<string, DesktopTheme> = {
   ...GENERATED_THEMES,
-  "nikcli-default": nikCliDefaultTheme,
+  "ragu-default": raguDefaultTheme,
   aura: auraTheme,
   ayu: ayuTheme,
   carbonfox: carbonfoxTheme,

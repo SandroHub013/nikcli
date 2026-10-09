@@ -178,7 +178,7 @@ describe("OpenAI Responses route", () => {
       yield* LLMClient.generate(
         LLM.updateRequest(request, {
           model: Azure.responses("gpt-4.1-mini", {
-            baseURL: "https://nikcli-test.openai.azure.com/openai/v1/",
+            baseURL: "https://ragu-test.openai.azure.com/openai/v1/",
             apiKey: "azure-key",
             headers: { authorization: "Bearer stale" },
           }),

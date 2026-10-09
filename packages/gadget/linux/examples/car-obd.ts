@@ -3,17 +3,17 @@
  * adapter, tethered to the phone's hotspot or the car's own Wi-Fi.
  *
  * CarPlay and Android Auto are closed platforms (MFi and Google
- * certification), so nikcli does not run "inside" them. What a gadget can do
+ * certification), so ragu does not run "inside" them. What a gadget can do
  * is read the car: RPM, speed, coolant temperature, fault codes — and the
  * head unit still plays whatever the phone plays, so the agent's replies can
- * reach you through the nikcli mobile app's notifications.
+ * reach you through the ragu mobile app's notifications.
  *
  * ELM327 over serial: `/dev/ttyUSB0` for a USB adapter, `/dev/rfcomm0` after
  * `rfcomm bind` for a Bluetooth one. Lines are `AT` commands and PIDs in hex.
  */
 import { spawnSync } from "node:child_process"
 import { closeSync, openSync, readSync, writeSync } from "node:fs"
-import { Gadget } from "@nikcli-ai/gadget"
+import { Gadget } from "@ragu/gadget"
 
 const PORT = process.env.OBD_PORT ?? "/dev/ttyUSB0"
 const BAUD = process.env.OBD_BAUD ?? "38400"

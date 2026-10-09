@@ -3,17 +3,17 @@
  *
  * This is the Cloudflare-deployable half of the Discord integration. The
  * Gateway bot in `src/bot.ts` needs a persistent websocket, a git working copy
- * and a child `nikcli serve` process, none of which a Worker can host — so it
+ * and a child `ragu serve` process, none of which a Worker can host — so it
  * stays on Railway. What runs here is the slash-command surface Discord can
  * reach over plain HTTP:
  *
  *   POST /discord/interactions   Ed25519-verified interaction endpoint
  *   GET  /health                 liveness + configuration probe
  *
- * The Worker owns no agent: it forwards the prompt to a nikcli server
- * (`NIKCLI_URL`) the way `packages/slack/src/worker.ts` does. Per-channel state
+ * The Worker owns no agent: it forwards the prompt to a ragu server
+ * (`RAGU_URL`) the way `packages/slack/src/worker.ts` does. Per-channel state
  * lives in a Durable Object rather than KV so that two interactions racing in
- * the same channel cannot each create their own nikcli session — the DO's input
+ * the same channel cannot each create their own ragu session — the DO's input
  * gate serializes them onto one.
  */
 
@@ -23,11 +23,11 @@ interface Env {
   DISCORD_PUBLIC_KEY: string
   DISCORD_APPLICATION_ID: string
   DISCORD_BOT_TOKEN?: string
-  NIKCLI_URL: string
-  NIKCLI_TOKEN?: string
-  NIKCLI_USERNAME?: string
-  NIKCLI_PASSWORD?: string
-  NIKCLI_TIMEOUT_MS?: string
+  RAGU_URL: string
+  RAGU_TOKEN?: string
+  RAGU_USERNAME?: string
+  RAGU_PASSWORD?: string
+  RAGU_TIMEOUT_MS?: string
   DISCORD_ALLOWED_CHANNELS?: string
   CHANNEL_SESSIONS: DurableObjectNamespace<ChannelSession>
 }
@@ -65,17 +65,17 @@ interface Interaction {
   }
 }
 
-interface NikcliResponse<T = unknown> {
+interface RaguResponse<T = unknown> {
   error?: string
   data?: T
 }
 
-interface NikcliSessionInfo {
+interface RaguSessionInfo {
   id: string
   share?: { url: string }
 }
 
-interface NikcliMessagePart {
+interface RaguMessagePart {
   type: string
   text?: string
 }
@@ -88,8 +88,8 @@ export default {
       return json({
         status: "healthy",
         timestamp: Date.now(),
-        nikcliUrl: env.NIKCLI_URL || "not configured",
-        nikcliAuth: env.NIKCLI_TOKEN ? "bearer" : env.NIKCLI_PASSWORD ? "basic" : "none",
+        raguUrl: env.RAGU_URL || "not configured",
+        raguAuth: env.RAGU_TOKEN ? "bearer" : env.RAGU_PASSWORD ? "basic" : "none",
         publicKey: env.DISCORD_PUBLIC_KEY ? "configured" : "not configured",
         applicationId: env.DISCORD_APPLICATION_ID ? "configured" : "not configured",
       })
@@ -143,15 +143,15 @@ async function handleInteraction(request: Request, env: Env, ctx: ExecutionConte
 
   const prompt = interaction.data?.options?.find((option) => option.name === "prompt")?.value?.trim()
   if (!prompt) {
-    return reply("Give me something to work on: `/nikcli prompt:<your request>`")
+    return reply("Give me something to work on: `/ragu prompt:<your request>`")
   }
 
-  if (!getNikcliUrl(env)) {
-    return reply("NIKCLI_URL is not configured on this Worker.")
+  if (!getRaguUrl(env)) {
+    return reply("RAGU_URL is not configured on this Worker.")
   }
 
   // Discord kills the interaction after 3 seconds, so acknowledge now and let
-  // the channel's Durable Object edit the deferred message when nikcli answers.
+  // the channel's Durable Object edit the deferred message when ragu answers.
   const stub = env.CHANNEL_SESSIONS.get(env.CHANNEL_SESSIONS.idFromName(channel))
   ctx.waitUntil(
     stub
@@ -175,7 +175,7 @@ export interface InteractionRef {
 }
 
 /**
- * One instance per Discord channel. Holds the nikcli session id for that
+ * One instance per Discord channel. Holds the ragu session id for that
  * channel and runs the prompts against it. Because a Durable Object handles one
  * request at a time, prompts in the same channel queue behind each other
  * instead of forking separate sessions.
@@ -185,7 +185,7 @@ export class ChannelSession extends DurableObject<Env> {
     try {
       const sessionId = await this.sessionId(interaction.channel)
       if (!sessionId) {
-        await editOriginal(interaction, "Couldn't create a nikcli session.")
+        await editOriginal(interaction, "Couldn't create a ragu session.")
         return
       }
 
@@ -197,15 +197,15 @@ export class ChannelSession extends DurableObject<Env> {
     }
   }
 
-  /** Returns the channel's nikcli session, creating it on first use. */
+  /** Returns the channel's ragu session, creating it on first use. */
   private async sessionId(channel: string): Promise<string | null> {
     const existing = await this.ctx.storage.get<string>("sessionId")
     if (existing) return existing
 
-    const nikcliUrl = getNikcliUrl(this.env)
-    if (!nikcliUrl) return null
+    const raguUrl = getRaguUrl(this.env)
+    if (!raguUrl) return null
 
-    const response = await nikcliFetch(this.env, `${nikcliUrl}/session`, {
+    const response = await raguFetch(this.env, `${raguUrl}/session`, {
       method: "POST",
       body: JSON.stringify({ title: `Discord channel ${channel}` }),
     })
@@ -215,7 +215,7 @@ export class ChannelSession extends DurableObject<Env> {
       return null
     }
 
-    const created = unwrapNikcliResponse((await response.json()) as NikcliResponse<NikcliSessionInfo>)
+    const created = unwrapRaguResponse((await response.json()) as RaguResponse<RaguSessionInfo>)
     if (created.error || !created.data?.id) {
       console.error("Failed to create session:", created.error)
       return null
@@ -227,10 +227,10 @@ export class ChannelSession extends DurableObject<Env> {
   }
 
   private async sendPrompt(sessionId: string, text: string): Promise<string> {
-    const nikcliUrl = getNikcliUrl(this.env)
-    if (!nikcliUrl) return "NIKCLI_URL is not configured on this Worker."
+    const raguUrl = getRaguUrl(this.env)
+    if (!raguUrl) return "RAGU_URL is not configured on this Worker."
 
-    const response = await nikcliFetch(this.env, `${nikcliUrl}/session/${sessionId}/message`, {
+    const response = await raguFetch(this.env, `${raguUrl}/session/${sessionId}/message`, {
       method: "POST",
       body: JSON.stringify({ parts: [{ type: "text", text }] }),
     })
@@ -241,11 +241,11 @@ export class ChannelSession extends DurableObject<Env> {
       return "Error processing request."
     }
 
-    const result = unwrapNikcliResponse(
-      (await response.json()) as NikcliResponse<{
+    const result = unwrapRaguResponse(
+      (await response.json()) as RaguResponse<{
         info?: { content: string }
         content?: string
-        parts?: NikcliMessagePart[]
+        parts?: RaguMessagePart[]
       }>,
     )
 
@@ -261,7 +261,7 @@ export class ChannelSession extends DurableObject<Env> {
 function extractResponseText(data?: {
   info?: { content: string }
   content?: string
-  parts?: NikcliMessagePart[]
+  parts?: RaguMessagePart[]
 }): string {
   if (!data) return "I received your message."
   if (data.info?.content) return data.info.content
@@ -376,8 +376,8 @@ function fromHex(value: string): Uint8Array | null {
   return bytes
 }
 
-async function nikcliFetch(env: Env, url: string, init: RequestInit): Promise<Response | null> {
-  const timeout = Number(env.NIKCLI_TIMEOUT_MS) || REQUEST_TIMEOUT_MS
+async function raguFetch(env: Env, url: string, init: RequestInit): Promise<Response | null> {
+  const timeout = Number(env.RAGU_TIMEOUT_MS) || REQUEST_TIMEOUT_MS
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeout)
 
@@ -388,7 +388,7 @@ async function nikcliFetch(env: Env, url: string, init: RequestInit): Promise<Re
       signal: controller.signal,
     })
   } catch (err) {
-    console.error("nikcli request failed:", err)
+    console.error("ragu request failed:", err)
     return null
   } finally {
     clearTimeout(timeoutId)
@@ -403,27 +403,27 @@ function isChannelAllowed(env: Env, channel: string): boolean {
   return allowed.includes(channel)
 }
 
-function getNikcliUrl(env: Env): string | null {
-  if (!env.NIKCLI_URL) return null
-  return env.NIKCLI_URL.replace(/\/+$/, "")
+function getRaguUrl(env: Env): string | null {
+  if (!env.RAGU_URL) return null
+  return env.RAGU_URL.replace(/\/+$/, "")
 }
 
 /**
- * A server started with `nikcli mobile serve` sets `mobileAuthRequired`, which
+ * A server started with `ragu mobile serve` sets `mobileAuthRequired`, which
  * rejects Basic auth outright and accepts only a bearer — a mobile pairing
- * token, an external session, or an `nku_` user token. A plain `nikcli serve`
+ * token, an external session, or an `nku_` user token. A plain `ragu serve`
  * takes Basic. Prefer the bearer when both are configured.
  */
 function getAuthHeader(env: Env): { Authorization: string } | Record<string, never> {
-  if (env.NIKCLI_TOKEN) return { Authorization: `Bearer ${env.NIKCLI_TOKEN}` }
-  if (!env.NIKCLI_PASSWORD) return {}
-  const username = env.NIKCLI_USERNAME || "nikcli"
-  return { Authorization: `Basic ${btoa(`${username}:${env.NIKCLI_PASSWORD}`)}` }
+  if (env.RAGU_TOKEN) return { Authorization: `Bearer ${env.RAGU_TOKEN}` }
+  if (!env.RAGU_PASSWORD) return {}
+  const username = env.RAGU_USERNAME || "ragu"
+  return { Authorization: `Basic ${btoa(`${username}:${env.RAGU_PASSWORD}`)}` }
 }
 
-function unwrapNikcliResponse<T>(value: NikcliResponse<T> | T): { data?: T; error?: string } {
+function unwrapRaguResponse<T>(value: RaguResponse<T> | T): { data?: T; error?: string } {
   if (value && typeof value === "object" && "data" in value) {
-    const wrapped = value as NikcliResponse<T>
+    const wrapped = value as RaguResponse<T>
     return { data: wrapped.data, error: wrapped.error }
   }
   return { data: value as T }

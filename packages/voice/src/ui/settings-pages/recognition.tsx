@@ -1,6 +1,6 @@
 /** Voce › Riconoscimento: how speech becomes text, and the keys it spends. */
 import { Show, type JSX } from "solid-js"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 import { STREAM_DAILY_CAP_MAX_USD } from "../../settings/model"
 import { HowItWorks } from "../how-it-works"
 import { formatMaskedApiKey } from "../shortcut-capture"

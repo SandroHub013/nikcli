@@ -1,6 +1,6 @@
 // installed by ADE — ade-agent-session
 // ADE overwrites this file when the integration is reinstalled, and removes it when it is switched off.
-// It tells ADE which conversation this nikcli TUI shows, and only when ADE started the TUI.
+// It tells ADE which conversation this ragu TUI shows, and only when ADE started the TUI.
 import { existsSync, renameSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
@@ -23,7 +23,7 @@ async function tui(api, options) {
       if (info && info.parentID) return
       if (info && typeof info.directory === "string") sessionDir = info.directory
     } catch {}
-    const report = { pane, nonce, agent: "nikcli", sessionId: sessionID, at: Date.now(), source: "switch" }
+    const report = { pane, nonce, agent: "ragu", sessionId: sessionID, at: Date.now(), source: "switch" }
     if (sessionDir) report.sessionDir = sessionDir
     const target = join(dir, nonce + ".json")
     const staging = target + ".part"

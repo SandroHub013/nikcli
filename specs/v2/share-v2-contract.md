@@ -14,7 +14,7 @@ The answer is **a session-scoped handle plus a typed `Data` envelope list**. Mod
 
 `ShareNext` in `src/share/share-next.ts`. SQL in `src/share/share.sql.ts` (`session_share`, `local_share`). Repo in `src/share/repo.ts`. Short-link redirects stay a justified open payload in `specs/README.md` §Open payloads.
 
-`NIKCLI_DISABLE_SHARE` makes create/remove no-ops / throws.
+`RAGU_DISABLE_SHARE` makes create/remove no-ops / throws.
 
 ## Envelope
 

@@ -23,14 +23,14 @@ const toc = [
 
 <DocsLayout
   title="MCP"
-  subtitle="How nikcli connects local and remote Model Context Protocol servers, authenticates OAuth servers, and exposes MCP tools to agent sessions."
+  subtitle="How ragu connects local and remote Model Context Protocol servers, authenticates OAuth servers, and exposes MCP tools to agent sessions."
   description="Guide to configuring local and remote MCP servers, OAuth authentication, and MCP tool exposure."
   toc={toc}
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
-      MCP support is implemented in <code>packages/nikcli/src/mcp/index.ts</code>. The service reads
+      MCP support is implemented in <code>packages/ragu/src/mcp/index.ts</code>. The service reads
       <code>config.mcp</code>, creates local stdio or remote HTTP/SSE clients, records status,
       converts server tools into AI SDK dynamic tools, and exposes prompts/resources to sessions.
     </p>
@@ -53,17 +53,17 @@ const toc = [
   <section id="add-server" class="doc-section">
     <h2>Add a server</h2>
     <p>
-      Use <code>nikcli mcp add</code> for interactive config patching, or edit
-      <code>mcp</code> in <code>nikcli.json</code> directly. <code>nikcli mcp list</code> initializes
+      Use <code>ragu mcp add</code> for interactive config patching, or edit
+      <code>mcp</code> in <code>nikcli.json</code> directly. <code>ragu mcp list</code> initializes
       configured servers and shows status.
     </p>
     <DocCode language="bash">
-nikcli mcp add
-nikcli mcp list
-nikcli mcp auth remote-docs
-nikcli mcp auth list
-nikcli mcp logout remote-docs
-nikcli mcp debug remote-docs
+ragu mcp add
+ragu mcp list
+ragu mcp auth remote-docs
+ragu mcp auth list
+ragu mcp logout remote-docs
+ragu mcp debug remote-docs
     </DocCode>
     <table class="doc-table">
       <thead><tr><th>Command</th><th>Purpose</th></tr></thead>
@@ -83,7 +83,7 @@ nikcli mcp debug remote-docs
     <p>
       Local servers use <code>StdioClientTransport</code>. The command runs with cwd set to the
       current project directory. The environment is <code>process.env</code> plus configured
-      <code>environment</code>; when the command is <code>nikcli</code>, <code>BUN_BE_BUN=1</code>
+      <code>environment</code>; when the command is <code>ragu</code>, <code>BUN_BE_BUN=1</code>
       is added.
     </p>
     <DocCode language="json" title="nikcli.json">
@@ -115,7 +115,7 @@ nikcli mcp debug remote-docs
   <section id="remote" class="doc-section">
     <h2>Remote servers</h2>
     <p>
-      Remote servers use two transports in sequence. nikcli tries
+      Remote servers use two transports in sequence. ragu tries
       <code>StreamableHTTPClientTransport</code> first, then <code>SSEClientTransport</code>. Both
       receive configured headers and the OAuth auth provider when OAuth is enabled.
     </p>
@@ -171,7 +171,7 @@ nikcli mcp debug remote-docs
     </DocCode>
     <DocCallout type="info" title="Client registration errors">
       <p>
-        If a server returns an unauthorized error mentioning registration or client id, nikcli reports
+        If a server returns an unauthorized error mentioning registration or client id, ragu reports
         <code>needs_client_registration</code> and asks you to add <code>clientId</code> in config.
       </p>
     </DocCallout>
@@ -263,7 +263,7 @@ curl -X POST http://127.0.0.1:4096/mcp/remote-docs/toggle \
     <table class="doc-table">
       <thead><tr><th>Symptom</th><th>Likely cause</th><th>Fix</th></tr></thead>
       <tbody>
-        <tr><td><code>needs_auth</code></td><td>Remote server requires OAuth and no valid token is stored.</td><td>Run <code>nikcli mcp auth &lt;name&gt;</code>.</td></tr>
+        <tr><td><code>needs_auth</code></td><td>Remote server requires OAuth and no valid token is stored.</td><td>Run <code>ragu mcp auth &lt;name&gt;</code>.</td></tr>
         <tr><td><code>needs_client_registration</code></td><td>Server does not support dynamic client registration.</td><td>Add <code>oauth.clientId</code>, and client secret if required.</td></tr>
         <tr><td>Local server failed</td><td>Command missing, bad args, bad cwd, or server did not initialize before timeout.</td><td>Run the command manually from the project directory and increase timeout if needed.</td></tr>
         <tr><td>Connected but no tools</td><td><code>listTools</code> failed after connect.</td><td>Check server logs and tool-list response.</td></tr>
@@ -277,12 +277,12 @@ curl -X POST http://127.0.0.1:4096/mcp/remote-docs/toggle \
     <table class="doc-table">
       <thead><tr><th>Need</th><th>File</th></tr></thead>
       <tbody>
-        <tr><td>MCP service</td><td><code>packages/nikcli/src/mcp/index.ts</code></td></tr>
-        <tr><td>MCP auth storage</td><td><code>packages/nikcli/src/mcp/auth.ts</code></td></tr>
-        <tr><td>OAuth provider and callback</td><td><code>packages/nikcli/src/mcp/oauth-provider.ts</code>, <code>packages/nikcli/src/mcp/oauth-callback.ts</code></td></tr>
-        <tr><td>CLI command</td><td><code>packages/nikcli/src/cli/cmd/mcp.ts</code></td></tr>
-        <tr><td>Classic routes</td><td><code>packages/nikcli/src/server/httpapi/mcp.ts</code></td></tr>
-        <tr><td>Typed routes</td><td><code>packages/nikcli/src/server/httpapi/mcp.ts</code></td></tr>
+        <tr><td>MCP service</td><td><code>packages/ragu/src/mcp/index.ts</code></td></tr>
+        <tr><td>MCP auth storage</td><td><code>packages/ragu/src/mcp/auth.ts</code></td></tr>
+        <tr><td>OAuth provider and callback</td><td><code>packages/ragu/src/mcp/oauth-provider.ts</code>, <code>packages/ragu/src/mcp/oauth-callback.ts</code></td></tr>
+        <tr><td>CLI command</td><td><code>packages/ragu/src/cli/cmd/mcp.ts</code></td></tr>
+        <tr><td>Classic routes</td><td><code>packages/ragu/src/server/httpapi/mcp.ts</code></td></tr>
+        <tr><td>Typed routes</td><td><code>packages/ragu/src/server/httpapi/mcp.ts</code></td></tr>
         <tr><td>TUI dialog</td><td><code>packages/tui/src/component/dialog-mcp.tsx</code></td></tr>
       </tbody>
     </table>

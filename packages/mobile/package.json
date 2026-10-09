@@ -1,5 +1,5 @@
 {
-  "name": "@nikcli-ai/mobile",
+  "name": "@ragu/mobile",
   "version": "1.431.0",
   "private": true,
   "main": "expo-router/entry",

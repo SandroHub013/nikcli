@@ -1,10 +1,10 @@
 /**
  * The bot section: a contact list, a conversation, a card.
  *
- * A bot is a nikcli agent — a markdown file with frontmatter and a system
- * prompt under `.nikcli/agent/` in the project or in nikcli's global
- * configuration, created by `nikcli agent create` and started with
- * `nikcli --agent <name>`. The section used to be a roster and a form: a way
+ * A bot is a ragu agent — a markdown file with frontmatter and a system
+ * prompt under `.nikcli/agent/` in the project or in ragu's global
+ * configuration, created by `ragu agent create` and started with
+ * `ragu --agent <name>`. The section used to be a roster and a form: a way
  * to write that file. It is now the way to *use* it, laid out as a
  * messaging app lays out its contacts:
  *
@@ -19,7 +19,7 @@
  *   - on the right its card: what it is for, what it runs on, its objectives,
  *     the file, and the form to change any of it.
  *
- * A nikcli bot's conversation is a session on ADE's nikcli server
+ * A ragu bot's conversation is a session on ADE's ragu server
  * (`serve-turn.ts`); Claude Code's and Codex's are one process per turn,
  * continued by session id (`turn.ts`). `talk.ts` is the thread. "Terminale"
  * still opens the full TUI in a pane for whoever wants it.
@@ -43,7 +43,7 @@ import {
   splitPrompt,
   type AgentFile,
   type AgentScope,
-} from "./nikcli"
+} from "./ragu"
 import { ACCOUNT_PLAN, localAccountStore, type BotAccount } from "./account"
 import {
   generationSpend,
@@ -111,7 +111,7 @@ import {
 } from "./routine"
 import { forgetBotTraces } from "./forget"
 import { RoutineSection, type RoutinePanelDeps } from "./routine-panel"
-import { botModelLabel, catalogFree, catalogFromText, modelGone, nikcliModelVariants } from "./catalog"
+import { botModelLabel, catalogFree, catalogFromText, modelGone, raguModelVariants } from "./catalog"
 import { effortChoices, effortToSave } from "./effort"
 import { appMemoryStore } from "./memory-app"
 import { MemorySection } from "./memory-panel"
@@ -253,8 +253,8 @@ const turns = createBotTurns({
 /*
  * The checks every turn of a bot passes before it starts: a project's bot
  * is asked about first (B3, `trust.ts`), and what runs is the file as it was
- * read and trusted just now, not the copy the roster loaded earlier; a nikcli
- * bot that grants itself the shell does not start (B8c); a nikcli bot loads
+ * read and trusted just now, not the copy the roster loaded earlier; a ragu
+ * bot that grants itself the shell does not start (B8c); a ragu bot loads
  * the project's own configuration, so the project is asked about (B3b, B8d). `confirm` is the dialog; a routine passes one that always says no.
  */
 async function admitTurn(
@@ -270,14 +270,14 @@ async function admitTurn(
   })
   if (!verdict.ok) return verdict
   const trusted = read === undefined ? bot : readAgentFile({ path: bot.path, scope: bot.scope, text: read })
-  const nikcli = runnerById(trusted.runner).id === "nikcli"
+  const ragu = runnerById(trusted.runner).id === "ragu"
   /*
    * A grant in the bot's file or the project's nikcli.json no longer stops
    * it: its session's rules come after them (B8d, `serve-rules.ts`), so the
    * shell and folders outside are asked about, the block list denied.
    */
-  // ADE's server loads the project's configuration for any nikcli bot, the user's own too (B8d).
-  if (root && nikcli) {
+  // ADE's server loads the project's configuration for any ragu bot, the user's own too (B8d).
+  if (root && ragu) {
     const project = await admitProject(root, {
       store: localTrustStore(PROJECT_TRUST_KEY),
       surface: () => projectSurface(root, projectFs),
@@ -312,7 +312,7 @@ async function readBotFile(path: string): Promise<AgentFile | undefined> {
   }
 }
 
-/* nikcli's catalog of one provider, read again after ten minutes; one that could not be read is not kept. */
+/* ragu's catalog of one provider, read again after ten minutes; one that could not be read is not kept. */
 const catalogs = new Map<string, { at: number; text: Promise<string> }>()
 const loadCatalog = (provider: string) => {
   const kept = catalogs.get(provider)
@@ -328,8 +328,8 @@ const loadCatalog = (provider: string) => {
 /**
  * The models a bot can be pinned to, from the Chat's catalog (composer-chip,
  * pezzo 1): `/config/providers` when ADE's server is already open on the
- * folder, otherwise the same records from `nikcli models --verbose`. The
- * form used to list nikcli's 385 bare ids, free and paid alike. Nothing is
+ * folder, otherwise the same records from `ragu models --verbose`. The
+ * form used to list ragu's 385 bare ids, free and paid alike. Nothing is
  * started for it: opening a folder asks for its trust, and a form cannot.
  */
 async function botModels(cwd: string): Promise<ModelRead> {
@@ -358,9 +358,9 @@ export interface BotCatalog {
   readonly recent: () => readonly ModelRef[]
 }
 
-/** Whether a nikcli bot's model is free, by the catalog (review, M2); undefined for the other runners. */
+/** Whether a ragu bot's model is free, by the catalog (review, M2); undefined for the other runners. */
 async function catalogFreeOf(bot: AgentFile): Promise<boolean | undefined> {
-  if (runnerById(bot.runner).id !== "nikcli" || !bot.model) return undefined
+  if (runnerById(bot.runner).id !== "ragu" || !bot.model) return undefined
   return catalogFree(bot.model, loadCatalog)
 }
 
@@ -668,7 +668,7 @@ const shared = createRoot(() => {
   /*
    * The roster is the directory, re-read rather than remembered.
    *
-   * A bot is a file the user can open in the editor two panes away, and nikcli
+   * A bot is a file the user can open in the editor two panes away, and ragu
    * itself writes to the same place — a list held in memory would be a second
    * opinion about what exists. `reloads` is the handle for "something changed,
    * look again".
@@ -689,7 +689,7 @@ const shared = createRoot(() => {
    * The models a bot can be pinned to: the one catalog, the Chat's
    * (`botModels`), read when a model menu opens. As a resource it was read
    * as the section mounted, even for no folder at all (review of
-   * catalogo-modelli, BASSO): `nikcli models --verbose`, 2.6 s, for a user
+   * catalogo-modelli, BASSO): `ragu models --verbose`, 2.6 s, for a user
    * who never opened the menu.
    */
   const [catalogState, setCatalogState] = createSignal<ModelSourceState>({ kind: "idle" })
@@ -987,7 +987,7 @@ export function BotsMain(props: BotsMainProps) {
   /*
    * «Terminale»: a turn's checks first (a project's bot is asked about, a self-approving one is
    * refused), then the pane with the file as it was trusted. No project question: the terminal is
-   * the user's own nikcli (bots 7).
+   * the user's own ragu (bots 7).
    */
   const launch = (bot: AgentFile) => {
     void launchBot(bot, {
@@ -1284,7 +1284,7 @@ function Thread(props: {
   }
   const chooseModel = (value: string) => {
     if (value === model()) return
-    const variants = runner().id === "nikcli" && value ? variantsOf(props.models, parseModelRef(value)) : undefined
+    const variants = runner().id === "ragu" && value ? variantsOf(props.models, parseModelRef(value)) : undefined
     void change(modelChange(value, effort(), variants))
   }
   const chooseEffort = (value: string) => {
@@ -1294,7 +1294,7 @@ function Thread(props: {
 
   return (
     <div data-slot="bots-thread">
-      <Show when={runnerById(props.bot.runner).id === "nikcli"}>
+      <Show when={runnerById(props.bot.runner).id === "ragu"}>
         <p data-slot="bots-rules-note">{t("bots.serve.rulesNote")}</p>
       </Show>
       <div data-slot="bots-messages" ref={(el) => (scroller = el)}>
@@ -1343,7 +1343,7 @@ function Thread(props: {
                 <button type="button" data-slot="bots-btn" onClick={() => props.onAnswer("reject", asked().requestID)}>
                   {t("bots.permission.deny")}
                 </button>
-                {/* ADE's «Sempre», for this bot: nikcli's own would be every bot's. */}
+                {/* ADE's «Sempre», for this bot: ragu's own would be every bot's. */}
                 <Show when={(asked().always?.length ?? 0) > 0}>
                   <button
                     type="button"
@@ -1444,7 +1444,7 @@ function Thread(props: {
         {/* Under the text, in the same box: the bot's model and effort, then Invia (as the Chat's). */}
         <div data-slot="bots-composer-row">
           <Show
-            when={runner().id === "nikcli"}
+            when={runner().id === "ragu"}
             fallback={
               <ChipMenu
                 kind="model"
@@ -1463,7 +1463,7 @@ function Thread(props: {
               models={props.models}
               {...(props.catalog ? { state: props.catalog.state() } : {})}
               recent={props.catalog?.recent() ?? []}
-              defaultLabel={t("bots.engine.nikcliDefault")}
+              defaultLabel={t("bots.engine.raguDefault")}
               {...(props.bot.model ? { kept: props.bot.model } : {})}
               fallback={(value) => botModelLabel(value)}
               onOpen={() => props.catalog?.open()}
@@ -1879,14 +1879,14 @@ function BotCard(props: {
 
 /**
  * Two ways to make a bot, and the difference is one field. Leave the persona
- * empty and nikcli's own model writes it from the description — that is
- * `nikcli agent create`, the native route, and it also chooses the identifier
+ * empty and ragu's own model writes it from the description — that is
+ * `ragu agent create`, the native route, and it also chooses the identifier
  * and the "when to use" line. Write a persona and the file is written
  * directly, byte-compatible with the generated one, because paying a model to
  * produce a prompt that is about to be thrown away is not a feature.
  *
- * The model list comes from nikcli, and "predefinito" is a real answer: a bot
- * with no `model` key runs on whatever nikcli is configured for, which is the
+ * The model list comes from ragu, and "predefinito" is a real answer: a bot
+ * with no `model` key runs on whatever ragu is configured for, which is the
  * right default for someone who has not thought about it.
  */
 function BotForm(props: {
@@ -1905,7 +1905,7 @@ function BotForm(props: {
   const [effort, setEffort] = createSignal("")
   // A level the chosen model does not have: shown as the default, and saved as none.
   const [staleEffort, setStaleEffort] = createSignal<string>()
-  const [runner, setRunner] = createSignal<string>("nikcli")
+  const [runner, setRunner] = createSignal<string>("ragu")
   const [objectives, setObjectives] = createSignal("")
   const [avatar, setAvatar] = createSignal<string>()
   const [problem, setProblem] = createSignal<string>()
@@ -1931,7 +1931,7 @@ function BotForm(props: {
 
     if (generating()) {
       const yes = await askYesNo(generationNotice(model()), {
-        ok: t("bots.form.generateWithNikcli"),
+        ok: t("bots.form.generateWithRagu"),
         cancel: t("bots.form.cancel"),
       })
       if (!yes) return
@@ -1948,7 +1948,7 @@ function BotForm(props: {
         ...(model() ? { model: model() } : {}),
         ...(effortToSave(effort(), staleEffort()) ? { effort: effortToSave(effort(), staleEffort()) } : {}),
         ...(avatar() ? { avatar: avatar() } : {}),
-        ...(runner() !== "nikcli" ? { runner: runner() } : {}),
+        ...(runner() !== "ragu" ? { runner: runner() } : {}),
         objectives: objectives()
           .split("\n")
           .map((line) => line.replace(/^[-*•]\s*/, "").trim())
@@ -2011,7 +2011,7 @@ function BotForm(props: {
         runner={runner()}
         model={model()}
         effort={effort()}
-        nikcliModels={props.models}
+        raguModels={props.models}
         {...(props.catalog ? { catalog: props.catalog } : {})}
         onStale={setStaleEffort}
         onRunner={(id) => {
@@ -2072,7 +2072,7 @@ function BotForm(props: {
           {t("bots.form.cancel")}
         </button>
         <button type="submit" data-slot="bots-btn" data-tone="primary" disabled={busy()}>
-          {busy() ? t("bots.form.creating") : generating() ? t("bots.form.generateWithNikcli") : t("bots.form.create")}
+          {busy() ? t("bots.form.creating") : generating() ? t("bots.form.generateWithRagu") : t("bots.form.create")}
         </button>
       </div>
       <Show when={busy() && generating()}>
@@ -2089,7 +2089,7 @@ function BotForm(props: {
 /**
  * Which program, which model, how hard.
  *
- * nikcli's models are a closed list asked of nikcli, because a name it has no
+ * ragu's models are a closed list asked of ragu, because a name it has no
  * provider for fails at launch. The other runners take free text with
  * suggestions: Claude Code and Codex accept aliases and new model names long
  * before a list here learns them, and refuse a wrong one in their own words.
@@ -2097,7 +2097,7 @@ function BotForm(props: {
 
 /**
  * The efforts a bot's model offers, for the form and the composer's chip
- * alike. A nikcli model's are its variants: the catalog's, or its provider's
+ * alike. A ragu model's are its variants: the catalog's, or its provider's
  * for a model the catalog lacks.
  */
 function createEfforts(
@@ -2111,37 +2111,37 @@ function createEfforts(
   const runner = createMemo<Runner>(() => runnerById(input().runner))
   const model = () => input().model
   const listed = createMemo(() =>
-    runner().id === "nikcli" && model() ? variantsOf(input().models, parseModelRef(model())) : undefined,
+    runner().id === "ragu" && model() ? variantsOf(input().models, parseModelRef(model())) : undefined,
   )
   const [variants] = createResource(
-    () => (runner().id === "nikcli" && model() && listed() === undefined ? model() : null),
-    (name) => nikcliModelVariants(name, loadCatalog),
+    () => (runner().id === "ragu" && model() && listed() === undefined ? model() : null),
+    (name) => raguModelVariants(name, loadCatalog),
   )
   return createMemo(() =>
     effortChoices({
-      nikcli: runner().id === "nikcli",
+      ragu: runner().id === "ragu",
       fixed: runner().efforts,
       // Only this model's, read: a resource keeps the last value when the model is cleared or while it loads.
       variants:
-        runner().id === "nikcli" && model() ? (listed() ?? (!variants.loading ? variants() : undefined)) : undefined,
+        runner().id === "ragu" && model() ? (listed() ?? (!variants.loading ? variants() : undefined)) : undefined,
       saved: input().effort,
     }),
   )
 }
 
 /**
- * Whether a nikcli bot's model has left its provider's catalog, as the card,
+ * Whether a ragu bot's model has left its provider's catalog, as the card,
  * the composer's chip and the form say it (review of bot-riquadro, a). Read
  * with the provider's catalog the efforts already read; false while it is
  * read, and for the other runners.
  */
 function createGone(input: () => { readonly runner: string | undefined; readonly model: string }) {
   const [gone] = createResource(
-    () => (runnerById(input().runner).id === "nikcli" && input().model ? input().model : null),
+    () => (runnerById(input().runner).id === "ragu" && input().model ? input().model : null),
     (model) => modelGone(model, loadCatalog),
   )
   // A resource keeps the last model's answer: only this model's, read.
-  return () => runnerById(input().runner).id === "nikcli" && Boolean(input().model) && !gone.loading && gone() === true
+  return () => runnerById(input().runner).id === "ragu" && Boolean(input().model) && !gone.loading && gone() === true
 }
 
 function EngineFields(props: {
@@ -2149,7 +2149,7 @@ function EngineFields(props: {
   runner: string
   model: string
   effort: string
-  nikcliModels: readonly ChatModelChoice[]
+  raguModels: readonly ChatModelChoice[]
   /** How the list is read: when the model menu opens (`BotCatalog`). */
   catalog?: BotCatalog
   /** The model the file already names, kept selectable when a list lacks it. */
@@ -2169,7 +2169,7 @@ function EngineFields(props: {
     runner: props.runner,
     model: props.model,
     effort: props.effort,
-    models: props.nikcliModels,
+    models: props.raguModels,
   }))
   const gone = createGone(() => ({ runner: props.runner, model: props.model }))
   createEffect(() => props.onStale?.(efforts().stale))
@@ -2283,7 +2283,7 @@ function EngineFields(props: {
         <div data-slot="bots-field">
           <span data-slot="bots-label">{t("bots.engine.model")}</span>
           <Show
-            when={runner().id === "nikcli"}
+            when={runner().id === "ragu"}
             fallback={
               <>
                 <input
@@ -2305,10 +2305,10 @@ function EngineFields(props: {
               label={t("bots.engine.model")}
               value={props.model}
               gone={gone()}
-              models={props.nikcliModels}
+              models={props.raguModels}
               {...(props.catalog ? { state: props.catalog.state() } : {})}
               recent={props.catalog?.recent() ?? []}
-              defaultLabel={t("bots.engine.nikcliDefault")}
+              defaultLabel={t("bots.engine.raguDefault")}
               {...(props.pinned ? { kept: props.pinned } : {})}
               fallback={(value) => botModelLabel(value)}
               onOpen={() => props.catalog?.open()}
@@ -2348,7 +2348,7 @@ function EngineFields(props: {
           {t("bots.engine.effortStaleHint", efforts().stale ?? "")}
         </span>
       </Show>
-      <Show when={runner().id === "nikcli" && !props.model}>
+      <Show when={runner().id === "ragu" && !props.model}>
         <span data-slot="bots-hint">{t("bots.engine.effortPickModel")}</span>
       </Show>
     </>
@@ -2426,7 +2426,7 @@ function BotSettings(props: {
       description: description().trim(),
       model: model() || undefined,
       effort: effortToSave(effort(), staleEffort()),
-      runner: runner() === "nikcli" ? undefined : runner(),
+      runner: runner() === "ragu" ? undefined : runner(),
       persona: persona(),
       avatar: avatar(),
       objectives: objectives()
@@ -2468,7 +2468,7 @@ function BotSettings(props: {
         runner={runner()}
         model={model()}
         effort={effort()}
-        nikcliModels={props.models}
+        raguModels={props.models}
         {...(props.catalog ? { catalog: props.catalog } : {})}
         onStale={setStaleEffort}
         {...(props.bot.model ? { pinned: props.bot.model } : {})}

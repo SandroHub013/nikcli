@@ -1,5 +1,5 @@
 import { For, Show, createMemo, createSignal, onMount } from "solid-js"
-import type { AgentFile } from "../bots/nikcli"
+import type { AgentFile } from "../bots/ragu"
 import { listBots, resolveRoots } from "../bots/store"
 import { QUALITY_LEVELS, qualityLabel, qualityLevel, sizePerMinute, type RecordQuality } from "../record/recording"
 import { LOCALE_PREFERENCES, locale, localePreference, setLocalePreference, t, type LocalePreference } from "../i18n"
@@ -49,8 +49,8 @@ export interface BotSectionProps {
 /**
  * The bots, as configuration rather than as a place to talk to them.
  *
- * Read-only on purpose, and read from the same place nikcli reads: a bot is an
- * agent file under `.nikcli/agent/` or in nikcli's global configuration, so
+ * Read-only on purpose, and read from the same place ragu reads: a bot is an
+ * agent file under `.nikcli/agent/` or in ragu's global configuration, so
  * this is a view of that directory rather than of a roster ADE keeps. They are
  * created and edited in the Bot view.
  */
@@ -113,10 +113,10 @@ export interface SkillsSectionProps {
 /**
  * The tools the bots are allowed, seen from the side of who uses them.
  *
- * nikcli's agents do not carry "skills"; they carry a tool list, and what a
+ * ragu's agents do not carry "skills"; they carry a tool list, and what a
  * file records is the tools that have been switched *off*. So the honest
  * reading is per-bot: which ones each has given up. A catalogue of everything
- * nikcli can do belongs to nikcli, and inventing one here would be a list ADE
+ * ragu can do belongs to ragu, and inventing one here would be a list ADE
  * cannot keep in step.
  */
 export function SkillsSection(props: SkillsSectionProps) {

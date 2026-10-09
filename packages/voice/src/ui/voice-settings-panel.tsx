@@ -28,7 +28,7 @@ import { createVoiceSettingsState, type VoiceSettingsStateProps } from "./settin
 import { VOICE_PAGE_TITLE, VoicePageContent, type VoiceSettingsPageId } from "./settings-pages"
 import { ListenActions, MicMark, ResetVoiceButton, StatusPill } from "./settings-pages/status"
 import "./voice-settings.css"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 
 export interface VoiceSettingsPanelProps extends VoiceSettingsStateProps {
   /** Title shown in the header. Defaults to the voice-only wording. */

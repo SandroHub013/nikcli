@@ -1,4 +1,4 @@
-import type { NativeDevice } from "@nikcli-ai/simulation/native"
+import type { NativeDevice } from "@ragu/simulation/native"
 import type { Component } from "solid-js"
 import { createMemo, createSignal, onMount, Show } from "solid-js"
 import { useTerminalDimensions } from "@opentui/solid"
@@ -40,7 +40,7 @@ export function SimulatorSidebar(props: { onClose: () => void }) {
     setLoading(true)
     setNotice("")
     try {
-      const backend = await import("@nikcli-ai/simulation/native")
+      const backend = await import("@ragu/simulation/native")
       if (attempt.stale()) return
       const available = await backend.listNativeDevices(attempt.signal)
       if (attempt.stale()) return
@@ -72,7 +72,7 @@ export function SimulatorSidebar(props: { onClose: () => void }) {
     setActive(undefined)
     setStatus(`Starting ${device.label}...`)
     try {
-      const backend = await import("@nikcli-ai/simulation/native")
+      const backend = await import("@ragu/simulation/native")
       if (attempt.stale()) return
       await backend.bootNativeDevice(device, attempt.signal)
       if (attempt.stale()) return

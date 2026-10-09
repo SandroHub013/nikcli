@@ -40,7 +40,7 @@ export type Kind = typeof Kind.Type
 
 /** Semver ranges the host must satisfy. An absent field is "no requirement". */
 export const HostRequirements = Schema.Struct({
-  nikcli: Schema.optional(Schema.String),
+  ragu: Schema.optional(Schema.String),
   effect: Schema.optional(Schema.String),
   opentui: Schema.optional(Schema.String),
   node: Schema.optional(Schema.String),

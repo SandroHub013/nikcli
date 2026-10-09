@@ -1,5 +1,5 @@
 /**
- * Simplified Chinese catalog for the nikcli TUI. Validates the i18n system end to end.
+ * Simplified Chinese catalog for the ragu TUI. Validates the i18n system end to end.
  * Key set MUST match `en.ts` exactly (enforced by `test/tui/i18n-parity.test.ts`).
  */
 import type { TuiMessageKey } from "./en"

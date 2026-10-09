@@ -310,7 +310,7 @@ export async function captureNativeDevice(device: NativeDevice, signal?: AbortSi
     if (!serial) throw new Error(`Android AVD is not running: ${device.id}`)
     return runNativeCommand(tools.adb, ["-s", serial, "exec-out", "screencap", "-p"], signal)
   }
-  const directory = await mkdtemp(join(tmpdir(), "nikcli-native-"))
+  const directory = await mkdtemp(join(tmpdir(), "ragu-native-"))
   try {
     const path = join(directory, "screenshot.png")
     await runNativeCommand("xcrun", ["simctl", "io", device.id, "screenshot", "--type=png", path], signal)

@@ -30,7 +30,7 @@ describe("the sessions the top bar counts", () => {
     expect(barSessionCount([], PROJECT, one)).toBe(1)
   })
 
-  test("a terminal's nikcli session is its pane, not a second session", () => {
+  test("a terminal's ragu session is its pane, not a second session", () => {
     const listed = chat("live", {
       session: [session("ses_chat", { permission: [...CHAT_PERMISSION] }), session("ses_terminal")],
     })

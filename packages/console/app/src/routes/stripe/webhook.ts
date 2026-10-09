@@ -1,13 +1,13 @@
-import { Billing } from "@nikcli-ai/console-core/billing.js"
+import { Billing } from "@ragu/console-core/billing.js"
 import type { APIEvent } from "@solidjs/start/server"
-import { and, Database, eq, isNull, sql } from "@nikcli-ai/console-core/drizzle/index.js"
-import { BillingTable, PaymentTable, SubscriptionTable } from "@nikcli-ai/console-core/schema/billing.sql.js"
-import { Identifier } from "@nikcli-ai/console-core/identifier.js"
-import { centsToMicroCents } from "@nikcli-ai/console-core/util/price.js"
-import { Actor } from "@nikcli-ai/console-core/actor.js"
-import { Resource } from "@nikcli-ai/console-resource"
-import { UserTable } from "@nikcli-ai/console-core/schema/user.sql.js"
-import { AuthTable } from "@nikcli-ai/console-core/schema/auth.sql.js"
+import { and, Database, eq, isNull, sql } from "@ragu/console-core/drizzle/index.js"
+import { BillingTable, PaymentTable, SubscriptionTable } from "@ragu/console-core/schema/billing.sql.js"
+import { Identifier } from "@ragu/console-core/identifier.js"
+import { centsToMicroCents } from "@ragu/console-core/util/price.js"
+import { Actor } from "@ragu/console-core/actor.js"
+import { Resource } from "@ragu/console-resource"
+import { UserTable } from "@ragu/console-core/schema/user.sql.js"
+import { AuthTable } from "@ragu/console-core/schema/auth.sql.js"
 
 export async function POST(input: APIEvent) {
   const body = await Billing.stripe().webhooks.constructEventAsync(

@@ -1,0 +1,195 @@
+import { afterAll, beforeAll, describe, expect, it } from "bun:test"
+import { removeTestDir } from "../helpers/fs"
+import fs from "fs/promises"
+import os from "os"
+import path from "path"
+import { preserveTestEnv } from "../helpers/env"
+
+/**
+ * Without a private home this file resolved the project row against the
+ * developer's real `~/.local/share/nikcli/nikcli.db`, which a running ragu
+ * (or another test file tearing its own home down) has open at the same time —
+ * surfacing as an intermittent `SQLITE_IOERR_VNODE` from `fromDirectoryImpl`.
+ * Set before the ragu modules below are imported so the path singletons pick
+ * it up.
+ */
+const testHome = await fs.mkdtemp(path.join(os.tmpdir(), "ragu-edit-home-"))
+process.env.RAGU_TEST_HOME = testHome
+process.env.RAGU_DISABLE_PROJECT_CONFIG = "1"
+preserveTestEnv(["RAGU_TEST_HOME", "RAGU_DISABLE_PROJECT_CONFIG"])
+
+const { EditTool, replace, replaceWithCount } = await import("@/tool/edit")
+const { FileTime } = await import("@/file/time")
+const { Instance } = await import("@/project/instance")
+const { makeToolContext, withProjectDirectory } = await import("../helpers/tool-context")
+
+describe("EditTool", () => {
+  let projectDir: string
+  let def: Awaited<ReturnType<typeof EditTool.init>>
+
+  beforeAll(async () => {
+    projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "ragu-edit-test-"))
+    def = await withProjectDirectory(projectDir, () => EditTool.init())
+  })
+
+  afterAll(async () => {
+    await Instance.disposeAll().catch(() => undefined)
+    const { Database } = await import("@/database/database")
+    Database.closeAll()
+    await removeTestDir(projectDir)
+    await removeTestDir(testHome)
+  })
+
+  it("replaces a unique string in an existing file", async () => {
+    const filePath = path.join(projectDir, "replace.txt")
+    await fs.writeFile(filePath, "hello world\n")
+    const { ctx, sessionID, asked } = makeToolContext()
+
+    const result = await withProjectDirectory(projectDir, async () => {
+      await FileTime.read(sessionID, filePath)
+      return def.executeAsync({ filePath, oldString: "world", newString: "ragu" }, ctx)
+    })
+    expect(result.output).toContain("Replaced 1 occurrence")
+    expect(await fs.readFile(filePath, "utf-8")).toBe("hello ragu\n")
+    expect(asked.some((a) => a.permission === "edit")).toBe(true)
+  })
+
+  it("creates a new file when oldString is empty", async () => {
+    const filePath = path.join(projectDir, "created.txt")
+    const { ctx } = makeToolContext()
+    const result = await withProjectDirectory(projectDir, () =>
+      def.executeAsync({ filePath, oldString: "", newString: "brand new\n" }, ctx),
+    )
+    expect(result.output).toContain("Created file.")
+    expect(await fs.readFile(filePath, "utf-8")).toBe("brand new\n")
+  })
+
+  it("replaceAll swaps every occurrence", async () => {
+    const filePath = path.join(projectDir, "multi.txt")
+    await fs.writeFile(filePath, "aa bb aa\n")
+    const { ctx, sessionID } = makeToolContext()
+
+    await withProjectDirectory(projectDir, async () => {
+      await FileTime.read(sessionID, filePath)
+      await def.executeAsync({ filePath, oldString: "aa", newString: "xx", replaceAll: true }, ctx)
+    })
+    expect(await fs.readFile(filePath, "utf-8")).toBe("xx bb xx\n")
+  })
+
+  it("rejects identical oldString and newString", async () => {
+    const filePath = path.join(projectDir, "noop.txt")
+    await fs.writeFile(filePath, "same\n")
+    const { ctx, sessionID } = makeToolContext()
+
+    await expect(
+      withProjectDirectory(projectDir, async () => {
+        await FileTime.read(sessionID, filePath)
+        return def.executeAsync({ filePath, oldString: "same", newString: "same" }, ctx)
+      }),
+    ).rejects.toThrow(/identical/)
+  })
+
+  it("rejects edit when the file was never read", async () => {
+    const filePath = path.join(projectDir, "unread.txt")
+    await fs.writeFile(filePath, "secret\n")
+    const { ctx } = makeToolContext()
+
+    await expect(
+      withProjectDirectory(projectDir, () =>
+        def.executeAsync({ filePath, oldString: "secret", newString: "public" }, ctx),
+      ),
+    ).rejects.toThrow(/must read file/)
+  })
+
+  it("resolves relative filePath against the Instance directory", async () => {
+    const relative = "relative-edit.txt"
+    const absolute = path.join(projectDir, relative)
+    await fs.writeFile(absolute, "before\n")
+    const { ctx, sessionID } = makeToolContext()
+
+    await withProjectDirectory(projectDir, async () => {
+      // FileTime keys must match the path EditTool resolves (Instance.directory
+      // may be realpath'd, e.g. /var → /private/var on macOS).
+      const resolved = path.join(Instance.directory, relative)
+      await FileTime.read(sessionID, resolved)
+      await def.executeAsync({ filePath: relative, oldString: "before", newString: "after" }, ctx)
+    })
+    expect(await fs.readFile(absolute, "utf-8")).toBe("after\n")
+  })
+})
+
+describe("UnicodeNormalizedReplacer", () => {
+  const CURLY_SINGLE = "‘hello’"
+  const CURLY_DOUBLE = "“hello”"
+  const EM_DASH = "a—b"
+  const NBSP = "a b"
+
+  it("matches ASCII quotes against curly quotes in the source", () => {
+    expect(replace(`const value = ${CURLY_SINGLE}\n`, "const value = 'hello'", "const value = 'bye'")).toBe(
+      "const value = 'bye'\n",
+    )
+    expect(replace(`const value = ${CURLY_DOUBLE}\n`, 'const value = "hello"', 'const value = "bye"')).toBe(
+      'const value = "bye"\n',
+    )
+  })
+
+  it("matches curly quotes against ASCII quotes in the source", () => {
+    expect(replace("const value = 'hello'\n", `const value = ${CURLY_SINGLE}`, "const value = 'bye'")).toBe(
+      "const value = 'bye'\n",
+    )
+  })
+
+  it("matches dashes and non-breaking spaces", () => {
+    expect(replace(`x = ${EM_DASH}\n`, "x = a-b", "x = c")).toBe("x = c\n")
+    expect(replace(`x = ${NBSP}\n`, "x = a b", "x = c")).toBe("x = c\n")
+  })
+
+  it("prefers an exact match over a normalized one", () => {
+    const content = `first ${CURLY_SINGLE}\nsecond 'hello'\n`
+    expect(replace(content, "second 'hello'", "second 'bye'")).toBe(`first ${CURLY_SINGLE}\nsecond 'bye'\n`)
+  })
+
+  it("rejects ambiguous normalized matches", () => {
+    const content = `a ${CURLY_SINGLE}\nb ${CURLY_SINGLE}\n`
+    expect(() => replace(content, "'hello'", "'bye'")).toThrow(/Found 2 matches/)
+  })
+
+  it("replaces every normalized occurrence with replaceAll", () => {
+    const content = `a ${CURLY_SINGLE}\nb ${CURLY_SINGLE}\n`
+    expect(replace(content, "'hello'", "'bye'", true)).toBe("a 'bye'\nb 'bye'\n")
+  })
+
+  it("leaves unrelated content untouched when nothing matches", () => {
+    expect(() => replace("nothing here\n", "'missing'", "'x'")).toThrow(/Could not find/i)
+  })
+})
+
+describe("replaceWithCount", () => {
+  it("reports a single replacement", () => {
+    expect(replaceWithCount("a b a", "b", "c")).toEqual({ content: "a c a", replacements: 1 })
+  })
+
+  it("reports how many occurrences replaceAll touched", () => {
+    const result = replaceWithCount("x\nx\nx\n", "x", "y", true)
+    expect(result.content).toBe("y\ny\ny\n")
+    expect(result.replacements).toBe(3)
+  })
+
+  it("quantifies an ambiguous match instead of just refusing", () => {
+    expect(() => replaceWithCount("dup\ndup\ndup\n", "dup", "one")).toThrow(/Found 3 matches/)
+  })
+
+  it("suggests replaceAll when the match is ambiguous", () => {
+    expect(() => replaceWithCount("dup\ndup\n", "dup", "one")).toThrow(/replaceAll: true/)
+  })
+
+  it("names the file in a no-match failure", () => {
+    expect(() => replaceWithCount("hello", "missing", "x", false, "/tmp/a.ts")).toThrow(
+      /Could not find oldString in \/tmp\/a\.ts/,
+    )
+  })
+
+  it("still refuses a no-op edit", () => {
+    expect(() => replaceWithCount("hello", "same", "same")).toThrow(/identical/)
+  })
+})

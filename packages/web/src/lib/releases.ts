@@ -91,16 +91,16 @@ const isInternal = (name: string): boolean => {
 }
 
 /**
- * ADE rides in the same release as nikcli: `ade-release` in attach_only mode
+ * ADE rides in the same release as ragu: `ade-release` in attach_only mode
  * uploads its installers into the existing `v*` release, in the same Tauri
- * bundle formats as the nikcli desktop app. The product name in the filename
+ * bundle formats as the ragu desktop app. The product name in the filename
  * is the only thing that separates the two, so that is what the category keys
  * off — otherwise both apps' installers land in one "Desktop" list under
  * identical labels ("Apple Silicon (.dmg)" twice, and so on).
  */
 const isAde = (name: string): boolean => /^ade[-_]/i.test(name)
 
-/** Tauri installer bundles, shared by the nikcli desktop app and ADE. */
+/** Tauri installer bundles, shared by the ragu desktop app and ADE. */
 const installerOf = (n: string, format: string, arch: Arch): { os: OS; label: string } | null => {
   if (/\.dmg$/.test(n)) return { os: "macos", label: `${fmtArch(arch, "macos")} (.dmg)` }
   if (/-setup\.exe$/.test(n) || /\.msi$/.test(n))
@@ -135,8 +135,8 @@ function classify(asset: RawAsset): ClassifiedAsset {
     os = "ios"
     label = `iOS (${format})`
   }
-  // CLI binaries: published as nikcli-ai-<os>-<arch>...
-  else if (n.startsWith("nikcli-ai-")) {
+  // CLI binaries: published as ragu-code-<os>-<arch>...
+  else if (n.startsWith("ragu-code-")) {
     category = "cli"
     if (/darwin/.test(n)) os = "macos"
     else if (/linux/.test(n)) os = "linux"
@@ -144,7 +144,7 @@ function classify(asset: RawAsset): ClassifiedAsset {
     const variantTag = variant ? ` · ${variant}` : ""
     label = `${fmtArch(arch, os)}${variantTag} (${format})`
   }
-  // GUI installers (Tauri): Nikcli_<ver>_… for the desktop app, ADE_<ver>_… for ADE.
+  // GUI installers (Tauri): Ragu_<ver>_… for the desktop app, ADE_<ver>_… for ADE.
   else {
     const installer = installerOf(n, format, arch)
     if (installer) {
@@ -219,7 +219,7 @@ export async function fetchReleases(limit = 30): Promise<ReleaseInfo[]> {
   const res = await fetch(`${API}?per_page=${limit}`, {
     headers: {
       Accept: "application/vnd.github+json",
-      "User-Agent": "nikcli-web",
+      "User-Agent": "ragu-web",
     },
   })
   if (!res.ok) throw new Error(`GitHub API ${res.status}`)

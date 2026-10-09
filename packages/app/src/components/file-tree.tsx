@@ -1,8 +1,8 @@
 import { useFile } from "@/context/file"
-import { Collapsible } from "@nikcli-ai/ui/collapsible"
-import { FileIcon } from "@nikcli-ai/ui/file-icon"
-import { Icon } from "@nikcli-ai/ui/icon"
-import { Tooltip } from "@nikcli-ai/ui/tooltip"
+import { Collapsible } from "@ragu/ui/collapsible"
+import { FileIcon } from "@ragu/ui/file-icon"
+import { Icon } from "@ragu/ui/icon"
+import { Tooltip } from "@ragu/ui/tooltip"
 import {
   createEffect,
   createMemo,
@@ -17,7 +17,7 @@ import {
   type ParentProps,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import type { FileNode } from "@nikcli-ai/sdk/httpapi"
+import type { FileNode } from "@ragu/sdk/httpapi"
 
 function pathToFileUrl(filepath: string): string {
   const encodedPath = filepath

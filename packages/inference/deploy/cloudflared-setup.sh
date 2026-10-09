@@ -4,13 +4,13 @@
 # locally and the cert.pem is in /root/.cloudflared/cert.pem (uploaded by the orchestrator).
 #
 # Args:
-#   TUNNEL_NAME — default: nikcli-inference
+#   TUNNEL_NAME — default: ragu-inference
 #   HOSTNAME    — required, e.g. inference.example.com
 
 set -euo pipefail
 
 : "${HOSTNAME:?missing HOSTNAME (e.g. inference.example.com)}"
-TUNNEL_NAME="${TUNNEL_NAME:-nikcli-inference}"
+TUNNEL_NAME="${TUNNEL_NAME:-ragu-inference}"
 
 if ! command -v cloudflared >/dev/null 2>&1; then
   apt-get install -y cloudflared

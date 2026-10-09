@@ -1,7 +1,7 @@
 <wizard-report>
 # PostHog post-wizard report
 
-The wizard has completed a deep integration of PostHog analytics into the nikcli Astro web project (`packages/web`). PostHog is initialized via the CDN snippet in a reusable `posthog.astro` component, injected into the root `Layout.astro` so every page is covered. Environment variables (`PUBLIC_POSTHOG_PROJECT_TOKEN`, `PUBLIC_POSTHOG_HOST`) are stored in `packages/web/.env` and referenced via `import.meta.env`. TypeScript global types for `window.posthog` were added to `src/env.d.ts`.
+The wizard has completed a deep integration of PostHog analytics into the ragu Astro web project (`packages/web`). PostHog is initialized via the CDN snippet in a reusable `posthog.astro` component, injected into the root `Layout.astro` so every page is covered. Environment variables (`PUBLIC_POSTHOG_PROJECT_TOKEN`, `PUBLIC_POSTHOG_HOST`) are stored in `packages/web/.env` and referenced via `import.meta.env`. TypeScript global types for `window.posthog` were added to `src/env.d.ts`.
 
 Twelve custom events are tracked across 7 files, covering the full user journey from landing page intent to dashboard feature usage. User identification (via `posthog.identify`) fires on login and registration, and `posthog.reset()` is called on logout to clear the session. Error tracking via `posthog.captureException()` is added to all critical auth and CRUD failure paths.
 

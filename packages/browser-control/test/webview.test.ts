@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createWebView } from "@nikcli-ai/util/bun-utils"
+import { createWebView } from "@ragu/util/bun-utils"
 
 describe("Bun.WebView", () => {
   test("loads a data URL and evaluates", async () => {

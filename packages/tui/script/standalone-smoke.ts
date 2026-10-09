@@ -3,7 +3,7 @@
  * Boots the standalone terminal against a running server and asserts it paints.
  *
  * This is an executable check for `specs/effect-tui/08-host-plugins-startup.md`: the host
- * under test imports `@nikcli-ai/tui` and nothing from `packages/nikcli`, so if
+ * under test imports `@ragu/tui` and nothing from `packages/ragu`, so if
  * a backend chain creeps back into the terminal's graph, this fails while the
  * CLI's own entry points keep working — they carry the backend regardless.
  *
@@ -15,14 +15,14 @@ import { rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { spawnPty } from "@nikcli-ai/util/pty"
+import { spawnPty } from "@ragu/util/pty"
 
 const url = process.argv[2]
 if (!url) throw new Error("usage: standalone-smoke.ts <server-url>")
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const entry = path.resolve(here, "../bin/nikcli-tui.ts")
-const home = mkdtempSync(path.join(os.tmpdir(), "nikcli-tui-standalone-"))
+const entry = path.resolve(here, "../bin/ragu-tui.ts")
+const home = mkdtempSync(path.join(os.tmpdir(), "ragu-tui-standalone-"))
 
 /**
  * Substrings that only ever appear when the terminal failed to boot.
@@ -78,7 +78,7 @@ const pty = spawnPty({
   cols: 100,
   rows: 30,
   cwd: path.resolve(here, ".."),
-  env: { ...process.env, NIKCLI_TEST_HOME: home, TERM: "xterm-256color" },
+  env: { ...process.env, RAGU_TEST_HOME: home, TERM: "xterm-256color" },
 })
 pty.onData((data) => {
   raw += data

@@ -1,10 +1,10 @@
 {
-  "name": "@nikcli-ai/devhub",
+  "name": "@ragu/devhub",
   "private": true,
   "version": "1.431.0",
   "type": "module",
   "license": "MIT",
-  "description": "Local admin dashboard and developer platform for nikcli: processes, memory, tests, benchmarks, API",
+  "description": "Local admin dashboard and developer platform for ragu: processes, memory, tests, benchmarks, API",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "dev": "vite",
@@ -16,8 +16,8 @@
     "tauri": "tauri"
   },
   "dependencies": {
-    "@nikcli-ai/sdk": "workspace:*",
-    "@nikcli-ai/ui": "workspace:*",
+    "@ragu/sdk": "workspace:*",
+    "@ragu/ui": "workspace:*",
     "@solid-primitives/storage": "catalog:",
     "@solidjs/meta": "catalog:",
     "@tauri-apps/api": "^2",

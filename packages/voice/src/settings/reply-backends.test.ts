@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { localePreference, setLocalePreference, t } from "@nikcli-ai/ade/i18n"
+import { localePreference, setLocalePreference, t } from "@ragu/ade/i18n"
 import {
   KOKORO_VOICES,
   KOKORO_VOICE_CHOICES,

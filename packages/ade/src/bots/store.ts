@@ -1,8 +1,8 @@
 /**
- * Reading and writing bots where nikcli keeps them.
+ * Reading and writing bots where ragu keeps them.
  *
- * The rules are next door in `nikcli.ts` and are pure; this is the part that
- * touches the machine — listing two directories, running `nikcli agent
+ * The rules are next door in `ragu.ts` and are pure; this is the part that
+ * touches the machine — listing two directories, running `ragu agent
  * create`, writing a file, deleting one. Split that way because the argument
  * lists and the file format are worth checking without a filesystem, and
  * because everything here is a one-line call to the host facade that would
@@ -21,41 +21,43 @@ import { SAFE_EFFORT, SAFE_MODEL } from "./runners"
 import { isLegacyTalkKey, parseTalk, serializeTalk, talkKey, TALK_KEY_PREFIX, type Talk } from "./talk"
 import { createGatewayThreads, type GatewayThreads } from "./gateway/threads"
 import {
-  agentDir,
   agentHome,
   agentDirs,
   createArgs,
   editedAgentFile,
   globalConfigDir,
+  globalConfigName,
   identifierFor,
   joinPrompt,
   launchArgs,
-  NIKCLI_COMMAND,
+  RAGU_COMMAND,
   parseCreatedPath,
   parseModelList,
+  projectConfigDir,
   readAgentFile,
   serializeAgentFile,
   type AgentFile,
   type AgentMode,
   type AgentScope,
-} from "./nikcli"
+} from "./ragu"
+import { DOT_FOLDERS, folderExists, type Exists } from "./app-folder"
 
 /** Where to look, and where to write. */
 export interface BotRoots {
   /** The open project, when there is one. Bots here travel with the repository. */
   readonly project?: string
-  /** nikcli's global configuration directory. Bots here follow the user. */
+  /** ragu's global configuration directory. Bots here follow the user. */
   readonly global?: string
 }
 
 /**
- * The two places nikcli discovers agents, resolved for this machine.
+ * The two places ragu discovers agents, resolved for this machine.
  *
  * The global one is derived from the home directory rather than read from the
  * environment, because ADE cannot see the environment of a process it has not
  * started — see `globalConfigDir`. A wrong guess costs a global roster that
  * lists nothing; it can never cause a write to the wrong place, because every
- * write goes to a path nikcli itself printed or to the project.
+ * write goes to a path ragu itself printed or to the project.
  */
 export async function resolveRoots(projectRoot?: string): Promise<BotRoots> {
   const host = await getHost()
@@ -64,14 +66,14 @@ export async function resolveRoots(projectRoot?: string): Promise<BotRoots> {
 
   return {
     ...(projectRoot ? { project: projectRoot } : {}),
-    ...(home ? { global: globalConfigDir(home, platform) } : {}),
+    ...(home ? { global: globalConfigDir(home, platform, await globalConfigName(home, platform, hostFolders(host))) } : {}),
   }
 }
 
 /**
  * How deep to follow subdirectories under an agent folder.
  *
- * nikcli's glob is `**`, which is unbounded; this is not, because ADE reads
+ * ragu's glob is `**`, which is unbounded; this is not, because ADE reads
  * the tree one `readDir` call at a time and an unbounded walk over a folder
  * someone pointed at a large checkout would stall the panel. Three levels is
  * far past any real layout — `agent/team/review/senior.md` — and the cost of
@@ -101,8 +103,8 @@ async function readDirectory(
     const path = joinPath(directory, entry.name)
     if (entry.is_dir) {
       /*
-       * nikcli finds agents at any depth (`{agent,agents}/**\/*.md`), so a
-       * roster that read only the top level would miss bots that nikcli runs
+       * ragu finds agents at any depth (`{agent,agents}/**\/*.md`), so a
+       * roster that read only the top level would miss bots that ragu runs
        * — a bot that exists everywhere except in the list of bots.
        */
       if (depth < MAX_AGENT_DEPTH) await readDirectory(host, path, scope, depth + 1, found)
@@ -115,19 +117,29 @@ async function readDirectory(
       found.push(readAgentFile({ path, scope, text: read.text }))
     } catch {
       /*
-       * One unreadable file must not empty the roster. nikcli would refuse to
+       * One unreadable file must not empty the roster. ragu would refuse to
        * load it and say so on its own terms; here it is simply one bot that
-       * does not appear, which is the same thing the user sees in nikcli.
+       * does not appear, which is the same thing the user sees in ragu.
        */
       continue
     }
   }
 }
 
+/** The host's folders, for rule B (`app-folder.ts`). */
+function hostFolders(host: Host | null | undefined): Exists {
+  return folderExists(host?.readDir && ((path: string) => host.readDir!(path)))
+}
+
+/** A project's `.ragu` or `.nikcli`; nothing for the global scope, whose folder is the configuration itself. */
+async function dotFolderOf(host: Host, base: string, scope: AgentScope): Promise<string | undefined> {
+  return scope === "project" ? projectConfigDir(base, hostFolders(host)) : undefined
+}
+
 async function readScope(host: Host, base: string, scope: AgentScope): Promise<AgentFile[]> {
   const found: AgentFile[] = []
-  // Both spellings, because nikcli accepts both.
-  for (const directory of agentDirs(base, scope)) {
+  // Both spellings, because ragu accepts both.
+  for (const directory of agentDirs(base, scope, await dotFolderOf(host, base, scope))) {
     await readDirectory(host, directory, scope, 0, found)
   }
   return found
@@ -136,11 +148,11 @@ async function readScope(host: Host, base: string, scope: AgentScope): Promise<A
 /**
  * Every bot this machine has, project ones first.
  *
- * Project before global because that is the order of specificity nikcli itself
+ * Project before global because that is the order of specificity ragu itself
  * applies, and because a bot written for the repository you have open is the
- * one you meant. Same-named entries are not merged: they are two files, nikcli
+ * one you meant. Same-named entries are not merged: they are two files, ragu
  * resolves the collision its own way, and hiding one of them here would make
- * the roster disagree with `nikcli agent list`.
+ * the roster disagree with `ragu agent list`.
  */
 export async function listBots(roots: BotRoots): Promise<AgentFile[]> {
   const host = await getHost()
@@ -154,13 +166,13 @@ export async function listBots(roots: BotRoots): Promise<AgentFile[]> {
 export interface CreateBotInput {
   readonly name: string
   readonly scope: AgentScope
-  /** What the bot is for. nikcli writes the prompt from this when generating. */
+  /** What the bot is for. ragu writes the prompt from this when generating. */
   readonly description: string
-  /** The persona, when the user wrote one. Empty means: let nikcli write it. */
+  /** The persona, when the user wrote one. Empty means: let ragu write it. */
   readonly persona?: string
-  /** `provider/model` as nikcli names models, or nothing for its default. */
+  /** `provider/model` as ragu names models, or nothing for its default. */
   readonly model?: string
-  /** nikcli's `variant`: how hard the model is asked to think. */
+  /** ragu's `variant`: how hard the model is asked to think. */
   readonly effort?: string
   /** What the bot is always working towards, beyond the persona. */
   readonly objectives?: readonly string[]
@@ -169,7 +181,7 @@ export interface CreateBotInput {
   readonly tools?: readonly string[]
   /** The face the user picked, `shape/color`. Omitted: the name decides. */
   readonly avatar?: string
-  /** The program its turns run on (`runners.ts`). Omitted: nikcli. */
+  /** The program its turns run on (`runners.ts`). Omitted: ragu. */
   readonly runner?: string
 }
 
@@ -180,16 +192,16 @@ export type CreateBotResult =
 /**
  * Creates a bot, by whichever of the two routes the form asked for.
  *
- * **Generated** — the user described what they want and nikcli's own model
+ * **Generated** — the user described what they want and ragu's own model
  * writes the identifier, the "when to use" line and the system prompt. This is
- * `nikcli agent create`, the native function, run non-interactively; it is the
- * reason the bot section is tied to nikcli rather than keeping a roster of its
+ * `ragu agent create`, the native function, run non-interactively; it is the
+ * reason the bot section is tied to ragu rather than keeping a roster of its
  * own.
  *
  * **Written** — the user typed the persona themselves. There is nothing for a
  * model to do, and paying for a generation to then throw its prompt away would
  * be worse than writing the same file directly. The file is byte-compatible
- * with the generated one: same directory, same frontmatter keys, so nikcli
+ * with the generated one: same directory, same frontmatter keys, so ragu
  * cannot tell them apart and neither can this roster.
  *
  * Either way the model is pinned afterwards, because `agent create` spends
@@ -207,15 +219,15 @@ export async function createBot(input: CreateBotInput, roots: BotRoots): Promise
     }
   }
 
-  const home = agentHome(base, input.scope)
+  const home = agentHome(base, input.scope, await dotFolderOf(host, base, input.scope))
   const mode: AgentMode = input.mode ?? "primary"
 
   if (input.persona && input.persona.trim().length > 0) {
     return writeBot({ ...input, mode, home, base }, host)
   }
 
-  if (!host.nikcliBot) return { ok: false, problem: t("bots.store.noNikcli") }
-  const result = await host.nikcliBot(
+  if (!host.raguBot) return { ok: false, problem: t("bots.store.noRagu") }
+  const result = await host.raguBot(
     createArgs({
       home,
       description: input.description,
@@ -238,12 +250,12 @@ export async function createBot(input: CreateBotInput, roots: BotRoots): Promise
     const said = [result.stderr.trim(), result.stdout.trim()].filter((part) => part.length > 0).join("\n")
     return {
       ok: false,
-      problem: said || t("bots.store.nikcliExited", String(result.code ?? t("bots.store.unknownCode"))),
+      problem: said || t("bots.store.raguExited", String(result.code ?? t("bots.store.unknownCode"))),
     }
   }
 
   /*
-   * The settings nikcli's generator does not write.
+   * The settings ragu's generator does not write.
    *
    * `agent create` chooses the identifier, the description and the prompt, and
    * spends `--model` on the model that *writes* the agent rather than
@@ -255,7 +267,7 @@ export async function createBot(input: CreateBotInput, roots: BotRoots): Promise
     ...(input.model ? { model: input.model } : {}),
     ...(input.effort ? { effort: input.effort } : {}),
     ...(input.avatar ? { avatar: input.avatar } : {}),
-    ...(input.runner && input.runner !== "nikcli" ? { runner: input.runner } : {}),
+    ...(input.runner && input.runner !== "ragu" ? { runner: input.runner } : {}),
     ...(input.objectives && input.objectives.length > 0 ? { objectives: input.objectives } : {}),
   }
   if (Object.keys(settings).length > 0 && host.readTextFile && host.writeTextFile) {
@@ -263,7 +275,7 @@ export async function createBot(input: CreateBotInput, roots: BotRoots): Promise
       const read = await host.readTextFile(created)
       await host.writeTextFile(created, editedAgentFile(read.text, settings))
     } catch {
-      // The bot exists and works on nikcli's defaults; only these are missing,
+      // The bot exists and works on ragu's defaults; only these are missing,
       // and the detail view says plainly what a bot is set to.
     }
   }
@@ -289,9 +301,9 @@ export async function writeBot(
     input.name,
     existing.map((bot) => bot.identifier),
   )
-  // `agent`, not `agents`: nikcli reads both but writes the first, and a
+  // `agent`, not `agents`: ragu reads both but writes the first, and a
   // roster split across two spellings is one the user has to think about.
-  const path = joinPath(agentDir(input.base, input.scope), `${identifier}.md`)
+  const path = joinPath(input.home, "agent", `${identifier}.md`)
 
   /*
    * Refused rather than overwritten, which is also what `agent create` does:
@@ -340,7 +352,7 @@ export interface BotChanges {
   readonly objectives?: readonly string[]
   /** `undefined` in the object goes back to the face the name gives. */
   readonly avatar?: string | undefined
-  /** `undefined` in the object goes back to nikcli. */
+  /** `undefined` in the object goes back to ragu. */
   readonly runner?: string | undefined
 }
 
@@ -434,10 +446,10 @@ export async function deleteBot(
 }
 
 /**
- * The models nikcli can be pinned to, as nikcli names them.
+ * The models ragu can be pinned to, as ragu names them.
  *
- * Asked of nikcli rather than taken from ADE's own chat list: those are
- * OpenRouter ids, and a bot runs inside nikcli, which can only reach models it
+ * Asked of ragu rather than taken from ADE's own chat list: those are
+ * OpenRouter ids, and a bot runs inside ragu, which can only reach models it
  * has a provider configured for. Offering the wrong list would offer choices
  * that fail at launch with a message from another program.
  */
@@ -445,8 +457,8 @@ export async function listModels(cwd?: string, hostOf: () => Promise<Host | unde
   const host = await hostOf()
   if (!host) return []
   try {
-    if (!host.nikcliBot) return []
-    const result = await host.nikcliBot(["models"], cwd)
+    if (!host.raguBot) return []
+    const result = await host.raguBot(["models"], cwd)
     return parseModelList(result.stdout)
   } catch {
     return []
@@ -454,8 +466,8 @@ export async function listModels(cwd?: string, hostOf: () => Promise<Host | unde
 }
 
 /**
- * One provider's catalog, with its prices (`nikcli models <provider>
- * --verbose`), for `catalog.ts`; every provider's without one (`nikcli
+ * One provider's catalog, with its prices (`ragu models <provider>
+ * --verbose`), for `catalog.ts`; every provider's without one (`ragu
  * models --verbose`, the bot form's models). Empty when it cannot be read.
  */
 export async function modelCatalogText(provider: string | undefined, cwd?: string): Promise<string> {
@@ -464,9 +476,9 @@ export async function modelCatalogText(provider: string | undefined, cwd?: strin
 }
 
 /**
- * The same read, with why it failed: the bot form said «serve nikcli nel
- * PATH» for a nikcli that was there and exited with an error, and for a host
- * that cannot run it (review 4, MEDIO 2). The reason is nikcli's first line
+ * The same read, with why it failed: the bot form said «serve ragu nel
+ * PATH» for a ragu that was there and exited with an error, and for a host
+ * that cannot run it (review 4, MEDIO 2). The reason is ragu's first line
  * of error, cut short, never its whole output.
  */
 export async function readModelCatalog(
@@ -475,10 +487,10 @@ export async function readModelCatalog(
   hostOf: () => Promise<Host | undefined> = getHost,
 ): Promise<{ readonly ok: true; readonly text: string } | { readonly ok: false; readonly reason: string }> {
   const host = await hostOf().catch(() => undefined)
-  if (!host?.nikcliBot) return { ok: false, reason: t("bots.models.noHost") }
+  if (!host?.raguBot) return { ok: false, reason: t("bots.models.noHost") }
   let result: RunResult
   try {
-    result = await host.nikcliBot(provider ? ["models", provider, "--verbose"] : ["models", "--verbose"], cwd)
+    result = await host.raguBot(provider ? ["models", provider, "--verbose"] : ["models", "--verbose"], cwd)
   } catch {
     return { ok: false, reason: t("bots.models.notFound") }
   }
@@ -514,7 +526,7 @@ export function botLaunch(bot: AgentFile): { agentId: string; command: string; a
       return { agentId: "codex", command: "codex", args }
     }
     default:
-      return { agentId: "nikcli", command: NIKCLI_COMMAND, args: launchArgs(bot.identifier, bot.model) }
+      return { agentId: "ragu", command: RAGU_COMMAND, args: launchArgs(bot.identifier, bot.model) }
   }
 }
 
@@ -585,14 +597,14 @@ function dropOldestTalks(disk: TalkDisk, except: string): boolean {
 /**
  * The project a bot file belongs to, from the path alone.
  *
- * nikcli keeps a project's agents in `<root>/.nikcli/agent/` and also
+ * ragu keeps a project's agents in `<root>/.nikcli/agent/` and also
  * `<root>/.nikcli/agents/` (`agentDirs`). The root is the part before that
  * segment. A path without it is a global bot: its folder is not a project.
  */
 export function projectOfBotPath(path: string): string | undefined {
   const folded = path.replace(/\\/g, "/").toLowerCase()
   let at = -1
-  for (const mark of ["/.nikcli/agents/", "/.nikcli/agent/"]) {
+  for (const mark of DOT_FOLDERS.flatMap((dot) => [`/${dot}/agents/`, `/${dot}/agent/`])) {
     const found = folded.lastIndexOf(mark)
     if (found > at) at = found
   }

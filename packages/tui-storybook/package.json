@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@nikcli-ai/tui-storybook",
+  "name": "@ragu/tui-storybook",
   "version": "1.431.0",
   "private": true,
   "type": "module",
@@ -18,8 +18,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@nikcli-ai/tui": "workspace:*",
-    "@nikcli-ai/util": "workspace:*",
+    "@ragu/tui": "workspace:*",
+    "@ragu/util": "workspace:*",
     "@opentui/core": "0.5.11",
     "@opentui/solid": "0.5.11",
     "solid-js": "catalog:"

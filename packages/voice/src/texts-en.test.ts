@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
-import { resetLocaleForTests } from "@nikcli-ai/ade/i18n"
+import { resetLocaleForTests } from "@ragu/ade/i18n"
 import { errorKind, plainProblem, spokenMessage } from "./effect/errors"
 import { isPlanningSentence, plannerFailure } from "./plan/planner"
 

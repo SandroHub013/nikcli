@@ -946,7 +946,7 @@ export default function SettingsScreen() {
               >
                 <View className="flex-row flex-wrap gap-2">
                   <InfoChip
-                    label={bootstrap?.version ? `Nikcli ${bootstrap.version}` : "Nikcli unknown"}
+                    label={bootstrap?.version ? `Ragu ${bootstrap.version}` : "Ragu unknown"}
                     tone="accent"
                   />
                   <InfoChip label={config?.url ? config.url.replace(/^https?:\/\//, "") : "No server"} />
@@ -969,7 +969,7 @@ export default function SettingsScreen() {
                       />
                     ) : (
                       <ActionButton
-                        label="Sign in with Nikcli"
+                        label="Sign in with Ragu"
                         loading={accountOauthLoading}
                         disabled={!config || oauthBusy}
                         onPress={() => void signInWithAccount()}
@@ -1052,8 +1052,8 @@ export default function SettingsScreen() {
                     title={bootstrap?.github?.user?.login ? `@${bootstrap.github.user.login}` : "Not connected"}
                     description={
                       bootstrap?.github?.user?.name
-                        ? `${bootstrap.github.user.name} · OAuth ${oauthConfigured ? "Nikcli GitHub App · approve your account" : "not configured yet"}`
-                        : `OAuth ${oauthConfigured ? "Nikcli GitHub App · approve your account" : "not configured yet"}`
+                        ? `${bootstrap.github.user.name} · OAuth ${oauthConfigured ? "Ragu GitHub App · approve your account" : "not configured yet"}`
+                        : `OAuth ${oauthConfigured ? "Ragu GitHub App · approve your account" : "not configured yet"}`
                     }
                   />
 
@@ -1397,7 +1397,7 @@ export default function SettingsScreen() {
                     value={url}
                     onChangeText={setUrl}
                     autoCapitalize="none"
-                    placeholder="https://your-hosted-nikcli.example.com"
+                    placeholder="https://your-hosted-ragu.example.com"
                   />
                   <TextField
                     label="Bearer token"
@@ -1444,7 +1444,7 @@ export default function SettingsScreen() {
                   <View className="gap-2">
                     {currentUser ? null : (
                       <ActionButton
-                        label="Sign in with Nikcli"
+                        label="Sign in with Ragu"
                         loading={accountOauthLoading}
                         disabled={!config?.url || oauthBusy}
                         onPress={() => void signInWithAccount()}

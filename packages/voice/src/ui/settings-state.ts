@@ -49,10 +49,10 @@ import { VOICE_COMMAND_AGENT, VOICE_COMMAND_TRANSCRIPTION } from "../settings/sh
 import { describeBackends, type TranscriberBackend } from "../asr/select"
 import { listAudioDevices, onDeviceChange, SYSTEM_DEFAULT, type AudioDevices } from "../audio/devices"
 import { VOCABULARY } from "../intent/vocabulary"
-import type { Binding } from "@nikcli-ai/ade/keyboard/keymap"
+import type { Binding } from "@ragu/ade/keyboard/keymap"
 import { captureKeyboardEvent, checkShortcutConflict, getPlatform, suggestClosestLanguage } from "./shortcut-capture"
 import { submitVoiceTrial } from "./voice-trial"
-import { locale, t } from "@nikcli-ai/ade/i18n"
+import { locale, t } from "@ragu/ade/i18n"
 
 /** What the pages need from their host: the settings, the engine, and the host's voice actions. */
 export interface VoiceSettingsStateProps {

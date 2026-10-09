@@ -1,5 +1,5 @@
 {
-  "name": "@nikcli-ai/slack",
+  "name": "@ragu/slack",
   "version": "1.431.0",
   "files": [
     "src",
@@ -18,7 +18,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@nikcli-ai/sdk": "workspace:*",
+    "@ragu/sdk": "workspace:*",
     "@slack/bolt": "^4.6.0"
   },
   "devDependencies": {

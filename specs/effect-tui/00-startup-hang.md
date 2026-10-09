@@ -28,7 +28,7 @@ Two structural observations, re-checked 2026-09-24:
 - `createCliRenderer` is awaited with no deadline (`packages/tui/src/app.tsx:207`). The adjacent theme probe
   already has one (`waitForThemeMode?.(1000)`, `:216`) and the palette query is deliberately fire-and-forget
   (`:215`). The capability negotiation inside `createCliRenderer` has neither.
-- The probe cannot count the failure. `packages/nikcli/script/tui-startup.ts:208` throws `never painted`, so a
+- The probe cannot count the failure. `packages/ragu/script/tui-startup.ts:208` throws `never painted`, so a
   single wedged sample aborts the entire 30-run warm collection rather than being recorded as an outcome.
 
 The existing `patches/@opentui%2Fcore@0.5.11.patch` is unrelated: it keeps streaming code highlights, and does
@@ -87,10 +87,10 @@ embedded server worker that was **lost**, leaving the first bootstrap waiting fo
 
 ### The mechanism
 
-`packages/nikcli/src/cli/handlers/default.ts` constructs the server `Worker` and starts calling it through
+`packages/ragu/src/cli/handlers/default.ts` constructs the server `Worker` and starts calling it through
 `Rpc.client` straight away. The worker, `src/cli/cmd/tui/worker.ts`, installs its listener with `Rpc.listen` on its
 last line — after a top-level `await Log.init(...)` and the whole server import graph. Upstream opencode's worker has
-no top-level `await` before `Rpc.listen`; nikcli added one.
+no top-level `await` before `Rpc.listen`; ragu added one.
 
 Bun delivers a message that reaches a worker while its module is suspended on a top-level `await` to no listener, and
 **drops it**. Measured in isolation on Bun 1.4.2: with the listener installed synchronously, 20 of 20 early messages
@@ -113,7 +113,7 @@ worker's imports, no top-level `await` anywhere in the worker's graph can reopen
 the same binary, so there is no version skew to handle. Serialising the input happens before the request is registered,
 so an input that cannot be serialised still rejects without leaving a pending entry, as it did before.
 
-`packages/nikcli/test/tui/rpc-error.test.ts` spawns a real `Worker` (`test/tui/fixtures/slow-rpc-worker.ts`) that
+`packages/ragu/test/tui/rpc-error.test.ts` spawns a real `Worker` (`test/tui/fixtures/slow-rpc-worker.ts`) that
 awaits 200 ms before `Rpc.listen`, and calls it at once. Before the fix the call is lost (the test's 3 s race returns
 `"lost"`); after it, the call is answered.
 
@@ -166,7 +166,7 @@ run against a binary built from `c5d5229e0` (`0.0.0-live-main-202609251440`, a c
 | ----------------------------------- | ------ | ------ | ---------------------------------- | ------------------ |
 | `TERM=xterm-256color`               | 201    | 0      | 4086 / 7360 / 7619 ms              | 2.58 → 3.32        |
 | `TERM=tmux-256color`, `TMUX` set    | 201    | 0      | 4274 / 14972 / 27646 ms            | 1.73 → 3.02        |
-| `TERM=nikcli-unknown` (no terminfo) | 201    | 0      | 3118 / 4530 / 7591 ms              | 2.72 → 2.35        |
+| `TERM=ragu-unknown` (no terminfo) | 201    | 0      | 3118 / 4530 / 7591 ms              | 2.72 → 2.35        |
 
 **603 compiled starts, `hangRate` 0 on each row**, in the non-answering PTY, on one macOS arm64 host with 8 cores.
 

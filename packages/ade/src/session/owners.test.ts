@@ -66,8 +66,8 @@ test("patterns: one star is one segment, two are any depth", () => {
 })
 
 test("the board is looked for in the project, then beside it", () => {
-  expect(boardCandidates("C:\\Users\\me\\Favorites\\nikcli-ade")).toEqual([
-    "C:/Users/me/Favorites/nikcli-ade/.ade/TEAM.md",
+  expect(boardCandidates("C:\\Users\\me\\Favorites\\ragu-ade")).toEqual([
+    "C:/Users/me/Favorites/ragu-ade/.ade/TEAM.md",
     "C:/Users/me/Favorites/ade-team/TEAM.md",
   ])
 })

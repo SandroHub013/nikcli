@@ -128,20 +128,20 @@ struct Exit {
  * form offers: a name added there and not here cannot start.
  */
 const ALLOWED_AGENTS: &[&str] = &[
-    "claude", "codex", "opencode", "nikcli", "grok", "agy", "kimi", "prime", "pi", "ohmypi",
+    "claude", "codex", "opencode", "ragu", "grok", "agy", "kimi", "prime", "pi", "ohmypi",
     "hermes",
     "freebuff", "cline", "crush", "kilo", "goose", "copilot", "t3", "cursor-agent",
 ];
 
 /// Environment ADE sets for one agent CLI, whatever the user's shell has.
 ///
-/// nikcli attaches to a shared background server by default (`nikcli serve
-/// --service`), started by whichever nikcli ran first, even from another pane
+/// ragu attaches to a shared background server by default (`ragu serve
+/// --service`), started by whichever ragu ran first, even from another pane
 /// or another day. Its tools then run in that server's process, with that
 /// process's environment: `ade-msg` answered for the wrong pane (a reply was
 /// refused as "not made to this session"), read another pane's inbox (the
-/// reminders never stopped), or was not on PATH at all. `NIKCLI_SERVICE=0` is
-/// nikcli's own switch for a private in-process server, which is the pane's
+/// reminders never stopped), or was not on PATH at all. `RAGU_SERVICE=0` is
+/// ragu's own switch for a private in-process server, which is the pane's
 /// process and carries the pane's `ADE_PANE_ID`, token and PATH.
 ///
 /// Claude Code 2.1.284, drawn full screen, takes the whole mouse: one click
@@ -152,8 +152,9 @@ const ALLOWED_AGENTS: &[&str] = &[
 /// (`menu-click.ts`). Only in the panes ADE starts: never the user's settings.
 fn agent_env(command: &str) -> &'static [(&'static str, &'static str)] {
     let stem = command_stem(command.trim());
-    if stem.eq_ignore_ascii_case("nikcli") {
-        &[("NIKCLI_SERVICE", "0")]
+    // Both names, and the nikcli of before ragu's rename too (`legacy_cli`).
+    if crate::legacy_cli::is_cli_stem(stem) {
+        &[("RAGU_SERVICE", "0"), ("NIKCLI_SERVICE", "0")]
     } else if stem.eq_ignore_ascii_case("claude") {
         &[("CLAUDE_CODE_DISABLE_MOUSE_CLICKS", "1")]
     } else {
@@ -177,9 +178,9 @@ const CODEX_ACCOUNT_VARS: &[&str] = &["OPENAI_API_KEY", "CODEX_API_KEY", "OPENAI
 
 /// The variables `flags` take out of the inherited environment, or why one is refused.
 ///
-/// The only flags are an account's (B10). nikcli's bot turns used to run with
-/// their rules in a variable named by a flag (`NIKCLI_PERMISSION`); they run
-/// on ADE's nikcli server now, with the rules of their session (B8d,
+/// The only flags are an account's (B10). ragu's bot turns used to run with
+/// their rules in a variable named by a flag (`RAGU_PERMISSION`); they run
+/// on ADE's ragu server now, with the rules of their session (B8d,
 /// `serve-rules.ts`), and no spawn sets a variable by name.
 ///
 /// `secret_names` are key names. `secret_envs` are the variables those names
@@ -889,7 +890,8 @@ pub async fn pty_spawn(
      * is not a formality: the agent CLIs ship as several files of the same name
      * in the same directory, and only the one PATHEXT picks can actually run.
      */
-    let resolved = which_on_path(&command).unwrap_or_else(|| command.clone());
+    // `ragu` falls back to the nikcli of before the rename (`legacy_cli`).
+    let resolved = crate::legacy_cli::resolve(&command, which_on_path).unwrap_or_else(|| command.clone());
     /*
      * Prime Agent and pi report their turns through an extension ADE passes on
      * the command line, and only to a spawn that has a nonce to report under.
@@ -985,7 +987,7 @@ pub async fn pty_spawn(
             builder.env("ADE_PANE_TOKEN", token);
         }
     }
-    // After the scrub too: a `NIKCLI_SERVICE=1` in the user's shell would
+    // After the scrub too: a `RAGU_SERVICE=1` in the user's shell would
     // otherwise send this pane's tools back to the shared server.
     for (key, value) in agent_env(&command) {
         builder.env(key, value);
@@ -1185,7 +1187,7 @@ pub async fn pty_spawn(
      * ConPTY keeps its console host — OpenConsole.exe — alive until the pseudo
      * console is closed, and the pseudo console is closed by dropping the
      * master, which the registry holds until the exit is known: each wait
-     * depends on the other, and a `nikcli run` that printed its answer and
+     * depends on the other, and a `ragu run` that printed its answer and
      * exited left a pane that said "working" forever, with an OpenConsole
      * process for every turn. So the child is asked directly, twice a second;
      * once it has gone the session is dropped — which is what lets the
@@ -1568,7 +1570,7 @@ pub async fn pty_which(command: String) -> Option<String> {
     if !is_allowed_command(&command) {
         return None;
     }
-    which_on_path(&command)
+    crate::legacy_cli::resolve(&command, which_on_path)
 }
 
 /// Whether CreateProcess would accept this file as a program.
@@ -1590,7 +1592,7 @@ fn runnable_on_windows(candidate: &std::path::Path) -> bool {
     file.read_exact(&mut magic).is_ok() && magic == *b"MZ"
 }
 
-/// Shared with `serve`, which has to find the same `nikcli` this module would
+/// Shared with `serve`, which has to find the same `ragu` this module would
 /// start — on Windows that means honouring PATHEXT rather than guessing `.exe`.
 pub(crate) fn which_on_path(command: &str) -> Option<String> {
     let path = std::env::var_os("PATH")?;
@@ -1715,7 +1717,7 @@ fn shim_node(shim: &std::path::Path) -> Option<String> {
  * time: an argument with `&` ran what followed it, `%VAR%` expanded — a
  * secret's value included — and a line break cut the rest. So:
  *
- * - an npm shim (Codex, and Claude Code or nikcli where installed that way)
+ * - an npm shim (Codex, and Claude Code or ragu where installed that way)
  *   is started as what it would start, `node <script>.js`, and every argument
  *   arrives whole, line breaks included, with nothing for cmd.exe to read;
  * - any other script refuses an argument cmd.exe would read, rather than
@@ -2409,7 +2411,7 @@ mod tests {
         assert!(victims(999, &rows, true).is_empty());
     }
 
-    /// B8d: nikcli's bot turns run on ADE's server; no spawn sets a variable by name any more.
+    /// B8d: ragu's bot turns run on ADE's server; no spawn sets a variable by name any more.
     #[test]
     fn no_flag_but_an_accounts_is_taken() {
         for flag in [
@@ -2421,13 +2423,13 @@ mod tests {
             "remote-ask-shell",
             "remote-no-shell",
             "PATH=C:/x",
-            "NIKCLI_PERMISSION",
+            "RAGU_PERMISSION",
         ] {
-            for agent in ["nikcli", "claude", "codex"] {
+            for agent in ["ragu", "claude", "codex"] {
                 assert!(super::spawn_flag_effect(agent, &[flag.to_string()], &[], &[]).is_err(), "{agent} {flag}");
             }
         }
-        assert!(super::spawn_flag_effect("nikcli", &[], &[], &[]).unwrap().is_empty());
+        assert!(super::spawn_flag_effect("ragu", &[], &[], &[]).unwrap().is_empty());
     }
 
     #[test]
@@ -2481,7 +2483,7 @@ mod tests {
         let plan_with_key =
             super::spawn_flag_effect("claude", &["account-plan".to_string()], &["finta".to_string()], &[]).unwrap_err();
         assert_eq!(plan_with_key, "un abbonamento non riceve chiavi");
-        assert!(super::spawn_flag_effect("nikcli", &["account-plan".to_string()], &[], &[]).is_err());
+        assert!(super::spawn_flag_effect("ragu", &["account-plan".to_string()], &[], &[]).is_err());
         assert!(super::spawn_flag_effect("powershell", &["account-key".to_string()], &[], &[]).is_err());
         assert!(super::spawn_flag_effect(
             "claude",
@@ -2501,11 +2503,12 @@ mod tests {
     }
 
     #[test]
-    fn nikcli_runs_its_tools_in_the_pane_not_in_the_shared_server() {
-        for name in ["nikcli", "NIKCLI", "nikcli.exe", "nikcli.cmd"] {
-            assert_eq!(agent_env(name), &[("NIKCLI_SERVICE", "0")], "{name}");
+    fn ragu_runs_its_tools_in_the_pane_not_in_the_shared_server() {
+        // Both names, and an installed nikcli of before ragu's rename too (`legacy_cli`, until 2026-12-01).
+        for name in ["ragu", "RAGU", "ragu.exe", "ragu.cmd", "nikcli", "nikcli.cmd"] {
+            assert_eq!(agent_env(name), &[("RAGU_SERVICE", "0"), ("NIKCLI_SERVICE", "0")], "{name}");
         }
-        for name in ["codex", "opencode", "agy", "pwsh", "nikcli-island", "claude-island"] {
+        for name in ["codex", "opencode", "agy", "pwsh", "ragu-island", "claude-island"] {
             assert!(agent_env(name).is_empty(), "{name}");
         }
     }

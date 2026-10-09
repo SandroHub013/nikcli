@@ -5,7 +5,7 @@ import { join, resolve } from "node:path"
 import { connect, type DriverSocket } from "../../src/driver"
 import type { SimulationProtocol } from "../../src/protocol"
 
-const nikcli = resolve(import.meta.dir, "../../../nikcli")
+const ragu = resolve(import.meta.dir, "../../../ragu")
 
 async function freePort() {
   return new Promise<number>((resolvePort, reject) => {
@@ -66,7 +66,7 @@ export interface Harness {
 }
 
 /**
- * Boot the real nikcli TUI headless, wired to the simulation's deterministic
+ * Boot the real ragu TUI headless, wired to the simulation's deterministic
  * OpenAI backend, and return a driver for it.
  *
  * Extracted from `e2e.test.ts` so a corpus of render scenarios can reuse it
@@ -75,7 +75,7 @@ export interface Harness {
 export async function start(
   options: { cols?: number; rows?: number; experimental?: Record<string, unknown> } = {},
 ): Promise<Harness> {
-  const root = await mkdtemp(join(tmpdir(), "nikcli-render-"))
+  const root = await mkdtemp(join(tmpdir(), "ragu-render-"))
   const registry = join(root, "registry")
   const media = join(root, "media")
   const project = join(root, "project")
@@ -93,10 +93,10 @@ export async function start(
   await Bun.write(join(registry, "render.json"), JSON.stringify(manifest))
   if (options.experimental) {
     // The global config, not the project one: the harness sets
-    // NIKCLI_DISABLE_PROJECT_CONFIG so a developer's own project settings can
+    // RAGU_DISABLE_PROJECT_CONFIG so a developer's own project settings can
     // never reach a golden, and that switch would swallow this too. XDG_CONFIG_HOME
     // points inside the run's temp root, so this stays isolated.
-    // NIKCLI_TEST_HOME wins over XDG for every Global.Path, so the global
+    // RAGU_TEST_HOME wins over XDG for every Global.Path, so the global
     // config lives at <test home>/config/nikcli.json.
     await Bun.write(join(root, "home", "config", "nikcli.json"), JSON.stringify({ experimental: options.experimental }))
   }
@@ -104,22 +104,22 @@ export async function start(
   const child = Bun.spawn(
     [process.execPath, "run", "--conditions=browser", "./src/index.ts", project, "--model", "simulation/deterministic"],
     {
-      cwd: nikcli,
+      cwd: ragu,
       env: {
         ...process.env,
-        NIKCLI_DRIVE: "render",
-        NIKCLI_DRIVE_REGISTRY_DIR: registry,
-        NIKCLI_DRIVE_RENDERER: "headless",
-        NIKCLI_DRIVE_MEDIA_DIR: media,
-        NIKCLI_TEST_HOME: join(root, "home"),
-        NIKCLI_DISABLE_PROJECT_CONFIG: "1",
-        NIKCLI_DISABLE_DEFAULT_PLUGINS: "1",
+        RAGU_DRIVE: "render",
+        RAGU_DRIVE_REGISTRY_DIR: registry,
+        RAGU_DRIVE_RENDERER: "headless",
+        RAGU_DRIVE_MEDIA_DIR: media,
+        RAGU_TEST_HOME: join(root, "home"),
+        RAGU_DISABLE_PROJECT_CONFIG: "1",
+        RAGU_DISABLE_DEFAULT_PLUGINS: "1",
         // The editor bridge is discovered through ~/.claude/ide, which the
         // temp home does not shadow — without this the CLI attaches to the
         // developer's editor and prepends their current selection to the
         // prompt, which then lands in a golden screen.
-        NIKCLI_DISABLE_EDITOR_CONTEXT: "1",
-        NIKCLI_DISABLE_LSP_DOWNLOAD: "1",
+        RAGU_DISABLE_EDITOR_CONTEXT: "1",
+        RAGU_DISABLE_LSP_DOWNLOAD: "1",
         XDG_DATA_HOME: join(root, "xdg-data"),
         XDG_CACHE_HOME: join(root, "xdg-cache"),
         XDG_CONFIG_HOME: join(root, "xdg-config"),
@@ -220,7 +220,7 @@ export function normalize(screen: string): string {
       // clock times
       .replace(/\b\d{1,2}:\d{2}(:\d{2})?\s?(AM|PM)?\b/gi, "HH:MM")
       // The status bar ends with the file the developer's editor has open
-      // (nikcli's IDE integration), right-aligned — so its *length* shifts the
+      // (ragu's IDE integration), right-aligned — so its *length* shifts the
       // whole line, not just its tail. Harmless in the product, poison in a
       // golden: the corpus would depend on which file the developer had open.
       // The line is chrome, not the session render, so it goes whole.

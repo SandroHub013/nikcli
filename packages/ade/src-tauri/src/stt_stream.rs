@@ -760,7 +760,7 @@ mod tests {
         let (port, seen) = serve(Script::talking()).await;
         let sessions = Sessions::default();
         let events = Events::default();
-        let terms = vec!["Nikcli".to_string(), "  ".to_string(), "à&b c".to_string()];
+        let terms = vec!["Ragu".to_string(), "  ".to_string(), "à&b c".to_string()];
         let address = build_url(&format!("ws://127.0.0.1:{port}/v1/stt"), "auto", &terms);
         sessions.start(Some(KEY.into()), address, quick(), events.emit()).unwrap();
         events.until("ready", |e| e.contains(&SttEvent::Ready)).await;
@@ -771,7 +771,7 @@ mod tests {
         assert!(uri.starts_with("/v1/stt?model=grok-voice-transcribe-2.0&sample_rate=16000&encoding=pcm&interim_results=true"), "{uri}");
         // «auto» leaves the language out; a blank term is dropped; the others are repeated and encoded.
         assert!(!uri.contains("language="), "{uri}");
-        assert!(uri.ends_with("&keyterm=Nikcli&keyterm=%C3%A0%26b%20c"), "{uri}");
+        assert!(uri.ends_with("&keyterm=Ragu&keyterm=%C3%A0%26b%20c"), "{uri}");
         sessions.close_all();
         assert_key_not_in(&events.all());
     }

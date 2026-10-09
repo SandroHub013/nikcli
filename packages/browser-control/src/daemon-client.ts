@@ -6,7 +6,7 @@
  * Start strategy:
  * - **Source / dev** (`bun run dev`): spawn `daemon.ts` with bun so the daemon
  *   outlives a short CLI invocation.
- * - **Compiled nikcli binary**: sources live under virtual `/$bunfs/root/`, so
+ * - **Compiled ragu binary**: sources live under virtual `/$bunfs/root/`, so
  *   there is no real `daemon.ts` on disk, and re-execing the 200MB+ binary just
  *   to host the socket is killed by the OS (SIGKILL / OOM). Instead, start the
  *   daemon **in-process** — the TUI (or tool) already has Bun.WebView in the
@@ -150,7 +150,7 @@ async function readStderrSnippet(proc: Bun.Subprocess, limit = 800): Promise<str
  * over a DevTools URL does not dodge it either. A daemon hosted in-process on a
  * worker therefore answers `list` fine and fails every `start`.
  *
- * A host that runs sessions on a worker (nikcli's TUI does) registers this so
+ * A host that runs sessions on a worker (ragu's TUI does) registers this so
  * the daemon binds on its main thread instead; the worker then talks to it over
  * the same socket as any other client, and views are created where they are
  * allowed to exist.

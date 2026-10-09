@@ -1117,7 +1117,7 @@ describe("the planner is the host's, on the agent's own runner", () => {
         { agentEngine: "claude", agentSpeed: "fast", openRouterApiKey: "sk-or-key" },
         async (request) => {
           seen.push({ engine: request.engine, speed: request.speed, system: request.system, user: request.user })
-          return '{"speech":"Apro il progetto nikcli.","steps":[{"action":"open_project","project":"nikcli"}]}'
+          return '{"speech":"Apro il progetto ragu.","steps":[{"action":"open_project","project":"ragu"}]}'
         },
       )
       await engine.submitText("portami nel progetto dei test")
@@ -2237,7 +2237,7 @@ describe("always-on listening", () => {
 
   // Full review 2026-10-06, ui 11: with the interface in English the notices about the key came out in Italian.
   test("what is left on the key is said in English when the interface is English", async () => {
-    const { resetLocaleForTests } = await import("@nikcli-ai/ade/i18n")
+    const { resetLocaleForTests } = await import("@ragu/ade/i18n")
     resetLocaleForTests("en")
     try {
       const engineWith = (credit: { left: number } | { refused: true }) =>

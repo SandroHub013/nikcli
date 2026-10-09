@@ -17,8 +17,8 @@ import {
   batch,
   on,
 } from "solid-js"
-import { VERSION, type InstallMethod } from "@nikcli-ai/util/version"
-import { Flag } from "@nikcli-ai/util/flag"
+import { VERSION, type InstallMethod } from "@ragu/util/version"
+import { Flag } from "@ragu/util/flag"
 import { DialogProvider, useDialog } from "@tui/ui/dialog"
 import { DialogProvider as DialogProviderList, DialogProviderDisconnect } from "@tui/component/dialog-provider"
 import { checkUpgradeWhenSubscriptionReady, SDKProvider, useSDK } from "@tui/context/sdk"
@@ -61,17 +61,17 @@ import { SessionTabsProvider, useSessionTabs } from "./context/session-tabs"
 import { ToastProvider, useToast } from "./ui/toast"
 import { ExitProvider, useExit } from "./context/exit"
 import { Usage } from "./util/usage"
-import { SessionPrimitives } from "@nikcli-ai/util/session-primitives"
-import { TuiEventName } from "@nikcli-ai/util/tui-event-schema"
+import { SessionPrimitives } from "@ragu/util/session-primitives"
+import { TuiEventName } from "@ragu/util/tui-event-schema"
 import { KVProvider, useKV } from "./context/kv"
 import { LanguageProvider } from "./context/language"
-import { parseModel } from "@nikcli-ai/util/model"
+import { parseModel } from "@ragu/util/model"
 import { ArgsProvider, useArgs, type Args } from "./context/args"
 import open from "open"
 import { writeHeapSnapshot } from "v8"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { EditorContextProvider } from "./context/editor"
-import type { TuiConfig } from "@nikcli-ai/sdk/httpapi"
+import type { TuiConfig } from "@ragu/sdk/httpapi"
 import { TuiPluginRuntime, createTuiApi, type RouteMap } from "./plugin"
 import { setPluginHost, type TuiPluginHost } from "./plugin/host"
 import { dbg as dbgApp } from "./feature-plugins/background/__debug"
@@ -89,7 +89,7 @@ import { DialogLogin } from "@tui/component/dialog-login"
 import { DialogAccountLogin } from "@tui/component/dialog-account-login"
 import { DialogProfile } from "@tui/component/dialog-profile"
 import { DialogAuthManage } from "@tui/component/dialog-auth-manage"
-import { BRAIN_SESSION_TITLE } from "@nikcli-ai/util/brain-constants"
+import { BRAIN_SESSION_TITLE } from "@ragu/util/brain-constants"
 import { DialogWebPreview } from "@tui/component/dialog-web-preview"
 import { SupportSessionProvider } from "@tui/context/support-session"
 import type { StartServerOptions } from "@tui/context/server"
@@ -98,7 +98,7 @@ import {
   win32DisableProcessedInput,
   win32InstallCtrlCGuard,
   restoreTerminalState,
-} from "@nikcli-ai/util/win32"
+} from "@ragu/util/win32"
 
 function rendererConfig(tuiCfg: TuiConfig): CliRendererConfig {
   return {
@@ -123,8 +123,8 @@ function rendererConfig(tuiCfg: TuiConfig): CliRendererConfig {
 }
 
 import type { EventSource, Transport } from "./context/sdk"
-import { Log } from "@nikcli-ai/util/log"
-import { errorMessage } from "@nikcli-ai/util/error-format"
+import { Log } from "@ragu/util/log"
+import { errorMessage } from "@ragu/util/error-format"
 import { classifyConfigFailure } from "@tui/util/config-failure"
 import { ensureOnboarded } from "@tui/util/onboarding"
 
@@ -281,15 +281,15 @@ export function tui(input: {
         setPluginHost(input.pluginHost)
 
         const tuiCfg = input.tuiConfig ?? ({} as TuiConfig)
-        const drive = Boolean(process.env.NIKCLI_DRIVE)
-        const headless = drive && process.env.NIKCLI_DRIVE_RENDERER === "headless"
+        const drive = Boolean(process.env.RAGU_DRIVE)
+        const headless = drive && process.env.RAGU_DRIVE_RENDERER === "headless"
         // In drive mode the renderer must still be built from *this* package's
         // `@opentui/core`, so hand the simulation package our constructors: the
         // renderer's class identity is what `render(node, renderer)` below checks
         // to decide whether to reuse it instead of creating a second one.
         const renderer = drive
           ? await (
-              await import("@nikcli-ai/simulation/frontend")
+              await import("@ragu/simulation/frontend")
             ).Drive.create(rendererConfig(tuiCfg), {
               createCliRenderer,
               createTestRenderer: (await import("@opentui/core/testing")).createTestRenderer,
@@ -559,7 +559,7 @@ function App(props: {
       await DialogAlert.show(
         dialog,
         "Update Available",
-        `Version v${version} is available, but your install method (${VERSION === "local" ? "local build" : process.execPath}) could not be detected automatically.\n\nRun \`nikcli upgrade ${version}\` to install.`,
+        `Version v${version} is available, but your install method (${VERSION === "local" ? "local build" : process.execPath}) could not be detected automatically.\n\nRun \`ragu upgrade ${version}\` to install.`,
       )
       return
     }
@@ -691,7 +691,7 @@ function App(props: {
       // returning user's plugins, config and prompt have no use for the answer.
       // What it decides (the sign-in dialog) is applied once they are up.
       let returningAccount: Promise<Awaited<ReturnType<typeof UserApi.session>>> | undefined
-      if (!process.env.NIKCLI_DRIVE) {
+      if (!process.env.RAGU_DRIVE) {
         // Account state comes from `/user/*` — the transport is up by now, as
         // the `sdk.client.tui.config` call a few lines below has always relied on.
         const accountRequest = UserApi.session(sdk)
@@ -849,7 +849,7 @@ function App(props: {
               : null,
       }),
       (state) => {
-        if (!state.enabled || Flag.NIKCLI_DISABLE_TERMINAL_TITLE) {
+        if (!state.enabled || Flag.RAGU_DISABLE_TERMINAL_TITLE) {
           renderer.setTerminalTitle("")
           return
         }
@@ -985,7 +985,7 @@ function App(props: {
     restartBackend: () => Promise<Transport | undefined>,
     options: { success?: string } = {},
   ): Promise<"restarted" | "skipped" | "failed"> {
-    const target = props.restartTarget ?? "nikcli server"
+    const target = props.restartTarget ?? "ragu server"
     dialog.replace(() => <DialogRestart target={target} />)
     await afterPaint(renderer)
     // The event stream drops while the backend is down, and the refetch its
@@ -1114,7 +1114,7 @@ function App(props: {
       title: "Warp session",
       value: "workspace.warp",
       category: "Workspace",
-      enabled: route.data.type === "session" && Flag.NIKCLI_EXPERIMENTAL_WORKSPACES_TUI,
+      enabled: route.data.type === "session" && Flag.RAGU_EXPERIMENTAL_WORKSPACES_TUI,
       slash: {
         name: "warp",
       },
@@ -1548,7 +1548,7 @@ function App(props: {
     {
       title: "View status",
       keybind: "status_view",
-      value: "nikcli.status",
+      value: "ragu.status",
       slash: {
         name: "status",
       },
@@ -1579,7 +1579,7 @@ function App(props: {
     {
       title: "Sync status",
       keybind: "sync_view",
-      value: "nikcli.sync",
+      value: "ragu.sync",
       slash: {
         name: "sync",
         aliases: ["hub", "remote"],
@@ -1591,7 +1591,7 @@ function App(props: {
     },
     {
       title: "Context usage",
-      value: "nikcli.usage",
+      value: "ragu.usage",
       slash: {
         name: "usage",
         aliases: ["context"],
@@ -1617,7 +1617,7 @@ function App(props: {
     },
     {
       title: "Command center",
-      value: "nikcli.dashboard",
+      value: "ragu.dashboard",
       slash: {
         name: "dashboard",
         aliases: ["ops", "command-center"],
@@ -1681,7 +1681,7 @@ function App(props: {
     },
     {
       title: "Reload configuration",
-      value: "nikcli.reload",
+      value: "ragu.reload",
       category: "System",
       slash: {
         name: "reload",
@@ -1695,7 +1695,7 @@ function App(props: {
     },
     {
       title: "Restart Ragu Code",
-      value: "nikcli.restart",
+      value: "ragu.restart",
       category: "System",
       slash: {
         name: "restart",
@@ -1800,7 +1800,7 @@ function App(props: {
             DialogAlert.show(
               dialog,
               "Warning",
-              "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out Nikcli Zen\nhttps://nikcli-ai.dev/zen",
+              "While openrouter is a convenient way to access LLMs your request will often be routed to subpar providers that do not work well in our testing.\n\nFor reliable access to models check out Ragu Zen\nhttps://nikcli-ai.dev/zen",
             ).then(() => kv.set("openrouter_warning", true))
           })
         }
@@ -1928,7 +1928,7 @@ function App(props: {
       flexDirection="column"
       backgroundColor={theme.surface.base}
       onMouseUp={async () => {
-        if (Flag.NIKCLI_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
+        if (Flag.RAGU_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) {
           renderer.clearSelection()
           return
         }

@@ -12,8 +12,8 @@
  * the service in-process — lazily, because that module pulls the `ai` package chain and must not
  * be evaluated during TUI module load. Over the wire that concern disappears with the import.
  */
-import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@nikcli-ai/plugin/tui"
-import type { ConnectorStatus } from "@nikcli-ai/sdk/httpapi"
+import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@ragu/plugin/tui"
+import type { ConnectorStatus } from "@ragu/sdk/httpapi"
 
 const id = "internal:connectors"
 
@@ -115,7 +115,7 @@ export function openManager(api: TuiPluginApi): void {
       api.ui.dialog.replace(() => (
         <Alert
           title="Connectors"
-          message={'No connectors configured.\nAdd one under "connectors" in nikcli.json or run: nikcli connector add'}
+          message={'No connectors configured.\nAdd one under "connectors" in nikcli.json or run: ragu connector add'}
         />
       ))
       return

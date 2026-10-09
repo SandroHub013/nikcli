@@ -46,10 +46,10 @@ const markdownHtml = meta?.kind === "markdown" ? renderMarkdown(textBody) : ""
 const rawUrl = meta ? `/artifact/${meta.id}/raw${key ? `?key=${encodeURIComponent(key)}` : ""}` : ""
 const updated = meta ? new Date(meta.time.updated).toUTCString() : ""
 const pageTitle = meta
-  ? `${meta.title} — nikcli artifact`
+  ? `${meta.title} — ragu artifact`
   : stored
-    ? "Private artifact — nikcli"
-    : "Artifact not found — nikcli"
+    ? "Private artifact — ragu"
+    : "Artifact not found — ragu"
 ---
 
 <!doctype html>
@@ -70,8 +70,8 @@ const pageTitle = meta
   <body>
     <header class="bar">
       <div class="bar-left">
-        <a class="brand" href="/" aria-label="nikcli home">
-          <span class="brand-fallback" aria-hidden="true">nikcli</span>
+        <a class="brand" href="/" aria-label="ragu home">
+          <span class="brand-fallback" aria-hidden="true">ragu</span>
           <img class="brand-light" src="/brand/wordmark-light.png" alt="" width="95" height="31" />
           <img class="brand-dark" src="/brand/wordmark-dark.png" alt="" width="95" height="31" />
         </a>
@@ -95,7 +95,7 @@ const pageTitle = meta
           <section class="gate">
             <h1>Private artifact</h1>
             <p>
-              Sign in with the publisher's nikcli account to view it, or open the link exactly as it was shared
+              Sign in with the publisher's ragu account to view it, or open the link exactly as it was shared
               (including its <code>?key=</code> part).
             </p>
             <a class="login-link" href={`/user/authorize?return_to=${encodeURIComponent(Astro.url.pathname + Astro.url.search)}`}>Sign in securely</a>

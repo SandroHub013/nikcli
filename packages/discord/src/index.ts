@@ -8,7 +8,7 @@ Couldn't start the Discord bot.
 Checklist:
 • Set DISCORD_BOT_TOKEN (Developer Portal → Bot → Reset Token)
 • Enable Message Content Intent (Bot → Privileged Gateway Intents)
-• Invite the bot, or configure from the nikcli TUI: /discord
+• Invite the bot, or configure from the ragu TUI: /discord
 • CLI fallback: bun run setup
 `)
   process.exit(1)
@@ -48,12 +48,12 @@ process.on("SIGINT", () => {
 try {
   await startDiscordBot({
     botToken: token,
-    nikcliUrl: process.env.NIKCLI_URL,
-    nikcliUsername: process.env.NIKCLI_USERNAME,
-    nikcliPassword: process.env.NIKCLI_PASSWORD,
-    directory: process.env.NIKCLI_DIRECTORY,
-    model: process.env.NIKCLI_MODEL,
-    workdir: process.env.NIKCLI_WORKDIR,
+    raguUrl: process.env.RAGU_URL,
+    raguUsername: process.env.RAGU_USERNAME,
+    raguPassword: process.env.RAGU_PASSWORD,
+    directory: process.env.RAGU_DIRECTORY,
+    model: process.env.RAGU_MODEL,
+    workdir: process.env.RAGU_WORKDIR,
   })
 } catch (err) {
   if (err instanceof Error && (err.name === "DiscordBotError" || !err.stack)) {

@@ -18,29 +18,29 @@ const toc = [
 
 <DocsLayout
   title="Getting Started"
-  subtitle="A source-of-truth overview of nikcli across the CLI, server, connectors, and mobile app."
-  description="nikcli getting started guide covering the CLI, TUI, session engine, server, connectors, and mobile app."
+  subtitle="A source-of-truth overview of ragu across the CLI, server, connectors, and mobile app."
+  description="ragu getting started guide covering the CLI, TUI, session engine, server, connectors, and mobile app."
   toc={toc}
 >
   <section id="install-run" class="doc-section">
     <h2>Install & Run</h2>
-    <DocCallout type="info" title="nikcli is a fork of OpenCode">
+    <DocCallout type="info" title="ragu is a fork of OpenCode">
       <p>
-        nikcli is an independent fork of
+        ragu is an independent fork of
         <a href="https://github.com/anomalyco/opencode" target="_blank" rel="noopener noreferrer">OpenCode</a>,
         the open source coding agent — full credit for the original project goes to its authors and
-        contributors. nikcli is not affiliated with or endorsed by them, so please report anything
+        contributors. ragu is not affiliated with or endorsed by them, so please report anything
         you hit here on the
-        <a href="https://github.com/nikcli/nikcli" target="_blank" rel="noopener noreferrer">nikcli repository</a>,
+        <a href="https://github.com/nikcli/nikcli" target="_blank" rel="noopener noreferrer">ragu repository</a>,
         never on the upstream tracker.
       </p>
     </DocCallout>
     <p>
-      nikcli is a Bun-based coding agent with a terminal UI, HTTP server, connector system, a
+      ragu is a Bun-based coding agent with a terminal UI, HTTP server, connector system, a
       browser web app, a Studio dashboard, and a mobile companion app. It also runs autonomously
       toward verifiable goals, schedules and API-triggers <a href="/docs/routines">routines</a>, and
       localizes both its interface and the model's replies. The CLI entrypoint is
-      <code>packages/nikcli/src/index.ts</code>.
+      <code>packages/ragu/src/index.ts</code>.
     </p>
     <DocCode language="bash" title="Terminal · macOS / Linux">
       curl -fsSL https://nikcli-ai.dev/install | bash
@@ -49,20 +49,20 @@ const toc = [
       irm https://nikcli-ai.dev/install.ps1 | iex
     </DocCode>
     <DocCode language="bash" title="Terminal">
-      nikcli
+      ragu
     </DocCode>
     <DocCallout type="info" title="Install location">
       <p>
         Both installers drop the binary in <code>~/.nikcli/bin</code> and add it to your PATH — set
-        <code>NIKCLI_INSTALL_DIR</code> to change that. On Windows the PowerShell installer also reads
-        <code>NIKCLI_VERSION</code> to pin a version and <code>NIKCLI_NO_PATH=1</code> to leave PATH
+        <code>RAGU_INSTALL_DIR</code> to change that. On Windows the PowerShell installer also reads
+        <code>RAGU_VERSION</code> to pin a version and <code>RAGU_NO_PATH=1</code> to leave PATH
         untouched. Any platform can also install from npm with <code>npm i -g nikcli-ai@latest</code>.
       </p>
     </DocCallout>
     <DocCallout type="info" title="Runtime">
       <p>
         For local development in this repo, run <code>bun dev</code> inside
-        <code>packages/nikcli</code>.
+        <code>packages/ragu</code>.
       </p>
     </DocCallout>
   </section>
@@ -72,32 +72,32 @@ const toc = [
     <div class="doc-grid not-prose my-2">
       <DocCard title="CLI + TUI" eyebrow="Interface">
         <p>
-          Commands are registered in <code>packages/nikcli/src/index.ts</code>. The default TUI and
-          worker flow live in <code>packages/nikcli/src/cli/cmd/tui/</code>.
+          Commands are registered in <code>packages/ragu/src/index.ts</code>. The default TUI and
+          worker flow live in <code>packages/ragu/src/cli/cmd/tui/</code>.
         </p>
       </DocCard>
       <DocCard title="Session Engine" eyebrow="Core">
         <p>
           Sessions, messages, tool parts, sharing, and todo state live under
-          <code>packages/nikcli/src/session/</code>.
+          <code>packages/ragu/src/session/</code>.
         </p>
       </DocCard>
       <DocCard title="Tools & Permissions" eyebrow="Execution">
         <p>
-          The public tool surface is defined in <code>packages/nikcli/src/tool/registry.ts</code>
-          and guarded by <code>packages/nikcli/src/permission/</code>.
+          The public tool surface is defined in <code>packages/ragu/src/tool/registry.ts</code>
+          and guarded by <code>packages/ragu/src/permission/</code>.
         </p>
       </DocCard>
       <DocCard title="Server + API" eyebrow="Services">
         <p>
           HTTP and SSE endpoints for TUI, companion, connectors, and mobile are built in
-          <code>packages/nikcli/src/server/</code>.
+          <code>packages/ragu/src/server/</code>.
         </p>
       </DocCard>
       <DocCard title="Connectors" eyebrow="Automation">
         <p>
           External service connectors and auth live under
-          <code>packages/nikcli/src/connectors/</code>.
+          <code>packages/ragu/src/connectors/</code>.
         </p>
       </DocCard>
       <DocCard title="Mobile App" eyebrow="Companion">
@@ -121,7 +121,7 @@ const toc = [
       </DocCard>
       <DocCard title="Web App & Studio" eyebrow="Browser" href="/docs/web-app">
         <p>
-          Drive sessions from the browser via <code>nikcli web</code> and the <code>/app</code> SPA,
+          Drive sessions from the browser via <code>ragu web</code> and the <code>/app</code> SPA,
           or manage agents, sessions, MCP, and config from the <code>/dashboard</code> Studio.
         </p>
       </DocCard>
@@ -140,7 +140,7 @@ const toc = [
       <DocCard title="Build" eyebrow="Extend" href="/docs/build">
         <p>
           Plugins that run inside the agent, the typed client that drives a running server, and the
-          embedded host that runs nikcli in your own process.
+          embedded host that runs ragu in your own process.
         </p>
       </DocCard>
       <DocCard title="API Reference" eyebrow="HTTP" href="/docs/api">
@@ -152,8 +152,8 @@ const toc = [
       </DocCard>
       <DocCard title="Packages & Suite" eyebrow="Monorepo" href="/docs/packages">
         <p>
-          <code>packages/nikcli</code> is the base; supporting packages include
-          <code>@nikcli-ai/llm</code>, <code>http-recorder</code>, the SDK, mobile, and web.
+          <code>packages/ragu</code> is the base; supporting packages include
+          <code>@ragu/llm</code>, <code>http-recorder</code>, the SDK, mobile, and web.
         </p>
       </DocCard>
     </div>
@@ -162,12 +162,12 @@ const toc = [
   <section id="codebase-roadmap" class="doc-section">
     <h2>Codebase Roadmap</h2>
     <p>
-      The runtime surface is split across three main packages: <code>packages/nikcli</code> for the
+      The runtime surface is split across three main packages: <code>packages/ragu</code> for the
       CLI and server, <code>packages/mobile</code> for the Expo app, and <code>packages/web</code>
       for this documentation site.
     </p>
     <div class="doc-grid not-prose my-2">
-      <DocCard title="Core runtime" eyebrow="packages/nikcli" href="/docs/architecture">
+      <DocCard title="Core runtime" eyebrow="packages/ragu" href="/docs/architecture">
         <p>
           Commands, agents, sessions, tools, connectors, sharing, storage, sync, and HTTP routes.
         </p>
@@ -191,27 +191,27 @@ const toc = [
       sheets (teleport, session artifacts, workspace switcher). The most recent release also
       extracted three sibling automation engines — <a href="/docs/computer-use">computer-use</a>,
       <a href="/docs/browser-control">browser-control</a>, and
-      <a href="/docs/terminal-control">terminal-control</a> — out of <code>packages/nikcli</code>
+      <a href="/docs/terminal-control">terminal-control</a> — out of <code>packages/ragu</code>
       into first-class workspace packages. The brand wordmarks are now shared between web and
       mobile — see the <a href="/docs/brand">brand assets</a> reference.
     </p>
     <div class="doc-grid not-prose my-2">
       <DocCard title="Computer-use engine" eyebrow="New package" href="/docs/computer-use">
         <p>
-          <code>@nikcli-ai/computer-use</code>: headless desktop-automation daemon, sandbox/host
+          <code>@ragu/computer-use</code>: headless desktop-automation daemon, sandbox/host
           backends, recording pipeline, PR-ready evidence bundles. Sibling of browser-control
           and terminal-control.
         </p>
       </DocCard>
       <DocCard title="Browser-control engine" eyebrow="New package" href="/docs/browser-control">
         <p>
-          <code>@nikcli-ai/browser-control</code>: per-workspace Chromium daemon with the same
+          <code>@ragu/browser-control</code>: per-workspace Chromium daemon with the same
           CLI grammar and bundle format as computer-use and terminal-control.
         </p>
       </DocCard>
       <DocCard title="Terminal-control engine" eyebrow="New package" href="/docs/terminal-control">
         <p>
-          <code>@nikcli-ai/terminal-control</code>: native termctrl driver, <code>.termctrl</code>
+          <code>@ragu/terminal-control</code>: native termctrl driver, <code>.termctrl</code>
           recordings, ANSI/JSON/PNG/SVG/video renderers, evidence bundles.
         </p>
       </DocCard>
@@ -224,7 +224,7 @@ const toc = [
       </DocCard>
       <DocCard title="Island plugin" eyebrow="macOS notch" href="/docs/island">
         <p>
-          <code>NikcliIsland.app</code> and the bridge that mirrors session state into the file
+          <code>RaguIsland.app</code> and the bridge that mirrors session state into the file
           contract it reads. Bidirectional: the notch can answer permission requests via
           <code>POST /permission/:requestID/reply</code>.
         </p>
@@ -241,7 +241,7 @@ const toc = [
       </DocCard>
       <DocCard title="Teleport and artifacts" eyebrow="Mobile" href="/docs/mobile">
         <p>
-          <code>nikcli teleport</code> ships a session (and optionally the working tree) to a
+          <code>ragu teleport</code> ships a session (and optionally the working tree) to a
           remote host, the mobile app exposes a teleport sheet, and session artifact viewer
           surfaces URLs, HTML, SVG, and Mermaid previews inline.
         </p>

@@ -1,5 +1,5 @@
 import { For, Show, createSignal } from "solid-js"
-import { HowItWorks } from "@nikcli-ai/voice"
+import { HowItWorks } from "@ragu/voice"
 import {
   HOOK_TARGETS,
   hookTargetsFor,
@@ -9,7 +9,7 @@ import {
   type HookHost,
   setHook,
 } from "./agent-hooks"
-import { isWindowsRuntime } from "@nikcli-ai/voice/core"
+import { isWindowsRuntime } from "@ragu/voice/core"
 import { t } from "../i18n"
 
 /**

@@ -91,9 +91,9 @@ def resolveBuildSetting(String envName, String propertyName) {
     return value?.toString()?.trim() ?: null
 }
 
-def releaseStoreFile = resolveBuildSetting('NIKCLI_ANDROID_STORE_FILE', 'nikcliAndroidStoreFile')
-def releaseVersionCode = (resolveBuildSetting('NIKCLI_ANDROID_VERSION_CODE', 'nikcliAndroidVersionCode') ?: '1').toInteger()
-def releaseVersionName = resolveBuildSetting('NIKCLI_ANDROID_VERSION_NAME', 'nikcliAndroidVersionName') ?: '1.0.0'
+def releaseStoreFile = resolveBuildSetting('RAGU_ANDROID_STORE_FILE', 'raguAndroidStoreFile')
+def releaseVersionCode = (resolveBuildSetting('RAGU_ANDROID_VERSION_CODE', 'raguAndroidVersionCode') ?: '1').toInteger()
+def releaseVersionName = resolveBuildSetting('RAGU_ANDROID_VERSION_NAME', 'raguAndroidVersionName') ?: '1.0.0'
 
 android {
     ndkVersion rootProject.ext.ndkVersion
@@ -121,9 +121,9 @@ android {
         if (releaseStoreFile != null) {
             release {
                 storeFile file(releaseStoreFile)
-                storePassword resolveBuildSetting('NIKCLI_ANDROID_STORE_PASSWORD', 'nikcliAndroidStorePassword')
-                keyAlias resolveBuildSetting('NIKCLI_ANDROID_KEY_ALIAS', 'nikcliAndroidKeyAlias')
-                keyPassword resolveBuildSetting('NIKCLI_ANDROID_KEY_PASSWORD', 'nikcliAndroidKeyPassword')
+                storePassword resolveBuildSetting('RAGU_ANDROID_STORE_PASSWORD', 'raguAndroidStorePassword')
+                keyAlias resolveBuildSetting('RAGU_ANDROID_KEY_ALIAS', 'raguAndroidKeyAlias')
+                keyPassword resolveBuildSetting('RAGU_ANDROID_KEY_PASSWORD', 'raguAndroidKeyPassword')
             }
         }
     }

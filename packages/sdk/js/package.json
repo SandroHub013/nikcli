@@ -1,13 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@nikcli-ai/sdk",
+  "name": "@ragu/sdk",
   "version": "1.431.0",
   "type": "module",
   "license": "MIT",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "build": "./script/build.ts",
-    "generate:httpapi": "bun run --cwd ../../nikcli generate:httpapi-clients"
+    "generate:httpapi": "bun run --cwd ../../ragu generate:httpapi-clients"
   },
   "exports": {
     ".": "./src/index.ts",

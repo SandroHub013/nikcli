@@ -7,7 +7,7 @@ import {
   type MobileLoopRuntime,
   type MobileLoopTemplate,
   type MobileRoutine,
-  WebNikcliClient,
+  WebRaguClient,
 } from "@/app/api"
 import { Banner, Button, Chip, EmptyState, Field, Spinner, Surface, TextAreaField } from "@/app/ui"
 
@@ -34,7 +34,7 @@ function runStatusTone(status: MobileLoopRun["status"]) {
   return "warn" as const
 }
 
-export function AutomationsScreen(props: { client: WebNikcliClient | null; navigate(path: string): void }) {
+export function AutomationsScreen(props: { client: WebRaguClient | null; navigate(path: string): void }) {
   const { client } = props
   const [routines, setRoutines] = useState<MobileRoutine[]>([])
   const [loops, setLoops] = useState<MobileLoop[]>([])

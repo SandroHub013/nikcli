@@ -4,22 +4,22 @@ import os from "os"
 import path from "path"
 import { z } from "zod"
 
-const testHome = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-sdk-next-home-"))
-process.env.NIKCLI_TEST_HOME = testHome
-process.env.NIKCLI_DISABLE_PROJECT_CONFIG = "1"
+const testHome = await fs.mkdtemp(path.join(os.tmpdir(), "ragu-sdk-next-home-"))
+process.env.RAGU_TEST_HOME = testHome
+process.env.RAGU_DISABLE_PROJECT_CONFIG = "1"
 process.env.XDG_DATA_HOME = path.join(testHome, "data")
 process.env.XDG_CACHE_HOME = path.join(testHome, "cache")
 process.env.XDG_CONFIG_HOME = path.join(testHome, "config")
 process.env.XDG_STATE_HOME = path.join(testHome, "state")
 
 const { Effect } = await import("effect")
-const { NikCli, Tool } = await import("../src")
-const { Instance } = await import("nikcli-ai/project/instance")
+const { Ragu, Tool } = await import("../src")
+const { Instance } = await import("ragu-code/project/instance")
 
 const projectDirs: string[] = []
 
 async function makeProjectDir() {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "nikcli-sdk-next-project-"))
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ragu-sdk-next-project-"))
   const resolved = await fs.realpath(dir)
   projectDirs.push(resolved)
   return resolved
@@ -28,9 +28,9 @@ async function makeProjectDir() {
 test("embedded client uses the real router and handlers", async () => {
   const directory = await makeProjectDir()
   const program = Effect.gen(function* () {
-    const nikcli = yield* NikCli.create({ directory })
+    const ragu = yield* Ragu.create({ directory })
 
-    yield* nikcli.tools.register(
+    yield* ragu.tools.register(
       Tool.define("embedded_tool", async () => ({
         description: "Embedded test tool",
         parameters: z.object({}),
@@ -38,10 +38,10 @@ test("embedded client uses the real router and handlers", async () => {
       })),
     )
 
-    const ids = yield* Effect.promise(() => nikcli.experimental.toolIDs())
-    const created = yield* Effect.promise(() => nikcli.session.create({ title: "Embedded session" }))
-    const listed = yield* Effect.promise(() => nikcli.session.list())
-    const config = yield* Effect.promise(() => nikcli.config.get())
+    const ids = yield* Effect.promise(() => ragu.experimental.toolIDs())
+    const created = yield* Effect.promise(() => ragu.session.create({ title: "Embedded session" }))
+    const listed = yield* Effect.promise(() => ragu.session.list())
+    const config = yield* Effect.promise(() => ragu.config.get())
 
     expect(ids).toContain("embedded_tool")
     expect(ids).toContain("bash")
@@ -57,9 +57,9 @@ test("requests can override the host directory per call", async () => {
   const first = await makeProjectDir()
   const second = await makeProjectDir()
   const program = Effect.gen(function* () {
-    const nikcli = yield* NikCli.create({ directory: first })
-    const created = yield* Effect.promise(() => nikcli.session.create({ title: "Host session" }))
-    const other = yield* Effect.promise(() => nikcli.session.list({ directory: second }))
+    const ragu = yield* Ragu.create({ directory: first })
+    const created = yield* Effect.promise(() => ragu.session.create({ title: "Host session" }))
+    const other = yield* Effect.promise(() => ragu.session.list({ directory: second }))
 
     expect(created.directory).toBe(first)
     expect(other.some((session) => session.id === created.id)).toBe(false)
@@ -71,8 +71,8 @@ test("registered tools are host-directory scoped", async () => {
   const first = await makeProjectDir()
   const second = await makeProjectDir()
   const program = Effect.gen(function* () {
-    const one = yield* NikCli.create({ directory: first })
-    const two = yield* NikCli.create({ directory: second })
+    const one = yield* Ragu.create({ directory: first })
+    const two = yield* Ragu.create({ directory: second })
 
     yield* one.tools.register(
       Tool.define("scoped_tool", async () => ({
@@ -95,11 +95,11 @@ test("embedded client is available as a Layer service", async () => {
   const directory = await makeProjectDir()
   const created = await Effect.runPromise(
     Effect.gen(function* () {
-      const nikcli = yield* NikCli.Service
+      const ragu = yield* Ragu.Service
       return yield* Effect.promise(() =>
-        nikcli.session.create({ title: "Layer session" }, { headers: { "x-nikcli-directory": directory } }),
+        ragu.session.create({ title: "Layer session" }, { headers: { "x-ragu-directory": directory } }),
       )
-    }).pipe(Effect.provide(NikCli.layer)),
+    }).pipe(Effect.provide(Ragu.layer)),
   )
 
   expect(created.title).toBe("Layer session")

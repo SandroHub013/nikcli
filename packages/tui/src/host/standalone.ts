@@ -1,6 +1,6 @@
-import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
-import type { NikcliClient, TuiConfig } from "@nikcli-ai/sdk/httpapi"
-import { Log } from "@nikcli-ai/util/log"
+import { createRaguClient } from "@ragu/sdk/httpapi"
+import type { RaguClient, TuiConfig } from "@ragu/sdk/httpapi"
+import { Log } from "@ragu/util/log"
 import type { PluginConfigInfo, TuiPluginHost } from "@tui/plugin/host"
 import { TuiConfigError, classifyConfigFailure, type TuiConfigFailure } from "@tui/util/config-failure"
 
@@ -13,8 +13,8 @@ const log = Log.create({ service: "tui.standalone" })
  * A terminal client with no backend behind it.
  *
  * This is the package's second consumer, and it exists to make "extracted" a
- * fact rather than a claim: it starts the real TUI against a nikcli server
- * reachable over HTTP, importing nothing from `packages/nikcli`. If a backend
+ * fact rather than a claim: it starts the real TUI against a ragu server
+ * reachable over HTTP, importing nothing from `packages/ragu`. If a backend
  * chain ever creeps back into the terminal's module graph, this is the host
  * that stops building — the CLI's own entry points would keep working, because
  * they have the backend anyway.
@@ -32,7 +32,7 @@ const log = Log.create({ service: "tui.standalone" })
  *   is an HTTP server that is *already listening*, so it can simply be asked.
  */
 export type StandaloneOptions = {
-  /** Base URL of a running nikcli server, e.g. `http://localhost:4096`. */
+  /** Base URL of a running ragu server, e.g. `http://localhost:4096`. */
   url: string
   /** Continue an existing session instead of starting a new one. */
   sessionID?: string
@@ -56,7 +56,7 @@ export function remotePluginHost(read: () => Promise<PluginConfigInfo>): TuiPlug
   }
 }
 
-type ConfigResult = Awaited<ReturnType<NikcliClient["tui"]["config"]>>
+type ConfigResult = Awaited<ReturnType<RaguClient["tui"]["config"]>>
 type ConfigClient = { readonly tui: { readonly config: () => Promise<ConfigResult> } }
 
 /**
@@ -79,7 +79,7 @@ export async function readRemoteTuiConfig(client: ConfigClient, url: string): Pr
 }
 
 export async function startStandaloneTui(options: StandaloneOptions): Promise<void> {
-  const client = createNikcliClient({ baseUrl: options.url, directory: options.directory })
+  const client = createRaguClient({ baseUrl: options.url, directory: options.directory })
 
   // Asked over the wire, before the renderer exists — legitimate here precisely
   // because the server is already listening, which is not true inside the CLI.

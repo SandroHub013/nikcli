@@ -7,7 +7,7 @@
 
 import { describeChordRisk } from "./shortcuts"
 import type { TranscriberBackend } from "../asr/select"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 
 export type VoiceMode = "agent" | "transcription"
 
@@ -20,7 +20,7 @@ export type TranscriptionSendMode = "manual" | "auto"
  */
 export type DictationPress = "hold" | "toggle"
 
-export const AGENT_ENGINES = ["auto", "claude", "codex", "nikcli", "off"] as const
+export const AGENT_ENGINES = ["auto", "claude", "codex", "ragu", "off"] as const
 export type AgentEngine = (typeof AGENT_ENGINES)[number]
 
 /**
@@ -247,7 +247,7 @@ export interface VoiceSettings {
    * Words the speech model has never heard, spelled the way the user writes them.
    *
    * Every ASR model decodes into its training vocabulary, and the words that
-   * matter most here are not in it: "nikcli", "opencode", "worktree", "xterm".
+   * matter most here are not in it: "ragu", "opencode", "worktree", "xterm".
    * They come back split, respelled or translated, and the result is dictated
    * into a coding agent's prompt — where a wrong identifier is not a typo but
    * a wrong instruction. See `asr/custom-words.ts` for how close a fragment
@@ -311,7 +311,7 @@ export interface VoiceSettings {
    * What answers a sentence the grammar does not know.
    *
    * The grammar covers what people say often, instantly and offline. The rest
-   * goes to a coding agent's CLI — Claude Code, Codex or nikcli — running as a
+   * goes to a coding agent's CLI — Claude Code, Codex or ragu — running as a
    * turn with the user's own sign-in, so it spends the subscription they
    * already have rather than a key billed per request, and it can manage
    * ADE's sessions through `ade-msg`. `auto` takes the first of those that is

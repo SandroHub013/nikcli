@@ -1,12 +1,12 @@
 [package]
-name = "nikcli-devhub"
+name = "ragu-devhub"
 version = "0.1.0"
-description = "Local admin dashboard and developer platform for nikcli"
-authors = ["Nikcli"]
+description = "Local admin dashboard and developer platform for ragu"
+authors = ["Alessandro Boni"]
 edition = "2021"
 
 [lib]
-name = "nikcli_devhub_lib"
+name = "ragu_devhub_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

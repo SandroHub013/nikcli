@@ -16,7 +16,7 @@ import { OrbMark } from "./orb-mark"
 import { orbTitle } from "./orb-title"
 import { getPlatform } from "./shortcut-capture"
 import "./voice-orb.css"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 
 export interface VoiceOrbProps {
   /** The voice control engine instance. */

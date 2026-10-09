@@ -10,7 +10,7 @@ import "../../voice/src/ui/voice.css"
 /**
  * The ADE surface: the sidebar and the grid of panes.
  *
- * Exported so the desktop shell can mount it beside the nikcli interface.
+ * Exported so the desktop shell can mount it beside the ragu interface.
  * `dev.tsx` renders it standalone.
  */
 export function AdeSurface() {

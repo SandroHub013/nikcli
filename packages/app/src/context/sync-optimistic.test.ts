@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Message, Part } from "@nikcli-ai/sdk/httpapi"
+import type { Message, Part } from "@ragu/sdk/httpapi"
 import { applyOptimisticAdd, applyOptimisticRemove } from "./sync"
 
 const userMessage = (id: string, sessionID: string): Message => ({

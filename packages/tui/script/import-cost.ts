@@ -20,7 +20,7 @@
  */
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { formatProbeEnvironment, probeEnvironment } from "@nikcli-ai/util/probe-env"
+import { formatProbeEnvironment, probeEnvironment } from "@ragu/util/probe-env"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const root = path.resolve(here, "..")

@@ -1,6 +1,6 @@
 /** Voce › Comandi: the vocabulary, and a field to try a command without speaking. */
 import { Show, For, type JSX } from "solid-js"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 import { VOCABULARY } from "../../intent/vocabulary"
 import { intentName } from "../intent-name"
 import type { VoiceSettingsState } from "../settings-state"

@@ -1,11 +1,11 @@
-import { Resource } from "@nikcli-ai/console-resource"
-import { Actor } from "@nikcli-ai/console-core/actor.js"
+import { Resource } from "@ragu/console-resource"
+import { Actor } from "@ragu/console-core/actor.js"
 import { action, json, query } from "@solidjs/router"
 import { withActor } from "~/context/auth.withActor"
-import { Billing } from "@nikcli-ai/console-core/billing.js"
-import { and, Database, desc, eq, isNull } from "@nikcli-ai/console-core/drizzle/index.js"
-import { WorkspaceTable } from "@nikcli-ai/console-core/schema/workspace.sql.js"
-import { UserTable } from "@nikcli-ai/console-core/schema/user.sql.js"
+import { Billing } from "@ragu/console-core/billing.js"
+import { and, Database, desc, eq, isNull } from "@ragu/console-core/drizzle/index.js"
+import { WorkspaceTable } from "@ragu/console-core/schema/workspace.sql.js"
+import { UserTable } from "@ragu/console-core/schema/user.sql.js"
 
 export function formatDateForTable(date: Date) {
   const options: Intl.DateTimeFormatOptions = {

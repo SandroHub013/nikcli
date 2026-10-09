@@ -102,7 +102,7 @@ export function BackgroundImage() {
 
   return (
     <>
-      <nikcli_background
+      <ragu_background
         ref={setPainter}
         position="absolute"
         left={0}
@@ -119,7 +119,7 @@ export function BackgroundImage() {
         siblings of the app root are the only nodes whose `zIndex` sorts
         against it. See `./guard`.
       */}
-      <nikcli_background_guard
+      <ragu_background_guard
         source={painter()}
         position="absolute"
         left={0}

@@ -1,5 +1,5 @@
 import { onCleanup, onMount } from "solid-js"
-import { showToast } from "@nikcli-ai/ui/toast"
+import { showToast } from "@ragu/ui/toast"
 import { usePrompt, type ContentPart, type ImageAttachmentPart } from "@/context/prompt"
 import { useLanguage } from "@/context/language"
 import { getCursorPosition } from "./editor-dom"

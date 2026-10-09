@@ -133,7 +133,7 @@ async function logoCheck(renderer: "classic" | "auto") {
 const SNAPSHOT = {
   at: 1,
   shops: [
-    { id: "s1", name: "nikcli", slot: 0 },
+    { id: "s1", name: "ragu", slot: 0 },
     { id: "s2", name: "un-progetto-con-un-nome-molto-lungo-davvero", slot: 1 },
     { id: "s3", name: "ade", slot: 2 },
   ],

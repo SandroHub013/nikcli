@@ -1,15 +1,15 @@
 import { useNavigate, useParams } from "@solidjs/router"
-import { base64Decode, base64Encode } from "@nikcli-ai/util/encode"
-import { getFilename } from "@nikcli-ai/util/path"
-import { Icon } from "@nikcli-ai/ui/icon"
-import { Avatar } from "@nikcli-ai/ui/avatar"
-import { Button } from "@nikcli-ai/ui/button"
-import { DropdownMenu } from "@nikcli-ai/ui/dropdown-menu"
-import { Popover } from "@nikcli-ai/ui/popover"
-import { Markdown } from "@nikcli-ai/ui/markdown"
-import { ModSite, type ModInfo, type ModPane } from "@nikcli-ai/ui/mod-tree"
-import { TextField } from "@nikcli-ai/ui/text-field"
-import { Logo, Splash } from "@nikcli-ai/ui/logo"
+import { base64Decode, base64Encode } from "@ragu/util/encode"
+import { getFilename } from "@ragu/util/path"
+import { Icon } from "@ragu/ui/icon"
+import { Avatar } from "@ragu/ui/avatar"
+import { Button } from "@ragu/ui/button"
+import { DropdownMenu } from "@ragu/ui/dropdown-menu"
+import { Popover } from "@ragu/ui/popover"
+import { Markdown } from "@ragu/ui/markdown"
+import { ModSite, type ModInfo, type ModPane } from "@ragu/ui/mod-tree"
+import { TextField } from "@ragu/ui/text-field"
+import { Logo, Splash } from "@ragu/ui/logo"
 import {
   useAccount,
   useCommand,
@@ -22,7 +22,7 @@ import {
   BrowserVisualEditor,
   type AccountUser,
   type LocalProject,
-} from "@nikcli-ai/app"
+} from "@ragu/app"
 import {
   For,
   Match,
@@ -76,7 +76,7 @@ const SIDEBAR_ACTION_ICONS: Record<string, Parameters<typeof Icon>[0]["name"]> =
   "connectors.list": "link",
   "skill.list": "code",
   "mcp.toggle": "mcp",
-  "nikcli.status": "circle-check",
+  "ragu.status": "circle-check",
   "analytics.view": "bullet-list",
   "support.doctor": "checklist",
   "otel.settings": "settings-gear",
@@ -207,7 +207,7 @@ export function DesktopFrame(props: ParentProps) {
   }
 
   onMount(() => {
-    document.documentElement.dataset.nikcliDesktop = "true"
+    document.documentElement.dataset.raguDesktop = "true"
     void Promise.resolve(storage?.getItem(SIDEBAR_STORAGE_KEY))
       .then((value) => {
         if (value == null) return
@@ -266,7 +266,7 @@ export function DesktopFrame(props: ParentProps) {
     window.removeEventListener("pointerup", stopResize)
     window.removeEventListener("pointerup", stopReviewResize)
     document.documentElement.classList.remove("desktop-shell-resizing")
-    delete document.documentElement.dataset.nikcliDesktop
+    delete document.documentElement.dataset.raguDesktop
   })
 
   return (
@@ -662,7 +662,7 @@ function DesktopAccount() {
 /**
  * The mods of the project that is open: what they draw, and which are loaded.
  *
- * A mod is a plugin that runs in the nikcli server. The terminal draws it with cells and this window
+ * A mod is a plugin that runs in the ragu server. The terminal draws it with cells and this window
  * with DOM, from the same mod: it is told it is drawing for the `desktop` surface and can answer with a
  * layout made for it. Edit the mod on disk and the server reloads it; the invalidation that follows
  * redraws it here without a restart.
@@ -784,7 +784,7 @@ function DesktopSidebar() {
     commandItems(["provider.connect", "connectors.list", "skill.list", "mcp.toggle"]),
   )
   const operations = createMemo(() =>
-    commandItems(["nikcli.status", "analytics.view", "support.doctor", "otel.settings", "server.switch"]),
+    commandItems(["ragu.status", "analytics.view", "support.doctor", "otel.settings", "server.switch"]),
   )
 
   onMount(() => {
@@ -1101,8 +1101,8 @@ function AutomationPanel(props: { surface: AutomationSurface; part?: AutomationP
           <strong>{props.surface === "browser" ? "No browser session yet" : "No computer activity yet"}</strong>
           <span>
             {props.surface === "browser"
-              ? "Ask Nikcli to use the browser. It runs headlessly in the background — a snapshot will appear here."
-              : "Ask Nikcli to control a computer. It runs on a background desktop — the live preview will appear here."}
+              ? "Ask Ragu to use the browser. It runs headlessly in the background — a snapshot will appear here."
+              : "Ask Ragu to control a computer. It runs on a background desktop — the live preview will appear here."}
           </span>
         </div>
       </Show>

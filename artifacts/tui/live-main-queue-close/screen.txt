@@ -1,6 +1,6 @@
 
- NIKCLI                                                                                                 ┃ + new
-                Welcome to Nikcli                                                         nikcli        ┃ × all
+ RAGU                                                                                                 ┃ + new
+                Welcome to Ragu Code                                                         ragu        ┃ × all
 ────────────                                                                                        ────────────
                 1. Welcome  ·  2. Account  ·  3. Filesystem  ·  4. AI provider  ·  5. Extras
                   ·  6. Image

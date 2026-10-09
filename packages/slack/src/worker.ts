@@ -6,13 +6,13 @@ interface Env {
   SLACK_CLIENT_ID: string
   SLACK_CLIENT_SECRET: string
   OPENAI_API_KEY: string
-  NIKCLI_URL: string
-  NIKCLI_USERNAME: string
-  NIKCLI_PASSWORD: string
+  RAGU_URL: string
+  RAGU_USERNAME: string
+  RAGU_PASSWORD: string
   SESSIONS: KVNamespace
   GITHUB_ACTIONS_MODE: string
   WHISPER_LANGUAGE?: string
-  NIKCLI_TIMEOUT_MS?: string
+  RAGU_TIMEOUT_MS?: string
 }
 
 const REQUEST_TIMEOUT_MS = 120_000
@@ -54,19 +54,19 @@ interface SessionData {
   createdAt: number
 }
 
-interface NikcliResponse<T = unknown> {
+interface RaguResponse<T = unknown> {
   error?: string
   data?: T
 }
 
-interface NikcliSessionInfo {
+interface RaguSessionInfo {
   id: string
   share?: {
     url: string
   }
 }
 
-interface NikcliMessagePart {
+interface RaguMessagePart {
   type: string
   text?: string
   tool?: string
@@ -98,7 +98,7 @@ export default {
         JSON.stringify({
           status: "healthy",
           timestamp: Date.now(),
-          nikcliUrl: env.NIKCLI_URL || "not configured",
+          raguUrl: env.RAGU_URL || "not configured",
         }),
         {
           headers: { "Content-Type": "application/json" },
@@ -205,7 +205,7 @@ async function processEvent(event: SlackEvent, env: Env): Promise<void> {
   if (useGitHubActions) {
     await handlePromptGitHub(event, env, prompt)
   } else {
-    await handlePromptNikcli(env, session, prompt, channel, thread)
+    await handlePromptRagu(env, session, prompt, channel, thread)
   }
 }
 
@@ -231,7 +231,7 @@ async function handlePromptGitHub(event: SlackEvent, env: Env, text: string): Pr
   }
 }
 
-async function handlePromptNikcli(
+async function handlePromptRagu(
   env: Env,
   session: SessionData,
   text: string,
@@ -260,7 +260,7 @@ async function triggerGitHubAction(env: Env, prompt: string, channel: string, th
     headers: {
       Accept: "application/vnd.github.v3+json",
       Authorization: `Bearer ${env.GITHUB_TOKEN}`,
-      "User-Agent": "nikcli-slack-bot",
+      "User-Agent": "ragu-slack-bot",
       "X-GitHub-Api-Version": "2022-11-28",
     },
     body: JSON.stringify({
@@ -288,19 +288,19 @@ async function createSession(
   channel: string,
   thread: string,
 ): Promise<SessionData | null> {
-  const nikcliUrl = getNikcliUrl(env)
-  if (!nikcliUrl) {
-    await postMessage(env.SLACK_BOT_TOKEN, channel, thread, "NIKCLI_URL is not configured")
+  const raguUrl = getRaguUrl(env)
+  if (!raguUrl) {
+    await postMessage(env.SLACK_BOT_TOKEN, channel, thread, "RAGU_URL is not configured")
     return null
   }
 
   const auth = getAuthHeader(env)
-  const timeout = Number(env.NIKCLI_TIMEOUT_MS) || REQUEST_TIMEOUT_MS
+  const timeout = Number(env.RAGU_TIMEOUT_MS) || REQUEST_TIMEOUT_MS
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeout)
 
   try {
-    const createResult = await fetch(`${nikcliUrl}/session`, {
+    const createResult = await fetch(`${raguUrl}/session`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -316,7 +316,7 @@ async function createSession(
       return null
     }
 
-    const createData = unwrapNikcliResponse((await createResult.json()) as NikcliResponse<NikcliSessionInfo>)
+    const createData = unwrapRaguResponse((await createResult.json()) as RaguResponse<RaguSessionInfo>)
 
     if (createData.error || !createData.data?.id) {
       console.error("Failed to create session:", createData.error)
@@ -333,7 +333,7 @@ async function createSession(
 
     await saveToKv(env, sessionKey, session)
 
-    const shareResult = await fetch(`${nikcliUrl}/session/${createData.data.id}/share`, {
+    const shareResult = await fetch(`${raguUrl}/session/${createData.data.id}/share`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -343,7 +343,7 @@ async function createSession(
     })
 
     if (shareResult.ok) {
-      const shareData = unwrapNikcliResponse((await shareResult.json()) as NikcliResponse<NikcliSessionInfo>)
+      const shareData = unwrapRaguResponse((await shareResult.json()) as RaguResponse<RaguSessionInfo>)
       if (!shareData.error && shareData.data?.share?.url) {
         await postMessage(env.SLACK_BOT_TOKEN, channel, thread, `Session: ${shareData.data.share.url}`)
       }
@@ -368,19 +368,19 @@ async function sendPrompt(
   channel: string,
   thread: string,
 ): Promise<{ error?: string }> {
-  const nikcliUrl = getNikcliUrl(env)
-  if (!nikcliUrl) {
-    await postMessage(env.SLACK_BOT_TOKEN, channel, thread, "NIKCLI_URL is not configured")
-    return { error: "NIKCLI_URL not configured" }
+  const raguUrl = getRaguUrl(env)
+  if (!raguUrl) {
+    await postMessage(env.SLACK_BOT_TOKEN, channel, thread, "RAGU_URL is not configured")
+    return { error: "RAGU_URL not configured" }
   }
 
   const auth = getAuthHeader(env)
-  const timeout = Number(env.NIKCLI_TIMEOUT_MS) || REQUEST_TIMEOUT_MS
+  const timeout = Number(env.RAGU_TIMEOUT_MS) || REQUEST_TIMEOUT_MS
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeout)
 
   try {
-    const result = await fetch(`${nikcliUrl}/session/${session.sessionId}/message`, {
+    const result = await fetch(`${raguUrl}/session/${session.sessionId}/message`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -396,11 +396,11 @@ async function sendPrompt(
       return { error: "Failed to send prompt" }
     }
 
-    const resultData = unwrapNikcliResponse(
-      (await result.json()) as NikcliResponse<{
+    const resultData = unwrapRaguResponse(
+      (await result.json()) as RaguResponse<{
         info?: { content: string }
         content?: string
-        parts?: NikcliMessagePart[]
+        parts?: RaguMessagePart[]
       }>,
     )
 
@@ -427,7 +427,7 @@ async function sendPrompt(
 function extractResponseText(data?: {
   info?: { content: string }
   content?: string
-  parts?: NikcliMessagePart[]
+  parts?: RaguMessagePart[]
 }): string {
   if (!data) return "I received your message."
 
@@ -545,7 +545,7 @@ async function handleFileShare(event: SlackEvent, env: Env): Promise<void> {
     if (useGitHubActions) {
       await handlePromptGitHub(event, env, transcript)
     } else {
-      await handlePromptNikcli(env, session, transcript, channel, thread)
+      await handlePromptRagu(env, session, transcript, channel, thread)
     }
   } finally {
     PROCESSING_FILES.delete(fileId)
@@ -648,10 +648,10 @@ async function handleInstall(request: Request, env: Env): Promise<Response> {
   return new Response(
     `<!DOCTYPE html>
 <html>
-<head><title>Install nikcli</title></head>
+<head><title>Install ragu</title></head>
 <body style="font-family: system-ui; padding: 2rem; text-align: center;">
-  <h1>Install nikcli Slack App</h1>
-  <p>Click the button below to authorize the nikcli app in your Slack workspace.</p>
+  <h1>Install ragu Slack App</h1>
+  <p>Click the button below to authorize the ragu app in your Slack workspace.</p>
   <a href="${authUrl}" style="display: inline-block; padding: 12px 24px; background: #4A154B; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">
     Add to Slack
   </a>
@@ -700,12 +700,12 @@ async function handleOAuthCallback(request: Request, env: Env): Promise<Response
   return new Response(
     `<!DOCTYPE html>
 <html>
-<head><title>nikcli Installed</title></head>
+<head><title>ragu Installed</title></head>
 <body style="font-family: system-ui; padding: 2rem; text-align: center;">
   <h1>App Installed</h1>
   <p>Successfully installed as <code>${data.authed_user?.id}</code></p>
-  <p>The nikcli bot is now available in your Slack workspace.</p>
-  <p>Start a conversation by mentioning @nikcli in any channel.</p>
+  <p>The ragu bot is now available in your Slack workspace.</p>
+  <p>Start a conversation by mentioning @ragu in any channel.</p>
 </body>
 </html>`,
     {
@@ -773,21 +773,21 @@ async function getFromKv(env: Env, key: string): Promise<SessionData | null> {
   return JSON.parse(cached) as SessionData
 }
 
-function getNikcliUrl(env: Env): string | null {
-  if (!env.NIKCLI_URL) return null
-  return env.NIKCLI_URL.replace(/\/+$/, "")
+function getRaguUrl(env: Env): string | null {
+  if (!env.RAGU_URL) return null
+  return env.RAGU_URL.replace(/\/+$/, "")
 }
 
 function getAuthHeader(env: Env): { Authorization: string } | Record<string, never> {
-  if (!env.NIKCLI_PASSWORD) return {}
-  const username = env.NIKCLI_USERNAME || "nikcli"
-  const token = btoa(`${username}:${env.NIKCLI_PASSWORD}`)
+  if (!env.RAGU_PASSWORD) return {}
+  const username = env.RAGU_USERNAME || "ragu"
+  const token = btoa(`${username}:${env.RAGU_PASSWORD}`)
   return { Authorization: `Basic ${token}` }
 }
 
-function unwrapNikcliResponse<T>(value: NikcliResponse<T> | T): { data?: T; error?: string } {
+function unwrapRaguResponse<T>(value: RaguResponse<T> | T): { data?: T; error?: string } {
   if (value && typeof value === "object" && "data" in value) {
-    const wrapped = value as NikcliResponse<T>
+    const wrapped = value as RaguResponse<T>
     return { data: wrapped.data, error: wrapped.error }
   }
   return { data: value as T }

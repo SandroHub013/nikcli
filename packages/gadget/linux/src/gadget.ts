@@ -1,5 +1,5 @@
 /**
- * The gadget runtime: what `Gadget.create` returns and `nikcli-gadget run` drives.
+ * The gadget runtime: what `Gadget.create` returns and `ragu-gadget run` drives.
  *
  * One gadget is one paired device with a command set, an optional display and
  * optional buttons. The runtime sends hello on every connect, holds the feed
@@ -59,7 +59,7 @@ export interface CommandDefinition<Args = Record<string, unknown>> {
 }
 
 export interface GadgetOptions {
-  /** Shown in nikcli; its slug is the device id. Defaults to the hostname. */
+  /** Shown in ragu; its slug is the device id. Defaults to the hostname. */
   readonly name?: string
   readonly version?: string
   /** `system.run`, `file.read`, `file.write` and `device.health` are included unless false. */
@@ -101,7 +101,7 @@ export class Gadget {
     this.display = options.display
     this.buttons = options.buttons
     this.audio = options.audio ?? false
-    this.log = options.log ?? ((message) => console.error(`[nikcli-gadget] ${message}`))
+    this.log = options.log ?? ((message) => console.error(`[ragu-gadget] ${message}`))
     this.onMessage = options.onMessage
     this.fetchImpl = options.fetch
     const commands = new Map<string, CommandDefinition<any>>()
@@ -149,7 +149,7 @@ export class Gadget {
   }
 
   /**
-   * Pair with a bridge: trade the code shown by `nikcli` for a token and store
+   * Pair with a bridge: trade the code shown by `ragu` for a token and store
    * it. When the gadget has buttons the bridge waits for one press before it
    * accepts a hello; `confirm` resolves once that press is reported.
    */
@@ -217,7 +217,7 @@ export class Gadget {
   }
 
   private connection(pairing = this.pairing ?? readPairing()) {
-    if (!pairing) throw new GadgetError("NotPaired", "this gadget is not paired: run `nikcli-gadget pair` first")
+    if (!pairing) throw new GadgetError("NotPaired", "this gadget is not paired: run `ragu-gadget pair` first")
     this.pairing = pairing
     this.transport ??= new Transport({ server: pairing.server, token: pairing.token, fetch: this.fetchImpl })
     return { transport: this.transport, pairing }
@@ -261,7 +261,7 @@ export class Gadget {
         } catch (error) {
           if (signal.aborted) break
           if (error instanceof GadgetError && (error.tag === "TokenRevoked" || error.tag === "NotPaired")) {
-            this.log(`${error.message}; pair again with \`nikcli-gadget pair\``)
+            this.log(`${error.message}; pair again with \`ragu-gadget pair\``)
             throw error
           }
           const wait = backoff(attempt++)

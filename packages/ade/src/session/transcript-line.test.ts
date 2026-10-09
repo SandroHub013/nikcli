@@ -8,7 +8,7 @@ describe("cleanTranscriptLine", () => {
   })
 
   /*
-   * The line that made a restored nikcli session unreadable: a spinner
+   * The line that made a restored ragu session unreadable: a spinner
    * redrawn in place, whose cursor moves `stripAnsi` removed correctly,
    * leaving several hundred braille frames run together as one "line".
    */

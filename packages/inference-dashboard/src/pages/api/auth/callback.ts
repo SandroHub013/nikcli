@@ -20,7 +20,7 @@ export const GET: APIRoute = async (ctx) => {
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       grant_type: "authorization_code",
-      client_id: "nikcli-inference-dashboard",
+      client_id: "ragu-inference-dashboard",
       code,
       redirect_uri: new URL("/api/auth/callback", ctx.request.url).toString(),
       code_verifier: verifier,

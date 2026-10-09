@@ -29,10 +29,10 @@ const IDLE_CHECK_MS = 30_000
  * time rather than "paused" time. A session streaming a live view or recording
  * is never reaped — see {@link SessionManager.reapIdle}.
  *
- * `NIKCLI_BROWSER_IDLE_MINUTES` overrides it; `0` disables reaping, restoring
+ * `RAGU_BROWSER_IDLE_MINUTES` overrides it; `0` disables reaping, restoring
  * the old behavior for anyone who wants a session to outlive their attention.
  */
-const ENV_IDLE_MINUTES = "NIKCLI_BROWSER_IDLE_MINUTES"
+const ENV_IDLE_MINUTES = "RAGU_BROWSER_IDLE_MINUTES"
 const DEFAULT_IDLE_MINUTES = 30
 
 export function idleMinutes(raw = process.env[ENV_IDLE_MINUTES]): number {
@@ -196,7 +196,7 @@ interface FrameFiles {
 }
 
 async function createFrameFiles(): Promise<FrameFiles> {
-  const dir = join(tmpdir(), `nikcli-screencast-${Bun.randomUUIDv7()}`)
+  const dir = join(tmpdir(), `ragu-screencast-${Bun.randomUUIDv7()}`)
   await mkdir(dir, { recursive: true })
   return {
     dir,
@@ -332,7 +332,7 @@ async function streamScreencast(manager: SessionManager, url: URL, signal: Abort
 export type StartDaemonOptions = {
   /**
    * When true (default for a dedicated daemon process), idle/shutdown ends the
-   * OS process. When false (in-process host inside the compiled nikcli binary),
+   * OS process. When false (in-process host inside the compiled ragu binary),
    * only the Unix server and sessions are torn down — the host keeps running.
    */
   readonly exitProcess?: boolean

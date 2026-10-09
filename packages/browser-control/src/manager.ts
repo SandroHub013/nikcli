@@ -233,7 +233,7 @@ export class SessionManager {
    * browser subprocess the whole Bun process shares, and Bun does not recover:
    * every later `new Bun.WebView()` fails with "Chrome process closed the pipe"
    * and then "Failed to spawn Chrome", for the life of the process. In a daemon
-   * — which is the whole nikcli session when it is hosted in-process — one
+   * — which is the whole ragu session when it is hosted in-process — one
    * `close-all` would leave the browser tool dead until a restart. Closing each
    * view is enough; the subprocess goes away with its parent.
    */

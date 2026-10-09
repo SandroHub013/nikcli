@@ -22,13 +22,13 @@ import type {
   Workspace,
   SessionEntry,
   SessionPendingInput2,
-} from "@nikcli-ai/sdk/httpapi"
-import type { Config } from "@nikcli-ai/sdk/httpapi"
-import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
+} from "@ragu/sdk/httpapi"
+import type { Config } from "@ragu/sdk/httpapi"
+import { createRaguClient } from "@ragu/sdk/httpapi"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useSDK } from "@tui/context/sdk"
 import { useProject } from "@tui/context/project"
-import { Binary } from "@nikcli-ai/util/binary"
+import { Binary } from "@ragu/util/binary"
 import { createSimpleContext } from "./helper"
 import { clientErrorStatus, isTransientHttpInterrupt, namedFailures, retryTransient } from "@tui/util/settled"
 import { createReconnectGate } from "@tui/util/reconnect"
@@ -36,12 +36,12 @@ import { useExit } from "./exit"
 import { useArgs } from "./args"
 import { batch, createEffect, on, onCleanup, onMount } from "solid-js"
 import { debounce } from "@solid-primitives/scheduled"
-import { Log } from "@nikcli-ai/util/log"
+import { Log } from "@ragu/util/log"
 import { createLru } from "@tui/util/lru-cache"
 import { createLatestOnlyAsync } from "@tui/util/signal"
-import type { Path } from "@nikcli-ai/sdk/httpapi"
-import { features } from "@nikcli-ai/util/features"
-import { appendInstructionNotice, type InstructionNotice } from "@nikcli-ai/util/instruction-delta"
+import type { Path } from "@ragu/sdk/httpapi"
+import { features } from "@ragu/util/features"
+import { appendInstructionNotice, type InstructionNotice } from "@ragu/util/instruction-delta"
 
 /** What the cache keeper last said about a session's prompt-cache entry. */
 export type SessionCacheState = EventSessionCache["properties"]
@@ -221,7 +221,7 @@ export const {
     function scopedClient() {
       const workspace = project.workspace.current()
       if (!workspace) return sdk.client
-      return createNikcliClient({
+      return createRaguClient({
         baseUrl: sdk.url,
         fetch: sdk.fetch,
         directory: sdk.directory,
@@ -1052,7 +1052,7 @@ export const {
      * The refetch a reconnect owes, which must never exit the TUI.
      *
      * A shared background service restarted by *another* client (its
-     * `/restart`, `nikcli service restart`) looks like this from here: the
+     * `/restart`, `ragu service restart`) looks like this from here: the
      * stream drops, "reconnects" — possibly to the process that is still
      * shutting down — and the refetch finds nothing listening. That used to be
      * fatal, and every other terminal open on the service died with it. Retried

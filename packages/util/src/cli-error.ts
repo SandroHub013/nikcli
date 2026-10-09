@@ -1,15 +1,15 @@
-import { Log } from "@nikcli-ai/util/log"
-import { UserFacingError } from "@nikcli-ai/util/user-error"
-import { safeStringify } from "@nikcli-ai/util/redact"
+import { Log } from "@ragu/util/log"
+import { UserFacingError } from "@ragu/util/user-error"
+import { safeStringify } from "@ragu/util/redact"
 
 const log = Log.create({ service: "error-formatter" })
 
 /**
  * Stack traces are suppressed by default so they never leak into user-facing
- * CLI / TUI output. Enable with `NIKCLI_DEBUG=1` for local diagnosis.
+ * CLI / TUI output. Enable with `RAGU_DEBUG=1` for local diagnosis.
  */
 export function formatStack(error: Error): string | null {
-  if (process.env.NIKCLI_DEBUG === "1") return error.stack ?? null
+  if (process.env.RAGU_DEBUG === "1") return error.stack ?? null
   return null
 }
 
@@ -36,7 +36,7 @@ const formatters: Record<string, Formatter> = {
     const message = [
       `Model not found: ${providerID}/${modelID}`,
       ...(Array.isArray(suggestions) && suggestions.length ? ["Did you mean: " + suggestions.join(", ")] : []),
-      `Try: \`nikcli models\` to list available models`,
+      `Try: \`ragu models\` to list available models`,
       `Or check your config (nikcli.json) provider/model names`,
     ].join("\n")
     log.debug("Formatting model not found error", { providerID, modelID })
@@ -50,13 +50,13 @@ const formatters: Record<string, Formatter> = {
   // Agent
   AgentNotFound: (e) => {
     log.debug("Formatting agent not found error", { name: e.name })
-    return `Agent not found: ${e.name}. Run \`nikcli agent list\` to list configured agents.`
+    return `Agent not found: ${e.name}. Run \`ragu agent list\` to list configured agents.`
   },
 
   // MCP
   MCPFailed: (e) => {
     log.debug("Formatting MCP error", { serverName: e.name })
-    return `MCP server "${e.name}" failed. Note, nikcli does not support MCP authentication yet.`
+    return `MCP server "${e.name}" failed. Note, ragu does not support MCP authentication yet.`
   },
 
   // Config
@@ -146,7 +146,7 @@ export function FormatUnknownError(input: unknown): string {
     // Use a redacting serializer so URLs and token-shaped substrings
     // inside the error message are masked before they reach the user.
     // Return the message (or `name: message`) rather than the stack by
-    // default. Set NIKCLI_DEBUG=1 to include the stack for diagnosis.
+    // default. Set RAGU_DEBUG=1 to include the stack for diagnosis.
     if (input.name === "ClientError") {
       const status =
         typeof input.cause === "object" &&
@@ -157,7 +157,7 @@ export function FormatUnknownError(input: unknown): string {
           : ""
       return `ClientError: ${input.message}${status}`
     }
-    const redact = process.env.NIKCLI_LOG_REDACT !== "0"
+    const redact = process.env.RAGU_LOG_REDACT !== "0"
     const safeMessage = redact ? safeStringify(input.message) : input.message
     log.debug("Formatting unknown error", {
       name: input.name,
@@ -171,7 +171,7 @@ export function FormatUnknownError(input: unknown): string {
 
   if (typeof input === "object" && input !== null) {
     try {
-      const redact = process.env.NIKCLI_LOG_REDACT !== "0"
+      const redact = process.env.RAGU_LOG_REDACT !== "0"
       const serialized = redact ? safeStringify(input) : JSON.stringify(input, null, 2)
       log.debug("Serialized object error", { keys: Object.keys(input) })
       return serialized

@@ -2,7 +2,7 @@
  * `file.read` and `file.write`, 64 KB at a time.
  *
  * A read returns one chunk and says where the next one starts; a write lands
- * in `<path>.nikcli-part` and replaces the target only when the caller says
+ * in `<path>.ragu-part` and replaces the target only when the caller says
  * the last chunk is in, so an interrupted transfer never leaves a half file
  * under the real name.
  */

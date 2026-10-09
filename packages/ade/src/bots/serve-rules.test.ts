@@ -144,12 +144,23 @@ describe("B8d: the rules of a bot's session", () => {
       "NIKCLI.JSONC::$data",
       "C:\\progetto\\nikcli.json::$DATA",
       "sotto\\nikcli.json::$DATA",
+      // Rule B: ragu reads `.ragu` and `ragu.json` first, so they are its configuration as much as the old names.
+      ".ragu/tool/x.ts",
+      ".RAGU\\agent\\altro.md",
+      "C:\\progetto\\.ragu\\tool\\x.ts",
+      "ragu.json",
+      "RAGU.JSONC",
+      "pacchetto/sotto/Ragu.Json",
+      "RAGU~1\\tool\\x.ts",
+      "ragu.json::$DATA",
     ]
     const PROJECT = [
       "src/index.ts",
       "src\\bots\\nikcli.ts",
       "src/bots/nikcli.test.ts",
       "packages/nikcli/src/x.ts",
+      "packages/ragu/src/x.ts",
+      "src/bots/ragu.ts",
       "docs/nikcli.md",
       ".github/workflows/ci.yml",
       ".vscode/settings.json",

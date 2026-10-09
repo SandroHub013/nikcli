@@ -1,5 +1,5 @@
 {
-  "name": "@nikcli-ai/function",
+  "name": "@ragu/function",
   "type": "module",
   "scripts": {
     "dev": "bun run --watch src/api.ts",

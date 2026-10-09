@@ -129,8 +129,8 @@ describe("grantedRoots (audit 0.7.7, D1-2)", () => {
 
 describe("rootMissing", () => {
   it("a folder that is gone is missing; one that is there is not", async () => {
-    expect(await rootMissing(fakeHost({ exists: async () => false }), "C:/Users/x/nikcli-ade-vecchia")).toBe(true)
-    expect(await rootMissing(fakeHost({ exists: async () => true }), "C:/Users/x/nikcli")).toBe(false)
+    expect(await rootMissing(fakeHost({ exists: async () => false }), "C:/Users/x/ragu-ade-vecchia")).toBe(true)
+    expect(await rootMissing(fakeHost({ exists: async () => true }), "C:/Users/x/ragu")).toBe(false)
   })
 
   it("never for a remote Space, an empty root, a host that cannot ask, or a check that fails", async () => {

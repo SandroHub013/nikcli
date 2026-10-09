@@ -2,8 +2,8 @@ import { randomUUID } from "crypto"
 import { Schema } from "effect"
 
 export namespace Process {
-  export const RUN_ID_ENV = "NIKCLI_RUN_ID"
-  export const ROLE_ENV = "NIKCLI_PROCESS_ROLE"
+  export const RUN_ID_ENV = "RAGU_RUN_ID"
+  export const ROLE_ENV = "RAGU_PROCESS_ROLE"
   export type Role = "main" | "worker"
 
   export function ensureRunID(env: NodeJS.ProcessEnv = process.env) {

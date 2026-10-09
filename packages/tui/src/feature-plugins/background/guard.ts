@@ -1,5 +1,5 @@
 /**
- * `<nikcli_background_guard>` — keeps the terminal's own text layer readable
+ * `<ragu_background_guard>` — keeps the terminal's own text layer readable
  * while the wallpaper stays at full detail.
  *
  * The image is painted as half-blocks, which means a real glyph in every cell
@@ -127,4 +127,4 @@ function sameColor(composed: Buffers, mine: Buffers, cell: number) {
   return true
 }
 
-extend({ nikcli_background_guard: BackgroundGuardRenderable })
+extend({ ragu_background_guard: BackgroundGuardRenderable })

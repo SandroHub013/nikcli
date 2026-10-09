@@ -7,7 +7,7 @@ import { t } from "../i18n"
  * repo. Both the component and the test read this file; neither copies it.
  */
 
-/** Mirrors `DialogStatus` in `@nikcli-ai/voice`, plus the engine being off. */
+/** Mirrors `DialogStatus` in `@ragu/voice`, plus the engine being off. */
 export type AgentPresence = "off" | "asleep" | "idle" | "listening" | "confirming" | "dictating" | "executing"
 
 export interface PresenceLabel {

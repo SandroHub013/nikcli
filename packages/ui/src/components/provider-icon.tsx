@@ -9,7 +9,7 @@ export type ProviderIconProps = JSX.SVGElementTags["svg"] & {
 
 const providerIconAliases: Record<string, IconName> = {
   ollama: "ollama-cloud",
-  "nikcli-inference": "nikcli",
+  "ragu-inference": "ragu",
 }
 
 export function resolveProviderIcon(id: string): IconName {

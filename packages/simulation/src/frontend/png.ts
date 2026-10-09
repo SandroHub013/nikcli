@@ -12,7 +12,7 @@ const { GlobalFonts, createCanvas } = Canvas
 const CellWidth = 10
 const CellHeight = 20
 const FontSize = 16
-const FontFamily = "Nikcli Simulation Mono"
+const FontFamily = "Ragu Simulation Mono"
 
 for (const file of [
   "adwaita-mono-latin-400-normal.woff2",

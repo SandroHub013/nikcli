@@ -17,7 +17,7 @@ import { PORT_OFFER as WORLD_PORT_OFFER } from "./world/world.js"
 
 const snapshot: Snapshot = {
   at: 1,
-  shops: [{ id: "s1", name: "nikcli" }],
+  shops: [{ id: "s1", name: "ragu" }],
   agents: [
     {
       paneId: "n1-0",

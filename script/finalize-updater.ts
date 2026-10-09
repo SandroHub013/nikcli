@@ -16,7 +16,7 @@
  * Env:
  *   UPDATER_FRAGMENTS_DIR  directory holding the downloaded updater-* artifacts
  *   GH_REPO                e.g. nikcli/nikcli
- *   NIKCLI_VERSION         version without leading v, e.g. 1.107.0
+ *   RAGU_VERSION         version without leading v, e.g. 1.107.0
  *   RELEASE_NOTES          (optional) notes string for the manifest
  */
 
@@ -30,8 +30,8 @@ if (!dir) throw new Error("UPDATER_FRAGMENTS_DIR is required")
 const repo = process.env.GH_REPO
 if (!repo) throw new Error("GH_REPO is required")
 
-const version = process.env.NIKCLI_VERSION
-if (!version) throw new Error("NIKCLI_VERSION is required")
+const version = process.env.RAGU_VERSION
+if (!version) throw new Error("RAGU_VERSION is required")
 
 const tag = `v${version.replace(/^v/, "")}`
 
@@ -68,7 +68,7 @@ if (Object.keys(platforms).length === 0) {
 
 const manifest = {
   version: tag,
-  notes: process.env.RELEASE_NOTES || `Nikcli ${tag}`,
+  notes: process.env.RELEASE_NOTES || `Ragu ${tag}`,
   pub_date: new Date().toISOString(),
   platforms,
 }

@@ -12,14 +12,14 @@ import {
   type TextBasedChannel,
 } from "discord.js"
 import {
-  createNikcliClient,
+  createRaguClient,
   type Part,
   type SessionPromptResponse,
   type TextPart,
   type ToolPart,
   type ToolStateCompleted,
-} from "@nikcli-ai/sdk/httpapi"
-import { createNikcli } from "@nikcli-ai/sdk/server"
+} from "@ragu/sdk/httpapi"
+import { createRagu } from "@ragu/sdk/server"
 import { ChannelMemory } from "./channel-memory"
 import { ChannelTools } from "./channel-tools"
 import { FollowUps } from "./followups"
@@ -29,10 +29,10 @@ export { CONNECTOR_NAME, INVITE_PERMISSIONS, inviteUrl, lookupBotUser, type Disc
 
 export type DiscordBotStartOptions = {
   botToken: string
-  nikcliUrl?: string
-  nikcliUsername?: string
-  nikcliPassword?: string
-  /** x-nikcli-directory for session.prompt */
+  raguUrl?: string
+  raguUsername?: string
+  raguPassword?: string
+  /** x-ragu-directory for session.prompt */
   directory?: string
   model?: string
   workdir?: string
@@ -63,14 +63,14 @@ type StreamState = {
   timer: ReturnType<typeof setTimeout> | null
 }
 
-type NikcliHandle = {
-  client: ReturnType<typeof createNikcliClient>
+type RaguHandle = {
+  client: ReturnType<typeof createRaguClient>
   server: { url: string; close(): void }
 }
 
 type Runtime = {
   client: Client
-  nikcli: NikcliHandle
+  ragu: RaguHandle
   startedServer: boolean
   abort: AbortController
   username: string
@@ -93,8 +93,8 @@ let runtime: Runtime | null = null
 let starting: Promise<DiscordBotStatus> | null = null
 
 const toolsCommand = new SlashCommandBuilder()
-  .setName("nikcli-tools")
-  .setDescription("Manage per-channel nikcli tool policy")
+  .setName("ragu-tools")
+  .setDescription("Manage per-channel ragu tool policy")
   .addSubcommand((sub) => sub.setName("list").setDescription("Show tool policy for this channel"))
   .addSubcommand((sub) =>
     sub
@@ -154,7 +154,7 @@ export async function stopDiscordBot(): Promise<boolean> {
   await Promise.all([ChannelMemory.flush(), ChannelTools.flush()]).catch(() => {})
   current.abort.abort()
   await current.client.destroy().catch(() => {})
-  if (current.startedServer) current.nikcli.server.close()
+  if (current.startedServer) current.ragu.server.close()
   return true
 }
 
@@ -178,15 +178,15 @@ async function startBot(opts: DiscordBotStartOptions): Promise<DiscordBotStatus>
 
   const clientId = process.env.DISCORD_CLIENT_ID?.trim() || botUser.id
   const invite = inviteUrl(clientId)
-  const model = opts.model ?? process.env.NIKCLI_MODEL ?? "minimax-coding-plan/MiniMax-M2.5"
-  const directory = opts.directory ?? opts.workdir ?? process.env.NIKCLI_WORKDIR
+  const model = opts.model ?? process.env.RAGU_MODEL ?? "minimax-coding-plan/MiniMax-M2.5"
+  const directory = opts.directory ?? opts.workdir ?? process.env.RAGU_WORKDIR
   const dirQuery = directory ? { directory } : {}
   const [providerID, ...modelParts] = model.split("/")
   const modelID = modelParts.join("/")
   const modelBody = providerID && modelID ? { model: { providerID, modelID } } : {}
   const allowedChannels = new Set((process.env.DISCORD_ALLOWED_CHANNELS ?? "").split(/[\s,]+/).filter(Boolean))
   const taskNotificationsEnabled =
-    process.env.NIKCLI_DISCORD_TASK_NOTIFICATIONS !== "false" &&
+    process.env.RAGU_DISCORD_TASK_NOTIFICATIONS !== "false" &&
     process.env.DISCORD_TASK_NOTIFICATIONS !== "false" &&
     process.env.DISCORD_TASK_NOTIFICATIONS !== "0"
   const rateLimitPerUser = Math.max(1, Number(process.env.DISCORD_RATE_LIMIT_PER_USER ?? "2000"))
@@ -202,36 +202,36 @@ async function startBot(opts: DiscordBotStartOptions): Promise<DiscordBotStatus>
   console.log("- Rate limit:", rateLimitPerUser, "req/min")
 
   const abort = new AbortController()
-  let nikcli: NikcliHandle
+  let ragu: RaguHandle
   let startedServer = false
-  const nikcliUrl = opts.nikcliUrl ?? process.env.NIKCLI_URL
-  const nikcliUsername = opts.nikcliUsername ?? process.env.NIKCLI_USERNAME
-  const nikcliPassword = opts.nikcliPassword ?? process.env.NIKCLI_PASSWORD
+  const raguUrl = opts.raguUrl ?? process.env.RAGU_URL
+  const raguUsername = opts.raguUsername ?? process.env.RAGU_USERNAME
+  const raguPassword = opts.raguPassword ?? process.env.RAGU_PASSWORD
 
-  if (nikcliUrl) {
-    console.log(`Connecting to remote nikcli server: ${nikcliUrl}`)
+  if (raguUrl) {
+    console.log(`Connecting to remote ragu server: ${raguUrl}`)
     const headers: Record<string, string> = {}
-    if (nikcliUsername !== undefined || nikcliPassword !== undefined) {
-      const basic = Buffer.from(`${nikcliUsername ?? ""}:${nikcliPassword ?? ""}`).toString("base64")
+    if (raguUsername !== undefined || raguPassword !== undefined) {
+      const basic = Buffer.from(`${raguUsername ?? ""}:${raguPassword ?? ""}`).toString("base64")
       headers.Authorization = `Basic ${basic}`
     }
-    const client = createNikcliClient({
-      baseUrl: nikcliUrl,
+    const client = createRaguClient({
+      baseUrl: raguUrl,
       directory,
       headers,
       signal: abort.signal,
     })
-    nikcli = { client, server: { url: nikcliUrl, close() {} } }
-    console.log("Nikcli remote server ready")
+    ragu = { client, server: { url: raguUrl, close() {} } }
+    console.log("Ragu remote server ready")
   } else {
-    console.log("Starting local nikcli server...")
-    nikcli = await createNikcli({
+    console.log("Starting local ragu server...")
+    ragu = await createRagu({
       port: 0,
-      timeout: Number(process.env.NIKCLI_START_TIMEOUT_MS ?? "120000"),
+      timeout: Number(process.env.RAGU_START_TIMEOUT_MS ?? "120000"),
       config: { model },
     })
     startedServer = true
-    console.log("Nikcli server ready")
+    console.log("Ragu server ready")
   }
 
   const sessions = new Map<string, PersistedSession>()
@@ -268,7 +268,7 @@ async function startBot(opts: DiscordBotStartOptions): Promise<DiscordBotStatus>
 
   const rt: Runtime = {
     client: discord,
-    nikcli,
+    ragu,
     startedServer,
     abort,
     username: botUser.username,
@@ -330,7 +330,7 @@ async function startBot(opts: DiscordBotStartOptions): Promise<DiscordBotStatus>
   try {
     const rest = new REST({ version: "10" }).setToken(token)
     await rest.put(Routes.applicationCommands(rt.clientId), { body: [toolsCommand.toJSON()] })
-    console.log("Registered /nikcli-tools slash command")
+    console.log("Registered /ragu-tools slash command")
   } catch (err) {
     console.error("Failed to register slash commands:", err instanceof Error ? err.message : err)
   }
@@ -346,7 +346,7 @@ async function teardownFailedStart(rt: Runtime): Promise<void> {
   FollowUps.stop()
   rt.abort.abort()
   await rt.client.destroy().catch(() => {})
-  if (rt.startedServer) rt.nikcli.server.close()
+  if (rt.startedServer) rt.ragu.server.close()
 }
 
 function tickCleanup(rt: Runtime, sessionsFile: string): void {
@@ -400,7 +400,7 @@ function isRateLimited(rt: Runtime, userId: string): boolean {
 async function subscribeToEvents(rt: Runtime): Promise<void> {
   while (!rt.abort.signal.aborted) {
     try {
-      const events = await rt.nikcli.client.event.subscribe()
+      const events = await rt.ragu.client.event.subscribe()
       for await (const event of events.stream) {
         if (rt.abort.signal.aborted) return
         if (event.type === "session.idle") {
@@ -509,7 +509,7 @@ async function handleMessage(rt: Runtime, raw: Message): Promise<void> {
 
   if (!promptText) {
     if (!mentioned) return
-    const channel = await ensureWorkChannel(message, work, "nikcli")
+    const channel = await ensureWorkChannel(message, work, "ragu")
     if (!channel) return
     await sendChunks(channel, "Please include a prompt after mentioning me.")
     return
@@ -562,7 +562,7 @@ async function ensureWorkChannel(
   if (!message.inGuild() || !message.channel.isTextBased())
     return message.channel.isTextBased() ? message.channel : null
 
-  const name = threadName.replace(/\s+/g, " ").trim().slice(0, 100) || "nikcli"
+  const name = threadName.replace(/\s+/g, " ").trim().slice(0, 100) || "ragu"
   try {
     const thread = await message.startThread({ name, autoArchiveDuration: 60 })
     work.threadId = thread.id
@@ -608,8 +608,8 @@ async function processPrompt(
     let retries = 2
     while (retries >= 0) {
       try {
-        console.log("Sending to nikcli:", prompt)
-        const result = await rt.nikcli.client.session.prompt({
+        console.log("Sending to ragu:", prompt)
+        const result = await rt.ragu.client.session.prompt({
           sessionID: session.sessionId,
           ...rt.dirQuery,
           parts: [{ type: "text", text: prompt }],
@@ -620,7 +620,7 @@ async function processPrompt(
 
         if (result.error) {
           const errorStr = String(result.error)
-          console.error("Nikcli error:", errorStr)
+          console.error("Ragu error:", errorStr)
           if (retries > 0 && errorStr.includes("rate")) {
             await new Promise((resolve) => setTimeout(resolve, 1000))
             retries--
@@ -628,11 +628,11 @@ async function processPrompt(
           }
         } else {
           responseText = extractResponseText(result.data)
-          console.log("Nikcli response:", responseText.slice(0, 80))
+          console.log("Ragu response:", responseText.slice(0, 80))
         }
         break
       } catch (err) {
-        console.error("nikcli prompt exception:", err)
+        console.error("ragu prompt exception:", err)
         if (retries > 0) {
           await new Promise((resolve) => setTimeout(resolve, 1000))
           retries--
@@ -672,9 +672,9 @@ async function getSession(
   const cached = rt.sessions.get(sessionKey)
   if (cached) return cached
 
-  console.log("Creating new nikcli session...")
+  console.log("Creating new ragu session...")
 
-  const createResult = await rt.nikcli.client.session.create({
+  const createResult = await rt.ragu.client.session.create({
     title: `Discord thread ${work.threadId}`,
     ...rt.dirQuery,
   })
@@ -685,7 +685,7 @@ async function getSession(
     return null
   }
 
-  console.log("Created nikcli session:", createResult.data.id)
+  console.log("Created ragu session:", createResult.data.id)
 
   const session: PersistedSession = {
     sessionId: createResult.data.id,
@@ -696,16 +696,16 @@ async function getSession(
   rt.sessions.set(sessionKey, session)
   schedulePersist(rt)
 
-  const shareResult = await rt.nikcli.client.session.share({ sessionID: createResult.data.id, ...rt.dirQuery })
+  const shareResult = await rt.ragu.client.session.share({ sessionID: createResult.data.id, ...rt.dirQuery })
   if (!shareResult.error && shareResult.data?.share?.url) {
-    await sendChunks(channel, `[Open session in nikcli](${shareResult.data.share.url})`).catch(() => {})
+    await sendChunks(channel, `[Open session in ragu](${shareResult.data.share.url})`).catch(() => {})
   }
 
   return session
 }
 
 async function handleSlashCommand(rt: Runtime, interaction: ChatInputCommandInteraction): Promise<void> {
-  if (interaction.commandName !== "nikcli-tools") return
+  if (interaction.commandName !== "ragu-tools") return
 
   const parentId =
     interaction.channel?.isThread() && interaction.channel.parentId
@@ -717,7 +717,7 @@ async function handleSlashCommand(rt: Runtime, interaction: ChatInputCommandInte
   const text = tool ? `${sub} ${tool}` : sub
   const reply = ChannelTools.handleCommand(text, key, interaction.user.id)
   await interaction.reply({ content: chunkForDiscord(reply)[0] ?? reply, ephemeral: true }).catch((err) => {
-    console.error("Failed to reply to /nikcli-tools:", err)
+    console.error("Failed to reply to /ragu-tools:", err)
   })
 }
 
@@ -874,11 +874,11 @@ function printDoctor(reason: "missing-token" | "invalid-token" | "intents", invi
   const lines = ["", "Couldn't start the Discord bot.", "", "Checklist:"]
   if (reason === "missing-token") {
     lines.push("• Set DISCORD_BOT_TOKEN (Developer Portal → Bot → Reset Token)")
-    lines.push("• Or configure from the nikcli TUI: /discord")
+    lines.push("• Or configure from the ragu TUI: /discord")
     lines.push("• CLI fallback: bun run setup")
   } else if (reason === "invalid-token") {
     lines.push("• The bot token is invalid — reset it in Developer Portal → Bot")
-    lines.push("• Or paste a new token via the nikcli TUI: /discord")
+    lines.push("• Or paste a new token via the ragu TUI: /discord")
   } else {
     lines.push("• Enable Message Content Intent (Developer Portal → Bot → Privileged Gateway Intents)")
   }

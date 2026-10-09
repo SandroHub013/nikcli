@@ -1,9 +1,9 @@
 /**
  * Where a gadget keeps its pairing.
  *
- * One JSON file, mode 0600, under the XDG state directory — or `/var/lib/nikcli-gadget`
+ * One JSON file, mode 0600, under the XDG state directory — or `/var/lib/ragu-gadget`
  * when `install.sh` set the gadget up as a system service (it exports
- * `NIKCLI_GADGET_STATE`). The token inside is the device's identity on the
+ * `RAGU_GADGET_STATE`). The token inside is the device's identity on the
  * bridge; losing the file means pairing again, which is the intended recovery.
  */
 import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs"
@@ -21,10 +21,10 @@ export interface PairingState {
 }
 
 export function stateDirectory(): string {
-  const override = process.env.NIKCLI_GADGET_STATE
+  const override = process.env.RAGU_GADGET_STATE
   if (override) return override
   const xdg = process.env.XDG_STATE_HOME || path.join(homedir(), ".local", "state")
-  return path.join(xdg, "nikcli-gadget")
+  return path.join(xdg, "ragu-gadget")
 }
 
 export function stateFile(): string {

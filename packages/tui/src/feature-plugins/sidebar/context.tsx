@@ -1,5 +1,5 @@
-import type { AssistantMessage } from "@nikcli-ai/sdk/httpapi"
-import { Plugin } from "@nikcli-ai/plugin/v2/tui"
+import type { AssistantMessage } from "@ragu/sdk/httpapi"
+import { Plugin } from "@ragu/plugin/v2/tui"
 import { createMemo } from "solid-js"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"

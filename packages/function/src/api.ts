@@ -34,7 +34,7 @@ function open(ns: DurableObjectNamespace, name: string): SyncServerStub {
 /**
  * Share/sync hub for a single shared session.
  *
- * Mirrors opencode's `SyncServer` Durable Object: the nikcli CLI pushes session
+ * Mirrors opencode's `SyncServer` Durable Object: the ragu CLI pushes session
  * info/message/part updates here via `/share_sync`, the DO persists them (DO
  * storage + R2) and broadcasts each update to subscribed web viewers over a
  * WebSocket. The session itself keeps running on the user's machine — this is

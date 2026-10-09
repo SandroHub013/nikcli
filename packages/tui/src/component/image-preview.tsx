@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
 import { RGBA } from "@opentui/core"
-import { pickDecoder, resize } from "@nikcli-ai/tui-image"
+import { pickDecoder, resize } from "@ragu/tui-image"
 import { useTheme } from "@tui/context/theme"
 import { createPromiseCache } from "@tui/util/lru-cache"
 

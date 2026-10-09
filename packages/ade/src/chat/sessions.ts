@@ -1,14 +1,14 @@
 /**
  * The chat's sessions and the one open, as the view shows them (C4).
  *
- * The list is the folder's sessions on the nikcli server, from the store
+ * The list is the folder's sessions on the ragu server, from the store
  * (`store.ts`): what the TUI or the web app made is there too, marked as not
  * the chat's, because only a session made with the chat's permission rules
  * (`rules.ts`) is written to. The view is a `.tsx`, which `bun test` cannot
  * import, so everything it decides is here.
  */
 
-import type { Message, Part, Session } from "@nikcli-ai/sdk/httpapi"
+import type { Message, Part, Session } from "@ragu/sdk/httpapi"
 import { answerError, type ErrorView } from "./errors"
 import type { ChatData } from "./events"
 import { hasChatRules } from "./rules"
@@ -42,7 +42,7 @@ export function isBusy(data: ChatData, sessionID: string): boolean {
  * A folder as a key: one slash, no trailing one, and a Windows drive path in
  * one case. Every place the chat asks «is this the folder?» compares these, so
  * `C:\x` from Recent and `c:/x` from the server are one folder, not two
- * openings. UNC and `\\?\` paths keep their case: nikcli does not produce them.
+ * openings. UNC and `\\?\` paths keep their case: ragu does not produce them.
  */
 export function folderKey(path: string): string {
   const slashes = path.replace(/\\/g, "/").replace(/\/+$/, "")
@@ -51,7 +51,7 @@ export function folderKey(path: string): string {
 
 /**
  * The folder's sessions the chat lists: not archived, not a subagent's, not a
- * bot's (the bots' server makes them in the same folder), the newest first. Only this folder's: nikcli puts every folder that is not a git
+ * bot's (the bots' server makes them in the same folder), the newest first. Only this folder's: ragu puts every folder that is not a git
  * repository in one «global» project, and lists them all.
  */
 export function sessionEntries(data: ChatData, directory: string | undefined): SessionEntry[] {

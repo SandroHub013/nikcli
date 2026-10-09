@@ -15,6 +15,7 @@
 
 import { restoreHistory } from "../browser/history"
 import { restoreNotes, type SheetNote } from "../design/notes"
+import { currentAgentId } from "./legacy-agent-id"
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -72,7 +73,7 @@ export interface PaneState {
   linkNonce?: string
   /**
    * The folder of the conversation the pane followed, when it is not the
-   * pane's own (nikcli's shared tabs), so a restore says so again.
+   * pane's own (ragu's shared tabs), so a restore says so again.
    */
   otherDir?: string
   /** The project the pane belongs to; absent in states saved before panes of several projects were kept. */
@@ -231,7 +232,7 @@ function sanitisePane(raw: unknown): PaneState {
   return {
     id: asString(raw.id, def.id),
     title: asString(raw.title, def.title),
-    agent: asString(raw.agent, def.agent),
+    agent: currentAgentId(asString(raw.agent, def.agent)),
     cwd: asString(raw.cwd, def.cwd),
     branch: asString(raw.branch, def.branch),
     status: asString(raw.status, def.status),

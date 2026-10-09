@@ -11,7 +11,7 @@
  *
  *   - A `--model` or a `--fork` never reaches here: the mailbox does not ask.
  *   - An agent whose quota is fine, or unknown ("n/d"), is started as asked.
- *     Rerouting on no evidence would move work off nikcli only because ADE
+ *     Rerouting on no evidence would move work off ragu only because ADE
  *     cannot see its quota — which says nothing about the quota itself.
  *   - An agent in Limite is replaced by another agent with a real reading and
  *     quota left, the one with the most. Agents that are "n/d" or in Limite

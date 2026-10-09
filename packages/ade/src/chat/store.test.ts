@@ -36,7 +36,7 @@ const textPart = (id: string, messageID: string, text: string) => ({
   text,
 })
 
-/** A fake nikcli server: `/event` streams what the test pushes, the rest answers from `routes`. */
+/** A fake ragu server: `/event` streams what the test pushes, the rest answers from `routes`. */
 function fakeServer() {
   const sent: ProxyRequest[] = []
   const aborted: number[] = []
@@ -77,7 +77,7 @@ function fakeServer() {
       sent.push(request)
       const id = sent.length
       const path = request.path.split("?")[0]!
-      const header = request.headers.find(([name]) => name.toLowerCase() === "x-nikcli-directory")?.[1] ?? ""
+      const header = request.headers.find(([name]) => name.toLowerCase() === "x-ragu-directory")?.[1] ?? ""
       if (path === "/event") {
         let open = true
         // As the real bridge does: nothing of the body before the head.
@@ -302,7 +302,7 @@ describe("the chat's store", () => {
     await opening
     await live(server, store, 2)
     const on = (request: ProxyRequest) =>
-      decodeURIComponent(request.headers.find(([name]) => name.toLowerCase() === "x-nikcli-directory")?.[1] ?? "")
+      decodeURIComponent(request.headers.find(([name]) => name.toLowerCase() === "x-ragu-directory")?.[1] ?? "")
     expect(server.calls("POST", /\/prompt_async$/).map(on)).toEqual([A])
     expect(server.calls("GET", /^\/session\/ses_nuova\/message$/).filter((r) => on(r) === B)).toEqual([])
   })
@@ -787,7 +787,7 @@ describe("the chat's store", () => {
     await store.send(undefined, "  Spiegami   il file\nconnection.ts, per favore", FREE)
     const created = JSON.parse(server.calls("POST", /^\/session$/)[0]!.body!)
     expect(created.title).toBe("Spiegami il file")
-    // Not nikcli's default («New session - <ISO date>»), which it would title with its small model.
+    // Not ragu's default («New session - <ISO date>»), which it would title with its small model.
     expect(created.title).not.toMatch(/^(New session|Child session) - \d{4}-/)
     expect(titleFrom("x".repeat(80))).toBe(`${"x".repeat(59)}…`)
   })
@@ -823,7 +823,7 @@ describe("the chat's store", () => {
     expect(catalog).toHaveLength(3)
     for (const request of catalog) {
       expect(
-        decodeURIComponent(request.headers.find(([name]) => name.toLowerCase() === "x-nikcli-directory")?.[1] ?? ""),
+        decodeURIComponent(request.headers.find(([name]) => name.toLowerCase() === "x-ragu-directory")?.[1] ?? ""),
       ).toBe(A)
     }
   })

@@ -16,10 +16,10 @@ import type {
   SessionStatus,
   Todo,
   VcsInfo,
-} from "@nikcli-ai/sdk/httpapi"
+} from "@ragu/sdk/httpapi"
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
-import type { InstructionNotice } from "@nikcli-ai/util/instruction-delta"
+import type { InstructionNotice } from "@ragu/util/instruction-delta"
 
 export type ProjectMeta = {
   name?: string

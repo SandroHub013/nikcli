@@ -1,6 +1,6 @@
 import type {
   Event,
-  NikcliClient,
+  RaguClient,
   Provider,
   PermissionRequest,
   UserMessage,
@@ -8,8 +8,8 @@ import type {
   Part,
   Auth,
   Config as SDKConfig,
-} from "@nikcli-ai/sdk/httpapi"
-import type { Model } from "@nikcli-ai/sdk/httpapi"
+} from "@ragu/sdk/httpapi"
+import type { Model } from "@ragu/sdk/httpapi"
 import type { BunShell } from "./shell"
 import { type ToolDefinition } from "./tool"
 export * from "./tool"
@@ -23,7 +23,7 @@ export type ProviderContext = {
   options: Record<string, any>
 }
 export type PluginInput = {
-  client: NikcliClient
+  client: RaguClient
   project: {
     id: string
     worktree: string

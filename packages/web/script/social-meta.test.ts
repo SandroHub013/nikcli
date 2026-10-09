@@ -17,7 +17,7 @@ describe("social sharing metadata", () => {
       expect(meta('meta[property="og:title"]')).toBe(doc.title)
       expect(meta('meta[name="twitter:title"]')).toBe(doc.title)
       expect(meta('meta[property="og:description"]')).toBe(meta('meta[name="description"]'))
-      expect(meta('meta[property="og:site_name"]')).toBe("nikcli")
+      expect(meta('meta[property="og:site_name"]')).toBe("ragu")
       expect(meta('meta[name="twitter:card"]')).toBe("summary_large_image")
       expect(doc.querySelectorAll('meta[property="og:image"]').length).toBe(1)
       expect(meta('meta[property="og:image"]')).toBe("https://nikcli-ai.dev/og.png")

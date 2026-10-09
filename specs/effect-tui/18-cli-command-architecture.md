@@ -2,8 +2,8 @@
 
 Status: partially landed — the parser and lifecycle requirements shipped; the policy requirements have not.
 Tier: 2. Phase: P3. Dependencies: EOT-02, EOT-08.
-Owner: `packages/nikcli/src/cli/framework/*`, `packages/nikcli/src/cli/handlers/*` and
-`packages/nikcli/src/cli/effect/*` maintainers. [Roadmap](../ROADMAP.md).
+Owner: `packages/ragu/src/cli/framework/*`, `packages/ragu/src/cli/handlers/*` and
+`packages/ragu/src/cli/effect/*` maintainers. [Roadmap](../ROADMAP.md).
 
 ## Problem and Evidence
 
@@ -27,7 +27,7 @@ What shipped, and what this spec can therefore stop asking for:
   `test/cli/command-surface.test.ts` fails if a command is added or removed without updating it.
 
 What remains open is dispatch-adjacent **policy**, which the parser migration did not address and which is still decided
-per command: there is no exit-code mapping (no `NIKCLI_HEADLESS`, no documented `64`/`66`/`69` contract in `src/`), no
+per command: there is no exit-code mapping (no `RAGU_HEADLESS`, no documented `64`/`66`/`69` contract in `src/`), no
 plugin command scoping, and no shared daemon/attach lifecycle. `cli/effect/prompt.ts` wraps `@clack/prompts` in Effect
 but its non-TTY fallback is implicit. Those are the requirements below that are still proposed.
 
@@ -56,9 +56,9 @@ the on-disk layout, or break existing command flags.
    commands under their plugin scope (`<plugin-id>:<command>`); conflicts with built-in commands resolve through the
    plugin's `priority` field, never by silent registration order.
 6. Daemon/attach coordination is a typed lifecycle:
-   - `nikcli serve` and `nikcli workspace-serve` start a long-running server with the HTTP/mDNS/mobile transports.
-   - `nikcli run` and `nikcli session` connect to an existing server, fall back to spawning one if none is reachable.
-   - `nikcli attach` is a typed attach to an existing browser daemon.
+   - `ragu serve` and `ragu workspace-serve` start a long-running server with the HTTP/mDNS/mobile transports.
+   - `ragu run` and `ragu session` connect to an existing server, fall back to spawning one if none is reachable.
+   - `ragu attach` is a typed attach to an existing browser daemon.
      The dispatcher exposes these as typed operations; the on-disk state (PID files, sockets) is owned by the
      `InstanceState` module, not by individual commands.
 7. Network and configuration flags are resolved once per command, before the handler runs. The `withNetworkOptions`
@@ -67,7 +67,7 @@ the on-disk layout, or break existing command flags.
    `UI.spinner`, `UI.text`, and `UI.log` are the canonical writers; raw `console.log` is forbidden in handlers. The
    `clack/prompts` integration goes through `cli/effect/prompt.ts`; prompts in non-TTY environments fall back to
    non-interactive defaults that fail closed.
-9. Errors flow through `FormatError` and `Log`, with redacted sinks. Stack traces honor `NIKCLI_DEBUG`. Exit codes
+9. Errors flow through `FormatError` and `Log`, with redacted sinks. Stack traces honor `RAGU_DEBUG`. Exit codes
    follow the documented mapping: `0` success, `1` generic failure, `2` invalid usage, `64` config error, `66` no input,
    `69` service unavailable, `130` interrupted (matches SIGINT convention). The mapping is typed and consistent across
    commands.
@@ -76,7 +76,7 @@ the on-disk layout, or break existing command flags.
     with a deadline. Commands that ignore the shutdown signal are defects.
 11. **(landed)** Nested commands follow the same shape as top-level ones: `Spec.make` carries a `commands` field and
     the runtime recurses through it. There is no special-cased path for subcommands.
-12. Headless mode: a `NIKCLI_HEADLESS=1` flag disables interactive prompts. The handler that needs a prompt falls back
+12. Headless mode: a `RAGU_HEADLESS=1` flag disables interactive prompts. The handler that needs a prompt falls back
     to its documented non-interactive default; the runtime fails closed for prompts that have no default. Headless mode
     never silently picks "yes".
 
@@ -111,11 +111,11 @@ a non-zero code and a typed message; it never silently continues.
   order; an unloaded plugin's command is no longer dispatched.
 - Headless mode: a prompt with no default fails closed; the documented exit code is set; the error is typed and
   redacted.
-- Exit codes follow the documented mapping; stack traces honor `NIKCLI_DEBUG`; `FormatError` covers all reported
+- Exit codes follow the documented mapping; stack traces honor `RAGU_DEBUG`; `FormatError` covers all reported
   failures.
-- Extend `packages/nikcli/test/cli/`, `packages/nikcli/test/cli/cmd/`, `packages/nikcli/test/plugin/`, and the existing
+- Extend `packages/ragu/test/cli/`, `packages/ragu/test/cli/cmd/`, `packages/ragu/test/plugin/`, and the existing
   command tests.
-- From `packages/nikcli`: `bun test test/cli/`. One final root `bun run typecheck` after the slice.
+- From `packages/ragu`: `bun test test/cli/`. One final root `bun run typecheck` after the slice.
 - Meet EOT-01 budgets; command dispatch overhead below 50 ms p95 on the warm fixture; bootstrap shared with the TUI
   avoids duplicate work.
 
@@ -139,7 +139,7 @@ written before the CLI framework migration and stopped being true when it landed
 `src/session/` each had no reference outside their own file: `auth` and `stats` are live
 commands, declared with `Spec.make` in `cli/commands.ts`, and the definitions in
 `src/session/` were duplicates the migration left behind. Verified before removing them —
-`nikcli auth --help` and `nikcli stats --help` both still answer.
+`ragu auth --help` and `ragu stats --help` both still answer.
 
 So the guarantee the requirement describes does not live there and never did after the
 migration. **It lives in `cli/bootstrap.ts`**, whose `finally` disposes the instance on
@@ -164,7 +164,7 @@ start from the same suspicion.
 ## Headless Posture, First Slice — 2026-09-21
 
 Requirement 12 has one consumer, not a policy. `src/cli/headless.ts` (`0a9444cbcf`) defines `isHeadless`:
-`NIKCLI_HEADLESS=1` (or `true`) always wins, `NIKCLI_TERMINAL=1` — the managed-PTY signal mobile uses — forces
+`RAGU_HEADLESS=1` (or `true`) always wins, `RAGU_TERMINAL=1` — the managed-PTY signal mobile uses — forces
 interactive, and otherwise a non-TTY stdin is headless. `resolvePermissionPrompt` builds on it and fails closed: with
 no TTY and no `--auto` it prints why and answers `reject`, never "yes".
 
@@ -253,13 +253,13 @@ code `1`. The exit rides on `process.exitCode` because `runMain` lets a successf
 
 Still open: `2` (usage), `64` (config), `66` (no input), `69` (service unavailable) have a name but no producer, and
 there is still no `CommandError.HeadlessFailure`. Pinned by `test/cli/exit-codes.test.ts`; `bun test test/cli/` (256
-tests) and `bun run typecheck` pass. End to end, on a real PTY (`nikcli connectors add`, Ctrl+C at the first prompt):
+tests) and `bun run typecheck` pass. End to end, on a real PTY (`ragu connectors add`, Ctrl+C at the first prompt):
 before the change the process exited `1` and printed `ERROR UICancelledError`; after it, it exits `130` and prints
 nothing. Driven with a `pty.fork()` script, since clack cannot run under `bun test`.
 
 ### Headless prompts hung instead of failing closed — 2026-09-30
 
-Measured, not read: `nikcli connectors add < /dev/null` did not exit in 120 s. Two causes, one layer each.
+Measured, not read: `ragu connectors add < /dev/null` did not exit in 120 s. Two causes, one layer each.
 
 1. **`isHeadless` never fired in production.** It tested `stdinIsTTY === false`, but a stream that is not a terminal
    reports `isTTY === undefined` (`bun -e 'console.log(process.stdin.isTTY)' < /dev/null` prints `undefined`); only a

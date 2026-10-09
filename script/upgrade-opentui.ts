@@ -102,7 +102,7 @@ const editCatalog = (obj: unknown) => {
  * Overrides point at the catalog *only where a catalog entry exists*.
  *
  * Upstream keeps `@opentui/*` in a root catalog, so its version of this script rewrites every
- * override to `catalog:` unconditionally. nikcli has no opentui catalog — its overrides carry literal
+ * override to `catalog:` unconditionally. ragu has no opentui catalog — its overrides carry literal
  * versions — and writing `catalog:` there resolves to nothing: `bun install` fails with
  * "@opentui/core@<ver> failed to resolve" and never writes a lockfile. Ask the manifest instead of
  * assuming the convention.

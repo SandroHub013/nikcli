@@ -3,7 +3,7 @@
  *
  * The hand-written vocabulary (`intent/parse.ts`) handles what people say
  * often, instantly and offline. It cannot handle "avvia quattro sessioni
- * claude nel progetto nikcli, una sul parser e una sui test", and no list of
+ * claude nel progetto ragu, una sul parser e una sui test", and no list of
  * phrases ever will: the count, the agent, the project and one free-text task
  * per session are four open dimensions at once.
  *
@@ -13,7 +13,7 @@
  * the host — the model proposes, it does not decide.
  */
 
-import { translate, t as tr } from "@nikcli-ai/ade/i18n"
+import { translate, t as tr } from "@ragu/ade/i18n"
 import { MAX_PLAN_STEPS, validatePlan, type PlanContext, type ValidatedPlan } from "./schema"
 
 /**
@@ -87,7 +87,7 @@ export const PLANNER_SYSTEM = [
   "- Massimo 1-3 frasi chiare ad alta densità: l'utente ascolta la sintesi vocale e non vuole monologhi.",
   "- Non tradurre termini tecnici standard come commit, branch, build, test, pane, terminal, debug, pull request.",
   "- Se l'utente chiede lo stato delle sessioni (chi è bloccato, chi ha finito, cosa fa un pannello), rispondi in `speech` con `steps: []`, dai pannelli elencati: nome e stato.",
-  "- Se l'utente chiede operazioni su ADE, conferma brevemente in `speech` (es. 'Avvio subito Claude sul progetto nikcli.') e compila `steps`.",
+  "- Se l'utente chiede operazioni su ADE, conferma brevemente in `speech` (es. 'Avvio subito Claude sul progetto ragu.') e compila `steps`.",
   '- Se la richiesta non è una di queste operazioni e non puoi rispondere con i dati che hai (spiegazioni sul codice, git, il web, chiedere a una sessione e aspettare la risposta), rispondi con una frase brevissima su cosa sta per succedere e passa la mano: {"speech":"Ci penso.","steps":[],"agent":true}. La frase viene detta subito, mentre un agente che può farlo lavora; non promettere un risultato.',
   "",
   "Operazioni ammesse in 'steps' (lascia [] se la richiesta è puramente informativa o discorsiva):",

@@ -1,2 +1,2 @@
 export * from "./types.js"
-export { CloudClientError, NikcliCloudClient, createNikcliCloudClient, type RelaySocketOptions } from "./client.js"
+export { CloudClientError, RaguCloudClient, createRaguCloudClient, type RelaySocketOptions } from "./client.js"

@@ -11,9 +11,9 @@ function quoteEnv(value: string): string {
 }
 
 console.log(`
-=== Setup bot Discord nikcli ===
+=== Setup bot Discord ragu ===
 
-Percorso consigliato: apri la TUI nikcli e lancia /discord.
+Percorso consigliato: apri la TUI ragu e lancia /discord.
 Questo wizard è il fallback da riga di comando.
 `)
 
@@ -26,7 +26,7 @@ for (let attempt = 0; attempt < 3; attempt++) {
   }
   try {
     const user = await lookupBotUser(token)
-    const nikcliUrl = ask("URL del server nikcli (Invio per avviare un server locale):")
+    const raguUrl = ask("URL del server ragu (Invio per avviare un server locale):")
     const openrouter = ask("Chiave OpenRouter per i messaggi vocali (opzionale):")
 
     const lines = [
@@ -34,8 +34,8 @@ for (let attempt = 0; attempt < 3; attempt++) {
       `DISCORD_BOT_TOKEN=${quoteEnv(token)}`,
       `DISCORD_CLIENT_ID=${quoteEnv(user.id)}`,
     ]
-    if (nikcliUrl) lines.push(`NIKCLI_URL=${quoteEnv(nikcliUrl)}`)
-    else lines.push("# NIKCLI_URL=")
+    if (raguUrl) lines.push(`RAGU_URL=${quoteEnv(raguUrl)}`)
+    else lines.push("# RAGU_URL=")
     if (openrouter) lines.push(`OPENROUTER_API_KEY=${quoteEnv(openrouter)}`)
     else lines.push("# OPENROUTER_API_KEY=")
     lines.push(

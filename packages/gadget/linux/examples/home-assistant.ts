@@ -4,9 +4,9 @@
  * Runs on any Linux box on the home network with a long-lived access token
  * for Home Assistant in `HA_TOKEN`. The agent sees three commands and asks
  * before calling the ones that change state, because the permission rules
- * on the nikcli side default to "ask" for every gadget command.
+ * on the ragu side default to "ask" for every gadget command.
  */
-import { Gadget } from "@nikcli-ai/gadget"
+import { Gadget } from "@ragu/gadget"
 
 const HA_URL = process.env.HA_URL ?? "http://homeassistant.local:8123"
 

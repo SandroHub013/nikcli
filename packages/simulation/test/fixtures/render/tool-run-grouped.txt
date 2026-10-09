@@ -1,5 +1,5 @@
 ┃
- NIKCLI  ┃ · Fixture            ⇄  ×                                                          + new
+ RAGU  ┃ · Fixture            ⇄  ×                                                          + new
          ┃
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -15,6 +15,6 @@
   ┃
   ┃
   ┃
-  ┃  Build  · Approve Deterministic simulation Nikcli deterministic simulation
+  ┃  Build  · Approve Deterministic simulation Ragu Code deterministic simulation
   ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
 [status bar]

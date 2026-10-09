@@ -1,5 +1,5 @@
-name = "nikcli-discord-bot"
-app = "nikcli-discord-bot"
+name = "ragu-discord-bot"
+app = "ragu-discord-bot"
 primaryRegion = "iad"
 
 [build]

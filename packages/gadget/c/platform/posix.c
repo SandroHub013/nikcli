@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <time.h>
 
-#include "nikcli_gadget.h"
+#include "ragu_gadget.h"
 
 static uint64_t now_ms(void) {
     struct timespec ts;
@@ -18,7 +18,7 @@ static void sleep_ms(unsigned ms) {
 
 static void log_line(void *user, const char *line) {
     (void)user;
-    fprintf(stderr, "[nikcli-gadget] %s\n", line);
+    fprintf(stderr, "[ragu-gadget] %s\n", line);
 }
 
 void ng_posix_defaults(ng_config *c) {

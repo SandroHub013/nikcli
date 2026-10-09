@@ -2,7 +2,7 @@
  * Turning what a person said into something ADE can look up.
  *
  * A spoken plan names an agent as "claude", "Claude Code" or "claude code",
- * and a project as "nikcli" or by a path the user read out — never as the ids
+ * and a project as "ragu" or by a path the user read out — never as the ids
  * the catalogue keeps. Matching that loosely is the whole job here, and it is
  * also the part most likely to be wrong, so it lives in its own module with
  * its own tests rather than inside a Solid component that `bun test` cannot

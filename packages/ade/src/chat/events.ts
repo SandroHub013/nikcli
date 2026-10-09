@@ -15,7 +15,7 @@
  * folder again (`"resync"`), since the instance it knew is gone.
  */
 
-import { Binary } from "@nikcli-ai/util/binary"
+import { Binary } from "@ragu/util/binary"
 import { produce, reconcile, type SetStoreFunction } from "solid-js/store"
 import type {
   Message,
@@ -25,7 +25,7 @@ import type {
   Session,
   SessionStatus,
   Todo,
-} from "@nikcli-ai/sdk/httpapi"
+} from "@ragu/sdk/httpapi"
 
 export interface ChatData {
   /** Sorted by id. Child sessions (a subagent's) included: the view picks the roots. */

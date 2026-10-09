@@ -7,7 +7,7 @@ use tauri_plugin_shell::{
 use crate::{LogState, constants::MAX_LOG_ENTRIES};
 
 const CLI_INSTALL_DIR: &str = ".nikcli/bin";
-const CLI_BINARY_NAME: &str = "nikcli";
+const CLI_BINARY_NAME: &str = "ragu";
 
 #[derive(serde::Deserialize)]
 pub struct ServerConfig {
@@ -24,7 +24,7 @@ pub async fn get_config(app: &AppHandle) -> Option<Config> {
     create_command(app, "debug config")
         .output()
         .await
-        .inspect_err(|e| eprintln!("Failed to read Nikcli config: {e}"))
+        .inspect_err(|e| eprintln!("Failed to read Ragu config: {e}"))
         .ok()
         .and_then(|out| String::from_utf8(out.stdout.to_vec()).ok())
         .and_then(|s| serde_json::from_str::<Config>(&s).ok())
@@ -44,7 +44,7 @@ pub fn get_sidecar_path(app: &tauri::AppHandle) -> std::path::PathBuf {
         .expect("Failed to get current binary")
         .parent()
         .expect("Failed to get parent dir")
-        .join("nikcli-cli")
+        .join("ragu-cli")
 }
 
 fn is_cli_installed() -> bool {
@@ -67,7 +67,7 @@ pub fn install_cli(app: tauri::AppHandle) -> Result<String, String> {
         return Err("Sidecar binary not found".to_string());
     }
 
-    let temp_script = std::env::temp_dir().join("nikcli-install.sh");
+    let temp_script = std::env::temp_dir().join("ragu-install.sh");
     std::fs::write(&temp_script, INSTALL_SCRIPT)
         .map_err(|e| format!("Failed to write install script: {}", e))?;
 
@@ -167,12 +167,12 @@ pub fn create_command(app: &tauri::AppHandle, args: &str) -> Command {
     #[cfg(target_os = "windows")]
     return app
         .shell()
-        .sidecar("nikcli-cli")
+        .sidecar("ragu-cli")
         .unwrap()
         .args(args.split_whitespace())
-        .env("NIKCLI_EXPERIMENTAL_ICON_DISCOVERY", "true")
-        .env("NIKCLI_EXPERIMENTAL_FILEWATCHER", "true")
-        .env("NIKCLI_CLIENT", "desktop")
+        .env("RAGU_EXPERIMENTAL_ICON_DISCOVERY", "true")
+        .env("RAGU_EXPERIMENTAL_FILEWATCHER", "true")
+        .env("RAGU_CLIENT", "desktop")
         .env("XDG_STATE_HOME", &state_dir)
         .current_dir(&cwd);
 
@@ -189,9 +189,9 @@ pub fn create_command(app: &tauri::AppHandle, args: &str) -> Command {
 
         app.shell()
             .command(&shell)
-            .env("NIKCLI_EXPERIMENTAL_ICON_DISCOVERY", "true")
-            .env("NIKCLI_EXPERIMENTAL_FILEWATCHER", "true")
-            .env("NIKCLI_CLIENT", "desktop")
+            .env("RAGU_EXPERIMENTAL_ICON_DISCOVERY", "true")
+            .env("RAGU_EXPERIMENTAL_FILEWATCHER", "true")
+            .env("RAGU_CLIENT", "desktop")
             .env("XDG_STATE_HOME", &state_dir)
             .current_dir(&cwd)
             .args(["-il", "-c", &cmd])
@@ -208,10 +208,10 @@ pub fn serve(app: &AppHandle, hostname: &str, port: u32, password: &str) -> Comm
         app,
         format!("serve --hostname {hostname} --port {port}").as_str(),
     )
-    .env("NIKCLI_SERVER_USERNAME", "nikcli")
-    .env("NIKCLI_SERVER_PASSWORD", password)
+    .env("RAGU_SERVER_USERNAME", "ragu")
+    .env("RAGU_SERVER_PASSWORD", password)
     .spawn()
-    .expect("Failed to spawn nikcli");
+    .expect("Failed to spawn ragu");
 
     tokio::spawn(async move {
         while let Some(event) = rx.recv().await {

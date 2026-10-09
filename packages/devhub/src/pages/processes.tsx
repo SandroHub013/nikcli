@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
-import { Button } from "@nikcli-ai/ui/button"
-import { Switch } from "@nikcli-ai/ui/switch"
+import { Button } from "@ragu/ui/button"
+import { Switch } from "@ragu/ui/switch"
 import { app, toastError, toastOk } from "../lib/store"
 import { bytes, duration, pct } from "../lib/format"
 import type { ProcCategory, ProcInfo } from "../lib/native"
@@ -84,7 +84,7 @@ export function Processes() {
   return (
     <Page
       title="Processes"
-      subtitle="Live view of every nikcli process and what it spawned — real values from the OS, sampled every 2 s"
+      subtitle="Live view of every ragu process and what it spawned — real values from the OS, sampled every 2 s"
       actions={
         <>
           <Switch checked={!app.paused()} onChange={(v) => app.setPaused(!v)}>
@@ -108,9 +108,9 @@ export function Processes() {
           label="Resident memory"
           value={bytes(totals().rss)}
           hint={`${pct((totals().rss / memTotal()) * 100)} of host RAM`}
-          spark={h().map((s) => s.nikcliRss)}
+          spark={h().map((s) => s.raguRss)}
         />
-        <Stat label="CPU (sum)" value={pct(totals().cpu)} hint="100% = one core" spark={h().map((s) => s.nikcliCpu)} />
+        <Stat label="CPU (sum)" value={pct(totals().cpu)} hint="100% = one core" spark={h().map((s) => s.raguCpu)} />
         <Stat
           label="Host swap"
           value={bytes(app.snapshot()?.swapUsed ?? 0)}
@@ -142,7 +142,7 @@ export function Processes() {
       <div class="dh-grid" data-cols={selected() ? "split" : undefined}>
         <Panel title={`Processes (${rows().length})`} class="flush">
           <div class="dh-scroll" style={{ "max-height": "60vh" }}>
-            <Show when={rows().length} fallback={<Empty>No nikcli processes match.</Empty>}>
+            <Show when={rows().length} fallback={<Empty>No ragu processes match.</Empty>}>
               <table class="dh-table">
                 <thead>
                   <tr>

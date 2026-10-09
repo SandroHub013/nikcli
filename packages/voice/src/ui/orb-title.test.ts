@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { localePreference, setLocalePreference } from "@nikcli-ai/ade/i18n"
+import { localePreference, setLocalePreference } from "@ragu/ade/i18n"
 import { DEFAULT_VOICE_SETTINGS } from "../settings/model"
 import { dictationHint, orbTitle } from "./orb-title"
 import { voiceSettingsSource } from "../test-support/voice-settings-source"

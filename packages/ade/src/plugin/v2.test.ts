@@ -1,11 +1,11 @@
 /**
- * The ADE adapter, exercised the way `packages/nikcli/test/tui/plugin-v2.test.ts`
+ * The ADE adapter, exercised the way `packages/ragu/test/tui/plugin-v2.test.ts`
  * exercises the TUI one: a real `Plugin.define` module, a real registry, and a
  * host that only records what it was told.
  */
 import { describe, expect, test } from "bun:test"
-import { Plugin } from "@nikcli-ai/plugin/v2/ade"
-import type { Context } from "@nikcli-ai/plugin/v2/ade/context"
+import { Plugin } from "@ragu/plugin/v2/ade"
+import type { Context } from "@ragu/plugin/v2/ade/context"
 import { createPluginRegistry } from "./registry"
 import { adaptV2AdePlugin, readV2AdePlugin, type AdePluginHost } from "./v2"
 import { clearPluginStorage } from "./storage"
@@ -18,7 +18,7 @@ function host() {
   const value: AdePluginHost = {
     registry: createPluginRegistry(),
     data: {
-      project: () => ({ name: "nikcli", root: "C:/repo" }),
+      project: () => ({ name: "ragu", root: "C:/repo" }),
       session: {
         list: () => [],
         get: () => undefined,
@@ -76,7 +76,7 @@ describe("adaptV2AdePlugin", () => {
     const loaded = await adaptV2AdePlugin(definition, runtime.value, { enabled: true })
     expect(loaded.id).toBe("example.plugin")
     expect(context?.options).toEqual({ enabled: true })
-    expect(context?.data.project()?.name).toBe("nikcli")
+    expect(context?.data.project()?.name).toBe("ragu")
 
     // Commands reach the palette namespaced, so they cannot shadow ADE's own.
     expect(runtime.value.registry.commands().map((item) => item.key)).toEqual(["plugin:example.plugin:overview"])

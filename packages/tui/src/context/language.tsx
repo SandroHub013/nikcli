@@ -53,15 +53,15 @@ function detectIntlLocale(): string | undefined {
 export function resolveLocale(raw?: string): string {
   // Resolution priority (first non-empty wins):
   //   1. explicit `raw` argument (tests, calls)
-  //   2. NIKCLI_LANG / NIKCLI_LOCALE / NIKCLI_LANGUAGE env overrides
+  //   2. RAGU_LANG / RAGU_LOCALE / RAGU_LANGUAGE env overrides
   //   3. LC_ALL / LC_MESSAGES / LANG / LANGUAGE (POSIX env)
   //   4. Intl.DateTimeFormat().resolvedOptions().locale (OS fallback)
   //   5. "en"
   const candidates = [
     raw,
-    process.env.NIKCLI_LANG,
-    process.env.NIKCLI_LOCALE,
-    process.env.NIKCLI_LANGUAGE,
+    process.env.RAGU_LANG,
+    process.env.RAGU_LOCALE,
+    process.env.RAGU_LANGUAGE,
     process.env.LC_ALL,
     process.env.LC_MESSAGES,
     process.env.LANG,

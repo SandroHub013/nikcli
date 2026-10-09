@@ -53,13 +53,13 @@ describe("listProjectsFrom", () => {
     const list = listProjectsFrom(
       [
         { root: "C:/altro", name: "altro" },
-        { root: "C:/repo", name: "nikcli" },
+        { root: "C:/repo", name: "ragu" },
       ],
-      { root: "C:/repo", name: "nikcli" },
+      { root: "C:/repo", name: "ragu" },
     )
 
-    expect(list.map((p) => p.name)).toEqual(["nikcli", "altro"])
-    expect(list.filter((p) => p.isOpen).map((p) => p.name)).toEqual(["nikcli"])
+    expect(list.map((p) => p.name)).toEqual(["ragu", "altro"])
+    expect(list.filter((p) => p.isOpen).map((p) => p.name)).toEqual(["ragu"])
   })
 
   /*
@@ -90,26 +90,26 @@ describe("listProjectsFrom", () => {
   })
 
   test("senza progetto aperto nessuno è aperto", () => {
-    const list = listProjectsFrom([{ root: "C:/repo", name: "nikcli" }], undefined)
+    const list = listProjectsFrom([{ root: "C:/repo", name: "ragu" }], undefined)
     expect(list.every((p) => !p.isOpen)).toBe(true)
   })
 })
 
 describe("resolveProject", () => {
   const projects = [
-    { name: "nikcli", root: "C:/Users/x/nikcli", isOpen: true },
+    { name: "ragu", root: "C:/Users/x/ragu", isOpen: true },
     { name: "sito web", root: "C:/Users/x/sito-web", isOpen: false },
   ]
 
   test("trova per nome, anche detto male", () => {
-    expect(resolveProject("nikcli", projects).root).toBe("C:/Users/x/nikcli")
-    expect(resolveProject("NikCLI", projects).root).toBe("C:/Users/x/nikcli")
+    expect(resolveProject("ragu", projects).root).toBe("C:/Users/x/ragu")
+    expect(resolveProject("Ragu", projects).root).toBe("C:/Users/x/ragu")
     expect(resolveProject("sitoweb", projects).root).toBe("C:/Users/x/sito-web")
   })
 
   test("trova per radice, con le barre in un verso o nell'altro", () => {
-    expect(resolveProject("C:\\Users\\x\\nikcli", projects).name).toBe("nikcli")
-    expect(resolveProject("c:/users/x/nikcli/", projects).name).toBe("nikcli")
+    expect(resolveProject("C:\\Users\\x\\ragu", projects).name).toBe("ragu")
+    expect(resolveProject("c:/users/x/ragu/", projects).name).toBe("ragu")
   })
 
   test("trova per ultima cartella della radice", () => {
@@ -118,11 +118,11 @@ describe("resolveProject", () => {
 
   test("rifiuta un progetto sconosciuto elencando quelli in lista", () => {
     expect(() => resolveProject("contabilità", projects)).toThrow(/Non conosco il progetto/)
-    expect(() => resolveProject("contabilità", projects)).toThrow(/nikcli, sito web/)
+    expect(() => resolveProject("contabilità", projects)).toThrow(/ragu, sito web/)
   })
 
   test("lo dice quando la lista è vuota, invece di elencare il nulla", () => {
-    expect(() => resolveProject("nikcli", [])).toThrow(/non ho nessun progetto in elenco/)
+    expect(() => resolveProject("ragu", [])).toThrow(/non ho nessun progetto in elenco/)
   })
 })
 

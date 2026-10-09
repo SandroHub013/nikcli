@@ -71,7 +71,7 @@ impl Env for AppEnv {
     fn log(&self, line: &str) {
         eprintln!("ADE: {line}");
     }
-    /// The keys in ADE's keychain, nikcli's provider keys and the keys in ADE's environment.
+    /// The keys in ADE's keychain, ragu's provider keys and the keys in ADE's environment.
     fn secrets(&self) -> Vec<String> {
         let mut values = crate::secrets::values(&self.app);
         values.extend(known::values());

@@ -49,7 +49,7 @@ describe("MEDIO 2: a later report counts only from the pane's own family", () =>
     expect(reportFamily("prime")).toBe("pi")
     expect(reportFamily("pi")).toBe("pi")
     expect(reportFamily("claude-code")).toBe("claude")
-    expect(reportFamily("nikcli")).toBe("nikcli")
+    expect(reportFamily("ragu")).toBe("ragu")
     expect(reportFamily("opencode")).toBeUndefined()
   })
 

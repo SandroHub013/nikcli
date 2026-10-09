@@ -2,7 +2,7 @@
  * The voice package's interface texts in Italian (S41, phase 4).
  *
  * Kept apart from `it.ts` only for size: they are spread into the one
- * catalog, so `t()` in `@nikcli-ai/voice` reads the same keys and the same
+ * catalog, so `t()` in `@ragu/voice` reads the same keys and the same
  * locale signal as the rest of ADE. What the assistant *says* and the phrases
  * it understands are not here; they follow the speech-recognition language.
  */
@@ -108,7 +108,7 @@ export const voiceIt = {
   "vui.engine.auto.desc": "Il primo installato tra Claude Code e Codex",
   "vui.engine.claude.desc": "Con il tuo abbonamento Anthropic",
   "vui.engine.codex.desc": "Con il tuo abbonamento ChatGPT",
-  "vui.engine.nikcli.desc": "Non risponde alla voce: non si può tenere in sola lettura",
+  "vui.engine.ragu.desc": "Non risponde alla voce: non si può tenere in sola lettura",
   "vui.engine.off": "Solo comandi",
   "vui.engine.off.desc": "Nessun agente: capisce solo le frasi note",
   "vui.engine.title": "Agente vocale",

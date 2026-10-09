@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Plugin } from "@nikcli-ai/plugin/v2/ade"
+import { Plugin } from "@ragu/plugin/v2/ade"
 import { createAdePluginRuntime, type RuntimeHost } from "./runtime"
 import { clearPluginStorage } from "./storage"
 import type { DiscoveryIO } from "./discovery"
@@ -9,7 +9,7 @@ function recordingHost() {
   const closed: string[] = []
   const host: RuntimeHost = {
     data: {
-      project: () => ({ name: "nikcli", root: "C:/repo" }),
+      project: () => ({ name: "ragu", root: "C:/repo" }),
       session: { list: () => [], get: () => undefined, focused: () => undefined },
     },
     showPalette: () => {},
@@ -274,11 +274,11 @@ describe("the runtime", () => {
     const { host } = recordingHost()
     const runtime = createAdePluginRuntime({
       host,
-      io: io({ "C:/repo/.nikcli/tui.json": configWith("./p.js", "nikcli-plugin-foo"), "C:/repo/p.js": "" }),
+      io: io({ "C:/repo/.nikcli/tui.json": configWith("./p.js", "ragu-plugin-foo"), "C:/repo/p.js": "" }),
     })
     await runtime.start("C:/repo")
     expect(runtime.registry.commands()).toHaveLength(0)
-    expect(runtime.status().map((item) => item.spec)).toEqual(["nikcli-plugin-foo"])
+    expect(runtime.status().map((item) => item.spec)).toEqual(["ragu-plugin-foo"])
   })
 
   test("dispose runs every cleanup and empties the registry", async () => {

@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { createServer } from "node:net"
 import { dirname, resolve } from "node:path"
-import { HttpRecorder, type HttpInteraction, type RequestSnapshot } from "@nikcli-ai/http-recorder"
+import { HttpRecorder, type HttpInteraction, type RequestSnapshot } from "@ragu/http-recorder"
 import type { SimulationProtocol } from "../protocol"
 import { SimulationOpenAI } from "./openai"
 
@@ -69,21 +69,21 @@ function fixtureResponse(interaction: HttpInteraction) {
 }
 
 function cassetteRequired(mode: Mode, cassette?: string): asserts cassette is string {
-  if (mode !== "driver" && !cassette) throw new Error(`NIKCLI simulation ${mode} mode requires a cassette name`)
+  if (mode !== "driver" && !cassette) throw new Error(`RAGU simulation ${mode} mode requires a cassette name`)
 }
 
 export function optionsFromEnv(endpoint: string): Options {
-  const raw = process.env.NIKCLI_SIMULATION_MODE ?? "driver"
+  const raw = process.env.RAGU_SIMULATION_MODE ?? "driver"
   if (raw !== "driver" && raw !== "record" && raw !== "replay") {
-    throw new Error(`Invalid NIKCLI_SIMULATION_MODE: ${raw}`)
+    throw new Error(`Invalid RAGU_SIMULATION_MODE: ${raw}`)
   }
   return {
     endpoint,
     mode: raw,
-    cassette: process.env.NIKCLI_SIMULATION_CASSETTE,
-    directory: process.env.NIKCLI_SIMULATION_CASSETTES_DIR,
-    upstream: process.env.NIKCLI_SIMULATION_UPSTREAM,
-    apiKey: process.env.NIKCLI_SIMULATION_API_KEY,
+    cassette: process.env.RAGU_SIMULATION_CASSETTE,
+    directory: process.env.RAGU_SIMULATION_CASSETTES_DIR,
+    upstream: process.env.RAGU_SIMULATION_UPSTREAM,
+    apiKey: process.env.RAGU_SIMULATION_API_KEY,
   }
 }
 
@@ -170,7 +170,7 @@ export async function start(options: Options): Promise<Server> {
       },
     }
     recorded = HttpRecorder.cassetteFor(cassetteName, [...(recorded?.interactions ?? []), interaction], {
-      source: "nikcli-simulation",
+      source: "ragu-simulation",
       upstream: new URL(upstream).origin,
     })
     const findings = HttpRecorder.cassetteSecretFindings(recorded)

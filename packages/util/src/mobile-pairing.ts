@@ -1,7 +1,7 @@
 import { networkInterfaces } from "os"
 
 /**
- * Pairing a phone with a nikcli server: where the server is reachable, and the link that carries
+ * Pairing a phone with a ragu server: where the server is reachable, and the link that carries
  * that address plus a token to the app.
  *
  * Pure string and interface work, extracted from the `mobile` CLI command. The TUI's pairing
@@ -115,7 +115,7 @@ export function resolveServerUrl(input: { publicUrl?: string; hostname: string; 
 }
 
 export function buildMobilePairingDeepLink(info: { serverUrl: string; token: string; directory?: string }) {
-  const deepLink = new URL("nikcli://connect")
+  const deepLink = new URL("ragu://connect")
   deepLink.searchParams.set("server", info.serverUrl)
   deepLink.searchParams.set("token", info.token)
   if (info.directory) deepLink.searchParams.set("directory", info.directory)

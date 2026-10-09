@@ -8,7 +8,7 @@
  * unreachable.
  */
 
-import type { TuiPluginApi } from "@nikcli-ai/plugin/tui"
+import type { TuiPluginApi } from "@ragu/plugin/tui"
 import { createStore } from "solid-js/store"
 import {
   MissionApi,

@@ -185,7 +185,7 @@ function init() {
         // decided the outcome.
         //
         // The DOM probe was inert rather than fatal. Under the CLI host
-        // `nikcli/src/util/document-shim` defines a `document` carrying only
+        // `ragu/src/util/document-shim` defines a `document` carrying only
         // `createElement`, so `document.activeElement?.tagName` is `undefined`
         // and the comparison is always true; in the standalone host, where no
         // shim is loaded, it would have thrown — but only if the first clause

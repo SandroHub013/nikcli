@@ -1,6 +1,6 @@
 import type { RGBA } from "@opentui/core"
 import type { Theme } from "../context/theme"
-import type { SessionContextResponse } from "@nikcli-ai/sdk/httpapi"
+import type { SessionContextResponse } from "@ragu/sdk/httpapi"
 
 /**
  * Helpers used by the context-usage dialog to render charts, gauges, and the

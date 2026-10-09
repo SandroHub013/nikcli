@@ -1,9 +1,9 @@
 /**
- * @nikcli-ai/computer-use
+ * @ragu/computer-use
  *
  * Control, inspect, capture and test real desktop sessions through a
- * background per-workspace daemon, the way `@nikcli-ai/browser-control`
- * drives a headless Chromium page or `@nikcli-ai/terminal-control` drives
+ * background per-workspace daemon, the way `@ragu/browser-control`
+ * drives a headless Chromium page or `@ragu/terminal-control` drives
  * a PTY-backed TUI. One or more named desktop sessions, each backed by a
  * Docker-managed Linux desktop in the default `sandbox` mode (an isolated
  * noVNC-served background VM) or by the user's real desktop in opt-in

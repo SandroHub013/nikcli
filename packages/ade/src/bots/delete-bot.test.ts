@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Host } from "../host/shell"
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 import { deleteBot } from "./store"
 
 const BOT = { path: "C:/progetto/.nikcli/agent/aiuto.md" } as AgentFile

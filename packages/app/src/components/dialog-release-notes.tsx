@@ -1,7 +1,7 @@
 import { createSignal, createEffect, onMount, onCleanup } from "solid-js"
-import { Dialog } from "@nikcli-ai/ui/dialog"
-import { Button } from "@nikcli-ai/ui/button"
-import { useDialog } from "@nikcli-ai/ui/context/dialog"
+import { Dialog } from "@ragu/ui/dialog"
+import { Button } from "@ragu/ui/button"
+import { useDialog } from "@ragu/ui/context/dialog"
 import { useSettings } from "@/context/settings"
 
 export type Highlight = {

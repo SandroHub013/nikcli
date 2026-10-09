@@ -1,0 +1,11 @@
+Publish a local file as a hosted artifact on nikcli-ai.dev — a live page the user can open in a browser or the ragu mobile app.
+
+Use for outputs better viewed as a page than terminal text: HTML report/dashboard, Markdown doc, image, video. Write the file first (Write tool), then publish.
+
+Supported files: .html/.htm, .md/.markdown, .txt, images (.png .jpg .jpeg .gif .webp .svg), videos (.mp4 .webm .mov .m4v). Max 25MB.
+
+HTML pages must be fully self-contained: inline all CSS/JS and embed images as data: URIs — strict CSP forbids external scripts/styles/media.
+
+Returns a capability link `https://nikcli-ai.dev/artifact/{id}?key=...`. Include it in your response so the user can open it. Artifacts are private by default; without the `?key=` only the publisher's logged-in account can view. No login required to publish.
+
+Pass an existing `artifactID` to publish a new version at the same URL; without it, a new artifact with a new URL is created.

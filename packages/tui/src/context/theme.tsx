@@ -25,8 +25,9 @@ import { useRoute } from "./route"
 import { useKV } from "./kv"
 import { useRenderer } from "@opentui/solid"
 import { createStore, produce } from "solid-js/store"
-import { Global } from "@nikcli-ai/util/global"
-import { Filesystem } from "@nikcli-ai/util/filesystem"
+import { Global } from "@ragu/util/global"
+import { Filesystem } from "@ragu/util/filesystem"
+import { DOT_FOLDERS, preferNew } from "@ragu/util/app-folder"
 
 export { BUILT_IN_THEME_IDS } from "./theme-catalog"
 export { tint, contrastFg, type SemanticTokens } from "./theme-tokens"
@@ -419,7 +420,7 @@ export const {
     onCleanup(() => process.off("SIGUSR2", onReloadSignal))
 
     const values = createMemo(() => {
-      return resolveTheme(store.themes[store.active] ?? store.themes.nikcli, store.mode)
+      return resolveTheme(store.themes[store.active] ?? store.themes.ragu, store.mode)
     })
 
     const syntax = createMemo(() => generateSyntax(values()))
@@ -466,7 +467,7 @@ export const {
      * the user asked for, and it only names the fields it decides.
      */
     function resolve(extra: readonly ComponentPatchMap[]): ResolvedComponents {
-      const document = store.themes[store.active] ?? store.themes.nikcli!
+      const document = store.themes[store.active] ?? store.themes.ragu!
       const patches = preset()
       return resolveComponents(createComponentResolver(values(), createColorResolver(document, store.mode)), [
         readComponentPatches(document.components),
@@ -547,10 +548,10 @@ async function getCustomThemes() {
     Global.Path.config,
     ...(await Array.fromAsync(
       Filesystem.up({
-        targets: [".nikcli"],
+        targets: [...DOT_FOLDERS],
         start: process.cwd(),
       }),
-    )),
+    ).then(preferNew)),
   ]
 
   const result: Record<string, ThemeJson> = {}
@@ -583,10 +584,10 @@ const COMPONENT_OVERRIDE_FILE = "components.json"
 async function getComponentOverrides(): Promise<ComponentPatchMap> {
   const ancestors = await Array.fromAsync(
     Filesystem.up({
-      targets: [".nikcli"],
+      targets: [...DOT_FOLDERS],
       start: process.cwd(),
     }),
-  )
+  ).then(preferNew)
   const directories = [Global.Path.config, ...ancestors.reverse()]
 
   const merged: Record<string, { box?: Record<string, unknown>; colors?: Record<string, unknown> }> = {}

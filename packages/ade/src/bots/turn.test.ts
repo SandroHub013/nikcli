@@ -138,14 +138,14 @@ describe("runTurn", () => {
     )
   })
 
-  /* B8d: a bot's nikcli turn runs on ADE's server, with its session's rules; nothing here would carry them. */
-  test("a nikcli turn is not started here", async () => {
+  /* B8d: a bot's ragu turn runs on ADE's server, with its session's rules; nothing here would carry them. */
+  test("a ragu turn is not started here", async () => {
     const m = machine()
-    const result = await runTurn({ runner: "nikcli", message: "ciao" }, m.deps).result
+    const result = await runTurn({ runner: "ragu", message: "ciao" }, m.deps).result
     expect(result.status).toBe("error")
-    expect(result.problem).toBe(t("bots.turn.nikcliOnServer"))
+    expect(result.problem).toBe(t("bots.turn.raguOnServer"))
     expect(m.spawned()).toBe(0)
-    expect(turnsRunning("nikcli")).toBe(0)
+    expect(turnsRunning("ragu")).toBe(0)
   })
 
   test("the plan's parallel-turn cap holds for turns, and a finished one frees its slot", async () => {

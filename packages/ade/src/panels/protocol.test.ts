@@ -194,7 +194,7 @@ describe("a request cannot become a shell command (review, ALTO 1)", () => {
   })
 
   test("only an agent CLI's session may ask; a terminal and an unknown command may not", () => {
-    for (const agent of ["claude-code", "codex", "opencode", "nikcli"]) expect(acceptsRequests(agent)).toBe(true)
+    for (const agent of ["claude-code", "codex", "opencode", "ragu"]) expect(acceptsRequests(agent)).toBe(true)
     expect(acceptsRequests("terminal")).toBe(false)
     expect(acceptsRequests("my-script")).toBe(false)
     expect(acceptsRequests(undefined)).toBe(false)

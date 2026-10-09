@@ -28,7 +28,7 @@ export const REAL_MARK_IDS: readonly string[] = [
   "claude-code",
   "codex",
   "opencode",
-  "nikcli",
+  "ragu",
   "grok",
   "agy",
   "kimi",

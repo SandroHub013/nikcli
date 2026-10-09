@@ -1,7 +1,7 @@
 import { PendingInputCard } from "@tui/component/pending-input-card"
 import { useLocal } from "@tui/context/local"
 import { createMemo } from "solid-js"
-import type { SessionPendingInput2 } from "@nikcli-ai/sdk/httpapi"
+import type { SessionPendingInput2 } from "@ragu/sdk/httpapi"
 
 /**
  * Session-route adapter for {@link PendingInputCard}.

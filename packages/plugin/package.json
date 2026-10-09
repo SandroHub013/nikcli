@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@nikcli-ai/plugin",
+  "name": "@ragu/plugin",
   "version": "1.431.0",
   "type": "module",
   "license": "MIT",
@@ -84,7 +84,7 @@
     }
   },
   "dependencies": {
-    "@nikcli-ai/sdk": "workspace:*",
+    "@ragu/sdk": "workspace:*",
     "@opentui/core": "0.5.11",
     "@opentui/solid": "0.5.11",
     "effect": "4.0.0-rc.112",

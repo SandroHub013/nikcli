@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
-import { Button } from "@nikcli-ai/ui/button"
-import { Select } from "@nikcli-ai/ui/select"
+import { Button } from "@ragu/ui/button"
+import { Select } from "@ragu/ui/select"
 import { createPoll, toastError } from "../lib/store"
 import { native, type BenchRecord, type BenchRun, type PerfBaseline } from "../lib/native"
 import { runner } from "../lib/tasks"
@@ -17,7 +17,7 @@ const unit = (v: number, u: string) =>
 const rkey = (r: BenchRecord) => `${r.suite}/${r.module}/${r.scenario}`
 const PROBE_FILE = ".devhub/perf-live.json"
 /** The suite only persists its records (what this page compares) when asked to. */
-const BENCH_SAVE_ENV = { NIKCLI_BENCHMARK_SAVE: "1", NIKCLI_BENCHMARK_PER_FILE: "1" }
+const BENCH_SAVE_ENV = { RAGU_BENCHMARK_SAVE: "1", RAGU_BENCHMARK_PER_FILE: "1" }
 
 export function Benchmarks() {
   const data = createPoll(() => native.benchmarks(), 0)
@@ -49,7 +49,7 @@ export function Benchmarks() {
   const regressions = () => rows().filter((x) => x.delta !== undefined && x.delta > 10 && x.r.unit === "ms").length
 
   const active = () => runner.runs.find((r) => r.kind === "bench")
-  const launch = async (label: string, args: string[], env?: Record<string, string>, cwd = "packages/nikcli") => {
+  const launch = async (label: string, args: string[], env?: Record<string, string>, cwd = "packages/ragu") => {
     try {
       await runner.start({ kind: "bench", label, cwd, args, env })
       const done = setInterval(() => {

@@ -1,4 +1,4 @@
-import type { TuiCommand, TuiKeymapLayer, TuiKeymapApi, TuiPluginApi } from "@nikcli-ai/plugin/tui"
+import type { TuiCommand, TuiKeymapLayer, TuiKeymapApi, TuiPluginApi } from "@ragu/plugin/tui"
 
 let layers = 0
 

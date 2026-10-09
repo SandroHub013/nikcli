@@ -1,10 +1,10 @@
 /**
  * What a mod draws, as the phone reads it.
  *
- * Mods run in the nikcli server and answer `POST /mod/ui/render` with an element tree: plain data,
- * already checked against the server's limits (`packages/nikcli/src/mod/ui.ts`). The same mod draws
+ * Mods run in the ragu server and answer `POST /mod/ui/render` with an element tree: plain data,
+ * already checked against the server's limits (`packages/ragu/src/mod/ui.ts`). The same mod draws
  * for the terminal, the desktop and this app; it tells them apart by the `surface` the client sends.
- * These types are the structural twin of `@nikcli-ai/plugin/mod`'s `ModNode`, restated because the
+ * These types are the structural twin of `@ragu/plugin/mod`'s `ModNode`, restated because the
  * app bundles with Metro and does not depend on the plugin package. Nothing in a tree runs here:
  * a `Button` carries a `key` and pressing it reports the key back.
  */

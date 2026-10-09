@@ -17,15 +17,15 @@ const toc = [
 
 <DocsLayout
   title="Browser-control"
-  subtitle="@nikcli-ai/browser-control drives headless Chromium sessions, the way computer-use drives desktops and terminal-control drives PTYs."
+  subtitle="@ragu/browser-control drives headless Chromium sessions, the way computer-use drives desktops and terminal-control drives PTYs."
   toc={toc}
-  description="The @nikcli-ai/browser-control package: CLI, daemon, recording, evidence bundles, and the agent-side browser tool wrapper."
+  description="The @ragu/browser-control package: CLI, daemon, recording, evidence bundles, and the agent-side browser tool wrapper."
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
-      <code>@nikcli-ai/browser-control</code> is the headless browser engine that powers
-      nikcli's <a href="/docs/tools">browser tool</a> and the TUI
+      <code>@ragu/browser-control</code> is the headless browser engine that powers
+      ragu's <a href="/docs/tools">browser tool</a> and the TUI
       <a href="/docs/tui">browser feature plugin</a>. It exposes a <code>browser-control</code>
       CLI binary and ships a per-workspace background daemon that keeps one shared Chromium
       process alive across separate CLI invocations. The daemon auto-spawns on first use
@@ -33,13 +33,13 @@ const toc = [
     </p>
     <p>
       The package is one of three sibling engines — alongside
-      <a href="/docs/computer-use">@nikcli-ai/computer-use</a> and
-      <a href="/docs/terminal-control">@nikcli-ai/terminal-control</a> — that share the same
+      <a href="/docs/computer-use">@ragu/computer-use</a> and
+      <a href="/docs/terminal-control">@ragu/terminal-control</a> — that share the same
       CLI grammar, the same per-workspace daemon pattern, and the same evidence-bundle
       output.
     </p>
     <DocCallout type="info" title="What it is not">
-      <code>@nikcli-ai/browser-control</code> is <em>not</em> the Playwright or
+      <code>@ragu/browser-control</code> is <em>not</em> the Playwright or
       <code>chromium-bidi</code> bindings themselves — both are dependencies. The package is
       the daemon, the session manager, the recording pipeline, and the
       PR-ready evidence-bundle format that wraps them.
@@ -129,7 +129,7 @@ const toc = [
   <section id="agent" class="doc-section">
     <h2>Agent integration</h2>
     <p>
-      The <a href="/docs/tools">browser tool</a> (<code>packages/nikcli/src/tool/browser-control.ts</code>)
+      The <a href="/docs/tools">browser tool</a> (<code>packages/ragu/src/tool/browser-control.ts</code>)
       and the <code>browser</code> TUI feature plugin
       (<code>packages/tui/src/feature-plugins/browser/</code>) both delegate to
       the package — agents only need the tool name; humans only need the CLI. Permission
@@ -141,7 +141,7 @@ const toc = [
         <p>
           <code>browser-control install-skill [--workspace DIR | --global]</code> registers
           the bundled skill in <code>.agents/skills</code>. With <code>--global</code> the
-          skill is installed into <code>~/.agents/skills</code> so nikcli discovers it on
+          skill is installed into <code>~/.agents/skills</code> so ragu discovers it on
           every workspace on the machine.
         </p>
       </DocCard>
@@ -209,7 +209,7 @@ const toc = [
         </tr>
         <tr>
           <td>Agent tool wrapper</td>
-          <td><code>packages/nikcli/src/tool/browser-control.ts</code></td>
+          <td><code>packages/ragu/src/tool/browser-control.ts</code></td>
         </tr>
         <tr>
           <td>TUI plugin</td>

@@ -17,29 +17,29 @@ const toc = [
 
 <DocsLayout
   title="Localization"
-  subtitle="Language, region, timezone, and model reply-language settings via nikcli locale. Source: packages/nikcli/src/cli/cmd/locale.ts."
-  description="Reference for nikcli locale settings, language, region, timezone, and model reply-language behavior."
+  subtitle="Language, region, timezone, and model reply-language settings via ragu locale. Source: packages/ragu/src/cli/cmd/locale.ts."
+  description="Reference for ragu locale settings, language, region, timezone, and model reply-language behavior."
   toc={toc}
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
-      The <code>locale</code> command controls the language and regional settings used by nikcli
+      The <code>locale</code> command controls the language and regional settings used by ragu
       and, optionally, the language in which the underlying model replies. Settings are stored in
-      the global nikcli config by default (<code>--global</code> is <code>true</code>). Pass
+      the global ragu config by default (<code>--global</code> is <code>true</code>). Pass
       <code>--global false</code> to write to the project-level <code>nikcli.json</code> instead.
     </p>
     <p>
-      When no overrides are set, nikcli auto-detects locale from the environment
+      When no overrides are set, ragu auto-detects locale from the environment
       (<code>LANG</code>, <code>LC_ALL</code>, system timezone, etc.). Auto-detection can be
       disabled permanently with <code>--no-auto-detect</code> in a <code>set</code> call, or
       overridden for a single invocation with the environment variables described below.
     </p>
     <DocCode language="bash">
-      nikcli locale           # show resolved locale (same as "locale show")
-      nikcli locale show      # print current language, region, timezone, currency, reply language
-      nikcli locale set ...   # apply one or more overrides
-      nikcli locale reset     # clear all overrides and return to auto-detect
+      ragu locale           # show resolved locale (same as "locale show")
+      ragu locale show      # print current language, region, timezone, currency, reply language
+      ragu locale set ...   # apply one or more overrides
+      ragu locale reset     # clear all overrides and return to auto-detect
     </DocCode>
   </section>
 
@@ -156,13 +156,13 @@ const toc = [
     </table>
     <DocCode language="bash">
       # CLI stays in English but model answers in French
-      nikcli locale set --reply-language fr
+      ragu locale set --reply-language fr
 
       # Match reply language to the current --language setting
-      nikcli locale set --language ja --reply-language true
+      ragu locale set --language ja --reply-language true
 
       # Disable reply-language steering entirely
-      nikcli locale set --reply-language false
+      ragu locale set --reply-language false
     </DocCode>
     <DocCallout type="info" title="Model support">
       <p>
@@ -188,25 +188,25 @@ const toc = [
       </thead>
       <tbody>
         <tr>
-          <td><code>NIKCLI_LOCALE</code></td>
+          <td><code>RAGU_LOCALE</code></td>
           <td>Full BCP-47 locale tag, e.g. <code>it-IT</code>. Overrides both language and region.</td>
         </tr>
         <tr>
-          <td><code>NIKCLI_LANGUAGE</code></td>
+          <td><code>RAGU_LANGUAGE</code></td>
           <td>Language subtag only, e.g. <code>ja</code>.</td>
         </tr>
         <tr>
-          <td><code>NIKCLI_REGION</code></td>
+          <td><code>RAGU_REGION</code></td>
           <td>ISO-3166 country code only, e.g. <code>DE</code>.</td>
         </tr>
       </tbody>
     </table>
     <DocCode language="bash">
       # One-off run in Italian, regardless of stored config
-      NIKCLI_LOCALE=it-IT nikcli run "spiega questo codice"
+      RAGU_LOCALE=it-IT ragu run "spiega questo codice"
 
       # Override just the language
-      NIKCLI_LANGUAGE=de nikcli run "erkläre diesen Code"
+      RAGU_LANGUAGE=de ragu run "erkläre diesen Code"
     </DocCode>
   </section>
 
@@ -214,25 +214,25 @@ const toc = [
     <h2>Examples</h2>
     <DocCode language="bash">
       # Show the current resolved locale
-      nikcli locale
+      ragu locale
 
       # Set Italian locale with Rome timezone and Euro currency
-      nikcli locale set --language it --region IT --timezone Europe/Rome --currency EUR
+      ragu locale set --language it --region IT --timezone Europe/Rome --currency EUR
 
       # Use the combined BCP-47 tag instead
-      nikcli locale set --locale it-IT --timezone Europe/Rome --currency EUR
+      ragu locale set --locale it-IT --timezone Europe/Rome --currency EUR
 
       # Ask the model to always reply in Japanese (CLI remains in English)
-      nikcli locale set --reply-language ja
+      ragu locale set --reply-language ja
 
       # Set a project-level override (does not touch global config)
-      nikcli locale set --language fr --global false
+      ragu locale set --language fr --global false
 
       # Disable auto-detection globally
-      nikcli locale set --no-auto-detect
+      ragu locale set --no-auto-detect
 
       # Reset all overrides and return to auto-detect
-      nikcli locale reset
+      ragu locale reset
     </DocCode>
   </section>
 </DocsLayout>

@@ -41,17 +41,17 @@ If the id does not start with `wrk_`, fall through.
 
 `proxyWorkspaceRequest` is the same idea with an explicit `{ workspaceID, method, url, body, headers, signal }` and builds the `Request` itself.
 
-Headers such as `x-nikcli-workspace` are used by workspace-server routes and `Workspace` clients; they are **not** an allow-list check inside this middleware. Instance directory selection lives in `ServerRouter`, a different seam.
+Headers such as `x-ragu-workspace` are used by workspace-server routes and `Workspace` clients; they are **not** an allow-list check inside this middleware. Instance directory selection lives in `ServerRouter`, a different seam.
 
 ## Standalone vs in-process
 
-`nikcli workspace-serve` boots `Server.listen` for a workspace host. In-process hosting embeds `Workspace` services in the same process. They share `Workspace.Info` and the proxy helper; they do not share a header-match 403.
+`ragu workspace-serve` boots `Server.listen` for a workspace host. In-process hosting embeds `Workspace` services in the same process. They share `Workspace.Info` and the proxy helper; they do not share a header-match 403.
 
 SSE for a workspace is a separate feed (`src/workspace/sse.ts` if present); this document does not claim it is the only cross-boundary channel until that file is the one being changed.
 
 ## Alternatives Rejected
 
-**Per-workspace SQLite.** The rest of nikcli is one `nikcli.db`. Remote workspaces are other processes, not other files in this host.
+**Per-workspace SQLite.** The rest of ragu is one `nikcli.db`. Remote workspaces are other processes, not other files in this host.
 
 **403 on missing header.** A request without a workspace id is a local-instance request. Rejecting it would break the TUI.
 
@@ -64,5 +64,5 @@ SSE for a workspace is a separate feed (`src/workspace/sse.ts` if present); this
 ## What Is Explicitly Not Covered
 
 - Per-workspace permission rulesets, budgets, audit trail (ROADMAP §later).
-- How `ServerRouter` binds `directory` / `x-nikcli-directory`.
+- How `ServerRouter` binds `directory` / `x-ragu-directory`.
 - Auth tokens for workspace-serve.

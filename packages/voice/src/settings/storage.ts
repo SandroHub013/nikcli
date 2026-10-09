@@ -17,7 +17,7 @@ import {
   type VoiceSettings,
 } from "./model"
 import type { TranscriberBackend } from "../asr/select"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 
 export const VOICE_SETTINGS_STORAGE_KEY = "voice.settings"
 

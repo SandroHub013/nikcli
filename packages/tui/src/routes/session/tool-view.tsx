@@ -38,11 +38,11 @@ import { useTheme, selectedForeground, tint } from "@tui/context/theme"
 import { BoxRenderable, ScrollBoxRenderable, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt } from "@tui/component/prompt"
 import { TuiPluginRuntime } from "@tui/plugin"
-import { type AssistantMessage, type Part, type ToolPart } from "@nikcli-ai/sdk/httpapi"
+import { type AssistantMessage, type Part, type ToolPart } from "@ragu/sdk/httpapi"
 import { useLocal } from "@tui/context/local"
-import { Locale } from "@nikcli-ai/util/locale"
+import { Locale } from "@ragu/util/locale"
 import { reasoningSummary } from "@tui/context/thinking"
-import { Token } from "@nikcli-ai/util/token"
+import { Token } from "@ragu/util/token"
 import {
   artifactPublishedHref,
   diagnosticMessage,
@@ -64,7 +64,7 @@ import {
   type WriteShape,
 } from "@tui/util/tool-shapes"
 
-import { normalizeVizComponents } from "@nikcli-ai/util/viz"
+import { normalizeVizComponents } from "@ragu/util/viz"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
 import { useCommandDialog } from "@tui/component/dialog-command"
@@ -79,18 +79,18 @@ import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
-import { LANGUAGE_EXTENSIONS } from "@nikcli-ai/util/language"
+import { LANGUAGE_EXTENSIONS } from "@ragu/util/language"
 import { Clipboard } from "../../util/clipboard"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv.tsx"
 import { useServer } from "../../context/server"
 import { Editor } from "../../util/editor"
-import { stripAnsi } from "@nikcli-ai/util/bun-utils"
+import { stripAnsi } from "@ragu/util/bun-utils"
 import { SubagentFooter } from "./subagent-footer.tsx"
 import { usePromptRef } from "../../context/prompt"
 import { useExit } from "../../context/exit"
-import { Filesystem } from "@nikcli-ai/util/filesystem"
-import { Global } from "@nikcli-ai/util/global"
+import { Filesystem } from "@ragu/util/filesystem"
+import { Global } from "@ragu/util/global"
 import { formatPath } from "@tui/util/path-format"
 import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
@@ -103,7 +103,7 @@ import { compilePartialSpec } from "@tui/util/spec-stream"
 import { TuiImageList } from "@tui/component/tui-image"
 import { DialogSelect } from "../../ui/dialog-select"
 import { DialogBgAgents } from "./dialog-bg-agents"
-import { features } from "@nikcli-ai/util/features"
+import { features } from "@ragu/util/features"
 import { useLanguage } from "@tui/context/language"
 import { visibleRange } from "./message-window"
 import { groupLabel, groupParts, type ExplorationGroup } from "./rows"
@@ -2011,7 +2011,7 @@ function Monitor(props: ToolProps<any>) {
 }
 
 /**
- * `plugin` writes code nikcli then runs, so the transcript shows the code (as
+ * `plugin` writes code ragu then runs, so the transcript shows the code (as
  * a diff of the entry file) and whether it actually loaded — not the source
  * flattened into one line of arguments, which is what the generic view drew.
  */

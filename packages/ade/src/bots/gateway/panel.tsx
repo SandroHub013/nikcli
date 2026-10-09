@@ -9,7 +9,7 @@
 
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { t } from "../../i18n"
-import type { AgentFile } from "../nikcli"
+import type { AgentFile } from "../ragu"
 import { runnerById } from "../runners"
 import { createGatewayPanel, type GatewayPanelDeps } from "./panel-state"
 
@@ -419,7 +419,7 @@ export function GatewaySection(props: { bot: AgentFile; deps: Omit<GatewayPanelD
         </Show>
       </div>
 
-      {/* The shell from a chat: off, and for nikcli only. */}
+      {/* The shell from a chat: off, and for ragu only. */}
       <div data-slot="gateway-block">
         <span data-slot="gateway-subtitle">{t("gateway.panel.remote")}</span>
         <Show

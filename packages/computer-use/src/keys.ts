@@ -1,7 +1,7 @@
 /**
  * Translate human-friendly key names into the canonical `<mods>+<base>` token
  * the host / sandbox backends understand. Mirrors the structure of
- * `@nikcli-ai/browser-control`'s `keys.ts` and `@nikcli-ai/terminal-control`'s
+ * `@ragu/browser-control`'s `keys.ts` and `@ragu/terminal-control`'s
  * `keys.ts`, but for desktop key chords — the canonical token is passed
  * straight to the platform's input driver (cliclick on macOS, xdotool on
  * Linux/x11, SendKeys on Windows), so this module only normalizes the

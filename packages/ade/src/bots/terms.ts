@@ -15,7 +15,7 @@
 
 import { t } from "../i18n"
 
-/** Runners that spend the user's Anthropic or ChatGPT plan, rather than keys the user gave nikcli. */
+/** Runners that spend the user's Anthropic or ChatGPT plan, rather than keys the user gave ragu. */
 export const PLAN_RUNNERS: readonly string[] = ["claude", "codex"]
 
 /** How many turns on one plan may run at the same time. */
@@ -117,7 +117,7 @@ const CHECKED_OPENROUTER = "2026-09-25"
 
 export const ROUTINE_POLICY: readonly RoutineRow[] = [
   {
-    runner: "nikcli",
+    runner: "ragu",
     mode: "free",
     allowed: true,
     cap: { perDay: 20, minGapMin: 15 },
@@ -125,7 +125,7 @@ export const ROUTINE_POLICY: readonly RoutineRow[] = [
     checked: CHECKED_OPENROUTER,
   },
   {
-    runner: "nikcli",
+    runner: "ragu",
     mode: "paid",
     allowed: true,
     cap: { perRunUsd: 0.1, perDayUsd: 0.5, spendCapRequired: true },
@@ -179,7 +179,7 @@ export const ROUTINE_POLICY: readonly RoutineRow[] = [
   },
 ]
 
-/** nikcli's mode is the catalog model (`:free`), never the name the user typed. */
+/** ragu's mode is the catalog model (`:free`), never the name the user typed. */
 export function routineModeOf(
   runner: string | undefined,
   accountMode: "plan" | "key" | undefined,
@@ -187,7 +187,7 @@ export function routineModeOf(
   /** The catalog's word (`catalog.ts`); absent, the `:free` suffix. */
   free?: boolean,
 ): RoutineMode {
-  if (!runner || runner === "nikcli")
+  if (!runner || runner === "ragu")
     return (free ?? (typeof model === "string" && /:free$/i.test(model.trim()))) ? "free" : "paid"
   return accountMode === "key" ? "key" : "plan"
 }
@@ -199,7 +199,7 @@ export function routinePolicy(
   free?: boolean,
 ): { readonly allowed: true; readonly cap: RoutineCap } | { readonly allowed: false; readonly reason: string } {
   if (runner === "grok") return { allowed: false, reason: t("bots.terms.xaiNotRead") }
-  const effective: RoutineMode = runner === "nikcli" ? routineModeOf(runner, undefined, model, free) : mode
+  const effective: RoutineMode = runner === "ragu" ? routineModeOf(runner, undefined, model, free) : mode
   const row = ROUTINE_POLICY.find((entry) => entry.runner === runner && entry.mode === effective)
   if (!row || !row.allowed || !row.cap) {
     const key = row?.reasonKey

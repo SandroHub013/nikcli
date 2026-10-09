@@ -3,7 +3,7 @@
  * background desktop sessions outlive any single CLI invocation. This is what
  * makes computer-use "control it in the background" rather than "control it
  * for the lifetime of one process", the same way
- * `@nikcli-ai/browser-control`'s daemon keeps Chromium sessions alive.
+ * `@ragu/browser-control`'s daemon keeps Chromium sessions alive.
  *
  * The daemon self-terminates after `IDLE_SHUTDOWN_MS` with zero open
  * sessions, so a forgotten `start` doesn't leave a Docker container or a
@@ -26,7 +26,7 @@ type RpcHandler = (manager: SessionManager, params: Record<string, unknown>) => 
 
 const handlers: Record<string, RpcHandler> = {
   async start(manager, p) {
-    return manager.start(p.nikcliSessionID as string, {
+    return manager.start(p.raguSessionID as string, {
       name: p.name as string | undefined,
       mode: p.mode as "sandbox" | "host" | undefined,
       width: p.width as number | undefined,
@@ -97,7 +97,7 @@ const handlers: Record<string, RpcHandler> = {
     return { removed: true }
   },
   async restart(manager, p) {
-    return manager.restart(p.nikcliSessionID as string, p.name as string)
+    return manager.restart(p.raguSessionID as string, p.name as string)
   },
   async startRecording(manager, p) {
     await manager.startRecording(p.name as string, {
@@ -122,7 +122,7 @@ const handlers: Record<string, RpcHandler> = {
 export type StartDaemonOptions = {
   /**
    * When true (default for a dedicated daemon process), idle/shutdown ends the
-   * OS process. When false (in-process host inside the compiled nikcli binary),
+   * OS process. When false (in-process host inside the compiled ragu binary),
    * only the Unix server and sessions are torn down — the host keeps running.
    */
   readonly exitProcess?: boolean

@@ -2,16 +2,16 @@
 
 | Field  | Value                                                                                                                                     |
 | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Status | **Current architecture overview** (verified 2026-09-11 against `packages/nikcli/src`)                                                     |
+| Status | **Current architecture overview** (verified 2026-09-11 against `packages/ragu/src`)                                                     |
 | Scope  | `src/project/*`, `src/effect/instance-state.ts`, `src/server/httpapi/instance-less.ts`, `src/server/httpapi/project.ts`, `src/worktree/*` |
-| Buys   | One nikcli server process serving many projects and many worktrees per project                                                            |
+| Buys   | One ragu server process serving many projects and many worktrees per project                                                            |
 
 ## Goal
 
-The same goal opencode states: let a single instance of nikcli run sessions for multiple projects and
+The same goal opencode states: let a single instance of ragu run sessions for multiple projects and
 different worktrees per project.
 
-nikcli already does this. The document exists because the _mechanism_ is not what the opencode spec
+ragu already does this. The document exists because the _mechanism_ is not what the opencode spec
 proposes, and the difference is easy to get wrong when porting an upstream route.
 
 ## The One Divergence That Matters
@@ -23,7 +23,7 @@ GET  /project/:projectID/session
 POST /project/:projectID/session/:sessionID/abort
 ```
 
-nikcli does **not**. Every session route is flat and the project is resolved from a **directory the
+ragu does **not**. Every session route is flat and the project is resolved from a **directory the
 request names**:
 
 ```text
@@ -35,7 +35,7 @@ The directory arrives one of three ways, in this order (`requestedDirectory`,
 `src/server/httpapi/instance-less.ts:76`):
 
 1. `?directory=<path>` query parameter
-2. `x-nikcli-directory` request header
+2. `x-ragu-directory` request header
 3. `process.cwd()` of the server process
 
 `ServerRouter.context` uses that same function, so there is exactly one definition of "which
@@ -43,7 +43,7 @@ directory is this request about". The value is URI-decoded, falling back to the 
 decode throws.
 
 Upstream treats `?directory=` as the awkward exception at the bottom of its spec ("These are
-awkward"). In nikcli it is the rule, and the project id is the derived thing.
+awkward"). In ragu it is the rule, and the project id is the derived thing.
 
 ## Why Directory, Not Project ID
 
@@ -85,14 +85,14 @@ would have been resolved against.
 
 | Field       | Meaning                                                                 |
 | ----------- | ----------------------------------------------------------------------- |
-| `id`        | Stable project id, cached in the git directory as a file named `nikcli` |
+| `id`        | Stable project id, cached in the git directory as a file named `ragu` |
 | `worktree`  | The primary worktree path                                               |
 | `canonical` | Realpath of the project root, used for identity comparisons             |
 | `vcs`       | `"git"` or absent                                                       |
 | `sandboxes` | Additional directories tracked against this project (copies, worktrees) |
 | `time`      | `created` / `updated` / optional `initialized`                          |
 
-The id is written to `<gitdir>/nikcli` and read back on later opens, so the identity survives a
+The id is written to `<gitdir>/ragu` and read back on later opens, so the identity survives a
 rename of the checkout directory and is shared by every worktree of the same repository. When there
 is no git directory the id is derived rather than cached.
 
@@ -122,7 +122,7 @@ to" without the caller having to resolve the directory itself.
 
 ## Copies
 
-`ProjectCopy` (`src/project/copy.ts`) is nikcli's answer to the upstream "worktree per project"
+`ProjectCopy` (`src/project/copy.ts`) is ragu's answer to the upstream "worktree per project"
 half of the goal. It has exactly one strategy today: `git_worktree`.
 
 - `create` resolves a free directory name before asking `Worktree.create`, mirroring the slug that
@@ -139,7 +139,7 @@ resolve to the same project id as the primary worktree.
 
 See [v2/workspace-trust-lattice.md](./v2/workspace-trust-lattice.md) for the separate question of
 _remote_ directories, and note the naming trap recorded there: a v2 "Workspace" upstream is a
-sandboxed compute environment, not nikcli's workspace.
+sandboxed compute environment, not ragu's workspace.
 
 ## What Is Not Modeled
 

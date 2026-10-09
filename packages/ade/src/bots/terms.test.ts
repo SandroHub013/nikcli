@@ -21,13 +21,13 @@ describe("turns on a plan", () => {
     if ("release" in again) held.push(again)
   })
 
-  test("releasing twice does not free a second place, and nikcli is not counted", () => {
+  test("releasing twice does not free a second place, and ragu is not counted", () => {
     const slot = acquireTurn("codex")
     if ("problem" in slot) throw new Error(slot.problem)
     slot.release()
     slot.release()
     expect(turnsRunning("codex")).toBe(0)
-    for (let i = 0; i < MAX_PARALLEL_TURNS + 2; i++) expect("release" in acquireTurn("nikcli")).toBe(true)
+    for (let i = 0; i < MAX_PARALLEL_TURNS + 2; i++) expect("release" in acquireTurn("ragu")).toBe(true)
   })
 })
 

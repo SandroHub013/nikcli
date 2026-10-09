@@ -152,7 +152,7 @@ export function buildMobileHeaders(config: ServerConfig, extra?: Record<string, 
   } else if (config.username && config.password) {
     headers.Authorization = `Basic ${toBasicAuth(config.username, config.password)}`
   }
-  if (config.directory) headers["x-nikcli-directory"] = config.directory
+  if (config.directory) headers["x-ragu-directory"] = config.directory
   return headers
 }
 
@@ -398,7 +398,7 @@ export class MobileClient {
   }
 
   /**
-   * Teleport a session living on this server to another nikcli server (e.g. a
+   * Teleport a session living on this server to another ragu server (e.g. a
    * Railway deploy) so it can be resumed there — including its working directory.
    * The phone has no filesystem, so this delegates to the connected server, which
    * archives the session's working dir and ships both content and transcript to
@@ -888,7 +888,7 @@ export class MobileClient {
       !Array.isArray((result as JsonObject).runtimes)
     ) {
       throw new Error(
-        "The server returned an incompatible loop list. Update the connected Nikcli server and try again.",
+        "The server returned an incompatible loop list. Update the connected Ragu server and try again.",
       )
     }
     return result as LoopListResult
@@ -1015,7 +1015,7 @@ export class MobileClient {
       !Array.isArray((result as JsonObject).runtimes)
     ) {
       throw new Error(
-        "The server returned an incompatible mission list. Update the connected Nikcli server and try again.",
+        "The server returned an incompatible mission list. Update the connected Ragu server and try again.",
       )
     }
     return result as MissionListResult

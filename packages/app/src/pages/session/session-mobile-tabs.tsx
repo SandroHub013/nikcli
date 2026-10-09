@@ -1,5 +1,5 @@
 import { Match, Show, Switch } from "solid-js"
-import { Tabs } from "@nikcli-ai/ui/tabs"
+import { Tabs } from "@ragu/ui/tabs"
 
 export function SessionMobileTabs(props: {
   open: boolean

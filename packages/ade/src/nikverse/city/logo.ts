@@ -1,16 +1,16 @@
 /**
- * The nikcli logo as the hologram in the square is built from it: read from the
+ * The ragu logo as the hologram in the square is built from it: read from the
  * brand's own SVG, never redrawn.
  *
- * `nikcli-logo-dark.svg` next to this file is a byte-for-byte copy of
- * `packages/console/app/src/asset/brand/nikcli-logo-dark.svg` (a test holds the
+ * `ragu-logo-dark.svg` next to this file is a byte-for-byte copy of
+ * `packages/console/app/src/asset/brand/ragu-logo-dark.svg` (a test holds the
  * two to the same hash, so a change to the brand's file that is not copied here
  * fails). Its paths are made only of axis-aligned squares on a 60-unit grid; this
  * reads each subpath as one rectangle and refuses a path that is anything else,
  * so a logo that stops being squares cannot be quietly approximated.
  */
 
-import logoSvg from "./nikcli-logo-dark.svg" with { type: "text" }
+import logoSvg from "./ragu-logo-dark.svg" with { type: "text" }
 
 /** One square of the logo, in SVG units (y grows downward), with the fill of its path. */
 export interface LogoRect {

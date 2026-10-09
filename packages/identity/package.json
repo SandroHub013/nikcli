@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@nikcli-ai/identity",
+  "name": "@ragu/identity",
   "version": "1.431.0",
   "private": true,
   "type": "module",

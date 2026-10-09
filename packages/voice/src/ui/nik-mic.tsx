@@ -1,5 +1,5 @@
 /**
- * The nikcli microphone — the product's N drawn as a mic capsule.
+ * The ragu microphone — the product's N drawn as a mic capsule.
  *
  * A generic microphone glyph says "audio" and nothing else; every app that
  * listens has one. This one says whose it is: the capsule is the head of the

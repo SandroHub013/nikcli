@@ -5,16 +5,16 @@ import { Portal, useKeyboard, useRenderer, useTerminalDimensions, type JSX } fro
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
 import { useTheme, selectedForeground } from "../../context/theme"
-import type { PermissionRequest } from "@nikcli-ai/sdk/httpapi"
+import type { PermissionRequest } from "@ragu/sdk/httpapi"
 import { useSDK } from "../../context/sdk"
 import { SplitBorder } from "../../component/border"
 import { useSync } from "../../context/sync"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import path from "path"
-import { LANGUAGE_EXTENSIONS } from "@nikcli-ai/util/language"
+import { LANGUAGE_EXTENSIONS } from "@ragu/util/language"
 import { Keybind } from "@tui/util/keybind"
-import { Locale } from "@nikcli-ai/util/locale"
-import { Global } from "@nikcli-ai/util/global"
+import { Locale } from "@ragu/util/locale"
+import { Global } from "@ragu/util/global"
 import { formatPath } from "@tui/util/path-format"
 
 type PermissionStage = "permission" | "always" | "reject"
@@ -180,7 +180,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               <Match when={true}>
                 <box paddingLeft={1} gap={1}>
                   <text fg={theme.foreground.muted}>
-                    This will allow the following patterns until Nikcli is restarted
+                    This will allow the following patterns until Ragu is restarted
                   </text>
                   <box>
                     <For each={props.request.always}>
@@ -290,7 +290,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
                   </Match>
                   <Match when={props.request.permission === "plugin"}>
                     {(() => {
-                      // The code is what the user is approving: once written, nikcli
+                      // The code is what the user is approving: once written, ragu
                       // loads it in-process. Show it as a diff, not as a tool name.
                       const meta = props.request.metadata ?? {}
                       const action = typeof meta["action"] === "string" ? meta["action"] : "create"
@@ -384,7 +384,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
           <text fg={theme.foreground.default}>Reject permission</text>
         </box>
         <box paddingLeft={1}>
-          <text fg={theme.foreground.muted}>Tell Nikcli what to do differently</text>
+          <text fg={theme.foreground.muted}>Tell Ragu what to do differently</text>
         </box>
       </box>
       <box

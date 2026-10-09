@@ -70,7 +70,7 @@ class UpstashStore implements CacheStore {
       return local
     }
     try {
-      const res = await fetch(`${this.url}/get/${encodeURIComponent(`nikcli:inf:${key}`)}`, {
+      const res = await fetch(`${this.url}/get/${encodeURIComponent(`ragu:inf:${key}`)}`, {
         headers: { Authorization: `Bearer ${this.token}` },
       })
       if (!res.ok) {
@@ -95,7 +95,7 @@ class UpstashStore implements CacheStore {
   async set(key: string, value: CachedEntry, ttlSeconds: number): Promise<void> {
     await this.fallback.set(key, value, ttlSeconds)
     try {
-      await fetch(`${this.url}/set/${encodeURIComponent(`nikcli:inf:${key}`)}?EX=${ttlSeconds}`, {
+      await fetch(`${this.url}/set/${encodeURIComponent(`ragu:inf:${key}`)}?EX=${ttlSeconds}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
         body: JSON.stringify(value),

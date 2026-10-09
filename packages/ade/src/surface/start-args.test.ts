@@ -20,7 +20,7 @@ const BOT = ["--agent", "revisore", "--model", "openrouter/google/gemma-4-31b-it
 describe("a pane's start, the first and every restart (review-alti, ALTO 5)", () => {
   test("a bot restarted with no arguments of its own for the start keeps its --agent and --model", () => {
     // What a restart hands: no `extra`, a conversation to reopen.
-    const args = startArgsFor("nikcli", { spawnArgs: BOT }, { title: "revisore", opening: ["--session", "ses_1"] })
+    const args = startArgsFor("ragu", { spawnArgs: BOT }, { title: "revisore", opening: ["--session", "ses_1"] })
     const flags = runAt(args, BOT)
     const session = runAt(args, ["--session", "ses_1"])
     expect(flags).toBeGreaterThan(-1)
@@ -51,7 +51,7 @@ describe("a pane's start, the first and every restart (review-alti, ALTO 5)", ()
   })
 
   test("a pane without arguments of its own adds none", () => {
-    const bare = startArgsFor("nikcli", undefined, { title: "s", opening: [] })
+    const bare = startArgsFor("ragu", undefined, { title: "s", opening: [] })
     expect(bare).not.toContain("--agent")
     expect(bare).not.toContain("--model")
   })

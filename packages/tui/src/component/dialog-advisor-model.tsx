@@ -48,7 +48,7 @@ export function DialogAdvisorModel(props: { agentName: string }) {
     const modelOptions: DialogSelectOption<string>[] = pipe(
       sync.data.provider,
       sortBy(
-        (provider) => provider.id !== "nikcli",
+        (provider) => provider.id !== "ragu",
         (provider) => provider.name,
       ),
       flatMap((provider) =>

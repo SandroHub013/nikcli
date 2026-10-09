@@ -1,5 +1,5 @@
 import { Component, createMemo, createResource, For, Show } from "solid-js"
-import { Dialog } from "@nikcli-ai/ui/dialog"
+import { Dialog } from "@ragu/ui/dialog"
 import { useSDK } from "@/context/sdk"
 import { useLanguage } from "@/context/language"
 

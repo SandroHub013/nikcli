@@ -1,5 +1,5 @@
 /**
- * Public, aggregate-only view of real nikcli usage — the data behind /data.
+ * Public, aggregate-only view of real ragu usage — the data behind /data.
  *
  * Two sources, both real, neither modelled or back-filled:
  *
@@ -24,7 +24,7 @@ import {
   computeActivityStats,
   type ActivityGrid,
   type ActivityStats,
-} from "@nikcli-ai/util/activity"
+} from "@ragu/util/activity"
 
 /** Rolling window the headline metrics and the leaderboard are measured over. */
 export const WINDOW_DAYS = 30
@@ -349,9 +349,9 @@ export function summarize(feed: unknown, now: number): GatewayStats | null {
 }
 
 // ── Community reports ────────────────────────────────────────────────────────
-// What nikcli installs report running on their own provider keys. The gateway
+// What ragu installs report running on their own provider keys. The gateway
 // table above only ever sees traffic that went through the gateway, which is a
-// slice of what nikcli actually runs; this is the rest, and it is opt-in.
+// slice of what ragu actually runs; this is the rest, and it is opt-in.
 
 export interface CommunityModel {
   model: string

@@ -169,7 +169,7 @@ export class RemoteServer extends EventEmitter {
 
     this.session = {
       id: sessionId,
-      name: options.name || `nikcli-${sessionId}`,
+      name: options.name || `ragu-${sessionId}`,
       qrCode: "",
       qrUrl: `${localUrl}?s=${sessionId}&t=${this.sessionSecret}`,
       localUrl,
@@ -909,21 +909,21 @@ export class RemoteServer extends EventEmitter {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NikCLI Remote</title>
+  <title>Ragu Remote</title>
   <style>
     body { background: #0d1117; color: #e6edf3; font-family: system-ui; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
     p { color: #8b949e; }
   </style>
 </head>
-<body><p>Run 'nikcli remote-control' to start a session</p></body>
+<body><p>Run 'ragu remote-control' to start a session</p></body>
 </html>`
   }
 
   private getManifest(): string {
     return JSON.stringify({
-      name: "NikCLI Remote",
-      short_name: "NikCLI",
-      description: "Control NikCLI from mobile",
+      name: "Ragu Remote",
+      short_name: "Ragu",
+      description: "Control Ragu from mobile",
       start_url: "/",
       display: "standalone",
       background_color: "#0d1117",
@@ -932,7 +932,7 @@ export class RemoteServer extends EventEmitter {
   }
 
   private getServiceWorker(): string {
-    return `const CACHE_NAME = 'nikcli-remote-v2'
+    return `const CACHE_NAME = 'ragu-remote-v2'
 const STATIC_ASSETS = ['/', '/index.html', '/ghostty-web.js', '/ghostty-vt.wasm']
 
 self.addEventListener('install', (event) => {

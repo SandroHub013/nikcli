@@ -232,12 +232,12 @@ describe("surface commands", () => {
     const cmds = buildCommands(
       context({
         workbench: createWorkbench(),
-        recents: [{ name: "Nikcli", root: "/path", openedAt: 123 }],
+        recents: [{ name: "Ragu", root: "/path", openedAt: 123 }],
       }),
     )
 
     const recent = cmds.find((c) => c.id.startsWith("project.recent."))
-    expect(recent?.title).toBe("Nikcli")
+    expect(recent?.title).toBe("Ragu")
     expect(recent?.description).toBe("/path")
   })
 

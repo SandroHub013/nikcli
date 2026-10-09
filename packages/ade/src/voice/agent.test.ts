@@ -18,7 +18,7 @@ import {
   VOICE_PLAN_SESSION_PHRASES,
   VOICE_PLAN_TIMEOUT_MS,
 } from "./agent"
-import { PLANNER_SYSTEM } from "@nikcli-ai/voice/core"
+import { PLANNER_SYSTEM } from "@ragu/voice/core"
 import { isFreeModel } from "../bots/runners"
 
 const status = (id: string, availability: AgentStatus["availability"]): AgentStatus =>
@@ -54,18 +54,18 @@ describe("voice/agent", () => {
     expect(resolveVoiceAgentRunner("codex", [status("codex", "assente")])).toEqual({ runner: "codex" })
     const none = resolveVoiceAgentRunner(
       "auto",
-      ["claude-code", "codex", "nikcli"].map((id) => status(id, "assente")),
+      ["claude-code", "codex", "ragu"].map((id) => status(id, "assente")),
     )
     expect("problem" in none && none.problem).toContain("Claude Code")
-    // nikcli cannot be held to read-only for one turn: never picked, and refused when named.
+    // ragu cannot be held to read-only for one turn: never picked, and refused when named.
     expect(
       resolveVoiceAgentRunner("auto", [
         status("claude-code", "assente"),
         status("codex", "assente"),
-        status("nikcli", "presente"),
+        status("ragu", "presente"),
       ]),
     ).toHaveProperty("problem")
-    expect(resolveVoiceAgentRunner("nikcli", undefined)).toHaveProperty("problem")
+    expect(resolveVoiceAgentRunner("ragu", undefined)).toHaveProperty("problem")
   })
 
   test("a voice turn is read-only: no edits, no writes, no shell but ade-msg, no web", async () => {
@@ -190,7 +190,7 @@ describe("voice/agent", () => {
       ran: true,
     })
     // No runner at all: nothing ran, so the planner may still take the sentence.
-    expect(await agent.ask({ text: "x", engine: "nikcli" })).toMatchObject({ ok: false, ran: false })
+    expect(await agent.ask({ text: "x", engine: "ragu" })).toMatchObject({ ok: false, ran: false })
 
     const abort = new AbortController()
     const pending = agent.ask({ text: "y", engine: "claude", signal: abort.signal })
@@ -324,7 +324,7 @@ describe("voice/agent", () => {
 
     // Full review 2026-10-06, ui 10: a good answer that talks about a 429 is not a limit.
     test("a finished turn whose text mentions a 429 is not rerouted to Codex", async () => {
-      const runner = fakeRunner([{ status: "done", text: "La sessione nikcli-2 ha avuto un 429 Too Many Requests, rate limit del provider." }])
+      const runner = fakeRunner([{ status: "done", text: "La sessione ragu-2 ha avuto un 429 Too Many Requests, rate limit del provider." }])
       const agent = createVoiceAgent({
         runTurn: runner.runTurn,
         statuses: () => [status("claude-code", "presente"), status("codex", "presente")],
@@ -796,9 +796,9 @@ describe("the planner runs on the agent's own runner", () => {
     expect(planRuns[0].mailbox).toBeUndefined()
   })
 
-  test("nikcli's planner has no tools either, and no model of its own choosing: the turn picks a free one at run time", async () => {
+  test("ragu's planner has no tools either, and no model of its own choosing: the turn picks a free one at run time", async () => {
     const { agent, cold } = setup()
-    await agent.plan({ system: "R", user: "U", engine: "nikcli", speed: "fast" })
+    await agent.plan({ system: "R", user: "U", engine: "ragu", speed: "fast" })
     expect(cold[0].noTools).toBe(true)
     expect(cold[0].model).toBeUndefined()
     expect(cold[0].freeModels?.length).toBeGreaterThan(0)
@@ -822,7 +822,7 @@ describe("the planner runs on the agent's own runner", () => {
   })
 
   test("with no CLI installed it says so, in the words the agent would use", async () => {
-    const { agent } = setup(["claude-code", "codex", "nikcli"].map((id) => status(id, "assente")))
+    const { agent } = setup(["claude-code", "codex", "ragu"].map((id) => status(id, "assente")))
     await expect(agent.plan({ system: "R", user: "U", engine: "auto" })).rejects.toThrow(
       /Non riesco a pianificare: .*Claude Code/,
     )
@@ -834,7 +834,7 @@ describe("the planner runs on the agent's own runner", () => {
       statuses: () => undefined,
       cwd: () => "C:/p",
     })
-    await expect(agent.plan({ system: "R", user: "U", engine: "nikcli" })).rejects.toThrow(
+    await expect(agent.plan({ system: "R", user: "U", engine: "ragu" })).rejects.toThrow(
       "Non riesco a pianificare: Claude Code non si avvia.",
     )
   })
@@ -851,7 +851,7 @@ describe("the planner runs on the agent's own runner", () => {
       statuses: () => undefined,
       cwd: () => "C:/p",
     })
-    const pending = agent.plan({ system: "R", user: "U", engine: "nikcli", signal: controller.signal })
+    const pending = agent.plan({ system: "R", user: "U", engine: "ragu", signal: controller.signal })
     controller.abort()
     await expect(pending).rejects.toMatchObject({ name: "AbortError" })
   })
@@ -869,7 +869,7 @@ describe("the planner runs on the agent's own runner", () => {
       statuses: () => undefined,
       cwd: () => "C:/p",
     })
-    await agent.plan({ system: "R", user: "U", engine: "nikcli", onText: (soFar) => void heard.push(soFar) })
+    await agent.plan({ system: "R", user: "U", engine: "ragu", onText: (soFar) => void heard.push(soFar) })
     expect(heard).toEqual(['{"speech":"Ap', '{"speech":"Apro."'])
   })
 

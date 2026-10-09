@@ -5,7 +5,7 @@ import { Header } from "~/component/header"
 import { Footer } from "~/component/footer"
 import { IconCopy, IconCheck } from "~/component/icon"
 import { Faq } from "~/component/faq"
-import desktopAppIcon from "../../asset/lander/nikcli-desktop-icon.png"
+import desktopAppIcon from "../../asset/lander/ragu-desktop-icon.png"
 import { Legal } from "~/component/legal"
 import { config } from "~/config"
 import { createSignal, onMount, Show, JSX } from "solid-js"
@@ -127,25 +127,25 @@ export default function Download() {
               </button>
               <button data-component="cli-row" onClick={handleCopyClick("npm i -g nikcli-ai")}>
                 <code>
-                  npm i -g <strong>nikcli-ai</strong>
+                  npm i -g <strong>ragu-code</strong>
                 </code>
                 <CopyStatus />
               </button>
               <button data-component="cli-row" onClick={handleCopyClick("bun add -g nikcli-ai")}>
                 <code>
-                  bun add -g <strong>nikcli-ai</strong>
+                  bun add -g <strong>ragu-code</strong>
                 </code>
                 <CopyStatus />
               </button>
               <button data-component="cli-row" onClick={handleCopyClick("brew install anomalyco/tap/nikcli")}>
                 <code>
-                  brew install <strong>anomalyco/tap/nikcli</strong>
+                  brew install <strong>anomalyco/tap/ragu</strong>
                 </code>
                 <CopyStatus />
               </button>
               <button data-component="cli-row" onClick={handleCopyClick("paru -S nikcli")}>
                 <code>
-                  paru -S <strong>nikcli</strong>
+                  paru -S <strong>ragu</strong>
                 </code>
                 <CopyStatus />
               </button>
@@ -157,9 +157,9 @@ export default function Download() {
               <span>[2]</span> {i18n.t("download.section.desktop")}
             </div>
             <div data-component="section-content">
-              <button data-component="cli-row" onClick={handleCopyClick("brew install --cask nikcli-desktop")}>
+              <button data-component="cli-row" onClick={handleCopyClick("brew install --cask ragu-desktop")}>
                 <code>
-                  brew install --cask <strong>nikcli-desktop</strong>
+                  brew install --cask <strong>ragu-desktop</strong>
                 </code>
                 <CopyStatus />
               </button>

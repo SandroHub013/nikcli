@@ -80,8 +80,8 @@ export function supportsKittyUnicodePlaceholders(
   env: Record<string, string | undefined> = typeof process !== "undefined" ? process.env : {},
 ): boolean {
   if (!capabilities.kitty) return false
-  if (env["NIKCLI_KITTY_PLACEHOLDERS"] === "0") return false
-  if (env["NIKCLI_KITTY_PLACEHOLDERS"] === "1") return true
+  if (env["RAGU_KITTY_PLACEHOLDERS"] === "0") return false
+  if (env["RAGU_KITTY_PLACEHOLDERS"] === "1") return true
   const terminal = (capabilities.terminal ?? "").toLowerCase()
   if (terminal.includes("kitty") || terminal.includes("ghostty")) return true
   // herdr's pane VT is libghostty: it scans the viewport for U+10EEEE runs,

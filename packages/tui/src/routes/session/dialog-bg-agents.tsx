@@ -8,7 +8,7 @@ import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
 import { useTheme } from "@tui/context/theme"
 import { useLocal } from "@tui/context/local"
 import { Keybind } from "@tui/util/keybind"
-import { Locale } from "@nikcli-ai/util/locale"
+import { Locale } from "@ragu/util/locale"
 import { Spinner } from "../../component/spinner"
 import { dismissBackground, getBackgroundDismissed } from "../../util/background"
 

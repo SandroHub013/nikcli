@@ -5,7 +5,7 @@ description: Use this when you are working on file operations like reading, writ
 
 ## Use this when
 
-- Editing file I/O or scans in `packages/nikcli`
+- Editing file I/O or scans in `packages/ragu`
 - Handling directory operations or external tools
 
 ## Bun file APIs (from Bun docs)

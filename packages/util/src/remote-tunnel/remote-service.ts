@@ -8,7 +8,7 @@ import {
   probeTunnel,
   type TunnelProvider,
   type TunnelResult,
-} from "@nikcli-ai/remote"
+} from "@ragu/remote"
 import { SessionManager } from "./session-manager"
 import type {
   BroadcastMessage,
@@ -22,7 +22,8 @@ import type {
   TaskInfo,
 } from "./types"
 import { RemoteServiceConfigSchema, RemoteSessionPersistenceSchema, SessionStatusSchema } from "./types"
-import { Log } from "@nikcli-ai/util/log"
+import { Log } from "@ragu/util/log"
+import { dotFolder } from "../app-folder"
 
 const log = Log.create({ service: "remote-service" })
 
@@ -50,8 +51,8 @@ export class RemoteService extends EventEmitter {
 
   private constructor() {
     super()
-    this.configPath = path.join(os.homedir(), ".nikcli", "remote-config.json")
-    this.sessionsDir = path.join(os.homedir(), ".nikcli", "remote-sessions")
+    this.configPath = path.join(dotFolder(os.homedir()), "remote-config.json")
+    this.sessionsDir = path.join(dotFolder(os.homedir()), "remote-sessions")
     this.config = this.getDefaultConfig()
     log.debug("RemoteService instance created", {
       configPath: this.configPath,
@@ -104,7 +105,7 @@ export class RemoteService extends EventEmitter {
     }
 
     if (this.sessionManager?.isActive()) {
-      const error = new Error('Session already active. Stop it first with "nikcli remote-control stop"')
+      const error = new Error('Session already active. Stop it first with "ragu remote-control stop"')
       log.error("Failed to start session", { error: error.message })
       throw error
     }

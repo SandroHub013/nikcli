@@ -2,9 +2,9 @@
 CC ?= cc
 CFLAGS ?= -std=c11 -Wall -Wextra -Werror -O1 -g -fsanitize=address,undefined
 INC = -Iinclude
-SRC = src/nikcli_gadget.c src/ng_json.c platform/posix.c
+SRC = src/ragu_gadget.c src/ng_json.c platform/posix.c
 
-build/host_gadget: $(SRC) examples/host_gadget.c include/nikcli_gadget.h include/ng_json.h
+build/host_gadget: $(SRC) examples/host_gadget.c include/ragu_gadget.h include/ng_json.h
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(INC) $(SRC) examples/host_gadget.c -o $@
 

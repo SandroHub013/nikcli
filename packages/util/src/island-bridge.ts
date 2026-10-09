@@ -2,15 +2,15 @@ import fs from "fs/promises"
 import { homedir, platform } from "os"
 import path from "path"
 import { GlobalBus } from "./global-bus"
-import { Log } from "@nikcli-ai/util/log"
+import { Log } from "@ragu/util/log"
 
 /**
- * nikcli Island bridge — mirrors live session state into the file contract
- * NikcliIsland.app (packages/nikcli-island, a native macOS notch app modeled on
+ * ragu Island bridge — mirrors live session state into the file contract
+ * RaguIsland.app (packages/ragu-island, a native macOS notch app modeled on
  * Pookify) reads. This is CLI-level, not TUI-level: it listens on `GlobalBus`,
  * the process-wide EventEmitter every `Bus.publish` call already forwards to
- * (see src/bus/index.ts) regardless of whether the invocation is `nikcli tui`,
- * a one-shot `nikcli run`, or `nikcli serve` — so the island reflects any nikcli
+ * (see src/bus/index.ts) regardless of whether the invocation is `ragu tui`,
+ * a one-shot `ragu run`, or `ragu serve` — so the island reflects any ragu
  * process running on the machine, the same way Pookify's hook fires for every
  * Claude Code session once installed, without depending on any one UI surface.
  *
@@ -31,9 +31,9 @@ import { Log } from "@nikcli-ai/util/log"
  * doc for why a shared `process.on("exit", ...)` inside `start()` itself was
  * wrong (it raced real writes out from under themselves when verified).
  *
- * One JSON file per session under `~/Library/Application Support/NikcliIsland/state.d/`,
+ * One JSON file per session under `~/Library/Application Support/RaguIsland/state.d/`,
  * written atomically (temp file + rename), macOS only. The native app polls that
- * directory (see NikcliIsland/SessionAggregator.swift). Each snapshot also carries
+ * directory (see RaguIsland/SessionAggregator.swift). Each snapshot also carries
  * this process's local server URL when one is running, so the island can call back
  * into `POST /permission/:requestID/reply` to approve/deny a permission request
  * directly from the notch instead of just displaying it.
@@ -42,18 +42,18 @@ export namespace IslandBridge {
   const log = Log.create({ service: "island-bridge" })
 
   // Re-resolved on every access rather than cached at module load: tests swap
-  // ISLAND_SUPPORT_DIR / NIKCLI_ISLAND_TEST_FORCE_DARWIN per file (see NIKCLI_TEST_HOME
+  // ISLAND_SUPPORT_DIR / RAGU_ISLAND_TEST_FORCE_DARWIN per file (see RAGU_TEST_HOME
   // convention elsewhere in this codebase), and a cached const would go stale.
   //
-  // NIKCLI_ISLAND_TEST_FORCE_DARWIN exists ONLY so this file's own test suite can run
+  // RAGU_ISLAND_TEST_FORCE_DARWIN exists ONLY so this file's own test suite can run
   // its assertions on non-macOS CI; it is not documented as a user-facing flag and must
   // never be set in a real deployment — the feature is Windows/Linux no-op by design
-  // (NikcliIsland.app is a native macOS notch UI; there is nothing for it to drive there).
+  // (RaguIsland.app is a native macOS notch UI; there is nothing for it to drive there).
   function isMac(): boolean {
-    return platform() === "darwin" || process.env.NIKCLI_ISLAND_TEST_FORCE_DARWIN === "1"
+    return platform() === "darwin" || process.env.RAGU_ISLAND_TEST_FORCE_DARWIN === "1"
   }
   function supportDir(): string {
-    return process.env.ISLAND_SUPPORT_DIR || path.join(homedir(), "Library", "Application Support", "NikcliIsland")
+    return process.env.ISLAND_SUPPORT_DIR || path.join(homedir(), "Library", "Application Support", "RaguIsland")
   }
   function stateDir(): string {
     return path.join(supportDir(), "state.d")
@@ -136,13 +136,13 @@ export namespace IslandBridge {
 
   function fileFor(sessionID: string): string {
     const safe = sessionID.replace(/[^A-Za-z0-9_.-]/g, "_").slice(0, 80) || "unknown"
-    return path.join(stateDir(), `nikcli-${safe}.json`)
+    return path.join(stateDir(), `ragu-${safe}.json`)
   }
 
   // Mirrors Pookify's appIsRunning()/launchApp(): the app writes its own pid to
   // app.pid on launch and removes it on a clean quit, so kill(pid, 0) is a cheap
   // liveness check. Checked on every write (not just once at start()) so quitting
-  // the app mid-session doesn't leave it dead for the rest of that nikcli process —
+  // the app mid-session doesn't leave it dead for the rest of that ragu process —
   // the next real event re-launches it, exactly like Pookify's hook does on every
   // Claude Code event.
   async function appIsRunning(): Promise<boolean> {
@@ -201,8 +201,8 @@ export namespace IslandBridge {
   }
 
   async function currentPort(): Promise<number> {
-    if (process.env.NIKCLI_PORT) {
-      const n = Number(process.env.NIKCLI_PORT)
+    if (process.env.RAGU_PORT) {
+      const n = Number(process.env.RAGU_PORT)
       if (Number.isFinite(n) && n > 0) return n
     }
     try {
@@ -297,7 +297,7 @@ export namespace IslandBridge {
   // register/unregister the listener each time — toggling off just clears
   // the current snapshots and stops writing; toggling back on resumes
   // through the already-registered listener.
-  let enabled = process.env.NIKCLI_ISLAND === "1" && process.env.NIKCLI_ISLAND_DISABLE !== "1"
+  let enabled = process.env.RAGU_ISLAND === "1" && process.env.RAGU_ISLAND_DISABLE !== "1"
 
   /** Idempotent. No-op off macOS. Safe to call from any CLI entrypoint. */
   export function start(): void {
@@ -397,7 +397,7 @@ export namespace IslandBridge {
 
   /**
    * Best-effort synchronous cleanup: remove every session file this instance
-   * touched, so a nikcli process that's genuinely quitting doesn't leave a
+   * touched, so a ragu process that's genuinely quitting doesn't leave a
    * zombie pill on the notch.
    *
    * NOT wired to `process.on("exit", ...)` here. `process` is one object per

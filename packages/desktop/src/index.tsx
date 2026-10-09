@@ -8,7 +8,7 @@ import {
   Platform,
   serverUrlMatchesRequest,
   useCommand,
-} from "@nikcli-ai/app"
+} from "@ragu/app"
 import { open, save } from "@tauri-apps/plugin-dialog"
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link"
 import { open as shellOpen } from "@tauri-apps/plugin-shell"
@@ -21,7 +21,7 @@ import { relaunch } from "@tauri-apps/plugin-process"
 import { AsyncStorage } from "@solid-primitives/storage"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { Store } from "@tauri-apps/plugin-store"
-import { Splash } from "@nikcli-ai/ui/logo"
+import { Splash } from "@ragu/ui/logo"
 import { createSignal, Show, Accessor, JSX, createResource, onMount, onCleanup } from "solid-js"
 
 import { UPDATER_ENABLED } from "./updater"
@@ -42,10 +42,10 @@ void initI18n()
 
 let update: Update | null = null
 const TAURI_AVAILABLE = typeof window === "object" && "__TAURI_INTERNALS__" in window
-const SERVER_AUTH_STORE = "nikcli.server-auth.dat"
+const SERVER_AUTH_STORE = "ragu.server-auth.dat"
 const SERVER_BEARER_TOKENS_KEY = "bearerTokens"
-const SERVER_BEARER_TOKENS_FALLBACK_KEY = "nikcli:desktop:server-bearer-tokens"
-const DESKTOP_VERSION = (import.meta.env.VITE_NIKCLI_DESKTOP_VERSION as string | undefined)?.trim() || pkg.version
+const SERVER_BEARER_TOKENS_FALLBACK_KEY = "ragu:desktop:server-bearer-tokens"
+const DESKTOP_VERSION = (import.meta.env.VITE_RAGU_DESKTOP_VERSION as string | undefined)?.trim() || pkg.version
 
 type ServerBearerTokens = Record<string, string>
 
@@ -124,13 +124,13 @@ const detectedOS = (): Platform["os"] => {
   return undefined
 }
 
-const deepLinkEvent = "nikcli:deep-link"
+const deepLinkEvent = "ragu:deep-link"
 
 const emitDeepLinks = (urls: string[]) => {
   if (urls.length === 0) return
-  window.__NIKCLI__ ??= {}
-  const pending = window.__NIKCLI__.deepLinks ?? []
-  window.__NIKCLI__.deepLinks = [...pending, ...urls]
+  window.__RAGU__ ??= {}
+  const pending = window.__RAGU__.deepLinks ?? []
+  window.__RAGU__.deepLinks = [...pending, ...urls]
   window.dispatchEvent(new CustomEvent(deepLinkEvent, { detail: { urls } }))
 }
 
@@ -138,10 +138,10 @@ const listenForDeepLinks = async () => {
   const startUrls = await getCurrent().catch(() => null)
   if (startUrls?.length) emitDeepLinks(startUrls)
   await Promise.all([
-    onOpenUrl((urls) => emitDeepLinks(urls.filter((url) => !url.startsWith("nikcli://auth/callback")))).catch(
+    onOpenUrl((urls) => emitDeepLinks(urls.filter((url) => !url.startsWith("ragu://auth/callback")))).catch(
       () => undefined,
     ),
-    listen<string>("nikcli:auth-callback", (event) => emitDeepLinks([event.payload])).catch(() => undefined),
+    listen<string>("ragu:auth-callback", (event) => emitDeepLinks([event.payload])).catch(() => undefined),
   ])
 }
 
@@ -206,7 +206,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
       return (name = "default.dat") => {
         const existing = cache.get(name)
         if (existing) return existing
-        const prefix = `nikcli:${name}:`
+        const prefix = `ragu:${name}:`
         const keys = () => Object.keys(localStorage).filter((key) => key.startsWith(prefix))
         const storage: AsyncStorage = {
           getItem: async (key) => localStorage.getItem(prefix + key),
@@ -456,7 +456,7 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
     new Headers(init?.headers).forEach((value, name) => headers.set(name, value))
     if (!headers.has("Authorization")) {
       if (bearer) headers.set("Authorization", `Bearer ${bearer}`)
-      else if (pw) headers.set("Authorization", `Basic ${btoa(`nikcli:${pw}`)}`)
+      else if (pw) headers.set("Authorization", `Basic ${btoa(`ragu:${pw}`)}`)
     }
 
     if (input instanceof Request) {
@@ -477,15 +477,15 @@ const createPlatform = (password: Accessor<string | null>): Platform => ({
   }) as typeof fetch,
 
   getDefaultServerUrl: async () => {
-    if (!TAURI_AVAILABLE) return localStorage.getItem("nikcli:desktop:server-url")
+    if (!TAURI_AVAILABLE) return localStorage.getItem("ragu:desktop:server-url")
     const result = await commands.getDefaultServerUrl().catch(() => null)
     return result
   },
 
   setDefaultServerUrl: async (url: string | null) => {
     if (!TAURI_AVAILABLE) {
-      if (url) localStorage.setItem("nikcli:desktop:server-url", url)
-      else localStorage.removeItem("nikcli:desktop:server-url")
+      if (url) localStorage.setItem("ragu:desktop:server-url", url)
+      else localStorage.removeItem("ragu:desktop:server-url")
       return
     }
     await commands.setDefaultServerUrl(url)
@@ -541,8 +541,8 @@ render(() => {
         <ServerGate>
           {(data) => {
             setServerPassword(data().password)
-            window.__NIKCLI__ ??= {}
-            window.__NIKCLI__.serverPassword = data().password ?? undefined
+            window.__RAGU__ ??= {}
+            window.__RAGU__.serverPassword = data().password ?? undefined
 
             function Inner() {
               const cmd = useCommand()
@@ -573,8 +573,8 @@ type ServerReadyData = { url: string; password: string | null }
 function ServerGate(props: { children: (data: Accessor<ServerReadyData>) => JSX.Element }) {
   if (!TAURI_AVAILABLE) {
     const url =
-      localStorage.getItem("nikcli:desktop:server-url") ??
-      import.meta.env.VITE_NIKCLI_SERVER_URL ??
+      localStorage.getItem("ragu:desktop:server-url") ??
+      import.meta.env.VITE_RAGU_SERVER_URL ??
       "http://127.0.0.1:4096"
     return props.children(() => ({ url, password: null }))
   }

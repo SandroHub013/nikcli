@@ -90,7 +90,7 @@ function SkillsPageInner() {
       <PageHeader
         eyebrow="Skills"
         title="Reusable skills"
-        description="Create and manage reusable skill prompts that nikcli agents can invoke."
+        description="Create and manage reusable skill prompts that ragu agents can invoke."
         actions={
           <button onClick={() => setShowCreate(!showCreate)} className={btnPrimary}>
             {showCreate ? "Cancel" : "+ New Skill"}

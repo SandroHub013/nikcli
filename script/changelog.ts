@@ -1,11 +1,11 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { createNikcli } from "@nikcli-ai/sdk/server"
+import { createRagu } from "@ragu/sdk/server"
 import { parseArgs } from "util"
 import path from "path"
 
-export const team = ["actions-user", "nikcli", "nikcli-agent[bot]"]
+export const team = ["actions-user", "ragu", "ragu-agent[bot]"]
 
 const CHANGELOG_PATH = path.resolve(import.meta.dir, "../CHANGELOG.md")
 const UNRELEASED_START = "<!-- UNRELEASED:START -->"
@@ -52,7 +52,7 @@ export async function getCommits(from: string, to: string): Promise<Commit[]> {
 
   // Get commits that touch the relevant packages
   const log =
-    await $`git log ${fromRef}..${toRef} --oneline --format="%H" -- packages/nikcli packages/sdk packages/plugin packages/desktop packages/mobile packages/app sdks/vscode packages/extensions github`.text()
+    await $`git log ${fromRef}..${toRef} --oneline --format="%H" -- packages/ragu packages/sdk packages/plugin packages/desktop packages/mobile packages/app sdks/vscode packages/extensions github`.text()
   const hashes = log.split("\n").filter(Boolean)
 
   const commits: Commit[] = []
@@ -67,8 +67,8 @@ export async function getCommits(from: string, to: string): Promise<Commit[]> {
     const areas = new Set<string>()
 
     for (const file of files.split("\n").filter(Boolean)) {
-      if (file.startsWith("packages/nikcli/src/cli/cmd/")) areas.add("tui")
-      else if (file.startsWith("packages/nikcli/")) areas.add("core")
+      if (file.startsWith("packages/ragu/src/cli/cmd/")) areas.add("tui")
+      else if (file.startsWith("packages/ragu/")) areas.add("core")
       else if (file.startsWith("packages/desktop/src-tauri/")) areas.add("tauri")
       else if (file.startsWith("packages/desktop/")) areas.add("app")
       else if (file.startsWith("packages/mobile/")) areas.add("mobile")
@@ -148,14 +148,14 @@ function getSection(areas: Set<string>): string {
   return "Core"
 }
 
-async function summarizeCommit(nikcli: Awaited<ReturnType<typeof createNikcli>>, message: string): Promise<string> {
+async function summarizeCommit(ragu: Awaited<ReturnType<typeof createRagu>>, message: string): Promise<string> {
   console.log("summarizing commit:", message)
-  const session = await nikcli.client.session.create()
-  const result = await nikcli.client.session
+  const session = await ragu.client.session.create()
+  const result = await ragu.client.session
     .prompt({
       path: { id: session.data!.id },
       body: {
-        model: { providerID: "nikcli", modelID: "claude-sonnet-4-5" },
+        model: { providerID: "ragu", modelID: "claude-sonnet-4-5" },
         tools: {
           "*": false,
         },
@@ -174,13 +174,13 @@ Commit: ${message}`,
   return result.trim()
 }
 
-export async function generateChangelog(commits: Commit[], nikcli: Awaited<ReturnType<typeof createNikcli>>) {
+export async function generateChangelog(commits: Commit[], ragu: Awaited<ReturnType<typeof createRagu>>) {
   // Summarize commits in parallel with max 10 concurrent requests
   const BATCH_SIZE = 10
   const summaries: string[] = []
   for (let i = 0; i < commits.length; i += BATCH_SIZE) {
     const batch = commits.slice(i, i + BATCH_SIZE)
-    const results = await Promise.all(batch.map((c) => summarizeCommit(nikcli, c.message)))
+    const results = await Promise.all(batch.map((c) => summarizeCommit(ragu, c.message)))
     summaries.push(...results)
   }
 
@@ -209,7 +209,7 @@ export async function generateChangelog(commits: Commit[], nikcli: Awaited<Retur
 }
 
 // Build changelog lines directly from commit messages, without AI summarization.
-// Used in CI (the --raw mode) so no running nikcli server / API key is required.
+// Used in CI (the --raw mode) so no running ragu server / API key is required.
 export function buildRawChangelog(commits: Commit[]): string[] {
   const grouped = new Map<string, string[]>()
   for (const commit of commits) {
@@ -355,10 +355,10 @@ export async function buildNotes(from: string, to: string, options: { raw?: bool
   } else {
     console.log("generating changelog since " + from)
 
-    const nikcli = await createNikcli({ port: 5044 })
+    const ragu = await createRagu({ port: 5044 })
 
     try {
-      const lines = await generateChangelog(commits, nikcli)
+      const lines = await generateChangelog(commits, ragu)
       notes.push(...lines)
       console.log("---- Generated Changelog ----")
       console.log(notes.join("\n"))
@@ -371,7 +371,7 @@ export async function buildNotes(from: string, to: string, options: { raw?: bool
         throw error
       }
     } finally {
-      nikcli.server.close()
+      ragu.server.close()
     }
   }
 
@@ -415,7 +415,7 @@ Options:
   -t, --to <ref>         Ending ref (default: HEAD)
   -w, --write            Update CHANGELOG.md (rewrites the "Unreleased" section)
   -r, --release <tag>    Write the generated notes into the given GitHub release
-      --raw              Skip AI summarization (no nikcli server required — used in CI)
+      --raw              Skip AI summarization (no ragu server required — used in CI)
   -h, --help             Show this help message
 
 Examples:

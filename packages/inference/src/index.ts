@@ -1,4 +1,4 @@
-// @nikcli-ai/inference - Multi-provider AI inference gateway
+// @ragu/inference - Multi-provider AI inference gateway
 
 export * from "./types"
 export * from "./providers"

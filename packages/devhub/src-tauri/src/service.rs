@@ -24,7 +24,7 @@ pub struct ServiceInfo {
     pub version: String,
     pub started_at: u64,
     pub has_password: bool,
-    /// The registered pid is a running nikcli process. A crashed service leaves its file behind.
+    /// The registered pid is a running ragu process. A crashed service leaves its file behind.
     pub alive: bool,
 }
 
@@ -74,7 +74,7 @@ pub fn discover_services() -> Vec<ServiceInfo> {
                 true,
                 sysinfo::ProcessRefreshKind::nothing().with_cmd(sysinfo::UpdateKind::Always),
             );
-            // A reused pid must not pass for the service: require a nikcli/serve command line.
+            // A reused pid must not pass for the service: require a ragu/serve command line.
             let alive = sys.process(pid).is_some_and(|p| {
                 let hay = format!(
                     "{} {}",
@@ -86,7 +86,7 @@ pub fn discover_services() -> Vec<ServiceInfo> {
                         .join(" ")
                 )
                 .to_lowercase();
-                hay.contains("nikcli") || hay.contains("serve")
+                hay.contains("ragu") || hay.contains("serve")
             });
             Some(ServiceInfo {
                 alive,
@@ -136,7 +136,7 @@ fn slots() -> &'static tokio::sync::Semaphore {
     SLOTS.get_or_init(|| tokio::sync::Semaphore::new(6))
 }
 
-/// Authenticated request to a local nikcli service. The password is read from
+/// Authenticated request to a local ragu service. The password is read from
 /// the channel's 0600 file here and never crosses into the webview.
 #[tauri::command]
 pub async fn api_request(req: ApiRequest) -> Result<ApiResponse, String> {
@@ -160,7 +160,7 @@ pub async fn api_request(req: ApiRequest) -> Result<ApiResponse, String> {
         format!("{}{}", service.url.trim_end_matches('/'), req.path),
     );
     if let Some(password) = read_password(&service.file) {
-        builder = builder.basic_auth("nikcli", Some(password));
+        builder = builder.basic_auth("ragu", Some(password));
     }
     for (k, v) in &req.headers {
         let lower = k.to_lowercase();
@@ -216,7 +216,7 @@ fn client(timeout_secs: u64) -> Result<reqwest::Client, String> {
 
 fn authed(b: reqwest::RequestBuilder, svc: &ServiceInfo) -> reqwest::RequestBuilder {
     match read_password(&svc.file) {
-        Some(pw) => b.basic_auth("nikcli", Some(pw)),
+        Some(pw) => b.basic_auth("ragu", Some(pw)),
         None => b,
     }
 }

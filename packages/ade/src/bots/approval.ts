@@ -10,12 +10,12 @@
  *    piped into a shell, elevation, killing processes, …): the turn stops and
  *    the user is asked — Consenti (this once), Nega, or Sempre;
  * 3. anything else goes through.
- * A write outside the project (nikcli's `external_directory`) is always
+ * A write outside the project (ragu's `external_directory`) is always
  * asked. No answer within `APPROVAL_TIMEOUT_MS` is a Nega.
  *
  * «Sempre» is ADE's, per bot: it is kept here by bot and by kind of danger
- * (or by folder, for a write outside), never handed to nikcli as its own
- * «always», which nikcli keeps for the whole project and so for every bot.
+ * (or by folder, for a write outside), never handed to ragu as its own
+ * «always», which ragu keeps for the whole project and so for every bot.
  *
  * The lists are patterns on the command as written: a
  * heuristic that catches the usual forms, not a sandbox. The tools a turn is
@@ -332,7 +332,7 @@ export type Verdict =
 export function classifyCommand(command: string): { blocked?: CommandRule; dangers: readonly CommandRule[] } {
   const text = command.replace(/\r\n?/g, "\n")
   /*
-   * nikcli sends one pattern per command and `serve-turn` joins them with a new line, so a
+   * ragu sends one pattern per command and `serve-turn` joins them with a new line, so a
    * pipeline arrives as its stages on separate lines: `curl url | sh` is `curl url` and `sh`.
    * Read as lines they are two innocent commands; read as a pipeline (`a | b`) they are the
    * danger they were. Both readings are checked, and what either finds counts (bots 1).
@@ -349,14 +349,14 @@ export type Always = readonly string[]
 const outsideKey = (patterns: string) => `outside:${patterns.trim()}`
 
 /**
- * The decision for one question nikcli asks (`permission` and its patterns,
+ * The decision for one question ragu asks (`permission` and its patterns,
  * whole, as its event carries them: B8d), for a bot with `always`.
  *
  * - `bash`: the block list refuses, `always` never reaches it; a command
  *   with dangers is asked unless `always` has every one of them (M3);
  *   anything else goes.
  * - `external_directory`: asked unless `always` has that folder.
- * - anything else nikcli asks about (the user's own «ask» rules): asked.
+ * - anything else ragu asks about (the user's own «ask» rules): asked.
  */
 export function decide(permission: string, patterns: string, always: Always): Verdict {
   if (permission === "bash") {

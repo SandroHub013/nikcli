@@ -22,13 +22,13 @@ const toc = [
 <DocsLayout
   title="Plugin recipes"
   subtitle="Eight complete plugins that each do one thing. Copy one, change the parts that are yours, point nikcli.json at the file."
-  description="Copy-pasteable nikcli plugin examples: custom tools, progress streaming, permission policy, shell secrets, model parameters, request redaction, system prompt rules and notifications."
+  description="Copy-pasteable ragu plugin examples: custom tools, progress streaming, permission policy, shell secrets, model parameters, request redaction, system prompt rules and notifications."
   toc={toc}
 >
   <section id="how" class="doc-section">
     <h2>How to use these</h2>
     <p>
-      Each recipe is a whole file. Drop it in <code>.nikcli/plugins/</code>, add the path to
+      Each recipe is a whole file. Drop it in <code>.ragu/plugins/</code>, add the path to
       <code>plugin</code> in <code>nikcli.json</code>, and restart. If any of that is unfamiliar,
       read <a href="/docs/guides/plugins">Writing a plugin</a> first.
     </p>
@@ -50,8 +50,8 @@ const toc = [
       The most common reason to write a plugin: give the agent a verb it cannot get wrong, instead
       of hoping it assembles the right shell command.
     </p>
-    <DocCode language="ts" title=".nikcli/plugins/deploy.ts">{`import type { Plugin } from "@nikcli-ai/plugin"
-import { tool } from "@nikcli-ai/plugin/tool"
+    <DocCode language="ts" title=".nikcli/plugins/deploy.ts">{`import type { Plugin } from "@ragu/plugin"
+import { tool } from "@ragu/plugin/tool"
 
 export const Deploy: Plugin = async ({ $ }) => ({
   tool: {
@@ -84,8 +84,8 @@ export const Deploy: Plugin = async ({ $ }) => ({
       Long-running tools should report as they go. <code>ctx.progress</code> pushes partial results
       before the tool returns, and <code>ctx.abort</code> lets the user cancel it.
     </p>
-    <DocCode language="ts" title=".nikcli/plugins/migrate.ts">{`import type { Plugin } from "@nikcli-ai/plugin"
-import { tool } from "@nikcli-ai/plugin/tool"
+    <DocCode language="ts" title=".nikcli/plugins/migrate.ts">{`import type { Plugin } from "@ragu/plugin"
+import { tool } from "@ragu/plugin/tool"
 
 export const Migrate: Plugin = async ({ directory }) => ({
   tool: {
@@ -127,7 +127,7 @@ export const Migrate: Plugin = async ({ directory }) => ({
       <code>allow</code> approves silently, and leaving it as <code>ask</code> falls through to the
       normal prompt.
     </p>
-    <DocCode language="ts" title=".nikcli/plugins/policy.ts">{`import type { Plugin } from "@nikcli-ai/plugin"
+    <DocCode language="ts" title=".nikcli/plugins/policy.ts">{`import type { Plugin } from "@ragu/plugin"
 
 const FORBIDDEN = [/\\bgit\\s+push\\s+--force/, /\\brm\\s+-rf\\s+\\//, /\\bcurl\\b.*\\|\\s*sh/]
 
@@ -158,7 +158,7 @@ export const Policy: Plugin = async () => ({
       <code>shell.env</code> adds environment variables to every PTY and shell the server creates,
       so commands can authenticate without the value ever appearing in a transcript.
     </p>
-    <DocCode language="ts" title=".nikcli/plugins/shell-env.ts">{`import type { Plugin } from "@nikcli-ai/plugin"
+    <DocCode language="ts" title=".nikcli/plugins/shell-env.ts">{`import type { Plugin } from "@ragu/plugin"
 
 export const ShellEnv: Plugin = async () => ({
   async "shell.env"(input, output) {
@@ -173,7 +173,7 @@ export const ShellEnv: Plugin = async () => ({
 })`}</DocCode>
     <p>
       Values are merged over the caller's environment, then terminal invariants such as
-      <code>TERM</code> and <code>NIKCLI_TERMINAL</code> are re-applied, so you cannot break the
+      <code>TERM</code> and <code>RAGU_TERMINAL</code> are re-applied, so you cannot break the
       terminal by accident.
     </p>
   </section>
@@ -184,7 +184,7 @@ export const ShellEnv: Plugin = async () => ({
       <code>chat.params</code> runs before every model call and knows which agent is running, so
       sampling can differ per role.
     </p>
-    <DocCode language="ts" title=".nikcli/plugins/sampling.ts">{`import type { Plugin } from "@nikcli-ai/plugin"
+    <DocCode language="ts" title=".nikcli/plugins/sampling.ts">{`import type { Plugin } from "@ragu/plugin"
 
 export const Sampling: Plugin = async () => ({
   async "chat.params"(input, output) {
@@ -211,7 +211,7 @@ export const Sampling: Plugin = async () => ({
       the serialized <code>url</code>, <code>headers</code> and <code>body</code> — which makes it
       the right place for a redaction pass, and the wrong place for anything slow.
     </p>
-    <DocCode language="ts" title=".nikcli/plugins/redact.ts">{`import type { Plugin } from "@nikcli-ai/plugin"
+    <DocCode language="ts" title=".nikcli/plugins/redact.ts">{`import type { Plugin } from "@ragu/plugin"
 
 const PATTERNS: Array<[RegExp, string]> = [
   [/sk-[A-Za-z0-9]{20,}/g, "[redacted-api-key]"],
@@ -240,7 +240,7 @@ export const Redact: Plugin = async () => ({
       <code>experimental.chat.system.transform</code> receives the system prompt as an array of
       blocks. Pushing onto it adds house rules to every turn without editing a prompt file.
     </p>
-    <DocCode language="ts" title=".nikcli/plugins/house-rules.ts">{`import type { Plugin } from "@nikcli-ai/plugin"
+    <DocCode language="ts" title=".nikcli/plugins/house-rules.ts">{`import type { Plugin } from "@ragu/plugin"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 
@@ -265,7 +265,7 @@ export const HouseRules: Plugin = async ({ directory }) => {
       The <code>event</code> hook sees every server event. <code>session.idle</code> is the one that
       means a turn finished — useful when a long task is running in another window.
     </p>
-    <DocCode language="ts" title=".nikcli/plugins/slack-notify.ts">{`import type { Plugin } from "@nikcli-ai/plugin"
+    <DocCode language="ts" title=".nikcli/plugins/slack-notify.ts">{`import type { Plugin } from "@ragu/plugin"
 
 type Options = { webhook?: string }
 
@@ -284,7 +284,7 @@ export const SlackNotify: Plugin = async ({ client }, options) => {
       await fetch(webhook, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: \`nikcli finished: \${session?.title ?? "session"}\` }),
+        body: JSON.stringify({ text: \`ragu finished: \${session?.title ?? "session"}\` }),
       })
     },
   }
@@ -294,7 +294,7 @@ export const SlackNotify: Plugin = async ({ client }, options) => {
       <code>session.error</code>, <code>permission.asked</code>, <code>question.asked</code>,
       <code>file.edited</code> and <code>todo.updated</code>.
     </p>
-    <DocCallout type="note" title="nikcli already ships notifications">
+    <DocCallout type="note" title="ragu already ships notifications">
       <p>
         Before writing this one, check <a href="/docs/plugins#notifications">the built-in notify
         plugin</a> — it covers macOS, Slack and Discord with rate limiting and a circuit breaker.

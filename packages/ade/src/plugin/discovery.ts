@@ -4,7 +4,7 @@
  * Why this is not `TuiPluginRuntime`
  * ---------------------------------
  * It was the first thing tried, and it cannot work. The TUI's discovery reads
- * the config through `pluginHost()` (an HTTP call to the nikcli server, which
+ * the config through `pluginHost()` (an HTTP call to the ragu server, which
  * ADE does not run), resolves specifiers with `resolvePluginTarget` (which
  * shells out to `bun install`), walks packages with `fs`, `path` and
  * `pathToFileURL`, watches sources with `fs.watch`, and finally does
@@ -18,7 +18,7 @@
  *  - **The declaration is the same one.** Plugins are listed in the project's
  *    `.nikcli/tui.json` under `plugin`, in the same `[spec]` /
  *    `[spec, options]` form, read with the same `pluginSpecifier` and
- *    `pluginOptions` the TUI uses (now in `@nikcli-ai/util/plugin-read`, so
+ *    `pluginOptions` the TUI uses (now in `@ragu/util/plugin-read`, so
  *    there is one definition and not two). Which surface a plugin serves is
  *    the package's own declaration: `exports["./tui"]` is the terminal's
  *    entry, `exports["./ade"]` is this one, and a package that declares only
@@ -39,14 +39,18 @@
  * installing it, which is `bun install`, which is the host's job. The refusal
  * carries a reason so it can be shown rather than guessed at.
  */
-import { pluginOptions, pluginSpecifier, pluginExportEntry, type PluginSpecValue } from "@nikcli-ai/util/plugin-read"
+import { pluginOptions, pluginSpecifier, pluginExportEntry, type PluginSpecValue } from "@ragu/util/plugin-read"
 import { t } from "../i18n"
+import { dotFolderName } from "../bots/app-folder"
 
 /** Which surface this discovery is for. The TUI passes `"tui"` for its own. */
 export const ADE_EXPORT_KIND = "ade"
 
 /** The config file ADE reads, relative to the project root. */
-export const CONFIG_RELATIVE_PATH = ".nikcli/tui.json"
+/** The project's `tui.json`, in its `.ragu` when there is one, else `.nikcli` (rule B, `bots/app-folder.ts`). */
+export async function configRelativePath(projectRoot: string, io: DiscoveryIO): Promise<string> {
+  return `${await dotFolderName(projectRoot, (path) => there(io, path))}/tui.json`
+}
 
 export interface DeclaredPlugin {
   readonly spec: string
@@ -262,7 +266,7 @@ export async function resolveDeclaredPlugin(
 
 /** Everything the project declares, sorted into what loads and what does not. */
 export async function discoverPlugins(projectRoot: string, io: DiscoveryIO): Promise<DiscoveryResult> {
-  const configPath = urlToPath(specToUrl(CONFIG_RELATIVE_PATH, projectRoot) ?? "")
+  const configPath = urlToPath(specToUrl(await configRelativePath(projectRoot, io), projectRoot) ?? "")
   if (!configPath || !(await there(io, configPath))) return { resolved: [], rejected: [] }
 
   const config = await io.readTextFile(configPath).catch(() => undefined)

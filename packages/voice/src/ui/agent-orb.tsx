@@ -29,7 +29,7 @@ import {
   type OrbPhase,
 } from "./agent-orb-state"
 import "./agent-orb.css"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 
 export interface AgentOrbProps {
   engine: VoiceEngine

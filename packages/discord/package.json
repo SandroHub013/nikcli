@@ -1,5 +1,5 @@
 {
-  "name": "@nikcli-ai/discord",
+  "name": "@ragu/discord",
   "version": "1.431.0",
   "files": [
     "src",
@@ -22,7 +22,7 @@
     "deploy:worker": "wrangler deploy src/worker.ts"
   },
   "dependencies": {
-    "@nikcli-ai/sdk": "workspace:*",
+    "@ragu/sdk": "workspace:*",
     "discord.js": "14.22.1"
   },
   "devDependencies": {

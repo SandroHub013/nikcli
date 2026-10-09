@@ -1,4 +1,4 @@
-@import "@nikcli-ai/ui/styles/tailwind";
+@import "@ragu/ui/styles/tailwind";
 
 .home-recent {
   display: flex;

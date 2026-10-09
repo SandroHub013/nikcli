@@ -16,7 +16,7 @@ describe("stripAnsi", () => {
   })
 
   test("removes an OSC string closed by BEL, title and all", () => {
-    expect(stripAnsi(`${ESC}]0;claude — nikcli${BEL}pronto`)).toBe("pronto")
+    expect(stripAnsi(`${ESC}]0;claude — ragu${BEL}pronto`)).toBe("pronto")
   })
 
   test("removes an OSC string closed by ST", () => {
@@ -61,7 +61,7 @@ describe("stripAnsi", () => {
    * A DCS reply. The terminal answers XTGETTCAP with `ESC P +q<hex>=<hex>`,
    * and the rule for two-character escapes removed only the `ESC P`: the
    * payload stayed, and `+q4d73Gi=31337,s=1,v=1,a=q,t=d,f=24;AAAA` was the
-   * first thing a restored nikcli session appeared to have said.
+   * first thing a restored ragu session appeared to have said.
    */
   test("removes a DCS string, payload included", () => {
     expect(stripAnsi(`${ESC}P+q4d73Gi=31337,s=1,v=1${ST}pronto`)).toBe("pronto")

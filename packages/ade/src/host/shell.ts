@@ -387,8 +387,8 @@ export interface Host {
    * configuration pointing at a script that is not there.
    */
   writeAgentHook?: (agent: string, configText: string, script: string | null) => Promise<void>
-  /** `nikcli models` or `nikcli agent create …`: the only nikcli commands the bots panel runs. */
-  nikcliBot?: (args: string[], cwd?: string) => Promise<RunResult>
+  /** `ragu models` or `ragu agent create …`: the only ragu commands the bots panel runs. */
+  raguBot?: (args: string[], cwd?: string) => Promise<RunResult>
   /**
    * `claude agents --json`, the only claude command ADE runs by itself: the
    * CLI's list of its live sessions, which native mail delivery is routed on.
@@ -445,7 +445,7 @@ export { stripAnsi } from "./ansi"
 
 import { createLineAccumulator } from "./line-stream"
 import type { TokenUsage } from "../session/shared"
-import type { InstallProgress, PackStatus } from "@nikcli-ai/voice"
+import type { InstallProgress, PackStatus } from "@ragu/voice"
 import { keyError, type KeyDraft, type KeyInfo } from "../secrets/keys"
 import type { QualityLevel, RecordTarget, RecordingState } from "../record/recording"
 import type { AssetsStatus } from "../nikverse/assets"
@@ -509,10 +509,10 @@ export async function getHost(): Promise<Host | undefined> {
       }
     },
 
-    async nikcliBot(args, cwd) {
+    async raguBot(args, cwd) {
       const { invoke } = await import("@tauri-apps/api/core")
       try {
-        return await invoke<RunResult>("nikcli_bot", { args, cwd })
+        return await invoke<RunResult>("ragu_bot", { args, cwd })
       } catch (error) {
         return { code: null, stdout: "", stderr: error instanceof Error ? error.message : String(error) }
       }

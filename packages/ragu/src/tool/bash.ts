@@ -1,0 +1,681 @@
+import { Effect, Schema } from "effect"
+import { zod } from "@ragu/util/effect-zod"
+import { spawn, type SpawnOptions } from "child_process"
+import { Tool } from "./tool"
+import path from "path"
+import DESCRIPTION from "./bash.txt"
+import { Log } from "@ragu/util/log"
+import { Instance } from "../project/instance"
+import { lazyAsync } from "@ragu/util/lazy"
+import { Language } from "web-tree-sitter"
+
+import { fileURLToPath } from "url"
+import { Flag } from "@ragu/util/flag"
+import { Shell } from "@/shell/shell"
+import * as os from "os"
+import { realpath } from "fs/promises"
+
+import { BashArity } from "@/permission/arity"
+import { splitShellStatements } from "@/permission/shell-split"
+import { Truncate } from "./truncation"
+import { Plugin } from "@/plugin"
+import { resolveWorkdir } from "./tool-path"
+import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
+
+export const MAX_METADATA_LENGTH = 30_000
+export const MAX_OUTPUT_LENGTH = 5 * 1024 * 1024
+
+/**
+ * Accumulates process output into a bounded rolling window that keeps the END of the stream.
+ *
+ * The tail is what explains the run — the failing assertion, the stack trace, the exit status —
+ * whereas the head of an oversized stream is almost always progress noise. Dropping the tail (or
+ * refusing to append once the cap is hit) hands the model a transcript that stops right before the
+ * part it needs.
+ */
+export function appendOutput(current: string, chunk: Buffer): { output: string; truncated: boolean } {
+  const text = chunk.toString()
+  const combined = current + text
+  if (combined.length <= MAX_OUTPUT_LENGTH) return { output: combined, truncated: false }
+  return {
+    output: combined.slice(combined.length - MAX_OUTPUT_LENGTH),
+    truncated: true,
+  }
+}
+
+/** Same principle as {@link appendOutput}, applied to the shorter model-facing metadata preview. */
+export function previewOutput(text: string): string {
+  if (text.length <= MAX_METADATA_LENGTH) return text
+  return "...\n\n" + text.slice(text.length - MAX_METADATA_LENGTH)
+}
+const DEFAULT_TIMEOUT = Flag.RAGU_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
+
+const SHELL_FILE_ARG_COMMANDS = new Set([
+  "cd",
+  "rm",
+  "cp",
+  "mv",
+  "mkdir",
+  "touch",
+  "chmod",
+  "chown",
+  "copy-item",
+  "move-item",
+  "remove-item",
+  "new-item",
+  "rename-item",
+  "set-location",
+])
+
+export const log = Log.create({ service: "bash-tool" })
+
+const PLATFORM_LABEL =
+  process.platform === "darwin"
+    ? "macOS"
+    : process.platform === "win32"
+      ? "Windows"
+      : process.platform === "linux"
+        ? "Linux"
+        : process.platform
+
+function normalizePathInput(value: string) {
+  return value
+    .trim()
+    .replace(/^["'`]|["'`]$/g, "")
+    .trim()
+}
+
+function looksLikeGlob(value: string) {
+  return /[*?[\]{}]/.test(value)
+}
+
+function commandTokens(input: string) {
+  const regex = /"([^"\\]|\\.)*"|'([^'\\]|\\.)*'|`([^`\\]|\\.)*`|\S+/g
+  return input.match(regex) ?? []
+}
+
+function stripQuotedToken(token: string) {
+  return token.replace(/^"|"$/g, "").replace(/^'|'$/g, "").replace(/^`|`$/g, "")
+}
+
+function isOptionToken(token: string) {
+  return token.startsWith("-") || token.startsWith("$(") || (token.startsWith("${") && token.endsWith("}"))
+}
+
+async function resolveCommandPath(token: string, cwd: string) {
+  const cleaned = normalizePathInput(stripQuotedToken(token))
+  if (!cleaned) return undefined
+
+  const expanded = cleaned.startsWith("~") ? path.join(os.homedir(), cleaned.slice(1)) : cleaned
+  const absolute = path.isAbsolute(expanded) ? expanded : path.resolve(cwd, expanded)
+  if (looksLikeGlob(expanded)) return absolute
+
+  const resolved = await realpath(absolute).catch(() => absolute)
+  return process.platform === "win32" && resolved.match(/^\/[a-z]\//i)
+    ? resolved.replace(/^\/([a-z])\//, (_, drive) => `${drive.toUpperCase()}:\\`).replace(/\//g, "\\")
+    : resolved
+}
+
+function getPathLikePermissionCandidate(token: string, cwd: string, directories: Set<string>) {
+  const value = normalizePathInput(token)
+  return resolveCommandPath(value, cwd).then((candidate) => {
+    if (!candidate) return
+    if (!Instance.containsPath(candidate)) directories.add(candidate)
+  })
+}
+
+function registerCommandSignals(
+  cmd: string[],
+  cwd: string,
+  directories: Set<string>,
+  patterns: Set<string>,
+  always: Set<string>,
+  pendingPathResolutions: Promise<void>[],
+  resource?: string,
+) {
+  if (!cmd.length) return
+  const normalizedCommand = cmd[0].toLowerCase()
+  const args = cmd.slice(1)
+  if (SHELL_FILE_ARG_COMMANDS.has(normalizedCommand)) {
+    for (const arg of args) {
+      if (!arg || isOptionToken(arg) || (normalizedCommand === "chmod" && arg.startsWith("+"))) continue
+      pendingPathResolutions.push(getPathLikePermissionCandidate(arg, cwd, directories))
+    }
+  }
+
+  if (normalizedCommand !== "cd") {
+    patterns.add(resource ?? cmd.join(" "))
+    always.add(BashArity.prefix(cmd).join(" ") + "*")
+  }
+}
+
+const POWERSHELL_DIRECTORY_COMMANDS = new Set([
+  "cd",
+  "chdir",
+  "sl",
+  "pushd",
+  "popd",
+  "set-location",
+  "push-location",
+  "pop-location",
+])
+const POWERSHELL_PATH_PARAMETERS = new Set(["-path", "-literalpath"])
+
+function splitPowerShellStatements(input: string) {
+  const parts: string[] = []
+  let current = ""
+  let quote: "'" | '"' | undefined
+  let escaped = false
+  let depth = 0
+  const flush = () => {
+    const value = current.trim()
+    if (value) parts.push(value)
+    current = ""
+  }
+
+  for (let index = 0; index < input.length; index++) {
+    const char = input[index]!
+    if (escaped) {
+      current += char
+      escaped = false
+      continue
+    }
+    if (char === "`") {
+      current += char
+      escaped = true
+      continue
+    }
+    if (quote) {
+      current += char
+      if (char === quote) {
+        if (quote === "'" && input[index + 1] === "'") current += input[++index]
+        else quote = undefined
+      }
+      continue
+    }
+    if (char === "'" || char === '"') {
+      quote = char
+      current += char
+      continue
+    }
+    if (char === "(" || char === "[" || char === "{") depth++
+    if (char === ")" || char === "]" || char === "}") depth = Math.max(0, depth - 1)
+    if (depth === 0 && (char === ";" || char === "\n" || char === "|")) {
+      if (char === "|" && input[index + 1] === "|") index++
+      flush()
+      continue
+    }
+    if (depth === 0 && char === "&" && input[index + 1] === "&") {
+      index++
+      flush()
+      continue
+    }
+    current += char
+  }
+  flush()
+  return parts
+}
+
+function powerShellTokens(input: string) {
+  const tokens: string[] = []
+  let current = ""
+  let quote: "'" | '"' | undefined
+  let escaped = false
+  const flush = () => {
+    if (current) tokens.push(stripQuotedToken(current))
+    current = ""
+  }
+  for (const char of input) {
+    if (escaped) {
+      current += char
+      escaped = false
+      continue
+    }
+    if (char === "`") {
+      escaped = true
+      continue
+    }
+    if (quote) {
+      current += char
+      if (char === quote) quote = undefined
+      continue
+    }
+    if (char === "'" || char === '"') {
+      quote = char
+      current += char
+      continue
+    }
+    if (/\s/.test(char)) flush()
+    else current += char
+  }
+  flush()
+  return tokens
+}
+
+function deterministicPowerShellPath(value: string, cwd: string, shell: string) {
+  let dynamic = false
+  const environment = (key: string) => {
+    if (process.platform !== "win32") return process.env[key]
+    const match = Object.keys(process.env).find((name) => name.toLowerCase() === key.toLowerCase())
+    return match ? process.env[match] : undefined
+  }
+  const expanded = value
+    .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => environment(key) ?? ((dynamic = true), ""))
+    .replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (_, key: string) => environment(key) ?? ((dynamic = true), ""))
+    .replace(/\$(HOME|PWD|PSHOME)(?=$|[\\/])/gi, (_, key: string) => {
+      if (key.toUpperCase() === "HOME") return os.homedir()
+      if (key.toUpperCase() === "PWD") return cwd
+      return path.dirname(shell)
+    })
+  if (dynamic || /[$`]/.test(expanded) || expanded.startsWith("(")) return undefined
+  return expanded
+}
+
+function registerPowerShellSignals(
+  input: string,
+  shell: string,
+  cwd: string,
+  directories: Set<string>,
+  patterns: Set<string>,
+  always: Set<string>,
+  pendingPathResolutions: Promise<void>[],
+) {
+  for (const statement of splitPowerShellStatements(input)) {
+    const tokens = powerShellTokens(statement)
+    while (tokens[0] === "&" || tokens[0] === ".") tokens.shift()
+    if (!tokens.length || (/^\$(?:env:)?[^=]+$/i.test(tokens[0]) && tokens[1] === "=")) continue
+    const name = tokens[0].toLowerCase()
+    if (!POWERSHELL_DIRECTORY_COMMANDS.has(name)) {
+      registerCommandSignals(tokens, cwd, directories, patterns, always, pendingPathResolutions, statement)
+      continue
+    }
+
+    let expectsPath = false
+    let foundPath = false
+    let dynamicPath = false
+    for (const token of tokens.slice(1)) {
+      if (token.startsWith("-")) {
+        expectsPath = POWERSHELL_PATH_PARAMETERS.has(token.toLowerCase())
+        continue
+      }
+      if (!expectsPath && foundPath) continue
+      const value = deterministicPowerShellPath(token, cwd, shell)
+      if (value === undefined) dynamicPath = true
+      else pendingPathResolutions.push(getPathLikePermissionCandidate(value, cwd, directories))
+      foundPath = true
+      expectsPath = false
+    }
+    // An expression-based location cannot be resolved safely. Keep the entire statement behind a
+    // shell approval instead of silently treating the directory change as authorized.
+    if (dynamicPath || !foundPath)
+      registerCommandSignals(tokens, cwd, directories, patterns, always, pendingPathResolutions, statement)
+  }
+}
+
+function registerCommandSignalsFromFallback(
+  input: string,
+  cwd: string,
+  directories: Set<string>,
+  patterns: Set<string>,
+  always: Set<string>,
+  pendingPathResolutions: Promise<void>[],
+) {
+  for (const command of splitShellStatements(input)) {
+    const tokens = commandTokens(command).map((token) => stripQuotedToken(token))
+    if (tokens.length === 0) continue
+    registerCommandSignals(tokens, cwd, directories, patterns, always, pendingPathResolutions)
+  }
+}
+
+/** Resolved shell invocation after plugins have had a chance to rewrite it. */
+export type ShellInvocation = {
+  command: string
+  cwd: string
+  timeout: number
+  shell?: string
+  env: Record<string, string>
+}
+
+/**
+ * Runs the `shell.create.before` plugin hook and returns the resulting invocation.
+ *
+ * A failing or missing hook must never block the shell tool, so plugin errors fall back to the
+ * caller's original invocation.
+ */
+export async function triggerShellCreateBefore(input: {
+  sessionID: string
+  command: string
+  cwd: string
+  timeout: number
+}): Promise<ShellInvocation> {
+  const output: ShellInvocation = {
+    command: input.command,
+    cwd: input.cwd,
+    timeout: input.timeout,
+    shell: undefined,
+    env: {},
+  }
+
+  await runPromiseWithLayer(
+    Plugin.defaultLayer,
+    withCurrentInstance(
+      Effect.gen(function* () {
+        const plugin = yield* Plugin.Service
+        yield* plugin.trigger("shell.create.before", { sessionID: input.sessionID, command: input.command }, output)
+      }),
+    ),
+  ).catch((error) => {
+    log.warn("shell.create.before hook failed", { error: String(error) })
+  })
+
+  if (typeof output.timeout !== "number" || !Number.isFinite(output.timeout) || output.timeout < 0) {
+    output.timeout = input.timeout
+  }
+  if (!output.command) output.command = input.command
+  if (!output.cwd) output.cwd = input.cwd
+  return output
+}
+
+export async function authorizeBashCommand(command: string, cwd: string, ctx: Tool.Context, shell?: string) {
+  const directories = new Set<string>()
+  if (!Instance.containsPath(cwd)) directories.add(cwd)
+  const patterns = new Set<string>()
+  const always = new Set<string>()
+
+  // The tree-sitter grammar we bundle is Bash. Running it over PowerShell yields command nodes
+  // that do not correspond to what PowerShell will actually execute, so a compound PowerShell line
+  // could be authorized from a misread of its first cmdlet. Split those ourselves instead.
+  const powershell = shell ? Shell.isPowerShellBinary(shell) : Shell.isPowerShell(command)
+
+  const tree = powershell
+    ? undefined
+    : await Promise.resolve(parser())
+        .then((p) => p.parse(command))
+        .catch(() => undefined)
+
+  const pendingPathResolutions: Promise<void>[] = []
+
+  if (!tree) {
+    if (powershell)
+      registerPowerShellSignals(
+        command,
+        shell ?? "powershell",
+        cwd,
+        directories,
+        patterns,
+        always,
+        pendingPathResolutions,
+      )
+    else registerCommandSignalsFromFallback(command, cwd, directories, patterns, always, pendingPathResolutions)
+  }
+
+  if (tree) {
+    for (const node of tree.rootNode.descendantsOfType("command")) {
+      if (!node) continue
+      const cmd: string[] = []
+      for (let i = 0; i < node.childCount; i++) {
+        const child = node.child(i)
+        if (!child) continue
+        if (
+          child.type !== "command_name" &&
+          child.type !== "word" &&
+          child.type !== "string" &&
+          child.type !== "raw_string" &&
+          child.type !== "concatenation"
+        ) {
+          continue
+        }
+        cmd.push(child.text)
+      }
+
+      registerCommandSignals(cmd, cwd, directories, patterns, always, pendingPathResolutions)
+    }
+  }
+
+  await Promise.allSettled(pendingPathResolutions)
+
+  if (directories.size > 0) {
+    await ctx.ask({
+      permission: "external_directory",
+      patterns: Array.from(directories),
+      always: Array.from(directories).map((x) => path.dirname(x) + "*"),
+      metadata: {},
+    })
+  }
+
+  if (patterns.size > 0) {
+    await ctx.ask({
+      permission: "bash",
+      patterns: Array.from(patterns),
+      always: Array.from(always),
+      metadata: {},
+    })
+  }
+}
+
+const resolveWasm = (asset: string) => {
+  if (asset.startsWith("file://")) return fileURLToPath(asset)
+  if (asset.startsWith("/") || /^[a-z]:/i.test(asset)) return asset
+  const url = new URL(asset, import.meta.url)
+  return fileURLToPath(url)
+}
+
+const parser = lazyAsync(async () => {
+  const { Parser } = await import("web-tree-sitter")
+  const { default: treeWasm } = await import("web-tree-sitter/tree-sitter.wasm" as string, {
+    with: { type: "wasm" },
+  })
+  const treePath = resolveWasm(treeWasm)
+  await Parser.init({
+    locateFile() {
+      return treePath
+    },
+  })
+  const { default: bashWasm } = await import("tree-sitter-bash/tree-sitter-bash.wasm" as string, {
+    with: { type: "wasm" },
+  })
+  const bashPath = resolveWasm(bashWasm)
+  const bashLanguage = await Language.load(bashPath)
+  const p = new Parser()
+  p.setLanguage(bashLanguage)
+  return p
+})
+
+export const BashTool = Tool.define("bash", async () => {
+  // The description used to name the default working directory, which made the schema of the
+  // second tool in the list differ between sessions and cut the provider's cache prefix at ~2k
+  // characters. The directory is now carried by the per-session `<env>` block instead, so this
+  // description is the same string in every session on the machine.
+  return {
+    // The model otherwise guesses the shell dialect from the OS, which is wrong whenever the
+    // resolved shell is not the platform default (zsh vs bash on macOS, Git Bash or PowerShell on
+    // Windows) — and a command in the wrong dialect fails for reasons the model cannot see.
+    description: DESCRIPTION.replaceAll("${platform}", PLATFORM_LABEL)
+      .replaceAll("${shell}", Shell.describe())
+      .replaceAll("${maxLines}", String(Truncate.MAX_LINES))
+      .replaceAll("${maxBytes}", String(Truncate.MAX_BYTES)),
+    parameters: zod(
+      Schema.Struct({
+        command: Schema.String.annotate({
+          description: "The command to execute",
+        }),
+        timeout: Schema.optional(Schema.Number).annotate({
+          description: "Optional timeout in milliseconds",
+        }),
+        workdir: Schema.optional(Schema.String).annotate({
+          description: `The working directory to run the command in. Defaults to the working directory in <env>. Use this instead of 'cd' commands.`,
+        }),
+        // Opencode #26419: local OpenAI-compatible backends (llama.cpp, LM Studio,
+        // LiteLLM) sometimes omit `description`. Make it optional and synthesize a
+        // short fallback so the TUI never shows empty titles.
+        description: Schema.optional(Schema.String).annotate({
+          description:
+            "Clear, concise description of what this command does in 5-10 words. Examples:\nInput: ls\nOutput: Lists files in current directory\n\nInput: git status\nOutput: Shows working tree status\n\nInput: npm install\nOutput: Installs package dependencies\n\nInput: mkdir foo\nOutput: Creates directory 'foo'",
+        }),
+      }),
+    ),
+    async execute(params, ctx) {
+      if (params.timeout !== undefined && params.timeout < 0) {
+        throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
+      }
+
+      // The model's `workdir` is read like a file tool's path (`/c/x` is the drive path) and checked before
+      // anything else sees it, so plugins and the permission check get the final directory and a missing one
+      // is reported as such instead of as a failed spawn of the shell.
+      const workdir = params.workdir ? resolveWorkdir(params.workdir, ctx.instance.directory) : undefined
+
+      // Plugins get to rewrite the invocation before anything else looks at it. Everything below —
+      // including the permission check — then runs against the *final* command, cwd and shell, so a
+      // hook cannot slip a different command past an approval granted for the original one.
+      const invocation = await triggerShellCreateBefore({
+        sessionID: ctx.sessionID,
+        command: params.command,
+        cwd: workdir ?? ctx.instance.directory,
+        timeout: params.timeout ?? DEFAULT_TIMEOUT,
+      })
+
+      const shell = invocation.shell ?? Shell.select(invocation.command)
+      log.info("bash tool using shell", { shell })
+
+      const cwd = invocation.cwd
+      const timeout = invocation.timeout
+
+      // Local openai-compatible backends often omit `description`. Synthesize
+      // a short title so the TUI never shows an empty header (opencode #26419).
+      const description = params.description?.trim() || "Shell"
+
+      // Publish title + empty output immediately so the TUI shows the running
+      // command (and description) before permission prompts / spawn latency.
+      ctx.metadata({
+        title: description,
+        metadata: {
+          output: "",
+          description,
+          command: invocation.command,
+        },
+      })
+
+      await authorizeBashCommand(invocation.command, cwd, ctx, shell)
+
+      const spawnOptions: SpawnOptions = {
+        cwd,
+        env: {
+          ...process.env,
+          ...invocation.env,
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+        detached: process.platform !== "win32",
+        // Agents run shell commands in the background; on Windows a spawned console would flash a
+        // window in front of whatever the user is doing.
+        windowsHide: true,
+      }
+      // PowerShell needs flags Node's `shell:` option cannot pass, so it is spawned directly.
+      const direct = Shell.directInvocation(shell, invocation.command)
+      const proc = direct
+        ? spawn(direct.file, direct.args, spawnOptions)
+        : spawn(invocation.command, { shell, ...spawnOptions })
+      // Windows: the command and everything it starts live in a Job Object, so a timeout or an abort leaves no orphan.
+      Shell.adopt(proc)
+
+      let output = ""
+      let outputTruncated = false
+      const append = (chunk: Buffer) => {
+        const result = appendOutput(output, chunk)
+        output = result.output
+        // Latch: once the window has rolled, the beginning is gone for the rest of the run.
+        outputTruncated = outputTruncated || result.truncated
+        ctx.metadata({
+          metadata: {
+            output: previewOutput(output),
+            description,
+          },
+        })
+      }
+
+      proc.stdout?.on("data", append)
+      proc.stderr?.on("data", append)
+
+      let timedOut = false
+      let aborted = false
+      let exited = false
+
+      const kill = () => Shell.killTree(proc, { exited: () => exited })
+
+      if (ctx.abort.aborted) {
+        aborted = true
+        await kill()
+      }
+
+      const abortHandler = () => {
+        aborted = true
+        void kill()
+      }
+
+      ctx.abort.addEventListener("abort", abortHandler, { once: true })
+
+      const timeoutTimer = setTimeout(() => {
+        timedOut = true
+        void kill()
+      }, timeout + 100)
+
+      await new Promise<void>((resolve, reject) => {
+        const cleanup = () => {
+          clearTimeout(timeoutTimer)
+          ctx.abort.removeEventListener("abort", abortHandler)
+        }
+
+        proc.once("exit", () => {
+          exited = true
+          cleanup()
+          resolve()
+        })
+
+        proc.once("error", (error) => {
+          exited = true
+          cleanup()
+          reject(error)
+        })
+      })
+
+      const resultMetadata: string[] = []
+
+      if (timedOut) {
+        resultMetadata.push(`bash tool terminated command after exceeding timeout ${timeout} ms`)
+      }
+
+      if (aborted) {
+        resultMetadata.push("User aborted the command")
+      }
+
+      let headTailTruncated = false
+      let headTailFilePath: string | undefined
+      if (output.length > Truncate.HEAD_TAIL_THRESHOLD) {
+        const trunc = Truncate.truncateHeadTail(output, { toolName: "bash" })
+        output = trunc.content
+        headTailTruncated = trunc.truncated
+        headTailFilePath = trunc.outputPath
+      }
+
+      if (outputTruncated) {
+        resultMetadata.push(
+          `Output exceeded ${MAX_OUTPUT_LENGTH} characters; the beginning was omitted and the most recent output retained`,
+        )
+      }
+
+      if (resultMetadata.length > 0) {
+        output += "\n\n<bash_metadata>\n" + resultMetadata.join("\n") + "\n</bash_metadata>"
+      }
+
+      return {
+        title: description,
+        metadata: {
+          output: previewOutput(output),
+          exit: proc.exitCode,
+          description,
+          ...(headTailTruncated ? { truncated: true, outputPath: headTailFilePath } : {}),
+        },
+        output,
+      }
+    },
+  }
+})

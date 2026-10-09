@@ -1,5 +1,5 @@
 import { t } from "../i18n"
-import { NIKCLI_PLUGIN_NAME } from "./nikcli-plugin"
+import { RAGU_PLUGIN_NAME } from "./ragu-plugin"
 /**
  * Installing ADE's reporting hook into a CLI's own configuration.
  *
@@ -70,7 +70,7 @@ export interface HookTarget {
   readonly execForm?: boolean
   /**
    * `tui-plugin`: no configuration to edit, only a file of ADE's in the CLI's
-   * plugin folder (`nikcli-plugin.ts`). `config` is then empty.
+   * plugin folder (`ragu-plugin.ts`). `config` is then empty.
    */
   readonly kind?: "tui-plugin"
 }
@@ -123,18 +123,18 @@ export const HOOK_TARGETS: readonly HookTarget[] = [
     script: [".codex", `${HOOK_MARKER}.ps1`],
   },
   /*
-   * nikcli: a plugin of its TUI rather than a hook, read off nikcli's own
-   * loader (`plugin/tui` under its config folder, `%APPDATA%\nikcli` on
+   * ragu: a plugin of its TUI rather than a hook, read off ragu's own
+   * loader (`plugin/tui` under its config folder, `%APPDATA%\ragu` on
    * Windows, where Rust puts it). Off until the user switches it on, like
    * the other two.
    */
   {
-    id: "nikcli",
+    id: "ragu",
     label: "Ragu Code",
-    agent: "nikcli",
+    agent: "ragu",
     config: [],
-    // As it lands on Windows. Rust puts it under nikcli's configuration folder on every platform (`config_home`).
-    script: ["AppData", "Roaming", "nikcli", "plugin", "tui", NIKCLI_PLUGIN_NAME],
+    // As it lands on Windows. Rust puts it under ragu's configuration folder on every platform (`config_home`).
+    script: ["AppData", "Roaming", "ragu", "plugin", "tui", RAGU_PLUGIN_NAME],
     kind: "tui-plugin",
   },
 ]
@@ -655,7 +655,7 @@ export async function setHook(host: HookHost, target: HookTarget, install: boole
 
   const files = await read(target.id)
   if (target.kind === "tui-plugin") {
-    // The text is Rust's own (`nikcli-plugin.ts`): the page only says install ("") or remove (null).
+    // The text is Rust's own (`ragu-plugin.ts`): the page only says install ("") or remove (null).
     await write(target.id, "", install ? "" : null)
     return readHookStatus(host, target)
   }

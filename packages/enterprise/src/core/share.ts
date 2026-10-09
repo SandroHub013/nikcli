@@ -1,8 +1,8 @@
-import { FileDiff, Message, Model, Part, Session } from "@nikcli-ai/sdk/httpapi"
-import { fn } from "@nikcli-ai/util/fn"
-import { iife } from "@nikcli-ai/util/iife"
-import { Identifier } from "@nikcli-ai/util/id"
-import { Binary } from "@nikcli-ai/util/binary"
+import { FileDiff, Message, Model, Part, Session } from "@ragu/sdk/httpapi"
+import { fn } from "@ragu/util/fn"
+import { iife } from "@ragu/util/iife"
+import { Identifier } from "@ragu/util/id"
+import { Binary } from "@ragu/util/binary"
 import z from "zod"
 import { Storage } from "./storage"
 

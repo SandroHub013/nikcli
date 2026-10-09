@@ -488,9 +488,9 @@ describe("quotaForAgent: a real reading or n/d, never a made-up figure", () => {
     expect(codex.isLimit).toBe(true)
   })
 
-  test("agy is n/d without its own file, and nikcli is always n/d", () => {
+  test("agy is n/d without its own file, and ragu is always n/d", () => {
     expect(isQuotaUnavailable(quotaForAgent("agy", snapshot, soon))).toBe(true)
-    expect(isQuotaUnavailable(quotaForAgent("nikcli", snapshot, soon))).toBe(true)
+    expect(isQuotaUnavailable(quotaForAgent("ragu", snapshot, soon))).toBe(true)
   })
 
   test("no report or an undated one is n/d; an old or stale report stays, marked with its time", () => {

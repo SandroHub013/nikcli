@@ -48,9 +48,9 @@ export interface ResumeRecipe {
    * A command that lists this directory's conversations, for a CLI whose own
    * "most recent" is not this directory's.
    *
-   * nikcli is the case: `--continue` takes the latest conversation of the
+   * ragu is the case: `--continue` takes the latest conversation of the
    * whole project, and a git project spans every worktree of the repository,
-   * so a pane came back inside another worktree's conversation. `nikcli api
+   * so a pane came back inside another worktree's conversation. `ragu api
    * session.list` filters by directory on the server; ADE reads the first
    * one no other pane holds and opens it with `byId`. When there is none, or
    * the command does not answer, a new conversation is asked for (`mint`):
@@ -74,9 +74,9 @@ export interface ResumeRecipe {
    * A command that asks the CLI itself for a new conversation, for a CLI that
    * refuses an id ADE invented.
    *
-   * nikcli is the case this exists for: `--session <id>` only *continues* a
+   * ragu is the case this exists for: `--session <id>` only *continues* a
    * conversation and fails on an id it has never seen, so ADE cannot make one
-   * up. It can ask: `nikcli api session.create` writes the new conversation —
+   * up. It can ask: `ragu api session.create` writes the new conversation —
    * with the directory it was run in — and prints it, id first. ADE reads the
    * id, kills that short-lived command and starts the real session with
    * `--session <id>`. From then on the pane is pinned like Claude Code's.
@@ -93,8 +93,8 @@ export interface ResumeRecipe {
    * How to ask the CLI whether the conversation `byId` would reopen is still
    * there, for a CLI that keeps no transcript file to look for.
    *
-   * nikcli is the case: its conversations are rows in one database, and one
-   * deleted from nikcli made the pane's `--session <id>` fail on the next
+   * ragu is the case: its conversations are rows in one database, and one
+   * deleted from ragu made the pane's `--session <id>` fail on the next
    * restart (Verifiche, 2026-09-27: the raw `NotFoundError`, then «Uscito con
    * 1»). Asked first, a missing one is a new conversation instead.
    */
@@ -161,20 +161,20 @@ function agyLatest(text: string, cwd: string): string | undefined {
 }
 
 /**
- * The id `nikcli api session.create` printed.
+ * The id `ragu api session.create` printed.
  *
  * Read with a pattern rather than `JSON.parse`: the command runs under a pty,
  * so what comes back can carry escape sequences, carriage returns and a
  * warning line above the JSON. The id's own shape (`ses_` and base62) is
  * distinctive enough to be found in that, and anything else is refused.
  */
-export function mintedNikcliId(output: string): string | undefined {
+export function mintedRaguId(output: string): string | undefined {
   const match = /"id"\s*:\s*"(ses_[A-Za-z0-9]{8,64})"/.exec(output)
   return match?.[1]
 }
 
 /**
- * Whether `nikcli api session.get` found the conversation `id`.
+ * Whether `ragu api session.get` found the conversation `id`.
  *
  * A missing one is a 404 and `{"name":"NotFoundError", … "Session not found:
  * <id>"}`, and the command exits; a present one is the conversation's JSON,
@@ -182,7 +182,7 @@ export function mintedNikcliId(output: string): string | undefined {
  * Anything else — a warning, half a line — is no answer yet, and no answer at
  * all leaves the pane reopening the id as before.
  */
-export function nikcliConversationThere(output: string, id: string): "gone" | "here" | undefined {
+export function raguConversationThere(output: string, id: string): "gone" | "here" | undefined {
   const text = output.replace(/\r/g, "")
   if (/"name"\s*:\s*"NotFoundError"/.test(text) && text.includes(`Session not found: ${id}`)) return "gone"
   const found = /"id"\s*:\s*"(ses_[A-Za-z0-9]{8,64})"/.exec(text)
@@ -192,20 +192,20 @@ export function nikcliConversationThere(output: string, id: string): "gone" | "h
 /**
  * The end of the title ADE gives a conversation it mints for a pane, which
  * says the pane it was asked for: panes are often all called "Sessione 1 —
- * nikcli", and inside the CLI the conversations are listed together.
+ * ragu", and inside the CLI the conversations are listed together.
  */
 export function mintMark(paneId: string): string {
   return ` · ${paneId.slice(-8)}`
 }
 
 /**
- * The most recent root conversation of `cwd` in what `nikcli api
+ * The most recent root conversation of `cwd` in what `ragu api
  * session.list` printed, leaving out the ones in `taken` and the ones whose
  * title ends with one of `marks`.
  *
  * `marks` are the other open panes' (`mintMark`): a conversation minted for
  * one of them is that pane's even when it does not hold the id. That is the
- * case of a mint past `MINT_MS` (`ask-cli.ts`): the command is killed, nikcli may have
+ * case of a mint past `MINT_MS` (`ask-cli.ts`): the command is killed, ragu may have
  * written the conversation anyway, and ADE never read its id. Empty and the
  * newest of the folder, it was the other pane's "here" (review of
  * ripristino-quater, BASSO 2). `session.list` says nothing of a
@@ -217,7 +217,7 @@ export function mintMark(paneId: string): string {
  * the shape of its id, so a server that ignored the filter would still not
  * hand over another folder's conversation.
  */
-export function lastNikcliHere(
+export function lastRaguHere(
   output: string,
   cwd: string,
   taken: ReadonlySet<string>,
@@ -300,7 +300,7 @@ function claudeTranscript(home: string, cwd: string, id: string): string | undef
  *   kimi      -S, --session <id>    / -c, --continue
  *   agy       --conversation <id>   / -c, --continue
  *   prime     -r, --resume <id>     / -c, --continue
- *   nikcli    -s, --session <id>    / -c, --continue, the whole project's
+ *   ragu    -s, --session <id>    / -c, --continue, the whole project's
  *             latest: `api session.list` with a directory instead
  *   opencode  -s, --session <id>    / -c, --continue
  *   grok      -s, --session-id <uuid>   start under a given id
@@ -340,11 +340,11 @@ export const RESUME: Record<string, ResumeRecipe> = {
     byId: (id) => ["--session", id],
     last: () => ["--continue"],
   },
-  nikcli: {
+  ragu: {
     byId: (id) => ["--session", id],
     lastHere: {
       /*
-       * A GET's parameters go in the query: `nikcli api` puts `-d` in the
+       * A GET's parameters go in the query: `ragu api` puts `-d` in the
        * request's body and only `--param` in its URL, and `session.list`
        * reads the query. Sent as `-d`, `roots` and `limit` never arrived and
        * every restore read the folder's whole list (lettura di Mimo, F2;
@@ -361,15 +361,15 @@ export const RESUME: Record<string, ResumeRecipe> = {
         "--param",
         `limit=${LAST_HERE_LIMIT}`,
       ],
-      read: lastNikcliHere,
+      read: lastRaguHere,
     },
     mint: {
       args: (title) => ["api", "session.create", "--log-level", "warn", "-d", JSON.stringify({ title })],
-      read: mintedNikcliId,
+      read: mintedRaguId,
     },
     exists: {
       args: (id) => ["api", "session.get", "--log-level", "warn", "--param", `sessionID=${id}`],
-      read: nikcliConversationThere,
+      read: raguConversationThere,
     },
   },
   grok: {
@@ -821,7 +821,7 @@ export function claimedByRestore(
  * directory that needs "the most recent conversation" gets it. The rest of
  * that directory start fresh rather than all reopening the same one.
  *
- * The same goes for an exact id (ripristino review, point 1): nikcli's tabs
+ * The same goes for an exact id (ripristino review, point 1): ragu's tabs
  * are one list for every TUI, so a pane that followed a tab can hold the
  * conversation another pane holds, and two `--session <id>` would write into
  * one conversation. The first pane keeps it; a later one gets `here` when

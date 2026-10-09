@@ -26,7 +26,7 @@ export function barSessionCount(
   chat: { readonly state: Pick<ChatState, "directory" | "status" | "data"> },
 ): number {
   const agents = panes.filter((pane) => !isPanelPane(pane) && (!project || belongsTo(pane, project))).length
-  // Only the conversations the Chat started: a terminal's nikcli session is
+  // Only the conversations the Chat started: a terminal's ragu session is
   // listed there too, and its pane is already counted above.
   const conversations =
     project && isOpenOn(chat, project.root)

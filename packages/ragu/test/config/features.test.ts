@@ -1,0 +1,56 @@
+import { describe, expect, it } from "bun:test"
+import { features } from "@ragu/util/features"
+
+describe("features()", () => {
+  it("defaults every flag off", () => {
+    expect(features(undefined)).toEqual({
+      tui: { cacheEviction: false, messageVirtualization: false, explorationGrouping: false },
+      requests: { latestOnlyLspRefresh: false },
+      events: { schemaEncoding: false },
+    })
+    expect(features({})).toEqual({
+      tui: { cacheEviction: false, messageVirtualization: false, explorationGrouping: false },
+      requests: { latestOnlyLspRefresh: false },
+      events: { schemaEncoding: false },
+    })
+  })
+
+  it("reads experimental keys as true only when strictly true", () => {
+    const f = features({
+      experimental: {
+        tui: { cacheEviction: true, messageVirtualization: true, explorationGrouping: true },
+        requests: { latestOnlyLspRefresh: true },
+        events: { schemaEncoding: true },
+      },
+    } as any)
+    expect(f.tui.cacheEviction).toBe(true)
+    expect(f.tui.messageVirtualization).toBe(true)
+    expect(f.tui.explorationGrouping).toBe(true)
+    expect(f.requests.latestOnlyLspRefresh).toBe(true)
+    expect(f.events.schemaEncoding).toBe(true)
+  })
+
+  it("keeps explicit false off", () => {
+    const f = features({
+      experimental: {
+        tui: { cacheEviction: false, messageVirtualization: true, explorationGrouping: false },
+        requests: { latestOnlyLspRefresh: false },
+        events: { schemaEncoding: false },
+      },
+    } as any)
+    expect(f.tui.cacheEviction).toBe(false)
+    expect(f.tui.messageVirtualization).toBe(true)
+    expect(f.tui.explorationGrouping).toBe(false)
+    expect(f.requests.latestOnlyLspRefresh).toBe(false)
+    expect(f.events.schemaEncoding).toBe(false)
+  })
+
+  it("treats truthy non-boolean as off", () => {
+    const f = features({
+      experimental: {
+        tui: { cacheEviction: "yes" as any },
+      },
+    } as any)
+    expect(f.tui.cacheEviction).toBe(false)
+  })
+})

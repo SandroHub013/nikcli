@@ -1,7 +1,7 @@
 /**
  * The folder's event stream, read (C2).
  *
- * `GET /event` with the folder in `x-nikcli-directory`: the server's stream
+ * `GET /event` with the folder in `x-ragu-directory`: the server's stream
  * for that instance only, `{type, properties}` per `data:` line, with
  * `server.connected` first and `server.heartbeat` every 30 s. Not
  * `/global/event`, which carries every folder's events (the proxy refuses
@@ -27,7 +27,7 @@ export async function* readEvents(
   signal: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
   const response = await fetch(new URL("/event", SERVER_BASE), {
-    headers: { accept: "text/event-stream", "x-nikcli-directory": encodeURIComponent(directory) },
+    headers: { accept: "text/event-stream", "x-ragu-directory": encodeURIComponent(directory) },
     signal,
   })
   if (response.status === 401 || response.status === 403) {

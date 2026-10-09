@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 import { withAlways } from "./approval"
 import { createBotTurns } from "./controller"
 import { acquireTurn, turnsRunning } from "./terms"
@@ -310,52 +310,52 @@ describe("a bot's memory in its turns", () => {
 
   test("the snapshot opens the conversation only, and a write lands for the next one", async () => {
     const p = memoryPanel()
-    const nikcli = bot("nikcli")
-    p.memory.set(nikcli.path, { notes: ["Il progetto usa bun."], user: [] })
-    p.turns.send(nikcli, "ciao")
+    const ragu = bot("ragu")
+    p.memory.set(ragu.path, { notes: ["Il progetto usa bun."], user: [] })
+    p.turns.send(ragu, "ciao")
     expect(p.requests[0]!.message).toContain("Il progetto usa bun.")
     expect(p.requests[0]!.message.endsWith("ciao")).toBe(true)
     // The bot answers with a write; its session is under way.
-    p.talks[nikcli.path] = {
+    p.talks[ragu.path] = {
       ...appendMessage(
-        p.talks[nikcli.path]!,
+        p.talks[ragu.path]!,
         { role: "bot", text: 'Ciao!\n<ade-memory op="add" block="user">Si chiama Mario.</ade-memory>' },
         1,
       ),
       sessionId: "s1",
     }
     await p.done()
-    const thread = p.talks[nikcli.path]!.messages
+    const thread = p.talks[ragu.path]!.messages
     expect(thread.find((message) => message.role === "bot")?.text).toBe("Ciao!")
     expect(thread.at(-1)?.role).toBe("tool")
     // The profile waits for the user's click (review), then is written.
-    expect(p.memory.get(nikcli.path).user).toEqual([])
-    const [proposal] = p.memory.get(nikcli.path).proposals ?? []
+    expect(p.memory.get(ragu.path).user).toEqual([])
+    const [proposal] = p.memory.get(ragu.path).proposals ?? []
     expect(proposal?.op).toEqual({ op: "add", block: "user", text: "Si chiama Mario." })
-    const confirmed = confirmProposal(p.memory.get(nikcli.path), proposal!.id)
-    p.memory.set(nikcli.path, confirmed.memory)
-    expect(p.memory.get(nikcli.path).user).toEqual(["Si chiama Mario."])
-    expect(p.memory.get(nikcli.path).proposals).toBeUndefined()
+    const confirmed = confirmProposal(p.memory.get(ragu.path), proposal!.id)
+    p.memory.set(ragu.path, confirmed.memory)
+    expect(p.memory.get(ragu.path).user).toEqual(["Si chiama Mario."])
+    expect(p.memory.get(ragu.path).proposals).toBeUndefined()
     // Same conversation: no snapshot again, whatever changed.
-    p.turns.send(nikcli, "e poi?")
+    p.turns.send(ragu, "e poi?")
     // Only told that its write waits for the user.
     expect(p.requests[1]!.message).not.toContain("NOTE DEL BOT")
     expect(p.requests[1]!.message).toContain("in attesa che l'utente la confermi")
     expect(p.requests[1]!.message.endsWith("e poi?")).toBe(true)
     await p.done()
     // A new conversation sees the write.
-    p.turns.forget(nikcli)
-    p.turns.send(nikcli, "di nuovo")
+    p.turns.forget(ragu)
+    p.turns.send(ragu, "di nuovo")
     expect(p.requests[2]!.message).toContain("Si chiama Mario.")
   })
 
   test("«Annulla» on the thread takes a write back, while nothing changed its block since (review)", async () => {
     const p = memoryPanel()
-    const nikcli = bot("nikcli")
-    p.turns.send(nikcli, "ricorda")
-    p.talks[nikcli.path] = {
+    const ragu = bot("ragu")
+    p.turns.send(ragu, "ricorda")
+    p.talks[ragu.path] = {
       ...appendMessage(
-        p.talks[nikcli.path]!,
+        p.talks[ragu.path]!,
         {
           role: "bot",
           text: '<ade-memory op="add" block="notes">Usa bun.</ade-memory>\n<ade-memory op="add" block="notes">I test stanno in src.</ade-memory>',
@@ -365,53 +365,53 @@ describe("a bot's memory in its turns", () => {
       sessionId: "s1",
     }
     await p.done()
-    const lines = p.talks[nikcli.path]!.messages.filter((message) => message.memoryUndo)
+    const lines = p.talks[ragu.path]!.messages.filter((message) => message.memoryUndo)
     expect(lines).toHaveLength(2)
-    expect(p.memory.get(nikcli.path).notes).toEqual(["Usa bun.", "I test stanno in src."])
+    expect(p.memory.get(ragu.path).notes).toEqual(["Usa bun.", "I test stanno in src."])
     // The first write: the second changed the block after it, so it is not undone.
-    p.turns.undoMemory(nikcli, lines[0]!.id)
-    expect(p.memory.get(nikcli.path).notes).toEqual(["Usa bun.", "I test stanno in src."])
-    expect(p.talks[nikcli.path]!.messages.at(-1)?.role).toBe("error")
+    p.turns.undoMemory(ragu, lines[0]!.id)
+    expect(p.memory.get(ragu.path).notes).toEqual(["Usa bun.", "I test stanno in src."])
+    expect(p.talks[ragu.path]!.messages.at(-1)?.role).toBe("error")
     // The last write comes back out, and its line loses the button.
-    p.turns.undoMemory(nikcli, lines[1]!.id)
-    expect(p.memory.get(nikcli.path).notes).toEqual(["Usa bun."])
-    const thread = p.talks[nikcli.path]!.messages
+    p.turns.undoMemory(ragu, lines[1]!.id)
+    expect(p.memory.get(ragu.path).notes).toEqual(["Usa bun."])
+    const thread = p.talks[ragu.path]!.messages
     expect(thread.find((message) => message.id === lines[1]!.id)?.memoryUndo).toBeUndefined()
     expect(thread.at(-1)?.text).toContain("annullata")
     // Telling the bot about a failure keeps what can still be undone.
     const kept = { id: "u1", block: "notes" as const, before: [], after: ["Usa bun."] }
-    p.memory.set(nikcli.path, { ...p.memory.get(nikcli.path), undo: [kept], pending: ["x"] })
+    p.memory.set(ragu.path, { ...p.memory.get(ragu.path), undo: [kept], pending: ["x"] })
     await p.done()
-    p.turns.send(nikcli, "ok")
-    expect(p.memory.get(nikcli.path).pending).toBeUndefined()
-    expect(p.memory.get(nikcli.path).undo).toEqual([kept])
+    p.turns.send(ragu, "ok")
+    expect(p.memory.get(ragu.path).pending).toBeUndefined()
+    expect(p.memory.get(ragu.path).undo).toEqual([kept])
   })
 
   test("a routine's writes all wait for the user: nobody was there to see them (review)", async () => {
     const p = memoryPanel()
-    const nikcli = bot("nikcli")
-    p.turns.routine(nikcli, "fai il punto")
-    p.talks[nikcli.path] = {
+    const ragu = bot("ragu")
+    p.turns.routine(ragu, "fai il punto")
+    p.talks[ragu.path] = {
       ...appendMessage(
-        p.talks[nikcli.path]!,
+        p.talks[ragu.path]!,
         { role: "bot", text: '<ade-memory op="add" block="notes">Usa bun.</ade-memory>' },
         1,
       ),
       sessionId: "s1",
     }
     await p.done()
-    expect(p.memory.get(nikcli.path).notes).toEqual([])
-    expect(p.memory.get(nikcli.path).proposals?.map((proposal) => [proposal.from, proposal.op.block])).toEqual([
+    expect(p.memory.get(ragu.path).notes).toEqual([])
+    expect(p.memory.get(ragu.path).proposals?.map((proposal) => [proposal.from, proposal.op.block])).toEqual([
       ["routine", "notes"],
     ])
-    expect(p.talks[nikcli.path]!.messages.some((message) => message.memoryUndo)).toBe(false)
+    expect(p.talks[ragu.path]!.messages.some((message) => message.memoryUndo)).toBe(false)
   })
 
   test("a room's writes all wait for the user too (B8b)", async () => {
     const p = memoryPanel()
-    const nikcli = bot("nikcli")
-    const thread = `room:r1:${nikcli.path}`
-    p.turns.room(nikcli, "tocca a te", thread)
+    const ragu = bot("ragu")
+    const thread = `room:r1:${ragu.path}`
+    p.turns.room(ragu, "tocca a te", thread)
     p.talks[thread] = {
       ...appendMessage(
         p.talks[thread]!,
@@ -421,35 +421,35 @@ describe("a bot's memory in its turns", () => {
       sessionId: "s1",
     }
     await p.done()
-    expect(p.memory.get(nikcli.path).notes).toEqual([])
-    expect(p.memory.get(nikcli.path).proposals?.map((proposal) => proposal.from)).toEqual(["room"])
+    expect(p.memory.get(ragu.path).notes).toEqual([])
+    expect(p.memory.get(ragu.path).proposals?.map((proposal) => proposal.from)).toEqual(["room"])
     expect(p.talks[thread]!.messages.find((message) => message.role === "bot")?.text).toBe("Ecco.")
-    expect(p.talks[nikcli.path]).toBeUndefined()
+    expect(p.talks[ragu.path]).toBeUndefined()
   })
 
   test("a refused write is said in the thread, and to the bot on its next turn", async () => {
     const p = memoryPanel()
-    const nikcli = bot("nikcli")
-    p.turns.send(nikcli, "ricorda la chiave")
-    p.talks[nikcli.path] = {
+    const ragu = bot("ragu")
+    p.turns.send(ragu, "ricorda la chiave")
+    p.talks[ragu.path] = {
       ...appendMessage(
-        p.talks[nikcli.path]!,
+        p.talks[ragu.path]!,
         { role: "bot", text: '<ade-memory op="add" block="notes">sk-abcdefghijklmnopqrstuvwxyz123456</ade-memory>' },
         1,
       ),
       sessionId: "s1",
     }
     await p.done()
-    expect(p.memory.get(nikcli.path).notes).toEqual([])
-    const thread = p.talks[nikcli.path]!.messages
+    expect(p.memory.get(ragu.path).notes).toEqual([])
+    const thread = p.talks[ragu.path]!.messages
     // The answer held only the tag: no empty bubble is left.
     expect(thread.some((message) => message.role === "bot")).toBe(false)
     expect(thread.at(-1)?.role).toBe("error")
-    p.turns.send(nikcli, "ok")
+    p.turns.send(ragu, "ok")
     expect(p.requests[1]!.message).toContain("chiave o un token")
     expect(p.requests[1]!.message.endsWith("ok")).toBe(true)
     await p.done()
-    p.turns.send(nikcli, "ancora")
+    p.turns.send(ragu, "ancora")
     expect(p.requests[2]!.message).toBe("ancora")
   })
 })

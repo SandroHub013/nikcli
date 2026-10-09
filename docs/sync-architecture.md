@@ -1,12 +1,12 @@
 # Sync architecture
 
-How nikcli keeps instances, workspaces and sessions on a single, replayable
+How ragu keeps instances, workspaces and sessions on a single, replayable
 backend — locally and (optionally) across machines through a remote hub.
 
 ## The unified event log
 
 Everything flows through one SQLite table, `sync_event` (see
-`packages/nikcli/src/sync/sync.sql.ts`):
+`packages/ragu/src/sync/sync.sql.ts`):
 
 | column                  | meaning                                                              |
 | ----------------------- | -------------------------------------------------------------------- |
@@ -18,7 +18,7 @@ Everything flows through one SQLite table, `sync_event` (see
 | `origin` / `origin_seq` | `local` or `remote:<client>`; the origin server's seq when remote    |
 
 Appends go through `Sync.emitRaw(projectID, aggregate, data, options?)`
-(`packages/nikcli/src/sync/index.ts`), which reserves the next sequence
+(`packages/ragu/src/sync/index.ts`), which reserves the next sequence
 number and inserts atomically (`BEGIN IMMEDIATE`, safe across processes
 sharing `nikcli.db`). Compaction trims aggregates past 1000 events down
 to 500; snapshots make that safe (below).
@@ -33,7 +33,7 @@ to 500; snapshots make that safe (below).
 - **Session sync bridge** (`session/sync-bridge.ts`): restore events of
   _local_ sessions (not bound to a workspace) are journaled under the
   session id. Workspace-bound sessions are skipped — the workspace loop
-  owns them. Opt out with `NIKCLI_DISABLE_SESSION_JOURNAL=1`.
+  owns them. Opt out with `RAGU_DISABLE_SESSION_JOURNAL=1`.
 - **Remote sync** (below): events received from the hub are replayed into
   the local log with `origin="remote:<client>"` so they are never pushed
   back.
@@ -60,13 +60,13 @@ to 500; snapshots make that safe (below).
 
 ## Remote sync (optional, hub-and-spoke)
 
-Disabled unless configured — nikcli is 100% local by default.
+Disabled unless configured — ragu is 100% local by default.
 
 ```sh
-export NIKCLI_REMOTE_URL=https://s.nikcli-ai.dev
-export NIKCLI_REMOTE_TOKEN=<token with cli-sync scope>
+export RAGU_REMOTE_URL=https://s.nikcli-ai.dev
+export RAGU_REMOTE_TOKEN=<token with cli-sync scope>
 # optional: keep bootstrap from autostarting (explicit commands still work)
-export NIKCLI_REMOTE_AUTOSTART=false
+export RAGU_REMOTE_AUTOSTART=false
 ```
 
 `RemoteSync.start({ url, token, projectID })` (`sync/remote-sync.ts`) runs
@@ -83,8 +83,8 @@ three loops:
    `(aggregate, seq)`).
 
 Starts are idempotent per `(url, projectID)`: bootstrap
-(`sync/cli-init.ts`, wired in `project/bootstrap.ts`), `nikcli serve` and
-`nikcli sync` share one connection instead of stacking hooks and timers.
+(`sync/cli-init.ts`, wired in `project/bootstrap.ts`), `ragu serve` and
+`ragu sync` share one connection instead of stacking hooks and timers.
 
 ### Hub-side security
 
@@ -92,14 +92,14 @@ Starts are idempotent per `(url, projectID)`: bootstrap
   requires the `cli-sync` or `studio` scope (`mobile/auth.sql.ts`); a
   paired mobile token gets 403. Operator-level auth paths (basic auth,
   Tailscale identity) pass through. Create a sync token with
-  `nikcli sync token create --name <label>`.
+  `ragu sync token create --name <label>`.
 - **Rate limiting**: `POST /sync/event` allows 100 events/min per token
   (fixed window, 429 + `retry-after` beyond it), so a stolen token cannot
   flood the log.
 - **Audit**: every accepted push is logged with token id/name, aggregate,
   type and the renumbered sequence.
 
-`nikcli sync status` shows connection, last seq, and outbox depth.
+`ragu sync status` shows connection, last seq, and outbox depth.
 
 ## Instance hot reload
 
@@ -118,7 +118,7 @@ Instances reload their configuration surface in-process, no restart:
   schedulers) is intentionally untouched; that is what makes reloading safe
   mid-session.
 - Explicit trigger: `POST /config/reload`. Opt out of the watcher with
-  `NIKCLI_DISABLE_HOT_RELOAD=1`.
+  `RAGU_DISABLE_HOT_RELOAD=1`.
 
 ## Migration notes
 
@@ -132,8 +132,8 @@ importer. `sync_event` has been the single source of truth since.
 
 | variable                         | effect                                           |
 | -------------------------------- | ------------------------------------------------ |
-| `NIKCLI_REMOTE_URL`              | hub base URL; enables remote sync (with token)   |
-| `NIKCLI_REMOTE_TOKEN`            | Bearer token (`cli-sync` scope)                  |
-| `NIKCLI_REMOTE_AUTOSTART=false`  | don't autostart from bootstrap                   |
-| `NIKCLI_DISABLE_SESSION_JOURNAL` | don't journal local session events               |
-| `NIKCLI_DISABLE_HOT_RELOAD`      | don't watch config files for instance hot reload |
+| `RAGU_REMOTE_URL`              | hub base URL; enables remote sync (with token)   |
+| `RAGU_REMOTE_TOKEN`            | Bearer token (`cli-sync` scope)                  |
+| `RAGU_REMOTE_AUTOSTART=false`  | don't autostart from bootstrap                   |
+| `RAGU_DISABLE_SESSION_JOURNAL` | don't journal local session events               |
+| `RAGU_DISABLE_HOT_RELOAD`      | don't watch config files for instance hot reload |

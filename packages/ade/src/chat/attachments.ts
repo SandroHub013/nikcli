@@ -2,7 +2,7 @@
  * Files the chat sends with a message (C6): a picked attachment or an
  * `@file` mention, always a file of the project the chat is admitted to.
  *
- * nikcli reads a `file://` part itself, as the user, with no permission asked
+ * ragu reads a `file://` part itself, as the user, with no permission asked
  * (`session/prompt.ts`), so the folder is enforced here and again in the
  * store before anything is sent: a path outside it, on another drive, a UNC
  * share or a `\\?\` path is refused, and `..` is resolved before the
@@ -10,7 +10,7 @@
  * that points out of it is not followed here.
  */
 
-import type { FilePartInput } from "@nikcli-ai/sdk/httpapi"
+import type { FilePartInput } from "@ragu/sdk/httpapi"
 
 export interface Attachment {
   /** Absolute, with forward slashes. */
@@ -68,7 +68,7 @@ const IMAGE: Record<string, string> = {
   webp: "image/webp",
 }
 
-/** Images and PDFs go to the model as media; anything else as text nikcli reads. */
+/** Images and PDFs go to the model as media; anything else as text ragu reads. */
 export function mimeOf(path: string): string {
   const extension = /\.([A-Za-z0-9]+)$/.exec(path)?.[1]?.toLowerCase() ?? ""
   if (extension === "pdf") return "application/pdf"
@@ -76,7 +76,7 @@ export function mimeOf(path: string): string {
 }
 
 /**
- * `.env` or `.env.*`: never attached (C6 review). nikcli guards those files for
+ * `.env` or `.env.*`: never attached (C6 review). ragu guards those files for
  * its read tool, and an attachment is read without that guard.
  */
 export function isEnvFile(path: string): boolean {
@@ -107,7 +107,7 @@ export function isBinaryPath(path: string): boolean {
 
 /**
  * Whether `path` has the letters of `query` in order, case aside: what a
- * fuzzy match promises. nikcli's finder forgives typos and ranks by use, so
+ * fuzzy match promises. ragu's finder forgives typos and ranks by use, so
  * `@som` came back with `README.md`, which has no `s` (chat-bot-facili, prove).
  */
 export function mentionMatches(path: string, query: string): boolean {
@@ -147,7 +147,7 @@ export function fileUrl(path: string): string {
 
 /** The path a `file://` URL names, for checking it again before it is sent. */
 export function pathOfFileUrl(url: string): string | undefined {
-  // `file:///…` only: `file://host/…` names a share on another machine, which nikcli would read as `\\host\…`.
+  // `file:///…` only: `file://host/…` names a share on another machine, which ragu would read as `\\host\…`.
   if (!url.startsWith("file:///")) return undefined
   try {
     const path = decodeURIComponent(url.slice("file://".length).split("?")[0]!)

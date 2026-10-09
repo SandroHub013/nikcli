@@ -1,7 +1,7 @@
-# nikcli — Code review focalizzata su consumo di CPU, memoria e altre risorse
+# ragu — Code review focalizzata su consumo di CPU, memoria e altre risorse
 
 **Data:** 2026-06-05
-**Scope:** `/Volumes/SSD/Projects/nikcli/packages/nikcli` (435 sorgenti TS)
+**Scope:** `/Volumes/SSD/Projects/ragu/packages/ragu` (435 sorgenti TS)
 **Metodo:** 6 sotto-agenti `@code-reviewer` in parallelo (uno per subsystem) + deep-dive manuale di verifica
 **Tipo di review:** READ-ONLY (nessun file modificato)
 
@@ -361,7 +361,7 @@ I seguenti file mostrano pattern corretti che dovrebbero essere replicati:
       await Promise.all(
         Array.from(current.values()).map(async (runtime) => {
           clearRuntimeTimers(runtime)
-          runtime.requestedFinalization = { status: "cancelled", error: "Nikcli shut down" }
+          runtime.requestedFinalization = { status: "cancelled", error: "Ragu Code shut down" }
           try {
             await Shell.killTree(runtime.process, { exited: () => runtime.exited })
           } catch {}
@@ -444,7 +444,7 @@ I seguenti file mostrano pattern corretti che dovrebbero essere replicati:
 
 ## Note metodologiche
 
-- **Primo tentativo (6 agenti paralleli):** tutti i 6 agenti sono andati in stato `orphaned` a causa di un restart di Nikcli verificatosi durante l'attesa (errore: "Nikcli restarted before the background task completed"). Risultati persi.
+- **Primo tentativo (6 agenti paralleli):** tutti i 6 agenti sono andati in stato `orphaned` a causa di un restart di Ragu Code verificatosi durante l'attesa (errore: "Ragu Code restarted before the background task completed"). Risultati persi.
 - **Secondo tentativo (6 agenti paralleli con prompt più stretti e time-budget 5min):** tutti i 6 agenti hanno completato con successo. La sintesi è stata letta via `delegation(action="read")`; il report markdown completo è stato prodotto dal worker session ma non incluso verbatim nella sintesi del delegator (le sintesi contengono però i top findings con numeri e severità).
 - **Verifica manuale:** 20+ `grep` e `read` diretti su `tool/bash.ts`, `tool/memory_search.ts`, `provider/transform.ts`, `provider/provider.ts`, `storage/storage.ts`, `db/users.ts`, `server/server.ts`, `server/routes/mobile.ts`, `server/routes/global.ts`, `cli/cmd/tui/win32.ts`, `util/eventloop.ts`, `plugin/index.ts`, `plugin/openai/ws-pool.ts`, `provider/models.ts`, `pty/index.ts`, `monitor/manager.ts`, `delegation/manager.ts`, `scheduler/index.ts`, `util/flock.ts`, `cli/cmd/tui/util/analytics-aggregator.ts`, `cli/cmd/tui/util/sound.ts`, `cli/cmd/tui/thread.ts`, `cli/cmd/tui/util/terminal.ts`, `cli/cmd/tui/util/double-esc.ts`, `acp/agent.ts`, `mcp/index.ts`, `tool/codesearch.ts`, `tool/webfetch.ts`, `tool/ls.ts`, `config/config.ts`, `worktree/managed.ts`, `analytics/analytics.ts`, `agent/agent.ts`, `brain/index.ts` — tutti i file:line citati in questo report sono stati letti e verificati.
 

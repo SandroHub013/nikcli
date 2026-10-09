@@ -45,7 +45,7 @@ describe("the sessions a surface owns", () => {
 /*
  * Measured in ADE Test: every hot update of `workbench.tsx` mounted a new
  * Workbench in the same page, which restored its three agents by spawning
- * them again while the old three ran on (nikcli at 580 MB), until ADE closed.
+ * them again while the old three ran on (ragu at 580 MB), until ADE closed.
  * The cleanup has to be registered during setup: after an await Solid has no
  * owner and `onCleanup` is a silent no-op.
  */

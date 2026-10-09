@@ -384,16 +384,16 @@ export function isFreeModel(id: ModelId): boolean {
  * `/v1/models` so SDK catalogs see them as first-class.
  */
 export const MODEL_ALIASES: Record<string, ModelId> = {
-  "nikcli-mini": "qwen-3.5-flash",
-  "nikcli-fast": "deepseek-v4-flash",
+  "ragu-mini": "qwen-3.5-flash",
+  "ragu-fast": "deepseek-v4-flash",
   nikseek: "deepseek-v4-pro",
-  "nikcli-max": "kimi-k2.6",
-  "nikcli-reason": "deepseek-r1-0528",
-  "nikcli-coder": "devstral-2",
-  "nikcli-vision": "llama-4-scout",
-  "nikcli-free": "nemotron-3-super",
-  "nikcli-free-mini": "nemotron-3-nano",
-  "nikcli-free-coder": "north-mini-code",
+  "ragu-max": "kimi-k2.6",
+  "ragu-reason": "deepseek-r1-0528",
+  "ragu-coder": "devstral-2",
+  "ragu-vision": "llama-4-scout",
+  "ragu-free": "nemotron-3-super",
+  "ragu-free-mini": "nemotron-3-nano",
+  "ragu-free-coder": "north-mini-code",
 } as const
 
 /**

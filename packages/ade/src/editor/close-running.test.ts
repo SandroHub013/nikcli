@@ -26,9 +26,9 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 describe("closing an agent at work (ALTO 6)", () => {
   test("from a shortcut, a running agent is ended only on a yes", async () => {
-    const s = setup({ a: "Sessione 1 — nikcli" })
+    const s = setup({ a: "Sessione 1 — ragu" })
     expect(s.closer.close("a", { confirmRunning: true })).toBe(false)
-    expect(s.questions.map((q) => q.agent)).toEqual(["Sessione 1 — nikcli"])
+    expect(s.questions.map((q) => q.agent)).toEqual(["Sessione 1 — ragu"])
     s.questions[0]!.answer(false)
     await tick()
     expect(s.closed).toEqual([])
@@ -39,7 +39,7 @@ describe("closing an agent at work (ALTO 6)", () => {
   })
 
   test("a pane with nothing running closes at once, and so does a close that is a decision already", () => {
-    const s = setup({ a: "Sessione 1 — nikcli" })
+    const s = setup({ a: "Sessione 1 — ragu" })
     expect(s.closer.close("b", { confirmRunning: true })).toBe(true)
     // `ade-msg close` and the ✕: no question.
     expect(s.closer.close("a")).toBe(true)

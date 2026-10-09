@@ -851,7 +851,7 @@ describe("createAdeVoiceHost", () => {
  * was switched to, and that each call carries its own task.
  */
 describe("createAdeVoiceHost, spoken planning", () => {
-  const nikcli: Project = { root: "C:/Users/x/nikcli", name: "nikcli", git: true }
+  const ragu: Project = { root: "C:/Users/x/ragu", name: "ragu", git: true }
 
   function planningDeps(overrides: Partial<AdeVoiceHostDeps> = {}) {
     const started: { agentId: string; task: string }[] = []
@@ -909,22 +909,22 @@ describe("createAdeVoiceHost, spoken planning", () => {
 
   test("listProjects marks only the open project, and dedupes it from the recents", () => {
     const { deps } = planningDeps({
-      project: () => nikcli,
+      project: () => ragu,
       // The same directory as the open one, spelled the way a shell spells it.
       recents: () => [
-        { root: "C:\\Users\\x\\nikcli", name: "nikcli", openedAt: 2 },
+        { root: "C:\\Users\\x\\ragu", name: "ragu", openedAt: 2 },
         { root: "C:/Users/x/altro", name: "altro", openedAt: 1 },
       ],
     })
 
     const projects = createAdeVoiceHost(deps).listProjects!()
 
-    expect(projects.map((p) => p.name)).toEqual(["nikcli", "altro"])
+    expect(projects.map((p) => p.name)).toEqual(["ragu", "altro"])
     expect(projects.map((p) => p.isOpen)).toEqual([true, false])
   })
 
   test("startSession resolves a spoken agent name and returns the pane it made", async () => {
-    const { deps, started } = planningDeps({ project: () => nikcli })
+    const { deps, started } = planningDeps({ project: () => ragu })
 
     const pane = await createAdeVoiceHost(deps).startSession!({
       agent: "Claude",
@@ -942,7 +942,7 @@ describe("createAdeVoiceHost, spoken planning", () => {
    * diversi, quattro pannelli distinti a cui poter parlare dopo.
    */
   test("four calls produce four panes with four different tasks", async () => {
-    const { deps, started } = planningDeps({ project: () => nikcli })
+    const { deps, started } = planningDeps({ project: () => ragu })
     const host = createAdeVoiceHost(deps)
 
     const tasks = ["il parser", "i test", "la documentazione", "le prestazioni"]
@@ -954,7 +954,7 @@ describe("createAdeVoiceHost, spoken planning", () => {
   })
 
   test("startSession refuses an agent that does not exist, and opens nothing", async () => {
-    const { deps, started } = planningDeps({ project: () => nikcli })
+    const { deps, started } = planningDeps({ project: () => ragu })
 
     await expect(createAdeVoiceHost(deps).startSession!({ agent: "aider", task: "qualsiasi cosa" })).rejects.toThrow(
       /Non conosco l'agente «aider»/,
@@ -964,7 +964,7 @@ describe("createAdeVoiceHost, spoken planning", () => {
 
   test("startSession switches project first when the task names another one", async () => {
     const { deps, started, switched } = planningDeps({
-      project: () => nikcli,
+      project: () => ragu,
       recents: () => [{ root: "C:/Users/x/altro", name: "altro", openedAt: 1 }],
     })
 
@@ -980,18 +980,18 @@ describe("createAdeVoiceHost, spoken planning", () => {
 
   test("startSession does not switch when the named project is the open one", async () => {
     const { deps, switched } = planningDeps({
-      project: () => nikcli,
-      recents: () => [{ root: "C:\\Users\\x\\nikcli", name: "nikcli", openedAt: 1 }],
+      project: () => ragu,
+      recents: () => [{ root: "C:\\Users\\x\\ragu", name: "ragu", openedAt: 1 }],
     })
 
-    await createAdeVoiceHost(deps).startSession!({ agent: "claude", project: "nikcli" })
+    await createAdeVoiceHost(deps).startSession!({ agent: "claude", project: "ragu" })
 
     expect(switched).toEqual([])
   })
 
   test("startSession refuses an unknown project without opening or switching anything", async () => {
     const { deps, started, switched } = planningDeps({
-      project: () => nikcli,
+      project: () => ragu,
       recents: () => [{ root: "C:/Users/x/altro", name: "altro", openedAt: 1 }],
     })
 
@@ -1016,7 +1016,7 @@ describe("createAdeVoiceHost, spoken planning", () => {
   })
 
   test("startSession says so instead of pretending when the host cannot open sessions", async () => {
-    const { deps } = createMockDeps({ project: () => nikcli })
+    const { deps } = createMockDeps({ project: () => ragu })
 
     await expect(createAdeVoiceHost(deps).startSession!({ agent: "claude" })).rejects.toThrow(
       "Non posso avviare sessioni da qui.",
@@ -1026,7 +1026,7 @@ describe("createAdeVoiceHost, spoken planning", () => {
   test("the same refusal is said in English with the interface in English (F7b)", async () => {
     resetLocaleForTests("en")
     try {
-      const { deps } = createMockDeps({ project: () => nikcli })
+      const { deps } = createMockDeps({ project: () => ragu })
       await expect(createAdeVoiceHost(deps).startSession!({ agent: "claude" })).rejects.toThrow(
         "I can't start sessions from here.",
       )

@@ -3,21 +3,21 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout, type LocalProject, getAvatarColors } from "@/context/layout"
 import { useNotification } from "@/context/notification"
-import { base64Encode } from "@nikcli-ai/util/encode"
-import { Avatar } from "@nikcli-ai/ui/avatar"
-import { DiffChanges } from "@nikcli-ai/ui/diff-changes"
-import { HoverCard } from "@nikcli-ai/ui/hover-card"
-import { Icon } from "@nikcli-ai/ui/icon"
-import { IconButton } from "@nikcli-ai/ui/icon-button"
-import { MessageNav } from "@nikcli-ai/ui/message-nav"
-import { Spinner } from "@nikcli-ai/ui/spinner"
-import { Tooltip } from "@nikcli-ai/ui/tooltip"
-import { getFilename } from "@nikcli-ai/util/path"
-import { type Message, type Session, type TextPart } from "@nikcli-ai/sdk/httpapi"
+import { base64Encode } from "@ragu/util/encode"
+import { Avatar } from "@ragu/ui/avatar"
+import { DiffChanges } from "@ragu/ui/diff-changes"
+import { HoverCard } from "@ragu/ui/hover-card"
+import { Icon } from "@ragu/ui/icon"
+import { IconButton } from "@ragu/ui/icon-button"
+import { MessageNav } from "@ragu/ui/message-nav"
+import { Spinner } from "@ragu/ui/spinner"
+import { Tooltip } from "@ragu/ui/tooltip"
+import { getFilename } from "@ragu/util/path"
+import { type Message, type Session, type TextPart } from "@ragu/sdk/httpapi"
 import { For, Match, Show, Switch, createMemo, onCleanup, type Accessor, type JSX } from "solid-js"
 import { agentColor } from "@/utils/agent"
 
-const NIKCLI_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
+const RAGU_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
 export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
   const notification = useNotification()
@@ -30,7 +30,7 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
         <Avatar
           fallback={name()}
           src={
-            props.project.id === NIKCLI_PROJECT_ID ? "https://nikcli-ai.dev/favicon.svg" : props.project.icon?.override
+            props.project.id === RAGU_PROJECT_ID ? "https://nikcli-ai.dev/favicon.svg" : props.project.icon?.override
           }
           {...getAvatarColors(props.project.icon?.color)}
           class="size-full rounded"

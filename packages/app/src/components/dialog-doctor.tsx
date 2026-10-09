@@ -1,6 +1,6 @@
 import { Component, createResource, For, JSXElement, Show } from "solid-js"
-import { Dialog } from "@nikcli-ai/ui/dialog"
-import { Icon } from "@nikcli-ai/ui/icon"
+import { Dialog } from "@ragu/ui/dialog"
+import { Icon } from "@ragu/ui/icon"
 import { useSDK } from "@/context/sdk"
 import { useLanguage } from "@/context/language"
 

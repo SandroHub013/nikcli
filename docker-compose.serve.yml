@@ -1,5 +1,5 @@
 services:
-  nikcli-serve:
+  ragu-serve:
     build:
       context: .
       dockerfile: Dockerfile.serve
@@ -9,12 +9,12 @@ services:
     env_file:
       - packages/slack/.env
     environment:
-      - NIKCLI_SERVER_SSH_ENABLED=true
-      - NIKCLI_SERVER_TAILSCALE_AUTH=${NIKCLI_SERVER_TAILSCALE_AUTH:-false}
+      - RAGU_SERVER_SSH_ENABLED=true
+      - RAGU_SERVER_TAILSCALE_AUTH=${RAGU_SERVER_TAILSCALE_AUTH:-false}
       - PORT=4096
     volumes:
-      - nikcli-data:/data
-      - /Users/nikoemme/.local/share/nikcli/auth.json:/data/nikcli/auth.json:ro
+      - ragu-data:/data
+      - /Users/nikoemme/.local/share/nikcli/auth.json:/data/ragu/auth.json:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4096/global/health"]
@@ -30,10 +30,10 @@ services:
     env_file:
       - packages/slack/.env
     environment:
-      # Always points to the nikcli-serve container on the internal Docker network
-      - NIKCLI_URL=http://nikcli-serve:4096
+      # Always points to the ragu-serve container on the internal Docker network
+      - RAGU_URL=http://ragu-serve:4096
     depends_on:
-      nikcli-serve:
+      ragu-serve:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -50,10 +50,10 @@ services:
     env_file:
       - packages/discord/.env
     environment:
-      # Always points to the nikcli-serve container on the internal Docker network
-      - NIKCLI_URL=http://nikcli-serve:4096
+      # Always points to the ragu-serve container on the internal Docker network
+      - RAGU_URL=http://ragu-serve:4096
     depends_on:
-      nikcli-serve:
+      ragu-serve:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -64,4 +64,4 @@ services:
       start_period: 15s
 
 volumes:
-  nikcli-data:
+  ragu-data:

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { t } from "../../i18n"
-import type { AgentFile } from "../nikcli"
+import type { AgentFile } from "../ragu"
 import { gatewayVisible } from "../../surface/state"
 import type { GatewayMessage } from "./controller"
 import {
@@ -30,7 +30,7 @@ const BOT: AgentFile = {
   mode: "primary",
   prompt: "",
   disabledTools: [],
-  runner: "nikcli",
+  runner: "ragu",
 }
 
 function fakeApi(initial: Partial<GatewayStatus> = {}) {

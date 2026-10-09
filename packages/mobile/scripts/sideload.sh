@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Downloads the latest nikcli iOS build from GitHub releases, verifies it
+# Downloads the latest ragu iOS build from GitHub releases, verifies it
 # against the published checksums and hands it to the right installer.
 #
 # The .ipa in the release is deliberately unsigned: without an Apple Developer
@@ -108,7 +108,7 @@ if [ -n "$KEEP_DIR" ]; then
   WORK="$KEEP_DIR"
   CLEANUP=""
 else
-  WORK="$(mktemp -d "${TMPDIR:-/tmp}/nikcli-sideload.XXXXXX")"
+  WORK="$(mktemp -d "${TMPDIR:-/tmp}/ragu-sideload.XXXXXX")"
   CLEANUP="$WORK"
 fi
 # shellcheck disable=SC2064
@@ -147,13 +147,13 @@ if [ "$MODE" = "simulator" ]; then
   rm -rf "$WORK/extracted"
   mkdir -p "$WORK/extracted"
   unzip -q "$WORK/$ASSET_NAME" -d "$WORK/extracted"
-  APP="$WORK/extracted/nikcli.app"
-  [ -d "$APP" ] || die "the archive did not contain nikcli.app."
+  APP="$WORK/extracted/ragu.app"
+  [ -d "$APP" ] || die "the archive did not contain ragu.app."
 
   say "Installing into the booted simulator..."
   xcrun simctl install booted "$APP"
   xcrun simctl launch booted ai.nikcli.mobile >/dev/null
-  say "Done — nikcli is running in the simulator."
+  say "Done — ragu is running in the simulator."
   exit 0
 fi
 
@@ -161,8 +161,8 @@ fi
 if command -v unzip >/dev/null 2>&1 && command -v codesign >/dev/null 2>&1; then
   rm -rf "$WORK/inspect"
   mkdir -p "$WORK/inspect"
-  unzip -q "$WORK/$ASSET_NAME" -d "$WORK/inspect" 'Payload/nikcli.app/*' 2>/dev/null || true
-  if [ -d "$WORK/inspect/Payload/nikcli.app" ] && codesign -dv "$WORK/inspect/Payload/nikcli.app" >/dev/null 2>&1; then
+  unzip -q "$WORK/$ASSET_NAME" -d "$WORK/inspect" 'Payload/ragu.app/*' 2>/dev/null || true
+  if [ -d "$WORK/inspect/Payload/ragu.app" ] && codesign -dv "$WORK/inspect/Payload/ragu.app" >/dev/null 2>&1; then
     die "this .ipa is already signed — it is not the build this script expects."
   fi
 fi

@@ -1,11 +1,11 @@
 /**
- * nikcli Herdr integration — server-side bridge.
+ * ragu Herdr integration — server-side bridge.
  *
- * Reports nikcli session lifecycle state (working/idle/blocked) to a Herdr
+ * Reports ragu session lifecycle state (working/idle/blocked) to a Herdr
  * pane via Herdr's Unix socket API. The bridge is auto-enabled when the
  * `HERDR_ENV=1` environment is set (set by a Herdr pane that wraps the
- * nikcli process) and a `HERDR_SOCKET_PATH` / `HERDR_PANE_ID` is published.
- * If either is missing — i.e. nikcli is running outside Herdr — the bridge
+ * ragu process) and a `HERDR_SOCKET_PATH` / `HERDR_PANE_ID` is published.
+ * If either is missing — i.e. ragu is running outside Herdr — the bridge
  * is a hard no-op, mirroring the Prime Agent / `prime-agent` built-in
  * extension shape.
  *
@@ -42,7 +42,7 @@ import { homedir } from "os"
 import path from "path"
 import { z } from "zod"
 import { GlobalBus } from "./global-bus"
-import { Log } from "@nikcli-ai/util/log"
+import { Log } from "@ragu/util/log"
 
 const log = Log.create({ service: "herdr-bridge" })
 
@@ -54,8 +54,8 @@ const log = Log.create({ service: "herdr-bridge" })
  * would drop into `~/.config/nikcli/plugin/`. Herdr's own integrations
  * use the same `herdr:<agent>` shape (`herdr:opencode`, `herdr:claude`).
  */
-export const HERDR_SOURCE = "herdr:nikcli"
-export const HERDR_AGENT = "nikcli"
+export const HERDR_SOURCE = "herdr:ragu"
+export const HERDR_AGENT = "ragu"
 
 /**
  * Herdr's `PaneAgentState` enum. `done` is *not* a reportable state —
@@ -296,7 +296,7 @@ export async function detect(): Promise<HerdrInstallInfo> {
  * Send a single request/response on a fresh socket. Used for one-shot
  * queries (`session.snapshot`). Throws on connection failure, protocol
  * error, or timeout. The bridge everywhere catches and logs these so a
- * flaky herdr server never crashes nikcli.
+ * flaky herdr server never crashes ragu.
  */
 export async function call<T = unknown>(
   method: string,
@@ -305,7 +305,7 @@ export async function call<T = unknown>(
   options?: { socketPath?: string },
 ): Promise<T> {
   const socketPath = options?.socketPath ?? resolveSocketPath()
-  const id = `nikcli-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  const id = `ragu-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   // Herdr's protocol rejects requests without a `params` field, so we
   // always send at least an empty object — `JSON.stringify` would otherwise
   // drop the key when the caller passes `undefined`.
@@ -373,7 +373,7 @@ export async function call<T = unknown>(
 /**
  * Public snapshot accessor. Returns the cached snapshot for the current
  * project directory, or an empty snapshot when the bridge has never seen
- * herdr. We key per-directory so multi-project nikcli instances don't
+ * herdr. We key per-directory so multi-project ragu instances don't
  * clobber each other.
  */
 export function snapshot(directory?: string): HerdrSnapshot {
@@ -420,7 +420,7 @@ export function isInHerdrPane(): boolean {
 /**
  * Send a `pane.report_agent` request and return its promise. The bridge
  * always uses the HERDR_PANE_ID, HERDR_SOCKET_PATH, and source label
- * "herdr:nikcli" so the wrapping Herdr server recognises the pane as a
+ * "herdr:ragu" so the wrapping Herdr server recognises the pane as a
  * first-class agent.
  */
 export async function reportAgent(input: {
@@ -431,7 +431,7 @@ export async function reportAgent(input: {
   socketPath?: string
   source?: string
   agent?: string
-  /** nikcli session id herdr should resume this pane into. */
+  /** ragu session id herdr should resume this pane into. */
   sessionID?: string
 }) {
   if (!runtime.enabled) return { ok: false as const, reason: "disabled" as const }
@@ -468,10 +468,10 @@ export async function reportAgent(input: {
 /**
  * Publish the pane's conversation reference without changing its state.
  *
- * This is what makes nikcli an "official" herdr integration rather than a
+ * This is what makes ragu an "official" herdr integration rather than a
  * status reporter: herdr persists the session ref and — with
  * `session.resume_agents_on_restore` — relaunches the pane straight back
- * into that nikcli session after a server restart.
+ * into that ragu session after a server restart.
  *
  * `startSource: "new"` tells herdr the pane genuinely started a new
  * conversation, so it replaces the stored ref instead of treating the
@@ -552,7 +552,7 @@ export async function releasePane(input?: { paneId?: string; socketPath?: string
  * Release the pane without an event loop.
  *
  * Herdr keeps a reported agent until someone releases it — it only clears
- * agents it recognizes by process, and nikcli is not one of those, so a
+ * agents it recognizes by process, and ragu is not one of those, so a
  * quit that skips the release leaves a zombie row in herdr's agent panel
  * until the pane's shell itself exits. `process.on("exit")` cannot await a
  * socket write, so the shutdown path goes through the herdr CLI instead,
@@ -566,7 +566,7 @@ export function releasePaneSync(): void {
   if (runtime.released) return
   const paneId = process.env["HERDR_PANE_ID"]
   // No pane, nothing to hand back — and that is the normal case for anyone
-  // running nikcli outside Herdr, so it is the case that must cost nothing.
+  // running ragu outside Herdr, so it is the case that must cost nothing.
   // Read the env guard *before* resolving the binary: `resolveHerdrBin` is a
   // synchronous PATH walk, and doing it here meant every clean exit of every
   // non-Herdr session paid for a `Bun.which` on the shutdown path.
@@ -577,7 +577,7 @@ export function releasePaneSync(): void {
   try {
     spawnSync(bin, releaseAgentArgv(paneId, nextReportSeq()), {
       stdio: "ignore",
-      // Bounded: a `herdr` that never answers must not keep nikcli alive. The
+      // Bounded: a `herdr` that never answers must not keep ragu alive. The
       // pane row is cosmetic (it clears itself when the pane's shell exits), so
       // giving up after the timeout costs a stale row and nothing else.
       timeout: 2000,
@@ -590,7 +590,7 @@ export function releasePaneSync(): void {
 }
 
 /**
- * Report a nikcli session as a herdr agent. No-op when the bridge is not
+ * Report a ragu session as a herdr agent. No-op when the bridge is not
  * enabled or the socket is unreachable. Failures are logged, never thrown,
  * so a flaky herdr can't affect the session lifecycle.
  */
@@ -614,7 +614,7 @@ export async function reportSession(input: {
 }
 
 /**
- * Release our authority over a nikcli-backed pane. Called when a session
+ * Release our authority over a ragu-backed pane. Called when a session
  * ends so herdr doesn't keep a zombie "working" agent around.
  */
 export async function releaseSession(input: { directory: string; sessionID: string; agent: string; paneId?: string }) {
@@ -675,7 +675,7 @@ function errorMessage(err: unknown): string {
 }
 
 /**
- * nikcli session status → herdr state. Kept as a map (rather than the
+ * ragu session status → herdr state. Kept as a map (rather than the
  * narrower typed union) because the bus carries
  * status strings from several producers; an unrecognized status means
  * "no state change", not "idle".
@@ -714,10 +714,10 @@ function sessionIDFrom(properties: any): string | undefined {
 }
 
 /**
- * Translate one nikcli bus event into herdr reports.
+ * Translate one ragu bus event into herdr reports.
  *
  * Mirrors the plugin herdr installs for opencode (`herdr integration
- * install opencode`) one-for-one, so a nikcli pane behaves exactly like
+ * install opencode`) one-for-one, so a ragu pane behaves exactly like
  * any first-party agent in the sidebar, the attention queue, and
  * `herdr agent wait`.
  *
@@ -808,7 +808,7 @@ function ensureBusListener() {
 
 /**
  * Optional explicit hook for callers that want to register the listener
- * ahead of time (e.g. when running `nikcli serve` for a hosted setup).
+ * ahead of time (e.g. when running `ragu serve` for a hosted setup).
  * Most users should call `setEnabled(true)` instead.
  */
 export function start(): void {
@@ -816,7 +816,7 @@ export function start(): void {
 }
 
 /**
- * Public schema for the nikcli side of herdr snapshots — defined here so
+ * Public schema for the ragu side of herdr snapshots — defined here so
  * the TUI plugin and the server API endpoint can share it without one
  * importing the other's runtime code.
  */

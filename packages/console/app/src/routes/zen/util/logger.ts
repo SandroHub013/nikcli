@@ -1,4 +1,4 @@
-import { Resource } from "@nikcli-ai/console-resource"
+import { Resource } from "@ragu/console-resource"
 
 export const logger = {
   metric: (values: Record<string, any>) => {

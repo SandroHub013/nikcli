@@ -1,7 +1,7 @@
 # Effect and TUI Architecture Roadmap
 
 Status: proposed implementation program. Baseline date: 2026-09-10.
-Scope: `packages/tui`, `packages/nikcli`, and the SDK/identity seams they cross. [Catalog and evidence](README.md).
+Scope: `packages/tui`, `packages/ragu`, and the SDK/identity seams they cross. [Catalog and evidence](README.md).
 
 ## Objective
 
@@ -81,15 +81,15 @@ session; every "open" line is a gate that still needs work, not a claim that a c
 billed step output, preserving content and the terminal `APIError` rather than removing parts and replaying the request.
 
 Native midstream failures are lazy iteration errors, outside the setup fallback catch; they are not actual midstream
-fallback to the AI SDK. `packages/nikcli/test/session/processor-retry.test.ts` and
-`packages/nikcli/test/session/native-runtime.test.ts` pin content preservation, no replay and no synthetic finish.
+fallback to the AI SDK. `packages/ragu/test/session/processor-retry.test.ts` and
+`packages/ragu/test/session/native-runtime.test.ts` pin content preservation, no replay and no synthetic finish.
 
-Baseline before changes, from `packages/nikcli`:
+Baseline before changes, from `packages/ragu`:
 `bun test test/session/processor-retry.test.ts test/session/native-runtime.test.ts test/session/llm-event-adapter.test.ts`
 reported **49 pass, 0 fail, exit 0**. After the slice, the wider targeted run
 `bun test test/session/processor-retry.test.ts test/session/native-runtime.test.ts test/session/llm-event-adapter.test.ts test/session/processor-effect-service.test.ts test/session/retry.test.ts test/session/retry-precise.test.ts`
 reported **108 pass, 0 fail, exit 0**, `bun run format:check` and `bun run lint` reported 0 errors, and
-`bun run typecheck` in `packages/nikcli` exits 0. (An earlier typecheck in this session reported twelve errors in
+`bun run typecheck` in `packages/ragu` exits 0. (An earlier typecheck in this session reported twelve errors in
 the vendored Copilot chat language model (since removed with the AI SDK) from a duplicated `@ai-sdk/provider` in the
 installed tree; `bun install --frozen-lockfile` cleared them, so that was install drift rather than a repo defect.)
 
@@ -115,10 +115,10 @@ EOT-00's real Ghostty/tmux gate remains open, so this slice does not permit prom
 Later the same day, a second EOT-11 slice closed both items this one left open, and the measurement changed the work:
 a real 429 carrying `retry-after: 7` proved the native runtime already honours the header on its own retries, and that
 when it gave up it threw a fully populated `LLMError` — which crossed into `MessageV2.fromError` as a non-retryable
-`UnknownError`, so `SessionRetry` never saw the header at all. `packages/nikcli/src/session/llm/llm-event-adapter.ts`
+`UnknownError`, so `SessionRetry` never saw the header at all. `packages/ragu/src/session/llm/llm-event-adapter.ts`
 now maps that error to a status- and header-carrying `APICallError` at the single seam native failures cross, and
 counts finish events that arrive without usage instead of leaving a zero-billed turn looking free.
-`packages/nikcli/test/session/native-retry-after.test.ts` serves real 429 and 400 responses and pins it; deleting the
+`packages/ragu/test/session/native-retry-after.test.ts` serves real 429 and 400 responses and pins it; deleting the
 mapping turns it red with `Received: "UnknownError"`. Nine session suites then reported **175 pass, 0 fail, exit 0**.
 
 Rollback must not restore retries over published content. See [EOT-11](effect-tui/11-provider-inference-streaming.md)
@@ -163,7 +163,7 @@ may bypass the typed contract.
    plugin runtime.
 4. Bounded queues require a stated overflow/recovery policy. A faster view that drops text, permission prompts, or final
    outcomes is a correctness regression. Safety and tenant isolation outrank performance.
-5. Keep existing tests and CI signals. Do not add the full nikcli suite back to CI; run whole-suite checks locally through
+5. Keep existing tests and CI signals. Do not add the full ragu suite back to CI; run whole-suite checks locally through
    `bun run test:ci`. Preserve targeted Windows suites, client-drift, formatting/lint, and Railway/Docker guards.
 6. The bridge protocol (CLI / TUI / SDK / mobile / companion / remote) is one typed contract per direction; clients are
    generated, not handwritten. Capability gating is part of the contract; absent capabilities are surfaced, not silently
@@ -176,7 +176,7 @@ may bypass the typed contract.
    fixed-cardinality labels and redaction enforced everywhere. OTLP export is opt-in; the in-process live panel is
    default-on. Redaction is not a configurable option.
 10. Testing follows the three-layer architecture (unit, integration, e2e) with deterministic fixtures, isolated
-    databases, PTY harnesses, and barriers — never `sleep` races. CI does not run the full nikcli suite; whole-suite
+    databases, PTY harnesses, and barriers — never `sleep` races. CI does not run the full ragu suite; whole-suite
     checks happen locally through `bun run test:ci`.
 
 ## Prioritized Work and Dependencies
@@ -233,7 +233,7 @@ contexts_, not a completed real-terminal matrix. `script/tui-startup.ts` now rec
 `realTerminalCoverage: observed-process-context | unverified | unavailable` alongside the Ghostty/tmux flags it
 actually observed, so a future artifact cannot read as full matrix coverage. The
 baseline artifact exists at
-`packages/nikcli/specs/perf-baseline.json` and `check:perf-baseline` gates it in
+`packages/ragu/specs/perf-baseline.json` and `check:perf-baseline` gates it in
 `script/ci-validate.ts`. It had not been closed because the probe never returned —
 `perf-baseline.ts` finished measuring in under a second and then hung on open handles, so
 no artifact could be produced. As of 2026-09-29 the validator is fail-closed rather than advisory: it rejects an
@@ -385,7 +385,7 @@ appears more than once.
 | EOT-18 | `cmd()` takes `bootstrap`/`teardown`; teardown runs in a finally without masking the handler                     | `3ecef498c0`               |
 | EOT-19 | Per-device capabilities the bridge advertises; an unknown scope grants nothing                                   | `3ecef498c0`               |
 | EOT-20 | Test layers made disjoint; barrier helpers; one flaky test migrated to a barrier                                 | `3ec56934`, `4035590e2`    |
-| EOT-20 | `preserveTestEnv` discipline enforced: a module-scope `NIKCLI_*` write fails a test                              | `dd27545efd`               |
+| EOT-20 | `preserveTestEnv` discipline enforced: a module-scope `RAGU_*` write fails a test                              | `dd27545efd`               |
 | EOT-01 | Lifecycle counters on the bridge; a cancel counted once, synchronously, and a finalizer-leak watchdog            | `644a8f28`                 |
 | EOT-02 | Bridge exits classified; two `WorkspaceRef`s on one directory torn down without interleaving                     | `644a8f28`                 |
 | EOT-04 | `BYTE_BUDGET` enforced **per frame**; a lifetime budget would evict every healthy long-lived reader              | `644a8f28`                 |
@@ -399,7 +399,7 @@ appears more than once.
 | EOT-19 | `/mobile/bootstrap` probes bounded and de-networked: 8s+ -> 950ms on the app's connect path                      | `d1e2f99e`                 |
 | EOT-20 | `withFixture` as the shared harness; both new gates driven by tests that make them fail                          | `644a8f28`, `6d880fc3`     |
 | EOT-12 | Flag capture-at-import is a CI gate, not four fixes; the legacy-credential pair moves together                   | `ac52fff3`                 |
-| EOT-20 | TUI tests already lived in `packages/nikcli/test/tui` (55 files); a duplicate directory removed, `adopt` covered | `995fff77ba`               |
+| EOT-20 | TUI tests already lived in `packages/ragu/test/tui` (55 files); a duplicate directory removed, `adopt` covered | `995fff77ba`               |
 | EOT-01 | P0 closed: the probe never returned, so no baseline existed; artifact + gate now in CI                           | `7376aed1e1`               |
 | EOT-13 | Redaction fuzz: camelCase keys, `:`/space/`\|` separators, URL userinfo and glued tokens all escaped             | `936ae2289a06`             |
 | EOT-13 | OTLP smoke: the exporter was shipping span attributes unredacted; panel now coalesced too                        | `46b4b5d1ae`               |
@@ -501,19 +501,19 @@ Run commands from the stated package through Bun; use `monitor` for tests, typec
 | Change surface             | Required evidence                                                                                                           |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Documentation only         | Markdown format check, local-link/source-reference validation, dependency DAG/coverage checks, read-back                    |
-| Runtime/service            | Narrow `packages/nikcli/test/effect` and changed domain tests; interruption and finalizer assertions                        |
-| TUI lifecycle/state/render | Matching `packages/nikcli/test/tui` tests, real OpenTUI frame assertions, PTY interaction when behavior changes             |
+| Runtime/service            | Narrow `packages/ragu/test/effect` and changed domain tests; interruption and finalizer assertions                        |
+| TUI lifecycle/state/render | Matching `packages/ragu/test/tui` tests, real OpenTUI frame assertions, PTY interaction when behavior changes             |
 | HTTP contract              | `bun run generate:httpapi-clients`, `bun run check:routes`, affected server/client tests, tracked generated output reviewed |
 | Bridge protocol            | Bridge contract round-trip + capability gating + watermark/snapshot barrier; client and server integration tests            |
 | Identity / auth            | State-machine matrix + controlled local issuer; redaction tests; no skipped onboarding                                      |
 | Observability              | Schema-validated spans/metrics/logs; redaction fuzz; live panel bounded; OTLP smoke against local collector                 |
 | Plugin v2                  | Manifest validation; capability denial; reload concurrency; storage scoping; v1 coexistence                                 |
 | Workspace / sync           | Concurrent isolation; hot switch determinism; barrier end-to-end; multi-device ordering                                     |
-| CLI host/startup           | `bun run smoke:standalone` in `packages/tui`; `bun run smoke:tui` and compiled startup probe in `packages/nikcli`           |
+| CLI host/startup           | `bun run smoke:standalone` in `packages/tui`; `bun run smoke:tui` and compiled startup probe in `packages/ragu`           |
 | Mobile/companion           | JWT round-trip; websocket reconnect; PTY bounded; teleport chunked resume; multi-device ordering                            |
 | Sandbox/permission         | Coupling respected; sandbox containment; headless posture fail-closed; redaction tests                                      |
 | Any implementation slice   | One final root `bun run typecheck` after edits, serialized via the existing root script; affected formatting/lint checks    |
-| Release-sized integration  | Local `bun run test:ci` in `packages/nikcli`, relevant compiled build/smokes, existing CI remains blocking                  |
+| Release-sized integration  | Local `bun run test:ci` in `packages/ragu`, relevant compiled build/smokes, existing CI remains blocking                  |
 
 Do not run root `bun test`: the root script intentionally fails. Do not run repeated typechecks during editing on a
 low-memory machine. A passing typecheck is not proof of cancellation, replay, focus restoration, rendering correctness,

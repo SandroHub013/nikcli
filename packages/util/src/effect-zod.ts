@@ -46,8 +46,8 @@ import * as Schema from "effect/Schema"
 import z from "zod"
 
 /** Identifier symbol for the ZodOverride escape hatch annotation. */
-export const ZodOverrideId = Symbol.for("nikcli/effect-zod/ZodOverride")
-export const ZodObjectModeId = Symbol.for("nikcli/effect-zod/ZodObjectMode")
+export const ZodOverrideId = Symbol.for("ragu/effect-zod/ZodOverride")
+export const ZodObjectModeId = Symbol.for("ragu/effect-zod/ZodObjectMode")
 
 type ZodOverrideFn = () => z.ZodType<any>
 type ZodObjectMode = "strict" | "strip" | "passthrough"

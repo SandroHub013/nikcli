@@ -7,7 +7,7 @@
  * metadata we can attach (mode, screen size). A {@link ComputerFrame} bundles
  * the screenshot bytes together with the source info so a single `snapshot()`
  * call is enough for waiting, rendering and evidence capture — mirroring the
- * contract of {@link BrowserFrame} in `@nikcli-ai/browser-control`.
+ * contract of {@link BrowserFrame} in `@ragu/browser-control`.
  */
 
 export type Mode = "sandbox" | "host"

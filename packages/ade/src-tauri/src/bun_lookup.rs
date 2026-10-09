@@ -142,7 +142,7 @@ mod tests {
         assert!(is_node_modules(Path::new("node_modules/.bin")));
         assert!(is_node_modules(Path::new("packages/ade/node_modules/.bin")));
         assert!(is_node_modules(Path::new(r"C:\repo\packages\ade\node_modules\.bin")));
-        assert!(is_node_modules(Path::new(r"D:\a\nikcli\nikcli\node_modules\.bin")));
+        assert!(is_node_modules(Path::new(r"D:\a\ragu\ragu\node_modules\.bin")));
         assert!(!is_node_modules(Path::new(r"C:\Users\runneradmin\.bun\bin")));
         assert!(!is_node_modules(Path::new("/usr/local/bin")));
         assert!(!is_node_modules(Path::new("~/.bun/bin")));

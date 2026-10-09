@@ -168,26 +168,26 @@ describe("readFrames", () => {
 })
 
 describe("fingerprint", () => {
-  const saved = process.env.NIKCLI_GADGET_STATE
+  const saved = process.env.RAGU_GADGET_STATE
   const dirs: string[] = []
   const fresh = () => {
-    const dir = mkdtempSync(path.join(os.tmpdir(), "nikcli-gadget-identity-"))
+    const dir = mkdtempSync(path.join(os.tmpdir(), "ragu-gadget-identity-"))
     dirs.push(dir)
     return dir
   }
   afterEach(() => {
-    if (saved === undefined) delete process.env.NIKCLI_GADGET_STATE
-    else process.env.NIKCLI_GADGET_STATE = saved
+    if (saved === undefined) delete process.env.RAGU_GADGET_STATE
+    else process.env.RAGU_GADGET_STATE = saved
     for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true })
   })
 
   test("is a random per-install value, stable in one state directory and distinct across them", async () => {
     const { fingerprint } = await import("../src/state.ts")
-    process.env.NIKCLI_GADGET_STATE = fresh()
+    process.env.RAGU_GADGET_STATE = fresh()
     const first = fingerprint()
     expect(first).toMatch(/^[0-9a-f]{32}$/)
     expect(fingerprint()).toBe(first)
-    process.env.NIKCLI_GADGET_STATE = fresh()
+    process.env.RAGU_GADGET_STATE = fresh()
     // Two installs on one host, or two clones of one SD card that pair on their own, must not look like one device.
     expect(fingerprint()).not.toBe(first)
   })
@@ -195,7 +195,7 @@ describe("fingerprint", () => {
   test("is kept in a private file and survives unpairing", async () => {
     const { fingerprint, clearPairing, writePairing } = await import("../src/state.ts")
     const dir = fresh()
-    process.env.NIKCLI_GADGET_STATE = dir
+    process.env.RAGU_GADGET_STATE = dir
     const value = fingerprint()
     expect(statSync(path.join(dir, "identity")).mode & 0o777).toBe(0o600)
     writePairing({ server: "http://x", id: "a", token: "nkg_x", name: "a", confirmed: true, pairedAt: 1 })
@@ -205,14 +205,14 @@ describe("fingerprint", () => {
 
   test("falls back to the machine's own identifiers when the state directory cannot be written", async () => {
     const { fingerprint } = await import("../src/state.ts")
-    process.env.NIKCLI_GADGET_STATE = "/dev/null/not-a-directory"
+    process.env.RAGU_GADGET_STATE = "/dev/null/not-a-directory"
     expect(fingerprint()).toMatch(/^[0-9a-f]{32}$/)
     expect(fingerprint()).toBe(fingerprint())
   })
 
   test("constructing a Gadget does not create an identity", () => {
     const dir = fresh()
-    process.env.NIKCLI_GADGET_STATE = path.join(dir, "state")
+    process.env.RAGU_GADGET_STATE = path.join(dir, "state")
     new Gadget({ name: "quiet", builtins: false, log: () => undefined })
     expect(existsSync(path.join(dir, "state"))).toBe(false)
   })

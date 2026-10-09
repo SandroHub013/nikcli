@@ -21,7 +21,7 @@ const toc = [
 <DocsLayout
   title="Driving terminals"
   subtitle="Create a pseudo-terminal on the server, attach to it over a websocket, and render it wherever your interface lives."
-  description="Guide to the nikcli PTY API: creating terminals, attaching over websockets, resizing, lifecycle, environment injection, and wiring one to xterm.js in a browser."
+  description="Guide to the ragu PTY API: creating terminals, attaching over websockets, resizing, lifecycle, environment injection, and wiring one to xterm.js in a browser."
   toc={toc}
 >
   <section id="three-ways" class="doc-section">
@@ -131,7 +131,7 @@ await client.pty.remove({ ptyID: pty.id })`}</DocCode>
       per-terminal layer. The <code>shell.env</code> plugin hook is the global one, applied to every
       PTY the server makes.
     </p>
-    <DocCode language="ts" title=".nikcli/plugins/shell-env.ts">{`import type { Plugin } from "@nikcli-ai/plugin"
+    <DocCode language="ts" title=".nikcli/plugins/shell-env.ts">{`import type { Plugin } from "@ragu/plugin"
 
 export const ShellEnv: Plugin = async () => ({
   async "shell.env"(input, output) {
@@ -141,7 +141,7 @@ export const ShellEnv: Plugin = async () => ({
 })`}</DocCode>
     <p>
       Plugin values are merged over the caller's, and then terminal invariants such as
-      <code>TERM</code> and <code>NIKCLI_TERMINAL</code> are re-applied — so a plugin cannot break
+      <code>TERM</code> and <code>RAGU_TERMINAL</code> are re-applied — so a plugin cannot break
       the terminal by overwriting them.
     </p>
   </section>
@@ -154,12 +154,12 @@ export const ShellEnv: Plugin = async () => ({
     </p>
     <DocCode language="ts" title="terminal.ts">{`import { Terminal } from "@xterm/xterm"
 import { FitAddon } from "@xterm/addon-fit"
-import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
+import { createRaguClient } from "@ragu/sdk/httpapi"
 
 const BASE = "http://127.0.0.1:4096"
 const directory = "/Users/me/project"
 
-const client = createNikcliClient({ baseUrl: BASE, directory })
+const client = createRaguClient({ baseUrl: BASE, directory })
 
 const { data: pty, error } = await client.pty.create({ title: "shell", cwd: directory })
 if (!pty) throw error

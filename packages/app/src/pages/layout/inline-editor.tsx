@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { Show, type Accessor } from "solid-js"
-import { InlineInput } from "@nikcli-ai/ui/inline-input"
+import { InlineInput } from "@ragu/ui/inline-input"
 
 export function createInlineEditorController() {
   const [editor, setEditor] = createStore({

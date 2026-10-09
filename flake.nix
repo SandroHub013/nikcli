@@ -1,5 +1,5 @@
 {
-  description = "Nikcli development flake";
+  description = "Ragu development flake";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
@@ -36,12 +36,12 @@
           node_modules = pkgs.callPackage ./nix/node_modules.nix {
             inherit rev;
           };
-          nikcli = pkgs.callPackage ./nix/nikcli.nix {
+          ragu = pkgs.callPackage ./nix/ragu.nix {
             inherit node_modules;
           };
           desktop = if builtins.pathExists ./nix/desktop.nix then pkgs.callPackage ./nix/desktop.nix {
-            inherit nikcli;
-          } else nikcli;
+            inherit ragu;
+          } else ragu;
           # nixpkgs cpu naming to bun cpu naming
           cpuMap = { x86_64 = "x64"; aarch64 = "arm64"; };
           # matrix of node_modules builds - these will always fail due to fakeHash usage
@@ -61,8 +61,8 @@
           );
         in
         {
-          default = nikcli;
-          inherit nikcli desktop;
+          default = ragu;
+          inherit ragu desktop;
         } // moduleUpdaters
       );
     };

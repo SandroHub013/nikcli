@@ -1,7 +1,7 @@
 import type { APIEvent } from "@solidjs/start/server"
 import { json } from "@solidjs/router"
-import { Database } from "@nikcli-ai/console-core/drizzle/index.js"
-import { UserTable } from "@nikcli-ai/console-core/schema/user.sql.js"
+import { Database } from "@ragu/console-core/drizzle/index.js"
+import { UserTable } from "@ragu/console-core/schema/user.sql.js"
 
 export async function GET(evt: APIEvent) {
   return json({

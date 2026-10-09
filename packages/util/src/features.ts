@@ -2,7 +2,7 @@
  * Typed experimental feature flags.
  *
  * Central place for opencode-parity gates so callers don't cast `config.experimental` ad hoc. Flags
- * default **off** until soak. (`nativeLlm` is gone: native `@nikcli-ai/llm` streaming is the only
+ * default **off** until soak. (`nativeLlm` is gone: native `@ragu/llm` streaming is the only
  * runtime, and the config key is accepted but ignored so existing configs keep validating.)
  */
 

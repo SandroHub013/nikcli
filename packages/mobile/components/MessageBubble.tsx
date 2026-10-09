@@ -714,7 +714,7 @@ function MessageBubbleImpl(props: MessageBubbleProps) {
   const bubble = (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${isUser ? "User" : "Nikcli"} message`}
+      accessibilityLabel={`${isUser ? "User" : "Ragu"} message`}
       accessibilityHint="Long press to show message actions"
       // Standard chat behavior: tapping the transcript puts the keyboard away.
       onPress={() => Keyboard.dismiss()}

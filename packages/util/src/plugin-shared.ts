@@ -1,12 +1,12 @@
 import path from "path"
 import { fileURLToPath, pathToFileURL } from "url"
 import semver from "semver"
-import { Filesystem } from "@nikcli-ai/util/filesystem"
-import { hasPluginExport, pluginExportEntry } from "@nikcli-ai/util/plugin-read"
-import { isRecord } from "@nikcli-ai/util/record"
+import { Filesystem } from "@ragu/util/filesystem"
+import { hasPluginExport, pluginExportEntry } from "@ragu/util/plugin-read"
+import { isRecord } from "@ragu/util/record"
 
 // Old npm package names for plugins that are now built-in
-export const DEPRECATED_PLUGIN_PACKAGES = ["nikcli-openai-codex-auth", "nikcli-copilot-auth"]
+export const DEPRECATED_PLUGIN_PACKAGES = ["ragu-openai-codex-auth", "ragu-copilot-auth"]
 
 export function isDeprecatedPlugin(spec: string) {
   return DEPRECATED_PLUGIN_PACKAGES.some((pkg) => spec.includes(pkg))
@@ -89,16 +89,16 @@ export function satisfiesRange(version: string, range: string): boolean {
   return semver.satisfies(coerced, range)
 }
 
-export async function checkPluginCompatibility(target: string, nikcliVersion: string) {
-  if (!semver.valid(nikcliVersion) || semver.major(nikcliVersion) === 0) return
+export async function checkPluginCompatibility(target: string, raguVersion: string) {
+  if (!semver.valid(raguVersion) || semver.major(raguVersion) === 0) return
   const pkg = await readPluginPackage(target).catch(() => undefined)
   if (!pkg) return
   const engines = pkg.json.engines
   if (!isRecord(engines)) return
-  const range = engines.nikcli
+  const range = engines.ragu
   if (typeof range !== "string") return
-  if (!semver.satisfies(nikcliVersion, range)) {
-    throw new Error(`Plugin requires nikcli ${range} but running ${nikcliVersion}`)
+  if (!semver.satisfies(raguVersion, range)) {
+    throw new Error(`Plugin requires ragu ${range} but running ${raguVersion}`)
   }
 }
 
@@ -107,7 +107,7 @@ export async function checkPluginCompatibility(target: string, nikcliVersion: st
  *
  * Everything else in this module is path and manifest work that both the server
  * and the terminal do; this one line shells out to `bun install`, which is the
- * host's job and the only reason the module used to live in `packages/nikcli`.
+ * host's job and the only reason the module used to live in `packages/ragu`.
  * The host sets it once at startup — `src/plugin/shared.ts` does, on import.
  */
 let installPackage: ((pkg: string, version: string) => Promise<string>) | undefined
@@ -206,7 +206,7 @@ export async function resolvePluginId(source: PluginSource, spec: string, target
 
 /**
  * Thrown in place of `process.exit` when a plugin being loaded tries to end the
- * process: the import fails like any other broken plugin, and nikcli stays up.
+ * process: the import fails like any other broken plugin, and ragu stays up.
  */
 export class PluginExitError extends Error {
   constructor(

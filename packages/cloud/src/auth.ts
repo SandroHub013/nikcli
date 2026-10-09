@@ -1,12 +1,12 @@
 import type { MiddlewareHandler } from "hono"
-import { parseBearerToken, verifyAccessToken, type VerifyAccessTokenOptions } from "@nikcli-ai/auth"
+import { parseBearerToken, verifyAccessToken, type VerifyAccessTokenOptions } from "@ragu/auth"
 import { ensureUser } from "./db"
 import type { AuthContext, CloudBindings, CloudEnv } from "./types"
 
 export async function verifyAuthToken(token: string, env: CloudBindings): Promise<AuthContext> {
   const options: VerifyAccessTokenOptions = {
     issuer: env.AUTH_ISSUER ?? "https://auth.nikcli-ai.dev",
-    audience: env.AUTH_AUDIENCE ?? "nikcli-api",
+    audience: env.AUTH_AUDIENCE ?? "ragu-api",
     jwksUrl: env.AUTH_JWKS_URL,
     jwtSecret: env.AUTH_JWT_SECRET,
   }

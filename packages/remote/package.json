@@ -1,13 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@nikcli-ai/remote",
+  "name": "@ragu/remote",
   "version": "1.431.0",
-  "description": "NikCLI remote terminal server - Mobile access via WebSocket with QR code",
+  "description": "Ragu remote terminal server - Mobile access via WebSocket with QR code",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "bin": {
-    "nikcli-remote": "./dist/nikcli-remote"
+    "ragu-remote": "./dist/ragu-remote"
   },
   "exports": {
     ".": {
@@ -29,7 +29,7 @@
     "build:client": "vite build",
     "build:server": "bunx tsup src/index.ts --format esm --dts --target es2022 --out-dir dist --splitting false --platform node --external ws --external ghostty-web --external qrcode --external localtunnel",
     "build": "bun run build:client && bun run build:server",
-    "compile": "bun run build && bun build src/cli.ts --compile --outfile=dist/nikcli-remote --target=node",
+    "compile": "bun run build && bun build src/cli.ts --compile --outfile=dist/ragu-remote --target=node",
     "dev": "bun run --conditions=browser ./src/index.ts"
   },
   "devDependencies": {

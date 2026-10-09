@@ -217,7 +217,7 @@ describe("storage", () => {
 
   test("lastWords go through the same filter before they are stored", () => {
     const key = "ghp_abcdefghijklmnopqrstuvwxyz"
-    const talk = applyExit(emptyTalk(), 1, T0, "nikcli", `untrusted: ${key}`)
+    const talk = applyExit(emptyTalk(), 1, T0, "ragu", `untrusted: ${key}`)
     expect(talk.messages.at(-1)?.text).not.toContain(key)
     expect(serializeTalk(talk)).not.toContain(key)
   })
@@ -237,7 +237,7 @@ describe("storage", () => {
   })
 
   test("a global bot's archive in another project is empty, session included", () => {
-    const path = "C:/Users/me/AppData/nikcli/agent/revisore.md"
+    const path = "C:/Users/me/AppData/ragu/agent/revisore.md"
     const keyA = talkKey(path, "C:/proj-a")
     const keyB = talkKey(path, "C:/proj-b")
     expect(keyA).not.toBe(keyB)

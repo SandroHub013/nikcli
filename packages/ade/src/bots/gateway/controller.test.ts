@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { t } from "../../i18n"
-import type { AgentFile } from "../nikcli"
+import type { AgentFile } from "../ragu"
 import { emptyTalk, type PendingPermission } from "../talk"
 import { turnsRunning } from "../terms"
 import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "../turn"
@@ -390,8 +390,8 @@ describe("the gateways' controller", () => {
     localStorage.setItem(storage, JSON.stringify({ a: "s-vecchia", b: { project: "C:/p", runner: "claude" }, c: 7 }))
     const sessions = localSessionStore(storage)
     for (const key of ["a", "b", "c", "d"]) expect(sessions.get(key)).toBeUndefined()
-    sessions.set("a", { project: "C:/p", runner: "nikcli", sessionId: "s-1" })
-    expect(localSessionStore(storage).get("a")).toEqual({ project: "C:/p", runner: "nikcli", sessionId: "s-1" })
+    sessions.set("a", { project: "C:/p", runner: "ragu", sessionId: "s-1" })
+    expect(localSessionStore(storage).get("a")).toEqual({ project: "C:/p", runner: "ragu", sessionId: "s-1" })
     localStorage.removeItem(storage)
   })
 
@@ -498,15 +498,15 @@ describe("the gateways' controller", () => {
 
 /*
  * G5, D93: a turn from a chat has no shell unless the owner turned on the
- * bot's remote commands; then every command nikcli asks about is asked on the
+ * bot's remote commands; then every command ragu asks about is asked on the
  * phone, and no answer in time is a no.
  */
 describe("the tools of a turn from a chat", () => {
-  const NIKCLI: AgentFile = { ...BOT, runner: "nikcli" }
-  const nikcli = async () => ({ ok: true as const, bot: NIKCLI, fingerprint: "f-1" })
+  const RAGU: AgentFile = { ...BOT, runner: "ragu" }
+  const ragu = async () => ({ ok: true as const, bot: RAGU, fingerprint: "f-1" })
   const on = { commands: true, fingerprint: "f-1" }
 
-  /** A question as nikcli's server event gives it (B8d). */
+  /** A question as ragu's server event gives it (B8d). */
   const asking = (permission: string, patterns: string): PendingPermission => ({
     requestID: `per_${patterns}`,
     permission,
@@ -537,7 +537,7 @@ describe("the tools of a turn from a chat", () => {
   }
 
   test("with nothing turned on the turn gets no shell", async () => {
-    for (const loadBot of [trusted, nikcli]) {
+    for (const loadBot of [trusted, ragu]) {
       const b = bridge()
       const turns = typedTurns()
       await startGatewayController({ bridge: b.fake, runTurn: turns.runTurn, loadBot, sessions: memorySessionStore() })
@@ -548,17 +548,17 @@ describe("the tools of a turn from a chat", () => {
   })
 
   /*
-   * G5 review, M2: with the commands off nobody was watching nikcli's menu, so
+   * G5 review, M2: with the commands off nobody was watching ragu's menu, so
    * any question (outside the project, a `.env`, a loop) left the turn waiting
    * until it timed out, «sta scrivendo» on the phone the whole time.
    */
-  test("with the commands off nikcli's every question is answered no at once, and the chat is told once", async () => {
+  test("with the commands off ragu's every question is answered no at once, and the chat is told once", async () => {
     const b = bridge()
     const turns = typedTurns()
     await startGatewayController({
       bridge: b.fake,
       runTurn: turns.runTurn,
-      loadBot: nikcli,
+      loadBot: ragu,
       sessions: memorySessionStore(),
     })
     b.emit("leggi i file fuori")
@@ -590,7 +590,7 @@ describe("the tools of a turn from a chat", () => {
     await startGatewayController({
       bridge: b.fake,
       runTurn: turns.runTurn,
-      loadBot: nikcli,
+      loadBot: ragu,
       sessions: memorySessionStore(),
       remote: () => on,
     })
@@ -606,14 +606,14 @@ describe("the tools of a turn from a chat", () => {
     expect(b.questions).toHaveLength(0)
   })
 
-  /* B8d: a question is nikcli's event with its id; no output is read, so nothing the model writes can be one. */
-  test("a nikcli turn from a chat takes its questions as events", async () => {
+  /* B8d: a question is ragu's event with its id; no output is read, so nothing the model writes can be one. */
+  test("a ragu turn from a chat takes its questions as events", async () => {
     const b = bridge()
     const turns = typedTurns()
     await startGatewayController({
       bridge: b.fake,
       runTurn: turns.runTurn,
-      loadBot: nikcli,
+      loadBot: ragu,
       sessions: memorySessionStore(),
       remote: () => on,
     })
@@ -635,13 +635,13 @@ describe("the tools of a turn from a chat", () => {
     }
   })
 
-  test("with remote commands on, nikcli's question goes to the phone and only a yes from there says yes", async () => {
+  test("with remote commands on, ragu's question goes to the phone and only a yes from there says yes", async () => {
     const b = bridge()
     const turns = typedTurns()
     await startGatewayController({
       bridge: b.fake,
       runTurn: turns.runTurn,
-      loadBot: nikcli,
+      loadBot: ragu,
       sessions: memorySessionStore(),
       remote: () => on,
     })
@@ -683,7 +683,7 @@ describe("the tools of a turn from a chat", () => {
     await startGatewayController({
       bridge: b.fake,
       runTurn: turns.runTurn,
-      loadBot: nikcli,
+      loadBot: ragu,
       sessions: memorySessionStore(),
       remote: () => on,
       approvalTimeoutMs: 20,
@@ -707,7 +707,7 @@ describe("the tools of a turn from a chat", () => {
     await startGatewayController({
       bridge: b.fake,
       runTurn: turns.runTurn,
-      loadBot: nikcli,
+      loadBot: ragu,
       sessions: memorySessionStore(),
       remote: () => on,
     })
@@ -731,7 +731,7 @@ describe("the tools of a turn from a chat", () => {
       await startGatewayController({
         bridge: b.fake,
         runTurn: turns.runTurn,
-        loadBot: nikcli,
+        loadBot: ragu,
         sessions: memorySessionStore(),
         remote: () => saved,
       })
@@ -755,7 +755,7 @@ describe("the tools of a turn from a chat", () => {
       await startGatewayController({
         bridge: b.fake,
         runTurn: turns.runTurn,
-        loadBot: nikcli,
+        loadBot: ragu,
         sessions: memorySessionStore(),
         remote: lookup,
       })
@@ -797,7 +797,7 @@ describe("the tools of a turn from a chat", () => {
     await startGatewayController({
       bridge: b.fake,
       runTurn: turns.runTurn,
-      loadBot: nikcli,
+      loadBot: ragu,
       sessions: memorySessionStore(),
       remote: (bot) => (bot === "C:/altro.md" ? on : REMOTE_OFF),
     })
@@ -834,8 +834,8 @@ describe("the remote commands saved per bot", () => {
     expect(memory.get("a.md")).toEqual({ commands: true, fingerprint: "f-1" })
   })
 
-  test("offered for nikcli only: Claude Code and Codex cannot ask about each command (G5 review, M1)", () => {
-    expect(offersRemoteCommands("nikcli")).toBe(true)
+  test("offered for ragu only: Claude Code and Codex cannot ask about each command (G5 review, M1)", () => {
+    expect(offersRemoteCommands("ragu")).toBe(true)
     expect(offersRemoteCommands(undefined)).toBe(true)
     expect(offersRemoteCommands("claude")).toBe(false)
     expect(offersRemoteCommands("codex")).toBe(false)

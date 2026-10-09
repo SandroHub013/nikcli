@@ -1,0 +1,350 @@
+import { randomBytes } from "crypto"
+import { adjectives, animals, colors, uniqueNamesGenerator } from "unique-names-generator"
+import z from "zod"
+import { Scheduler } from "@/scheduler"
+import { Session } from "@/session"
+import { SessionPrompt } from "@/session/prompt"
+import { bunUtils } from "@/bun"
+import { Log } from "@ragu/util/log"
+import { Provider } from "@/provider/provider"
+import { Effect } from "effect"
+import { runPromiseWithLayer, withCurrentInstance, withInstanceAsync } from "@/effect"
+import { RoutineRepo } from "./repo"
+import type { InstanceContext } from "@/effect"
+
+function runProvider<A, E>(effect: Effect.Effect<A, E, Provider.Service>) {
+  return runPromiseWithLayer(Provider.defaultLayer, withCurrentInstance(effect))
+}
+
+function runSessionPrompt<A, E>(effect: Effect.Effect<A, E, SessionPrompt.Service>) {
+  return runPromiseWithLayer(SessionPrompt.defaultLayer, withCurrentInstance(effect))
+}
+
+function runSession<A, E>(effect: Effect.Effect<A, E, Session.Service>) {
+  return runPromiseWithLayer(Session.defaultLayer, withCurrentInstance(effect))
+}
+
+function defaultProviderModel() {
+  return runProvider(
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      return yield* provider.defaultModel()
+    }),
+  )
+}
+
+export namespace Routine {
+  const log = Log.create({ service: "routine" })
+
+  // ── Zod schemas ────────────────────────────────────────────────────────────
+
+  export const TriggerSchedule = z
+    .object({
+      type: z.literal("schedule"),
+      cron: z.string(),
+      enabled: z.boolean(),
+    })
+    .meta({ ref: "RoutineTriggerSchedule" })
+
+  export const TriggerApi = z
+    .object({
+      type: z.literal("api"),
+      token: z.string(),
+      enabled: z.boolean(),
+    })
+    .meta({ ref: "RoutineTriggerApi" })
+
+  export const Trigger = z.discriminatedUnion("type", [TriggerSchedule, TriggerApi]).meta({ ref: "RoutineTrigger" })
+
+  export const Record = z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      prompt: z.string(),
+      triggers: z.array(Trigger),
+      model: z
+        .object({
+          providerID: z.string(),
+          modelID: z.string(),
+        })
+        .optional(),
+      paused: z.boolean(),
+      projectID: z.string(),
+      directory: z.string(),
+      createdAt: z.number(),
+      updatedAt: z.number(),
+      lastRunAt: z.number().optional(),
+      lastSessionID: z.string().optional(),
+    })
+    .meta({ ref: "Routine" })
+
+  export const CreateInput = z
+    .object({
+      name: z.string().trim().min(1),
+      prompt: z.string().trim().min(1),
+      triggers: z.array(Trigger).optional(),
+      model: z
+        .object({
+          providerID: z.string(),
+          modelID: z.string(),
+        })
+        .optional(),
+    })
+    .meta({ ref: "RoutineCreateInput" })
+
+  export const UpdateInput = CreateInput.partial()
+    .extend({ paused: z.boolean().optional() })
+    .meta({ ref: "RoutineUpdateInput" })
+
+  // ── Types ──────────────────────────────────────────────────────────────────
+
+  export type TriggerSchedule = z.infer<typeof TriggerSchedule>
+  export type TriggerApi = z.infer<typeof TriggerApi>
+  export type Trigger = z.infer<typeof Trigger>
+  export type Record = z.infer<typeof Record>
+  export type CreateInput = z.infer<typeof CreateInput>
+  export type UpdateInput = z.infer<typeof UpdateInput>
+
+  // ── Identity ───────────────────────────────────────────────────────────────
+
+  function missing(id: string): never {
+    throw new Error(`Routine "${id}" not found.`)
+  }
+
+  function generateID() {
+    return uniqueNamesGenerator({ dictionaries: [adjectives, colors, animals], separator: "-", length: 3 })
+  }
+
+  function generateApiToken() {
+    return `nkr_${randomBytes(32).toString("hex")}`
+  }
+
+  // ── Cron interval parser ───────────────────────────────────────────────────
+
+  export const SUPPORTED_CRON_HELP =
+    "Supported schedules: standard 5-field cron, @hourly/@daily/@weekly/@monthly/@yearly, or */N minutes."
+
+  // Expand star-slash-N (minutes) into a 5-field expression Bun.cron accepts.
+  export function normalizeCron(cron: string): string {
+    const trimmed = cron.trim()
+    if (/^\*\/\d+$/.test(trimmed)) return `${trimmed} * * * *`
+    return trimmed
+  }
+
+  export function parseCron(cron: string): Date | null {
+    const expr = normalizeCron(cron)
+    if (!expr) return null
+    try {
+      return bunUtils.cron.parse(expr) ?? null
+    } catch {
+      return null
+    }
+  }
+
+  /** True when the expression is a valid in-process cron schedule. */
+  export function parseCronInterval(cron: string): number | null {
+    const next = parseCron(cron)
+    if (!next) return null
+    return Math.max(1, next.getTime() - Date.now())
+  }
+
+  function validateTriggers(triggers: Trigger[]) {
+    for (const trigger of triggers) {
+      if (trigger.type === "schedule" && trigger.enabled && !parseCron(trigger.cron)) {
+        throw new Error(`Unsupported cron pattern "${trigger.cron}". ${SUPPORTED_CRON_HELP}`)
+      }
+    }
+  }
+
+  // ── Scheduler helpers ──────────────────────────────────────────────────────
+
+  function schedulerID(id: string) {
+    return `routine-${id}`
+  }
+
+  function unregisterScheduler(id: string) {
+    Scheduler.unregister(schedulerID(id), "instance")
+  }
+
+  function registerScheduler(routine: Record) {
+    const scheduleTrigger = routine.triggers.find((t): t is TriggerSchedule => t.type === "schedule" && t.enabled)
+    if (!scheduleTrigger || routine.paused) {
+      unregisterScheduler(routine.id)
+      return
+    }
+
+    const expr = normalizeCron(scheduleTrigger.cron)
+    if (!parseCron(expr)) {
+      unregisterScheduler(routine.id)
+      log.warn("unrecognized cron pattern, skipping scheduler registration", {
+        id: routine.id,
+        cron: scheduleTrigger.cron,
+      })
+      return
+    }
+
+    log.info("registering scheduler", { id: routine.id, cron: expr })
+
+    Scheduler.register({
+      id: schedulerID(routine.id),
+      cron: expr,
+      scope: "instance",
+      skipInitialRun: true,
+      run: async () => {
+        // The routine records the directory it belongs to, so this re-enters
+        // that instance and hands the body the context it installed rather
+        // than reading whatever scope the timer fired on.
+        await withInstanceAsync({ directory: routine.directory }, (instance) => run(instance, routine.id))
+      },
+    })
+  }
+
+  // ── CRUD ───────────────────────────────────────────────────────────────────
+
+  export async function list(instance: InstanceContext): Promise<Record[]> {
+    // Resolve the project id in the caller's instance scope, exactly like
+    // `LoopManager.list` (`src/loop/manager.ts`).
+    return Effect.runSync(RoutineRepo.list(instance.project.id))
+  }
+
+  export async function get(instance: InstanceContext, id: string): Promise<Record | undefined> {
+    return Effect.runSync(RoutineRepo.get(instance.project.id, id))
+  }
+
+  export async function getByToken(instance: InstanceContext, token: string): Promise<Record | null> {
+    const all = await list(instance)
+    return (
+      all.find((r) => r.triggers.some((t): t is TriggerApi => t.type === "api" && t.enabled && t.token === token)) ??
+      null
+    )
+  }
+
+  export async function create(instance: InstanceContext, input: CreateInput): Promise<Record> {
+    const id = generateID()
+    const now = Date.now()
+
+    // Auto-inject an API trigger token if none supplied
+    const triggers: Trigger[] = input.triggers ?? []
+    validateTriggers(triggers)
+    const hasApiTrigger = triggers.some((t) => t.type === "api")
+    if (!hasApiTrigger) {
+      triggers.push({ type: "api", token: generateApiToken(), enabled: false })
+    }
+
+    // Capture the default model if not explicitly provided
+    let model: Record["model"] = input.model
+    if (!model) {
+      model = await defaultProviderModel()
+    }
+
+    const record: Record = {
+      id,
+      name: input.name,
+      prompt: input.prompt,
+      triggers,
+      model,
+      paused: false,
+      projectID: instance.project.id,
+      directory: instance.directory,
+      createdAt: now,
+      updatedAt: now,
+    }
+
+    Effect.runSync(RoutineRepo.upsert(instance.project.id, record))
+    log.info("created", { id, name: record.name })
+    registerScheduler(record)
+    return record
+  }
+
+  export async function update(instance: InstanceContext, id: string, input: UpdateInput): Promise<Record> {
+    if (input.triggers) validateTriggers(input.triggers)
+    const record = Effect.runSync(
+      RoutineRepo.update(instance.project.id, id, (draft) => {
+        if (input.name !== undefined) draft.name = input.name
+        if (input.prompt !== undefined) draft.prompt = input.prompt
+        if (input.triggers !== undefined) draft.triggers = input.triggers
+        if (input.paused !== undefined) draft.paused = input.paused
+        if (input.model !== undefined) draft.model = input.model
+        draft.updatedAt = Date.now()
+      }),
+    )
+    if (!record) missing(id)
+    registerScheduler(record)
+    return record
+  }
+
+  export async function remove(instance: InstanceContext, id: string): Promise<void> {
+    unregisterScheduler(id)
+    Effect.runSync(RoutineRepo.remove(instance.project.id, id))
+    log.info("removed", { id })
+  }
+
+  export async function pause(instance: InstanceContext, id: string): Promise<Record> {
+    return update(instance, id, { paused: true })
+  }
+
+  export async function resume(instance: InstanceContext, id: string): Promise<Record> {
+    return update(instance, id, { paused: false })
+  }
+
+  // ── Run ────────────────────────────────────────────────────────────────────
+
+  export async function run(
+    instance: InstanceContext,
+    id: string,
+    input?: { text?: string; model?: { providerID: string; modelID: string } },
+  ): Promise<Session.Info> {
+    const routine = await get(instance, id)
+    if (!routine) missing(id)
+    log.info("running", { id, name: routine.name, model: input?.model ?? routine.model })
+
+    const session = await runSession(
+      Effect.gen(function* () {
+        const sessionService = yield* Session.Service
+        return yield* sessionService.create({ title: `Routine: ${routine.name}` })
+      }),
+    )
+    const text = input?.text?.trim()
+    const prompt = text ? `${routine.prompt}\n\nRun context:\n${text}` : routine.prompt
+
+    // Resolve the model to use: input > routine record > global default
+    const modelToUse = input?.model ?? routine.model ?? (await defaultProviderModel())
+
+    // Fire-and-forget the prompt — the route caller can track via the session ID
+    void runSessionPrompt(
+      Effect.gen(function* () {
+        const sessionPrompt = yield* SessionPrompt.Service
+        return yield* sessionPrompt.prompt({
+          sessionID: session.id,
+          parts: [{ type: "text", text: prompt }],
+          model: modelToUse,
+        })
+      }),
+    )
+
+    const updated = Effect.runSync(
+      RoutineRepo.update(instance.project.id, id, (draft) => {
+        draft.lastRunAt = Date.now()
+        draft.lastSessionID = session.id
+        draft.updatedAt = Date.now()
+      }),
+    )
+    if (!updated) missing(id)
+
+    return session
+  }
+
+  // ── Bootstrap: re-register all active schedules on startup ─────────────────
+
+  export async function restoreSchedulers(instance: InstanceContext): Promise<void> {
+    try {
+      const records = await list(instance)
+      for (const record of records) {
+        registerScheduler(record)
+      }
+      log.info("restored schedulers", { count: records.length })
+    } catch (error) {
+      log.error("failed to restore schedulers", { error })
+    }
+  }
+}

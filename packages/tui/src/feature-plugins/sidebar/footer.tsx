@@ -1,7 +1,7 @@
-import { Plugin } from "@nikcli-ai/plugin/v2/tui"
+import { Plugin } from "@ragu/plugin/v2/tui"
 import { createMemo, Show } from "solid-js"
-import { Global } from "@nikcli-ai/util/global"
-import { VERSION } from "@nikcli-ai/util/version"
+import { Global } from "@ragu/util/global"
+import { VERSION } from "@ragu/util/version"
 import { useKV } from "@tui/context/kv"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
@@ -12,7 +12,7 @@ function View() {
   const theme = useTheme().theme
   const hasProvider = createMemo(() =>
     sync.data.provider.some(
-      (item) => item.id !== "nikcli" || Object.values(item.models).some((model) => model.cost?.input !== 0),
+      (item) => item.id !== "ragu" || Object.values(item.models).some((model) => model.cost?.input !== 0),
     ),
   )
   const showGettingStarted = createMemo(() => !hasProvider() && !kv.get("dismissed_getting_started", false))
@@ -47,7 +47,7 @@ function View() {
                 ✕
               </text>
             </box>
-            <text fg={theme.foreground.muted}>Nikcli includes free models so you can start immediately.</text>
+            <text fg={theme.foreground.muted}>Ragu includes free models so you can start immediately.</text>
             <text fg={theme.foreground.muted}>
               Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
             </text>

@@ -99,7 +99,7 @@ export async function planDocs(input: {
       messages: [
         {
           role: "system",
-          content: `You route questions about nikcli to its documentation. Call open_docs with the paths that answer the question. Table of contents:\n${toc}`,
+          content: `You route questions about ragu to its documentation. Call open_docs with the paths that answer the question. Table of contents:\n${toc}`,
         },
         { role: "user", content: input.question },
       ],

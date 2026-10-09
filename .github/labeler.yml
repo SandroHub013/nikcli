@@ -3,11 +3,11 @@
 
 area/cli:
   - changed-files:
-      - any-glob-to-any-file: "packages/nikcli/src/cli/**"
+      - any-glob-to-any-file: "packages/ragu/src/cli/**"
 
 area/server:
   - changed-files:
-      - any-glob-to-any-file: "packages/nikcli/src/server/**"
+      - any-glob-to-any-file: "packages/ragu/src/server/**"
 
 area/app:
   - changed-files:

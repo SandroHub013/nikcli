@@ -13,7 +13,7 @@ function getIndexHtml(): string {
     return `<!DOCTYPE html>
 <html>
 <head>
-  <title>nikcli Companion</title>
+  <title>ragu Companion</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,7 +83,7 @@ export function CompanionRoutes() {
       sessionId,
       wsUrl: `ws://${host}:${port}/companion/ws/${sessionId}`,
       cliUrl: `ws://${host}:${port}/companion/cli/${sessionId}`,
-      instructions: `nikcli --sdk-url ws://${host}:${port}/companion/cli/${sessionId} --print --output-format stream-json --input-format stream-json -p ""`,
+      instructions: `ragu --sdk-url ws://${host}:${port}/companion/cli/${sessionId} --print --output-format stream-json --input-format stream-json -p ""`,
     })
   })
 

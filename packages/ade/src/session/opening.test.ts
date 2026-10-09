@@ -95,7 +95,7 @@ describe("decideOpening", () => {
     ["codex", 683],
     ["opencode", 1093],
     ["kimi", 1377],
-    ["nikcli", 1912],
+    ["ragu", 1912],
     ["gemini", 2398],
     ["hermes", 22954],
   ])("waits for %s, which first speaks at %ims", (_agent, firstByteAt) => {

@@ -11,7 +11,7 @@
  * orchestrator's bus events for live updates. A local KV cache keeps the
  * sidebar snappy when the server is unreachable.
  */
-import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@nikcli-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@ragu/plugin/tui"
 import { createMemo, For, Show } from "solid-js"
 import * as Store from "./store"
 import * as Runner from "./runner"

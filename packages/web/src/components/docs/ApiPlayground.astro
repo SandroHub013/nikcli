@@ -3,9 +3,9 @@
  * Connection settings for the "Try it" panels on this page.
  *
  * The docs are static, so every request is made from the reader's own browser
- * to their own nikcli server. That works because the server's CORS allowlist
+ * to their own ragu server. That works because the server's CORS allowlist
  * already includes `*.nikcli-ai.dev` and permits exactly the headers used here
- * (`Authorization`, `Content-Type`, `x-nikcli-directory`, `x-nikcli-workspace`)
+ * (`Authorization`, `Content-Type`, `x-ragu-directory`, `x-ragu-workspace`)
  * — see `server-router.ts`. Nothing is proxied through this site, and no value
  * entered below ever leaves the browser.
  */
@@ -50,14 +50,14 @@
     <summary>How this works</summary>
     <div class="api-details-body">
       <p class="api-pg-sub">
-        Start a server with <code>nikcli serve --hostname 127.0.0.1 --port 4096</code>. Requests go
+        Start a server with <code>ragu serve --hostname 127.0.0.1 --port 4096</code>. Requests go
         straight from this page to that address — the browser allows it because loopback counts as a
         secure origin, and the server allows it because <code>nikcli-ai.dev</code> is in its CORS
         allowlist.
       </p>
       <p class="api-pg-sub">
         To try things without touching your real sessions or config, start the server with
-        <code>NIKCLI_TEST_HOME</code> pointed at a throwaway directory — see
+        <code>RAGU_TEST_HOME</code> pointed at a throwaway directory — see
         <a href="/docs/guides/api-tour">the guided tour</a>.
       </p>
     </div>

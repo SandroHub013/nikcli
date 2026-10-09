@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
- * Standalone entry for bun compile → single executable (nikcli-remote).
- * Used by: bun build src/cli.ts --compile --outfile=dist/nikcli-remote
+ * Standalone entry for bun compile → single executable (ragu-remote).
+ * Used by: bun build src/cli.ts --compile --outfile=dist/ragu-remote
  */
 import { parseArgs } from "util"
 import { createRemoteServer } from "./index"
@@ -25,7 +25,7 @@ async function main() {
     maxConnections: parseInt(values["max-connections"] as string, 10),
   })
 
-  console.log("\nNikCLI Remote Terminal")
+  console.log("\nRagu Remote Terminal")
   console.log("======================")
   console.log(`Local URL:  ${session.localUrl}`)
   console.log(`Access URL: ${session.qrUrl}`) // qrUrl contains the ?t=token required

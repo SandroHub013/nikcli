@@ -1,4 +1,4 @@
-import type { Event as NikcliEvent, Message, MobileSessionDetail, Part } from "@nikcli-ai/sdk/httpapi"
+import type { Event as RaguEvent, Message, MobileSessionDetail, Part } from "@ragu/sdk/httpapi"
 
 export type MessageWithParts = MobileSessionDetail["messages"][number]
 
@@ -32,7 +32,7 @@ export function upsertPart(messages: MessageWithParts[], part: Part) {
   return next
 }
 
-export function reduceSessionDetail(detail: MobileSessionDetail, event: NikcliEvent) {
+export function reduceSessionDetail(detail: MobileSessionDetail, event: RaguEvent) {
   if (event.type === "message.updated") {
     return { ...detail, messages: upsertMessage(detail.messages, event.properties.info) }
   }
@@ -100,7 +100,7 @@ export function reduceSessionDetail(detail: MobileSessionDetail, event: NikcliEv
   return detail
 }
 
-export function sessionErrorMessage(event: NikcliEvent) {
+export function sessionErrorMessage(event: RaguEvent) {
   if (event.type !== "session.error") return null
 
   const error = event.properties.error

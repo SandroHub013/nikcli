@@ -1,5 +1,5 @@
 {
-  "name": "@nikcli-ai/console-function",
+  "name": "@ragu/console-function",
   "version": "1.431.0",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
@@ -18,8 +18,8 @@
   },
   "dependencies": {
     "@hono/zod-validator": "catalog:",
-    "@nikcli-ai/console-core": "workspace:*",
-    "@nikcli-ai/console-resource": "workspace:*",
+    "@ragu/console-core": "workspace:*",
+    "@ragu/console-resource": "workspace:*",
     "@openauthjs/openauth": "0.0.0-20250322224806",
     "hono": "catalog:",
     "zod": "catalog:"

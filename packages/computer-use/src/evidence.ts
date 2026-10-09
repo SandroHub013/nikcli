@@ -2,7 +2,7 @@
  * Evidence bundling — turn a captured screenshot (and optional recording) into
  * a PR-ready artifact directory: screenshot, demo.mp4, preview.gif, a
  * hash-bearing manifest.json and pr.md. Mirrors
- * `@nikcli-ai/browser-control`'s evidence shape one-to-one, so the same
+ * `@ragu/browser-control`'s evidence shape one-to-one, so the same
  * discovery / merge helpers in CI can treat both the same way.
  *
  * Because there's no real "video" of a desktop session the way Playwright

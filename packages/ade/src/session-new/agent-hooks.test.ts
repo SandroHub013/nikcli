@@ -26,7 +26,7 @@ import {
   usesExecForm,
   type HookStatus,
 } from "./agent-hooks"
-import { NIKCLI_PLUGIN_NAME, NIKCLI_PLUGIN_SOURCE } from "./nikcli-plugin"
+import { RAGU_PLUGIN_NAME, RAGU_PLUGIN_SOURCE } from "./ragu-plugin"
 import { codeOf } from "../test-support/source-text"
 
 /**
@@ -78,7 +78,7 @@ const CLAUDE_SCRIPT = "C:\\Users\\x\\.claude\\hooks\\ade-agent-session.ps1"
 
 describe("targets", () => {
   test("only the CLIs whose format has been read off disk or off their loader", () => {
-    expect(HOOK_TARGETS.map((target) => target.id)).toEqual(["claude-code", "codex", "nikcli"])
+    expect(HOOK_TARGETS.map((target) => target.id)).toEqual(["claude-code", "codex", "ragu"])
   })
 
   test("every target is an agent ADE can also resume", async () => {
@@ -128,7 +128,7 @@ describe("the targets here and the paths in Rust", () => {
   test("the plugin's text is compiled into Rust, from the file the tests load", () => {
     expect(source).toContain('const PLUGIN_TEXT: &str = include_str!("../plugins/ade-agent-session.js");')
     expect(
-      new URL(NIKCLI_PLUGIN_SOURCE, import.meta.url).pathname.endsWith("/src-tauri/plugins/ade-agent-session.js"),
+      new URL(RAGU_PLUGIN_SOURCE, import.meta.url).pathname.endsWith("/src-tauri/plugins/ade-agent-session.js"),
     ).toBe(true)
   })
 
@@ -147,11 +147,11 @@ describe("the targets here and the paths in Rust", () => {
     }
   })
 
-  test("and nikcli's plugin under the same marker, with no configuration", () => {
-    expect(NIKCLI_PLUGIN_NAME).toBe(`${HOOK_MARKER}.js`)
-    expect(source).toContain(`const PLUGIN_NAME: &str = "${NIKCLI_PLUGIN_NAME}";`)
+  test("and ragu's plugin under the same marker, with no configuration", () => {
+    expect(RAGU_PLUGIN_NAME).toBe(`${HOOK_MARKER}.js`)
+    expect(source).toContain(`const PLUGIN_NAME: &str = "${RAGU_PLUGIN_NAME}";`)
     expect(source).toMatch(
-      /id: "nikcli",\s*reports_as: "nikcli",\s*base: Base::ConfigHome,\s*config: &\[\],\s*script: &\["nikcli", "plugin", "tui", PLUGIN_NAME\]/,
+      /id: "ragu",\s*reports_as: "ragu",\s*base: Base::ConfigHome,\s*config: &\[\],\s*script: &\["ragu", "plugin", "tui", PLUGIN_NAME\]/,
     )
   })
 
@@ -661,9 +661,9 @@ describe("activity events", () => {
   })
 })
 
-/* nikcli: a plugin file and no configuration, off until the user switches it on. */
-describe("nikcli's TUI plugin as a target", () => {
-  const nikcli = hookTarget("nikcli")!
+/* ragu: a plugin file and no configuration, off until the user switches it on. */
+describe("ragu's TUI plugin as a target", () => {
+  const ragu = hookTarget("ragu")!
   const PLUGIN = "C:\\Users\\x\\AppData\\Roaming\\nikcli\\plugin\\tui\\ade-agent-session.js"
 
   function disk(scriptPresent = false, scriptCurrent = true) {
@@ -687,13 +687,13 @@ describe("nikcli's TUI plugin as a target", () => {
   }
 
   test("is a plugin with nothing to edit", () => {
-    expect(nikcli).toMatchObject({ kind: "tui-plugin", config: [], agent: "nikcli" })
-    expect(nikcli.script.at(-1)).toBe(NIKCLI_PLUGIN_NAME)
+    expect(ragu).toMatchObject({ kind: "tui-plugin", config: [], agent: "ragu" })
+    expect(ragu.script.at(-1)).toBe(RAGU_PLUGIN_NAME)
   })
 
   test("off until installed: the file being there is the whole install", async () => {
     const { host } = disk()
-    expect(await readHookStatus(host, nikcli)).toMatchObject({
+    expect(await readHookStatus(host, ragu)).toMatchObject({
       installed: false,
       broken: false,
       configPath: "",
@@ -703,10 +703,10 @@ describe("nikcli's TUI plugin as a target", () => {
 
   test("installing asks Rust for its plugin, sending no text; removing takes only the plugin away", async () => {
     const { writes, host } = disk()
-    expect((await setHook(host, nikcli, true)).installed).toBe(true)
+    expect((await setHook(host, ragu, true)).installed).toBe(true)
     // BASSO 1: nothing of the page's is written, the text is the one compiled into Rust.
     expect(writes).toEqual([{ configText: "", script: "" }])
-    expect((await setHook(host, nikcli, false)).installed).toBe(false)
+    expect((await setHook(host, ragu, false)).installed).toBe(false)
     expect(writes[1]).toEqual({ configText: "", script: null })
   })
 
@@ -717,15 +717,15 @@ describe("nikcli's TUI plugin as a target", () => {
    */
   test("an installed plugin that is not this version's is not rewritten at start: it is said to be outdated", async () => {
     const off = disk(false)
-    expect(await refreshHookScript(off.host, nikcli, undefined)).toBeUndefined()
+    expect(await refreshHookScript(off.host, ragu, undefined)).toBeUndefined()
     expect(off.writes).toEqual([])
     const older = disk(true, false)
-    expect(await refreshHookScript(older.host, nikcli, undefined)).toBeUndefined()
+    expect(await refreshHookScript(older.host, ragu, undefined)).toBeUndefined()
     expect(older.writes).toEqual([])
-    expect(await readHookStatus(older.host, nikcli)).toMatchObject({ installed: true, outdated: true })
-    expect((await readHookStatus(disk(true, true).host, nikcli)).outdated).toBeUndefined()
+    expect(await readHookStatus(older.host, ragu)).toMatchObject({ installed: true, outdated: true })
+    expect((await readHookStatus(disk(true, true).host, ragu)).outdated).toBeUndefined()
     // The panel's button updates it, asking as any install does.
-    expect((await setHook(older.host, nikcli, true)).outdated).toBeUndefined()
+    expect((await setHook(older.host, ragu, true)).outdated).toBeUndefined()
     expect(older.writes).toEqual([{ configText: "", script: "" }])
   })
 

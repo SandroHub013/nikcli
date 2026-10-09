@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { admitProject, surfaceFingerprint } from "../bots/project-trust"
 import { memoryTrustStore } from "../bots/trust"
 import { FRESH_MS, isChatRefused, openChat, loadChatCatalog, within } from "./connection"
-import type { NikcliClient } from "@nikcli-ai/sdk/client"
+import type { RaguClient } from "@ragu/sdk/client"
 import type { ProxyEvent, ProxyRequest, ServerBridge } from "./transport"
 
 /*
@@ -61,7 +61,7 @@ describe("the chat on a folder", () => {
     expect(fake.starts).toEqual([PROJECT])
     expect(fake.sent).toHaveLength(1)
     const headers = new Map(fake.sent[0]!.headers.map(([name, value]) => [name.toLowerCase(), value]))
-    expect(headers.get("x-nikcli-directory")).toBe(PROJECT)
+    expect(headers.get("x-ragu-directory")).toBe(PROJECT)
   })
 
   test("a request for another folder, in the header or the query, does not leave", async () => {
@@ -227,7 +227,7 @@ describe("the chat on a folder", () => {
         get: async () => ({ data: { model: "openrouter/x:free" } }),
       },
       app: { agents: async () => ({ data: agents }) },
-    } as unknown as NikcliClient
+    } as unknown as RaguClient
     expect(await loadChatCatalog(client)).toEqual({
       configProviders: providers,
       agents,
@@ -240,7 +240,7 @@ describe("the chat on a folder", () => {
 describe("a catalog read has a time limit", () => {
   test("a server that never answers gives an unknown catalog, in time", async () => {
     const never = () => new Promise<never>(() => {})
-    const client = { app: { agents: never }, config: { get: never, providers: never } } as unknown as NikcliClient
+    const client = { app: { agents: never }, config: { get: never, providers: never } } as unknown as RaguClient
     const started = Date.now()
     const catalog = await loadChatCatalog(client, 20)
     expect(Date.now() - started).toBeLessThan(1000)

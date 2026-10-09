@@ -14,7 +14,7 @@ const agent = (paneId: string, state: Snapshot["agents"][number]["state"] = "wor
 
 const picture = (over: Partial<Snapshot> = {}): Snapshot => ({
   at: 1,
-  shops: [{ id: "s1", name: "nikcli" }],
+  shops: [{ id: "s1", name: "ragu" }],
   agents: [agent("n1"), agent("n2")],
   waiting: { decisions: 0 },
   ...over,

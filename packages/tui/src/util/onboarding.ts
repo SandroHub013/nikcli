@@ -1,4 +1,4 @@
-import type { UserSchema } from "@nikcli-ai/util/user-schema"
+import type { UserSchema } from "@ragu/util/user-schema"
 
 /**
  * Whether first-run onboarding produced an account.

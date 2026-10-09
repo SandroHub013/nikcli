@@ -84,7 +84,7 @@ const MAX_WAIT: Duration = Duration::from_secs(60);
 const RETRIES: usize = 3;
 const CALL_TIMEOUT: Duration = Duration::from_secs(20);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
-const USER_AGENT: &str = concat!("nikcli-ade/", env!("CARGO_PKG_VERSION"), " (gateway)");
+const USER_AGENT: &str = concat!("ragu-ade/", env!("CARGO_PKG_VERSION"), " (gateway)");
 
 /// The bot scopes this adapter uses, and the only ones the manifest asks for:
 /// `app_mentions:read` for a mention in a channel, `im:history` for a direct

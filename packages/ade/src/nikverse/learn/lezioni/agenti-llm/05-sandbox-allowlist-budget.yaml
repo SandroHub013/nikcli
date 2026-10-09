@@ -38,7 +38,7 @@ fonti:
     titolo: "OWASP Top 10 for LLM Applications: LLM06 Excessive Agency"
     url: https://genai.owasp.org/llm-top-10/
   - id: F6
-    titolo: "Documentazione di nikcli: pagina dei permessi (allow, ask, deny)"
+    titolo: "Documentazione di ragu: pagina dei permessi (allow, ask, deny)"
     url: https://github.com/nikcli/nikcli/blob/live-main/packages/web/src/pages/docs/permissions.astro
   - id: F7
     titolo: "OpenRouter: limiti delle API e dei modelli gratuiti"
@@ -290,5 +290,5 @@ esercizi:
         perche: "Eliminare copie di riserva compromette l'integrità e la disponibilità, non la riservatezza verso terzi."
 
 # Dubbi e verifiche:
-# - Aggiornata F6 con l'URL ufficiale della documentazione permessi di nikcli su GitHub.
+# - Aggiornata F6 con l'URL ufficiale della documentazione permessi di ragu su GitHub.
 # - Aggiunta F7 per i limiti dei modelli gratuiti (:free) da documentazione OpenRouter.

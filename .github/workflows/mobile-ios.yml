@@ -144,7 +144,7 @@ jobs:
           esac
           echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "Building nikcli mobile $VERSION_NAME ($BUILD_NUMBER)"
+          echo "Building ragu mobile $VERSION_NAME ($BUILD_NUMBER)"
 
       # `--no-install` keeps prebuild from running its own package-manager
       # install, which would fight the bun workspace resolution done above.
@@ -178,8 +178,8 @@ jobs:
           # `archive` + `exportArchive` cannot produce an .ipa without a signing
           # identity, so this builds the .app and packages Payload/ by hand.
           xcodebuild \
-            -workspace ios/nikcli.xcworkspace \
-            -scheme nikcli \
+            -workspace ios/ragu.xcworkspace \
+            -scheme ragu \
             -configuration Release \
             -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/dd-device" \
@@ -203,8 +203,8 @@ jobs:
         run: |
           set -euo pipefail
           xcodebuild \
-            -workspace ios/nikcli.xcworkspace \
-            -scheme nikcli \
+            -workspace ios/ragu.xcworkspace \
+            -scheme ragu \
             -configuration Release \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/dd-sim" \
@@ -249,30 +249,30 @@ jobs:
             echo "$app: main.jsbundle $size bytes"
           }
 
-          DEVICE_APP="$RUNNER_TEMP/dd-device/Build/Products/Release-iphoneos/nikcli.app"
+          DEVICE_APP="$RUNNER_TEMP/dd-device/Build/Products/Release-iphoneos/ragu.app"
           if [ -d "$DEVICE_APP" ]; then
             assert_has_bundle "$DEVICE_APP"
             WORK="$RUNNER_TEMP/payload"
             rm -rf "$WORK"
             mkdir -p "$WORK/Payload"
-            cp -R "$DEVICE_APP" "$WORK/Payload/nikcli.app"
+            cp -R "$DEVICE_APP" "$WORK/Payload/ragu.app"
             if [ "$STRIP_EXTENSIONS" = "true" ]; then
-              rm -rf "$WORK/Payload/nikcli.app/PlugIns" "$WORK/Payload/nikcli.app/Watch"
+              rm -rf "$WORK/Payload/ragu.app/PlugIns" "$WORK/Payload/ragu.app/Watch"
               echo "Stripped app extensions for free-Apple-ID sideloading."
             fi
             # A leftover signature would make the re-signer choke; there should
             # be none, so this is an assertion rather than a cleanup.
-            if codesign -dv "$WORK/Payload/nikcli.app" 2>/dev/null; then
+            if codesign -dv "$WORK/Payload/ragu.app" 2>/dev/null; then
               echo "::error::The app is code signed — this build is meant to be unsigned."
               exit 1
             fi
-            (cd "$WORK" && zip -qry "$STAGE/nikcli-${VERSION_NAME}-${BUILD_NUMBER}-unsigned.ipa" Payload)
+            (cd "$WORK" && zip -qry "$STAGE/ragu-${VERSION_NAME}-${BUILD_NUMBER}-unsigned.ipa" Payload)
           fi
 
-          SIM_APP="$RUNNER_TEMP/dd-sim/Build/Products/Release-iphonesimulator/nikcli.app"
+          SIM_APP="$RUNNER_TEMP/dd-sim/Build/Products/Release-iphonesimulator/ragu.app"
           if [ -d "$SIM_APP" ]; then
             assert_has_bundle "$SIM_APP"
-            (cd "$(dirname "$SIM_APP")" && zip -qry "$STAGE/nikcli-${VERSION_NAME}-${BUILD_NUMBER}-simulator.app.zip" nikcli.app)
+            (cd "$(dirname "$SIM_APP")" && zip -qry "$STAGE/ragu-${VERSION_NAME}-${BUILD_NUMBER}-simulator.app.zip" ragu.app)
           fi
 
           if [ -z "$(ls -A "$STAGE")" ]; then
@@ -282,9 +282,9 @@ jobs:
           # Named per-platform: the release attachment below uploads with
           # --clobber, and mobile-android.yml already publishes a plain
           # checksums.txt that this would otherwise overwrite.
-          (cd "$STAGE" && shasum -a 256 nikcli-* > checksums-ios.txt)
+          (cd "$STAGE" && shasum -a 256 ragu-* > checksums-ios.txt)
           {
-            echo "### nikcli mobile ${VERSION_NAME} (${BUILD_NUMBER}) — iOS"
+            echo "### ragu mobile ${VERSION_NAME} (${BUILD_NUMBER}) — iOS"
             echo
             echo '```'
             cat "$STAGE/checksums-ios.txt"
@@ -294,7 +294,7 @@ jobs:
             echo
             echo "- **iPhone/iPad**: re-sign it with your own free Apple ID using [Sideloadly](https://sideloadly.io) or [AltStore](https://altstore.io). The app then works for 7 days and must be refreshed; an Apple ID can hold 3 sideloaded apps at a time."
             echo "- **TrollStore / jailbroken device**: install the .ipa directly, no refresh needed."
-            echo "- **Mac**: unzip the simulator build and run \`xcrun simctl install booted nikcli.app\`."
+            echo "- **Mac**: unzip the simulator build and run \`xcrun simctl install booted ragu.app\`."
             echo
             echo "\`packages/mobile/scripts/sideload.sh\` automates the download and verification; see [packages/mobile/README.md](https://github.com/${{ github.repository }}/blob/live-main/packages/mobile/README.md)."
             if [ "$STRIP_EXTENSIONS" = "true" ]; then
@@ -307,7 +307,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: nikcli-ios-${{ steps.version.outputs.name }}-${{ steps.version.outputs.number }}
+          name: ragu-ios-${{ steps.version.outputs.name }}-${{ steps.version.outputs.number }}
           path: ${{ steps.package.outputs.stage }}
           if-no-files-found: error
           retention-days: 30

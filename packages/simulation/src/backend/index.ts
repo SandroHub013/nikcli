@@ -8,11 +8,11 @@ export interface Backend {
   readonly stop: () => void
 }
 
-/** Environment overrides for the nikcli worker that route its default model into this backend. */
-export function workerEnv(openai: string, inlineConfig = process.env.NIKCLI_CONFIG_CONTENT): Record<string, string> {
+/** Environment overrides for the ragu worker that route its default model into this backend. */
+export function workerEnv(openai: string, inlineConfig = process.env.RAGU_CONFIG_CONTENT): Record<string, string> {
   const inherited: unknown = inlineConfig ? JSON.parse(inlineConfig) : {}
   if (typeof inherited !== "object" || inherited === null || Array.isArray(inherited)) {
-    throw new Error("NIKCLI_CONFIG_CONTENT must be a JSON object in simulation mode")
+    throw new Error("RAGU_CONFIG_CONTENT must be a JSON object in simulation mode")
   }
   const current = inherited as Record<string, unknown>
   const providers =
@@ -26,7 +26,7 @@ export function workerEnv(openai: string, inlineConfig = process.env.NIKCLI_CONF
     provider: {
       ...providers,
       simulation: {
-        name: "Nikcli deterministic simulation",
+        name: "Ragu deterministic simulation",
         api: baseURL,
         npm: "@ai-sdk/openai-compatible",
         options: { apiKey: "simulation", baseURL, includeUsage: false },
@@ -43,9 +43,9 @@ export function workerEnv(openai: string, inlineConfig = process.env.NIKCLI_CONF
     },
   }
   return {
-    NIKCLI_CONFIG_CONTENT: JSON.stringify(config),
-    NIKCLI_DISABLE_MODELS_FETCH: "1",
-    NIKCLI_DISABLE_AUTOUPDATE: "1",
+    RAGU_CONFIG_CONTENT: JSON.stringify(config),
+    RAGU_DISABLE_MODELS_FETCH: "1",
+    RAGU_DISABLE_AUTOUPDATE: "1",
   }
 }
 
@@ -60,8 +60,8 @@ export async function start(
     endpoint: options.endpoint ?? manifest.endpoints.openai,
   })
   const control = SimulationControl.start(manifest.endpoints.backend, network)
-  process.stderr.write(`nikcli simulation OpenAI: ${network.url} (${network.mode})\n`)
-  process.stderr.write(`nikcli drive backend websocket: ${control.url}\n`)
+  process.stderr.write(`ragu simulation OpenAI: ${network.url} (${network.mode})\n`)
+  process.stderr.write(`ragu drive backend websocket: ${control.url}\n`)
   return {
     openai: network.url,
     control: control.url,

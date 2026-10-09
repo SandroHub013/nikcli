@@ -1,4 +1,4 @@
-name: nikcli-site-deploy
+name: ragu-site-deploy
 
 on:
   push:
@@ -48,7 +48,7 @@ jobs:
             exit 1
           fi
 
-      - name: Deploy nikcli site with SST
+      - name: Deploy ragu site with SST
         shell: bash
         run: |
           set -o pipefail

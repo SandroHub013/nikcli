@@ -1,6 +1,6 @@
 import { For, Show, createMemo } from "solid-js"
-import { Button } from "@nikcli-ai/ui/button"
-import { Tag } from "@nikcli-ai/ui/tag"
+import { Button } from "@ragu/ui/button"
+import { Tag } from "@ragu/ui/tag"
 import { app, createPoll } from "../lib/store"
 import { unwrap } from "../lib/api"
 import { bytes, compact, duration, pct, usd, when } from "../lib/format"
@@ -43,11 +43,11 @@ export function Overview(props: { go: (id: string) => void }) {
       }
     >
       <Problem error={app.error()} title="System probe failed" />
-      <Problem error={health().state === "down" ? health().error : undefined} title="nikcli service unreachable" />
+      <Problem error={health().state === "down" ? health().error : undefined} title="ragu service unreachable" />
       <Show when={!svc()}>
         <Problem
-          error="Start one with `nikcli serve --service` (or launch the nikcli TUI) and it will appear here."
-          title="No local nikcli service registered"
+          error="Start one with `ragu serve --service` (or launch the ragu TUI) and it will appear here."
+          title="No local ragu service registered"
         />
       </Show>
 
@@ -71,10 +71,10 @@ export function Overview(props: { go: (id: string) => void }) {
           }
         />
         <Stat
-          label="nikcli processes"
+          label="ragu processes"
           value={own().length}
           hint={`${bytes(ownRss())} resident · ${pct(ownCpu())} CPU`}
-          spark={h().map((s) => s.nikcliRss)}
+          spark={h().map((s) => s.raguRss)}
         />
         <Stat
           label="Host CPU"
@@ -235,8 +235,8 @@ export function Overview(props: { go: (id: string) => void }) {
         </Panel>
       </div>
 
-      <Panel title="nikcli memory over time (resident, all nikcli processes)">
-        <Spark values={h().map((s) => s.nikcliRss)} height={90} />
+      <Panel title="ragu memory over time (resident, all ragu processes)">
+        <Spark values={h().map((s) => s.raguRss)} height={90} />
         <div
           style={{
             display: "flex",
@@ -246,7 +246,7 @@ export function Overview(props: { go: (id: string) => void }) {
           }}
         >
           <span>{h().length ? when(h()[0].at) : ""}</span>
-          <span>peak {bytes(Math.max(0, ...h().map((s) => s.nikcliRss)))}</span>
+          <span>peak {bytes(Math.max(0, ...h().map((s) => s.raguRss)))}</span>
           <Bar value={memPct()} />
         </div>
       </Panel>

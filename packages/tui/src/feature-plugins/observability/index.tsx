@@ -8,7 +8,7 @@
  * settings panel, plus a "Live telemetry" command that jumps straight to the
  * streaming span viewer.
  */
-import type { TuiPlugin, TuiPluginModule } from "@nikcli-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginModule } from "@ragu/plugin/tui"
 import { DialogOpenTelemetry, DialogTelemetryLive } from "./dialogs"
 
 const id = "internal:observability"

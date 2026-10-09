@@ -1,5 +1,5 @@
 import { Show } from "solid-js"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 import type { PackView } from "../settings/voice-pack"
 
 /**

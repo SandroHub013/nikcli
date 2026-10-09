@@ -1,6 +1,6 @@
 ---
 layout: ../../layouts/Doc.astro
-title: Vercel AI SDK · nikcli Inference docs
+title: Vercel AI SDK · ragu Inference docs
 ---
 
 # Vercel AI SDK
@@ -11,14 +11,14 @@ The gateway is OpenAI-compatible, so use the `@ai-sdk/openai-compatible` provide
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
 import { generateText } from "ai"
 
-const nikcli = createOpenAICompatible({
-  name: "nikcli",
+const ragu = createOpenAICompatible({
+  name: "ragu",
   baseURL: "https://inference.nikcli-ai.dev/v1",
-  apiKey: process.env.NIKCLI_API_KEY!,
+  apiKey: process.env.RAGU_API_KEY!,
 })
 
 const { text } = await generateText({
-  model: nikcli("nikseek"),
+  model: ragu("nikseek"),
   prompt: "What's the capital of Slovenia?",
 })
 ```
@@ -30,7 +30,7 @@ import { streamText, tool } from "ai"
 import { z } from "zod"
 
 const { textStream } = await streamText({
-  model: nikcli("nikcli-coder"),
+  model: ragu("ragu-coder"),
   prompt: "Find the bug in this file",
   tools: {
     grep: tool({
@@ -47,7 +47,7 @@ const { textStream } = await streamText({
 
 ```ts
 const result = await generateText({
-  model: nikcli("nikseek:thinking"),
+  model: ragu("nikseek:thinking"),
   prompt: "Hard math question…",
 })
 // result.reasoningText is populated when the model supports it

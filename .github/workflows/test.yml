@@ -13,19 +13,19 @@ jobs:
       fail-fast: false
       matrix:
         settings:
-          # Test execution was removed from CI: the nikcli suite is not run by
+          # Test execution was removed from CI: the ragu suite is not run by
           # any workflow any more, and releases gate on typecheck alone. The
           # windows entry went with it — it only ever ran `bun test:e2e:local`,
           # which had been failing on every commit (the node_modules/.bin `bun`
           # shim wins the PATH lookup under the hoisted linker and dies with
           # "Bun failed to remap this bin"). Run the suite with `bun run test:ci`
-          # in packages/nikcli, which shards it so it does not OOM.
+          # in packages/ragu, which shards it so it does not OOM.
           - name: linux
             host: ubuntu-latest
             workdir: .
             command: |
               git config --global user.email "bot@nikcli-ai.dev"
-              git config --global user.name "nikcli"
+              git config --global user.name "ragu"
               bun turbo typecheck
     runs-on: ${{ matrix.settings.host }}
     defaults:
@@ -44,23 +44,23 @@ jobs:
         run: |
           if [ "${{ runner.os }}" = "Windows" ]; then
             {
-              printf '%s\n' "NIKCLI_E2E_ROOT=${{ runner.temp }}\\nikcli-e2e"
-              printf '%s\n' "NIKCLI_TEST_HOME=${{ runner.temp }}\\nikcli-e2e\\home"
-              printf '%s\n' "XDG_DATA_HOME=${{ runner.temp }}\\nikcli-e2e\\share"
-              printf '%s\n' "XDG_CACHE_HOME=${{ runner.temp }}\\nikcli-e2e\\cache"
-              printf '%s\n' "XDG_CONFIG_HOME=${{ runner.temp }}\\nikcli-e2e\\config"
-              printf '%s\n' "XDG_STATE_HOME=${{ runner.temp }}\\nikcli-e2e\\state"
-              printf '%s\n' "MODELS_DEV_API_JSON=${{ github.workspace }}\\packages\\nikcli\\test\\tool\\fixtures\\models-api.json"
+              printf '%s\n' "RAGU_E2E_ROOT=${{ runner.temp }}\\ragu-e2e"
+              printf '%s\n' "RAGU_TEST_HOME=${{ runner.temp }}\\ragu-e2e\\home"
+              printf '%s\n' "XDG_DATA_HOME=${{ runner.temp }}\\ragu-e2e\\share"
+              printf '%s\n' "XDG_CACHE_HOME=${{ runner.temp }}\\ragu-e2e\\cache"
+              printf '%s\n' "XDG_CONFIG_HOME=${{ runner.temp }}\\ragu-e2e\\config"
+              printf '%s\n' "XDG_STATE_HOME=${{ runner.temp }}\\ragu-e2e\\state"
+              printf '%s\n' "MODELS_DEV_API_JSON=${{ github.workspace }}\\packages\\ragu\\test\\tool\\fixtures\\models-api.json"
             } >> "$GITHUB_ENV"
           else
             {
-              printf '%s\n' "NIKCLI_E2E_ROOT=${{ runner.temp }}/nikcli-e2e"
-              printf '%s\n' "NIKCLI_TEST_HOME=${{ runner.temp }}/nikcli-e2e/home"
-              printf '%s\n' "XDG_DATA_HOME=${{ runner.temp }}/nikcli-e2e/share"
-              printf '%s\n' "XDG_CACHE_HOME=${{ runner.temp }}/nikcli-e2e/cache"
-              printf '%s\n' "XDG_CONFIG_HOME=${{ runner.temp }}/nikcli-e2e/config"
-              printf '%s\n' "XDG_STATE_HOME=${{ runner.temp }}/nikcli-e2e/state"
-              printf '%s\n' "MODELS_DEV_API_JSON=${{ github.workspace }}/packages/nikcli/test/tool/fixtures/models-api.json"
+              printf '%s\n' "RAGU_E2E_ROOT=${{ runner.temp }}/ragu-e2e"
+              printf '%s\n' "RAGU_TEST_HOME=${{ runner.temp }}/ragu-e2e/home"
+              printf '%s\n' "XDG_DATA_HOME=${{ runner.temp }}/ragu-e2e/share"
+              printf '%s\n' "XDG_CACHE_HOME=${{ runner.temp }}/ragu-e2e/cache"
+              printf '%s\n' "XDG_CONFIG_HOME=${{ runner.temp }}/ragu-e2e/config"
+              printf '%s\n' "XDG_STATE_HOME=${{ runner.temp }}/ragu-e2e/state"
+              printf '%s\n' "MODELS_DEV_API_JSON=${{ github.workspace }}/packages/ragu/test/tool/fixtures/models-api.json"
             } >> "$GITHUB_ENV"
           fi
 
@@ -70,19 +70,19 @@ jobs:
         env:
           CI: true
           MODELS_DEV_API_JSON: ${{ env.MODELS_DEV_API_JSON }}
-          NIKCLI_DISABLE_MODELS_FETCH: "true"
-          NIKCLI_DISABLE_SHARE: "true"
-          NIKCLI_DISABLE_LSP_DOWNLOAD: "true"
-          NIKCLI_DISABLE_DEFAULT_PLUGINS: "true"
-          NIKCLI_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
-          NIKCLI_TEST_HOME: ${{ env.NIKCLI_TEST_HOME }}
+          RAGU_DISABLE_MODELS_FETCH: "true"
+          RAGU_DISABLE_SHARE: "true"
+          RAGU_DISABLE_LSP_DOWNLOAD: "true"
+          RAGU_DISABLE_DEFAULT_PLUGINS: "true"
+          RAGU_EXPERIMENTAL_DISABLE_FILEWATCHER: "true"
+          RAGU_TEST_HOME: ${{ env.RAGU_TEST_HOME }}
           XDG_DATA_HOME: ${{ env.XDG_DATA_HOME }}
           XDG_CACHE_HOME: ${{ env.XDG_CACHE_HOME }}
           XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
           XDG_STATE_HOME: ${{ env.XDG_STATE_HOME }}
           PLAYWRIGHT_SERVER_HOST: "127.0.0.1"
           PLAYWRIGHT_SERVER_PORT: "4096"
-          VITE_NIKCLI_SERVER_HOST: "127.0.0.1"
-          VITE_NIKCLI_SERVER_PORT: "4096"
-          NIKCLI_CLIENT: "app"
+          VITE_RAGU_SERVER_HOST: "127.0.0.1"
+          VITE_RAGU_SERVER_PORT: "4096"
+          RAGU_CLIENT: "app"
         timeout-minutes: 30

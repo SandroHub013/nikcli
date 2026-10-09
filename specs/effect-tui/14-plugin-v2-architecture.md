@@ -1,7 +1,7 @@
 # EOT-14: Plugin v2 Contracts and Hot Reload
 
 Status: proposed. Tier: 1. Phase: P2. Dependencies: EOT-02, EOT-03, EOT-08, EOT-10.
-Owner: `@nikcli-ai/plugin` and TUI/nikcli plugin maintainers. [Roadmap](../ROADMAP.md).
+Owner: `@ragu/plugin` and TUI/ragu plugin maintainers. [Roadmap](../ROADMAP.md).
 
 ## Problem and Evidence
 
@@ -97,9 +97,9 @@ an explicit, separate decision and a flag flip.
 - Tool invocations validate inputs against the typed schema and decode outputs before returning; permission gating runs
   before side effects.
 - Reload from a programmatic `Reload(pluginID)` produces the same outcome as the file-watcher path.
-- Extend `packages/tui/test/plugin`, `packages/nikcli/test/tui/plugin-v2.test.ts`, `packages/nikcli/test/tui/plugin-dispose.test.ts`,
-  `packages/nikcli/test/plugin/`, and existing capability tests.
-- From `packages/nikcli`: `bun test test/tui/plugin-v2.test.ts test/tui/plugin-dispose.test.ts test/plugin/`. Run
+- Extend `packages/tui/test/plugin`, `packages/ragu/test/tui/plugin-v2.test.ts`, `packages/ragu/test/tui/plugin-dispose.test.ts`,
+  `packages/ragu/test/plugin/`, and existing capability tests.
+- From `packages/ragu`: `bun test test/tui/plugin-v2.test.ts test/tui/plugin-dispose.test.ts test/plugin/`. Run
   `packages/tui` smoke (`bun run smoke:standalone`) to confirm no transitive backend import. One final root
   `bun run typecheck` after the slice.
 - Meet EOT-01 startup/memory gates; reload latency p95 below the reload budget; reload that runs while streaming does
@@ -118,8 +118,8 @@ that has not been migrated sees its data, a v2 plugin sees only its scoped store
 `script/check-plugin-v2.ts` is in CI (commit `644a8f28`). It pins three structural invariants without importing the plugin package, so it costs no build step:
 
 1. `packages/plugin/src/v2/manifest.ts` exports `parseManifest`, `hasManifest`, `Capability`, `ManifestSchema` and the three typed failures, and each failure still carries its `PluginV2*` tag. The tags are what consumers `catchTag` on, so a rename that keeps the code compiling would still break every handler.
-2. The tool registry never imports a config-dir tool without consulting `NIKCLI_ALLOW_PLUGIN_AUTOLOAD` or `tool.allow`. Autoload is a hard opt-in: the gate has to be read _before_ the import, because an import is already execution.
-3. `packages/nikcli/AGENTS.md` documents the same opt-in. A contract enforced only by a script is one a human reviewer cannot check, and the two drift in opposite directions.
+2. The tool registry never imports a config-dir tool without consulting `RAGU_ALLOW_PLUGIN_AUTOLOAD` or `tool.allow`. Autoload is a hard opt-in: the gate has to be read _before_ the import, because an import is already execution.
+3. `packages/ragu/AGENTS.md` documents the same opt-in. A contract enforced only by a script is one a human reviewer cannot check, and the two drift in opposite directions.
 
 `test/plugin/v2-manifest.test.ts` and `test/plugin/autoload-safety.test.ts` cover the behaviour the gate can only assert structurally.
 
@@ -135,7 +135,7 @@ background, loops, mission — all register their commands through `api.keymap.r
 > and is wrong**. `UI.ui.command` exists (`packages/plugin/src/v2/tui/context.ts:183`), the `commands` capability is in
 > the manifest vocabulary and in `TUI_HOST_CAPABILITIES` (`packages/tui/src/plugin/v2.ts:95`), and
 > `adaptV2TuiPlugin.command` maps it onto `keymap.registerLayer`
-> (`packages/tui/test`/`packages/nikcli/test/tui/plugin-v2-commands.test.ts` covers the parity). The comment at
+> (`packages/tui/test`/`packages/ragu/test/tui/plugin-v2-commands.test.ts` covers the parity). The comment at
 > `packages/plugin/src/v2/manifest.ts:22-27` naming "routes, storage, http" is stale in the same way — the TUI host
 > supplies `routes` and `commands`.
 >
@@ -162,7 +162,7 @@ only re-read what the callback reads — and `adaptV2TuiPlugin` passed an object
 on settings showed a snapshot from load time. `name` stays static on purpose: it is the dedupe and dispatch key, and a
 command whose identity changes between reads would be two commands sharing one name.
 
-Three cases in `packages/nikcli/test/tui/plugin-v2-commands.test.ts` pin it, and each reads **twice with the store
+Three cases in `packages/ragu/test/tui/plugin-v2-commands.test.ts` pin it, and each reads **twice with the store
 changed in between** — a single snapshot passes against the old static array and proves nothing. Reverting the adapter
 to a static layer turns the two dynamic cases red and leaves the static one green, which is how they were confirmed to be
 load-bearing. The shared harness also had to learn the layer-thunk form: it mirrored `resolveList` but not
@@ -217,7 +217,7 @@ it across 318 lines. This half is re-verification, not work.
 directly (`runtime.ts:402`), skipping `readV2TuiPlugin` (`packages/plugin/src/v2/tui/v2.ts:289-292`) — the only path that
 runs `parseManifest`, `checkHost` and `checkCapabilities`. `Definition.manifest` is optional and read unparsed
 (`v2.ts:166`), so a manifest added to `background` would be validated by nobody. Separately, `defaultHost()` supplies only
-a `node` version (`v2.ts:97-102`), so a `hostRequirements.nikcli` constraint would be skipped even on the external path.
+a `node` version (`v2.ts:97-102`), so a `hostRequirements.ragu` constraint would be skipped even on the external path.
 
 **`background` cannot hot-reload.** `reloadLocalPlugins` filters `source === "file"` (`runtime.ts:1153`), while internal
 entries are `source: "internal"` with no `item` (`runtime.ts:413`, `runtime.ts:406-424`). Note that `source`
@@ -245,7 +245,7 @@ now calls it, and `loadInternalPlugin` (`packages/tui/src/plugin/runtime.ts:399`
 failure the extraction exists to prevent. No internal plugin carries a manifest today, so nothing changes until one does —
 which is exactly when the check starts earning its keep.
 
-Four cases in `packages/nikcli/test/tui/plugin-v2.test.ts` pin it: an internal definition with an incompatible
+Four cases in `packages/ragu/test/tui/plugin-v2.test.ts` pin it: an internal definition with an incompatible
 `hostRequirements` is refused, one declaring no capability is refused, a valid internal manifest loads and registers its
 route, and a manifest-less internal definition stays ungated. Neuter the validation in `adaptValidatedV2TuiPlugin` and
 all the refusing cases go red, so they are not vacuous. The check is driven through the exported validator rather than
@@ -269,13 +269,13 @@ but the registry is evaluated at import time, so a `const` flag is frozen at sta
 
 **Landed (server side).** A mod is a plugin module that exports `register(on, options)`; it hooks named events with
 `on(event, [matcher], hook)` and each hook receives `($, e, next)` and can observe, rewrite, answer or wrap the event.
-This is the Claude Code mods contract, kept identical in logic and fitted to nikcli's structure: one Effect service,
+This is the Claude Code mods contract, kept identical in logic and fitted to ragu's structure: one Effect service,
 the existing plugin loader, the existing hot reload, the existing `plugin` tool. Status of the spec is unchanged
 (proposed): the UI half below has no acceptance tests yet.
 
 Where it lives:
 
-- `packages/nikcli/src/mod/chain.ts` — the chain as an `Effect<T, E, R>`. `E` and `R` are the engine behaviour's own: a
+- `packages/ragu/src/mod/chain.ts` — the chain as an `Effect<T, E, R>`. `E` and `R` are the engine behaviour's own: a
   hook never adds to them, and a failure of the engine always arrives on the typed channel as itself, whichever hook was
   waiting on `next` (the `Cause` crosses the Promise boundary, not a message). Hooks are Promise functions — third-party
   code — so `next` re-enters Effect with `runPromiseWith`; interrupting the event aborts `next.signal` and the engine's own
@@ -286,8 +286,8 @@ Where it lives:
 - `src/mod/api.ts` — the `$` API. Every call is also an event (`fs.read`, `process.run`, …) seen by the mods that run
   _before_ the caller (a policy mod at the front audits the mods after it), answerable with `{ value }` or `{ deny }`; a call pauses the hook's clock, `$.clock.sleep` does not.
 - `src/mod/guard.ts` — managed policy, static analysis of a module's source, and `sec-default`, itself a mod.
-- `packages/plugin/src/mod.ts` — the author-facing types (`@nikcli-ai/plugin/mod`), checked by `test/mod/types.test.ts`.
-- `nikcli mod validate <dir> [--strict] [--json]` — what a mod hooks and calls, read without running it.
+- `packages/plugin/src/mod.ts` — the author-facing types (`@ragu/plugin/mod`), checked by `test/mod/types.test.ts`.
+- `ragu mod validate <dir> [--strict] [--json]` — what a mod hooks and calls, read without running it.
 
 Order, outermost first: `sec-default` → the organization's mods (`prependPlugins`, then unlisted) → mods a user installed,
 in config order → `appendPlugins` → built-in mods. `PermissionNext.layer` and `Plugin.layer` now require `Mod.Service`;
@@ -297,25 +297,25 @@ Events fired: `plugin.register`, `session.start`, `session.end` (instance shutdo
 `prompt.section`, `prompt.compose`, `tool.call`, `tool.check`, `tool.describe`, `command.run`, `turn.start`, `turn.step`,
 `turn.complete`, `agent.offer`, `agent.spawn`, `skill.prompt`, `session.compact`, `command.describe`, `ui.render`, `ui.press`,
 `ui.input`, `ui.select`, and every `$` call. `tool.call` wraps all four execution paths (registry tools, MCP tools, connector tools, model subtasks) and
-rethrows nikcli's own error unchanged when no hook replaced the result, so callers keep catching what they always did.
+rethrows ragu's own error unchanged when no hook replaced the result, so callers keep catching what they always did.
 `tool.check` fires inside `PermissionNext.ask` before anyone is asked and carries `rule`, what the rules decided.
 Fail-open/fail-closed follows the doc: a hook that throws, times out (10 s of its own time) or returns the wrong shape is
 skipped, `.catch` makes it fail closed (1 s).
 
-Policy is read from managed settings only — `mod` in `nikcli.json` under `NIKCLI_MANAGED_CONFIG_DIR`, the system
-directory (`/Library/Application Support/nikcli/managed`, `/etc/nikcli/managed`, `%ProgramData%\nikcli\managed`) or the
+Policy is read from managed settings only — `mod` in `nikcli.json` under `RAGU_MANAGED_CONFIG_DIR`, the system
+directory (`/Library/Application Support/nikcli/managed`, `/etc/ragu/managed`, `%ProgramData%\ragu\managed`) or the
 legacy `~/.config/nikcli/managed` (policy only: the user owns it). Keys: `prependPlugins`, `appendPlugins`,
-`allowManagedModsOnly`, `allowModsToOverrideDenyRules`, `disableAllMods`; `NIKCLI_DISABLE_MODS=1` is safe mode. A managed
+`allowManagedModsOnly`, `allowModsToOverrideDenyRules`, `disableAllMods`; `RAGU_DISABLE_MODS=1` is safe mode. A managed
 file that cannot be read fails closed: no user mod loads. An organization's own mods live in `<managed>/plugins/`.
 A module whose use of `$` cannot be read statically (alias, destructuring, computed key) is refused, as is one whose
 source cannot be read.
 
-Deliberate differences from Claude Code, each a nikcli fact rather than a taste:
+Deliberate differences from Claude Code, each a ragu fact rather than a taste:
 
-- `sec-default` always loads. nikcli has no Team plan to key it on, and the guard only tightens (a deny rule stays a deny).
+- `sec-default` always loads. ragu has no Team plan to key it on, and the guard only tightens (a deny rule stays a deny).
   A managed `prependPlugins` that omits it leaves it out, as in Claude Code.
-- Tool names are nikcli's (`bash`, `edit`, `write`), lower case. A tool's arguments are top-level fields of `tool.call`; an
-  argument named like one of nikcli's fields is reachable through `e.input`, which always holds them untouched.
+- Tool names are ragu's (`bash`, `edit`, `write`), lower case. A tool's arguments are top-level fields of `tool.call`; an
+  argument named like one of ragu's fields is reachable through `e.input`, which always holds them untouched.
 - `tool.check` carries `rule` and `patterns`; a mod refusal surfaces as `PermissionBlockedError` (the agent reads the reason
   and continues), not a turn-ending rejection.
 - One process serves many sessions, so `$.session.*` reads the session of the hook that is running (async-local), and
@@ -334,22 +334,22 @@ Deliberate differences from Claude Code, each a nikcli fact rather than a taste:
 - `/mod` and `/mods` are aliases of `/plugins`. The build agent's prompt carries a short pointer and tells it to load the
   `plugin` tool (deferred, so its full instructions load only on demand) before writing a mod.
 
-Sites nikcli draws itself are `Replace` wrappers (`packages/tui/src/feature-plugins/mods/render.tsx`): `ToolUse` (a tool
+Sites ragu draws itself are `Replace` wrappers (`packages/tui/src/feature-plugins/mods/render.tsx`): `ToolUse` (a tool
 call's row), `UserMessage`, `AssistantMessage`, and `Spinner` (the reasoning line, `props.word`). A `Replace` draws its
 children exactly as before unless a mod answered with a tree; it does not even ask the server unless some loaded mod hooks
 `ui.render` (read once from `GET /mod`, kept current by an untargeted `mod.ui.invalidate` when such a mod loads or
 unloads), and with no client at all (a story, a component test) it is its children. `session.compact` can be skipped: the
 pending compaction part is removed and the loop stops, so the next prompt starts from the conversation as it stands.
 `skill.prompt` rewrites a skill's text as it is loaded; `command.describe` renames or hides a command in the list.
-`nikcli` composes no commit or PR attribution text, so `attribution.text` has nothing to hook.
+`ragu` composes no commit or PR attribution text, so `attribution.text` has nothing to hook.
 
 **Not implemented, and said so rather than stubbed:** replacing `AskUserQuestion` (a replaced dialog would need a way to answer
 the question, which `$` does not have, and a user must never be trapped behind a mod's drawing), `Button` hotkeys and
 `ui.focus/scroll/close/message`, `session.receive/send/append/attach/detach/measure`, `prompt.suggest/edit/context/attachment`,
-`config.*` (nikcli has no `/config` rows), `engine.create`, and the `$` calls `ui.status/blit`, `prompt.read/suggest/compose`,
+`config.*` (ragu has no `/config` rows), `engine.create`, and the `$` calls `ui.status/blit`, `prompt.read/suggest/compose`,
 `model.fork`, `agent.register/spawn`, `session.surfaces/compact/send/append/authorize`, `tool.call/check`, `audio.*`.
-`telemetry.*` is accepted and ignored for an installed mod, as in Claude Code. Hooking one is a `nikcli mod validate`
-warning; calling one throws `$.<name> is not available in nikcli yet`. The v1 hooks `permission.ask`, `chat.headers` and
+`telemetry.*` is accepted and ignored for an installed mod, as in Claude Code. Hooking one is a `ragu mod validate`
+warning; calling one throws `$.<name> is not available in ragu yet`. The v1 hooks `permission.ask`, `chat.headers` and
 `chat.request` remain declared but never invoked (found 2026-10-02); the `plugin` tool no longer tells the model they work.
 
 Verification: `bun test test/mod` (chain semantics incl. typed-failure preservation and interruption, loader, `tool.call`

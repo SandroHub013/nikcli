@@ -55,7 +55,7 @@ export const modelLabel = (m: ModelOption) => `${m.name}`
 
 export type AgentOption = { readonly name: string; readonly description?: string }
 
-/** nikcli's own agents that can lead a session (hidden and subagent-only ones are not offered). */
+/** ragu's own agents that can lead a session (hidden and subagent-only ones are not offered). */
 export const loadAgents = Gateway.use((g) =>
   g.json<{ name: string; description?: string; mode?: string; hidden?: boolean }[]>({ method: "GET", path: "/agent" }),
 ).pipe(

@@ -1,0 +1,87 @@
+/**
+ * Resolution of the optional remote-sync hub settings.
+ *
+ * Values come from two places, in priority order:
+ *  1. `RAGU_REMOTE_URL` + `RAGU_REMOTE_TOKEN` env vars (always win)
+ *  2. the `sync` block of the global config file, settable from the TUI
+ *     /sync dialog (POST /sync/config) or by editing nikcli.json directly
+ *
+ * The TUI polls `/sync/stats` every 2 seconds, so the config-file read is
+ * cached with a short TTL; `invalidate()` is called after a config write.
+ */
+import { Effect } from "effect"
+import { Config } from "@/config/config"
+import { Flag } from "@ragu/util/flag"
+import { runPromiseWithLayer } from "@/effect"
+import { Account } from "@/account"
+
+export namespace SyncConfig {
+  export type Resolved = {
+    url?: string
+    token?: string
+    /** true when both url and token are present */
+    configured: boolean
+    /** where the effective url + token came from */
+    source?: "env" | "config" | "account"
+    /** bootstrap may auto-connect (RAGU_REMOTE_AUTOSTART and config `sync.autostart`) */
+    autostart: boolean
+  }
+
+  const TTL_MS = 5_000
+  let cached: { value: Resolved; at: number } | undefined
+
+  export function invalidate() {
+    cached = undefined
+  }
+
+  export async function refreshToken(): Promise<string | undefined> {
+    invalidate()
+    return (await resolve()).token
+  }
+
+  export async function resolve(): Promise<Resolved> {
+    if (cached && Date.now() - cached.at < TTL_MS) return cached.value
+    const value = await resolveUncached()
+    cached = { value, at: Date.now() }
+    return value
+  }
+
+  async function resolveUncached(): Promise<Resolved> {
+    const envUrl = Flag.RAGU_REMOTE_URL?.replace(/\/$/, "")
+    const envToken = Flag.RAGU_REMOTE_TOKEN
+    const saved = envUrl && envToken ? undefined : await readGlobal()
+    const url = envUrl ?? saved?.url?.replace(/\/$/, "")
+    const accountToken = !envToken && !saved?.token && url ? await readAccountToken() : undefined
+    const token = envToken ?? saved?.token ?? accountToken
+    const configured = Boolean(url && token)
+    return {
+      url,
+      token,
+      configured,
+      source: configured ? (envUrl && envToken ? "env" : saved?.token ? "config" : "account") : undefined,
+      autostart: configured && Flag.RAGU_REMOTE_AUTOSTART && (saved?.autostart ?? true),
+    }
+  }
+
+  async function readGlobal() {
+    return runPromiseWithLayer(
+      Config.defaultLayer,
+      Effect.gen(function* () {
+        const config = yield* Config.Service
+        return (yield* config.getGlobal()).sync
+      }),
+    ).catch(() => undefined)
+  }
+
+  async function readAccountToken() {
+    return runPromiseWithLayer(
+      Account.defaultLayer,
+      Effect.gen(function* () {
+        const account = yield* Account.Service
+        const active = yield* account.active()
+        if (!active) return undefined
+        return yield* account.token(active.id)
+      }),
+    ).catch(() => undefined)
+  }
+}

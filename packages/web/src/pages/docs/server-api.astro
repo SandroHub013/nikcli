@@ -26,14 +26,14 @@ const toc = [
 
 <DocsLayout
   title="Server API"
-  subtitle="How the nikcli server exposes CLI, TUI, mobile, and workspace routes through a single typed Effect HttpApi surface."
-  description="Reference for nikcli’s Effect HttpApi server routes, request pipeline, auth layers, mobile API, and SDK generation."
+  subtitle="How the ragu server exposes CLI, TUI, mobile, and workspace routes through a single typed Effect HttpApi surface."
+  description="Reference for ragu’s Effect HttpApi server routes, request pipeline, auth layers, mobile API, and SDK generation."
   toc={toc}
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
-      The server in <code>packages/nikcli/src/server/server.ts</code> is the shared HTTP surface for
+      The server in <code>packages/ragu/src/server/server.ts</code> is the shared HTTP surface for
       web clients, the desktop app, the TUI control channel, mobile pairing, PTYs, workspace routing,
       connector settings, MCP, analytics, and the generated SDK.
     </p>
@@ -41,14 +41,14 @@ const toc = [
       It runs on <code>Bun.serve</code> with a hand-written request pipeline in
       <code>server/server-router.ts</code>. Every declared route lives in a typed
       <code>effect/unstable/httpapi</code> group under
-      <code>packages/nikcli/src/server/httpapi/</code>, assembled into one API in
+      <code>packages/ragu/src/server/httpapi/</code>, assembled into one API in
       <code>httpapi/public.ts</code> and served through <code>HttpApiBridge</code>.
     </p>
     <DocCallout type="info" title="There is no Hono layer any more">
       <p>
         Earlier releases mounted classic Hono route files under
         <code>src/server/routes/</code> and put the typed groups behind a
-        <code>NIKCLI_EXPERIMENTAL_HTTPAPI</code> flag. Both are gone: the routes directory was
+        <code>RAGU_EXPERIMENTAL_HTTPAPI</code> flag. Both are gone: the routes directory was
         deleted, the flag was removed, and the typed groups are the only implementation. If you are
         looking for <code>routes/session.ts</code>, read
         <code>httpapi/session.ts</code> instead.
@@ -70,8 +70,8 @@ const toc = [
       </DocCard>
       <DocCard title="Instance-aware execution" eyebrow="Context">
         <p>
-          Every non-global request gets an instance context from <code>x-nikcli-directory</code>,
-          <code>directory</code>, <code>x-nikcli-workspace</code>, or the session named in the path.
+          Every non-global request gets an instance context from <code>x-ragu-directory</code>,
+          <code>directory</code>, <code>x-ragu-workspace</code>, or the session named in the path.
         </p>
       </DocCard>
       <DocCard title="Layered auth" eyebrow="httpapi/auth.ts">
@@ -86,27 +86,27 @@ const toc = [
   <section id="start" class="doc-section">
     <h2>Start a server</h2>
     <p>
-      Use <code>nikcli serve</code> for the general API server, <code>nikcli web</code> for the
-      web app workflow, or <code>nikcli mobile serve</code> for the mobile-first host. The TUI also
+      Use <code>ragu serve</code> for the general API server, <code>ragu web</code> for the
+      web app workflow, or <code>ragu mobile serve</code> for the mobile-first host. The TUI also
       starts an internal worker server when network options are provided.
     </p>
     <DocCode language="bash">
-nikcli serve --hostname 127.0.0.1 --port 4096
+ragu serve --hostname 127.0.0.1 --port 4096
 
-NIKCLI_SERVER_PASSWORD=secret \
-  nikcli serve --hostname 0.0.0.0 --port 4096
+RAGU_SERVER_PASSWORD=secret \
+  ragu serve --hostname 0.0.0.0 --port 4096
 
-NIKCLI_SERVER_PASSWORD=secret \
-  nikcli mobile serve --hostname 0.0.0.0 --port 4096 --pair
+RAGU_SERVER_PASSWORD=secret \
+  ragu mobile serve --hostname 0.0.0.0 --port 4096 --pair
     </DocCode>
     <table class="doc-table">
       <thead><tr><th>Mode</th><th>Command</th><th>Primary routes</th><th>Notes</th></tr></thead>
       <tbody>
-        <tr><td>Local API</td><td><code>nikcli serve</code></td><td>All mounted server routes</td><td>Safe for loopback development. Password is optional on loopback.</td></tr>
-        <tr><td>Public API</td><td><code>nikcli serve --hostname 0.0.0.0</code></td><td>All mounted server routes</td><td>Set <code>NIKCLI_SERVER_PASSWORD</code> or use loopback Tailscale identity mode.</td></tr>
-        <tr><td>Mobile host</td><td><code>nikcli mobile serve --pair</code></td><td><code>/mobile/*</code>, <code>/user/*</code>, shared project/session routes</td><td>Bearer token auth is minted by the mobile pairing commands.</td></tr>
-        <tr><td>Workspace host</td><td><code>nikcli workspace-serve</code></td><td><code>/experimental/workspace/*</code> plus the standard API</td><td>Hosts workspace contexts, status, events, and session proxying.</td></tr>
-        <tr><td>TUI external</td><td><code>nikcli --port 0</code></td><td>TUI worker server plus standard API</td><td>Used when the terminal UI needs network-visible access.</td></tr>
+        <tr><td>Local API</td><td><code>ragu serve</code></td><td>All mounted server routes</td><td>Safe for loopback development. Password is optional on loopback.</td></tr>
+        <tr><td>Public API</td><td><code>ragu serve --hostname 0.0.0.0</code></td><td>All mounted server routes</td><td>Set <code>RAGU_SERVER_PASSWORD</code> or use loopback Tailscale identity mode.</td></tr>
+        <tr><td>Mobile host</td><td><code>ragu mobile serve --pair</code></td><td><code>/mobile/*</code>, <code>/user/*</code>, shared project/session routes</td><td>Bearer token auth is minted by the mobile pairing commands.</td></tr>
+        <tr><td>Workspace host</td><td><code>ragu workspace-serve</code></td><td><code>/experimental/workspace/*</code> plus the standard API</td><td>Hosts workspace contexts, status, events, and session proxying.</td></tr>
+        <tr><td>TUI external</td><td><code>ragu --port 0</code></td><td>TUI worker server plus standard API</td><td>Used when the terminal UI needs network-visible access.</td></tr>
       </tbody>
     </table>
     <DocCallout type="note" title="Port fallback is automatic">
@@ -158,23 +158,23 @@ NIKCLI_SERVER_PASSWORD=secret \
         <tr><td>Public paths</td><td><code>/user/login</code>, <code>/user/register</code>, <code>/user/status</code>, share routes</td><td>Public by design so accounts can be created and login status can be checked.</td></tr>
         <tr><td>Account token</td><td><code>Authorization: Bearer nku_…</code></td><td>Resolves the local account record; <code>/account/*</code> and <code>/user/*</code> run instance-less.</td></tr>
         <tr><td>Mobile token</td><td><code>Authorization: Bearer</code> or <code>?token=</code></td><td>Verified against hashed tokens in the mobile auth table; required for <code>/mobile/*</code> when <code>mobileAuthRequired</code> is set.</td></tr>
-        <tr><td>Tailscale identity</td><td><code>Tailscale-User-Login</code></td><td>Trusted only on a loopback listener with <code>NIKCLI_SERVER_TAILSCALE_AUTH</code>; allows users from <code>NIKCLI_SERVER_TAILSCALE_USERS</code>.</td></tr>
-        <tr><td>Basic Auth</td><td>Username and password</td><td>Username defaults to <code>nikcli</code>; password comes from <code>NIKCLI_SERVER_PASSWORD</code>.</td></tr>
+        <tr><td>Tailscale identity</td><td><code>Tailscale-User-Login</code></td><td>Trusted only on a loopback listener with <code>RAGU_SERVER_TAILSCALE_AUTH</code>; allows users from <code>RAGU_SERVER_TAILSCALE_USERS</code>.</td></tr>
+        <tr><td>Basic Auth</td><td>Username and password</td><td>Username defaults to <code>ragu</code>; password comes from <code>RAGU_SERVER_PASSWORD</code>.</td></tr>
       </tbody>
     </table>
     <DocCode language="bash">
-NIKCLI_SERVER_USERNAME=nikcli \
-NIKCLI_SERVER_PASSWORD=secret \
-  nikcli serve --hostname 0.0.0.0 --port 4096
+RAGU_SERVER_USERNAME=ragu \
+RAGU_SERVER_PASSWORD=secret \
+  ragu serve --hostname 0.0.0.0 --port 4096
 
-NIKCLI_SERVER_TAILSCALE_AUTH=1 \
-NIKCLI_SERVER_TAILSCALE_USERS=alice@example.com,bob@example.com \
-  nikcli serve --hostname 127.0.0.1 --port 4096
+RAGU_SERVER_TAILSCALE_AUTH=1 \
+RAGU_SERVER_TAILSCALE_USERS=alice@example.com,bob@example.com \
+  ragu serve --hostname 127.0.0.1 --port 4096
     </DocCode>
     <DocCallout type="warn" title="Tailscale identity needs loopback">
       <p>
         The server logs a warning and refuses to trust identity headers when
-        <code>NIKCLI_SERVER_TAILSCALE_AUTH</code> is set but the listener is not bound to loopback —
+        <code>RAGU_SERVER_TAILSCALE_AUTH</code> is set but the listener is not bound to loopback —
         otherwise anyone able to reach the port could forge the header.
       </p>
     </DocCallout>
@@ -184,12 +184,12 @@ NIKCLI_SERVER_TAILSCALE_USERS=alice@example.com,bob@example.com \
     <h2>Instance &amp; workspace context</h2>
     <p>
       After auth, instance-bound routes run inside a project instance. The server chooses the
-      directory from the <code>directory</code> query parameter, the <code>x-nikcli-directory</code>
+      directory from the <code>directory</code> query parameter, the <code>x-ragu-directory</code>
       header, the current process cwd, or the directory stored on a session referenced by the route
       path.
     </p>
     <p>
-      Workspace routing then looks at <code>workspace</code>, <code>x-nikcli-workspace</code>, or
+      Workspace routing then looks at <code>workspace</code>, <code>x-ragu-workspace</code>, or
       the route session's <code>workspaceID</code>. Local workspaces replace the directory with the
       workspace target directory. Remote workspaces are proxied through <code>ServerProxy</code> for
       both HTTP and websocket upgrades.
@@ -197,9 +197,9 @@ NIKCLI_SERVER_TAILSCALE_USERS=alice@example.com,bob@example.com \
     <table class="doc-table">
       <thead><tr><th>Input</th><th>Priority</th><th>Effect</th></tr></thead>
       <tbody>
-        <tr><td><code>x-nikcli-workspace</code> / <code>?workspace=</code></td><td>Highest</td><td>Pins the workspace and skips the session lookup entirely.</td></tr>
+        <tr><td><code>x-ragu-workspace</code> / <code>?workspace=</code></td><td>Highest</td><td>Pins the workspace and skips the session lookup entirely.</td></tr>
         <tr><td><code>directory</code> query</td><td>High</td><td>Sets the instance directory unless a workspace target overrides it.</td></tr>
-        <tr><td><code>x-nikcli-directory</code></td><td>High</td><td>Same as query; used by the SDK and mobile clients.</td></tr>
+        <tr><td><code>x-ragu-directory</code></td><td>High</td><td>Same as query; used by the SDK and mobile clients.</td></tr>
         <tr><td>Session route id</td><td>Fallback</td><td>For <code>/session/:id…</code> paths the server recovers the session's directory and workspace.</td></tr>
         <tr><td>Instance-less roots</td><td>Bypass</td><td><code>/global</code>, <code>/user</code>, <code>/account</code> never bind a directory.</td></tr>
       </tbody>
@@ -241,13 +241,13 @@ NIKCLI_SERVER_TAILSCALE_USERS=alice@example.com,bob@example.com \
         <tr><td><code>/loop</code></td><td><code>httpapi/loop.ts</code></td><td><a href="/docs/loops">Loops</a> CRUD, templates, generate, run, pause, resume, schedule.</td></tr>
         <tr><td><code>/sync</code></td><td><code>httpapi/sync.ts</code></td><td>Event push, outbox, snapshots, stats, config, connect/disconnect/drain. See <a href="/docs/sync">Sync</a>.</td></tr>
         <tr><td><code>/analytics</code></td><td><code>httpapi/analytics.ts</code></td><td>Global, daily, and per-session analytics summaries and drilldowns.</td></tr>
-        <tr><td><code>/doctor</code></td><td><code>httpapi/doctor.ts</code></td><td>Health, connectivity, and runtime diagnostics behind <code>nikcli doctor</code>.</td></tr>
+        <tr><td><code>/doctor</code></td><td><code>httpapi/doctor.ts</code></td><td>Health, connectivity, and runtime diagnostics behind <code>ragu doctor</code>.</td></tr>
         <tr><td><code>/profile</code></td><td><code>httpapi/profile.ts</code></td><td>Declared user profile and learned habits.</td></tr>
         <tr><td><code>/voice</code></td><td><code>httpapi/voice.ts</code></td><td>Audio transcription for voice input.</td></tr>
         <tr><td><code>/tui</code></td><td><code>httpapi/tui.ts</code></td><td>Remote control: append/submit/clear prompt, open dialogs, execute commands, toasts, control channel.</td></tr>
         <tr><td><code>/global</code></td><td><code>httpapi/global.ts</code></td><td>Instance-less health and dispose. <code>/global/event</code> is the raw SSE feed.</td></tr>
         <tr><td><code>/user</code></td><td><code>httpapi/users.ts</code></td><td>Local account login, registration, profile, and user admin. Instance-less.</td></tr>
-        <tr><td><code>/account</code></td><td><code>httpapi/account.ts</code></td><td>nikcli account records and tokens. Instance-less.</td></tr>
+        <tr><td><code>/account</code></td><td><code>httpapi/account.ts</code></td><td>ragu account records and tokens. Instance-less.</td></tr>
         <tr><td><em>(root)</em></td><td><code>httpapi/top-level.ts</code></td><td><code>/path</code>, <code>/vcs</code>, <code>/vcs/status</code>, <code>/vcs/diff/raw</code>, <code>/vcs/apply</code>, <code>/command</code>, <code>/agent</code>, <code>/skill</code>, <code>/lsp</code>, <code>/formatter</code>, <code>/instance/dispose</code>.</td></tr>
         <tr><td><em>(root)</em></td><td><code>httpapi/file.ts</code></td><td><code>/find</code>, <code>/find/file</code>, <code>/find/symbol</code>, <code>/file</code>, <code>/file/content</code>, <code>/file/status</code>.</td></tr>
         <tr><td><em>(root)</em></td><td><code>httpapi/app.ts</code></td><td><code>POST /log</code> for client log forwarding and <code>POST /skill</code> for skill creation.</td></tr>
@@ -391,19 +391,19 @@ NIKCLI_SERVER_TAILSCALE_USERS=alice@example.com,bob@example.com \
     </p>
     <p>
       The JavaScript SDK is generated from that API by
-      <code>packages/nikcli/script/generate-httpapi-clients.ts</code>, using
-      <code>@nikcli-ai/httpapi-codegen</code>. One run emits three artifacts:
+      <code>packages/ragu/script/generate-httpapi-clients.ts</code>, using
+      <code>@ragu/httpapi-codegen</code>. One run emits three artifacts:
     </p>
     <table class="doc-table">
       <thead><tr><th>Emitter</th><th>Output</th><th>Consumer</th></tr></thead>
       <tbody>
-        <tr><td><code>emitPromise</code></td><td><code>packages/sdk/js/src/httpapi/generated</code></td><td>The public Promise-based SDK (<code>@nikcli-ai/sdk/httpapi</code>).</td></tr>
+        <tr><td><code>emitPromise</code></td><td><code>packages/sdk/js/src/httpapi/generated</code></td><td>The public Promise-based SDK (<code>@ragu/sdk/httpapi</code>).</td></tr>
         <tr><td><code>emitEffectImported</code></td><td><code>src/server/httpapi/client/generated</code></td><td>In-process Effect clients.</td></tr>
         <tr><td><code>emitEffectShape</code></td><td><code>src/server/httpapi/client/api</code></td><td>Standalone Effect client shapes.</td></tr>
       </tbody>
     </table>
     <DocCode language="bash">
-bun run --cwd packages/nikcli generate:httpapi-clients
+bun run --cwd packages/ragu generate:httpapi-clients
 # or, equivalently, from the SDK package:
 bun run --cwd packages/sdk/js generate:httpapi
     </DocCode>
@@ -424,12 +424,12 @@ bun run --cwd packages/sdk/js generate:httpapi
     <table class="doc-table">
       <thead><tr><th>Symptom</th><th>Likely cause</th><th>Check</th></tr></thead>
       <tbody>
-        <tr><td>401 on every request</td><td>Missing bearer token, Basic Auth password mismatch, or Tailscale identity header absent.</td><td>Check auth headers and <code>NIKCLI_SERVER_PASSWORD</code>.</td></tr>
-        <tr><td>Workspace not found</td><td><code>x-nikcli-workspace</code> points at a workspace with no target.</td><td>Call workspace list or remove the stale workspace id.</td></tr>
+        <tr><td>401 on every request</td><td>Missing bearer token, Basic Auth password mismatch, or Tailscale identity header absent.</td><td>Check auth headers and <code>RAGU_SERVER_PASSWORD</code>.</td></tr>
+        <tr><td>Workspace not found</td><td><code>x-ragu-workspace</code> points at a workspace with no target.</td><td>Call workspace list or remove the stale workspace id.</td></tr>
         <tr><td>Route returns the hosted web app</td><td>The bridge does not claim that method/path, so the fallback proxied it to <code>app.nikcli-ai.dev</code>.</td><td>Inspect <code>HttpApiBridge.supports</code> and the <code>RoutePattern</code> table.</td></tr>
         <tr><td>500 on a route that used to work</td><td>A response schema is stricter than the real payload — the bridge validates responses.</td><td><code>curl</code> the route and diff the body against the schema.</td></tr>
         <tr><td>Empty mobile session list</td><td>A resurrected <code>server/routes/mobile.ts</code> shadowing <code>server/mobile/</code>.</td><td>Delete the monolith file.</td></tr>
-        <tr><td>CORS preflight fails</td><td>Origin is not local, app, Tailscale, <code>nikcli-ai.dev</code>, or whitelisted.</td><td>Set <code>NIKCLI_SERVER_CORS_ORIGINS</code> for custom origins.</td></tr>
+        <tr><td>CORS preflight fails</td><td>Origin is not local, app, Tailscale, <code>nikcli-ai.dev</code>, or whitelisted.</td><td>Set <code>RAGU_SERVER_CORS_ORIGINS</code> for custom origins.</td></tr>
         <tr><td>Mobile bootstrap is slow</td><td>Bootstrap hits project, GitHub, Expo, container, provider, and config checks.</td><td>Smoke <code>/mobile/auth/token</code> first.</td></tr>
         <tr><td>Unknown error JSON</td><td>Error did not match a known domain class in <code>ServerRouter.mapError</code>.</td><td>Use <code>--print-logs</code> and inspect <code>Global.Path.log</code>.</td></tr>
       </tbody>
@@ -441,20 +441,20 @@ bun run --cwd packages/sdk/js generate:httpapi
     <table class="doc-table">
       <thead><tr><th>Need</th><th>File</th></tr></thead>
       <tbody>
-        <tr><td>Listener, ports, OpenAPI, memory pressure</td><td><code>packages/nikcli/src/server/server.ts</code></td></tr>
-        <tr><td>Request pipeline, CORS, context, dispatch, error mapping</td><td><code>packages/nikcli/src/server/server-router.ts</code></td></tr>
-        <tr><td>API composition and handler wiring</td><td><code>packages/nikcli/src/server/httpapi/public.ts</code></td></tr>
-        <tr><td>Bridge, route table, coverage</td><td><code>packages/nikcli/src/server/httpapi/bridge.ts</code></td></tr>
-        <tr><td>Raw handlers before the bridge</td><td><code>packages/nikcli/src/server/public.ts</code>, <code>server/extra.ts</code></td></tr>
-        <tr><td>Instance-less roots</td><td><code>packages/nikcli/src/server/httpapi/instance-less.ts</code></td></tr>
-        <tr><td>Auth principal resolution</td><td><code>packages/nikcli/src/server/httpapi/auth.ts</code></td></tr>
-        <tr><td>Typed session API</td><td><code>packages/nikcli/src/server/httpapi/session.ts</code></td></tr>
-        <tr><td>Prompt streaming</td><td><code>packages/nikcli/src/server/httpapi/prompt.ts</code></td></tr>
-        <tr><td>Mobile API and handlers</td><td><code>packages/nikcli/src/server/httpapi/mobile.ts</code>, <code>server/mobile/</code></td></tr>
-        <tr><td>SSE feeds</td><td><code>packages/nikcli/src/server/httpapi/event.ts</code>, <code>event-feed.ts</code></td></tr>
-        <tr><td>Websocket upgrades</td><td><code>packages/nikcli/src/server/websocket.ts</code></td></tr>
-        <tr><td>Workspace proxying</td><td><code>packages/nikcli/src/server/proxy.ts</code>, <code>packages/nikcli/src/workspace</code></td></tr>
-        <tr><td>SDK generation</td><td><code>packages/nikcli/script/generate-httpapi-clients.ts</code>, <code>packages/httpapi-codegen</code></td></tr>
+        <tr><td>Listener, ports, OpenAPI, memory pressure</td><td><code>packages/ragu/src/server/server.ts</code></td></tr>
+        <tr><td>Request pipeline, CORS, context, dispatch, error mapping</td><td><code>packages/ragu/src/server/server-router.ts</code></td></tr>
+        <tr><td>API composition and handler wiring</td><td><code>packages/ragu/src/server/httpapi/public.ts</code></td></tr>
+        <tr><td>Bridge, route table, coverage</td><td><code>packages/ragu/src/server/httpapi/bridge.ts</code></td></tr>
+        <tr><td>Raw handlers before the bridge</td><td><code>packages/ragu/src/server/public.ts</code>, <code>server/extra.ts</code></td></tr>
+        <tr><td>Instance-less roots</td><td><code>packages/ragu/src/server/httpapi/instance-less.ts</code></td></tr>
+        <tr><td>Auth principal resolution</td><td><code>packages/ragu/src/server/httpapi/auth.ts</code></td></tr>
+        <tr><td>Typed session API</td><td><code>packages/ragu/src/server/httpapi/session.ts</code></td></tr>
+        <tr><td>Prompt streaming</td><td><code>packages/ragu/src/server/httpapi/prompt.ts</code></td></tr>
+        <tr><td>Mobile API and handlers</td><td><code>packages/ragu/src/server/httpapi/mobile.ts</code>, <code>server/mobile/</code></td></tr>
+        <tr><td>SSE feeds</td><td><code>packages/ragu/src/server/httpapi/event.ts</code>, <code>event-feed.ts</code></td></tr>
+        <tr><td>Websocket upgrades</td><td><code>packages/ragu/src/server/websocket.ts</code></td></tr>
+        <tr><td>Workspace proxying</td><td><code>packages/ragu/src/server/proxy.ts</code>, <code>packages/ragu/src/workspace</code></td></tr>
+        <tr><td>SDK generation</td><td><code>packages/ragu/script/generate-httpapi-clients.ts</code>, <code>packages/httpapi-codegen</code></td></tr>
       </tbody>
     </table>
   </section>

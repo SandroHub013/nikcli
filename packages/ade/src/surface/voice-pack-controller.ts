@@ -12,7 +12,7 @@ import {
   type LocalProvider,
   type PackState,
   type PackStatus,
-} from "@nikcli-ai/voice"
+} from "@ragu/voice"
 
 /** The commands of the host facade this needs; each may be missing. */
 export interface VoicePackHost {

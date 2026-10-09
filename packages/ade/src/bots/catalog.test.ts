@@ -7,13 +7,13 @@ import {
   catalogFree,
   catalogFromText,
   modelGone,
-  nikcliModelVariants,
+  raguModelVariants,
   parseModelCatalog,
 } from "./catalog"
 import { modelsFromConfigProviders } from "../chat/model"
 import { codeOf } from "../test-support/source-text"
 
-/* The shape of `nikcli models opencode --verbose`, with made-up models. */
+/* The shape of `ragu models opencode --verbose`, with made-up models. */
 const record = (id: string, input: number, output: number) =>
   [
     `opencode/${id}`,
@@ -32,7 +32,7 @@ const record = (id: string, input: number, output: number) =>
 
 const OPENCODE = [record("mario-free", 0, 0), record("mario-pro", 2.5, 15)].join("\n")
 
-describe("whether a routine's model is free, by nikcli's catalog (B11 review, M2)", () => {
+describe("whether a routine's model is free, by ragu's catalog (B11 review, M2)", () => {
   test("the catalog is read record by record", () => {
     const models = parseModelCatalog(`${OPENCODE}\nrumore\n`)
     expect([...models.keys()]).toEqual(["opencode/mario-free", "opencode/mario-pro"])
@@ -48,7 +48,7 @@ describe("whether a routine's model is free, by nikcli's catalog (B11 review, M2
     expect(asked).toEqual(["opencode", "opencode", "opencode"])
   })
 
-  test("the suffix is free without asking; elsewhere 0 is a missing price, and nikcli is not asked", async () => {
+  test("the suffix is free without asking; elsewhere 0 is a missing price, and ragu is not asked", async () => {
     const asked: string[] = []
     const load = async (provider: string) => (asked.push(provider), OPENCODE)
     expect(await catalogFree("openrouter/mario/modello:free", load)).toBe(true)
@@ -96,9 +96,9 @@ describe("the bot form's model list", () => {
   })
 })
 
-/* chat-bot-facili, pezzo 0: a nikcli bot's efforts are its model's variants. */
-describe("a nikcli model's efforts, from its catalog", () => {
-  // As `nikcli models openrouter --verbose` prints them (2026-09-26).
+/* chat-bot-facili, pezzo 0: a ragu bot's efforts are its model's variants. */
+describe("a ragu model's efforts, from its catalog", () => {
+  // As `ragu models openrouter --verbose` prints them (2026-09-26).
   const OPENROUTER = [
     "openrouter/google/gemma-4-31b-it:free",
     "{",
@@ -120,12 +120,12 @@ describe("a nikcli model's efforts, from its catalog", () => {
       "none",
       "thinking",
     ])
-    expect(await nikcliModelVariants("openrouter/google/gemma-4-31b-it:free", load)).toEqual(["none", "thinking"])
-    expect(await nikcliModelVariants("openrouter/plain/model:free", load)).toEqual([])
-    expect(await nikcliModelVariants("openrouter/missing/one", load)).toBeUndefined()
-    expect(await nikcliModelVariants("altro/x", load)).toBeUndefined()
-    expect(await nikcliModelVariants("senza-provider", load)).toBeUndefined()
-    expect(await nikcliModelVariants("openrouter/x", async () => Promise.reject(new Error("no")))).toBeUndefined()
+    expect(await raguModelVariants("openrouter/google/gemma-4-31b-it:free", load)).toEqual(["none", "thinking"])
+    expect(await raguModelVariants("openrouter/plain/model:free", load)).toEqual([])
+    expect(await raguModelVariants("openrouter/missing/one", load)).toBeUndefined()
+    expect(await raguModelVariants("altro/x", load)).toBeUndefined()
+    expect(await raguModelVariants("senza-provider", load)).toBeUndefined()
+    expect(await raguModelVariants("openrouter/x", async () => Promise.reject(new Error("no")))).toBeUndefined()
   })
 
   test("lint: the form offers the model's variants, not a fixed list (chat-bot-facili, pezzo 0)", () => {
@@ -133,14 +133,14 @@ describe("a nikcli model's efforts, from its catalog", () => {
     // Since pezzo 4 the form and the composer's chip share `createEfforts`.
     expect(codeOf(form)).toContain(
       codeOf(
-        "const efforts = createEfforts(() => ({ runner: props.runner, model: props.model, effort: props.effort, models: props.nikcliModels }))",
+        "const efforts = createEfforts(() => ({ runner: props.runner, model: props.model, effort: props.effort, models: props.raguModels }))",
       ),
     )
-    expect(codeOf(form)).toContain(codeOf("(name) => nikcliModelVariants(name, loadCatalog),"))
+    expect(codeOf(form)).toContain(codeOf("(name) => raguModelVariants(name, loadCatalog),"))
     // This model's only: a resource keeps the last model's value when the model is cleared (A occhio).
     expect(codeOf(form)).toContain(
       codeOf(
-        'variants: runner().id === "nikcli" && model() ? (listed() ?? (!variants.loading ? variants() : undefined)) : undefined,',
+        'variants: runner().id === "ragu" && model() ? (listed() ?? (!variants.loading ? variants() : undefined)) : undefined,',
       ),
     )
     // The catalog's first: the provider's CLI only for a model it does not list.
@@ -216,7 +216,7 @@ describe("a bot's model gone from its provider's catalog", () => {
     expect(await modelGone("openrouter/nex-agi/nex-n2.5-mini:free", async () => "")).toBeUndefined()
     expect(
       await modelGone("openrouter/nex-agi/nex-n2.5-mini:free", async () => {
-        throw new Error("no nikcli")
+        throw new Error("no ragu")
       }),
     ).toBeUndefined()
     expect(await modelGone("sonnet", async () => OPENROUTER)).toBeUndefined()

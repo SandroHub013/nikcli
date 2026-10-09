@@ -132,7 +132,7 @@ describe("encodeKittyVirtualPng", () => {
 
 describe("encodeKittyVirtualFile", () => {
   it("sends the path, not the pixels", () => {
-    const path = "/tmp/nikcli-screencast-abc/frame-2.png"
+    const path = "/tmp/ragu-screencast-abc/frame-2.png"
     const chunks = chunksOf(encodeKittyVirtualFile(path, { id: 12, columns: 40, rows: 20 }))
     expect(chunks).toHaveLength(1)
     expect(chunks[0]!.control).toBe("a=T,U=1,q=2,f=100,t=t,i=12,c=40,r=20")
@@ -185,8 +185,8 @@ describe("supportsKittyUnicodePlaceholders", () => {
   })
 
   it("honours the explicit override", () => {
-    expect(supportsKittyUnicodePlaceholders(kittyCaps("kitty"), { NIKCLI_KITTY_PLACEHOLDERS: "0" })).toBe(false)
-    expect(supportsKittyUnicodePlaceholders(kittyCaps("WezTerm"), { NIKCLI_KITTY_PLACEHOLDERS: "1" })).toBe(true)
+    expect(supportsKittyUnicodePlaceholders(kittyCaps("kitty"), { RAGU_KITTY_PLACEHOLDERS: "0" })).toBe(false)
+    expect(supportsKittyUnicodePlaceholders(kittyCaps("WezTerm"), { RAGU_KITTY_PLACEHOLDERS: "1" })).toBe(true)
   })
 })
 

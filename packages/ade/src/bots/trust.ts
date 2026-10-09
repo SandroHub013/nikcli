@@ -13,7 +13,7 @@
  * see `fromRepository` in `runners.ts`.
  */
 
-import { parseAgentFile, type AgentFile } from "./nikcli"
+import { parseAgentFile, type AgentFile } from "./ragu"
 import { canWrite, runnerById } from "./runners"
 import { t } from "../i18n"
 
@@ -76,7 +76,7 @@ const unquoteKey = (key: string) => key.replace(/^(["'])(.*)\1$/, "$2")
 
 /*
  * `key: allow` (for `permission`) or `key: true` (for the older `tools`, which
- * nikcli turns into `allow`), in block or flow form, the key bare or quoted,
+ * ragu turns into `allow`), in block or flow form, the key bare or quoted,
  * and a YAML tag before the value allowed for.
  */
 const GRANT = (value: string) =>
@@ -154,8 +154,8 @@ function topKeyAt(value: string, index: number): string | undefined {
 }
 
 /**
- * Every grant a bot file gives itself that nikcli would honour without asking
- * (review B3, A2; B8c). nikcli reads the file itself, frontmatter included, so
+ * Every grant a bot file gives itself that ragu would honour without asking
+ * (review B3, A2; B8c). ragu reads the file itself, frontmatter included, so
  * a bot with `permission: { bash: allow }` runs commands nobody is asked
  * about. Deliberately strict: a grant this cannot read for certain — an
  * alias, a merge key, another frontmatter language — counts as one, under `*`.
@@ -203,7 +203,7 @@ export function selfApproval(text: string): string | undefined {
   return grantsIn(text).find((grant) => !SAFE_TO_ALLOW.has(grant.what))?.what
 }
 
-/** `*` and `?` as nikcli's `Wildcard.match` reads them in a permission's name. */
+/** `*` and `?` as ragu's `Wildcard.match` reads them in a permission's name. */
 function wildcard(pattern: string): RegExp {
   const escaped = pattern
     .replace(/[.+^${}()|[\]\\]/g, "\\$&")
@@ -250,8 +250,8 @@ export async function admit(bot: AgentFile, deps: AdmitDeps): Promise<{ ok: true
     return { ok: false, problem: t("bots.trust.unreadable", bot.identifier) }
   }
   const runner = runnerById(bot.runner).id
-  // Checked on every turn, trusted or not: nikcli reads the file as it is now.
-  const granted = runner === "nikcli" ? grantsIn(text).find((grant) => !SAFE_TO_ALLOW.has(grant.what)) : undefined
+  // Checked on every turn, trusted or not: ragu reads the file as it is now.
+  const granted = runner === "ragu" ? grantsIn(text).find((grant) => !SAFE_TO_ALLOW.has(grant.what)) : undefined
   if (granted !== undefined)
     return { ok: false, problem: t("bots.trust.selfApproves", bot.identifier, granted.what, granted.line) }
   const fingerprint = await fileFingerprint(text)
@@ -264,7 +264,7 @@ export async function admit(bot: AgentFile, deps: AdmitDeps): Promise<{ ok: true
         ? canWrite(bot)
           ? "bots.trust.can.claude"
           : "bots.trust.can.claudeReadOnly"
-        : "bots.trust.can.nikcli",
+        : "bots.trust.can.ragu",
   )
   const question =
     trusted === undefined ? t("bots.trust.new", bot.identifier, can) : t("bots.trust.changed", bot.identifier, can)

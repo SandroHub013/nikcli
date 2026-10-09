@@ -7,10 +7,10 @@
  * subscribes to the bus events published by the engine so live state stays in
  * sync even when the interval trigger fires while the TUI is open.
  */
-import type { NikcliClient } from "@nikcli-ai/sdk/httpapi"
-import type { TuiEventBus } from "@nikcli-ai/plugin/tui"
+import type { RaguClient } from "@ragu/sdk/httpapi"
+import type { TuiEventBus } from "@ragu/plugin/tui"
 // Shapes come from the contract, not from the server module that happens to declare them.
-import type { LoopDefinition, LoopTemplate, LoopRun } from "@nikcli-ai/sdk/httpapi"
+import type { LoopDefinition, LoopTemplate, LoopRun } from "@ragu/sdk/httpapi"
 // Validation still does: these produce the messages shown before a definition is posted, and the
 // SDK carries no behavior. See specs/effect-tui/08-host-plugins-startup.md.
 import {
@@ -18,9 +18,9 @@ import {
   isValidModel,
   validateDefinition,
   type GeneratedLoopDraft,
-} from "@nikcli-ai/util/loop-validation"
+} from "@ragu/util/loop-validation"
 
-export type { LoopDefinition, LoopTemplate, LoopRun, LoopPullRequestRef } from "@nikcli-ai/sdk/httpapi"
+export type { LoopDefinition, LoopTemplate, LoopRun, LoopPullRequestRef } from "@ragu/sdk/httpapi"
 
 /** Wire types — what the server's runtime map returns per loop. */
 export type LoopRuntimeStatus = "idle" | "running" | "paused" | "error" | "cancelling"
@@ -181,7 +181,7 @@ function asTemplate(value: unknown): LoopTemplate | undefined {
 export type GeneratedDraft = GeneratedLoopDraft
 
 export class LoopApi {
-  constructor(private client: NikcliClient) {}
+  constructor(private client: RaguClient) {}
 
   async list(): Promise<ListResult> {
     const res = await this.client.loop.list()

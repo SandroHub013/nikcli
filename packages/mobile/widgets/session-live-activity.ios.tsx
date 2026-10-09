@@ -103,7 +103,7 @@ const SessionActivity = (props: SessionLiveActivityProps) => {
             padding({ horizontal: 12, vertical: 7 }),
             background("#222225"),
             cornerRadius(10),
-            accessibilityLabel("Review request in nikcli"),
+            accessibilityLabel("Review request in ragu"),
           ]}
         >
           <Image systemName="arrow.up.forward.app" size={11} color="#F2F2F7" modifiers={[accessibilityHidden()]} />
@@ -243,7 +243,7 @@ let sessionActivityFactory: {
 } | null = null
 try {
   const { createLiveActivity } = require("expo-widgets") as typeof import("expo-widgets")
-  sessionActivityFactory = createLiveActivity("NikcliSessionActivity", SessionActivity)
+  sessionActivityFactory = createLiveActivity("RaguSessionActivity", SessionActivity)
 } catch {
   sessionActivityFactory = null
 }

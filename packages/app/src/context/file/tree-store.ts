@@ -1,5 +1,5 @@
 import { createStore, produce, reconcile } from "solid-js/store"
-import type { FileNode } from "@nikcli-ai/sdk/httpapi"
+import type { FileNode } from "@ragu/sdk/httpapi"
 
 type DirectoryState = {
   expanded: boolean

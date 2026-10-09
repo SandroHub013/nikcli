@@ -20,9 +20,9 @@ const snap = {
     {
       pid: 10,
       parent: 1,
-      name: "nikcli",
+      name: "ragu",
       exe: null,
-      cmd: "nikcli serve --service",
+      cmd: "ragu serve --service",
       cwd: null,
       category: "service",
       cpu: 1,
@@ -63,7 +63,7 @@ const HostTest = Layer.succeed(
   Host.of({
     navigate: (p) => void navigated.push(p),
     snapshot: () => snap,
-    tests: async () => [{ package: "nikcli", path: "test/a.test.ts", size: 1, modified: 1 }],
+    tests: async () => [{ package: "ragu", path: "test/a.test.ts", size: 1, modified: 1 }],
     runs: () => [],
     runTask: async () => {
       throw new Error("not used")
@@ -131,7 +131,7 @@ test("safety policy: reads run freely, writes ask, kill always confirms", () => 
   expect(isSafe(a({ action: "snapshot" }))).toBe(true)
   expect(isSafe(a({ action: "http", path: "/doctor" }))).toBe(true)
   expect(isSafe(a({ action: "http", method: "POST", path: "/x" }))).toBe(false)
-  expect(isSafe(a({ action: "run_tests", package: "nikcli" }))).toBe(false)
+  expect(isSafe(a({ action: "run_tests", package: "ragu" }))).toBe(false)
   expect(alwaysConfirm(a({ action: "kill", pid: 1 }))).toBe(true)
 })
 
@@ -152,7 +152,7 @@ test("reports precise failures as typed errors", async () => {
   const exit = await Effect.runPromiseExit(execute({ action: "run_tests", package: "ghost" }).pipe(Effect.provide(env)))
   expect(String(exit)).toContain('unknown package "ghost"')
   const missing = await Effect.runPromiseExit(
-    execute({ action: "run_tests", package: "nikcli", files: ["test/zzz.test.ts"] }).pipe(Effect.provide(env)),
+    execute({ action: "run_tests", package: "ragu", files: ["test/zzz.test.ts"] }).pipe(Effect.provide(env)),
   )
   expect(String(missing)).toContain("no such test file")
 })
@@ -166,8 +166,8 @@ test("context block carries the live state", () => {
     service: { channel: "shared", url: "http://127.0.0.1:1", version: "1", pid: 10 },
   })
   expect(ctx).toContain("page: processes")
-  expect(ctx).toContain("nikcli processes: 2")
-  expect(ctx).toContain("nikcli serve --service")
+  expect(ctx).toContain("ragu processes: 2")
+  expect(ctx).toContain("ragu serve --service")
 })
 
 test("gateway drops null and GET bodies instead of sending them", async () => {

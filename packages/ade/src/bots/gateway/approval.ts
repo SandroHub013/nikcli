@@ -1,7 +1,7 @@
 /**
- * nikcli's questions, asked on the phone (G5, D93).
+ * ragu's questions, asked on the phone (G5, D93).
  *
- * In a turn from a chat nobody sits at the computer, so when nikcli asks for
+ * In a turn from a chat nobody sits at the computer, so when ragu asks for
  * a permission the question goes to the chat, with two buttons: yes this
  * once, or no. «Always» is not offered: a standing grant from a phone is
  * exactly what the default-off shell is meant to prevent. No answer in five
@@ -9,7 +9,7 @@
  * decided where the press is taken (`controller.ts`): a button ADE sent, in
  * that chat, once, from an authorized sender.
  *
- * The question is nikcli's own event on ADE's server (B8d), with its id and
+ * The question is ragu's own event on ADE's server (B8d), with its id and
  * the whole command: nothing is read off a terminal, so nothing the model
  * writes can pass for one, and the command is never cut. Rust takes known
  * secrets out of everything sent to a chat.
@@ -32,7 +32,7 @@ import type { Choice } from "./controller"
 /** Puts a question with buttons in the chat; `undefined` when nothing valid was pressed in time. */
 export type Ask = (question: string, choices: readonly Choice[], signal: AbortSignal) => Promise<string | undefined>
 
-/** The command as the phone shows it: whole, as nikcli asked about it. */
+/** The command as the phone shows it: whole, as ragu asked about it. */
 function shown(patterns: string): string {
   return patterns.trim() || "?"
 }
@@ -57,9 +57,9 @@ export async function approveOnPhone(
 }
 
 /**
- * Answers a nikcli turn's questions from a chat, as they come
+ * Answers a ragu turn's questions from a chat, as they come
  * (`TurnRequest.onPermission`, one at a time). Every turn from a chat on
- * nikcli has one: with the remote commands on the question goes to the
+ * ragu has one: with the remote commands on the question goes to the
  * phone; off, it is answered no at once and the chat is told what was
  * refused, instead of the turn waiting on a question nobody sees until it
  * times out (G5 review, M2).

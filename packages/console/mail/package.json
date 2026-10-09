@@ -1,5 +1,5 @@
 {
-  "name": "@nikcli-ai/console-mail",
+  "name": "@ragu/console-mail",
   "version": "1.431.0",
   "dependencies": {
     "@jsx-email/all": "2.2.3",

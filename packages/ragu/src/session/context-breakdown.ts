@@ -1,0 +1,475 @@
+import { Effect } from "effect"
+import z from "zod"
+import { Session } from "."
+import { MessageV2 } from "./message-v2"
+import { SystemPrompt } from "./system"
+import { Provider } from "@/provider/provider"
+import { Config } from "@/config/config"
+import { MCP } from "@/mcp"
+import { ToolRegistry } from "@/tool/registry"
+import { withDeferredIndex } from "@/tool/search_tools"
+import { PermissionNext } from "@/permission/next"
+import { Flag } from "@ragu/util/flag"
+import { Agent } from "@/agent/agent"
+import { Skill } from "@/skill"
+import { Token } from "@ragu/util/token"
+import { Log } from "@ragu/util/log"
+import { runPromiseWithLayer, locallyInstance, InstanceState, type InstanceContext } from "@/effect"
+import { collectSystemPaths } from "./instruction"
+
+const log = Log.create({ service: "session.context-breakdown" })
+
+export namespace SessionContext {
+  /** A single, attributable source of context tokens. */
+  export const Source = z.object({
+    id: z.string(),
+    category: z.enum(["system", "instructions", "skills", "mcp", "tools", "agents", "messages"]),
+    label: z.string(),
+    detail: z.string().optional(),
+    tokens: z.number(),
+    enabled: z.boolean(),
+    /** A tool that is off only until the session needs it: `search_tools` or a direct call loads it. */
+    deferred: z.boolean().optional(),
+    togglable: z.boolean(),
+    toggleKind: z.enum(["mcp", "skill", "instruction", "tool"]).optional(),
+    toggleKey: z.string().optional(),
+  })
+  export type Source = z.infer<typeof Source>
+
+  export const Breakdown = z.object({
+    model: z
+      .object({
+        providerID: z.string(),
+        modelID: z.string(),
+        name: z.string(),
+        contextLimit: z.number(),
+      })
+      .optional(),
+    reported: z.object({
+      input: z.number(),
+      output: z.number(),
+      reasoning: z.number(),
+      cacheRead: z.number(),
+      cacheWrite: z.number(),
+      total: z.number(),
+    }),
+    sources: z.array(Source),
+    estimatedTotal: z.number(),
+  })
+  export type Breakdown = z.infer<typeof Breakdown>
+
+  function runSession<A, E>(ctx: InstanceContext, effect: Effect.Effect<A, E, Session.Service>) {
+    return runPromiseWithLayer(Session.defaultLayer, locallyInstance(ctx, effect))
+  }
+  function runProvider<A, E>(ctx: InstanceContext, effect: Effect.Effect<A, E, Provider.Service>) {
+    return runPromiseWithLayer(Provider.defaultLayer, locallyInstance(ctx, effect))
+  }
+  function runConfig<A, E>(ctx: InstanceContext, effect: Effect.Effect<A, E, Config.Service>) {
+    return runPromiseWithLayer(Config.defaultLayer, locallyInstance(ctx, effect))
+  }
+  function runMCP<A, E>(ctx: InstanceContext, effect: Effect.Effect<A, E, MCP.Service>) {
+    return runPromiseWithLayer(MCP.defaultLayer, locallyInstance(ctx, effect))
+  }
+  function runRegistry<A, E>(ctx: InstanceContext, effect: Effect.Effect<A, E, ToolRegistry.Service>) {
+    return runPromiseWithLayer(ToolRegistry.defaultLayer, locallyInstance(ctx, effect))
+  }
+  function runAgent<A, E>(ctx: InstanceContext, effect: Effect.Effect<A, E, Agent.Service>) {
+    return runPromiseWithLayer(Agent.defaultLayer, locallyInstance(ctx, effect))
+  }
+  function runSkill<A, E>(ctx: InstanceContext, effect: Effect.Effect<A, E, Skill.Service>) {
+    return runPromiseWithLayer(Skill.defaultLayer, locallyInstance(ctx, effect))
+  }
+  function runSystemPrompt<A, E>(ctx: InstanceContext, effect: Effect.Effect<A, E, SystemPrompt.Service>) {
+    return runPromiseWithLayer(SystemPrompt.defaultLayer, locallyInstance(ctx, effect))
+  }
+
+  function currentContext(): InstanceContext {
+    return InstanceState.ambient()
+  }
+
+  const est = (s: string) => Token.estimate(s)
+
+  /** Best-effort token estimate for a single resolved tool (description + JSON schema). */
+  function toolTokens(description: string, schema: unknown): number {
+    let schemaText = ""
+    try {
+      schemaText = JSON.stringify(schema ?? {})
+    } catch {
+      schemaText = ""
+    }
+    return est((description ?? "") + " " + schemaText)
+  }
+
+  /** Sum the visible text content of a session's messages (the conversation history). */
+  async function conversationTokens(sessionID: string): Promise<number> {
+    let total = 0
+    for await (const item of MessageV2.stream(sessionID)) {
+      for (const part of item.parts) {
+        if (part.type === "text") total += est(part.text ?? "")
+        else if (part.type === "reasoning") total += est(part.text ?? "")
+        else if (part.type === "tool" && part.state.status === "completed") {
+          total += est(String(part.state.output ?? ""))
+          try {
+            total += est(JSON.stringify(part.state.input ?? {}))
+          } catch {}
+        }
+      }
+    }
+    return total
+  }
+
+  async function lastTokens(sessionID: string) {
+    let last: MessageV2.Assistant | undefined
+    let lastModel: { providerID: string; modelID: string } | undefined
+    let lastAgent: string | undefined
+    for await (const item of MessageV2.stream(sessionID)) {
+      if (item.info.role === "assistant") {
+        const info = item.info as MessageV2.Assistant
+        if (info.tokens.output > 0) last = info
+      }
+      if (item.info.role === "user" && item.info.model) lastModel = item.info.model
+      if (item.info.role === "user" && item.info.agent) lastAgent = item.info.agent
+    }
+    return { last, lastModel, lastAgent }
+  }
+
+  export async function breakdown(sessionID: string): Promise<Breakdown> {
+    // One ambient read for the whole breakdown, at the entry point. Everything
+    // below is bound to this instance explicitly, so a service resolved late in
+    // the walk cannot end up on a different one than the session it started on.
+    const ctx = currentContext()
+    const session = await runSession(
+      ctx,
+      Effect.gen(function* () {
+        const service = yield* Session.Service
+        return yield* service.get(sessionID)
+      }),
+    )
+
+    const { last, lastModel, lastAgent } = await lastTokens(sessionID)
+
+    const modelRef = last
+      ? { providerID: last.providerID, modelID: last.modelID }
+      : (lastModel ??
+        (await runProvider(
+          ctx,
+          Effect.gen(function* () {
+            const provider = yield* Provider.Service
+            const model = yield* provider.defaultModel()
+            return { providerID: model.providerID, modelID: model.modelID }
+          }),
+        ).catch(() => undefined)))
+
+    const model = modelRef
+      ? await runProvider(
+          ctx,
+          Effect.gen(function* () {
+            const provider = yield* Provider.Service
+            return yield* provider.getModel(modelRef.providerID, modelRef.modelID)
+          }),
+        ).catch(() => undefined)
+      : undefined
+
+    const reported = last
+      ? {
+          input: last.tokens.input,
+          output: last.tokens.output,
+          reasoning: last.tokens.reasoning,
+          cacheRead: last.tokens.cache.read,
+          cacheWrite: last.tokens.cache.write,
+          total:
+            last.tokens.total ??
+            last.tokens.input +
+              last.tokens.output +
+              last.tokens.reasoning +
+              last.tokens.cache.read +
+              last.tokens.cache.write,
+        }
+      : { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0, total: 0 }
+
+    const config = await runConfig(
+      ctx,
+      Effect.gen(function* () {
+        const service = yield* Config.Service
+        return yield* service.get()
+      }),
+    )
+
+    const sources: Source[] = []
+
+    // 1. System prompt (provider header + base instructions) — always present.
+    if (model) {
+      const systemText = [...SystemPrompt.header(model.providerID), ...SystemPrompt.provider(model)].join("\n")
+      sources.push({
+        id: "system:prompt",
+        category: "system",
+        label: "System prompt",
+        detail: model.name,
+        tokens: est(systemText),
+        enabled: true,
+        togglable: false,
+      })
+    }
+
+    // 2. Environment block.
+    const environment = await runSystemPrompt(
+      ctx,
+      Effect.gen(function* () {
+        const service = yield* SystemPrompt.Service
+        return yield* service.environment()
+      }),
+    ).catch(() => [] as string[])
+    if (environment.length > 0) {
+      sources.push({
+        id: "system:environment",
+        category: "system",
+        label: "Environment",
+        detail: ctx.directory,
+        tokens: est(environment.join("\n")),
+        enabled: true,
+        togglable: false,
+      })
+    }
+
+    // 2b. User profile block — small, but it is in every request, so it belongs
+    //     in the breakdown rather than hiding inside "System prompt".
+    const profile = await runSystemPrompt(
+      ctx,
+      Effect.gen(function* () {
+        const service = yield* SystemPrompt.Service
+        return yield* service.profile()
+      }),
+    ).catch(() => [] as string[])
+    if (profile.length > 0) {
+      sources.push({
+        id: "system:profile",
+        category: "system",
+        label: "User profile",
+        detail: "/profile",
+        tokens: est(profile.join("\n")),
+        enabled: true,
+        togglable: false,
+      })
+    }
+
+    // 3. Instruction files (AGENTS.md, CLAUDE.md, config instructions) — one source per
+    //    file/url, togglable. Disabled files are still read so their token cost is shown.
+    const disabledInstructions = new Set(session.disabledInstructions ?? [])
+    const { paths, urls } = await collectSystemPaths(ctx, config).catch(() => ({ paths: new Set<string>(), urls: [] }))
+    await Promise.all(
+      Array.from(paths).map(async (p) => {
+        const text = await Bun.file(p)
+          .text()
+          .catch(() => "")
+        if (!text) return
+        const enabled = !disabledInstructions.has(p)
+        sources.push({
+          id: "instructions:" + p,
+          category: "instructions",
+          label: p.split("/").pop() || p,
+          detail: p,
+          tokens: est(text),
+          enabled,
+          togglable: true,
+          toggleKind: "instruction",
+          toggleKey: p,
+        })
+      }),
+    )
+    for (const url of urls) {
+      sources.push({
+        id: "instructions:" + url,
+        category: "instructions",
+        label: new URL(url).hostname,
+        detail: url,
+        tokens: 0,
+        enabled: !disabledInstructions.has(url),
+        togglable: true,
+        toggleKind: "instruction",
+        toggleKey: url,
+      })
+    }
+
+    // 4. Active skills — one source per skill, togglable off.
+    const activeSkills = session.skills ?? []
+    await Promise.all(
+      activeSkills.map(async (name) => {
+        const loaded = await runSkill(
+          ctx,
+          Effect.gen(function* () {
+            const skill = yield* Skill.Service
+            return yield* skill.load(name)
+          }),
+        ).catch(() => undefined)
+        sources.push({
+          id: "skill:" + name,
+          category: "skills",
+          label: name,
+          detail: loaded?.description ?? Skill.commandName(name),
+          tokens: loaded ? est(loaded.content) : 0,
+          enabled: true,
+          togglable: true,
+          toggleKind: "skill",
+          toggleKey: name,
+        })
+      }),
+    )
+
+    // 5. MCP servers — group connected tools by server, include disabled servers as togglable-on.
+    const mcpConfig = config.mcp ?? {}
+    const mcpStatus = await runMCP(
+      ctx,
+      Effect.gen(function* () {
+        const service = yield* MCP.Service
+        return yield* service.status()
+      }),
+    ).catch(() => ({}) as Record<string, { status: string }>)
+    const mcpTools = await runMCP(
+      ctx,
+      Effect.gen(function* () {
+        const service = yield* MCP.Service
+        return yield* service.tools()
+      }),
+    ).catch(() => ({}) as Record<string, unknown>)
+
+    const sanitize = (name: string) => name.replace(/[^a-zA-Z0-9_-]/g, "_")
+    for (const name of Object.keys(mcpConfig)) {
+      const status = mcpStatus[name]?.status ?? "disabled"
+      const enabled = mcpConfig[name]?.enabled !== false && status === "connected"
+      const prefix = sanitize(name) + "_"
+      let tokens = 0
+      let count = 0
+      for (const [key, t] of Object.entries(mcpTools)) {
+        if (!key.startsWith(prefix)) continue
+        const tool = t as { description?: string; inputSchema?: { jsonSchema?: unknown } }
+        tokens += toolTokens(tool.description ?? "", tool.inputSchema?.jsonSchema ?? tool.inputSchema)
+        count++
+      }
+      sources.push({
+        id: "mcp:" + name,
+        category: "mcp",
+        label: name,
+        detail: enabled ? `${count} tool${count === 1 ? "" : "s"} · ${status}` : status,
+        tokens,
+        enabled,
+        togglable: true,
+        toggleKind: "mcp",
+        toggleKey: name,
+      })
+    }
+
+    // 6. Built-in tools — one togglable source per tool (schema + description).
+    //    `enabled` is whether the next request carries the tool, decided the
+    //    way `resolveTools` decides it for the agent the session last ran.
+    const disabledTools = session.disabledTools ?? {}
+    if (model) {
+      const agent = await runAgent(
+        ctx,
+        Effect.gen(function* () {
+          const service = yield* Agent.Service
+          const named = lastAgent ? yield* service.get(lastAgent) : undefined
+          return named ?? (yield* service.get(yield* service.defaultAgent()))
+        }),
+      ).catch(() => undefined)
+      const merged = PermissionNext.merge(agent?.permission ?? [], session.permission ?? [])
+      const ruleset = Flag.autoApprove() ? PermissionNext.autoApprove(merged) : merged
+      const eager = config.tool?.eager ?? []
+      const tools = await runRegistry(
+        ctx,
+        Effect.gen(function* () {
+          const registry = yield* ToolRegistry.Service
+          return yield* registry.tools({ providerID: model.providerID, modelID: model.id }, agent)
+        }),
+      ).catch(() => [] as ToolRegistry.Resolved[])
+      const exposed = tools.map((tool) => ({
+        tool,
+        exposure: ToolRegistry.exposure(tool.id, { disabledTools, ruleset, eager }),
+      }))
+      const deferredIndex = exposed
+        .filter((entry) => entry.exposure === "deferred")
+        .map((entry) => ({ id: entry.tool.id, description: entry.tool.description }))
+      for (const { tool, exposure } of exposed) {
+        // A tool the agent's permissions deny outright is never sent and the
+        // toggle cannot bring it back, so it is not a source of this session's
+        // context. One the user switched off stays listed to switch back on.
+        if (exposure === "hidden" && disabledTools[tool.id] !== true) continue
+        let schema: unknown = {}
+        try {
+          schema = z.toJSONSchema(tool.parameters)
+        } catch {}
+        const description =
+          tool.id === "search_tools" ? withDeferredIndex(tool.description, deferredIndex) : tool.description
+        const firstLine = (tool.description ?? "").split("\n")[0]?.trim()
+        sources.push({
+          id: "tool:" + tool.id,
+          category: "tools",
+          label: tool.id,
+          // `detail` is `optionalKey` on the route: a present `undefined`
+          // fails the response encode instead of omitting the field.
+          ...(firstLine ? { detail: firstLine.slice(0, 80) } : undefined),
+          tokens: toolTokens(description, schema),
+          enabled: exposure === "active",
+          ...(exposure === "deferred" ? { deferred: true } : undefined),
+          togglable: true,
+          toggleKind: "tool",
+          toggleKey: tool.id,
+        })
+      }
+    }
+
+    // 7. Custom agents — feed the task tool / subagent routing.
+    const agents = await runAgent(
+      ctx,
+      Effect.gen(function* () {
+        const service = yield* Agent.Service
+        return yield* service.list()
+      }),
+    ).catch(() => [] as Agent.Info[])
+    const customAgents = agents.filter((a) => !a.hidden)
+    if (customAgents.length > 0) {
+      const tokens = customAgents.reduce((sum, a) => sum + est(a.name + " " + (a.description ?? "")), 0)
+      sources.push({
+        id: "agents:custom",
+        category: "agents",
+        label: "Agents",
+        detail: `${customAgents.length} available`,
+        tokens,
+        enabled: true,
+        togglable: false,
+      })
+    }
+
+    // 8. Conversation history.
+    const convTokens = await conversationTokens(sessionID).catch((e) => {
+      log.warn("conversation token estimate failed", { error: String(e) })
+      return 0
+    })
+    sources.push({
+      id: "messages:conversation",
+      category: "messages",
+      label: "Conversation",
+      detail: "Messages, tool calls & results",
+      tokens: convTokens,
+      enabled: true,
+      togglable: false,
+    })
+
+    const estimatedTotal = sources.filter((s) => s.enabled).reduce((sum, s) => sum + s.tokens, 0)
+
+    return {
+      ...(model
+        ? {
+            model: {
+              providerID: model.providerID,
+              modelID: model.id,
+              name: model.name,
+              contextLimit: model.limit.input ?? model.limit.context,
+            },
+          }
+        : undefined),
+      reported,
+      sources,
+      estimatedTotal,
+    }
+  }
+}

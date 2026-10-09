@@ -174,7 +174,7 @@ function SessionsPageInner() {
           </p>
           <h2 className="mt-2 font-display text-2xl sm:text-3xl font-bold text-terminal-text">Manage Cloud Sessions</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-terminal-muted">
-            Create, rename, archive, delete, and inspect the authenticated Cloud Sessions attached to this nikcli
+            Create, rename, archive, delete, and inspect the authenticated Cloud Sessions attached to this ragu
             server.
           </p>
         </div>

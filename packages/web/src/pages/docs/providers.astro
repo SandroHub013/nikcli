@@ -24,14 +24,14 @@ const toc = [
 
 <DocsLayout
   title="Providers"
-  subtitle="How nikcli builds its model catalog, resolves credentials, selects runtime adapters, and streams requests."
-  description="Reference for nikcli model providers, credentials, adapters, model filtering, and streaming behavior."
+  subtitle="How ragu builds its model catalog, resolves credentials, selects runtime adapters, and streams requests."
+  description="Reference for ragu model providers, credentials, adapters, model filtering, and streaming behavior."
   toc={toc}
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
-      Providers are resolved by <code>packages/nikcli/src/provider/provider.ts</code>. The service
+      Providers are resolved by <code>packages/ragu/src/provider/provider.ts</code>. The service
       starts with <code>models.dev</code>, layers local and gateway providers, applies user config
       and saved auth, lets plugins modify providers, filters models, then caches SDK instances and
       model loaders.
@@ -47,7 +47,7 @@ const toc = [
         <p>Known AI SDK packages are imported directly; unknown provider packages can still be loaded dynamically.</p>
       </DocCard>
       <DocCard title="Runtime" eyebrow="Stream">
-        <p>Session execution enters <code>session/llm.ts</code>, then uses AI SDK or the native <code>@nikcli-ai/llm</code> runtime when supported.</p>
+        <p>Session execution enters <code>session/llm.ts</code>, then uses AI SDK or the native <code>@ragu/llm</code> runtime when supported.</p>
       </DocCard>
     </div>
   </section>
@@ -56,9 +56,9 @@ const toc = [
     <h2>Provider resolution</h2>
     <p>The provider service constructs the final catalog in this order:</p>
     <ol>
-      <li>Load <code>models.dev</code> and convert each provider/model into nikcli provider records.</li>
+      <li>Load <code>models.dev</code> and convert each provider/model into ragu provider records.</li>
       <li>Apply <code>disabled_providers</code> and <code>enabled_providers</code> filters.</li>
-      <li>Probe dynamic local providers such as <code>ollama</code> and <code>nikcli-inference</code>.</li>
+      <li>Probe dynamic local providers such as <code>ollama</code> and <code>ragu-inference</code>.</li>
       <li>Merge provider overrides from <code>config.provider</code>.</li>
       <li>Merge saved API auth records from <code>Auth.Service</code>.</li>
       <li>Run plugin auth loaders and plugin model loaders.</li>
@@ -77,7 +77,7 @@ const toc = [
     <h2>Configure a provider</h2>
     <p>
       Provider config is stored under <code>provider</code> in <code>nikcli.json</code>. The schema is
-      <code>ModelsDev.Provider.partial</code> plus nikcli options such as API key, base URL, timeout,
+      <code>ModelsDev.Provider.partial</code> plus ragu options such as API key, base URL, timeout,
       header timeout, chunk timeout, model variants, allow-lists, and block-lists.
     </p>
     <DocCode language="json" title="nikcli.json">
@@ -149,14 +149,14 @@ const toc = [
   <section id="dynamic" class="doc-section">
     <h2>Dynamic providers</h2>
     <p>
-      nikcli also creates providers that are not just copied from <code>models.dev</code>.
-      The two important dynamic loaders are local Ollama and nikcli Inference Gateway.
+      ragu also creates providers that are not just copied from <code>models.dev</code>.
+      The two important dynamic loaders are local Ollama and ragu Inference Gateway.
     </p>
     <table class="doc-table">
       <thead><tr><th>Provider</th><th>Detection</th><th>Result</th></tr></thead>
       <tbody>
         <tr><td><code>ollama</code></td><td>Configured <code>provider.ollama.options.baseURL</code>, <code>OLLAMA_BASE_URL</code>, or local <code>127.0.0.1:11434</code> probe.</td><td>Builds OpenAI-compatible models from <code>/models</code> with conservative limits.</td></tr>
-        <tr><td><code>nikcli-inference</code></td><td><code>NIKCLI_INFERENCE_URL</code>, <code>NIKCLI_INFERENCE_KEY</code>, or config options.</td><td>Builds models from gateway <code>/models</code>, with pricing, context, thinking, and image input metadata.</td></tr>
+        <tr><td><code>ragu-inference</code></td><td><code>RAGU_INFERENCE_URL</code>, <code>RAGU_INFERENCE_KEY</code>, or config options.</td><td>Builds models from gateway <code>/models</code>, with pricing, context, thinking, and image input metadata.</td></tr>
         <tr><td>Unknown configured provider</td><td>Entry exists in <code>config.provider</code> or has a key.</td><td>Creates a default provider record so custom compatible endpoints can appear.</td></tr>
         <tr><td>Plugin provider</td><td>Plugin exposes auth or model hooks.</td><td>Merges options and model lists into the provider catalog.</td></tr>
       </tbody>
@@ -176,7 +176,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 export OPENROUTER_API_KEY=sk-or-...
 export AWS_REGION=us-east-1
 export AWS_PROFILE=default
-export NIKCLI_INFERENCE_KEY=nik-...
+export RAGU_INFERENCE_KEY=nik-...
     </DocCode>
     <table class="doc-table">
       <thead><tr><th>Provider family</th><th>Special handling</th></tr></thead>
@@ -202,8 +202,8 @@ export NIKCLI_INFERENCE_KEY=nik-...
       <tbody>
         <tr><td><code>model</code></td><td>Default primary model for agent turns.</td></tr>
         <tr><td><code>small_model</code></td><td>Low-cost helper work such as title and summaries.</td></tr>
-        <tr><td><code>NIKCLI_ENABLE_EXPERIMENTAL_MODELS</code></td><td>Keeps alpha models in the catalog.</td></tr>
-        <tr><td><code>NIKCLI_DISABLE_MODELS_FETCH</code></td><td>Disables models.dev fetch path where supported.</td></tr>
+        <tr><td><code>RAGU_ENABLE_EXPERIMENTAL_MODELS</code></td><td>Keeps alpha models in the catalog.</td></tr>
+        <tr><td><code>RAGU_DISABLE_MODELS_FETCH</code></td><td>Disables models.dev fetch path where supported.</td></tr>
         <tr><td><code>provider.*.whitelist</code></td><td>Provider-local model allow-list.</td></tr>
         <tr><td><code>provider.*.blacklist</code></td><td>Provider-local model block-list.</td></tr>
       </tbody>
@@ -221,14 +221,14 @@ export NIKCLI_INFERENCE_KEY=nik-...
     <p>
       Runtime ownership starts in <code>session/llm.ts</code>. It builds headers, normalizes messages,
       converts tools, applies <code>ProviderTransform</code>, and streams output. A native runtime in
-      <code>session/llm/native-runtime.ts</code> can use <code>@nikcli-ai/llm</code> for OpenAI,
+      <code>session/llm/native-runtime.ts</code> can use <code>@ragu/llm</code> for OpenAI,
       Anthropic, and OpenAI-compatible providers when requirements are met.
     </p>
     <table class="doc-table">
       <thead><tr><th>Step</th><th>Source</th><th>Notes</th></tr></thead>
       <tbody>
         <tr><td>Message repair</td><td><code>LLM.normalizeStreamMessages</code></td><td>Repairs UI-shaped messages that would otherwise trigger invalid prompt errors.</td></tr>
-        <tr><td>Headers</td><td><code>buildRequestHeaders</code></td><td>Adds nikcli request headers for nikcli providers and user agent for most others.</td></tr>
+        <tr><td>Headers</td><td><code>buildRequestHeaders</code></td><td>Adds ragu request headers for ragu providers and user agent for most others.</td></tr>
         <tr><td>Provider options</td><td><code>ProviderTransform.providerOptions</code></td><td>Transforms model/provider options before SDK/native call.</td></tr>
         <tr><td>Native runtime</td><td><code>native-runtime.ts</code></td><td>Requires supported provider family and configured API key.</td></tr>
         <tr><td>AI SDK fallback</td><td><code>session/llm/ai-sdk.ts</code></td><td>General runtime path for all supported SDK adapters.</td></tr>
@@ -260,10 +260,10 @@ export NIKCLI_INFERENCE_KEY=nik-...
     <table class="doc-table">
       <thead><tr><th>Env</th><th>Used by</th></tr></thead>
       <tbody>
-        <tr><td><code>NIKCLI_OPENROUTER_API_KEY</code> / <code>OPENROUTER_API_KEY</code></td><td>OpenRouter image, speech, and voice-related tools.</td></tr>
-        <tr><td><code>NIKCLI_ELEVENLABS_API_KEY</code> / <code>ELEVENLABS_API_KEY</code></td><td>ElevenLabs speech provider.</td></tr>
-        <tr><td><code>NIKCLI_OPENROUTER_BASE_URL</code></td><td>OpenRouter-compatible base URL override.</td></tr>
-        <tr><td><code>NIKCLI_ELEVENLABS_BASE_URL</code></td><td>ElevenLabs base URL override.</td></tr>
+        <tr><td><code>RAGU_OPENROUTER_API_KEY</code> / <code>OPENROUTER_API_KEY</code></td><td>OpenRouter image, speech, and voice-related tools.</td></tr>
+        <tr><td><code>RAGU_ELEVENLABS_API_KEY</code> / <code>ELEVENLABS_API_KEY</code></td><td>ElevenLabs speech provider.</td></tr>
+        <tr><td><code>RAGU_OPENROUTER_BASE_URL</code></td><td>OpenRouter-compatible base URL override.</td></tr>
+        <tr><td><code>RAGU_ELEVENLABS_BASE_URL</code></td><td>ElevenLabs base URL override.</td></tr>
       </tbody>
     </table>
   </section>
@@ -292,7 +292,7 @@ export NIKCLI_INFERENCE_KEY=nik-...
       <thead><tr><th>Symptom</th><th>Likely cause</th><th>Check</th></tr></thead>
       <tbody>
         <tr><td>Provider absent from model list</td><td>Filtered by <code>enabled_providers</code>/<code>disabled_providers</code>, missing auth, or failed dynamic probe.</td><td>Inspect config filters and provider log entries.</td></tr>
-        <tr><td>Model id missing</td><td>Alpha/deprecated filtering, provider allow/block list, or no API key for paid nikcli models.</td><td>Enable experimental models only if the model status requires it.</td></tr>
+        <tr><td>Model id missing</td><td>Alpha/deprecated filtering, provider allow/block list, or no API key for paid ragu models.</td><td>Enable experimental models only if the model status requires it.</td></tr>
         <tr><td>Bedrock authentication failure</td><td>Region/profile/bearer token mismatch.</td><td>Check config region, <code>AWS_REGION</code>, <code>AWS_PROFILE</code>, bearer token, and endpoint.</td></tr>
         <tr><td>OpenAI-compatible usage missing</td><td>Provider options disabled usage inclusion or compatible endpoint omits usage.</td><td>Check <code>includeUsage</code> and provider response.</td></tr>
         <tr><td>Invalid prompt error</td><td>Malformed message shape reached runtime.</td><td>Verify <code>normalizeStreamMessages</code> input and message history.</td></tr>
@@ -306,13 +306,13 @@ export NIKCLI_INFERENCE_KEY=nik-...
     <table class="doc-table">
       <thead><tr><th>Need</th><th>File</th></tr></thead>
       <tbody>
-        <tr><td>Provider catalog and SDK cache</td><td><code>packages/nikcli/src/provider/provider.ts</code></td></tr>
-        <tr><td>Provider transforms</td><td><code>packages/nikcli/src/provider/transform.ts</code></td></tr>
-        <tr><td>Provider auth routes</td><td><code>packages/nikcli/src/server/httpapi/provider.ts</code>, <code>packages/nikcli/src/server/httpapi/provider.ts</code></td></tr>
-        <tr><td>Session runtime hot path</td><td><code>packages/nikcli/src/session/llm.ts</code></td></tr>
-        <tr><td>Native runtime</td><td><code>packages/nikcli/src/session/llm/native-runtime.ts</code></td></tr>
+        <tr><td>Provider catalog and SDK cache</td><td><code>packages/ragu/src/provider/provider.ts</code></td></tr>
+        <tr><td>Provider transforms</td><td><code>packages/ragu/src/provider/transform.ts</code></td></tr>
+        <tr><td>Provider auth routes</td><td><code>packages/ragu/src/server/httpapi/provider.ts</code>, <code>packages/ragu/src/server/httpapi/provider.ts</code></td></tr>
+        <tr><td>Session runtime hot path</td><td><code>packages/ragu/src/session/llm.ts</code></td></tr>
+        <tr><td>Native runtime</td><td><code>packages/ragu/src/session/llm/native-runtime.ts</code></td></tr>
         <tr><td>LLM package providers</td><td><code>packages/llm/src/providers</code></td></tr>
-        <tr><td>Image and speech tools</td><td><code>packages/nikcli/src/tool/generate_image.ts</code>, <code>packages/nikcli/src/tool/speak.ts</code></td></tr>
+        <tr><td>Image and speech tools</td><td><code>packages/ragu/src/tool/generate_image.ts</code>, <code>packages/ragu/src/tool/speak.ts</code></td></tr>
       </tbody>
     </table>
   </section>

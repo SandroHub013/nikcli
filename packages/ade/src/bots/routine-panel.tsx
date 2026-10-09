@@ -9,7 +9,7 @@
 import { createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { t } from "../i18n"
 import type { BotAccount } from "./account"
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 import {
   describeCap,
   describeEvery,
@@ -44,7 +44,7 @@ export interface RoutinePanelDeps {
   /** The user agreed again: the consent as things are now, and the suspension lifted. */
   readonly reconsent: (bot: AgentFile, id: string) => Promise<string | undefined>
   readonly openSource: (url: string) => void
-  /** The catalog's word on the bot's nikcli model (`catalog.ts`); undefined for the other runners. */
+  /** The catalog's word on the bot's ragu model (`catalog.ts`); undefined for the other runners. */
   readonly catalogFree: (bot: AgentFile) => Promise<boolean | undefined>
 }
 
@@ -55,7 +55,7 @@ export function RoutineSection(props: {
   deps: RoutinePanelDeps
 }) {
   const runner = () => runnerById(props.bot.runner)
-  /* Whether the model is free is nikcli's catalog's to say (review, M2); until it has, the suffix. */
+  /* Whether the model is free is ragu's catalog's to say (review, M2); until it has, the suffix. */
   const [free] = createResource(
     () => `${runner().id}|${props.bot.model ?? ""}`,
     () => props.deps.catalogFree(props.bot),

@@ -15,7 +15,7 @@ const sent = (type: string) => posted.filter((message) => message.type === type)
 
 beforeAll(() => {
   const shim = {
-    __NIKCLI_INSPECTOR_ACTIVE__: false,
+    __RAGU_INSPECTOR_ACTIVE__: false,
     __ADE_LISTEN__: (target: EventTarget, type: string, handler: (event: Event) => void, options?: boolean) =>
       target.addEventListener(type, (event) => userInput.has(event) && handler(event), options),
     parent: { postMessage: (message: unknown) => posted.push(message) },

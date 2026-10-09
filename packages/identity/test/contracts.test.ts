@@ -79,7 +79,7 @@ describe("identity contracts", () => {
       auth: { command: string[]; env: string }
     }
     expect(discovery.auth.command[0]).toBe("curl")
-    expect(discovery.auth.env).toBe("NIKCLI_ACCOUNT_URL")
+    expect(discovery.auth.env).toBe("RAGU_ACCOUNT_URL")
   })
 
   test("requires PKCE S256 and registered redirects", async () => {

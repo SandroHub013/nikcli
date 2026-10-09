@@ -1,5 +1,5 @@
 import type { R2Bucket } from "@cloudflare/workers-types"
-import { verifyAccessToken } from "@nikcli-ai/auth"
+import { verifyAccessToken } from "@ragu/auth"
 
 /** Public artifact metadata, returned once a viewer is authorized. */
 export type ArtifactMeta = {
@@ -31,8 +31,8 @@ export type StoredArtifact = ArtifactMeta & {
 export const ARTIFACT_MAX_BYTES = 25 * 1024 * 1024
 
 /** Cookie the artifact viewer sets after a /user/login; same token space as Bearer auth. */
-export const ARTIFACT_TOKEN_COOKIE = "nikcli_token"
-export const DEFAULT_NIKCLI_AUTH_SERVER = "https://s.nikcli-ai.dev"
+export const ARTIFACT_TOKEN_COOKIE = "ragu_token"
+export const DEFAULT_RAGU_AUTH_SERVER = "https://s.nikcli-ai.dev"
 
 export function parseByteRange(value: string, size: number): { offset: number; length: number } | null {
   const match = /^bytes=(\d*)-(\d*)$/.exec(value.trim())
@@ -161,12 +161,12 @@ function parseCookies(header: string | null): Record<string, string> {
 }
 
 /**
- * Validate a caller-supplied nikcli server URL (the `X-Nikcli-Server` header
+ * Validate a caller-supplied ragu server URL (the `X-Ragu-Server` header
  * the CLI sends). Identities are namespaced by that server's host, so callers
  * verifying against their own server can only claim identities under it.
  */
 function callerAuthServer(request: Request): string | null {
-  const header = request.headers.get("X-Nikcli-Server")
+  const header = request.headers.get("X-Ragu-Server")
   if (!header) return null
   try {
     const url = new URL(header)
@@ -178,15 +178,15 @@ function callerAuthServer(request: Request): string | null {
 }
 
 /**
- * Resolve the logged-in nikcli user from a request, accepting the same
+ * Resolve the logged-in ragu user from a request, accepting the same
  * tokens the web app uses (`Authorization: Bearer` from /user/login) or the
  * viewer cookie set by the artifact login gate. The token is verified against
- * the caller's own nikcli server when `X-Nikcli-Server` names a reachable one,
+ * the caller's own ragu server when `X-Ragu-Server` names a reachable one,
  * falling back to the default auth server; the resulting id is namespaced by
  * the verifying server's host.
  */
 export async function resolveViewerUserId(
-  env: Pick<CloudflareEnv, "NIKCLI_AUTH_SERVER" | "AUTH_ISSUER" | "AUTH_AUDIENCE" | "AUTH_JWKS_URL">,
+  env: Pick<CloudflareEnv, "RAGU_AUTH_SERVER" | "AUTH_ISSUER" | "AUTH_AUDIENCE" | "AUTH_JWKS_URL">,
   request: Request,
   fetcher: typeof fetch = fetch,
 ): Promise<string | null> {
@@ -201,7 +201,7 @@ export async function resolveViewerUserId(
     try {
       const auth = await verifyAccessToken(token, {
         issuer,
-        audience: env.AUTH_AUDIENCE ?? "nikcli-api",
+        audience: env.AUTH_AUDIENCE ?? "ragu-api",
         jwksUrl: env.AUTH_JWKS_URL ?? new URL("/.well-known/jwks.json", issuer).toString(),
       })
       return auth.accountID
@@ -211,7 +211,7 @@ export async function resolveViewerUserId(
   }
 
   const authServer =
-    callerAuthServer(request) ?? (env.NIKCLI_AUTH_SERVER || DEFAULT_NIKCLI_AUTH_SERVER).replace(/\/$/, "")
+    callerAuthServer(request) ?? (env.RAGU_AUTH_SERVER || DEFAULT_RAGU_AUTH_SERVER).replace(/\/$/, "")
   try {
     const response = await fetcher(`${authServer}/user/me`, {
       headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },

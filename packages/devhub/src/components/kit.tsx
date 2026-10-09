@@ -1,6 +1,6 @@
 import { For, Show, createMemo, type JSX } from "solid-js"
-import { Card } from "@nikcli-ai/ui/card"
-import { Spinner } from "@nikcli-ai/ui/spinner"
+import { Card } from "@ragu/ui/card"
+import { Spinner } from "@ragu/ui/spinner"
 
 export function Spark(props: {
   values: number[]

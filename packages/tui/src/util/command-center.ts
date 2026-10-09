@@ -14,7 +14,7 @@ import {
   sampleForSparkline,
   weightedToolSuccess,
 } from "./analytics-utils"
-import { VizCatalog, type OpenTUIVizSpecType, type VizComponent, type VizSeverity } from "@nikcli-ai/util/viz"
+import { VizCatalog, type OpenTUIVizSpecType, type VizComponent, type VizSeverity } from "@ragu/util/viz"
 
 export type CommandCenterSource = "live" | "live+history"
 

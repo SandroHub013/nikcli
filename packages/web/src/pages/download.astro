@@ -79,10 +79,10 @@ const hasContent = Boolean(base)
 const curlCmd = "curl -fsSL https://nikcli-ai.dev/install | bash"
 const psCmd = "irm https://nikcli-ai.dev/install.ps1 | iex"
 const seoDescription =
-  "Download nikcli — desktop apps and ADE for macOS, Windows, and Linux, standalone CLI binaries, and mobile builds for every released version."
+  "Download ragu — desktop apps and ADE for macOS, Windows, and Linux, standalone CLI binaries, and mobile builds for every released version."
 ---
 
-<Layout title="Download nikcli — Desktop, ADE, CLI & Mobile" description={seoDescription}>
+<Layout title="Download ragu — Desktop, ADE, CLI & Mobile" description={seoDescription}>
   <Navbar />
   <main id="main-content" tabindex="-1" class="flex-1 w-full bg-terminal-bg relative isolate outline-none">
     <!-- Hero -->
@@ -97,7 +97,7 @@ const seoDescription =
           <div class="h-px w-6 bg-terminal-accent" aria-hidden="true"></div>
         </div>
         <h1 class="font-display text-[clamp(2rem,5vw,3.5rem)] font-extrabold leading-[1.04] tracking-[-0.035em] text-terminal-text mb-4">
-          Get nikcli for<br /><span class="text-terminal-muted font-semibold">your platform.</span>
+          Get ragu for<br /><span class="text-terminal-muted font-semibold">your platform.</span>
         </h1>
         <p class="max-w-xl text-[clamp(0.9rem,1.5vw,1.05rem)] text-terminal-muted leading-relaxed mb-8">
           Native desktop apps, ADE, standalone CLI binaries, and mobile builds — every release,
@@ -184,7 +184,7 @@ const seoDescription =
             <div class="mb-6 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
               <div>
                 <h2 class="font-display text-[1.5rem] font-bold tracking-tight text-terminal-text">Desktop app</h2>
-                <p class="text-[14px] text-terminal-muted mt-1">The full nikcli GUI — agent sessions, TUI, and tooling in a native window.</p>
+                <p class="text-[14px] text-terminal-muted mt-1">The full ragu GUI — agent sessions, TUI, and tooling in a native window.</p>
               </div>
               {desktopSec.groups.length > 0 && base && (
                 <span class="font-mono text-[12px] text-terminal-muted/70">{base.tag}</span>
@@ -289,7 +289,7 @@ const seoDescription =
         <section id="mobile" aria-label="Mobile downloads">
           <div class="mb-6">
             <h2 class="font-display text-[1.5rem] font-bold tracking-tight text-terminal-text">Mobile</h2>
-            <p class="text-[14px] text-terminal-muted mt-1">Drive nikcli sessions from your phone.</p>
+            <p class="text-[14px] text-terminal-muted mt-1">Drive ragu sessions from your phone.</p>
           </div>
           {mobileSec.groups.length > 0 ? (
             <DownloadCards groups={mobileSec.groups} detect={false} />
@@ -302,10 +302,10 @@ const seoDescription =
                   </svg>
                 </div>
                 <div class="flex-1">
-                  <h3 class="font-display text-[1.05rem] font-bold text-terminal-text mb-1.5">Use nikcli on mobile</h3>
+                  <h3 class="font-display text-[1.05rem] font-bold text-terminal-text mb-1.5">Use ragu on mobile</h3>
                   <p class="text-[14px] leading-[1.7] text-terminal-muted mb-4">
                     Native binaries for this release aren't published yet. Connect your phone to a running
-                    nikcli server and resume any session from the mobile experience — no install required.
+                    ragu server and resume any session from the mobile experience — no install required.
                   </p>
                   <div class="flex flex-wrap gap-3">
                     <a href="/app" class="inline-flex items-center gap-1.5 rounded-[var(--radius-md)] bg-terminal-accent px-4 py-2 text-[13px] font-bold text-terminal-bg transition-[transform,opacity] hover:opacity-90 active:scale-[0.97]">
@@ -341,7 +341,7 @@ const seoDescription =
                 </svg>
               </span>
               <span class="brand-kit__copy">
-                <span class="brand-kit__title">nikcli-brandkit.zip</span>
+                <span class="brand-kit__title">ragu-brandkit.zip</span>
                 <span class="brand-kit__meta">~986 KB · 17 files · 15 PNGs + README + MANIFEST</span>
               </span>
               <span class="brand-kit__action">Download</span>

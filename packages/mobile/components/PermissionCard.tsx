@@ -157,13 +157,13 @@ export function PermissionCard(props: {
           <ActionButton
             label="Always allow"
             accessibilityLabel={`Always allow permission ${props.item.permission}`}
-            accessibilityHint="Remembers this permission scope until Nikcli restarts"
+            accessibilityHint="Remembers this permission scope until Ragu restarts"
             onPress={() => props.onRespond("always")}
           />
         </View>
       </View>
       <Text selectable className="mt-2 text-[10px] leading-4 text-soft">
-        Always remembers this permission scope until Nikcli restarts. Use it only when the command and path look safe.
+        Always remembers this permission scope until Ragu restarts. Use it only when the command and path look safe.
       </Text>
     </View>
   )

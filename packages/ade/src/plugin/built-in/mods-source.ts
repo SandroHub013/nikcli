@@ -4,7 +4,7 @@
  * Plain TypeScript, apart from the component that uses it (`mods.tsx`), so the stream's behaviour can
  * be tested without a DOM.
  */
-import type { ModHostEvent, ModSource } from "@nikcli-ai/ui/mod-tree-model"
+import type { ModHostEvent, ModSource } from "@ragu/ui/mod-tree-model"
 import { isChatRefused, type ChatConnection } from "../../chat/connection"
 import { readEvents, StreamRefused } from "../../chat/stream"
 

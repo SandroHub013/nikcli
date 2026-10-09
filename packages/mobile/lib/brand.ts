@@ -1,5 +1,5 @@
 /**
- * nikcli pixel wordmark assets.
+ * ragu pixel wordmark assets.
  *
  * Naming follows surface contrast, not appearance mode:
  * - `wordmark-dark`  → pale letters for dark / photographic surfaces

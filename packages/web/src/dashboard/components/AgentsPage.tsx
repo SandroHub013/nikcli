@@ -44,7 +44,7 @@ function AgentsPageInner() {
       <PageHeader
         eyebrow="Agents"
         title="AI agents"
-        description="AI agents available on your nikcli server. Define new agents from the CLI with nikcli agent create."
+        description="AI agents available on your ragu server. Define new agents from the CLI with ragu agent create."
       />
 
       {error && <ErrorBanner>{error}</ErrorBanner>}
@@ -55,7 +55,7 @@ function AgentsPageInner() {
         <EmptyState
           icon={emptyIcons.robot}
           title="No agents"
-          description="Define agents on the server with nikcli agent create."
+          description="Define agents on the server with ragu agent create."
         />
       ) : (
         <div className="space-y-3">

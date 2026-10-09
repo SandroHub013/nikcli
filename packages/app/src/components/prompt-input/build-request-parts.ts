@@ -1,5 +1,5 @@
-import { getFilename } from "@nikcli-ai/util/path"
-import { type AgentPartInput, type FilePartInput, type Part, type TextPartInput } from "@nikcli-ai/sdk/httpapi"
+import { getFilename } from "@ragu/util/path"
+import { type AgentPartInput, type FilePartInput, type Part, type TextPartInput } from "@ragu/sdk/httpapi"
 import type { FileSelection } from "@/context/file"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
 import { Identifier } from "@/utils/id"

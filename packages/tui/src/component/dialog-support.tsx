@@ -13,7 +13,7 @@ import { Clipboard } from "@tui/util/clipboard"
 import { DialogModel, useConnected } from "@tui/component/dialog-model"
 import { buildSupportDocsIndex } from "@tui/util/support-docs"
 import { useAbortOnCleanup } from "@tui/util/lifecycle"
-import type { Part, TextPart } from "@nikcli-ai/sdk/httpapi"
+import type { Part, TextPart } from "@ragu/sdk/httpapi"
 import {
   buildSupportPromptParts,
   supportPartFromPaste,

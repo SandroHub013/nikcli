@@ -1,0 +1,91 @@
+import { Effect, Schema } from "effect"
+import { zod } from "@ragu/util/effect-zod"
+import { Tool } from "./tool"
+import { Question } from "../question"
+import { Session } from "../session"
+import { PermissionNext } from "@/permission/next"
+import DESCRIPTION from "./question.txt"
+import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
+
+const QuestionWithoutCustom = Schema.Struct({
+  question: Schema.String.annotate({ description: "Complete question" }),
+  header: Schema.String.pipe(Schema.check(Schema.isMaxLength(30))).annotate({
+    description: "Very short label (max 30 chars)",
+  }),
+  options: Schema.Array(
+    Schema.Struct({
+      label: Schema.String.pipe(Schema.check(Schema.isMaxLength(30))).annotate({
+        description: "Display text (1-5 words, concise)",
+      }),
+      description: Schema.String.annotate({ description: "Explanation of choice" }),
+    }),
+  ).annotate({ description: "Available choices" }),
+  multiple: Schema.optional(Schema.Boolean).annotate({ description: "Allow selecting multiple choices" }),
+})
+
+const Parameters = Schema.Struct({
+  questions: Schema.Array(QuestionWithoutCustom).annotate({ description: "Questions to ask" }),
+})
+
+// True when the session's own rules deny `question` for every pattern. A session that cannot
+// be read (or has no rules) is not forbidden: the tool behaves as it always did.
+export async function isQuestionForbidden(sessionID: string) {
+  try {
+    const info = await runPromiseWithLayer(
+      Session.defaultLayer,
+      withCurrentInstance(Effect.flatMap(Session.Service, (session) => session.get(sessionID))),
+    )
+    return PermissionNext.disabled(["question"], info.permission ?? []).has("question")
+  } catch {
+    return false
+  }
+}
+
+export const QuestionTool = Tool.define("question", {
+  description: DESCRIPTION,
+  parameters: zod(Parameters),
+  async execute(params, ctx) {
+    // The session can forbid `question` outright (`ragu run` does: nobody is there to answer).
+    // The tool is normally hidden from the model then; if a call still gets here, answering
+    // "no one can reply" now beats parking for the 600s tool timeout.
+    if (await isQuestionForbidden(ctx.sessionID)) {
+      return {
+        title: "Question not asked",
+        output:
+          "No user is available to answer questions in this session, so nothing was asked. Decide on your own with the best-supported assumption, state it briefly, and continue the task.",
+        metadata: { answers: [] as Question.Answer[] },
+      }
+    }
+    const answers = await runPromiseWithLayer(
+      Question.defaultLayer,
+      withCurrentInstance(
+        Effect.gen(function* () {
+          const question = yield* Question.Service
+          return yield* question.ask({
+            sessionID: ctx.sessionID,
+            // SAFETY: `params` is the tool's own validated schema output, so the
+            // questions already match `Question.Info`; the copy exists to drop
+            // the schema's readonly modifiers, not to change the shape.
+            questions: [...params.questions] as Question.Info[],
+            tool: ctx.callID ? { messageID: ctx.messageID, callID: ctx.callID } : undefined,
+          })
+        }),
+      ),
+    )
+
+    function format(answer: Question.Answer | undefined) {
+      if (!answer?.length) return "Unanswered"
+      return answer.join(", ")
+    }
+
+    const formatted = params.questions.map((q, i) => `"${q.question}"="${format(answers[i])}"`).join(", ")
+
+    return {
+      title: `Asked ${params.questions.length} question${params.questions.length > 1 ? "s" : ""}`,
+      output: `User has answered your questions: ${formatted}. You can now continue with the user's answers in mind.`,
+      metadata: {
+        answers,
+      },
+    }
+  },
+})

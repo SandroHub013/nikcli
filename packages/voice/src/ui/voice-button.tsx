@@ -18,7 +18,7 @@ import type { DialogStatus } from "../dialog/session"
 import type { VoiceMode } from "../settings/model"
 import { NikMic } from "./nik-mic"
 import "./voice.css"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 
 export interface VoiceButtonProps {
   /** The voice control engine instance. */

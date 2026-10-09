@@ -1,6 +1,6 @@
 /**
  * Ensures packages/web/src/pages/docs/tools.astro toolIndex IDs stay in sync
- * with Tool.define IDs under packages/nikcli/src/tool/*.ts
+ * with Tool.define IDs under packages/ragu/src/tool/*.ts
  */
 import { readFileSync, readdirSync } from "node:fs"
 import path from "node:path"
@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url"
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const monoRoot = path.resolve(webRoot, "../..")
 const toolsPagePath = path.join(webRoot, "src/pages/docs/tools.astro")
-const toolDir = path.join(monoRoot, "packages/nikcli/src/tool")
+const toolDir = path.join(monoRoot, "packages/ragu/src/tool")
 
 /** Matches Tool.define("id") and Tool.define<...>("id", */
 const toolDefineRe = /Tool\.define(?:<[^>]*>)?\(\s*["']([^"']+)["']/g

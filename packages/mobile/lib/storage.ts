@@ -15,18 +15,18 @@ import { DEFAULT_WALLPAPER, normalizeWallpaper } from "./wallpaper"
 
 export { normalizeWallpaper }
 
-const SERVER_CONFIG_KEY = "nikcli_server_config"
-const APP_PREFERENCES_KEY = "nikcli_app_preferences"
-const USER_TOKEN_KEY = "nikcli_user_token"
-const OAUTH_TOKENS_KEY = "nikcli_oauth_tokens"
-const OAUTH_ISSUER_KEY = "nikcli_oauth_issuer"
-const REMEMBERED_USER_KEY = "nikcli_remembered_user"
-const LIVE_ACTIVITY_REGISTRY_KEY = "nikcli_live_activity_registry"
-const THEME_ID_KEY = "nikcli_theme_id"
-const COLOR_SCHEME_KEY = "nikcli_color_scheme"
-const TELEPORT_TARGET_KEY = "nikcli_teleport_target"
-const SESSION_SEEN_KEY = "nikcli_session_seen"
-const GITHUB_DEVICE_AUTH_PENDING_KEY = "nikcli_github_device_auth_pending"
+const SERVER_CONFIG_KEY = "ragu_server_config"
+const APP_PREFERENCES_KEY = "ragu_app_preferences"
+const USER_TOKEN_KEY = "ragu_user_token"
+const OAUTH_TOKENS_KEY = "ragu_oauth_tokens"
+const OAUTH_ISSUER_KEY = "ragu_oauth_issuer"
+const REMEMBERED_USER_KEY = "ragu_remembered_user"
+const LIVE_ACTIVITY_REGISTRY_KEY = "ragu_live_activity_registry"
+const THEME_ID_KEY = "ragu_theme_id"
+const COLOR_SCHEME_KEY = "ragu_color_scheme"
+const TELEPORT_TARGET_KEY = "ragu_teleport_target"
+const SESSION_SEEN_KEY = "ragu_session_seen"
+const GITHUB_DEVICE_AUTH_PENDING_KEY = "ragu_github_device_auth_pending"
 
 export type TeleportTarget = { url: string; token: string }
 
@@ -207,12 +207,12 @@ function defaultPreferences(): AppPreferences {
 }
 
 function envDefault(): ServerConfig | null {
-  const url = process.env.EXPO_PUBLIC_NIKCLI_SERVER_URL
+  const url = process.env.EXPO_PUBLIC_RAGU_SERVER_URL
   if (!url) return null
   return {
     url,
-    username: process.env.EXPO_PUBLIC_NIKCLI_USERNAME || undefined,
-    password: process.env.EXPO_PUBLIC_NIKCLI_PASSWORD || undefined,
+    username: process.env.EXPO_PUBLIC_RAGU_USERNAME || undefined,
+    password: process.env.EXPO_PUBLIC_RAGU_PASSWORD || undefined,
   }
 }
 

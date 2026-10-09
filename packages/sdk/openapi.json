@@ -53,7 +53,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.instance.dispose({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.instance.dispose({\n  ...\n})"
           }
         ]
       }
@@ -106,7 +106,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.path.get({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.path.get({\n  ...\n})"
           }
         ]
       }
@@ -159,7 +159,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.vcs.get({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.vcs.get({\n  ...\n})"
           }
         ]
       }
@@ -215,7 +215,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.vcs.status({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.vcs.status({\n  ...\n})"
           }
         ]
       }
@@ -268,7 +268,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.vcs.diff.raw({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.vcs.diff.raw({\n  ...\n})"
           }
         ]
       }
@@ -341,7 +341,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.vcs.apply({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.vcs.apply({\n  ...\n})"
           }
         ]
       }
@@ -397,7 +397,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.command.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.command.list({\n  ...\n})"
           }
         ]
       }
@@ -453,7 +453,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.app.agents({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.app.agents({\n  ...\n})"
           }
         ]
       }
@@ -509,7 +509,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.app.skills({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.app.skills({\n  ...\n})"
           }
         ]
       },
@@ -570,7 +570,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.app.skill.create({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.app.skill.create({\n  ...\n})"
           }
         ]
       }
@@ -626,7 +626,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.lsp.status({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.lsp.status({\n  ...\n})"
           }
         ]
       }
@@ -682,7 +682,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.formatter.status({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.formatter.status({\n  ...\n})"
           }
         ]
       }
@@ -735,7 +735,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.analytics.global({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.analytics.global({\n  ...\n})"
           }
         ]
       }
@@ -836,7 +836,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.analytics.daily({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.analytics.daily({\n  ...\n})"
           }
         ]
       }
@@ -907,7 +907,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.analytics.session({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.analytics.session({\n  ...\n})"
           }
         ]
       }
@@ -963,7 +963,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.analytics.sessions({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.analytics.sessions({\n  ...\n})"
           }
         ]
       }
@@ -1016,7 +1016,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.analytics.leaderboard({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.analytics.leaderboard({\n  ...\n})"
           }
         ]
       }
@@ -1099,7 +1099,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.analytics.data({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.analytics.data({\n  ...\n})"
           }
         ]
       }
@@ -1162,7 +1162,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.app.log({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.app.log({\n  ...\n})"
           }
         ]
       }
@@ -1223,7 +1223,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.app.skill.delete({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.app.skill.delete({\n  ...\n})"
           }
         ]
       }
@@ -1276,7 +1276,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.brain.status({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.brain.status({\n  ...\n})"
           }
         ]
       }
@@ -1339,7 +1339,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.brain.trigger({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.brain.trigger({\n  ...\n})"
           }
         ]
       }
@@ -1395,7 +1395,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.chatbot.bots({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.chatbot.bots({\n  ...\n})"
           }
         ]
       }
@@ -1456,7 +1456,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.chatbot.start({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.chatbot.start({\n  ...\n})"
           }
         ]
       }
@@ -1517,7 +1517,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.chatbot.stop({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.chatbot.stop({\n  ...\n})"
           }
         ]
       }
@@ -1570,7 +1570,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.discord.status({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.discord.status({\n  ...\n})"
           }
         ]
       }
@@ -1643,7 +1643,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.discord.setup({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.discord.setup({\n  ...\n})"
           }
         ]
       }
@@ -1696,7 +1696,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.discord.start({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.discord.start({\n  ...\n})"
           }
         ]
       }
@@ -1749,7 +1749,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.discord.stop({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.discord.stop({\n  ...\n})"
           }
         ]
       }
@@ -1812,7 +1812,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.voice.transcribe({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.voice.transcribe({\n  ...\n})"
           }
         ]
       }
@@ -1865,7 +1865,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.profile.get({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.profile.get({\n  ...\n})"
           }
         ]
       },
@@ -1926,7 +1926,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.profile.patch({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.profile.patch({\n  ...\n})"
           }
         ]
       },
@@ -1977,7 +1977,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.profile.clear({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.profile.clear({\n  ...\n})"
           }
         ]
       }
@@ -2045,7 +2045,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.profile.habits({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.profile.habits({\n  ...\n})"
           }
         ]
       },
@@ -2111,7 +2111,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.profile.clearHabits({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.profile.clearHabits({\n  ...\n})"
           }
         ]
       }
@@ -2179,7 +2179,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.profile.preview({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.profile.preview({\n  ...\n})"
           }
         ]
       }
@@ -2232,7 +2232,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.config.get({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.config.get({\n  ...\n})"
           }
         ]
       },
@@ -2303,7 +2303,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.config.update({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.config.update({\n  ...\n})"
           }
         ]
       }
@@ -2356,7 +2356,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.config.providers({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.config.providers({\n  ...\n})"
           }
         ]
       }
@@ -2409,7 +2409,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.connectors.status({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.connectors.status({\n  ...\n})"
           }
         ]
       }
@@ -2490,7 +2490,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.connectors.auth.set({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.connectors.auth.set({\n  ...\n})"
           }
         ]
       },
@@ -2549,7 +2549,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.connectors.auth.remove({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.connectors.auth.remove({\n  ...\n})"
           }
         ]
       }
@@ -2612,7 +2612,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.connectors.invalidate({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.connectors.invalidate({\n  ...\n})"
           }
         ]
       }
@@ -2665,7 +2665,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.doctor.run({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.doctor.run({\n  ...\n})"
           }
         ]
       }
@@ -2718,7 +2718,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.tool.ids({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.tool.ids({\n  ...\n})"
           }
         ]
       }
@@ -2787,7 +2787,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.tool.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.tool.list({\n  ...\n})"
           }
         ]
       }
@@ -2850,7 +2850,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.worktree.create({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.worktree.create({\n  ...\n})"
           }
         ]
       },
@@ -2901,7 +2901,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.worktree.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.worktree.list({\n  ...\n})"
           }
         ]
       },
@@ -2962,7 +2962,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.worktree.remove({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.worktree.remove({\n  ...\n})"
           }
         ]
       }
@@ -3025,7 +3025,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.worktree.reset({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.worktree.reset({\n  ...\n})"
           }
         ]
       }
@@ -3078,7 +3078,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.experimental.resource.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.experimental.resource.list({\n  ...\n})"
           }
         ]
       }
@@ -3141,7 +3141,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.managed-worktree.create({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.managed-worktree.create({\n  ...\n})"
           }
         ]
       },
@@ -3202,7 +3202,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.managed-worktree.remove({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.managed-worktree.remove({\n  ...\n})"
           }
         ]
       },
@@ -3253,7 +3253,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.managed-worktree.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.managed-worktree.list({\n  ...\n})"
           }
         ]
       }
@@ -3316,7 +3316,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.managed-worktree.link({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.managed-worktree.link({\n  ...\n})"
           }
         ]
       }
@@ -3377,7 +3377,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.managed-worktree.children({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.managed-worktree.children({\n  ...\n})"
           }
         ]
       }
@@ -3438,7 +3438,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.managed-worktree.ancestors({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.managed-worktree.ancestors({\n  ...\n})"
           }
         ]
       }
@@ -3502,7 +3502,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.find.text({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.find.text({\n  ...\n})"
           }
         ]
       }
@@ -3613,7 +3613,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.find.files({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.find.files({\n  ...\n})"
           }
         ]
       }
@@ -3677,7 +3677,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.find.symbols({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.find.symbols({\n  ...\n})"
           }
         ]
       }
@@ -3741,7 +3741,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.file.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.file.list({\n  ...\n})"
           }
         ]
       }
@@ -3802,7 +3802,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.file.read({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.file.read({\n  ...\n})"
           }
         ]
       },
@@ -3863,7 +3863,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.file.write({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.file.write({\n  ...\n})"
           }
         ]
       }
@@ -3919,7 +3919,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.file.status({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.file.status({\n  ...\n})"
           }
         ]
       }
@@ -3962,7 +3962,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.global.health({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.global.health({\n  ...\n})"
           }
         ]
       }
@@ -4015,7 +4015,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.global.dispose({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.global.dispose({\n  ...\n})"
           }
         ]
       }
@@ -4068,7 +4068,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mcp.status({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mcp.status({\n  ...\n})"
           }
         ]
       },
@@ -4129,7 +4129,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mcp.add({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mcp.add({\n  ...\n})"
           }
         ]
       }
@@ -4200,7 +4200,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mcp.auth.start({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mcp.auth.start({\n  ...\n})"
           }
         ]
       },
@@ -4259,7 +4259,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mcp.auth.remove({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mcp.auth.remove({\n  ...\n})"
           }
         ]
       }
@@ -4330,7 +4330,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mcp.auth.callback({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mcp.auth.callback({\n  ...\n})"
           }
         ]
       }
@@ -4401,7 +4401,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mcp.auth.authenticate({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mcp.auth.authenticate({\n  ...\n})"
           }
         ]
       }
@@ -4462,7 +4462,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mcp.connect({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mcp.connect({\n  ...\n})"
           }
         ]
       }
@@ -4523,7 +4523,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mcp.disconnect({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mcp.disconnect({\n  ...\n})"
           }
         ]
       }
@@ -4594,7 +4594,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mcp.toggle({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mcp.toggle({\n  ...\n})"
           }
         ]
       }
@@ -4647,7 +4647,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mission.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mission.list({\n  ...\n})"
           }
         ]
       },
@@ -4718,7 +4718,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mission.upsert({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mission.upsert({\n  ...\n})"
           }
         ]
       }
@@ -4771,7 +4771,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mission.templates({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mission.templates({\n  ...\n})"
           }
         ]
       }
@@ -4844,7 +4844,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mission.generate({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mission.generate({\n  ...\n})"
           }
         ]
       }
@@ -4905,7 +4905,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mission.recentExecs({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mission.recentExecs({\n  ...\n})"
           }
         ]
       }
@@ -4976,7 +4976,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mission.get({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mission.get({\n  ...\n})"
           }
         ]
       },
@@ -5065,7 +5065,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mission.update({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mission.update({\n  ...\n})"
           }
         ]
       },
@@ -5134,7 +5134,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mission.delete({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mission.delete({\n  ...\n})"
           }
         ]
       }
@@ -5215,7 +5215,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mission.start({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mission.start({\n  ...\n})"
           }
         ]
       }
@@ -5286,7 +5286,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mission.pause({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mission.pause({\n  ...\n})"
           }
         ]
       }
@@ -5357,7 +5357,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mission.cancel({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mission.cancel({\n  ...\n})"
           }
         ]
       }
@@ -5456,7 +5456,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mission.feature.mutate({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mission.feature.mutate({\n  ...\n})"
           }
         ]
       }
@@ -5525,7 +5525,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mission.execs({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mission.execs({\n  ...\n})"
           }
         ]
       }
@@ -5581,7 +5581,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.auth.token.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.auth.token.list({\n  ...\n})"
           }
         ]
       },
@@ -5652,7 +5652,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.auth.token.create({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.auth.token.create({\n  ...\n})"
           }
         ]
       }
@@ -5720,7 +5720,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.auth.token.revoke({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.auth.token.revoke({\n  ...\n})"
           }
         ]
       }
@@ -5773,7 +5773,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.bootstrap({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.bootstrap({\n  ...\n})"
           }
         ]
       }
@@ -5829,7 +5829,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.command.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.command.list({\n  ...\n})"
           }
         ]
       }
@@ -5885,7 +5885,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.project.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.project.list({\n  ...\n})"
           }
         ]
       }
@@ -5941,7 +5941,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.memory.history({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.memory.history({\n  ...\n})"
           }
         ]
       }
@@ -6005,7 +6005,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.memory.search({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.memory.search({\n  ...\n})"
           }
         ]
       }
@@ -6061,7 +6061,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.memory.stash.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.memory.stash.list({\n  ...\n})"
           }
         ]
       },
@@ -6129,7 +6129,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.memory.stash.create({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.memory.stash.create({\n  ...\n})"
           }
         ]
       }
@@ -6200,7 +6200,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.memory.stash.delete({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.memory.stash.delete({\n  ...\n})"
           }
         ]
       }
@@ -6273,7 +6273,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.repos({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.repos({\n  ...\n})"
           }
         ]
       }
@@ -6365,7 +6365,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.branches({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.branches({\n  ...\n})"
           }
         ]
       }
@@ -6457,7 +6457,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.actions.workflows({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.actions.workflows({\n  ...\n})"
           }
         ]
       }
@@ -6576,7 +6576,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.actions.runs({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.actions.runs({\n  ...\n})"
           }
         ]
       }
@@ -6676,7 +6676,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.actions.run.jobs({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.actions.run.jobs({\n  ...\n})"
           }
         ]
       }
@@ -6783,7 +6783,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.actions.run.rerun({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.actions.run.rerun({\n  ...\n})"
           }
         ]
       }
@@ -6880,7 +6880,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.actions.run.cancel({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.actions.run.cancel({\n  ...\n})"
           }
         ]
       }
@@ -6987,7 +6987,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.actions.workflow.dispatch({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.actions.workflow.dispatch({\n  ...\n})"
           }
         ]
       }
@@ -7043,7 +7043,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.imports({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.imports({\n  ...\n})"
           }
         ]
       }
@@ -7113,7 +7113,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.oauth.clientId.set({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.oauth.clientId.set({\n  ...\n})"
           }
         ]
       }
@@ -7176,7 +7176,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.oauth.device.start({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.oauth.device.start({\n  ...\n})"
           }
         ]
       }
@@ -7256,7 +7256,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.oauth.device.poll({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.oauth.device.poll({\n  ...\n})"
           }
         ]
       }
@@ -7326,7 +7326,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.auth.set({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.auth.set({\n  ...\n})"
           }
         ]
       },
@@ -7377,7 +7377,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.auth.remove({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.auth.remove({\n  ...\n})"
           }
         ]
       }
@@ -7460,7 +7460,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.import({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.import({\n  ...\n})"
           }
         ]
       }
@@ -7533,7 +7533,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.session.create({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.session.create({\n  ...\n})"
           }
         ]
       }
@@ -7619,7 +7619,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.session.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.list({\n  ...\n})"
           }
         ]
       },
@@ -7680,7 +7680,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.session.create({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.create({\n  ...\n})"
           }
         ]
       }
@@ -7741,7 +7741,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.session.detail({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.detail({\n  ...\n})"
           }
         ]
       },
@@ -7800,7 +7800,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.session.delete({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.delete({\n  ...\n})"
           }
         ]
       }
@@ -7872,7 +7872,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.session.diff({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.diff({\n  ...\n})"
           }
         ]
       }
@@ -7936,7 +7936,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.session.command.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.command.list({\n  ...\n})"
           }
         ]
       },
@@ -8028,7 +8028,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.session.command({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.command({\n  ...\n})"
           }
         ]
       }
@@ -8109,7 +8109,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.session.message({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.message({\n  ...\n})"
           }
         ]
       }
@@ -8170,7 +8170,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.session.abort({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.abort({\n  ...\n})"
           }
         ]
       }
@@ -8249,7 +8249,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.permission.respond({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.permission.respond({\n  ...\n})"
           }
         ]
       }
@@ -8341,7 +8341,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.question.respond({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.question.respond({\n  ...\n})"
           }
         ]
       },
@@ -8408,7 +8408,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.question.reject({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.question.reject({\n  ...\n})"
           }
         ]
       }
@@ -8499,7 +8499,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.session.publish({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.session.publish({\n  ...\n})"
           }
         ]
       }
@@ -8570,7 +8570,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.github.session.cleanup({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.github.session.cleanup({\n  ...\n})"
           }
         ]
       }
@@ -8713,7 +8713,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.session.stream({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.stream({\n  ...\n})"
           }
         ]
       }
@@ -8801,7 +8801,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.session.rename({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.rename({\n  ...\n})"
           }
         ]
       }
@@ -8872,7 +8872,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.session.todo({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.todo({\n  ...\n})"
           }
         ]
       }
@@ -8932,7 +8932,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.session.teleport.upload.begin({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.teleport.upload.begin({\n  ...\n})"
           }
         ]
       }
@@ -9000,7 +9000,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.session.teleport.upload.chunk({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.teleport.upload.chunk({\n  ...\n})"
           }
         ]
       }
@@ -9073,7 +9073,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.session.teleport({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.teleport({\n  ...\n})"
           }
         ]
       }
@@ -9164,7 +9164,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.session.teleport.out({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.session.teleport.out({\n  ...\n})"
           }
         ]
       }
@@ -9227,7 +9227,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.worktree.create({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.worktree.create({\n  ...\n})"
           }
         ]
       },
@@ -9288,7 +9288,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.worktree.remove({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.worktree.remove({\n  ...\n})"
           }
         ]
       }
@@ -9351,7 +9351,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.worktree.reset({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.worktree.reset({\n  ...\n})"
           }
         ]
       }
@@ -9404,7 +9404,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.git.status({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.git.status({\n  ...\n})"
           }
         ]
       }
@@ -9491,7 +9491,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.git.diff({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.git.diff({\n  ...\n})"
           }
         ]
       }
@@ -9562,7 +9562,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.git.commits({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.git.commits({\n  ...\n})"
           }
         ]
       }
@@ -9618,7 +9618,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.git.branches({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.git.branches({\n  ...\n})"
           }
         ]
       }
@@ -9741,7 +9741,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.git.commit({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.git.commit({\n  ...\n})"
           }
         ]
       }
@@ -9821,7 +9821,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.git.checkout({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.git.checkout({\n  ...\n})"
           }
         ]
       }
@@ -9894,7 +9894,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.git.stage({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.git.stage({\n  ...\n})"
           }
         ]
       }
@@ -9967,7 +9967,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.git.unstage({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.git.unstage({\n  ...\n})"
           }
         ]
       }
@@ -10040,7 +10040,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.git.discard({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.git.discard({\n  ...\n})"
           }
         ]
       }
@@ -10119,7 +10119,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.git.push({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.git.push({\n  ...\n})"
           }
         ]
       }
@@ -10196,7 +10196,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.git.pull({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.git.pull({\n  ...\n})"
           }
         ]
       }
@@ -10265,7 +10265,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.loop.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.loop.list({\n  ...\n})"
           }
         ]
       },
@@ -10336,7 +10336,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.loop.create({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.loop.create({\n  ...\n})"
           }
         ]
       }
@@ -10399,7 +10399,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.loop.templates({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.loop.templates({\n  ...\n})"
           }
         ]
       }
@@ -10462,7 +10462,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.loop.generate({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.loop.generate({\n  ...\n})"
           }
         ]
       }
@@ -10540,7 +10540,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.loop.runs.recent({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.loop.runs.recent({\n  ...\n})"
           }
         ]
       }
@@ -10621,7 +10621,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.loop.get({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.loop.get({\n  ...\n})"
           }
         ]
       },
@@ -10690,7 +10690,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.loop.delete({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.loop.delete({\n  ...\n})"
           }
         ]
       },
@@ -10779,7 +10779,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.loop.update({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.loop.update({\n  ...\n})"
           }
         ]
       }
@@ -10875,7 +10875,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.loop.runs({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.loop.runs({\n  ...\n})"
           }
         ]
       }
@@ -10946,7 +10946,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.loop.run({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.loop.run({\n  ...\n})"
           }
         ]
       }
@@ -11017,7 +11017,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.loop.abort({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.loop.abort({\n  ...\n})"
           }
         ]
       }
@@ -11105,7 +11105,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.loop.toggle({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.loop.toggle({\n  ...\n})"
           }
         ]
       }
@@ -11176,7 +11176,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.loop.pause({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.loop.pause({\n  ...\n})"
           }
         ]
       }
@@ -11247,7 +11247,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.loop.resume({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.loop.resume({\n  ...\n})"
           }
         ]
       }
@@ -11303,7 +11303,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.routine.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.routine.list({\n  ...\n})"
           }
         ]
       },
@@ -11364,7 +11364,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.routine.create({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.routine.create({\n  ...\n})"
           }
         ]
       }
@@ -11435,7 +11435,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.routine.get({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.routine.get({\n  ...\n})"
           }
         ]
       },
@@ -11504,7 +11504,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.routine.delete({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.routine.delete({\n  ...\n})"
           }
         ]
       },
@@ -11583,7 +11583,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.routine.update({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.routine.update({\n  ...\n})"
           }
         ]
       }
@@ -11664,7 +11664,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.routine.run({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.routine.run({\n  ...\n})"
           }
         ]
       }
@@ -11735,7 +11735,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.routine.pause({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.routine.pause({\n  ...\n})"
           }
         ]
       }
@@ -11806,7 +11806,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.routine.resume({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.routine.resume({\n  ...\n})"
           }
         ]
       }
@@ -11887,7 +11887,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.routine.trigger({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.routine.trigger({\n  ...\n})"
           }
         ]
       }
@@ -11943,7 +11943,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.pty.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.pty.list({\n  ...\n})"
           }
         ]
       },
@@ -12063,7 +12063,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.pty.create({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.pty.create({\n  ...\n})"
           }
         ]
       }
@@ -12124,7 +12124,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.pty.get({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.pty.get({\n  ...\n})"
           }
         ]
       },
@@ -12242,7 +12242,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.pty.update({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.pty.update({\n  ...\n})"
           }
         ]
       },
@@ -12301,7 +12301,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.pty.remove({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.pty.remove({\n  ...\n})"
           }
         ]
       }
@@ -12360,7 +12360,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.pty.connect({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.pty.connect({\n  ...\n})"
           }
         ]
       }
@@ -12429,7 +12429,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.mission.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.mission.list({\n  ...\n})"
           }
         ]
       },
@@ -12500,7 +12500,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.mission.create({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.mission.create({\n  ...\n})"
           }
         ]
       }
@@ -12563,7 +12563,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.mission.templates({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.mission.templates({\n  ...\n})"
           }
         ]
       }
@@ -12636,7 +12636,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.mission.generate({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.mission.generate({\n  ...\n})"
           }
         ]
       }
@@ -12714,7 +12714,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.mission.execs.recent({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.mission.execs.recent({\n  ...\n})"
           }
         ]
       }
@@ -12795,7 +12795,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.mission.get({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.mission.get({\n  ...\n})"
           }
         ]
       },
@@ -12884,7 +12884,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.mission.update({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.mission.update({\n  ...\n})"
           }
         ]
       },
@@ -12953,7 +12953,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.mission.delete({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.mission.delete({\n  ...\n})"
           }
         ]
       }
@@ -13049,7 +13049,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.mission.execs({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.mission.execs({\n  ...\n})"
           }
         ]
       }
@@ -13120,7 +13120,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.mission.start({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.mission.start({\n  ...\n})"
           }
         ]
       }
@@ -13191,7 +13191,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.mission.pause({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.mission.pause({\n  ...\n})"
           }
         ]
       }
@@ -13262,7 +13262,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.mission.cancel({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.mission.cancel({\n  ...\n})"
           }
         ]
       }
@@ -13361,7 +13361,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.mission.feature.mutate({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.mission.feature.mutate({\n  ...\n})"
           }
         ]
       }
@@ -13496,7 +13496,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.events({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.events({\n  ...\n})"
           }
         ]
       }
@@ -13646,7 +13646,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.brain.get({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.brain.get({\n  ...\n})"
           }
         ]
       },
@@ -13776,7 +13776,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.brain.trigger({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.brain.trigger({\n  ...\n})"
           }
         ]
       }
@@ -13855,7 +13855,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.chatbot.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.chatbot.list({\n  ...\n})"
           }
         ]
       }
@@ -13933,7 +13933,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.chatbot.start({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.chatbot.start({\n  ...\n})"
           }
         ]
       }
@@ -14001,7 +14001,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.chatbot.stop({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.chatbot.stop({\n  ...\n})"
           }
         ]
       }
@@ -14071,7 +14071,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.observability.get({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.observability.get({\n  ...\n})"
           }
         ]
       },
@@ -14156,7 +14156,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.observability.set({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.observability.set({\n  ...\n})"
           }
         ]
       }
@@ -14246,7 +14246,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.lsp.status({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.lsp.status({\n  ...\n})"
           }
         ]
       }
@@ -14322,7 +14322,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.fusion.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.fusion.list({\n  ...\n})"
           }
         ]
       },
@@ -14403,7 +14403,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.fusion.set({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.fusion.set({\n  ...\n})"
           }
         ]
       }
@@ -14483,7 +14483,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.host.browser({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.host.browser({\n  ...\n})"
           }
         ]
       }
@@ -14593,7 +14593,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.host.computer({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.host.computer({\n  ...\n})"
           }
         ]
       }
@@ -14683,7 +14683,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.host.herdr.get({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.host.herdr.get({\n  ...\n})"
           }
         ]
       },
@@ -14788,7 +14788,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.host.herdr.set({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.host.herdr.set({\n  ...\n})"
           }
         ]
       }
@@ -14906,7 +14906,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.host.island({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.host.island({\n  ...\n})"
           }
         ]
       }
@@ -15094,7 +15094,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.host.devtools({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.host.devtools({\n  ...\n})"
           }
         ]
       }
@@ -15147,7 +15147,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.host.lan.get({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.host.lan.get({\n  ...\n})"
           }
         ]
       },
@@ -15208,7 +15208,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mobile.host.lan.start({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mobile.host.lan.start({\n  ...\n})"
           }
         ]
       }
@@ -15264,7 +15264,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.project.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.project.list({\n  ...\n})"
           }
         ]
       }
@@ -15317,7 +15317,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.project.current({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.project.current({\n  ...\n})"
           }
         ]
       }
@@ -15388,7 +15388,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.project.update({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.project.update({\n  ...\n})"
           }
         ]
       }
@@ -15452,7 +15452,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.project.directory.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.project.directory.list({\n  ...\n})"
           }
         ]
       }
@@ -15523,7 +15523,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.project.copy.create({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.project.copy.create({\n  ...\n})"
           }
         ]
       },
@@ -15585,7 +15585,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.project.copy.remove({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.project.copy.remove({\n  ...\n})"
           }
         ]
       }
@@ -15646,7 +15646,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.project.copy.refresh({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.project.copy.refresh({\n  ...\n})"
           }
         ]
       }
@@ -15699,7 +15699,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.provider.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.provider.list({\n  ...\n})"
           }
         ]
       }
@@ -15752,7 +15752,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.provider.auth({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.provider.auth({\n  ...\n})"
           }
         ]
       }
@@ -15823,7 +15823,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.provider.api.set({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.provider.api.set({\n  ...\n})"
           }
         ]
       }
@@ -15884,7 +15884,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.provider.auth.remove({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.provider.auth.remove({\n  ...\n})"
           }
         ]
       }
@@ -15962,7 +15962,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.provider.oauth.authorize({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.provider.oauth.authorize({\n  ...\n})"
           }
         ]
       }
@@ -16033,7 +16033,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.provider.oauth.callback({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.provider.oauth.callback({\n  ...\n})"
           }
         ]
       }
@@ -16089,7 +16089,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.question.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.question.list({\n  ...\n})"
           }
         ]
       }
@@ -16160,7 +16160,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.question.reply({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.question.reply({\n  ...\n})"
           }
         ]
       }
@@ -16221,7 +16221,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.question.reject({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.question.reject({\n  ...\n})"
           }
         ]
       }
@@ -16277,7 +16277,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.permission.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.permission.list({\n  ...\n})"
           }
         ]
       }
@@ -16333,7 +16333,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.permission.blocked({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.permission.blocked({\n  ...\n})"
           }
         ]
       }
@@ -16404,7 +16404,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.permission.reply({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.permission.reply({\n  ...\n})"
           }
         ]
       }
@@ -16460,7 +16460,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mod.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mod.list({\n  ...\n})"
           }
         ]
       }
@@ -16516,7 +16516,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mod.panes({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mod.panes({\n  ...\n})"
           }
         ]
       }
@@ -16579,7 +16579,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mod.render({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mod.render({\n  ...\n})"
           }
         ]
       }
@@ -16642,7 +16642,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.mod.event({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.mod.event({\n  ...\n})"
           }
         ]
       }
@@ -16695,7 +16695,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.pty.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.pty.list({\n  ...\n})"
           }
         ]
       },
@@ -16766,7 +16766,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.pty.create({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.pty.create({\n  ...\n})"
           }
         ]
       }
@@ -16837,7 +16837,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.pty.get({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.pty.get({\n  ...\n})"
           }
         ]
       },
@@ -16916,7 +16916,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.pty.update({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.pty.update({\n  ...\n})"
           }
         ]
       },
@@ -16975,7 +16975,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.pty.remove({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.pty.remove({\n  ...\n})"
           }
         ]
       }
@@ -17028,7 +17028,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.loop.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.loop.list({\n  ...\n})"
           }
         ]
       },
@@ -17099,7 +17099,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.loop.upsert({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.loop.upsert({\n  ...\n})"
           }
         ]
       }
@@ -17152,7 +17152,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.loop.templates({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.loop.templates({\n  ...\n})"
           }
         ]
       }
@@ -17225,7 +17225,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.loop.generate({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.loop.generate({\n  ...\n})"
           }
         ]
       }
@@ -17286,7 +17286,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.loop.recentRuns({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.loop.recentRuns({\n  ...\n})"
           }
         ]
       }
@@ -17357,7 +17357,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.loop.get({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.loop.get({\n  ...\n})"
           }
         ]
       },
@@ -17446,7 +17446,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.loop.update({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.loop.update({\n  ...\n})"
           }
         ]
       },
@@ -17515,7 +17515,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.loop.delete({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.loop.delete({\n  ...\n})"
           }
         ]
       }
@@ -17596,7 +17596,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.loop.toggle({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.loop.toggle({\n  ...\n})"
           }
         ]
       }
@@ -17677,7 +17677,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.loop.run({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.loop.run({\n  ...\n})"
           }
         ]
       }
@@ -17748,7 +17748,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.loop.abort({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.loop.abort({\n  ...\n})"
           }
         ]
       }
@@ -17819,7 +17819,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.loop.pause({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.loop.pause({\n  ...\n})"
           }
         ]
       }
@@ -17890,7 +17890,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.loop.resume({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.loop.resume({\n  ...\n})"
           }
         ]
       }
@@ -17959,7 +17959,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.loop.runs({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.loop.runs({\n  ...\n})"
           }
         ]
       }
@@ -18044,7 +18044,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.list({\n  ...\n})"
           }
         ]
       },
@@ -18105,7 +18105,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.create({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.create({\n  ...\n})"
           }
         ]
       }
@@ -18158,7 +18158,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.status({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.status({\n  ...\n})"
           }
         ]
       }
@@ -18239,7 +18239,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.get({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.get({\n  ...\n})"
           }
         ]
       },
@@ -18318,7 +18318,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.delete({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.delete({\n  ...\n})"
           }
         ]
       },
@@ -18407,7 +18407,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.update({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.update({\n  ...\n})"
           }
         ]
       }
@@ -18498,7 +18498,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.fork({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.fork({\n  ...\n})"
           }
         ]
       }
@@ -18559,7 +18559,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.abort({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.abort({\n  ...\n})"
           }
         ]
       }
@@ -18650,7 +18650,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.revert({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.revert({\n  ...\n})"
           }
         ]
       }
@@ -18731,7 +18731,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.unrevert({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.unrevert({\n  ...\n})"
           }
         ]
       }
@@ -18812,7 +18812,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.share({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.share({\n  ...\n})"
           }
         ]
       },
@@ -18891,7 +18891,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.unshare({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.unshare({\n  ...\n})"
           }
         ]
       }
@@ -18982,7 +18982,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.summarize({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.summarize({\n  ...\n})"
           }
         ]
       }
@@ -19073,7 +19073,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.generate({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.generate({\n  ...\n})"
           }
         ]
       }
@@ -19164,7 +19164,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.command({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.command({\n  ...\n})"
           }
         ]
       }
@@ -19255,7 +19255,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.shell({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.shell({\n  ...\n})"
           }
         ]
       }
@@ -19354,7 +19354,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.permission.respond({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.permission.respond({\n  ...\n})"
           }
         ]
       }
@@ -19435,7 +19435,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.children({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.children({\n  ...\n})"
           }
         ]
       }
@@ -19516,7 +19516,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.todo({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.todo({\n  ...\n})"
           }
         ]
       }
@@ -19605,7 +19605,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.diff({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.diff({\n  ...\n})"
           }
         ]
       }
@@ -19694,7 +19694,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.messages({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.messages({\n  ...\n})"
           }
         ]
       },
@@ -19763,7 +19763,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.prompt({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.prompt({\n  ...\n})"
           }
         ]
       }
@@ -19844,7 +19844,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.pending({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.pending({\n  ...\n})"
           }
         ]
       }
@@ -19933,7 +19933,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.pendingSteer({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.pendingSteer({\n  ...\n})"
           }
         ]
       }
@@ -20022,7 +20022,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.message({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.message({\n  ...\n})"
           }
         ]
       },
@@ -20109,7 +20109,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.messageRemove({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.messageRemove({\n  ...\n})"
           }
         ]
       }
@@ -20206,7 +20206,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.part.delete({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.part.delete({\n  ...\n})"
           }
         ]
       },
@@ -20321,7 +20321,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.part.update({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.part.update({\n  ...\n})"
           }
         ]
       }
@@ -20402,7 +20402,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.v2.entries({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.v2.entries({\n  ...\n})"
           }
         ]
       }
@@ -20483,7 +20483,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.v2.state({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.v2.state({\n  ...\n})"
           }
         ]
       }
@@ -20564,7 +20564,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.v2.events({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.v2.events({\n  ...\n})"
           }
         ]
       }
@@ -20645,7 +20645,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.instructions({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.instructions({\n  ...\n})"
           }
         ]
       }
@@ -20726,7 +20726,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.context({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.context({\n  ...\n})"
           }
         ]
       }
@@ -20817,7 +20817,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.contextToggle({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.contextToggle({\n  ...\n})"
           }
         ]
       }
@@ -20878,7 +20878,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.goal({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.goal({\n  ...\n})"
           }
         ]
       }
@@ -20949,7 +20949,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.background({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.background({\n  ...\n})"
           }
         ]
       }
@@ -21018,7 +21018,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.background.inspect({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.background.inspect({\n  ...\n})"
           }
         ]
       }
@@ -21087,7 +21087,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.background.read({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.background.read({\n  ...\n})"
           }
         ]
       }
@@ -21156,7 +21156,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.background.cancel({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.background.cancel({\n  ...\n})"
           }
         ]
       }
@@ -21225,7 +21225,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.background.resume({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.background.resume({\n  ...\n})"
           }
         ]
       }
@@ -21314,7 +21314,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.monitor({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.monitor({\n  ...\n})"
           }
         ]
       }
@@ -21411,7 +21411,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.monitorLog({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.monitorLog({\n  ...\n})"
           }
         ]
       }
@@ -21500,7 +21500,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.monitorCancel({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.monitorCancel({\n  ...\n})"
           }
         ]
       }
@@ -21553,7 +21553,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.getAccount({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.getAccount({\n  ...\n})"
           }
         ]
       }
@@ -21606,7 +21606,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.postAccountLogin({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.postAccountLogin({\n  ...\n})"
           }
         ]
       }
@@ -21687,7 +21687,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.postAccountLoginComplete({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.postAccountLoginComplete({\n  ...\n})"
           }
         ]
       }
@@ -21772,7 +21772,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.sync.event.push({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.sync.event.push({\n  ...\n})"
           }
         ]
       }
@@ -21895,7 +21895,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.sync.outbox.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.sync.outbox.list({\n  ...\n})"
           }
         ]
       }
@@ -21964,7 +21964,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.sync.snapshot.get({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.sync.snapshot.get({\n  ...\n})"
           }
         ]
       }
@@ -22131,7 +22131,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.sync.event.stream({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.sync.event.stream({\n  ...\n})"
           }
         ]
       }
@@ -22199,7 +22199,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.sync.stats({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.sync.stats({\n  ...\n})"
           }
         ]
       }
@@ -22262,7 +22262,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.sync.config.set({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.sync.config.set({\n  ...\n})"
           }
         ]
       }
@@ -22308,7 +22308,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.sync.connect({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.sync.connect({\n  ...\n})"
           }
         ]
       }
@@ -22354,7 +22354,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.sync.disconnect({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.sync.disconnect({\n  ...\n})"
           }
         ]
       }
@@ -22400,7 +22400,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.sync.drain({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.sync.drain({\n  ...\n})"
           }
         ]
       }
@@ -22473,7 +22473,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.tui.appendPrompt({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.tui.appendPrompt({\n  ...\n})"
           }
         ]
       }
@@ -22526,7 +22526,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.tui.openHelp({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.tui.openHelp({\n  ...\n})"
           }
         ]
       }
@@ -22579,7 +22579,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.tui.openSessions({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.tui.openSessions({\n  ...\n})"
           }
         ]
       }
@@ -22632,7 +22632,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.tui.openThemes({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.tui.openThemes({\n  ...\n})"
           }
         ]
       }
@@ -22685,7 +22685,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.tui.openModels({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.tui.openModels({\n  ...\n})"
           }
         ]
       }
@@ -22738,7 +22738,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.tui.submitPrompt({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.tui.submitPrompt({\n  ...\n})"
           }
         ]
       }
@@ -22791,7 +22791,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.tui.clearPrompt({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.tui.clearPrompt({\n  ...\n})"
           }
         ]
       }
@@ -22864,7 +22864,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.tui.executeCommand({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.tui.executeCommand({\n  ...\n})"
           }
         ]
       }
@@ -22937,7 +22937,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.tui.showToast({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.tui.showToast({\n  ...\n})"
           }
         ]
       }
@@ -23010,7 +23010,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.tui.publish({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.tui.publish({\n  ...\n})"
           }
         ]
       }
@@ -23093,7 +23093,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.tui.selectSession({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.tui.selectSession({\n  ...\n})"
           }
         ]
       }
@@ -23146,7 +23146,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.tui.config({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.tui.config({\n  ...\n})"
           }
         ]
       }
@@ -23199,7 +23199,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.tui.control.next({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.tui.control.next({\n  ...\n})"
           }
         ]
       }
@@ -23262,7 +23262,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.tui.control.response({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.tui.control.response({\n  ...\n})"
           }
         ]
       }
@@ -23318,7 +23318,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.experimental.workspace.adaptor.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.experimental.workspace.adaptor.list({\n  ...\n})"
           }
         ]
       }
@@ -23364,7 +23364,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.experimental.workspace.syncList({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.experimental.workspace.syncList({\n  ...\n})"
           }
         ]
       }
@@ -23420,7 +23420,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.experimental.workspace.status({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.experimental.workspace.status({\n  ...\n})"
           }
         ]
       }
@@ -23491,7 +23491,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.experimental.workspace.create({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.experimental.workspace.create({\n  ...\n})"
           }
         ]
       },
@@ -23550,7 +23550,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.experimental.workspace.remove({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.experimental.workspace.remove({\n  ...\n})"
           }
         ]
       }
@@ -23606,7 +23606,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.experimental.workspace.list({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.experimental.workspace.list({\n  ...\n})"
           }
         ]
       }
@@ -23682,7 +23682,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.experimental.workspace.restore({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.experimental.workspace.restore({\n  ...\n})"
           }
         ]
       }
@@ -23766,7 +23766,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.experimental.workspace.session.restore({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.experimental.workspace.session.restore({\n  ...\n})"
           }
         ]
       }
@@ -23822,7 +23822,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.experimental.workspace.warp({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.experimental.workspace.warp({\n  ...\n})"
           }
         ]
       }
@@ -23893,7 +23893,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.auth.set({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.auth.set({\n  ...\n})"
           }
         ]
       },
@@ -23952,7 +23952,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.auth.remove({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.auth.remove({\n  ...\n})"
           }
         ]
       }
@@ -24005,7 +24005,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.config.reload({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.config.reload({\n  ...\n})"
           }
         ]
       }
@@ -24068,7 +24068,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.postConfigMcp({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.postConfigMcp({\n  ...\n})"
           }
         ]
       }
@@ -24139,7 +24139,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.patchConfigMcp:name({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.patchConfigMcp:name({\n  ...\n})"
           }
         ]
       },
@@ -24198,7 +24198,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.deleteConfigMcp:name({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.deleteConfigMcp:name({\n  ...\n})"
           }
         ]
       }
@@ -24251,7 +24251,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.getConfigProfiles({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.getConfigProfiles({\n  ...\n})"
           }
         ]
       },
@@ -24319,7 +24319,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.postConfigProfiles({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.postConfigProfiles({\n  ...\n})"
           }
         ]
       }
@@ -24380,7 +24380,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.postConfigProfilesActivate:name({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.postConfigProfilesActivate:name({\n  ...\n})"
           }
         ]
       }
@@ -24444,7 +24444,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.session.prompt_async({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.session.prompt_async({\n  ...\n})"
           }
         ]
       }
@@ -24496,7 +24496,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.getS:shareID({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.getS:shareID({\n  ...\n})"
           }
         ]
       }
@@ -24547,7 +24547,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.getShare:shareID({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.getShare:shareID({\n  ...\n})"
           }
         ]
       }
@@ -24598,7 +24598,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.getApiShare:shareID({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.getApiShare:shareID({\n  ...\n})"
           }
         ]
       }
@@ -24649,7 +24649,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.getApiShare:shareIDData({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.getApiShare:shareIDData({\n  ...\n})"
           }
         ]
       }
@@ -24783,7 +24783,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.event.subscribe({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.event.subscribe({\n  ...\n})"
           }
         ]
       }
@@ -24917,7 +24917,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.global.event({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.global.event({\n  ...\n})"
           }
         ]
       }
@@ -24996,7 +24996,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.experimental.workspace.events({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.experimental.workspace.events({\n  ...\n})"
           }
         ]
       }
@@ -25067,7 +25067,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.experimental.workspace.session.warp({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.experimental.workspace.session.warp({\n  ...\n})"
           }
         ]
       }
@@ -25143,7 +25143,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.postUserRegister({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.postUserRegister({\n  ...\n})"
           }
         ]
       }
@@ -25206,7 +25206,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.postUserLogin({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.postUserLogin({\n  ...\n})"
           }
         ]
       }
@@ -25311,7 +25311,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.patchUser:id({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.patchUser:id({\n  ...\n})"
           }
         ]
       }
@@ -25370,7 +25370,7 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createNikcliClient } from \"@nikcli-ai/sdk/httpapi\"\n\nconst client = createNikcliClient()\nawait client.pty.connect({\n  ...\n})"
+            "source": "import { createRaguClient } from \"@ragu/sdk/httpapi\"\n\nconst client = createRaguClient()\nawait client.pty.connect({\n  ...\n})"
           }
         ]
       }

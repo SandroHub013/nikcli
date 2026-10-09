@@ -2,14 +2,14 @@
  * Computer Use — internal TUI plugin.
  *
  * Mirrors `feature-plugins/browser`: surfaces the
- * `@nikcli-ai/computer-use` background desktop engine (the way
+ * `@ragu/computer-use` background desktop engine (the way
  * browser-control surfaces WebView sessions) in the TUI as a self-contained
  * plugin. Registers the `/computer` slash command that probes the host for
  * screenshot/input capabilities and reports what the `computer` tool can do
  * on this machine (and what optional helpers are missing).
  */
-import type { TuiPlugin, TuiPluginModule } from "@nikcli-ai/plugin/tui"
-import { hostBackend } from "@nikcli-ai/computer-use"
+import type { TuiPlugin, TuiPluginModule } from "@ragu/plugin/tui"
+import { hostBackend } from "@ragu/computer-use"
 
 const id = "internal:computer"
 

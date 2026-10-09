@@ -23,8 +23,8 @@ const related = [
 
 <DocsLayout
   title="Agents"
-  subtitle="Agents are defined in packages/nikcli/src/agent/agent.ts and configured through nikcli config overlays."
-  description="Reference for nikcli agents, subagent profiles, the support assistant, permissions, and config overlays."
+  subtitle="Agents are defined in packages/ragu/src/agent/agent.ts and configured through ragu config overlays."
+  description="Reference for ragu agents, subagent profiles, the support assistant, permissions, and config overlays."
   toc={toc}
 >
   <section id="primary-agents" class="doc-section">
@@ -49,7 +49,7 @@ const related = [
       <DocCard title="explore"><p>Exploration agent optimized for codebase discovery with read, grep, glob, bash, webfetch, and search access.</p></DocCard>
       <DocCard title="fast-explore"><p>Faster read-only exploration profile limited to read, grep, glob, list, and tree.</p></DocCard>
       <DocCard title="planner"><p>Planning-oriented agent for multi-step implementation strategies; produces step-by-step plans without modifying files.</p></DocCard>
-      <DocCard title="scout"><p>Read-only research agent for external libraries, dependency source, documentation, and public repositories. Can clone remote repos via <code>repo_clone</code>. Requires the <code>NIKCLI_EXPERIMENTAL_SCOUT</code> flag.</p></DocCard>
+      <DocCard title="scout"><p>Read-only research agent for external libraries, dependency source, documentation, and public repositories. Can clone remote repos via <code>repo_clone</code>. Requires the <code>RAGU_EXPERIMENTAL_SCOUT</code> flag.</p></DocCard>
       <DocCard title="researcher"><p>Read-only background research agent that collects evidence and returns source-backed findings; can delegate subtasks to <code>fast-explore</code> or <code>planner</code>.</p></DocCard>
       <DocCard title="code-reviewer"><p>Reviews code for quality and safety using read, grep, glob, list, and bash.</p></DocCard>
       <DocCard title="ultrareview-reviewer"><p>Specialized reviewer for a single domain within a parallel ultrareview fleet; hidden from the primary agent picker.</p></DocCard>
@@ -65,7 +65,7 @@ const related = [
     <div class="doc-grid not-prose">
       <DocCard title="support" eyebrow="Hidden · read-only">
         <p>
-          Documentation and how-to assistant for nikcli features, commands, configuration, and
+          Documentation and how-to assistant for ragu features, commands, configuration, and
           troubleshooting. Read-only: it does not edit the workspace. Invoked from the TUI support
           dialog (<code>/support</code>, leader keybind), not from the primary agent picker.
         </p>

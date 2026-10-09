@@ -1,4 +1,4 @@
-import { Plugin } from "@nikcli-ai/plugin/v2/tui"
+import { Plugin } from "@ragu/plugin/v2/tui"
 import { createMemo, onCleanup, Show } from "solid-js"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKV } from "@tui/context/kv"

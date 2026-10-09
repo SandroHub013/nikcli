@@ -1,4 +1,4 @@
-import type { FileNode } from "@nikcli-ai/sdk/httpapi"
+import type { FileNode } from "@ragu/sdk/httpapi"
 
 type WatcherEvent = {
   type: string

@@ -23,11 +23,11 @@ const pathname = Astro.url.pathname;
     <a
       href="/"
       class="group flex items-center shrink-0 transition-opacity duration-150 ease-out hover:opacity-90 active:opacity-80"
-      aria-label="nikcli home"
+      aria-label="ragu home"
     >
       <img
         src="/brand/wordmark-light.png"
-        alt="nikcli"
+        alt="ragu"
         width="158"
         height="52"
         loading="eager"
@@ -36,7 +36,7 @@ const pathname = Astro.url.pathname;
       />
       <img
         src="/brand/wordmark-dark.png"
-        alt="nikcli"
+        alt="ragu"
         width="158"
         height="52"
         loading="eager"
@@ -213,7 +213,7 @@ const pathname = Astro.url.pathname;
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
       </svg>
-      Install nikcli
+      Install ragu
     </a>
   </div>
 </header>
@@ -221,11 +221,11 @@ const pathname = Astro.url.pathname;
 <script>
   const initNavbar = () => {
     const win = window as Window & {
-      __nikcliNavbarCleanup?: () => void;
-      __nikcliNavbarPageLoad?: () => void;
+      __raguNavbarCleanup?: () => void;
+      __raguNavbarPageLoad?: () => void;
     };
 
-    win.__nikcliNavbarCleanup?.();
+    win.__raguNavbarCleanup?.();
     const cleanups: Array<() => void> = [];
 
     const root = document.documentElement;
@@ -278,7 +278,7 @@ const pathname = Astro.url.pathname;
       newBtn?.setAttribute("aria-label", open ? "Close menu" : "Open menu");
       document.getElementById("icon-hamburger")?.classList.toggle("hidden", open);
       document.getElementById("icon-close")?.classList.toggle("hidden", !open);
-      if (open) window.dispatchEvent(new CustomEvent("nikcli:mobile-overlay-open", { detail: { source: "navbar" } }));
+      if (open) window.dispatchEvent(new CustomEvent("ragu:mobile-overlay-open", { detail: { source: "navbar" } }));
     };
 
     const handleToggle = () => setMenuState(!menuOpen);
@@ -289,8 +289,8 @@ const pathname = Astro.url.pathname;
       if (!(e instanceof CustomEvent) || e.detail?.source === "navbar") return;
       setMenuState(false);
     };
-    window.addEventListener("nikcli:mobile-overlay-open", handleExternalOpen);
-    cleanups.push(() => window.removeEventListener("nikcli:mobile-overlay-open", handleExternalOpen));
+    window.addEventListener("ragu:mobile-overlay-open", handleExternalOpen);
+    cleanups.push(() => window.removeEventListener("ragu:mobile-overlay-open", handleExternalOpen));
 
     const handleEscape = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuState(false); };
     window.addEventListener("keydown", handleEscape);
@@ -311,17 +311,17 @@ const pathname = Astro.url.pathname;
       cleanups.push(() => link.removeEventListener("click", close));
     });
 
-    win.__nikcliNavbarCleanup = () => {
+    win.__raguNavbarCleanup = () => {
       setMenuState(false);
       cleanups.forEach((fn) => fn());
     };
   };
 
-  const win = window as Window & { __nikcliNavbarPageLoad?: () => void };
-  if (win.__nikcliNavbarPageLoad) {
-    document.removeEventListener("astro:page-load", win.__nikcliNavbarPageLoad);
+  const win = window as Window & { __raguNavbarPageLoad?: () => void };
+  if (win.__raguNavbarPageLoad) {
+    document.removeEventListener("astro:page-load", win.__raguNavbarPageLoad);
   }
-  win.__nikcliNavbarPageLoad = () => initNavbar();
+  win.__raguNavbarPageLoad = () => initNavbar();
   initNavbar();
-  document.addEventListener("astro:page-load", win.__nikcliNavbarPageLoad);
+  document.addEventListener("astro:page-load", win.__raguNavbarPageLoad);
 </script>

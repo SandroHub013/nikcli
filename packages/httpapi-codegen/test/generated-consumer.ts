@@ -1,9 +1,9 @@
 import { Effect, Stream } from "effect"
 import { HttpClient } from "effect/unstable/http"
-import { ClientError, NikCli } from "./generated"
+import { ClientError, Ragu } from "./generated"
 import { Missing } from "./fixture"
 
-export const program = NikCli.make().pipe(
+export const program = Ragu.make().pipe(
   Effect.map((client) => {
     const health = client.session.health()
     const list = client.session.list()

@@ -75,13 +75,13 @@ const directories = [
 <DocsLayout
   title="Source Map"
   subtitle="A practical map for finding the real implementation behind CLI commands, API routes, TUI views, mobile flows, providers, plugins, and storage."
-  description="Practical source map for finding nikcli CLI, API, TUI, mobile, provider, plugin, and storage implementations."
+  description="Practical source map for finding ragu CLI, API, TUI, mobile, provider, plugin, and storage implementations."
   toc={toc}
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
-      The main runtime lives in <code>packages/nikcli/src</code>. The repo is a Bun monorepo, so
+      The main runtime lives in <code>packages/ragu/src</code>. The repo is a Bun monorepo, so
       related packages also matter: <code>packages/sdk/js</code> for generated client types,
       <code>packages/plugin</code> for plugin contracts, <code>packages/mobile</code> for the Expo
       app, <code>packages/web</code> for this docs site, <code>packages/llm</code> for route-based
@@ -96,21 +96,21 @@ const directories = [
   <section id="top-level-entry" class="doc-section">
     <h2>Top-level entry</h2>
     <p>
-      <code>packages/nikcli/src/index.ts</code> registers every CLI command with yargs, initializes
-      global directories, initializes logging, sets <code>AGENT=1</code> and <code>NIKCLI=1</code>,
+      <code>packages/ragu/src/index.ts</code> registers every CLI command with yargs, initializes
+      global directories, initializes logging, sets <code>AGENT=1</code> and <code>RAGU=1</code>,
       and catches fatal errors for user-facing formatting.
     </p>
     <DocCode language="bash">
-bun run --cwd packages/nikcli --conditions=browser src/index.ts --help
-bun run --cwd packages/nikcli --conditions=browser src/index.ts serve --help
-bun run --cwd packages/nikcli --conditions=browser src/index.ts mcp --help
+bun run --cwd packages/ragu --conditions=browser src/index.ts --help
+bun run --cwd packages/ragu --conditions=browser src/index.ts serve --help
+bun run --cwd packages/ragu --conditions=browser src/index.ts mcp --help
     </DocCode>
     <table class="doc-table">
       <thead><tr><th>Need</th><th>Start here</th><th>Then inspect</th></tr></thead>
       <tbody>
         <tr><td>Command registration</td><td><code>src/index.ts</code></td><td><code>src/cli/cmd/*.ts</code></td></tr>
-        <tr><td>Global paths</td><td><code>src/@nikcli-ai/util/global</code></td><td><code>NIKCLI_DATA_DIR</code>, XDG/AppData rules.</td></tr>
-        <tr><td>Logging</td><td><code>@nikcli-ai/util/log</code></td><td><code>--print-logs</code>, <code>--log-level</code>.</td></tr>
+        <tr><td>Global paths</td><td><code>src/@ragu/util/global</code></td><td><code>RAGU_DATA_DIR</code>, XDG/AppData rules.</td></tr>
+        <tr><td>Logging</td><td><code>@ragu/util/log</code></td><td><code>--print-logs</code>, <code>--log-level</code>.</td></tr>
         <tr><td>Error formatting</td><td><code>src/cli/error.ts</code></td><td>Command-specific thrown errors.</td></tr>
       </tbody>
     </table>
@@ -188,7 +188,7 @@ bun run --cwd packages/nikcli --conditions=browser src/index.ts mcp --help
         <tr><td>Create/list/update/remove</td><td><code>session/index.ts</code></td><td><code>Session.Service</code> methods and storage keys.</td></tr>
         <tr><td>Prompt execution</td><td><code>session/prompt.ts</code></td><td>Tool setup, system prompt assembly, request loop.</td></tr>
         <tr><td>LLM provider hot path</td><td><code>session/llm.ts</code></td><td>Message normalization, headers, provider transforms, tool conversion.</td></tr>
-        <tr><td>Native provider runtime</td><td><code>session/llm/native-runtime.ts</code></td><td><code>@nikcli-ai/llm</code> route-based streaming for supported providers.</td></tr>
+        <tr><td>Native provider runtime</td><td><code>session/llm/native-runtime.ts</code></td><td><code>@ragu/llm</code> route-based streaming for supported providers.</td></tr>
         <tr><td>Messages and parts</td><td><code>session/message-v2.ts</code></td><td>Message/part persistence and retrieval.</td></tr>
         <tr><td>Status</td><td><code>session/status.ts</code></td><td>Busy, retry, idle state.</td></tr>
         <tr><td>Diff and revert</td><td><code>session/summary.ts</code>, <code>session/revert.ts</code></td><td>File diff summaries and revert/unrevert actions.</td></tr>
@@ -208,7 +208,7 @@ bun run --cwd packages/nikcli --conditions=browser src/index.ts mcp --help
     <table class="doc-table">
       <thead><tr><th>Need</th><th>File</th><th>Notes</th></tr></thead>
       <tbody>
-        <tr><td>Global paths</td><td><code>@nikcli-ai/util/global</code></td><td>XDG/AppData resolution, <code>NIKCLI_DATA_DIR</code>, cache version.</td></tr>
+        <tr><td>Global paths</td><td><code>@ragu/util/global</code></td><td>XDG/AppData resolution, <code>RAGU_DATA_DIR</code>, cache version.</td></tr>
         <tr><td>Config loading</td><td><code>config/config.ts</code></td><td>Merge order, plugin/command/agent loading, legacy tools migration.</td></tr>
         <tr><td>Config paths</td><td><code>config/paths.ts</code></td><td>Project file discovery, directory list, JSONC substitution.</td></tr>
         <tr><td>TUI config</td><td><code>config/tui.ts</code>, <code>config/tui-schema.ts</code></td><td>Keybinds, scroll, mouse, layout config.</td></tr>
@@ -258,8 +258,8 @@ bun run --cwd packages/nikcli --conditions=browser src/index.ts mcp --help
     <h2>Mobile map</h2>
     <p>
       The Expo app lives in <code>packages/mobile</code>, while the host API lives in
-      <code>packages/nikcli/src/server/httpapi/mobile.ts</code> and helpers under
-      <code>packages/nikcli/src/mobile</code>.
+      <code>packages/ragu/src/server/httpapi/mobile.ts</code> and helpers under
+      <code>packages/ragu/src/mobile</code>.
     </p>
     <table class="doc-table">
       <thead><tr><th>Need</th><th>Host source</th><th>App source</th></tr></thead>
@@ -285,7 +285,7 @@ bun run --cwd packages/nikcli --conditions=browser src/index.ts mcp --help
         <tr><td><code>packages/mobile</code></td><td>Expo mobile application.</td><td>When a host route is correct but app behavior differs.</td></tr>
         <tr><td><code>packages/web</code></td><td>Astro docs and dashboard pages.</td><td>When editing docs, dashboard, or public web pages.</td></tr>
         <tr><td><code>packages/remote</code></td><td>Remote execution support.</td><td>When terminal remote or cloud relay behavior changes.</td></tr>
-        <tr><td><code>packages/inference</code></td><td>Inference provider/gateway package.</td><td>When nikcli-inference provider catalog or routing changes.</td></tr>
+        <tr><td><code>packages/inference</code></td><td>Inference provider/gateway package.</td><td>When ragu-inference provider catalog or routing changes.</td></tr>
         <tr><td><code>packages/http-recorder</code></td><td>HTTP recording utilities.</td><td>When fixture or provider request recording changes.</td></tr>
       </tbody>
     </table>
@@ -296,14 +296,14 @@ bun run --cwd packages/nikcli --conditions=browser src/index.ts mcp --help
     <ol>
       <li>Find the entry: command in <code>src/index.ts</code>, route in <code>server.ts</code>, or UI route in <code>tui/context/route.tsx</code>.</li>
       <li>Read the domain service imported by that entry. Route files usually call services from <code>session</code>, <code>provider</code>, <code>config</code>, <code>mcp</code>, <code>connectors</code>, or <code>workspace</code>.</li>
-      <li>Check config and flags. Many features are enabled by config fields plus environment flags from <code>@nikcli-ai/util/flag</code>.</li>
+      <li>Check config and flags. Many features are enabled by config fields plus environment flags from <code>@ragu/util/flag</code>.</li>
       <li>Check storage. Durable behavior usually writes through <code>Storage.Service</code> or a SQLite helper.</li>
       <li>For client behavior, trace generated SDK types in <code>packages/sdk/js/src/httpapi/generated</code> and UI code in <code>packages/mobile</code> or TUI route files.</li>
     </ol>
     <DocCode language="bash">
-rg -n "route-or-command-name" packages/nikcli/src
-rg -n "operationId|HttpApiEndpoint|get\\(|post\\(" packages/nikcli/src/server
-rg -n "Config\\.Service|Provider\\.Service|Session\\.Service" packages/nikcli/src
+rg -n "route-or-command-name" packages/ragu/src
+rg -n "operationId|HttpApiEndpoint|get\\(|post\\(" packages/ragu/src/server
+rg -n "Config\\.Service|Provider\\.Service|Session\\.Service" packages/ragu/src
     </DocCode>
   </section>
 

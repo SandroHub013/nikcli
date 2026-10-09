@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { $ } from "bun"
-import { Script } from "@nikcli-ai/script"
+import { Script } from "@ragu/script"
 import { buildNotes, getLatestRelease } from "./changelog"
 import path from "path"
 import fs from "fs"
@@ -11,11 +11,11 @@ console.log("=== creating github release ===\n")
 const previous = await getLatestRelease()
 const notes = await buildNotes(previous, "HEAD")
 
-console.log("building nikcli...")
-await $`cd packages/nikcli && bun run build`
+console.log("building ragu...")
+await $`cd packages/ragu && bun run build`
 
 console.log("\ncreating archives...")
-const distPath = path.resolve("packages/nikcli/dist")
+const distPath = path.resolve("packages/ragu/dist")
 const dirs = fs
   .readdirSync(distPath, { withFileTypes: true })
   .filter((dirent) => dirent.isDirectory())
@@ -61,7 +61,7 @@ for (const name of dirs) {
 console.log("\ncreating release...")
 const tag = `v${Script.version}`
 
-await $`git add packages/nikcli/dist/*.tar.gz packages/nikcli/dist/*.zip`
+await $`git add packages/ragu/dist/*.tar.gz packages/ragu/dist/*.zip`
 await $`git commit -m "release: ${tag}" --allow-empty`
 await $`git tag ${tag}`
 await $`git push origin ${tag}`

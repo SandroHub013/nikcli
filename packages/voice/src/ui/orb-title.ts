@@ -4,8 +4,8 @@
  * orb opens, the default one. What the microphone is doing now stays in the
  * accessible name, which changes with it.
  */
-import type { Platform } from "@nikcli-ai/ade/keyboard/keymap"
-import { t } from "@nikcli-ai/ade/i18n"
+import type { Platform } from "@ragu/ade/keyboard/keymap"
+import { t } from "@ragu/ade/i18n"
 import type { VoiceSettings } from "../settings/model"
 import { describeShortcut } from "../settings/shortcuts"
 

@@ -1,12 +1,12 @@
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 
 /*
  * «Terminale» on a bot's card: the same checks as a turn, then the pane (full review 2026-10-06,
- * bots 7). It used to open `nikcli --agent <bot>` for a project's bot with no question at all, past
+ * bots 7). It used to open `ragu --agent <bot>` for a project's bot with no question at all, past
  * both the trust a turn asks for (`trust.ts`) and the refusal of a bot that grants itself the shell,
  * and with the roster's copy of the file, not the one that was trusted. The checks are `admitTurn`'s,
  * handed in; the project's own configuration is not asked about here: the terminal is the user's
- * own nikcli, started by them in their folder.
+ * own ragu, started by them in their folder.
  */
 export interface LaunchDeps {
   /** `admitTurn` without a project: a project's bot is asked about, a self-approving one refused. */

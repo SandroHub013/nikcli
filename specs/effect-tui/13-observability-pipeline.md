@@ -5,7 +5,7 @@ Owner: observability, brain, profile, and HTTP server maintainers. [Roadmap](../
 
 ## Problem and Evidence
 
-Evidence B26, B27, B28 in the [register](../README.md): `packages/nikcli/src/observability/otlp.ts` already exports an
+Evidence B26, B27, B28 in the [register](../README.md): `packages/ragu/src/observability/otlp.ts` already exports an
 Effect runtime layer that captures spans in-process for the TUI panel and exports to OTLP when `OTEL_EXPORTER_OTLP_ENDPOINT`
 is set; the `telemetry-bus` records `TelemetryRecord`s; `brain/` runs a scheduler; `profile/` reports per-process profile
 counters. But the **end-to-end** tracing contract — span boundaries, attribute schema, resource attributes, sampling,
@@ -16,7 +16,7 @@ a side effect of "merge the OTLP layer into the runtime".
 
 ## Scope and Non-Goals
 
-Define the canonical tracing, metrics, and logging contract across the nikcli server, TUI, SDK clients, and provider
+Define the canonical tracing, metrics, and logging contract across the ragu server, TUI, SDK clients, and provider
 adapters. Preserve the existing `Observability.layer`, `liveEnabled`, and `enabled` exports; preserve the existing
 `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_RESOURCE_ATTRIBUTES` flags. Do not introduce a new telemetry backend, require
 external infrastructure, change the default privacy posture, or expand the high-cardinality dimensions beyond what the
@@ -38,18 +38,18 @@ current redacted sink already permits. Do not turn the live TUI panel off by def
    OAuth codes, PKCE verifiers, emails, account ids, IP addresses, and request bodies. Prompts may only appear as a
    stable hash and a length bucket (e.g. `prompt.length_bucket`).
 4. Metrics use `Metrics.Counter`, `Metrics.Histogram`, `Metrics.Gauge` against the same Effect runtime. Allowed metrics:
-   `nikcli.session.turn.duration`, `nikcli.llm.stream.duration`, `nikcli.llm.first_token_ms`, `nikcli.llm.tokens.in`,
-   `nikcli.llm.tokens.out`, `nikcli.httpapi.request.duration`, `nikcli.httpapi.request.error`,
-   `nikcli.event.queue.depth`, `nikcli.event.queue.bytes`, `nikcli.cache.hit`, `nikcli.cache.miss`,
-   `nikcli.job.duration`, `nikcli.plugin.generation`, `nikcli.renderer.frame.duration`, `nikcli.dialog.open.duration`.
+   `ragu.session.turn.duration`, `ragu.llm.stream.duration`, `ragu.llm.first_token_ms`, `ragu.llm.tokens.in`,
+   `ragu.llm.tokens.out`, `ragu.httpapi.request.duration`, `ragu.httpapi.request.error`,
+   `ragu.event.queue.depth`, `ragu.event.queue.bytes`, `ragu.cache.hit`, `ragu.cache.miss`,
+   `ragu.job.duration`, `ragu.plugin.generation`, `ragu.renderer.frame.duration`, `ragu.dialog.open.duration`.
    Each metric uses fixed-cardinality labels from the schema above; histograms use the Effect default buckets, not custom
    high-cardinality ones.
 5. Sampling is a single policy: head sampling at 100% in dev, parent-based + ratio-based in production, with overrides per
    operation class (always-on: errors, auth, provider; sampled: chat completions). The default is **not** to sample
-   errors away; `nikcli.error` events are recorded unconditionally.
+   errors away; `ragu.error` events are recorded unconditionally.
 6. Logs flow through `Log` with structured JSON output and redacted sinks (`safeStringify`, `redactUrl`). Spans correlate
    to logs through `trace_id`/`span_id` injected as log attributes. TUI-visible error formatting goes through
-   `formatStack` and honors `NIKCLI_DEBUG`. Spans that overflow the redacted budget are dropped, not truncated to look
+   `formatStack` and honors `RAGU_DEBUG`. Spans that overflow the redacted budget are dropped, not truncated to look
    safe.
 7. The live TUI panel reads from `telemetry-bus.ts` and shows live span completion, queue depth, and per-route error
    counts. The panel is rate-limited (one update per 250 ms) and bounded to the most recent N entries; it never freezes
@@ -60,7 +60,7 @@ current redacted sink already permits. Do not turn the live TUI panel off by def
 9. The OTLP exporter is a thin adapter over `effect/unstable/observability`; replacing it (Datadog, Honeycomb, Tempo) is an
    adapter swap, not a refactor. The exporter must respect the same redaction rules; no plaintext prompt leakage at any
    layer.
-10. Privacy posture: opt-in only for remote export, default-on for in-process live capture. `NIKCLI_DISABLE_OTEL_LIVE=1`
+10. Privacy posture: opt-in only for remote export, default-on for in-process live capture. `RAGU_DISABLE_OTEL_LIVE=1`
     disables the live panel. There is no flag that turns **off** redaction; redaction is not a configurable option.
 
 ## Telemetry Topology
@@ -75,7 +75,7 @@ Effect services + HTTP handlers + AI SDK adapter
 
 ## Failure and Cancellation
 
-A telemetry export failure (OTLP down, network error, schema mismatch) is recorded as a typed metric (`nikcli.otel.error`)
+A telemetry export failure (OTLP down, network error, schema mismatch) is recorded as a typed metric (`ragu.otel.error`)
 and never raises into the application's hot path. The in-process live panel keeps working independently of the OTLP
 exporter. Cancellation of a span owner closes the span on `Exit`; a finalizer failure is logged through the redacted sink,
 not raised into the application. The live panel cannot block the input thread: a stuck panel is bounded by the rate
@@ -93,10 +93,10 @@ limit, not by user input latency.
   jitter are exercised in tests; finalizers run on every exit class.
 - Redaction: a fixture with fake secrets, tokens, and URLs is exported/recorded; no secret appears in the export payload,
   the live panel, or the structured log.
-- Extend `packages/nikcli/test/observability/`, `packages/nikcli/test/bus/`, `packages/nikcli/test/server/event-feed.test.ts`,
-  `packages/nikcli/test/server/event-visibility.test.ts`, and existing telemetry tests. Add a redaction fuzz test that
+- Extend `packages/ragu/test/observability/`, `packages/ragu/test/bus/`, `packages/ragu/test/server/event-feed.test.ts`,
+  `packages/ragu/test/server/event-visibility.test.ts`, and existing telemetry tests. Add a redaction fuzz test that
   feeds known secret shapes and asserts no leak.
-- From `packages/nikcli`: `bun test test/observability/ test/bus/ test/server/event-feed.test.ts`. With the OTLP endpoint
+- From `packages/ragu`: `bun test test/observability/ test/bus/ test/server/event-feed.test.ts`. With the OTLP endpoint
   set, run the recorded workload against a local OTLP collector and verify the schema. One final root
   `bun run typecheck` after the slice.
 - Meet EOT-01 budgets: instrumentation overhead median within the approved 5%; telemetry export failures do not increase
@@ -184,7 +184,7 @@ emptied: a `[REDACTED]` value still announces that the key was present, and the 
 half the forbidden list is about.
 
 The wrapper is also applied unconditionally now. It used to be `live ? wrapTracer(base) :
-base`, so an export-only configuration — `NIKCLI_DISABLE_OTEL_LIVE=1` with an endpoint —
+base`, so an export-only configuration — `RAGU_DISABLE_OTEL_LIVE=1` with an endpoint —
 had no wrapper and therefore no redaction at all. `live` now decides only whether the bus
 also hears about the span.
 
@@ -212,7 +212,7 @@ is told, which is the part the input thread pays for.
 uses: `push` is synchronous and never calls the sink inline, flushes are windowed, and
 `flushNow` exists so a window parked behind the throttle is not the one the panel never
 receives. Its `schedule` is injected, so
-`packages/nikcli/test/tui/telemetry-buffer.test.ts` drives the clock instead of sleeping
+`packages/ragu/test/tui/telemetry-buffer.test.ts` drives the clock instead of sleeping
 long enough that the throttle has probably fired.
 
 `src/observability/telemetry-consumer.ts` is deleted. It was a reference implementation
@@ -224,7 +224,7 @@ gate now asserts the real buffer, its test, and that the panel routes through it
 ## The HTTP Runtime Has No Tracer — 2026-09-24
 
 The first slice this spec schedules — span coverage for the `session` route group — cannot start where it was
-assumed to. `HttpApiBridge.layer` in `packages/nikcli/src/server/httpapi/bridge.ts` merges the HttpApi routes with
+assumed to. `HttpApiBridge.layer` in `packages/ragu/src/server/httpapi/bridge.ts` merges the HttpApi routes with
 `LogRedirect` and nothing else: **`Observability.layer` is not in it.** So every span created while an HTTP handler
 runs on that runtime, including the implicit ones `Effect.fn("…")` opens, is discarded by Effect's default tracer.
 This is Discipline Addendum rule 1 again, one layer up: the brain scheduler's span was lost for the same reason.
@@ -269,7 +269,7 @@ every request, and nothing in `src` reads the current span or `traceparent`. It 
 
 `Server.listenEffect`, the other Effect listener, is gone (`1a796f1dec`): its only caller was a test of itself, it
 was never wired in after the Hono removal, and it had already drifted from `Server.listen` (it ignored
-`NIKCLI_SERVER_CORS_ORIGINS`).
+`RAGU_SERVER_CORS_ORIGINS`).
 
 ### The overhead measurement this section owed
 

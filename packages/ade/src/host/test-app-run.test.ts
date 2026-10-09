@@ -16,7 +16,7 @@ import {
  * table and a record that kill and removeRecord really change.
  */
 
-const root = "C:\\Users\\me\\Favorites\\nikcli-ade-testapp"
+const root = "C:\\Users\\me\\Favorites\\ragu-ade-testapp"
 const plan = planTestApp({ root, branch: "ade/voice-prova" })
 const startedAt = 1_000_000
 

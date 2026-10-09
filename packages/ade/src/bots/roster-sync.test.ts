@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
-import { readAgentFile } from "./nikcli"
+import { readAgentFile } from "./ragu"
 import { ROSTER_CHECK_MS, rosterChanged } from "./roster-sync"
 
 /* Verifiche: a `model:` added from outside ADE showed «a pagamento» until a restart. */

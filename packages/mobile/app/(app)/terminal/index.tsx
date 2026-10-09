@@ -106,7 +106,7 @@ function TerminalWebView({
 
   // Inject config before the page JS runs
   const injectedJS = `
-    window.__NIKCLI_PTY_CONFIG = ${JSON.stringify({ wsUrl, theme })};
+    window.__RAGU_PTY_CONFIG = ${JSON.stringify({ wsUrl, theme })};
     true;
   `
 
@@ -248,7 +248,7 @@ function TerminalWebView({
               paddingHorizontal: 32,
             }}
           >
-            Unable to connect to the terminal server. Check that nikcli server is running.
+            Unable to connect to the terminal server. Check that ragu server is running.
           </Text>
         </View>
       )}
@@ -657,7 +657,7 @@ export default function TerminalScreen() {
           )}
           <EmptyState
             title="No terminals"
-            description="Open a shell session directly on your nikcli server."
+            description="Open a shell session directly on your ragu server."
             action={
               <ActionButton
                 label={creating ? "Opening…" : "New terminal"}

@@ -16,8 +16,8 @@
  * because in a terminal a route name is never a DOM id. Here it is. See
  * `./trust` for what is checked and why.
  */
-import type { Context, Definition } from "@nikcli-ai/plugin/v2/ade/plugin"
-import type { Data } from "@nikcli-ai/plugin/v2/ade/context"
+import type { Context, Definition } from "@ragu/plugin/v2/ade/plugin"
+import type { Data } from "@ragu/plugin/v2/ade/context"
 import type { PluginRegistry } from "./registry"
 import { pluginStorage } from "./storage"
 import { assertIdentifier, safeKeywords, safeLabel, safePaneData } from "./trust"

@@ -4,7 +4,7 @@ import type { APIRoute } from "astro"
 export const GET: APIRoute = async () => {
   const installScript = `#!/usr/bin/env bash
 set -euo pipefail
-APP=nikcli
+APP=ragu
 
 MUTED='\\033[0;2m'
 RED='\\033[0;31m'
@@ -13,7 +13,7 @@ NC='\\033[0m'
 
 usage() {
     cat <<EOF
-Nikcli Installer
+Ragu Code Installer
 
 Usage: install.sh [options]
 
@@ -26,7 +26,7 @@ Options:
 Examples:
     curl -fsSL https://nikcli-ai.dev/install | bash
     curl -fsSL https://nikcli-ai.dev/install | bash -s -- --version 1.0.180
-    ./install --binary /path/to/nikcli
+    ./install --binary /path/to/ragu
 EOF
 }
 

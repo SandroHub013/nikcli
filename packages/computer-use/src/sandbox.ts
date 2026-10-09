@@ -1,7 +1,7 @@
 /**
  * Background "computer use" desktop registry.
  *
- * One isolated Linux desktop container per nikcli conversation, driven
+ * One isolated Linux desktop container per ragu conversation, driven
  * headlessly via `docker exec` and never touching the host screen. A noVNC
  * web endpoint is exposed for an optional live preview, mirroring how the
  * `browser` tool surfaces a `liveUrl`.
@@ -10,7 +10,7 @@
  * colima/lima (a lightweight Linux VM), so the desktop runs inside that VM,
  * fully isolated from the Mac's own display.
  *
- * Mirrors the lifecycle contract of `@nikcli-ai/browser-control`'s
+ * Mirrors the lifecycle contract of `@ragu/browser-control`'s
  * `SessionManager`: process-local registry of desktops keyed by
  * conversation, with a background daemon (`daemon.ts`) wrapping this so the
  * registry survives across separate CLI invocations.
@@ -22,7 +22,7 @@ import { SandboxImage } from "./sandbox-image"
 
 export namespace Sandbox {
   export type Desktop = {
-    nikcliSessionID: string
+    raguSessionID: string
     containerID: string
     name: string
     port: number
@@ -44,7 +44,7 @@ export namespace Sandbox {
 
   /**
    * Process-local registry. The background daemon (`daemon.ts`) owns its own
-   * instance; the nikcli in-process `Sandbox` reuses this same module so
+   * instance; the ragu in-process `Sandbox` reuses this same module so
    * `local(sessionID)` returns the same `Desktop` regardless of which path
    * instantiated the container.
    */
@@ -67,7 +67,7 @@ export namespace Sandbox {
   }
 
   /** The container runtime binary. Docker, backed by colima on macOS. */
-  const RUNTIME = process.env.NIKCLI_COMPUTER_RUNTIME?.trim() || "docker"
+  const RUNTIME = process.env.RAGU_COMPUTER_RUNTIME?.trim() || "docker"
 
   async function spawn(args: string[], options?: { input?: string }): Promise<Exec> {
     const proc = Bun.spawn([RUNTIME, ...args], {
@@ -98,7 +98,7 @@ export namespace Sandbox {
       `The background computer sandbox needs a container runtime. \`${RUNTIME}\` is not reachable.\n` +
         "On macOS start it with colima (already a lightweight Linux VM):\n" +
         "  colima start --cpu 4 --memory 6 --disk 30\n" +
-        "Then retry. Set NIKCLI_COMPUTER_RUNTIME to override the runtime binary.",
+        "Then retry. Set RAGU_COMPUTER_RUNTIME to override the runtime binary.",
     )
   }
 
@@ -117,7 +117,7 @@ export namespace Sandbox {
     }
 
     onProgress?.(`Building computer sandbox image ${SandboxImage.TAG} …`)
-    const dir = await mkdtemp(path.join(os.tmpdir(), "nikcli-sandbox-"))
+    const dir = await mkdtemp(path.join(os.tmpdir(), "ragu-sandbox-"))
     try {
       await writeFile(path.join(dir, "Dockerfile"), SandboxImage.DOCKERFILE)
       await writeFile(path.join(dir, "entrypoint.sh"), SandboxImage.ENTRYPOINT)
@@ -141,8 +141,8 @@ export namespace Sandbox {
     await spawn(["rm", "-f", idOrName]).catch(() => {})
   }
 
-  function shortId(nikcliSessionID: string): string {
-    return nikcliSessionID.replace(/[^a-zA-Z0-9_.-]/g, "").slice(-24) || "default"
+  function shortId(raguSessionID: string): string {
+    return raguSessionID.replace(/[^a-zA-Z0-9_.-]/g, "").slice(-24) || "default"
   }
 
   async function isRunning(containerID: string): Promise<boolean> {
@@ -170,15 +170,15 @@ export namespace Sandbox {
     throw new Error("Sandbox desktop did not become ready in time.")
   }
 
-  export function local(nikcliSessionID: string): Desktop | undefined {
-    return state.desktops.get(nikcliSessionID)
+  export function local(raguSessionID: string): Desktop | undefined {
+    return state.desktops.get(raguSessionID)
   }
 
-  async function create(nikcliSessionID: string, opts: { width?: number; height?: number } = {}): Promise<Desktop> {
+  async function create(raguSessionID: string, opts: { width?: number; height?: number } = {}): Promise<Desktop> {
     await ensureImage()
     const width = opts.width ?? SandboxImage.DEFAULT_WIDTH
     const height = opts.height ?? SandboxImage.DEFAULT_HEIGHT
-    const name = `nikcli-computer-${shortId(nikcliSessionID)}`
+    const name = `ragu-computer-${shortId(raguSessionID)}`
     await removeContainer(name)
 
     const { code, stdout, stderr } = await spawn([
@@ -208,7 +208,7 @@ export namespace Sandbox {
     await waitForDisplay(containerID)
 
     const desktop: Desktop = {
-      nikcliSessionID,
+      raguSessionID,
       containerID,
       name,
       port,
@@ -216,41 +216,41 @@ export namespace Sandbox {
       width,
       height,
     }
-    state.desktops.set(nikcliSessionID, desktop)
+    state.desktops.set(raguSessionID, desktop)
     return desktop
   }
 
   /** Get the desktop for this conversation, creating/recreating as needed. */
   export async function ensure(
-    nikcliSessionID: string,
+    raguSessionID: string,
     opts: { width?: number; height?: number } = {},
   ): Promise<Desktop> {
-    const existing = local(nikcliSessionID)
+    const existing = local(raguSessionID)
     if (existing && (await isRunning(existing.containerID))) return existing
-    if (existing) state.desktops.delete(nikcliSessionID)
-    return create(nikcliSessionID, opts)
+    if (existing) state.desktops.delete(raguSessionID)
+    return create(raguSessionID, opts)
   }
 
   /** Run a command inside the desktop with DISPLAY set. */
   export async function exec(
-    nikcliSessionID: string,
+    raguSessionID: string,
     command: string[],
     _options?: { binary?: boolean },
   ): Promise<Exec> {
-    const desktop = await ensure(nikcliSessionID)
+    const desktop = await ensure(raguSessionID)
     return spawn(["exec", "-e", "DISPLAY=:99", desktop.containerID, ...command])
   }
 
-  export async function status(nikcliSessionID: string): Promise<{ running: boolean; desktop?: Desktop }> {
-    const desktop = local(nikcliSessionID)
+  export async function status(raguSessionID: string): Promise<{ running: boolean; desktop?: Desktop }> {
+    const desktop = local(raguSessionID)
     if (!desktop) return { running: false }
     return { running: await isRunning(desktop.containerID), desktop }
   }
 
-  export async function close(nikcliSessionID: string): Promise<boolean> {
-    const desktop = state.desktops.get(nikcliSessionID)
+  export async function close(raguSessionID: string): Promise<boolean> {
+    const desktop = state.desktops.get(raguSessionID)
     if (!desktop) return false
-    state.desktops.delete(nikcliSessionID)
+    state.desktops.delete(raguSessionID)
     await removeContainer(desktop.containerID)
     return true
   }

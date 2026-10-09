@@ -57,7 +57,7 @@ export default function SecuritySettingsScreen() {
     if (!canEnable) return
     setEnabling(true)
     try {
-      const ok = await authenticate(`Enable ${label} to unlock nikcli`)
+      const ok = await authenticate(`Enable ${label} to unlock ragu`)
       if (!ok) return
       await persist("biometricsEnabled", true)
       void triggerHaptic("success")
@@ -88,7 +88,7 @@ export default function SecuritySettingsScreen() {
       <SurfaceCard
         eyebrow="App lock"
         title={`Unlock with ${label}`}
-        description="Require Face ID, Touch ID, or your device passcode when returning to nikcli."
+        description="Require Face ID, Touch ID, or your device passcode when returning to ragu."
       >
         <View className="flex-row flex-wrap gap-2">
           <InfoChip
@@ -113,7 +113,7 @@ export default function SecuritySettingsScreen() {
       <SurfaceCard
         eyebrow="Background"
         title="Lock when leaving the app"
-        description="Hide the session and require unlock after nikcli goes to the background."
+        description="Hide the session and require unlock after ragu goes to the background."
       >
         <ActionButton
           label={security.lockOnBackground ? "On" : "Off"}

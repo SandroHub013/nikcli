@@ -1,6 +1,6 @@
-# @nikcli-ai/tui-image
+# @ragu/tui-image
 
-Terminal image rendering primitives for NikCLI and OpenTUI applications.
+Terminal image rendering primitives for Ragu Code and OpenTUI applications.
 
 The package decodes images into an RGBA pixel buffer and renders them with:
 
@@ -13,7 +13,7 @@ The package decodes images into an RGBA pixel buffer and renders them with:
 ## Render An Image
 
 ```ts
-import { renderImage } from "@nikcli-ai/tui-image"
+import { renderImage } from "@ragu/tui-image"
 
 const input = new Uint8Array(await Bun.file("logo.png").arrayBuffer())
 const result = await renderImage({
@@ -36,7 +36,7 @@ Ghostty, use `encodeKittyVirtual` and render the strings from
 `kittyPlaceholderGrid` as OpenTUI text cells using the foreground color from
 `kittyIdColor`.
 
-For terminals without Kitty Unicode placeholders, NikCLI can register an
+For terminals without Kitty Unicode placeholders, Ragu Code can register an
 iTerm2 or Sixel cursor overlay in OpenTUI's native render pass. WezTerm uses
 the iTerm2 path, so images are rendered as pixels even when the shell is
 PowerShell.
@@ -44,5 +44,5 @@ PowerShell.
 Terminals that expose none of these native protocols, including Windows
 Terminal, use the truecolor ANSI half-block renderer inside the OpenTUI grid.
 The Braille renderer remains available when higher geometric resolution is
-more important than color fidelity. NikCLI's integration is in
-`packages/nikcli/src/cli/cmd/tui/component/tui-image.tsx`.
+more important than color fidelity. Ragu Code's integration is in
+`packages/ragu/src/cli/cmd/tui/component/tui-image.tsx`.

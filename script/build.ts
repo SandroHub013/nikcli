@@ -12,7 +12,7 @@ const dir = path.resolve(__dirname, "..")
 process.chdir(dir)
 
 import pkg from "../package.json"
-import { Script, signDarwinBinary } from "@nikcli-ai/script"
+import { Script, signDarwinBinary } from "@ragu/script"
 
 const singleFlag = process.argv.includes("--single")
 const skipInstall = process.argv.includes("--skip-install")
@@ -54,7 +54,7 @@ const allTargets: {
   },
 ]
 
-// See packages/nikcli/script/build.ts: the tree-sitter worker must be embedded as a
+// See packages/ragu/script/build.ts: the tree-sitter worker must be embedded as a
 // virtual file, never handed to `entrypoints` as a real node_modules path.
 const treeSitterWorker = await Bun.file(fileURLToPath(import.meta.resolve("@opentui/core/parser.worker"))).text()
 const treeSitterWorkerPath = "opentui-tree-sitter-worker.js"
@@ -122,8 +122,8 @@ for (const item of targets) {
       autoloadTsconfig: true,
       autoloadPackageJson: true,
       target: name.replace(pkg.name, "bun") as any,
-      outfile: `dist/${name}/bin/nikcli`,
-      execArgv: [`--user-agent=nikcli/${Script.version}`, "--use-system-ca", "--"],
+      outfile: `dist/${name}/bin/ragu`,
+      execArgv: [`--user-agent=ragu/${Script.version}`, "--use-system-ca", "--"],
       windows: {},
     },
     files: {
@@ -131,16 +131,16 @@ for (const item of targets) {
     },
     entrypoints: ["./src/index.ts", treeSitterWorkerPath, workerPath],
     define: {
-      NIKCLI_VERSION: `'${Script.version}'`,
+      RAGU_VERSION: `'${Script.version}'`,
       OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + treeSitterWorkerPath,
-      NIKCLI_WORKER_PATH: workerPath,
-      NIKCLI_CHANNEL: `'${Script.channel}'`,
-      NIKCLI_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
+      RAGU_WORKER_PATH: workerPath,
+      RAGU_CHANNEL: `'${Script.channel}'`,
+      RAGU_LIBC: item.os === "linux" ? `'${item.abi ?? "glibc"}'` : "",
     },
   })
 
   await $`rm -rf ./dist/${name}/bin/tui`
-  if (item.os === "darwin") await signDarwinBinary(`dist/${name}/bin/nikcli`)
+  if (item.os === "darwin") await signDarwinBinary(`dist/${name}/bin/ragu`)
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
       {

@@ -1,5 +1,5 @@
-import { getFilename } from "@nikcli-ai/util/path"
-import { type Session } from "@nikcli-ai/sdk/httpapi"
+import { getFilename } from "@ragu/util/path"
+import { type Session } from "@ragu/sdk/httpapi"
 
 export const workspaceKey = (directory: string) => directory.replace(/[\\/]+$/, "")
 

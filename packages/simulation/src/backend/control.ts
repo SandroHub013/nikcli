@@ -51,7 +51,7 @@ export function start(endpoint: string, network: Pick<NetworkServer, "log">) {
     port: Number(url.port),
     fetch(request, server) {
       if (server.upgrade(request, { data: {} })) return undefined
-      return new Response("nikcli drive backend websocket", { status: 426 })
+      return new Response("ragu drive backend websocket", { status: 426 })
     },
     websocket: {
       close(socket) {

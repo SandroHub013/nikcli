@@ -1,5 +1,5 @@
 import type { CliRenderer } from "@opentui/core"
-import { shouldForceOverlayRepaint } from "@nikcli-ai/util/win32"
+import { shouldForceOverlayRepaint } from "@ragu/util/win32"
 
 /**
  * The renderer's own full-repaint switch.

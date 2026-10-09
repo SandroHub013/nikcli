@@ -6,7 +6,7 @@ import { type as ostype } from "@tauri-apps/plugin-os"
 import { initI18n, t } from "./i18n"
 import { commands } from "./bindings"
 
-export const UPDATER_ENABLED = window.__NIKCLI__?.updaterEnabled ?? false
+export const UPDATER_ENABLED = window.__RAGU__?.updaterEnabled ?? false
 
 export async function runUpdater({ alertOnFail }: { alertOnFail: boolean }) {
   await initI18n()

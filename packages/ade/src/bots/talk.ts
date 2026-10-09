@@ -6,7 +6,7 @@
  * said, what it said, what it did in between, and whether it is waiting on
  * you. This module is the thread: its messages, its question, what it cost.
  *
- * A bot's nikcli turn runs on ADE's nikcli server (B8d, `serve-turn.ts`),
+ * A bot's ragu turn runs on ADE's ragu server (B8d, `serve-turn.ts`),
  * where a question is an event with an id, answered by that id. Claude Code
  * and Codex print one JSON object per event, one process per turn; their
  * lines are folded in by `applyJsonLine` with each runner's own reading
@@ -26,11 +26,11 @@ export type TalkRole = "user" | "bot" | "tool" | "error"
 export interface TalkMessage {
   readonly id: string
   readonly role: TalkRole
-  /** The words. For a tool: its title, what nikcli would print beside the name. */
+  /** The words. For a tool: its title, what ragu would print beside the name. */
   readonly text: string
   /** The tool's name, for `tool` messages. */
   readonly tool?: string
-  /** What the tool printed, when nikcli included it (bash does). */
+  /** What the tool printed, when ragu included it (bash does). */
   readonly output?: string
   /** A memory write this line reports, still undoable from here (`MemoryUndo`, B8a). */
   readonly memoryUndo?: string
@@ -38,7 +38,7 @@ export interface TalkMessage {
 }
 
 export interface PendingPermission {
-  /** nikcli's id for the question, on ADE's server (B8d): the answer goes to it, not to a menu. */
+  /** ragu's id for the question, on ADE's server (B8d): the answer goes to it, not to a menu. */
   readonly requestID?: string
   readonly permission: string
   readonly patterns: string
@@ -52,7 +52,7 @@ export interface PendingPermission {
 }
 
 export interface Talk {
-  /** nikcli's session id, once the first event has said it. */
+  /** ragu's session id, once the first event has said it. */
   readonly sessionId?: string
   readonly messages: readonly TalkMessage[]
   readonly status: TalkStatus
@@ -80,7 +80,7 @@ export interface Talk {
   readonly pendingTurn?: LastTurn
   /** When anything last happened, for the roster's clock. */
   readonly updatedAt?: number
-  /** A question nikcli is waiting on. The thread shows it; `controller.ts` answers it, by its id (B8d). */
+  /** A question ragu is waiting on. The thread shows it; `controller.ts` answers it, by its id (B8d). */
   readonly permission?: PendingPermission
   /**
    * A dangerous command Claude Code was refused (B8c): it cannot ask mid-turn,
@@ -175,7 +175,7 @@ function rememberModel(talk: Talk, model: string | undefined): Talk {
   const pending = talk.pendingTurn ?? { tokens: 0, costUsd: 0 }
   const remembered = { ...talk, pendingTurn: { ...pending, model: named } }
   /*
-   * A bot on nikcli's default model starts its turn `metered`: the default
+   * A bot on ragu's default model starts its turn `metered`: the default
    * can be paid. Once the turn names a free model, it was free, and what it
    * already counted goes with it (Verifiche, live 3: «Predefinito» turns on
    * a :free model summed as «a consumo»). The test is `isFreeModel`'s, in
@@ -289,7 +289,7 @@ export function sendMessage(talk: Talk, text: string, at: number): Talk {
 /** How much of a broken event is kept before giving up on it. */
 const MAX_PARTIAL = 256 * 1024
 
-/** nikcli's token record is `{input, output, reasoning, cache: {read, write}}`; the sum is what a bill counts. */
+/** ragu's token record is `{input, output, reasoning, cache: {read, write}}`; the sum is what a bill counts. */
 function sumTokens(tokens: unknown): number {
   if (!tokens || typeof tokens !== "object") return 0
   let total = 0
@@ -418,7 +418,7 @@ export function appendMessage(
 }
 
 /**
- * A message put on the thread, or put in place of the one with its id: nikcli's
+ * A message put on the thread, or put in place of the one with its id: ragu's
  * server sends a part whole each time it changes (B8d), a text as it grows and
  * a tool from running to done. Stored as `appendMessage` stores it; the first
  * time it came stays its time.

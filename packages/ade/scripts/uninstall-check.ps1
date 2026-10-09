@@ -1,6 +1,6 @@
 <#
   Proves ADE's uninstaller on a CI runner (`.github/workflows/ade-uninstall-check.yml`), never on a person's computer: the setup closes every
-  ade-desktop.exe by name and the uninstall removes the hooks in the real ~/.claude, ~/.codex and nikcli.
+  ade-desktop.exe by name and the uninstall removes the hooks in the real ~/.claude, ~/.codex and ragu.
 
   It works on the NSIS installer of the TEST identity (`ai.nikcli.ade.test`, `ade-test.exe`, product "ADE Test"), built with
   `tauri.test.conf.json`, so nothing here has the released app's names. The hooks are global and only the released identity removes them

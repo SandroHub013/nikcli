@@ -247,7 +247,7 @@ export default function McpSettingsScreen() {
                 Local
               </Text>
               <Text style={{ marginTop: 4, color: palette.soft, ...typeStyle(12) }}>
-                Host command launched by Nikcli
+                Host command launched by Ragu
               </Text>
             </Pressable>
           </View>

@@ -1,5 +1,5 @@
 /**
- * Real response bodies, captured from a running nikcli server.
+ * Real response bodies, captured from a running ragu server.
  *
  * The point is that the reference shows a concrete answer without the reader
  * having to start anything. Where there is no capture, the operation card falls
@@ -7,7 +7,7 @@
  * shape is honest about being one, and a captured body is worth more than any
  * number of invented field values.
  *
- * Captured 2026-09-17 against a server started with `NIKCLI_TEST_HOME` pointed
+ * Captured 2026-09-17 against a server started with `RAGU_TEST_HOME` pointed
  * at a throwaway directory, in a two-file git project. The only edit is
  * cosmetic: the temporary paths were rewritten to `/Users/me/demo`.
  *

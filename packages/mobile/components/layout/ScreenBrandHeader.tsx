@@ -8,7 +8,7 @@ import { useAppTheme } from "@/lib/theme"
 import { type as typeStyle } from "@/lib/typography"
 
 /**
- * Custom screen header used by the tab pages: bare NIKCLI brand image
+ * Custom screen header used by the tab pages: bare RAGU brand image
  * top-left (no native glass bubble), large title below, optional circular
  * controls top-right.
  */

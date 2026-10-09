@@ -1,12 +1,12 @@
 /**
- * Whether a bot's nikcli model is free, from nikcli's own catalog (B11
+ * Whether a bot's ragu model is free, from ragu's own catalog (B11
  * review, M2), the way the chat's selector decides it (`chat/model.ts`).
  *
  * The `:free` suffix is not the whole answer: a provider that prices its
  * catalogue honestly (OpenCode Zen, a local server) prices its free models at
  * 0 and names them after the tier, not after a tag. Everywhere else a cost of
  * 0 means the price is missing, not that it is nothing, so only the suffix
- * counts there, and nikcli is not asked.
+ * counts there, and ragu is not asked.
  */
 
 import {
@@ -27,7 +27,7 @@ export interface CatalogModel {
 }
 
 /**
- * `nikcli models <provider> --verbose`: each model's `provider/id` on a line
+ * `ragu models <provider> --verbose`: each model's `provider/id` on a line
  * of its own, then its record as indented JSON closed by `}` at the start of a
  * line. A record that does not read is skipped, never guessed.
  */
@@ -53,7 +53,7 @@ export function parseModelCatalog(stdout: string): ReadonlyMap<string, CatalogMo
   return models
 }
 
-/** Each record of `nikcli models [provider] --verbose`, with its `provider/id`; one that does not read is skipped. */
+/** Each record of `ragu models [provider] --verbose`, with its `provider/id`; one that does not read is skipped. */
 function catalogRecords(stdout: string): [string, Record<string, unknown>][] {
   const records: [string, Record<string, unknown>][] = []
   const lines = stdout.split(/\r?\n/)
@@ -75,7 +75,7 @@ function catalogRecords(stdout: string): [string, Record<string, unknown>][] {
 }
 
 /**
- * The whole of `nikcli models --verbose` as a catalog shaped like
+ * The whole of `ragu models --verbose` as a catalog shaped like
  * `GET /config/providers`, for `modelsFromConfigProviders`: the bot form's
  * models when ADE's server is not open on the bot's folder (composer-chip,
  * pezzo 1). The records are the same `Model` the server gives, variants
@@ -83,7 +83,7 @@ function catalogRecords(stdout: string): [string, Record<string, unknown>][] {
  * in them, so it is its id.
  */
 /*
- * The providers nikcli's records name by id only, as `/config/providers`
+ * The providers ragu's records name by id only, as `/config/providers`
  * names them: the menu shows the provider on every row, and «opencode» next
  * to «OpenRouter» read as two kinds of thing (model-picker review, BASSO c).
  */
@@ -142,11 +142,11 @@ export async function catalogFree(model: string, load: (provider: string) => Pro
 }
 
 /**
- * The efforts a nikcli model takes: its variants in nikcli's catalog of its
+ * The efforts a ragu model takes: its variants in ragu's catalog of its
  * provider, the same ones `GET /config/providers` gives. Undefined when the
  * catalog cannot be read or does not list the model: not knowing.
  */
-export async function nikcliModelVariants(
+export async function raguModelVariants(
   model: string,
   load: (provider: string) => Promise<string>,
 ): Promise<readonly string[] | undefined> {
@@ -163,7 +163,7 @@ export async function nikcliModelVariants(
 /**
  * A model as the bot form's list shows it: a free one marked as the Chat's
  * selector marks it, «(gratis)», any other by its id alone. The list is
- * nikcli's ids with no prices, so the `:free` suffix is what tells; before,
+ * ragu's ids with no prices, so the `:free` suffix is what tells; before,
  * the 17 free models sat among 368 paid ones looking the same (prove dal
  * vivo 2).
  */
@@ -172,8 +172,8 @@ export function botModelLabel(id: string): string {
 }
 
 /**
- * Whether nikcli's catalog of the model's provider no longer lists it: a
- * model taken out of it (nex-n2.5-mini:free) makes nikcli answer mute, with
+ * Whether ragu's catalog of the model's provider no longer lists it: a
+ * model taken out of it (nex-n2.5-mini:free) makes ragu answer mute, with
  * «prompt loop failed». Undefined when the catalog cannot be read, is empty,
  * or the name has no provider: not knowing.
  */

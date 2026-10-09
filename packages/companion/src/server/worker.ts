@@ -13,7 +13,7 @@ app.get("/", (c) => {
     <!DOCTYPE html>
     <html>
     <head>
-      <title>nikcli Companion</title>
+      <title>ragu Companion</title>
       <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
@@ -47,7 +47,7 @@ app.get("/", (c) => {
     </head>
     <body>
       <div class="container">
-        <h1>nikcli Companion</h1>
+        <h1>ragu Companion</h1>
         <p class="subtitle">Web UI for Claude Code sessions</p>
         
         <div class="card">

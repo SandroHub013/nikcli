@@ -1,4 +1,4 @@
-name = "nikcli-inference-dashboard"
+name = "ragu-inference-dashboard"
 main = "./dist/_worker.js/index.js"
 compatibility_date = "2025-10-01"
 compatibility_flags = ["nodejs_compat"]
@@ -15,7 +15,7 @@ binding = "ASSETS"
 # Then replace database_id below with the value printed.
 [[d1_databases]]
 binding = "DB"
-database_name = "nikcli-inference"
+database_name = "ragu-inference"
 database_id = "5be2b87f-fc61-4642-a444-2f954430bbb6"
 migrations_dir = "./d1-migrations"
 
@@ -23,4 +23,4 @@ migrations_dir = "./d1-migrations"
 INFERENCE_API_BASE = "https://inference.nikcli-ai.dev"
 SITE_URL = "https://dashboard.nikcli-ai.dev"
 AUTH_ISSUER = "https://auth.nikcli-ai.dev"
-AUTH_AUDIENCE = "nikcli-api"
+AUTH_AUDIENCE = "ragu-api"

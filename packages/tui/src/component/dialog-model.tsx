@@ -13,7 +13,7 @@ import { useSDK } from "@tui/context/sdk"
 export function useConnected() {
   const sync = useSync()
   return createMemo(() =>
-    sync.data.provider.some((x) => x.id !== "nikcli" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
+    sync.data.provider.some((x) => x.id !== "ragu" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
   )
 }
 
@@ -67,8 +67,8 @@ export function DialogModel(props: {
               title: model.name ?? item.modelID,
               description: provider.name,
               category: "Favorites",
-              disabled: provider.id === "nikcli" && model.id.includes("-nano"),
-              footer: model.cost?.input === 0 && provider.id === "nikcli" ? "Free" : undefined,
+              disabled: provider.id === "ragu" && model.id.includes("-nano"),
+              footer: model.cost?.input === 0 && provider.id === "ragu" ? "Free" : undefined,
               onSelect: () => {
                 if (props.onSelect) {
                   props.onSelect({ providerID: provider.id, modelID: model.id })
@@ -105,8 +105,8 @@ export function DialogModel(props: {
               title: model.name ?? item.modelID,
               description: provider.name,
               category: "Recent",
-              disabled: provider.id === "nikcli" && model.id.includes("-nano"),
-              footer: model.cost?.input === 0 && provider.id === "nikcli" ? "Free" : undefined,
+              disabled: provider.id === "ragu" && model.id.includes("-nano"),
+              footer: model.cost?.input === 0 && provider.id === "ragu" ? "Free" : undefined,
               onSelect: () => {
                 if (props.onSelect) {
                   props.onSelect({ providerID: provider.id, modelID: model.id })
@@ -130,7 +130,7 @@ export function DialogModel(props: {
     const providerOptions = pipe(
       sync.data.provider,
       sortBy(
-        (provider) => provider.id !== "nikcli",
+        (provider) => provider.id !== "ragu",
         (provider) => provider.name,
       ),
       flatMap((provider) =>
@@ -153,8 +153,8 @@ export function DialogModel(props: {
                 ? "(Favorite)"
                 : undefined,
               category: connected() ? provider.name : undefined,
-              disabled: provider.id === "nikcli" && model.includes("-nano"),
-              footer: info.cost?.input === 0 && provider.id === "nikcli" ? "Free" : undefined,
+              disabled: provider.id === "ragu" && model.includes("-nano"),
+              footer: info.cost?.input === 0 && provider.id === "ragu" ? "Free" : undefined,
               onSelect() {
                 if (props.onSelect) {
                   props.onSelect({ providerID: provider.id, modelID: model })

@@ -18,7 +18,7 @@ plugin loading, change autoload permission defaults, or introduce a second plugi
 ## Design and Requirements
 
 1. Keep `packages/tui/src/host/standalone.ts` dependent on SDK/shared utilities only. Enforce the transitive import boundary,
-   not just the absence of a literal `packages/nikcli` string. Inspect aliases, dynamic imports, and shared utility chains;
+   not just the absence of a literal `packages/ragu` string. Inspect aliases, dynamic imports, and shared utility chains;
    allow necessary client helpers, forbid backend runtime/database/server modules.
 2. Retain host-supplied pre-render configuration in embedded mode. Standalone reads it from its already-running server;
    distinguish authentication, transport, invalid response, and explicit default config. EOT-10 owns the error contract:
@@ -67,9 +67,9 @@ isolation as security isolation. Secrets from config/import failures remain reda
   exactly one generation is active and owned registrations return to baseline after unload.
 - Shutdown with multiple stuck disposers respects the aggregate deadline and reports each incomplete cleanup. Terminal
   modes restore and no new host mutations are accepted after revocation.
-- Extend `packages/nikcli/test/tui/plugin-dispose.test.ts`, `packages/nikcli/test/tui/plugin-v2.test.ts`,
-  `packages/nikcli/test/tui/entry-coverage.test.ts`, and `packages/tui/script/standalone-smoke.ts`.
-- From `packages/tui`: `bun run smoke:standalone`. From `packages/nikcli`:
+- Extend `packages/ragu/test/tui/plugin-dispose.test.ts`, `packages/ragu/test/tui/plugin-v2.test.ts`,
+  `packages/ragu/test/tui/entry-coverage.test.ts`, and `packages/tui/script/standalone-smoke.ts`.
+- From `packages/tui`: `bun run smoke:standalone`. From `packages/ragu`:
   `bun test test/tui/plugin-dispose.test.ts test/tui/plugin-v2.test.ts test/tui/entry-coverage.test.ts`,
   `bun run build:single`, `bun run smoke:tui`, and `bun run bench:startup <compiled-binary-path>`.
   Record the actual built binary path; do not mistake source-mode smoke for compiled parity.

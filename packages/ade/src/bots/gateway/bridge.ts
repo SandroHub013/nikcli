@@ -6,7 +6,7 @@
 
 import { t } from "../../i18n"
 import { askDialog } from "../../host/ask"
-import type { AgentFile } from "../nikcli"
+import type { AgentFile } from "../ragu"
 import { admitProject, projectSurface, PROJECT_TRUST_KEY } from "../project-trust"
 import { runnerById } from "../runners"
 import { localGatewayThreads, projectFs, readBotText, resolveRoots } from "../store"
@@ -79,7 +79,7 @@ const askTrust = (question: string) => askDialog(question, { ok: t("bots.ask.yes
 /**
  * The trust a chat's turns need, asked now with ADE's dialogs (B3/B3b), then
  * checked exactly as every chat turn checks it; the bot is a repository's
- * unless its file is in nikcli's global folders (`scopeOf`), whatever the
+ * unless its file is in ragu's global folders (`scopeOf`), whatever the
  * roster said.
  */
 export async function approveForChat(
@@ -90,7 +90,7 @@ export async function approveForChat(
   const scoped: AgentFile = { ...bot, scope: scopeOf(bot.path, globalRoot) }
   const asked = await admit(scoped, { store: localTrustStore(), read: readBotText, confirm: askTrust })
   if (!asked.ok) return asked
-  if (scoped.scope === "project" && runnerById(bot.runner).id === "nikcli") {
+  if (scoped.scope === "project" && runnerById(bot.runner).id === "ragu") {
     const configuration = await admitProject(project, {
       store: localTrustStore(PROJECT_TRUST_KEY),
       surface: () => projectSurface(project, projectFs),

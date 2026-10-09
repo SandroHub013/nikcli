@@ -1,18 +1,18 @@
 import type { APIEvent } from "@solidjs/start/server"
-import { and, Database, eq, isNull, lt, or, sql } from "@nikcli-ai/console-core/drizzle/index.js"
-import { KeyTable } from "@nikcli-ai/console-core/schema/key.sql.js"
-import { BillingTable, SubscriptionTable, UsageTable } from "@nikcli-ai/console-core/schema/billing.sql.js"
-import { centsToMicroCents } from "@nikcli-ai/console-core/util/price.js"
-import { getWeekBounds } from "@nikcli-ai/console-core/util/date.js"
-import { Identifier } from "@nikcli-ai/console-core/identifier.js"
-import { Billing } from "@nikcli-ai/console-core/billing.js"
-import { Actor } from "@nikcli-ai/console-core/actor.js"
-import { WorkspaceTable } from "@nikcli-ai/console-core/schema/workspace.sql.js"
-import { ZenData } from "@nikcli-ai/console-core/model.js"
-import { Black, BlackData } from "@nikcli-ai/console-core/black.js"
-import { UserTable } from "@nikcli-ai/console-core/schema/user.sql.js"
-import { ModelTable } from "@nikcli-ai/console-core/schema/model.sql.js"
-import { ProviderTable } from "@nikcli-ai/console-core/schema/provider.sql.js"
+import { and, Database, eq, isNull, lt, or, sql } from "@ragu/console-core/drizzle/index.js"
+import { KeyTable } from "@ragu/console-core/schema/key.sql.js"
+import { BillingTable, SubscriptionTable, UsageTable } from "@ragu/console-core/schema/billing.sql.js"
+import { centsToMicroCents } from "@ragu/console-core/util/price.js"
+import { getWeekBounds } from "@ragu/console-core/util/date.js"
+import { Identifier } from "@ragu/console-core/identifier.js"
+import { Billing } from "@ragu/console-core/billing.js"
+import { Actor } from "@ragu/console-core/actor.js"
+import { WorkspaceTable } from "@ragu/console-core/schema/workspace.sql.js"
+import { ZenData } from "@ragu/console-core/model.js"
+import { Black, BlackData } from "@ragu/console-core/black.js"
+import { UserTable } from "@ragu/console-core/schema/user.sql.js"
+import { ModelTable } from "@ragu/console-core/schema/model.sql.js"
+import { ProviderTable } from "@ragu/console-core/schema/provider.sql.js"
 import { logger } from "./logger"
 import {
   AuthError,
@@ -55,7 +55,7 @@ export async function handler(
   const MAX_RETRIES = 3
   const FREE_WORKSPACES = [
     "wrk_01K46JDFR0E75SG2Q8K172KF3Y", // frank
-    "wrk_01K6W1A3VE0KMNVSCQT43BG2SX", // nikcli bench
+    "wrk_01K6W1A3VE0KMNVSCQT43BG2SX", // ragu bench
   ]
 
   try {
@@ -64,10 +64,10 @@ export async function handler(
     const model = opts.parseModel(url, body)
     const isStream = opts.parseIsStream(url, body)
     const ip = input.request.headers.get("x-real-ip") ?? ""
-    const sessionId = input.request.headers.get("x-nikcli-session") ?? ""
-    const requestId = input.request.headers.get("x-nikcli-request") ?? ""
-    const projectId = input.request.headers.get("x-nikcli-project") ?? ""
-    const ocClient = input.request.headers.get("x-nikcli-client") ?? ""
+    const sessionId = input.request.headers.get("x-ragu-session") ?? ""
+    const requestId = input.request.headers.get("x-ragu-request") ?? ""
+    const projectId = input.request.headers.get("x-ragu-project") ?? ""
+    const ocClient = input.request.headers.get("x-ragu-client") ?? ""
     logger.metric({
       is_tream: isStream,
       session: sessionId,
@@ -124,10 +124,10 @@ export async function handler(
           })
           headers.delete("host")
           headers.delete("content-length")
-          headers.delete("x-nikcli-request")
-          headers.delete("x-nikcli-session")
-          headers.delete("x-nikcli-project")
-          headers.delete("x-nikcli-client")
+          headers.delete("x-ragu-request")
+          headers.delete("x-ragu-session")
+          headers.delete("x-ragu-project")
+          headers.delete("x-ragu-client")
           return headers
         })(),
         body: reqBody,

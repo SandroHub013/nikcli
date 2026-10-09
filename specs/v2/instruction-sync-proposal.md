@@ -8,7 +8,7 @@
 
 ## Principle
 
-The model is a replica nikcli can write but cannot read or edit. The transcript is the only channel. Instruction sync keeps mutable privileged context — `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, skill guidance, profile, date, environment — current over that channel **without rewriting text that was already sent**.
+The model is a replica ragu can write but cannot read or edit. The transcript is the only channel. Instruction sync keeps mutable privileged context — `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, skill guidance, profile, date, environment — current over that channel **without rewriting text that was already sent**.
 
 The durable log stores only irreducible facts: which source values changed, and when. Bodies live in a content-addressed table. Rendering is a function of the log plus current renderer code.
 
@@ -16,7 +16,7 @@ The durable log stores only irreducible facts: which source values changed, and 
 
 `Instruction.system()` runs on every request assembly:
 
-1. `collectSystemPaths` walks up from the instance directory to the worktree root for each of `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, `.github/instructions/memory.instruction.md`, then adds `~/.config/nikcli/AGENTS.md`, `~/.claude/CLAUDE.md` (unless `NIKCLI_DISABLE_CLAUDE_CODE_PROMPT`), and `$NIKCLI_CONFIG_DIR/AGENTS.md`. Config-declared instruction globs and URLs resolve the same way.
+1. `collectSystemPaths` walks up from the instance directory to the worktree root for each of `AGENTS.md`, `CLAUDE.md`, `CONTEXT.md`, `.github/instructions/memory.instruction.md`, then adds `~/.config/nikcli/AGENTS.md`, `~/.claude/CLAUDE.md` (unless `RAGU_DISABLE_CLAUDE_CODE_PROMPT`), and `$RAGU_CONFIG_DIR/AGENTS.md`. Config-declared instruction globs and URLs resolve the same way.
 2. `readInstructionContents` reads every matched file with a bounded fan-out of 10, prefixing each with `Instructions from: <path>`. A read failure becomes an empty string and disappears.
 3. `fetchInstructionUrls` fetches every instruction URL with a 5s timeout. A non-`ok` response or a timeout also becomes an empty string and disappears.
 4. The concatenation is spliced into the system prompt for that request and thrown away.

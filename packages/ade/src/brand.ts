@@ -36,7 +36,7 @@ export function asBrand(raw: unknown): Brand {
 /** The brand as built into the app. */
 export const BRAND: Brand = asBrand(brandJson)
 
-/** The copyright line: "© 2025 nikcli" the first year, "© 2025-2026 nikcli" after. */
+/** The copyright line: "© 2025 ragu" the first year, "© 2025-2026 ragu" after. */
 export function copyrightLine(brand: Brand): string {
   const span = brand.until > brand.since ? `${brand.since}-${brand.until}` : `${brand.since}`
   return `© ${span} ${brand.publisher}`

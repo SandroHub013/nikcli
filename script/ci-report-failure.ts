@@ -31,7 +31,7 @@ function redact(text: string): string {
 
 // ─── Build comment body ─────────────────────────────────────────────────────
 
-const STICKY_MARKER = "<!-- nikcli-ci-autofix -->"
+const STICKY_MARKER = "<!-- ragu-ci-autofix -->"
 
 function buildBody(
   mention: string,
@@ -81,7 +81,7 @@ async function main() {
   const sha = process.env.GITHUB_SHA || ""
   const headSha = process.env.GITHUB_HEAD_SHA || sha
   const prNumber = process.env.GITHUB_PR_NUMBER
-  const mention = process.env.NIKCLI_CI_FAILURE_MENTION || "@nikomatt69"
+  const mention = process.env.RAGU_CI_FAILURE_MENTION || "@nikomatt69"
   const autofixResult = process.env.AUTOFIX_ATTEMPTED || "skipped"
 
   if (!token) {
@@ -273,7 +273,7 @@ async function main() {
   ].join("\n")
 
   // Search for an existing open tracking issue
-  const issueSearchUrl = `/repos/${owner}/${repoName}/issues?state=open&labels=nikcli-ci-failure&per_page=5`
+  const issueSearchUrl = `/repos/${owner}/${repoName}/issues?state=open&labels=ragu-ci-failure&per_page=5`
 
   try {
     const existingIssues: any[] = await githubFetch(issueSearchUrl)
@@ -288,7 +288,7 @@ async function main() {
       await githubPost(`/repos/${owner}/${repoName}/issues`, {
         title: issueTitle,
         body: issueBody,
-        labels: ["nikcli-ci-failure", "bug"],
+        labels: ["ragu-ci-failure", "bug"],
       })
       console.log("Created new tracking issue")
     }

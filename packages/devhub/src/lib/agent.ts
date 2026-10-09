@@ -2,11 +2,11 @@ import { Context, Data, Effect, Layer } from "effect"
 import { errorText, native, type ApiResponse } from "./native"
 
 /**
- * Transport to the local nikcli service and the agent session API, as Effect services.
+ * Transport to the local ragu service and the agent session API, as Effect services.
  *
  * - `Gateway` is the only thing that knows how a request leaves the webview (the Rust proxy that
  *   attaches the channel password). Callers above it see typed failures.
- * - `Agent` is the nikcli session API: create a session, prompt it, read it back, abort, delete.
+ * - `Agent` is the ragu session API: create a session, prompt it, read it back, abort, delete.
  *
  * Both are ports: tests and other hosts swap the layer without touching callers.
  */
@@ -19,7 +19,7 @@ export type GatewayRequest = {
   readonly method: string
   readonly path: string
   readonly body?: unknown
-  /** Instance directory (`x-nikcli-directory`). */
+  /** Instance directory (`x-ragu-directory`). */
   readonly directory?: string
   readonly timeoutSecs?: number
 }
@@ -36,13 +36,13 @@ export const gatewayLayer = (serviceUrl: () => string | undefined) => {
   const raw = (req: GatewayRequest): Effect.Effect<ApiResponse, GatewayError> =>
     Effect.suspend(() => {
       const url = serviceUrl()
-      if (!url) return Effect.fail(new GatewayError({ message: "No local nikcli service is registered" }))
+      if (!url) return Effect.fail(new GatewayError({ message: "No local ragu service is registered" }))
       const headers: Record<string, string> = {}
       // GET/HEAD never carry a body, and `null` (what a model writes for "no body") means none.
       const hasBody = req.body !== undefined && req.body !== null && !/^(GET|HEAD)$/i.test(req.method)
       if (hasBody) headers["content-type"] = "application/json"
       if (req.directory)
-        headers["x-nikcli-directory"] = /[^\x00-\x7F]/.test(req.directory)
+        headers["x-ragu-directory"] = /[^\x00-\x7F]/.test(req.directory)
           ? encodeURIComponent(req.directory)
           : req.directory
       return Effect.tryPromise({

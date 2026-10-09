@@ -9,8 +9,8 @@ import { useToast } from "@tui/ui/toast"
 import { DialogProvider } from "./dialog-provider"
 import { useSDK } from "@tui/context/sdk"
 import { UserApi } from "@tui/util/user-api"
-import { UserSession } from "@nikcli-ai/util/user-session"
-import type { UserSchema } from "@nikcli-ai/util/user-schema"
+import { UserSession } from "@ragu/util/user-session"
+import type { UserSchema } from "@ragu/util/user-schema"
 import { useTheme } from "@tui/context/theme"
 import { DialogLogin } from "@tui/component/dialog-login"
 
@@ -93,7 +93,7 @@ export function DialogAuthManage() {
         title: "Sign in",
         value: "login",
         category: "Account",
-        description: "Continue with nikcli (browser) or use a local password",
+        description: "Continue with ragu (browser) or use a local password",
         onSelect: async () => {
           await DialogLogin.run(dialog, sdk)
           dialog.replace(() => <DialogAuthManage />)

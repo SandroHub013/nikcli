@@ -15,9 +15,9 @@ app
     openAPIRouteHandler(app, {
       documentation: {
         info: {
-          title: "Nikcli Enterprise API",
+          title: "Ragu Enterprise API",
           version: "1.0.0",
-          description: "Nikcli Enterprise API endpoints",
+          description: "Ragu Enterprise API endpoints",
         },
         openapi: "3.1.1",
       },

@@ -159,7 +159,7 @@ test("native commands surface stderr and missing executable errors", async () =>
   await expect(
     runNativeCommand(process.execPath, ["-e", "console.error('SDK failure');process.exit(7)"]),
   ).rejects.toThrow("exited 7: SDK failure")
-  await expect(runNativeCommand("/nonexistent/nikcli-native-command", [])).rejects.toThrow("Cannot run")
+  await expect(runNativeCommand("/nonexistent/ragu-native-command", [])).rejects.toThrow("Cannot run")
 })
 
 test("command timeout kills and reaps the owned process", async () => {

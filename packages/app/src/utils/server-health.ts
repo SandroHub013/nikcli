@@ -1,4 +1,4 @@
-import { createNikcliClient } from "@nikcli-ai/sdk/httpapi"
+import { createRaguClient } from "@ragu/sdk/httpapi"
 
 export type ServerHealth = { healthy: boolean; version?: string }
 
@@ -55,7 +55,7 @@ export async function checkServerHealth(
   opts?: CheckServerHealthOptions,
 ): Promise<ServerHealth> {
   const signal = opts?.signal ?? timeoutSignal(opts?.timeoutMs ?? 3000)
-  const sdk = createNikcliClient({
+  const sdk = createRaguClient({
     baseUrl: url,
     fetch,
     signal,

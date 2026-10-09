@@ -1,6 +1,6 @@
 import { remoteService } from "./remote-service"
 import type { RemoteNotification, TaskInfo } from "./types"
-import { Log } from "@nikcli-ai/util/log"
+import { Log } from "@ragu/util/log"
 
 const log = Log.create({ service: "notifications" })
 

@@ -21,7 +21,7 @@ Background headless-browser sessions, driven the way terminal-control drives
 PTY sessions — but for web pages. A per-workspace daemon holds Bun.WebView
 sessions (WebKit on macOS); they persist across separate CLI invocations.
 A session unused for 30 minutes is stopped; the daemon then exits 10 minutes
-later. Set NIKCLI_BROWSER_IDLE_MINUTES to override the session window, or 0 to disable it.
+later. Set RAGU_BROWSER_IDLE_MINUTES to override the session window, or 0 to disable it.
 
 Session commands:
   browser-control start [NAME] --url URL [--viewport WxH] [--record]
@@ -79,7 +79,7 @@ Evidence:
 Other:
   browser-control install-skill [--workspace DIR | --global] [--json]
 
-    --global installs into ~/.agents/skills so nikcli discovers it in every
+    --global installs into ~/.agents/skills so ragu discovers it in every
     workspace on this machine, not just the current one.
   browser-control shutdown        Stop the background daemon for this workspace
   -h, --help
@@ -354,7 +354,7 @@ async function findWorkspaceRoot(start = process.cwd()): Promise<string> {
 
 /**
  * `global: true` targets `~/.agents/skills/browser-control` — the home-rooted
- * external skill directory nikcli's Skill loader scans unconditionally for
+ * external skill directory ragu's Skill loader scans unconditionally for
  * every workspace on this machine, making the skill available by default
  * rather than opt-in per project.
  */
@@ -554,7 +554,7 @@ export async function main(argv = Bun.argv.slice(2)): Promise<void> {
           return
         }
         const action = installation.installed ? "Installed" : "Already installed"
-        process.stdout.write(`${action}: ${installation.target}\nRestart nikcli to load the skill.\n`)
+        process.stdout.write(`${action}: ${installation.target}\nRestart ragu to load the skill.\n`)
         return
       }
       case "bundle": {

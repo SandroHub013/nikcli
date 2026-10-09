@@ -1,5 +1,5 @@
 /**
- * Live protocol check against the real local nikcli service and a real model.
+ * Live protocol check against the real local ragu service and a real model.
  * Opt in with DEVHUB_LIVE=1 — it spends (free-tier) tokens and needs a running service.
  *
  *   DEVHUB_LIVE=1 DEVHUB_MODEL=minimax-coding-plan/MiniMax-M2 bun test src/lib/agent.live.test.ts
@@ -11,7 +11,7 @@ import { join } from "node:path"
 import { Effect, Layer } from "effect"
 
 const live = process.env.DEVHUB_LIVE === "1"
-const state = join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "nikcli")
+const state = join(process.env.XDG_STATE_HOME ?? join(homedir(), ".local", "state"), "ragu")
 
 if (live) {
   const reg = JSON.parse(readFileSync(join(state, "service.json"), "utf8")) as { url: string }
@@ -24,7 +24,7 @@ if (live) {
         const t = performance.now()
         const res = await fetch(reg.url + req.path, {
           method: req.method,
-          headers: { ...req.headers, authorization: `Basic ${Buffer.from(`nikcli:${password}`).toString("base64")}` },
+          headers: { ...req.headers, authorization: `Basic ${Buffer.from(`ragu:${password}`).toString("base64")}` },
           body: req.body,
         })
         return { status: res.status, headers: {}, body: await res.text(), elapsedMs: performance.now() - t }
@@ -67,7 +67,7 @@ test.skipIf(!live)(
         system: SYSTEM_PROMPT,
         tools: ASSISTANT_TOOLS,
         model: { providerID, modelID },
-        text: wrapUserMessage(ctx, "Check the nikcli service health by calling GET /global/health. Use an action."),
+        text: wrapUserMessage(ctx, "Check the ragu service health by calling GET /global/health. Use an action."),
       })
       const parsed = yield* parseActions(textOf(reply))
       const first = parsed.find((p) => p.ok)

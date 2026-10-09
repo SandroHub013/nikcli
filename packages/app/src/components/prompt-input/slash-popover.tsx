@@ -1,7 +1,7 @@
 import { Component, For, Match, Show, Switch } from "solid-js"
-import { FileIcon } from "@nikcli-ai/ui/file-icon"
-import { Icon } from "@nikcli-ai/ui/icon"
-import { getDirectory, getFilename } from "@nikcli-ai/util/path"
+import { FileIcon } from "@ragu/ui/file-icon"
+import { Icon } from "@ragu/ui/icon"
+import { getDirectory, getFilename } from "@ragu/util/path"
 
 export type AtOption =
   | { type: "agent"; name: string; display: string }

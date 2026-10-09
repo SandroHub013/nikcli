@@ -7,89 +7,89 @@ import DocCard from "../../components/docs/DocCard.astro";
 
 const toc = [
   { title: "Overview", href: "#overview", depth: 2 },
-  { title: "@nikcli-ai/llm", href: "#llm", depth: 2 },
-  { title: "@nikcli-ai/http-recorder", href: "#http-recorder", depth: 2 },
+  { title: "@ragu/llm", href: "#llm", depth: 2 },
+  { title: "@ragu/http-recorder", href: "#http-recorder", depth: 2 },
   { title: "Full Package Table", href: "#package-table", depth: 2 },
 ];
 
 const packages = [
   {
-    name: "@nikcli-ai/nikcli",
-    path: "packages/nikcli",
+    name: "@ragu/ragu",
+    path: "packages/ragu",
     role: "Core CLI, TUI, agent runtime, session management, HTTP server, and all built-in tools. The primary deliverable.",
   },
   {
-    name: "@nikcli-ai/llm",
+    name: "@ragu/llm",
     path: "packages/llm",
     role: "Multi-provider LLM client: route-based model refs, protocol adapters (Anthropic, OpenAI, Gemini, Bedrock, and more), tool-use runtime, and Effect-native streaming.",
   },
   {
-    name: "@nikcli-ai/http-recorder",
+    name: "@ragu/http-recorder",
     path: "packages/http-recorder",
-    role: "Record-and-replay HTTP (and WebSocket) test fixture library used by @nikcli-ai/llm's provider test suite.",
+    role: "Record-and-replay HTTP (and WebSocket) test fixture library used by @ragu/llm's provider test suite.",
   },
   {
-    name: "@nikcli-ai/sdk",
+    name: "@ragu/sdk",
     path: "packages/sdk/js",
-    role: "Public JavaScript/TypeScript SDK exposing the nikcli client, server utilities, cloud sync helpers, and generated API types.",
+    role: "Public JavaScript/TypeScript SDK exposing the ragu client, server utilities, cloud sync helpers, and generated API types.",
   },
   {
-    name: "@nikcli-ai/plugin",
+    name: "@ragu/plugin",
     path: "packages/plugin",
-    role: "TypeScript types and utilities for authoring nikcli plugins, including the PluginInput contract and tool-definition helpers.",
+    role: "TypeScript types and utilities for authoring ragu plugins, including the PluginInput contract and tool-definition helpers.",
   },
   {
-    name: "@nikcli-ai/inference",
+    name: "@ragu/inference",
     path: "packages/inference",
     role: "Self-hosted OpenAI-compatible inference gateway that routes to 14 upstream providers, caches responses, and applies per-tier rate limiting.",
   },
   {
-    name: "@nikcli-ai/inference-dashboard",
+    name: "@ragu/inference-dashboard",
     path: "packages/inference-dashboard",
     role: "Astro-based admin dashboard for the inference gateway, surfacing provider health, usage, and cache statistics.",
   },
   {
-    name: "@nikcli-ai/cloud",
+    name: "@ragu/cloud",
     path: "packages/cloud",
     role: "Cloudflare-Workers backend providing JWT auth, device registration, encrypted session storage (D1), and WebSocket relay via Durable Objects.",
   },
   {
-    name: "@nikcli-ai/remote",
+    name: "@ragu/remote",
     path: "packages/remote",
-    role: "WebSocket terminal-server that lets mobile and web clients access a running nikcli session remotely, with optional tunnel and QR-code pairing.",
+    role: "WebSocket terminal-server that lets mobile and web clients access a running ragu session remotely, with optional tunnel and QR-code pairing.",
   },
   {
-    name: "@nikcli-ai/companion",
+    name: "@ragu/companion",
     path: "packages/companion",
-    role: "Companion server and UI for pairing remote clients with a local nikcli session.",
+    role: "Companion server and UI for pairing remote clients with a local ragu session.",
   },
   {
-    name: "@nikcli-ai/desktop",
+    name: "@ragu/desktop",
     path: "packages/desktop",
-    role: "Native desktop application built with Tauri v2, embedding the nikcli web UI in a platform-native shell.",
+    role: "Native desktop application built with Tauri v2, embedding the ragu web UI in a platform-native shell.",
   },
   {
-    name: "@nikcli-ai/enterprise",
+    name: "@ragu/enterprise",
     path: "packages/enterprise",
-    role: "SolidStart web application for enterprise deployments, providing a browser-based interface for managing nikcli teams and sessions.",
+    role: "SolidStart web application for enterprise deployments, providing a browser-based interface for managing ragu teams and sessions.",
   },
   {
-    name: "@nikcli-ai/slack",
+    name: "@ragu/slack",
     path: "packages/slack",
-    role: "Cloudflare Worker that connects a Slack workspace to a running nikcli server, supporting text and voice-message sessions.",
+    role: "Cloudflare Worker that connects a Slack workspace to a running ragu server, supporting text and voice-message sessions.",
   },
   {
-    name: "@nikcli-ai/ui",
+    name: "@ragu/ui",
     path: "packages/ui",
     role: "Shared SolidJS component library (buttons, accordions, avatars, tool views) used by the app, enterprise, and desktop packages.",
   },
   {
-    name: "@nikcli-ai/util",
+    name: "@ragu/util",
     path: "packages/util",
     role: "Lightweight utility helpers (array, binary, encoding, error, function) shared across workspace packages.",
   },
   {
-    name: "@nikcli-ai/function",
+    name: "@ragu/function",
     path: "packages/function",
     role: "Minimal Hono-based HTTP function package providing a stub API entrypoint.",
   },
@@ -99,112 +99,112 @@ const packages = [
     role: "OpenTUI web-view renderer that bridges native browser runtime, WebViewController, and SolidJS bindings for embedded web views inside the TUI.",
   },
   {
-    name: "@nikcli-ai/app",
+    name: "@ragu/app",
     path: "packages/app",
     role: "SolidJS single-page application shell used by desktop and companion, containing shared layout, context providers, and add-on entry points.",
   },
   {
-    name: "@nikcli-ai/mobile",
+    name: "@ragu/mobile",
     path: "packages/mobile",
     role: "React Native / Expo companion app for iOS and Android that streams sessions over SSE and handles mobile-specific permissions.",
   },
   {
-    name: "@nikcli-ai/web",
+    name: "@ragu/web",
     path: "packages/web",
     role: "Astro site that powers nikcli-ai.dev, the docs site, and the Studio dashboard.",
   },
   {
-    name: "@nikcli-ai/computer-use",
+    name: "@ragu/computer-use",
     path: "packages/computer-use",
     role: "Headless desktop-automation engine: daemon, sandbox/host backends, recording pipeline, PR-ready evidence bundles. Sibling of browser-control and terminal-control.",
   },
   {
-    name: "@nikcli-ai/browser-control",
+    name: "@ragu/browser-control",
     path: "packages/browser-control",
     role: "Headless browser-automation engine for Chromium pages: per-workspace daemon, recording pipeline, evidence bundles. Powers the browser tool.",
   },
   {
-    name: "@nikcli-ai/terminal-control",
+    name: "@ragu/terminal-control",
     path: "packages/terminal-control",
     role: "Terminal-recording engine with native termctrl driver: .termctrl recordings, JSON/ANSI/PNG/SVG/video renderers, evidence bundles.",
   },
   {
-    name: "@nikcli-ai/tui-image",
+    name: "@ragu/tui-image",
     path: "packages/tui-image",
     role: "Image rendering primitives for TUI / OpenTUI terminals with Kitty, Sixel, iTerm2 and Unicode fallbacks.",
   },
   {
-    name: "@nikcli-ai/sdk-next",
+    name: "@ragu/sdk-next",
     path: "packages/sdk-next",
-    role: "Next-generation JavaScript SDK prototype. Lives next to @nikcli-ai/sdk; see that package for the stable surface.",
+    role: "Next-generation JavaScript SDK prototype. Lives next to @ragu/sdk; see that package for the stable surface.",
   },
   {
-    name: "@nikcli-ai/auth",
+    name: "@ragu/auth",
     path: "packages/auth",
     role: "Provider and external auth storage used outside connector-specific auth (distinct from per-connector and account-level auth).",
   },
   {
-    name: "@nikcli-ai/identity",
+    name: "@ragu/identity",
     path: "packages/identity",
     role: "Identity layer shared across the cloud surface, accounts, and mobile pairing.",
   },
   {
-    name: "@nikcli-ai/httpapi-codegen",
+    name: "@ragu/httpapi-codegen",
     path: "packages/httpapi-codegen",
     role: "Code generator for the typed HttpApi route groups consumed by the SDK.",
   },
   {
-    name: "@nikcli-ai/bench-tui",
+    name: "@ragu/bench-tui",
     path: "packages/bench-tui",
     role: "Standalone test interface and benchmark dashboard for Bun packages — SolidJS over OpenTUI.",
   },
   {
-    name: "@nikcli-ai/simulation",
+    name: "@ragu/simulation",
     path: "packages/simulation",
     role: "Driver + recording + protocol layer for the simulation harness used by browser, terminal and computer engines.",
   },
   {
-    name: "@nikcli-ai/script",
+    name: "@ragu/script",
     path: "packages/script",
     role: "Cross-package CLI scripts and ops tooling — includes the Railway deploy script referenced from the mobile doc.",
   },
   {
-    name: "@nikcli-ai/nikcli-island",
-    path: "packages/nikcli-island",
-    role: "Swift package that ships NikcliIsland.app, the macOS notch HUD for live sessions. Outside the JS build graph.",
+    name: "@ragu/ragu-island",
+    path: "packages/ragu-island",
+    role: "Swift package that ships RaguIsland.app, the macOS notch HUD for live sessions. Outside the JS build graph.",
   },
   {
-    name: "@nikcli-ai/containers",
+    name: "@ragu/containers",
     path: "packages/containers",
     role: "Prebuilt GitHub Actions container images: base, bun-node, rust, tauri-linux, publish.",
   },
   {
-    name: "@nikcli-ai/extensions/zed",
+    name: "@ragu/extensions/zed",
     path: "packages/extensions/zed",
-    role: "Zed editor extension that wires nikcli as an agent server.",
+    role: "Zed editor extension that wires ragu as an agent server.",
   },
   {
-    name: "@nikcli-ai/console-app",
+    name: "@ragu/console-app",
     path: "packages/console/app",
     role: "Console-suite Vite app shell for the hosted admin surface.",
   },
   {
-    name: "@nikcli-ai/console-core",
+    name: "@ragu/console-core",
     path: "packages/console/core",
     role: "Console-suite shared core: AWS SDK helpers, SST infra glue, and JSX-email rendering.",
   },
   {
-    name: "@nikcli-ai/console-function",
+    name: "@ragu/console-function",
     path: "packages/console/function",
     role: "Console-suite Cloudflare Worker functions exposed under the console surface.",
   },
   {
-    name: "@nikcli-ai/console-mail",
+    name: "@ragu/console-mail",
     path: "packages/console/mail",
     role: "Console-suite transactional-email worker built on @jsx-email.",
   },
   {
-    name: "@nikcli-ai/console-resource",
+    name: "@ragu/console-resource",
     path: "packages/console/resource",
     role: "Console-suite Cloudflare resource bindings (KV, R2, Durable Objects, etc.).",
   },
@@ -213,32 +213,32 @@ const packages = [
 
 <DocsLayout
   title="Packages & Suite"
-  subtitle="nikcli is a monorepo. packages/nikcli is the core CLI/TUI/server; the packages below provide supporting infrastructure, provider integrations, and surface-area extensions."
+  subtitle="ragu is a monorepo. packages/ragu is the core CLI/TUI/server; the packages below provide supporting infrastructure, provider integrations, and surface-area extensions."
   toc={toc}
-  description="Overview of every package in the nikcli monorepo, with detailed documentation for @nikcli-ai/llm and @nikcli-ai/http-recorder."
+  description="Overview of every package in the ragu monorepo, with detailed documentation for @ragu/llm and @ragu/http-recorder."
 >
   <section id="overview" class="doc-section">
     <h2>Overview</h2>
     <p>
-      The nikcli monorepo lives under <code>packages/</code>. The base product is
-      <code>packages/nikcli</code> — the CLI binary, TUI, agent runtime, session storage, HTTP
+      The ragu monorepo lives under <code>packages/</code>. The base product is
+      <code>packages/ragu</code> — the CLI binary, TUI, agent runtime, session storage, HTTP
       server, and built-in tool registry. Every other package is a supporting layer: provider
       infrastructure (<code>llm</code>), test tooling (<code>http-recorder</code>), SDKs, native
       surfaces (desktop, mobile), and hosted services (cloud, inference, slack).
     </p>
     <DocCallout type="info" title="Dependency direction">
-      <code>packages/nikcli</code> depends on <code>@nikcli-ai/llm</code> for all LLM traffic.
-      <code>@nikcli-ai/llm</code>'s test suite depends on <code>@nikcli-ai/http-recorder</code>
+      <code>packages/ragu</code> depends on <code>@ragu/llm</code> for all LLM traffic.
+      <code>@ragu/llm</code>'s test suite depends on <code>@ragu/http-recorder</code>
       to replay provider responses without live network calls. Neither recorder nor llm depends
-      back on <code>packages/nikcli</code>.
+      back on <code>packages/ragu</code>.
     </DocCallout>
   </section>
 
   <section id="llm" class="doc-section">
-    <h2>@nikcli-ai/llm</h2>
+    <h2>@ragu/llm</h2>
     <p>
       <code>packages/llm</code> is the multi-provider LLM client library that handles every
-      inference request nikcli makes. It is built on
+      inference request ragu makes. It is built on
       <a href="https://effect.website" target="_blank" rel="noopener">Effect</a> and the
       <a href="https://sdk.vercel.ai" target="_blank" rel="noopener">Vercel AI SDK</a> (<code>ai</code>
       package) for streaming, and exposes a uniform <code>LLMClient</code> service regardless of
@@ -257,7 +257,7 @@ const packages = [
         <p>
           Named provider modules for Anthropic, OpenAI, Azure, Amazon Bedrock, Google Gemini,
           GitHub Copilot, Cloudflare, OpenRouter, xAI, and the built-in
-          <code>nikcli-inference</code> gateway. Each exports a typed <code>model()</code>
+          <code>ragu-inference</code> gateway. Each exports a typed <code>model()</code>
           factory.
         </p>
       </DocCard>
@@ -278,16 +278,16 @@ const packages = [
       </DocCard>
     </div>
 
-    <h3>How nikcli consumes @nikcli-ai/llm</h3>
+    <h3>How ragu consumes @ragu/llm</h3>
     <p>
-      <code>packages/nikcli/src/provider/llm-client.ts</code> creates and exports the Effect
+      <code>packages/ragu/src/provider/llm-client.ts</code> creates and exports the Effect
       <code>Layer</code> for <code>LLMClient</code>:
     </p>
     <pre
       class="not-prose overflow-x-auto rounded-[var(--radius-md)] border border-terminal-border/60 bg-terminal-code px-5 py-4 text-sm font-mono leading-relaxed text-terminal-text"
     ><code
->// packages/nikcli/src/provider/llm-client.ts
-import &#123; LLMClient, RequestExecutor &#125; from "@nikcli-ai/llm/route"
+>// packages/ragu/src/provider/llm-client.ts
+import &#123; LLMClient, RequestExecutor &#125; from "@ragu/llm/route"
 
 export const defaultLayer = Layer.suspend(() =>
   LLMClient.layer.pipe(Layer.provide(RequestExecutor.defaultLayer))
@@ -297,7 +297,7 @@ export const defaultLayer = Layer.suspend(() =>
       <code>src/provider/provider.ts</code> then use <code>LLMClient.stream</code> /
       <code>LLMClient.generate</code> to drive all model calls, and import provider model
       factories (e.g. <code>Anthropic.model()</code>, <code>OpenAI.model()</code>) from
-      <code>@nikcli-ai/llm/providers</code> to build typed <code>ModelRef</code> values
+      <code>@ragu/llm/providers</code> to build typed <code>ModelRef</code> values
       from user config.
     </p>
 
@@ -311,7 +311,7 @@ export const defaultLayer = Layer.suspend(() =>
       </thead>
       <tbody>
         <tr>
-          <td><code>@nikcli-ai/llm</code></td>
+          <td><code>@ragu/llm</code></td>
           <td>
             <code>LLMClient</code>, <code>LLMCore</code>, schema types (<code>LLMRequest</code>,
             <code>LLMResponse</code>, <code>ModelRef</code>, etc.), <code>Tool</code> helpers,
@@ -319,21 +319,21 @@ export const defaultLayer = Layer.suspend(() =>
           </td>
         </tr>
         <tr>
-          <td><code>@nikcli-ai/llm/route</code></td>
+          <td><code>@ragu/llm/route</code></td>
           <td>
             <code>LLMClient</code> service + Effect layer, <code>Route.make</code>,
             <code>RequestExecutor</code>
           </td>
         </tr>
         <tr>
-          <td><code>@nikcli-ai/llm/providers</code></td>
+          <td><code>@ragu/llm/providers</code></td>
           <td>
             All named provider modules re-exported; individual providers also available at
-            <code>@nikcli-ai/llm/providers/anthropic</code>, <code>.../openai</code>, etc.
+            <code>@ragu/llm/providers/anthropic</code>, <code>.../openai</code>, etc.
           </td>
         </tr>
         <tr>
-          <td><code>@nikcli-ai/llm/protocols/&lt;name&gt;</code></td>
+          <td><code>@ragu/llm/protocols/&lt;name&gt;</code></td>
           <td>
             Individual protocol adapters: <code>anthropic-messages</code>,
             <code>openai-chat</code>, <code>openai-responses</code>,
@@ -342,14 +342,14 @@ export const defaultLayer = Layer.suspend(() =>
           </td>
         </tr>
         <tr>
-          <td><code>@nikcli-ai/llm/core</code></td>
+          <td><code>@ragu/llm/core</code></td>
           <td>
             Thin wrapper around the Vercel AI SDK <code>streamText</code> for cases that
             bypass the route system
           </td>
         </tr>
         <tr>
-          <td><code>@nikcli-ai/llm/provider</code></td>
+          <td><code>@ragu/llm/provider</code></td>
           <td>
             <code>Provider.make</code> — typed factory for declaring a new provider
             definition
@@ -360,7 +360,7 @@ export const defaultLayer = Layer.suspend(() =>
   </section>
 
   <section id="http-recorder" class="doc-section">
-    <h2>@nikcli-ai/http-recorder</h2>
+    <h2>@ragu/http-recorder</h2>
     <p>
       <code>packages/http-recorder</code> is a record-and-replay HTTP fixture library written
       with Effect. It intercepts <code>HttpClient</code> calls, serialises request/response pairs
@@ -438,11 +438,11 @@ export const defaultLayer = Layer.suspend(() =>
       </tbody>
     </table>
 
-    <h3>Usage in @nikcli-ai/llm tests</h3>
+    <h3>Usage in @ragu/llm tests</h3>
     <p>
       The llm package's test helpers (<code>packages/llm/test/recorded-test.ts</code>,
       <code>recorded-websocket.ts</code>) import <code>HttpRecorder</code> from
-      <code>@nikcli-ai/http-recorder</code> and wrap each provider test case in a
+      <code>@ragu/http-recorder</code> and wrap each provider test case in a
       <code>cassetteLayer</code> pointing at
       <code>packages/llm/test/fixtures/recordings/</code>. Running with
       <code>RECORD=true</code> refreshes the fixtures against live providers; the default CI
@@ -462,13 +462,13 @@ export const defaultLayer = Layer.suspend(() =>
       <code>packages/sdk</code> which nests <code>packages/sdk/js</code>, or
       <code>packages/extensions/zed</code> which is a Zed extension manifest) are listed by
       their published package name. The <code>packages/console/</code> tree publishes five
-      sibling packages under the <code>@nikcli-ai/console-*</code> scope; the
+      sibling packages under the <code>@ragu/console-*</code> scope; the
       <code>packages/containers/</code> tree ships prebuilt Docker images rather than a
       single npm package.
     </p>
     <DocCallout type="info" title="The three automation engines">
-      <code>@nikcli-ai/computer-use</code>, <code>@nikcli-ai/browser-control</code>, and
-      <code>@nikcli-ai/terminal-control</code> are sibling engines that share the same CLI
+      <code>@ragu/computer-use</code>, <code>@ragu/browser-control</code>, and
+      <code>@ragu/terminal-control</code> are sibling engines that share the same CLI
       grammar (<code>start / info / recording / bundle</code>) and the same per-workspace
       background daemon pattern. Their <code>bundle</code> commands all produce the same
       artifact set (<code>screenshot.png</code>, <code>demo.mp4</code>,

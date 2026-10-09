@@ -1,5 +1,5 @@
 /**
- * @nikcli-ai/voice
+ * @ragu/voice
  * Pure logical core for 100% voice control of ADE in Italian.
  */
 

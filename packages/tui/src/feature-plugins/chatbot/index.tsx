@@ -8,7 +8,7 @@
  * GitHub) with its running state, and offers start/stop plus the webhook
  * path each platform must be pointed at.
  */
-import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@nikcli-ai/plugin/tui"
+import type { TuiPlugin, TuiPluginApi, TuiPluginModule } from "@ragu/plugin/tui"
 
 const id = "internal:chatbot"
 

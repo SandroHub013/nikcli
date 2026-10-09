@@ -8,7 +8,7 @@
  * point for something you turn on to chase a billing anomaly over days.
  *
  * Ported in spirit from opencode's DevTools debug bar (#38359/#38398), minus
- * the overlay: nikcli already had the per-turn table (`util/turn-usage.ts`),
+ * the overlay: ragu already had the per-turn table (`util/turn-usage.ts`),
  * it was just unreachable without hand-editing JSON.
  */
 import { createMemo, createSignal } from "solid-js"

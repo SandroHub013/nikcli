@@ -1,6 +1,6 @@
 /** Voce › Lingua parlata: the language spoken to the microphone, not the interface's. */
 import { Show, For, type JSX } from "solid-js"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 import type { VoiceSettingsState } from "../settings-state"
 import { PageHead } from "./head"
 

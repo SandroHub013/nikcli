@@ -1,37 +1,37 @@
-import { FileDiff, Message, Model, Part, Session, SessionStatus, UserMessage } from "@nikcli-ai/sdk/httpapi"
-import { SessionTurn } from "@nikcli-ai/ui/session-turn"
-import { SessionReview } from "@nikcli-ai/ui/session-review"
-import { DataProvider } from "@nikcli-ai/ui/context"
-import { DiffComponentProvider } from "@nikcli-ai/ui/context/diff"
-import { CodeComponentProvider } from "@nikcli-ai/ui/context/code"
-import { WorkerPoolProvider } from "@nikcli-ai/ui/context/worker-pool"
+import { FileDiff, Message, Model, Part, Session, SessionStatus, UserMessage } from "@ragu/sdk/httpapi"
+import { SessionTurn } from "@ragu/ui/session-turn"
+import { SessionReview } from "@ragu/ui/session-review"
+import { DataProvider } from "@ragu/ui/context"
+import { DiffComponentProvider } from "@ragu/ui/context/diff"
+import { CodeComponentProvider } from "@ragu/ui/context/code"
+import { WorkerPoolProvider } from "@ragu/ui/context/worker-pool"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, ErrorBoundary, For, Match, Show, Switch } from "solid-js"
 import { Share } from "~/core/share"
-import { Logo, Mark } from "@nikcli-ai/ui/logo"
-import { IconButton } from "@nikcli-ai/ui/icon-button"
-import { ProviderIcon } from "@nikcli-ai/ui/provider-icon"
-import { createDefaultOptions } from "@nikcli-ai/ui/pierre"
-import { iife } from "@nikcli-ai/util/iife"
-import { Binary } from "@nikcli-ai/util/binary"
-import { NamedError } from "@nikcli-ai/util/error"
+import { Logo, Mark } from "@ragu/ui/logo"
+import { IconButton } from "@ragu/ui/icon-button"
+import { ProviderIcon } from "@ragu/ui/provider-icon"
+import { createDefaultOptions } from "@ragu/ui/pierre"
+import { iife } from "@ragu/util/iife"
+import { Binary } from "@ragu/util/binary"
+import { NamedError } from "@ragu/util/error"
 import { DateTime } from "luxon"
 import { createStore } from "solid-js/store"
 import z from "zod"
 import NotFound from "../[...404]"
-import { Tabs } from "@nikcli-ai/ui/tabs"
-import { MessageNav } from "@nikcli-ai/ui/message-nav"
+import { Tabs } from "@ragu/ui/tabs"
+import { MessageNav } from "@ragu/ui/message-nav"
 import { preloadMultiFileDiff, PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
-import { Diff as SSRDiff } from "@nikcli-ai/ui/diff-ssr"
+import { Diff as SSRDiff } from "@ragu/ui/diff-ssr"
 import { clientOnly } from "@solidjs/start"
-import { type IconName } from "@nikcli-ai/ui/icons/provider"
+import { type IconName } from "@ragu/ui/icons/provider"
 import { Meta, Title } from "@solidjs/meta"
 import { Base64 } from "js-base64"
 
-const ClientOnlyDiff = clientOnly(() => import("@nikcli-ai/ui/diff").then((m) => ({ default: m.Diff })))
-const ClientOnlyCode = clientOnly(() => import("@nikcli-ai/ui/code").then((m) => ({ default: m.Code })))
+const ClientOnlyDiff = clientOnly(() => import("@ragu/ui/diff").then((m) => ({ default: m.Diff })))
+const ClientOnlyCode = clientOnly(() => import("@ragu/ui/code").then((m) => ({ default: m.Code })))
 const ClientOnlyWorkerPoolProvider = clientOnly(() =>
-  import("@nikcli-ai/ui/pierre/worker").then((m) => ({
+  import("@ragu/ui/pierre/worker").then((m) => ({
     default: (props: { children: any }) => (
       <WorkerPoolProvider pools={m.getWorkerPools()}>{props.children}</WorkerPoolProvider>
     ),
@@ -197,15 +197,15 @@ export default function () {
               modelParam = "unknown"
             }
             const version = `v${info().version}`
-            return `https://social-cards.sst.dev/nikcli-share/${encodedTitle}.png?model=${modelParam}&version=${version}&id=${data().shareID}`
+            return `https://social-cards.sst.dev/ragu-share/${encodedTitle}.png?model=${modelParam}&version=${version}&id=${data().shareID}`
           })
 
           return (
             <>
               <Show when={info().title}>
-                <Title>{info().title} | Nikcli</Title>
+                <Title>{info().title} | Ragu</Title>
               </Show>
-              <Meta name="description" content="nikcli - The AI coding agent built for the terminal." />
+              <Meta name="description" content="ragu - The AI coding agent built for the terminal." />
               <Meta property="og:image" content={ogImage()} />
               <Meta name="twitter:image" content={ogImage()} />
               <ClientOnlyWorkerPoolProvider>
@@ -326,7 +326,7 @@ export default function () {
                                 />
                                 <IconButton
                                   as={"a"}
-                                  href="https://discord.com/invite/nikcli"
+                                  href="https://discord.com/invite/ragu"
                                   target="_blank"
                                   icon="discord"
                                   variant="ghost"

@@ -18,7 +18,7 @@ jobs:
             const pr = context.payload.pull_request;
             const login = pr.user.login;
 
-            if (login === 'nikcli-agent[bot]') return;
+            if (login === 'ragu-agent[bot]') return;
             const { data: file } = await github.rest.repos.getContent({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -87,7 +87,7 @@ jobs:
             - \`refactor:\` or \`refactor(scope):\` code refactoring
             - \`test:\` or \`test(scope):\` adding or updating tests
 
-            Where \`scope\` is the package name (e.g., \`app\`, \`desktop\`, \`nikcli\`).
+            Where \`scope\` is the package name (e.g., \`app\`, \`desktop\`, \`ragu\`).
 
             See [CONTRIBUTING.md](../blob/live-main/CONTRIBUTING.md#pr-titles) for details.`);
               return;
@@ -151,7 +151,7 @@ jobs:
             const pr = context.payload.pull_request;
             const login = pr.user.login;
 
-            if (login === 'nikcli-agent[bot]') return;
+            if (login === 'ragu-agent[bot]') return;
             const { data: file } = await github.rest.repos.getContent({
               owner: context.repo.owner,
               repo: context.repo.repo,

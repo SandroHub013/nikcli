@@ -24,7 +24,7 @@
  */
 import { createMemo, Index, Match, Show, Switch } from "solid-js"
 import type { ColorInput, MarkdownTableOptions, SyntaxStyle } from "@opentui/core"
-import { buildMathBlocks, type MathBlock } from "@nikcli-ai/tui-math"
+import { buildMathBlocks, type MathBlock } from "@ragu/tui-math"
 import "./renderable"
 import { useKV } from "@tui/context/kv"
 import { useTheme } from "@tui/context/theme"
@@ -105,7 +105,7 @@ export function MathMarkdown(props: MathMarkdownProps) {
                     marginBottom={1}
                     paddingLeft={(block() as { display: boolean }).display ? 2 : 0}
                   >
-                    <nikcli_latex
+                    <ragu_latex
                       content={(block() as { content: string }).content}
                       displayMode={(block() as { display: boolean }).display}
                       foregroundColor={props.fg}

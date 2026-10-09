@@ -13,7 +13,7 @@ import {
   resize,
   type LiveCapabilities,
   type RendererKind,
-} from "@nikcli-ai/tui-image"
+} from "@ragu/tui-image"
 import { cellSize } from "@tui/util/browser-frames"
 import { fitOverlayCells, type CellMetrics } from "@tui/util/native-overlay"
 import { useTheme } from "@tui/context/theme"
@@ -191,7 +191,7 @@ const defaultWriter: TuiImageWriter = (bytes) => {
 }
 
 // Virtual-placement image ids are per terminal session; offsetting by pid
-// keeps concurrent / successive nikcli processes from overwriting each
+// keeps concurrent / successive ragu processes from overwriting each
 // other's images in the same terminal.
 let placeholderIdCounter = 0
 const placeholderIdBase = (((typeof process !== "undefined" ? process.pid : 0) ?? 0) & 0xff) << 16

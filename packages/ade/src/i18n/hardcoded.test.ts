@@ -56,7 +56,7 @@ const SINKS = new Set([
 ])
 
 /** Names and symbols that read the same in any language. */
-const NEUTRAL = /^(?:ADE|nik|nikcli|NikVerse|ssh|MCP|git|GitHub|OpenRouter|Codex|Claude Code|&lt;|&gt;|bun run|[A-Z][A-Z0-9_]+)$/
+const NEUTRAL = /^(?:ADE|nik|ragu|NikVerse|ssh|MCP|git|GitHub|OpenRouter|Codex|Claude Code|&lt;|&gt;|bun run|[A-Z][A-Z0-9_]+)$/
 
 function sources(dir: string, into: string[] = []): string[] {
   for (const name of readdirSync(dir)) {

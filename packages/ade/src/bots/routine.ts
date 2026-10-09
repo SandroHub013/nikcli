@@ -293,7 +293,7 @@ export interface RoutineOffer {
 
 /** What else decides a bot's offer. */
 export interface RoutineOfferOptions {
-  /** The catalog's word on a nikcli model (`catalog.ts`); absent, the `:free` suffix. */
+  /** The catalog's word on a ragu model (`catalog.ts`); absent, the `:free` suffix. */
   readonly free?: boolean | undefined
   /** ADE Test runs only what costs nothing: free models and subscriptions. Default: `isAdeTestBuild()`. */
   readonly testBuild?: boolean
@@ -336,7 +336,7 @@ export interface RoutineContext {
   readonly runner: string
   readonly model?: string | undefined
   readonly account?: BotAccount | undefined
-  /** The catalog's word on a nikcli model (`catalog.ts`); absent, the `:free` suffix. */
+  /** The catalog's word on a ragu model (`catalog.ts`); absent, the `:free` suffix. */
   readonly free?: boolean | undefined
 }
 
@@ -782,9 +782,9 @@ export function describeCap(cap: RoutineCap): string {
   return parts.join("; ")
 }
 
-/** Whether the runner's routines only read (`TurnSpec.unattended`): all three, nikcli by the `read-only` rules on ADE's server (B8d). */
+/** Whether the runner's routines only read (`TurnSpec.unattended`): all three, ragu by the `read-only` rules on ADE's server (B8d). */
 export function routineReadOnly(runner: string): boolean {
-  return runner === "claude" || runner === "codex" || runner === "nikcli"
+  return runner === "claude" || runner === "codex" || runner === "ragu"
 }
 
 export function modeLabel(mode: RoutineMode): string {

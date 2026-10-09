@@ -9,14 +9,14 @@
  * `{ "gadget": { "pi-office:device.health": "allow", "*": "ask" } }` works and a
  * deny is a deny. `list`, `health`, `show` and `send` only read or draw.
  */
-import { tool } from "@nikcli-ai/plugin/tool"
-import { GadgetError, type GadgetInfo, type InvokeResult } from "@nikcli-ai/gadget/protocol"
+import { tool } from "@ragu/plugin/tool"
+import { GadgetError, type GadgetInfo, type InvokeResult } from "@ragu/gadget/protocol"
 import type { Bridge } from "./bridge.ts"
 
 /** Commands that run whatever they are given. */
 const OPEN_ENDED = new Set(["system.run", "file.write"])
 
-const DESCRIPTION = `Work with gadgets: devices (a Raspberry Pi, a microcontroller, a panel) paired with this nikcli.
+const DESCRIPTION = `Work with gadgets: devices (a Raspberry Pi, a microcontroller, a panel) paired with this ragu.
 
 Actions:
 - list: every paired gadget, whether it is online, and the commands it declares.
@@ -112,7 +112,7 @@ export function createGadgetTool(bridge: () => Bridge | undefined) {
               title: "pairing window",
               output: [
                 `Pairing is open for ${minutes} minutes. Code: ${window.code}`,
-                `On the new device: nikcli-gadget pair --server ${window.url} --code ${window.code}`,
+                `On the new device: ragu-gadget pair --server ${window.url} --code ${window.code}`,
                 "A device with a button finishes by pressing it once.",
               ].join("\n"),
               metadata: { code: window.code, url: window.url, expiresAt: window.expiresAt },

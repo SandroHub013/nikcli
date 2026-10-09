@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { AgentFile } from "./nikcli"
+import type { AgentFile } from "./ragu"
 import { runRoutine } from "./routine"
 import { routineConsentHash, routineConsentHolds, routineModeOf, routinePolicy, ROUTINE_POLICY } from "./terms"
 import type { TurnDeps } from "./turn"
@@ -16,9 +16,9 @@ const bot = (runner: string): AgentFile => ({
 })
 
 describe("quali routine sono consentite", () => {
-  test("il modo di nikcli viene dal modello del catalogo, non dal nome", () => {
-    expect(routineModeOf("nikcli", undefined, "openrouter/free-looking")).toBe("paid")
-    expect(routineModeOf("nikcli", "key", "google/gemini-2.0-flash:free")).toBe("free")
+  test("il modo di ragu viene dal modello del catalogo, non dal nome", () => {
+    expect(routineModeOf("ragu", undefined, "openrouter/free-looking")).toBe("paid")
+    expect(routineModeOf("ragu", "key", "google/gemini-2.0-flash:free")).toBe("free")
     expect(routineModeOf("claude", "key", "opus")).toBe("key")
     expect(routineModeOf("codex", undefined, "gpt-5.5")).toBe("plan")
   })
@@ -30,7 +30,7 @@ describe("quali routine sono consentite", () => {
     expect(routinePolicy("grok", "plan").allowed).toBe(false)
     expect(routinePolicy("grok", "key").allowed).toBe(false)
     expect(routinePolicy("claude", "free").allowed).toBe(false)
-    const paidNamedFree = routinePolicy("nikcli", "free", "openai/gpt-4o")
+    const paidNamedFree = routinePolicy("ragu", "free", "openai/gpt-4o")
     expect(paidNamedFree.allowed).toBe(true)
     if (paidNamedFree.allowed) expect(paidNamedFree.cap.spendCapRequired).toBe(true)
   })
@@ -144,9 +144,9 @@ describe("una routine parte come gli altri spawn", () => {
     root.document = { documentElement: { dataset: { adeBuild: "test" } } }
     try {
       const refused = await runRoutine({
-        runner: "nikcli",
+        runner: "ragu",
         message: "ciao",
-        bot: { ...bot("nikcli"), model: "openrouter/openai/gpt-4o" },
+        bot: { ...bot("ragu"), model: "openrouter/openai/gpt-4o" },
       }).result
       expect(refused.status).toBe("error")
       expect(refused.problem).toContain("ADE Test")

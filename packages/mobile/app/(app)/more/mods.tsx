@@ -15,7 +15,7 @@ import { type as typeStyle } from "@/lib/typography"
 /**
  * The mods loaded on the host and what they draw.
  *
- * A mod is a plugin that runs in the nikcli server. Edit one on the host and it reloads there; the
+ * A mod is a plugin that runs in the ragu server. Edit one on the host and it reloads there; the
  * panes below redraw on their own. This is the same mod the terminal shows, drawn for a phone: the
  * mod asks which `surface` is drawing and can answer with a layout made for it.
  */
@@ -84,7 +84,7 @@ function Mods() {
       {ready && mods.length === 0 && !error ? (
         <EmptyState
           title="No mods loaded"
-          description="Add a mod to .nikcli/plugin on the host, or run `nikcli plugin create` there. It shows up here without restarting."
+          description="Add a mod to .nikcli/plugin on the host, or run `ragu plugin create` there. It shows up here without restarting."
         />
       ) : null}
 

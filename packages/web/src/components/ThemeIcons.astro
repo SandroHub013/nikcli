@@ -9,7 +9,7 @@
   (() => {
     // Inline so icons match the first paint, including pages without the router.
     // Replacing the head during Astro navigation must not accumulate observers.
-    window.__nikcliThemeIconsCleanup?.();
+    window.__raguThemeIconsCleanup?.();
     const root = document.documentElement;
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const sync = () => {
@@ -36,7 +36,7 @@
       document.removeEventListener("astro:before-swap", cleanup);
     };
     document.addEventListener("astro:before-swap", cleanup);
-    window.__nikcliThemeIconsCleanup = cleanup;
+    window.__raguThemeIconsCleanup = cleanup;
     sync();
   })();
 </script>

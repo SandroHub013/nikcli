@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
-import type { Part, PermissionRequest, QuestionRequest } from "@nikcli-ai/sdk/httpapi"
+import type { Part, PermissionRequest, QuestionRequest } from "@ragu/sdk/httpapi"
 import { answersOf, emptyDraft, OUTPUT_LIMIT, partView, permissionView, pick, type } from "./view"
 
 /* C5: what the chat shows of messages, tools, permissions and questions: text only. */

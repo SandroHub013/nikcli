@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readBotModels, type BotModelsDeps } from "./bot-models"
 
 /*
- * Full review 2026-10-06, bots 2: the model menu of a bot form must not run nikcli in a folder
+ * Full review 2026-10-06, bots 2: the model menu of a bot form must not run ragu in a folder
  * nobody admitted. The catalog read has no folder unless ADE's server is open on it.
  */
 
@@ -31,7 +31,7 @@ function deps(over: Partial<BotModelsDeps> = {}) {
 }
 
 describe("the model menu of a bot form", () => {
-  test("with no server open on the folder, nikcli models runs in the home, not in the folder nor ADE's own", async () => {
+  test("with no server open on the folder, ragu models runs in the home, not in the folder nor ADE's own", async () => {
     const { value, reads, opened } = deps()
     const read = await readBotModels("C:/clonato/repo", value)
     expect(opened).toEqual(["C:/clonato/repo"])
@@ -53,7 +53,7 @@ describe("the model menu of a bot form", () => {
     expect(reads).toEqual([])
   })
 
-  test("with the server open on the folder, the Chat's catalog answers and nikcli is not run", async () => {
+  test("with the server open on the folder, the Chat's catalog answers and ragu is not run", async () => {
     const { value, reads } = deps({
       openCatalog: async () => ({ providers: [], default: {} }) as never,
     })
@@ -63,7 +63,7 @@ describe("the model menu of a bot form", () => {
   })
 
   test("a catalog that cannot be read says why, and nothing is kept", async () => {
-    const { value } = deps({ readCatalog: async () => ({ ok: false, reason: "nikcli non trovato" }) })
-    expect(await readBotModels("C:/clonato/repo", value)).toEqual({ ok: false, reason: "nikcli non trovato" })
+    const { value } = deps({ readCatalog: async () => ({ ok: false, reason: "ragu non trovato" }) })
+    expect(await readBotModels("C:/clonato/repo", value)).toEqual({ ok: false, reason: "ragu non trovato" })
   })
 })

@@ -8,7 +8,7 @@
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { pickDecoder, type PixelImage } from "@nikcli-ai/tui-image"
+import { pickDecoder, type PixelImage } from "@ragu/tui-image"
 import { IMAGE_EXTENSIONS, isImagePath } from "./settings"
 import { prepare } from "./pixels"
 import { createPromiseCache } from "@tui/util/lru-cache"

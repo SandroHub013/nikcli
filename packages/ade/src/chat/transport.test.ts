@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test"
-import { createNikcliClient } from "@nikcli-ai/sdk/client"
+import { createRaguClient } from "@ragu/sdk/client"
 import { SERVER_BASE, serverFetch, type ProxyEvent, type ProxyRequest, type ServerBridge } from "./transport"
 
 /*
- * C1: the chat reaches nikcli through ADE's Rust side. A `fetch` from the
+ * C1: the chat reaches ragu through ADE's Rust side. A `fetch` from the
  * WebView fails in a release (origin `tauri.localhost`, which the server's
  * CORS does not accept) and would need the server's password. The bridge here
  * is a fake of the three Rust commands; the SDK on top of it is the real one.
@@ -29,7 +29,7 @@ function fakeBridge(options: { startFails?: number; sendFails?: number } = {}) {
       starts++
       if (failures > 0) {
         failures--
-        throw new Error("nikcli non è nel PATH")
+        throw new Error("ragu non è nel PATH")
       }
       return { url: "http://127.0.0.1:49374", version: "1.384.0" }
     },
@@ -37,7 +37,7 @@ function fakeBridge(options: { startFails?: number; sendFails?: number } = {}) {
       if (sendFailures > 0) {
         sendFailures--
         // What Rust answers when the server it knew has gone: the command is refused outright.
-        throw new Error("il server di nikcli non è avviato")
+        throw new Error("il server di ragu non è avviato")
       }
       const entry = { request, emit: onEvent, id: sent.length + 1 }
       sent.push(entry)
@@ -75,7 +75,7 @@ describe("il trasporto della chat", () => {
     const fake = fakeBridge()
     fake.answer(json(200, { healthy: true, version: "1.384.0" }))
     fake.answer(json(200, { all: [], default: {}, connected: [] }))
-    const client = createNikcliClient({
+    const client = createRaguClient({
       baseUrl: SERVER_BASE,
       fetch: serverFetch(fake.bridge),
       directory: "C:/progetto",
@@ -90,7 +90,7 @@ describe("il trasporto della chat", () => {
       ["GET", "/global/health"],
       ["GET", "/provider"],
     ])
-    expect(fake.sent[1]!.request.headers).toContainEqual(["x-nikcli-directory", "C:/progetto"])
+    expect(fake.sent[1]!.request.headers).toContainEqual(["x-ragu-directory", "C:/progetto"])
     expect(fake.starts()).toBe(1)
     expect(fetchSpy).not.toHaveBeenCalled()
   })
@@ -165,16 +165,16 @@ describe("il trasporto della chat", () => {
 
   test("un errore prima della risposta rifiuta la fetch, e al giro dopo il server si cerca di nuovo", async () => {
     const fake = fakeBridge()
-    fake.answer((sent) => sent.emit({ kind: "error", message: "il server di nikcli non risponde" }))
+    fake.answer((sent) => sent.emit({ kind: "error", message: "il server di ragu non risponde" }))
     fake.answer(json(200, { healthy: true, version: "1" }))
     const fetch = serverFetch(fake.bridge)
-    await expect(fetch(`${SERVER_BASE}/global/health`)).rejects.toThrow("il server di nikcli non risponde")
+    await expect(fetch(`${SERVER_BASE}/global/health`)).rejects.toThrow("il server di ragu non risponde")
     expect((await fetch(`${SERVER_BASE}/global/health`)).status).toBe(200)
     expect(fake.starts()).toBe(2)
   })
 
   /*
-   * Full review 2026-10-06, bots 4: `nikcli serve` exits (crash, killed, updated) and Rust refuses
+   * Full review 2026-10-06, bots 4: `ragu serve` exits (crash, killed, updated) and Rust refuses
    * the request at once instead of sending an `error` event. `started` stayed the old resolved
    * promise, `start` was never called again and the Chat stayed on «retrying» until ADE restarted.
    */
@@ -182,7 +182,7 @@ describe("il trasporto della chat", () => {
     const fake = fakeBridge({ sendFails: 1 })
     fake.answer(json(200, { healthy: true, version: "1" }))
     const fetch = serverFetch(fake.bridge)
-    await expect(fetch(`${SERVER_BASE}/global/health`)).rejects.toThrow("il server di nikcli non è avviato")
+    await expect(fetch(`${SERVER_BASE}/global/health`)).rejects.toThrow("il server di ragu non è avviato")
     expect((await fetch(`${SERVER_BASE}/global/health`)).status).toBe(200)
     expect(fake.starts()).toBe(2)
   })
@@ -191,7 +191,7 @@ describe("il trasporto della chat", () => {
     const fake = fakeBridge({ startFails: 1 })
     fake.answer(json(200, {}))
     const fetch = serverFetch(fake.bridge)
-    await expect(fetch(`${SERVER_BASE}/provider`)).rejects.toThrow("nikcli non è nel PATH")
+    await expect(fetch(`${SERVER_BASE}/provider`)).rejects.toThrow("ragu non è nel PATH")
     expect((await fetch(`${SERVER_BASE}/provider`)).status).toBe(200)
     expect(fake.starts()).toBe(2)
   })

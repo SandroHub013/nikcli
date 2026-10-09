@@ -64,14 +64,14 @@ describe("describeElement", () => {
     expect(describeElement({})).toContain("<element> (html)")
   })
 
-  test("filters out internal __nikcli classes", () => {
+  test("filters out internal __ragu classes", () => {
     const withInternalClass: Partial<InspectedElement> = {
       tagName: "div",
-      className: "__nikcli_hover_outline custom-box",
+      className: "__ragu_hover_outline custom-box",
     }
     const output = describeElement(withInternalClass)
     expect(output).toContain("<div.custom-box>")
-    expect(output).not.toContain("__nikcli")
+    expect(output).not.toContain("__ragu")
   })
 
   test("sanitizes multiline innerText and truncates long text", () => {

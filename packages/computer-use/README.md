@@ -1,20 +1,20 @@
-# @nikcli-ai/computer-use
+# @ragu/computer-use
 
 Control, inspect, capture and test real desktop sessions through a background
-per-workspace daemon, the way `@nikcli-ai/browser-control` drives a headless
-Chromium page or `@nikcli-ai/terminal-control` drives a PTY-backed TUI. Spawn
+per-workspace daemon, the way `@ragu/browser-control` drives a headless
+Chromium page or `@ragu/terminal-control` drives a PTY-backed TUI. Spawn
 one or more named sessions (each backed by a Docker-managed Linux desktop in
 the default `sandbox` mode, or by the user's real desktop in opt-in `host`
 mode), drive them with mouse / keyboard actions, capture screenshots, record
 markers, and produce a PR-ready evidence bundle.
 
 For agent-driven desktop verification, the package ships a `computer-use`
-evidence CLI and a bundled skill (`skills/computer-use/SKILL.md`) that nikcli
+evidence CLI and a bundled skill (`skills/computer-use/SKILL.md`) that ragu
 discovers automatically once installed.
 
 ## Architecture
 
-Mirrors the `@nikcli-ai/browser-control` layout so any agent habit trained on
+Mirrors the `@ragu/browser-control` layout so any agent habit trained on
 the browser skill transfers directly:
 
 ```
@@ -49,12 +49,12 @@ skills/
 ```
 
 The background daemon self-terminates after `IDLE_SHUTDOWN_MS` with zero
-running sessions, the same idle-shutdown contract as `@nikcli-ai/browser-control`.
+running sessions, the same idle-shutdown contract as `@ragu/browser-control`.
 
 ## Usage
 
 ```ts
-import { SessionManager, renderText, renderPng } from "@nikcli-ai/computer-use"
+import { SessionManager, renderText, renderPng } from "@ragu/computer-use"
 
 const manager = new SessionManager()
 
@@ -96,7 +96,7 @@ startRecording() / marker() / stopRecording() / recordingData() / stop()`.
 
 - `sandbox` (default) — drives a per-session isolated Linux desktop container
   via `docker exec`; the host screen is never touched. Needs a reachable
-  container runtime (`docker`, or set `NIKCLI_COMPUTER_RUNTIME`). On macOS
+  container runtime (`docker`, or set `RAGU_COMPUTER_RUNTIME`). On macOS
   start it with colima (already a lightweight Linux VM):
   ```bash
   colima start --cpu 4 --memory 6 --disk 30

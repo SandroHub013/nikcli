@@ -21,7 +21,7 @@ describe("browser-control daemon-client", () => {
   test("isCompiledBinaryHost detects bunfs paths", () => {
     expect(isCompiledBinaryHost("/$bunfs/root/daemon-client.js")).toBe(true)
     expect(isCompiledBinaryHost("B:\\~BUN\\root\\daemon-client.js")).toBe(true)
-    expect(isCompiledBinaryHost("/Volumes/SSD/Projects/nikcli/packages/browser-control/src")).toBe(false)
+    expect(isCompiledBinaryHost("/Volumes/SSD/Projects/ragu/packages/browser-control/src")).toBe(false)
   })
 
   test("resolveDaemonLaunch uses spawn when daemon.ts is on disk", async () => {

@@ -1,6 +1,6 @@
 import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createRoot, createSignal, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
-import type { ModNode } from "@nikcli-ai/plugin/mod"
+import type { ModNode } from "@ragu/plugin/mod"
 import { useSDK } from "@tui/context/sdk"
 import { Tree, type TreeEvents } from "./tree"
 
@@ -8,7 +8,7 @@ import { Tree, type TreeEvents } from "./tree"
  * Asking the mods what to draw, shared by every render site.
  *
  * A site is a `component` name and a `requestId`; the answer is a drawing (`tree`), or "draw the default"
- * with the props as the mods left them. A site that replaces something nikcli already draws — a tool
+ * with the props as the mods left them. A site that replaces something ragu already draws — a tool
  * row, a message, the question dialog — is `Replace`: it draws its children unless a mod answered with a
  * tree, so nothing changes for a user with no mod that draws.
  */
@@ -127,7 +127,7 @@ function maybeSDK() {
 }
 
 /**
- * Draw `children` as nikcli always did, unless a mod answers this site with a tree. A mod that only
+ * Draw `children` as ragu always did, unless a mod answers this site with a tree. A mod that only
  * rewrites props passes them to `children` when it is a function; otherwise they are ignored. Without a
  * client there is nobody to ask, and this is its children.
  */

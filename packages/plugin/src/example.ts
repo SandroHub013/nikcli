@@ -18,9 +18,9 @@ export const ExamplePlugin: Plugin = async (ctx) => {
 }
 
 /**
- * A provider nikcli has no built-in support for.
+ * A provider ragu has no built-in support for.
  *
- * nikcli talks to models through native routes (OpenAI Chat, OpenAI Responses, Anthropic Messages, Gemini),
+ * ragu talks to models through native routes (OpenAI Chat, OpenAI Responses, Anthropic Messages, Gemini),
  * so a service that speaks one of those wire protocols needs no SDK: name the protocol and the host, and
  * supply whatever the service needs on top of a static key. The loader's `fetch` is what every request
  * goes through, so request signing, token renewal or a rewritten endpoint live there.

@@ -3,7 +3,7 @@
 | Field   | Value                                                                                                                         |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | Status  | **Groups 1-4 complete** — 2026-09-15: `Database.syncDb()` has no callers left in `src`                                        |
-| Scope   | `packages/nikcli/src/database/database.ts` and its 38 consumers                                                               |
+| Scope   | `packages/ragu/src/database/database.ts` and its 38 consumers                                                               |
 | Buys    | One database access shape, so a repository's failure mode is visible in its type                                              |
 | Depends | Nothing. The adapter dependency is void — see below.                                                                          |
 | Tests   | `test/database/transaction-semantics.test.ts` (the two semantics), `test/database/wrapper-inventory.test.ts` (the count gate) |
@@ -116,7 +116,7 @@ Three properties follow from `syncDb()` being reachable from anywhere:
 1. **Failure is invisible in the signature.** A repository function that calls `Database.syncDb()`
    has the same type as one that does not. Whether it touches the database is not part of its
    contract, so a caller cannot tell what it needs to provide or what it can fail on.
-2. **Test isolation depends on a convention.** `bun test` swaps `NIKCLI_TEST_HOME` per file. The
+2. **Test isolation depends on a convention.** `bun test` swaps `RAGU_TEST_HOME` per file. The
    singleton re-resolves its path on access, which is what makes that work — but nothing enforces
    it. A future singleton that captures the path at module load reintroduces the stale-path class of
    failure silently.
@@ -129,7 +129,7 @@ None of these are live bugs. They are the reason the count below should shrink r
 
 ## Current Inventory
 
-Measured 2026-09-11 against `packages/nikcli/src`, **code only** — comments are stripped first,
+Measured 2026-09-11 against `packages/ragu/src`, **code only** — comments are stripped first,
 because `database.ts` names the APIs it explains and a doc comment is not a call site.
 
 Before group 1: 92 references / 39 files. After: **90 references across 39 files.**
@@ -278,7 +278,7 @@ Needed" above measures.
 ## Risks
 
 - **`bun test` isolation.** Every change in groups 3 and 4 touches a module that tests instantiate
-  per file with a different `NIKCLI_TEST_HOME`. Run the domain's suite, not just typecheck.
+  per file with a different `RAGU_TEST_HOME`. Run the domain's suite, not just typecheck.
 - **Groups 3 and 4 are wide.** 27 files reach for `syncDb()`. The inventory gate stops the count
   growing; it does not stop a change from being large. One domain per change.
 - **The baseline is a number in a test.** It only means something if it is lowered when a group

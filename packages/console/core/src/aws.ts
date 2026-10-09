@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { Resource } from "@nikcli-ai/console-resource"
+import { Resource } from "@ragu/console-resource"
 import { AwsClient } from "aws4fetch"
 import { fn } from "./util/fn"
 
@@ -32,7 +32,7 @@ export namespace AWS {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          FromEmailAddress: `Nikcli Zen <contact@anoma.ly>`,
+          FromEmailAddress: `Ragu Zen <contact@anoma.ly>`,
           Destination: {
             ToAddresses: [input.to],
           },

@@ -9,7 +9,7 @@
  * Deliberately dependency-free: no Solid, no SDK types, no data-layer access.
  * It takes parts and returns rows, which is the whole reason it can be tested
  * without standing up a TUI. Ported from opencode's `routes/session/rows.ts`
- * (commit e6f660f), adapted to nikcli's flat per-message parts array — nikcli
+ * (commit e6f660f), adapted to ragu's flat per-message parts array — ragu
  * groups within one assistant message rather than across a whole session.
  */
 

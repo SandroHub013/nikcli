@@ -11,7 +11,7 @@ COPY package.json bun.lock ./
 COPY patches patches
 
 # Package manifests (dep cache layer)
-COPY packages/nikcli/package.json packages/nikcli/
+COPY packages/ragu/package.json packages/ragu/
 COPY packages/script/package.json packages/script/
 COPY packages/util/package.json packages/util/
 COPY packages/sdk/js/package.json packages/sdk/js/
@@ -37,7 +37,7 @@ COPY github/package.json github/
 RUN bun install
 
 # Full source
-COPY packages/nikcli packages/nikcli
+COPY packages/ragu packages/ragu
 COPY packages/script packages/script
 COPY packages/util packages/util
 COPY packages/sdk packages/sdk
@@ -59,13 +59,13 @@ COPY packages/computer-use packages/computer-use
 
 RUN mkdir -p /app/repos
 
-# The SDK's createNikcli spawns `nikcli serve`. The published bin is a node
-# launcher that needs a prebuilt platform binary; in-container we run nikcli
+# The SDK's createRagu spawns `ragu serve`. The published bin is a node
+# launcher that needs a prebuilt platform binary; in-container we run ragu
 # straight from source via bun instead.
-# Run from the nikcli package dir so bun picks up its tsconfig
+# Run from the ragu package dir so bun picks up its tsconfig
 # (jsxImportSource=@opentui/solid); otherwise bun defaults JSX to react.
-RUN printf '#!/bin/sh\ncd /app/packages/nikcli && exec bun --conditions=browser ./src/index.ts "$@"\n' > /usr/local/bin/nikcli \
-    && chmod +x /usr/local/bin/nikcli
+RUN printf '#!/bin/sh\ncd /app/packages/ragu && exec bun --conditions=browser ./src/index.ts "$@"\n' > /usr/local/bin/ragu \
+    && chmod +x /usr/local/bin/ragu
 
 ENV PATH="/app/node_modules/.bin:${PATH}"
 

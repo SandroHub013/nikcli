@@ -1,10 +1,10 @@
-import { createNikcliClient, type Event } from "@nikcli-ai/sdk/httpapi"
+import { createRaguClient, type Event } from "@ragu/sdk/httpapi"
 import { createSimpleContext } from "./helper"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { batch, createSignal, onCleanup, onMount } from "solid-js"
 import { createWakeDedup, type WakeDedup } from "../util/wake-dedup"
 import { createQueueMeter } from "../util/event-queue-meter"
-import { Log } from "@nikcli-ai/util/log"
+import { Log } from "@ragu/util/log"
 import { reconnectDelay, sleepUnlessAborted } from "../util/reconnect"
 
 const log = Log.create({ service: "tui.sdk" })
@@ -123,7 +123,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
     }
 
     function createSDK() {
-      return createNikcliClient({
+      return createRaguClient({
         baseUrl: transport.url,
         signal: abort.signal,
         directory: props.directory,

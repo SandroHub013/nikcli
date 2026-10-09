@@ -1,11 +1,11 @@
-import { Button } from "@nikcli-ai/ui/button"
-import { useDialog } from "@nikcli-ai/ui/context/dialog"
-import { Dialog } from "@nikcli-ai/ui/dialog"
-import type { IconName } from "@nikcli-ai/ui/icons/provider"
-import { List, type ListRef } from "@nikcli-ai/ui/list"
-import { ProviderIcon } from "@nikcli-ai/ui/provider-icon"
-import { Tag } from "@nikcli-ai/ui/tag"
-import { Tooltip } from "@nikcli-ai/ui/tooltip"
+import { Button } from "@ragu/ui/button"
+import { useDialog } from "@ragu/ui/context/dialog"
+import { Dialog } from "@ragu/ui/dialog"
+import type { IconName } from "@ragu/ui/icons/provider"
+import { List, type ListRef } from "@ragu/ui/list"
+import { ProviderIcon } from "@ragu/ui/provider-icon"
+import { Tag } from "@ragu/ui/tag"
+import { Tooltip } from "@ragu/ui/tooltip"
 import { type Component, onCleanup, onMount, Show } from "solid-js"
 import { useLocal } from "@/context/local"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
@@ -52,7 +52,7 @@ export const DialogSelectModelUnpaid: Component = () => {
                 <ModelTooltip
                   model={item}
                   latest={item.latest}
-                  free={item.provider.id === "nikcli" && (!item.cost || item.cost.input === 0)}
+                  free={item.provider.id === "ragu" && (!item.cost || item.cost.input === 0)}
                 />
               }
             >
@@ -100,7 +100,7 @@ export const DialogSelectModelUnpaid: Component = () => {
                 <div class="w-full flex items-center gap-x-3">
                   <ProviderIcon data-slot="list-item-extra-icon" id={i.id as IconName} />
                   <span>{i.name}</span>
-                  <Show when={i.id === "nikcli"}>
+                  <Show when={i.id === "ragu"}>
                     <Tag>{language.t("dialog.provider.tag.recommended")}</Tag>
                   </Show>
                   <Show when={i.id === "anthropic"}>

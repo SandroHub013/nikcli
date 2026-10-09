@@ -1,6 +1,6 @@
 /** Voce › Attivazione: how listening starts. */
 import { Show, type JSX } from "solid-js"
-import { t } from "@nikcli-ai/ade/i18n"
+import { t } from "@ragu/ade/i18n"
 import { wakeWordEnabled, shortcutActivationEnabled } from "../../settings/model"
 import { describeShortcut } from "../../settings/shortcuts"
 import { listenCostLines } from "../stream-panel"

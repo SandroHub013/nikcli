@@ -162,7 +162,7 @@ export const apiGroups: ApiGroup[] = [
     section: "API Reference",
     tags: ["config", "config-management"],
     summary:
-      "Read and patch the merged nikcli config, reload it from disk, resolve the provider table, and manage MCP server entries and config profiles.",
+      "Read and patch the merged ragu config, reload it from disk, resolve the provider table, and manage MCP server entries and config profiles.",
     keywords: [
       "config",
       "configuration",
@@ -344,7 +344,7 @@ export const apiGroups: ApiGroup[] = [
     section: "API Reference",
     tags: ["account", "users"],
     summary:
-      "The nikcli account behind a server (login and its completion step) and the local UserDB records the server owns.",
+      "The ragu account behind a server (login and its completion step) and the local UserDB records the server owns.",
     keywords: ["account", "login", "sign in", "register", "user", "token", "nku", "auth code"],
   },
   {

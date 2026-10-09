@@ -5,7 +5,7 @@ import { applyChatEvent, emptyChatData, type ChatEvent } from "./events"
 import { hasChatRules } from "./rules"
 
 /*
- * C2: real conversations, replayed. Recorded from `nikcli serve` 1.389 on this
+ * C2: real conversations, replayed. Recorded from `ragu serve` 1.389 on this
  * folder's `/event` stream, on a free model only (OpenRouter
  * `nvidia/nemotron-3-super-120b-a12b:free`, then `qwen/qwen3.8-27b:free`,
  * which answered 429): every assistant message says cost 0. The machine's

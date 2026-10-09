@@ -172,7 +172,7 @@ export interface VoiceHost {
     system: string
     user: string
     /* `VoiceSettings.agentEngine` without "off": the planner follows the agent's runner. */
-    engine: "auto" | "claude" | "codex" | "nikcli"
+    engine: "auto" | "claude" | "codex" | "ragu"
     speed?: "fast" | "cli"
     signal?: AbortSignal
     onText?: (soFar: string) => void
@@ -195,7 +195,7 @@ export interface VoiceHost {
     /** What the user has already heard for this sentence: the agent is not to say it again. */
     alreadySaid?: string
     /* `VoiceSettings.agentEngine` without "off", spelled out for the reason above. */
-    engine: "auto" | "claude" | "codex" | "nikcli"
+    engine: "auto" | "claude" | "codex" | "ragu"
     /* `VoiceSettings.agentSpeed`; absent is the CLI's own settings. */
     speed?: "fast" | "cli"
     signal?: AbortSignal
@@ -221,7 +221,7 @@ export interface VoiceHost {
    * Get the agent ready for a sentence that may come soon: started ahead, it
    * answers the first one without the cost of starting. Optional.
    */
-  prepareAgent?(request: { engine: "auto" | "claude" | "codex" | "nikcli"; speed?: "fast" | "cli" }): void
+  prepareAgent?(request: { engine: "auto" | "claude" | "codex" | "ragu"; speed?: "fast" | "cli" }): void
 
   /** The voice is off: what `prepareAgent` started can go. Optional. */
   releaseAgent?(): void

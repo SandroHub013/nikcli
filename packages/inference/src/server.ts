@@ -195,10 +195,10 @@ app.post("/v1/chat/completions", async (c) => {
       stop: body.stop,
       seed: body.seed,
       reasoning,
-      cacheOverride: body.nikcli?.cache,
-      cacheTtlSeconds: body.nikcli?.cacheTtlSeconds,
-      preferProvider: body.nikcli?.preferProvider ?? DEFAULT_PREFER_PROVIDER,
-      allowEstimated: body.nikcli?.allowEstimated,
+      cacheOverride: body.ragu?.cache,
+      cacheTtlSeconds: body.ragu?.cacheTtlSeconds,
+      preferProvider: body.ragu?.preferProvider ?? DEFAULT_PREFER_PROVIDER,
+      allowEstimated: body.ragu?.allowEstimated,
     })
 
     if ("passthrough" in result) {
@@ -208,8 +208,8 @@ app.post("/v1/chat/completions", async (c) => {
       return c.body(stream, {
         headers: {
           "Content-Type": "text/event-stream",
-          "X-Nikcli-Provider": result.route.provider,
-          "X-Nikcli-Cache": "stream",
+          "X-Ragu-Provider": result.route.provider,
+          "X-Ragu-Cache": "stream",
           "X-Request-Id": rid,
         },
       })
@@ -261,7 +261,7 @@ app.post("/v1/chat/completions", async (c) => {
     return c.json({
       ...result.body,
       model: displayedModel,
-      nikcli: {
+      ragu: {
         resolvedModel: displayedModel !== resolvedModel ? resolvedModel : undefined,
         thinking:
           resolved.thinking || resolved.nativeReasoning

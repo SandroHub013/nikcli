@@ -4,7 +4,7 @@ import { translate } from "../i18n"
 import { CHAT_PERMISSION, hasChatRules, type PermissionRule } from "./rules"
 
 /*
- * C5: the chat's rules win over the agent's, as nikcli decides them: the last
+ * C5: the chat's rules win over the agent's, as ragu decides them: the last
  * rule that matches, agent's first, session's after (`permission/next.ts`,
  * `evaluate`; the wildcard of `util/wildcard.ts`, copied here).
  */
@@ -31,7 +31,7 @@ const rule = (permission: string, pattern: string, action: PermissionRule["actio
   action,
 })
 
-/** nikcli's defaults for an agent (`agent/agent.ts`), then this machine's user config: `bash *: allow`. */
+/** ragu's defaults for an agent (`agent/agent.ts`), then this machine's user config: `bash *: allow`. */
 const BUILD: PermissionRule[] = [
   rule("*", "*", "allow"),
   rule("browser_control", "*", "ask"),

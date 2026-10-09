@@ -4,7 +4,7 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 
 /**
  * Browser-control info dialog. The `browser_control` tool drives a real,
- * local, headless Bun.WebView page through `@nikcli-ai/browser-control`'s
+ * local, headless Bun.WebView page through `@ragu/browser-control`'s
  * background daemon — there is no API key or model to configure, so this is a
  * short explainer rather than a setup flow.
  */

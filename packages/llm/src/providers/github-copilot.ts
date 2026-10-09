@@ -10,7 +10,7 @@ export type { CopilotProviderOptionsInput } from "./copilot-options"
 
 export const id = ProviderID.make("github-copilot")
 
-// GitHub Copilot has no canonical public URL — callers (nikcli, etc.) must
+// GitHub Copilot has no canonical public URL — callers (ragu, etc.) must
 // supply `baseURL` explicitly.
 export type ModelOptions = Omit<ModelInput, "id" | "provider" | "route" | "providerOptions"> & {
   readonly providerOptions?: CopilotProviderOptionsInput

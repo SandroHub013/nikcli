@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import "@xterm/xterm/css/xterm.css"
-import { getErrorMessage, type Pty, WebNikcliClient } from "@/app/api"
+import { getErrorMessage, type Pty, WebRaguClient } from "@/app/api"
 import { Banner, Button, Chip, cn, EmptyState, Spinner, Surface } from "@/app/ui"
 
 type ConnectionState = "idle" | "connecting" | "open" | "closed"
 
-export function TerminalScreen(props: { client: WebNikcliClient | null }) {
+export function TerminalScreen(props: { client: WebRaguClient | null }) {
   const { client } = props
   const [ptys, setPtys] = useState<Pty[]>([])
   const [loading, setLoading] = useState(true)
@@ -190,7 +190,7 @@ export function TerminalScreen(props: { client: WebNikcliClient | null }) {
       ) : ptys.length === 0 ? (
         <EmptyState
           title="No terminal sessions"
-          description="Open a new terminal to run commands directly on the connected Nikcli host."
+          description="Open a new terminal to run commands directly on the connected Ragu host."
           action={
             <Button busy={creating} onClick={() => void create()}>
               Open terminal

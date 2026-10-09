@@ -608,7 +608,7 @@ export const en: Messages = {
   "pane.close": "Close",
   "hooks.foreign":
     "From another build of ADE, not this one: this build neither updates nor removes it, because the official ADE's sessions run through that file",
-  "bar.nikcliVersion": (v) => `Ragu Code ${v}: the program new sessions start, not ADE`,
+  "bar.raguVersion": (v) => `Ragu Code ${v}: the program new sessions start, not ADE`,
   "bar.sessions": (count) => `${count} ${count === 1 ? "session" : "sessions"}`,
   "bar.meta.ade": (version) => `ADE ${version}`,
   "bar.info": (facts) => `Project details: ${facts}`,
@@ -736,7 +736,7 @@ export const en: Messages = {
   "bots.trust.can.claude":
     "It cannot run commands or touch .git and the tools' settings (.claude, .nikcli, .codex, .vscode, .husky, .github/workflows), but it can change the project's other files.",
   "bots.trust.can.claudeReadOnly": "It cannot run commands or change files: it can only read the project.",
-  "bots.trust.can.nikcli": "It can do what your Ragu Code configuration allows: the bot's file cannot grant itself more.",
+  "bots.trust.can.ragu": "It can do what your Ragu Code configuration allows: the bot's file cannot grant itself more.",
   "bots.trust.selfApproves": (name, what, line) =>
     `This project's bot «${name}» grants itself «${what}» in its file, with the line «${line}», and Ragu Code would run it without asking: not started. Remove that line from the file, or copy the bot to your own.`,
   "bots.projectTrust.new": (root, files) =>
@@ -1672,8 +1672,8 @@ export const en: Messages = {
   "effort.xhigh": "extra high",
   "effort.max": "max",
   "bots.models.noHost": "ADE cannot run Ragu Code here",
-  "bots.models.notFound": "Ragu Code does not start (is nikcli on PATH?)",
-  "bots.models.exit": (code, detail) => `nikcli models exited with ${code}${detail ? `: ${detail}` : ""}`,
+  "bots.models.notFound": "Ragu Code does not start (is ragu on PATH?)",
+  "bots.models.exit": (code, detail) => `ragu models exited with ${code}${detail ? `: ${detail}` : ""}`,
   "bots.models.empty": "Ragu Code listed no models",
   "chat.model.choose": "Choose a model",
   "chat.model.none": "No models available",
@@ -1985,7 +1985,7 @@ export const en: Messages = {
   "bots.turn.noHost": "No host: a turn only runs in the desktop app.",
   "bots.turn.cannotRefuse": (label) => `${label} cannot refuse the tools this turn leaves out.`,
   "bots.turn.didNotStart": (label, why) => `${label} did not start: ${why}`,
-  "bots.turn.nikcliOnServer":
+  "bots.turn.raguOnServer":
     "A Ragu Code turn runs on ADE's Ragu Code server, with its session's rules: it does not start here.",
   "bots.serve.noFolder": "A Ragu Code bot answers from a project: open a folder to talk to it.",
   "bots.serve.notAdmitted": (root) =>
@@ -2028,14 +2028,14 @@ export const en: Messages = {
   "bots.store.noHost": "No host: bots are created only in the desktop app.",
   "bots.store.noProject": "No project open: choose “global” or open a project.",
   "bots.store.noGlobal": "Ragu Code's configuration folder was not found.",
-  "bots.store.noNikcli": "This host cannot run Ragu Code.",
+  "bots.store.noRagu": "This host cannot run Ragu Code.",
   "bots.store.noWrite": "This host cannot write files.",
   "bots.store.noRead": "This host cannot read files.",
   "bots.store.noDir": "This host cannot read folders.",
   "bots.store.hostMissing": "No host.",
   "bots.store.gatewayKept": (error) =>
     `Could not remove this bot's tokens and gateways (${error}): the bot is not deleted. Try again: it removes what is left.`,
-  "bots.store.nikcliExited": (code) => `Ragu Code exited with code ${code}.`,
+  "bots.store.raguExited": (code) => `Ragu Code exited with code ${code}.`,
   "bots.store.unknownCode": "unknown",
   "bots.spend.plan": "subscription",
   "bots.spend.api": "API key",
@@ -2097,11 +2097,11 @@ export const en: Messages = {
     "Leave blank and Ragu Code will write it from the description. Or write your own: how it should behave, and what it should not do.",
   "bots.form.cancel": "Cancel",
   "bots.form.creating": "Creating…",
-  "bots.form.generateWithNikcli": "Generate with Ragu Code",
+  "bots.form.generateWithRagu": "Generate with Ragu Code",
   "bots.form.create": "Create",
   "bots.form.generatingHint": "Ragu Code is writing the agent. This takes a few seconds.",
   "bots.engine.label": "Runner",
-  "bots.runner.account.nikcli": "Providers connected to Ragu Code (ragu auth).",
+  "bots.runner.account.ragu": "Providers connected to Ragu Code (ragu auth).",
   "bots.runner.account.claude": "Anthropic subscription or Claude Code API key.",
   "bots.runner.account.codex": "ChatGPT subscription or Codex API key.",
   "bots.engine.accountHint": "Sign-ins are managed in Settings › Providers.",
@@ -2109,7 +2109,7 @@ export const en: Messages = {
     "ADE launches the official CLI installed on your computer, using the account you signed in with, and never sees your credentials. The subscription is for personal use and consumes your plan limits: for intensive or unattended automation use an API key in the CLI.",
   "bots.engine.model": "Model",
   "bots.engine.modelDefaultOf": (label) => `${label} default`,
-  "bots.engine.nikcliDefault": "Ragu Code default",
+  "bots.engine.raguDefault": "Ragu Code default",
   "bots.engine.effort": "Reasoning effort",
   "bots.engine.effortNotSupported": "not supported",
   "bots.engine.effortDefault": "default",

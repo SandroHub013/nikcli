@@ -63,7 +63,7 @@ function socialSvg(p: (typeof palette)["dark" | "light"], wordmark: string) {
   <g>
     <rect x="72" y="470" width="424" height="62" rx="12" fill="${p.panel}" stroke="${p.border}"/>
     <text x="102" y="510" font-family="'JetBrains Mono', 'Courier New', monospace" font-size="21" font-weight="700">
-      <tspan fill="${p.accent}">$</tspan><tspan fill="${p.text}" dx="10">nikcli --agent=build</tspan>
+      <tspan fill="${p.accent}">$</tspan><tspan fill="${p.text}" dx="10">ragu --agent=build</tspan>
     </text>
   </g>
 

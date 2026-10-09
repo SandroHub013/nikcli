@@ -84,12 +84,12 @@ describe("the model menu's sections", () => {
         showPaid: true,
       }),
       models: [QWEN, SONNET],
-      defaultLabel: "predefinito di nikcli",
+      defaultLabel: "predefinito di ragu",
       kept: "openrouter/old/model:free",
       keptLabel: (value) => `«${value}»`,
     })
     expect(items).toEqual([
-      { kind: "option", value: "", label: "predefinito di nikcli" },
+      { kind: "option", value: "", label: "predefinito di ragu" },
       {
         kind: "option",
         value: "openrouter/old/model:free",
@@ -192,7 +192,7 @@ describe("the effort chip", () => {
   })
 
   /* Model-picker review, BASSO a: «none» and «thinking» were shown raw. */
-  test("the levels nikcli's models use in the user's language; an unknown one as it is", () => {
+  test("the levels ragu's models use in the user's language; an unknown one as it is", () => {
     expect(effortLabel("medium")).toBe(t("effort.medium"))
     expect(effortLabel("xhigh")).toBe(t("effort.xhigh"))
     expect(effortLabel("none")).toBe(t("effort.none"))
@@ -225,7 +225,7 @@ describe("the effort chip", () => {
 /*
  * Review of bot-riquadro, a: a model that left the catalog showed its raw id
  * on the chip and the card («openrouter/nex-agi/nex-n2.5-mini:free · gratis»),
- * and nikcli then answers mute. Its name in words, and why.
+ * and ragu then answers mute. Its name in words, and why.
  */
 describe("a model the catalog no longer has", () => {
   test("its id reads as a name: the last part, no suffix, in words", () => {

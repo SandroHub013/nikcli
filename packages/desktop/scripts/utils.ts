@@ -3,32 +3,32 @@ import { $ } from "bun"
 export const SIDECAR_BINARIES: Array<{ rustTarget: string; ocBinary: string; assetExt: string }> = [
   {
     rustTarget: "aarch64-apple-darwin",
-    ocBinary: "nikcli-ai-darwin-arm64",
+    ocBinary: "ragu-code-darwin-arm64",
     assetExt: "zip",
   },
   {
     rustTarget: "x86_64-apple-darwin",
-    ocBinary: "nikcli-ai-darwin-x64",
+    ocBinary: "ragu-code-darwin-x64",
     assetExt: "zip",
   },
   {
     rustTarget: "x86_64-pc-windows-msvc",
-    ocBinary: "nikcli-ai-windows-x64",
+    ocBinary: "ragu-code-windows-x64",
     assetExt: "zip",
   },
   {
     rustTarget: "aarch64-pc-windows-msvc",
-    ocBinary: "nikcli-ai-windows-arm64",
+    ocBinary: "ragu-code-windows-arm64",
     assetExt: "zip",
   },
   {
     rustTarget: "x86_64-unknown-linux-gnu",
-    ocBinary: "nikcli-ai-linux-x64",
+    ocBinary: "ragu-code-linux-x64",
     assetExt: "tar.gz",
   },
   {
     rustTarget: "aarch64-unknown-linux-gnu",
-    ocBinary: "nikcli-ai-linux-arm64",
+    ocBinary: "ragu-code-linux-arm64",
     assetExt: "tar.gz",
   },
 ]
@@ -71,7 +71,7 @@ export function getCurrentSidecar(target?: string) {
 export async function copyBinaryToSidecarFolder(source: string, target = RUST_TARGET) {
   const rustTarget = resolveRustTarget(target)
   await $`mkdir -p src-tauri/sidecars`
-  const dest = windowsify(`src-tauri/sidecars/nikcli-cli-${rustTarget}`)
+  const dest = windowsify(`src-tauri/sidecars/ragu-cli-${rustTarget}`)
   await $`cp ${source} ${dest}`
 
   console.log(`Copied ${source} to ${dest}`)

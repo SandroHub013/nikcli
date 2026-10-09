@@ -3,13 +3,13 @@ import { initPlatform, shortcut } from "./lib/platform"
 import { For, Match, Show, Switch, createSignal, onCleanup, onMount } from "solid-js"
 import { render } from "solid-js/web"
 import { MetaProvider } from "@solidjs/meta"
-import { Font } from "@nikcli-ai/ui/font"
-import { Icon, type IconProps } from "@nikcli-ai/ui/icon"
-import { Logo } from "@nikcli-ai/ui/logo"
-import { Select } from "@nikcli-ai/ui/select"
-import { Toast } from "@nikcli-ai/ui/toast"
-import { ThemeProvider } from "@nikcli-ai/ui/theme"
-import { MarkedProvider } from "@nikcli-ai/ui/context/marked"
+import { Font } from "@ragu/ui/font"
+import { Icon, type IconProps } from "@ragu/ui/icon"
+import { Logo } from "@ragu/ui/logo"
+import { Select } from "@ragu/ui/select"
+import { Toast } from "@ragu/ui/toast"
+import { ThemeProvider } from "@ragu/ui/theme"
+import { MarkedProvider } from "@ragu/ui/context/marked"
 import "./styles.css"
 import { app, toastError } from "./lib/store"
 import { assistant } from "./lib/assistant"
@@ -156,13 +156,13 @@ function Shell() {
         <div class="dh-service" data-alive={app.service()?.alive ?? false}>
           <div class="dh-service__row">
             <Dot tone={app.service()?.alive ? "ok" : "bad"} live={app.service()?.alive} />
-            <strong>{app.service() ? `nikcli ${app.service()!.version}` : "no nikcli service"}</strong>
+            <strong>{app.service() ? `ragu ${app.service()!.version}` : "no ragu service"}</strong>
           </div>
           <Show
             when={app.service()}
             fallback={
               <span class="dh-sub">
-                start it with <code>nikcli serve --service</code>
+                start it with <code>ragu serve --service</code>
               </span>
             }
           >

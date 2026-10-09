@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { $ } from "bun"
-import { Script } from "@nikcli-ai/script"
+import { Script } from "@ragu/script"
 import crypto from "crypto"
 import fs from "fs"
 import path from "path"

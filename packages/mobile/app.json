@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "nikcli",
-    "slug": "nikcli-mobile",
+    "name": "ragu",
+    "slug": "ragu-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "scheme": "nikcli",
+    "scheme": "ragu",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-light.png",
@@ -30,9 +30,9 @@
       },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSFaceIDUsageDescription": "Nikcli uses Face ID to unlock the app and confirm sensitive actions.",
-        "NSCameraUsageDescription": "Nikcli uses the camera to scan the pairing QR shown on your computer.",
-        "NSLocalNetworkUsageDescription": "Nikcli connects to the local CLI server running on your computer.",
+        "NSFaceIDUsageDescription": "Ragu uses Face ID to unlock the app and confirm sensitive actions.",
+        "NSCameraUsageDescription": "Ragu uses the camera to scan the pairing QR shown on your computer.",
+        "NSLocalNetworkUsageDescription": "Ragu connects to the local CLI server running on your computer.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         },
@@ -67,7 +67,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Nikcli uses the camera to scan the pairing QR shown on your computer.",
+          "cameraPermission": "Ragu uses the camera to scan the pairing QR shown on your computer.",
           "recordAudioAndroid": false
         }
       ],

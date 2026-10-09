@@ -40,7 +40,7 @@ afterAll(() => {
 
 const host: RuntimeHost = {
   data: {
-    project: () => ({ name: "nikcli", root: "C:/repo" }),
+    project: () => ({ name: "ragu", root: "C:/repo" }),
     session: { list: () => [], get: () => undefined, focused: () => undefined },
   },
   showPalette: () => {},

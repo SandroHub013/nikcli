@@ -1,4 +1,4 @@
-# @nikcli-ai/inference — Agent Guidelines
+# @ragu/inference — Agent Guidelines
 
 OpenAI-compatible inference gateway that fronts **14 upstream providers** (Together, Fireworks, DeepInfra, Groq, Cerebras, SambaNova, Hyperbolic, Nebius, OpenRouter, DeepSeek, Mistral, Moonshot, Zhipu, plus self-hosted vLLM), routes each request to the cheapest healthy upstream per model, caches results aggressively, and charges the customer at a fixed `MODELS` price — the spread is the margin.
 
@@ -27,7 +27,7 @@ POST /v1/chat/completions
   │   ├─ sort: blendedCost ASC                    cheapest first
   │   ├─ preferProvider?                           pin override
   │   └─ try in order; fall through on 5xx/429/network; surface 4xx immediately
-  └─ Response  body + nikcli.{cache, provider, upstreamModel, costUsd, upstreamCostUsd, savedCostUsd, marginUsd}
+  └─ Response  body + ragu.{cache, provider, upstreamModel, costUsd, upstreamCostUsd, savedCostUsd, marginUsd}
 ```
 
 State is **in-memory by default** and **upgrades transparently** when Upstash env vars are set. No restart-time persistence requirements for the gateway itself.
@@ -38,7 +38,7 @@ Margin per call ≈ `MODELS[id].price × (1 + MARKUP) − routed-upstream-cost �
 
 1. **Cheapest-provider routing.** `src/config/routing.ts` holds per-model upstream prices for every supported provider. The router picks the cheapest _healthy_ route via `blendedCost(route)` (weights output 3× input — agent traffic is output-heavy). Customer price is fixed by `MODELS[id]`; the delta is gross margin.
 2. **Circuit-broken failover.** `src/health/circuit.ts` opens a per-provider breaker after 5 consecutive failures, recovers via half-open probes. Bad providers are skipped silently — no user-visible 503 unless _all_ providers fail.
-3. **Content-hash response cache.** `src/cache/hash.ts` + `store.ts`. Key = SHA-256 over `{model, messages, tools, tool_choice, temperature, top_p, max_tokens, response_format, stop, seed}`. Default policy: cache only on `temperature === 0` or `seed` set. Override per request with `body.nikcli.cache: true` to opt-in for higher temperatures.
+3. **Content-hash response cache.** `src/cache/hash.ts` + `store.ts`. Key = SHA-256 over `{model, messages, tools, tool_choice, temperature, top_p, max_tokens, response_format, stop, seed}`. Default policy: cache only on `temperature === 0` or `seed` set. Override per request with `body.ragu.cache: true` to opt-in for higher temperatures.
 4. **In-flight coalescing.** `src/cache/coalesce.ts`. Concurrent identical requests share one upstream Promise — first one pays, the rest return `cache: "coalesced"`.
 5. **vLLM prefix caching** (when routing to `local`). Server-side flag `--enable-prefix-caching`. We don't reorder messages; we keep stable prefix (system + tool schemas) first. `prefixCacheable: true` surfaces when this should hit.
 6. **Optional Upstash L2** for cross-instance cache + quota sharing. Falls back to memory on REST error.
@@ -46,7 +46,7 @@ Margin per call ≈ `MODELS[id].price × (1 + MARKUP) − routed-upstream-cost �
 Response envelope:
 
 ```json
-"nikcli": {
+"ragu": {
   "provider": "groq",
   "upstreamModel": "llama-3.3-70b-versatile",
   "cache": "hit | miss | coalesced",
@@ -104,7 +104,7 @@ Per-request controls inside the body (all optional):
 {
   "model": "kimi-k2.6",
   "messages": [...],
-  "nikcli": {
+  "ragu": {
     "cache": true,             // opt-in caching for temperature > 0
     "cacheTtlSeconds": 3600,
     "preferProvider": "groq",  // pin a provider (must still be enabled + healthy)
@@ -159,20 +159,20 @@ bun test
 ## Production
 
 ```bash
-docker build -f deploy/Dockerfile -t nikcli-inference .
-docker run --env-file .env -p 3000:3000 nikcli-inference
+docker build -f deploy/Dockerfile -t ragu-inference .
+docker run --env-file .env -p 3000:3000 ragu-inference
 
 # or
 docker compose -f deploy/docker-compose.yml up -d
 ```
 
-The Dockerfile is multi-stage (deps → build → minimal runtime), uses `oven/bun:1.4.2-alpine`, runs as non-root user `nikcli`, and includes a `HEALTHCHECK` against `/health`. The entrypoint `src/main.ts` validates env at boot and handles `SIGTERM` / `SIGINT` gracefully.
+The Dockerfile is multi-stage (deps → build → minimal runtime), uses `oven/bun:1.4.2-alpine`, runs as non-root user `ragu`, and includes a `HEALTHCHECK` against `/health`. The entrypoint `src/main.ts` validates env at boot and handles `SIGTERM` / `SIGINT` gracefully.
 
 ### Where to deploy
 
 - **Fly.io / Render / Railway**: drop in the Dockerfile.
 - **Vercel**: not ideal — this is a long-lived HTTP service, not Edge-friendly because of the in-flight coalescer and breaker state.
-- **Self-hosted with vLLM behind**: run `nikcli-inference` next to a vLLM instance, point `VLLM_BASE_URL` at it, leave managed-provider keys unset to operate fully self-hosted.
+- **Self-hosted with vLLM behind**: run `ragu-inference` next to a vLLM instance, point `VLLM_BASE_URL` at it, leave managed-provider keys unset to operate fully self-hosted.
 
 ## Key files
 
@@ -212,7 +212,7 @@ Tests: `test/{cached-provider,router,registry,circuit,validation}.test.ts` — 3
 
 1. Add an entry to `MODELS` in `src/types/index.ts` with `provider`, `context`, `input`, `output`, `params`, `hfId`.
 2. Add an entry in `ROUTES` (`src/config/routing.ts`) mapping the gateway id → ordered list of upstream provider routes with their upstream model ids and **upstream** prices (not your sell price).
-3. If unsure whether a provider serves the model yet, mark the route `estimated: true` — the router skips it unless `nikcli.allowEstimated` or `ALLOW_ESTIMATED_ROUTES` is set.
+3. If unsure whether a provider serves the model yet, mark the route `estimated: true` — the router skips it unless `ragu.allowEstimated` or `ALLOW_ESTIMATED_ROUTES` is set.
 4. No code change is needed for the route to take effect; providers auto-enable from env.
 
 ## Adding a provider
@@ -225,7 +225,7 @@ Tests: `test/{cached-provider,router,registry,circuit,validation}.test.ts` — 3
 ## Operational notes
 
 - **Refresh prices.** `ROUTES` ship with prices as of 2026-02. Providers move; treat the table as the source of truth and audit it monthly.
-- **Pin a provider in dev** with `body.nikcli.preferProvider = "groq"` to validate a specific upstream.
+- **Pin a provider in dev** with `body.ragu.preferProvider = "groq"` to validate a specific upstream.
 - **Watch the breakers** via `GET /health` — open breakers mean a provider is shedding load or down.
 - **Structured logs.** Every request emits `http` + `inference.complete` with `rid`, `provider`, `cache`, `inputTokens`, `outputTokens`, `billedUsd`, `upstreamUsd`, `marginUsd`. Ship to your log sink for revenue accounting.
 
