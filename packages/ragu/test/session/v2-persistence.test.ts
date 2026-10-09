@@ -232,7 +232,9 @@ describe("SessionV2 write API", () => {
     expect(engine).toContain("SessionV2Write.persist")
     const run = await Bun.file(root + "cli/handlers/run.ts").text()
     const imported = await Bun.file(root + "cli/handlers/import.ts").text()
-    expect(run).toContain("SessionV2Write.persist")
+    // `run` wrote messages only when it imported a share link; sharing is gone (brief ragu-via-servizi-nik), so only
+    // `import` writes them now.
+    expect(run).not.toContain("SessionV2Write")
     expect(imported).toContain("SessionV2Write.persist")
     expect(run).not.toContain("SessionEntryProjection.rebuild")
     expect(imported).not.toContain("SessionEntryProjection.rebuild")
