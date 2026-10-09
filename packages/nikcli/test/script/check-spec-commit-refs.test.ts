@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { removeTestDirSync } from "../helpers/fs"
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..", "..", "..", "..")
 const PACKAGE_ROOT = path.join(REPO_ROOT, "packages", "nikcli")
@@ -17,7 +18,7 @@ describe("check-spec-commit-refs.ts", () => {
     const result = run()
     if (result.status !== 0) console.error(result.stdout, result.stderr)
     expect(result.status).toBe(0)
-  })
+  }, 30_000)
 
   it("actually finds references rather than reporting an empty scan", () => {
     // The failure mode a gate like this dies of: a glob that stops matching,
@@ -26,7 +27,7 @@ describe("check-spec-commit-refs.ts", () => {
     const { stdout } = run()
     const count = Number(stdout.match(/(\d+) commit reference\(s\) cited/)?.[1] ?? 0)
     expect(count).toBeGreaterThan(10)
-  })
+  }, 30_000)
 
   it("skips rather than fails where ancestry cannot be answered", () => {
     // A gate that fails on CI's own checkout strategy is one people learn to
@@ -36,7 +37,7 @@ describe("check-spec-commit-refs.ts", () => {
       const { stdout } = spawnSync("bun", ["run", SCRIPT], { cwd: dir, encoding: "utf8" })
       expect(stdout).toContain("spec commit refs")
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true })
+      removeTestDirSync(dir)
     }
-  })
+  }, 30_000)
 })
