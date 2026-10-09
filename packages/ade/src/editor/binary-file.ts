@@ -146,6 +146,11 @@ export function formatSize(bytes: number, language: "it" | "en"): string {
     value /= 1024
     unit++
   }
+  // Rounded first: 1023.98 KB is said «1 MB», not «1024 KB».
+  if (Math.round(value * 10) / 10 >= 1024 && unit < UNITS.length - 1) {
+    value /= 1024
+    unit++
+  }
   const number = new Intl.NumberFormat(language === "it" ? "it-IT" : "en-US", { maximumFractionDigits: 1 }).format(
     value,
   )

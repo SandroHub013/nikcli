@@ -16,6 +16,12 @@ describe("formatSize", () => {
     expect(formatSize(3 * 1024 ** 3, "en")).toBe("3 GB")
   })
 
+  test("a size that rounds up to the next unit is said in that unit", () => {
+    expect(formatSize(1048575, "it")).toBe("1 MB")
+    expect(formatSize(1024 ** 3 - 1, "en")).toBe("1 GB")
+    expect(formatSize(1023 * 1024 + 1000, "en")).toBe("1 MB")
+  })
+
   test("under a kilobyte the bytes are counted, in words", () => {
     expect(formatSize(5, "it")).toBe("5 byte")
     expect(formatSize(5, "en")).toBe("5 bytes")
