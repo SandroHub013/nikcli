@@ -39,9 +39,7 @@ export interface Provider {
 export class ProviderConfigError extends Error {}
 
 /**
- * Exa via its hosted MCP endpoint. The key is optional: without one the endpoint
- * still answers on a shared quota, which is what ragu relied on before this
- * became configurable — so the default path keeps working with no setup.
+ * Exa via its hosted MCP endpoint. Requires an API key (EXA_API_KEY or websearch.apiKey).
  */
 export function exa(config: WebSearchConfig): Provider {
   const apiKey = config.apiKey ?? process.env["EXA_API_KEY"]
@@ -52,6 +50,11 @@ export function exa(config: WebSearchConfig): Provider {
     id: "exa",
     name: "Exa",
     search: async (input) => {
+      if (!apiKey) {
+        throw new ProviderConfigError(
+          "Exa web search needs an API key. Set EXA_API_KEY or websearch.apiKey in the ragu config.",
+        )
+      }
       const result = await callTool({
         url: url.toString(),
         tool: config.tool ?? "web_search_exa",

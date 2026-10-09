@@ -3,6 +3,21 @@ import { zod } from "@ragu/util/effect-zod"
 import { Tool } from "./tool"
 import DESCRIPTION from "./codesearch.txt"
 import { callTool } from "./mcp-exa"
+import { Config } from "@/config/config"
+import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
+
+function websearchConfig() {
+  return runPromiseWithLayer(
+    Config.defaultLayer,
+    withCurrentInstance(
+      Effect.gen(function* () {
+        const config = yield* Config.Service
+        const cfg = yield* config.get()
+        return cfg.websearch ?? {}
+      }),
+    ),
+  )
+}
 
 interface McpCodeRequest extends Record<string, unknown> {
   query: string
@@ -44,7 +59,17 @@ export const CodeSearchTool = Tool.define("codesearch", {
       tokensNum: params.tokensNum || 5000,
     }
 
-    const text = await callTool({ tool: "get_code_context_exa", args: request, signal: ctx.abort, timeoutMs: 30000 })
+    const cfg = await websearchConfig().catch(() => undefined)
+    const exaConfigKey = !cfg?.provider || cfg.provider === "exa" ? cfg.apiKey : undefined
+    const apiKey = exaConfigKey ?? process.env["EXA_API_KEY"]
+
+    const text = await callTool({
+      tool: "get_code_context_exa",
+      args: request,
+      signal: ctx.abort,
+      timeoutMs: 30000,
+      apiKey,
+    })
     if (!text) {
       return {
         output:

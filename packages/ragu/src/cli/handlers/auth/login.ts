@@ -9,7 +9,6 @@ import { ModelsDev } from "@/provider/models"
 import { map, pipe, sortBy, values } from "remeda"
 import { Effect } from "effect"
 import { withInstanceAsync } from "@/effect"
-import { loginAccount } from "@/cli/handlers/account/shared"
 import { Policy } from "@/policy/policy"
 import { log, runAuth, configGet, authSet, pluginList, handlePluginAuth } from "./shared"
 
@@ -18,74 +17,79 @@ export default Runtime.handler(Commands.commands["auth"].commands["login"], asyn
     _: [],
     $0: "ragu",
     "--": passthrough(),
-    url: Option.getOrUndefined(input["url"]),
-    provider: input["provider"],
-    server: Option.getOrUndefined(input["server"]),
+    provider: Option.getOrUndefined(input["provider"]),
   }
   await withInstanceAsync({ directory: process.cwd() }, async () => {
-    {
-      if (!args.url && !args.provider) {
-        await loginAccount(args.server)
-        return
-      }
-      UI.empty()
-      prompts.intro("Add credential")
+    UI.empty()
+    prompts.intro("Add credential")
 
-      if (args.url) {
-        const url = args.url
-        log.debug("Login with well-known URL", { url })
+    const target = args.provider?.trim()
+    const isUrl = target && (target.startsWith("http://") || target.startsWith("https://"))
 
-        const wellknownResponse = await runAuth(
-          Effect.gen(function* () {
-            const auth = yield* Auth.Service
-            return yield* auth.fetchWellKnown(url)
-          }),
-        )
-          .then((x) => (x.ok ? x.json() : null))
-          .catch(() => null)
+    if (isUrl) {
+      const url = target
+      log.debug("Login with well-known URL", { url })
 
-        const wellknown = Auth.WellKnownAuthResponse.safeParse(wellknownResponse)
+      const wellknownResponse = await runAuth(
+        Effect.gen(function* () {
+          const auth = yield* Auth.Service
+          return yield* auth.fetchWellKnown(url)
+        }),
+      )
+        .then((x) => (x.ok ? x.json() : null))
+        .catch(() => null)
 
-        if (!wellknown.success) {
-          prompts.log.error("Invalid auth response from server")
-          prompts.outro("Done")
-          return
-        }
+      const wellknown = Auth.WellKnownAuthResponse.safeParse(wellknownResponse)
 
-        let token: string
-        try {
-          token = await runAuth(
-            Effect.gen(function* () {
-              const auth = yield* Auth.Service
-              return yield* auth.fetchWellKnownToken(url, [...wellknown.data.auth.command])
-            }),
-          )
-        } catch (error) {
-          log.error("Failed to fetch well-known token", { error })
-          prompts.log.error(error instanceof Error ? error.message : "Failed")
-          prompts.outro("Done")
-          return
-        }
-
-        await authSet(url, {
-          type: "wellknown",
-          key: wellknown.data.auth.env,
-          token: token.trim(),
-        })
-        prompts.log.success("Logged into " + url)
-        log.info("Well-known login successful", { url })
+      if (!wellknown.success) {
+        prompts.log.error("Invalid auth response from server")
         prompts.outro("Done")
         return
       }
 
-      await ModelsDev.refresh().catch(() => {})
+      let token: string
+      try {
+        token = await runAuth(
+          Effect.gen(function* () {
+            const auth = yield* Auth.Service
+            return yield* auth.fetchWellKnownToken(url, [...wellknown.data.auth.command])
+          }),
+        )
+      } catch (error) {
+        log.error("Failed to fetch well-known token", { error })
+        prompts.log.error(error instanceof Error ? error.message : "Failed")
+        prompts.outro("Done")
+        return
+      }
 
-      const config = await configGet()
+      await authSet(url, {
+        type: "wellknown",
+        key: wellknown.data.auth.env,
+        token: token.trim(),
+      })
+      prompts.log.success("Logged into " + url)
+      log.info("Well-known login successful", { url })
+      prompts.outro("Done")
+      return
+    }
+
+    let provider = target
+    const config = await configGet()
+
+    if (provider && !isUrl) {
+      if (!Policy.allowsProvider(config, provider)) {
+        prompts.log.error(`Provider "${provider}" is disabled by policy`)
+        prompts.outro("Done")
+        return
+      }
+    }
+
+    if (!provider) {
+      await ModelsDev.refresh().catch(() => {})
 
       const providers = Policy.filter(config, await ModelsDev.get())
 
       const priority: Record<string, number> = {
-        ragu: 0,
         anthropic: 1,
         "github-copilot": 2,
         openai: 3,
@@ -93,7 +97,7 @@ export default Runtime.handler(Commands.commands["auth"].commands["login"], asyn
         openrouter: 5,
         vercel: 6,
       }
-      let provider = await prompts.autocomplete({
+      provider = await prompts.autocomplete({
         message: "Select provider",
         maxItems: 8,
         options: [
@@ -108,7 +112,6 @@ export default Runtime.handler(Commands.commands["auth"].commands["login"], asyn
               label: x.name,
               value: x.id,
               hint: {
-                ragu: "recommended",
                 anthropic: "Claude Max or API key",
                 openai: "ChatGPT Plus/Pro or API key",
               }[x.id],
@@ -125,75 +128,77 @@ export default Runtime.handler(Commands.commands["auth"].commands["login"], asyn
         prompts.outro("Done")
         return
       }
+    }
 
-      const plugin = await pluginList().then((x) => x.find((x) => x.auth?.provider === provider))
-      if (plugin && plugin.auth) {
-        const handled = await handlePluginAuth({ auth: plugin.auth }, provider)
-        if (handled) return
-      }
+    const plugin = await pluginList().then((x) => x.find((x) => x.auth?.provider === provider))
+    if (plugin && plugin.auth) {
+      const handled = await handlePluginAuth({ auth: plugin.auth }, provider)
+      if (handled) return
+    }
 
-      if (provider === "other") {
-        provider = await prompts.text({
-          message: "Enter provider id",
-          validate: (x) => (x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
-        })
-        if (prompts.isCancel(provider)) {
-          prompts.outro("Done")
-          return
-        }
-        provider = provider.replace(/^@ai-sdk\//, "")
-
-        const customPlugin = await pluginList().then((x) => x.find((x) => x.auth?.provider === provider))
-        if (customPlugin && customPlugin.auth) {
-          const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider)
-          if (handled) return
-        }
-
-        prompts.log.warn(
-          `This only stores a credential for ${provider} - you will need configure it in nikcli.json, check the docs for examples.`,
-        )
-      }
-
-      if (provider === "amazon-bedrock") {
-        prompts.log.info(
-          "Amazon Bedrock authentication priority:\n" +
-            "  1. Bearer token (AWS_BEARER_TOKEN_BEDROCK or /connect)\n" +
-            "  2. AWS credential chain (profile, access keys, IAM roles, EKS IRSA)\n\n" +
-            "Configure via nikcli.json options (profile, region, endpoint) or\n" +
-            "AWS environment variables (AWS_PROFILE, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_WEB_IDENTITY_TOKEN_FILE).",
-        )
-      }
-
-      if (provider === "ragu") {
-        prompts.log.info("Create an api key at https://nikcli-ai.dev/auth")
-      }
-
-      if (provider === "vercel") {
-        prompts.log.info("You can create an api key at https://vercel.link/ai-gateway-token")
-      }
-
-      if (["cloudflare", "cloudflare-ai-gateway"].includes(provider)) {
-        prompts.log.info(
-          "Cloudflare AI Gateway can be configured with CLOUDFLARE_GATEWAY_ID, CLOUDFLARE_ACCOUNT_ID, and CLOUDFLARE_API_TOKEN environment variables. Read more: https://nikcli-ai.dev/docs/providers/#cloudflare-ai-gateway",
-        )
-      }
-
-      const key = await prompts.password({
-        message: "Enter your API key",
-        validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+    if (provider === "other") {
+      provider = await prompts.text({
+        message: "Enter provider id",
+        validate: (x) => (x && x.match(/^[0-9a-z-]+$/) ? undefined : "a-z, 0-9 and hyphens only"),
       })
-      if (prompts.isCancel(key)) {
+      if (prompts.isCancel(provider)) {
+        prompts.outro("Done")
+        return
+      }
+      provider = provider.replace(/^@ai-sdk\//, "")
+
+      if (!Policy.allowsProvider(config, provider)) {
+        prompts.log.error(`Provider "${provider}" is disabled by policy`)
         prompts.outro("Done")
         return
       }
 
-      log.info("Setting API key", { provider })
-      await authSet(provider, {
-        type: "api",
-        key,
-      })
+      const customPlugin = await pluginList().then((x) => x.find((x) => x.auth?.provider === provider))
+      if (customPlugin && customPlugin.auth) {
+        const handled = await handlePluginAuth({ auth: customPlugin.auth }, provider)
+        if (handled) return
+      }
 
-      prompts.outro("Done")
+      prompts.log.warn(
+        `This only stores a credential for ${provider} - you will need to configure it in nikcli.json/ragu.json, check the docs for examples.`,
+      )
     }
+
+    if (provider === "amazon-bedrock") {
+      prompts.log.info(
+        "Amazon Bedrock authentication priority:\n" +
+          "  1. Bearer token (AWS_BEARER_TOKEN_BEDROCK or /connect)\n" +
+          "  2. AWS credential chain (profile, access keys, IAM roles, EKS IRSA)\n\n" +
+          "Configure via config options (profile, region, endpoint) or\n" +
+          "AWS environment variables (AWS_PROFILE, AWS_REGION, AWS_ACCESS_KEY_ID, AWS_WEB_IDENTITY_TOKEN_FILE).",
+      )
+    }
+
+    if (provider === "vercel") {
+      prompts.log.info("You can create an api key at https://vercel.link/ai-gateway-token")
+    }
+
+    if (["cloudflare", "cloudflare-ai-gateway"].includes(provider)) {
+      prompts.log.info(
+        "Cloudflare AI Gateway can be configured with CLOUDFLARE_GATEWAY_ID, CLOUDFLARE_ACCOUNT_ID, and CLOUDFLARE_API_TOKEN environment variables.",
+      )
+    }
+
+    const key = await prompts.password({
+      message: "Enter your API key",
+      validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+    })
+    if (prompts.isCancel(key)) {
+      prompts.outro("Done")
+      return
+    }
+
+    log.info("Setting API key", { provider })
+    await authSet(provider, {
+      type: "api",
+      key,
+    })
+
+    prompts.outro("Done")
   })
 })

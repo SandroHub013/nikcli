@@ -5,7 +5,6 @@ import { data } from "./models-macro" with { type: "macro" }
 import { Installation } from "../installation"
 import { Flag } from "@ragu/util/flag"
 import { cursorModelsDevProvider } from "../plugin/cursor"
-import { RAGU_INFERENCE_ID, raguInferenceModelsDevProvider } from "./ragu-inference"
 import { patchReasoningOptions } from "./variants-catalog-patch"
 import { type DeepMutable, zodObject } from "@ragu/util/effect-zod"
 import { Schema } from "effect"
@@ -450,11 +449,6 @@ export namespace ModelsDev {
       database["cursor"] = cursorModelsDevProvider() as Provider
     }
 
-    // Same for the ragu inference gateway — the live catalog is fetched by
-    // its custom loader, this seed just makes it a known provider.
-    if (!database[RAGU_INFERENCE_ID]) {
-      database[RAGU_INFERENCE_ID] = raguInferenceModelsDevProvider() as Provider
-    }
 
     // Catalog-driven variant generation, mirroring upstream opencode v2's
     // `opencode.variant` plugin. The patch fills in `reasoning_options`

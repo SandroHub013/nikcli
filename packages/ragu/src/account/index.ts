@@ -115,7 +115,7 @@ export namespace Account {
   // Configuration
   // ============================================================================
 
-  const DEFAULT_ACCOUNT_URL = process.env.RAGU_ACCOUNT_URL ?? "https://auth.nikcli-ai.dev"
+  const DEFAULT_ACCOUNT_URL = process.env.RAGU_ACCOUNT_URL ?? ""
 
   /** Fallback poll cadence when the issuer does not send one. */
   const DEFAULT_POLL_INTERVAL_SECONDS = 5
@@ -287,11 +287,18 @@ export namespace Account {
    * Returns the device code info needed for polling.
    */
   async function loginImpl(options: LoginOptions = {}): Promise<LoginStartResult> {
-    const serverUrl = normalizeServerUrl(options.serverUrl ?? DEFAULT_ACCOUNT_URL)
+    const rawUrl = options.serverUrl ?? DEFAULT_ACCOUNT_URL
+    const serverUrl = normalizeServerUrl(rawUrl)
+    if (!serverUrl || serverUrl.includes("nikcli-ai.dev") || serverUrl.includes("nikcli.store")) {
+      throw new LoginFlowError({
+        message: "Remote Nik account service has been removed. Configure a custom RAGU_ACCOUNT_URL to sign in.",
+        status: 400,
+      })
+    }
     log.info("starting device code login", { serverUrl })
 
     const request: DeviceCodeRequest = {
-      client_id: "nikcli",
+      client_id: "ragu",
       scope: "openid profile email offline_access",
     }
 
@@ -363,6 +370,12 @@ export namespace Account {
     expiresIn: number
   }> {
     const serverUrl = normalizeServerUrl(options.serverUrl ?? DEFAULT_ACCOUNT_URL)
+    if (!serverUrl || serverUrl.includes("nikcli-ai.dev") || serverUrl.includes("nikcli.store")) {
+      throw new LoginFlowError({
+        message: "Remote Nik account service has been removed. Configure a custom RAGU_ACCOUNT_URL to sign in.",
+        status: 400,
+      })
+    }
     const startTime = Date.now()
     const deadline = startTime + (options.expiresIn ?? 600) * 1000
     let interval = DEFAULT_POLL_INTERVAL_SECONDS
@@ -387,7 +400,7 @@ export namespace Account {
           },
           body: JSON.stringify({
             grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-            client_id: "nikcli",
+            client_id: "ragu",
             device_code: deviceCode,
           }),
           signal: options.signal,
@@ -627,6 +640,11 @@ export namespace Account {
     log.info("refreshing account token", { accountID })
 
     const serverUrl = normalizeServerUrl(recheck.url)
+    if (!serverUrl || serverUrl.includes("nikcli-ai.dev") || serverUrl.includes("nikcli.store")) {
+      throw new LoginFlowError({
+        message: "Remote Nik account service has been removed. Run `ragu auth login` to configure your provider.",
+      })
+    }
     const response = await fetch(`${serverUrl}oauth/token`, {
       method: "POST",
       headers: {
@@ -635,7 +653,7 @@ export namespace Account {
       body: new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token: recheck.refresh_token,
-        client_id: "nikcli",
+        client_id: "ragu",
       }).toString(),
     })
 
@@ -646,7 +664,7 @@ export namespace Account {
       // instead of surfacing the raw OAuth error body.
       if (response.status === 400 || response.status === 401) {
         throw new TokenExpiredError({
-          message: "Your ragu session expired. Run `ragu account login` to sign in again.",
+          message: "Your ragu session expired. Run `ragu auth login` to sign in again.",
         })
       }
       throw new TokenRefreshError({

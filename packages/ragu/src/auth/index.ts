@@ -387,9 +387,13 @@ export namespace Auth {
     const oauth = current as z.infer<typeof Oauth>
 
     // Build refresh request
-    const tokenUrl = oauth.enterpriseUrl
-      ? `${oauth.enterpriseUrl}/oauth/token`
-      : "https://auth.nikcli-ai.dev/oauth/token"
+    if (!oauth.enterpriseUrl) {
+      throw new NotOAuthProviderError({
+        message: `Provider ${providerID} does not configure an enterpriseUrl for OAuth refresh`,
+        providerID,
+      })
+    }
+    const tokenUrl = `${oauth.enterpriseUrl}/oauth/token`
 
     log.info("refreshing token", { providerID })
 
@@ -401,7 +405,7 @@ export namespace Auth {
       body: new URLSearchParams({
         grant_type: "refresh_token",
         refresh_token: oauth.refresh,
-        client_id: "nikcli",
+        client_id: "ragu",
       }).toString(),
     })
 

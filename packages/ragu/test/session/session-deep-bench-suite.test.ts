@@ -368,7 +368,7 @@ describe("Session retry helpers", () => {
     },
     {
       input: createApiError("FreeUsageLimitError"),
-      expected: "Free usage exceeded, add credits https://nikcli-ai.dev/zen",
+      expected: "Free usage exceeded",
       label: "free usage",
     },
     {

@@ -17,7 +17,6 @@ import { Keybind } from "@tui/util/keybind"
 import { useAbortOnCleanup, type AbortOnCleanup } from "@tui/util/lifecycle"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
-  ragu: 0,
   anthropic: 1,
   "github-copilot": 2,
   openai: 3,
@@ -39,7 +38,6 @@ export function createDialogProviderOptions() {
           title: provider.name,
           value: provider.id,
           description: {
-            ragu: "(Recommended)",
             anthropic: "(Claude Max or API key)",
             openai: "(ChatGPT Plus/Pro or API key)",
           }[provider.id],
@@ -580,21 +578,6 @@ function ApiMethod(props: ApiMethodProps) {
     <DialogPrompt
       title={props.title}
       placeholder="API key"
-      description={
-        props.providerID === "ragu"
-          ? () => (
-              <box gap={1}>
-                <text fg={theme.foreground.muted}>
-                  Ragu Zen gives you access to all the best coding models at the cheapest prices with a single API
-                  key.
-                </text>
-                <text fg={theme.foreground.default}>
-                  Go to <span style={{ fg: theme.accent.fg }}>https://nikcli-ai.dev/zen</span> to get a key
-                </text>
-              </box>
-            )
-          : undefined
-      }
       onConfirm={async (value) => {
         if (!value) return
         await sdk.client.auth.set(

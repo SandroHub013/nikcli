@@ -42,17 +42,16 @@ afterEach(() => {
 })
 
 describe("websearch provider resolution", () => {
-  it("defaults to keyless Exa, preserving the pre-config behaviour", async () => {
+  it("reports a missing Exa key as a config error instead of calling out", async () => {
     delete process.env["EXA_API_KEY"]
-    const { captured } = stubFetch({ content: [{ type: "text", text: "Title: T\nURL: https://e.com\nText:\nbody" }] })
+    let called = false
+    globalThis.fetch = (async () => {
+      called = true
+      return new Response("{}")
+    }) as unknown as typeof fetch
 
-    const provider = resolve({})
-    const results = await provider.search({ query: "hello" })
-
-    expect(provider.id).toBe("exa")
-    expect(captured[0]!.url).toBe(EXA_ENDPOINT)
-    expect(captured[0]!.body.params.name).toBe("web_search_exa")
-    expect(results).toEqual([{ url: "https://e.com", title: "T", content: "body" }])
+    await expect(resolve({}).search({ query: "hello" })).rejects.toBeInstanceOf(ProviderConfigError)
+    expect(called).toBe(false)
   })
 
   it("passes an Exa key as a query parameter", async () => {

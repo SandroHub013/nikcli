@@ -12,16 +12,19 @@ export const ExaRequestSchema = z.object({
   args: z.record(z.string(), z.unknown()),
   timeoutMs: z.number().positive().optional(),
   signal: z.instanceof(globalThis.AbortSignal).optional(),
+  apiKey: z.string().optional(),
 })
 
 export type ExaRequest = z.infer<typeof ExaRequestSchema>
 
 /** Call an Exa MCP tool and return its first text block, or "" when it returned none. */
 export async function callTool(input: ExaRequest): Promise<string> {
+  const apiKey = input.apiKey ?? process.env["EXA_API_KEY"]
+  if (!apiKey) {
+    throw new Error("Exa code search needs an API key. Set EXA_API_KEY or websearch.apiKey in the config.")
+  }
   const url = new URL(EXA_ENDPOINT)
-  // Optional: the hosted endpoint answers without a key on a shared quota.
-  const apiKey = process.env["EXA_API_KEY"]
-  if (apiKey) url.searchParams.set("exaApiKey", apiKey)
+  url.searchParams.set("exaApiKey", apiKey)
 
   const result = await callMcpTool({
     url: url.toString(),

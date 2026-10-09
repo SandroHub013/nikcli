@@ -211,7 +211,7 @@ function nativeFailureMessage(reason: NativeHttpReason): string {
     case "RateLimit":
       return "Rate Limited"
     case "QuotaExceeded":
-      return "Free usage exceeded, add credits https://nikcli-ai.dev/zen"
+      return "Free usage exceeded"
     case "Authentication":
       return reason.message || "Provider authentication failed"
     case "InvalidRequest":
