@@ -45,10 +45,17 @@ describe("sharing is gone", () => {
 
   test("no CLI way in: `run --share`, share links in `run --session`, `import` and `pr`", () => {
     expect(read("ragu/src/cli/commands.ts")).not.toContain('Flag.boolean("share")')
-    expect(read("ragu/src/cli/handlers/run.ts")).not.toMatch(/ShareNext|session\.share|ShareReference|SHARE_ID|share URL/)
+    expect(read("ragu/src/cli/handlers/run.ts")).not.toMatch(
+      /ShareNext|session\.share|ShareReference|SHARE_ID|share URL/,
+    )
     expect(read("ragu/src/cli/handlers/import.ts")).not.toMatch(/share|fetch\(/i)
     expect(read("ragu/src/cli/handlers/pr.ts")).not.toMatch(/\/s\/|import"/)
     expect(read("util/src/flag.ts")).not.toMatch(/RAGU_AUTO_SHARE|RAGU_DISABLE_SHARE/)
+  })
+
+  test("the TUI sidebar shows no share link of an old session", () => {
+    // `Session.Info.share` stays in the contract for old sessions; its link points at Nik's share service.
+    expect(read("tui/src/routes/session/sidebar.tsx")).not.toMatch(/share\??!?\.url/)
   })
 
   test("no /share or /unshare in the TUI and the web app", () => {
