@@ -15,7 +15,7 @@ import { UserDB } from "@/user/users"
  */
 export function identityVerifierOptions(): VerifyAccessTokenOptions | undefined {
   // Off unless RAGU_AUTH_ISSUER names an issuer. It used to default to Nik's
-  // (https://auth.nikcli-ai.dev), so every server turned a bearer signed there
+  // account issuer, so every server turned a bearer signed there
   // into one of its users and fetched Nik's JWKS to check it. A JWKS url or a
   // secret alone does not switch it on: the issuer is what the `iss` claim is
   // checked against. "off", "0", "false" and "none" still mean off.

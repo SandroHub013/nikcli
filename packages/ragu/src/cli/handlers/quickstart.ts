@@ -88,7 +88,6 @@ export default Runtime.handler(Commands.commands["quickstart"], async (input) =>
         options: [
           { label: "Run `ragu auth login` now", value: "login" },
           { label: "Skip — I'll set it up later", value: "skip" },
-          { label: "Show me the docs", value: "docs" },
         ],
         initialValue: "login",
       })
@@ -106,9 +105,6 @@ export default Runtime.handler(Commands.commands["quickstart"], async (input) =>
         prompts.outro("Re-run `ragu quickstart` after you've connected a provider.")
         const code = await reexec(["auth", "login"])
         process.exit(code)
-      }
-      if (action === "docs") {
-        prompts.log.info("Read https://nikcli-ai.dev/docs/quickstart for the full walkthrough.")
       }
     } else {
       prompts.log.success(`${connected} provider${connected === 1 ? "" : "s"} connected.`)
@@ -172,7 +168,6 @@ export default Runtime.handler(Commands.commands["quickstart"], async (input) =>
       process.exit(modelsCode)
     default:
       prompts.log.info("Help: `ragu --help` lists every command.")
-      prompts.log.info("Docs: https://nikcli-ai.dev/docs")
       prompts.log.info(`Docs path: ${process.cwd()}${EOL}`)
       prompts.outro("Done.")
   }

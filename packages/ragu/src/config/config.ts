@@ -38,11 +38,11 @@ export namespace Config {
    * with a warning in the log.
    */
   export const REMOVED_KEYS: Record<string, string> = {
-    analytics: "it sent usage totals to Nik's dashboard (dashboard.nikcli-ai.dev)",
+    analytics: "it sent usage totals to Nik's dashboard",
     teleport: "teleport, which sent a session and its workspace to a remote server, is gone",
     autoupdate: "updates came from upstream's release feeds and installers; Ragu Code does not update itself",
-    share: "sharing published sessions on Nik's share service (s.nikcli-ai.dev), removed",
-    autoshare: "sharing published sessions on Nik's share service (s.nikcli-ai.dev), removed",
+    share: "sharing published sessions on Nik's share service, removed",
+    autoshare: "sharing published sessions on Nik's share service, removed",
   }
 
   /** Keybinds of removed features: accepted in `keybinds` and ignored, like `REMOVED_KEYS`. */
@@ -1647,7 +1647,7 @@ export namespace Config {
       command: z
         .record(z.string(), Command)
         .optional()
-        .describe("Command configuration, see https://nikcli-ai.dev/docs/commands"),
+        .describe("Command configuration"),
       reference: z
         .record(z.string(), Reference)
         .optional()
@@ -1750,7 +1750,7 @@ export namespace Config {
         })
         .catchall(Agent)
         .optional()
-        .describe("Agent configuration, see https://nikcli-ai.dev/docs/agents"),
+        .describe("Agent configuration"),
       provider: z
         .record(z.string(), Provider)
         .optional()

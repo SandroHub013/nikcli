@@ -36,7 +36,7 @@ import { DialogThemeList } from "@tui/component/dialog-theme-list"
 import { DialogSettings } from "@tui/component/dialog-settings"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogTour } from "@tui/component/dialog-tour"
-import { DialogQuickstartInfo, DialogDoctorInfo, DialogSupport, openExternal } from "@tui/component/dialog-support"
+import { DialogQuickstartInfo, DialogDoctorInfo, DialogSupport } from "@tui/component/dialog-support"
 import { CommandProvider, useCommandDialog } from "@tui/component/dialog-command"
 import { DialogPermissionMode } from "@tui/component/dialog-permission-mode"
 import { DialogAdvisorModel } from "@tui/component/dialog-advisor-model"
@@ -924,15 +924,6 @@ function App(props: {
       },
     },
     {
-      title: "Open the docs",
-      value: "support.docs",
-      category: "Support",
-      slash: { name: "docs" },
-      onSelect: () => {
-        openExternal("https://nikcli-ai.dev/docs")
-      },
-    },
-    {
       title: "Chat with the support assistant",
       value: "support.chat",
       category: "Support",
@@ -1516,15 +1507,6 @@ function App(props: {
       },
       onSelect: () => {
         dialog.replace(() => <DialogHelp />)
-      },
-      category: "System",
-    },
-    {
-      title: "Open docs",
-      value: "docs.open",
-      onSelect: () => {
-        open("https://nikcli-ai.dev/docs").catch(() => {})
-        dialog.clear()
       },
       category: "System",
     },

@@ -413,7 +413,6 @@ export namespace Auth {
           title: "Auth session expired",
           what: `${providerID} rejected the refresh token (${response.status}).`,
           try: `Run \`ragu auth login ${providerID}\` to reconnect, or pick a different provider.`,
-          docs: "https://nikcli-ai.dev/docs/auth",
           cause: { status: response.status, error: errorText },
         })
       }

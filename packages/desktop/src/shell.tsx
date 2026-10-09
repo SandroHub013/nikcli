@@ -634,13 +634,6 @@ function DesktopAccount() {
                 <DropdownMenu.ItemLabel>{t("desktop.account.settings")}</DropdownMenu.ItemLabel>
                 <kbd class="desktop-account__menu-kbd">⌘,</kbd>
               </DropdownMenu.Item>
-              <DropdownMenu.Item
-                class="desktop-account__menu-item"
-                onSelect={() => platform.openLink("https://nikcli-ai.dev")}
-              >
-                <Icon name="share" size="small" />
-                <DropdownMenu.ItemLabel>{t("desktop.account.invite")}</DropdownMenu.ItemLabel>
-              </DropdownMenu.Item>
               <DropdownMenu.Separator />
               <DropdownMenu.Item class="desktop-account__menu-item" onSelect={() => command.trigger("analytics.view")}>
                 <Icon name="bullet-list" size="small" />
