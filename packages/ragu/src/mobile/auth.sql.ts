@@ -15,7 +15,7 @@ export const mobileTokens = sqliteTable(
     expiresAt: integer("expires_at"),
     /**
      * Token scope: `mobile` (default, paired mobile device), `cli-sync`
-     * (CLI↔server sync token, e.g. for https://s.nikcli-ai.dev), `studio`
+     * (CLI↔server sync token, e.g. for a hub at http://127.0.0.1:4096), `studio`
      * (desktop UI). The server-side middleware enforces scope per route.
      */
     scope: text("scope").notNull().default("mobile"),

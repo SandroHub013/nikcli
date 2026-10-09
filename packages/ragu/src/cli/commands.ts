@@ -1404,7 +1404,7 @@ const SpecSyncToken = Spec.make("token", {
 })
 
 const SpecSync = Spec.make("sync", {
-  description: "manage optional remote hub sync (e.g. https://s.nikcli-ai.dev)",
+  description: "manage optional remote hub sync (e.g. http://127.0.0.1:4096)",
   commands: [SpecSyncStatus, SpecSyncConnect, SpecSyncDisconnect, SpecSyncToken],
 })
 

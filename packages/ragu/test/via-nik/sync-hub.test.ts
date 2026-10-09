@@ -42,6 +42,24 @@ const read = (file: string) => fs.readFileSync(path.join(PACKAGES, file), "utf8"
 
 describe("remote sync without Nik", () => {
   test("a hub URL without a token does not start, and says why; no account token is read", async () => {
+    // A signed-in account with a valid token: the old resolver handed this token to the hub.
+    const { Database } = await import("@/database/database")
+    const db = Database.syncNative()
+    const now = Date.now()
+    db.run(
+      "INSERT OR REPLACE INTO account (id, email, url, access_token, refresh_token, token_expiry, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        "acc_sync_hub",
+        "user@example.com",
+        "http://127.0.0.1:9",
+        "account_access_token",
+        "account_refresh",
+        now + 3_600_000,
+        now,
+        now,
+      ],
+    )
+    db.run("INSERT OR REPLACE INTO config (id, active_account_id) VALUES (1, ?)", ["acc_sync_hub"])
     await fsp.mkdir(Global.Path.config, { recursive: true })
     await fsp.writeFile(
       path.join(Global.Path.config, "nikcli.json"),
@@ -53,6 +71,7 @@ describe("remote sync without Nik", () => {
     expect(resolved.token).toBeUndefined()
     expect(resolved.configured).toBe(false)
     expect(resolved.reason).toContain("token")
+    expect(JSON.stringify(resolved)).not.toContain("account_access_token")
     expect(read("ragu/src/sync/sync-config.ts")).not.toMatch(/Account|account\.token/)
   })
 
@@ -62,6 +81,8 @@ describe("remote sync without Nik", () => {
       "ragu/src/sync/remote-client.ts",
       "ragu/src/cli/handlers/serve.ts",
       "tui/src/component/dialog-sync.tsx",
+      "ragu/src/cli/commands.ts",
+      "ragu/src/mobile/auth.sql.ts",
     ])
       expect([file, read(file).includes("nikcli-ai.dev")]).toEqual([file, false])
     expect(read("ragu/src/config/config.ts")).not.toContain("e.g. https://s.nikcli-ai.dev")
