@@ -290,12 +290,17 @@ describe("refreshing the machine's session", () => {
         return reply()
       },
     })
+    // The issuer is the configured account server: the service refreshes against no other.
+    process.env.RAGU_ACCOUNT_URL = `http://127.0.0.1:${server.port}/`
     return {
       url: `http://127.0.0.1:${server.port}/`,
       get calls() {
         return state.calls
       },
-      stop: () => server.stop(true),
+      stop: () => {
+        delete process.env.RAGU_ACCOUNT_URL
+        server.stop(true)
+      },
     }
   }
 

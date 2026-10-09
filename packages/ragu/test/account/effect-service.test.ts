@@ -1,6 +1,6 @@
 import { preserveTestEnv } from "../helpers/env"
 import { removeTestDir } from "../helpers/fs"
-import { afterAll, beforeEach, describe, expect, it } from "bun:test"
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "bun:test"
 import { Effect } from "effect"
 import fs from "fs/promises"
 import os from "os"
@@ -18,7 +18,13 @@ function runAccount<A, E>(effect: Effect.Effect<A, E, any>) {
 }
 
 describe("Account.Service", () => {
+  // The fake issuer below is the configured account server: the service talks to no other.
+  afterEach(() => {
+    delete process.env.RAGU_ACCOUNT_URL
+  })
+
   beforeEach(async () => {
+    process.env.RAGU_ACCOUNT_URL = "https://issuer.test"
     await fs.rm(path.join(testHome, "data", "accounts.db"), { force: true })
     await fs.rm(path.join(testHome, "data", "accounts.db-shm"), {
       force: true,
@@ -30,6 +36,7 @@ describe("Account.Service", () => {
   })
 
   it("provides local account operations through the Effect service boundary", async () => {
+    delete process.env.RAGU_ACCOUNT_URL
     const result = await runAccount(
       Effect.gen(function* () {
         const account = yield* Account.Service

@@ -37,7 +37,7 @@ describe("removal of Nik account and device-code login", () => {
             return yield* account.login()
           }),
         ),
-      ).rejects.toThrow(/Remote Nik account service has been removed/)
+      ).rejects.toThrow(/RAGU_ACCOUNT_URL/)
       expect(nikHostCalled).toBe(false)
     } finally {
       globalThis.fetch = originalFetch
@@ -63,7 +63,7 @@ describe("removal of Nik account and device-code login", () => {
             return yield* account.poll("dummy-code" as never, { serverUrl: "https://auth.nikcli-ai.dev" })
           }),
         ),
-      ).rejects.toThrow(/Remote Nik account service has been removed/)
+      ).rejects.toThrow(/RAGU_ACCOUNT_URL/)
       expect(fetchCalled).toBe(false)
     } finally {
       globalThis.fetch = originalFetch
