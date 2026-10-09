@@ -231,9 +231,8 @@ jobs:
         env:
           RAGU_HEALTH_URL: ${{ vars.RAILWAY_HEALTH_URL }}
         run: |
-          # Default lives in bash. GitHub expressions treat `//` as a comment, so an https
-          # URL cannot be used as an expression fallback.
-          : "${RAGU_HEALTH_URL:=https://nikcli-mobile-production.up.railway.app}"
+          # No default: without the repository variable the check fails, rather than asking
+          # someone else's service which commit it runs.
           bun run script/check-release-identity.ts --expect "$GITHUB_SHA" --timeout 900
 
   autofix:

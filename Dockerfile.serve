@@ -169,4 +169,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 
 ENTRYPOINT ["/usr/local/bin/ragu-railway-entrypoint"]
 
-CMD ["sh", "-c", "exec ragu mobile serve --hostname 0.0.0.0 --port ${PORT:-4096} --pair --public-url https://${RAILWAY_PUBLIC_DOMAIN:-nikcli-mobile-production.up.railway.app}"]
+CMD ["sh", "-c", "exec ragu mobile serve --hostname 0.0.0.0 --port ${PORT:-4096} --pair ${RAILWAY_PUBLIC_DOMAIN:+--public-url https://$RAILWAY_PUBLIC_DOMAIN}"]
