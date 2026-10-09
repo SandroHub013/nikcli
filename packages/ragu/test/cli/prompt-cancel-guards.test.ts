@@ -90,10 +90,11 @@ describe("every interactive CLI prompt fails closed on cancel", () => {
     expect(offenders).toEqual([])
   })
 
-  it("guards the upgrade prompt that was the live defect", () => {
+  it("`ragu upgrade`, the live defect, no longer asks anything: it installs nothing", () => {
     // Named individually so the regression reports where it happened rather
-    // than only as a count in a list.
+    // than only as a count in a list. The updater is gone (brief
+    // ragu-via-servizi-nik): the command only prints where updates come from.
     const upgrade = readFileSync(path.join(HANDLERS, "upgrade.ts"), "utf8")
-    expect(upgrade).toMatch(/prompts\.isCancel\(install\)/)
+    expect(upgrade).not.toMatch(INTERACTIVE)
   })
 })
