@@ -80,7 +80,9 @@ export namespace Expo {
     opts?.onSpawn?.(proc)
 
     const timeout = opts?.timeout ?? 120000
+    let timedOut = false
     let timer: ReturnType<typeof setTimeout> | undefined
+    let killPromise: Promise<void> | undefined
 
     const runPromise = (async () => {
       const [exitCode, stdout, stderr] = await Promise.all([
@@ -103,12 +105,19 @@ export namespace Expo {
       return await Promise.race([
         runPromise,
         new Promise<never>((_, reject) => {
-          timer = setTimeout(async () => {
-            await killProc(proc)
+          timer = setTimeout(() => {
+            timedOut = true
+            killPromise = killProc(proc)
             reject(new Error(`npx ${args.join(" ")} timed out after ${timeout}ms`))
           }, timeout)
         }),
       ])
+    } catch (error) {
+      if (timedOut) {
+        await killPromise?.catch(() => {})
+        throw new Error(`npx ${args.join(" ")} timed out after ${timeout}ms`)
+      }
+      throw error
     } finally {
       if (timer) clearTimeout(timer)
     }
