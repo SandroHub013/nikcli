@@ -130,7 +130,7 @@ bun run register                # registers the global /ragu command
 ```
 
 Then set the **Interactions Endpoint URL** in the Developer Portal to
-`https://discord.nikcli-ai.dev/discord/interactions`. Discord verifies the
+`https://<your Worker's domain>/discord/interactions`. Discord verifies the
 endpoint by sending a deliberately invalid signature, so it must be reachable
 before you save.
 
