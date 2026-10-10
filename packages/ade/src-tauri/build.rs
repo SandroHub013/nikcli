@@ -36,6 +36,7 @@ fn build_nikverse_world() {
     }
     let required = env::var_os("NIKVERSE_WORLD_REQUIRED").is_some();
     let app = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR")).join("..");
+    let city_bundle = app.join("src-tauri").join(ASSETS_DIR).join("world").join("city.js");
     let candidates = bun_lookup::find_bun_candidates_from_env();
     let mut failures = Vec::new();
 
@@ -60,6 +61,11 @@ fn build_nikverse_world() {
             }
             Err(error) => failures.push(format!("{}: {error}", program.display())),
         }
+    }
+
+    if city_bundle.is_file() {
+        println!("cargo:warning=NikVerse: bun non e riuscito a rigenerare il bundle, ma city.js e presente; procedo con quello");
+        return;
     }
 
     let summary = if failures.is_empty() {
