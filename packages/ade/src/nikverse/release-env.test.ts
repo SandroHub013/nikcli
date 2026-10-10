@@ -100,5 +100,12 @@ describe("the workflows that build ADE", () => {
     expect(lookupRs).toContain("find_bun_candidates")
     expect(lookupRs).toContain("node_modules")
   })
+
+  test.each(builds.map((b) => [`${b.file}:${b.name}`, b.job] as const))(
+    "%s bundles NikVerse world in a pre-build step before Tauri",
+    (_label, job) => {
+      expect(job).toContain("scripts/build-nikverse-world.ts")
+    },
+  )
 })
 

@@ -56,6 +56,10 @@ jobs:
         working-directory: packages/ade
         run: bun x vite build
 
+      - name: Build NikVerse world
+        working-directory: packages/ade
+        run: bun ./scripts/build-nikverse-world.ts
+
       - name: Build app
         working-directory: packages/ade
         shell: bash

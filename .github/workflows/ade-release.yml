@@ -236,6 +236,10 @@ jobs:
         working-directory: packages/ade
         run: bun x vite build
 
+      - name: Build NikVerse world
+        working-directory: packages/ade
+        run: bun ./scripts/build-nikverse-world.ts
+
       # Second defense for NikVerse bundling: pass the global toolchain bun path directly
       # before Tauri runs with node_modules/.bin prepended to PATH.
       - name: Locate toolchain bun
