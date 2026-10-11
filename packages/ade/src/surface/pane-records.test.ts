@@ -71,6 +71,7 @@ describe("createPaneRecords", () => {
         eol: "\n",
       })
       records.bufferLoading.set("p1", true)
+      records.bufferBinary.set("p1", { bytes: 42, head: [1, 2, 3] })
       records.permissions.set("p1", { what: "scrivere", kind: "write", answers: [] })
 
       // A second pane, to prove the forgetting is targeted.
@@ -81,6 +82,7 @@ describe("createPaneRecords", () => {
       expect(records.reports()).toEqual({})
       expect(records.buffers()).toEqual({})
       expect(records.permissions()).toEqual({})
+      expect(records.bufferBinary()).toEqual({})
       expect(records.bufferLoading()).toEqual({ p2: true })
 
       dispose()
@@ -100,7 +102,7 @@ describe("createPaneRecords", () => {
        * would make the pane that reuses the id refuse mail for ever.
        */
       const every = Object.entries(records).filter(([name]) => name !== "forget")
-      expect(every.length).toBe(9)
+      expect(every.length).toBe(10)
 
       for (const [, record] of every) {
         ;(record as ReturnType<typeof createPaneRecord>).set("p1", true as never)
