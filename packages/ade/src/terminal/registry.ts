@@ -11,15 +11,27 @@
  * keystrokes; whoever owns the process wires the two together.
  */
 import { FitAddon } from "@xterm/addon-fit"
+import { ImageAddon, type IImageAddonOptions } from "@xterm/addon-image"
 import { Terminal, type ITheme } from "@xterm/xterm"
 import { registerLinks, type LinkRequest } from "./links"
 import { registerMenuClicks } from "./menu-click"
 import { rowsInside, terminalBox, watchCellSize } from "./fit-rows"
 import { selectionReachesSecret, watchRows, type CoverBuffer } from "./recording-cover"
 
+export const DEFAULT_IMAGE_OPTIONS: IImageAddonOptions = {
+  iipSupport: true,
+  sixelSupport: false,
+  iipSizeLimit: 10_000_000,
+  pixelLimit: 4_194_304,
+  storageLimit: 64,
+  showPlaceholder: true,
+  enableSizeReports: true,
+}
+
 export interface SessionTerminal {
   terminal: Terminal
   fit: FitAddon
+  image: ImageAddon
   /** Where it is currently drawn, if anywhere. */
   element?: HTMLElement
   detach?: () => void
@@ -483,7 +495,10 @@ export function getTerminal(id: string): SessionTerminal {
   const fit = new FitAddon()
   terminal.loadAddon(fit)
 
-  const created: SessionTerminal = { terminal, fit }
+  const image = new ImageAddon(DEFAULT_IMAGE_OPTIONS)
+  terminal.loadAddon(image)
+
+  const created: SessionTerminal = { terminal, fit, image }
   terminal.attachCustomKeyEventHandler(
     createTerminalKeyHandler(
       terminal,
