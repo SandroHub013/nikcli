@@ -63,11 +63,13 @@ function run(r: Repo, bases: string[] | undefined, ...args: string[]) {
     file = join(r.dir, "upstream-bases.txt")
     writeFileSync(file, `${bases.join("\n")}\n`)
   }
+  const env = { ...process.env, RELEASE_UPSTREAM_BASES: file }
+  delete env.GITHUB_OUTPUT
   const result = Bun.spawnSync([process.execPath, SCRIPT, ...args], {
     cwd: r.dir,
     stdout: "pipe",
     stderr: "pipe",
-    env: { ...process.env, RELEASE_UPSTREAM_BASES: file },
+    env,
   })
   return { code: result.exitCode, out: result.stdout.toString(), err: result.stderr.toString() }
 }
