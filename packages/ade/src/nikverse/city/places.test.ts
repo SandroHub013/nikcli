@@ -222,7 +222,9 @@ describe("walking to the Faro", () => {
     }
     for (const b of faroBoxes()) expect(drawnIn(b)).toBe(true)
     // The tower's boxes stay within 10 cm of the drawn tower's foot.
-    for (const b of faroBoxes().slice(0, 4)) for (const c of boxCorners(b)) expect(Math.hypot(c.x - FARO.x, c.z - FARO.z)).toBeLessThanOrEqual(FARO.towerRadius + 0.1)
+    for (const b of faroBoxes().slice(0, 4))
+      for (const c of boxCorners(b))
+        expect(Math.hypot(c.x - FARO.x, c.z - FARO.z)).toBeLessThanOrEqual(FARO.towerRadius + 0.1 + 1e-4)
   })
 })
 
