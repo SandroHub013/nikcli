@@ -112,14 +112,14 @@ export interface PaneRendererDeps {
   decisions: DecisionsHub
   /** The project's design proposals register, shared with the bar's badge and window. */
   design: DesignHub
-  /** What the NikVerse panel needs from ADE: the picture of the workbench, and the few things the world may ask for. */
+  /** What the RaguVerse panel needs from ADE: the picture of the workbench, and the few things the world may ask for. */
   world: {
     picture: () => Snapshot | undefined
     openSession: (paneId: string) => void
     focusProject: (shopId: string) => void
     chord: (chord: ForwardedChord) => void
     ignored: (reason: string) => void
-    /** The host's commands for NikVerse's assets (fetched the first time the world opens); absent where there is no host. */
+    /** The host's commands for RaguVerse's assets (fetched the first time the world opens); absent where there is no host. */
     assets: () => Promise<AssetsHost | undefined>
   }
   /** What the lessons over the world need from ADE: the learner's progress, and what the lesson page said that ADE ignored. */

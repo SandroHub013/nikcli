@@ -1,7 +1,7 @@
 /*
  * «Spazio su disco»: what ADE keeps on the user's computer, row by row, and the button that gives each back.
  *
- * One row for each thing ADE put there that can be taken away again: the local voices (Piper's, one for each voice, and Kokoro), NikVerse's
+ * One row for each thing ADE put there that can be taken away again: the local voices (Piper's, one for each voice, and Kokoro), RaguVerse's
  * assets, the worktrees of finished sessions, the `ade/*` branches that have landed, and the captures and results of a project's `.ade/` that
  * are old. Each row says what it weighs and, if it can go, has one button. Nothing goes without a question that says how much it frees, and
  * the panel never touches work that has not landed (a worktree with changes, or commits the project's branch does not have is listed and

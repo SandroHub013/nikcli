@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://nikverse.isola.test/learn/lezione.schema.json",
-  "title": "Lezione di NikVerse «Impara e gioca»",
+  "title": "Lezione di RaguVerse «Impara e gioca»",
   "description": "Una lezione è un file YAML. Questo schema vale per il file letto come JSON. Le regole che lo schema non può esprimere (indici nei limiti, risposte sbagliate diverse da quella giusta, segnaposto contati) stanno in review.md, sezione «Controlli del verificatore».",
   "type": "object",
   "additionalProperties": false,

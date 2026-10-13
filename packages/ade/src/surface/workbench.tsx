@@ -2024,7 +2024,7 @@ export function Workbench() {
   }
 
   /**
-   * Opens the NikVerse panel, or takes the user to the one already open: it lives in the project it was opened
+   * Opens the RaguVerse panel, or takes the user to the one already open: it lives in the project it was opened
    * in, and focusing a panel of another project showed nothing.
    */
   const openNikversePane = async () => {
@@ -2038,7 +2038,7 @@ export function Workbench() {
     setWb((w) => ({
       ...addPane(w, {
         id: newPaneId("nv"),
-        title: "NikVerse",
+        title: "RaguVerse",
         status: "working",
         model: "—",
         mode: "nikverse",
@@ -9060,13 +9060,13 @@ export function Workbench() {
   }
 
   /*
-   * The world's picture of ADE (NikVerse). Built only while a NikVerse panel
+   * The world's picture of ADE (RaguVerse). Built only while a RaguVerse panel
    * exists, and from what the panes' own headers read: the agent's report, a
    * standing permission prompt, and whether the process is there.
    */
   const worldSlots = createSlotBook()
   /*
-   * The quota store, held only while a NikVerse panel exists, so a session at
+   * The quota store, held only while a RaguVerse panel exists, so a session at
    * its limit reads as one in the world as it does in its header (`limit`).
    * Taken in the memo and not in an effect: the effect would run after the
    * first picture, and the store's signals would not be read by it.

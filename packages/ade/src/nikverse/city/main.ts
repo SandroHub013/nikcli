@@ -556,7 +556,7 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
   town.sync(deps.picture())
   // One discreet line, from the first frame drawn and for a few seconds: why the world looks plainer than before.
   const note = deps.lowered ? doc.getElementById("note") : null
-  if (note) note.textContent = "NikVerse in qualità Bassa: al livello automatico questo PC era lento"
+  if (note) note.textContent = "RaguVerse in qualità Bassa: al livello automatico questo PC era lento"
   // Until the loop draws: an opening stopped here is waiting for its first frame (a paused pane, a hidden frame).
   log.phase("first-frame")
   resize()

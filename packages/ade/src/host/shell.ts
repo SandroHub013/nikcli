@@ -267,11 +267,11 @@ export interface Host {
   ttsInstallStatus?: (provider: string) => Promise<InstallProgress>
   /** K3: stops the install under way for a provider; whether there was one. */
   ttsInstallCancel?: (provider: string) => Promise<{ cancelled: boolean }>
-  /** NikVerse's assets: whether the world's folder is complete, and how a fetch under way is going. */
+  /** RaguVerse's assets: whether the world's folder is complete, and how a fetch under way is going. */
   nikverseAssetsStatus?: () => Promise<AssetsStatus>
-  /** Fetches what NikVerse's folder is missing, each file checked against the list the binary carries; resolves when it is over. */
+  /** Fetches what RaguVerse's folder is missing, each file checked against the list the binary carries; resolves when it is over. */
   nikverseAssetsInstall?: () => Promise<void>
-  /** What the fetched NikVerse assets weigh on this disk (0 in a debug build, which has none). */
+  /** What the fetched RaguVerse assets weigh on this disk (0 in a debug build, which has none). */
   nikverseAssetsBytes?: () => Promise<number>
   /** Takes the fetched assets off the disk; the bytes freed. They are fetched again when the world next opens. Refused while a fetch runs. */
   nikverseAssetsRemove?: () => Promise<number>

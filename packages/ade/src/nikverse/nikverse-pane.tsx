@@ -13,7 +13,7 @@ import "./nikverse.css"
 import { t } from "../i18n"
 
 /**
- * The NikVerse panel: a frame with the world in it, and ADE's end of the channel.
+ * The RaguVerse panel: a frame with the world in it, and ADE's end of the channel.
  *
  * The frame is sandboxed to an opaque origin, so Tauri's IPC refuses it, and
  * what runs in it can only ask ADE for the few things on the allowlist. The panel
