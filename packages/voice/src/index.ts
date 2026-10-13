@@ -167,12 +167,6 @@ export { AgentOrb, type AgentOrbProps } from "./ui/agent-orb"
 
 export { RaguMic, type RaguMicProps } from "./ui/ragu-mic"
 
-/** @deprecated NikCube is obsolete, kept as empty stub for external branch compatibility (workbench.tsx) */
-export function NikCube(_props?: any): null {
-  return null
-}
-export type NikCubeProps = Record<string, unknown>
-
 export { VoiceSettingsPanel, type VoiceSettingsPanelProps } from "./ui/voice-settings-panel"
 export { createVoiceSettingsState, type VoiceSettingsState, type VoiceSettingsStateProps } from "./ui/settings-state"
 export {
