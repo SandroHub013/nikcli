@@ -27,6 +27,7 @@ import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { usePromptStash } from "./stash"
+import { chipText } from "./chip"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
@@ -2389,7 +2390,7 @@ export function Prompt(props: PromptProps) {
                   paddingRight={0.5}
                   flexShrink={0}
                 >
-                  <text fg={theme.surface.base} wrapMode="none">
+                  <text fg={chipText(theme.status.error.fg)} wrapMode="none">
                     <span style={{ bold: voiceStatus() === "recording" }}>
                       {voiceStatus() === "recording"
                         ? "release to send"
@@ -2420,8 +2421,8 @@ export function Prompt(props: PromptProps) {
                   paddingRight={1}
                   flexShrink={0}
                 >
-                  <text fg={theme.surface.base} wrapMode="none">
-                    ⊕ <span style={{ fg: theme.surface.base }}>web</span>
+                  <text fg={chipText(theme.accent.fg)} wrapMode="none">
+                    ⊕ web
                   </text>
                 </box>
 

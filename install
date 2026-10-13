@@ -65,12 +65,11 @@ ui() { printf "%b\n" "$1" >&2; }
 logo() {
     if [ "$TTY" != "true" ]; then return 0; fi
     ui ""
-    ui "${GRAY}    ███╗   ██╗██╗██╗  ██╗ ██████╗██╗     ██╗${NC}"
-    ui "${GRAY}    ████╗  ██║██║██║ ██╔╝██╔════╝██║     ██║${NC}"
-    ui "${GRAY}    ██╔██╗ ██║██║█████╔╝ ██║     ██║     ██║${NC}"
-    ui "${GRAY}    ██║╚██╗██║██║██╔═██╗ ██║     ██║     ██║${NC}"
-    ui "${GRAY}    ██║ ╚████║██║██║  ██╗╚██████╗███████╗██║${NC}"
-    ui "${GRAY}    ╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝${NC}"
+    ui "${GRAY}                                     ▄${NC}"
+    ui "${GRAY}    █▀▀▀ ▀▀▀█ █▀▀█ █  █ █▀▀▀ █▀▀█ █▀▀█ █▀▀█${NC}"
+    ui "${GRAY}    █    █▀▀█ █  █ █  █ █    █  █ █  █ █▀▀▀${NC}"
+    ui "${GRAY}    ▀    ▀▀▀▀ ▀▀▀█ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀${NC}"
+    ui "${GRAY}              ▀▀▀▀${NC}"
     ui ""
 }
 
@@ -140,7 +139,7 @@ trap cleanup_on_exit EXIT INT TERM
 
 usage() {
     cat <<EOF
-Nikcli Installer
+Ragu Code Installer
 
 Usage: install.sh [options]
 
@@ -153,7 +152,7 @@ Options:
 Examples:
     ./install
     ./install --version 1.5.0
-    ./install --binary /path/to/nikcli
+    ./install --binary /path/to/ragu
 EOF
 }
 
@@ -602,5 +601,5 @@ outro "${GREEN}${APP} ${specific_version} installed${NC}"
 ui ""
 ui "   ${DIM}Next steps${NC}"
 ui "   ${BOLD}cd${NC} <project>          ${DIM}# open your project${NC}"
-ui "   ${BOLD}${APP}${NC}                  ${DIM}# start nikcli${NC}"
+ui "   ${BOLD}${APP}${NC}                  ${DIM}# start Ragu Code${NC}"
 ui ""

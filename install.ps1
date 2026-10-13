@@ -1,5 +1,5 @@
 # Cache-bust: 2026-08-03T00-00-00Z
-# nikcli installer for Windows (PowerShell 5.1+ / pwsh 7+)
+# Ragu Code installer for Windows (PowerShell 5.1+ / pwsh 7+)
 #
 #   .\install.ps1
 #
@@ -32,7 +32,7 @@ function Warn([string]$Text) { Write-Rail "!" $Text "Yellow" }
 function Fail([string]$Text) { Write-Rail "x" $Text "Red"; exit 1 }
 
 Write-Host ""
-Write-Host "  nikcli installer" -ForegroundColor White
+Write-Host "  Ragu Code installer" -ForegroundColor White
 Write-Host ""
 
 # ---------------------------------------------------------------------------
@@ -401,5 +401,5 @@ Write-Host "  nikcli $version installed" -ForegroundColor Green
 Write-Host ""
 Write-Host "   Next steps"
 Write-Host "   cd <project>          # open your project"
-Write-Host "   nikcli                # start nikcli"
+Write-Host "   nikcli                # start Ragu Code"
 Write-Host ""

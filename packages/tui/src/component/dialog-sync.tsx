@@ -203,7 +203,7 @@ export function DialogSync() {
               {form.editing ? "Edit sync server" : "Set up remote sync"}
             </text>
             <text fg={theme.foreground.muted} wrapMode="word">
-              Saved to the global nikcli.json. RAGU_REMOTE_URL / RAGU_REMOTE_TOKEN env vars override it.
+              Saved to the global ragu.json. RAGU_REMOTE_URL / RAGU_REMOTE_TOKEN env vars override it.
             </text>
             <Show when={status().source === "env"}>
               <text fg={theme.status.warning.fg} wrapMode="word">

@@ -26,7 +26,7 @@ export default Runtime.handler(Commands.commands["auto-mode"].commands["critique
         .filter(([, entries]) => entries.length > 0),
     )
     if (Object.keys(custom).length === 0) {
-      UI.println("You have no custom auto mode rules. Add them under auto_mode in your global nikcli.json.")
+      UI.println("You have no custom auto mode rules. Add them under auto_mode in your global ragu.json.")
       return
     }
 

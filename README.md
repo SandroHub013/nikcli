@@ -194,7 +194,7 @@ filesystem/     # fs helpers
 flag/           # environment-variable flags (incl. OTEL/RAGU_*)
 format/         # formatter (prettier, biome, oxc, …)
 git/            # local git operations (status, diff, worktree)
-global/         # global paths (~/.config/nikcli)
+global/         # global paths (~/.config/ragu)
 ide/            # editor integrations (VSCode, Cursor, Zed)
 image/          # image tools
 installation/   # version, install method, upgrade

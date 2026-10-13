@@ -102,6 +102,8 @@ import { getScrollAcceleration, scrollChildIntoView } from "@tui/util/scroll"
 /** The file fields the user-message badge row and image preview read. */
 import { DialogMonitorLog, ExplorationSummary, ToolPartView } from "./tool-view"
 import { moveSelection } from "@tui/ui/select-controller"
+import { Home } from "@tui/routes/home"
+import { showsHome } from "./blank"
 
 addDefaultParsers(parsers.parsers)
 
@@ -273,6 +275,21 @@ export function Session() {
   const pendingInputs = createMemo(() => {
     const visible = new Set(messages().map((message) => message.id))
     return sync.session.pending(route.sessionID).filter((item) => !visible.has(item.messageID))
+  })
+
+  // A conversation with nothing in it yet shows the home (`./blank`): how ADE
+  // opens ragu, on a conversation it created a moment before.
+  let started = false
+  const blank = createMemo(() => {
+    const loaded = sync.data.message[route.sessionID]
+    if (loaded && loaded.length > 0) started = true
+    return showsHome({
+      loaded: loaded !== undefined && session() !== undefined,
+      root: !session()?.parentID,
+      messages: loaded?.length ?? 0,
+      pending: pendingInputs().length,
+      started,
+    })
   })
 
   const instructionNotices = createMemo(() =>
@@ -1268,175 +1285,189 @@ export function Session() {
   createEffect(on(() => route.sessionID, toBottom))
 
   return (
-    <context.Provider
-      value={{
-        get width() {
-          return contentWidth()
-        },
-        get height() {
-          return dimensions().height
-        },
-        sessionID: route.sessionID,
-        conceal,
-        showThinking,
-        showTimestamps,
-        showDetails,
-        diffWrapMode,
-        messageCreatedAt,
-        sync,
-      }}
+    <Show
+      when={!blank()}
+      fallback={
+        <Home
+          sessionID={route.sessionID}
+          workspaceID={route.workspaceID}
+          onPrompt={(r) => {
+            prompt = r
+            if (route.initialPrompt) r.set(route.initialPrompt)
+          }}
+        />
+      }
     >
-      <box flexDirection="row">
-        <box flexGrow={1} paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
-          <Show when={session()}>
-            <scrollbox
-              ref={(r) => (scroll = r)}
-              viewportOptions={{
-                paddingRight: showScrollbar() ? 1 : 0,
-              }}
-              verticalScrollbarOptions={{
-                paddingLeft: 1,
-                visible: showScrollbar(),
-                trackOptions: {
-                  backgroundColor: theme.surface.offset,
-                  foregroundColor: theme.border.default,
-                },
-              }}
-              stickyScroll={true}
-              stickyStart="bottom"
-              flexGrow={1}
-              scrollAcceleration={scrollAcceleration()}
-            >
-              <Show when={windowed().top > 0}>
-                <box height={windowed().top} flexShrink={0} />
-              </Show>
-              {/* RevertBanner is rendered outside <For> so virtualization cannot
-                  unmount it on slice change — keeps click handlers alive when
-                  the user scrolls while the banner is visible. */}
-              <Show when={revert()}>
-                <RevertBanner count={revert()!.reverted.length} diffFiles={revert()!.diffFiles} />
-              </Show>
-              <For each={windowed().items}>
-                {(turn, index) => (
-                  <Switch>
-                    <Match when={revert()?.messageID && turn.messageID >= revert()!.messageID}>
-                      <></>
-                    </Match>
-                    <Match when={turn.role === "user"}>
-                      <Replace
-                        component="UserMessage"
-                        requestId={turn.messageID}
-                        sessionID={route.sessionID}
-                        props={{ text: String((turn.body[0] as { text?: string } | undefined)?.text ?? "") }}
-                      >
-                        <UserMessage
-                          style={userStyle()}
-                          index={windowed().baseIndex + index()}
-                          onMouseUp={() => {
-                            if (renderer.getSelection()?.getSelectedText()) return
-                            dialog.replace(() => (
-                              <DialogMessage
-                                messageID={turn.messageID}
-                                sessionID={route.sessionID}
-                                setPrompt={(promptInfo) => prompt.set(promptInfo)}
-                              />
-                            ))
-                          }}
-                          turn={turn}
-                          pending={pending()}
-                        />
-                      </Replace>
-                    </Match>
-                    <Match when={turn.role === "assistant"}>
-                      <Replace
-                        component="AssistantMessage"
-                        requestId={turn.messageID}
-                        sessionID={route.sessionID}
-                        props={{
-                          text: (turn.body as Array<{ type?: string; text?: string }>)
-                            .filter((entry) => entry.type === "text")
-                            .map((entry) => entry.text ?? "")
-                            .join("\n"),
-                        }}
-                      >
-                        <AssistantMessage
-                          last={lastAssistant()?.id === turn.messageID}
-                          turn={turn}
-                          usage={turnUsage()?.get(turn.messageID)}
-                        />
-                      </Replace>
-                    </Match>
-                  </Switch>
-                )}
-              </For>
-              <Show when={windowed().bottom > 0}>
-                <box height={windowed().bottom} flexShrink={0} />
-              </Show>
-              <For each={pendingInputs()}>{(item) => <PendingUserMessage pending={item} />}</For>
-              <For each={instructionNotices()}>
-                {(notice) => (
-                  <box paddingLeft={2} paddingRight={2} paddingTop={1} flexShrink={0}>
-                    <text fg={theme.foreground.muted} wrapMode="word">
-                      {lang.t("session.instructions.updated", {
-                        keys: formatInstructionDelta(notice.delta),
-                      })}
-                    </text>
-                  </box>
-                )}
-              </For>
-            </scrollbox>
-            <box flexShrink={0}>
-              <TuiPluginRuntime.Slot name="session.prompt.top" sessionID={route.sessionID} />
-              <Show when={permissions().length > 0}>
-                <PermissionPrompt request={permissions()[0]} />
-              </Show>
-              <Show when={permissions().length === 0 && questions().length > 0}>
-                <QuestionPrompt request={questions()[0]} />
-              </Show>
-              <Show when={session()?.parentID && permissions().length === 0 && questions().length === 0}>
-                <SubagentFooter />
-              </Show>
-              <Prompt
-                visible={!session()?.parentID && permissions().length === 0 && questions().length === 0}
-                ref={(r) => {
-                  prompt = r
-                  promptRef.set(r)
-                  // Apply initial prompt when prompt component mounts (e.g., from fork)
-                  if (route.initialPrompt) {
-                    r.set(route.initialPrompt)
-                  }
+      <context.Provider
+        value={{
+          get width() {
+            return contentWidth()
+          },
+          get height() {
+            return dimensions().height
+          },
+          sessionID: route.sessionID,
+          conceal,
+          showThinking,
+          showTimestamps,
+          showDetails,
+          diffWrapMode,
+          messageCreatedAt,
+          sync,
+        }}
+      >
+        <box flexDirection="row">
+          <box flexGrow={1} paddingBottom={1} paddingTop={1} paddingLeft={2} paddingRight={2} gap={1}>
+            <Show when={session()}>
+              <scrollbox
+                ref={(r) => (scroll = r)}
+                viewportOptions={{
+                  paddingRight: showScrollbar() ? 1 : 0,
                 }}
-                disabled={permissions().length > 0 || questions().length > 0}
-                onSubmit={() => {
-                  toBottom()
+                verticalScrollbarOptions={{
+                  paddingLeft: 1,
+                  visible: showScrollbar(),
+                  trackOptions: {
+                    backgroundColor: theme.surface.offset,
+                    foregroundColor: theme.border.default,
+                  },
                 }}
-                sessionID={route.sessionID}
-              />
-            </box>
-          </Show>
-          <Toast />
-        </box>
-        <Show when={sidebarVisible()}>
-          <Switch>
-            <Match when={wide()}>
-              <Sidebar sessionID={route.sessionID} />
-            </Match>
-            <Match when={!wide()}>
-              <box
-                position="absolute"
-                top={0}
-                left={0}
-                right={0}
-                bottom={0}
-                alignItems="flex-end"
-                backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
+                stickyScroll={true}
+                stickyStart="bottom"
+                flexGrow={1}
+                scrollAcceleration={scrollAcceleration()}
               >
-                <Sidebar sessionID={route.sessionID} />
+                <Show when={windowed().top > 0}>
+                  <box height={windowed().top} flexShrink={0} />
+                </Show>
+                {/* RevertBanner is rendered outside <For> so virtualization cannot
+                    unmount it on slice change — keeps click handlers alive when
+                    the user scrolls while the banner is visible. */}
+                <Show when={revert()}>
+                  <RevertBanner count={revert()!.reverted.length} diffFiles={revert()!.diffFiles} />
+                </Show>
+                <For each={windowed().items}>
+                  {(turn, index) => (
+                    <Switch>
+                      <Match when={revert()?.messageID && turn.messageID >= revert()!.messageID}>
+                        <></>
+                      </Match>
+                      <Match when={turn.role === "user"}>
+                        <Replace
+                          component="UserMessage"
+                          requestId={turn.messageID}
+                          sessionID={route.sessionID}
+                          props={{ text: String((turn.body[0] as { text?: string } | undefined)?.text ?? "") }}
+                        >
+                          <UserMessage
+                            style={userStyle()}
+                            index={windowed().baseIndex + index()}
+                            onMouseUp={() => {
+                              if (renderer.getSelection()?.getSelectedText()) return
+                              dialog.replace(() => (
+                                <DialogMessage
+                                  messageID={turn.messageID}
+                                  sessionID={route.sessionID}
+                                  setPrompt={(promptInfo) => prompt.set(promptInfo)}
+                                />
+                              ))
+                            }}
+                            turn={turn}
+                            pending={pending()}
+                          />
+                        </Replace>
+                      </Match>
+                      <Match when={turn.role === "assistant"}>
+                        <Replace
+                          component="AssistantMessage"
+                          requestId={turn.messageID}
+                          sessionID={route.sessionID}
+                          props={{
+                            text: (turn.body as Array<{ type?: string; text?: string }>)
+                              .filter((entry) => entry.type === "text")
+                              .map((entry) => entry.text ?? "")
+                              .join("\n"),
+                          }}
+                        >
+                          <AssistantMessage
+                            last={lastAssistant()?.id === turn.messageID}
+                            turn={turn}
+                            usage={turnUsage()?.get(turn.messageID)}
+                          />
+                        </Replace>
+                      </Match>
+                    </Switch>
+                  )}
+                </For>
+                <Show when={windowed().bottom > 0}>
+                  <box height={windowed().bottom} flexShrink={0} />
+                </Show>
+                <For each={pendingInputs()}>{(item) => <PendingUserMessage pending={item} />}</For>
+                <For each={instructionNotices()}>
+                  {(notice) => (
+                    <box paddingLeft={2} paddingRight={2} paddingTop={1} flexShrink={0}>
+                      <text fg={theme.foreground.muted} wrapMode="word">
+                        {lang.t("session.instructions.updated", {
+                          keys: formatInstructionDelta(notice.delta),
+                        })}
+                      </text>
+                    </box>
+                  )}
+                </For>
+              </scrollbox>
+              <box flexShrink={0}>
+                <TuiPluginRuntime.Slot name="session.prompt.top" sessionID={route.sessionID} />
+                <Show when={permissions().length > 0}>
+                  <PermissionPrompt request={permissions()[0]} />
+                </Show>
+                <Show when={permissions().length === 0 && questions().length > 0}>
+                  <QuestionPrompt request={questions()[0]} />
+                </Show>
+                <Show when={session()?.parentID && permissions().length === 0 && questions().length === 0}>
+                  <SubagentFooter />
+                </Show>
+                <Prompt
+                  visible={!session()?.parentID && permissions().length === 0 && questions().length === 0}
+                  ref={(r) => {
+                    prompt = r
+                    promptRef.set(r)
+                    // Apply initial prompt when prompt component mounts (e.g., from fork)
+                    if (route.initialPrompt) {
+                      r.set(route.initialPrompt)
+                    }
+                  }}
+                  disabled={permissions().length > 0 || questions().length > 0}
+                  onSubmit={() => {
+                    toBottom()
+                  }}
+                  sessionID={route.sessionID}
+                />
               </box>
-            </Match>
-          </Switch>
-        </Show>
-      </box>
-    </context.Provider>
+            </Show>
+            <Toast />
+          </box>
+          <Show when={sidebarVisible()}>
+            <Switch>
+              <Match when={wide()}>
+                <Sidebar sessionID={route.sessionID} />
+              </Match>
+              <Match when={!wide()}>
+                <box
+                  position="absolute"
+                  top={0}
+                  left={0}
+                  right={0}
+                  bottom={0}
+                  alignItems="flex-end"
+                  backgroundColor={RGBA.fromInts(0, 0, 0, 70)}
+                >
+                  <Sidebar sessionID={route.sessionID} />
+                </box>
+              </Match>
+            </Switch>
+          </Show>
+        </box>
+      </context.Provider>
+    </Show>
   )
 }
