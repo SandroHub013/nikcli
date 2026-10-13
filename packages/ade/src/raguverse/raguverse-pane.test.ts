@@ -18,7 +18,7 @@ compileSolidJsx()
 const navigation = (window as unknown as { happyDOM?: { settings: { navigation: { disableChildFrameNavigation: boolean } } } }).happyDOM?.settings.navigation
 
 const { createComponent, render } = await import("solid-js/web")
-const { NikversePane } = await import("./nikverse-pane")
+const { RaguversePane } = await import("./raguverse-pane")
 const { LearnFrame } = await import("./learn/learn-frame")
 
 let dispose: (() => void) | undefined
@@ -62,13 +62,13 @@ function holdOpenings() {
  * a pane is built, so a test that needs it lowered has to set the storage before any pane of the run exists.
  */
 test("a world lowered to Bassa offers «Riprova a qualità piena», which forgets it and reloads at the machine's level", () => {
-  localStorage.setItem("ade.nikverse.lowered", JSON.stringify({ at: Date.now() }))
+  localStorage.setItem("ade.raguverse.lowered", JSON.stringify({ at: Date.now() }))
   if (navigation) navigation.disableChildFrameNavigation = true
   const host = document.createElement("div")
   document.body.append(host)
   dispose = render(
     () =>
-      createComponent(NikversePane, {
+      createComponent(RaguversePane, {
         picture: () => undefined,
         focused: false,
         onOpenSession: () => {},
@@ -77,14 +77,14 @@ test("a world lowered to Bassa offers «Riprova a qualità piena», which forget
       }),
     host,
   )
-  const frame = () => host.querySelector<HTMLIFrameElement>('iframe[data-slot="nikverse-frame"]')!
+  const frame = () => host.querySelector<HTMLIFrameElement>('iframe[data-slot="raguverse-frame"]')!
   expect(new URL(frame().src).searchParams.get("quality")).toBe("bassa")
-  const retry = host.querySelector<HTMLButtonElement>('[data-slot="nikverse-lowered-retry"]')
+  const retry = host.querySelector<HTMLButtonElement>('[data-slot="raguverse-lowered-retry"]')
   expect(retry?.textContent).toBe("Riprova a qualità piena")
   retry!.click()
   expect(new URL(frame().src).searchParams.get("quality")).toBeNull()
-  expect(host.querySelector('[data-slot="nikverse-lowered-retry"]')).toBeNull()
-  expect(JSON.parse(localStorage.getItem("ade.nikverse.lowered") ?? "null")).toBeNull()
+  expect(host.querySelector('[data-slot="raguverse-lowered-retry"]')).toBeNull()
+  expect(JSON.parse(localStorage.getItem("ade.raguverse.lowered") ?? "null")).toBeNull()
 })
 
 test("«Riprova» and «Apri la lista» each load the world in a new frame element, not the old one with a new #", () => {
@@ -94,7 +94,7 @@ test("«Riprova» and «Apri la lista» each load the world in a new frame eleme
   document.body.append(host)
   dispose = render(
     () =>
-      createComponent(NikversePane, {
+      createComponent(RaguversePane, {
         picture: () => undefined,
         focused: false,
         onOpenSession: () => {},
@@ -103,15 +103,15 @@ test("«Riprova» and «Apri la lista» each load the world in a new frame eleme
       }),
     host,
   )
-  const frame = () => host.querySelector<HTMLIFrameElement>('iframe[data-slot="nikverse-frame"]')!
-  const late = () => host.querySelector('[data-slot="nikverse-late"]')
+  const frame = () => host.querySelector<HTMLIFrameElement>('iframe[data-slot="raguverse-frame"]')!
+  const late = () => host.querySelector('[data-slot="raguverse-late"]')
   const first = frame()
   expect(first).toBeTruthy()
   expect(late()).toBeNull()
 
   thirtySecondsPass()
   expect(late()).not.toBeNull()
-  host.querySelector<HTMLButtonElement>('[data-slot="nikverse-late-retry"]')!.click()
+  host.querySelector<HTMLButtonElement>('[data-slot="raguverse-late-retry"]')!.click()
   const second = frame()
   expect(second).not.toBe(first)
   expect(first.isConnected).toBe(false)
@@ -121,7 +121,7 @@ test("«Riprova» and «Apri la lista» each load the world in a new frame eleme
   expect(late()).toBeNull()
 
   thirtySecondsPass()
-  host.querySelector<HTMLButtonElement>('[data-slot="nikverse-late-list"]')!.click()
+  host.querySelector<HTMLButtonElement>('[data-slot="raguverse-late-list"]')!.click()
   const third = frame()
   expect(third).not.toBe(second)
   expect(new URL(third.src).searchParams.get("city")).toBe("0")
@@ -171,7 +171,7 @@ function mount(extra: { learn?: boolean } = {}) {
   document.body.append(host)
   dispose = render(
     () =>
-      createComponent(NikversePane, {
+      createComponent(RaguversePane, {
         picture: () => undefined,
         focused: false,
         onOpenSession: () => {},
@@ -182,7 +182,7 @@ function mount(extra: { learn?: boolean } = {}) {
       }),
     host,
   )
-  const world = () => host.querySelector<HTMLIFrameElement>('iframe[data-slot="nikverse-frame"]')!
+  const world = () => host.querySelector<HTMLIFrameElement>('iframe[data-slot="raguverse-frame"]')!
   const lesson = () => host.querySelector<HTMLIFrameElement>('iframe[data-slot="learn-frame"]')
   return { host, ignored, learned, world, lesson }
 }
@@ -199,7 +199,7 @@ async function connectWorld(page: ReturnType<typeof mount>) {
   return { frame, seen, port, got, say: (command: unknown) => port.postMessage({ type: "command", command }) }
 }
 
-const inLesson = (page: ReturnType<typeof mount>) => page.host.querySelector('[data-slot="nikverse-learn"]')
+const inLesson = (page: ReturnType<typeof mount>) => page.host.querySelector('[data-slot="raguverse-learn"]')
 
 describe("a lesson over the world", () => {
   test("`open-learn` puts the lesson over the world, in ADE's DOM, and the world is paused under it", async () => {
@@ -435,7 +435,7 @@ describe("a lesson over the world", () => {
     await flush()
     expect(inLesson(page)).toBeNull()
     expect(page.world()).toBeNull()
-    expect(page.host.querySelector('[data-slot="nikverse-unloaded"]')).not.toBeNull()
+    expect(page.host.querySelector('[data-slot="raguverse-unloaded"]')).not.toBeNull()
   })
 })
 

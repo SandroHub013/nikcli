@@ -57,7 +57,7 @@ describe("the panel's end of the assets fetch", () => {
     await flow.start()
     expect(events).toEqual(["ready:true"])
     expect(views).toEqual([])
-    const half = setup({ nikverseAssetsStatus: async () => status() })
+    const half = setup({ raguverseAssetsStatus: async () => status() })
     await half.flow.start()
     expect(half.events).toEqual(["ready:true"])
   })
@@ -65,8 +65,8 @@ describe("the panel's end of the assets fetch", () => {
   test("with every file in place the frame starts at once and the panel says nothing", async () => {
     let installs = 0
     const { flow, events } = setup({
-      nikverseAssetsStatus: async () => status({ ready: true, missing_files: 0, missing_bytes: 0 }),
-      nikverseAssetsInstall: async () => void installs++,
+      raguverseAssetsStatus: async () => status({ ready: true, missing_files: 0, missing_bytes: 0 }),
+      raguverseAssetsInstall: async () => void installs++,
     })
     await flow.start()
     expect(events).toEqual(["view:ready", "ready:true"])
@@ -76,8 +76,8 @@ describe("the panel's end of the assets fetch", () => {
   test("with files missing they are fetched first and the frame starts after, not before: it would load twice", async () => {
     let finish: () => void = () => {}
     const { flow, events } = setup({
-      nikverseAssetsStatus: async () => status(),
-      nikverseAssetsInstall: () => new Promise<void>((resolve) => (finish = resolve)),
+      raguverseAssetsStatus: async () => status(),
+      raguverseAssetsInstall: () => new Promise<void>((resolve) => (finish = resolve)),
     })
     const started = flow.start()
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -92,8 +92,8 @@ describe("the panel's end of the assets fetch", () => {
     let finish: () => void = () => {}
     let reading = status()
     const { flow, time, views } = setup({
-      nikverseAssetsStatus: async () => reading,
-      nikverseAssetsInstall: () => new Promise<void>((resolve) => (finish = resolve)),
+      raguverseAssetsStatus: async () => reading,
+      raguverseAssetsInstall: () => new Promise<void>((resolve) => (finish = resolve)),
     })
     const started = flow.start()
     await time.tick()
@@ -109,8 +109,8 @@ describe("the panel's end of the assets fetch", () => {
 
   test("a fetch that fails says why, offers no frame-blocking wall, and the world starts with its placeholders", async () => {
     const { flow, events, views } = setup({
-      nikverseAssetsStatus: async () => status(),
-      nikverseAssetsInstall: async () => {
+      raguverseAssetsStatus: async () => status(),
+      raguverseAssetsInstall: async () => {
         throw new Error("Il file scaricato non corrisponde a quello atteso: scartato.")
       },
     })
@@ -122,8 +122,8 @@ describe("the panel's end of the assets fetch", () => {
   test("an error that is not an Error still gives a reason, and «riprova» is another start", async () => {
     let fail = true
     const { flow, events, views } = setup({
-      nikverseAssetsStatus: async () => status(),
-      nikverseAssetsInstall: async () => {
+      raguverseAssetsStatus: async () => status(),
+      raguverseAssetsInstall: async () => {
         if (fail) throw "offline"
       },
     })
@@ -139,8 +139,8 @@ describe("the panel's end of the assets fetch", () => {
     let finish: () => void = () => {}
     let installs = 0
     const { flow } = setup({
-      nikverseAssetsStatus: async () => status(),
-      nikverseAssetsInstall: () => {
+      raguverseAssetsStatus: async () => status(),
+      raguverseAssetsInstall: () => {
         installs++
         return new Promise<void>((resolve) => (finish = resolve))
       },
@@ -156,8 +156,8 @@ describe("the panel's end of the assets fetch", () => {
   test("a panel that is gone starts nothing and stops reading", async () => {
     let finish: () => void = () => {}
     const { flow, events, time } = setup({
-      nikverseAssetsStatus: async () => status(),
-      nikverseAssetsInstall: () => new Promise<void>((resolve) => (finish = resolve)),
+      raguverseAssetsStatus: async () => status(),
+      raguverseAssetsInstall: () => new Promise<void>((resolve) => (finish = resolve)),
     })
     const started = flow.start()
     await new Promise((resolve) => setTimeout(resolve, 0))

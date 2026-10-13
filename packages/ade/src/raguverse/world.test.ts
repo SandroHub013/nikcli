@@ -181,7 +181,7 @@ describe("the world proves it is the world, and takes the port only after that",
     offer({ name: "another window" }, [stranger])
     expect(stranger.seen).toEqual([])
     const wrongType = port()
-    offer(parent, [wrongType], "nikverse:other")
+    offer(parent, [wrongType], "raguverse:other")
     expect(wrongType.seen).toEqual([])
     offer(parent, [])
     const taken = port()

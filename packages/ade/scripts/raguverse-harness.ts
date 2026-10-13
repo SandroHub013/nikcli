@@ -1,18 +1,18 @@
 /**
- * What the scripts that run NikVerse's world in a real browser share: the world's page and its 3D bundle (built in
+ * What the scripts that run RaguVerse's world in a real browser share: the world's page and its 3D bundle (built in
  * memory) served on a local port the way the `nikverse` scheme serves them, with the same policy; a headless Edge
  * or Chrome of its own (a profile under `.ade-test/browsers`, its whole tree killed at the end, on any error, on a signal and
- * when the script dies: `src/nikverse/browser-guard.ts`; never ADE); and a line to it over CDP.
- * `nikverse-render-check.ts` and `nikverse-shots.ts` are built on it.
+ * when the script dies: `src/raguverse/browser-guard.ts`; never ADE); and a line to it over CDP.
+ * `raguverse-render-check.ts` and `raguverse-shots.ts` are built on it.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { buildWorld } from "../src/nikverse/city/build-world"
-import { guardBrowser, newProfile, profilesDir, sweepOrphans } from "../src/nikverse/browser-guard"
+import { buildWorld } from "../src/raguverse/city/build-world"
+import { guardBrowser, newProfile, profilesDir, sweepOrphans } from "../src/raguverse/browser-guard"
 
 const root = join(import.meta.dir, "..")
-const world = join(root, "src", "nikverse", "world")
+const world = join(root, "src", "raguverse", "world")
 
 export const arg = (name: string) => {
   const i = process.argv.indexOf(name)
@@ -24,7 +24,7 @@ export const actAsAde = (snapshot: object, spot?: { x: number; z: number; headin
   const channel = new MessageChannel()
   window.__ade = { port: channel.port1, seen: [] }
   channel.port1.onmessage = (event) => window.__ade.seen.push(event.data)
-  window.postMessage({ type: "nikverse:port", version: 1 }, "*", [channel.port2])
+  window.postMessage({ type: "raguverse:port", version: 1 }, "*", [channel.port2])
   for (let i = 0; i < 100 && !window.__ade.seen.some((m) => m.type === "ready"); i++) await new Promise((r) => setTimeout(r, 50))
   ${spot ? `channel.port1.postMessage({ type: "player", ...${JSON.stringify(spot)} })` : ""}
   channel.port1.postMessage({ type: "snapshot", snapshot: ${JSON.stringify(snapshot)} })
@@ -107,13 +107,13 @@ export async function startHarness(options: HarnessOptions) {
 
   // The world's own policy, as the `nikverse` scheme sends it, with the host replaced by this server's: a
   // page that works here works there. Without it a `fetch` of a `blob:` address, say, would pass here and fail in ADE.
-  const POLICY = readFileSync(join(root, "src-tauri", "src", "nikverse.rs"), "utf8").match(
+  const POLICY = readFileSync(join(root, "src-tauri", "src", "raguverse.rs"), "utf8").match(
     /pub const CSP: &str = "([^"]+)"/,
   )?.[1]
-  if (!POLICY) throw new Error("no CSP found in nikverse.rs")
+  if (!POLICY) throw new Error("no CSP found in raguverse.rs")
   const CSP = POLICY.replaceAll("http://nikverse.localhost nikverse:", "'self'")
   const LEVELS_DIR = join(root, "src-tauri", "nikverse-assets", "levels")
-  const LOGO = readFileSync(join(root, "src", "nikverse", "city", "ragu-logo-dark.svg"), "utf8")
+  const LOGO = readFileSync(join(root, "src", "raguverse", "city", "ragu-logo-dark.svg"), "utf8")
   const text = (path: string) => readFileSync(join(world, path), "utf8")
 
   const server = Bun.serve({
@@ -121,7 +121,7 @@ export async function startHarness(options: HarnessOptions) {
     fetch(request) {
       const url = new URL(request.url)
       // The policy sandboxes the page (its origin is `null`), so its module scripts and files are cross-origin
-      // requests: the scheme answers them with `Access-Control-Allow-Origin: *` (`nikverse.rs`), and so does this.
+      // requests: the scheme answers them with `Access-Control-Allow-Origin: *` (`raguverse.rs`), and so does this.
       const policy: Record<string, string> = options.noPolicy?.includes(url.pathname)
         ? { "access-control-allow-origin": "*" }
         : { "content-security-policy": CSP, "access-control-allow-origin": "*" }

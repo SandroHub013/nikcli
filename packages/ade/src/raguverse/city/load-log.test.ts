@@ -10,7 +10,7 @@ function page() {
   return {
     win,
     at: (ms: number) => (now = ms),
-    entries: () => (win as unknown as { __nikverseLoad: LoadEntry[] }).__nikverseLoad,
+    entries: () => (win as unknown as { __raguverseLoad: LoadEntry[] }).__raguverseLoad,
     data: win.document.documentElement.dataset,
   }
 }
@@ -64,7 +64,7 @@ describe("the opening's phases", () => {
   })
 
   test("a piece's name keeps the end of the address", () => {
-    expect(shortUrl("plugin://nikverse/assets/levels/media/city.glb?v=3")).toBe("levels/media/city.glb")
+    expect(shortUrl("plugin://raguverse/assets/levels/media/city.glb?v=3")).toBe("levels/media/city.glb")
   })
 })
 

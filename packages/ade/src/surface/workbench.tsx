@@ -385,10 +385,10 @@ import {
 } from "../session/mailbox"
 import { outputRun, outputSaysWorking, stampingInput, type OutputRun } from "../session/output-activity"
 import { createLineQueue } from "../session/line-queue"
-import type { Snapshot } from "../nikverse/protocol"
-import { createSlotBook, shopId, worldSnapshot } from "../nikverse/snapshot"
-import { forwardedCommand } from "../nikverse/chords"
-import { nikverseOpening } from "../nikverse/open"
+import type { Snapshot } from "../raguverse/protocol"
+import { createSlotBook, shopId, worldSnapshot } from "../raguverse/snapshot"
+import { forwardedCommand } from "../raguverse/chords"
+import { raguverseOpening } from "../raguverse/open"
 
 import { quotaForAgent } from "../session/quota"
 import { useSharedQuota } from "../session/quota-store"
@@ -2027,8 +2027,8 @@ export function Workbench() {
    * Opens the RaguVerse panel, or takes the user to the one already open: it lives in the project it was opened
    * in, and focusing a panel of another project showed nothing.
    */
-  const openNikversePane = async () => {
-    const opening = nikverseOpening(wb().panes, project()?.root, pathEquals)
+  const openRaguversePane = async () => {
+    const opening = raguverseOpening(wb().panes, project()?.root, pathEquals)
     if (opening.kind === "focus") {
       if (opening.switchTo) await switchProjectTo(opening.switchTo)
       setStarting(false)
@@ -2041,7 +2041,7 @@ export function Workbench() {
         title: "RaguVerse",
         status: "working",
         model: "—",
-        mode: "nikverse",
+        mode: "raguverse",
         ...here(),
         lines: [],
       }),
@@ -6913,8 +6913,8 @@ export function Workbench() {
       openDecisionsPane()
     } else if (id === "design.pane") {
       openDesignPane()
-    } else if (id === "nikverse.pane") {
-      void openNikversePane()
+    } else if (id === "raguverse.pane") {
+      void openRaguversePane()
     } else if (id === "model.new") {
       // Opened empty, like the video panel; a model file clicked in the tree opens it directly.
       openModel("")
@@ -9072,7 +9072,7 @@ export function Workbench() {
    * first picture, and the store's signals would not be read by it.
    */
   let worldQuota: ReturnType<typeof useSharedQuota> | undefined
-  const worldOpen = createMemo(() => wb().panes.some((pane) => pane.mode === "nikverse"))
+  const worldOpen = createMemo(() => wb().panes.some((pane) => pane.mode === "raguverse"))
   createEffect(() => {
     if (worldOpen()) return
     worldQuota?.release()
@@ -9161,9 +9161,9 @@ export function Workbench() {
       chord: (chord) => {
         const id = forwardedCommand(bindings, chord, platform)
         if (id) void runCommand(id)
-        else console.warn("[nikverse] scorciatoia non inoltrata: non è di navigazione")
+        else console.warn("[raguverse] scorciatoia non inoltrata: non è di navigazione")
       },
-      ignored: (reason) => console.warn(`[nikverse] ignorato: ${reason}`),
+      ignored: (reason) => console.warn(`[raguverse] ignorato: ${reason}`),
       assets: () => getHost(),
     },
     learn: {
@@ -10189,7 +10189,7 @@ function NewPaneGlyph(props: { kind: NewPaneItem["glyph"] }) {
         <path d="M11.5 2.5l2 2-7.5 7.5H4v-2l7.5-7.5z" stroke-linecap="round" stroke-linejoin="round" />
         <path d="M10 4l2 2" stroke-linecap="round" />
       </Show>
-      <Show when={props.kind === "nikverse"}>
+      <Show when={props.kind === "raguverse"}>
         <path d="M2 14V7l3-2v9M5 14V4l4-2v12M9 14V6l5 2v6M1.5 14h13" stroke-linecap="round" stroke-linejoin="round" />
       </Show>
     </svg>

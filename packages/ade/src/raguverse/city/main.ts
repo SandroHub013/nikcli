@@ -112,7 +112,7 @@ export interface CityHandle {
   /** Draws the current view `frames` times back to back and says how long the GPU took (the gate's and the bench's number). */
   bench?(frames?: number): Promise<GpuTiming>
   /**
-   * What keeps the loop awake now, read only when asked (the bench's door, `window.__nikverseWhy`): for finding why a
+   * What keeps the loop awake now, read only when asked (the bench's door, `window.__raguverseWhy`): for finding why a
    * still world does not come to rest (old PCs, point 4). Nothing of it is computed per frame.
    */
   why?(): Record<string, unknown>
@@ -144,7 +144,7 @@ async function pickRenderer(deps: CityDeps, check: boolean, classic: boolean) {
       const renderer = new WebGPURenderer({ canvas, antialias: options.antialias, alpha: options.alpha })
       await renderer.init()
       // three's own frame loop would run at every vsync for a city that draws nothing.
-      if (!quietLoop(renderer)) console.warn("[nikverse] il ciclo interno di three non e stato fermato")
+      if (!quietLoop(renderer)) console.warn("[raguverse] il ciclo interno di three non e stato fermato")
       // Never its WebGL backend: that is what the classic renderer is for.
       if (!(renderer as unknown as { backend?: { isWebGPUBackend?: boolean } }).backend?.isWebGPUBackend) {
         renderer.dispose()
@@ -449,8 +449,8 @@ export async function startCity(deps: CityDeps): Promise<CityHandle> {
           .finally(() => (sampling = false))
       }
       // A count of the frames drawn, for the render check: pausing must stop it.
-      const counter = win as unknown as { __nikverseFrames?: number }
-      counter.__nikverseFrames = (counter.__nikverseFrames ?? 0) + 1
+      const counter = win as unknown as { __raguverseFrames?: number }
+      counter.__raguverseFrames = (counter.__raguverseFrames ?? 0) + 1
       if (probe.after()) {
         doc.documentElement.dataset.ready = "1"
         deps.onDrawn?.()

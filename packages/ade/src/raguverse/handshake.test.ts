@@ -73,14 +73,14 @@ describe("only the world, proving it knows the nonce, is given the port", () => 
 
   test("a message of the frame that is not a hello is refused", () => {
     const { handshake, state } = rig()
-    for (const data of [null, undefined, "hello", 3, [], {}, { type: "ready" }, { type: "nikverse:port", nonce: state.nonce }]) {
+    for (const data of [null, undefined, "hello", 3, [], {}, { type: "ready" }, { type: "raguverse:port", nonce: state.nonce }]) {
       const verdict = handshake.hello({ source: frame, data })
       expect([data, verdict.ok]).toEqual([data, false])
     }
   })
 
   test("lint: every load of the frame is given a new nonce, in the fragment, and the port goes only to the window that proved it", () => {
-    const pane = readFileSync(join(import.meta.dir, "nikverse-pane.tsx"), "utf8")
+    const pane = readFileSync(join(import.meta.dir, "raguverse-pane.tsx"), "utf8")
     const from = pane.indexOf("load: () => {")
     expect(from).toBeGreaterThan(0)
     const load = pane.slice(from, pane.indexOf("schedule:", from))

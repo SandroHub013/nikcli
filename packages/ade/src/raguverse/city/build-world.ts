@@ -1,7 +1,7 @@
 /**
- * Bundles NikVerse's 3D city: `city/main.ts` (three.js, the WebGPU renderer and the scene) becomes
+ * Bundles RaguVerse's 3D city: `city/main.ts` (three.js, the WebGPU renderer and the scene) becomes
  * one module, with nothing loaded from a CDN, because the world's policy allows its own host and
- * nothing else. `scripts/build-nikverse-world.ts` writes it; the tests build it in memory.
+ * nothing else. `scripts/build-raguverse-world.ts` writes it; the tests build it in memory.
  */
 
 import { createHash } from "node:crypto"
@@ -12,7 +12,7 @@ const root = join(import.meta.dir, "..", "..", "..")
 /** Where the bundle is written: the assets folder the `nikverse` scheme serves, under `world/`. */
 export const OUT_DIR = join(root, "src-tauri", "nikverse-assets", "world")
 export const OUT_FILE = join(OUT_DIR, "city.js")
-export const ENTRY = join(root, "src", "nikverse", "city", "main.ts")
+export const ENTRY = join(root, "src", "raguverse", "city", "main.ts")
 
 /** Builds the bundle in memory: its text, or the reasons it failed. */
 export async function buildWorld(): Promise<{ ok: true; text: string } | { ok: false; errors: string[] }> {
@@ -45,7 +45,7 @@ export interface WorldBundle {
  * The file is ignored by git and only a release build or a script rebuilt it, so an ADE Test started by `test:app` (or a gate that found
  * one running) served the city of the last time somebody built it: a branch with the island showed the old city. The bundle costs a
  * quarter of a second, so it is built every time, and written only when the bytes differ (a write that changes nothing would make
- * cargo rebuild for it, see `scripts/build-nikverse-world.ts`). `check` builds and writes nothing.
+ * cargo rebuild for it, see `scripts/build-raguverse-world.ts`). `check` builds and writes nothing.
  */
 export async function ensureWorld(
   options: { file?: string; check?: boolean } = {},

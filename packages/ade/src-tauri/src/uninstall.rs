@@ -207,7 +207,7 @@ fn clean_plugin(folder: &Path, done: &mut Cleaned) {
     let _ = std::fs::remove_dir(folder);
 }
 
-/// Takes the downloads and caches out of the app's local data folder: the voices (`tts`), NikVerse's assets, the plugins' files (not what they
+/// Takes the downloads and caches out of the app's local data folder: the voices (`tts`), RaguVerse's assets, the plugins' files (not what they
 /// saved), and the WebView2 caches. Best effort: what will not go is in `failed`, and the rest is done. Nothing else is touched: not the
 /// mailbox, the settings, the WebView's cookies and local storage, nor the keychain.
 pub fn clean_caches(local: &Path) -> Cleaned {

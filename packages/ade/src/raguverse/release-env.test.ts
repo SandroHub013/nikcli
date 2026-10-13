@@ -3,8 +3,8 @@ import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
 /**
- * `build.rs` bundles NikVerse's 3D city with bun. If it cannot, it warns and the app ships with the plain list,
- * unless `NIKVERSE_WORLD_REQUIRED` is set. A release that comes out without the city, in silence, is what these
+ * `build.rs` bundles RaguVerse's 3D city with bun. If it cannot, it warns and the app ships with the plain list,
+ * unless `RAGUVERSE_WORLD_REQUIRED` is set. A release that comes out without the city, in silence, is what these
  * hold off: every workflow that builds the app with `tauri build` and ships what it builds sets the variable, on
  * the job, and none turns the bundling off.
  */
@@ -75,21 +75,21 @@ describe("the workflows that build ADE", () => {
 
   test.each(builds.map((b) => [`${b.file}:${b.name}`, b.job] as const))("%s makes a missing 3D city fail the build", (_label, job) => {
     const env = jobEnv(job)
-    expect(env).toMatch(/^\s*NIKVERSE_WORLD_REQUIRED:\s*"?1"?\s*$/m)
+    expect(env).toMatch(/^\s*RAGUVERSE_WORLD_REQUIRED:\s*"?1"?\s*$/m)
     // The line is a setting, not a comment that says so.
-    expect(env.split("\n").filter((line) => line.includes("NIKVERSE_WORLD_REQUIRED") && !line.trim().startsWith("#"))).toHaveLength(1)
+    expect(env.split("\n").filter((line) => line.includes("RAGUVERSE_WORLD_REQUIRED") && !line.trim().startsWith("#"))).toHaveLength(1)
   })
 
   test("no workflow turns the bundling of the city off", () => {
     for (const file of readdirSync(WORKFLOWS).filter((f) => /\.ya?ml$/.test(f))) {
       const lines = readFileSync(join(WORKFLOWS, file), "utf8").split("\n")
-      expect([file, lines.filter((line) => line.includes("NIKVERSE_SKIP_WORLD") && !line.trim().startsWith("#"))]).toEqual([file, []])
+      expect([file, lines.filter((line) => line.includes("RAGUVERSE_SKIP_WORLD") && !line.trim().startsWith("#"))]).toEqual([file, []])
     }
   })
 
   test("build.rs reads the variable under the name the workflows set", () => {
     const rs = readFileSync(join(import.meta.dir, "..", "..", "src-tauri", "build.rs"), "utf8")
-    expect(rs).toContain('env::var_os("NIKVERSE_WORLD_REQUIRED")')
+    expect(rs).toContain('env::var_os("RAGUVERSE_WORLD_REQUIRED")')
   })
 
   test("build.rs discards node_modules shims and seeks real bun candidates via bun_lookup", () => {
@@ -102,9 +102,9 @@ describe("the workflows that build ADE", () => {
   })
 
   test.each(builds.map((b) => [`${b.file}:${b.name}`, b.job] as const))(
-    "%s bundles NikVerse world in a pre-build step before Tauri",
+    "%s bundles RaguVerse world in a pre-build step before Tauri",
     (_label, job) => {
-      expect(job).toContain("scripts/build-nikverse-world.ts")
+      expect(job).toContain("scripts/build-raguverse-world.ts")
     },
   )
 })

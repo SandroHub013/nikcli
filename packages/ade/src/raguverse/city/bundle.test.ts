@@ -49,7 +49,7 @@ describe("the world bundle", () => {
     // The page asks for `./assets/world/city.js`; the scheme maps `/assets/<path>` to `<path>` under the folder.
     expect(CITY_MODULE).toBe("./assets/world/city.js")
     expect(relative(assets, OUT_FILE).replaceAll("\\", "/")).toBe(CITY_MODULE.replace("./assets/", ""))
-    expect(ENTRY.replaceAll("\\", "/")).toEndWith("src/nikverse/city/main.ts")
+    expect(ENTRY.replaceAll("\\", "/")).toEndWith("src/raguverse/city/main.ts")
   })
 
   test("lint: the bundle is not committed, and build.rs runs the build before it lists the assets", () => {
@@ -57,7 +57,7 @@ describe("the world bundle", () => {
     expect(readFileSync(join(root, ".gitignore"), "utf8")).toContain("packages/ade/src-tauri/nikverse-assets/world/")
     const build = readFileSync(join(import.meta.dir, "..", "..", "..", "src-tauri", "build.rs"), "utf8")
     const main = build.slice(build.indexOf("fn main()"), build.indexOf("}", build.indexOf("fn main()")))
-    expect(main.indexOf("build_nikverse_world()")).toBeGreaterThan(-1)
-    expect(main.indexOf("build_nikverse_world()")).toBeLessThan(main.indexOf("write_nikverse_manifest()"))
+    expect(main.indexOf("build_raguverse_world()")).toBeGreaterThan(-1)
+    expect(main.indexOf("build_raguverse_world()")).toBeLessThan(main.indexOf("write_raguverse_manifest()"))
   })
 })

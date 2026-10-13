@@ -1,28 +1,28 @@
 /**
- * The live gate for NikVerse's city (V1): opens the world in this worktree's ADE Test, measures it, and
- * fails above the ceilings in `src/nikverse/gate.ts` (frame private 115 MB, ADE +5 MB, nothing drawn 1 % of a core over what
+ * The live gate for RaguVerse's city (V1): opens the world in this worktree's ADE Test, measures it, and
+ * fails above the ceilings in `src/raguverse/gate.ts` (frame private 115 MB, ADE +5 MB, nothing drawn 1 % of a core over what
  * ADE alone costs the GPU process, 60 fps while walking, a frame in 15 ms of GPU at the 95th percentile, GPU memory peak 460 MB at Media). JSON on stdout, the log on stderr; exit 0 green, 1 red or out of time, 2 could not run.
  *
  *   bun run test:app --cdp                    ADE Test of this worktree, with remote debugging
- *   bun scripts/nikverse-gate.ts              attach to it (its port is in .ade-test/record.json, or CDP_PORT)
- *   bun scripts/nikverse-gate.ts --start      start it first (voice off) and stop it after
+ *   bun scripts/raguverse-gate.ts              attach to it (its port is in .ade-test/record.json, or CDP_PORT)
+ *   bun scripts/raguverse-gate.ts --start      start it first (voice off) and stop it after
  *   options: --cycles N (5) --rest S (30, wait for "at rest") --cap S (600, the whole run) --out FILE
- *            --bench FILE  the bench.json of a `nikverse-shots.ts` run to read the GPU time from, instead of running one
+ *            --bench FILE  the bench.json of a `raguverse-shots.ts` run to read the GPU time from, instead of running one
  *
  * What it measures, with the window visible and on a project (the real iGPU, so not headless): the
  * `nikverse.localhost` renderer's private bytes and working set over N open/close cycles; ADE's own
  * renderer (private, working set, JS heap after a GC) against the world-closed baseline 5 s after the last
  * close and again after `--rest` (the baseline is taken after one warm-up open/close, once ADE has settled); CPU of the frame, the GPU and ADE in the three draw modes (moving, still,
  * immobile) three times each, after a baseline of the GPU process with the world closed; frames a second; the GPU time of a
- * frame: the p95 of the WORST of the eight shots of the level, read from the bench (`nikverse-shots.ts`, run here on the real GPU unless `--bench` gives one), with the scale it settled at; the view a player starts in (the world's own `window.__nikverseBench` in ADE Test, three times) is kept in the JSON as information only; the GPU process' memory. Only ADE Test is driven (it asks for
- * `data-ade-build="test"` first); the UI it clicks is the Italian one ("Nuovo pannello", "NikVerse").
+ * frame: the p95 of the WORST of the eight shots of the level, read from the bench (`raguverse-shots.ts`, run here on the real GPU unless `--bench` gives one), with the scale it settled at; the view a player starts in (the world's own `window.__raguverseBench` in ADE Test, three times) is kept in the JSON as information only; the GPU process' memory. Only ADE Test is driven (it asks for
+ * `data-ade-build="test"` first); the UI it clicks is the Italian one ("Nuovo pannello", "RaguVerse").
  */
 
 import { spawn, spawnSync } from "node:child_process"
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { basename, join } from "node:path"
-import { profilesDir, sweepOrphans } from "../src/nikverse/browser-guard"
-import { ensureWorld } from "../src/nikverse/city/build-world"
+import { profilesDir, sweepOrphans } from "../src/raguverse/browser-guard"
+import { ensureWorld } from "../src/raguverse/city/build-world"
 import {
   gateChecks,
   framePrivate,
@@ -34,7 +34,7 @@ import {
   worstShot,
   GATE_LIMITS,
   type BenchRow,
-} from "../src/nikverse/gate"
+} from "../src/raguverse/gate"
 
 const arg = (name: string) => {
   const i = process.argv.indexOf(name)
@@ -50,7 +50,7 @@ const OUT = arg("--out")
 
 const adeDir = join(import.meta.dir, "..")
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-const log = (...a: unknown[]) => console.error("[nikverse-gate]", ...a)
+const log = (...a: unknown[]) => console.error("[raguverse-gate]", ...a)
 const ps = (s: string) => spawnSync("powershell", ["-NoProfile", "-Command", s], { encoding: "utf8" }).stdout.trim()
 const git = (args: string[]) => spawnSync("git", args, { cwd: adeDir, encoding: "utf8" }).stdout.trim()
 const root = git(["rev-parse", "--show-toplevel"])
@@ -67,7 +67,7 @@ function stopApp() {
 process.on("exit", stopApp)
 for (const event of ["uncaughtException", "unhandledRejection"] as const)
   process.on(event, (error) => {
-    console.error(`[nikverse-gate] ${event}:`, error)
+    console.error(`[raguverse-gate] ${event}:`, error)
     stopApp()
     process.exit(2)
   })
@@ -242,7 +242,7 @@ async function heapMb(send: Send, sessionId?: string) {
 }
 async function frameSession() {
   const target = (await browser("Target.getTargets")).targetInfos.find(
-    (t: any) => t.type === "iframe" && /nikverse\.localhost/.test(t.url) && !/check=/.test(t.url),
+    (t: any) => t.type === "iframe" && /raguverse\.localhost/.test(t.url) && !/check=/.test(t.url),
   )
   return target
     ? ((await browser("Target.attachToTarget", { targetId: target.targetId, flatten: true })).sessionId as string)
@@ -250,14 +250,14 @@ async function frameSession() {
 }
 async function openWorldOnce() {
   showWindow()
-  await ev(page, `window.__nikverseTune = ${JSON.stringify(TUNE ?? "")}`)
+  await ev(page, `window.__raguverseTune = ${JSON.stringify(TUNE ?? "")}`)
   await ev(page, `document.querySelector('button[aria-label="Nuovo pannello"]')?.click()`)
   await sleep(600)
   await ev(
     page,
-    `(() => { const root = document.querySelector('[role=menu]'); const els = [...(root?.querySelectorAll('*') ?? [])].filter(e => (e.textContent || '').trim().startsWith('NikVerse') && e.getBoundingClientRect().width > 0).sort((a, b) => a.textContent.length - b.textContent.length); const r = els[0]?.getBoundingClientRect(); return r ? JSON.stringify({x: r.x + r.width / 2, y: r.y + r.height / 2}) : null })()`,
+    `(() => { const root = document.querySelector('[role=menu]'); const els = [...(root?.querySelectorAll('*') ?? [])].filter(e => (e.textContent || '').trim().startsWith('RaguVerse') && e.getBoundingClientRect().width > 0).sort((a, b) => a.textContent.length - b.textContent.length); const r = els[0]?.getBoundingClientRect(); return r ? JSON.stringify({x: r.x + r.width / 2, y: r.y + r.height / 2}) : null })()`,
   ).then(async (c) => {
-    if (!c) throw new Error("il menu «Nuovo pannello» non ha la voce NikVerse")
+    if (!c) throw new Error("il menu «Nuovo pannello» non ha la voce RaguVerse")
     const { x, y } = JSON.parse(c)
     await page("Input.dispatchMouseEvent", { type: "mouseMoved", x, y })
     await page("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 })
@@ -268,7 +268,7 @@ async function openWorldOnce() {
     session = await frameSession()
     if (!session) await sleep(250)
   }
-  if (!session) throw new Error("il pannello NikVerse non ha aperto il frame")
+  if (!session) throw new Error("il pannello RaguVerse non ha aperto il frame")
   for (let i = 0; i < 80; i++) {
     if ((await ev(browser, `document.documentElement.dataset.ready`, session).catch(() => "")) === "1") return session
     await sleep(250)
@@ -296,7 +296,7 @@ async function openWorld() {
 const closeWorld = () =>
   ev(
     page,
-    `(() => { const x = document.querySelector('[data-component=nikverse-pane] button[aria-label*="Chiudi"]'); x?.click(); return !!x })()`,
+    `(() => { const x = document.querySelector('[data-component=raguverse-pane] button[aria-label*="Chiudi"]'); x?.click(); return !!x })()`,
   )
 
 try {
@@ -397,7 +397,7 @@ try {
   await tap(frame.x + 60, frame.y + 40)
   const key = (type: string, l: string) =>
     page("Input.dispatchKeyEvent", { type, code: KEYS[l][0], key: l, windowsVirtualKeyCode: KEYS[l][1] })
-  const frames = () => ev(browser, `window.__nikverseFrames ?? 0`, session)
+  const frames = () => ev(browser, `window.__raguverseFrames ?? 0`, session)
   const mode = () => ev(browser, `document.documentElement.dataset.drawMode`, session)
   // What the frame's own main thread did: tasks and script time from the browser's counters, to tell page work from the
   // browser's (a WebGPU device that is alive costs CPU in the renderer without any script running).
@@ -522,7 +522,7 @@ try {
   // ---- the GPU time of a frame: the world draws its own view back to back with no cap, waiting for the GPU each time
   const timings: { frames: number; p50: number; p95: number; max: number; sync: string; timestampQuery: boolean }[] = []
   for (let rep = 1; rep <= 3; rep++) {
-    timings.push(await ev(browser, `window.__nikverseBench(240)`, session, true))
+    timings.push(await ev(browser, `window.__raguverseBench(240)`, session, true))
     log(`GPU ${rep}`, JSON.stringify(timings.at(-1)))
   }
   const level = await ev(browser, `document.documentElement.dataset.quality`, session)
@@ -576,7 +576,7 @@ try {
     spawnSync(
       "bun",
       [
-        "scripts/nikverse-shots.ts",
+        "scripts/raguverse-shots.ts",
         "--levels",
         benchLevel,
         "--no-clip",
@@ -629,8 +629,8 @@ try {
   // No browser of the harness survives its script: the tests that start the stand-in and the real Edge, kept out of test:unit.
   const guardRun = spawnSync(
     "bun",
-    ["test", "--conditions=browser", "--preload", "./happydom.ts", "./src/nikverse/browser-guard.test.ts"],
-    { cwd: adeDir, stdio: "ignore", timeout: 300_000, env: { ...process.env, NIKVERSE_GUARD_TESTS: "1" } },
+    ["test", "--conditions=browser", "--preload", "./happydom.ts", "./src/raguverse/browser-guard.test.ts"],
+    { cwd: adeDir, stdio: "ignore", timeout: 300_000, env: { ...process.env, RAGUVERSE_GUARD_TESTS: "1" } },
   )
   checks.push({
     name: "browser guard tests (0 = green)",
@@ -658,7 +658,7 @@ try {
       gpuTimings: timings,
       // The worst shot the ceiling was held to, and where the bench came from.
       worstShot: { ...worst, level: benchLevel, bench: benchFile },
-      // The default view's p95 (ADE Test, `__nikverseBench`): information, not what the ceiling reads.
+      // The default view's p95 (ADE Test, `__raguverseBench`): information, not what the ceiling reads.
       defaultViewP95Ms: median(timings.map((t) => t.p95)),
       // The scale the level's resolution settled at for the default view (1 where the level does not move it).
       gpuScale: median(timings.map((t) => (t as { scale?: number }).scale ?? 1)),

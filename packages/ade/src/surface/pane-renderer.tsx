@@ -29,11 +29,11 @@ import { createPanelStack } from "../panels/stack"
 import { DecisionsPane } from "../decisions/decisions-pane"
 import type { DecisionsHub } from "../decisions/hub"
 import { DesignPane } from "../design/design-pane"
-import { NikversePane } from "../nikverse/nikverse-pane"
-import type { LearnProgressHost } from "../nikverse/learn/learn-frame"
-import type { AssetsHost } from "../nikverse/assets"
-import type { Snapshot } from "../nikverse/protocol"
-import type { ForwardedChord } from "../nikverse/chords"
+import { RaguversePane } from "../raguverse/raguverse-pane"
+import type { LearnProgressHost } from "../raguverse/learn/learn-frame"
+import type { AssetsHost } from "../raguverse/assets"
+import type { Snapshot } from "../raguverse/protocol"
+import type { ForwardedChord } from "../raguverse/chords"
 import type { DesignHub } from "../design/hub"
 import { isPicked } from "../design/answer"
 import type { PanelRouter } from "../panels/router"
@@ -392,8 +392,8 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
       />
     )
 
-    const nikversePane = () => (
-      <NikversePane
+    const raguversePane = () => (
+      <RaguversePane
         picture={deps.world.picture}
         focused={isFocused()}
         onOpenSession={deps.world.openSession}
@@ -644,10 +644,10 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                                     when={current().mode === "design"}
                                     fallback={
                                       <Show
-                                        when={current().mode === "nikverse"}
+                                        when={current().mode === "raguverse"}
                                         fallback={sessionPane()}
                                       >
-                                        {nikversePane()}
+                                        {raguversePane()}
                                       </Show>
                                     }
                                   >

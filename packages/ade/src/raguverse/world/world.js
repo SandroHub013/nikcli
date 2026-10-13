@@ -1,5 +1,5 @@
 /*
- * NikVerse's world, the placeholder of the first piece (N1).
+ * RaguVerse's world, the placeholder of the first piece (N1).
  *
  * It runs in a frame of its own, from the `nikverse` scheme: it is not ADE's
  * origin and it has no line to ADE except one MessageChannel port. ADE hands
@@ -15,10 +15,10 @@
  */
 
 /** ADE hands the port over in a message with this type, and nothing else on `window` is believed. */
-export const PORT_OFFER = "nikverse:port"
+export const PORT_OFFER = "raguverse:port"
 
 /** The world says this to its parent, with the nonce ADE put in its address: the proof it is the world. */
-export const HELLO = "nikverse:hello"
+export const HELLO = "raguverse:hello"
 
 /** The nonce in the address fragment (`#n=…`), or nothing. */
 export function readNonce(hash) {
@@ -215,7 +215,7 @@ export function readOptions(search) {
     check: params.get("check") === "logo",
     classic: params.get("renderer") === "classic",
     quality: params.get("quality") ?? undefined,
-    // `?bench=1` is what ADE asks for in its test build: the gate times the GPU through `window.__nikverseBench`, and nothing else does.
+    // `?bench=1` is what ADE asks for in its test build: the gate times the GPU through `window.__raguverseBench`, and nothing else does.
     bench: params.get("bench") === "1",
     shot: Number.isInteger(shot) && shot >= 1 && shot <= 8 ? shot : undefined,
     // For measuring only, and only where the bench's door is open: `?samples=1|4`, `?maxscale=0.75..1` and `?compile=async` (see `CityDeps.tune`).
@@ -322,9 +322,9 @@ export function boot(win, options = {}) {
       // The gate and the bench time the GPU through this: the world's own drawing, not a copy of it.
       // Only the bench page and ADE's test build put the timing on the window; a release build has no such door.
       if (query.bench || query.shot) {
-        win.__nikverseBench = (frames) => (city?.bench ? city.bench(frames) : Promise.reject(new Error("no bench")))
+        win.__raguverseBench = (frames) => (city?.bench ? city.bench(frames) : Promise.reject(new Error("no bench")))
         // What keeps the loop awake, for the measures of a world that does not come to rest.
-        win.__nikverseWhy = () => city?.why?.()
+        win.__raguverseWhy = () => city?.why?.()
       }
       mark("city", "1")
       if (spot) city.restore(spot)
@@ -396,4 +396,4 @@ export function boot(win, options = {}) {
   return renderer
 }
 
-if (typeof document !== "undefined" && document.documentElement?.dataset?.nikverse === "1") boot(window)
+if (typeof document !== "undefined" && document.documentElement?.dataset?.raguverse === "1") boot(window)

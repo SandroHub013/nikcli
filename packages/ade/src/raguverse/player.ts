@@ -29,7 +29,7 @@ export function readSpot(raw: unknown): PlayerSpot | undefined {
   return { x, z, heading }
 }
 
-export const PLAYER_KEY = "ade.nikverse.player"
+export const PLAYER_KEY = "ade.raguverse.player"
 
 /** What the store needs of `localStorage`. */
 export interface SpotStorage {

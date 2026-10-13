@@ -4,7 +4,7 @@
  * world has settled. The difference between the last two is what Media's files cost the frame; what the last one holds is the
  * frame's own floor (the bundle, three.js, the WebAssembly decoders, the renderer).
  *
- *   bun scripts/nikverse-frame-memory.ts [--out DIR]
+ *   bun scripts/raguverse-frame-memory.ts [--out DIR]
  *
  * Numbers are the larger of private bytes and working set of each renderer process (as the gate reads them), the JS heap of the
  * page, and the GPU process.
@@ -14,10 +14,10 @@ import { spawnSync } from "node:child_process"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
-import { arg, startHarness } from "./nikverse-harness"
+import { arg, startHarness } from "./raguverse-harness"
 
 const NONCE = "0123456789abcdef".repeat(3)
-const out = arg("--out") ?? join(tmpdir(), "nikverse-frame-memory")
+const out = arg("--out") ?? join(tmpdir(), "raguverse-frame-memory")
 mkdirSync(out, { recursive: true })
 const ps = (s: string) => spawnSync("powershell", ["-NoProfile", "-Command", s], { encoding: "utf8" }).stdout.trim()
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))

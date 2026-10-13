@@ -1,5 +1,5 @@
 /**
- * What ADE and the NikVerse world say to each other.
+ * What ADE and the RaguVerse world say to each other.
  *
  * The world runs in a frame with an origin of its own (`nikverse://localhost/`,
  * `http://nikverse.localhost/` on Windows), so it is treated as code that ADE
@@ -21,7 +21,7 @@ import { readSpot, type PlayerSpot } from "./player"
 export const PROTOCOL_VERSION = 1
 
 /** The message that hands the world its port; the port travels with it. */
-export const PORT_OFFER = "nikverse:port"
+export const PORT_OFFER = "raguverse:port"
 
 export interface Shop {
   /** Stable for a project (a hash of its folder): the same place every time. */

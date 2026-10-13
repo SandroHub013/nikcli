@@ -15,7 +15,7 @@
  */
 
 /** The world → ADE message that carries the nonce. */
-export const HELLO = "nikverse:hello"
+export const HELLO = "raguverse:hello"
 
 /** A fresh secret for one load of the frame: 24 random bytes as hex. */
 export function newNonce(): string {

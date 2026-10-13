@@ -28,9 +28,9 @@ setDefaultTimeout(60_000)
 
 /**
  * The tests that start processes (the stand-in, and the real Edge) take about a minute and wait on WMI, which answers late under
- * load: they are out of `test:unit` and run with `NIKVERSE_GUARD_TESTS=1`, which the gate does (its «browser guard» check).
+ * load: they are out of `test:unit` and run with `RAGUVERSE_GUARD_TESTS=1`, which the gate does (its «browser guard» check).
  */
-const processes = process.env.NIKVERSE_GUARD_TESTS === "1"
+const processes = process.env.RAGUVERSE_GUARD_TESTS === "1"
 
 const packageRoot = join(import.meta.dir, "..", "..")
 const scratch = join(profilesDir(packageRoot), "test-guard")
@@ -106,23 +106,23 @@ describe("the profile", () => {
   })
 
   test("ownerOf reads the pid from any folder, and nothing from a browser that is not ours", () => {
-    expect(ownerOf(`--user-data-dir=C:\\Users\\x\\AppData\\Local\\Temp\\nikverse-browser-4242 --headless=new`)).toBe(
+    expect(ownerOf(`--user-data-dir=C:\\Users\\x\\AppData\\Local\\Temp\\raguverse-browser-4242 --headless=new`)).toBe(
       4242,
     )
-    expect(ownerOf("--user-data-dir=/tmp/nikverse-browser-77")).toBe(77)
+    expect(ownerOf("--user-data-dir=/tmp/raguverse-browser-77")).toBe(77)
     expect(ownerOf("msedge.exe --user-data-dir=C:\\Users\\x\\edge-profile")).toBeUndefined()
-    expect(ownerOf("--user-data-dir=/tmp/nikverse-browser-old")).toBeUndefined()
+    expect(ownerOf("--user-data-dir=/tmp/raguverse-browser-old")).toBeUndefined()
   })
 
   test("a profile is named exactly: the one of pid 123 is not the one of pid 1234", () => {
     expect(
-      namesProfile('msedge.exe --user-data-dir="C:\\a\\nikverse-browser-123" --x', "C:\\a\\nikverse-browser-123"),
+      namesProfile('msedge.exe --user-data-dir="C:\\a\\raguverse-browser-123" --x', "C:\\a\\raguverse-browser-123"),
     ).toBe(true)
-    expect(namesProfile("msedge.exe --user-data-dir=C:\\a\\nikverse-browser-123", "c:\\a\\NIKVERSE-browser-123")).toBe(
+    expect(namesProfile("msedge.exe --user-data-dir=C:\\a\\raguverse-browser-123", "c:\\a\\RAGUVERSE-browser-123")).toBe(
       true,
     )
     expect(
-      namesProfile("msedge.exe --user-data-dir=C:\\a\\nikverse-browser-1234 --x", "C:\\a\\nikverse-browser-123"),
+      namesProfile("msedge.exe --user-data-dir=C:\\a\\raguverse-browser-1234 --x", "C:\\a\\raguverse-browser-123"),
     ).toBe(false)
   })
 })
@@ -155,7 +155,7 @@ function slowBrowser(profile: string, stillListedAfter: number) {
 }
 
 describe("killing a browser by its profile waits for the last helper to be gone, and says whether it is", () => {
-  const profile = "C:/a/nikverse-browser-123"
+  const profile = "C:/a/raguverse-browser-123"
 
   test("a helper that is still listed after four kills is killed again: the count of passes is not what ends it", () => {
     // Edge's GPU process: listed for a while after it is killed, or started again as the browser goes.
@@ -185,7 +185,7 @@ describe("killing a browser by its profile waits for the last helper to be gone,
         listed-- > 0
           ? [
               { pid: 7, commandLine: `msedge.exe --user-data-dir=${profile}` },
-              { pid: 8, commandLine: "msedge.exe --user-data-dir=C:/a/nikverse-browser-1234" },
+              { pid: 8, commandLine: "msedge.exe --user-data-dir=C:/a/raguverse-browser-1234" },
             ]
           : [],
       kill: (...pids) => void killed.push(pids),
@@ -252,7 +252,7 @@ describe.skipIf(!processes)("the sweep at the start of a run", () => {
     await gone.exited
     mkdirSync(scratch, { recursive: true })
     const start = (ownerPid: number) => {
-      const profile = join(scratch, `nikverse-browser-${ownerPid}`)
+      const profile = join(scratch, `raguverse-browser-${ownerPid}`)
       mkdirSync(profile, { recursive: true })
       profiles.add(profile)
       const child = Bun.spawn([process.execPath, dummy, `--user-data-dir=${profile}`], {
@@ -289,7 +289,7 @@ describe.skipIf(!processes || !edge || process.platform !== "win32")("the real h
     mkdirSync(scratch, { recursive: true })
     await Bun.write(
       script,
-      `import { startHarness } from ${JSON.stringify(join(packageRoot, "scripts", "nikverse-harness.ts").replaceAll("\\", "/"))}
+      `import { startHarness } from ${JSON.stringify(join(packageRoot, "scripts", "raguverse-harness.ts").replaceAll("\\", "/"))}
 const harness = await startHarness({ out: ${JSON.stringify(scratch.replaceAll("\\", "/"))}, gpu: "software" })
 console.log("open")
 if (process.argv[2] === "close") harness.close()

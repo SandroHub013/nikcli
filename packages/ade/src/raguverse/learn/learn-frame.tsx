@@ -9,7 +9,7 @@ import { locale, t } from "../../i18n"
  *
  * It is the world's own arrangement — an origin of its own, a nonce in the address, one `MessageChannel` port and nothing else on it —
  * with everything the world needs and this does not: no snapshot of the workbench, no commands, no chords, no GPU. Which is why it opens
- * and works with NikVerse switched off, and on a machine with no WebGPU: what is inside the frame is text and a few buttons.
+ * and works with RaguVerse switched off, and on a machine with no WebGPU: what is inside the frame is text and a few buttons.
  *
  * Two frames can be on screen at once (the world and a lesson over it): each has its own nonce and its own port, and a `hello` that
  * carries the other one's nonce, or comes from the other one's window, is none of this frame's business.

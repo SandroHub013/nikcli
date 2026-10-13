@@ -183,7 +183,7 @@ describe("a layout saved by a release that had plugin panels", () => {
     version: 2,
     panes: [{ id: "s1", title: "Sessione 1", agent: "agy", cwd: "/project", branch: "main", status: "running" }],
     browsers: [{ id: "b1", title: "Docs", url: "https://example.com/" }],
-    framePlugins: [{ id: "fp1", plugin: "nikverse", title: "NikVerse", project: "ws", projectRoot: "/project", span: { columns: 2, rows: 1 } }],
+    framePlugins: [{ id: "fp1", plugin: "raguverse", title: "RaguVerse", project: "ws", projectRoot: "/project", span: { columns: 2, rows: 1 } }],
     focusedPaneId: "fp1",
     pinnedColumns: 2,
     currentView: "grid",

@@ -1,5 +1,5 @@
 /**
- * The ceilings NikVerse's live gate (`scripts/nikverse-gate.ts`) holds the city to, and the verdict on a
+ * The ceilings RaguVerse's live gate (`scripts/raguverse-gate.ts`) holds the city to, and the verdict on a
  * set of measurements. Pure, so the ceilings are tested; the script does the measuring.
  */
 
@@ -18,7 +18,7 @@ export const GATE_LIMITS = {
   stillCpuPercent: 1,
   /** Frames a second while the character walks; a display faster than this must not make the city run faster. */
   movingFps: 60,
-  /** The GPU time of a frame at its 95th percentile, in ms, of the WORST of the eight shots, with no cap and no display in the way (`src/nikverse/city/bench.ts`). */
+  /** The GPU time of a frame at its 95th percentile, in ms, of the WORST of the eight shots, with no cap and no display in the way (`src/raguverse/city/bench.ts`). */
   gpuFrameP95Ms: 15,
   /** The GPU process with the world closed may not use more than this: above it ADE was busy and the measure is not valid. */
   baselineMaxPercent: 5,
@@ -151,7 +151,7 @@ export function gpuMemory(cycles: readonly number[], baseSamples: readonly numbe
   return { peakMb, baseMb, growthMb: peakMb - baseMb }
 }
 
-/** What `nikverse-shots.ts` writes for each shot, as far as the gate reads it. */
+/** What `raguverse-shots.ts` writes for each shot, as far as the gate reads it. */
 export interface BenchRow {
   level: string
   n: number

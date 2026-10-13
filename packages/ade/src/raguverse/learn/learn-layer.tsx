@@ -8,7 +8,7 @@ import { t } from "../../i18n"
  * The lesson page with its bar: «Torna al mondo», «Esporta progressi», «Importa progressi».
  *
  * The bar is ADE's own DOM, never the frame's: the file for the import is chosen here, a page cannot be trusted to ask about itself.
- * In NikVerse the whole thing is a layer over the world (`nikverse-pane.tsx`); where there is no world to go back to, `onBack` is absent
+ * In RaguVerse the whole thing is a layer over the world (`raguverse-pane.tsx`); where there is no world to go back to, `onBack` is absent
  * and so is the first button.
  */
 export function LearnLayer(props: {

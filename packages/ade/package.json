@@ -32,7 +32,7 @@
     "brand:check": "bun script/brand.ts --check",
     "dev": "vite",
     "build": "vite build",
-    "build:world": "bun scripts/build-nikverse-world.ts",
+    "build:world": "bun scripts/build-raguverse-world.ts",
     "test": "bun run test:unit",
     "test:unit": "bun test --conditions=browser --preload ./happydom.ts ./src",
     "test:unit:watch": "bun test --watch --conditions=browser --preload ./happydom.ts ./src",

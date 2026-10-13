@@ -135,7 +135,7 @@ jobs:
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --draft \
             --title "$NAME ${TAG#ade-v}" --notes-file notes.md --verify-tag
 
-      # The release that holds the updater's manifest also holds NikVerse's assets (one per file, named `nikverse-<sha256>`), which the builds
+      # The release that holds the updater's manifest also holds RaguVerse's assets (one per file, named `nikverse-<sha256>`), which the builds
       # below put there before this release is public. It is created here, once, and not by the builds that run side by side and would race.
       - name: The updater release
         if: ${{ !inputs.attach_only }}
@@ -164,10 +164,10 @@ jobs:
     # gone, and a release on red tests is worse than none.
     needs: [draft, checks]
     env:
-      # build.rs bundles NikVerse's 3D city with bun; without this a build that
+      # build.rs bundles RaguVerse's 3D city with bun; without this a build that
       # cannot do it warns and ships the plain list, in silence. A release must
-      # fail instead (`nikverse/release-env.test.ts` holds this line).
-      NIKVERSE_WORLD_REQUIRED: "1"
+      # fail instead (`raguverse/release-env.test.ts` holds this line).
+      RAGUVERSE_WORLD_REQUIRED: "1"
       # Authenticode signing through SignPath Foundation starts the day its API
       # token is added as a secret; until then the Windows setup ships
       # unsigned, as before. See packages/ade/CODE_SIGNING.md.
@@ -236,11 +236,11 @@ jobs:
         working-directory: packages/ade
         run: bun x vite build
 
-      - name: Build NikVerse world
+      - name: Build RaguVerse world
         working-directory: packages/ade
-        run: bun ./scripts/build-nikverse-world.ts
+        run: bun ./scripts/build-raguverse-world.ts
 
-      # Second defense for NikVerse bundling: pass the global toolchain bun path directly
+      # Second defense for RaguVerse bundling: pass the global toolchain bun path directly
       # before Tauri runs with node_modules/.bin prepended to PATH.
       - name: Locate toolchain bun
         shell: bash
@@ -277,12 +277,12 @@ jobs:
           export BUN_BIN="${BUN_BIN:-$(command -v bun)}"
           bun x tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }} --config "$CONFIG_JSON"
 
-      # NikVerse's assets are not in the installer: the app fetches them the first time the world opens, by the hash its own list carries
-      # (`src-tauri/src/nikverse_assets.rs`), from this release. The list was compiled from the folder as it is now, so every file of the
+      # RaguVerse's assets are not in the installer: the app fetches them the first time the world opens, by the hash its own list carries
+      # (`src-tauri/src/raguverse_assets.rs`), from this release. The list was compiled from the folder as it is now, so every file of the
       # folder is put there, named by content and never overwritten: the same file in two versions is one asset, and an older app finds
       # the ones its list names. This runs before `publish` makes the release public, and a file that cannot be put there fails the build:
       # a release whose world cannot be fetched is worse than no release.
-      - name: NikVerse assets
+      - name: RaguVerse assets
         if: ${{ !inputs.attach_only }}
         shell: bash
         env:
@@ -310,8 +310,8 @@ jobs:
             UPLOADED=$((UPLOADED + 1))
           done < <(find "$DIR" -type f -not -path '*/.*' | sort)
           TOTAL="$(find "$DIR" -type f -not -path '*/.*' | wc -l | tr -d '[:space:]')"
-          echo "NikVerse assets: $TOTAL files, $UPLOADED uploaded"
-          if [ "$TOTAL" = "0" ]; then echo "no NikVerse assets to upload"; exit 1; fi
+          echo "RaguVerse assets: $TOTAL files, $UPLOADED uploaded"
+          if [ "$TOTAL" = "0" ]; then echo "no RaguVerse assets to upload"; exit 1; fi
           # Not what the uploads said: what the release holds now. Every hash the manifest carries must be an asset of ade-updater,
           # because a list naming one that is not there is a world that cannot be fetched, and the release must not go out with it.
           LIVE="$(names)"
@@ -323,7 +323,7 @@ jobs:
               ABSENT=$((ABSENT + 1))
             fi
           done < <(find "$DIR" -type f -not -path '*/.*' | sort)
-          if [ "$ABSENT" != "0" ]; then echo "$ABSENT NikVerse assets are not on ade-updater"; exit 1; fi
+          if [ "$ABSENT" != "0" ]; then echo "$ABSENT RaguVerse assets are not on ade-updater"; exit 1; fi
 
       # The setup goes to SignPath, comes back with an Authenticode signature,
       # and replaces the unsigned one. Its updater signature was computed over

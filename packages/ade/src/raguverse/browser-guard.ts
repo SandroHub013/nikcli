@@ -1,5 +1,5 @@
 /**
- * Keeps the headless Edge/Chrome of the NikVerse scripts from outliving the script that started it.
+ * Keeps the headless Edge/Chrome of the RaguVerse scripts from outliving the script that started it.
  *
  * A browser is a tree of processes (GPU, renderers, crash handler, utilities) and none of them dies with a script that was
  * killed hard (a `spawnSync` timeout, a closed terminal, a crash). Worse: the process the script starts is not the
@@ -12,9 +12,9 @@
  *     error between the launch and the first page.
  *  2. Process hooks: `exit`, SIGINT/SIGTERM/SIGHUP/SIGBREAK, an uncaught exception or rejection stop every browser this
  *     process started, then leave.
- *  3. A watchdog (`scripts/nikverse-browser-watchdog.ts`, a process of its own) that watches the owner: when it dies
+ *  3. A watchdog (`scripts/raguverse-browser-watchdog.ts`, a process of its own) that watches the owner: when it dies
  *     without a word (nothing above runs on a hard kill) it kills the browser by its profile and removes it.
- *  4. `sweepOrphans()` at the start of every run: any browser whose profile says «nikverse-browser-<owner pid>» and whose
+ *  4. `sweepOrphans()` at the start of every run: any browser whose profile says «raguverse-browser-<owner pid>» and whose
  *     owner is gone is killed, wherever the profile lives (the old ones were in %TEMP%).
  *
  * The profile lives under `.ade-test/browsers` of the package, inside Favorites (outside it the sandbox refuses writes),
@@ -25,14 +25,14 @@ import { spawnSync } from "node:child_process"
 import { mkdirSync, readdirSync, rmSync } from "node:fs"
 import { join } from "node:path"
 
-export const PROFILE_PREFIX = "nikverse-browser-"
+export const PROFILE_PREFIX = "raguverse-browser-"
 
 /** Where the profiles are made: `<package>/.ade-test/browsers`, ignored by git. */
 export const profilesDir = (packageRoot: string) => join(packageRoot, ".ade-test", "browsers")
 
-/** The pid a browser's command line says owns it (from `--user-data-dir=...nikverse-browser-<pid>`), if it has one. */
+/** The pid a browser's command line says owns it (from `--user-data-dir=...raguverse-browser-<pid>`), if it has one. */
 export function ownerOf(commandLine: string): number | undefined {
-  const match = /nikverse-browser-(\d+)(?![\w-])/.exec(commandLine)
+  const match = /raguverse-browser-(\d+)(?![\w-])/.exec(commandLine)
   return match ? Number(match[1]) : undefined
 }
 
@@ -79,7 +79,7 @@ export interface BrowserProcess {
 }
 
 /**
- * Every process of ours: those whose command line names a `nikverse-browser-*` profile (the main one and its children).
+ * Every process of ours: those whose command line names a `raguverse-browser-*` profile (the main one and its children).
  * `program` is the executable's name pattern (the browsers'; a test's stand-in is a `bun`).
  */
 export function browserProcesses(program = "msedge|chrome"): BrowserProcess[] {
@@ -257,7 +257,7 @@ export function guardBrowser(options: GuardOptions): Guard {
       Bun.spawn(
         [
           process.execPath,
-          join(import.meta.dir, "..", "..", "scripts", "nikverse-browser-watchdog.ts"),
+          join(import.meta.dir, "..", "..", "scripts", "raguverse-browser-watchdog.ts"),
           String(process.pid),
           options.profile,
           String(maxMs),

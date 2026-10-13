@@ -70,7 +70,7 @@ describe("worldSnapshot: the real projects and sessions become shops and agents"
         pane("b1", { browserUrl: "http://localhost:3000", agent: undefined, model: "—" }),
         pane("v1", { mode: "video", agent: undefined, model: "—" }),
         pane("d1", { mode: "decisions", agent: undefined, model: "—" }),
-        pane("nv", { mode: "nikverse", agent: undefined, model: "—" }),
+        pane("nv", { mode: "raguverse", agent: undefined, model: "—" }),
         pane("x1", { agent: undefined, model: "" }),
       ],
     })
@@ -136,7 +136,7 @@ describe("worldSnapshot: the real projects and sessions become shops and agents"
     const body = source.slice(start, source.indexOf("const rootOfShop", start))
     expect(body).toContain("quota: quotaForAgent(pane.agent ?? pane.model, quotas.snapshot(), quotas.now())")
     expect(body).toContain("worldQuota ??= useSharedQuota()")
-    // Given back when the last NikVerse panel closes.
+    // Given back when the last RaguVerse panel closes.
     expect(source).toContain("worldQuota?.release()")
   })
 

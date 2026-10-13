@@ -69,7 +69,7 @@ describe("who calls it", () => {
   })
 
   test("the gate rebuilds it whether or not it starts ADE Test, and writes which bundle it measured in its JSON", () => {
-    const gate = source("scripts/nikverse-gate.ts")
+    const gate = source("scripts/raguverse-gate.ts")
     const built = gate.indexOf("await ensureWorld()")
     expect(built).toBeGreaterThan(-1)
     // Before it looks for an ADE Test, not only in the branch that starts one.

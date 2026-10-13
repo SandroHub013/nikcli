@@ -29,7 +29,7 @@ export interface NewPaneItem {
     | "app"
     | "decisions"
     | "design"
-    | "nikverse"
+    | "raguverse"
   /** The one the button performs on a plain click, without opening the menu. */
   readonly primary?: true
 }
@@ -110,14 +110,14 @@ export const NEW_PANE_ITEMS: readonly NewPaneItem[] = [
     glyph: "design",
   },
   {
-    commandId: "nikverse.pane",
+    commandId: "raguverse.pane",
     get label() {
-      return t("newPane.nikverse")
+      return t("newPane.raguverse")
     },
     get hint() {
-      return t("newPane.nikverse.hint")
+      return t("newPane.raguverse.hint")
     },
-    glyph: "nikverse",
+    glyph: "raguverse",
   },
 ]
 

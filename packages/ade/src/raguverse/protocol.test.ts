@@ -167,7 +167,7 @@ describe("where the world lives", () => {
   })
 
   test("lint: the frame's origin is opaque, so Tauri's IPC refuses it, and it has no way to navigate ADE", () => {
-    const source = readFileSync(join(import.meta.dir, "nikverse-pane.tsx"), "utf8")
+    const source = readFileSync(join(import.meta.dir, "raguverse-pane.tsx"), "utf8")
     const frame = source.slice(source.indexOf("<iframe"), source.indexOf("/>", source.indexOf("<iframe")))
     expect(frame).toContain("src={frameSrc()}")
     expect(frame).not.toContain("srcdoc")
@@ -193,7 +193,7 @@ describe("where the world lives", () => {
     expect(source).toContain('dataset.adeBuild === "test"')
     expect(source).toContain("?bench=1")
     // The gate's `--tune` rides on the same door, and on no other: nothing is added to a release build's address.
-    expect(source.slice(source.indexOf("const benchQuery"), source.indexOf("const sourceFor"))).toMatch(/adeBuild === "test"\s*\?[\s\S]*__nikverseTune[\s\S]*:\s*""/)
+    expect(source.slice(source.indexOf("const benchQuery"), source.indexOf("const sourceFor"))).toMatch(/adeBuild === "test"\s*\?[\s\S]*__raguverseTune[\s\S]*:\s*""/)
     expect(source).toContain("src={frameSrc()}")
     expect(source).toContain("nonce = newNonce()")
     // Every load of the frame asks the link whether its document is still there.

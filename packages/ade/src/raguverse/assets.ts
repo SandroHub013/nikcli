@@ -1,13 +1,13 @@
 /**
- * NikVerse's assets, fetched the first time the world is opened: what the panel shows and when it starts the frame.
+ * RaguVerse's assets, fetched the first time the world is opened: what the panel shows and when it starts the frame.
  *
- * The host (`src-tauri/src/nikverse_assets.rs`) does the fetching and checks every file against the list the binary was built with; this is the
+ * The host (`src-tauri/src/raguverse_assets.rs`) does the fetching and checks every file against the list the binary was built with; this is the
  * panel's end of it. A `.ts` and not in the `.tsx`, so the order of things is tested: the frame is not started while the files are on their way
  * (it would load once with placeholders and again with the files), it is started when they are in, and where they cannot be fetched (no network, a
  * release without them) the world starts with the placeholders it already has and says why, with a way to try again.
  */
 
-/** What `nikverse_assets_status` answers (the host's field names). */
+/** What `raguverse_assets_status` answers (the host's field names). */
 export interface AssetsStatus {
   /** Nothing to fetch: every file is in place (always, in a debug build). */
   ready: boolean
@@ -24,8 +24,8 @@ export interface AssetsStatus {
 
 /** The commands of the host facade this needs; each may be missing (a browser tab, an older host). */
 export interface AssetsHost {
-  nikverseAssetsStatus?: () => Promise<AssetsStatus>
-  nikverseAssetsInstall?: () => Promise<void>
+  raguverseAssetsStatus?: () => Promise<AssetsStatus>
+  raguverseAssetsInstall?: () => Promise<void>
 }
 
 /** What the panel shows. */
@@ -92,8 +92,8 @@ export function createAssetsFlow(deps: AssetsFlowDeps): AssetsFlow {
   return {
     async start() {
       if (running || disposed) return
-      const read = deps.host?.nikverseAssetsStatus
-      const install = deps.host?.nikverseAssetsInstall
+      const read = deps.host?.raguverseAssetsStatus
+      const install = deps.host?.raguverseAssetsInstall
       // No host to ask (a browser tab, an older host): the world starts as it is, as it did before the files were fetched.
       if (!read || !install) return deps.ready(true)
       running = true

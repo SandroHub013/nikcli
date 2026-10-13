@@ -57,9 +57,9 @@ function setup(over: Partial<SpaceHost> = {}, deps: Partial<SpaceDeps> = {}, say
       return 1
     },
     ttsLocalDelete: async (provider) => void removedBy.push(`local ${provider}`),
-    nikverseAssetsBytes: async () => 40_000_000,
-    nikverseAssetsRemove: async () => {
-      removedBy.push("nikverse")
+    raguverseAssetsBytes: async () => 40_000_000,
+    raguverseAssetsRemove: async () => {
+      removedBy.push("raguverse")
       return 40_000_000
     },
     run: fake.run,
@@ -104,14 +104,14 @@ describe("what the panel lists", () => {
       "piper:ugo",
       "piper:paola",
       "kokoro",
-      "nikverse",
+      "raguverse",
       `worktree:${normalized(FIX)}`,
       `worktree:${normalized(OLD)}`,
       `branches:${normalized(ROOT)}`,
       `prune:${normalized(ROOT)}`,
     ])
     expect(rows.find((row) => row.id === "kokoro")?.bytes).toBe(219_000_000)
-    expect(rows.find((row) => row.id === "nikverse")?.bytes).toBe(40_000_000)
+    expect(rows.find((row) => row.id === "raguverse")?.bytes).toBe(40_000_000)
     expect(rows.find((row) => row.id === `prune:${normalized(ROOT)}`)?.bytes).toBe(3000)
   })
 
@@ -128,7 +128,7 @@ describe("what the panel lists", () => {
   test("a runtime with no voice left is a row of its own, and nothing installed is no row", async () => {
     const left = setup({ ttsDiskReport: async () => ({ piper: { runtime: 190_000_000, voices: [] }, kokoro: 0 }) })
     expect(ids(await left.space.refresh()).slice(0, 1)).toEqual(["piper:all"])
-    const none = setup({ ttsDiskReport: async () => ({ piper: { runtime: 0, voices: [] }, kokoro: 0 }), nikverseAssetsBytes: async () => 0, run: undefined, readDir: undefined })
+    const none = setup({ ttsDiskReport: async () => ({ piper: { runtime: 0, voices: [] }, kokoro: 0 }), raguverseAssetsBytes: async () => 0, run: undefined, readDir: undefined })
     expect(await none.space.refresh()).toEqual([])
   })
 
@@ -187,7 +187,7 @@ describe("what the panel lists", () => {
   })
 
   test("a host that cannot do a thing has no row for it", async () => {
-    const { space } = setup({ ttsDiskReport: undefined, nikverseAssetsBytes: undefined, run: undefined, readDir: undefined, adePrune: undefined })
+    const { space } = setup({ ttsDiskReport: undefined, raguverseAssetsBytes: undefined, run: undefined, readDir: undefined, adePrune: undefined })
     expect(await space.refresh()).toEqual([])
   })
 
@@ -252,7 +252,7 @@ describe("nothing goes without a question that says how much it frees", () => {
     const first = space.remove("kokoro")
     await Promise.resolve()
     expect(space.busy()).toBe(true)
-    expect((await space.remove("nikverse")).kind).toBe("declined")
+    expect((await space.remove("raguverse")).kind).toBe("declined")
     answer(false)
     await first
     expect(asked).toHaveLength(1)
@@ -272,9 +272,9 @@ describe("what each button does", () => {
     const { space, removedBy } = setup()
     await space.refresh()
     expect(await space.remove("kokoro")).toEqual({ kind: "done", freed: 219_000_000 })
-    expect(await space.remove("nikverse")).toEqual({ kind: "done", freed: 40_000_000 })
+    expect(await space.remove("raguverse")).toEqual({ kind: "done", freed: 40_000_000 })
     expect(await space.remove(`prune:${normalized(ROOT)}`)).toEqual({ kind: "done", freed: 3000 })
-    expect(removedBy).toEqual(["local kokoro", "nikverse", "prune 1"])
+    expect(removedBy).toEqual(["local kokoro", "raguverse", "prune 1"])
   })
 
   test("a worktree that has landed: removed, then its branch, then the folder beside the project if it is empty; the bytes it weighed", async () => {

@@ -107,7 +107,7 @@ const PROSE_PROPERTIES = new Set(["reason", "problem", "detail", "note", "error"
 /** Files excluded from non-JSX object title property checks (matching pre-F7a2 baseline). */
 function isExcludedTitle(path: string): boolean {
   const norm = path.replaceAll("\\", "/")
-  return norm.endsWith("release-plan.ts") || norm.includes("nikverse/city/") || norm.includes("/voice/")
+  return norm.endsWith("release-plan.ts") || norm.includes("raguverse/city/") || norm.includes("/voice/")
 }
 
 /**
@@ -161,7 +161,7 @@ const EXCLUDED_PROSE_FILES = new Set([
 
 function isExcludedProse(path: string): boolean {
   const norm = path.replaceAll("\\", "/")
-  if (norm.includes("nikverse/") || norm.includes("/voice/") || norm.startsWith("voice/")) return true
+  if (norm.includes("raguverse/") || norm.includes("/voice/") || norm.startsWith("voice/")) return true
   for (const file of EXCLUDED_PROSE_FILES) {
     if (norm.endsWith(file)) return true
   }

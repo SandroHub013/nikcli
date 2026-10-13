@@ -100,7 +100,7 @@ describe("a chord from the world runs only navigation", () => {
   })
 
   test("lint: the panel runs the command and dispatches no keyboard event, and the world's wire has no keys of its own to send", () => {
-    const pane = readFileSync(join(import.meta.dir, "nikverse-pane.tsx"), "utf8")
+    const pane = readFileSync(join(import.meta.dir, "raguverse-pane.tsx"), "utf8")
     expect(pane).not.toMatch(/dispatchEvent|new KeyboardEvent|chordEvent/)
     const protocol = readFileSync(join(import.meta.dir, "protocol.ts"), "utf8")
     expect(protocol).not.toMatch(/dispatchEvent|new KeyboardEvent|chordEvent/)

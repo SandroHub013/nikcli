@@ -1,5 +1,5 @@
 /**
- * The dynamic resolution of the live loop, in a real browser on the real GPU (`src/nikverse/city/resolution.ts`).
+ * The dynamic resolution of the live loop, in a real browser on the real GPU (`src/raguverse/city/resolution.ts`).
  *
  * Media is opened in a window four times the size of the bench's, walked in, and the frame's `data-render-scale` and the
  * canvas' size are read every second: the GPU cost of the plaza at that size is over the governor's line, so the scale must go
@@ -7,7 +7,7 @@
  * must come back up to 1. It is a check of the loop (timed frames, the governor, the resize), not of a number: the numbers are
  * the bench's.
  *
- *   bun scripts/nikverse-live-scale.ts [--out DIR] [--browser PATH]
+ *   bun scripts/raguverse-live-scale.ts [--out DIR] [--browser PATH]
  *
  * Exits 1 when the scale never went down, went under 0.75, did not come back, or the canvas did not follow it. Time cap: 5 minutes.
  */
@@ -15,12 +15,12 @@
 import { mkdirSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { SCALE_MIN } from "../src/nikverse/city/resolution"
-import { shotPicture } from "../src/nikverse/city/shots"
-import { actAsAde, arg, startHarness } from "./nikverse-harness"
+import { SCALE_MIN } from "../src/raguverse/city/resolution"
+import { shotPicture } from "../src/raguverse/city/shots"
+import { actAsAde, arg, startHarness } from "./raguverse-harness"
 
 const NONCE = "0123456789abcdef".repeat(3)
-const out = arg("--out") ?? join(tmpdir(), "nikverse-live-scale")
+const out = arg("--out") ?? join(tmpdir(), "raguverse-live-scale")
 mkdirSync(out, { recursive: true })
 const deadline = setTimeout(() => {
   console.error("time cap of 5 minutes reached")

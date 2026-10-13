@@ -1,7 +1,7 @@
 /**
  * `?shot=N`: the bench's page. It skips ADE's picture and draws the fixed scene (`shots.ts`) from shot N's camera at
  * 1600×900 with a pixel ratio of 1, once, and keeps the picture and its numbers for the script that drives it:
- * `window.__nikverseShot` holds the PNG (a data address) and the stats; `data-shot` says `ready` or `failed`.
+ * `window.__raguverseShot` holds the PNG (a data address) and the stats; `data-shot` says `ready` or `failed`.
  * The picture is read from the canvas in the very task that draws it, which is the only time a WebGPU canvas has it.
  */
 
@@ -144,7 +144,7 @@ export async function startShot(parts: ShotParts) {
   const data = parts.win.document.documentElement.dataset
   try {
     const result = await takeShot(parts)
-    ;(parts.win as unknown as { __nikverseShot?: ShotResult }).__nikverseShot = result
+    ;(parts.win as unknown as { __raguverseShot?: ShotResult }).__raguverseShot = result
     data.shot = "ready"
     data.shotProblems = result.problems.join(" | ").slice(0, 400)
     data.ready = "1"

@@ -1,7 +1,7 @@
 /**
  * The bench's fixed scene and its eight shots: the same six shops and eighteen people in the same states, the
  * same clock, the same eight cameras, every time, so that two pictures of a shot differ only in what the renderer
- * did (`?shot=N`, `scripts/nikverse-shots.ts`). Nothing here reads the world's picture, the clock or a random
+ * did (`?shot=N`, `scripts/raguverse-shots.ts`). Nothing here reads the world's picture, the clock or a random
  * number: the scene is made from the test snapshot below.
  */
 

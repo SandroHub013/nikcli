@@ -82,7 +82,7 @@ export function createSlowWatch(now: () => number = () => performance.now()) {
       elapsed = frames = slow = 0
       pausedAt ??= now()
     },
-    /** Where the watch is, for `__nikverseWhy`: the seconds in the window, their share of slow frames, and whether it said so. */
+    /** Where the watch is, for `__raguverseWhy`: the seconds in the window, their share of slow frames, and whether it said so. */
     state: () => ({ seconds: seconds.length, share: Math.round(share() * 1000) / 1000, said }),
   }
 }

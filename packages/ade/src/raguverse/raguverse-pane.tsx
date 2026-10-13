@@ -9,7 +9,7 @@ import { PORT_OFFER, PROTOCOL_VERSION, worldUrl, type Command, type LearnPlace, 
 import type { ForwardedChord } from "./chords"
 import { LearnLayer } from "./learn/learn-layer"
 import type { LearnOpening, LearnProgressHost } from "./learn/learn-frame"
-import "./nikverse.css"
+import "./raguverse.css"
 import { t } from "../i18n"
 
 /**
@@ -27,7 +27,7 @@ import { t } from "../i18n"
  * stays where it is; closing the layer — Esc in the page, Esc on the bar, «Torna al mondo» — takes the lesson frame away.
  *
  * What it decides is in `protocol.ts`, `link.ts`, `snapshot.ts`, `lifecycle.ts`
- * and `opening.ts`; the wiring is mounted in `nikverse-pane.test.ts` (`compileSolidJsx`).
+ * and `opening.ts`; the wiring is mounted in `raguverse-pane.test.ts` (`compileSolidJsx`).
  */
 /** ADE's own storage, when there is one to use (it may be missing or throw). */
 function spotStorage(): SpotStorage | undefined {
@@ -46,7 +46,7 @@ const places = createPlayerStore(spotStorage())
 /** Whether the world was too slow at its own level and opens at Bassa (`opening.ts`): ADE's to keep, like the place. */
 const lowering = createLoweredStore(spotStorage())
 
-export function NikversePane(props: {
+export function RaguversePane(props: {
   /** The picture of ADE now; undefined while there is nothing to show. */
   picture: () => Snapshot | undefined
   focused: boolean
@@ -79,14 +79,14 @@ export function NikversePane(props: {
   const benchQuery = () =>
     document.documentElement.dataset.adeBuild === "test"
       ? // The gate's `--tune` (`samples=1&maxscale=0.9`) rides on the same door, and only in the test build.
-        `bench=1${(window as { __nikverseTune?: string }).__nikverseTune ? `&${(window as { __nikverseTune?: string }).__nikverseTune}` : ""}`
+        `bench=1${(window as { __raguverseTune?: string }).__raguverseTune ? `&${(window as { __raguverseTune?: string }).__raguverseTune}` : ""}`
       : ""
   /** The user chose the list after an opening that did not come: the next load is the page without the city. */
   let list = false
-  // A measuring run (the gate and the measures set `__nikverseTune`, even empty) is never lowered by what an earlier run
+  // A measuring run (the gate and the measures set `__raguverseTune`, even empty) is never lowered by what an earlier run
   // left in the profile, unless it is a trial of the watch itself (`slowwatch=1`).
   const tuned = () => {
-    const tune = (window as { __nikverseTune?: string }).__nikverseTune
+    const tune = (window as { __raguverseTune?: string }).__raguverseTune
     return tune !== undefined && !/(^|&)slowwatch=1(&|$)/.test(tune)
   }
   const sourceFor = (secret: string) =>
@@ -323,16 +323,16 @@ export function NikversePane(props: {
   return (
     <article
       ref={root}
-      data-component="nikverse-pane"
+      data-component="raguverse-pane"
       data-focused={props.focused ? "true" : undefined}
       onFocusIn={() => props.onFocus?.()}
       onPointerDown={() => props.onFocus?.()}
     >
       <header data-slot="pane-header">
         <span data-slot="pane-identity" aria-hidden="true">
-          <NikverseGlyph />
+          <RaguverseGlyph />
         </span>
-        <h2 data-slot="pane-title">{t("newPane.nikverse")}</h2>
+        <h2 data-slot="pane-title">{t("newPane.raguverse")}</h2>
         <div data-slot="pane-actions">
           <button
             type="button"
@@ -366,52 +366,52 @@ export function NikversePane(props: {
 
       <Show when={asking()}>
         {(pending) => (
-          <div data-slot="nikverse-ask" role="alert">
-            <span>{t("nikverse.ask", pending().command.cmd)}</span>
+          <div data-slot="raguverse-ask" role="alert">
+            <span>{t("raguverse.ask", pending().command.cmd)}</span>
             <button
               type="button"
-              data-slot="nikverse-allow"
+              data-slot="raguverse-allow"
               onClick={() => {
                 const { approve } = pending()
                 setAsking(undefined)
                 approve()
               }}
             >
-              {t("nikverse.allow")}
+              {t("raguverse.allow")}
             </button>
-            <button type="button" data-slot="nikverse-deny" onClick={() => setAsking(undefined)}>
-              {t("nikverse.deny")}
+            <button type="button" data-slot="raguverse-deny" onClick={() => setAsking(undefined)}>
+              {t("raguverse.deny")}
             </button>
           </div>
         )}
       </Show>
 
-      <div data-slot="nikverse-body">
+      <div data-slot="raguverse-body">
         <Show when={assetsView().kind === "fetching" ? (assetsView() as Extract<AssetsView, { kind: "fetching" }>) : undefined}>
           {(fetching) => (
-            <div data-slot="nikverse-assets" role="status" aria-live="polite">
-              <p>{t("nikverse.assets.fetching", fetching().megabytes)}</p>
+            <div data-slot="raguverse-assets" role="status" aria-live="polite">
+              <p>{t("raguverse.assets.fetching", fetching().megabytes)}</p>
               <div
                 role="progressbar"
                 aria-valuemin="0"
                 aria-valuemax="100"
                 aria-valuenow={fetching().percent}
-                data-slot="nikverse-assets-track"
+                data-slot="raguverse-assets-track"
               >
-                <div data-slot="nikverse-assets-fill" style={{ width: `${fetching().percent ?? 0}%` }} />
+                <div data-slot="raguverse-assets-fill" style={{ width: `${fetching().percent ?? 0}%` }} />
               </div>
               <Show when={fetching().percent !== undefined}>
-                <span data-slot="nikverse-assets-percent">{`${fetching().percent ?? 0}%`}</span>
+                <span data-slot="raguverse-assets-percent">{`${fetching().percent ?? 0}%`}</span>
               </Show>
             </div>
           )}
         </Show>
         <Show when={assetsView().kind === "failed" ? (assetsView() as Extract<AssetsView, { kind: "failed" }>) : undefined}>
           {(failed) => (
-            <div data-slot="nikverse-assets" data-failed="true" role="alert">
-              <p>{t("nikverse.assets.failed", failed().reason)}</p>
-              <button type="button" data-slot="nikverse-assets-retry" onClick={() => void startAssets()}>
-                {t("nikverse.assets.retry")}
+            <div data-slot="raguverse-assets" data-failed="true" role="alert">
+              <p>{t("raguverse.assets.failed", failed().reason)}</p>
+              <button type="button" data-slot="raguverse-assets-retry" onClick={() => void startAssets()}>
+                {t("raguverse.assets.retry")}
               </button>
             </div>
           )}
@@ -419,30 +419,30 @@ export function NikversePane(props: {
         <Show when={lowered()}>
           <button
             type="button"
-            data-slot="nikverse-lowered-retry"
+            data-slot="raguverse-lowered-retry"
             onClick={() => {
               lowering.clear()
               setLowered(false)
               reloadFrame()
             }}
           >
-            {t("nikverse.lowered.retry")}
+            {t("raguverse.lowered.retry")}
           </button>
         </Show>
         <Show when={late()}>
-          <div data-slot="nikverse-late" role="alert">
-            <p>{t("nikverse.late")}</p>
-            <button type="button" data-slot="nikverse-late-retry" onClick={() => reopen(false)}>
-              {t("nikverse.late.retry")}
+          <div data-slot="raguverse-late" role="alert">
+            <p>{t("raguverse.late")}</p>
+            <button type="button" data-slot="raguverse-late-retry" onClick={() => reopen(false)}>
+              {t("raguverse.late.retry")}
             </button>
-            <button type="button" data-slot="nikverse-late-list" onClick={() => reopen(true)}>
-              {t("nikverse.late.list")}
+            <button type="button" data-slot="raguverse-late-list" onClick={() => reopen(true)}>
+              {t("raguverse.late.list")}
             </button>
           </div>
         </Show>
         <Show when={lesson()}>
           {(open) => (
-            <div data-slot="nikverse-learn">
+            <div data-slot="raguverse-learn">
               <LearnLayer
                 place={open().opening}
                 progress={props.learn?.progress}
@@ -453,14 +453,14 @@ export function NikversePane(props: {
             </div>
           )}
         </Show>
-        <Show when={loaded() && !waiting()} fallback={loaded() ? null : <p data-slot="nikverse-unloaded">{t("nikverse.unloaded")}</p>}>
+        <Show when={loaded() && !waiting()} fallback={loaded() ? null : <p data-slot="raguverse-unloaded">{t("raguverse.unloaded")}</p>}>
           <Show when={frameLoad()} keyed>
             {(_load) => (
               <iframe
                 ref={frame}
-                data-slot="nikverse-frame"
-                title={t("newPane.nikverse")}
-                name="ade-nikverse"
+                data-slot="raguverse-frame"
+                title={t("newPane.raguverse")}
+                name="ade-raguverse"
                 src={frameSrc()}
                 // Under a lesson the world is not to be reached with Tab or the pointer: it is paused, and the layer is what is on screen.
                 inert={lesson() !== undefined}
@@ -480,7 +480,7 @@ export function NikversePane(props: {
   )
 }
 
-export function NikverseGlyph() {
+export function RaguverseGlyph() {
   return (
     <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3">
       <path d="M2 14V7l3-2v9M5 14V4l4-2v12M9 14V6l5 2v6M1.5 14h13" stroke-linecap="round" stroke-linejoin="round" />

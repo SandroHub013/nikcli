@@ -13,7 +13,7 @@ import { VEG_STRIDE } from "./kit"
  * that ship. The numbers are read from the files, not from the generator's report: the report says what the
  * generator meant, the file says what the world loads.
  *
- * Bassa and Media are in the repo. Alta's 2K set is a developer's local copy (`sync-nikverse-assets --alta`),
+ * Bassa and Media are in the repo. Alta's 2K set is a developer's local copy (`sync-raguverse-assets --alta`),
  * so the checks run over the levels that are here, and Bassa and Media must be.
  */
 

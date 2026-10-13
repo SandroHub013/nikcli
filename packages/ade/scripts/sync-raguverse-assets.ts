@@ -15,7 +15,7 @@
  * the two lightmaps, as `.ktx2` files beside them. The generator's `textures/` folder is what went into the `.glb`
  * and is not copied. `--check` copies nothing and lists what would change.
  *
- *   bun scripts/sync-nikverse-assets.ts [--from DIR] [--alta] [--check]
+ *   bun scripts/sync-raguverse-assets.ts [--from DIR] [--alta] [--check]
  */
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"

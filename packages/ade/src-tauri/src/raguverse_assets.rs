@@ -1,9 +1,9 @@
-//! NikVerse's assets, fetched the first time the world is opened.
+//! RaguVerse's assets, fetched the first time the world is opened.
 //!
 //! The installer does not carry them (`nikverse-assets/` is no longer in `bundle.resources`): they are models, lightmaps and the world's
-//! bundle, and most people open NikVerse rarely or never. What the binary carries is the list (`MANIFEST`, from `build.rs`: every file with its
+//! bundle, and most people open RaguVerse rarely or never. What the binary carries is the list (`MANIFEST`, from `build.rs`: every file with its
 //! size and SHA-256), and the list is what makes fetching safe: a file is asked for by the hash the binary was built with, it is kept only if
-//! it has exactly that size and that hash, and the scheme (`nikverse.rs`) serves only what is in the list and still has its hash. The network
+//! it has exactly that size and that hash, and the scheme (`raguverse.rs`) serves only what is in the list and still has its hash. The network
 //! cannot put anything in the world's folder that the binary did not name.
 //!
 //! Where from: the release `ade-updater`, the one installed copies already read their update manifest from, with one asset per file named
@@ -12,9 +12,9 @@
 //! reads in a release. A debug build reads the sources and has nothing to fetch.
 //!
 //! One file at a time, into `<name>.part`, checked, then renamed: a reader never finds half a file, and a download that dies leaves nothing
-//! that looks like progress. The progress is read by polling (`nikverse_assets_status`), like the voice packs': the panel asks while it waits.
+//! that looks like progress. The progress is read by polling (`raguverse_assets_status`), like the voice packs': the panel asks while it waits.
 
-use crate::nikverse::{sha256_hex, ManifestEntry, Source, MANIFEST};
+use crate::raguverse::{sha256_hex, ManifestEntry, Source, MANIFEST};
 use crate::tts::{Curl, Fetcher};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
@@ -257,10 +257,10 @@ fn status_of(source: &Source, manifest: &[ManifestEntry], assets: &Assets) -> St
 }
 
 #[tauri::command]
-pub async fn nikverse_assets_status(app: tauri::AppHandle) -> Result<Status, String> {
+pub async fn raguverse_assets_status(app: tauri::AppHandle) -> Result<Status, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<Assets>();
-        status_of(crate::nikverse::source(&app), MANIFEST, &state)
+        status_of(crate::raguverse::source(&app), MANIFEST, &state)
     })
     .await
     .map_err(|e| e.to_string())
@@ -333,9 +333,9 @@ fn remove_files(root: &Path, manifest: &[ManifestEntry]) -> Result<u64, String> 
 }
 
 #[tauri::command]
-pub async fn nikverse_assets_bytes(app: tauri::AppHandle) -> Result<u64, String> {
+pub async fn raguverse_assets_bytes(app: tauri::AppHandle) -> Result<u64, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        Ok(target(crate::nikverse::source(&app)).map(|root| installed_bytes(root, MANIFEST)).unwrap_or(0))
+        Ok(target(crate::raguverse::source(&app)).map(|root| installed_bytes(root, MANIFEST)).unwrap_or(0))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -343,10 +343,10 @@ pub async fn nikverse_assets_bytes(app: tauri::AppHandle) -> Result<u64, String>
 
 /// Takes the fetched assets off the disk; the bytes freed (nothing in a debug build, which reads the sources and has none fetched).
 #[tauri::command]
-pub async fn nikverse_assets_remove(app: tauri::AppHandle) -> Result<u64, String> {
+pub async fn raguverse_assets_remove(app: tauri::AppHandle) -> Result<u64, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<Assets>();
-        match target(crate::nikverse::source(&app)) {
+        match target(crate::raguverse::source(&app)) {
             Some(root) => remove_from(root, MANIFEST, &state),
             None => Ok(0),
         }
@@ -357,10 +357,10 @@ pub async fn nikverse_assets_remove(app: tauri::AppHandle) -> Result<u64, String
 
 /// Fetches what is missing. Returns when it is over (the panel watches the progress meanwhile); an error comes back as the message to show.
 #[tauri::command]
-pub async fn nikverse_assets_install(app: tauri::AppHandle) -> Result<(), String> {
+pub async fn raguverse_assets_install(app: tauri::AppHandle) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<Assets>();
-        let Some(root) = target(crate::nikverse::source(&app)) else { return Ok(()) };
+        let Some(root) = target(crate::raguverse::source(&app)) else { return Ok(()) };
         // Never for longer than this in all: a transfer that is never going to arrive is not waited for.
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15 * 60);
         install_into(
@@ -674,7 +674,7 @@ mod tests {
         let manifest = [entry("a.txt", b"alpha"), entry("b.txt", b"bravo!")];
         let release = Source::choose(false, Path::new("/nowhere"), Some(data.0.clone()));
         // The release folder is `<data>/nikverse-assets`: the files go there.
-        let folder = data.0.join(crate::nikverse::ASSETS_DIR);
+        let folder = data.0.join(crate::raguverse::ASSETS_DIR);
         std::fs::create_dir_all(&folder).unwrap();
         std::fs::write(folder.join("a.txt"), b"alpha").unwrap();
         let status = status_of(&release, &manifest, &Assets::default());

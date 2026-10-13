@@ -279,7 +279,7 @@ export function isPanelPane(
     pane.mode === "app" ||
     pane.mode === "decisions" ||
     pane.mode === "design" ||
-    pane.mode === "nikverse",
+    pane.mode === "raguverse",
   )
 }
 

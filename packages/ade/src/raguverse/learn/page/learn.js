@@ -15,10 +15,10 @@
  */
 
 /** ADE hands the port over in a message with this type, and nothing else on `window` is believed. */
-export const PORT_OFFER = "nikverse:port"
+export const PORT_OFFER = "raguverse:port"
 
 /** The page says this to its parent, with the nonce ADE put in its address: the proof it is this page. */
-export const HELLO = "nikverse:hello"
+export const HELLO = "raguverse:hello"
 
 /** The nonce in the address fragment (`#n=…`), or nothing. */
 export function readNonce(hash) {

@@ -21,7 +21,7 @@
     !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
     ; ADE's hooks and plugin out of Claude Code, Codex and ragu.
     ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --unlink-agents'
-    ; What it downloaded and can download again: the voices, NikVerse's assets, the plugins' files, the WebView caches.
+    ; What it downloaded and can download again: the voices, RaguVerse's assets, the plugins' files, the WebView caches.
     ; (The plugins' folder is A1's, removed on 2026-10-06: the cleanup stays for whoever had them.)
     ExecWait '"$INSTDIR\${MAINBINARYNAME}.exe" --clean-caches'
     ; The keys and bot tokens in the system keychain go only with "elimina i dati": someone who ticked it wants nothing left. The names of

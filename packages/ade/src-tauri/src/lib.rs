@@ -28,8 +28,8 @@ mod gateway;
 mod learn;
 mod legacy_cli;
 mod media;
-mod nikverse;
-mod nikverse_assets;
+mod raguverse;
+mod raguverse_assets;
 mod project_bytes;
 mod pty;
 mod record;
@@ -2588,7 +2588,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(pty::Registry::default())
-        .manage(nikverse_assets::Assets::default())
+        .manage(raguverse_assets::Assets::default())
         .manage(record::Recorder::default())
         .manage(frontend::DevServer::default())
         .manage(serve::Server::default())
@@ -2635,12 +2635,12 @@ pub fn run() {
             });
         })
         /*
-         * NikVerse's world: the package's own files, in an origin of its own.
-         * Nothing on disk is reachable through it (`nikverse.rs`).
+         * RaguVerse's world: the package's own files, in an origin of its own.
+         * Nothing on disk is reachable through it (`raguverse.rs`).
          */
-        .register_asynchronous_uri_scheme_protocol(nikverse::SCHEME, |ctx, request, responder| {
-            let source = nikverse::source(ctx.app_handle());
-            tauri::async_runtime::spawn_blocking(move || responder.respond(nikverse::respond(&request, source)));
+        .register_asynchronous_uri_scheme_protocol(raguverse::SCHEME, |ctx, request, responder| {
+            let source = raguverse::source(ctx.app_handle());
+            tauri::async_runtime::spawn_blocking(move || responder.respond(raguverse::respond(&request, source)));
         })
         .setup(|app| {
             // Before the window, not after: a webview pointed at a port that
@@ -2709,10 +2709,10 @@ pub fn run() {
             tts::tts_local_delete,
             tts::tts_install_status,
             tts::tts_install_cancel,
-            nikverse_assets::nikverse_assets_status,
-            nikverse_assets::nikverse_assets_install,
-            nikverse_assets::nikverse_assets_bytes,
-            nikverse_assets::nikverse_assets_remove,
+            raguverse_assets::raguverse_assets_status,
+            raguverse_assets::raguverse_assets_install,
+            raguverse_assets::raguverse_assets_bytes,
+            raguverse_assets::raguverse_assets_remove,
             learn::learn_progress_get,
             learn::learn_progress_set,
             mailbox::mailbox_receipt,
@@ -3102,7 +3102,7 @@ mod tests {
         let source = include_str!("lib.rs");
         let sync_scheme = [".register_uri", "_scheme_protocol("].concat();
         assert!(!source.contains(&sync_scheme), "a scheme that answers on the window's thread");
-        for scheme in ["media::SCHEME", "nikverse::SCHEME"] {
+        for scheme in ["media::SCHEME", "raguverse::SCHEME"] {
             assert!(source.contains(&format!("register_asynchronous_uri_scheme_protocol({scheme}")), "{scheme}");
         }
         let at = source.find("async fn chat_attachment_inside(").expect("chat_attachment_inside");
@@ -3909,7 +3909,7 @@ mod tests {
     }
 
     #[test]
-    fn frame_src_csp_allows_nikverse_and_nothing_wider() {
+    fn frame_src_csp_allows_raguverse_and_nothing_wider() {
         let config: serde_json::Value =
             serde_json::from_str(include_str!("../tauri.conf.json")).expect("tauri.conf.json");
         let csp = config["app"]["security"]["csp"]

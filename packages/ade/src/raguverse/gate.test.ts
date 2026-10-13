@@ -33,7 +33,7 @@ const red = (change: Partial<GateMeasures>) =>
     .filter((check) => !check.ok)
     .map((check) => check.name)
 
-describe("the NikVerse gate", () => {
+describe("the RaguVerse gate", () => {
   test("numbers under every ceiling pass", () => {
     expect(gatePasses(gateChecks(good))).toBe(true)
   })
@@ -129,7 +129,7 @@ describe("the worst of the eight shots", () => {
   })
 
   test("the view a player starts in (3 ms) does not decide: the desk does", () => {
-    // The gate used to read `__nikverseBench` on the default view and passed on 3 ms while a shot took 16.
+    // The gate used to read `__raguverseBench` on the default view and passed on 3 ms while a shot took 16.
     const worst = worstShot(eight([3, 3, 3, 16.4, 3, 3, 3, 3]), "media")
     expect(worst.p95).toBe(16.4)
     expect(red({ gpuFrameP95Ms: worst.p95 })).toEqual(["GPU frame time p95, worst of the 8 shots, ms"])

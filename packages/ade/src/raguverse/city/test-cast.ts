@@ -10,7 +10,7 @@ export const LEVELS_DIR = join(import.meta.dir, "..", "..", "..", "src-tauri", "
 
 /**
  * The levels whose files are here: Bassa and Media ship, Alta's 2K set is a developer's local copy
- * (`sync-nikverse-assets --alta`), so tests over "every level" run over the ones present.
+ * (`sync-raguverse-assets --alta`), so tests over "every level" run over the ones present.
  */
 export const presentLevels = (): string[] => ["bassa", "media", "alta"].filter((level) => existsSync(join(LEVELS_DIR, level, "city.glb")))
 

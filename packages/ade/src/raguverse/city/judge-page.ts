@@ -135,7 +135,7 @@ ${beforeSide.toString()}
 ${summarize.toString()}
 (function () {
   var data = JSON.parse(document.getElementById("data").textContent);
-  var KEY = "nikverse-judge-" + data.seed;
+  var KEY = "raguverse-judge-" + data.seed;
   var state = { level: data.levels[0], blind: false, verdicts: {}, tripleA: null, note: "" };
   try { var saved = JSON.parse(localStorage.getItem(KEY) || "null"); if (saved) { state.verdicts = saved.verdicts || {}; state.tripleA = saved.tripleA || null; state.note = saved.note || ""; state.blind = !!saved.blind; } } catch (e) {}
   var lastUrl;

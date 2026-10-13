@@ -1,6 +1,6 @@
-//! Serving NikVerse's world to its panel.
+//! Serving RaguVerse's world to its panel.
 //!
-//! The world runs in a frame of its own inside the NikVerse panel, so that a
+//! The world runs in a frame of its own inside the RaguVerse panel, so that a
 //! heavy renderer lives in a process and an origin that are not ADE's: if the
 //! world falls over, ADE stays up (the lesson of Parakeet). An origin of its
 //! own needs a scheme of its own, and this registers it: `nikverse://localhost/`,
@@ -22,7 +22,7 @@
 //! path is only ever compared to the list, never joined to a directory, so
 //! there is nothing to traverse; a file added to the folder after the build, or
 //! swapped for another, is not served. A release reads the folder in the app's
-//! local data, where `nikverse_assets.rs` fetches what is missing the first time
+//! local data, where `raguverse_assets.rs` fetches what is missing the first time
 //! the world is opened (the installer does not carry the assets); a debug build
 //! reads the sources, so editing an asset shows on the next request, and does
 //! not check the hash, which an edit would break (the list is rebuilt on the
@@ -63,44 +63,44 @@ const PACKAGE: &[PackageFile] = &[
     PackageFile {
         path: "index.html",
         mime: "text/html; charset=utf-8",
-        body: include_bytes!("../../src/nikverse/world/index.html"),
+        body: include_bytes!("../../src/raguverse/world/index.html"),
     },
     PackageFile {
         path: "world.js",
         mime: "text/javascript; charset=utf-8",
-        body: include_bytes!("../../src/nikverse/world/world.js"),
+        body: include_bytes!("../../src/raguverse/world/world.js"),
     },
     PackageFile {
         path: "world.css",
         mime: "text/css; charset=utf-8",
-        body: include_bytes!("../../src/nikverse/world/world.css"),
+        body: include_bytes!("../../src/raguverse/world/world.css"),
     },
     // The lesson page, «Impara». It is a page of its own under the same scheme and the same policy: it is not a page of the world, so
     // it is not under the world's files and the world's files are not under it.
     PackageFile {
         path: "learn/index.html",
         mime: "text/html; charset=utf-8",
-        body: include_bytes!("../../src/nikverse/learn/page/index.html"),
+        body: include_bytes!("../../src/raguverse/learn/page/index.html"),
     },
     PackageFile {
         path: "learn/learn.js",
         mime: "text/javascript; charset=utf-8",
-        body: include_bytes!("../../src/nikverse/learn/page/learn.js"),
+        body: include_bytes!("../../src/raguverse/learn/page/learn.js"),
     },
     PackageFile {
         path: "learn/learn.css",
         mime: "text/css; charset=utf-8",
-        body: include_bytes!("../../src/nikverse/learn/page/learn.css"),
+        body: include_bytes!("../../src/raguverse/learn/page/learn.css"),
     },
     PackageFile {
         path: "learn/content.json",
         mime: "application/json; charset=utf-8",
-        body: include_bytes!("../../src/nikverse/learn/content.json"),
+        body: include_bytes!("../../src/raguverse/learn/content.json"),
     },
     PackageFile {
         path: "learn/gioco.json",
         mime: "application/json; charset=utf-8",
-        body: include_bytes!("../../src/nikverse/learn/gioco.json"),
+        body: include_bytes!("../../src/raguverse/learn/gioco.json"),
     },
 ];
 
@@ -130,7 +130,7 @@ pub struct ManifestEntry {
 }
 
 // `MANIFEST`, written by `build.rs` from the files in `nikverse-assets/`.
-include!(concat!(env!("OUT_DIR"), "/nikverse_manifest.rs"));
+include!(concat!(env!("OUT_DIR"), "/raguverse_manifest.rs"));
 
 /// Where the assets are read from, and whether their hash is checked.
 pub struct Source {
@@ -496,7 +496,7 @@ mod tests {
         for uri in [
             "nikverse://localhost/Cargo.toml",
             "nikverse://localhost/src/lib.rs",
-            "nikverse://localhost/src/nikverse.rs",
+            "nikverse://localhost/src/raguverse.rs",
             "nikverse://localhost/world/index.html",
             "nikverse://localhost/missing.js",
             "nikverse://localhost/INDEX.HTML",
@@ -617,7 +617,7 @@ mod tests {
         fn new() -> Scratch {
             static COUNTER: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
             let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            let dir = std::env::temp_dir().join(format!("nikverse-test-{}-{n}", std::process::id()));
+            let dir = std::env::temp_dir().join(format!("raguverse-test-{}-{n}", std::process::id()));
             std::fs::create_dir_all(&dir).expect("cartella di prova");
             Scratch(dir)
         }
@@ -687,11 +687,11 @@ mod tests {
     fn a_way_up_is_refused_before_the_manifest_is_looked_at() {
         let scratch = Scratch::new();
         write(&scratch.0, "a.txt", b"a");
-        write(scratch.0.parent().unwrap(), "nikverse-outside.txt", b"secret");
+        write(scratch.0.parent().unwrap(), "raguverse-outside.txt", b"secret");
         let manifest = [entry("a.txt", b"a")];
         for uri in [
-            "nikverse://localhost/assets/../nikverse-outside.txt",
-            "nikverse://localhost/assets/%2e%2e/nikverse-outside.txt",
+            "nikverse://localhost/assets/../raguverse-outside.txt",
+            "nikverse://localhost/assets/%2e%2e/raguverse-outside.txt",
             "nikverse://localhost/assets/sub/..%5Cx",
             "nikverse://localhost/assets/C:/Windows/win.ini",
             "nikverse://localhost/assets/a.txt::$DATA",
@@ -699,7 +699,7 @@ mod tests {
             let response = asset(&checked(&scratch.0), &manifest, uri);
             assert_eq!((uri, response.status()), (uri, StatusCode::BAD_REQUEST));
         }
-        let _ = std::fs::remove_file(scratch.0.parent().unwrap().join("nikverse-outside.txt"));
+        let _ = std::fs::remove_file(scratch.0.parent().unwrap().join("raguverse-outside.txt"));
     }
 
     #[test]
@@ -803,7 +803,7 @@ mod tests {
             "l'installer porta di nuovo la cartella degli asset"
         );
 
-        // A release reads `<app local data>/nikverse-assets`, the folder `nikverse_assets.rs` fills, file by file.
+        // A release reads `<app local data>/nikverse-assets`, the folder `raguverse_assets.rs` fills, file by file.
         let data = Scratch::new();
         for entry in MANIFEST {
             write(&data.0.join(ASSETS_DIR), entry.path, &std::fs::read(source_dir().join(entry.path)).unwrap());

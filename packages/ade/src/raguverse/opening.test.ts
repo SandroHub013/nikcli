@@ -145,17 +145,17 @@ describe("the level ADE lowered the world to", () => {
 
 describe("the line of an opening that did not come", () => {
   test("has its own rule: a row with padding, the text taking the room, and ADE's buttons", () => {
-    const css = readFileSync(join(import.meta.dir, "nikverse.css"), "utf8")
+    const css = readFileSync(join(import.meta.dir, "raguverse.css"), "utf8")
     const rule = (selector: string) => css.match(new RegExp(`(^|\\n)${selector.replace(/[[\]"=]/g, "\\$&")} \\{([^}]*)\\}`))?.[2] ?? ""
-    const box = rule('[data-slot="nikverse-late"]')
+    const box = rule('[data-slot="raguverse-late"]')
     for (const line of ["display: flex", "align-items: center", "padding: 8px 12px", "position: absolute"]) expect(box).toContain(line)
-    expect(rule('[data-slot="nikverse-late"] p')).toContain("margin: 0")
-    expect(rule('[data-slot="nikverse-late"] button')).toContain("border-radius: var(--ade-radius-sm, 5px)")
+    expect(rule('[data-slot="raguverse-late"] p')).toContain("margin: 0")
+    expect(rule('[data-slot="raguverse-late"] button')).toContain("border-radius: var(--ade-radius-sm, 5px)")
   })
 
   test("every token it uses has a fallback, like the panel's others (the type scale's are bare, as type-scale.test wants)", () => {
-    const css = readFileSync(join(import.meta.dir, "nikverse.css"), "utf8")
-    const rules = [...css.matchAll(/(^|\n)(\[data-slot="nikverse-late"\][^{]*)\{([^}]*)\}/g)]
+    const css = readFileSync(join(import.meta.dir, "raguverse.css"), "utf8")
+    const rules = [...css.matchAll(/(^|\n)(\[data-slot="raguverse-late"\][^{]*)\{([^}]*)\}/g)]
     expect(rules.length).toBeGreaterThanOrEqual(4)
     const tokens = rules.flatMap((r) => [...r[3].replace(/font-(size|weight):[^;]*;/g, "").matchAll(/var\((--[\w-]+)([^)]*)\)/g)])
     expect(tokens.length).toBeGreaterThan(0)

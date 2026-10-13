@@ -1,5 +1,5 @@
 /**
- * Renders NikVerse's world in a real browser and checks what it draws.
+ * Renders RaguVerse's world in a real browser and checks what it draws.
  *
  * It serves the world's page and the 3D bundle (built in memory) on a local port, the way the
  * `nikverse` scheme does, starts a headless Edge or Chrome of its own (a temporary profile, killed at
@@ -15,7 +15,7 @@
  * (`WebGPURenderer` when the browser has a WebGPU adapter, the classic one when it has not).
  * A backend that the headless browser does not have is reported, not failed.
  *
- *   bun scripts/nikverse-render-check.ts [--out DIR] [--browser PATH] [--json FILE] [--strict-logo]
+ *   bun scripts/raguverse-render-check.ts [--out DIR] [--browser PATH] [--json FILE] [--strict-logo]
  *
  * `--json FILE` writes every check as {name, ok, detail}; `--strict-logo` asks the logo check for 100 % of the pixels
  * within ΔE 3, as the bench does (an effect must never touch the logo).
@@ -25,11 +25,11 @@
 import { existsSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { bc1Ktx2, bc5Ktx2 } from "../src/nikverse/city/fixtures/make-ktx2"
-import { actAsAde, arg, startHarness } from "./nikverse-harness"
+import { bc1Ktx2, bc5Ktx2 } from "../src/raguverse/city/fixtures/make-ktx2"
+import { actAsAde, arg, startHarness } from "./raguverse-harness"
 
 const root = join(import.meta.dir, "..")
-const out = arg("--out") ?? join(tmpdir(), "nikverse-render-check")
+const out = arg("--out") ?? join(tmpdir(), "raguverse-render-check")
 const LEVELS_DIR = join(root, "src-tauri", "nikverse-assets", "levels")
 const NONCE = "0123456789abcdef".repeat(3)
 
@@ -38,7 +38,7 @@ const deadline = setTimeout(() => {
   process.exit(1)
 }, 300_000)
 
-// The server, the browser and the line to it are `nikverse-harness.ts`'s; this script adds its own two pages.
+// The server, the browser and the line to it are `raguverse-harness.ts`'s; this script adds its own two pages.
 const { base, page, browserLine, cpuByProcess, problems, evaluate, open, until, shot, close } = await startHarness({
   out,
   // The reference page is the harness's own (it compares pictures through `data:` addresses): no policy on it.
@@ -247,7 +247,7 @@ async function cityCheck(renderer: "classic" | "auto") {
     const eOk = farCommands === 0 && opened?.cmd === "open-session" && ["p1", "p2", "p3"].includes(opened?.paneId) && hintShown === `E · apri ${opened.paneId}`
     console.log(`  [${renderer}] E at the door: ${farCommands} commands; at desk 1 (${await where()}): hint "${hintShown}", command ${JSON.stringify(opened)}`)
     // Paused, no frame is drawn; resumed, they come again.
-    const frames = () => evaluate<number>(`window.__nikverseFrames ?? 0`)
+    const frames = () => evaluate<number>(`window.__raguverseFrames ?? 0`)
     await evaluate(`window.__ade.port.postMessage({ type: "pause" })`)
     await Bun.sleep(500)
     const paused1 = await frames()

@@ -35,8 +35,8 @@ export interface SpaceHost {
   ttsDiskReport?: () => Promise<{ piper: { runtime: number; voices: { id: string; bytes: number }[] }; kokoro: number }>
   ttsPiperDelete?: (voiceId?: string) => Promise<number>
   ttsLocalDelete?: (provider: string) => Promise<void>
-  nikverseAssetsBytes?: () => Promise<number>
-  nikverseAssetsRemove?: () => Promise<number>
+  raguverseAssetsBytes?: () => Promise<number>
+  raguverseAssetsRemove?: () => Promise<number>
   run?: (command: string, args: string[], cwd?: string) => Promise<Pick<RunResult, "code" | "stdout" | "stderr">>
   readDir?: (path: string) => Promise<(Listed & { size?: number })[]>
   adePrune?: (paths: string[]) => Promise<number>
@@ -169,10 +169,10 @@ export function createSpace(deps: SpaceDeps) {
   }
 
   async function assetRows(rows: Row[]) {
-    const bytes = await host.nikverseAssetsBytes?.().catch(() => 0)
-    if (!bytes || !host.nikverseAssetsRemove) return
-    rows.push({ id: "nikverse", group: "assets", title: t("space.nikverse"), detail: t("space.nikverse.again"), bytes, action: t("space.remove.again") })
-    plans.set("nikverse", () => host.nikverseAssetsRemove!())
+    const bytes = await host.raguverseAssetsBytes?.().catch(() => 0)
+    if (!bytes || !host.raguverseAssetsRemove) return
+    rows.push({ id: "raguverse", group: "assets", title: t("space.raguverse"), detail: t("space.raguverse.again"), bytes, action: t("space.remove.again") })
+    plans.set("raguverse", () => host.raguverseAssetsRemove!())
   }
 
   async function projectRows(rows: Row[], root: string) {

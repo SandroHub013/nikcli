@@ -1,9 +1,9 @@
 /**
- * Builds the page a piece of the look is judged on, from two runs of the bench (`nikverse-shots.ts`): the «prima»
+ * Builds the page a piece of the look is judged on, from two runs of the bench (`raguverse-shots.ts`): the «prima»
  * and the «dopo». One HTML file, the JPEGs inside it, the clips as links, the numbers of the bench and of the gate
- * beside them (`src/nikverse/city/judge-page.ts` says what the page does).
+ * beside them (`src/raguverse/city/judge-page.ts` says what the page does).
  *
- *   bun scripts/nikverse-judge.ts --before DIR --after DIR --out FILE.html
+ *   bun scripts/raguverse-judge.ts --before DIR --after DIR --out FILE.html
  *        [--gate-before FILE.json] [--gate-after FILE.json] [--seed N] [--title TEXT]
  *
  * With no `--after` the page is made of the «prima» against itself: it opens and can be tried, and says so in the title.
@@ -11,10 +11,10 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, join, relative, resolve } from "node:path"
-import { judgePage, type JudgeData, type JudgeImage, type JudgeNumber } from "../src/nikverse/city/judge-page"
-import { MAX_BURNT } from "../src/nikverse/city/shot-stats"
-import { SHOTS } from "../src/nikverse/city/shots"
-import { GATE_LIMITS } from "../src/nikverse/gate"
+import { judgePage, type JudgeData, type JudgeImage, type JudgeNumber } from "../src/raguverse/city/judge-page"
+import { MAX_BURNT } from "../src/raguverse/city/shot-stats"
+import { SHOTS } from "../src/raguverse/city/shots"
+import { GATE_LIMITS } from "../src/raguverse/gate"
 
 const arg = (name: string) => {
   const i = process.argv.indexOf(name)
@@ -25,7 +25,7 @@ const beforeDir = arg("--before")
 const out = arg("--out")
 if (!beforeDir || !out) {
   console.error(
-    "usage: bun scripts/nikverse-judge.ts --before DIR --after DIR --out FILE.html [--gate-before F] [--gate-after F] [--seed N] [--title T]",
+    "usage: bun scripts/raguverse-judge.ts --before DIR --after DIR --out FILE.html [--gate-before F] [--gate-after F] [--seed N] [--title T]",
   )
   process.exit(2)
 }

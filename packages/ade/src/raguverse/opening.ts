@@ -59,7 +59,7 @@ export function createOpenWatch(deps: OpenWatchDeps) {
   }
 }
 
-export const LOWERED_KEY = "ade.nikverse.lowered"
+export const LOWERED_KEY = "ade.raguverse.lowered"
 /**
  * How long ADE keeps a world lowered to Bassa: a day, then it tries the machine's own level again. A week was too long for
  * what can be a burst of slow frames while an agent compiles; the panel also has «Riprova a qualità piena» (`clear`)

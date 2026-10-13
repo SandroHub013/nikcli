@@ -165,14 +165,14 @@ describe("the 3D city the page starts", () => {
     const handle = { sync() {}, pause() {}, resume() {}, dispose() {}, bench: async (frames?: number) => (asked.push(frames), timing) }
     boot(win, { loadCity: async () => ({ startCity: async () => handle }) })
     await settled()
-    const bench = (win as unknown as { __nikverseBench(frames?: number): Promise<unknown> }).__nikverseBench
+    const bench = (win as unknown as { __raguverseBench(frames?: number): Promise<unknown> }).__raguverseBench
     expect(await bench(120)).toEqual(timing)
     expect(asked).toEqual([120])
     // A city without a bench (the logo check's) refuses, it does not answer with nothing.
     const bare = page("?bench=1")
     boot(bare.win, { loadCity: async () => ({ startCity: async () => ({ sync() {}, pause() {}, resume() {}, dispose() {} }) }) })
     await settled()
-    await expect((bare.win as unknown as { __nikverseBench(): Promise<unknown> }).__nikverseBench()).rejects.toThrow("no bench")
+    await expect((bare.win as unknown as { __raguverseBench(): Promise<unknown> }).__raguverseBench()).rejects.toThrow("no bench")
   })
 
   test("a release build has no timing door on the window: it is there only for ?bench=1 (ADE's test build) and ?shot (the bench)", async () => {
@@ -187,7 +187,7 @@ describe("the 3D city the page starts", () => {
       const { win } = page(search)
       boot(win, { loadCity: async () => ({ startCity: async () => handle }) })
       await settled()
-      expect([search, "__nikverseBench" in win]).toEqual([search, door])
+      expect([search, "__raguverseBench" in win]).toEqual([search, door])
     }
   })
 
@@ -308,11 +308,11 @@ describe("what keeps the loop awake (old PCs, point 4)", () => {
     const bench = page("?bench=1")
     boot(bench.win, { loadCity: async () => ({ startCity: async () => handle }) })
     await settled()
-    expect((bench.win as unknown as { __nikverseWhy(): unknown }).__nikverseWhy()).toEqual(awake)
+    expect((bench.win as unknown as { __raguverseWhy(): unknown }).__raguverseWhy()).toEqual(awake)
     const release = page()
     boot(release.win, { loadCity: async () => ({ startCity: async () => handle }) })
     await settled()
-    expect((release.win as unknown as { __nikverseWhy?: unknown }).__nikverseWhy).toBeUndefined()
+    expect((release.win as unknown as { __raguverseWhy?: unknown }).__raguverseWhy).toBeUndefined()
   })
 })
 

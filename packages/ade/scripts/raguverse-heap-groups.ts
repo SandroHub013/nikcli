@@ -3,7 +3,7 @@
  * (Media by default) once it has settled, the snapshot's nodes summed by what they are (constructor for objects; type and name for
  * the rest, so an ArrayBuffer's backing store shows as `native:system / JSArrayBufferData`), the largest first.
  *
- *   bun scripts/nikverse-heap-groups.ts [--level media] [--top 20] [--out DIR] [--refuse-files]
+ *   bun scripts/raguverse-heap-groups.ts [--level media] [--top 20] [--out DIR] [--refuse-files]
  *
  * A snapshot holds what the JS heap owns and the array buffers' bytes beside it; what the frame's process holds beyond that (the
  * WebAssembly memories' pages, the renderer's own allocations) is printed as `outside the snapshot`: the private bytes of the frame,
@@ -14,13 +14,13 @@ import { spawnSync } from "node:child_process"
 import { mkdirSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
-import { arg, startHarness } from "./nikverse-harness"
+import { arg, startHarness } from "./raguverse-harness"
 
 const NONCE = "0123456789abcdef".repeat(3)
 const LEVEL = arg("--level") ?? "media"
 const TOP = Number(arg("--top") ?? 20)
 const refusing = process.argv.includes("--refuse-files")
-const out = arg("--out") ?? join(tmpdir(), "nikverse-heap-groups")
+const out = arg("--out") ?? join(tmpdir(), "raguverse-heap-groups")
 mkdirSync(out, { recursive: true })
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const ps = (s: string) => spawnSync("powershell", ["-NoProfile", "-Command", s], { encoding: "utf8" }).stdout.trim()

@@ -1,7 +1,7 @@
 /**
- * The bench of NikVerse's look: eight fixed shots at each level, and a walking clip, in a real browser.
+ * The bench of RaguVerse's look: eight fixed shots at each level, and a walking clip, in a real browser.
  *
- * Each shot is the fixed scene (`src/nikverse/city/shots.ts`: six shops, eighteen people, the world clock at 12.0 s)
+ * Each shot is the fixed scene (`src/raguverse/city/shots.ts`: six shops, eighteen people, the world clock at 12.0 s)
  * from one fixed camera, drawn once at 1600×900 with a pixel ratio of 1 by the world's own page (`?shot=N&quality=…`).
  * The page reads its own canvas in the task that draws it and hands back the PNG and the numbers; this script writes
  * `<level>-<n>-<name>.png` and `.jpg`, checks the numbers (no NaN or pure-black pixels outside the sky, at most 2 % burnt,
@@ -9,7 +9,7 @@
  * (CDP screencast, ffmpeg when it is installed). With `--checks` it also runs the render check with the logo held to
  * 100 % of the pixels within ΔE 3.
  *
- *   bun scripts/nikverse-shots.ts --label prima [--out DIR] [--levels bassa,media] [--shots 1,2,…] [--gpu real|software] [--no-clip] [--checks] [--browser PATH]
+ *   bun scripts/raguverse-shots.ts --label prima [--out DIR] [--levels bassa,media] [--shots 1,2,…] [--gpu real|software] [--no-clip] [--checks] [--browser PATH]
  *
  * Writes `bench.json` next to the pictures. Exits 1 when a check fails. Time cap: 10 minutes.
  */
@@ -17,16 +17,16 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { SHOTS, shotPicture } from "../src/nikverse/city/shots"
-import type { GpuTiming } from "../src/nikverse/city/bench"
-import { drawnOver } from "../src/nikverse/city/drawn"
-import type { ShotResult } from "../src/nikverse/city/shot-handle"
-import { GATE_LIMITS } from "../src/nikverse/gate"
-import { SCALE_DOWN_ABOVE_MS, SCALE_MIN } from "../src/nikverse/city/resolution"
-import { actAsAde, arg, startHarness } from "./nikverse-harness"
+import { SHOTS, shotPicture } from "../src/raguverse/city/shots"
+import type { GpuTiming } from "../src/raguverse/city/bench"
+import { drawnOver } from "../src/raguverse/city/drawn"
+import type { ShotResult } from "../src/raguverse/city/shot-handle"
+import { GATE_LIMITS } from "../src/raguverse/gate"
+import { SCALE_DOWN_ABOVE_MS, SCALE_MIN } from "../src/raguverse/city/resolution"
+import { actAsAde, arg, startHarness } from "./raguverse-harness"
 
 const label = arg("--label") ?? "shots"
-const out = arg("--out") ?? join(tmpdir(), "nikverse-shots", label)
+const out = arg("--out") ?? join(tmpdir(), "raguverse-shots", label)
 const levels = (arg("--levels") ?? "bassa,media").split(",").filter(Boolean)
 const only = arg("--shots")?.split(",").map(Number)
 // For measuring: `--tune samples=1&maxscale=0.9` rides on the shot pages' query (`CityDeps.tune`); the pictures name it in `label`.
@@ -71,7 +71,7 @@ interface Row {
   problems: string[]
   png: string
   jpg: string
-  /** The GPU time of the shot's view, drawn back to back (`window.__nikverseBench`): undefined when it could not be taken. */
+  /** The GPU time of the shot's view, drawn back to back (`window.__raguverseBench`): undefined when it could not be taken. */
   gpu?: GpuTiming
   /** What the frame drew: triangles and draw calls, as the renderer counts them. */
   drawn?: { calls: number; triangles: number }
@@ -101,8 +101,8 @@ async function shots(level: string) {
       )
       const info = JSON.parse(state) as { shot?: string; city?: string; error?: string; quality?: string; why?: string }
       if (info.shot !== "ready") throw new Error(`the page did not take the shot: ${info.error ?? state}`)
-      const result = await evaluate<ShotResult>(`window.__nikverseShot`)
-      const gpu = await evaluate<GpuTiming>(`window.__nikverseBench(120)`).catch(() => undefined)
+      const result = await evaluate<ShotResult>(`window.__raguverseShot`)
+      const gpu = await evaluate<GpuTiming>(`window.__raguverseBench(120)`).catch(() => undefined)
       const bytes = (data: string) => Buffer.from(data.slice(data.indexOf(",") + 1), "base64")
       writeFileSync(join(out, `${name}.png`), bytes(result.png))
       writeFileSync(join(out, `${name}.jpg`), bytes(result.jpg))
@@ -256,7 +256,7 @@ function checks(): unknown {
   const ran = Bun.spawnSync(
     [
       "bun",
-      join(import.meta.dir, "nikverse-render-check.ts"),
+      join(import.meta.dir, "raguverse-render-check.ts"),
       "--strict-logo",
       "--json",
       file,
