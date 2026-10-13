@@ -121,6 +121,7 @@ import type { EventSource, Transport } from "./context/sdk"
 import { Log } from "@ragu/util/log"
 import { errorMessage } from "@ragu/util/error-format"
 import { classifyConfigFailure } from "@tui/util/config-failure"
+import { LOGO_LINES } from "@tui/component/logo"
 
 const log = Log.create({ service: "tui.app" })
 
@@ -509,13 +510,7 @@ function App(props: {
     const model = usage.model ? `${usage.model.providerID}/${usage.model.modelID}` : "—"
     const resume = `ragu --session ${sessionID}`
 
-    const asciiLogo = `
-███╗   ██╗██╗██╗  ██╗ ██████╗██╗     ██╗
-████╗  ██║██║██║ ██╔╝██╔════╝██║     ██║
-██╔██╗ ██║██║█████╔╝ ██║     ██║     ██║
-██║╚██╗██║██║██╔═██╗ ██║     ██║     ██║
-██║ ╚████║██║██║  ██╗╚██████╗███████╗██║
-╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝`
+    const asciiLogo = `\n${LOGO_LINES.join("\n")}`
 
     return [
       `${asciiLogo}`,
