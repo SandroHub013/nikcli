@@ -1,166 +1,103 @@
 import { TextAttributes, RGBA } from "@opentui/core"
-import { useTimeline } from "@opentui/solid"
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { For, Show } from "solid-js"
 import { useTheme, tint } from "@tui/context/theme"
-import { useKV } from "@tui/context/kv"
-import { Link } from "@tui/ui/link"
 
-/** The wordmark, one string per row. */
-export const LOGO_LINES = [
-  "███╗   ██╗ ██╗ ██╗  ██╗  ██████╗ ██╗      ██╗",
-  "████╗  ██║ ██║ ██║ ██╔╝ ██╔════╝ ██║      ██║",
-  "██╔██╗ ██║ ██║ █████╔╝  ██║      ██║      ██║",
-  "██║╚██╗██║ ██║ ██╔═██╗  ██║      ██║      ██║",
-  "██║ ╚████║ ██║ ██║  ██╗ ╚██████╗ ███████╗ ██║",
-  "╚═╝  ╚═══╝ ╚═╝ ╚═╝  ╚═╝  ╚═════╝ ╚══════╝ ╚═╝",
+/*
+ * The wordmark, in the pixel letters OpenCode's home uses: "ragu" muted, "code"
+ * bright, like its "open"/"code". Half blocks draw two pixel rows per text row.
+ * Three markers paint the inside of a letter in a shadow tone:
+ *   _  a shadow cell
+ *   ^  the letter's top half over a shadow cell
+ *   ~  a top half in the shadow tone
+ * Row 0 is the ascender (the "d"), row 4 the descender (the "g").
+ */
+export const LOGO_RAGU = [
+  "                   ",
+  "█▀▀▀ ▀▀▀█ █▀▀█ █  █",
+  "█    █^^█ █__█ █__█",
+  "▀    ▀▀▀▀ ▀▀▀█ ▀▀▀▀",
+  "          ▀▀▀▀     ",
 ]
+export const LOGO_CODE = [
+  "             ▄     ",
+  "█▀▀▀ █▀▀█ █▀▀█ █▀▀█",
+  "█___ █__█ █__█ █^^^",
+  "▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀",
+  "                   ",
+]
+const GAP = " "
 
-const LOGO_WIDTH = Math.max(...LOGO_LINES.map((line) => line.length))
-const REVEAL_DURATION = 950
-/** How long past the reveal a stalled timeline is waited for before the wordmark is drawn whole. */
-const REVEAL_GRACE = 250
-const SHINE_WIDTH = 5
-const ROW_LUMINANCE = [0.48, 0.62, 0.82, 1, 0.72, 0.5]
-const CREDIT = "by @nikomatt69"
-const GITHUB_PROFILE_URL = "https://github.com/nikomatt69"
+/** The wordmark as plain rows, markers turned into the cells they draw: for the exit summary. */
+export const LOGO_LINES = LOGO_RAGU.map((left, row) =>
+  `${left}${GAP}${LOGO_CODE[row]}`.replace(/_/g, " ").replace(/\^/g, "▀").replace(/~/g, "▀").trimEnd(),
+)
 
-type Segment = {
-  text: string
-  color: RGBA
-  bold: boolean
+type Cell = { text: string; fg: RGBA; bg?: RGBA; bold: boolean }
+
+/** One row of one half of the wordmark, split into runs that share their colours. */
+function cells(line: string, fg: RGBA, shadow: RGBA, bold: boolean): Cell[] {
+  const runs: Cell[] = []
+  for (const char of line) {
+    const cell: Cell =
+      char === "_"
+        ? { text: " ", fg, bg: shadow, bold }
+        : char === "^"
+          ? { text: "▀", fg, bg: shadow, bold }
+          : char === "~"
+            ? { text: "▀", fg: shadow, bold }
+            : { text: char, fg, bold }
+    const last = runs.at(-1)
+    if (last && last.fg === cell.fg && last.bg === cell.bg) last.text += cell.text
+    else runs.push(cell)
+  }
+  return runs
 }
 
-export function Logo(props: { idle?: boolean; compact?: boolean }) {
+export function Logo(props: { compact?: boolean }) {
   const { theme } = useTheme()
-  const kv = useKV()
-  const animationsEnabled = props.idle !== false && kv.get("animations_enabled", true)
-  const [progress, setProgress] = createSignal(animationsEnabled ? 0 : 1)
-  const timeline = useTimeline({
-    duration: REVEAL_DURATION,
-    autoplay: animationsEnabled,
-  })
-
-  onMount(() => {
-    if (!animationsEnabled) return
-    let revealed = false
-    timeline.add(
-      { progress: 0 },
-      {
-        progress: 1,
-        duration: REVEAL_DURATION,
-        ease: "inOutSine",
-        onUpdate: (animation) => {
-          if (!revealed) setProgress(animation.targets[0].progress)
-        },
-      },
-    )
-    /*
-     * The reveal is decoration. Until the timeline moves, every row is spaces in
-     * the background colour, so a renderer whose frames never tick it would show
-     * an empty box where the name should be. Past the reveal's own length the
-     * wordmark is drawn whole, whatever the timeline did.
-     */
-    const reveal = setTimeout(() => {
-      revealed = true
-      setProgress(1)
-    }, REVEAL_DURATION + REVEAL_GRACE)
-    onCleanup(() => clearTimeout(reveal))
-  })
-
-  const renderLine = (line: string, row: number): Segment[] => {
-    const cursor = Math.floor(progress() * (LOGO_WIDTH + SHINE_WIDTH))
-    const edge = Math.min(LOGO_WIDTH, cursor)
-    const shineStart = Math.min(LOGO_WIDTH, Math.max(0, cursor - SHINE_WIDTH))
-    const base = tint(theme.foreground.muted, theme.foreground.default, ROW_LUMINANCE[row] ?? 0.7)
-    const segments: Segment[] = []
-
-    if (shineStart > 0) {
-      segments.push({
-        text: line.slice(0, shineStart),
-        color: base,
-        bold: row >= 2 && row <= 4,
-      })
-    }
-
-    if (edge > shineStart) {
-      segments.push({
-        text: line.slice(shineStart, edge),
-        color: tint(base, theme.foreground.default, 0.9),
-        bold: true,
-      })
-    }
-
-    if (edge < LOGO_WIDTH) {
-      segments.push({
-        text: " ".repeat(LOGO_WIDTH - edge),
-        color: theme.surface.base,
-        bold: false,
-      })
-    }
-
-    return segments
-  }
-
-  const diamondStrength = () => {
-    const value = progress()
-    if (value < 0.86) return 0
-    if (value < 0.96) return (value - 0.86) / 0.1
-    return 1 - ((value - 0.96) / 0.04) * 0.35
-  }
+  // Opaque on purpose: the background may be transparent (ADE draws its own),
+  // and a shadow mixed from it must still be a colour.
+  const shadow = (fg: RGBA) => tint(theme.surface.base, fg, 0.25)
+  const row = (index: number) => [
+    ...cells(LOGO_RAGU[index]!, theme.foreground.muted, shadow(theme.foreground.muted), false),
+    { text: GAP, fg: theme.foreground.muted, bold: false },
+    ...cells(LOGO_CODE[index]!, theme.foreground.default, shadow(theme.foreground.default), true),
+  ]
 
   return (
     <Show
       when={props.compact}
       fallback={
-        <box width={LOGO_WIDTH}>
-          <For each={LOGO_LINES}>
-            {(line, index) => (
+        <box flexDirection="column" flexShrink={0}>
+          <For each={LOGO_RAGU.map((_, index) => index)}>
+            {(index) => (
               <box flexDirection="row" height={1}>
-                <For each={renderLine(line, index())}>
-                  {(segment) => (
+                <For each={row(index)}>
+                  {(cell) => (
                     <text
-                      fg={segment.color}
-                      attributes={segment.bold ? TextAttributes.BOLD : undefined}
+                      fg={cell.fg}
+                      bg={cell.bg}
+                      attributes={cell.bold ? TextAttributes.BOLD : undefined}
                       selectable={false}
+                      wrapMode="none"
                     >
-                      {segment.text}
+                      {cell.text}
                     </text>
                   )}
                 </For>
               </box>
             )}
           </For>
-          <box width={LOGO_WIDTH} height={1} flexDirection="row" justifyContent="center" gap={1}>
-            <text
-              fg={tint(theme.surface.base, theme.foreground.default, diamondStrength())}
-              attributes={TextAttributes.BOLD}
-              selectable={false}
-            >
-              {progress() >= 0.86 ? "◇" : " "}
-            </text>
-            <Show
-              when={progress() >= 0.86}
-              fallback={
-                <text fg={theme.surface.base} selectable={false}>
-                  {" ".repeat(CREDIT.length)}
-                </text>
-              }
-            >
-              <Link href={GITHUB_PROFILE_URL} fg={theme.status.info.fg} underline={false}>
-                {CREDIT}
-              </Link>
-            </Show>
-          </box>
         </box>
       }
     >
       <box height={1} flexDirection="column">
         <text selectable={false} wrapMode="none">
           <span style={{ fg: theme.foreground.muted }}>
-            <b>NIK</b>
+            <b>RAGU</b>
           </span>
           <span style={{ fg: theme.foreground.default }}>
-            <b>CLI</b>
+            <b>CODE</b>
           </span>
         </text>
       </box>

@@ -94,7 +94,7 @@ export function Home() {
         <box flexGrow={1} minHeight={0} />
         <box height={4} minHeight={0} flexShrink={1} />
         <box flexShrink={0} ref={bindLogoBox}>
-          <Logo idle={true} />
+          <Logo />
         </box>
         <box height={1} minHeight={0} flexShrink={1} />
         <box width="100%" maxWidth={75} zIndex={1000} paddingTop={1} flexShrink={0}>

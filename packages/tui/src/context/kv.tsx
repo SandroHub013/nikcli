@@ -4,7 +4,7 @@ import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import path from "path"
 
-export const { use: useKV, provider: KVProvider, context: KVContext } = createSimpleContext({
+export const { use: useKV, provider: KVProvider } = createSimpleContext({
   name: "KV",
   init: () => {
     const [ready, setReady] = createSignal(false)

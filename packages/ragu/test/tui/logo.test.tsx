@@ -1,15 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import { engine } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { ThemeContext, createStandaloneTheme } from "@tui/context/theme"
 import { loadBuiltInTheme } from "@tui/context/theme-catalog"
-import { KVContext } from "@tui/context/kv"
 import { LOGO_LINES, Logo } from "@tui/component/logo"
 
 /*
  * The user, 2026-10-13: «quando avvio ragù cli non appare la sua scritta come
- * appariva prima nikcli nel tui». The home's wordmark is the product's name, and
- * it must be there whether or not its reveal animation ever runs.
+ * appariva prima nikcli nel tui», and then: the home like OpenCode's, with
+ * "ragucode" written in its pixel letters.
  */
 
 const theme = createStandaloneTheme({
@@ -17,32 +15,38 @@ const theme = createStandaloneTheme({
   mode: "dark",
 })
 
-async function mount(animations: boolean, compact = false) {
-  const kv = {
-    get: (key: string, fallback: unknown) => (key === "animations_enabled" ? animations : fallback),
-  }
-  return testRender(
+async function frame(compact = false) {
+  const screen = await testRender(
     () => (
       <ThemeContext.Provider value={theme as never}>
-        <KVContext.Provider value={kv as never}>
-          <Logo idle={true} compact={compact} />
-        </KVContext.Provider>
+        <Logo compact={compact} />
       </ThemeContext.Provider>
     ),
-    { width: 60, height: 10 },
+    { width: 60, height: 8 },
   )
+  await screen.renderOnce()
+  const captured = screen.captureCharFrame()
+  screen.renderer.destroy()
+  return captured
 }
 
 describe("Logo", () => {
-  test("with animations on, a timeline that never moves still leaves the name on screen", async () => {
-    const screen = await mount(true)
-    // No frame will ever tick the reveal: the case of a renderer that never goes live.
-    engine.detach()
-    await screen.renderOnce()
-    await Bun.sleep(1400)
-    await screen.renderOnce()
-    const frame = screen.captureCharFrame()
-    for (const line of LOGO_LINES) expect(frame).toContain(line.trimEnd())
-    screen.renderer.destroy()
+  test("the home spells ragucode in pixel letters, on its first frame", async () => {
+    const captured = await frame()
+    for (const line of LOGO_LINES) expect(captured).toContain(line)
+    // "ragu" then "code": the bowl of the a, the descender of the g, the ascender of the d.
+    expect(captured).toContain("█▀▀▀ ▀▀▀█ █▀▀█ █  █ █▀▀▀ █▀▀█ █▀▀█ █▀▀█")
+    expect(captured).not.toContain("███╗")
+  })
+
+  test("the short form in the session strip reads RAGU CODE", async () => {
+    const captured = await frame(true)
+    expect(captured).toContain("RAGUCODE")
+    expect(captured).not.toContain("NIKCLI")
+  })
+
+  test("the exit summary's rows carry no marker characters", () => {
+    for (const line of LOGO_LINES) expect(line).not.toMatch(/[_^~]/)
+    expect(LOGO_LINES).toHaveLength(5)
   })
 })

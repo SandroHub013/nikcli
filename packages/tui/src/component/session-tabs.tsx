@@ -141,7 +141,7 @@ export function SessionTabs() {
         paddingLeft={1}
         flexDirection="column"
       >
-        <Logo compact idle={false} />
+        <Logo compact />
       </box>
       <box flexDirection="row" flexGrow={1} minWidth={0} height={contentHeight()} gap={TAB_GAP} overflow="hidden">
         <For each={layout().ids}>
