@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { setShortcutActivationEnabledForTests, setWakeWordEnabledForTests } from "../settings/model"
 import { listeningState } from "./listening-state"
 
-const on = { alwaysListen: true, activation: "wake-word" as const, wakeWord: "ei nik" }
+const on = { alwaysListen: true, activation: "wake-word" as const, wakeWord: "ei ragù" }
 
 describe("the always-on indicator", () => {
   // The wake word, on by default; set here so the block does not depend on the order it runs in.
@@ -11,7 +11,7 @@ describe("the always-on indicator", () => {
   test("shown for as long as the microphone listens by itself, naming the phrase", () => {
     const state = listeningState({ settings: on, running: true, mode: "agent", paused: false })
     expect(state.kind).toBe("listening")
-    expect(state.kind === "listening" && state.text).toBe("In ascolto · «ei nik»")
+    expect(state.kind === "listening" && state.text).toBe("In ascolto · «ei ragù»")
   })
 
   test("says when it has paused, so the user knows why it stopped answering", () => {
@@ -50,13 +50,13 @@ describe("with the wake word switched off", () => {
 describe("after an answer", () => {
   test("the pill says it is listening without the name", () => {
     const state = listeningState({
-      settings: { alwaysListen: true, activation: "wake-word", wakeWord: "nik" },
+      settings: { alwaysListen: true, activation: "wake-word", wakeWord: "ei ragù" },
       running: true,
       mode: "agent",
       paused: false,
       followUp: true,
     })
     expect(state.kind).toBe("follow-up")
-    expect(state.kind !== "hidden" && state.title).toContain("«nik»")
+    expect(state.kind !== "hidden" && state.title).toContain("«ei ragù»")
   })
 })

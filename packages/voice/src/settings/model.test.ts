@@ -158,7 +158,7 @@ describe("settings/model - normalizeSettings", () => {
   })
 
   test("the name is fixed to «ei ragù», whatever was stored", () => {
-    for (const wakeWord of ["hei nik", "nik", "ei nik", "ragù", "ei ragù", "jarvis", "", undefined]) {
+    for (const wakeWord of ["hei ragù", "ragù", "ei ragù", "jarvis", "computer", "", undefined]) {
       const res = normalizeSettings({
         version: 2,
         activation: "wake-word" as const,
@@ -171,10 +171,10 @@ describe("settings/model - normalizeSettings", () => {
     expect(WAKE_PHRASE).toBe("ei ragù")
   })
 
-  test("a legacy voice.settings profile with wakeWord: 'nik' migrates to «ei ragù»", () => {
+  test("a legacy voice.settings profile with legacy wakeWord migrates to «ei ragù»", () => {
     const legacy = {
       version: 6,
-      wakeWord: "nik",
+      wakeWord: "legacy",
     }
     const result = normalizeSettings(legacy)
     expect(result.wakeWord).toBe("ei ragù")
@@ -189,7 +189,7 @@ describe("settings/model - normalizeSettings", () => {
       mode: "agent",
       activation: "wake-word",
       alwaysListen: true,
-      wakeWord: "nik",
+      wakeWord: "ei ragù",
       transcriptionSend: "manual",
       language: "it",
       backend: "openrouter",
@@ -288,7 +288,7 @@ describe("settings/model - normalizeSettings", () => {
       activation: "wake-word" as const,
       transcriptionSend: "auto" as const,
       language: "it",
-      wakeWord: "hei nik",
+      wakeWord: "ei ragù",
       agentChord: "ctrl+shift+a",
       transcriptionChord: "ctrl+shift+t",
       backend: "openrouter" as const,
@@ -506,7 +506,7 @@ describe("0.7.0: the assistant starts only from its shortcut", () => {
       mode: "agent",
       activation: "wake-word",
       alwaysListen: true,
-      wakeWord: "ei nik",
+      wakeWord: "ei ragù",
     }
     const moved = normalizeSettings(saved)
     expect(moved.activation).toBe("push-to-talk")

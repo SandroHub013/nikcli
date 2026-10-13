@@ -15,7 +15,7 @@ describe("dialog/while-thinking", () => {
       "lascia stare",
       "annulla la richiesta",
       "ferma la domanda",
-      "basta così nik",
+      "basta così ragù",
       "interrompi pure",
       "lascia perdere la richiesta",
     ]) {

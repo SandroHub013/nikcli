@@ -249,14 +249,14 @@ describe("planUtterance", () => {
   test("supporta risposta combinata con speech e steps", async () => {
     const result = await planUtterance("avvia claude sul parser", context, async () =>
       JSON.stringify({
-        speech: "Subito Nik, avvio la sessione Claude Code per analizzare il parser.",
+        speech: "Subito, avvio la sessione Claude Code per analizzare il parser.",
         steps: [{ action: "start_session", agent: "claude", task: "analizza il parser" }],
       }),
     )
 
     expect(result.failure).toBeUndefined()
     expect(result.steps).toHaveLength(1)
-    expect(result.speech).toBe("Subito Nik, avvio la sessione Claude Code per analizzare il parser.")
+    expect(result.speech).toBe("Subito, avvio la sessione Claude Code per analizzare il parser.")
   })
 
   test("buildPlannerPrompt include la cronologia dei turni precedenti quando fornita", () => {

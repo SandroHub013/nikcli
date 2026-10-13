@@ -2,7 +2,7 @@
  * Proactive voice alerts queue for ADE.
  *
  * Implements S48 consumption rules:
- * - Alerts speak of nik's own initiative for three events:
+ * - Alerts speak of ragù's own initiative for three events:
  *   1. A session requests a permission (the question with voice-answerable options)
  *   2. A session completes its work (brief, concrete sentence, e.g. "Prova-voce ha finito: tre test verdi.")
  *   3. An open decision is registered in the Decisions panel

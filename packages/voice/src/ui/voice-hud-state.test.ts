@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { agentHudState, latestExchange, HUD_WAVE, orbRim, waveBarHeight } from "./voice-hud-state"
 
-const base = { partial: "", spoken: "", readback: undefined, wakeWord: "hei nik" }
+const base = { partial: "", spoken: "", readback: undefined, wakeWord: "ei ragù" }
 
 describe("orbRim", () => {
   it("is green while the microphone is open", () => {
@@ -36,7 +36,7 @@ describe("agentHudState", () => {
   it("quotes the wake word while the agent sleeps", () => {
     const state = agentHudState({ ...base, status: "asleep" })
     expect(state.tone).toBe("armed")
-    expect(state.line).toBe("di' «hei nik»")
+    expect(state.line).toBe("di' «ei ragù»")
     expect(state.quoted).toBe(false)
   })
 

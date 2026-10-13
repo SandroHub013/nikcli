@@ -208,7 +208,7 @@ describe("Voice Modes & Settings Interaction", () => {
         mode: "agent",
         activation: "wake-word",
         alwaysListen: true,
-        wakeWord: "hei nik",
+        wakeWord: "ei ragù",
       },
     })
 
@@ -219,8 +219,8 @@ describe("Voice Modes & Settings Interaction", () => {
     await heard(transcriber, "nuova sessione")
     expect(host.calls.filter((c) => c.method === "runCommand")).toHaveLength(0)
 
-    // 2. Spoken with wake word (and ASR variation 'ehi nick') -> executes command immediately
-    await heard(transcriber, "ehi nick nuova sessione")
+    // 2. Spoken with wake word (and ASR variation 'ehi ragù') -> executes command immediately
+    await heard(transcriber, "ehi ragù nuova sessione")
     const newSessionCalls = host.calls.filter((c) => c.method === "runCommand" && c.args[0] === "session.new")
     expect(newSessionCalls).toHaveLength(1)
 

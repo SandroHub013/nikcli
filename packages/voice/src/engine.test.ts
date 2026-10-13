@@ -222,7 +222,7 @@ describe("engine/createVoiceEngine", () => {
     test("wake word: the sentence runs without it, and a leading one is dropped", async () => {
       const { engine, opened } = withActivation("wake-word")
       await engine.submitText("apri la tavolozza")
-      await engine.submitText("hei nik apri la tavolozza")
+      await engine.submitText("ei ragù apri la tavolozza")
       expect(opened()).toBe(2)
     })
 
@@ -493,7 +493,7 @@ describe("engine/createVoiceEngine", () => {
         activation: "toggle",
         agentEngine: "off",
         backend: "grok-stream",
-        customWords: ["docker", "nik", "docker"],
+        customWords: ["docker", "ei ragù", "docker"],
       },
       backendOptions: {
         grokStreamOptions: {
@@ -514,7 +514,7 @@ describe("engine/createVoiceEngine", () => {
 
     await engine.start()
     // Deduped against itself and against the wake word, custom words first.
-    expect(captured[0]?.grokStreamOptions?.keyterms).toEqual(["docker", "nik"])
+    expect(captured[0]?.grokStreamOptions?.keyterms).toEqual(["docker", "ei ragù"])
     await engine.stop()
   })
 
@@ -1506,13 +1506,13 @@ describe("engine/agent answers what the grammar does not know", () => {
       await hear("il governo ha approvato la legge di bilancio nella notte")
       await hear("apri la tavolozza")
       // Only the greeting may come before the name.
-      await hear("senti nik apri la tavolozza")
+      await hear("senti ragù apri la tavolozza")
 
       expect(asked).toHaveLength(0)
       expect(host.calls.some((call) => call.method === "runCommand")).toBe(false)
       const ignored = engine
         .history()
-        .filter((entry) => entry.kind === "action" && entry.label.startsWith("Ignorata, non inizia con «nik»"))
+        .filter((entry) => entry.kind === "action" && entry.label.startsWith("Ignorata, non inizia con «ei ragù»"))
       expect(ignored).toHaveLength(3)
       await engine.stop()
     })
@@ -1520,13 +1520,13 @@ describe("engine/agent answers what the grammar does not know", () => {
     test("called by name, with or without a greeting, it answers", async () => {
       const { host, asked, engine, hear } = calling()
       await engine.start()
-      await hear("ei nik apri la tavolozza")
+      await hear("ei ragù apri la tavolozza")
       expect(host.calls).toContainEqual({ method: "runCommand", args: ["palette.open"] })
 
-      await hear("ehi nick quante sessioni ci sono")
+      await hear("ehi ragù quante sessioni ci sono")
       expect(engine.lastSpoken()).toContain("session")
 
-      await hear("hey nick, raccontami la storia di Roma")
+      await hear("hey ragù, raccontami la storia di Roma")
       // What is left after the name, as the recogniser's own normalisation leaves it.
       expect(asked).toEqual(["raccontami la storia di roma"])
       await engine.stop()
@@ -1547,7 +1547,7 @@ describe("engine/agent answers what the grammar does not know", () => {
       expect(host.calls.some((call) => call.method === "answerPermission")).toBe(false)
 
       advance(15_000)
-      await hear("ehi nik sì")
+      await hear("ehi ragù sì")
       expect(host.calls.find((call) => call.method === "answerPermission")?.args.slice(0, 2)).toEqual([
         "pane-1",
         "allow",
@@ -1579,7 +1579,7 @@ describe("engine/agent answers what the grammar does not know", () => {
         settings: { agentEngine: "auto", activation: "wake-word", alwaysListen: true },
       })
       await engine.start("agent", { waitForName: true })
-      transcriber.emit("ei nik raccontami la storia di Roma in tre frasi", true)
+      transcriber.emit("ei ragù raccontami la storia di Roma in tre frasi", true)
       await new Promise((r) => setTimeout(r, 20))
 
       // A video saying a command out loud must not close anything.
@@ -1589,7 +1589,7 @@ describe("engine/agent answers what the grammar does not know", () => {
       expect(engine.held()).toBe("chiudi il pannello due")
       expect(engine.status()).toBe("executing")
 
-      transcriber.emit("ehi nik apri la tavolozza", true)
+      transcriber.emit("ehi ragù apri la tavolozza", true)
       await new Promise((r) => setTimeout(r, 20))
       expect(host.calls).toContainEqual({ method: "runCommand", args: ["palette.open"] })
       await engine.stop()
@@ -1615,7 +1615,7 @@ describe("engine/agent answers what the grammar does not know", () => {
         settings: { agentEngine: "auto", activation: "wake-word", alwaysListen: true },
       })
       await engine.start()
-      transcriber.emit("ei nik raccontami la storia di Roma in tre frasi", true)
+      transcriber.emit("ei ragù raccontami la storia di Roma in tre frasi", true)
       await new Promise((r) => setTimeout(r, 20))
       expect(engine.status()).toBe("executing")
 
@@ -1730,7 +1730,7 @@ describe("always-on listening", () => {
     expect(engine.lastSpoken()).not.toContain("sveglio")
     await hear("apri la tavolozza")
     expect(ran(host)).toHaveLength(0)
-    await hear("ei nik apri la tavolozza")
+    await hear("ei ragù apri la tavolozza")
     expect(ran(host)).toEqual([{ method: "runCommand", args: ["palette.open"] }])
     await engine.stop()
   })
@@ -1829,7 +1829,7 @@ describe("always-on listening", () => {
     await hear("apri la tavolozza")
     expect(ran(host)).toHaveLength(0)
 
-    await hear("ei nik")
+    await hear("ei ragù")
     expect(gate.active(clock + 5_000)).toBe(false)
     clock += 30_000
     await hear("apri la tavolozza")
@@ -1863,7 +1863,7 @@ describe("always-on listening", () => {
       },
     })
     await engine.start("agent", { waitForName: true })
-    transcriber.emit("ei nik raccontami la storia di Roma", true)
+    transcriber.emit("ei ragù raccontami la storia di Roma", true)
     await settle()
     expect(engine.status()).toBe("executing")
     expect(gate.active(10_000)).toBe(true)
@@ -1878,7 +1878,7 @@ describe("always-on listening", () => {
     const { host, engine, hear, later } = listening()
     await engine.start("agent", { waitForName: true })
     // The name alone, then the command: the path that held it awake.
-    await hear("ei nik")
+    await hear("ei ragù")
     await hear("chiudi pannello 1")
     expect(engine.status()).toBe("confirming")
     await engine.submitText("sì")
@@ -2332,18 +2332,17 @@ describe("always-on listening", () => {
     })
     await engine.start("agent", { waitForName: true })
     expect(gate.active()).toBe(true)
-    expect(gate.accepts("ehi nick apri")).toBe(true)
-    expect(gate.accepts("nik apri")).toBe(true)
-    expect(gate.accepts("eh nik, apri")).toBe(true)
-    expect(gate.accepts("eh nik apri")).toBe(false)
-    expect(gate.accepts("ok nik apri")).toBe(false)
+    expect(gate.accepts("ehi ragù apri")).toBe(true)
+    expect(gate.accepts("ragù apri")).toBe(false)
+    expect(gate.accepts("eh ragù, apri")).toBe(true)
+    expect(gate.accepts("ok ragù apri")).toBe(false)
     expect(gate.accepts("nì")).toBe(false)
-    expect(gate.accepts("Nike apri")).toBe(false)
+    expect(gate.accepts("ragusano apri")).toBe(false)
 
     gate.onRejected("il governo ha approvato la legge di bilancio nella notte fonda")
     expect(engine.history().at(-1)).toMatchObject({
       kind: "action",
-      label: expect.stringContaining("Ignorata, non inizia con «nik»: «il governo"),
+      label: expect.stringContaining("Ignorata, non inizia con «ei ragù»: «il governo"),
     })
 
     // Called by the button: the next sentence is meant, and has to go whole.
@@ -2566,15 +2565,15 @@ describe("after 0.7.0: only the name starts the assistant", () => {
       await new Promise((r) => setTimeout(r, 20))
     }
     await hear("raccontami la storia di Roma")
-    await hear("senti nik raccontami la storia di Roma")
-    await hear("ok nik raccontami la storia di Roma")
+    await hear("senti ragù raccontami la storia di Roma")
+    await hear("ok ragù raccontami la storia di Roma")
     // «nì» alone is not the name, and the sentence after it is still the room's.
     await hear("nì")
     await hear("raccontami la storia di Roma")
-    await hear("niko raccontami la storia di Roma")
+    await hear("ragù racconta la storia di Roma")
     expect(asked).toHaveLength(0)
-    await hear("nik raccontami la storia di Roma")
-    await hear("ei nik raccontami la storia di Grecia")
+    await hear("ehi ragù raccontami la storia di Roma")
+    await hear("ei ragù raccontami la storia di Grecia")
     expect(asked).toHaveLength(2)
     // After the answers and the few seconds that follow them, the room is ignored again.
     clock += FOLLOW_UP_MS + 1
@@ -2620,7 +2619,7 @@ describe("after 0.7.0: opened by hand, with listening by itself turned off", () 
       settings: { agentEngine: "auto", alwaysListen: true },
     })
     await engine.start("agent", { waitForName: true })
-    transcriber.emit("nik raccontami la storia di Roma", true)
+    transcriber.emit("ei ragù raccontami la storia di Roma", true)
     await new Promise((r) => setTimeout(r, 60))
     expect(engine.isRunning()).toBe(true)
     await engine.stop()
@@ -2894,7 +2893,7 @@ describe("a conversation: after an answer the name is not needed for a few secon
   test("the next sentence is taken without the name, and the one after the window is not", async () => {
     const { engine, asked, cues, hear, advance } = talking()
     await engine.start("agent", { waitForName: true })
-    await hear("nik qual è la capitale della Francia")
+    await hear("ei ragù qual è la capitale della Francia")
     expect(asked).toHaveLength(1)
     expect(engine.followUp()).toBe(10_000 + FOLLOW_UP_MS)
     expect(cues).toEqual(["listening"])
@@ -2923,7 +2922,7 @@ describe("a conversation: after an answer the name is not needed for a few secon
     await engine.submitText("uno")
     expect(asked).toHaveLength(1)
     expect(engine.followUp()).toBeUndefined()
-    await hear("nik due")
+    await hear("ei ragù due")
     expect(asked).toHaveLength(2)
     expect(engine.followUp()).toBeDefined()
     await engine.submitText("grazie")
@@ -2936,7 +2935,7 @@ describe("a conversation: after an answer the name is not needed for a few secon
   test("with listening by itself turned off, there is no window", async () => {
     const { engine, hear } = talking({ activation: "wake-word", alwaysListen: false })
     await engine.start("agent", { waitForName: true })
-    await hear("nik qual è la capitale della Francia")
+    await hear("ei ragù qual è la capitale della Francia")
     expect(engine.followUp()).toBeUndefined()
     await engine.stop()
   })
@@ -3009,7 +3008,7 @@ describe("a conversation: after an answer the name is not needed for a few secon
     await engine.openResponseWindow({ durationMs: 200, rescheduleMs: 50 })
     expect(engine.isRunning()).toBe(true)
 
-    void hear("nik raccontami la storia di Roma")
+    void hear("ei ragù raccontami la storia di Roma")
     await new Promise((r) => setTimeout(r, 60))
     expect(engine.dialogState().status).toBe("executing")
 
@@ -3083,9 +3082,9 @@ describe("interrupted while it talks", () => {
   test("its name over its voice stops the voice and the sentence is carried out", async () => {
     const { host, events, engine, hear } = talkingSlowly()
     await engine.start("agent", { waitForName: true })
-    await hear("nik raccontami una storia")
+    await hear("ei ragù raccontami una storia")
     expect(events.at(-1)).toBe("speak:Una risposta lunga che non finisce mai.")
-    await hear("nik apri la tavolozza")
+    await hear("ei ragù apri la tavolozza")
     expect(events.slice(-1)).toEqual(["cancel"])
     expect(ran(host)).toEqual([{ method: "runCommand", args: ["palette.open"] }])
     await engine.stop()
@@ -3103,7 +3102,7 @@ describe("interrupted while it talks", () => {
   test("a sentence from the room over its voice changes nothing", async () => {
     const { events, engine, hear, finish } = talkingSlowly()
     await engine.start("agent", { waitForName: true })
-    await hear("nik raccontami una storia")
+    await hear("ei ragù raccontami una storia")
     const before = events.length
     await hear("il telegiornale di stasera")
     expect(events.slice(before)).toEqual([])
@@ -3115,7 +3114,7 @@ describe("interrupted while it talks", () => {
     for (const tap of ["toggle", "interrupt"] as const) {
       const { host, events, engine, hear } = talkingSlowly()
       await engine.start("agent", { waitForName: true })
-      await hear("nik raccontami una storia")
+      await hear("ei ragù raccontami una storia")
       await engine[tap]()
       expect(events).toContain("cancel")
       expect(engine.isRunning()).toBe(true)
@@ -3156,7 +3155,7 @@ describe("a television talking on does not keep the window open", () => {
       await new Promise((r) => setTimeout(r, 30))
     }
     await engine.start("agent", { waitForName: true })
-    await hear("nik qual è la capitale della Francia")
+    await hear("ei ragù qual è la capitale della Francia")
     const room = [
       "il governo ha approvato",
       "e domani pioggia al nord",
@@ -3196,10 +3195,10 @@ describe("a television talking on does not keep the window open", () => {
       await new Promise((r) => setTimeout(r, 30))
     }
     await engine.start("agent", { waitForName: true })
-    await hear("nik qual è la capitale della Francia")
+    await hear("ei ragù qual è la capitale della Francia")
     await hear("e quella della Spagna")
     expect(engine.followUp()).toBeUndefined()
-    await hear("nik e quella del Portogallo")
+    await hear("ei ragù e quella del Portogallo")
     expect(engine.followUp()).toBeDefined()
     await hear("e della Grecia")
     await engine.toggle()
@@ -3269,7 +3268,7 @@ describe("hearing: the orb lights only when the next sentence would be taken (D7
   test("an answer keeps it lit for the follow-up", async () => {
     const { engine, hear } = listening()
     await engine.start("agent", { waitForName: true })
-    await hear("nik qual è la capitale della Francia")
+    await hear("ei ragù qual è la capitale della Francia")
     expect(engine.followUp()).toBe(10_000 + FOLLOW_UP_MS)
     expect(engine.hearing()).toBe(true)
     await engine.stop()
