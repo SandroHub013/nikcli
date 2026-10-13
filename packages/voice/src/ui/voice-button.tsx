@@ -16,7 +16,7 @@ import { createMemo, Show } from "solid-js"
 import type { VoiceEngine } from "../engine"
 import type { DialogStatus } from "../dialog/session"
 import type { VoiceMode } from "../settings/model"
-import { NikMic } from "./nik-mic"
+import { RaguMic } from "./ragu-mic"
 import "./voice.css"
 import { t } from "@ragu/ade/i18n"
 
@@ -120,13 +120,13 @@ export function VoiceButton(props: VoiceButtonProps) {
       </Show>
 
       {/*
-        Solid rather than hairline: at 16px in a toolbar the outlined N silts
+        Solid rather than hairline: at 16px in a toolbar the outlined mark silts
         up inside the capsule, and a mark you cannot resolve is worse than a
-        generic one. Knocked out against the button's own ground so the letter
+        generic one. Knocked out against the button's own ground so the pot
         stays legible whether or not the mic is live.
       */}
       <span data-slot="mic-icon" aria-hidden="true">
-        <NikMic size={16} variant="solid" knockout="var(--ade-surface)" />
+        <RaguMic size={16} variant="solid" knockout="var(--ade-surface)" />
       </span>
     </button>
   )

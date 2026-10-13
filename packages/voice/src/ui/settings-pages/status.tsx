@@ -1,7 +1,7 @@
 import { Show, type JSX } from "solid-js"
 import { t } from "@ragu/ade/i18n"
 import type { VoiceEngine } from "../../engine"
-import { NikMic } from "../nik-mic"
+import { RaguMic } from "../ragu-mic"
 import type { VoiceSettingsState } from "../settings-state"
 
 /*
@@ -26,7 +26,7 @@ export function MicMark(p: { state: VoiceSettingsState }): JSX.Element {
           opacity: `${engineRunning() ? Math.min(0.25 + micLevel() * 1.5, 0.9) : 0}`,
         }}
       />
-      <NikMic size={18} variant="line" />
+      <RaguMic size={18} variant="line" />
     </div>
   )
 }
