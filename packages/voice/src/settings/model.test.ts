@@ -26,7 +26,7 @@ describe("settings/model - normalizeSettings", () => {
       expect(res.activation).toBe("wake-word")
       expect(res.transcriptionSend).toBe("manual")
       expect(res.language).toBe("it")
-      expect(res.wakeWord).toBe("nik")
+      expect(res.wakeWord).toBe("ei ragù")
       expect(res.agentChord).toBe("mod+shift+k")
       expect(res.transcriptionChord).toBe("mod+shift+j")
       expect(res.backend).toBe("grok-stream")
@@ -57,7 +57,7 @@ describe("settings/model - normalizeSettings", () => {
     expect(res.transcriptionSend).toBe("manual")
     expect(res.backend).toBe("grok-stream")
     expect(res.language).toBe("it")
-    expect(res.wakeWord).toBe("nik")
+    expect(res.wakeWord).toBe("ei ragù")
     expect(res.agentChord).toBe("mod+shift+k")
     expect(res.transcriptionChord).toBe("mod+shift+j")
 
@@ -91,7 +91,7 @@ describe("settings/model - normalizeSettings", () => {
     expect(res.transcriptionSend).toBe("auto")
     expect(res.language).toBe("en")
     // The phrase is fixed: a stored one is replaced.
-    expect(res.wakeWord).toBe("nik")
+    expect(res.wakeWord).toBe("ei ragù")
     // The local engine is gone: a profile that chose it moves to the cloud one, silently (not a correction),
     // and its acceleration preference is dropped with it. Cloud now starts on the streaming engine.
     expect(res.backend).toBe("grok-stream")
@@ -157,8 +157,8 @@ describe("settings/model - normalizeSettings", () => {
     expect(normalizeSettings({ ...moved, activation: "toggle" }).activation).toBe("toggle")
   })
 
-  test("the name is fixed to «nik», whatever was stored", () => {
-    for (const wakeWord of ["hei nik", "nik", "jarvis", "", undefined]) {
+  test("the name is fixed to «ei ragù», whatever was stored", () => {
+    for (const wakeWord of ["hei nik", "nik", "ei nik", "ragù", "ei ragù", "jarvis", "", undefined]) {
       const res = normalizeSettings({
         version: 2,
         activation: "wake-word" as const,
@@ -168,7 +168,16 @@ describe("settings/model - normalizeSettings", () => {
       // Replaced without a word: it is not the user's to set.
       expect(res.corrections.some((line) => line.includes("richiamo"))).toBe(false)
     }
-    expect(WAKE_PHRASE).toBe("nik")
+    expect(WAKE_PHRASE).toBe("ei ragù")
+  })
+
+  test("a legacy voice.settings profile with wakeWord: 'nik' migrates to «ei ragù»", () => {
+    const legacy = {
+      version: 6,
+      wakeWord: "nik",
+    }
+    const result = normalizeSettings(legacy)
+    expect(result.wakeWord).toBe("ei ragù")
   })
 
   test("a 0.7.2 profile, which listened all the time, opens no microphone after the update", () => {
@@ -444,7 +453,7 @@ describe("after 0.7.0: only the name starts the assistant", () => {
     expect(fresh.activation).toBe("wake-word")
     // It listens only in a microphone the user opened: see version 7.
     expect(fresh.alwaysListen).toBe(false)
-    expect(fresh.wakeWord).toBe("nik")
+    expect(fresh.wakeWord).toBe("ei ragù")
   })
 
   test("a 0.7.0 profile on the shortcut moves to the name once, told and without an error", () => {
