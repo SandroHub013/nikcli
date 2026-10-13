@@ -76,14 +76,14 @@ function sample(entry: unknown): string {
 }
 
 describe("the catalogs", () => {
-  test("the voice hint explains the pause in ei nik and that nik alone is enough", () => {
-    const italian = it["vui.wake.hint"]("nik")
-    expect(italian).toContain("Basta dire «nik»")
-    expect(italian).toContain("«ei nik» staccato, con una pausa dopo il nome")
-    const english = en["vui.wake.hint"]("nik")
-    expect(english).toContain("Just say “nik”")
-    expect(english).toContain("“ei nik” as separate words, with a pause after the name")
-    expect(english).toContain("for example “nik, open the browser”")
+  test("the voice hint explains the pause in ei ragù and that the name alone is enough", () => {
+    const italian = it["vui.wake.hint"]("ragù")
+    expect(italian).toContain("Basta dire «ei ragù»")
+    expect(italian).toContain("«ei ragù» staccato, con una pausa dopo il nome")
+    const english = en["vui.wake.hint"]("ragù")
+    expect(english).toContain("Just say “ragù”")
+    expect(english).toContain("“ei ragù” as separate words, with a pause after the name")
+    expect(english).toContain("for example “ragù, open the browser”")
     expect(english).not.toContain("apri il browser")
   })
 
