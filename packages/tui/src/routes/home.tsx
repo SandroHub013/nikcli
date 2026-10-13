@@ -15,7 +15,14 @@ import { usePromptRef } from "../context/prompt"
 import { VERSION } from "@ragu/util/version"
 import type { BoxRenderable } from "@opentui/core"
 import { TuiPluginRuntime } from "../plugin"
-export function Home() {
+/**
+ * The home: the wordmark, the prompt and the tips.
+ *
+ * With `sessionID` it stands in for a conversation that has no message yet
+ * (`routes/session/blank.ts`): the prompt writes into that conversation instead
+ * of creating one, and the route's own initial prompt is the session's to apply.
+ */
+export function Home(props: { sessionID?: string; workspaceID?: string; onPrompt?: (prompt: PromptRef) => void } = {}) {
   const sync = useSync()
   const remote = useRemoteSync()
   const { theme } = useTheme()
@@ -53,6 +60,7 @@ export function Home() {
   let prompt: PromptRef
   const args = useArgs()
   onMount(() => {
+    if (props.sessionID) return
     if (route.initialPrompt) {
       prompt.set(route.initialPrompt)
     } else if (args.prompt) {
@@ -102,9 +110,11 @@ export function Home() {
             ref={(r) => {
               prompt = r
               promptRef.set(r)
+              props.onPrompt?.(r)
             }}
             hint={Hint}
-            workspaceID={route.workspaceID}
+            sessionID={props.sessionID}
+            workspaceID={props.sessionID ? props.workspaceID : route.workspaceID}
           />
         </box>
         <TuiPluginRuntime.Slot name="home.bottom" />
