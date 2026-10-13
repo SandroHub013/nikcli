@@ -197,7 +197,7 @@ export function ModePage(p: { state: VoiceSettingsState; bare?: boolean }): JSX.
         </div>
 
         {/*
-        Proactive alerts: nik speaks on its own for permissions, completions, or decisions.
+        Proactive alerts: ragù speaks on its own for permissions, completions, or decisions.
         Off by default to avoid unexpected speech or consumption (S48).
       */}
         <div data-slot="sub-choice-box">
