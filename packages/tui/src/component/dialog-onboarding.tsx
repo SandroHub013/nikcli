@@ -270,7 +270,7 @@ function FilesystemContent() {
       <box gap={1}>
         <FsSectionHeader title="Configuration" subtitle="Settings files — persisted across updates" />
         <FsRow indent={0} path={`${configRoot}/`} desc="Config root directory" />
-        <FsRow indent={1} path="nikcli.json" desc="Global config: provider, model, agent defaults" />
+        <FsRow indent={1} path="ragu.json" desc="Global config: provider, model, agent defaults" />
         <FsRow indent={1} path="tui.json" desc="TUI config: theme, keybinds, plugins" />
         <FsRow indent={1} path="AGENTS.md" desc="Global AI system instructions" />
         <FsRow indent={1} path="skills/" desc="Installed agent skills" />
@@ -291,13 +291,13 @@ function FilesystemContent() {
           title="Project Directory (optional)"
           subtitle="Created in your repo when you customize a project"
         />
-        <FsRow indent={0} path=".nikcli/" desc="Project config directory" />
+        <FsRow indent={0} path=".ragu/" desc="Project config directory" />
         <FsRow indent={1} path="commands/" desc="Custom slash commands (.md)" />
         <FsRow indent={1} path="agents/" desc="Custom AI agents (.md)" />
         <FsRow indent={1} path="plugins/" desc="Local plugins (.ts, .js)" />
         <FsRow indent={1} path="package.json" desc="Plugin dependencies" />
         <FsRow indent={1} path=".gitignore" desc="Version control exclusions" />
-        <FsRow indent={0} path="nikcli.json" desc="Per-project settings override" />
+        <FsRow indent={0} path="ragu.json" desc="Per-project settings override" />
       </box>
 
       {/* ── Legend ───────────────────────────────────────────────── */}

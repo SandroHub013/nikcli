@@ -115,7 +115,7 @@ export function openManager(api: TuiPluginApi): void {
       api.ui.dialog.replace(() => (
         <Alert
           title="Connectors"
-          message={'No connectors configured.\nAdd one under "connectors" in nikcli.json or run: ragu connector add'}
+          message={'No connectors configured.\nAdd one under "connectors" in ragu.json or run: ragu connector add'}
         />
       ))
       return

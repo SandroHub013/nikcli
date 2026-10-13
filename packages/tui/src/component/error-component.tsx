@@ -30,7 +30,7 @@ export function ErrorComponent(props: {
   })
   const [copied, setCopied] = createSignal(false)
 
-  const issueURL = new URL("https://github.com/nikcli/nikcli/issues/new?template=bug-report.yml")
+  const issueURL = new URL("https://github.com/SandroHub013/ragucode/issues/new?template=bug-report.yml")
 
   const isLight = props.mode === "light"
   const colors = {
