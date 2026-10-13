@@ -8,6 +8,8 @@
  * memory for when storage is not there (a private window, blocked data).
  */
 
+import { LEGACY_PLAYER_KEY, readCopyingLegacy } from "./legacy-keys"
+
 /** The character's place on the ground and the way it faces. */
 export interface PlayerSpot {
   x: number
@@ -46,7 +48,7 @@ export function createPlayerStore(storage?: SpotStorage) {
       if (read) return spot
       read = true
       try {
-        const text = storage?.getItem(PLAYER_KEY)
+        const text = readCopyingLegacy(storage, PLAYER_KEY, LEGACY_PLAYER_KEY)
         if (text) spot = readSpot(JSON.parse(text))
       } catch {
         /* storage may throw, or hold something else: no saved place */

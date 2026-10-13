@@ -8,6 +8,8 @@
  * When the frames stay too slow at Media the world says `slow`; ADE keeps that for a day and opens it at Bassa.
  */
 
+import { LEGACY_LOWERED_KEY, readCopyingLegacy } from "./legacy-keys"
+
 export const OPEN_TIMEOUT_MS = 30_000
 
 export interface OpenWatchDeps {
@@ -79,7 +81,7 @@ export function createLoweredStore(storage: LoweredStorage | undefined, now: () 
     if (read) return at
     read = true
     try {
-      const value = Number(JSON.parse(storage?.getItem(LOWERED_KEY) ?? "null")?.at)
+      const value = Number(JSON.parse(readCopyingLegacy(storage, LOWERED_KEY, LEGACY_LOWERED_KEY) ?? "null")?.at)
       if (Number.isFinite(value)) at = value
     } catch {
       /* storage may throw or hold something else: not lowered */
@@ -121,6 +123,8 @@ export function createLoweredStore(storage: LoweredStorage | undefined, now: () 
  */
 export function worldQuery(options: { bench?: string; lowered?: boolean; list?: boolean }): string {
   // The lowered level first: the page reads the first `quality`, and a measuring trial's own (`quality=auto`) comes after.
-  const parts = [options.lowered ? "quality=bassa&lowered=1" : "", options.bench, options.list ? "city=0" : ""].filter(Boolean)
+  const parts = [options.lowered ? "quality=bassa&lowered=1" : "", options.bench, options.list ? "city=0" : ""].filter(
+    Boolean,
+  )
   return parts.length ? `?${parts.join("&")}` : ""
 }

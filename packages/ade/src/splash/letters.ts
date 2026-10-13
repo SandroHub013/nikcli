@@ -105,7 +105,7 @@ export function raguStrokes(): Segment[] {
   })
   let min = Infinity
   let max = -Infinity
-  for (const s of segments) for (const p of [s.from, s.to]) (min = Math.min(min, p[1])), (max = Math.max(max, p[1]))
+  for (const s of segments) for (const p of [s.from, s.to]) ((min = Math.min(min, p[1])), (max = Math.max(max, p[1])))
   const shift = -(min + max) / 2
   return segments.map((s) => ({ from: [s.from[0], s.from[1] + shift], to: [s.to[0], s.to[1] + shift] }))
 }
