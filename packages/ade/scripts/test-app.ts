@@ -32,7 +32,7 @@ import {
   type TestAppPlan,
   type TestAppRecord,
 } from "../src/host/test-app"
-import { ensureWorld } from "../src/nikverse/city/build-world"
+import { ensureWorld } from "../src/raguverse/city/build-world"
 
 const adeDir = join(import.meta.dir, "..")
 const isWindows = process.platform === "win32"
@@ -184,8 +184,8 @@ async function start(): Promise<void> {
   const world = await ensureWorld()
   console.log(
     world.ok
-      ? `Mondo di NikVerse: ${world.sha256.slice(0, 12)}${world.written ? " (ricostruito)" : " (già aggiornato)"}`
-      : `ATTENZIONE: il mondo di NikVerse non si costruisce, ADE Test mostrerebbe quello vecchio:\n${world.errors.join("\n")}`,
+      ? `Mondo di RaguVerse: ${world.sha256.slice(0, 12)}${world.written ? " (ricostruito)" : " (già aggiornato)"}`
+      : `ATTENZIONE: il mondo di RaguVerse non si costruisce, ADE Test mostrerebbe quello vecchio:\n${world.errors.join("\n")}`,
   )
 
   for (const dir of [plan.stateDir, plan.profileDir, plan.tmpDir]) mkdirSync(dir, { recursive: true })

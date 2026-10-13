@@ -93,7 +93,7 @@ export const it = {
   "palette.decisions.pane": "Apri pannello Decisioni",
   "palette.design.open": "Proposte di design per te",
   "palette.design.pane": "Apri pannello Design",
-  "palette.nikverse.pane": "Apri pannello NikVerse",
+  "palette.raguverse.pane": "Apri pannello RaguVerse",
   "palette.update.check": "Controlla aggiornamenti",
   "palette.process.kill": "Uccidi processo",
   "palette.process.none": "Il pannello a fuoco non ha un processo vivo",
@@ -156,8 +156,8 @@ export const it = {
   "newPane.decisions.hint": "tutto il registro: aperte, risposte, rimandate, chiuse",
   "newPane.design": "Design",
   "newPane.design.hint": "proposte grafiche, varianti e anteprime",
-  "newPane.nikverse": "NikVerse",
-  "newPane.nikverse.hint": "la città delle tue sessioni, in tempo reale",
+  "newPane.raguverse": "RaguVerse",
+  "newPane.raguverse.hint": "la città delle tue sessioni, in tempo reale",
   "learn.title": "Impara",
   "learn.back": "Torna al mondo",
   "learn.export": "Esporta progressi",
@@ -169,18 +169,18 @@ export const it = {
   "learn.exportFailed": (motivo: string) => `Non riesco a esportare i progressi: ${motivo}`,
   "learn.progressUnreadable": "I progressi non sono un documento che ADE sa leggere.",
   "learn.noHost": "Senza ADE non ci sono progressi da salvare.",
-  "nikverse.unloaded": "Mondo scaricato per risparmiare memoria: torna su questo pannello per riaprirlo.",
-  "nikverse.assets.fetching": (megabytes: number) => `Scarico il mondo di NikVerse (${megabytes} MB), solo la prima volta…`,
-  "nikverse.assets.failed": (reason: string) =>
-    `Non sono riuscita a scaricare il mondo di NikVerse: ${reason} Per ora vedi i segnaposto.`,
-  "nikverse.assets.retry": "Riprova",
-  "nikverse.ask": (what: string) => `NikVerse chiede di: ${what}`,
-  "nikverse.allow": "Consenti",
-  "nikverse.deny": "Nega",
-  "nikverse.late": "Il mondo non si è aperto: riprova, oppure apri la lista.",
-  "nikverse.late.retry": "Riprova",
-  "nikverse.late.list": "Apri la lista",
-  "nikverse.lowered.retry": "Riprova a qualità piena",
+  "raguverse.unloaded": "Mondo scaricato per risparmiare memoria: torna su questo pannello per riaprirlo.",
+  "raguverse.assets.fetching": (megabytes: number) => `Scarico il mondo di RaguVerse (${megabytes} MB), solo la prima volta…`,
+  "raguverse.assets.failed": (reason: string) =>
+    `Non sono riuscita a scaricare il mondo di RaguVerse: ${reason} Per ora vedi i segnaposto.`,
+  "raguverse.assets.retry": "Riprova",
+  "raguverse.ask": (what: string) => `RaguVerse chiede di: ${what}`,
+  "raguverse.allow": "Consenti",
+  "raguverse.deny": "Nega",
+  "raguverse.late": "Il mondo non si è aperto: riprova, oppure apri la lista.",
+  "raguverse.late.retry": "Riprova",
+  "raguverse.late.list": "Apri la lista",
+  "raguverse.lowered.retry": "Riprova a qualità piena",
   "restore.note": "Sessione ripristinata.",
   "restore.note.gone": "Il processo non è più attivo.",
   "restore.note.reopen": "Riapro la conversazione dell'agente dov'era rimasta.",
@@ -324,7 +324,7 @@ export const it = {
   "agent.onboarding.key.done": "Configurata",
   "agent.onboarding.agent.title": "Agente (Claude Code o Codex)",
   "agent.onboarding.agent.desc":
-    "nik coordina le sessioni ed esegue compiti tramite la CLI di Claude Code o Codex installata sul PC.",
+    "ragù coordina le sessioni ed esegue compiti tramite la CLI di Claude Code o Codex installata sul PC.",
   "agent.onboarding.agent.action": "Configura agente",
   "agent.onboarding.agent.done": "Disponibile",
   "agent.onboarding.voice.title": "Voce naturale (Piper)",
@@ -491,7 +491,7 @@ export const it = {
   "space.desc": "Quello che ADE tiene sul tuo computer e si può togliere. Prima di cancellare dice quanto libera; il lavoro non integrato, i segreti, le decisioni e la memoria dei progetti non si toccano mai.",
   "space.empty": "Non c'è niente da togliere.",
   "space.group.voices": "Voci locali",
-  "space.group.assets": "Asset di NikVerse",
+  "space.group.assets": "Asset di RaguVerse",
   "space.group.worktrees": "Worktree delle sessioni finite",
   "space.group.branches": "Branch di ADE già integrati",
   "space.group.project": "Catture e risultati vecchi",
@@ -502,8 +502,8 @@ export const it = {
   "space.piper.runtime": "Con l'ultima voce se ne va anche il programma di Piper",
   "space.piper.leftover": "Piper · programma senza voci",
   "space.kokoro": "Kokoro · voce locale",
-  "space.nikverse": "Asset di NikVerse",
-  "space.nikverse.again": "Si riscaricano alla prossima apertura del mondo",
+  "space.raguverse": "Asset di RaguVerse",
+  "space.raguverse.again": "Si riscaricano alla prossima apertura del mondo",
   "space.worktree.remove": "Togli",
   "space.worktree.unknown": "Non riesco a controllare se il lavoro è integrato",
   "space.worktree.locked": "La worktree è bloccata",
@@ -772,14 +772,14 @@ export const it = {
   "shots.noFolder": "Nessuna cartella delle schermate su questo computer",
   "browser.adeOrigin": "Questo indirizzo è ADE stessa; non si apre nel pannello.",
   "bots.trust.new": (name: string, can: string) =>
-    `Il bot «${name}» viene da questo progetto (.nikcli/agent): le sue istruzioni le ha scritte chi ha scritto il repository, e girerà con il tuo account. ${can} Lo usi?`,
+    `Il bot «${name}» viene da questo progetto (.ragu/agent): le sue istruzioni le ha scritte chi ha scritto il repository, e girerà con il tuo account. ${can} Lo usi?`,
   "bots.trust.changed": (name: string, can: string) =>
     `Il file del bot «${name}» di questo progetto è cambiato da quando l'hai approvato: le istruzioni nuove le ha scritte chi ha modificato il repository. ${can} Lo usi così com'è ora?`,
   // What a project's bot may do once trusted, by runner (review B3, BASSO 2).
   "bots.trust.can.codex":
     "Girerà in sola lettura: potrà leggere i file del progetto ed eseguire comandi che non scrivono niente, ma non modificare file.",
   "bots.trust.can.claude":
-    "Non potrà eseguire comandi né toccare .git e le impostazioni degli strumenti (.claude, .nikcli, .codex, .vscode, .husky, .github/workflows), ma potrà modificare gli altri file del progetto.",
+    "Non potrà eseguire comandi né toccare .git e le impostazioni degli strumenti (.claude, .ragu, .codex, .vscode, .husky, .github/workflows), ma potrà modificare gli altri file del progetto.",
   "bots.trust.can.claudeReadOnly": "Non potrà eseguire comandi né modificare file: potrà solo leggere il progetto.",
   "bots.trust.can.ragu":
     "Potrà fare quello che la tua configurazione di Ragu Code concede: il file del bot non può concedersi altro.",
@@ -1568,9 +1568,9 @@ export const it = {
   "note.viaNativeAck": () => `Consegna nativa confermata`,
   "note.viaFallback": (reason: string) => `Consegna nativa non confermata (${reason}): ADE la digita`,
   "voice.nameOnly": (shortcut: string, manual: string) =>
-    `Da questa versione l'assistente si attiva a voce: inizia la frase con «ei nik» o «nik». ADE ascolta sempre e ignora le frasi senza il nome; la scorciatoia ${shortcut} e il tasto in alto lo chiamano a mano. Per non farlo ascoltare da solo scegli «${manual}» qui sotto.`,
+    `Da questa versione l'assistente si attiva a voce: inizia la frase con «ei ragù» o «ragù». ADE ascolta sempre e ignora le frasi senza il nome; la scorciatoia ${shortcut} e il tasto in alto lo chiamano a mano. Per non farlo ascoltare da solo scegli «${manual}» qui sotto.`,
   "voice.shortcutOnly": (shortcut: string) =>
-    `Da questa versione l'assistente si attiva solo con la scorciatoia ${shortcut} o con il tasto in alto, e si chiude a fine risposta: il microfono non resta più aperto, e non c'è più «ei nik».`,
+    `Da questa versione l'assistente si attiva solo con la scorciatoia ${shortcut} o con il tasto in alto, e si chiude a fine risposta: il microfono non resta più aperto, e non c'è più «ei ragù».`,
   "voice.alwaysListening": (wakeWord: string, manual: string, toggle: string) =>
     `Da questa versione ADE ascolta sempre e l'assistente risponde solo quando dici «${wakeWord}». Per non farlo ascoltare da solo scegli «${manual}» qui sotto; per il microfono aperto che risponde a tutto, «${toggle}».`,
   "voice.listeningOff": (shortcut: string, always: string) =>
@@ -2181,7 +2181,7 @@ export const it = {
   "bots.form.description": "A cosa serve",
   "bots.form.descPlaceholder": "Revisiona le pull request e segnala i rischi",
   "bots.form.where": "Dove",
-  "bots.form.scopeProject": "Nel progetto (.nikcli/agent)",
+  "bots.form.scopeProject": "Nel progetto (.ragu/agent)",
   "bots.form.scopeGlobal": "Globale (per tutti i progetti)",
   "bots.form.objectives": "Obiettivi",
   "bots.form.objectivesPlaceholder": "Uno per riga. Restano veri in ogni conversazione.",
@@ -2323,7 +2323,7 @@ export const it = {
   // F7a2: Review & Plugin consent
   "review.error.details": "Impossibile calcolare i dettagli delle modifiche.",
   "plugins.consent.question": (root: string, list: string) =>
-    `Il progetto\n${root}\n\ndichiara in .nikcli/tui.json dei plugin che verrebbero eseguiti dentro ADE:\n\n${list}\n\nUn plugin è codice con accesso alle sessioni e ai file del progetto. Eseguirli?`,
+    `Il progetto\n${root}\n\ndichiara in .ragu/tui.json dei plugin che verrebbero eseguiti dentro ADE:\n\n${list}\n\nUn plugin è codice con accesso alle sessioni e ai file del progetto. Eseguirli?`,
 
   // F7a2: 3D Model
   "model.error.paneClosed": "pannello chiuso",

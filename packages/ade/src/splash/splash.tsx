@@ -3,6 +3,7 @@ import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 // that never shows the splash never parses three.js either.
 import type * as THREE from "three"
 import { t } from "../i18n"
+import { allocate, raguStrokes } from "./letters"
 import "./splash.css"
 import { SPLASH_SCENE_DELAY_MS, sceneIsWorthBuilding } from "./timing"
 
@@ -17,10 +18,10 @@ export interface SplashProps {
 
 const FADE_MS = 600
 const NUM_PARTICLES = 2000
-const ASCII_CHARS = [" ", ".", ":", "-", "=", "+", "*", "%", "#", "@", "N", "i", "K"]
+const ASCII_CHARS = [" ", ".", ":", "-", "=", "+", "*", "%", "#", "@", "R", "A", "G", "U"]
 
 /**
- * Concept 04: Fullscreen 3D ASCII Typography (NiK).
+ * Concept 04: Fullscreen 3D ASCII Typography (RAGÙ).
  *
  * Perfectly centered typography in 3D and 2D.
  * All mouse interaction with the text is disabled: the typography stays steady,
@@ -90,7 +91,7 @@ function SplashView(props: { visible: boolean; onDismiss?: () => void }) {
 
     if (!hasWebGL()) {
       // Graceful fallback for non-WebGL test environments
-      asciiLayer.textContent = "   N   i   K   \n [ADE READY]"
+      asciiLayer.textContent = "   RAGÙ   \n [ADE READY]"
       return
     }
 
@@ -186,36 +187,26 @@ async function startScene(
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
   container.appendChild(renderer.domElement)
 
-  // ── Swarm Target Positions: Perfectly Symmetrical Typography "NiK" ──────
+  // ── Swarm Target Positions: Perfectly Symmetrical Typography "RAGÙ" ─────
   const swarmTargets: THREE.Vector3[] = []
   const swarmPositions: THREE.Vector3[] = []
 
-  function sampleLine(x1: number, y1: number, z1: number, x2: number, y2: number, z2: number, count: number) {
+  // Every stroke gets particles by its length, and together they are exactly NUM_PARTICLES.
+  const strokes = raguStrokes()
+  const counts = allocate(strokes, NUM_PARTICLES)
+  strokes.forEach((stroke, n) => {
+    const count = counts[n]!
     for (let i = 0; i < count; i++) {
       const t = i / count
       swarmTargets.push(
         new three.Vector3(
-          x1 + (x2 - x1) * t + (Math.random() - 0.5) * 0.25,
-          y1 + (y2 - y1) * t + (Math.random() - 0.5) * 0.25,
-          z1 + (z2 - z1) * t + (Math.random() - 0.5) * 0.4,
+          stroke.from[0] + (stroke.to[0] - stroke.from[0]) * t + (Math.random() - 0.5) * 0.25,
+          stroke.from[1] + (stroke.to[1] - stroke.from[1]) * t + (Math.random() - 0.5) * 0.25,
+          (Math.random() - 0.5) * 0.4,
         ),
       )
     }
-  }
-
-  // Letter N strokes (880 points) - centered around x = -2.9
-  sampleLine(-4.2, -3.5, 0, -4.2, 3.5, 0, 280)
-  sampleLine(-4.2, 3.5, 0, -1.6, -3.5, 0, 340)
-  sampleLine(-1.6, -3.5, 0, -1.6, 3.5, 0, 260)
-
-  // Letter I strokes (360 points) - centered at x = 0.0
-  sampleLine(0.0, -2.5, 0, 0.0, 2.0, 0, 260)
-  sampleLine(0.0, 3.0, 0, 0.0, 3.5, 0, 100)
-
-  // Letter K strokes (760 points) - centered around x = +2.9
-  sampleLine(1.6, -3.5, 0, 1.6, 3.5, 0, 280)
-  sampleLine(1.6, 0.2, 0, 4.2, 3.5, 0, 240)
-  sampleLine(1.6, 0.2, 0, 4.2, -3.5, 0, 240)
+  })
 
   // Points Buffer Geometry
   const pGeo = new three.BufferGeometry()

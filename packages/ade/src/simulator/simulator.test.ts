@@ -130,7 +130,7 @@ describe("app URLs", () => {
   })
 
   /*
-   * Full review 2026-10-06, nikverse M1: `ade-media` serves every file of the open
+   * Full review 2026-10-06, raguverse M1: `ade-media` serves every file of the open
    * projects at `http(s)://ade-media.localhost/<path>` on Windows; a page of them in a
    * frame with allow-same-origin could `fetch` the others, `.env` included. The browser
    * pane refuses it (`isAdeOrigin`); the simulator did not.

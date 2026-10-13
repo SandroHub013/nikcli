@@ -255,6 +255,36 @@ describe("a layout saved when the lessons were a panel of their own", () => {
   })
 })
 
+describe("a layout and the RaguVerse panel (the world was called NikVerse, mode \"nikverse\")", () => {
+  test("the panel is not saved, so no layout of this build carries its mode", () => {
+    let wb = addPane(createWorkbench(), mockSession("s1"))
+    wb = addPane(wb, { ...mockSession("w1"), mode: "raguverse" })
+    const saved = serializeWorkspace(toWorkspaceState(wb))
+    expect(parseWorkspace(saved)!.panes.map((pane) => pane.id)).toEqual(["s1"])
+    expect(saved).not.toMatch(/raguverse|nikverse/i)
+  })
+
+  test("a layout from before the rename that names a pane in mode \"nikverse\" is read, with the sessions beside it, and the mode is not carried over", () => {
+    const old = JSON.stringify({
+      version: 2,
+      panes: [
+        { id: "s1", title: "Sessione 1", agent: "agy", cwd: "/project", branch: "main", status: "running" },
+        { id: "nv1", title: "NikVerse", agent: "", cwd: "/project", branch: "", status: "idle", mode: "nikverse" },
+      ],
+      focusedPaneId: "s1",
+      pinnedColumns: 2,
+      currentView: "grid",
+      sidebarWidth: 280,
+      projectPath: "/project",
+    })
+    const state = parseWorkspace(old)
+    expect(state).toBeDefined()
+    const restored = fromWorkspaceState(state!)
+    expect(restored.panes.some((pane) => pane.id === "s1")).toBe(true)
+    expect(restored.panes.some((pane) => pane.mode === "nikverse")).toBe(false)
+  })
+})
+
 function mockSession(id: string): Pane {
   return { id, title: "Sessione", status: "working", model: "test-model", mode: "auto", lines: [], cwd: "test/path", workspaceId: "ws1" }
 }

@@ -88,7 +88,7 @@ export const en: Messages = {
   "palette.decisions.pane": "Open Decisions panel",
   "palette.design.open": "Design proposals for you",
   "palette.design.pane": "Open Design panel",
-  "palette.nikverse.pane": "Open NikVerse panel",
+  "palette.raguverse.pane": "Open RaguVerse panel",
   "palette.update.check": "Check for updates",
   "palette.process.kill": "Kill process",
   "palette.process.none": "The focused panel has no running process",
@@ -151,8 +151,8 @@ export const en: Messages = {
   "newPane.decisions.hint": "the whole log: open, answered, deferred, closed",
   "newPane.design": "Design",
   "newPane.design.hint": "UI proposals, variants and previews",
-  "newPane.nikverse": "NikVerse",
-  "newPane.nikverse.hint": "the city of your sessions, live",
+  "newPane.raguverse": "RaguVerse",
+  "newPane.raguverse.hint": "the city of your sessions, live",
   "learn.title": "Learn",
   "learn.back": "Back to the world",
   "learn.export": "Export progress",
@@ -164,17 +164,17 @@ export const en: Messages = {
   "learn.exportFailed": (reason: string) => `Could not export the progress: ${reason}`,
   "learn.progressUnreadable": "The progress is not a document ADE can read.",
   "learn.noHost": "Without ADE there is no progress to keep.",
-  "nikverse.unloaded": "World unloaded to save memory: come back to this panel to reopen it.",
-  "nikverse.assets.fetching": (megabytes: number) => `Downloading NikVerse's world (${megabytes} MB), the first time only…`,
-  "nikverse.assets.failed": (reason: string) => `Could not download NikVerse's world: ${reason} For now you see placeholders.`,
-  "nikverse.assets.retry": "Try again",
-  "nikverse.ask": (what) => `NikVerse asks to: ${what}`,
-  "nikverse.allow": "Allow",
-  "nikverse.deny": "Deny",
-  "nikverse.late": "The world did not open: try again, or open the list.",
-  "nikverse.late.retry": "Try again",
-  "nikverse.late.list": "Open the list",
-  "nikverse.lowered.retry": "Try at full quality",
+  "raguverse.unloaded": "World unloaded to save memory: come back to this panel to reopen it.",
+  "raguverse.assets.fetching": (megabytes: number) => `Downloading RaguVerse's world (${megabytes} MB), the first time only…`,
+  "raguverse.assets.failed": (reason: string) => `Could not download RaguVerse's world: ${reason} For now you see placeholders.`,
+  "raguverse.assets.retry": "Try again",
+  "raguverse.ask": (what) => `RaguVerse asks to: ${what}`,
+  "raguverse.allow": "Allow",
+  "raguverse.deny": "Deny",
+  "raguverse.late": "The world did not open: try again, or open the list.",
+  "raguverse.late.retry": "Try again",
+  "raguverse.late.list": "Open the list",
+  "raguverse.lowered.retry": "Try at full quality",
   "restore.note": "Session restored.",
   "restore.note.gone": "The process is no longer running.",
   "restore.note.reopen": "Reopening the agent's conversation where it left off.",
@@ -307,7 +307,7 @@ export const en: Messages = {
   "agent.settings": "Settings",
   "agent.noPlanner":
     "Without an agent (Claude Code or Codex) turned on in the voice settings, the assistant only understands fixed commands. It can't plan requests like “start four claude sessions”.",
-  "agent.onboarding.title": "Before speaking to nik",
+  "agent.onboarding.title": "Before speaking to ragù",
   "agent.onboarding.subtitle": "A few things are needed to use voice. Here is what is ready and what is missing:",
   "agent.onboarding.key.title": "OpenRouter API Key",
   "agent.onboarding.key.desc":
@@ -316,7 +316,7 @@ export const en: Messages = {
   "agent.onboarding.key.done": "Configured",
   "agent.onboarding.agent.title": "Agent (Claude Code or Codex)",
   "agent.onboarding.agent.desc":
-    "nik orchestrates sessions and runs tasks via Claude Code or Codex CLI installed on your PC.",
+    "ragù orchestrates sessions and runs tasks via Claude Code or Codex CLI installed on your PC.",
   "agent.onboarding.agent.action": "Configure agent",
   "agent.onboarding.agent.done": "Available",
   "agent.onboarding.voice.title": "Natural voice (Piper)",
@@ -475,7 +475,7 @@ export const en: Messages = {
   "space.desc": "What ADE keeps on your computer and can be taken away. It says how much it frees before it deletes; work that has not landed, secrets, decisions and projects' memory are never touched.",
   "space.empty": "There is nothing to remove.",
   "space.group.voices": "Local voices",
-  "space.group.assets": "NikVerse assets",
+  "space.group.assets": "RaguVerse assets",
   "space.group.worktrees": "Worktrees of finished sessions",
   "space.group.branches": "ADE branches already integrated",
   "space.group.project": "Old captures and results",
@@ -486,8 +486,8 @@ export const en: Messages = {
   "space.piper.runtime": "The last voice takes Piper's program with it",
   "space.piper.leftover": "Piper · program with no voice",
   "space.kokoro": "Kokoro · local voice",
-  "space.nikverse": "NikVerse assets",
-  "space.nikverse.again": "Fetched again the next time the world opens",
+  "space.raguverse": "RaguVerse assets",
+  "space.raguverse.again": "Fetched again the next time the world opens",
   "space.worktree.remove": "Remove",
   "space.worktree.unknown": "Cannot check whether the work is integrated",
   "space.worktree.locked": "The worktree is locked",
@@ -756,13 +756,13 @@ export const en: Messages = {
   "shots.noFolder": "No screenshots folder on this computer",
   "browser.adeOrigin": "That address is ADE itself; it isn't opened in the pane.",
   "bots.trust.new": (name, can) =>
-    `The bot «${name}» comes from this project (.nikcli/agent): its instructions were written by whoever wrote the repository, and it will run on your account. ${can} Use it?`,
+    `The bot «${name}» comes from this project (.ragu/agent): its instructions were written by whoever wrote the repository, and it will run on your account. ${can} Use it?`,
   "bots.trust.changed": (name, can) =>
     `The file of this project's bot «${name}» changed since you approved it: the new instructions were written by whoever changed the repository. ${can} Use it as it is now?`,
   "bots.trust.can.codex":
     "It runs read-only: it can read the project's files and run commands that write nothing, but not change files.",
   "bots.trust.can.claude":
-    "It cannot run commands or touch .git and the tools' settings (.claude, .nikcli, .codex, .vscode, .husky, .github/workflows), but it can change the project's other files.",
+    "It cannot run commands or touch .git and the tools' settings (.claude, .ragu, .codex, .vscode, .husky, .github/workflows), but it can change the project's other files.",
   "bots.trust.can.claudeReadOnly": "It cannot run commands or change files: it can only read the project.",
   "bots.trust.can.ragu": "It can do what your Ragu Code configuration allows: the bot's file cannot grant itself more.",
   "bots.trust.selfApproves": (name, what, line) =>
@@ -1525,9 +1525,9 @@ export const en: Messages = {
   "note.askTo": (to, text) => `Request sent to ${to}: ${text}`,
   "note.messageTo": (to, text) => `Message sent to ${to}: ${text}`,
   "voice.nameOnly": (shortcut, manual) =>
-    `Starting with this version the assistant starts by voice: begin the sentence with “ei nik” or “nik”. ADE is always listening and ignores sentences without the name; the ${shortcut} shortcut and the button at the top call it by hand. To keep it from listening on its own, choose “${manual}” below.`,
+    `Starting with this version the assistant starts by voice: begin the sentence with “ei ragù” or “ragù”. ADE is always listening and ignores sentences without the name; the ${shortcut} shortcut and the button at the top call it by hand. To keep it from listening on its own, choose “${manual}” below.`,
   "voice.shortcutOnly": (shortcut) =>
-    `Starting with this version the assistant starts only with the ${shortcut} shortcut or the button at the top, and closes when the answer is done: the microphone no longer stays open, and “ei nik” is gone.`,
+    `Starting with this version the assistant starts only with the ${shortcut} shortcut or the button at the top, and closes when the answer is done: the microphone no longer stays open, and “ei ragù” is gone.`,
   "voice.alwaysListening": (wakeWord, manual, toggle) =>
     `Starting with this version, ADE is always listening and the assistant only answers when you say “${wakeWord}”. To stop it listening on its own, choose “${manual}” below; for an open microphone that answers everything, choose “${toggle}”.`,
   "voice.listeningOff": (shortcut, always) =>
@@ -2116,7 +2116,7 @@ export const en: Messages = {
   "bots.form.description": "Purpose",
   "bots.form.descPlaceholder": "Review pull requests and flag potential risks",
   "bots.form.where": "Where",
-  "bots.form.scopeProject": "In project (.nikcli/agent)",
+  "bots.form.scopeProject": "In project (.ragu/agent)",
   "bots.form.scopeGlobal": "Global (for all projects)",
   "bots.form.objectives": "Objectives",
   "bots.form.objectivesPlaceholder": "One per line. Kept active across conversations.",
@@ -2258,7 +2258,7 @@ export const en: Messages = {
   // F7a2: Review & Plugin consent
   "review.error.details": "Unable to calculate change details.",
   "plugins.consent.question": (root: string, list: string) =>
-    `The project\n${root}\n\ndeclares plugins in .nikcli/tui.json that would be run inside ADE:\n\n${list}\n\nA plugin is code with access to project sessions and files. Run them?`,
+    `The project\n${root}\n\ndeclares plugins in .ragu/tui.json that would be run inside ADE:\n\n${list}\n\nA plugin is code with access to project sessions and files. Run them?`,
 
   // F7a2: 3D Model
   "model.error.paneClosed": "pane closed",

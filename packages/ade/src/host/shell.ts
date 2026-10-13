@@ -267,14 +267,14 @@ export interface Host {
   ttsInstallStatus?: (provider: string) => Promise<InstallProgress>
   /** K3: stops the install under way for a provider; whether there was one. */
   ttsInstallCancel?: (provider: string) => Promise<{ cancelled: boolean }>
-  /** NikVerse's assets: whether the world's folder is complete, and how a fetch under way is going. */
-  nikverseAssetsStatus?: () => Promise<AssetsStatus>
-  /** Fetches what NikVerse's folder is missing, each file checked against the list the binary carries; resolves when it is over. */
-  nikverseAssetsInstall?: () => Promise<void>
-  /** What the fetched NikVerse assets weigh on this disk (0 in a debug build, which has none). */
-  nikverseAssetsBytes?: () => Promise<number>
+  /** RaguVerse's assets: whether the world's folder is complete, and how a fetch under way is going. */
+  raguverseAssetsStatus?: () => Promise<AssetsStatus>
+  /** Fetches what RaguVerse's folder is missing, each file checked against the list the binary carries; resolves when it is over. */
+  raguverseAssetsInstall?: () => Promise<void>
+  /** What the fetched RaguVerse assets weigh on this disk (0 in a debug build, which has none). */
+  raguverseAssetsBytes?: () => Promise<number>
   /** Takes the fetched assets off the disk; the bytes freed. They are fetched again when the world next opens. Refused while a fetch runs. */
-  nikverseAssetsRemove?: () => Promise<number>
+  raguverseAssetsRemove?: () => Promise<number>
   /**
    * The learner's progress for «Impara» (`learn.rs`): one JSON in the app's local data, `null` when there is none yet. The shape is
    * checked by the caller before anything is written, and the file itself refuses what is not JSON or is over its ceiling.
@@ -452,7 +452,7 @@ import type { TokenUsage } from "../session/shared"
 import type { InstallProgress, PackStatus } from "@ragu/voice"
 import { keyError, type KeyDraft, type KeyInfo } from "../secrets/keys"
 import type { QualityLevel, RecordTarget, RecordingState } from "../record/recording"
-import type { AssetsStatus } from "../nikverse/assets"
+import type { AssetsStatus } from "../raguverse/assets"
 import { t } from "../i18n"
 import { BinaryFileError, binaryFromHost, type ArchiveListing } from "../editor/binary-file"
 
@@ -873,24 +873,24 @@ export async function getHost(): Promise<Host | undefined> {
       return invoke<{ cancelled: boolean }>("tts_install_cancel", { provider })
     },
 
-    async nikverseAssetsStatus() {
+    async raguverseAssetsStatus() {
       const { invoke } = await import("@tauri-apps/api/core")
-      return invoke<AssetsStatus>("nikverse_assets_status")
+      return invoke<AssetsStatus>("raguverse_assets_status")
     },
 
-    async nikverseAssetsInstall() {
+    async raguverseAssetsInstall() {
       const { invoke } = await import("@tauri-apps/api/core")
-      await invoke("nikverse_assets_install")
+      await invoke("raguverse_assets_install")
     },
 
-    async nikverseAssetsBytes() {
+    async raguverseAssetsBytes() {
       const { invoke } = await import("@tauri-apps/api/core")
-      return await invoke<number>("nikverse_assets_bytes")
+      return await invoke<number>("raguverse_assets_bytes")
     },
 
-    async nikverseAssetsRemove() {
+    async raguverseAssetsRemove() {
       const { invoke } = await import("@tauri-apps/api/core")
-      return await invoke<number>("nikverse_assets_remove")
+      return await invoke<number>("raguverse_assets_remove")
     },
 
     async learnProgressGet() {

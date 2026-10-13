@@ -4,37 +4,37 @@ use std::{
     path::{Path, PathBuf},
 };
 
-/// The folder of NikVerse's assets, next to this file. `src/nikverse.rs` names the same folder (`ASSETS_DIR`)
-/// and the installer does not ship it: `src/nikverse_assets.rs` fetches the files the manifest below names.
+/// The folder of RaguVerse's assets, next to this file. `src/raguverse.rs` names the same folder (`ASSETS_DIR`)
+/// and the installer does not ship it: `src/raguverse_assets.rs` fetches the files the manifest below names.
 const ASSETS_DIR: &str = "nikverse-assets";
 
 fn main() {
-    build_nikverse_world();
-    write_nikverse_manifest();
+    build_raguverse_world();
+    write_raguverse_manifest();
     tauri_build::build()
 }
 
 #[path = "src/bun_lookup.rs"]
 mod bun_lookup;
 
-/// Bundles NikVerse's 3D city into `nikverse-assets/world/city.js` (`scripts/build-nikverse-world.ts`),
+/// Bundles RaguVerse's 3D city into `nikverse-assets/world/city.js` (`scripts/build-raguverse-world.ts`),
 /// before the folder is listed, so the bundle is hashed into the manifest like every other asset.
 ///
 /// Every way ADE is built goes through cargo, so this is the one place that cannot be forgotten
 /// (`tauri dev`, `tauri build`, the test app, `cargo test`). Without `bun` the world keeps working as
 /// its plain list (the page falls back when the module is missing) and the build says so; set
-/// `NIKVERSE_WORLD_REQUIRED=1` to make that an error, as a release build should.
-fn build_nikverse_world() {
-    println!("cargo:rerun-if-changed=../src/nikverse/city");
-    println!("cargo:rerun-if-changed=../scripts/build-nikverse-world.ts");
+/// `RAGUVERSE_WORLD_REQUIRED=1` to make that an error, as a release build should.
+fn build_raguverse_world() {
+    println!("cargo:rerun-if-changed=../src/raguverse/city");
+    println!("cargo:rerun-if-changed=../scripts/build-raguverse-world.ts");
     println!("cargo:rerun-if-changed=src/bun_lookup.rs");
-    println!("cargo:rerun-if-env-changed=NIKVERSE_WORLD_REQUIRED");
-    println!("cargo:rerun-if-env-changed=NIKVERSE_SKIP_WORLD");
+    println!("cargo:rerun-if-env-changed=RAGUVERSE_WORLD_REQUIRED");
+    println!("cargo:rerun-if-env-changed=RAGUVERSE_SKIP_WORLD");
     println!("cargo:rerun-if-env-changed=BUN_BIN");
-    if env::var_os("NIKVERSE_SKIP_WORLD").is_some() {
+    if env::var_os("RAGUVERSE_SKIP_WORLD").is_some() {
         return;
     }
-    let required = env::var_os("NIKVERSE_WORLD_REQUIRED").is_some();
+    let required = env::var_os("RAGUVERSE_WORLD_REQUIRED").is_some();
     let app = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR")).join("..");
     let city_bundle = app.join("src-tauri").join(ASSETS_DIR).join("world").join("city.js");
     let candidates = bun_lookup::find_bun_candidates_from_env();
@@ -42,7 +42,7 @@ fn build_nikverse_world() {
 
     for program in &candidates {
         match std::process::Command::new(program)
-            .arg("scripts/build-nikverse-world.ts")
+            .arg("scripts/build-raguverse-world.ts")
             .current_dir(&app)
             .output()
         {
@@ -64,7 +64,7 @@ fn build_nikverse_world() {
     }
 
     if city_bundle.is_file() {
-        println!("cargo:warning=NikVerse: bun non e riuscito a rigenerare il bundle, ma city.js e presente; procedo con quello");
+        println!("cargo:warning=RaguVerse: bun non e riuscito a rigenerare il bundle, ma city.js e presente; procedo con quello");
         return;
     }
 
@@ -75,18 +75,18 @@ fn build_nikverse_world() {
     };
 
     if required {
-        panic!("NikVerse: il mondo 3D non si e costruito: {summary}");
+        panic!("RaguVerse: il mondo 3D non si e costruito: {summary}");
     }
-    println!("cargo:warning=NikVerse: il mondo 3D non si e costruito ({summary}); il pannello mostrera la lista");
+    println!("cargo:warning=RaguVerse: il mondo 3D non si e costruito ({summary}); il pannello mostrera la lista");
 }
 
 /// Lists every file of the assets folder with its SHA-256 and size, and writes the list as Rust
-/// source into `OUT_DIR`, where `src/nikverse.rs` includes it. The scheme serves only what this list
+/// source into `OUT_DIR`, where `src/raguverse.rs` includes it. The scheme serves only what this list
 /// names, and only while the file on disk still has the hash the binary was built with.
 ///
 /// A name that cannot be a plain relative path (a space, a backslash, a colon, a non-ASCII letter) fails
 /// the build here, so nothing the scheme's path rules would refuse ever reaches the list.
-fn write_nikverse_manifest() {
+fn write_raguverse_manifest() {
     let root = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR")).join(ASSETS_DIR);
     println!("cargo:rerun-if-changed={ASSETS_DIR}");
     println!("cargo:rerun-if-changed=build.rs");
@@ -109,8 +109,8 @@ fn write_nikverse_manifest() {
     }
     source.push_str("];\n");
 
-    let out = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR")).join("nikverse_manifest.rs");
-    fs::write(out, source).expect("nikverse_manifest.rs");
+    let out = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR")).join("raguverse_manifest.rs");
+    fs::write(out, source).expect("raguverse_manifest.rs");
 }
 
 fn collect(root: &Path, dir: &Path, into: &mut Vec<String>) {

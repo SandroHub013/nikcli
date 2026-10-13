@@ -30,9 +30,9 @@ jobs:
     if: github.repository == 'SandroHub013/nikcli'
     runs-on: macos-14
     env:
-      # build.rs fails the build if NikVerse's 3D city cannot be bundled, instead of
-      # shipping the plain list in silence (`nikverse/release-env.test.ts`).
-      NIKVERSE_WORLD_REQUIRED: "1"
+      # build.rs fails the build if RaguVerse's 3D city cannot be bundled, instead of
+      # shipping the plain list in silence (`raguverse/release-env.test.ts`).
+      RAGUVERSE_WORLD_REQUIRED: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -56,9 +56,9 @@ jobs:
         working-directory: packages/ade
         run: bun x vite build
 
-      - name: Build NikVerse world
+      - name: Build RaguVerse world
         working-directory: packages/ade
-        run: bun ./scripts/build-nikverse-world.ts
+        run: bun ./scripts/build-raguverse-world.ts
 
       - name: Build app
         working-directory: packages/ade

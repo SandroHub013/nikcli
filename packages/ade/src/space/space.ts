@@ -1,7 +1,7 @@
 /*
  * «Spazio su disco»: what ADE keeps on the user's computer, row by row, and the button that gives each back.
  *
- * One row for each thing ADE put there that can be taken away again: the local voices (Piper's, one for each voice, and Kokoro), NikVerse's
+ * One row for each thing ADE put there that can be taken away again: the local voices (Piper's, one for each voice, and Kokoro), RaguVerse's
  * assets, the worktrees of finished sessions, the `ade/*` branches that have landed, and the captures and results of a project's `.ade/` that
  * are old. Each row says what it weighs and, if it can go, has one button. Nothing goes without a question that says how much it frees, and
  * the panel never touches work that has not landed (a worktree with changes, or commits the project's branch does not have is listed and
@@ -35,8 +35,8 @@ export interface SpaceHost {
   ttsDiskReport?: () => Promise<{ piper: { runtime: number; voices: { id: string; bytes: number }[] }; kokoro: number }>
   ttsPiperDelete?: (voiceId?: string) => Promise<number>
   ttsLocalDelete?: (provider: string) => Promise<void>
-  nikverseAssetsBytes?: () => Promise<number>
-  nikverseAssetsRemove?: () => Promise<number>
+  raguverseAssetsBytes?: () => Promise<number>
+  raguverseAssetsRemove?: () => Promise<number>
   run?: (command: string, args: string[], cwd?: string) => Promise<Pick<RunResult, "code" | "stdout" | "stderr">>
   readDir?: (path: string) => Promise<(Listed & { size?: number })[]>
   adePrune?: (paths: string[]) => Promise<number>
@@ -169,10 +169,10 @@ export function createSpace(deps: SpaceDeps) {
   }
 
   async function assetRows(rows: Row[]) {
-    const bytes = await host.nikverseAssetsBytes?.().catch(() => 0)
-    if (!bytes || !host.nikverseAssetsRemove) return
-    rows.push({ id: "nikverse", group: "assets", title: t("space.nikverse"), detail: t("space.nikverse.again"), bytes, action: t("space.remove.again") })
-    plans.set("nikverse", () => host.nikverseAssetsRemove!())
+    const bytes = await host.raguverseAssetsBytes?.().catch(() => 0)
+    if (!bytes || !host.raguverseAssetsRemove) return
+    rows.push({ id: "raguverse", group: "assets", title: t("space.raguverse"), detail: t("space.raguverse.again"), bytes, action: t("space.remove.again") })
+    plans.set("raguverse", () => host.raguverseAssetsRemove!())
   }
 
   async function projectRows(rows: Row[], root: string) {

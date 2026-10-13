@@ -430,7 +430,7 @@ export function parseWorkspace(json: string): WorkspaceState | undefined {
     version: CURRENT_VERSION,
     panes: sanitisePanes(data.panes),
     browsers: sanitiseBrowsers(data.browsers),
-    // A layout saved before the lessons moved inside NikVerse carries `learns`: it is not read, so it is not kept.
+    // A layout saved before the lessons moved inside RaguVerse carries `learns`: it is not read, so it is not kept.
     focusedPaneId: asOptionalString(data.focusedPaneId),
     pinnedColumns: asOptionalNumber(data.pinnedColumns),
     currentView: asString(data.currentView, def.currentView),

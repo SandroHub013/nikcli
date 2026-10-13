@@ -12,11 +12,11 @@
 //! - **A rename, not a write.** The document goes to `progress.json.part` and is renamed over the old one, so a reader sees the old
 //!   progress or the new one and never half of one, and a write that dies leaves the last good document where it was.
 //! - **The version is ADE's to read.** The file says which shape it is (`{"v": 1, …}`) and the host checks it before writing
-//!   (`src/nikverse/learn/link.ts`, `parseProgress`: a file of another version is neither handed to the page nor written over, and
+//!   (`src/raguverse/learn/link.ts`, `parseProgress`: a file of another version is neither handed to the page nor written over, and
 //!   neither is one that could not be read), because an older or a newer document is not something to write over.
 //!
 //! **It is the user's data.** `learn/` is in the app's local data folder, next to the sessions and the settings, and a normal
-//! uninstall leaves it: `--clean-caches` takes the voices, NikVerse's assets and the plugins' files, never this
+//! uninstall leaves it: `--clean-caches` takes the voices, RaguVerse's assets and the plugins' files, never this
 //! (`uninstall.rs`). Only Tauri's own «elimina i dati» takes it, with everything else of the folder.
 
 use serde_json::Value;

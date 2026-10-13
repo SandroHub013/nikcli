@@ -29,11 +29,11 @@ import { createPanelStack } from "../panels/stack"
 import { DecisionsPane } from "../decisions/decisions-pane"
 import type { DecisionsHub } from "../decisions/hub"
 import { DesignPane } from "../design/design-pane"
-import { NikversePane } from "../nikverse/nikverse-pane"
-import type { LearnProgressHost } from "../nikverse/learn/learn-frame"
-import type { AssetsHost } from "../nikverse/assets"
-import type { Snapshot } from "../nikverse/protocol"
-import type { ForwardedChord } from "../nikverse/chords"
+import { RaguversePane } from "../raguverse/raguverse-pane"
+import type { LearnProgressHost } from "../raguverse/learn/learn-frame"
+import type { AssetsHost } from "../raguverse/assets"
+import type { Snapshot } from "../raguverse/protocol"
+import type { ForwardedChord } from "../raguverse/chords"
 import type { DesignHub } from "../design/hub"
 import { isPicked } from "../design/answer"
 import type { PanelRouter } from "../panels/router"
@@ -112,14 +112,14 @@ export interface PaneRendererDeps {
   decisions: DecisionsHub
   /** The project's design proposals register, shared with the bar's badge and window. */
   design: DesignHub
-  /** What the NikVerse panel needs from ADE: the picture of the workbench, and the few things the world may ask for. */
+  /** What the RaguVerse panel needs from ADE: the picture of the workbench, and the few things the world may ask for. */
   world: {
     picture: () => Snapshot | undefined
     openSession: (paneId: string) => void
     focusProject: (shopId: string) => void
     chord: (chord: ForwardedChord) => void
     ignored: (reason: string) => void
-    /** The host's commands for NikVerse's assets (fetched the first time the world opens); absent where there is no host. */
+    /** The host's commands for RaguVerse's assets (fetched the first time the world opens); absent where there is no host. */
     assets: () => Promise<AssetsHost | undefined>
   }
   /** What the lessons over the world need from ADE: the learner's progress, and what the lesson page said that ADE ignored. */
@@ -392,8 +392,8 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
       />
     )
 
-    const nikversePane = () => (
-      <NikversePane
+    const raguversePane = () => (
+      <RaguversePane
         picture={deps.world.picture}
         focused={isFocused()}
         onOpenSession={deps.world.openSession}
@@ -644,10 +644,10 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
                                     when={current().mode === "design"}
                                     fallback={
                                       <Show
-                                        when={current().mode === "nikverse"}
+                                        when={current().mode === "raguverse"}
                                         fallback={sessionPane()}
                                       >
-                                        {nikversePane()}
+                                        {raguversePane()}
                                       </Show>
                                     }
                                   >

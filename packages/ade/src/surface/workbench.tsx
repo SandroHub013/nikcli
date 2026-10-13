@@ -108,6 +108,7 @@ import {
   planMint,
   startingState,
   mintMark,
+  mintMarks,
   MintLedger,
   lastHereBesideMints,
   planRestore,
@@ -385,10 +386,10 @@ import {
 } from "../session/mailbox"
 import { outputRun, outputSaysWorking, stampingInput, type OutputRun } from "../session/output-activity"
 import { createLineQueue } from "../session/line-queue"
-import type { Snapshot } from "../nikverse/protocol"
-import { createSlotBook, shopId, worldSnapshot } from "../nikverse/snapshot"
-import { forwardedCommand } from "../nikverse/chords"
-import { nikverseOpening } from "../nikverse/open"
+import type { Snapshot } from "../raguverse/protocol"
+import { createSlotBook, shopId, worldSnapshot } from "../raguverse/snapshot"
+import { forwardedCommand } from "../raguverse/chords"
+import { raguverseOpening } from "../raguverse/open"
 
 import { quotaForAgent } from "../session/quota"
 import { useSharedQuota } from "../session/quota-store"
@@ -2024,11 +2025,11 @@ export function Workbench() {
   }
 
   /**
-   * Opens the NikVerse panel, or takes the user to the one already open: it lives in the project it was opened
+   * Opens the RaguVerse panel, or takes the user to the one already open: it lives in the project it was opened
    * in, and focusing a panel of another project showed nothing.
    */
-  const openNikversePane = async () => {
-    const opening = nikverseOpening(wb().panes, project()?.root, pathEquals)
+  const openRaguversePane = async () => {
+    const opening = raguverseOpening(wb().panes, project()?.root, pathEquals)
     if (opening.kind === "focus") {
       if (opening.switchTo) await switchProjectTo(opening.switchTo)
       setStarting(false)
@@ -2038,10 +2039,10 @@ export function Workbench() {
     setWb((w) => ({
       ...addPane(w, {
         id: newPaneId("nv"),
-        title: "NikVerse",
+        title: "RaguVerse",
         status: "working",
         model: "—",
-        mode: "nikverse",
+        mode: "raguverse",
         ...here(),
         lines: [],
       }),
@@ -6913,8 +6914,8 @@ export function Workbench() {
       openDecisionsPane()
     } else if (id === "design.pane") {
       openDesignPane()
-    } else if (id === "nikverse.pane") {
-      void openNikversePane()
+    } else if (id === "raguverse.pane") {
+      void openRaguversePane()
     } else if (id === "model.new") {
       // Opened empty, like the video panel; a model file clicked in the tree opens it directly.
       openModel("")
@@ -7930,7 +7931,7 @@ export function Workbench() {
     // The other open panes' conversations by title, a mint whose id ADE never read among them.
     const marks = wb()
       .panes.filter((pane) => pane.id !== paneId)
-      .map((pane) => mintMark(pane.id))
+      .flatMap((pane) => mintMarks(pane.id))
     const plan = planLastHere(agentId, cwd, taken, marks)
     if (!plan) return undefined
     return await lastHereBesideMints(
@@ -9060,19 +9061,19 @@ export function Workbench() {
   }
 
   /*
-   * The world's picture of ADE (NikVerse). Built only while a NikVerse panel
+   * The world's picture of ADE (RaguVerse). Built only while a RaguVerse panel
    * exists, and from what the panes' own headers read: the agent's report, a
    * standing permission prompt, and whether the process is there.
    */
   const worldSlots = createSlotBook()
   /*
-   * The quota store, held only while a NikVerse panel exists, so a session at
+   * The quota store, held only while a RaguVerse panel exists, so a session at
    * its limit reads as one in the world as it does in its header (`limit`).
    * Taken in the memo and not in an effect: the effect would run after the
    * first picture, and the store's signals would not be read by it.
    */
   let worldQuota: ReturnType<typeof useSharedQuota> | undefined
-  const worldOpen = createMemo(() => wb().panes.some((pane) => pane.mode === "nikverse"))
+  const worldOpen = createMemo(() => wb().panes.some((pane) => pane.mode === "raguverse"))
   createEffect(() => {
     if (worldOpen()) return
     worldQuota?.release()
@@ -9161,9 +9162,9 @@ export function Workbench() {
       chord: (chord) => {
         const id = forwardedCommand(bindings, chord, platform)
         if (id) void runCommand(id)
-        else console.warn("[nikverse] scorciatoia non inoltrata: non è di navigazione")
+        else console.warn("[raguverse] scorciatoia non inoltrata: non è di navigazione")
       },
-      ignored: (reason) => console.warn(`[nikverse] ignorato: ${reason}`),
+      ignored: (reason) => console.warn(`[raguverse] ignorato: ${reason}`),
       assets: () => getHost(),
     },
     learn: {
@@ -10189,7 +10190,7 @@ function NewPaneGlyph(props: { kind: NewPaneItem["glyph"] }) {
         <path d="M11.5 2.5l2 2-7.5 7.5H4v-2l7.5-7.5z" stroke-linecap="round" stroke-linejoin="round" />
         <path d="M10 4l2 2" stroke-linecap="round" />
       </Show>
-      <Show when={props.kind === "nikverse"}>
+      <Show when={props.kind === "raguverse"}>
         <path d="M2 14V7l3-2v9M5 14V4l4-2v12M9 14V6l5 2v6M1.5 14h13" stroke-linecap="round" stroke-linejoin="round" />
       </Show>
     </svg>

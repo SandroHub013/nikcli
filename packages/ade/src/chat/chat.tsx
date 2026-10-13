@@ -707,7 +707,7 @@ function Turn(props: { turn: Turn }) {
   return (
     <article data-slot="chat-message" data-role={role()}>
       <Show when={role() === "assistant"}>
-        <span data-slot="chat-author">nik</span>
+        <span data-slot="chat-author">ragù</span>
       </Show>
       <div data-slot="chat-body">
         <MessageParts parts={props.turn.parts} />

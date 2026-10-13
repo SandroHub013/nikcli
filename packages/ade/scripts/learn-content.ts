@@ -1,15 +1,15 @@
 /**
  * The conversion of the lessons, run by hand when a YAML changes: `bun run scripts/learn-content.ts`.
  *
- * It writes `src/nikverse/learn/content.json`, the only file the lesson page is served. Nothing else happens here: the schema of a
+ * It writes `src/raguverse/learn/content.json`, the only file the lesson page is served. Nothing else happens here: the schema of a
  * lesson is `learn/schema.json` and `learn/content.test.ts` decides whether what came out is any good, so a bad lesson fails the test
  * and not the writer.
  */
 import { writeFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
-import { convert, lessonFiles, toJson } from "../src/nikverse/learn/content-build"
+import { convert, lessonFiles, toJson } from "../src/raguverse/learn/content-build"
 
-const root = resolve(import.meta.dirname, "../src/nikverse/learn")
+const root = resolve(import.meta.dirname, "../src/raguverse/learn")
 const lessons = root + "/lezioni"
 const target = `${root}/content.json`
 
@@ -22,7 +22,7 @@ try {
     0,
   )
   console.log(`content.json: ${files.length} lezioni, ${exercises} esercizi, da ${files[0] ?? "-"} a ${files.at(-1) ?? "-"}`)
-  const { convertGioco, giocoFiles, toGiocoJson } = await import("../src/nikverse/learn/gioco-build")
+  const { convertGioco, giocoFiles, toGiocoJson } = await import("../src/raguverse/learn/gioco-build")
   const giocoDir = root + "/gioco"
   const gFiles = giocoFiles(giocoDir)
   const gContent = convertGioco(giocoDir)

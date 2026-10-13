@@ -1,0 +1,142 @@
+[data-component="raguverse-pane"] {
+  --ade-pane-ground: var(--ade-bg);
+}
+
+[data-slot="raguverse-body"] {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+
+[data-slot="raguverse-frame"] {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: transparent;
+}
+
+/* A lesson over the world: ADE's own DOM, in this panel, above the world's frame (which stays loaded, paused, under it). */
+[data-slot="raguverse-learn"] {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  background: var(--ade-bg, canvas);
+}
+
+[data-slot="raguverse-unloaded"] {
+  margin: auto;
+  padding: 16px;
+  max-width: 32ch;
+  text-align: center;
+  color: var(--ade-text-dim, currentColor);
+}
+
+[data-slot="raguverse-assets"] {
+  margin: auto;
+  padding: 16px;
+  max-width: 40ch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--ade-text-dim, currentColor);
+}
+
+/* The frame is in place under a failure line: the line sits over it instead of pushing it. */
+[data-slot="raguverse-assets"][data-failed="true"] {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  margin: 0;
+  max-width: none;
+  flex-direction: row;
+  justify-content: space-between;
+  text-align: left;
+  background: var(--ade-sunken, canvas);
+  border: 1px solid var(--ade-line, currentColor);
+  border-radius: var(--ade-radius-md);
+}
+
+[data-slot="raguverse-assets-track"] {
+  width: 100%;
+  height: 4px;
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-line, currentColor);
+  overflow: hidden;
+}
+
+[data-slot="raguverse-assets-fill"] {
+  height: 100%;
+  background: var(--ade-accent, currentColor);
+  transition: width 200ms linear;
+}
+
+/* The world was lowered to Bassa: a small way back to the machine's own level, over the frame's corner. */
+[data-slot="raguverse-lowered-retry"] {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1;
+  padding: var(--ade-space-2, 4px) var(--ade-space-5, 10px);
+  border-radius: var(--ade-radius-sm, 5px);
+  font-size: var(--ade-font-xs);
+  font-weight: var(--ade-weight-medium);
+  background: var(--ade-sunken, canvas);
+  color: var(--ade-text, currentColor);
+  border: 1px solid var(--ade-border, currentColor);
+  cursor: pointer;
+}
+
+/* An opening that did not come (`opening.ts`): one line over the frame, the reason and the two ways on. */
+[data-slot="raguverse-late"] {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--ade-sunken, canvas);
+  color: var(--ade-text, currentColor);
+  border: 1px solid var(--ade-line, currentColor);
+  border-radius: var(--ade-radius-md, 8px);
+}
+
+[data-slot="raguverse-late"] p {
+  flex: 1;
+  margin: 0;
+}
+
+[data-slot="raguverse-late"] button {
+  padding: var(--ade-space-2, 4px) var(--ade-space-5, 10px);
+  border-radius: var(--ade-radius-sm, 5px);
+  font-size: var(--ade-font-xs);
+  font-weight: var(--ade-weight-medium);
+  background: var(--ade-active, transparent);
+  color: var(--ade-text, currentColor);
+  border: 1px solid var(--ade-border, currentColor);
+  cursor: pointer;
+}
+
+[data-slot="raguverse-late"] button:hover {
+  background: var(--ade-hover, transparent);
+  border-color: var(--ade-text-weak, currentColor);
+}
+
+[data-slot="raguverse-ask"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ade-line, currentColor);
+}
+
+[data-slot="raguverse-ask"] span {
+  flex: 1;
+}

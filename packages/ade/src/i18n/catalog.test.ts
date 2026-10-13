@@ -46,7 +46,7 @@ const SAME_IN_BOTH = new Set<string>([
   "design.title",
   "newPane.design",
   "newPane.browser",
-  "newPane.nikverse",
+  "newPane.raguverse",
   "update.dialog.escKey",
   "vui.backend.piper",
   "vui.backend.kokoro",

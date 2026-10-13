@@ -113,7 +113,7 @@ describe("the release workflows keep their guards", () => {
     expect(found).toEqual([])
   })
 
-  test("the NikVerse asset checks grep a variable", () => {
+  test("the RaguVerse asset checks grep a variable", () => {
     const text = read("ade-release.yml")
     expect(text).toContain('grep -qx "$ASSET" <<<"$HAVE"')
     expect(text).toContain('grep -qx "$ASSET" <<<"$AFTER"')
