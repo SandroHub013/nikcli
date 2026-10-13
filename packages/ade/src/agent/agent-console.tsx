@@ -104,7 +104,7 @@ export function AgentConsole(props: AgentConsoleProps) {
     <section data-component="agent-console">
       <header data-slot="agent-head">
         <div data-slot="agent-identity">
-          <span data-slot="agent-name">nik</span>
+          <span data-slot="agent-name">ragù</span>
           <span data-slot="agent-presence" data-tone={presence().tone}>
             <i data-slot="agent-dot" />
             {presence().text}

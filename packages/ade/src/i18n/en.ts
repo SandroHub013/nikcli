@@ -307,7 +307,7 @@ export const en: Messages = {
   "agent.settings": "Settings",
   "agent.noPlanner":
     "Without an agent (Claude Code or Codex) turned on in the voice settings, the assistant only understands fixed commands. It can't plan requests like “start four claude sessions”.",
-  "agent.onboarding.title": "Before speaking to nik",
+  "agent.onboarding.title": "Before speaking to ragù",
   "agent.onboarding.subtitle": "A few things are needed to use voice. Here is what is ready and what is missing:",
   "agent.onboarding.key.title": "OpenRouter API Key",
   "agent.onboarding.key.desc":
@@ -316,7 +316,7 @@ export const en: Messages = {
   "agent.onboarding.key.done": "Configured",
   "agent.onboarding.agent.title": "Agent (Claude Code or Codex)",
   "agent.onboarding.agent.desc":
-    "nik orchestrates sessions and runs tasks via Claude Code or Codex CLI installed on your PC.",
+    "ragù orchestrates sessions and runs tasks via Claude Code or Codex CLI installed on your PC.",
   "agent.onboarding.agent.action": "Configure agent",
   "agent.onboarding.agent.done": "Available",
   "agent.onboarding.voice.title": "Natural voice (Piper)",
@@ -1525,9 +1525,9 @@ export const en: Messages = {
   "note.askTo": (to, text) => `Request sent to ${to}: ${text}`,
   "note.messageTo": (to, text) => `Message sent to ${to}: ${text}`,
   "voice.nameOnly": (shortcut, manual) =>
-    `Starting with this version the assistant starts by voice: begin the sentence with “ei nik” or “nik”. ADE is always listening and ignores sentences without the name; the ${shortcut} shortcut and the button at the top call it by hand. To keep it from listening on its own, choose “${manual}” below.`,
+    `Starting with this version the assistant starts by voice: begin the sentence with “ei ragù” or “ragù”. ADE is always listening and ignores sentences without the name; the ${shortcut} shortcut and the button at the top call it by hand. To keep it from listening on its own, choose “${manual}” below.`,
   "voice.shortcutOnly": (shortcut) =>
-    `Starting with this version the assistant starts only with the ${shortcut} shortcut or the button at the top, and closes when the answer is done: the microphone no longer stays open, and “ei nik” is gone.`,
+    `Starting with this version the assistant starts only with the ${shortcut} shortcut or the button at the top, and closes when the answer is done: the microphone no longer stays open, and “ei ragù” is gone.`,
   "voice.alwaysListening": (wakeWord, manual, toggle) =>
     `Starting with this version, ADE is always listening and the assistant only answers when you say “${wakeWord}”. To stop it listening on its own, choose “${manual}” below; for an open microphone that answers everything, choose “${toggle}”.`,
   "voice.listeningOff": (shortcut, always) =>

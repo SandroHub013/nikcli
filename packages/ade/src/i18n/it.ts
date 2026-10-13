@@ -324,7 +324,7 @@ export const it = {
   "agent.onboarding.key.done": "Configurata",
   "agent.onboarding.agent.title": "Agente (Claude Code o Codex)",
   "agent.onboarding.agent.desc":
-    "nik coordina le sessioni ed esegue compiti tramite la CLI di Claude Code o Codex installata sul PC.",
+    "ragù coordina le sessioni ed esegue compiti tramite la CLI di Claude Code o Codex installata sul PC.",
   "agent.onboarding.agent.action": "Configura agente",
   "agent.onboarding.agent.done": "Disponibile",
   "agent.onboarding.voice.title": "Voce naturale (Piper)",
@@ -1568,9 +1568,9 @@ export const it = {
   "note.viaNativeAck": () => `Consegna nativa confermata`,
   "note.viaFallback": (reason: string) => `Consegna nativa non confermata (${reason}): ADE la digita`,
   "voice.nameOnly": (shortcut: string, manual: string) =>
-    `Da questa versione l'assistente si attiva a voce: inizia la frase con «ei nik» o «nik». ADE ascolta sempre e ignora le frasi senza il nome; la scorciatoia ${shortcut} e il tasto in alto lo chiamano a mano. Per non farlo ascoltare da solo scegli «${manual}» qui sotto.`,
+    `Da questa versione l'assistente si attiva a voce: inizia la frase con «ei ragù» o «ragù». ADE ascolta sempre e ignora le frasi senza il nome; la scorciatoia ${shortcut} e il tasto in alto lo chiamano a mano. Per non farlo ascoltare da solo scegli «${manual}» qui sotto.`,
   "voice.shortcutOnly": (shortcut: string) =>
-    `Da questa versione l'assistente si attiva solo con la scorciatoia ${shortcut} o con il tasto in alto, e si chiude a fine risposta: il microfono non resta più aperto, e non c'è più «ei nik».`,
+    `Da questa versione l'assistente si attiva solo con la scorciatoia ${shortcut} o con il tasto in alto, e si chiude a fine risposta: il microfono non resta più aperto, e non c'è più «ei ragù».`,
   "voice.alwaysListening": (wakeWord: string, manual: string, toggle: string) =>
     `Da questa versione ADE ascolta sempre e l'assistente risponde solo quando dici «${wakeWord}». Per non farlo ascoltare da solo scegli «${manual}» qui sotto; per il microfono aperto che risponde a tutto, «${toggle}».`,
   "voice.listeningOff": (shortcut: string, always: string) =>
