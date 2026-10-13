@@ -193,9 +193,26 @@ export function raguConversationThere(output: string, id: string): "gone" | "her
  * The end of the title ADE gives a conversation it mints for a pane, which
  * says the pane it was asked for: panes are often all called "Sessione 1 —
  * ragu", and inside the CLI the conversations are listed together.
+ *
+ * « · pane 9a1f2c»: a short hash of the whole id, with the word that says what it is. Until the
+ * 2026-10 build the mark was the last 8 characters of the id (« · 5998-1-1»), which in a title
+ * like «Sessione 1 — Ragu Code · 2029-1-2» reads as a date (`legacyMintMark`).
  */
 export function mintMark(paneId: string): string {
+  // FNV-1a over the id, six hex digits of it: stable between runs, and a different pane almost never shares it.
+  let hash = 0x811c9dc5
+  for (let i = 0; i < paneId.length; i++) hash = Math.imul(hash ^ paneId.charCodeAt(i), 0x01000193) >>> 0
+  return ` · pane ${hash.toString(16).padStart(8, "0").slice(0, 6)}`
+}
+
+/** The mark of the builds that came before `mintMark`'s: titles already saved end with it, and stay their pane's. */
+export function legacyMintMark(paneId: string): string {
   return ` · ${paneId.slice(-8)}`
+}
+
+/** Every mark a conversation of this pane may carry: the one ADE writes now and the one it used to. */
+export function mintMarks(paneId: string): string[] {
+  return [mintMark(paneId), legacyMintMark(paneId)]
 }
 
 /**
@@ -203,7 +220,7 @@ export function mintMark(paneId: string): string {
  * session.list` printed, leaving out the ones in `taken` and the ones whose
  * title ends with one of `marks`.
  *
- * `marks` are the other open panes' (`mintMark`): a conversation minted for
+ * `marks` are the other open panes' (`mintMarks`): a conversation minted for
  * one of them is that pane's even when it does not hold the id. That is the
  * case of a mint past `MINT_MS` (`ask-cli.ts`): the command is killed, ragu may have
  * written the conversation anyway, and ADE never read its id. Empty and the

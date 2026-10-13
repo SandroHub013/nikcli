@@ -108,6 +108,7 @@ import {
   planMint,
   startingState,
   mintMark,
+  mintMarks,
   MintLedger,
   lastHereBesideMints,
   planRestore,
@@ -7930,7 +7931,7 @@ export function Workbench() {
     // The other open panes' conversations by title, a mint whose id ADE never read among them.
     const marks = wb()
       .panes.filter((pane) => pane.id !== paneId)
-      .map((pane) => mintMark(pane.id))
+      .flatMap((pane) => mintMarks(pane.id))
     const plan = planLastHere(agentId, cwd, taken, marks)
     if (!plan) return undefined
     return await lastHereBesideMints(

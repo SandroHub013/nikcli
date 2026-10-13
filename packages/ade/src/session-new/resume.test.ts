@@ -23,7 +23,9 @@ import {
   LIST_COLS,
   MintLedger,
   lastHereBesideMints,
+  legacyMintMark,
   mintMark,
+  mintMarks,
   startingState,
 } from "./resume"
 
@@ -733,20 +735,43 @@ describe("a conversation minted for another open pane is not «here»", () => {
   )
 
   test("its title says the pane, and the pane is open: left out", () => {
-    expect(mintMark("n1789476735968-5998-1-1")).toBe(" · 5998-1-1")
-    expect(lastRaguHere(output, HERE, new Set(), [mintMark("n1789476735968-5998-1-1")])).toBe(real)
-    expect(planLastHere("ragu", HERE, new Set(), [mintMark("n1789476735968-5998-1-1")])!.read(output)).toBe(real)
+    expect(mintMark("n1789476735968-5998-1-1")).toMatch(/^ · pane [0-9a-f]{6}$/)
+    expect(lastRaguHere(output, HERE, new Set(), mintMarks("n1789476735968-5998-1-1"))).toBe(real)
+    expect(planLastHere("ragu", HERE, new Set(), mintMarks("n1789476735968-5998-1-1"))!.read(output)).toBe(real)
+  })
+
+  test("the mark reads as a pane's id, not a date, and is the same for the same pane and another for another", () => {
+    const ids = ["n1789476735968-5998-1-1", "n1789476735968-7777-2-2", "n1790781981355-1-3", "p1", "n1-2029-1-2"]
+    const marks = ids.map(mintMark)
+    for (const mark of marks) expect(mark).toMatch(/^ · pane [0-9a-f]{6}$/)
+    expect(new Set(marks).size).toBe(ids.length)
+    expect(mintMark(ids[0]!)).toBe(mintMark(ids[0]!))
+    // A hash of the whole id: two ids with the same last 8 characters no longer share a mark.
+    expect(mintMark("a-2029-1-2")).not.toBe(mintMark("b-2029-1-2"))
+  })
+
+  test("titles saved with the old mark (the id's last 8 characters) are still their pane's", () => {
+    const id = "n1789476735968-5998-1-1"
+    expect(legacyMintMark(id)).toBe(" · 5998-1-1")
+    expect(mintMarks(id)).toEqual([mintMark(id), " · 5998-1-1"])
+    const saved = listed(session(orphan, 30, { title: "Sessione 1 — ragu · 5998-1-1" }), session(real, 20))
+    expect(lastRaguHere(saved, HERE, new Set(), mintMarks(id))).toBe(real)
+    // And another pane's old mark leaves it to be taken, as before.
+    expect(lastRaguHere(saved, HERE, new Set(), mintMarks("n1789476735968-7777-2-2"))).toBe(orphan)
+    // A title with the new mark is left out the same way.
+    const fresh = listed(session(orphan, 30, { title: `Sessione 1 — ragu${mintMark(id)}` }), session(real, 20))
+    expect(lastRaguHere(fresh, HERE, new Set(), mintMarks(id))).toBe(real)
   })
 
   test("a pane no longer open, or no mark, leaves it to be taken", () => {
-    expect(lastRaguHere(output, HERE, new Set(), [mintMark("n1789476735968-7777-2-2")])).toBe(orphan)
+    expect(lastRaguHere(output, HERE, new Set(), mintMarks("n1789476735968-7777-2-2"))).toBe(orphan)
     expect(lastRaguHere(output, HERE, new Set())).toBe(orphan)
   })
 
   test("lint: the workbench titles a mint with its pane's mark and reads the list by the same marks", () => {
     const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf8")
     expect(workbench).toContain("const title = `${launched?.title || agent.label || agentId}${mintMark(paneId)}`")
-    expect(workbench).toContain(".panes.filter((pane) => pane.id !== paneId)\n      .map((pane) => mintMark(pane.id))")
+    expect(workbench).toContain(".panes.filter((pane) => pane.id !== paneId)\n      .flatMap((pane) => mintMarks(pane.id))")
     expect(workbench).toContain("planLastHere(agentId, cwd, excluded, marks)")
   })
 })
