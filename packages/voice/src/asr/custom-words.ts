@@ -4,7 +4,7 @@
  * Every ASR model decodes into the vocabulary it was trained on, and the words
  * that matter most here are not in it: "ragu", "opencode", "worktree",
  * "codex", "tauri", "xterm". They come back split ("open code"), respelled
- * ("nick cli"), or translated ("codice" for "codex") — and the result is
+ * ("ragu cli"), or translated ("codice" for "codex") — and the result is
  * dictated into a coding agent's prompt, where a wrong identifier is not a
  * typo but a wrong instruction.
  *
@@ -30,7 +30,7 @@ export const DEFAULT_WORD_CORRECTION_THRESHOLD = 0.18
  * How many consecutive spoken tokens may be joined into one candidate.
  *
  * Three, because that is what the splits actually look like: "open code",
- * "nick c l i", "work tree". Wider windows start matching whole phrases to
+ * "ragu c l i", "work tree". Wider windows start matching whole phrases to
  * short words and cost quadratically more comparisons.
  */
 const MAX_WINDOW = 3

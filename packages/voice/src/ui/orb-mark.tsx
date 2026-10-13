@@ -85,15 +85,12 @@ export function OrbMark(props: OrbMarkProps) {
         {/* The glow the mark stands in — this is the part that dilates. */}
         <span data-slot="orb-pupil" />
         {/*
-          The N, as the pupil.
+          The mark, as the pupil.
 
           Whose eye it is, said in the one place the eye is looking from. Drawn
-          here rather than imported: `nik-logo.tsx` is a 4×5 grid of solid
-          cells that stops resolving below about twenty pixels — inside a 28px
-          sphere it would be a rectangle — and `nik-mic.tsx` carries a capsule
-          this has no use for. What is shared is the letter's construction:
-          three strokes, meeting at their ends and nowhere else, because a
-          single polyline rounds the joins into a shape that stops being an N.
+          here rather than imported: inside a 28px sphere what is drawn is the
+          letter's construction: three strokes, meeting at their ends and nowhere else,
+          because a single polyline rounds the joins into a shape that stops being an N.
         */}
         <svg data-slot="orb-mark-n" viewBox="0 0 12 12">
           <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">

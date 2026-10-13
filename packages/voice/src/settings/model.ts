@@ -720,7 +720,7 @@ export function normalizeSettings(
     language = DEFAULT_VOICE_SETTINGS.language
   }
 
-  // 6. Wake word: fixed. Whatever was stored — "hei nik", a name the user
+  // 6. Wake word: fixed. Whatever was stored — a legacy name the user
   // typed — is replaced without a word; the phrase is not theirs to set now.
   const wakeWord = WAKE_PHRASE
   let alwaysListen = DEFAULT_VOICE_SETTINGS.alwaysListen

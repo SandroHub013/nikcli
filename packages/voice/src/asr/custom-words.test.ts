@@ -2,14 +2,14 @@ import { describe, expect, test } from "bun:test"
 import { DEFAULT_WORD_CORRECTION_THRESHOLD, correctCustomWords, editDistance, normalizeForMatch } from "./custom-words"
 
 /** The vocabulary this project actually loses to a speech model. */
-const WORDS = ["nikcli", "opencode", "worktree", "codex", "xterm", "Tauri"]
+const WORDS = ["ragucli", "opencode", "worktree", "codex", "xterm", "Tauri"]
 
 const fix = (text: string) => correctCustomWords(text, WORDS).text
 
 describe("normalizeForMatch", () => {
   test("compares on letters and digits alone", () => {
     expect(normalizeForMatch("Open-Code!")).toBe("opencode")
-    expect(normalizeForMatch("  NikCLI  ")).toBe("nikcli")
+    expect(normalizeForMatch("  RaguCLI  ")).toBe("ragucli")
   })
 
   test("folds accents, which a model puts in and leaves out freely", () => {
@@ -19,8 +19,8 @@ describe("normalizeForMatch", () => {
 
 describe("editDistance", () => {
   test("counts the usual edits", () => {
-    expect(editDistance("nikcli", "nikcli")).toBe(0)
-    expect(editDistance("nickcli", "nikcli")).toBe(1)
+    expect(editDistance("ragucli", "ragucli")).toBe(0)
+    expect(editDistance("ragocli", "ragucli")).toBe(1)
     expect(editDistance("", "abc")).toBe(3)
   })
 
@@ -29,8 +29,8 @@ describe("editDistance", () => {
    * a bug: below the limit the number must still be exact.
    */
   test("a bounded call is exact up to the bound and merely over it beyond", () => {
-    expect(editDistance("nickcli", "nikcli", 2)).toBe(1)
-    expect(editDistance("qwerty", "nikcli", 2)).toBeGreaterThan(2)
+    expect(editDistance("ragocli", "ragucli", 2)).toBe(1)
+    expect(editDistance("qwerty", "ragucli", 2)).toBeGreaterThan(2)
   })
 })
 
@@ -46,12 +46,12 @@ describe("correctCustomWords", () => {
   })
 
   test("repairs a respelling", () => {
-    expect(fix("avvia nick cli")).toBe("avvia nikcli")
+    expect(fix("avvia rago cli")).toBe("avvia ragucli")
   })
 
   test("leaves a word that is already right exactly as it is", () => {
-    const result = correctCustomWords("avvia nikcli adesso", WORDS)
-    expect(result.text).toBe("avvia nikcli adesso")
+    const result = correctCustomWords("avvia ragucli adesso", WORDS)
+    expect(result.text).toBe("avvia ragucli adesso")
     expect(result.corrections).toEqual([])
   })
 
@@ -113,7 +113,7 @@ describe("correctCustomWords", () => {
   test("the threshold is the documented one and can be tightened", () => {
     expect(DEFAULT_WORD_CORRECTION_THRESHOLD).toBe(0.18)
     // At zero only exact matches survive, so the respelling stays as heard.
-    expect(correctCustomWords("avvia nick cli", WORDS, 0).text).toBe("avvia nick cli")
+    expect(correctCustomWords("avvia rago cli", WORDS, 0).text).toBe("avvia rago cli")
   })
 
   test("an empty transcript is returned untouched", () => {

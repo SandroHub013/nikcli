@@ -1281,7 +1281,7 @@ export function makeVoiceProgram(
          * Announced here, and only here, so the console sees what the agent
          * saw. Every agent-mode path converges on this function *after* the
          * wake word has been stripped, so what is reported is the command
-         * itself rather than "ehi nik apri il pannello". Dictation never
+         * itself rather than "ehi ragù apri il pannello". Dictation never
          * reaches this point, which is correct: text on its way into a pane
          * is not a turn of conversation with the assistant.
          */

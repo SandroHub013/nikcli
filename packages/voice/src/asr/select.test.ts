@@ -99,7 +99,7 @@ describe("asr/select", () => {
           end: async () => {},
           cancel: () => {},
         },
-        keyterms: ["nik"],
+        keyterms: ["ragù"],
       },
       openRouterOptions: {
         captureOptions: {

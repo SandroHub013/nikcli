@@ -269,10 +269,10 @@ describe("the migration to the wake word happens once", () => {
 
   test("a stored name is rewritten to the fixed phrase in the profile", () => {
     const store = new MemoryStorage()
-    store.setItem("voice.settings", JSON.stringify({ version: 2, activation: "wake-word", wakeWord: "hei nik" }))
+    store.setItem("voice.settings", JSON.stringify({ version: 2, activation: "wake-word", wakeWord: "legacy" }))
 
-    expect(loadVoiceSettings(store).settings.wakeWord).toBe("nik")
-    expect(JSON.parse(store.getItem("voice.settings") ?? "{}").wakeWord).toBe("nik")
+    expect(loadVoiceSettings(store).settings.wakeWord).toBe("ei ragù")
+    expect(JSON.parse(store.getItem("voice.settings") ?? "{}").wakeWord).toBe("ei ragù")
     expect(loadVoiceSettings(store).migrations).toEqual([])
   })
 

@@ -112,7 +112,7 @@ export function matchesWakeWord(utterance: string, wakeWord: string): WakeWordMa
 
   /*
    * Only from the start, past any greeting. This used to scan the whole
-   * sentence, so "domani il nick della squadra" woke the assistant up.
+   * sentence, so "domani il ragù della squadra" woke the assistant up.
    */
   let start = 0
   while (start < uTokens.length && OPENERS.has(uTokens[start]) && !matchToken(uTokens[start], wTokens[0])) {

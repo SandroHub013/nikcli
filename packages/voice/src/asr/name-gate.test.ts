@@ -28,7 +28,7 @@ function setup(answers: string[], gate: Partial<NameGate> & { active?: () => boo
     onFinal: (event) => finals.push(event.text),
     nameGate: {
       active: gate.active ?? (() => true),
-      accepts: (text) => matchesWakeWord(text, "ei nik").matched,
+      accepts: (text) => matchesWakeWord(text, "ei ragù").matched,
       onRejected: (text) => rejected.push(text),
       onAccepted: () => accepted.push(true),
     },
@@ -52,19 +52,19 @@ describe("while it waits for the name, only the start of a sentence goes to the 
   })
 
   test("a long sentence that calls it is then sent whole", async () => {
-    const { sent, finals, hear, accepted } = setup(["ehi nik raccontami", "ehi nik raccontami la storia di Roma"])
+    const { sent, finals, hear, accepted } = setup(["ehi ragù raccontami", "ehi ragù raccontami la storia di Roma"])
     await hear(6_000)
     // Said as soon as the start is heard, before the rest comes back.
     expect(accepted).toEqual([true])
     expect(sent).toEqual([bytesFor(NAME_PROBE_MS), bytesFor(6_000)])
-    expect(finals).toEqual(["ehi nik raccontami la storia di Roma"])
+    expect(finals).toEqual(["ehi ragù raccontami la storia di Roma"])
   })
 
   test("a short sentence is sent whole at once: cutting it would save nothing", async () => {
-    const { sent, finals, hear } = setup(["ei nik stop"])
+    const { sent, finals, hear } = setup(["ei ragù stop"])
     await hear(1_800)
     expect(sent).toEqual([bytesFor(1_800)])
-    expect(finals).toEqual(["ei nik stop"])
+    expect(finals).toEqual(["ei ragù stop"])
   })
 
   test("when the name is not needed — awake, answering, at work — the sentence goes whole", async () => {
@@ -95,7 +95,7 @@ describe("error purpose at the OpenRouter boundary", () => {
       onError: (_error, context) => purposes.push(context?.purpose),
       nameGate: {
         active: () => true,
-        accepts: (text) => matchesWakeWord(text, "ei nik").matched,
+        accepts: (text) => matchesWakeWord(text, "ei ragù").matched,
         onAccepted: () => accepted.push("accepted"),
       },
     })
@@ -125,7 +125,7 @@ describe("error purpose at the OpenRouter boundary", () => {
     const { accepted, purposes } = await hearEarlySentence(async () => {
       requests++
       return requests === 1
-        ? new Response(JSON.stringify({ text: "ei nik raccontami" }), { status: 200 })
+        ? new Response(JSON.stringify({ text: "ei ragù raccontami" }), { status: 200 })
         : new Response("busy", { status: 503 })
     })
 
@@ -167,7 +167,7 @@ describe("what the gate counts", () => {
         fetch: (async () => new Response(JSON.stringify({ text: answers.shift() ?? "" }), { status: 200 })) as any,
         nameGate: {
           active: () => active,
-          accepts: (text) => matchesWakeWord(text, "ei nik").matched,
+          accepts: (text) => matchesWakeWord(text, "ei ragù").matched,
           onRequest: () => counted++,
         },
       })
@@ -178,7 +178,7 @@ describe("what the gate counts", () => {
     }
     await make(true, ["la televisione"])(6_000) // one probe
     expect(counted).toBe(1)
-    await make(true, ["ei nik apri", "ei nik apri il browser"])(6_000) // probe and whole
+    await make(true, ["ei ragù apri", "ei ragù apri il browser"])(6_000) // probe and whole
     expect(counted).toBe(3)
     await make(true, ["ok"])(1_000) // short, whole
     expect(counted).toBe(4)
@@ -241,7 +241,7 @@ describe("the start of a long sentence is heard before it ends", () => {
   test("sent once, while the speaker goes on, and not again when the sentence closes", async () => {
     let clock = 10_000
     const sent: { bytes: number; at: number }[] = []
-    const answers = ["ei nik raccontami", "ei nik raccontami la storia di Roma"]
+    const answers = ["ei ragù raccontami", "ei ragù raccontami la storia di Roma"]
     const finals: string[] = []
     const capture = createMicCapture({
       now: () => clock,
@@ -259,7 +259,7 @@ describe("the start of a long sentence is heard before it ends", () => {
         return new Response(JSON.stringify({ text: answers.shift() ?? "" }), { status: 200 })
       }) as any,
       onFinal: (event) => finals.push(event.text),
-      nameGate: { active: () => true, accepts: (text) => matchesWakeWord(text, "ei nik").matched },
+      nameGate: { active: () => true, accepts: (text) => matchesWakeWord(text, "ei ragù").matched },
     })
     await transcriber.start()
     const frame = (level: number) => {
@@ -274,7 +274,7 @@ describe("the start of a long sentence is heard before it ends", () => {
     await new Promise((resolve) => setTimeout(resolve, 5))
     expect(sent).toHaveLength(2)
     expect(sent[1]!.bytes).toBeGreaterThan(bytesFor(NAME_PROBE_MS))
-    expect(finals).toEqual(["ei nik raccontami la storia di Roma"])
+    expect(finals).toEqual(["ei ragù raccontami la storia di Roma"])
   })
 })
 

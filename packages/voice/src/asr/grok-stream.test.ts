@@ -147,7 +147,7 @@ function setup(
 
 describe("asr/grok-stream streaming", () => {
   test("streams the sentence in 100 ms pieces and delivers from the socket, never sending the WAV", async () => {
-    const h = setup({ keyterms: ["nik"] })
+    const h = setup({ keyterms: ["ragù"] })
     await h.transcriber.start()
 
     h.startSeg(1)
@@ -161,7 +161,7 @@ describe("asr/grok-stream streaming", () => {
     // 3200 samples at 16 kHz: two pieces of exactly 100 ms of PCM16LE.
     expect(h.sent).toEqual([3200, 3200])
     expect(h.opens[0]!.language).toBe("it")
-    expect(h.opens[0]!.keyterms).toEqual(["nik"])
+    expect(h.opens[0]!.keyterms).toEqual(["ragù"])
 
     h.emit({ kind: "partial", text: "apri il browser", isFinal: true, speechFinal: false })
     expect(h.partials).toEqual(["apri il browser"])
@@ -501,7 +501,7 @@ describe("asr/grok-stream the gate", () => {
     const seen = { requests: 0, accepted: 0, rejected: 0, uncut: 0 }
     const gate: NameGate = {
       active: () => true,
-      accepts: (text) => text.startsWith("ei nik"),
+      accepts: (text) => text.startsWith("ei ragù"),
       onRequest: () => seen.requests++,
       onAccepted: () => seen.accepted++,
       onRejected: () => seen.rejected++,
@@ -513,7 +513,7 @@ describe("asr/grok-stream the gate", () => {
 
   test("while it waits for the name no socket opens: the start is probed, and the whole sentence follows only if it calls", async () => {
     const { gate, seen } = gateOf()
-    const h = setup({ nameGate: gate, answers: ["ei nik apri", "ei nik apri il browser"] })
+    const h = setup({ nameGate: gate, answers: ["ei ragù apri", "ei ragù apri il browser"] })
     await h.transcriber.start()
 
     h.startSeg(1)
@@ -527,7 +527,7 @@ describe("asr/grok-stream the gate", () => {
     expect(h.batches[0]!.segment.blob.size).toBe(44 + bytesFor(1_500))
     expect(h.batches[1]!.purpose).toBe("turn")
     expect(h.batches[1]!.gated).toBe(true)
-    expect(h.finals.map((event) => event.text)).toEqual(["ei nik apri il browser"])
+    expect(h.finals.map((event) => event.text)).toEqual(["ei ragù apri il browser"])
     expect(seen).toEqual({ requests: 2, accepted: 1, rejected: 0, uncut: 0 })
   })
 
@@ -547,7 +547,7 @@ describe("asr/grok-stream the gate", () => {
 
   test("a short sentence goes whole as its own probe, the way the batch path does today", async () => {
     const { gate, seen } = gateOf()
-    const h = setup({ nameGate: gate, answers: ["ei nik stop"] })
+    const h = setup({ nameGate: gate, answers: ["ei ragù stop"] })
     await h.transcriber.start()
 
     h.startSeg(1)
@@ -556,7 +556,7 @@ describe("asr/grok-stream the gate", () => {
     expect(h.batches).toHaveLength(1)
     expect(h.batches[0]!.purpose).toBe("probe")
     expect(h.batches[0]!.segment.durationMs).toBe(1_000)
-    expect(h.finals.map((event) => event.text)).toEqual(["ei nik stop"])
+    expect(h.finals.map((event) => event.text)).toEqual(["ei ragù stop"])
     expect(seen.requests).toBe(1)
   })
 
