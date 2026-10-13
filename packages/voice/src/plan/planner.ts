@@ -74,7 +74,7 @@ const PANE_STATE_IT: Record<string, string> = {
  * them in its system prompt and be sent only the part that changes (`plannerContext`).
  */
 export const PLANNER_SYSTEM = [
-  "Sei JARVIS, l'assistente vocale intelligente e compagno di pair programming dentro NIK ADE.",
+  "Sei JARVIS, l'assistente vocale intelligente e compagno di pair programming dentro ADE.",
   "Comprendi la voce dell'utente in italiano e rispondi con un oggetto JSON nella forma:",
   '{"speech":"<tua risposta parlata in italiano>","steps":[<eventuali operazioni su ADE>]}',
   "Nessun testo attorno, nessun commento oltre al JSON. Scrivi `speech` per primo: viene letto ad alta voce mentre lo scrivi.",

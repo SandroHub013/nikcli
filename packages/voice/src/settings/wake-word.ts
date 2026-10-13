@@ -2,7 +2,7 @@
  * Wake-word detection and extraction logic for partial and final ASR streams.
  *
  * Reuses the canonical normalization (normalizeUtterance). The name is matched
- * exactly, in the spellings the recogniser writes it ("nik", "nick", "nic").
+ * exactly, in the spellings the recogniser writes it ("ragù", "ragu", "ragú", "rago", "ragoo").
  */
 
 import { normalizeUtterance } from "../intent/normalize"
@@ -22,9 +22,11 @@ const WAKE_WORD_PHONETIC_ALIASES: Readonly<Record<string, readonly string[]>> = 
   ehi: ["hei", "ehi", "hey", "ei", "he", "eh"],
   hey: ["hei", "ehi", "hey", "ei", "he", "eh"],
   ei: ["hei", "ehi", "hey", "ei", "he", "eh"],
-  nik: ["nik", "nick", "nic"],
-  nick: ["nik", "nick", "nic"],
-  nic: ["nik", "nick", "nic"],
+  ragu: ["ragu", "ragù", "ragú", "rago", "ragoo"],
+  ragù: ["ragu", "ragù", "ragú", "rago", "ragoo"],
+  ragú: ["ragu", "ragù", "ragú", "rago", "ragoo"],
+  rago: ["ragu", "ragù", "ragú", "rago", "ragoo"],
+  ragoo: ["ragu", "ragù", "ragú", "rago", "ragoo"],
 }
 
 function matchToken(utteranceToken: string, wakeToken: string): boolean {
@@ -38,9 +40,8 @@ function matchToken(utteranceToken: string, wakeToken: string): boolean {
   }
 
   /*
-   * Nothing approximate. The name is three letters, and one letter away from
-   * it are «ni», «nì», «Nike» and «niko»: said in a room, each of them woke
-   * the assistant and handed it the rest of the sentence.
+   * Nothing approximate. We accept only the actual ASR spellings for «ragù»
+   * (ragu, ragù, ragú, rago, ragoo) and greetings.
    */
   return false
 }
@@ -48,34 +49,34 @@ function matchToken(utteranceToken: string, wakeToken: string): boolean {
 /**
  * What people put in front of the name, and which is not part of it.
  *
- * "Nik, apri il browser" and "ehi Nik, apri il browser" are the same request.
+ * "Ragù, apri il browser" and "ehi ragù, apri il browser" are the same request.
  * Only these may come first: the name has to open the sentence, otherwise the
- * television saying "nick" halfway through a line would be an address.
+ * television saying "ragù" halfway through a line would be an address.
  */
 const OPENERS: ReadonlySet<string> = new Set(["hei", "ehi", "hey", "ei", "eh", "e"])
 
 /*
  * «e» and «eh» are how the recogniser often writes «ei», and also how a
- * sentence about someone called Nick begins: «E Nick ha detto che…» from the
+ * sentence about ragù begins: «E il ragù ha detto che…» from the
  * television. With these in front, the name counts only on its own or with a
  * pause after it, which the recogniser writes as punctuation. No guessing
  * from the words that follow: that went wrong both ways.
  */
 const WEAK_OPENERS: ReadonlySet<string> = new Set(["e", "eh"])
 
-/** Whether «e nik …» has no pause after the name, and so may be about Nick. */
+/** Whether «e ragù …» has no pause after the name, and so may be about ragù. */
 function noPauseAfterName(utterance: string): boolean {
-  // «ehnik,»: the recogniser may glue the greeting to the name.
+  // «ehragu,»: the recogniser may glue the greeting to the name.
   // Inspect the first name only; punctuation after a later mention is not its pause.
-  const name = /(?:\b|(?<=\beh?))ni(?:c?k|c)\b(\s*[,.;:!?…])?/iu.exec(utterance)
+  const name = /(?:\b|(?<=\beh?))rag(?:u|ù|ú|o|oo)\b(\s*[,.;:!?…])?/iu.exec(utterance)
   return !name?.[1]
 }
 
 /*
- * «ei nik» written as one word, which the recogniser does when it is said
- * quickly: «einik», «heynick». Split back into greeting and name.
+ * «ei ragù» written as one word, which the recogniser does when it is said
+ * quickly: «eiragu», «heyragu», «heyragoo». Split back into greeting and name.
  */
-const JOINED = /^(hei|ehi|hey|ei|eh)(nik|nick|nic)$/
+const JOINED = /^(hei|ehi|hey|ei|eh)(ragu|ragù|ragú|rago|ragoo)$/
 
 function splitJoined(token: string): string[] {
   const joined = JOINED.exec(token)
@@ -86,11 +87,12 @@ function splitJoined(token: string): string[] {
  * Inspects a spoken utterance for the configured name, at its start.
  *
  * Guarantees:
- * - Detects "nik" across ASR misrecognitions: "nick", "nic", with or without
- *   a greeting in front ("ehi nik", "ok nick").
- * - Never triggers when the name is part of a longer word (e.g. "nikopolis").
+ * - Detects "ei ragù" across ASR misrecognitions: "ragù", "ragu", "ragú", "rago", "ragoo",
+ *   with greeting variations ("ehi ragù", "hey ragoo", "eiragu").
+ * - Never triggers when the name is part of a longer word (e.g. "ragusano").
  * - Never triggers on a name buried in the middle of a sentence, which is what
  *   a radio or a conversation in the room sounds like.
+ * - Never triggers on "ragù" alone without "ei" / greeting.
  * - Returns what remains of the utterance after the name, enabling single-shot commands.
  */
 export function matchesWakeWord(utterance: string, wakeWord: string): WakeWordMatch {

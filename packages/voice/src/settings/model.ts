@@ -195,12 +195,12 @@ export function setWakeWordEnabledForTests(on: boolean): void {
 }
 
 /**
- * The name that calls the assistant. Fixed, by the user's decision: «nik» or
- * «ei nik» at the start of the sentence. The greeting is accepted in front of
- * the name, and what the recogniser makes of either — «ehi nik», «hey nick» —
+ * The name that calls the assistant. Fixed, by the user's decision: «ei ragù»
+ * at the start of the sentence. The greeting is accepted in front of
+ * the name, and what the recogniser makes of either — «ehi ragu», «hey ragoo» —
  * by `settings/wake-word.ts`.
  */
-export const WAKE_PHRASE = "nik"
+export const WAKE_PHRASE = "ei ragù"
 
 export interface VoiceSettings {
   /** Schema version used to govern migrations across configuration upgrades. */

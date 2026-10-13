@@ -165,11 +165,13 @@ export { OrbMark, type OrbMarkProps, type OrbRim } from "./ui/orb-mark"
 export { VoiceHud, type VoiceHudProps } from "./ui/voice-hud"
 export { AgentOrb, type AgentOrbProps } from "./ui/agent-orb"
 
-export { NikMic, type NikMicProps } from "./ui/nik-mic"
+export { RaguMic, type RaguMicProps } from "./ui/ragu-mic"
 
-export { NikLogo, type NikLogoProps } from "./ui/nik-logo"
-
-export { NikCube, type NikCubeProps } from "./ui/nik-cube"
+/** @deprecated NikCube is obsolete, kept as empty stub for external branch compatibility (workbench.tsx) */
+export function NikCube(_props?: any): null {
+  return null
+}
+export type NikCubeProps = Record<string, unknown>
 
 export { VoiceSettingsPanel, type VoiceSettingsPanelProps } from "./ui/voice-settings-panel"
 export { createVoiceSettingsState, type VoiceSettingsState, type VoiceSettingsStateProps } from "./ui/settings-state"
