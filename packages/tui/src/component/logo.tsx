@@ -1,11 +1,12 @@
 import { TextAttributes, RGBA } from "@opentui/core"
 import { useTimeline } from "@opentui/solid"
-import { createSignal, For, onMount, Show } from "solid-js"
+import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { useTheme, tint } from "@tui/context/theme"
 import { useKV } from "@tui/context/kv"
 import { Link } from "@tui/ui/link"
 
-const LOGO_LINES = [
+/** The wordmark, one string per row. */
+export const LOGO_LINES = [
   "███╗   ██╗ ██╗ ██╗  ██╗  ██████╗ ██╗      ██╗",
   "████╗  ██║ ██║ ██║ ██╔╝ ██╔════╝ ██║      ██║",
   "██╔██╗ ██║ ██║ █████╔╝  ██║      ██║      ██║",
@@ -16,6 +17,8 @@ const LOGO_LINES = [
 
 const LOGO_WIDTH = Math.max(...LOGO_LINES.map((line) => line.length))
 const REVEAL_DURATION = 950
+/** How long past the reveal a stalled timeline is waited for before the wordmark is drawn whole. */
+const REVEAL_GRACE = 250
 const SHINE_WIDTH = 5
 const ROW_LUMINANCE = [0.48, 0.62, 0.82, 1, 0.72, 0.5]
 const CREDIT = "by @nikomatt69"
@@ -39,15 +42,29 @@ export function Logo(props: { idle?: boolean; compact?: boolean }) {
 
   onMount(() => {
     if (!animationsEnabled) return
+    let revealed = false
     timeline.add(
       { progress: 0 },
       {
         progress: 1,
         duration: REVEAL_DURATION,
         ease: "inOutSine",
-        onUpdate: (animation) => setProgress(animation.targets[0].progress),
+        onUpdate: (animation) => {
+          if (!revealed) setProgress(animation.targets[0].progress)
+        },
       },
     )
+    /*
+     * The reveal is decoration. Until the timeline moves, every row is spaces in
+     * the background colour, so a renderer whose frames never tick it would show
+     * an empty box where the name should be. Past the reveal's own length the
+     * wordmark is drawn whole, whatever the timeline did.
+     */
+    const reveal = setTimeout(() => {
+      revealed = true
+      setProgress(1)
+    }, REVEAL_DURATION + REVEAL_GRACE)
+    onCleanup(() => clearTimeout(reveal))
   })
 
   const renderLine = (line: string, row: number): Segment[] => {
