@@ -161,7 +161,7 @@ export default Runtime.handler(Commands.commands["auth"].commands["login"], asyn
       }
 
       prompts.log.warn(
-        `This only stores a credential for ${provider} - you will need to configure it in nikcli.json/ragu.json, check the docs for examples.`,
+        `This only stores a credential for ${provider} - you will need to configure it in ragu.json, check the docs for examples.`,
       )
     }
 

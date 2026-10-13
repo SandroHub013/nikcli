@@ -272,7 +272,7 @@ export const dict = {
   "dialog.mcp.empty": "Keine MCPs konfiguriert",
 
   "dialog.lsp.empty": "LSPs automatisch nach Dateityp erkannt",
-  "dialog.plugins.empty": "In nikcli.json konfigurierte Plugins",
+  "dialog.plugins.empty": "In ragu.json konfigurierte Plugins",
 
   "mcp.status.connected": "verbunden",
   "mcp.status.failed": "fehlgeschlagen",
@@ -407,7 +407,7 @@ export const dict = {
   "error.chain.responseBody": "Antwort-Body:\n{{body}}",
   "error.chain.didYouMean": "Meinten Sie: {{suggestions}}",
   "error.chain.modelNotFound": "Modell nicht gefunden: {{provider}}/{{model}}",
-  "error.chain.checkConfig": "Überprüfen Sie Ihre Konfiguration (nikcli.json) auf Anbieter-/Modellnamen",
+  "error.chain.checkConfig": "Überprüfen Sie Ihre Konfiguration (ragu.json) auf Anbieter-/Modellnamen",
   "error.chain.mcpFailed":
     'MCP-Server "{{name}}" fehlgeschlagen. Hinweis: Ragu unterstützt noch keine MCP-Authentifizierung.',
   "error.chain.providerAuthFailed": "Anbieter-Authentifizierung fehlgeschlagen ({{provider}}): {{message}}",
