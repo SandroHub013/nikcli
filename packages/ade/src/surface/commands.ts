@@ -378,7 +378,7 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       id: "raguverse.pane",
       title: t("palette.raguverse.pane"),
       group: t("palette.group.pane"),
-      keywords: ["raguverse", "città", "mondo", "gioco", "3d", "sessioni", "negozi", "city", "world", "game", "sessions"],
+      keywords: ["raguverse", "nikverse", "città", "mondo", "gioco", "3d", "sessioni", "negozi", "city", "world", "game", "sessions"],
     },
     {
       id: "update.check",
