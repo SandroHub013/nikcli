@@ -772,14 +772,14 @@ export const it = {
   "shots.noFolder": "Nessuna cartella delle schermate su questo computer",
   "browser.adeOrigin": "Questo indirizzo è ADE stessa; non si apre nel pannello.",
   "bots.trust.new": (name: string, can: string) =>
-    `Il bot «${name}» viene da questo progetto (.nikcli/agent): le sue istruzioni le ha scritte chi ha scritto il repository, e girerà con il tuo account. ${can} Lo usi?`,
+    `Il bot «${name}» viene da questo progetto (.ragu/agent): le sue istruzioni le ha scritte chi ha scritto il repository, e girerà con il tuo account. ${can} Lo usi?`,
   "bots.trust.changed": (name: string, can: string) =>
     `Il file del bot «${name}» di questo progetto è cambiato da quando l'hai approvato: le istruzioni nuove le ha scritte chi ha modificato il repository. ${can} Lo usi così com'è ora?`,
   // What a project's bot may do once trusted, by runner (review B3, BASSO 2).
   "bots.trust.can.codex":
     "Girerà in sola lettura: potrà leggere i file del progetto ed eseguire comandi che non scrivono niente, ma non modificare file.",
   "bots.trust.can.claude":
-    "Non potrà eseguire comandi né toccare .git e le impostazioni degli strumenti (.claude, .nikcli, .codex, .vscode, .husky, .github/workflows), ma potrà modificare gli altri file del progetto.",
+    "Non potrà eseguire comandi né toccare .git e le impostazioni degli strumenti (.claude, .ragu, .codex, .vscode, .husky, .github/workflows), ma potrà modificare gli altri file del progetto.",
   "bots.trust.can.claudeReadOnly": "Non potrà eseguire comandi né modificare file: potrà solo leggere il progetto.",
   "bots.trust.can.ragu":
     "Potrà fare quello che la tua configurazione di Ragu Code concede: il file del bot non può concedersi altro.",
@@ -2181,7 +2181,7 @@ export const it = {
   "bots.form.description": "A cosa serve",
   "bots.form.descPlaceholder": "Revisiona le pull request e segnala i rischi",
   "bots.form.where": "Dove",
-  "bots.form.scopeProject": "Nel progetto (.nikcli/agent)",
+  "bots.form.scopeProject": "Nel progetto (.ragu/agent)",
   "bots.form.scopeGlobal": "Globale (per tutti i progetti)",
   "bots.form.objectives": "Obiettivi",
   "bots.form.objectivesPlaceholder": "Uno per riga. Restano veri in ogni conversazione.",
@@ -2323,7 +2323,7 @@ export const it = {
   // F7a2: Review & Plugin consent
   "review.error.details": "Impossibile calcolare i dettagli delle modifiche.",
   "plugins.consent.question": (root: string, list: string) =>
-    `Il progetto\n${root}\n\ndichiara in .nikcli/tui.json dei plugin che verrebbero eseguiti dentro ADE:\n\n${list}\n\nUn plugin è codice con accesso alle sessioni e ai file del progetto. Eseguirli?`,
+    `Il progetto\n${root}\n\ndichiara in .ragu/tui.json dei plugin che verrebbero eseguiti dentro ADE:\n\n${list}\n\nUn plugin è codice con accesso alle sessioni e ai file del progetto. Eseguirli?`,
 
   // F7a2: 3D Model
   "model.error.paneClosed": "pannello chiuso",

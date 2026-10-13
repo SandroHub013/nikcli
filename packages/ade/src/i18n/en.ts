@@ -756,13 +756,13 @@ export const en: Messages = {
   "shots.noFolder": "No screenshots folder on this computer",
   "browser.adeOrigin": "That address is ADE itself; it isn't opened in the pane.",
   "bots.trust.new": (name, can) =>
-    `The bot «${name}» comes from this project (.nikcli/agent): its instructions were written by whoever wrote the repository, and it will run on your account. ${can} Use it?`,
+    `The bot «${name}» comes from this project (.ragu/agent): its instructions were written by whoever wrote the repository, and it will run on your account. ${can} Use it?`,
   "bots.trust.changed": (name, can) =>
     `The file of this project's bot «${name}» changed since you approved it: the new instructions were written by whoever changed the repository. ${can} Use it as it is now?`,
   "bots.trust.can.codex":
     "It runs read-only: it can read the project's files and run commands that write nothing, but not change files.",
   "bots.trust.can.claude":
-    "It cannot run commands or touch .git and the tools' settings (.claude, .nikcli, .codex, .vscode, .husky, .github/workflows), but it can change the project's other files.",
+    "It cannot run commands or touch .git and the tools' settings (.claude, .ragu, .codex, .vscode, .husky, .github/workflows), but it can change the project's other files.",
   "bots.trust.can.claudeReadOnly": "It cannot run commands or change files: it can only read the project.",
   "bots.trust.can.ragu": "It can do what your Ragu Code configuration allows: the bot's file cannot grant itself more.",
   "bots.trust.selfApproves": (name, what, line) =>
@@ -2116,7 +2116,7 @@ export const en: Messages = {
   "bots.form.description": "Purpose",
   "bots.form.descPlaceholder": "Review pull requests and flag potential risks",
   "bots.form.where": "Where",
-  "bots.form.scopeProject": "In project (.nikcli/agent)",
+  "bots.form.scopeProject": "In project (.ragu/agent)",
   "bots.form.scopeGlobal": "Global (for all projects)",
   "bots.form.objectives": "Objectives",
   "bots.form.objectivesPlaceholder": "One per line. Kept active across conversations.",
@@ -2258,7 +2258,7 @@ export const en: Messages = {
   // F7a2: Review & Plugin consent
   "review.error.details": "Unable to calculate change details.",
   "plugins.consent.question": (root: string, list: string) =>
-    `The project\n${root}\n\ndeclares plugins in .nikcli/tui.json that would be run inside ADE:\n\n${list}\n\nA plugin is code with access to project sessions and files. Run them?`,
+    `The project\n${root}\n\ndeclares plugins in .ragu/tui.json that would be run inside ADE:\n\n${list}\n\nA plugin is code with access to project sessions and files. Run them?`,
 
   // F7a2: 3D Model
   "model.error.paneClosed": "pane closed",

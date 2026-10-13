@@ -19,8 +19,8 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "publisher": "nikcli",
-    "copyright": "© 2025-2026 nikcli",
+    "publisher": "Ragu Code",
+    "copyright": "© 2025-2026 Ragu Code",
     "homepage": "https://github.com/SandroHub013/nikcli/releases",
     "shortDescription": "Agent Development Environment",
     "longDescription": "ADE runs coding agents side by side in one window: sessions, files, browser and voice.",
