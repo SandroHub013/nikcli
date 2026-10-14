@@ -19,6 +19,7 @@ import { useLanguage } from "@tui/context/language"
 import { useTheme } from "@tui/context/theme"
 import { BORDER_CHAR_TABLES, borderCharsFor, EmptyBorder } from "@tui/component/border"
 import { DISCLOSURE } from "@tui/component/disclosure"
+import { stopWhenDisposed } from "@tui/component/spinner"
 import { useSDK } from "@tui/context/sdk"
 import { useRoute } from "@tui/context/route"
 import { useSync } from "@tui/context/sync"
@@ -2258,7 +2259,12 @@ export function Prompt(props: PromptProps) {
                     when={kv.get("animations_enabled", true) && spinnerDef()}
                     fallback={<text fg={theme.foreground.muted}>[⋯]</text>}
                   >
-                    <spinner color={spinnerDef()!.color} frames={spinnerDef()!.frames} interval={40} />
+                    <spinner
+                      ref={stopWhenDisposed}
+                      color={spinnerDef()!.color}
+                      frames={spinnerDef()!.frames}
+                      interval={40}
+                    />
                   </Show>
                 </box>
                 <box flexDirection="row" gap={1} flexShrink={0}>
