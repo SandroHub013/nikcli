@@ -1547,6 +1547,8 @@ export const it = {
   "pane.mail": (count: number) => `${count} in attesa: ADE non consegna finché la riga è a metà`,
   "note.resentRequest": (id: string) => `Invio ripetuto: la richiesta ${id} non era partita`,
   "note.nudged": (id: string) => `Promemoria inviato: la richiesta ${id} aspetta una risposta`,
+  "note.outputWorkGivenUp": () =>
+    "Solo il suo output diceva che la sessione lavorava, da dieci minuti e senza un Invio dietro: segnata disponibile, e la posta può raggiungerla di nuovo",
   "note.replySent": (ref: string) => `Risposta inviata (richiesta ${ref})`,
   "note.replySentTo": (to: string, ref: string) => `Risposta inviata a ${to} (richiesta ${ref})`,
   "note.replyFrom": (from: string, text: string) => `Risposta ricevuta da ${from}: ${text}`,
