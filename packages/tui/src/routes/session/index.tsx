@@ -69,9 +69,8 @@ import { compilePartialSpec } from "@tui/util/spec-stream"
 import { TuiImageList } from "@tui/component/tui-image"
 import { DialogSelect } from "../../ui/dialog-select"
 import { DialogBgAgents } from "./dialog-bg-agents"
-import { features } from "@ragu/util/features"
 import { useLanguage } from "@tui/context/language"
-import { spacerHeights, visibleRange } from "./message-window"
+import { transcriptWindow, windowingOn } from "./message-window"
 import { groupParts, type ExplorationGroup } from "./rows"
 import { liveMarkdown, splitLiveMarkdown, wrapDiagramsInFences } from "./diagram"
 import { SESSION_SIDEBAR_WIDTH } from "@tui/ui/layout"
@@ -128,6 +127,7 @@ export function Session() {
   // `createMemo` callbacks. Must be declared before any usage site to avoid TDZ
   // errors when effects run before JSX `ref={(r) => …}` callbacks.
   const dimensions = useTerminalDimensions()
+  const renderer = useRenderer()
   let scroll: ScrollBoxRenderable
   let prompt: PromptRef
   let lastSwitch: string | undefined = undefined
@@ -174,89 +174,6 @@ export function Session() {
   const turnUsage = createMemo(() =>
     sync.data.config.tui?.turn_tokens === true ? TurnUsage.byMessage(messages()) : undefined,
   )
-  // The virtualizer uses estimated heights. While the assistant is streaming,
-  // the active row grows on every text delta, so those estimates no longer
-  // describe the scroll position and can window the live response out.
-  const streaming = createMemo(() => turns().some((turn) => turn.role === "assistant" && !turn.completedAt))
-  /**
-   * Fallback row height, used only when a turn's content cannot be measured.
-   * `estimateTurnHeight` derives the real figure from the turn's body.
-   */
-  const MESSAGE_HEIGHT_FALLBACK = 6
-  const OVERSCAN = 5
-  const virtualizationEnabled = createMemo(() => features(sync.data.config).tui.messageVirtualization)
-  const [scrollPos, setScrollPos] = createSignal(0)
-  const [viewportH, setViewportH] = createSignal(24)
-  createEffect(() => {
-    if (!virtualizationEnabled()) return
-    const id = setInterval(() => {
-      if (!scroll || scroll.isDestroyed) return
-      setScrollPos(scroll.scrollTop)
-      setViewportH(Math.max(1, scroll.viewport.height || dimensions().height - 10))
-    }, 50)
-    onCleanup(() => clearInterval(id))
-  })
-  /**
-   * Windowed message list for C1 virtualization. Flag off → full list (bit-identical).
-   * On any error → full list fallback.
-   */
-  const windowed = createMemo(() => {
-    const all = turns()
-    if (!virtualizationEnabled() || streaming() || all.length === 0) {
-      return { items: all, top: 0, bottom: 0, baseIndex: 0 }
-    }
-    try {
-      // Per-turn, from content. A flat constant was wrong in both directions
-      // and the errors did not cancel: a one-line acknowledgement was
-      // over-reserved while a long diff was under-reserved by an order of
-      // magnitude, so the offset drifted further the more the transcript mixed
-      // the two. `specs/effect-tui/06-terminal-rendering.md`.
-      const columns = Math.max(1, scroll?.viewport.width || dimensions().width || 80)
-      // Chrome rows come from the *resolved* message style, not a constant. A
-      // theme that changes the message padding changes how tall every turn
-      // renders; an estimator still counting the stock 3 would mis-reserve and
-      // the scroll offset would drift — which reads as a renderer bug, not a
-      // theming one.
-      // `contentWidth()`, the same number the message component reads as
-      // `ctx.width`. The scrollbox viewport above falls back to the whole
-      // terminal, which ignores the sidebar and is some thirty columns wide of
-      // what a message is actually given.
-      const userBox = userStyle().box
-      const userColumns = bodyColumns(userBox, contentWidth())
-      const metrics = {
-        chromeRows: chromeRows(userBox),
-        entryRows: DEFAULT_TURN_HEIGHT_METRICS.entryRows,
-      }
-      const heights = all.map(
-        (turn) =>
-          estimateTurnHeight(
-            turn,
-            turn.role === "user" ? userColumns : columns,
-            turn.role === "user" ? metrics : DEFAULT_TURN_HEIGHT_METRICS,
-          ) || MESSAGE_HEIGHT_FALLBACK,
-      )
-      const scrollTop = scrollPos()
-      const vp = viewportH()
-      // Sticky-bottom is owned by the scrollbox itself (stickyScroll=true,
-      // stickyStart="bottom"). Do NOT clamp scrollTop here — double-sticky
-      // causes jumpy viewport during streaming when the flag is on.
-      const range = visibleRange({
-        heights,
-        scrollTop,
-        viewportHeight: vp,
-        overscan: OVERSCAN,
-      })
-      const spacers = spacerHeights(heights, range)
-      return {
-        items: all.slice(range.start, range.end),
-        top: spacers.top,
-        bottom: spacers.bottom,
-        baseIndex: range.start,
-      }
-    } catch {
-      return { items: all, top: 0, bottom: 0, baseIndex: 0 }
-    }
-  })
   const messageCreatedAt = createMemo(() =>
     Object.fromEntries(messages().map((message) => [message.id, message.time.created])),
   )
@@ -321,6 +238,109 @@ export function Session() {
   })
   const showTimestamps = createMemo(() => timestamps() === "show")
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? SESSION_SIDEBAR_WIDTH : 0) - 4)
+  // The windowing below reads `contentWidth()`, so it is declared after it: a
+  // memo runs as soon as it is created, and a session that is windowed from
+  // the first render (any large one) read it before its declaration.
+  /**
+   * Fallback row height, used only when a turn's content cannot be measured.
+   * `estimateTurnHeight` derives the real figure from the turn's body.
+   */
+  const MESSAGE_HEIGHT_FALLBACK = 6
+  const OVERSCAN = 5
+  // The user's explicit setting wins either way; unset, a session large enough
+  // to need it is windowed by itself. See `windowingOn`.
+  const virtualizationEnabled = createMemo(() =>
+    windowingOn(sync.data.config.experimental?.tui?.messageVirtualization, turns().length),
+  )
+  const [scrollPos, setScrollPos] = createSignal(0)
+  const [viewportH, setViewportH] = createSignal(24)
+  const [atBottom, setAtBottom] = createSignal(true)
+  // Read once per drawn frame. A 50 ms timer woke the process twenty times a
+  // second for as long as a session was open, about a point of a core with
+  // nothing happening, while the scroll position only moves when a frame is
+  // drawn: a wheel, a key, a reply growing.
+  createEffect(() => {
+    if (!virtualizationEnabled()) return
+    const follow = async () => {
+      if (!scroll || scroll.isDestroyed) return
+      const height = Math.max(1, scroll.viewport.height || dimensions().height - 10)
+      setScrollPos(scroll.scrollTop)
+      setViewportH(height)
+      setAtBottom(scroll.scrollTop + height >= scroll.scrollHeight - 1)
+    }
+    renderer.setFrameCallback(follow)
+    onCleanup(() => renderer.removeFrameCallback(follow))
+  })
+  /**
+   * Estimated rows per turn, in transcript order. Its own memo so that a scroll
+   * only re-slices the window: inside it, every turn was re-estimated on every
+   * scroll tick.
+   */
+  const heights = createMemo(() => {
+    if (!virtualizationEnabled()) return []
+    // Per-turn, from content. A flat constant was wrong in both directions
+    // and the errors did not cancel: a one-line acknowledgement was
+    // over-reserved while a long diff was under-reserved by an order of
+    // magnitude, so the offset drifted further the more the transcript mixed
+    // the two. `specs/effect-tui/06-terminal-rendering.md`.
+    const terminal = dimensions()
+    const columns = Math.max(1, scroll?.viewport.width || terminal.width || 80)
+    // Chrome rows come from the *resolved* message style, not a constant. A
+    // theme that changes the message padding changes how tall every turn
+    // renders; an estimator still counting the stock 3 would mis-reserve and
+    // the scroll offset would drift — which reads as a renderer bug, not a
+    // theming one.
+    // `contentWidth()`, the same number the message component reads as
+    // `ctx.width`. The scrollbox viewport above falls back to the whole
+    // terminal, which ignores the sidebar and is some thirty columns wide of
+    // what a message is actually given.
+    const userBox = userStyle().box
+    const userColumns = bodyColumns(userBox, contentWidth())
+    const metrics = {
+      chromeRows: chromeRows(userBox),
+      entryRows: DEFAULT_TURN_HEIGHT_METRICS.entryRows,
+    }
+    return turns().map(
+      (turn) =>
+        estimateTurnHeight(
+          turn,
+          turn.role === "user" ? userColumns : columns,
+          turn.role === "user" ? metrics : DEFAULT_TURN_HEIGHT_METRICS,
+        ) || MESSAGE_HEIGHT_FALLBACK,
+    )
+  })
+  /**
+   * Windowed message list for C1 virtualization. Off → full list (bit-identical).
+   * On any error → full list fallback.
+   */
+  const windowed = createMemo(() => {
+    const all = turns()
+    if (!virtualizationEnabled() || all.length === 0) {
+      return { items: all, top: 0, bottom: 0, baseIndex: 0 }
+    }
+    try {
+      // Sticky-bottom is owned by the scrollbox itself (stickyScroll=true,
+      // stickyStart="bottom"); the window only follows it. Held at the bottom,
+      // the window is the tail, so a reply being written stays mounted
+      // without switching windowing off — which, on a large session, mounted
+      // every row the moment a reply started.
+      const window = transcriptWindow({
+        heights: heights(),
+        scrollTop: scrollPos(),
+        viewportHeight: viewportH(),
+        atBottom: atBottom(),
+        overscan: OVERSCAN,
+      })
+      return {
+        items: all.slice(window.start, window.end),
+        top: window.top,
+        bottom: window.bottom,
+        baseIndex: window.start,
+      }
+    } catch {
+      return { items: all, top: 0, bottom: 0, baseIndex: 0 }
+    }
+  })
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(sync.data.config.tui))
   const toast = useToast()
@@ -542,6 +562,32 @@ export function Session() {
     dialog.clear()
   }
 
+  /**
+   * Bring a turn into view, mounted or not.
+   *
+   * `scrollChildIntoView` finds the row's renderable, and a windowed
+   * transcript has none for a turn far from the viewport: the timeline's jump
+   * did nothing on a large session. Such a turn is scrolled to by its
+   * estimated offset, which mounts it, then brought into view by its real
+   * position once it has been laid out.
+   */
+  function jumpTo(messageID: string) {
+    if (!scroll || scroll.isDestroyed) return
+    const window = windowed()
+    const index = turns().findIndex((turn) => turn.messageID === messageID)
+    if (index < 0 || (index >= window.baseIndex && index < window.baseIndex + window.items.length)) {
+      scrollChildIntoView(scroll, messageID)
+      return
+    }
+    const offset = heights()
+      .slice(0, index)
+      .reduce((sum, height) => sum + height, 0)
+    scroll.scrollTo(offset)
+    setAtBottom(false)
+    setScrollPos(scroll.scrollTop)
+    setTimeout(() => scrollChildIntoView(scroll, messageID), 50)
+  }
+
   function toBottom() {
     setTimeout(() => {
       if (scroll) scroll.scrollTo(scroll.scrollHeight)
@@ -650,7 +696,7 @@ export function Session() {
         dialog.replace(() => (
           <DialogTimeline
             onMove={(messageID) => {
-              scrollChildIntoView(scroll, messageID)
+              jumpTo(messageID)
             }}
             sessionID={route.sessionID}
             setPrompt={(promptInfo) => prompt.set(promptInfo)}
@@ -670,7 +716,7 @@ export function Session() {
         dialog.replace(() => (
           <DialogForkFromTimeline
             onMove={(messageID) => {
-              scrollChildIntoView(scroll, messageID)
+              jumpTo(messageID)
             }}
             sessionID={route.sessionID}
           />
@@ -971,7 +1017,7 @@ export function Session() {
           )
 
           if (hasValidTextPart) {
-            scrollChildIntoView(scroll, message.id)
+            jumpTo(message.id)
             break
           }
         }
@@ -1280,10 +1326,18 @@ export function Session() {
   })
 
   const dialog = useDialog()
-  const renderer = useRenderer()
 
-  // snap to bottom when session changes
-  createEffect(on(() => route.sessionID, toBottom))
+  // snap to bottom when session changes; the window goes there with it rather
+  // than slicing the new session at the old one's scroll position first
+  createEffect(
+    on(
+      () => route.sessionID,
+      () => {
+        setAtBottom(true)
+        toBottom()
+      },
+    ),
+  )
 
   return (
     <Show

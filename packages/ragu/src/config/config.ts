@@ -2037,7 +2037,7 @@ export namespace Config {
                 .boolean()
                 .optional()
                 .describe(
-                  "Window the session message list via message-window visibleRange instead of rendering all messages. Default off.",
+                  "Window the session message list: mount only the messages near the viewport. Unset: on by itself for sessions of more than 150 messages. true or false forces it on or off.",
                 ),
               explorationGrouping: z
                 .boolean()

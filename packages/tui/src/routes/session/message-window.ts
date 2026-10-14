@@ -83,3 +83,55 @@ export function spacerHeights(
   const bottom = total - offsets[Math.min(range.end, heights.length)]
   return { top: Math.max(0, top), bottom: Math.max(0, bottom) }
 }
+
+/**
+ * Above this many turns the transcript is windowed even when the user has not
+ * set `experimental.tui.messageVirtualization`.
+ *
+ * Measured with every row mounted, from source on Windows: 40 messages took
+ * 1376 native text buffers and 777 MB, 300 took 7878 and 1074 MB, and a
+ * 1180-message session reached opentui's limit at ~16 thousand and could not
+ * be drawn at all. Windowed, each of them stayed between 630 and 740 buffers.
+ * At 150 a full mount is some 4 thousand buffers, a quarter of the limit;
+ * below it a session keeps every row, so selection, search and jumps work on
+ * real rows instead of estimated heights.
+ */
+export const AUTO_WINDOW_TURNS = 150
+
+/**
+ * Whether the transcript is windowed. The user's explicit setting always wins,
+ * either way; unset, the size of the session decides.
+ */
+export function windowingOn(setting: boolean | undefined, turns: number): boolean {
+  return setting ?? turns > AUTO_WINDOW_TURNS
+}
+
+export type TranscriptWindowInput = VisibleRangeInput & {
+  /**
+   * The scrollbox is held at the bottom, as it is when a session opens and
+   * while a reply is being written.
+   */
+  atBottom: boolean
+}
+
+/** The turns to mount, `[start, end)`, and the spacer rows that stand in for the rest. */
+export function transcriptWindow(input: TranscriptWindowInput): {
+  start: number
+  end: number
+  top: number
+  bottom: number
+} {
+  const { heights, atBottom } = input
+  const total = cumulativeOffsets(heights)[heights.length]
+  // Held at the bottom, the window is the tail, counted back from the end.
+  // `scrollTop` there is the real one, laid out from real rows, and the
+  // estimates can put it a few turns short of the end: the reply being
+  // written was windowed out and the view jumped. That is why windowing used
+  // to switch off while a turn was open, and on a large session switching it
+  // off mounted every row at once, which is the failure it exists to prevent.
+  const scrollTop = atBottom ? Math.max(0, total - input.viewportHeight) : input.scrollTop
+  const range = visibleRange({ ...input, scrollTop })
+  const end = atBottom ? heights.length : range.end
+  const spacers = spacerHeights(heights, { start: range.start, end })
+  return { start: range.start, end, top: spacers.top, bottom: spacers.bottom }
+}
