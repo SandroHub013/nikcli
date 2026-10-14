@@ -42,10 +42,12 @@ export function ReasoningPart(props: { last: boolean; streaming: boolean; entry:
     outerBorder: !tight(),
     borderColor: style().colors.tableBorder,
   }))
-  const done = createMemo(() => {
-    const end = props.entry.completed as number | undefined
-    return end !== undefined
-  })
+  // `streaming` already folds in the turn: a reasoning part stored without its
+  // end (a retry drops the open one, a killed process never writes it) is over
+  // once its turn is sealed. Reading only the part's end kept a "Thinking"
+  // spinner in such a turn forever, and the spinner's 80 ms frames repainted the
+  // whole transcript — every row is mounted, so even out of sight.
+  const done = createMemo(() => props.entry.completed !== undefined || !props.streaming)
   const duration = createMemo(() => {
     const end = props.entry.completed as number | undefined
     if (end === undefined) return
