@@ -185,6 +185,8 @@ describe("output alone is believed to be a turn only for so long (resumed TUI th
     expect(isFree({ ...printing, quarantined: true }, now)).toBe(true)
     expect(isFree({ ...printing, quarantined: true, permissionPending: true }, now)).toBe(false)
     expect(isFree({ ...printing, quarantined: true, typing: true }, now)).toBe(false)
+    // A hook (or plugin) that has said nothing yet is no word either: an old plugin on disk, a TUI that repaints.
+    expect(isFree({ hooked: true, permissionPending: false, quarantined: true, lastOutputAt: 10_000 }, now)).toBe(true)
     // A hooked session's own word still decides: the quarantine is for the agents that say nothing.
     expect(isFree({ hooked: true, permissionPending: false, quarantined: true, activity: { state: "busy", at: now - 1_000 } }, now)).toBe(false)
   })

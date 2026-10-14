@@ -1061,14 +1061,15 @@ export function isFree(
     lastOutputAt?: number
     /**
      * ADE gave up the turn this pane's output declared (`OUTPUT_CLAIM_MAX_MS`, an interruption): whatever it goes on
-     * printing, it is not believed to be in a turn. Only for a session without turn hooks — a hook's word is not a guess.
+     * printing, it is not believed to be in a turn. Only where nothing but the output speaks: a session without turn
+     * hooks, or one whose hook has said nothing (a plugin not yet current) — a hook's word is not a guess.
      */
     quarantined?: boolean
   },
   now: number,
 ): boolean {
   if (target.permissionPending || target.typing) return false
-  if (target.quarantined && !target.hooked) return true
+  if (target.quarantined && !target.activity) return true
   const quietFor = target.lastOutputAt === undefined ? Infinity : now - target.lastOutputAt
   if (target.hooked) {
     // Nothing known at all, neither a turn nor a byte of output: not a reason to type.

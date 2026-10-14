@@ -153,6 +153,8 @@ describe("which agents get it, here and in Rust", () => {
     expect(reportsTurns("pi")).toBe(true)
     expect(reportsTurns("claude-code")).toBe(true)
     expect(reportsTurns("opencode")).toBe(false)
+    // ragu: from its TUI plugin (`ade-agent-session.js`), once that is installed and current.
+    expect(reportsTurns("ragu")).toBe(true)
   })
 
   test("the same list, file and text in agent_link.rs", () => {
