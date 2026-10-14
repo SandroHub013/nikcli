@@ -403,6 +403,7 @@ import {
   type LineOutcome,
 } from "../session/enter"
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
+import { parseQueue, queueToSave } from "../session/mail-queue"
 import {
   canSuspend,
   closeSuspendedTree,
@@ -2915,6 +2916,48 @@ export function Workbench() {
   const saveSuspendedMail = () =>
     writeStored(SUSPENDED_MAIL_KEY, JSON.stringify(suspendedMailToSave(heldLines, paneExists)))
 
+  /*
+   * The mail held for a busy session survives a restart of ADE.
+   *
+   * «ok: in coda» is the receipt a sender gets for a message held until the turn ends, and the sender stops
+   * listening there; the message lived only in `mailQueue` and `heldLines`, so a restart lost it and told nobody.
+   * Both are written down at the end of every pass, when they changed, and read back once the panes are restored
+   * (`restoreMail`).
+   */
+  const QUEUE_KEY = "ade.mailbox.queue"
+  let savedMail = ""
+  // Nothing is written until what was saved has been read back: an empty queue at boot must not erase it.
+  let mailRestored = false
+  const persistMail = () => {
+    if (!mailRestored) return
+    const queue = queueToSave(mailQueue)
+    const now = JSON.stringify([queue, suspendedMailToSave(heldLines, paneExists)])
+    if (now === savedMail) return
+    savedMail = now
+    writeStored(QUEUE_KEY, queue)
+    saveSuspendedMail()
+  }
+  /**
+   * The held mail back, once the panes are: the messages go on waiting for a free session, and a sender is told
+   * (never left in silence) of one that is too old to be typed in now.
+   */
+  const restoreMail = async (host: Awaited<ReturnType<typeof getHost>> | undefined) => {
+    const { live, expired } = parseQueue(readStored(QUEUE_KEY), Date.now())
+    for (const item of live) {
+      // Its sender was told «in coda» before the restart: the outcome is reported where it listens now (`deliverOne`).
+      held.add(item.id)
+      mailQueue.push(item)
+    }
+    for (const { id, message } of expired) {
+      const to = message.kind === "send" || message.kind === "ask" ? message.to : ""
+      const title = wb().panes.find((pane) => pane.id === to)?.title ?? to
+      const text = `[ade-msg] errore: il messaggio ${id} per "${title}" era in coda da più di dodici ore, quando ADE è stato riavviato: non è stato consegnato`
+      if (message.kind === "ask" && host) await settle(host, id, text)
+      else tellSender(message.from, text)
+    }
+    mailRestored = true
+  }
+
   /**
    * Types `line` into `paneId`, or leaves it in the pane's inbox and types a bell.
    *
@@ -3621,6 +3664,7 @@ export function Workbench() {
       const done = await deliverOne(host, item.id, item.message)
       if (done) mailQueue.splice(mailQueue.indexOf(item), 1)
     }
+    persistMail()
 
     /*
      * Minimised (P1-C1): the messages above move on every pass; what follows —
@@ -4753,6 +4797,12 @@ export function Workbench() {
             host,
             id,
             `[ade-msg] errore: la sessione "${target.pane.title}" si è chiusa prima di ricevere la richiesta ${id}`,
+          )
+        // A held `send` was answered «in coda» and its sender went away: it hears of the loss here, never in silence.
+        else if (message.kind === "send")
+          tellSender(
+            message.from,
+            `[ade-msg] errore: la sessione "${target.pane.title}" si è chiusa prima di ricevere il messaggio ${id}: non è stato consegnato`,
           )
         return true
       }
@@ -6342,6 +6392,8 @@ export function Workbench() {
         heldLines.push(...parseSuspendedMail(readStored(SUSPENDED_MAIL_KEY)).filter((line) => paneExists(line.paneId)))
       }
     }
+    // The messages held for a busy session when ADE closed, and the lines held for one that was running (`restoreMail`).
+    await restoreMail(host)
 
     // Discover project
     if (host) {

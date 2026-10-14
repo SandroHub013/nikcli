@@ -182,8 +182,12 @@ export function keptWithoutProcess(line: { suspended?: true }, pane: { exists: b
 }
 
 /**
- * The mail queued while suspended, as it is saved: until it is typed, also
- * after "Riprendi", so ADE closing right after it loses nothing.
+ * The mail held for a session, as it is saved: what waits for a suspended one
+ * until it is typed, also after "Riprendi", and the mail held for a running
+ * one that was busy when ADE closed. Either way a restart brings the line back
+ * and the ordinary pass types it once the session is free; read back, it
+ * counts as queued (`suspended`), which only means its request's clock starts
+ * when it is typed.
  */
 export function suspendedMailToSave(
   lines: readonly (Omit<QueuedLine, "inbox"> & { inbox?: { id: string; kind: string; from: string } })[],
@@ -191,9 +195,11 @@ export function suspendedMailToSave(
 ): QueuedLine[] {
   const saved: QueuedLine[] = []
   for (const { paneId, text, full, inbox, suspended } of lines) {
-    if (!suspended || !paneExists(paneId)) continue
-    // Only mail is queued for a suspended session: `send` and `ask`.
-    if (inbox && inbox.kind !== "ask" && inbox.kind !== "send") continue
+    if (!paneExists(paneId)) continue
+    // A notice is the pane's own and goes with it; mail is `send` and `ask`.
+    const mail = inbox?.kind === "ask" || inbox?.kind === "send"
+    if (!suspended && !mail) continue
+    if (inbox && !mail) continue
     saved.push({
       paneId,
       text,
