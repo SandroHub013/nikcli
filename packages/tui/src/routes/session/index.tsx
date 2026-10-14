@@ -76,6 +76,7 @@ import { groupParts, type ExplorationGroup } from "./rows"
 import { liveMarkdown, splitLiveMarkdown, wrapDiagramsInFences } from "./diagram"
 import { SESSION_SIDEBAR_WIDTH } from "@tui/ui/layout"
 import { RevertBanner } from "./revert-banner"
+import { TranscriptBoundary } from "./transcript-boundary"
 import { sessionCommandLabels } from "./session-command-labels"
 import {
   dismissBackground as dismissBackgroundUtil,
@@ -1337,83 +1338,89 @@ export function Session() {
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
               >
-                <Show when={windowed().top > 0}>
-                  <box height={windowed().top} flexShrink={0} />
-                </Show>
-                {/* RevertBanner is rendered outside <For> so virtualization cannot
+                <TranscriptBoundary
+                  sessionID={route.sessionID}
+                  message={lang.t("session.transcript.failed")}
+                  color={theme.status.warning.fg}
+                >
+                  <Show when={windowed().top > 0}>
+                    <box height={windowed().top} flexShrink={0} />
+                  </Show>
+                  {/* RevertBanner is rendered outside <For> so virtualization cannot
                     unmount it on slice change — keeps click handlers alive when
                     the user scrolls while the banner is visible. */}
-                <Show when={revert()}>
-                  <RevertBanner count={revert()!.reverted.length} diffFiles={revert()!.diffFiles} />
-                </Show>
-                <For each={windowed().items}>
-                  {(turn, index) => (
-                    <Switch>
-                      <Match when={revert()?.messageID && turn.messageID >= revert()!.messageID}>
-                        <></>
-                      </Match>
-                      <Match when={turn.role === "user"}>
-                        <Replace
-                          component="UserMessage"
-                          requestId={turn.messageID}
-                          sessionID={route.sessionID}
-                          props={{ text: String((turn.body[0] as { text?: string } | undefined)?.text ?? "") }}
-                        >
-                          <UserMessage
-                            style={userStyle()}
-                            index={windowed().baseIndex + index()}
-                            onMouseUp={() => {
-                              if (renderer.getSelection()?.getSelectedText()) return
-                              dialog.replace(() => (
-                                <DialogMessage
-                                  messageID={turn.messageID}
-                                  sessionID={route.sessionID}
-                                  setPrompt={(promptInfo) => prompt.set(promptInfo)}
-                                />
-                              ))
+                  <Show when={revert()}>
+                    <RevertBanner count={revert()!.reverted.length} diffFiles={revert()!.diffFiles} />
+                  </Show>
+                  <For each={windowed().items}>
+                    {(turn, index) => (
+                      <Switch>
+                        <Match when={revert()?.messageID && turn.messageID >= revert()!.messageID}>
+                          <></>
+                        </Match>
+                        <Match when={turn.role === "user"}>
+                          <Replace
+                            component="UserMessage"
+                            requestId={turn.messageID}
+                            sessionID={route.sessionID}
+                            props={{ text: String((turn.body[0] as { text?: string } | undefined)?.text ?? "") }}
+                          >
+                            <UserMessage
+                              style={userStyle()}
+                              index={windowed().baseIndex + index()}
+                              onMouseUp={() => {
+                                if (renderer.getSelection()?.getSelectedText()) return
+                                dialog.replace(() => (
+                                  <DialogMessage
+                                    messageID={turn.messageID}
+                                    sessionID={route.sessionID}
+                                    setPrompt={(promptInfo) => prompt.set(promptInfo)}
+                                  />
+                                ))
+                              }}
+                              turn={turn}
+                              pending={pending()}
+                            />
+                          </Replace>
+                        </Match>
+                        <Match when={turn.role === "assistant"}>
+                          <Replace
+                            component="AssistantMessage"
+                            requestId={turn.messageID}
+                            sessionID={route.sessionID}
+                            props={{
+                              text: (turn.body as Array<{ type?: string; text?: string }>)
+                                .filter((entry) => entry.type === "text")
+                                .map((entry) => entry.text ?? "")
+                                .join("\n"),
                             }}
-                            turn={turn}
-                            pending={pending()}
-                          />
-                        </Replace>
-                      </Match>
-                      <Match when={turn.role === "assistant"}>
-                        <Replace
-                          component="AssistantMessage"
-                          requestId={turn.messageID}
-                          sessionID={route.sessionID}
-                          props={{
-                            text: (turn.body as Array<{ type?: string; text?: string }>)
-                              .filter((entry) => entry.type === "text")
-                              .map((entry) => entry.text ?? "")
-                              .join("\n"),
-                          }}
-                        >
-                          <AssistantMessage
-                            last={lastAssistant()?.id === turn.messageID}
-                            turn={turn}
-                            usage={turnUsage()?.get(turn.messageID)}
-                          />
-                        </Replace>
-                      </Match>
-                    </Switch>
-                  )}
-                </For>
-                <Show when={windowed().bottom > 0}>
-                  <box height={windowed().bottom} flexShrink={0} />
-                </Show>
-                <For each={pendingInputs()}>{(item) => <PendingUserMessage pending={item} />}</For>
-                <For each={instructionNotices()}>
-                  {(notice) => (
-                    <box paddingLeft={2} paddingRight={2} paddingTop={1} flexShrink={0}>
-                      <text fg={theme.foreground.muted} wrapMode="word">
-                        {lang.t("session.instructions.updated", {
-                          keys: formatInstructionDelta(notice.delta),
-                        })}
-                      </text>
-                    </box>
-                  )}
-                </For>
+                          >
+                            <AssistantMessage
+                              last={lastAssistant()?.id === turn.messageID}
+                              turn={turn}
+                              usage={turnUsage()?.get(turn.messageID)}
+                            />
+                          </Replace>
+                        </Match>
+                      </Switch>
+                    )}
+                  </For>
+                  <Show when={windowed().bottom > 0}>
+                    <box height={windowed().bottom} flexShrink={0} />
+                  </Show>
+                  <For each={pendingInputs()}>{(item) => <PendingUserMessage pending={item} />}</For>
+                  <For each={instructionNotices()}>
+                    {(notice) => (
+                      <box paddingLeft={2} paddingRight={2} paddingTop={1} flexShrink={0}>
+                        <text fg={theme.foreground.muted} wrapMode="word">
+                          {lang.t("session.instructions.updated", {
+                            keys: formatInstructionDelta(notice.delta),
+                          })}
+                        </text>
+                      </box>
+                    )}
+                  </For>
+                </TranscriptBoundary>
               </scrollbox>
               <box flexShrink={0}>
                 <TuiPluginRuntime.Slot name="session.prompt.top" sessionID={route.sessionID} />

@@ -24,6 +24,7 @@ export const zh: Record<TuiMessageKey, string> = {
   "session.revert.bannerCountPlural": "已撤销 {{count}} 条消息",
   "session.revert.bannerHint": "或 /redo 恢复",
   "session.instructions.updated": "指令已更新 · {{keys}}",
+  "session.transcript.failed": "此对话无法在此显示（过大，或某条消息无法绘制）。输入框仍可使用；详情见日志。",
   "session.message.actionsTitle": "消息操作",
   "session.message.revert": "撤销",
   "session.message.revertDescription": "撤销消息和文件更改",

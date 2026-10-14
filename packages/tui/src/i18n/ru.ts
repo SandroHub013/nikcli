@@ -24,6 +24,7 @@ export const ru: Record<TuiMessageKey, string> = {
   "session.revert.bannerCountPlural": "Отменено сообщений: {{count}}",
   "session.revert.bannerHint": "или /redo для восстановления",
   "session.instructions.updated": "Инструкции обновлены · {{keys}}",
+  "session.transcript.failed": "Этот разговор нельзя показать здесь (слишком большой, или сообщение не удалось отрисовать). Ввод работает; подробности в журнале.",
   "session.message.actionsTitle": "Действия с сообщением",
   "session.message.revert": "Отменить",
   "session.message.revertDescription": "отменить сообщения и изменения файлов",

@@ -24,6 +24,7 @@ export const ko: Record<TuiMessageKey, string> = {
   "session.revert.bannerCountPlural": "{{count}}개의 메시지를 되돌렸습니다",
   "session.revert.bannerHint": "또는 /redo로 복원",
   "session.instructions.updated": "지침이 업데이트되었습니다 · {{keys}}",
+  "session.transcript.failed": "이 대화는 여기에 표시할 수 없습니다(너무 크거나 메시지를 그리지 못했습니다). 입력은 계속 사용할 수 있으며, 자세한 내용은 로그에 있습니다.",
   "session.message.actionsTitle": "메시지 작업",
   "session.message.revert": "되돌리기",
   "session.message.revertDescription": "메시지와 파일 변경 사항 취소",

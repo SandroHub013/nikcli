@@ -24,6 +24,7 @@ export const ja: Record<TuiMessageKey, string> = {
   "session.revert.bannerCountPlural": "{{count}} 件のメッセージを取り消しました",
   "session.revert.bannerHint": "または /redo で復元",
   "session.instructions.updated": "指示を更新しました · {{keys}}",
+  "session.transcript.failed": "この会話はここに表示できません（大きすぎるか、メッセージを描画できませんでした）。入力は使えます。詳細はログにあります。",
   "session.message.actionsTitle": "メッセージの操作",
   "session.message.revert": "取り消し",
   "session.message.revertDescription": "メッセージとファイルの変更を元に戻す",
