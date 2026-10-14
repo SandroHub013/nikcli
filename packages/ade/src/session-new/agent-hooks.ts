@@ -178,9 +178,20 @@ export function reportFamily(agentId: string): string | undefined {
   return takesActivityExtension(agentId) ? "pi" : hookTarget(agentId)?.agent
 }
 
-/** Whether a spawn of this agent with a nonce reports its turns: a hook with activity events, or the extension. */
+/**
+ * The agents whose TUI plugin reports the turn as well as the conversation (`ade-agent-session.js`): ragu says
+ * `busy`, `idle` or `permission` from the TUI's own state. Until the plugin on disk is the current one it writes no
+ * activity and ADE goes on guessing from the output, as for an agent with no hooks (`isFree`, `OUTPUT_CLAIM_MAX_MS`).
+ */
+export const TURN_PLUGIN_AGENTS: readonly string[] = ["ragu"]
+
+/** Whether a spawn of this agent with a nonce reports its turns: a hook with activity events, the extension or the plugin. */
 export function reportsTurns(agentId: string): boolean {
-  return Boolean(hookTarget(agentId)?.activityEvents?.length) || takesActivityExtension(agentId)
+  return (
+    Boolean(hookTarget(agentId)?.activityEvents?.length) ||
+    takesActivityExtension(agentId) ||
+    TURN_PLUGIN_AGENTS.includes(agentId)
+  )
 }
 
 /** How the config file invokes the script. */

@@ -57,6 +57,68 @@ export function outputSaysWorking(run: OutputRun | undefined): boolean {
 }
 
 /**
+ * How long output alone is believed to be a turn.
+ *
+ * The rule above reads a turn from the terminal because those agents say nothing else. It is a guess, and a guess
+ * has to be able to end: a TUI that is resumed and then repaints for ever — a spinner on a server that is idle —
+ * prints in every window, is never quiet, and so stayed `working` (and closed to mail, and deaf to an Esc) for as
+ * long as it lived: three hours for the ragu session «Sol 6.1» on 2026-10-14, every message of it complete.
+ *
+ * So a turn that only output declared, with no keystroke ADE saw, no delivery and no hook behind it, is given up
+ * after this long. It is the longest such a turn is believed to run, not a guess at how long turns take: a turn
+ * somebody started (an Enter, a message ADE typed) never expires by this rule, and is ended by the quiet that ends
+ * every turn. After it expires the pane is quarantined: its output is not read as a turn again until something
+ * with evidence starts one, so the status does not flicker back at the next window. A turn that began unseen and
+ * runs longer than this is the price: its pane reads free, and mail may arrive in the middle of it.
+ */
+export const OUTPUT_CLAIM_MAX_MS = 10 * 60_000
+
+/**
+ * Which panes' `working` rests on output alone, and which are quarantined from it.
+ *
+ * Pure bookkeeping, one per workbench: the workbench says when output declared a turn (`noticed`), when something
+ * with evidence began one (`evidence`), when an Esc or Ctrl-C ended it (`quarantine`), and asks on every pass
+ * which claims have run out (`expire`).
+ */
+export function createOutputClaims() {
+  const claimed = new Map<string, number>()
+  const quarantined = new Set<string>()
+  return {
+    /** Output declared a turn in this pane at `now`: the claim runs from the first time, not from the last. */
+    noticed(paneId: string, now: number): void {
+      if (!claimed.has(paneId)) claimed.set(paneId, now)
+    },
+    /** A turn with evidence began, or the user took the pane over: it is not an output claim, and not quarantined. */
+    evidence(paneId: string): void {
+      claimed.delete(paneId)
+      quarantined.delete(paneId)
+    },
+    /** The claim has run out: true once, then the pane is quarantined. */
+    expire(paneId: string, now: number): boolean {
+      const since = claimed.get(paneId)
+      if (since === undefined || now - since < OUTPUT_CLAIM_MAX_MS) return false
+      claimed.delete(paneId)
+      quarantined.add(paneId)
+      return true
+    },
+    /** Output is not read as a turn here until something with evidence begins one. */
+    quarantined(paneId: string): boolean {
+      return quarantined.has(paneId)
+    },
+    /** An interruption: whatever the output claimed is over, and what it prints next is not a new turn. */
+    quarantine(paneId: string): void {
+      claimed.delete(paneId)
+      quarantined.add(paneId)
+    },
+    /** The pane was closed or started again. */
+    forget(paneId: string): void {
+      claimed.delete(paneId)
+      quarantined.delete(paneId)
+    },
+  }
+}
+
+/**
  * Stamps every write into a session, and every resize, with the time it was
  * made, so the output that answers it is not taken for work: a divider dragged
  * across the screen is a resize every frame, and a full-screen TUI redraws on

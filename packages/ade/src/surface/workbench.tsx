@@ -384,7 +384,13 @@ import {
   parseInbox,
   type InboxEntry,
 } from "../session/mailbox"
-import { outputRun, outputSaysWorking, stampingInput, type OutputRun } from "../session/output-activity"
+import {
+  createOutputClaims,
+  outputRun,
+  outputSaysWorking,
+  stampingInput,
+  type OutputRun,
+} from "../session/output-activity"
 import { createLineQueue } from "../session/line-queue"
 import type { Snapshot } from "../raguverse/protocol"
 import { createSlotBook, shopId, worldSnapshot } from "../raguverse/snapshot"
@@ -403,6 +409,7 @@ import {
   type LineOutcome,
 } from "../session/enter"
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
+import { parseQueue, queueToSave, waitsForRestore } from "../session/mail-queue"
 import {
   canSuspend,
   closeSuspendedTree,
@@ -2514,6 +2521,7 @@ export function Workbench() {
     })
     if (paneId !== undefined && outcome === "sent") {
       // A line ADE submits starts a turn exactly as the user's Enter does.
+      claims.evidence(paneId)
       markWorking(paneId)
       void confirmSubmitted(paneId, session, typedAt)
     }
@@ -2847,6 +2855,8 @@ export function Workbench() {
         // A line the user began is not the agent being busy, but it is just
         // as much a reason not to type: see `session/typing.ts`.
         typing: isTyping(records.typed.get(paneId)),
+        // A turn only output declared and ADE gave up: a TUI that repaints is not busy for that (`OUTPUT_CLAIM_MAX_MS`).
+        quarantined: claims.quarantined(paneId),
         ...(activity ? { activity } : {}),
         ...(lastOutputAt.has(paneId) ? { lastOutputAt: lastOutputAt.get(paneId)! } : {}),
       },
@@ -2914,6 +2924,51 @@ export function Workbench() {
   const paneExists = (paneId: string) => wb().panes.some((pane) => pane.id === paneId)
   const saveSuspendedMail = () =>
     writeStored(SUSPENDED_MAIL_KEY, JSON.stringify(suspendedMailToSave(heldLines, paneExists)))
+
+  /*
+   * The mail held for a busy session survives a restart of ADE.
+   *
+   * «ok: in coda» is the receipt a sender gets for a message held until the turn ends, and the sender stops
+   * listening there; the message lived only in `mailQueue` and `heldLines`, so a restart lost it and told nobody.
+   * Both are written down at the end of every pass, when they changed, and read back once the panes are restored
+   * (`restoreMail`).
+   */
+  const QUEUE_KEY = "ade.mailbox.queue"
+  let savedMail = ""
+  /** The ids read back from the saved queue: they wait for their pane's process after a start (`waitsForRestore`). */
+  const replayedMail = new Set<string>()
+  // Nothing is written until what was saved has been read back: an empty queue at boot must not erase it.
+  let mailRestored = false
+  const persistMail = () => {
+    if (!mailRestored) return
+    const queue = queueToSave(mailQueue)
+    const now = JSON.stringify([queue, suspendedMailToSave(heldLines, paneExists)])
+    if (now === savedMail) return
+    savedMail = now
+    writeStored(QUEUE_KEY, queue)
+    saveSuspendedMail()
+  }
+  /**
+   * The held mail back, once the panes are: the messages go on waiting for a free session, and a sender is told
+   * (never left in silence) of one that is too old to be typed in now.
+   */
+  const restoreMail = async (host: Awaited<ReturnType<typeof getHost>> | undefined) => {
+    const { live, expired } = parseQueue(readStored(QUEUE_KEY), Date.now())
+    for (const item of live) {
+      // Its sender was told «in coda» before the restart: the outcome is reported where it listens now (`deliverOne`).
+      held.add(item.id)
+      replayedMail.add(item.id)
+      mailQueue.push(item)
+    }
+    for (const { id, message } of expired) {
+      const to = message.kind === "send" || message.kind === "ask" ? message.to : ""
+      const title = wb().panes.find((pane) => pane.id === to)?.title ?? to
+      const text = `[ade-msg] errore: il messaggio ${id} per "${title}" era in coda da più di dodici ore, quando ADE è stato riavviato: non è stato consegnato`
+      if (message.kind === "ask" && host) await settle(host, id, text)
+      else tellSender(message.from, text)
+    }
+    mailRestored = true
+  }
 
   /**
    * Types `line` into `paneId`, or leaves it in the pane's inbox and types a bell.
@@ -3119,6 +3174,8 @@ export function Workbench() {
   const lastInputAt = new Map<string, number>()
   /** Each idle pane's run of windows with output (`session/output-activity.ts`). */
   const outputRuns = new Map<string, OutputRun>()
+  /** Which panes' `working` rests on output alone, and which are quarantined from it (`OUTPUT_CLAIM_MAX_MS`). */
+  const claims = createOutputClaims()
 
   /** Each running pane's hook nonce, and the last turn start or end its hook reported. */
   const paneNonces = new Map<string, string>()
@@ -3328,6 +3385,8 @@ export function Workbench() {
    */
   const turnSubmitted = (paneId: string) => {
     promptAnswered(paneId)
+    // An Enter ADE saw is evidence, not a guess from output: this turn does not expire (`OUTPUT_CLAIM_MAX_MS`).
+    claims.evidence(paneId)
     markWorking(paneId)
   }
 
@@ -3621,6 +3680,8 @@ export function Workbench() {
       const done = await deliverOne(host, item.id, item.message)
       if (done) mailQueue.splice(mailQueue.indexOf(item), 1)
     }
+    persistMail()
+    expireOutputClaims(Date.now())
 
     /*
      * Minimised (P1-C1): the messages above move on every pass; what follows —
@@ -4619,6 +4680,18 @@ export function Workbench() {
       tellPane(target.pane.id, t("note.interruptedBy", sender?.title ?? t("note.someSession")))
       // The point is to stop the work, not the session: say which happened.
       await new Promise((resolve) => setTimeout(resolve, 2000))
+      /*
+       * Without turn hooks silence is the only end of a turn, and a TUI that keeps repainting after the Esc has none:
+       * the pane stayed `working` and the interrupt changed nothing. The interrupt is the word that the work is over
+       * (an explicit request, unlike an Esc the user types, which may only close a menu): idle now, and what the
+       * pane prints next is not a new turn until something with evidence starts one (`OUTPUT_CLAIM_MAX_MS`).
+       */
+      if (!hooked(target.pane.id) && running.get(target.pane.id) === session) {
+        claims.quarantine(target.pane.id)
+        forgetQuiet(target.pane.id)
+        if (wb().panes.find((candidate) => candidate.id === target.pane.id)?.status === "working")
+          setWb((w) => updatePane(w, target.pane.id, { status: "idle", activity: "ready" }))
+      }
       await answer(
         running.get(target.pane.id) === session
           ? `ok: interrotta "${target.pane.title}", la sessione resta aperta; mandale una riga correttiva con ade-msg send`
@@ -4745,6 +4818,9 @@ export function Workbench() {
       return queueForSuspended(host, id, message, target.pane, sender, toSuspended.receipt)
     }
     const session = running.get(target.pane.id)
+    // Read back from the saved queue before its session was started again: it waits for the process, not for ever.
+    if (!session && waitsForRestore({ replayed: replayedMail.has(id), paneExists: paneExists(target.pane.id), sinceBoot: Date.now() - loadedAt }))
+      return false
     if (!session) {
       // Its sender stopped reading receipts when it was held: an ask is answered where the caller waits.
       if (held.delete(id)) {
@@ -4753,6 +4829,12 @@ export function Workbench() {
             host,
             id,
             `[ade-msg] errore: la sessione "${target.pane.title}" si è chiusa prima di ricevere la richiesta ${id}`,
+          )
+        // A held `send` was answered «in coda» and its sender went away: it hears of the loss here, never in silence.
+        else if (message.kind === "send")
+          tellSender(
+            message.from,
+            `[ade-msg] errore: la sessione "${target.pane.title}" si è chiusa prima di ricevere il messaggio ${id}: non è stato consegnato`,
           )
         return true
       }
@@ -6342,6 +6424,8 @@ export function Workbench() {
         heldLines.push(...parseSuspendedMail(readStored(SUSPENDED_MAIL_KEY)).filter((line) => paneExists(line.paneId)))
       }
     }
+    // The messages held for a busy session when ADE closed, and the lines held for one that was running (`restoreMail`).
+    await restoreMail(host)
 
     // Discover project
     if (host) {
@@ -7176,6 +7260,8 @@ export function Workbench() {
   const noticeWorkFromOutput = (pane: Pane) => {
     // A hooked pane whose hook has said nothing yet is guessed like any other.
     if ((pane.agent ?? pane.model) === "terminal" || (hooked(pane.id) && activityOf.has(pane.id))) return
+    // A turn this guess gave up (or an Esc ended) is not declared again by the next repaint: only evidence starts one.
+    if (claims.quarantined(pane.id)) return
     const run = outputRun(outputRuns.get(pane.id), Date.now(), lastInputAt.get(pane.id))
     if (!outputSaysWorking(run)) {
       if (run) outputRuns.set(pane.id, run)
@@ -7183,11 +7269,28 @@ export function Workbench() {
       return
     }
     outputRuns.delete(pane.id)
+    claims.noticed(pane.id, Date.now())
     markWorking(pane.id)
   }
   const forgetQuiet = (paneId: string) => {
     clearTimeout(quietTimers.get(paneId))
     quietTimers.delete(paneId)
+  }
+  /*
+   * The turns only output declared, given up after `OUTPUT_CLAIM_MAX_MS`.
+   *
+   * Silence ends a turn, and a TUI that repaints for ever (a resumed session's spinner on a server that is idle)
+   * is never silent: its pane stayed `working`, closed to mail, for as long as it lived. Run on every pass, since
+   * a pane that never goes quiet never arms its own timer. A turn with evidence behind it is not touched.
+   */
+  const expireOutputClaims = (now: number) => {
+    for (const paneId of running.keys()) {
+      if (!claims.expire(paneId, now)) continue
+      if (wb().panes.find((pane) => pane.id === paneId)?.status !== "working") continue
+      forgetQuiet(paneId)
+      setWb((w) => updatePane(w, paneId, { status: "idle", activity: "ready" }))
+      appendLine(paneId, t("note.outputWorkGivenUp"), "note", "ade")
+    }
   }
 
   const feedTerminal = (paneId: string, chunk: string) => {
@@ -7349,6 +7452,7 @@ export function Workbench() {
     lastOutputAt.delete(id)
     lastInputAt.delete(id)
     outputRuns.delete(id)
+    claims.forget(id)
     usageOf.delete(id)
     paneTokens.delete(id)
     paneNonces.delete(id)
@@ -8364,6 +8468,8 @@ export function Workbench() {
     // Kept per pane so turn activity can be read for as long as this spawn lives.
     if (nonce) paneNonces.set(paneId, nonce)
     else paneNonces.delete(paneId)
+    // A new process owes nothing to what the last one printed: no claim, no quarantine.
+    claims.forget(paneId)
     // The previous spawn's, saved with the pane: its worker may still be the one writing (MEDIO 1).
     const formerNonce = wb().panes.find((pane) => pane.id === paneId)?.linkNonce
     if (nonce && formerNonce && formerNonce !== nonce && takesActivityExtension(agentId)) {

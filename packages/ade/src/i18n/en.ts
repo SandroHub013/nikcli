@@ -1505,6 +1505,8 @@ export const en: Messages = {
   "pane.mail": (count) => `${count} waiting: ADE holds mail back while the line is half-written`,
   "note.resentRequest": (id) => `Pressed Enter again: request ${id} hadn't been sent`,
   "note.nudged": (id) => `Reminder sent: request ${id} is waiting for a reply`,
+  "note.outputWorkGivenUp": () =>
+    "Only its output said this session was working, for ten minutes and no Enter behind it: marked available, and mail can reach it again",
   "note.replySent": (ref) => `Reply sent (request ${ref})`,
   "note.replySentTo": (to, ref) => `Reply sent to ${to} (request ${ref})`,
   "note.replyFrom": (from, text) => `Reply from ${from}: ${text}`,

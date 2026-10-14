@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, unlinkSync,
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
+import { parseActivity } from "../session/mailbox"
 import { acceptsReport, parseReport } from "./agent-link"
 import { RAGU_PLUGIN_NAME, RAGU_PLUGIN_SOURCE } from "./ragu-plugin"
 import { HOOK_MARKER } from "./agent-hooks"
@@ -137,6 +138,91 @@ describe("ragu's TUI plugin", () => {
     await settle()
     expect(readdirSync(drop)).toEqual([])
     expect(disposers).toHaveLength(0)
+  })
+
+  describe("the turn it reports (what ADE used to guess from the terminal going quiet)", () => {
+    const activityOf = (drop: string) => {
+      const file = join(drop, "a1b2c3d4e5f6a1b2c3d4e5f6.activity")
+      return existsSync(file) ? parseActivity(readFileSync(file, "utf8")) : undefined
+    }
+    function withState() {
+      const status: Record<string, { type: string }> = {}
+      const permission: Record<string, unknown[]> = {}
+      const question: Record<string, unknown[]> = {}
+      const tui = fakeTui({ ses_one: { directory: "C:\\p" }, ses_child: { directory: "C:\\p", parentID: "ses_one" } })
+      ;(tui.api as Record<string, unknown>).state = {
+        session: {
+          status: (id: string) => status[id],
+          permission: (id: string) => permission[id] ?? [],
+          question: (id: string) => question[id] ?? [],
+        },
+      }
+      return { tui, status, permission, question }
+    }
+
+    test("busy while the TUI says it is working, idle when it is not, from the conversation on screen", async () => {
+      const plugin = await loadPlugin()
+      const { drop } = launchedByAde()
+      const { tui, status } = withState()
+      tui.show("ses_one")
+      await plugin.tui(tui.api, { intervalMs: 5 })
+      await settle()
+      expect(activityOf(drop)).toMatchObject({ state: "idle", cwd: "C:\\p" })
+      status.ses_one = { type: "busy" }
+      await settle()
+      expect(activityOf(drop)?.state).toBe("busy")
+      status.ses_one = { type: "retry" }
+      await settle()
+      expect(activityOf(drop)?.state).toBe("busy")
+      status.ses_one = { type: "idle" }
+      await settle()
+      expect(activityOf(drop)?.state).toBe("idle")
+    })
+
+    test("a permission or a question waiting is a permission: ADE types nothing into it", async () => {
+      const plugin = await loadPlugin()
+      const { drop } = launchedByAde()
+      const { tui, status, permission, question } = withState()
+      tui.show("ses_one")
+      status.ses_one = { type: "busy" }
+      await plugin.tui(tui.api, { intervalMs: 5 })
+      await settle()
+      permission.ses_one = [{ id: "p1" }]
+      await settle()
+      expect(activityOf(drop)?.state).toBe("permission")
+      permission.ses_one = []
+      question.ses_one = [{ id: "q1" }]
+      await settle()
+      expect(activityOf(drop)?.state).toBe("permission")
+      question.ses_one = []
+      await settle()
+      expect(activityOf(drop)?.state).toBe("busy")
+    })
+
+    test("written when it changes, not on every tick, and never for a child conversation", async () => {
+      const plugin = await loadPlugin()
+      const { drop } = launchedByAde()
+      const { tui } = withState()
+      tui.show("ses_one")
+      await plugin.tui(tui.api, { intervalMs: 5 })
+      await settle()
+      const first = activityOf(drop)!
+      await settle()
+      expect(activityOf(drop)!.at).toBe(first.at)
+      tui.show("ses_child")
+      await settle()
+      expect(activityOf(drop)).toEqual(first)
+    })
+
+    test("a TUI without the state writes no activity at all: ADE keeps guessing", async () => {
+      const plugin = await loadPlugin()
+      const { drop } = launchedByAde()
+      const tui = fakeTui({ ses_one: { directory: "C:\\p" } })
+      tui.show("ses_one")
+      await plugin.tui(tui.api, { intervalMs: 5 })
+      await settle()
+      expect(existsSync(join(drop, "a1b2c3d4e5f6a1b2c3d4e5f6.activity"))).toBe(false)
+    })
   })
 
   test("a nonce that is not hex never becomes a file name", async () => {
