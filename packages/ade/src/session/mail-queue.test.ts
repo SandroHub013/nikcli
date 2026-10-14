@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
-import { QUEUE_MAX_AGE_MS, parseQueue, queueToSave, type QueuedMessage } from "./mail-queue"
+import { QUEUE_MAX_AGE_MS, RESTORE_GRACE_MS, parseQueue, queueToSave, waitsForRestore, type QueuedMessage } from "./mail-queue"
 import { suspendedMailToSave } from "./suspend"
 import type { Message } from "./mailbox"
 
@@ -61,6 +61,21 @@ describe("the queue of messages held for a busy session survives a restart", () 
       null,
     ])
     expect(parseQueue(text, NOW).live.map((item) => item.id)).toEqual(["ok"])
+  })
+})
+
+describe("a replayed message waits for its pane's process instead of being dropped as «closed»", () => {
+  // Found live on 2026-10-14: the queue came back after the restart, and the first pass ran before the restored
+  // sessions had been started again. The pane existed, its process did not yet, and the message was dropped.
+  test("waits while the pane exists without a process, shortly after the start", () => {
+    expect(waitsForRestore({ replayed: true, paneExists: true, sinceBoot: 5_000 })).toBe(true)
+    expect(waitsForRestore({ replayed: true, paneExists: true, sinceBoot: RESTORE_GRACE_MS - 1 })).toBe(true)
+  })
+
+  test("not for a fresh message, a pane that is gone, or once the grace has run out", () => {
+    expect(waitsForRestore({ replayed: false, paneExists: true, sinceBoot: 5_000 })).toBe(false)
+    expect(waitsForRestore({ replayed: true, paneExists: false, sinceBoot: 5_000 })).toBe(false)
+    expect(waitsForRestore({ replayed: true, paneExists: true, sinceBoot: RESTORE_GRACE_MS })).toBe(false)
   })
 })
 

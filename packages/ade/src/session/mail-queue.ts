@@ -22,6 +22,21 @@ export interface QueuedMessage {
 /** Past this a held message is not typed into a session any more: it would arrive as news of another day. */
 export const QUEUE_MAX_AGE_MS = 12 * 60 * 60_000
 
+/** After a start, how long a restored pane may be without its process before mail for it counts as undeliverable. */
+export const RESTORE_GRACE_MS = 2 * 60_000
+
+/**
+ * Whether a message read back from the saved queue keeps waiting for its pane to start again.
+ *
+ * The first pass after a restart runs before the restored sessions have been started: the pane exists, its process
+ * does not yet, and that read as «closed» — the message was dropped (live proof, 2026-10-14). Only a replayed
+ * message waits, only for a pane that still exists, and only for a couple of minutes; a pane that does not come
+ * back after that is closed, and the sender is told.
+ */
+export function waitsForRestore(input: { replayed: boolean; paneExists: boolean; sinceBoot: number }): boolean {
+  return input.replayed && input.paneExists && input.sinceBoot < RESTORE_GRACE_MS
+}
+
 /** The kinds that wait for a free session: the ones answered «in coda». */
 function isMail(message: Message): message is Message & { kind: "send" | "ask"; to: string } {
   return message.kind === "send" || message.kind === "ask"

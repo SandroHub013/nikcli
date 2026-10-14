@@ -409,7 +409,7 @@ import {
   type LineOutcome,
 } from "../session/enter"
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
-import { parseQueue, queueToSave } from "../session/mail-queue"
+import { parseQueue, queueToSave, waitsForRestore } from "../session/mail-queue"
 import {
   canSuspend,
   closeSuspendedTree,
@@ -2935,6 +2935,8 @@ export function Workbench() {
    */
   const QUEUE_KEY = "ade.mailbox.queue"
   let savedMail = ""
+  /** The ids read back from the saved queue: they wait for their pane's process after a start (`waitsForRestore`). */
+  const replayedMail = new Set<string>()
   // Nothing is written until what was saved has been read back: an empty queue at boot must not erase it.
   let mailRestored = false
   const persistMail = () => {
@@ -2955,6 +2957,7 @@ export function Workbench() {
     for (const item of live) {
       // Its sender was told «in coda» before the restart: the outcome is reported where it listens now (`deliverOne`).
       held.add(item.id)
+      replayedMail.add(item.id)
       mailQueue.push(item)
     }
     for (const { id, message } of expired) {
@@ -4815,6 +4818,9 @@ export function Workbench() {
       return queueForSuspended(host, id, message, target.pane, sender, toSuspended.receipt)
     }
     const session = running.get(target.pane.id)
+    // Read back from the saved queue before its session was started again: it waits for the process, not for ever.
+    if (!session && waitsForRestore({ replayed: replayedMail.has(id), paneExists: paneExists(target.pane.id), sinceBoot: Date.now() - loadedAt }))
+      return false
     if (!session) {
       // Its sender stopped reading receipts when it was held: an ask is answered where the caller waits.
       if (held.delete(id)) {
