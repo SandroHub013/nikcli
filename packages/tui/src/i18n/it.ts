@@ -24,6 +24,7 @@ export const it: Record<TuiMessageKey, string> = {
   "session.revert.bannerCountPlural": "{{count}} messaggi annullati",
   "session.revert.bannerHint": "oppure /redo per ripristinare",
   "session.instructions.updated": "Istruzioni aggiornate · {{keys}}",
+  "session.transcript.failed": "Questa conversazione non si può mostrare qui (troppo grande, o un messaggio non si disegna). Il prompt funziona; i dettagli sono nel log.",
   "session.message.actionsTitle": "Azioni del messaggio",
   "session.message.revert": "Annulla",
   "session.message.revertDescription": "annulla messaggi e modifiche ai file",

@@ -24,6 +24,7 @@ export const ar: Record<TuiMessageKey, string> = {
   "session.revert.bannerCountPlural": "تم التراجع عن {{count}} رسائل",
   "session.revert.bannerHint": "أو /redo للاستعادة",
   "session.instructions.updated": "تم تحديث التعليمات · {{keys}}",
+  "session.transcript.failed": "لا يمكن عرض هذه المحادثة هنا (كبيرة جدًا، أو تعذّر رسم رسالة). لا يزال الإدخال يعمل؛ التفاصيل في السجل.",
   "session.message.actionsTitle": "إجراءات الرسالة",
   "session.message.revert": "تراجع",
   "session.message.revertDescription": "التراجع عن الرسائل وتغييرات الملفات",

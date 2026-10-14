@@ -24,6 +24,7 @@ export const hi: Record<TuiMessageKey, string> = {
   "session.revert.bannerCountPlural": "{{count}} संदेश वापस लाए गए",
   "session.revert.bannerHint": "या पुनर्स्थापित करने के लिए /redo",
   "session.instructions.updated": "निर्देश अपडेट किए गए · {{keys}}",
+  "session.transcript.failed": "यह बातचीत यहाँ नहीं दिखाई जा सकती (बहुत बड़ी है, या कोई संदेश नहीं बन सका)। इनपुट अब भी काम करता है; विवरण लॉग में है।",
   "session.message.actionsTitle": "संदेश क्रियाएँ",
   "session.message.revert": "वापस लाएँ",
   "session.message.revertDescription": "संदेशों और फ़ाइल परिवर्तनों को पूर्ववत करें",

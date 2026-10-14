@@ -29,6 +29,7 @@ export const en = {
   "session.revert.bannerCountPlural": "{{count}} messages reverted",
   "session.revert.bannerHint": "or /redo to restore",
   "session.instructions.updated": "Instructions updated · {{keys}}",
+  "session.transcript.failed": "This conversation can't be shown here (too large, or a message failed to draw). The prompt still works; details are in the log.",
   "session.message.actionsTitle": "Message Actions",
   "session.message.revert": "Revert",
   "session.message.revertDescription": "undo messages and file changes",

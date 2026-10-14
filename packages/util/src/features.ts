@@ -45,11 +45,10 @@ export function features(cfg: { experimental?: unknown } | undefined | null): Fe
   return {
     tui: {
       cacheEviction: e?.tui?.cacheEviction === true,
-      // Stays opt-in until the windowing heuristic is finished: it assumes a flat 6-row height for
-      // every message (see MESSAGE_HEIGHT_ESTIMATE in routes/session/index.tsx — heights are never
-      // measured), polls the scroll position on a 50ms timer, and disables itself while streaming,
-      // which is exactly when a long transcript costs the most. Turning it on by default would
-      // trade a real rendering cost for wrong scroll windows.
+      // `true` only when the user turned it on. The session route reads the raw setting instead,
+      // because there unset and `false` differ: unset, a transcript past `AUTO_WINDOW_TURNS` is
+      // windowed by itself, and only an explicit `false` keeps every row mounted (`windowingOn` in
+      // routes/session/message-window.ts). Row heights are still estimated, never measured.
       messageVirtualization: e?.tui?.messageVirtualization === true,
       explorationGrouping: e?.tui?.explorationGrouping === true,
     },

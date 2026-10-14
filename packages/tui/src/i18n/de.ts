@@ -24,6 +24,7 @@ export const de: Record<TuiMessageKey, string> = {
   "session.revert.bannerCountPlural": "{{count}} Nachrichten zurückgenommen",
   "session.revert.bannerHint": "oder /redo zum Wiederherstellen",
   "session.instructions.updated": "Anweisungen aktualisiert · {{keys}}",
+  "session.transcript.failed": "Diese Unterhaltung kann hier nicht angezeigt werden (zu groß, oder eine Nachricht ließ sich nicht zeichnen). Die Eingabe funktioniert; Details stehen im Log.",
   "session.message.actionsTitle": "Nachrichtenaktionen",
   "session.message.revert": "Zurücknehmen",
   "session.message.revertDescription": "Nachrichten und Dateiänderungen rückgängig machen",
