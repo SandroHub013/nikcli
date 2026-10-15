@@ -60,6 +60,31 @@ export function FooterSep() {
 }
 
 /**
+ * A footer group for hints that come and go: pass the hints that apply now and the dots fall only between those
+ * that are shown, which a `<Show>` inside `FooterHintGroup` cannot do (it leaves its dot behind). Same row, same
+ * rule: only on a line of its own.
+ */
+export function FooterHintList(props: { hints: Array<{ keys: string; label: string }> }) {
+  const t = useTheme()
+  return (
+    <box flexDirection="row" gap={1} alignItems="baseline" flexWrap="wrap">
+      <For each={props.hints}>
+        {(hint, index) => (
+          <>
+            <Show when={index() > 0}>
+              <text fg={t.theme.border.subtle} wrapMode="none">
+                ·
+              </text>
+            </Show>
+            <FooterHint keys={hint.keys} label={hint.label} />
+          </>
+        )}
+      </For>
+    </box>
+  )
+}
+
+/**
  * Group of footer hints with separator dots between them.
  *
  * Use it only on a row it has to itself. A group is roughly twice the width of
