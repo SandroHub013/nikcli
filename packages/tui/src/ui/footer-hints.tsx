@@ -19,7 +19,7 @@ export function FooterHintAction(props: { action: string; label?: string }) {
         <text fg={t.theme.foreground.default} attributes={TextAttributes.BOLD} wrapMode="none">
           {key()}
         </text>
-        <text fg={t.theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+        <text fg={t.theme.foreground.muted} wrapMode="none">
           {` ${label()}`}
         </text>
       </box>
@@ -39,11 +39,7 @@ export function FooterHint(props: { keys: string; label: string; tone?: RGBA }) 
       <text fg={t.theme.foreground.default} attributes={TextAttributes.BOLD} wrapMode="none">
         {props.keys}
       </text>
-      <text
-        fg={props.tone ?? t.theme.foreground.muted}
-        attributes={props.tone ? undefined : TextAttributes.DIM}
-        wrapMode="none"
-      >
+      <text fg={props.tone ?? t.theme.foreground.muted} wrapMode="none">
         {` ${props.label}`}
       </text>
     </box>

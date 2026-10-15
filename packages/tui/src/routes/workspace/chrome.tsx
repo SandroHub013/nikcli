@@ -98,7 +98,7 @@ export function WorkspaceTabBar(props: {
           >
             <text
               fg={isActive() ? theme.accent.fg : theme.foreground.muted}
-              attributes={isActive() ? TextAttributes.BOLD : TextAttributes.DIM}
+              attributes={isActive() ? TextAttributes.BOLD : undefined}
               wrapMode="none"
             >
               {tab.label}
@@ -115,7 +115,7 @@ export function WorkspaceTabBar(props: {
         )
       })}
       <box flexGrow={1} />
-      <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+      <text fg={theme.foreground.muted} wrapMode="none">
         tab · cycle
       </text>
       <text fg={theme.border.subtle} wrapMode="none">
@@ -124,13 +124,13 @@ export function WorkspaceTabBar(props: {
       <text fg={theme.foreground.default} attributes={TextAttributes.BOLD} wrapMode="none">
         .
       </text>
-      <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+      <text fg={theme.foreground.muted} wrapMode="none">
         actions
       </text>
       <text fg={theme.border.subtle} wrapMode="none">
         │
       </text>
-      <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+      <text fg={theme.foreground.muted} wrapMode="none">
         esc · back
       </text>
     </box>
@@ -188,14 +188,14 @@ export function RepoStrip(props: {
       <Show
         when={props.status && !props.status.error ? props.status : undefined}
         fallback={
-          <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+          <text fg={theme.foreground.muted} wrapMode="none">
             {props.loading ? "reading repository…" : (props.status?.error ?? "not a git repository")}
           </text>
         }
       >
         {(repo) => (
           <>
-            <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+            <text fg={theme.foreground.muted} wrapMode="none">
               {repo().name}
             </text>
             <text fg={theme.border.subtle} wrapMode="none">
@@ -214,14 +214,14 @@ export function RepoStrip(props: {
               </text>
             </Show>
             <Show when={!repo().upstream && !repo().detached}>
-              <text fg={theme.foreground.subtle} attributes={TextAttributes.DIM} wrapMode="none">
+              <text fg={theme.foreground.subtle} wrapMode="none">
                 no upstream
               </text>
             </Show>
             <Show
               when={dirty() && dirtyCount(dirty()!) > 0}
               fallback={
-                <text fg={theme.foreground.subtle} attributes={TextAttributes.DIM} wrapMode="none">
+                <text fg={theme.foreground.subtle} wrapMode="none">
                   clean
                 </text>
               }
@@ -242,7 +242,7 @@ export function RepoStrip(props: {
               </box>
             </Show>
             <Show when={repo().stashes > 0}>
-              <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+              <text fg={theme.foreground.muted} wrapMode="none">
                 {`⌂${repo().stashes}`}
               </text>
             </Show>
@@ -253,7 +253,7 @@ export function RepoStrip(props: {
                   <text fg={value().color} attributes={TextAttributes.BOLD} wrapMode="none">
                     {value().icon}
                   </text>
-                  <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                  <text fg={theme.foreground.muted} wrapMode="none">
                     {value().text}
                   </text>
                 </box>
@@ -265,7 +265,7 @@ export function RepoStrip(props: {
                   <text fg={theme.border.subtle} wrapMode="none">
                     │
                   </text>
-                  <text fg={theme.foreground.subtle} attributes={TextAttributes.DIM} wrapMode="none">
+                  <text fg={theme.foreground.subtle} wrapMode="none">
                     {`${commit().hash} ${commit().relative}`}
                   </text>
                 </>

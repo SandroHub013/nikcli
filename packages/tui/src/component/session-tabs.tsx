@@ -205,7 +205,7 @@ export function SessionTabs() {
                   </Show>
                   <text
                     fg={selected() ? theme.foreground.default : theme.foreground.muted}
-                    attributes={selected() ? TextAttributes.BOLD : TextAttributes.DIM}
+                    attributes={selected() ? TextAttributes.BOLD : undefined}
                     wrapMode="none"
                     flexGrow={1}
                   >
@@ -248,7 +248,7 @@ export function SessionTabs() {
               paddingBottom={style().box.paddingBottom}
               flexDirection="column"
             >
-              <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+              <text fg={theme.foreground.muted} wrapMode="none">
                 {` ·· +${layout().hidden}`}
               </text>
             </box>

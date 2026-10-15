@@ -51,7 +51,7 @@ export function Footer(props: {
         gap={1}
       >
         <box flexDirection="row" gap={2} alignItems="center" flexWrap="wrap">
-          <text fg={accent()} attributes={TextAttributes.DIM} wrapMode="none">
+          <text fg={accent()} wrapMode="none">
             {label()}
           </text>
           <FooterSep />

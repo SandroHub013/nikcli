@@ -21,11 +21,11 @@ export function sessionStatusDisplay(
 ): { label: string; fg: RGBA; attributes?: number } {
   const max = options?.maxMessageChars ?? 64
   if (status == null) {
-    return { label: "idle", fg: t.textMuted, attributes: TextAttributes.DIM }
+    return { label: "idle", fg: t.textMuted }
   }
   switch (status.type) {
     case "idle":
-      return { label: "idle", fg: t.textMuted, attributes: TextAttributes.DIM }
+      return { label: "idle", fg: t.textMuted }
     case "busy":
       return { label: "busy", fg: t.info, attributes: TextAttributes.BOLD }
     case "retry": {
