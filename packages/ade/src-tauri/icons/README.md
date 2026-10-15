@@ -21,5 +21,4 @@ pixels. Redraw them when the icon changes.
 
 The icons here and in `test/` are the Ragu Code pixel pot, drawn by
 `make-ragu.py` from the logo generator's 16 and 32 px PNGs at whole factors,
-without interpolation, so the pixels stay square. `prod/`, `dev/`, `android/`
-and `ios/` are not used by either Tauri config and still hold the old mark.
+without interpolation, so the pixels stay square.
