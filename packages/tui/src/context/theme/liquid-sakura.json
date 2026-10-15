@@ -44,15 +44,15 @@
     },
     "warning": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#ae521f"
     },
     "success": {
       "dark": "darkGreen",
-      "light": "lightGreen"
+      "light": "#397953"
     },
     "info": {
       "dark": "darkCyan",
-      "light": "lightCyan"
+      "light": "#3a7581"
     },
     "text": {
       "dark": "darkStep12",
@@ -147,7 +147,7 @@
       "light": "lightStep12"
     },
     "markdownHeading": {
-      "dark": "#da6276",
+      "dark": "#ef7487",
       "light": "#a02c3f"
     },
     "markdownLink": {
@@ -172,7 +172,7 @@
     },
     "markdownStrong": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#973d00"
     },
     "markdownHorizontalRule": {
       "dark": "darkStep11",

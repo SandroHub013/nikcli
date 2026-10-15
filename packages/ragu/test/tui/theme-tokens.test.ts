@@ -109,13 +109,24 @@ describe("deriveSemanticTokens", () => {
   })
 
   it("keeps an explicit selectedListItemText as the badge foreground", () => {
-    const colors = source({ selectedListItemText: rgb(255, 0, 128) })
+    const colors = source({ selectedListItemText: rgb(20, 10, 40) })
     const tokens = deriveSemanticTokens(colors, {
       hasSelectedListItemText: true,
       thinkingOpacity: 0.6,
       mode: "dark",
     })
     expect(tokens.badge.fg).toEqual(colors.selectedListItemText)
+  })
+
+  it("trades an explicit selectedListItemText that no fill can make readable for black or white", () => {
+    // Pink on a light blue: no lightness of the fill gives 7:1 to it and 3:1 to the dialog around it.
+    const colors = source({ selectedListItemText: rgb(255, 0, 128) })
+    const tokens = deriveSemanticTokens(colors, {
+      hasSelectedListItemText: true,
+      thinkingOpacity: 0.6,
+      mode: "dark",
+    })
+    expect([rgb(0, 0, 0), rgb(255, 255, 255)]).toContainEqual(tokens.badge.fg)
   })
 
   it("gives warning and error a background distinct from the base surface", () => {

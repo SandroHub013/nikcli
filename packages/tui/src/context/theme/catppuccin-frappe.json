@@ -81,8 +81,8 @@
       "light": "frappeSurface0"
     },
     "borderActive": {
-      "dark": "frappeSurface1",
-      "light": "frappeSurface1"
+      "dark": "#767d94",
+      "light": "#767d94"
     },
     "borderSubtle": {
       "dark": "frappeSurface2",
@@ -141,8 +141,8 @@
       "light": "frappeText"
     },
     "markdownHeading": {
-      "dark": "frappeMauve",
-      "light": "frappeMauve"
+      "dark": "#dfb3fc",
+      "light": "#dfb3fc"
     },
     "markdownLink": {
       "dark": "frappeBlue",
@@ -165,8 +165,8 @@
       "light": "frappeYellow"
     },
     "markdownStrong": {
-      "dark": "frappePeach",
-      "light": "frappePeach"
+      "dark": "#ffb28a",
+      "light": "#ffb28a"
     },
     "markdownHorizontalRule": {
       "dark": "frappeSubtext0",

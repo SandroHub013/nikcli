@@ -38,13 +38,13 @@ export function SessionTreeHeader(props: {
             minWidth={0}
             overflow="hidden"
           >
-            <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+            <text fg={theme.foreground.muted} wrapMode="none">
               Session
             </text>
             <text fg={theme.accent.fg} attributes={TextAttributes.BOLD} wrapMode="none">
               {" tree"}
             </text>
-            <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+            <text fg={theme.foreground.muted} wrapMode="none">
               {"  ·  "}
             </text>
             <text
@@ -76,23 +76,23 @@ export function SessionTreeHeader(props: {
           <Show
             when={props.focusedSessionId}
             fallback={
-              <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+              <text fg={theme.foreground.muted} wrapMode="none">
                 All roots
               </text>
             }
           >
-            <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+            <text fg={theme.foreground.muted} wrapMode="none">
               {`Focus · ${shortId(props.focusedSessionId!)}`}
             </text>
           </Show>
           <box flexDirection="row" gap={1} flexShrink={0} alignItems="center">
-            <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+            <text fg={theme.foreground.muted} wrapMode="none">
               {`${props.rootsCount} root${props.rootsCount === 1 ? "" : "s"}`}
             </text>
-            <text fg={theme.border.subtle} attributes={TextAttributes.DIM} wrapMode="none">
+            <text fg={theme.border.subtle} wrapMode="none">
               ·
             </text>
-            <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+            <text fg={theme.foreground.muted} wrapMode="none">
               {`${props.sessionsCount} session${props.sessionsCount === 1 ? "" : "s"}`}
             </text>
           </box>
@@ -107,7 +107,7 @@ export function SessionTreeHeader(props: {
             minWidth={0}
             overflow="hidden"
           >
-            <text fg={theme.accent.fg} attributes={TextAttributes.DIM} wrapMode="none">
+            <text fg={theme.accent.fg} wrapMode="none">
               ▾
             </text>
             <text fg={theme.foreground.default} wrapMode="word" flexGrow={1} minWidth={0}>
@@ -135,23 +135,23 @@ export function SessionTreeColumnHeaders() {
       gap={2}
     >
       <box flexDirection="row" gap={1} flexShrink={0}>
-        <text attributes={TextAttributes.DIM} fg={theme.foreground.muted} wrapMode="none">
+        <text fg={theme.foreground.muted} wrapMode="none">
           Session
         </text>
       </box>
       <box flexDirection="row" gap={2} flexShrink={1} minWidth={0} alignItems="center">
-        <text attributes={TextAttributes.DIM} fg={theme.foreground.muted} minWidth={14} wrapMode="none">
+        <text fg={theme.foreground.muted} minWidth={14} wrapMode="none">
           Delta
         </text>
         <box flexGrow={1} minWidth={20} minHeight={0} flexShrink={1}>
-          <text attributes={TextAttributes.DIM} fg={theme.foreground.muted} wrapMode="none">
+          <text fg={theme.foreground.muted} wrapMode="none">
             Message
           </text>
         </box>
-        <text attributes={TextAttributes.DIM} fg={theme.foreground.muted} minWidth={10} wrapMode="none">
+        <text fg={theme.foreground.muted} minWidth={10} wrapMode="none">
           Age
         </text>
-        <text attributes={TextAttributes.DIM} fg={theme.foreground.muted} minWidth={8} wrapMode="none">
+        <text fg={theme.foreground.muted} minWidth={8} wrapMode="none">
           ID
         </text>
       </box>

@@ -27,8 +27,8 @@ import {
   type Comment,
   type CommentType,
   type DiffRow,
-  type LineType,
 } from "./comment-box"
+import { parseDiffRows } from "./diff-rows"
 import { Footer } from "./footer"
 import { ChangesHeader } from "./header"
 import { formatCommentsForAI, hasAnyComments, type CommentsByFile } from "./format-comments"
@@ -665,62 +665,4 @@ export function Changes() {
       />
     </box>
   )
-}
-
-function parseDiffRows(diff: string): DiffRow[] {
-  const rows: DiffRow[] = []
-  const lines = diff.split("\n")
-  let oldLine: number | undefined
-  let newLine: number | undefined
-
-  for (let index = 0; index < lines.length; index++) {
-    const text = lines[index]
-    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(text)
-    if (hunk) {
-      oldLine = Number.parseInt(hunk[1], 10)
-      newLine = Number.parseInt(hunk[2], 10)
-      continue
-    }
-    if (oldLine === undefined || newLine === undefined) continue
-    if (!text || text.startsWith("\\ No newline")) continue
-
-    if (text.startsWith("+") && !text.startsWith("+++")) {
-      rows.push(createRow(index, "add", undefined, newLine, text.slice(1)))
-      newLine++
-      continue
-    }
-    if (text.startsWith("-") && !text.startsWith("---")) {
-      rows.push(createRow(index, "remove", oldLine, undefined, text.slice(1)))
-      oldLine++
-      continue
-    }
-    if (text.startsWith(" ")) {
-      rows.push(createRow(index, "context", oldLine, newLine, text.slice(1)))
-      oldLine++
-      newLine++
-    }
-  }
-
-  return rows
-}
-
-function createRow(
-  visualLine: number,
-  lineType: LineType,
-  oldLine: number | undefined,
-  newLine: number | undefined,
-  text: string,
-): DiffRow {
-  const anchor = lineType === "remove" && oldLine !== undefined ? `old:${oldLine}` : `new:${newLine ?? visualLine + 1}`
-  const label =
-    lineType === "remove" && oldLine !== undefined ? `old line ${oldLine}` : `new line ${newLine ?? visualLine + 1}`
-  return {
-    visualLine,
-    oldLine,
-    newLine,
-    lineType,
-    anchor,
-    label,
-    text,
-  }
 }

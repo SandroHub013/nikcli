@@ -23,40 +23,40 @@
   },
   "theme": {
     "primary": {
-      "dark": "crystalBlue",
+      "dark": "#81a0dc",
       "light": "waveBlue"
     },
     "secondary": {
-      "dark": "oniViolet",
-      "light": "oniViolet"
+      "dark": "#ac96d0",
+      "light": "#6c588e"
     },
     "accent": {
-      "dark": "sakuraPink",
-      "light": "sakuraPink"
+      "dark": "#db87a2",
+      "light": "#954964"
     },
     "error": {
-      "dark": "dragonRed",
-      "light": "dragonRed"
+      "dark": "#ff7567",
+      "light": "#c60010"
     },
     "warning": {
       "dark": "roninYellow",
-      "light": "roninYellow"
+      "light": "#845900"
     },
     "success": {
       "dark": "lotusGreen",
-      "light": "lotusGreen"
+      "light": "#4c6b1b"
     },
     "info": {
-      "dark": "waveAqua",
-      "light": "waveAqua"
+      "dark": "#89a97d",
+      "light": "#4e6942"
     },
     "text": {
       "dark": "fujiWhite",
-      "light": "lightText"
+      "light": "#524239"
     },
     "textMuted": {
-      "dark": "fujiGray",
-      "light": "lightGray"
+      "dark": "#a1a097",
+      "light": "#6a6057"
     },
     "background": {
       "dark": "sumiInk0",
@@ -76,7 +76,7 @@
     },
     "borderActive": {
       "dark": "carpYellow",
-      "light": "carpYellow"
+      "light": "#ad7888"
     },
     "borderSubtle": {
       "dark": "sumiInk2",
@@ -135,8 +135,8 @@
       "light": "lightText"
     },
     "markdownHeading": {
-      "dark": "oniViolet",
-      "light": "oniViolet"
+      "dark": "#b6a0db",
+      "light": "#594377"
     },
     "markdownLink": {
       "dark": "crystalBlue",
@@ -144,23 +144,23 @@
     },
     "markdownLinkText": {
       "dark": "waveAqua",
-      "light": "waveAqua"
+      "light": "#557149"
     },
     "markdownCode": {
       "dark": "lotusGreen",
-      "light": "lotusGreen"
+      "light": "#547324"
     },
     "markdownBlockQuote": {
-      "dark": "fujiGray",
-      "light": "lightGray"
+      "dark": "#88877e",
+      "light": "#73685f"
     },
     "markdownEmph": {
       "dark": "carpYellow",
-      "light": "carpYellow"
+      "light": "#8e5b6b"
     },
     "markdownStrong": {
       "dark": "roninYellow",
-      "light": "roninYellow"
+      "light": "#684700"
     },
     "markdownHorizontalRule": {
       "dark": "fujiGray",
@@ -172,7 +172,7 @@
     },
     "markdownListEnumeration": {
       "dark": "waveAqua",
-      "light": "waveAqua"
+      "light": "#557149"
     },
     "markdownImage": {
       "dark": "crystalBlue",
@@ -187,12 +187,12 @@
       "light": "lightText"
     },
     "syntaxComment": {
-      "dark": "fujiGray",
-      "light": "lightGray"
+      "dark": "#94928a",
+      "light": "#73685f"
     },
     "syntaxKeyword": {
-      "dark": "oniViolet",
-      "light": "oniViolet"
+      "dark": "#9e88c1",
+      "light": "#756097"
     },
     "syntaxFunction": {
       "dark": "crystalBlue",
@@ -204,19 +204,19 @@
     },
     "syntaxString": {
       "dark": "lotusGreen",
-      "light": "lotusGreen"
+      "light": "#547324"
     },
     "syntaxNumber": {
       "dark": "roninYellow",
-      "light": "roninYellow"
+      "light": "#8e6100"
     },
     "syntaxType": {
       "dark": "carpYellow",
-      "light": "carpYellow"
+      "light": "#8e5b6b"
     },
     "syntaxOperator": {
       "dark": "sakuraPink",
-      "light": "sakuraPink"
+      "light": "#9f516c"
     },
     "syntaxPunctuation": {
       "dark": "fujiWhite",

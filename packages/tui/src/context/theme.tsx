@@ -1,4 +1,4 @@
-import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
+import { CliRenderEvents, SyntaxStyle, RGBA, type TerminalColors, type ThemeMode } from "@opentui/core"
 import path from "path"
 import { createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { useSync } from "@tui/context/sync"
@@ -11,6 +11,7 @@ import {
   loadBuiltInTheme,
 } from "./theme-catalog"
 import { contrastFg, deriveSemanticTokens, tint, type SemanticTokens } from "./theme-tokens"
+import { ensureContrast, isDarkBackground, worstRatio } from "./contrast"
 import {
   createComponentResolver,
   readComponentPatches,
@@ -176,7 +177,8 @@ function createColorResolver(theme: ThemeJson, mode: "dark" | "light"): (c: Colo
   return resolveColor
 }
 
-function resolveTheme(theme: ThemeJson, mode: "dark" | "light"): Theme {
+/** A theme document resolved for one mode: its colours and the tokens derived from them, nothing else. */
+export function resolveTheme(theme: ThemeJson, mode: "dark" | "light"): Theme {
   const resolveColor = createColorResolver(theme, mode)
 
   const resolved = Object.fromEntries(
@@ -402,7 +404,7 @@ export const {
           }
           setStore(
             produce((draft) => {
-              draft.themes.system = generateSystem(colors, store.mode)
+              draft.themes.system = generateSystem(colors)
               if (store.active === "system") {
                 draft.ready = true
               }
@@ -412,6 +414,19 @@ export const {
     }
 
     const renderer = useRenderer()
+    // The terminal's own answer, which can come after the first frame (the startup waits one second) or change when
+    // the user switches the terminal's theme. It moves the mode unless the user chose one: a choice is kept in
+    // `theme_mode`, and "Follow terminal appearance" clears it.
+    let detected: "dark" | "light" = props.mode
+    const onThemeMode = (next: ThemeMode) => {
+      detected = next
+      if (kv.get("theme_mode") !== undefined) return
+      setStore("mode", next)
+      renderer.clearPaletteCache()
+      resolveSystemTheme()
+    }
+    renderer.on(CliRenderEvents.THEME_MODE, onThemeMode)
+    onCleanup(() => renderer.off(CliRenderEvents.THEME_MODE, onThemeMode))
     const onReloadSignal = async () => {
       renderer.clearPaletteCache()
       await reload()
@@ -529,6 +544,11 @@ export const {
         setStore("mode", mode)
         kv.set("theme_mode", mode)
       },
+      /** Forget the mode the user chose and take the terminal's again. */
+      followTerminal() {
+        kv.set("theme_mode", undefined)
+        setStore("mode", renderer.themeMode ?? detected)
+      },
       set(theme: string) {
         setStore("active", theme)
         kv.set("theme", theme)
@@ -609,10 +629,20 @@ async function getComponentOverrides(): Promise<ComponentPatchMap> {
   return merged as ComponentPatchMap
 }
 
-function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
+/**
+ * The "system" theme, built from the terminal's own palette.
+ *
+ * Dark or light follows the background the terminal reports, not the mode: in a light terminal whose mode was never
+ * detected, the old `mode` path drew light greys on the light background (and divided by zero on a black one).
+ *
+ * The palette's colours are the user's, but not all of them are readable as text on their own background: on
+ * Campbell, the default of Windows Terminal and conhost, blue and magenta on black are 2.4:1. Each ANSI colour used
+ * as text takes the normal or the bright one, whichever reads better here, then the smallest change of lightness that
+ * reaches the floor of the review on every surface it is drawn on.
+ */
+export function generateSystem(colors: TerminalColors): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
-  const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
-  const isDark = mode == "dark"
+  const isDark = isDarkBackground(bg)
 
   const col = (i: number) => {
     const value = colors.palette[i]
@@ -622,27 +652,36 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
 
   // Generate gray scale based on terminal background
   const grays = generateGrayScale(bg, isDark)
-  const textMuted = generateMutedTextColor(bg, isDark)
+
+  const diffAlpha = isDark ? 0.22 : 0.14
+  const diffAddedBg = tint(bg, col(2), diffAlpha)
+  const diffRemovedBg = tint(bg, col(1), diffAlpha)
+  const diffAddedLineNumberBg = tint(grays[3], col(2), diffAlpha)
+  const diffRemovedLineNumberBg = tint(grays[3], col(1), diffAlpha)
+
+  // Everything text is drawn on: the surfaces, and the diff's lines for the code inside them.
+  const surfaces = [bg, grays[1], grays[2], grays[3], diffAddedBg, diffRemovedBg]
+  const fg = ensureContrast(RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!), surfaces, 7)
+  const textMuted = ensureContrast(generateMutedTextColor(bg, isDark), surfaces, 4.5)
+  const ink = (i: number) => {
+    const normal = col(i)
+    const bright = col(i + 8)
+    return ensureContrast(worstRatio(bright, surfaces) > worstRatio(normal, surfaces) ? bright : normal, surfaces, 4.5)
+  }
 
   // ANSI color references
   const ansiColors = {
     black: col(0),
-    red: col(1),
-    green: col(2),
-    yellow: col(3),
-    blue: col(4),
-    magenta: col(5),
-    cyan: col(6),
+    red: ink(1),
+    green: ink(2),
+    yellow: ink(3),
+    blue: ink(4),
+    magenta: ink(5),
+    cyan: ink(6),
     white: col(7),
     redBright: col(9),
     greenBright: col(10),
   }
-
-  const diffAlpha = isDark ? 0.22 : 0.14
-  const diffAddedBg = tint(bg, ansiColors.green, diffAlpha)
-  const diffRemovedBg = tint(bg, ansiColors.red, diffAlpha)
-  const diffAddedLineNumberBg = tint(grays[3], ansiColors.green, diffAlpha)
-  const diffRemovedLineNumberBg = tint(grays[3], ansiColors.red, diffAlpha)
 
   return {
     theme: {
@@ -671,7 +710,7 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       // Border colors
       borderSubtle: grays[6],
       border: grays[7],
-      borderActive: grays[8],
+      borderActive: ensureContrast(grays[8], [bg], 3),
 
       // Diff colors
       diffAdded: ansiColors.green,
@@ -806,26 +845,22 @@ function generateSyntax(theme: Theme) {
   return SyntaxStyle.fromTheme(getSyntaxRules(theme))
 }
 
+/**
+ * The reasoning's palette: every token in `foreground.muted`, opaque, keeping its weight and slant.
+ *
+ * It used to be the code palette at `thinkingOpacity` (0.6), which put the reasoning under 4.5:1 in about half the
+ * variants: an alpha over the background loses contrast in proportion, and the accents it scaled were tuned for the
+ * full colour. `muted` is a colour every theme already keeps readable for secondary text, so the reasoning reads as
+ * quieter than the answer without falling under the floor. `thinkingOpacity` stays in the documents and the tokens
+ * for the plugins that read it.
+ */
 function generateSubtleSyntax(theme: Theme) {
   const rules = getSyntaxRules(theme)
   return SyntaxStyle.fromTheme(
     rules.map((rule) => {
-      if (rule.style.foreground) {
-        const fg = rule.style.foreground
-        return {
-          ...rule,
-          style: {
-            ...rule.style,
-            foreground: RGBA.fromInts(
-              Math.round(fg.r * 255),
-              Math.round(fg.g * 255),
-              Math.round(fg.b * 255),
-              Math.round(theme.thinkingOpacity * 255),
-            ),
-          },
-        }
-      }
-      return rule
+      if (!rule.style.foreground) return rule
+      const { background: _background, ...style } = rule.style as typeof rule.style & { background?: RGBA }
+      return { ...rule, style: { ...style, foreground: theme.foreground.muted } }
     }),
   )
 }

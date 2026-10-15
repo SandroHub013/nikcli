@@ -448,13 +448,13 @@ export function ActionsPanel() {
         <box paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} flexDirection="column">
           <box flexDirection="row" justifyContent="space-between" alignItems="center" width="100%" gap={1}>
             <box flexDirection="row" gap={0} alignItems="baseline" flexGrow={1} minWidth={0} overflow="hidden">
-              <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+              <text fg={theme.foreground.muted} wrapMode="none">
                 Workflow
               </text>
               <text fg={theme.accent.fg} attributes={TextAttributes.BOLD} wrapMode="none">
                 {" runs"}
               </text>
-              <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+              <text fg={theme.foreground.muted} wrapMode="none">
                 {"  ·  "}
               </text>
               <text fg={theme.foreground.default} attributes={TextAttributes.DIM} wrapMode="none" minWidth={0}>
@@ -479,7 +479,7 @@ export function ActionsPanel() {
             </box>
           </box>
           <box flexDirection="row" justifyContent="space-between" alignItems="center" width="100%" gap={1}>
-            <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+            <text fg={theme.foreground.muted} wrapMode="none">
               {state.loading ? "loading…" : (state()?.error ?? `${summary().total} runs`)}
             </text>
             <box flexDirection="row" gap={1} flexShrink={0} alignItems="center">
@@ -520,7 +520,7 @@ export function ActionsPanel() {
             >
               <text
                 fg={section() === tab.id ? theme.accent.fg : theme.foreground.muted}
-                attributes={section() === tab.id ? TextAttributes.BOLD : TextAttributes.DIM}
+                attributes={section() === tab.id ? TextAttributes.BOLD : undefined}
                 wrapMode="none"
               >
                 {tab.label}
@@ -544,11 +544,7 @@ export function ActionsPanel() {
             when={items().length > 0}
             fallback={
               <box flexGrow={1} alignItems="center" justifyContent="center" paddingLeft={2} paddingRight={2}>
-                <text
-                  fg={state()?.error ? theme.status.error.fg : theme.foreground.muted}
-                  attributes={TextAttributes.DIM}
-                  wrapMode="word"
-                >
+                <text fg={state()?.error ? theme.status.error.fg : theme.foreground.muted} wrapMode="word">
                   {state.loading
                     ? "Loading…"
                     : (state()?.error ??
@@ -598,10 +594,10 @@ export function ActionsPanel() {
                               >
                                 {truncate(row().workflow || row().title, LIST_WIDTH - 22)}
                               </text>
-                              <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                              <text fg={theme.foreground.muted} wrapMode="none">
                                 {truncate(row().branch, 12)}
                               </text>
-                              <text fg={theme.foreground.subtle} attributes={TextAttributes.DIM} wrapMode="none">
+                              <text fg={theme.foreground.subtle} wrapMode="none">
                                 {formatAge(row().updatedAt || row().createdAt, now())}
                               </text>
                             </>
@@ -646,9 +642,7 @@ export function ActionsPanel() {
                 when={selectedWorkflow()}
                 fallback={
                   <box flexGrow={1} alignItems="center" justifyContent="center">
-                    <text fg={theme.foreground.muted} attributes={TextAttributes.DIM}>
-                      Select a row
-                    </text>
+                    <text fg={theme.foreground.muted}>Select a row</text>
                   </box>
                 }
               >
@@ -663,7 +657,7 @@ export function ActionsPanel() {
                     <text fg={workflow().state === "active" ? theme.status.success.fg : theme.status.warning.fg}>
                       {workflow().state}
                     </text>
-                    <text fg={theme.foreground.subtle} attributes={TextAttributes.DIM} wrapMode="word">
+                    <text fg={theme.foreground.subtle} wrapMode="word">
                       enter · show its runs d · run workflow
                     </text>
                   </box>
@@ -688,7 +682,7 @@ export function ActionsPanel() {
                     </text>
                   </box>
                   <box flexDirection="row" gap={1} alignItems="baseline" flexWrap="wrap">
-                    <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                    <text fg={theme.foreground.muted} wrapMode="none">
                       {`${row().workflow} #${row().number}${row().attempt > 1 ? ` · attempt ${row().attempt}` : ""}`}
                     </text>
                   </box>
@@ -708,10 +702,10 @@ export function ActionsPanel() {
                   </box>
 
                   <box paddingTop={1} flexDirection="row" gap={1} alignItems="baseline">
-                    <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                    <text fg={theme.foreground.muted} wrapMode="none">
                       Jobs
                     </text>
-                    <text fg={theme.foreground.subtle} attributes={TextAttributes.DIM} wrapMode="none">
+                    <text fg={theme.foreground.subtle} wrapMode="none">
                       {jobs.loading ? "loading…" : `${(jobs() ?? []).length}`}
                     </text>
                   </box>
@@ -728,17 +722,17 @@ export function ActionsPanel() {
                             <text fg={theme.foreground.default} wrapMode="none" flexGrow={1} minWidth={0}>
                               {job.name}
                             </text>
-                            <text fg={theme.foreground.subtle} attributes={TextAttributes.DIM} wrapMode="none">
+                            <text fg={theme.foreground.subtle} wrapMode="none">
                               {formatDuration(job.startedAt, job.completedAt, now())}
                             </text>
                           </box>
                           <For each={failedSteps()}>
                             {(step) => (
                               <box flexDirection="row" gap={1} paddingLeft={2}>
-                                <text fg={theme.status.error.fg} attributes={TextAttributes.DIM} wrapMode="none">
+                                <text fg={theme.status.error.fg} wrapMode="none">
                                   ↳
                                 </text>
-                                <text fg={theme.status.error.fg} attributes={TextAttributes.DIM} wrapMode="word">
+                                <text fg={theme.status.error.fg} wrapMode="word">
                                   {step.name}
                                 </text>
                               </box>
@@ -817,7 +811,7 @@ function DetailField(props: { label: string; value: string; tone?: RGBA }) {
   const { theme } = useTheme()
   return (
     <box flexDirection="row" gap={1} alignItems="baseline">
-      <text fg={theme.foreground.subtle} attributes={TextAttributes.DIM} wrapMode="none">
+      <text fg={theme.foreground.subtle} wrapMode="none">
         {props.label}
       </text>
       <text fg={props.tone ?? theme.foreground.default} wrapMode="none">

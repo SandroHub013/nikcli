@@ -103,6 +103,7 @@ function Field(props: { element: Extract<Element, { type: "Input" }>; events: Tr
       <box flexGrow={1} border={["bottom"]} borderColor={focused() ? theme.accent.fg : theme.border.subtle}>
         <input
           value={props.element.props.value ?? ""}
+          placeholderColor={theme.foreground.muted}
           placeholder={props.element.props.placeholder}
           focused={focused()}
           cursorColor={theme.accent.fg}

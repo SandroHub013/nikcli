@@ -302,6 +302,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             focusedBackgroundColor={theme.surface.offset}
             cursorColor={theme.accent.fg}
             focusedTextColor={theme.foreground.muted}
+            placeholderColor={theme.foreground.muted}
             placeholder={props.placeholder ?? "Search"}
           />
         </box>

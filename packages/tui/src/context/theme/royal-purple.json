@@ -35,7 +35,7 @@
   },
   "theme": {
     "primary": {
-      "dark": "#a262da",
+      "dark": "#a969e1",
       "light": "#6a2ca0"
     },
     "secondary": {
@@ -44,23 +44,23 @@
     },
     "accent": {
       "dark": "darkAccent",
-      "light": "lightAccent"
+      "light": "#7f6821"
     },
     "error": {
-      "dark": "darkRed",
+      "dark": "#de7b85",
       "light": "lightRed"
     },
     "warning": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#a14c25"
     },
     "success": {
       "dark": "darkGreen",
-      "light": "lightGreen"
+      "light": "#30765d"
     },
     "info": {
       "dark": "darkCyan",
-      "light": "lightCyan"
+      "light": "#2b6c84"
     },
     "text": {
       "dark": "darkStep12",
@@ -155,7 +155,7 @@
       "light": "lightStep12"
     },
     "markdownHeading": {
-      "dark": "#a262da",
+      "dark": "#c180fb",
       "light": "#6a2ca0"
     },
     "markdownLink": {
@@ -180,7 +180,7 @@
     },
     "markdownStrong": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#8f3b10"
     },
     "markdownHorizontalRule": {
       "dark": "darkStep11",
@@ -207,11 +207,11 @@
       "light": "lightStep12"
     },
     "syntaxComment": {
-      "dark": "darkStep11",
+      "dark": "#9f93ab",
       "light": "lightStep11"
     },
     "syntaxKeyword": {
-      "dark": "#a262da",
+      "dark": "#ba7bf5",
       "light": "#6a2ca0"
     },
     "syntaxFunction": {
@@ -219,24 +219,24 @@
       "light": "lightSecondary"
     },
     "syntaxVariable": {
-      "dark": "darkRed",
+      "dark": "#de7b85",
       "light": "lightRed"
     },
     "syntaxString": {
       "dark": "darkGreen",
-      "light": "lightGreen"
+      "light": "#297056"
     },
     "syntaxNumber": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#a14c24"
     },
     "syntaxType": {
       "dark": "darkYellow",
-      "light": "lightYellow"
+      "light": "#835d25"
     },
     "syntaxOperator": {
       "dark": "darkCyan",
-      "light": "lightCyan"
+      "light": "#2b6c84"
     },
     "syntaxPunctuation": {
       "dark": "darkStep12",

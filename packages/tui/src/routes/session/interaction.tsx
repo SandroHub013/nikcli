@@ -5,7 +5,7 @@ import { createMemo, For, Show, Switch, Match, onMount, type JSX } from "solid-j
 import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes, type TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
-import { tint, useTheme } from "../../context/theme"
+import { selectedForeground, tint, useTheme } from "../../context/theme"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import { useDialog } from "../../ui/dialog"
 import type {
@@ -403,6 +403,7 @@ export function DialogInteractionApp(props: { spec: AppSpecType }) {
                   })
                 }}
                 initialValue={String(getVal(w.id) ?? "")}
+                placeholderColor={theme.foreground.muted}
                 placeholder={w.placeholder ?? ""}
                 textColor={theme.foreground.default}
                 focusedTextColor={theme.foreground.default}
@@ -501,7 +502,9 @@ export function DialogInteractionApp(props: { spec: AppSpecType }) {
               paddingRight={2}
               backgroundColor={isFocused() ? buttonBg(w.variant) : theme.surface.offset}
             >
-              <text fg={isFocused() ? theme.badge.fg : buttonFg(w.variant)}>{w.label}</text>
+              <text fg={isFocused() ? selectedForeground(theme, buttonBg(w.variant)) : buttonFg(w.variant)}>
+                {w.label}
+              </text>
             </box>
           </box>
         </Match>

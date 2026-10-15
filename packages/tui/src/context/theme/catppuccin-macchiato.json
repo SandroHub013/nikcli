@@ -81,8 +81,8 @@
       "light": "macSurface0"
     },
     "borderActive": {
-      "dark": "macSurface1",
-      "light": "macSurface1"
+      "dark": "#6b7088",
+      "light": "#6b7088"
     },
     "borderSubtle": {
       "dark": "macSurface2",
@@ -141,8 +141,8 @@
       "light": "macText"
     },
     "markdownHeading": {
-      "dark": "macMauve",
-      "light": "macMauve"
+      "dark": "#c8a2f9",
+      "light": "#c8a2f9"
     },
     "markdownLink": {
       "dark": "macBlue",

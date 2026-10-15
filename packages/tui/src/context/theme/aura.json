@@ -17,12 +17,21 @@
     "primary": "purple",
     "secondary": "pink",
     "accent": "purple",
-    "error": "red",
+    "error": {
+      "dark": "#ff918d",
+      "light": "#ff918d"
+    },
     "warning": "orange",
     "success": "cyan",
-    "info": "purple",
+    "info": {
+      "dark": "#baa2ff",
+      "light": "#baa2ff"
+    },
     "text": "darkFg",
-    "textMuted": "darkFgMuted",
+    "textMuted": {
+      "dark": "#7e7e7d",
+      "light": "#7e7e7d"
+    },
     "background": "darkBg",
     "backgroundPanel": "darkBgPanel",
     "backgroundElement": "darkBgPanel",
@@ -42,26 +51,47 @@
     "diffAddedLineNumberBg": "#162620",
     "diffRemovedLineNumberBg": "#26161a",
     "markdownText": "darkFg",
-    "markdownHeading": "purple",
+    "markdownHeading": {
+      "dark": "#ab88ff",
+      "light": "#ab88ff"
+    },
     "markdownLink": "pink",
     "markdownLinkText": "purple",
     "markdownCode": "cyan",
-    "markdownBlockQuote": "darkFgMuted",
+    "markdownBlockQuote": {
+      "dark": "#7b7b7a",
+      "light": "#7b7b7a"
+    },
     "markdownEmph": "orange",
-    "markdownStrong": "purple",
+    "markdownStrong": {
+      "dark": "#ab88ff",
+      "light": "#ab88ff"
+    },
     "markdownHorizontalRule": "darkFgMuted",
     "markdownListItem": "purple",
     "markdownListEnumeration": "purple",
     "markdownImage": "pink",
     "markdownImageText": "purple",
     "markdownCodeBlock": "darkFg",
-    "syntaxComment": "darkFgMuted",
+    "syntaxComment": {
+      "dark": "#b1b0b0",
+      "light": "#b1b0b0"
+    },
     "syntaxKeyword": "pink",
-    "syntaxFunction": "purple",
-    "syntaxVariable": "purple",
+    "syntaxFunction": {
+      "dark": "#baa2ff",
+      "light": "#baa2ff"
+    },
+    "syntaxVariable": {
+      "dark": "#baa2ff",
+      "light": "#baa2ff"
+    },
     "syntaxString": "cyan",
     "syntaxNumber": "green",
-    "syntaxType": "purple",
+    "syntaxType": {
+      "dark": "#baa2ff",
+      "light": "#baa2ff"
+    },
     "syntaxOperator": "pink",
     "syntaxPunctuation": "darkFg"
   }

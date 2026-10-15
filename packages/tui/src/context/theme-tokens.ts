@@ -1,4 +1,13 @@
 import { RGBA } from "@opentui/core"
+import {
+  blackOrWhite,
+  contrastRatio,
+  contrastScore,
+  ensureContrast,
+  ensureContrastFor,
+  over,
+  toOklch,
+} from "./contrast"
 
 export type StatusPair = {
   fg: RGBA
@@ -149,15 +158,84 @@ export function luminance(color: RGBA): number {
   return 0.299 * color.r + 0.587 * color.g + 0.114 * color.b
 }
 
+/**
+ * Black or white text for a filled `bg`, by the WCAG ratio. Not by `luminance` above: BT.601 luma calls a saturated
+ * red or blue dark and puts white on it, where black reads better (white on #ff0000 is 4:1, black 5.3:1).
+ */
 export function contrastFg(bg: RGBA): RGBA {
-  return luminance(bg) > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
+  return blackOrWhite(bg)
 }
 
-function statusPair(base: RGBA, hue: RGBA, alpha: number): StatusPair {
-  return {
-    fg: hue,
-    bg: tint(base, hue, alpha),
+/** The floors of the triple-A review for the colours the engine derives. */
+const SUBTLE_MIN = 4.5
+const BADGE_MIN = 7
+/** The selected row's fill is also the bar that marks it in a dialog: a mark, 3:1 on the dialog. */
+const BAR_MIN = 3
+const DIFF_GUTTER_MIN = 4.5
+const TERMINAL_DARK = RGBA.fromInts(12, 12, 12)
+const TERMINAL_LIGHT = RGBA.fromInts(255, 255, 255)
+const BLACK = RGBA.fromInts(0, 0, 0)
+const WHITE = RGBA.fromInts(255, 255, 255)
+
+/**
+ * `muted` faded toward the background, the colour of what a tool hides («▸ N more lines») and of its markers. Faded
+ * less than the 40 % it starts from when that would drop it under 4.5:1 on the background, and moved in lightness
+ * when even `muted` is under it.
+ */
+function subtleOf(muted: RGBA, ground: RGBA): RGBA {
+  for (let step = 8; step >= 1; step--) {
+    const faded = tint(muted, ground, step * 0.05)
+    if (contrastRatio(faded, ground) >= SUBTLE_MIN) return faded
   }
+  return ensureContrast(muted, [ground], SUBTLE_MIN)
+}
+
+/**
+ * The selected row: its text and its fill. The text is the theme's (`selectedListItemText`) or black or white; the
+ * fill is `primary`, moved in lightness only when the text does not reach 7:1 on it or the fill does not stand 3:1
+ * off the dialog it marks a row in. The theme's own text wins when some fill works with it. Otherwise black and white
+ * are both tried and the pair whose fill moves least wins: on a light theme a mid-tone primary under black text would
+ * go pale and vanish into the dialog, where under white it only has to darken a little.
+ */
+function badgeOf(primary: RGBA, overlay: RGBA, declared: RGBA | undefined): StatusPair {
+  const pair = (fg: RGBA) => {
+    const targets = [
+      { bg: fg, min: BADGE_MIN },
+      { bg: overlay, min: BAR_MIN },
+    ]
+    const bg = ensureContrastFor(primary, targets)
+    if (contrastScore(bg, targets) < 1) return undefined
+    return { fg, bg, distance: Math.abs(toOklch(bg).l - toOklch(primary).l) }
+  }
+  const own = declared && pair(declared)
+  if (own) return { fg: own.fg, bg: own.bg }
+  const best = [BLACK, WHITE]
+    .map(pair)
+    .filter((p) => p !== undefined)
+    .sort((a, b) => a.distance - b.distance)[0]
+  if (best) return { fg: best.fg, bg: best.bg }
+  // No fill does both: the text reads, the bar is what gives.
+  const fg = declared ?? contrastFg(primary)
+  return { fg, bg: ensureContrast(primary, [fg], BADGE_MIN) }
+}
+
+/**
+ * A state's colour and the fill tinted with it, the background of the error and warning toasts. The fill is the
+ * background with `alpha` of the hue, less when that would leave the hue under 4.5:1 on it or the toast's text (the
+ * default at 7:1, muted at 4.5:1) unreadable.
+ */
+function statusPair(base: RGBA, hue: RGBA, alpha: number, text: RGBA, muted: RGBA): StatusPair {
+  const targets = [
+    { colour: hue, min: 4.5 },
+    { colour: text, min: 7 },
+    { colour: muted, min: 4.5 },
+  ]
+  const readable = (bg: RGBA) => targets.every((t) => contrastRatio(t.colour, bg) >= t.min)
+  for (let step = Math.round(alpha / 0.02); step > 0; step--) {
+    const bg = tint(base, hue, step * 0.02)
+    if (readable(bg)) return { fg: hue, bg }
+  }
+  return { fg: hue, bg: tint(base, hue, 0) }
 }
 
 export function deriveSemanticTokens(
@@ -169,7 +247,33 @@ export function deriveSemanticTokens(
   },
 ): SemanticTokens {
   const fill = options.mode === "dark" ? 0.28 : 0.16
-  const badgeBg = colors.primary
+  // A transparent background shows the terminal's: assume the default of Windows Terminal and conhost when dark,
+  // white when light (the backgrounds the triple-A review measured transparent themes on).
+  const ground = over(colors.background, options.mode === "dark" ? TERMINAL_DARK : TERMINAL_LIGHT)
+  const badge = badgeOf(
+    colors.primary,
+    over(colors.backgroundMenu, ground),
+    options.hasSelectedListItemText ? colors.selectedListItemText : undefined,
+  )
+  // The diff's gutter: the line number on each line's gutter fill, and the + and - signs, which the renderer draws in
+  // the gutter too, on the fill of their own line. Both were near invisible (line numbers at 1.1:1 in the default
+  // theme) and the signs are the one cue left to whoever cannot tell the green from the red.
+  const gutter = (c: RGBA) => over(c, ground)
+  const lineNumber = ensureContrast(
+    colors.diffLineNumber,
+    [colors.diffContextBg, colors.diffAddedLineNumberBg, colors.diffRemovedLineNumberBg].map(gutter),
+    DIFF_GUTTER_MIN,
+  )
+  const highlightAdded = ensureContrast(
+    colors.diffHighlightAdded,
+    [gutter(colors.diffAddedLineNumberBg)],
+    DIFF_GUTTER_MIN,
+  )
+  const highlightRemoved = ensureContrast(
+    colors.diffHighlightRemoved,
+    [gutter(colors.diffRemovedLineNumberBg)],
+    DIFF_GUTTER_MIN,
+  )
   return {
     surface: {
       base: colors.background,
@@ -180,7 +284,7 @@ export function deriveSemanticTokens(
     foreground: {
       default: colors.text,
       muted: colors.textMuted,
-      subtle: tint(colors.textMuted, colors.background, 0.4),
+      subtle: subtleOf(colors.textMuted, ground),
     },
     accent: {
       fg: colors.primary,
@@ -190,10 +294,10 @@ export function deriveSemanticTokens(
       secondary: colors.secondary,
     },
     status: {
-      error: statusPair(colors.background, colors.error, fill),
-      warning: statusPair(colors.background, colors.warning, fill),
-      success: statusPair(colors.background, colors.success, fill),
-      info: statusPair(colors.background, colors.info, fill),
+      error: statusPair(ground, colors.error, fill, colors.text, colors.textMuted),
+      warning: statusPair(ground, colors.warning, fill, colors.text, colors.textMuted),
+      success: statusPair(ground, colors.success, fill, colors.text, colors.textMuted),
+      info: statusPair(ground, colors.info, fill, colors.text, colors.textMuted),
     },
     border: {
       default: colors.border,
@@ -202,8 +306,8 @@ export function deriveSemanticTokens(
       focus: tint(colors.primary, colors.text, 0.35),
     },
     badge: {
-      fg: options.hasSelectedListItemText ? colors.selectedListItemText : contrastFg(badgeBg),
-      bg: badgeBg,
+      fg: badge.fg,
+      bg: badge.bg,
     },
     syntax: {
       comment: colors.syntaxComment,
@@ -240,9 +344,9 @@ export function deriveSemanticTokens(
       removedBg: colors.diffRemovedBg,
       contextBg: colors.diffContextBg,
       hunkHeader: colors.diffHunkHeader,
-      highlightAdded: colors.diffHighlightAdded,
-      highlightRemoved: colors.diffHighlightRemoved,
-      lineNumber: colors.diffLineNumber,
+      highlightAdded,
+      highlightRemoved,
+      lineNumber,
       addedLineNumberBg: colors.diffAddedLineNumberBg,
       removedLineNumberBg: colors.diffRemovedLineNumberBg,
     },

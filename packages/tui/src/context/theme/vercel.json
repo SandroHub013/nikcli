@@ -41,39 +41,39 @@
   },
   "theme": {
     "primary": {
-      "dark": "blue700",
-      "light": "blue700"
+      "dark": "#408eff",
+      "light": "#0064dc"
     },
     "secondary": {
       "dark": "blue900",
       "light": "#0062D1"
     },
     "accent": {
-      "dark": "purple700",
-      "light": "purple700"
+      "dark": "#b172ed",
+      "light": "#8b4ac2"
     },
     "error": {
-      "dark": "red700",
-      "light": "#DC3545"
+      "dark": "#f7585b",
+      "light": "#cd2139"
     },
     "warning": {
       "dark": "amber700",
-      "light": "#FF9500"
+      "light": "#9c5a00"
     },
     "success": {
       "dark": "green700",
-      "light": "#388E3C"
+      "light": "#207a29"
     },
     "info": {
       "dark": "blue900",
-      "light": "blue700"
+      "light": "#0064db"
     },
     "text": {
       "dark": "gray1000",
       "light": "lightGray1000"
     },
     "textMuted": {
-      "dark": "gray600",
+      "dark": "#908f8f",
       "light": "lightGray600"
     },
     "background": {
@@ -93,8 +93,8 @@
       "light": "lightGray200"
     },
     "borderActive": {
-      "dark": "gray500",
-      "light": "#999999"
+      "dark": "#5a5959",
+      "light": "#959494"
     },
     "borderSubtle": {
       "dark": "gray100",
@@ -154,7 +154,7 @@
     },
     "markdownHeading": {
       "dark": "purple900",
-      "light": "purple700"
+      "light": "#7938af"
     },
     "markdownLink": {
       "dark": "blue900",
@@ -162,11 +162,11 @@
     },
     "markdownLinkText": {
       "dark": "teal900",
-      "light": "teal700"
+      "light": "#008577"
     },
     "markdownCode": {
       "dark": "green900",
-      "light": "green700"
+      "light": "#22883b"
     },
     "markdownBlockQuote": {
       "dark": "gray600",
@@ -174,11 +174,11 @@
     },
     "markdownEmph": {
       "dark": "amber900",
-      "light": "amber700"
+      "light": "#a06c00"
     },
     "markdownStrong": {
-      "dark": "pink900",
-      "light": "pink700"
+      "dark": "#fc5a94",
+      "light": "#b00059"
     },
     "markdownHorizontalRule": {
       "dark": "gray500",
@@ -206,11 +206,11 @@
     },
     "syntaxComment": {
       "dark": "gray600",
-      "light": "#888888"
+      "light": "#6e6d6d"
     },
     "syntaxKeyword": {
       "dark": "pink900",
-      "light": "pink700"
+      "light": "#cf1e6d"
     },
     "syntaxFunction": {
       "dark": "purple900",
@@ -218,23 +218,23 @@
     },
     "syntaxVariable": {
       "dark": "blue900",
-      "light": "blue700"
+      "light": "#0068e2"
     },
     "syntaxString": {
       "dark": "green900",
-      "light": "green700"
+      "light": "#117e31"
     },
     "syntaxNumber": {
       "dark": "amber900",
-      "light": "amber700"
+      "light": "#946400"
     },
     "syntaxType": {
       "dark": "teal900",
-      "light": "teal700"
+      "light": "#007b6e"
     },
     "syntaxOperator": {
       "dark": "pink900",
-      "light": "pink700"
+      "light": "#cf1e6d"
     },
     "syntaxPunctuation": {
       "dark": "gray1000",

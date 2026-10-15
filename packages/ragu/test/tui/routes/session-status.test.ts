@@ -21,9 +21,10 @@ describe("sessionStatusDisplay", () => {
       expect(result.fg).toBe(theme.textMuted)
     })
 
-    it("includes DIM attributes for undefined", () => {
+    // textMuted is already the quieter colour: DIM on it would dim twice (P0 #2 of the triple-A review).
+    it("does not DIM the muted idle label", () => {
       const result = sessionStatusDisplay(undefined, theme)
-      expect(typeof result.attributes).toBe("number")
+      expect(result.attributes ?? 0).toBe(0)
     })
   })
 

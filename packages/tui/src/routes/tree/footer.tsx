@@ -81,7 +81,7 @@ export function SessionTreeFooter(props: {
             <text fg={theme.theme.foreground.default} attributes={TextAttributes.BOLD} wrapMode="none">
               esc
             </text>
-            <text fg={theme.theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+            <text fg={theme.theme.foreground.muted} wrapMode="none">
               {` ${escLabel()}`}
             </text>
           </box>

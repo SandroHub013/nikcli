@@ -28,12 +28,18 @@
     "primary": "darkEntity",
     "secondary": "darkConstant",
     "accent": "darkAccent",
-    "error": "darkError",
+    "error": {
+      "dark": "#ef6b69",
+      "light": "#ef6b69"
+    },
     "warning": "darkSpecial",
     "success": "darkAdded",
     "info": "darkTag",
     "text": "darkFg",
-    "textMuted": "darkFgMuted",
+    "textMuted": {
+      "dark": "#787d88",
+      "light": "#787d88"
+    },
     "background": "darkBg",
     "backgroundPanel": "darkPanel",
     "backgroundElement": "darkBgAlt",

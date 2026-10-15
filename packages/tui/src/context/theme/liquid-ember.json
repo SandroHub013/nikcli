@@ -32,7 +32,7 @@
     },
     "secondary": {
       "dark": "darkSecondary",
-      "light": "lightSecondary"
+      "light": "#9d5e27"
     },
     "accent": {
       "dark": "darkAccent",
@@ -44,15 +44,15 @@
     },
     "warning": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#ad551a"
     },
     "success": {
       "dark": "darkGreen",
-      "light": "lightGreen"
+      "light": "#367a4e"
     },
     "info": {
       "dark": "darkCyan",
-      "light": "lightCyan"
+      "light": "#39767d"
     },
     "text": {
       "dark": "darkStep12",
@@ -147,8 +147,8 @@
       "light": "lightStep12"
     },
     "markdownHeading": {
-      "dark": "#da8262",
-      "light": "#a04b2c"
+      "dark": "#dc8463",
+      "light": "#934020"
     },
     "markdownLink": {
       "dark": "#da8262",
@@ -172,7 +172,7 @@
     },
     "markdownStrong": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#934100"
     },
     "markdownHorizontalRule": {
       "dark": "darkStep11",

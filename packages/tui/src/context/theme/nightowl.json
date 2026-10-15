@@ -29,8 +29,8 @@
       "light": "nightOwlPurple"
     },
     "error": {
-      "dark": "nightOwlRed",
-      "light": "nightOwlRed"
+      "dark": "#f55854",
+      "light": "#f55854"
     },
     "warning": {
       "dark": "nightOwlYellow",
@@ -49,8 +49,8 @@
       "light": "nightOwlFg"
     },
     "textMuted": {
-      "dark": "nightOwlMuted",
-      "light": "nightOwlMuted"
+      "dark": "#6e8da7",
+      "light": "#6e8da7"
     },
     "background": {
       "dark": "nightOwlBg",
@@ -145,8 +145,8 @@
       "light": "nightOwlGreen"
     },
     "markdownBlockQuote": {
-      "dark": "nightOwlMuted",
-      "light": "nightOwlMuted"
+      "dark": "#62829b",
+      "light": "#62829b"
     },
     "markdownEmph": {
       "dark": "nightOwlPurple",
@@ -181,8 +181,8 @@
       "light": "nightOwlFg"
     },
     "syntaxComment": {
-      "dark": "nightOwlGray",
-      "light": "nightOwlGray"
+      "dark": "#7d9291",
+      "light": "#7d9291"
     },
     "syntaxKeyword": {
       "dark": "nightOwlPurple",

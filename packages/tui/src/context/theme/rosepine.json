@@ -31,39 +31,39 @@
   "theme": {
     "primary": {
       "dark": "foam",
-      "light": "pine"
+      "light": "#2e718c"
     },
     "secondary": {
       "dark": "iris",
-      "light": "#907aa9"
+      "light": "#77618f"
     },
     "accent": {
       "dark": "rose",
-      "light": "#d7827e"
+      "light": "#a35250"
     },
     "error": {
       "dark": "love",
-      "light": "#b4637a"
+      "light": "#a05169"
     },
     "warning": {
       "dark": "gold",
-      "light": "#ea9d34"
+      "light": "#965d00"
     },
     "success": {
-      "dark": "pine",
+      "dark": "#5394b0",
       "light": "#286983"
     },
     "info": {
       "dark": "foam",
-      "light": "#56949f"
+      "light": "#34727d"
     },
     "text": {
       "dark": "#e0def4",
-      "light": "#575279"
+      "light": "#4e486f"
     },
     "textMuted": {
-      "dark": "muted",
-      "light": "dawnMuted"
+      "dark": "#8d89a6",
+      "light": "#6c6878"
     },
     "background": {
       "dark": "base",
@@ -139,11 +139,11 @@
     },
     "markdownText": {
       "dark": "#e0def4",
-      "light": "#575279"
+      "light": "#544e75"
     },
     "markdownHeading": {
       "dark": "iris",
-      "light": "#907aa9"
+      "light": "#5f4a76"
     },
     "markdownLink": {
       "dark": "foam",
@@ -151,23 +151,23 @@
     },
     "markdownLinkText": {
       "dark": "rose",
-      "light": "#d7827e"
+      "light": "#aa5956"
     },
     "markdownCode": {
-      "dark": "pine",
+      "dark": "#4789a4",
       "light": "#286983"
     },
     "markdownBlockQuote": {
-      "dark": "muted",
-      "light": "dawnMuted"
+      "dark": "#827e9a",
+      "light": "#736e80"
     },
     "markdownEmph": {
       "dark": "gold",
-      "light": "#ea9d34"
+      "light": "#9e6300"
     },
     "markdownStrong": {
-      "dark": "love",
-      "light": "#b4637a"
+      "dark": "#f97b9e",
+      "light": "#863a52"
     },
     "markdownHorizontalRule": {
       "dark": "highlightMed",
@@ -179,7 +179,7 @@
     },
     "markdownListEnumeration": {
       "dark": "rose",
-      "light": "#d7827e"
+      "light": "#aa5956"
     },
     "markdownImage": {
       "dark": "foam",
@@ -191,19 +191,19 @@
     },
     "markdownCodeBlock": {
       "dark": "#e0def4",
-      "light": "#575279"
+      "light": "#544e75"
     },
     "syntaxComment": {
-      "dark": "muted",
-      "light": "dawnMuted"
+      "dark": "#938fac",
+      "light": "#6c6878"
     },
     "syntaxKeyword": {
-      "dark": "pine",
+      "dark": "#599ab7",
       "light": "#286983"
     },
     "syntaxFunction": {
       "dark": "rose",
-      "light": "#d7827e"
+      "light": "#a25350"
     },
     "syntaxVariable": {
       "dark": "#e0def4",
@@ -211,23 +211,23 @@
     },
     "syntaxString": {
       "dark": "gold",
-      "light": "#ea9d34"
+      "light": "#955e00"
     },
     "syntaxNumber": {
       "dark": "iris",
-      "light": "#907aa9"
+      "light": "#77618f"
     },
     "syntaxType": {
       "dark": "foam",
-      "light": "#56949f"
+      "light": "#34727d"
     },
     "syntaxOperator": {
-      "dark": "subtle",
-      "light": "dawnSubtle"
+      "dark": "#938fad",
+      "light": "#6b6684"
     },
     "syntaxPunctuation": {
-      "dark": "subtle",
-      "light": "dawnSubtle"
+      "dark": "#938fad",
+      "light": "#6b6684"
     }
   }
 }

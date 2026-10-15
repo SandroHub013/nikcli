@@ -3,7 +3,7 @@ import { createMemo, For, Show } from "solid-js"
 import { useKeyboard } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useKeybind } from "../../context/keybind"
-import { tint, useTheme } from "../../context/theme"
+import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@ragu/sdk/httpapi"
 import { useSDK } from "../../context/sdk"
 import { useSync } from "../../context/sync"
@@ -285,7 +285,11 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                   >
                     <text
                       fg={
-                        isActive() ? theme.badge.fg : isAnswered() ? theme.foreground.default : theme.foreground.muted
+                        isActive()
+                          ? selectedForeground(theme, theme.accent.alt)
+                          : isAnswered()
+                            ? theme.foreground.default
+                            : theme.foreground.muted
                       }
                     >
                       {q.header}
@@ -300,7 +304,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
               backgroundColor={confirm() ? theme.accent.alt : theme.surface.offset}
               onMouseUp={() => selectTab(questions().length)}
             >
-              <text fg={confirm() ? theme.badge.fg : theme.foreground.muted}>Confirm</text>
+              <text fg={confirm() ? selectedForeground(theme, theme.accent.alt) : theme.foreground.muted}>Confirm</text>
             </box>
           </box>
         </Show>
@@ -398,6 +402,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                           })
                         }}
                         initialValue={input()}
+                        placeholderColor={theme.foreground.muted}
                         placeholder="Type your own answer"
                         textColor={theme.foreground.default}
                         focusedTextColor={theme.foreground.default}

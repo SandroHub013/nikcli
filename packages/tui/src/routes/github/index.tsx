@@ -834,13 +834,13 @@ export function GitHubPanel() {
               minWidth={0}
               overflow="hidden"
             >
-              <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+              <text fg={theme.foreground.muted} wrapMode="none">
                 Git
               </text>
               <text fg={theme.accent.fg} attributes={TextAttributes.BOLD} wrapMode="none">
                 {"Hub"}
               </text>
-              <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+              <text fg={theme.foreground.muted} wrapMode="none">
                 {"  ·  "}
               </text>
               <text
@@ -876,11 +876,11 @@ export function GitHubPanel() {
             paddingTop={0}
             gap={1}
           >
-            <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+            <text fg={theme.foreground.muted} wrapMode="none">
               {state()?.currentBranch ?? "—"}
             </text>
             <box flexDirection="row" gap={1} flexShrink={0} alignItems="center">
-              <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+              <text fg={theme.foreground.muted} wrapMode="none">
                 {state()
                   ? `${state()!.branches.length} br · ${state()!.prs.length} pr · ${state()!.issues.length} issue`
                   : ""}
@@ -918,7 +918,7 @@ export function GitHubPanel() {
             >
               <text
                 fg={section() === tab.id ? theme.accent.fg : theme.foreground.muted}
-                attributes={section() === tab.id ? TextAttributes.BOLD : TextAttributes.DIM}
+                attributes={section() === tab.id ? TextAttributes.BOLD : undefined}
                 wrapMode="none"
               >
                 {tab.label}
@@ -946,11 +946,7 @@ export function GitHubPanel() {
             when={!state.loading && state() && visibleItems().length > 0}
             fallback={
               <box flexGrow={1} alignItems="center" justifyContent="center" paddingLeft={1} paddingRight={1}>
-                <text
-                  fg={state()?.error ? theme.status.error.fg : theme.foreground.muted}
-                  attributes={TextAttributes.DIM}
-                  wrapMode="word"
-                >
+                <text fg={state()?.error ? theme.status.error.fg : theme.foreground.muted} wrapMode="word">
                   {state.loading
                     ? "Loading..."
                     : (state()?.error ?? filterText())
@@ -1016,7 +1012,7 @@ export function GitHubPanel() {
                               {truncate(item.subject, SIDE_WIDTH - 13)}
                             </text>
                           </box>
-                          <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                          <text fg={theme.foreground.muted} wrapMode="none">
                             {item.relativeDate}
                           </text>
                         </Show>
@@ -1049,7 +1045,7 @@ export function GitHubPanel() {
                               {truncate(item.title, SIDE_WIDTH - 7)}
                             </text>
                           </box>
-                          <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                          <text fg={theme.foreground.muted} wrapMode="none">
                             {item.author} · {item.head}
                           </text>
                         </Show>
@@ -1074,7 +1070,7 @@ export function GitHubPanel() {
                               {truncate(item.title, SIDE_WIDTH - 7)}
                             </text>
                           </box>
-                          <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                          <text fg={theme.foreground.muted} wrapMode="none">
                             {item.author}
                             {item.labels.length > 0 ? ` · ${truncate(item.labels.join(", "), 16)}` : ""}
                           </text>
@@ -1102,7 +1098,7 @@ export function GitHubPanel() {
             when={selectedItem()}
             fallback={
               <box flexGrow={1} alignItems="center" justifyContent="center">
-                <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="word">
+                <text fg={theme.foreground.muted} wrapMode="word">
                   Select a {section().replace(/s$/, "")} to view details
                 </text>
               </box>
@@ -1122,7 +1118,7 @@ export function GitHubPanel() {
                       <text fg={theme.accent.fg} attributes={TextAttributes.BOLD} wrapMode="word">
                         {(item() as Branch).name}
                       </text>
-                      <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                      <text fg={theme.foreground.muted} wrapMode="none">
                         {(item() as Branch).current ? "Current branch" : "Switch to branch"}
                       </text>
                       <Show when={!(item() as Branch).current}>
@@ -1152,20 +1148,20 @@ export function GitHubPanel() {
                         <text fg={theme.status.warning.fg} wrapMode="none">
                           {selectedItem().hash}
                         </text>
-                        <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                        <text fg={theme.foreground.muted} wrapMode="none">
                           {initials(selectedItem().author)}
                         </text>
-                        <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                        <text fg={theme.foreground.muted} wrapMode="none">
                           {selectedItem().relativeDate}
                         </text>
                       </box>
                       <text fg={theme.foreground.default} attributes={TextAttributes.BOLD} wrapMode="word">
                         {selectedItem().subject}
                       </text>
-                      <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                      <text fg={theme.foreground.muted} wrapMode="none">
                         {selectedItem().fullHash}
                       </text>
-                      <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                      <text fg={theme.foreground.muted} wrapMode="none">
                         {selectedItem().author} · {selectedItem().date}
                       </text>
                       <box flexDirection="row" gap={1} paddingTop={0}>
@@ -1232,7 +1228,7 @@ export function GitHubPanel() {
                       <text fg={theme.foreground.default} attributes={TextAttributes.BOLD} wrapMode="word">
                         {selectedItem().title}
                       </text>
-                      <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                      <text fg={theme.foreground.muted} wrapMode="none">
                         {selectedItem().author} {selectedItem().head} → {selectedItem().base}
                       </text>
                       <box flexDirection="row" gap={1} paddingTop={0}>
@@ -1267,7 +1263,7 @@ export function GitHubPanel() {
                       <text fg={theme.foreground.default} attributes={TextAttributes.BOLD} wrapMode="word">
                         {selectedItem().title}
                       </text>
-                      <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                      <text fg={theme.foreground.muted} wrapMode="none">
                         {selectedItem().author}
                         {selectedItem().assignees.length > 0
                           ? ` · assigned: ${selectedItem().assignees.join(", ")}`

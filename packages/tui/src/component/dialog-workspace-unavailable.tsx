@@ -57,7 +57,7 @@ export function DialogWorkspaceUnavailable(props: { onRestore?: () => boolean | 
             <box
               paddingLeft={2}
               paddingRight={2}
-              backgroundColor={item === store.active ? theme.accent.fg : undefined}
+              backgroundColor={item === store.active ? theme.badge.bg : undefined}
               onMouseUp={() => {
                 setStore("active", item)
                 void confirm()

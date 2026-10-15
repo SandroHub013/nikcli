@@ -593,18 +593,18 @@ export function GitGraph() {
               <text fg={theme.foreground.muted} attributes={TextAttributes.BOLD} wrapMode="none">
                 GHUI
               </text>
-              <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+              <text fg={theme.foreground.muted} wrapMode="none">
                 {"  "}
               </text>
               <text fg={theme.foreground.default} attributes={TextAttributes.BOLD} wrapMode="none">
                 {shortDir(directory())}
               </text>
-              <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+              <text fg={theme.foreground.muted} wrapMode="none">
                 {branchLabel() ? `  ${branchLabel()}` : ""}
               </text>
             </box>
             <box flexDirection="row" gap={1} flexShrink={0}>
-              <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+              <text fg={theme.foreground.muted} wrapMode="none">
                 updated
               </text>
               <text fg={theme.foreground.muted} attributes={TextAttributes.BOLD} wrapMode="none">
@@ -635,7 +635,7 @@ export function GitGraph() {
             <text fg={theme.status.warning.fg} attributes={TextAttributes.BOLD} wrapMode="none">
               {hasPrRows() ? "PULL REQUESTS" : "COMMITS"}
             </text>
-            <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+            <text fg={theme.foreground.muted} wrapMode="none">
               {`${rows().length}/${totalRows()}`}
             </text>
           </box>
@@ -658,11 +658,7 @@ export function GitGraph() {
             when={commitsOpen() && !graph.loading && graph()?.status !== "error" && rows().length > 0}
             fallback={
               <box flexGrow={1} justifyContent="center" alignItems="center" flexDirection="column" gap={1}>
-                <text
-                  fg={errorMessage() ? theme.status.error.fg : theme.foreground.muted}
-                  attributes={TextAttributes.DIM}
-                  wrapMode="word"
-                >
+                <text fg={errorMessage() ? theme.status.error.fg : theme.foreground.muted} wrapMode="word">
                   {graph.loading
                     ? "Loading git graph..."
                     : errorMessage()
@@ -736,7 +732,7 @@ export function GitGraph() {
                         </text>
                       </box>
                       <box width={DATE_WIDTH} minWidth={DATE_WIDTH} flexShrink={0} overflow="hidden">
-                        <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                        <text fg={theme.foreground.muted} wrapMode="none">
                           {truncate(row.relativeDate, DATE_WIDTH - 1)}
                         </text>
                       </box>
@@ -754,7 +750,7 @@ export function GitGraph() {
               when={selectedRow()}
               fallback={
                 <box flexGrow={1} alignItems="center" justifyContent="center">
-                  <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="word">
+                  <text fg={theme.foreground.muted} wrapMode="word">
                     Select a commit
                   </text>
                 </box>
@@ -783,7 +779,7 @@ export function GitGraph() {
                           <text fg={theme.status.warning.fg} wrapMode="none">
                             {currentGitHub()?.number ? `#${currentGitHub()!.number}` : row().hash}
                           </text>
-                          <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                          <text fg={theme.foreground.muted} wrapMode="none">
                             {currentGitHub()?.author ?? initials(row().author)}
                           </text>
                         </box>
@@ -845,7 +841,7 @@ export function GitGraph() {
                     </Show>
                     <Show when={selectedPrNumber() && github.loading}>
                       <box border={["bottom"]} borderColor={theme.border.subtle} paddingBottom={1}>
-                        <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="word">
+                        <text fg={theme.foreground.muted} wrapMode="word">
                           Loading GitHub PR metadata...
                         </text>
                       </box>
@@ -864,22 +860,22 @@ export function GitGraph() {
                       <text fg={theme.foreground.default} wrapMode="none">
                         {`Author  ${currentGitHub()?.author ?? row().author}`}
                       </text>
-                      <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                      <text fg={theme.foreground.muted} wrapMode="none">
                         {`Date    ${row().date} (${row().relativeDate})`}
                       </text>
                       <Show when={currentGitHub()}>
                         {(pr) => (
                           <>
-                            <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                            <text fg={theme.foreground.muted} wrapMode="none">
                               {`Branch  ${pr().headRefName} -> ${pr().baseRefName}`}
                             </text>
-                            <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                            <text fg={theme.foreground.muted} wrapMode="none">
                               {`State   ${pr().state}`}
                             </text>
                           </>
                         )}
                       </Show>
-                      <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                      <text fg={theme.foreground.muted} wrapMode="none">
                         {`Hash    ${row().fullHash}`}
                       </text>
                     </box>
@@ -901,7 +897,7 @@ export function GitGraph() {
                             : (currentDetails()?.body.length ?? 0)) > 0
                         }
                         fallback={
-                          <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="word">
+                          <text fg={theme.foreground.muted} wrapMode="word">
                             No extended commit body.
                           </text>
                         }
@@ -937,13 +933,13 @@ export function GitGraph() {
                       </box>
                       <For each={currentDetails()?.files.slice(0, 8) ?? []}>
                         {(file) => (
-                          <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                          <text fg={theme.foreground.muted} wrapMode="none">
                             {truncate(file, Math.max(30, dimensions().width - leftWidth() - 6))}
                           </text>
                         )}
                       </For>
                       <Show when={!currentDetails() && !details.loading}>
-                        <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="word">
+                        <text fg={theme.foreground.muted} wrapMode="word">
                           Stats unavailable.
                         </text>
                       </Show>

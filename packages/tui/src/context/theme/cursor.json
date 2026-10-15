@@ -46,38 +46,38 @@
   "theme": {
     "primary": {
       "dark": "darkCyan",
-      "light": "lightTeal"
+      "light": "#48727d"
     },
     "secondary": {
       "dark": "darkBlue",
-      "light": "lightBlue"
+      "light": "#30709f"
     },
     "accent": {
       "dark": "darkCyan",
-      "light": "lightTeal"
+      "light": "#48727d"
     },
     "error": {
-      "dark": "darkRed",
-      "light": "lightRed"
+      "dark": "#fd5f86",
+      "light": "#ca2652"
     },
     "warning": {
       "dark": "darkYellow",
-      "light": "lightOrange"
+      "light": "#b14b26"
     },
     "success": {
       "dark": "darkGreen",
-      "light": "lightGreen"
+      "light": "#007b58"
     },
     "info": {
       "dark": "darkBlue",
-      "light": "lightBlue"
+      "light": "#2f6f9e"
     },
     "text": {
       "dark": "darkFg",
       "light": "lightFg"
     },
     "textMuted": {
-      "dark": "darkMuted",
+      "dark": "#8c8c8c",
       "light": "lightMuted"
     },
     "background": {
@@ -98,7 +98,7 @@
     },
     "borderActive": {
       "dark": "darkCyan",
-      "light": "lightTeal"
+      "light": "#6e9aa4"
     },
     "borderSubtle": {
       "dark": "#0f0f0f",
@@ -158,7 +158,7 @@
     },
     "markdownHeading": {
       "dark": "darkPurple",
-      "light": "lightBlueDark"
+      "light": "#135b8b"
     },
     "markdownLink": {
       "dark": "darkTeal",
@@ -170,10 +170,10 @@
     },
     "markdownCode": {
       "dark": "darkPink",
-      "light": "lightGreen"
+      "light": "#158460"
     },
     "markdownBlockQuote": {
-      "dark": "darkMuted",
+      "dark": "#818080",
       "light": "lightMuted"
     },
     "markdownEmph": {
@@ -209,7 +209,7 @@
       "light": "lightFg"
     },
     "syntaxComment": {
-      "dark": "darkMuted",
+      "dark": "#979796",
       "light": "lightMuted"
     },
     "syntaxKeyword": {
@@ -218,7 +218,7 @@
     },
     "syntaxFunction": {
       "dark": "darkSyntaxOrange",
-      "light": "lightOrange"
+      "light": "#b14b25"
     },
     "syntaxVariable": {
       "dark": "darkFg",
@@ -226,11 +226,11 @@
     },
     "syntaxString": {
       "dark": "darkPink",
-      "light": "lightPurple"
+      "light": "#6d62a0"
     },
     "syntaxNumber": {
       "dark": "darkSyntaxYellow",
-      "light": "lightPink"
+      "light": "#b13e85"
     },
     "syntaxType": {
       "dark": "darkSyntaxOrange",

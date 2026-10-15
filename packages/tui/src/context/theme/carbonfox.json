@@ -76,7 +76,7 @@
       "light": "lfg1"
     },
     "textMuted": {
-      "dark": "fg3",
+      "dark": "#7e8691",
       "light": "lfg3"
     },
     "background": {
@@ -208,7 +208,7 @@
       "light": "lfg2"
     },
     "syntaxComment": {
-      "dark": "fg3",
+      "dark": "#808792",
       "light": "lfg3"
     },
     "syntaxKeyword": {

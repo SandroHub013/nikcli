@@ -100,7 +100,7 @@ export function DialogTour() {
         <box
           paddingLeft={2}
           paddingRight={2}
-          backgroundColor={theme.accent.fg}
+          backgroundColor={theme.badge.bg}
           onMouseUp={() => {
             if (index() >= total - 1) dialog.clear()
             else setIndex(index() + 1)

@@ -67,7 +67,7 @@ function Footer(props: { left?: string; right?: string }) {
   return (
     <box flexDirection="row" justifyContent="space-between" paddingTop={1}>
       <text fg={theme.foreground.muted}>{props.left ?? ""}</text>
-      <box paddingLeft={3} paddingRight={3} backgroundColor={theme.accent.fg} onMouseUp={() => dialog.clear()}>
+      <box paddingLeft={3} paddingRight={3} backgroundColor={theme.badge.bg} onMouseUp={() => dialog.clear()}>
         <text fg={theme.badge.fg}>{props.right ?? "Close"}</text>
       </box>
     </box>
@@ -601,6 +601,7 @@ export function DialogSupport() {
           ref={(r: TextareaRenderable) => {
             textarea = r
           }}
+          placeholderColor={theme.foreground.muted}
           placeholder={busy() ? "Support is responding — please wait..." : "Ask Support… paste a file path to attach"}
           textColor={theme.foreground.default}
           focusedTextColor={theme.foreground.default}

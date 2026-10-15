@@ -248,6 +248,7 @@ export function CommentInput(props: {
             focused={phase() === "text" && !submitting()}
             height={4}
             initialValue={props.initialValue}
+            placeholderColor={theme.foreground.muted}
             placeholder="Write feedback for this line"
             textColor={theme.foreground.default}
             focusedTextColor={theme.foreground.default}

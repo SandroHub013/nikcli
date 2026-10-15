@@ -478,14 +478,14 @@ export function SessionTree() {
           </box>
           <box flexDirection="row" gap={0} flexShrink={0} alignItems="center" paddingLeft={1}>
             <Show when={filterOpen()}>
-              <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+              <text fg={theme.foreground.muted} wrapMode="none">
                 {`return done · `}
               </text>
             </Show>
             <text fg={theme.foreground.default} attributes={TextAttributes.BOLD} wrapMode="none">
               esc
             </text>
-            <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+            <text fg={theme.foreground.muted} wrapMode="none">
               {filterOpen() ? " clear" : " clear search"}
             </text>
           </box>
@@ -508,16 +508,16 @@ export function SessionTree() {
             alignItems="center"
             backgroundColor={theme.surface.base}
           >
-            <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="word">
+            <text fg={theme.foreground.muted} wrapMode="word">
               No sessions
             </text>
             <Show when={filterText().length > 0}>
-              <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="word">
+              <text fg={theme.foreground.muted} wrapMode="word">
                 {`No match for /${filterText()}`}
               </text>
             </Show>
             <Show when={filterText().length > 0}>
-              <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="word">
+              <text fg={theme.foreground.muted} wrapMode="word">
                 esc clears search
               </text>
             </Show>
@@ -596,12 +596,12 @@ export function SessionTree() {
                         gap={2}
                       >
                         <box flexDirection="row" gap={1} flexShrink={1} minWidth={0} alignItems="center">
-                          <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                          <text fg={theme.foreground.muted} wrapMode="none">
                             {treeLinePrefix(row)}
                           </text>
                           <text
                             fg={row.hasChildren ? theme.accent.fg : theme.foreground.muted}
-                            attributes={row.hasChildren ? TextAttributes.BOLD : TextAttributes.DIM}
+                            attributes={row.hasChildren ? TextAttributes.BOLD : undefined}
                             wrapMode="none"
                             minWidth={2}
                           >
@@ -627,12 +627,7 @@ export function SessionTree() {
                         >
                           <Show when={row.session.summary}>{(summary) => <TreeChangeSummary parts={summary()} />}</Show>
                           <Show when={!row.session.summary}>
-                            <text
-                              fg={theme.foreground.muted}
-                              attributes={TextAttributes.DIM}
-                              minWidth={14}
-                              wrapMode="none"
-                            >
+                            <text fg={theme.foreground.muted} minWidth={14} wrapMode="none">
                               —
                             </text>
                           </Show>
@@ -656,15 +651,10 @@ export function SessionTree() {
                               )
                             })()}
                           </box>
-                          <text
-                            fg={theme.foreground.muted}
-                            attributes={TextAttributes.DIM}
-                            minWidth={10}
-                            wrapMode="none"
-                          >
+                          <text fg={theme.foreground.muted} minWidth={10} wrapMode="none">
                             {formatTime(row.session.time.updated)}
                           </text>
-                          <text fg={theme.border.subtle} attributes={TextAttributes.DIM} minWidth={8} wrapMode="none">
+                          <text fg={theme.border.subtle} minWidth={8} wrapMode="none">
                             {shortID(row.session.id)}
                           </text>
                         </box>
@@ -679,10 +669,10 @@ export function SessionTree() {
                         gap={2}
                       >
                         <box flexDirection="row" gap={1} flexShrink={1} minWidth={0} alignItems="center">
-                          <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                          <text fg={theme.foreground.muted} wrapMode="none">
                             {treeLinePrefix(row)}
                           </text>
-                          <text fg={theme.status.info.fg} attributes={TextAttributes.DIM} wrapMode="none" minWidth={2}>
+                          <text fg={theme.status.info.fg} wrapMode="none" minWidth={2}>
                             ↳
                           </text>
                           <text
@@ -703,34 +693,18 @@ export function SessionTree() {
                           alignItems="center"
                           paddingLeft={1}
                         >
-                          <text
-                            fg={theme.foreground.muted}
-                            attributes={TextAttributes.DIM}
-                            minWidth={14}
-                            wrapMode="none"
-                          >
+                          <text fg={theme.foreground.muted} minWidth={14} wrapMode="none">
                             —
                           </text>
                           <box flexGrow={1} minWidth={20} minHeight={0} flexShrink={1} alignItems="center">
-                            <text
-                              fg={theme.foreground.muted}
-                              attributes={TextAttributes.DIM}
-                              wrapMode="none"
-                              minWidth={0}
-                              flexGrow={1}
-                            >
+                            <text fg={theme.foreground.muted} wrapMode="none" minWidth={0} flexGrow={1}>
                               {row.preview.length > maxMsg() ? `${row.preview.slice(0, maxMsg() - 1)}…` : row.preview}
                             </text>
                           </box>
-                          <text
-                            fg={theme.foreground.muted}
-                            attributes={TextAttributes.DIM}
-                            minWidth={10}
-                            wrapMode="none"
-                          >
+                          <text fg={theme.foreground.muted} minWidth={10} wrapMode="none">
                             {formatTime(row.time)}
                           </text>
-                          <text fg={theme.border.subtle} attributes={TextAttributes.DIM} minWidth={8} wrapMode="none">
+                          <text fg={theme.border.subtle} minWidth={8} wrapMode="none">
                             {shortID(row.messageId)}
                           </text>
                         </box>
@@ -763,13 +737,13 @@ function TreeChangeSummary(props: { parts: { files: number; additions: number; d
   const s = props.parts
   return (
     <box flexDirection="row" gap={0} minWidth={14} flexShrink={0} alignItems="center">
-      <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+      <text fg={theme.foreground.muted} wrapMode="none">
         {`${s.files}f `}
       </text>
       <text fg={theme.diff.added} wrapMode="none">
         {`+${s.additions}`}
       </text>
-      <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+      <text fg={theme.foreground.muted} wrapMode="none">
         /
       </text>
       <text fg={theme.diff.removed} wrapMode="none">
