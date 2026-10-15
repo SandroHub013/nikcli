@@ -2,6 +2,7 @@ import { Plugin } from "@ragu/plugin/v2/tui"
 import { createMemo, Show } from "solid-js"
 import { Global } from "@ragu/util/global"
 import { VERSION } from "@ragu/util/version"
+import { shortVersion } from "@tui/util/product-name"
 import { useKV } from "@tui/context/kv"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
@@ -47,7 +48,6 @@ function View() {
                 ✕
               </text>
             </box>
-            <text fg={theme.foreground.muted}>Ragu includes free models so you can start immediately.</text>
             <text fg={theme.foreground.muted}>
               Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
             </text>
@@ -63,11 +63,7 @@ function View() {
         <span style={{ fg: theme.foreground.default }}>{path().name}</span>
       </text>
       <text fg={theme.foreground.muted}>
-        <span style={{ fg: theme.status.success.fg }}>•</span> <b>RAGU</b>
-        <span style={{ fg: theme.foreground.default }}>
-          <b>CODE</b>
-        </span>{" "}
-        <span>{VERSION}</span>
+        <span style={{ fg: theme.status.success.fg }}>•</span> <b>Ragu Code</b> <span>{shortVersion(VERSION)}</span>
       </text>
     </box>
   )
