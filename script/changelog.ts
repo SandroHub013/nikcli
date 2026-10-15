@@ -75,7 +75,6 @@ export async function getCommits(from: string, to: string): Promise<Commit[]> {
       else if (file.startsWith("packages/app/")) areas.add("app")
       else if (file.startsWith("packages/sdk/")) areas.add("sdk")
       else if (file.startsWith("packages/plugin/")) areas.add("plugin")
-      else if (file.startsWith("packages/extensions/")) areas.add("extensions/zed")
       else if (file.startsWith("sdks/vscode/")) areas.add("extensions/vscode")
       else if (file.startsWith("github/")) areas.add("github")
     }
@@ -123,7 +122,6 @@ const sections = {
   mobile: "Mobile",
   sdk: "SDK",
   plugin: "SDK",
-  "extensions/zed": "Extensions",
   "extensions/vscode": "Extensions",
   github: "Extensions",
 } as const
@@ -138,7 +136,6 @@ function getSection(areas: Set<string>): string {
     "mobile",
     "sdk",
     "plugin",
-    "extensions/zed",
     "extensions/vscode",
     "github",
   ]

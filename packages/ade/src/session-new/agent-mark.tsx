@@ -34,7 +34,7 @@
  *   prime        PrimeIntellect-ai/prime-agent, `assets/brand/prime-butterfly.svg`
  *   pi           `pi.dev/logo-auto.svg`
  *   ohmypi       can1357/oh-my-pi, `assets/icon.svg`
- *   ragu       `packages/ui/src/assets/brand/ragu-logo-dark.svg`
+ *   ragu         `packages/ade/src/surface/ragu-pot-mark.tsx`
  *   grok         xAI's Grok mark, from `@lobehub/icons-static-svg`, kept in
  *                `vendor-paths.ts`. The product's mark, not the company's
  *   hermes       Nous Research's profile portrait, from `@lobehub/icons-static-svg`,
@@ -72,6 +72,7 @@
  */
 
 import { For, type JSX } from "solid-js"
+import { RaguPotMark } from "../surface/ragu-pot-mark"
 import { initialOf } from "./marks"
 import {
   ANTIGRAVITY_ARCH,
@@ -102,9 +103,9 @@ export interface AgentMarkProps {
   /**
    * Rendered size in px.
    *
-   * Most marks are square and take it as both dimensions. ragu's and
-   * OpenCode's are 4:5 and take it as their height; OhMyPi's is 4:3 and takes
-   * it as its width, so a wide mark cannot push a row apart.
+   * Most marks are square and take it as both dimensions. OpenCode's is 4:5
+   * and takes it as its height; OhMyPi's is 4:3 and takes it as its width,
+   * so a wide mark cannot push a row apart.
    */
   size?: number
   /** Whether to render authentic full brand colors. Defaults to true. */
@@ -353,23 +354,8 @@ const MARKS: Record<string, (size: () => number, colored: () => boolean) => JSX.
     )
   },
 
-  /* ragu block N */
-  ragu: (size, colored) => {
-    const height = size()
-    return (
-      <svg width={(height * 240) / 300} height={height} viewBox="0 0 240 300" aria-hidden="true" data-mark="ragu">
-        <path
-          d="M0 0H60V60H0ZM60 0H120V60H60ZM120 0H180V60H120ZM0 60H60V120H0ZM180 60H240V120H180ZM0 120H60V180H0ZM180 120H240V180H180ZM0 180H60V240H0ZM180 180H240V240H180ZM0 240H60V300H0ZM180 240H240V300H180Z"
-          fill={colored() ? "light-dark(#211E1E, #F1ECEC)" : "currentColor"}
-        />
-        <path
-          d="M60 120H120V180H60ZM120 120H180V180H120ZM60 180H120V240H60ZM120 180H180V240H120ZM60 240H120V300H60ZM120 240H180V300H120Z"
-          fill={colored() ? "light-dark(#CFCECD, #4B4646)" : "currentColor"}
-          opacity={colored() ? "1" : "0.3"}
-        />
-      </svg>
-    )
-  },
+  /* ragu pixel pot */
+  ragu: (size) => <RaguPotMark size={size()} />,
 
   /*
    * xAI's Grok mark, in ink.

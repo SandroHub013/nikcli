@@ -89,7 +89,6 @@ Dependency versions and older module inventories below are historical notes from
 | `packages/function`                                            | `@ragu/function`            | Serverless function (Hono + Cloudflare Workers)                                                               |
 | `packages/script`                                              | `@ragu/script`              | Cross-package scripting helpers                                                                               |
 | `packages/http-recorder`                                       | `@ragu/http-recorder`       | HTTP recording test fixture                                                                                   |
-| `packages/extensions/zed`                                      | `@ragu/zed`                 | Zed editor integration                                                                                        |
 | `packages/containers/{base,bun-node,publish,rust,tauri-linux}` | `@ragu/containers-*`        | Container build assets                                                                                        |
 | `packages/console/{app,core,function,mail,resource}`           | `@ragu/console-*`           | Console sub-monorepo (SolidStart + Drizzle + Stripe + jsx-email)                                              |
 | `github/`                                                      | `github`                         | GitHub Action composite action                                                                                |
