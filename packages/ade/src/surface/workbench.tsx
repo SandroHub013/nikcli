@@ -249,6 +249,7 @@ import {
   ADE_VIEW_LABELS,
   VISIBLE_VIEWS,
   isViewVisible,
+  gatewayControllerOn,
   type AdeView,
   type Workbench as WorkbenchState,
 } from "./state"
@@ -6776,7 +6777,7 @@ export function Workbench() {
     // The bots' gateways: a message from a chat becomes a turn of its bot (G4).
     // Rust reads no chat until this listens; the cleanup is registered before
     // the await, so a reloaded workbench never answers a chat twice.
-    if (isTauriDesktop()) {
+    if (gatewayControllerOn(isTauriDesktop())) {
       let gateway: { stop: () => void } | undefined
       let gatewayGone = false
       onCleanup(() => {
