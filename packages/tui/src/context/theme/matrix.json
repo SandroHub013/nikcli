@@ -192,7 +192,7 @@
     },
     "syntaxKeyword": {
       "dark": "rainPurple",
-      "light": "#973dcb"
+      "light": "#973ccb"
     },
     "syntaxFunction": {
       "dark": "alertBlue",
@@ -208,15 +208,15 @@
     },
     "syntaxNumber": {
       "dark": "rainOrange",
-      "light": "#975c00"
+      "light": "#965c00"
     },
     "syntaxType": {
       "dark": "alertYellow",
-      "light": "#637000"
+      "light": "#636f00"
     },
     "syntaxOperator": {
       "dark": "rainTeal",
-      "light": "#007768"
+      "light": "#007668"
     },
     "syntaxPunctuation": {
       "dark": "rainGreenHi",

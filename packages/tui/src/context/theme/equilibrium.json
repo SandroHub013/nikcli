@@ -196,11 +196,11 @@
       "light": "#696871"
     },
     "syntaxKeyword": {
-      "dark": "#b264ff",
+      "dark": "#b468ff",
       "light": "#913add"
     },
     "syntaxFunction": {
-      "dark": "#4188fc",
+      "dark": "#438bff",
       "light": "#1d64d6"
     },
     "syntaxVariable": {

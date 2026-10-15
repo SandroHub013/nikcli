@@ -189,40 +189,40 @@
       "light": "fg"
     },
     "syntaxComment": {
-      "dark": "#8b8c83",
-      "light": "#6b6b63"
+      "dark": "#8f9187",
+      "light": "#696861"
     },
     "syntaxKeyword": {
-      "dark": "#a07fb0",
-      "light": "#7f5e8e"
+      "dark": "#a583b5",
+      "light": "#7d5c8c"
     },
     "syntaxFunction": {
-      "dark": "#5e91b0",
-      "light": "#3e6f8e"
+      "dark": "#6296b5",
+      "light": "#3d6d8c"
     },
     "syntaxVariable": {
       "dark": "#f4f4f0",
       "light": "fg"
     },
     "syntaxString": {
-      "dark": "green",
-      "light": "#487626"
+      "dark": "#6c9d4c",
+      "light": "#467424"
     },
     "syntaxNumber": {
-      "dark": "#ca763e",
-      "light": "#a55417"
+      "dark": "#cf7a42",
+      "light": "#a35215"
     },
     "syntaxType": {
-      "dark": "cyan",
-      "light": "#227768"
+      "dark": "#4d9d8c",
+      "light": "#1f7466"
     },
     "syntaxOperator": {
-      "dark": "#8b8c83",
-      "light": "#6b6b63"
+      "dark": "#8f9187",
+      "light": "#696861"
     },
     "syntaxPunctuation": {
-      "dark": "#8b8c83",
-      "light": "#6b6b63"
+      "dark": "#8f9187",
+      "light": "#696861"
     }
   }
 }

@@ -201,7 +201,7 @@
       "light": "#49565e"
     },
     "syntaxComment": {
-      "dark": "#949f92",
+      "dark": "#9ca79a",
       "light": "#5d6658"
     },
     "syntaxKeyword": {
@@ -213,7 +213,7 @@
       "light": "#5c6900"
     },
     "syntaxVariable": {
-      "dark": "darkRed",
+      "dark": "#ef8687",
       "light": "#c31b26"
     },
     "syntaxString": {
