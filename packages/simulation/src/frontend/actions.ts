@@ -113,6 +113,18 @@ export async function screenshot(harness: Harness, name?: string) {
   await mkdir(directory, { recursive: true })
   const path = join(directory, `${filename}.png`)
   await Bun.write(path, image.data)
+  // Opt-in: the cells behind the PNG, so a review can rebuild the screen as
+  // HTML and measure the real fg/bg pairs instead of sampling pixels.
+  if (process.env.RAGU_DRIVE_SPANS === "1") {
+    const buffer = harness.renderer.currentRenderBuffer
+    const lines = buffer.getSpanLines().map((line) =>
+      line.spans.map((span) => [span.text, span.fg.toInts(), span.bg.toInts(), span.attributes, span.width]),
+    )
+    await Bun.write(
+      join(directory, `${filename}.spans.json`),
+      JSON.stringify({ cols: buffer.width, rows: buffer.height, lines }),
+    )
+  }
   return path
 }
 
