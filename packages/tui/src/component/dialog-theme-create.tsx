@@ -7,7 +7,7 @@ import { createMemo, For, Show, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Global } from "@ragu/util/global"
 import { Filesystem } from "@ragu/util/filesystem"
-import { reservedThemeNames, useTheme } from "../context/theme"
+import { reservedThemeNames, selectedForeground, useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { DOT_FOLDERS, dotFolder, preferNew } from "@ragu/util/app-folder"
 
@@ -576,7 +576,7 @@ export function DialogThemeCreate() {
             <box
               paddingLeft={1}
               paddingRight={1}
-              backgroundColor={store.variant === variant ? theme.accent.fg : theme.surface.offset}
+              backgroundColor={store.variant === variant ? theme.badge.bg : theme.surface.offset}
               onMouseUp={() => {
                 setStore("variant", variant)
                 resetOverwriteArm()
@@ -595,7 +595,7 @@ export function DialogThemeCreate() {
             <box
               paddingLeft={1}
               paddingRight={1}
-              backgroundColor={store.scope === scope ? theme.accent.fg : theme.surface.offset}
+              backgroundColor={store.scope === scope ? theme.badge.bg : theme.surface.offset}
               onMouseUp={() => {
                 setStore("scope", scope)
                 resetOverwriteArm()
@@ -728,12 +728,20 @@ export function DialogThemeCreate() {
               store.name && !store.saving
                 ? store.overwriteArmed
                   ? theme.status.warning.fg
-                  : theme.accent.fg
+                  : theme.badge.bg
                 : theme.surface.offset
             }
             onMouseUp={() => store.name && !store.saving && handleSave()}
           >
-            <text fg={store.name && !store.saving ? theme.badge.fg : theme.foreground.muted}>
+            <text
+              fg={
+                store.name && !store.saving
+                  ? store.overwriteArmed
+                    ? selectedForeground(theme, theme.status.warning.fg)
+                    : theme.badge.fg
+                  : theme.foreground.muted
+              }
+            >
               {store.saving ? "Saving..." : store.overwriteArmed ? "Overwrite Theme" : "Save Theme"}
             </text>
           </box>

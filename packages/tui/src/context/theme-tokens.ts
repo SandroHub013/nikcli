@@ -1,4 +1,5 @@
 import { RGBA } from "@opentui/core"
+import { blackOrWhite, contrastRatio, ensureContrast, over } from "./contrast"
 
 export type StatusPair = {
   fg: RGBA
@@ -149,8 +150,29 @@ export function luminance(color: RGBA): number {
   return 0.299 * color.r + 0.587 * color.g + 0.114 * color.b
 }
 
+/**
+ * Black or white text for a filled `bg`, by the WCAG ratio. Not by `luminance` above: BT.601 luma calls a saturated
+ * red or blue dark and puts white on it, where black reads better (white on #ff0000 is 4:1, black 5.3:1).
+ */
 export function contrastFg(bg: RGBA): RGBA {
-  return luminance(bg) > 0.5 ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255)
+  return blackOrWhite(bg)
+}
+
+/** The floors of the triple-A review for the colours the engine derives. */
+const SUBTLE_MIN = 4.5
+const BADGE_MIN = 7
+
+/**
+ * `muted` faded toward the background, the colour of what a tool hides («▸ N more lines») and of its markers. Faded
+ * less than the 40 % it starts from when that would drop it under 4.5:1 on the background, and moved in lightness
+ * when even `muted` is under it.
+ */
+function subtleOf(muted: RGBA, ground: RGBA): RGBA {
+  for (let step = 8; step >= 1; step--) {
+    const faded = tint(muted, ground, step * 0.05)
+    if (contrastRatio(faded, ground) >= SUBTLE_MIN) return faded
+  }
+  return ensureContrast(muted, [ground], SUBTLE_MIN)
 }
 
 function statusPair(base: RGBA, hue: RGBA, alpha: number): StatusPair {
@@ -169,7 +191,15 @@ export function deriveSemanticTokens(
   },
 ): SemanticTokens {
   const fill = options.mode === "dark" ? 0.28 : 0.16
-  const badgeBg = colors.primary
+  // A transparent background shows the terminal's: assume the one the mode says.
+  const ground = over(
+    colors.background,
+    options.mode === "dark" ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255),
+  )
+  // The selected row: the theme's text for it, or black or white; when neither reaches 7:1 on `primary`, the fill
+  // moves in lightness rather than the text giving up.
+  const badgeFg = options.hasSelectedListItemText ? colors.selectedListItemText : contrastFg(colors.primary)
+  const badgeBg = ensureContrast(colors.primary, [badgeFg], BADGE_MIN)
   return {
     surface: {
       base: colors.background,
@@ -180,7 +210,7 @@ export function deriveSemanticTokens(
     foreground: {
       default: colors.text,
       muted: colors.textMuted,
-      subtle: tint(colors.textMuted, colors.background, 0.4),
+      subtle: subtleOf(colors.textMuted, ground),
     },
     accent: {
       fg: colors.primary,
@@ -202,7 +232,7 @@ export function deriveSemanticTokens(
       focus: tint(colors.primary, colors.text, 0.35),
     },
     badge: {
-      fg: options.hasSelectedListItemText ? colors.selectedListItemText : contrastFg(badgeBg),
+      fg: badgeFg,
       bg: badgeBg,
     },
     syntax: {

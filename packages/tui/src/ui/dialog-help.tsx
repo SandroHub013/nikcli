@@ -175,7 +175,7 @@ export function DialogHelp() {
       </box>
 
       <box flexDirection="row" justifyContent="flex-end" paddingTop={1}>
-        <box paddingLeft={3} paddingRight={3} backgroundColor={theme.accent.fg} onMouseUp={() => dialog.clear()}>
+        <box paddingLeft={3} paddingRight={3} backgroundColor={theme.badge.bg} onMouseUp={() => dialog.clear()}>
           <text fg={theme.badge.fg}>OK</text>
         </box>
       </box>

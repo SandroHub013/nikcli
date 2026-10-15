@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
 import { BUILT_IN_THEME_IDS, loadBuiltInTheme } from "@tui/context/theme-catalog"
-import { createStandaloneTheme, type Theme } from "@tui/context/theme"
+import { contrastFg, createStandaloneTheme, type Theme } from "@tui/context/theme"
+import { deriveSemanticTokens, type TokenSource } from "@tui/context/theme-tokens"
 
 /**
  * Every built-in theme, in both modes, measured on the colour pairs the screens draw.
@@ -90,7 +91,11 @@ function pairs(t: Theme, reasoning: RGBA): Pair[] {
 type Measured = { theme: string; mode: "dark" | "light"; id: string; where: string; ratio: number; min: number }
 
 async function measure(id: string, mode: "dark" | "light"): Promise<Measured[]> {
-  const standalone = createStandaloneTheme({ document: await loadBuiltInTheme(id), mode })
+  return measureDocument(id, await loadBuiltInTheme(id), mode)
+}
+
+function measureDocument(id: string, document: unknown, mode: "dark" | "light"): Measured[] {
+  const standalone = createStandaloneTheme({ document, mode })
   const t = standalone.theme
   const reasoning = standalone.subtleSyntax().getStyle("default")?.fg ?? t.foreground.default
   const terminal = TERMINAL[mode]
@@ -125,4 +130,45 @@ describe("theme contrast", () => {
       expect(known.filter((k) => !failing.some((m) => key(m) === k))).toEqual([])
     })
   }
+})
+
+describe("the colours the engine derives", () => {
+  const rgb = (hex: string) => RGBA.fromHex(hex)
+  const source = (overrides: Partial<TokenSource>): TokenSource => {
+    // Every colour the test does not name is mid grey: what matters is the one it does.
+    const grey = rgb("#808080")
+    return new Proxy({} as TokenSource, {
+      get: (_target, prop: string) => (prop in overrides ? overrides[prop as keyof TokenSource] : grey),
+    })
+  }
+  const derive = (overrides: Partial<TokenSource>, hasSelectedListItemText = false) =>
+    deriveSemanticTokens(source(overrides), { hasSelectedListItemText, thinkingOpacity: 0.6, mode: "dark" })
+
+  test("text on a fill is black or white by the WCAG ratio: black on pure red, where BT.601 chose white", () => {
+    expect(contrastFg(rgb("#ff0000"))).toEqual(rgb("#000000"))
+    expect(contrastFg(rgb("#0000ff"))).toEqual(rgb("#ffffff"))
+    for (const hex of ["#ff0000", "#00a000", "#3a96dd", "#c19c00", "#808080", "#f39a6b"])
+      expect(ratio(contrastFg(rgb(hex)), rgb(hex))).toBeGreaterThanOrEqual(4.5)
+  })
+
+  test("subtle is muted faded toward the background, but never under 4.5:1 on it", () => {
+    const background = rgb("#121212")
+    for (const muted of ["#9a9a9a", "#808080", "#5a5a5a", "#2a2a2a"]) {
+      const subtle = derive({ background, textMuted: rgb(muted) }).foreground.subtle
+      expect(ratio(subtle, background)).toBeGreaterThanOrEqual(4.5)
+    }
+    // A muted with room to spare keeps the old 40 % fade.
+    const roomy = derive({ background, textMuted: rgb("#e0e0e0") }).foreground.subtle
+    expect(ratio(roomy, background)).toBeLessThan(ratio(rgb("#e0e0e0"), background))
+  })
+
+  test("the selected row reaches 7:1: when no text does on primary, the fill moves", () => {
+    for (const primary of ["#3a96dd", "#808080", "#e45649", "#6fa3ff"]) {
+      const badge = derive({ primary: rgb(primary) }).badge
+      expect(ratio(badge.fg, badge.bg)).toBeGreaterThanOrEqual(7)
+    }
+    const declared = derive({ primary: rgb("#3a96dd"), selectedListItemText: rgb("#ffffff") }, true).badge
+    expect(declared.fg).toEqual(rgb("#ffffff"))
+    expect(ratio(declared.fg, declared.bg)).toBeGreaterThanOrEqual(7)
+  })
 })

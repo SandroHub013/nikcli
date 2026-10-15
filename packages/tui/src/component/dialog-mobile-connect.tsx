@@ -337,7 +337,7 @@ function RemoteServerPanel(props: { onBack: () => void }) {
               <box
                 paddingLeft={1}
                 paddingRight={1}
-                backgroundColor={form.busy ? theme.surface.offset : theme.accent.fg}
+                backgroundColor={form.busy ? theme.surface.offset : theme.badge.bg}
                 onMouseUp={() => !form.busy && void submit()}
               >
                 <text fg={form.busy ? theme.foreground.muted : theme.badge.fg}>
