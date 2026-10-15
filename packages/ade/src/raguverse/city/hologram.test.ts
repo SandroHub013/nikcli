@@ -176,7 +176,7 @@ describe("the hologram on the classic renderer", () => {
 
   test("the voxels are shaders, and the cone and the halo are plain additive materials that write no depth", () => {
     const materials = materialsOf("shader")
-    expect(materials.filter((m) => m.isShaderMaterial)).toHaveLength(2)
+    expect(materials.filter((m) => m.isShaderMaterial)).toHaveLength(COLOURS.length)
     const plain = materials.filter((m) => m.blending === AdditiveBlending && !m.isShaderMaterial)
     expect(plain).toHaveLength(2)
     for (const m of plain) expect([m.transparent, m.depthWrite]).toEqual([true, false])
@@ -208,9 +208,9 @@ describe("the hologram on the classic renderer", () => {
       })
       return seen
     }
-    expect(times()).toEqual([0, 0])
+    expect(times()).toEqual(COLOURS.map(() => 0))
     holo.update(12.5, new PerspectiveCamera())
-    expect(times()).toEqual([12.5, 12.5])
+    expect(times()).toEqual(COLOURS.map(() => 12.5))
   })
 
   test("the squares are the same whatever dresses them: the geometry is the logo's", () => {
