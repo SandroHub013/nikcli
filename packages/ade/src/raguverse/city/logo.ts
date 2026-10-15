@@ -5,9 +5,11 @@
  * `ragu-logo-dark.svg` next to this file is a byte-for-byte copy of
  * `packages/ui/src/assets/brand/ragu-logo-dark.svg` (a test holds the
  * two to the same hash, so a change to the brand's file that is not copied here
- * fails). Its paths are made only of axis-aligned squares on a 60-unit grid; this
- * reads each subpath as one rectangle and refuses a path that is anything else,
- * so a logo that stops being squares cannot be quietly approximated.
+ * fails). It is the Ragu Code pot, written by `make-ragu.py` next to the brand's
+ * file: one path per colour, made only of 15-unit squares, one per pixel of the
+ * pot's 16 px grid. This reads each subpath as one rectangle and refuses a path
+ * that is anything else, so a logo that stops being squares cannot be quietly
+ * approximated.
  */
 
 import logoSvg from "./ragu-logo-dark.svg" with { type: "text" }

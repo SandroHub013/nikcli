@@ -354,9 +354,8 @@ export function createHologram(logo: Logo, kind: HologramKind = "tsl", options: 
   spun.position.y = HOLOGRAM_HEIGHT
   spun.add(
     voxelMeshes(logo, (color) => {
-      const bright = color.toUpperCase() === "#4B4646" ? 0.55 : 1
-      if (kind === "tsl") return hologramMaterial(color, bright)
-      const shader = hologramShaderMaterial(color, bright)
+      if (kind === "tsl") return hologramMaterial(color, 1)
+      const shader = hologramShaderMaterial(color, 1)
       shaders.push(shader)
       return shader
     }),

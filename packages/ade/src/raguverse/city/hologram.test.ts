@@ -23,6 +23,8 @@ import {
 import { LOGO_SCALE, parseLogo, voxelRect, type LogoRect } from "./logo"
 
 const logo = parseLogo()
+/** One instanced mesh per colour of the file, one instance per square of that colour. */
+const COLOURS = [...new Set(logo.rects.map((r) => r.color))]
 const order = (a: LogoRect, b: LogoRect) => a.color.localeCompare(b.color) || a.y - b.y || a.x - b.x
 
 /** The squares an instanced mesh draws, read back from its matrices, in SVG units. */
@@ -51,14 +53,16 @@ const meshesOf = (root: { traverse(fn: (o: unknown) => void): void }) => {
 describe("the hologram's geometry is the logo's paths", () => {
   test("the instances are the file's squares one for one: position, size and colour, tolerance 0", () => {
     const meshes = meshesOf(voxelMeshes(logo, (color) => new MeshBasicMaterial({ color })))
-    expect(meshes.map((m) => m.count).sort()).toEqual([11, 6])
+    expect(meshes.map((m) => m.count).sort((a, b) => a - b)).toEqual(
+      COLOURS.map((c) => logo.rects.filter((r) => r.color === c).length).sort((a, b) => a - b),
+    )
     const drawn = meshes.flatMap(rectsOf).sort(order)
     expect(drawn).toEqual([...logo.rects].sort(order))
   })
 
   test("the hologram in the square draws the same squares, dressed in the hologram material", () => {
     const meshes = meshesOf(createHologram(logo).group)
-    expect(meshes).toHaveLength(2)
+    expect(meshes).toHaveLength(COLOURS.length)
     expect(meshes.flatMap(rectsOf).sort(order)).toEqual([...logo.rects].sort(order))
     for (const mesh of meshes) expect((mesh.material as unknown as { isNodeMaterial?: boolean }).isNodeMaterial).toBe(true)
   })
@@ -77,7 +81,7 @@ describe("?check=logo: the plain logo, flat and front-on", () => {
   test("every voxel is a flat basic material in exactly the colour of its path", () => {
     const { scene } = logoCheck(logo)
     const meshes = meshesOf(scene)
-    expect(meshes).toHaveLength(2)
+    expect(meshes).toHaveLength(COLOURS.length)
     for (const mesh of meshes) {
       const material = mesh.material as MeshBasicMaterial
       expect((material as unknown as { isNodeMaterial?: boolean }).isNodeMaterial).toBeFalsy()
@@ -97,16 +101,16 @@ describe("?check=logo: the plain logo, flat and front-on", () => {
       found.push(kind)
     })
     expect(found.filter((k) => k !== "Group" && k !== "voxels")).toEqual([])
-    expect(found.filter((k) => k === "voxels")).toHaveLength(2)
+    expect(found.filter((k) => k === "voxels")).toHaveLength(COLOURS.length)
   })
 
   test("the picture is four pixels per SVG unit, and the camera frames the logo to the pixel", () => {
     const { camera, width, height } = logoCheck(logo)
     expect(CHECK_PIXELS_PER_UNIT).toBe(4)
-    expect([width, height]).toEqual([960, 1200])
+    expect([width, height]).toEqual([960, 960])
     expect(camera).toBeInstanceOf(OrthographicCamera)
     expect((camera.right - camera.left) * (1 / LOGO_SCALE)).toBe(240)
-    expect((camera.top - camera.bottom) * (1 / LOGO_SCALE)).toBe(300)
+    expect((camera.top - camera.bottom) * (1 / LOGO_SCALE)).toBe(240)
     // Front-on: straight down the z axis, not turned, and the logo is not rotated.
     expect([camera.position.x, camera.position.y]).toEqual([0, 0])
     const looks = camera.getWorldDirection(new Vector3())
@@ -188,7 +192,7 @@ describe("the hologram on the classic renderer", () => {
   })
 
   test("it draws instanced boxes, and the colour goes through the output colour space", () => {
-    const { vertexShader, fragmentShader } = hologramShaderMaterial("#4B4646", 0.55)
+    const { vertexShader, fragmentShader } = hologramShaderMaterial("#120D0B", 1)
     expect(vertexShader).toContain("#ifdef USE_INSTANCING")
     expect(vertexShader).toContain("modelMatrix * instanceMatrix")
     expect(fragmentShader).toContain("#include <colorspace_fragment>")

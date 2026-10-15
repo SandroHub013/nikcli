@@ -5,7 +5,7 @@
  * `nikverse` scheme does, starts a headless Edge or Chrome of its own (a temporary profile, killed at
  * the end: never ADE), and drives it over CDP:
  *
- *   1. `?check=logo`: the logo flat and front-on at 960×1200, compared with the brand's SVG drawn by
+ *   1. `?check=logo`: the logo flat and front-on at four pixels per SVG unit, compared with the brand's SVG drawn by
  *      the same browser at the same size. Passes at ≥ 99.5 % of pixels within ΔE 3 and a silhouette
  *      IoU ≥ 0.995 (the plan's thresholds).
  *   2. The city, fed a picture the way ADE feeds it (a MessageChannel and a snapshot): it must start,
@@ -26,9 +26,13 @@ import { existsSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { bc1Ktx2, bc5Ktx2 } from "../src/raguverse/city/fixtures/make-ktx2"
+import { CHECK_PIXELS_PER_UNIT } from "../src/raguverse/city/hologram"
+import { parseLogo } from "../src/raguverse/city/logo"
 import { actAsAde, arg, startHarness } from "./raguverse-harness"
 
 const root = join(import.meta.dir, "..")
+/** The check picture's size: the logo's box at four pixels per SVG unit (960×960 for the pot). */
+const LOGO_BOX = (({ width, height }) => ({ width: width * CHECK_PIXELS_PER_UNIT, height: height * CHECK_PIXELS_PER_UNIT }))(parseLogo())
 const out = arg("--out") ?? join(tmpdir(), "raguverse-render-check")
 const LEVELS_DIR = join(root, "src-tauri", "nikverse-assets", "levels")
 const NONCE = "0123456789abcdef".repeat(3)
@@ -49,7 +53,7 @@ const { base, page, browserLine, cpuByProcess, problems, evaluate, open, until, 
     if (url.pathname === "/fixtures/bc5.ktx2") return new Response(bc5Ktx2(8, 8), { headers: { "content-type": "image/ktx2", "cache-control": "no-store", ...policy } })
     if (url.pathname === "/reference.html")
       return new Response(
-        '<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:transparent}img{display:block;width:960px;height:1200px}</style><img id="logo" src="/logo.svg">',
+        `<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:transparent}img{display:block;width:${LOGO_BOX.width}px;height:${LOGO_BOX.height}px}</style><img id="logo" src="/logo.svg">`,
         { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", ...policy } },
       )
     return undefined
@@ -106,17 +110,17 @@ async function logoCheck(renderer: "classic" | "auto") {
   const label = renderer === "classic" ? "classic WebGL (asked for)" : "auto"
   try {
     problems.length = 0
-    await open(`/reference.html`, { width: 960, height: 1200 })
+    await open(`/reference.html`, LOGO_BOX)
     await until(`document.getElementById("logo")?.complete === true`, "the reference image")
     const reference = await shot("logo-reference")
-    await open(`/?check=logo${renderer === "classic" ? "&renderer=classic" : ""}`, { width: 960, height: 1200 })
+    await open(`/?check=logo${renderer === "classic" ? "&renderer=classic" : ""}`, LOGO_BOX)
     await until(`document.documentElement.dataset.ready === "1" || document.documentElement.dataset.city === "failed"`, "the check picture")
     if ((await evaluate<string>(`document.documentElement.dataset.city`)) === "failed")
       throw new Error(`the city did not start: ${await evaluate(`document.documentElement.dataset.cityError`)}`)
     await Bun.sleep(300)
     const backend = await evaluate<string>(`document.documentElement.dataset.backend`)
     const mine = await shot(`logo-check-${renderer}`)
-    await open(`/reference.html`, { width: 960, height: 1200 })
+    await open(`/reference.html`, LOGO_BOX)
     await until(`document.getElementById("logo")?.complete === true`, "the reference image")
     const result = await evaluate<any>(`${COMPARE}(${JSON.stringify(mine)}, ${JSON.stringify(reference)})`)
     if (result.error) throw new Error(JSON.stringify(result))
