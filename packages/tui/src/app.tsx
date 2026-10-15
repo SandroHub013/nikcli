@@ -2,6 +2,7 @@ import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { CliRenderEvents, createCliRenderer, type CliRenderer, type CliRendererConfig } from "@opentui/core"
 import { Clipboard } from "@tui/util/clipboard"
 import * as Sound from "@tui/util/sound"
+import { createSoundPolicy, rootSessionID } from "@tui/util/sound-policy"
 import { UserApi } from "@tui/util/user-api"
 import { RouteProvider, useRoute } from "@tui/context/route"
 import {
@@ -1574,6 +1575,18 @@ function App(props: {
     }
     renderer.on("focus", refocusPrompt)
 
+    const soundPolicy = createSoundPolicy({
+      now: () => Date.now(),
+      setTimer: (fn, ms) => setTimeout(fn, ms),
+      clearTimer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+      displayed: () => sessionIDFromRoute(route.data),
+      rootOf: (id) => rootSessionID(id, (x) => sync.session.get(x)?.parentID),
+      muted: () => {
+        const tuiCfg = sync.data.config?.tui as { sound?: boolean } | undefined
+        return tuiCfg?.sound === false || attention.focus() === "focused"
+      },
+      play: (scale) => Sound.pulse(scale),
+    })
     const unsubs = [
       sdk.event.on(TuiEventName.commandExecute, (evt) => {
         command.trigger(evt.properties.command)
@@ -1654,21 +1667,15 @@ function App(props: {
           duration: 5000,
         })
       }),
-      sdk.event.on("permission.asked", () => {
-        const tuiCfg = sync.data.config?.tui as { sound?: boolean } | undefined
-        if (tuiCfg?.sound === false) return
-        if (attention.focus() === "focused") return
-        Sound.pulse(1.3)
-      }),
-      sdk.event.on("session.idle", () => {
-        const tuiCfg = sync.data.config?.tui as { sound?: boolean } | undefined
-        if (tuiCfg?.sound === false) return
-        if (attention.focus() === "focused") return
-        Sound.pulse(0.8)
-      }),
+      // Whether a sound rings is decided in one place (util/sound-policy.ts): which session, once per real turn,
+      // once per request, and not more than one every few seconds.
+      sdk.event.on("session.status", (evt) => soundPolicy.status(evt.properties.sessionID, evt.properties.status.type)),
+      sdk.event.on("permission.asked", (evt) => soundPolicy.permission(evt.properties.id, evt.properties.sessionID)),
+      sdk.event.on("session.idle", (evt) => soundPolicy.idle(evt.properties.sessionID)),
     ]
 
     onCleanup(() => {
+      soundPolicy.dispose()
       renderer.off("focus", refocusPrompt)
       unsubs.forEach((fn) => fn())
       Sound.dispose()
