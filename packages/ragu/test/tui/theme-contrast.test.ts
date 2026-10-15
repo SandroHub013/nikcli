@@ -92,11 +92,14 @@ function pairs(t: Theme, reasoning: RGBA): Pair[] {
     add(`syntax.${k}/base`, "syntax", "code", t.syntax[k], base)
     add(`syntax.${k}/added`, "syntax", "code on an added line", t.syntax[k], t.diff.addedBg)
     add(`syntax.${k}/removed`, "syntax", "code on a removed line", t.syntax[k], t.diff.removedBg)
+    add(`syntax.${k}/context`, "syntax", "code on a context line", t.syntax[k], t.diff.contextBg)
+    add(`syntax.${k}/panel`, "syntax", "a written file's code, on the panel", t.syntax[k], panel)
   }
   // The states the highlighter also paints code in: builtins and tags (error), annotations (warning), notes (info).
   for (const k of ["error", "warning", "info"] as const) {
     add(`syntax.${k}/added`, "syntax", "code on an added line", t.status[k].fg, t.diff.addedBg)
     add(`syntax.${k}/removed`, "syntax", "code on a removed line", t.status[k].fg, t.diff.removedBg)
+    add(`syntax.${k}/context`, "syntax", "code on a context line", t.status[k].fg, t.diff.contextBg)
   }
 
   add("border.active/base", "graphic", "active border", t.border.active, base)
@@ -131,20 +134,11 @@ function measureDocument(id: string, document: unknown, mode: "dark" | "light"):
  * Pairs no change of lightness can close, each with the reason; `script/fix-themes.ts` lists them when it runs. A key
  * with no pair after the variant («github-light/light») stands for every pair of it. Kept honest both ways: a pair
  * that starts passing has to leave this list.
+ *
+ * Empty since zenburn's dark surfaces and github-light's blue element were moved by hand (2026-10-16), the two that
+ * were listed: kept for the next theme that needs a decision.
  */
-const ZENBURN =
-  "zenburn's surfaces are mid greys (#3f3f3f to #5f5f5f): no text colour reaches 7:1 on the lightest, the best is 6.4"
-const KNOWN: Record<string, string> = {
-  "zenburn/dark text/panel": ZENBURN,
-  "zenburn/dark text/offset": ZENBURN,
-  "zenburn/dark text/overlay": ZENBURN,
-  "zenburn/dark diff.text/added": ZENBURN,
-  "zenburn/dark diff.text/removed": ZENBURN,
-  "zenburn/dark diff.text/context": ZENBURN,
-  "github-light/light":
-    "its backgroundElement, under the prompt and the dialogs, is the `selection` def, solid #0366d6 blue: no colour " +
-    "reads on it and on the light grey surfaces both, so the text, muted and every accent are left as they were",
-}
+const KNOWN: Record<string, string> = {}
 
 const key = (m: Measured) => `${m.theme}/${m.mode} ${m.id}`
 const known = (m: Measured) => key(m) in KNOWN || `${m.theme}/${m.mode}` in KNOWN
@@ -198,21 +192,6 @@ describe("the ragu theme", () => {
         .filter((m) => m.ratio < greyscale.get(m.id)!)
         .map((m) => `${m.id}: ${m.ratio.toFixed(2)} < greyscale ${greyscale.get(m.id)!.toFixed(2)} (${m.where})`)
       expect(worse).toEqual([])
-    })
-
-    // The captures showed code on the diff's context lines and on the panel (a written file's view) under 4.5:1, in
-    // greyscale too: pairs the catalog test does not measure yet. Ragu reaches the floor there.
-    test(`its code reaches 4.5:1 on the diff's context lines and on the panel in ${mode} mode`, async () => {
-      const t = createStandaloneTheme({ document: await loadBuiltInTheme("ragu"), mode }).theme
-      const ground = over(t.surface.base, TERMINAL[mode])
-      const colours = { ...t.syntax, error: t.status.error.fg, warning: t.status.warning.fg, info: t.status.info.fg }
-      const low: string[] = []
-      for (const [where, fill] of Object.entries({ context: t.diff.contextBg, panel: t.surface.panel })) {
-        const bg = over(fill, ground)
-        for (const [name, fg] of Object.entries(colours))
-          if (ratio(fg, bg) < 4.5) low.push(`${name}/${where}: ${ratio(fg, bg).toFixed(2)}`)
-      }
-      expect(low).toEqual([])
     })
 
     test(`wears the brand's colours in ${mode} mode`, async () => {
