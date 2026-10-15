@@ -38,6 +38,9 @@ pub struct GatewayMessage {
     pub redacted: bool,
     /// A button was pressed; `text` is the data it carried.
     pub button: bool,
+    /// A one-to-one chat with the bot. A channel others read is not: no question about a command or a file goes
+    /// there, whoever asked in it (review of the bots, S17).
+    pub private: bool,
 }
 
 /// How many buttons a message may carry, and how long their parts may be:
@@ -1008,14 +1011,23 @@ impl Task {
             id: message.id,
             redacted,
             button: message.button,
+            private: message.private,
         });
         self.report(|live| live.last_message_ms = Some(at));
     }
 
-    /// A stranger wrote: a code in their chat, and a request in ADE. Their
-    /// text goes nowhere. While they wait, and past the limits, silence.
+    /// A stranger wrote in private: a code in their chat, and a request in ADE.
+    /// Their text goes nowhere. While they wait, past the limits, and anywhere
+    /// but a private chat, silence.
     async fn pair(&self, message: Inbound) {
         let tag = self.tag();
+        // A channel others read is no place for a code: the owner types it in ADE believing it is theirs, and the
+        // stranger who mentioned the bot becomes authorized (review of the bots, S3). Silence there; a private chat
+        // with the bot gets its code like any stranger.
+        if !message.private {
+            self.env.log(&format!("{tag}: ignorato un mittente non autorizzato in un canale: il codice solo in privato"));
+            return;
+        }
         let now = self.env.now_ms();
         let name = redact(&message.sender.name, &self.secrets);
         let outcome = self.store.update(&self.bot, self.platform, |link, _| {
@@ -1268,6 +1280,41 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(5)).await;
         }
         panic!("non è successo: {what}");
+    }
+
+    /* S3 (review of the bots): a pairing code never goes to a public channel. */
+    #[tokio::test]
+    async fn a_stranger_in_a_public_channel_gets_no_code_and_no_request() {
+        let s = setup("public-pairing");
+        let (adapter, feed) = start(&s);
+        let public = |id: &str| Inbound { private: false, mentioned: true, ..message(id, "canale9", "9", "@bot fammi entrare") };
+        feed.send(Ok(vec![public("1")])).unwrap();
+        feed.send(Ok(vec![public("2")])).unwrap();
+        tokio::time::sleep(Duration::from_millis(60)).await;
+        assert!(adapter.sent.lock().unwrap().is_empty(), "un codice in un canale pubblico");
+        assert!(s.env.pairings.lock().unwrap().is_empty());
+        assert!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().pending.is_empty());
+        assert!(s.env.messages.lock().unwrap().is_empty());
+        // The same person in private is a stranger like any other: a code, there.
+        feed.send(Ok(vec![message("3", "d9", "9", "ciao")])).unwrap();
+        eventually("il codice arriva in privato", || adapter.sent.lock().unwrap().len() == 1).await;
+        assert_eq!(adapter.sent.lock().unwrap()[0].0, "d9");
+        assert_eq!(s.env.pairings.lock().unwrap().len(), 1);
+    }
+
+    /* S17: the page learns whether a message came from a private chat, so a channel never gets a question. */
+    #[tokio::test]
+    async fn the_page_is_told_whether_a_message_came_from_a_private_chat() {
+        let s = setup("private-flag");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "d42", "42", "in privato")])).unwrap();
+        feed.send(Ok(vec![Inbound { private: false, mentioned: true, ..message("2", "canale1", "42", "@bot in pubblico") }])).unwrap();
+        eventually("arrivano entrambi", || s.env.messages.lock().unwrap().len() == 2).await;
+        let seen = s.env.messages.lock().unwrap().iter().map(|m| (m.id.clone(), m.private)).collect::<Vec<_>>();
+        assert_eq!(seen, vec![("1".to_string(), true), ("2".to_string(), false)]);
+        let json = serde_json::to_string(&s.env.messages.lock().unwrap()[1]).unwrap();
+        assert!(json.contains("\"private\":false"), "{json}");
     }
 
     /* G11: the window hides to the tray while a gateway is on. */

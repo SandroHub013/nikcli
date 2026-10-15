@@ -38,6 +38,27 @@ describe("the command shown on the phone", () => {
     expect(answers).toEqual([])
   })
 
+  /* S17: a channel others read is asked nothing, and no command is written in it. */
+  test("in a channel: no question, no command in the line, the line said once", () => {
+    const answers: [string | undefined, string][] = []
+    const said: string[] = []
+    const asked: string[] = []
+    const answerer = permissionAnswerer({
+      ask: async (question) => void asked.push(question) as never,
+      refuse: true,
+      publicChat: true,
+      answer: (id, reply) => void answers.push([id, reply]),
+      say: (text) => void said.push(text),
+      signal: new AbortController().signal,
+    })
+    answerer({ requestID: "r1", permission: "bash", patterns: "rm -rf build", askedAt: 0 })
+    answerer({ requestID: "r2", permission: "bash", patterns: "rm -rf /", askedAt: 0 })
+    answerer({ requestID: "r3", permission: "external_directory", patterns: "C:/x/*", askedAt: 0 })
+    expect(answers).toEqual([["r1", "reject"], ["r2", "reject"], ["r3", "reject"]])
+    expect(asked).toEqual([])
+    expect(said).toEqual([t("gateway.approve.privateOnly")])
+  })
+
   /* B8d review, M1: every answer names the question it is for. */
   test("an answer carries the id of its question: refused at once, or from the phone", async () => {
     const answers: [string | undefined, string][] = []

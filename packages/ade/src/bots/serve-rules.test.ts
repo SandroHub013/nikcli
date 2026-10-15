@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { readdirSync, readFileSync } from "node:fs"
+import { join } from "node:path"
 import type { PermissionRule } from "../chat/rules"
 import { BLOCKED as BLOCK_RULES, classifyCommand } from "./approval"
 import {
@@ -7,6 +9,7 @@ import {
   configDenials,
   hasBotRules,
   profileFor,
+  READ_TOOLS,
   type BotProfile,
 } from "./serve-rules"
 import { it as itDict } from "../i18n/it"
@@ -162,8 +165,8 @@ describe("B8d: the rules of a bot's session", () => {
       "packages/ragu/src/x.ts",
       "src/bots/ragu.ts",
       "docs/nikcli.md",
-      ".github/workflows/ci.yml",
-      ".vscode/settings.json",
+      ".github/CODEOWNERS",
+      ".gitignore",
       "config.json",
     ]
     for (const profile of PROFILES) {
@@ -177,11 +180,8 @@ describe("B8d: the rules of a bot's session", () => {
     // First among the session's, which all come after the bot's file: a routine's
     // `edit` denied whole stays the last, which is what hides the tool (`disabled`).
     const denials = configDenials()
-    expect(
-      botPermission("remote-none")
-        .slice(0, denials.length)
-        .map((entry) => entry.pattern),
-    ).toEqual(denials)
+    const edits = botPermission("remote-none").filter((entry) => entry.permission === "edit" && entry.action === "deny")
+    expect(edits.slice(0, denials.length).map((entry) => entry.pattern)).toEqual(denials)
     expect(botPermission("read-only").findLast((entry) => entry.permission === "edit")).toEqual({
       permission: "edit",
       pattern: "*",
@@ -189,10 +189,12 @@ describe("B8d: the rules of a bot's session", () => {
     })
   })
 
-  test("the note on the rules says an «always» for edits opens the configuration too", () => {
-    // Given in the project, it comes after the session's rules and wins (bot-config-chiusa review).
-    expect(itDict["bots.serve.rulesNote"]).toContain("nikcli.json")
-    expect(enDict["bots.serve.rulesNote"]).toContain("nikcli.json")
+  test("the note on the rules says an «always» of the project does not reach a bot (S4: ragu ignores it for a bot's session)", () => {
+    // It used to say the opposite, and that an «always» for edits opened the configuration too.
+    expect(itDict["bots.serve.rulesNote"]).not.toContain("nikcli.json")
+    expect(enDict["bots.serve.rulesNote"]).not.toContain("nikcli.json")
+    expect(itDict["bots.serve.rulesNote"]).toContain("non lo raggiunge")
+    expect(enDict["bots.serve.rulesNote"]).toContain("does not reach it")
   })
 
   test("the list: every form, deduplicated", () => {
@@ -313,5 +315,144 @@ describe("the planner's profile: a session with no tool at all", () => {
     const rules = botPermission("planner" as BotProfile)
     for (const tool of ["edit", "write", "patch", "webfetch", "websearch", "read", "grep", "glob", "bash", "task"])
       expect([tool, decide(tool, "src/a.ts", HOSTILE, rules)]).toEqual([tool, "deny"])
+  })
+})
+
+/*
+ * S1 (review of the bots): the profiles were denials laid over ragu's default, `"*": "allow"`, so a chat with the
+ * commands off and a routine «read only» still ran webfetch, websearch and every MCP tool of the server — the
+ * user's own — without asking. These profiles now begin with `"*": "deny"` and open what they need.
+ */
+const TOOL_DIR = join(import.meta.dir, "../../../ragu/src/tool")
+const SERVER_TOOLS = [
+  ...new Set(
+    readdirSync(TOOL_DIR)
+      .filter((file) => file.endsWith(".ts"))
+      .flatMap((file) =>
+        [...readFileSync(join(TOOL_DIR, file), "utf8").matchAll(/Tool\.define(?:<[^(]*>)?\(\s*"([a-z_]+)"/g)].map((m) => m[1]!),
+      ),
+  ),
+]
+// ragu's `TOOL_PERMISSION` (permission/ruleset.ts): these tools ask another tool's permission.
+const PERMISSION_OF: Record<string, string> = {
+  monitor: "bash",
+  write: "edit",
+  patch: "edit",
+  multiedit: "edit",
+  apply_patch: "edit",
+}
+const LIST_PROFILES = ["remote-ask", "remote-none", "read-only", "no-shell"] as const
+
+describe("S1: a turn nobody watches starts from a list, not from everything", () => {
+  test("the server's tool ids are really read from ragu (the names are not guessed)", () => {
+    expect(SERVER_TOOLS.length).toBeGreaterThan(30)
+    for (const name of ["read", "glob", "grep", "list", "webfetch", "websearch", "call_tool", "exec_code", "bash", "edit"])
+      expect(SERVER_TOOLS).toContain(name)
+  })
+
+  test("every tool the list opens is a real tool of the server", () => {
+    for (const name of READ_TOOLS) expect(SERVER_TOOLS).toContain(name)
+  })
+
+  test("websearch, codesearch, call_tool, exec_code, code_mode and any MCP tool are denied, whatever the bot's file grants", () => {
+    const MCP = ["github_create_issue", "playwright_browser_navigate", "filesystem_write_file", "mcp__anything"]
+    for (const profile of LIST_PROFILES) {
+      for (const tool of ["websearch", "codesearch", "call_tool", "exec_code", "code_mode", "generate_image", "repo_clone", ...MCP])
+        expect([profile, tool, decide(tool, "*", HOSTILE, botPermission(profile))]).toEqual([profile, tool, "deny"])
+      const webfetch = decide("webfetch", "https://example.com", HOSTILE, botPermission(profile))
+      expect([profile, webfetch]).toEqual([profile, profile === "remote-ask" ? "ask" : "deny"])
+    }
+  })
+
+  test("what a read-only turn does with the project still works: read, glob, grep, list, tree, todos, lsp, skills", () => {
+    for (const profile of LIST_PROFILES)
+      for (const tool of READ_TOOLS)
+        expect([profile, tool, decide(tool, "src/a.ts", HOSTILE, botPermission(profile))]).toEqual([profile, tool, "allow"])
+  })
+
+  test("every tool the server has is in the list, an edit, or not allowed: nothing new slips in", () => {
+    for (const profile of LIST_PROFILES) {
+      for (const id of SERVER_TOOLS) {
+        const permission = PERMISSION_OF[id] ?? id
+        const got = decide(permission, "x", HOSTILE, botPermission(profile))
+        const opened = READ_TOOLS.includes(id) || (permission === "edit" && profile !== "read-only")
+        if (opened) expect([profile, id, got]).toEqual([profile, id, "allow"])
+        else expect([profile, id, got === "allow"]).toEqual([profile, id, false])
+      }
+    }
+  })
+
+  test("a bot's thread in the panel, where a person answers every ask, keeps what it had", () => {
+    for (const profile of ["ask", "ask-outside"] as const) {
+      expect(decide("webfetch", "https://example.com", HOSTILE, botPermission(profile))).toBe("allow")
+      expect(decide("read", "src/a.ts", HOSTILE, botPermission(profile))).toBe("allow")
+    }
+  })
+
+  test("the list comes first, so the bot's own file cannot shade it", () => {
+    for (const profile of LIST_PROFILES) {
+      const rules = botPermission(profile)
+      expect(rules[0]).toEqual({ permission: "*", pattern: "*", action: "deny" })
+      expect(rules.findLast((entry) => entry.permission === "read")?.action).toBe("allow")
+    }
+  })
+})
+
+/*
+ * S2: Claude was kept from writing where a write turns into a command run later (`EXECUTES_LATER`); the turns of
+ * ragu were not. With the commands off, a text could make a bot write `.git/hooks/pre-commit` or
+ * `.vscode/tasks.json` (runOn folderOpen).
+ */
+describe("S2: no profile writes where a file runs later", () => {
+  const RUNS_LATER = [
+    ".git/hooks/pre-commit",
+    ".git\\hooks\\pre-commit",
+    ".GIT/hooks/pre-commit",
+    ".Git\\config",
+    "sub/.git/hooks/post-merge",
+    "C:\\progetto\\.git\\hooks\\pre-push",
+    "GIT~1\\hooks\\pre-commit",
+    ".vscode/tasks.json",
+    ".VSCODE\\tasks.json",
+    "pacchetto/.vscode/launch.json",
+    ".claude/settings.json",
+    ".CLAUDE\\commands\\x.md",
+    ".codex/config.toml",
+    ".husky/pre-commit",
+    ".HUSKY\\pre-commit",
+    ".github/workflows/ci.yml",
+    ".GITHUB/WORKFLOWS/ci.yml",
+    ".github\\workflows\\release.yml",
+    "D:/altro/.github/workflows/x.yml",
+  ]
+  const WRITABLE = [
+    ".gitignore",
+    ".gitattributes",
+    ".github/CODEOWNERS",
+    ".github/ISSUE_TEMPLATE/bug.md",
+    "src/git/hooks.ts",
+    "docs/vscode.md",
+    "src/husky.ts",
+    "README.md",
+  ]
+
+  test("every profile refuses them, however the path is spelled, even where the bot's file grants edit", () => {
+    for (const profile of PROFILES)
+      for (const path of RUNS_LATER)
+        expect([profile, path, decide("edit", path, HOSTILE, botPermission(profile))]).toEqual([profile, path, "deny"])
+  })
+
+  test("and leaves the rest of the project to the profile", () => {
+    for (const profile of PROFILES) {
+      const open = profile === "read-only" || profile === "planner" ? "deny" : "allow"
+      for (const path of WRITABLE)
+        expect([profile, path, decide("edit", path, HOSTILE, botPermission(profile))]).toEqual([profile, path, open])
+    }
+  })
+
+  test("the list is the one Claude's turns use (runners.ts), kept in one place", () => {
+    const runners = readFileSync(join(import.meta.dir, "runners.ts"), "utf8")
+    expect(runners).not.toMatch(/^const EXECUTES_LATER = \[/m)
+    expect(runners).toContain("EXECUTES_LATER")
   })
 })

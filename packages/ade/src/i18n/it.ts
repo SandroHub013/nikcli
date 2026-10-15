@@ -831,6 +831,8 @@ export const it = {
   "gateway.approve.question": (permission: string, what: string) =>
     `Il bot chiede il permesso «${permission}» per:\n${what}\n\nLo permetto questa volta? Senza risposta entro 5 minuti vale no.`,
   "gateway.approve.once": "Sì, questa volta",
+  "gateway.approve.privateOnly":
+    "Questo richiede una tua conferma, e in un canale non la chiedo. Scrivimi in privato.",
   "gateway.approve.danger": (reason: string) => `Attenzione: questo comando ${reason}.`,
   "gateway.approve.blocked": (what: string, reason: string) =>
     `Ho bloccato «${what}»: ${reason}. Questo comando non parte mai, nemmeno con un sì.`,
@@ -2099,7 +2101,7 @@ export const it = {
   "bots.serve.refused": (permission: string, patterns: string) =>
     `Rifiutato: Ragu Code ha chiesto «${permission}» (${patterns}) e qui nessuno può rispondere.`,
   "bots.serve.rulesNote":
-    "Il bot chiede prima di ogni comando, ma un «sempre» già dato per questo progetto (per esempio nel terminale di Ragu Code) vale anche per lui, come nella Chat: quella richiesta non comparirà. Un «sempre» dato a una modifica di file gli apre anche la configurazione di Ragu Code (.nikcli, nikcli.json), che altrimenti un bot non può scrivere.",
+    "Il bot chiede prima di ogni comando, e un «sempre» dato per questo progetto (per esempio nel terminale di Ragu Code) non lo raggiunge: la Chat ce l'ha, un bot no. Conta solo il «Sempre» che dai a questo bot qui, e mai per ciò che è bloccato.",
   "bots.serve.lost": "Il server di Ragu Code ha chiuso il flusso degli eventi prima della fine del turno.",
   "bots.runner.protectedPath": (paths: string) =>
     `Claude Code non ha potuto scrivere in un percorso protetto per i bot di progetto (${paths}): lì una scrittura diventa codice che parte dopo, quindi è negata di proposito.`,

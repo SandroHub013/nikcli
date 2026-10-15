@@ -225,6 +225,38 @@ describe("the decision, and «Sempre» per bot", () => {
     expect(localAlwaysStore({ getItem: () => "{rotto", setItem: () => {} }).get("x")).toEqual([])
   })
 
+  /* S5 (review of the bots): «Sempre» on a dangerous command was permanent, invisible and could not be taken back. */
+  test("a «Sempre» can be taken back, one or all, and only for that bot", () => {
+    const data = new Map<string, string>()
+    const storage = {
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, value: string) => void data.set(key, value),
+    }
+    const store = localAlwaysStore(storage)
+    const a = "C:/u/.nikcli/agent/a.md"
+    const b = "C:/u/.nikcli/agent/b.md"
+    store.add(a, "gitRewrite")
+    store.add(a, "recursiveDelete")
+    store.add(b, "gitRewrite")
+    expect(decide("bash", "git push -f", store.get(a)).kind).toBe("allow")
+    store.remove(a, "gitRewrite")
+    expect(store.get(a)).toEqual(["recursiveDelete"])
+    expect(decide("bash", "git push -f", store.get(a)).kind).toBe("ask")
+    expect(store.get(b)).toEqual(["gitRewrite"])
+    // Taking back what is not there changes nothing, and the last one leaves no empty entry behind.
+    store.remove(a, "gitRewrite")
+    store.remove(a, "recursiveDelete")
+    expect(JSON.parse(data.get("ade.bots.approvals")!)).toEqual({ [b]: ["gitRewrite"] })
+    store.add(a, "gitRewrite")
+    store.clear(a)
+    store.clear("C:/u/nessuno.md")
+    expect(store.get(a)).toEqual([])
+    expect(store.get(b)).toEqual(["gitRewrite"])
+    // A store that cannot be read or written takes back nothing and says nothing.
+    const broken = localAlwaysStore({ getItem: () => "{rotto", setItem: () => {} })
+    expect(() => (broken.remove("x", "y"), broken.clear("x"))).not.toThrow()
+  })
+
   test("the question waits five minutes, then it is a no", () => {
     expect(APPROVAL_TIMEOUT_MS).toBe(300_000)
   })

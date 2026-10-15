@@ -80,6 +80,20 @@ export function gatewayVisible(
   return enabled || development
 }
 
+/**
+ * Whether the bots' gateways answer chats at all (review of the bots, A6). The controller listens to every message
+ * of every platform and turns it into a turn of a bot, and Rust reads no chat until it does: with the Bot section off,
+ * or the Gateway section hidden as in a release, nothing may be listening, whatever a state file from a development
+ * build says is switched on.
+ */
+export function gatewayControllerOn(
+  desktop: boolean,
+  botEnabled: boolean = BOT_ENABLED,
+  gatewayShown: boolean = gatewayVisible(),
+): boolean {
+  return desktop && botEnabled && gatewayShown
+}
+
 /** Which of the two switchable sections are on. */
 export interface SectionSwitches {
   readonly chat: boolean

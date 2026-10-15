@@ -1,8 +1,11 @@
 /**
  * The bots' turns from a chat (G4): what happens to a `gateway:message`.
  *
- * Rust holds the connection and lets through only an authorized sender in a
- * private chat (`src-tauri/src/gateway`). Here, in the page, the message
+ * Rust holds the connection and lets through only an authorized sender: in a
+ * private chat, or in a channel when the message names the bot (G9). A channel
+ * is read by others, so a turn from one runs without commands and asks nothing
+ * there (S17): the message says whether it came from a private chat. Here, in
+ * the page, the message
  * becomes a turn of that bot:
  * - one conversation per chat (`session.ts`), continued with the CLI's
  *   session id;
@@ -37,7 +40,7 @@ import type { Talk } from "../talk"
 import { permissionAnswerer } from "./approval"
 import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
 import type { BotAccount } from "../account"
-import { offersRemoteCommands, remoteTools, type RemoteSetting } from "./remote"
+import { offersRemoteCommands, REMOTE_OFF, remoteTools, type RemoteSetting } from "./remote"
 import { resumable, sessionKey, type SessionStore } from "./session"
 import { gatewayThreadKey, keptThread, type GatewayThreads } from "./threads"
 
@@ -53,6 +56,8 @@ export interface GatewayMessage {
   readonly redacted: boolean
   /** A button was pressed; `text` is its data. */
   readonly button: boolean
+  /** A one-to-one chat with the bot. Anything else is a channel others read. */
+  readonly private: boolean
 }
 
 /** The Rust side, as the controller sees it. Tests pass a fake. */
@@ -285,10 +290,15 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       const sendTyping = () => void deps.bridge.typing(message.bot, message.platform, message.chat).catch(() => {})
       sendTyping()
       typing = setInterval(sendTyping, deps.typingEveryMs ?? TYPING_EVERY_MS)
-      const remote = remoteTools(
-        offersRemoteCommands(runner) ? deps.remote?.(message.bot, message.platform) : undefined,
-        loaded.fingerprint,
-      )
+      // A channel others read: no commands there, and no question, whoever asked in it (S17). Anything but a
+      // private chat counts, so a message that does not say is treated as a channel.
+      const publicChat = message.private !== true
+      const remote = publicChat
+        ? REMOTE_OFF
+        : remoteTools(
+            offersRemoteCommands(runner) ? deps.remote?.(message.bot, message.platform) : undefined,
+            loaded.fingerprint,
+          )
       let turn: Turn | undefined
       // ragu's questions, by their id on ADE's server (B8d): answered on the phone, or no at once.
       const onPermission =
@@ -297,6 +307,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
               ask: (question, choices, signal) =>
                 ask(message, question, choices, deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS, signal),
               refuse: !remote.commands,
+              publicChat,
               answer: (requestID, reply) => {
                 if (requestID !== undefined) turn?.answer?.(requestID, reply)
               },
