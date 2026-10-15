@@ -1,7 +1,19 @@
 import { describe, expect, test } from "bun:test"
-import { layoutSessionTabs, truncateTabTitle } from "@tui/component/session-tabs"
+import { layoutSessionTabs, shouldShowSessionTabs, truncateTabTitle } from "@tui/component/session-tabs"
 
 describe("session tab layout", () => {
+  test("hides inside ADE", () => {
+    const ade = { ADE_PANE_ID: "pane-1", ADE_MAILBOX: "C:/mail" }
+    expect(shouldShowSessionTabs(1, ade)).toBe(false)
+    expect(shouldShowSessionTabs(2, ade)).toBe(false)
+  })
+
+  test("hides a single session outside ADE and requires both ADE markers", () => {
+    expect(shouldShowSessionTabs(1, {})).toBe(false)
+    expect(shouldShowSessionTabs(2, {})).toBe(true)
+    expect(shouldShowSessionTabs(2, { ADE_PANE_ID: "pane-1" })).toBe(true)
+  })
+
   test("keeps all tabs visible when the terminal has room", () => {
     const result = layoutSessionTabs(["a", "b", "c"], "b", 100)
 
@@ -27,9 +39,7 @@ describe("session tab layout", () => {
   })
 
   test("spends no horizontal cells on the close-all button", () => {
-    // `+ new` and `× all` are stacked in one 8-wide column, so reserved chrome is a logo plus a
-    // single button. If either ever gets its own column, this drops and the tabs must shrink with
-    // it — a mismatch renders them past the right edge of the terminal.
+    // `+ new` and `× all` are stacked in one 8-wide column.
     const LOGO = 9
     const BUTTON = 8
     const [gaps, count] = [2, 3]

@@ -1,36 +1,40 @@
-import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch } from "solid-js"
-import { RGBA } from "@opentui/core"
-import { useRenderer } from "@opentui/solid"
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch, untrack } from "solid-js"
+import { BoxRenderable, RGBA, ScrollBoxRenderable } from "@opentui/core"
+import { useKeyboard, useRenderer } from "@opentui/solid"
 import {
   applyLiveCapabilities,
   chooseInlineImageRenderer,
   detectCapabilities,
   encodeKittyVirtual,
+  encodeAdeImage,
   kittyIdColor,
   kittyPlaceholderGrid,
   pickDecoder,
   renderImage,
   resize,
   type LiveCapabilities,
-  type RendererKind,
+  type InlineImageRenderer,
+  type Decoder,
 } from "@ragu/tui-image"
 import { cellSize } from "@tui/util/browser-frames"
-import { fitOverlayCells, type CellMetrics } from "@tui/util/native-overlay"
+import { fitOverlayCells, registerNativeOverlay, type CellMetrics, type OverlayRect } from "@tui/util/native-overlay"
 import { useTheme } from "@tui/context/theme"
 import { createPromiseCache } from "@tui/util/lru-cache"
+import { useDialog } from "@tui/ui/dialog"
+import { DialogSelect } from "@tui/ui/dialog-select"
+import { useCommandDialog } from "@tui/component/dialog-command"
+import { localImagePath, openFullResolutionImage, readImageSource } from "@tui/util/image-open"
 
 /**
  * Image preview in the scrolling message list.
  *
- * Kitty / Ghostty: drawless virtual placement + placeholder cells that
- * scroll with the grid. Cursor / VS Code / everything else: truecolor
- * half-blocks through the grid. Sixel overlays stay on the WebView dialog
- * — they cannot live in this list without painting CSI over the composer.
+ * Kitty / Ghostty use grid-native virtual placements. ADE uses OSC 1337
+ * after the frame, only within the chat viewport, with half-block cells
+ * underneath for partial visibility and failed native output.
  */
 export { registerNativeOverlay } from "@tui/util/native-overlay"
 export type { NativeOverlay } from "@tui/util/native-overlay"
 
-const MAX_PREVIEW_BYTES = 10 * 1024 * 1024
 const MAX_PREVIEW_COLUMNS = 120
 const MAX_PREVIEW_FALLBACK_ROWS = 36
 const IMAGE_EXTENSIONS = /\.(?:png|jpe?g|gif|webp|bmp|tiff?)(?:$|[?#])/i
@@ -46,7 +50,7 @@ function cleanPreviewUrl(value: string) {
 
 function hostForUrl(value: string) {
   if (value.startsWith("data:image/")) return "attached image"
-  if (value.startsWith("/")) return "local file"
+  if (localImagePath(value)) return "local file"
   try {
     const url = new URL(value)
     if (url.protocol === "file:") return "local file"
@@ -58,8 +62,8 @@ function hostForUrl(value: string) {
 
 function isSupportedSource(value: string) {
   if (value.startsWith("data:image/")) return true
-  if (value.startsWith("/")) return true
   try {
+    if (localImagePath(value)) return true
     const url = new URL(value)
     return url.protocol === "http:" || url.protocol === "https:" || url.protocol === "file:"
   } catch {
@@ -93,62 +97,23 @@ export function extractTuiImageUrls(text: string, limit = 2) {
     add(match[0], false)
     if (urls.length >= limit) return urls
   }
-  for (const match of text.matchAll(/["'](\/[^"']+\.(?:png|jpe?g|gif|webp|bmp|tiff?))["']/gi)) {
+  // Absolute paths, Unix (`/x.png`) or Windows (`C:\x.png`, `C:/x.png`).
+  for (const match of text.matchAll(/["']((?:\/|[A-Za-z]:[\\/])[^"']+\.(?:png|jpe?g|gif|webp|bmp|tiff?))["']/gi)) {
     add(match[1] ?? "", false)
     if (urls.length >= limit) return urls
   }
-  for (const match of text.matchAll(/(?:^|\s)(\/[\w~./%+-]+\.(?:png|jpe?g|gif|webp|bmp|tiff?))(?:$|\s)/gi)) {
+  for (const match of text.matchAll(
+    /(?:^|\s)((?:\/|[A-Za-z]:[\\/])[\w~./\\%+-]+\.(?:png|jpe?g|gif|webp|bmp|tiff?))(?:$|\s)/gi,
+  )) {
     add(match[1] ?? "", false)
     if (urls.length >= limit) return urls
   }
   return urls
 }
 
-async function readImageBytes(url: string, signal: AbortSignal) {
-  if (url.startsWith("data:")) {
-    const match = url.match(/^data:([^;,]+)?((?:;[^,]*)?),(.*)$/s)
-    if (!match) throw new Error("invalid data URL")
-    const mime = match[1]?.toLowerCase()
-    if (mime && !mime.startsWith("image/")) throw new Error("data URL is not an image")
-    const metadata = match[2] ?? ""
-    const payload = match[3] ?? ""
-    const bytes = metadata.includes(";base64")
-      ? Uint8Array.fromBase64(payload)
-      : new TextEncoder().encode(decodeURIComponent(payload))
-    if (bytes.byteLength > MAX_PREVIEW_BYTES) throw new Error("image is too large")
-    return bytes
-  }
-
-  if (url.startsWith("/") || url.startsWith("file://")) {
-    const filename = url.startsWith("file://") ? new URL(url).pathname : url
-    const file = Bun.file(decodeURIComponent(filename))
-    if (!(await file.exists())) throw new Error("image not found")
-    if (file.size > MAX_PREVIEW_BYTES) throw new Error("image is too large")
-    return new Uint8Array(await file.arrayBuffer())
-  }
-
-  const response = await fetch(url, {
-    signal,
-    headers: {
-      Accept: "image/png,image/jpeg,image/gif,image/bmp,image/tiff,image/*;q=0.5,*/*;q=0.1",
-    },
-  })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-
-  const contentType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase()
-  if (contentType && !contentType.startsWith("image/")) throw new Error("URL is not an image")
-
-  const contentLength = Number(response.headers.get("content-length") ?? 0)
-  if (contentLength > MAX_PREVIEW_BYTES) throw new Error("image is too large")
-
-  const buffer = await response.arrayBuffer()
-  if (buffer.byteLength > MAX_PREVIEW_BYTES) throw new Error("image is too large")
-  return new Uint8Array(buffer)
-}
-
 type Cell = { char: string; fg: RGBA; bg: RGBA }
 
-type TuiImageData = {
+export type TuiImageData = {
   url: string
   host: string
   width: number
@@ -165,7 +130,8 @@ type TuiImageData = {
   transmitted?: boolean
   /** Placeholder cell rows the terminal composites the image over. */
   placeholder?: { rows: string[]; fg: RGBA }
-  renderer: RendererKind
+  renderer: InlineImageRenderer
+  overlay?: { bytes: string; rows: number }
 }
 
 export interface TuiImageWriter {
@@ -298,22 +264,24 @@ export function toCellGrid(text: string, columns: number): Cell[][] {
   return out
 }
 
-async function loadTuiImage(
+export async function loadTuiImage(
   url: string,
   maxColumns: number,
   maxRows: number,
   live: LiveCapabilities | null,
   cell: CellMetrics,
   signal: AbortSignal,
+  env: Record<string, string | undefined> = process.env,
+  decoderOverride?: Decoder,
 ): Promise<TuiImageData> {
-  const bytes = await readImageBytes(url, signal)
+  const bytes = await readImageSource(url, signal)
   if (signal.aborted) throw new Error("aborted")
   const capabilities = applyLiveCapabilities(detectCapabilities(), live)
   const bounds = previewBounds(maxColumns, maxRows)
-  const kind = chooseInlineImageRenderer(capabilities)
+  const kind = chooseInlineImageRenderer(capabilities, env)
 
   if (kind === "kitty") {
-    const decoder = await pickDecoder()
+    const decoder = decoderOverride ?? (await pickDecoder())
     const image = await decoder(bytes)
     if (image.width <= 0 || image.height <= 0) throw new Error("decoder produced a zero-sized image")
     const fitted = fitOverlayCells(image.width, image.height, bounds, cell)
@@ -339,22 +307,45 @@ async function loadTuiImage(
     }
   }
 
+  let overlay: TuiImageData["overlay"]
+  const decoder = decoderOverride ?? (await pickDecoder())
+  const image = await decoder(bytes)
+  signal.throwIfAborted()
+  if (kind === "ade") {
+    try {
+      const fitted = fitOverlayCells(image.width, image.height, bounds, cell)
+      if (fitted.pixelWidth * fitted.pixelHeight > 4_000_000) throw new Error("native preview is too large")
+      const target = resize(image, fitted.pixelWidth, fitted.pixelHeight)
+      overlay = { bytes: encodeAdeImage(target, fitted), rows: fitted.rows }
+      bounds.columns = fitted.columns
+      bounds.rows = fitted.rows
+    } catch {
+      // A failed native encode must not remove the usable half-block preview.
+    }
+  }
   const result = await renderImage({
     input: bytes,
+    decoder: () => image,
     columns: bounds.columns,
     rows: bounds.rows,
     capabilities,
     renderer: "halfblock",
   })
   const fallback = result.output as string
+  const rows = toCellGrid(fallback, overlay ? bounds.columns : result.columns)
+  if (overlay) {
+    while (rows.length < overlay.rows)
+      rows.push(Array.from({ length: bounds.columns }, () => ({ char: " ", fg: TRANSPARENT, bg: TRANSPARENT })))
+  }
   return {
     url,
     host: hostForUrl(url),
-    width: 0,
-    height: 0,
-    columns: result.columns,
-    rows: toCellGrid(fallback, result.columns),
-    renderer: "halfblock",
+    width: image.width,
+    height: image.height,
+    columns: overlay ? bounds.columns : result.columns,
+    rows,
+    renderer: overlay ? "ade" : "halfblock",
+    overlay,
   }
 }
 
@@ -367,23 +358,67 @@ function cachedTuiImage(
   signal: AbortSignal,
 ) {
   const bounds = previewBounds(maxColumns, maxRows)
-  const key = `${bounds.columns}x${bounds.rows}\n${Math.round(cell.width)}x${Math.round(cell.height)}\n${live ? "live" : "env"}\n${url}`
+  const env = { ...process.env }
+  const kind = chooseInlineImageRenderer(applyLiveCapabilities(detectCapabilities(), live), env)
+  const key = `${bounds.columns}x${bounds.rows}\n${Math.round(cell.width)}x${Math.round(cell.height)}\n${JSON.stringify(live)}\n${kind}\n${env.ADE_PANE_ID ?? ""}\n${env.ADE_MAILBOX ?? ""}\n${url}`
   return previewCache.load(
     key,
-    (loadSignal) => loadTuiImage(url, bounds.columns, bounds.rows, live, cell, loadSignal),
+    (loadSignal) => loadTuiImage(url, bounds.columns, bounds.rows, live, cell, loadSignal, env),
     signal,
   )
 }
 
-function TuiImage(props: { url: string; maxColumns: number; maxRows: number; writer?: TuiImageWriter }) {
+export function inlineImageViewport(box: Pick<BoxRenderable, "parent">): OverlayRect | undefined {
+  for (let parent = box.parent; parent; parent = parent.parent) {
+    if (parent instanceof ScrollBoxRenderable) {
+      const view = parent.viewport
+      return { x: view.x, y: view.y, columns: view.width, rows: view.height }
+    }
+  }
+  return undefined
+}
+
+function TuiImage(props: {
+  url: string
+  maxColumns: number
+  maxRows: number
+  writer?: TuiImageWriter
+  onOpen: () => void
+  overlaysEnabled: () => boolean
+}) {
   const { theme } = useTheme()
   const renderer = useRenderer()
   const [state, setState] = createSignal<TuiImageState>({ status: "loading" })
+  const [imageBox, setImageBox] = createSignal<BoxRenderable>()
+  const [overlayFailed, setOverlayFailed] = createSignal(false)
+
+  createEffect(() => {
+    const current = state()
+    const box = imageBox()
+    if (current.status !== "ready" || !current.data.overlay || !box || overlayFailed()) return
+    const native = current.data.overlay
+    const viewport = () => inlineImageViewport(box)
+    const release = untrack(() =>
+      registerNativeOverlay(renderer, {
+        box,
+        bytes: native.bytes,
+        columns: current.data.columns,
+        rows: native.rows,
+        inline: true,
+        viewport,
+        enabled: props.overlaysEnabled,
+        writer: props.writer,
+        onError: () => setOverlayFailed(true),
+      }),
+    )
+    onCleanup(release)
+  })
 
   createEffect(() => {
     const controller = new AbortController()
     const url = props.url
     setState({ status: "loading" })
+    setOverlayFailed(false)
     const live = (renderer.capabilities ?? null) as LiveCapabilities | null
     const cell = cellSize(renderer.resolution, renderer.terminalWidth, renderer.terminalHeight)
     void cachedTuiImage(url, props.maxColumns, props.maxRows, live, cell, controller.signal)
@@ -415,6 +450,10 @@ function TuiImage(props: { url: string; maxColumns: number; maxRows: number; wri
       borderColor={theme.border.default}
       flexDirection="column"
       flexShrink={0}
+      onMouseUp={(event) => {
+        event.stopPropagation()
+        props.onOpen()
+      }}
     >
       <Switch>
         <Match when={state().status === "loading"}>
@@ -429,7 +468,7 @@ function TuiImage(props: { url: string; maxColumns: number; maxRows: number; wri
           {(data) => (
             <>
               <text fg={theme.foreground.muted}>
-                image | {data().host} | {data().renderer}
+                image | {data().host} | {overlayFailed() ? "halfblock" : data().renderer} | Ctrl+Shift+O: open full size
                 {data().placeholder ? " (native)" : ""}
               </text>
               <Show when={data().placeholder}>
@@ -440,7 +479,7 @@ function TuiImage(props: { url: string; maxColumns: number; maxRows: number; wri
                 )}
               </Show>
               <Show when={data().rows.length > 0}>
-                <box marginTop={1} flexDirection="column" flexShrink={0}>
+                <box ref={setImageBox} marginTop={1} flexDirection="column" flexShrink={0}>
                   <For each={data().rows}>
                     {(row) => (
                       <text>
@@ -488,13 +527,81 @@ export function TuiImageList(props: {
     return result
   })
 
+  // Opening an image needs the dialog and the command palette, so only a
+  // message that has images asks for them. Every text part and tool mounts
+  // a list, and most have nothing to show: they should not each hold a
+  // keyboard handler and a palette entry, nor need the app's providers to be
+  // drawn at all.
   return (
     <Show when={urls().length > 0}>
-      <box flexDirection="column" flexShrink={0}>
-        <For each={urls()}>
-          {(url) => <TuiImage url={url} maxColumns={props.maxColumns} maxRows={props.maxRows} writer={props.writer} />}
-        </For>
-      </box>
+      <TuiImageEntries urls={urls()} maxColumns={props.maxColumns} maxRows={props.maxRows} writer={props.writer} />
     </Show>
+  )
+}
+
+function TuiImageEntries(props: { urls: string[]; maxColumns: number; maxRows: number; writer?: TuiImageWriter }) {
+  const dialog = useDialog()
+  const command = useCommandDialog()
+  const [openState, setOpenState] = createSignal("")
+  let opening: AbortController | undefined
+  onCleanup(() => opening?.abort())
+  const openImage = async (url: string) => {
+    if (opening) return
+    const controller = new AbortController()
+    opening = controller
+    setOpenState("Opening full-resolution image...")
+    try {
+      await openFullResolutionImage(url, controller.signal)
+      if (!controller.signal.aborted) setOpenState("Opened in image viewer")
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setOpenState(`Cannot open image: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      opening = undefined
+    }
+  }
+  const urls = () => props.urls
+
+  onCleanup(
+    command.register(() =>
+      urls().map((url, index) => ({
+        title: `Open image ${index + 1}: ${hostForUrl(url)}`,
+        value: `image.open.${url}`,
+        category: "Images",
+        onSelect: () => {
+          dialog.clear()
+          void openImage(url)
+        },
+      })),
+    ),
+  )
+  useKeyboard((event) => {
+    if (event.defaultPrevented || dialog.stack.length > 0 || !urls().length) return
+    if (event.ctrl && event.shift && event.name.toLowerCase() === "o") {
+      event.preventDefault()
+      event.stopPropagation()
+      const options = command.all().filter((item) => item.category === "Images" && item.value.startsWith("image.open."))
+      dialog.replace(() => <DialogSelect title="Open full-resolution image" options={options} />)
+    }
+  })
+
+  return (
+    <box flexDirection="column" flexShrink={0}>
+      <For each={urls()}>
+        {(url) => (
+          <TuiImage
+            url={url}
+            maxColumns={props.maxColumns}
+            maxRows={props.maxRows}
+            writer={props.writer}
+            onOpen={() => void openImage(url)}
+            overlaysEnabled={() => dialog.stack.length === 0}
+          />
+        )}
+      </For>
+      <Show when={openState()}>
+        <text>{openState()}</text>
+      </Show>
+    </box>
   )
 }
