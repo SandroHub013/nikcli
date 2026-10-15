@@ -108,7 +108,8 @@ describe("component tokens equal the expressions they replaced", () => {
     "session.error": {
       background: (t) => t.surface.panel,
       border: (t) => t.status.error.fg,
-      text: (t) => t.foreground.muted,
+      // N7: a failed turn's text is the error colour (it was the muted grey, an error that read as a note).
+      text: (t) => t.status.error.fg,
     },
     "session.turn-tokens": {
       text: (t) => t.foreground.muted,
