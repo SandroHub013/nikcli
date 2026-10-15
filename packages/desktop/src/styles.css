@@ -71,8 +71,8 @@ html.desktop-shell-resizing * {
 }
 
 .desktop-app-splash__logo {
-  width: 56px;
-  height: 70px;
+  width: 48px;
+  height: 48px;
   opacity: 0.1;
   animation: pulse-splash 1.6s ease-in-out infinite;
 }
@@ -1814,9 +1814,10 @@ button.desktop-sidebar__list-item:hover {
   place-items: center;
 }
 
+/* The pot is a 16 px grid: twice its size keeps every pixel square */
 .desktop-work-start__logo {
-  width: 19px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
 }
 
 .desktop-work-start__heading h1 {

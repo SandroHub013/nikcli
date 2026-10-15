@@ -6,6 +6,7 @@
   "exports": {
     "./mod-tree-model": "./src/components/mod-tree-model.ts",
     "./mod-tree.css": "./src/components/mod-tree.css",
+    "./ragu-pot": "./src/components/ragu-pot.ts",
     "./*": "./src/components/*.tsx",
     "./i18n/*": "./src/i18n/*.ts",
     "./pierre": "./src/pierre/index.ts",

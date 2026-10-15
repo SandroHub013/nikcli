@@ -3,11 +3,17 @@ import { createHash } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { SVGLoader } from "three/addons/loaders/SVGLoader.js"
+import { PALETTE, POT_16 } from "@ragu/ui/ragu-pot"
 import { LOGO_SCALE, LOGO_SVG, logoVoxels, parseLogo, voxelRect, type LogoRect } from "./logo"
 
 const BRAND = join(import.meta.dir, "..", "..", "..", "..", "ui", "src", "assets", "brand")
 const hash = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex")
 const order = (a: LogoRect, b: LogoRect) => a.color.localeCompare(b.color) || a.y - b.y || a.x - b.x
+
+/** The pot's painted pixels as the logo must draw them: 15 units each, colours uppercase as the file spells them. */
+const POT_PIXELS: LogoRect[] = POT_16.flatMap((row, y) =>
+  [...row].flatMap((key, x) => (key === "." ? [] : [{ x: x * 15, y: y * 15, w: 15, h: 15, color: PALETTE[key]!.toUpperCase() }])),
+).sort(order)
 
 /** The squares as three.js's own SVG loader reads them: a second reading, made a different way. */
 function viaLoader(svg: string): LogoRect[] {
@@ -34,19 +40,16 @@ describe("the logo is the brand's own file", () => {
     expect(hash(LOGO_SVG)).toBe(hash(brand))
   })
 
-  test("it is 17 squares of 60 on a 60 grid, in the two colours of the file, on a 240 by 300 box", () => {
+  test("it is the Ragu Code pot: a square of 15 for every pixel of its 16 px grid, in its colours, on a 240 box", () => {
     const logo = parseLogo()
-    expect([logo.width, logo.height]).toEqual([240, 300])
-    expect(logo.rects).toHaveLength(17)
-    expect(logo.rects.filter((r) => r.color === "#4B4646")).toHaveLength(6)
-    expect(logo.rects.filter((r) => r.color === "#F1ECEC")).toHaveLength(11)
-    for (const r of logo.rects) expect([r.w, r.h, r.x % 60, r.y % 60]).toEqual([60, 60, 0, 0])
+    expect([logo.width, logo.height]).toEqual([240, 240])
+    expect([...logo.rects].sort(order)).toEqual(POT_PIXELS)
   })
 
   test("the squares are the ones the SVG loader reads from the same file, with tolerance 0", () => {
     const mine = [...parseLogo().rects].sort(order)
     const theirs = viaLoader(LOGO_SVG).sort(order)
-    expect(theirs).toHaveLength(17)
+    expect(theirs).toHaveLength(POT_PIXELS.length)
     expect(mine).toEqual(theirs)
   })
 
@@ -92,7 +95,7 @@ describe("the voxels of the hologram", () => {
     expect(first).toBeDefined()
     const all = logoVoxels(parseLogo())
     expect(Math.min(...all.map((v) => v.cx - v.sx / 2))).toBe(-(240 * LOGO_SCALE) / 2)
-    expect(Math.max(...all.map((v) => v.cy + v.sy / 2))).toBe((300 * LOGO_SCALE) / 2)
+    expect(Math.max(...all.map((v) => v.cy + v.sy / 2))).toBe((240 * LOGO_SCALE) / 2)
   })
 
   test("a redrawn logo is caught: moving one square by one unit fails the read-back", () => {
