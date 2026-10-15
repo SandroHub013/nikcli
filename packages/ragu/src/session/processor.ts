@@ -589,21 +589,28 @@ export namespace SessionProcessor {
                   break
 
                 case "finish-step": {
-                  const usage = await getUsage({
-                    model: input.model,
-                    usage: value.usage,
-                    metadata: value.providerMetadata,
-                  })
+                  // A provider may send no usage at all (the adapter counts and logs those). Then nothing is counted:
+                  // the message keeps what it had, the cache keeper and the overflow check get no numbers, and the
+                  // step's record carries the schema's zeros without a `total`.
+                  const usage = value.usage
+                    ? await getUsage({
+                        model: input.model,
+                        usage: value.usage,
+                        metadata: value.providerMetadata,
+                      })
+                    : undefined
                   input.assistantMessage.finish = value.finishReason
-                  input.assistantMessage.cost += usage.cost
-                  input.assistantMessage.tokens = usage.tokens
-                  // The answer of the request the keeper observed: what it says about the cache entry arms the keep-alive.
-                  void CacheKeeper.used(input.sessionID, {
-                    input: usage.tokens.input,
-                    output: usage.tokens.output,
-                    cacheRead: usage.tokens.cache.read,
-                    cacheWrite: usage.tokens.cache.write,
-                  }).catch(() => undefined)
+                  if (usage) {
+                    input.assistantMessage.cost += usage.cost
+                    input.assistantMessage.tokens = usage.tokens
+                    // The answer of the request the keeper observed: what it says about the cache entry arms the keep-alive.
+                    void CacheKeeper.used(input.sessionID, {
+                      input: usage.tokens.input,
+                      output: usage.tokens.output,
+                      cacheRead: usage.tokens.cache.read,
+                      cacheWrite: usage.tokens.cache.write,
+                    }).catch(() => undefined)
+                  }
                   await updatePart(
                     trackPart({
                       id: Identifier.ascending("part"),
@@ -617,8 +624,8 @@ export namespace SessionProcessor {
                       messageID: input.assistantMessage.id,
                       sessionID: input.assistantMessage.sessionID,
                       type: "step-finish" as const,
-                      tokens: usage.tokens,
-                      cost: usage.cost,
+                      tokens: usage?.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                      cost: usage?.cost ?? 0,
                     }),
                   )
                   await updateMessage(input.assistantMessage)
@@ -654,7 +661,8 @@ export namespace SessionProcessor {
                     }),
                   )
                   if (
-                    await runCompaction(
+                    usage &&
+                    (await runCompaction(
                       Effect.gen(function* () {
                         const compaction = yield* SessionCompaction.Service
                         return yield* compaction.isOverflow({
@@ -662,7 +670,7 @@ export namespace SessionProcessor {
                           model: input.model,
                         })
                       }),
-                    )
+                    ))
                   ) {
                     needsCompaction = true
                   }
