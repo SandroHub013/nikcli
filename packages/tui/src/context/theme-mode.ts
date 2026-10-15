@@ -34,7 +34,7 @@ export async function fallbackThemeMode(input: {
   const colors = input.palette
     ? await Promise.race([
         input.palette.catch(() => undefined),
-        new Promise<undefined>((resolve) => setTimeout(resolve, input.timeoutMs ?? 300).unref?.()),
+        new Promise<undefined>((resolve) => setTimeout(resolve, input.timeoutMs ?? 300)),
       ])
     : undefined
   return (
