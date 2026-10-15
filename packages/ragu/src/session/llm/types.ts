@@ -229,7 +229,8 @@ export type StreamEvent =
   | {
       type: "finish-step"
       finishReason: FinishReason
-      usage: LanguageModelUsage
+      /** Absent when the provider sent none (`llm-event-adapter` counts those). */
+      usage?: LanguageModelUsage
       providerMetadata?: ProviderMetadata
       response?: unknown
     }
