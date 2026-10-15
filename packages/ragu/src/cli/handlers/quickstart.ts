@@ -4,20 +4,38 @@ import { passthrough } from "../framework/args"
 import { Commands } from "../commands"
 import { UI } from "@/cli/ui"
 import * as prompts from "@/cli/prompts"
+import { Installation } from "@/installation"
 import { spawn } from "bun"
 import { EOL } from "os"
 
+type Self = { execPath: string; entry: string | undefined; standalone: boolean }
+
 /**
- * Re-exec the current ragu binary with extra positional args appended after
- * the user's existing argv. Returns the child's exit code. Used by quickstart
+ * The argv that runs the next step with this same build: `extraArgs` and nothing of how quickstart was called (its
+ * own name and flags are not the next step's). A compiled binary is its own interpreter, and its `argv[1]` is an
+ * internal `/$bunfs/…` path that must not be passed on; from source the interpreter is bun and the entry has to go
+ * with it. Same rule as the background service's `selfCommand`.
+ */
+export function reexecCommand(
+  extraArgs: string[],
+  self: Self = {
+    execPath: process.execPath,
+    entry: process.argv[1],
+    standalone: Installation.isStandaloneExecutable(),
+  },
+): string[] {
+  if (self.standalone) return [self.execPath, ...extraArgs]
+  if (!self.entry) throw new Error("cannot locate the ragu entrypoint to run the next step")
+  return [self.execPath, self.entry, ...extraArgs]
+}
+
+/**
+ * Re-exec the current ragu binary with `extraArgs`. Returns the child's exit code. Used by quickstart
  * to hand off to the TUI / `run` / `models` without duplicating their setup.
  */
 export async function reexec(extraArgs: string[]): Promise<number> {
-  // Strip the `quickstart` and any quickstart-only flags from argv so the
-  // child sees the same invocation the user typed.
-  const filtered = process.argv.slice(2).filter((a) => !a.startsWith("--") || isAllowedFlag(a))
   const proc = spawn({
-    cmd: [process.execPath, ...process.argv.slice(1, 2), ...filtered, ...extraArgs],
+    cmd: reexecCommand(extraArgs),
     stdin: "inherit",
     stdout: "inherit",
     stderr: "inherit",
@@ -25,11 +43,6 @@ export async function reexec(extraArgs: string[]): Promise<number> {
   })
   const code = await proc.exited
   return code
-}
-
-export const ALLOWED_FLAGS = new Set(["--skip-checks", "--dry-run", "-h", "--help"])
-export function isAllowedFlag(arg: string): boolean {
-  return ALLOWED_FLAGS.has(arg)
 }
 
 /**
