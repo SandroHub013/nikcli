@@ -26,7 +26,7 @@ function View() {
   onCleanup(unregister)
 
   return (
-    <box height={4} minHeight={0} width="100%" maxWidth={75} alignItems="center" paddingTop={3} flexShrink={1}>
+    <box height={5} minHeight={0} width="100%" maxWidth={75} alignItems="center" paddingTop={2} flexShrink={1}>
       <Show when={show()}>
         <Tips />
       </Show>
