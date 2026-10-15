@@ -505,26 +505,6 @@ export function TuiImageList(props: {
   limit?: number
   writer?: TuiImageWriter
 }) {
-  const dialog = useDialog()
-  const command = useCommandDialog()
-  const [openState, setOpenState] = createSignal("")
-  let opening: AbortController | undefined
-  onCleanup(() => opening?.abort())
-  const openImage = async (url: string) => {
-    if (opening) return
-    const controller = new AbortController()
-    opening = controller
-    setOpenState("Opening full-resolution image...")
-    try {
-      await openFullResolutionImage(url, controller.signal)
-      if (!controller.signal.aborted) setOpenState("Opened in image viewer")
-    } catch (error) {
-      if (!controller.signal.aborted)
-        setOpenState(`Cannot open image: ${error instanceof Error ? error.message : String(error)}`)
-    } finally {
-      opening = undefined
-    }
-  }
   const urls = createMemo(() => {
     const limit = props.limit ?? 2
     const seen = new Set<string>()
@@ -546,6 +526,41 @@ export function TuiImageList(props: {
     }
     return result
   })
+
+  // Opening an image needs the dialog and the command palette, so only a
+  // message that has images asks for them. Every text part and tool mounts
+  // a list, and most have nothing to show: they should not each hold a
+  // keyboard handler and a palette entry, nor need the app's providers to be
+  // drawn at all.
+  return (
+    <Show when={urls().length > 0}>
+      <TuiImageEntries urls={urls()} maxColumns={props.maxColumns} maxRows={props.maxRows} writer={props.writer} />
+    </Show>
+  )
+}
+
+function TuiImageEntries(props: { urls: string[]; maxColumns: number; maxRows: number; writer?: TuiImageWriter }) {
+  const dialog = useDialog()
+  const command = useCommandDialog()
+  const [openState, setOpenState] = createSignal("")
+  let opening: AbortController | undefined
+  onCleanup(() => opening?.abort())
+  const openImage = async (url: string) => {
+    if (opening) return
+    const controller = new AbortController()
+    opening = controller
+    setOpenState("Opening full-resolution image...")
+    try {
+      await openFullResolutionImage(url, controller.signal)
+      if (!controller.signal.aborted) setOpenState("Opened in image viewer")
+    } catch (error) {
+      if (!controller.signal.aborted)
+        setOpenState(`Cannot open image: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      opening = undefined
+    }
+  }
+  const urls = () => props.urls
 
   onCleanup(
     command.register(() =>
@@ -571,24 +586,22 @@ export function TuiImageList(props: {
   })
 
   return (
-    <Show when={urls().length > 0}>
-      <box flexDirection="column" flexShrink={0}>
-        <For each={urls()}>
-          {(url) => (
-            <TuiImage
-              url={url}
-              maxColumns={props.maxColumns}
-              maxRows={props.maxRows}
-              writer={props.writer}
-              onOpen={() => void openImage(url)}
-              overlaysEnabled={() => dialog.stack.length === 0}
-            />
-          )}
-        </For>
-        <Show when={openState()}>
-          <text>{openState()}</text>
-        </Show>
-      </box>
-    </Show>
+    <box flexDirection="column" flexShrink={0}>
+      <For each={urls()}>
+        {(url) => (
+          <TuiImage
+            url={url}
+            maxColumns={props.maxColumns}
+            maxRows={props.maxRows}
+            writer={props.writer}
+            onOpen={() => void openImage(url)}
+            overlaysEnabled={() => dialog.stack.length === 0}
+          />
+        )}
+      </For>
+      <Show when={openState()}>
+        <text>{openState()}</text>
+      </Show>
+    </box>
   )
 }
