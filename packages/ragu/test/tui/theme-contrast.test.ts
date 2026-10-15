@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { RGBA } from "@opentui/core"
+import { RGBA, type TerminalColors } from "@opentui/core"
 import { BUILT_IN_THEME_IDS, loadBuiltInTheme } from "@tui/context/theme-catalog"
-import { contrastFg, createStandaloneTheme, type Theme } from "@tui/context/theme"
+import { contrastFg, createStandaloneTheme, generateSystem, type Theme } from "@tui/context/theme"
 import { deriveSemanticTokens, type TokenSource } from "@tui/context/theme-tokens"
 
 /**
@@ -130,6 +130,80 @@ describe("theme contrast", () => {
       expect(known.filter((k) => !failing.some((m) => key(m) === k))).toEqual([])
     })
   }
+})
+
+/** The two palettes of phase A: the default of Windows Terminal and conhost, and the light scheme it ships. */
+const PALETTES: Record<"dark" | "light", { name: string; colors: TerminalColors }> = {
+  dark: {
+    name: "Campbell",
+    colors: {
+      defaultBackground: "#0c0c0c",
+      defaultForeground: "#cccccc",
+      palette: [
+        "#0c0c0c",
+        "#c50f1f",
+        "#13a10e",
+        "#c19c00",
+        "#0037da",
+        "#881798",
+        "#3a96dd",
+        "#cccccc",
+        "#767676",
+        "#e74856",
+        "#16c60c",
+        "#f9f1a5",
+        "#3b78ff",
+        "#b4009e",
+        "#61d6d6",
+        "#f2f2f2",
+      ],
+    } as TerminalColors,
+  },
+  light: {
+    name: "One Half Light",
+    colors: {
+      defaultBackground: "#fafafa",
+      defaultForeground: "#383a42",
+      palette: [
+        "#383a42",
+        "#e45649",
+        "#50a14f",
+        "#c18401",
+        "#0184bc",
+        "#a626a4",
+        "#0997b3",
+        "#fafafa",
+        "#4f525d",
+        "#df6c75",
+        "#98c379",
+        "#e4c07a",
+        "#61afef",
+        "#c577dd",
+        "#56b5c2",
+        "#ffffff",
+      ],
+    } as TerminalColors,
+  },
+}
+
+describe("the system theme", () => {
+  for (const mode of ["dark", "light"] as const) {
+    const { name, colors } = PALETTES[mode]
+    test(`on ${name}, every pair reaches its floor`, () => {
+      const failing = measureDocument(`system:${name}`, generateSystem(colors), mode).filter((m) => m.ratio < m.min)
+      expect(failing.map(describeFailure)).toEqual([])
+    })
+  }
+
+  test("is light on a light terminal and dark on a dark one, whatever the mode was", () => {
+    const dark = generateSystem(PALETTES.dark.colors).theme
+    const light = generateSystem(PALETTES.light.colors).theme
+    const lum = (c: unknown) => luminance(c as RGBA)
+    expect(lum(light.text)).toBeLessThan(lum(light.background))
+    expect(lum(light.textMuted)).toBeLessThan(lum(light.background))
+    expect(lum(dark.text)).toBeGreaterThan(lum(dark.background))
+    expect(lum(dark.textMuted)).toBeGreaterThan(lum(dark.background))
+  })
 })
 
 describe("the colours the engine derives", () => {

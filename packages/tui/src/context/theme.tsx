@@ -11,6 +11,7 @@ import {
   loadBuiltInTheme,
 } from "./theme-catalog"
 import { contrastFg, deriveSemanticTokens, tint, type SemanticTokens } from "./theme-tokens"
+import { ensureContrast, isDarkBackground, worstRatio } from "./contrast"
 import {
   createComponentResolver,
   readComponentPatches,
@@ -402,7 +403,7 @@ export const {
           }
           setStore(
             produce((draft) => {
-              draft.themes.system = generateSystem(colors, store.mode)
+              draft.themes.system = generateSystem(colors)
               if (store.active === "system") {
                 draft.ready = true
               }
@@ -609,10 +610,20 @@ async function getComponentOverrides(): Promise<ComponentPatchMap> {
   return merged as ComponentPatchMap
 }
 
-function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJson {
+/**
+ * The "system" theme, built from the terminal's own palette.
+ *
+ * Dark or light follows the background the terminal reports, not the mode: in a light terminal whose mode was never
+ * detected, the old `mode` path drew light greys on the light background (and divided by zero on a black one).
+ *
+ * The palette's colours are the user's, but not all of them are readable as text on their own background: on
+ * Campbell, the default of Windows Terminal and conhost, blue and magenta on black are 2.4:1. Each ANSI colour used
+ * as text takes the normal or the bright one, whichever reads better here, then the smallest change of lightness that
+ * reaches the floor of the review on every surface it is drawn on.
+ */
+export function generateSystem(colors: TerminalColors): ThemeJson {
   const bg = RGBA.fromHex(colors.defaultBackground ?? colors.palette[0]!)
-  const fg = RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!)
-  const isDark = mode == "dark"
+  const isDark = isDarkBackground(bg)
 
   const col = (i: number) => {
     const value = colors.palette[i]
@@ -622,27 +633,36 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
 
   // Generate gray scale based on terminal background
   const grays = generateGrayScale(bg, isDark)
-  const textMuted = generateMutedTextColor(bg, isDark)
+
+  const diffAlpha = isDark ? 0.22 : 0.14
+  const diffAddedBg = tint(bg, col(2), diffAlpha)
+  const diffRemovedBg = tint(bg, col(1), diffAlpha)
+  const diffAddedLineNumberBg = tint(grays[3], col(2), diffAlpha)
+  const diffRemovedLineNumberBg = tint(grays[3], col(1), diffAlpha)
+
+  // Everything text is drawn on: the surfaces, and the diff's lines for the code inside them.
+  const surfaces = [bg, grays[1], grays[2], grays[3], diffAddedBg, diffRemovedBg]
+  const fg = ensureContrast(RGBA.fromHex(colors.defaultForeground ?? colors.palette[7]!), surfaces, 7)
+  const textMuted = ensureContrast(generateMutedTextColor(bg, isDark), surfaces, 4.5)
+  const ink = (i: number) => {
+    const normal = col(i)
+    const bright = col(i + 8)
+    return ensureContrast(worstRatio(bright, surfaces) > worstRatio(normal, surfaces) ? bright : normal, surfaces, 4.5)
+  }
 
   // ANSI color references
   const ansiColors = {
     black: col(0),
-    red: col(1),
-    green: col(2),
-    yellow: col(3),
-    blue: col(4),
-    magenta: col(5),
-    cyan: col(6),
+    red: ink(1),
+    green: ink(2),
+    yellow: ink(3),
+    blue: ink(4),
+    magenta: ink(5),
+    cyan: ink(6),
     white: col(7),
     redBright: col(9),
     greenBright: col(10),
   }
-
-  const diffAlpha = isDark ? 0.22 : 0.14
-  const diffAddedBg = tint(bg, ansiColors.green, diffAlpha)
-  const diffRemovedBg = tint(bg, ansiColors.red, diffAlpha)
-  const diffAddedLineNumberBg = tint(grays[3], ansiColors.green, diffAlpha)
-  const diffRemovedLineNumberBg = tint(grays[3], ansiColors.red, diffAlpha)
 
   return {
     theme: {
@@ -671,7 +691,7 @@ function generateSystem(colors: TerminalColors, mode: "dark" | "light"): ThemeJs
       // Border colors
       borderSubtle: grays[6],
       border: grays[7],
-      borderActive: grays[8],
+      borderActive: ensureContrast(grays[8], [bg], 3),
 
       // Diff colors
       diffAdded: ansiColors.green,
