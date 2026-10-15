@@ -242,6 +242,7 @@ export type KeybindsConfig = {
   messages_previous?: string | undefined
   messages_last_user?: string | undefined
   messages_copy?: string | undefined
+  image_open?: string | undefined
   messages_undo?: string | undefined
   messages_redo?: string | undefined
   messages_toggle_conceal?: string | undefined
@@ -814,6 +815,7 @@ export type KeybindsConfig1 = {
   messages_previous?: string | undefined
   messages_last_user?: string | undefined
   messages_copy?: string | undefined
+  image_open?: string | undefined
   messages_undo?: string | undefined
   messages_redo?: string | undefined
   messages_toggle_conceal?: string | undefined
@@ -3406,6 +3408,7 @@ export type TuiConfig = {
         messages_previous?: string | undefined
         messages_last_user?: string | undefined
         messages_copy?: string | undefined
+        image_open?: string | undefined
         messages_undo?: string | undefined
         messages_redo?: string | undefined
         messages_toggle_conceal?: string | undefined
@@ -5929,6 +5932,7 @@ export type ConfigUpdateInput = {
           readonly messages_previous?: string | undefined
           readonly messages_last_user?: string | undefined
           readonly messages_copy?: string | undefined
+          readonly image_open?: string | undefined
           readonly messages_undo?: string | undefined
           readonly messages_redo?: string | undefined
           readonly messages_toggle_conceal?: string | undefined

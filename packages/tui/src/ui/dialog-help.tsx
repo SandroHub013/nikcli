@@ -25,6 +25,7 @@ const SHORTCUTS: Array<{ key: string; description: string }> = [
     key: "sync_view",
     description: "View sync status (hub remote, outbox, recent events)",
   },
+  { key: "image_open", description: "Open an image in the session at full resolution" },
   { key: "model_favorite_toggle", description: "Cycle favorite models" },
   { key: "sidebar_toggle", description: "Toggle the sidebar" },
   { key: "app_exit", description: "Exit Ragu Code" },

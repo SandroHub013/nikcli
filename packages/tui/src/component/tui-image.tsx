@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, Switch, untrack } from "solid-js"
 import { BoxRenderable, RGBA, ScrollBoxRenderable } from "@opentui/core"
-import { useKeyboard, useRenderer } from "@opentui/solid"
+import { useRenderer } from "@opentui/solid"
 import {
   applyLiveCapabilities,
   chooseInlineImageRenderer,
@@ -23,6 +23,7 @@ import { createPromiseCache } from "@tui/util/lru-cache"
 import { useDialog } from "@tui/ui/dialog"
 import { DialogSelect } from "@tui/ui/dialog-select"
 import { useCommandDialog } from "@tui/component/dialog-command"
+import { useKeybind } from "@tui/context/keybind"
 import { localImagePath, openFullResolutionImage, readImageSource } from "@tui/util/image-open"
 
 /**
@@ -384,6 +385,8 @@ function TuiImage(props: {
   maxRows: number
   writer?: TuiImageWriter
   onOpen: () => void
+  /** The key that opens the chooser, as the user has it bound; empty when unbound. */
+  openKey: string
   overlaysEnabled: () => boolean
 }) {
   const { theme } = useTheme()
@@ -468,7 +471,7 @@ function TuiImage(props: {
           {(data) => (
             <>
               <text fg={theme.foreground.muted}>
-                image | {data().host} | {overlayFailed() ? "halfblock" : data().renderer} | Ctrl+Shift+O: open full size
+                image | {data().host} | {overlayFailed() ? "halfblock" : data().renderer} | {props.openKey || "click"}: open full size
                 {data().placeholder ? " (native)" : ""}
               </text>
               <Show when={data().placeholder}>
@@ -527,11 +530,10 @@ export function TuiImageList(props: {
     return result
   })
 
-  // Opening an image needs the dialog and the command palette, so only a
-  // message that has images asks for them. Every text part and tool mounts
-  // a list, and most have nothing to show: they should not each hold a
-  // keyboard handler and a palette entry, nor need the app's providers to be
-  // drawn at all.
+  // Opening an image needs the dialog, the command palette and the keybinds,
+  // so only a message that has images asks for them. Every text part and tool
+  // mounts a list, and most have nothing to show: they should not each hold
+  // palette entries, nor need the app's providers to be drawn at all.
   return (
     <Show when={urls().length > 0}>
       <TuiImageEntries urls={urls()} maxColumns={props.maxColumns} maxRows={props.maxRows} writer={props.writer} />
@@ -542,6 +544,7 @@ export function TuiImageList(props: {
 function TuiImageEntries(props: { urls: string[]; maxColumns: number; maxRows: number; writer?: TuiImageWriter }) {
   const dialog = useDialog()
   const command = useCommandDialog()
+  const keybind = useKeybind()
   const [openState, setOpenState] = createSignal("")
   let opening: AbortController | undefined
   onCleanup(() => opening?.abort())
@@ -562,9 +565,26 @@ function TuiImageEntries(props: { urls: string[]; maxColumns: number; maxRows: n
   }
   const urls = () => props.urls
 
+  // The chooser is a command like any other, so its key is `image_open` in the
+  // config, shows in the palette and in the keybind sheet, and is matched by
+  // the command registry. It used to be ctrl+shift+o, matched here by hand:
+  // xterm 6, which ADE draws with, sends nothing for ctrl+shift+letter, and a
+  // classic terminal sends plain ctrl+o, which went back a session tab instead.
   onCleanup(
-    command.register(() =>
-      urls().map((url, index) => ({
+    command.register(() => [
+      {
+        title: "Open full-resolution image",
+        value: "images.choose",
+        category: "Images",
+        keybind: "image_open",
+        onSelect: () => {
+          const options = command
+            .all()
+            .filter((item) => item.category === "Images" && item.value.startsWith("image.open."))
+          dialog.replace(() => <DialogSelect title="Open full-resolution image" options={options} />)
+        },
+      },
+      ...urls().map((url, index) => ({
         title: `Open image ${index + 1}: ${hostForUrl(url)}`,
         value: `image.open.${url}`,
         category: "Images",
@@ -573,17 +593,8 @@ function TuiImageEntries(props: { urls: string[]; maxColumns: number; maxRows: n
           void openImage(url)
         },
       })),
-    ),
+    ]),
   )
-  useKeyboard((event) => {
-    if (event.defaultPrevented || dialog.stack.length > 0 || !urls().length) return
-    if (event.ctrl && event.shift && event.name.toLowerCase() === "o") {
-      event.preventDefault()
-      event.stopPropagation()
-      const options = command.all().filter((item) => item.category === "Images" && item.value.startsWith("image.open."))
-      dialog.replace(() => <DialogSelect title="Open full-resolution image" options={options} />)
-    }
-  })
 
   return (
     <box flexDirection="column" flexShrink={0}>
@@ -595,6 +606,7 @@ function TuiImageEntries(props: { urls: string[]; maxColumns: number; maxRows: n
             maxRows={props.maxRows}
             writer={props.writer}
             onOpen={() => void openImage(url)}
+            openKey={keybind.print("image_open")}
             overlaysEnabled={() => dialog.stack.length === 0}
           />
         )}
