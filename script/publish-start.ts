@@ -42,15 +42,6 @@ for (const file of pkgjsons) {
   await Bun.file(file).write(pkg)
 }
 
-const extensionToml = new URL("../packages/extensions/zed/extension.toml", import.meta.url).pathname
-if (await Bun.file(extensionToml).exists()) {
-  let toml = await Bun.file(extensionToml).text()
-  toml = toml.replace(/^version = "[^"]+"/m, `version = "${Script.version}"`)
-  toml = toml.replaceAll(/releases\/download\/v[^/]+\//g, `releases/download/v${Script.version}/`)
-  console.log("updated:", extensionToml)
-  await Bun.file(extensionToml).write(toml)
-}
-
 await $`bun install`
 
 console.log("\n=== ragu ===\n")
@@ -128,8 +119,7 @@ if (!Script.preview) {
       const releaseOwned = (file: string) =>
         file.endsWith("package.json") ||
         file === "bun.lock" ||
-        file === "CHANGELOG.md" ||
-        file === "packages/extensions/zed/extension.toml"
+        file === "CHANGELOG.md"
       if (conflicted.length === 0 || !conflicted.every(releaseOwned)) {
         await $`git rebase --abort`.nothrow()
         throw new Error(`Failed to rebase release commit onto origin/${branch}`)
