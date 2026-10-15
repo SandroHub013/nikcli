@@ -219,11 +219,23 @@ function badgeOf(primary: RGBA, overlay: RGBA, declared: RGBA | undefined): Stat
   return { fg, bg: ensureContrast(primary, [fg], BADGE_MIN) }
 }
 
-function statusPair(base: RGBA, hue: RGBA, alpha: number): StatusPair {
-  return {
-    fg: hue,
-    bg: tint(base, hue, alpha),
+/**
+ * A state's colour and the fill tinted with it, the background of the error and warning toasts. The fill is the
+ * background with `alpha` of the hue, less when that would leave the hue under 4.5:1 on it or the toast's text (the
+ * default at 7:1, muted at 4.5:1) unreadable.
+ */
+function statusPair(base: RGBA, hue: RGBA, alpha: number, text: RGBA, muted: RGBA): StatusPair {
+  const targets = [
+    { colour: hue, min: 4.5 },
+    { colour: text, min: 7 },
+    { colour: muted, min: 4.5 },
+  ]
+  const readable = (bg: RGBA) => targets.every((t) => contrastRatio(t.colour, bg) >= t.min)
+  for (let step = Math.round(alpha / 0.02); step > 0; step--) {
+    const bg = tint(base, hue, step * 0.02)
+    if (readable(bg)) return { fg: hue, bg }
   }
+  return { fg: hue, bg: tint(base, hue, 0) }
 }
 
 export function deriveSemanticTokens(
@@ -282,10 +294,10 @@ export function deriveSemanticTokens(
       secondary: colors.secondary,
     },
     status: {
-      error: statusPair(colors.background, colors.error, fill),
-      warning: statusPair(colors.background, colors.warning, fill),
-      success: statusPair(colors.background, colors.success, fill),
-      info: statusPair(colors.background, colors.info, fill),
+      error: statusPair(ground, colors.error, fill, colors.text, colors.textMuted),
+      warning: statusPair(ground, colors.warning, fill, colors.text, colors.textMuted),
+      success: statusPair(ground, colors.success, fill, colors.text, colors.textMuted),
+      info: statusPair(ground, colors.info, fill, colors.text, colors.textMuted),
     },
     border: {
       default: colors.border,
