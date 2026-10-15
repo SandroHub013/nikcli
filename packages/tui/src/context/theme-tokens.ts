@@ -178,6 +178,14 @@ const BLACK = RGBA.fromInts(0, 0, 0)
 const WHITE = RGBA.fromInts(255, 255, 255)
 
 /**
+ * The background as the screen shows it. A transparent one shows the terminal's: assume the default of Windows
+ * Terminal and conhost when dark, white when light (the backgrounds the triple-A review measured transparent themes on).
+ */
+export function groundOf(background: RGBA, mode: "dark" | "light"): RGBA {
+  return over(background, mode === "dark" ? TERMINAL_DARK : TERMINAL_LIGHT)
+}
+
+/**
  * `muted` faded toward the background, the colour of what a tool hides («▸ N more lines») and of its markers. Faded
  * less than the 40 % it starts from when that would drop it under 4.5:1 on the background, and moved in lightness
  * when even `muted` is under it.
@@ -247,9 +255,7 @@ export function deriveSemanticTokens(
   },
 ): SemanticTokens {
   const fill = options.mode === "dark" ? 0.28 : 0.16
-  // A transparent background shows the terminal's: assume the default of Windows Terminal and conhost when dark,
-  // white when light (the backgrounds the triple-A review measured transparent themes on).
-  const ground = over(colors.background, options.mode === "dark" ? TERMINAL_DARK : TERMINAL_LIGHT)
+  const ground = groundOf(colors.background, options.mode)
   const badge = badgeOf(
     colors.primary,
     over(colors.backgroundMenu, ground),
