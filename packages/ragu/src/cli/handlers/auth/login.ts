@@ -112,7 +112,7 @@ export default Runtime.handler(Commands.commands["auth"].commands["login"], asyn
               label: x.name,
               value: x.id,
               hint: {
-                anthropic: "Claude Max or API key",
+                anthropic: "API key",
                 openai: "ChatGPT Plus/Pro or API key",
               }[x.id],
             })),
