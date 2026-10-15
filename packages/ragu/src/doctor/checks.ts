@@ -9,6 +9,7 @@
 import { Installation } from "@/installation"
 import { Global } from "@ragu/util/global"
 import { configFile as userConfigFile } from "@ragu/util/app-folder"
+import { type ParseError as JsoncParseError, parse as parseJsonc, printParseErrorCode } from "jsonc-parser"
 import { statfsSync } from "fs"
 import path from "path"
 
@@ -99,29 +100,52 @@ function checkDisk(record: Record) {
   }
 }
 
+/**
+ * Parses a config file the way the loader does (`config/config.ts`): JSONC, with comments and trailing commas.
+ * A plain `JSON.parse` called a file with a comment broken, and a user who followed its advice lost the config.
+ */
+export function parseConfigText(text: string): { data: unknown } | { error: string } {
+  const errors: JsoncParseError[] = []
+  const data = parseJsonc(text, errors, { allowTrailingComma: true })
+  if (errors.length === 0) return { data }
+  const first = errors[0]!
+  const line = text.substring(0, first.offset).split("\n").length
+  return { error: `${printParseErrorCode(first.error)} at line ${line}` }
+}
+
 async function checkConfig(record: Record) {
   try {
     // Best-effort: a real config-schema validation needs an instance context.
-    // We just check the raw JSON file for now — the full validation runs on
+    // We just check the raw file for now — the full validation runs on
     // the next `ragu` invocation.
     const fs = await import("fs")
     // The file `Config.global()` loads: `ragu.json`, else `nikcli.json` (rule B).
     const configFile = userConfigFile(Global.Path.config)
     if (!fs.existsSync(configFile)) {
+      // The user-level loader reads `<stem>.json` only; `ragu.jsonc` is read inside a project folder, not here.
+      const jsonc = path.join(Global.Path.config, "ragu.jsonc")
+      if (fs.existsSync(jsonc)) {
+        record(
+          false,
+          "Config",
+          `${jsonc} is not read: ragu loads the user config from ragu.json (ragu.jsonc only inside a project folder)`,
+          `Rename ${jsonc} to ragu.json; comments are allowed there.`,
+        )
+        return
+      }
       record(true, "Config", "no user config file (defaults in use)")
       return
     }
-    const text = fs.readFileSync(configFile, "utf-8")
-    try {
-      JSON.parse(text)
-      record(true, "Config", `${configFile} parses as JSON`)
-    } catch (err) {
+    const parsed = parseConfigText(fs.readFileSync(configFile, "utf-8"))
+    if ("error" in parsed) {
       record(
         false,
         "Config",
-        `${configFile} is not valid JSON: ${err instanceof Error ? err.message : "unknown"}`,
-        `Fix the syntax or delete the file to use defaults.`,
+        `${configFile} is not valid JSON: ${parsed.error}`,
+        `Fix the syntax at that line (comments and trailing commas are allowed). Do not delete the file: it holds your settings.`,
       )
+    } else {
+      record(true, "Config", `${configFile} parses as JSON`)
     }
   } catch (err) {
     record(false, "Config", `unexpected error: ${err instanceof Error ? err.message : "unknown"}`)
@@ -141,7 +165,10 @@ async function checkDeprecatedConfigKeys(record: Record) {
       record(true, "Deprecated keys", "no user config file — nothing to check")
       return
     }
-    const data = JSON.parse(fs.readFileSync(configFile, "utf-8"))
+    const parsed = parseConfigText(fs.readFileSync(configFile, "utf-8"))
+    // The Config check above has already said what is wrong with the syntax.
+    if ("error" in parsed) return
+    const data = parsed.data
     const found: string[] = []
     for (const item of deprecated) {
       if (data && typeof data === "object" && item.from in data) found.push(item.from)
