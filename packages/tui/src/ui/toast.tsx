@@ -6,6 +6,7 @@ import { GlassBorder } from "../component/border"
 import { TextAttributes } from "@opentui/core"
 import z from "zod"
 import { TuiEventZod } from "@ragu/util/tui-event-schema"
+import { toastGlyph, toastHeight, toastTextWidth, toastTops } from "@tui/util/toast-layout"
 
 // `duration` stays optional at the call site: the zod schema fills the 5000ms
 // default at parse time, but the walker types the field as required.
@@ -26,13 +27,19 @@ export const TOAST_DURATION = {
 } as const
 
 const MAX_TOASTS = 3
-const TOAST_GAP = 5
+const TOAST_GAP = 1
 const TOAST_BASE_TOP = 2
 
 export function Toast() {
   const toast = useToast()
   const { theme } = useTheme()
   const dimensions = useTerminalDimensions()
+  const tops = () =>
+    toastTops(
+      toast.toasts.map((item) => toastHeight(item.message, item.title, toastTextWidth(dimensions().width))),
+      TOAST_BASE_TOP,
+      TOAST_GAP,
+    )
 
   return (
     <For each={toast.toasts}>
@@ -41,13 +48,11 @@ export function Toast() {
           position="absolute"
           justifyContent="center"
           alignItems="flex-start"
-          top={TOAST_BASE_TOP + index() * (item.height + TOAST_GAP)}
+          top={tops()[index()]}
           right={2}
           maxWidth={Math.min(60, dimensions().width - 6)}
           paddingLeft={2}
           paddingRight={2}
-          paddingTop={1}
-          paddingBottom={1}
           backgroundColor={toastSurface(item.variant, theme).bg}
           borderColor={toastSurface(item.variant, theme).border}
           border={[...GlassBorder.border]}
@@ -56,7 +61,7 @@ export function Toast() {
           <box flexDirection="row" gap={1} width="100%" alignItems="center">
             <box width={3} flexShrink={0} alignItems="center" justifyContent="center">
               <text attributes={TextAttributes.BOLD} fg={variantTone(item.variant, theme)}>
-                {variantIcon(item.variant)}
+                {toastGlyph(item.variant)}
               </text>
             </box>
             <box flexDirection="column" gap={0} flexGrow={1} minWidth={0}>
@@ -93,19 +98,9 @@ function variantTone(variant: ToastOptions["variant"], theme: ReturnType<typeof 
   return tones[variant] ?? theme.status.info.fg
 }
 
-function variantIcon(variant: ToastOptions["variant"]) {
-  const icons = {
-    info: "[i]",
-    success: "[+]",
-    warning: "[!]",
-    error: "[x]",
-  }
-  return icons[variant] ?? "[i]"
-}
-
 function init() {
   const [store, setStore] = createStore({
-    toasts: [] as Array<ToastCurrent & { id: number; height: number }>,
+    toasts: [] as Array<ToastCurrent & { id: number }>,
   })
 
   let nextId = 0
@@ -129,7 +124,6 @@ function init() {
       const { duration, ...currentToast } = parsedOptions
 
       const id = nextId++
-      const height = currentToast.title ? 7 : 5
 
       setStore("toasts", (prev) => {
         const dropped = prev.length >= MAX_TOASTS ? prev.slice(0, prev.length - MAX_TOASTS + 1) : []
@@ -138,7 +132,7 @@ function init() {
           if (timer) clearTimeout(timer)
           timers.delete(item.id)
         }
-        return [...prev, { ...currentToast, id, height }].slice(-MAX_TOASTS)
+        return [...prev, { ...currentToast, id }].slice(-MAX_TOASTS)
       })
 
       const timer = setTimeout(() => dismiss(id), duration)

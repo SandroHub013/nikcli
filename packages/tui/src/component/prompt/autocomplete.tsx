@@ -52,6 +52,9 @@ function extractLineRange(input: string) {
   }
 }
 
+/** Widest the command column is padded to, so the descriptions keep their room in a narrow terminal. */
+export const COMMAND_COLUMN_MAX = 24
+
 export type AutocompleteRef = {
   onInput: (value: string) => void
   onKeyDown: (e: KeyEvent) => void
@@ -461,8 +464,11 @@ export function Autocomplete(props: {
 
     results.sort((a, b) => a.display.localeCompare(b.display))
 
-    const max = firstBy(results, [(x) => x.display.length, "desc"])?.display.length
-    if (!max) return results
+    // The command column grows with the longest command, up to a cap: one long name used to push every description
+    // out of an 80-column terminal. A name longer than the cap keeps its whole text and just takes the room it needs.
+    const longest = firstBy(results, [(x) => x.display.length, "desc"])?.display.length
+    if (!longest) return results
+    const max = Math.min(longest, COMMAND_COLUMN_MAX)
     return results.map((item) => ({
       ...item,
       display: item.display.padEnd(max + 2),
@@ -806,7 +812,13 @@ export function Autocomplete(props: {
                 {option().display}
               </text>
               <Show when={option().description}>
-                <text fg={index === store.selected ? theme.badge.fg : theme.foreground.muted} wrapMode="none">
+                <text
+                  fg={index === store.selected ? theme.badge.fg : theme.foreground.muted}
+                  wrapMode="none"
+                  flexShrink={1}
+                  minWidth={0}
+                  truncate
+                >
                   {option().description}
                 </text>
               </Show>

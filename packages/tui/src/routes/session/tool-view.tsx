@@ -62,6 +62,7 @@ import {
   type WriteShape,
 } from "@tui/util/tool-shapes"
 
+import { invalidToolRow } from "@tui/util/invalid-tool"
 import { normalizeVizComponents } from "@ragu/util/viz"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useSDK } from "@tui/context/sdk"
@@ -293,6 +294,9 @@ function ToolPartViewDefault(props: { last: boolean; streaming: boolean; entry: 
           <Match when={toolName() === "plugin"}>
             <PluginView {...toolprops} />
           </Match>
+          <Match when={toolName() === "invalid"}>
+            <InvalidTool {...toolprops} />
+          </Match>
           <Match when={true}>
             <GenericTool {...toolprops} />
           </Match>
@@ -383,6 +387,16 @@ function ComputerUse(props: ToolProps<ComputerShape>) {
         </InlineTool>
       </Match>
     </Switch>
+  )
+}
+
+/** A call to a tool the model was not given, or with arguments that do not fit: one line, in the error colour. */
+function InvalidTool(props: ToolProps<any>) {
+  const { theme } = useTheme()
+  return (
+    <InlineTool icon="✗" iconColor={theme.status.error.fg} pending="Checking tool call…" complete={true} part={props.part}>
+      <span style={{ fg: theme.status.error.fg }}>{invalidToolRow(props.input)}</span>
+    </InlineTool>
   )
 }
 

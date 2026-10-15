@@ -54,6 +54,12 @@ export namespace Keybind {
     return result
   }
 
+  /** `toString` with «<leader>» replaced by the key it stands for, as the help and the status line print it. */
+  export function display(info: Info | undefined, leader: Info | undefined): string {
+    const text = toString(info)
+    return leader ? text.replace("<leader>", toString(leader)) : text
+  }
+
   export function parse(key: string): Info[] {
     if (key === "none") return []
 

@@ -1,4 +1,5 @@
 import { useScrollAcceleration } from "@tui/util/scroll"
+import { sessionDisplayTitle } from "@tui/util/session-title"
 import { createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { formatInstructionDelta, visibleInstructionNotices } from "@ragu/util/instruction-delta"
 import { useSDK } from "@tui/context/sdk"
@@ -43,7 +44,7 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
             <box flexShrink={0} gap={1} paddingRight={1}>
               <box paddingRight={1}>
                 <text fg={theme.foreground.default}>
-                  <b>{current().title}</b>
+                  <b>{sessionDisplayTitle(current().title)}</b>
                 </text>
               </box>
               <TuiPluginRuntime.Slot name="sidebar.content" sessionID={props.sessionID} />

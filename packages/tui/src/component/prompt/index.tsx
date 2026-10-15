@@ -2155,7 +2155,13 @@ export function Prompt(props: PromptProps) {
                   >
                     {footerModel(local.model.parsed().model, local.model.parsed().provider)}
                   </text>
-                  {/* The provider gives way first: it shrinks far faster than the model. */}
+                  {/* The provider gives way first: it shrinks far faster than the model.
+                      The dot keeps a cut model name from running into the provider's name. */}
+                  <Show when={footerProvider(local.model.parsed().provider)}>
+                    <text fg={theme.foreground.muted} flexShrink={0}>
+                      ·
+                    </text>
+                  </Show>
                   <text fg={theme.foreground.muted} flexShrink={100} minWidth={0} wrapMode="none" truncate>
                     {footerProvider(local.model.parsed().provider)}
                   </text>

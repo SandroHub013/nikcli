@@ -17,6 +17,7 @@ import { createStore } from "solid-js/store"
 import { Clipboard } from "@tui/util/clipboard"
 import { scheduleOverlayRepaint } from "@tui/util/repaint"
 import { useToast } from "./toast"
+import { dialogWidth } from "@tui/util/dialog-width"
 
 /**
  * Gap convention for dialog layouts:
@@ -63,15 +64,7 @@ export function Dialog(
   })
 
   const width = () => {
-    const dims = dimensions()
-    // `full` is for dialogs whose *content* is the window — the browser
-    // surface, where every column is a pixel of horizontal resolution and a
-    // 120-column cap is a cap on how much page you can see.
-    if (props.size === "full") return Math.max(1, dims.width - 4)
-    if (props.size === "xlarge") return Math.min(120, Math.max(1, dims.width - 8))
-    if (props.size === "large") return Math.min(88, Math.max(1, dims.width - 6))
-    if (props.size === "small") return Math.min(42, Math.max(1, dims.width - 4))
-    return Math.min(60, Math.max(1, dims.width - 4))
+    return dialogWidth(props.size, dimensions().width)
   }
 
   // Backdrop click-to-dismiss must not fire for a press that started on the

@@ -111,7 +111,7 @@ const TIPS = [
   "Use {highlight}--format json{/highlight} for machine-readable output in scripts",
   "Run {highlight}ragu serve{/highlight} for headless API access to Ragu Code",
   "Use {highlight}ragu run --attach{/highlight} to connect to a running server",
-  "Run {highlight}ragu upgrade{/highlight} to see where new versions come from",
+  "Run {highlight}ragu upgrade{/highlight} to see how to get a newer build: Ragu Code does not update itself",
   "Run {highlight}ragu auth list{/highlight} to see all configured providers",
   "Run {highlight}ragu agent create{/highlight} for guided agent creation",
   "Use {highlight}/ragu{/highlight} in GitHub issues/PRs to trigger AI actions",

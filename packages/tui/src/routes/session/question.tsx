@@ -10,6 +10,8 @@ import { useSync } from "../../context/sync"
 import { SplitBorder } from "../../component/border"
 import { useTextareaKeybindings } from "../../component/textarea-keybindings"
 import { useDialog } from "../../ui/dialog"
+import { FooterHintList } from "../../ui/footer-hints"
+import { questionHints } from "../../util/question-hints"
 
 export function QuestionPrompt(props: { request: QuestionRequest }) {
   const sdk = useSDK()
@@ -41,6 +43,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
   const other = createMemo(() => custom() && store.selected === options().length)
   const input = createMemo(() => store.custom[store.tab] ?? "")
   const multi = createMemo(() => question()?.multiple === true)
+  const hints = createMemo(() => questionHints({ single: single(), confirm: confirm(), multi: multi() }))
   const customPicked = createMemo(() => {
     const value = input()
     if (!value) return false
@@ -445,28 +448,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
         paddingBottom={1}
         justifyContent="space-between"
       >
-        <box flexDirection="row" gap={2}>
-          <Show when={!single()}>
-            <text fg={theme.foreground.default}>
-              {"⇆"} <span style={{ fg: theme.foreground.muted }}>tab</span>
-            </text>
-          </Show>
-          <Show when={!confirm()}>
-            <text fg={theme.foreground.default}>
-              {"↑↓"} <span style={{ fg: theme.foreground.muted }}>select</span>
-            </text>
-          </Show>
-          <text fg={theme.foreground.default}>
-            enter{" "}
-            <span style={{ fg: theme.foreground.muted }}>
-              {confirm() ? "submit" : multi() ? "toggle" : single() ? "submit" : "confirm"}
-            </span>
-          </text>
-
-          <text fg={theme.foreground.default}>
-            esc <span style={{ fg: theme.foreground.muted }}>dismiss</span>
-          </text>
-        </box>
+        <FooterHintList hints={hints()} />
       </box>
     </box>
   )

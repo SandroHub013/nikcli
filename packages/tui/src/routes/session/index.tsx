@@ -28,6 +28,7 @@ import { TuiPluginRuntime } from "@tui/plugin"
 import { createRaguClient, type Part, type SessionPendingInput2 } from "@ragu/sdk/httpapi"
 import { useLocal } from "@tui/context/local"
 import { Locale } from "@ragu/util/locale"
+import { Log } from "@ragu/util/log"
 import { reasoningSummary } from "@tui/context/thinking"
 import { Token } from "@ragu/util/token"
 
@@ -1395,7 +1396,9 @@ export function Session() {
                 <TranscriptBoundary
                   sessionID={route.sessionID}
                   message={lang.t("session.transcript.failed")}
-                  color={theme.status.warning.fg}
+                  color={theme.status.error.fg}
+                  logFile={Log.file()}
+                  exits={`Other ways out: ${keybind.print("session_list")} opens another session · /export saves this one`}
                 >
                   <Show when={windowed().top > 0}>
                     <box height={windowed().top} flexShrink={0} />

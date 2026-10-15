@@ -2,6 +2,8 @@ import { Plugin } from "@ragu/plugin/v2/tui"
 import { createMemo, Show } from "solid-js"
 import { Global } from "@ragu/util/global"
 import { VERSION } from "@ragu/util/version"
+import { shortVersion } from "@tui/util/product-name"
+import { sidebarPath } from "@tui/util/sidebar-path"
 import { useKV } from "@tui/context/kv"
 import { useSync } from "@tui/context/sync"
 import { useTheme } from "@tui/context/theme"
@@ -18,9 +20,7 @@ function View() {
   const showGettingStarted = createMemo(() => !hasProvider() && !kv.get("dismissed_getting_started", false))
   const path = createMemo(() => {
     const value = (sync.data.path.directory || process.cwd()).replace(Global.Path.home, "~")
-    const text = sync.data.vcs?.branch ? `${value}:${sync.data.vcs.branch}` : value
-    const parts = text.split("/")
-    return { parent: parts.slice(0, -1).join("/"), name: parts.at(-1) ?? "" }
+    return sidebarPath(value, sync.data.vcs?.branch)
   })
 
   return (
@@ -47,7 +47,6 @@ function View() {
                 ✕
               </text>
             </box>
-            <text fg={theme.foreground.muted}>Ragu includes free models so you can start immediately.</text>
             <text fg={theme.foreground.muted}>
               Connect from 75+ providers to use other models, including Claude, GPT, Gemini etc
             </text>
@@ -59,15 +58,11 @@ function View() {
         </box>
       </Show>
       <text>
-        <span style={{ fg: theme.foreground.muted }}>{path().parent}/</span>
+        <span style={{ fg: theme.foreground.muted }}>{path().parent}</span>
         <span style={{ fg: theme.foreground.default }}>{path().name}</span>
       </text>
       <text fg={theme.foreground.muted}>
-        <span style={{ fg: theme.status.success.fg }}>•</span> <b>RAGU</b>
-        <span style={{ fg: theme.foreground.default }}>
-          <b>CODE</b>
-        </span>{" "}
-        <span>{VERSION}</span>
+        <span style={{ fg: theme.status.success.fg }}>•</span> <b>Ragu Code</b> <span>{shortVersion(VERSION)}</span>
       </text>
     </box>
   )

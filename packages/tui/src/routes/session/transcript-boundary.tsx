@@ -2,6 +2,7 @@ import type { RGBA } from "@opentui/core"
 import { createEffect, createSignal, ErrorBoundary, on, onCleanup, Show, untrack, type JSX } from "solid-js"
 import { Log } from "@ragu/util/log"
 import { errorFormat, errorMessage } from "@ragu/util/error-format"
+import { transcriptFailedLines } from "../../util/transcript-notice"
 
 const log = Log.create({ service: "tui.transcript" })
 
@@ -16,7 +17,16 @@ const log = Log.create({ service: "tui.transcript" })
  * rows give way to one line that says so, the prompt below stays usable, and
  * the error goes to the log. Moving to another session tries again.
  */
-export function TranscriptBoundary(props: { sessionID: string; message: string; color: RGBA; children?: JSX.Element }) {
+export function TranscriptBoundary(props: {
+  sessionID: string
+  message: string
+  color: RGBA
+  /** Where the details went: the log file. */
+  logFile?: string
+  /** The ways out that are still there: another session, an export. */
+  exits?: string
+  children?: JSX.Element
+}) {
   return (
     <ErrorBoundary
       fallback={(error, reset) => {
@@ -26,7 +36,12 @@ export function TranscriptBoundary(props: { sessionID: string; message: string; 
           stack: errorFormat(error),
         })
         createEffect(on(() => props.sessionID, reset, { defer: true }))
-        return <TranscriptFailed message={props.message} color={props.color} />
+        return (
+          <TranscriptFailed
+            lines={transcriptFailedLines({ message: props.message, logFile: props.logFile, exits: props.exits })}
+            color={props.color}
+          />
+        )
       }}
     >
       {props.children}
@@ -43,7 +58,7 @@ export function TranscriptBoundary(props: { sessionID: string; message: string; 
  * simply not there; uncontained, its error goes up to the App, whose own
  * fallback fails the same way and leaves the screen as it was.
  */
-function TranscriptFailed(props: { message: string; color: RGBA }) {
+function TranscriptFailed(props: { lines: string[]; color: RGBA }) {
   const [ready, setReady] = createSignal(false)
   const timer = setTimeout(() => setReady(true), 0)
   onCleanup(() => clearTimeout(timer))
@@ -52,7 +67,7 @@ function TranscriptFailed(props: { message: string; color: RGBA }) {
       <ErrorBoundary fallback={() => null}>
         <box paddingLeft={2} paddingRight={2} paddingTop={1} flexShrink={0}>
           <text fg={props.color} wrapMode="word">
-            {props.message}
+            {props.lines.join("\n")}
           </text>
         </box>
       </ErrorBoundary>

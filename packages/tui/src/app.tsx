@@ -121,6 +121,7 @@ import type { EventSource, Transport } from "./context/sdk"
 import { Log } from "@ragu/util/log"
 import { errorMessage } from "@ragu/util/error-format"
 import { classifyConfigFailure } from "@tui/util/config-failure"
+import { shouldToastSessionError } from "@tui/util/session-error"
 import { LOGO_LINES } from "@tui/component/logo"
 
 const log = Log.create({ service: "tui.app" })
@@ -1622,9 +1623,10 @@ function App(props: {
       }),
       sdk.event.on(SessionPrimitives.EventName.error, (evt) => {
         const error = evt.properties.error
-        if (error && typeof error === "object" && error.name === "MessageAbortedError") return
         const sessionID = evt.properties.sessionID
         const currentSession = route.data.type === "session" ? route.data.sessionID : undefined
+        // The session on screen shows this error in its transcript: a toast would repeat it over the next prompt.
+        if (!shouldToastSessionError({ error, sessionID, currentSessionID: currentSession })) return
         const session = sessionID ? sync.session.get(sessionID) : undefined
         if (session?.title === BRAIN_SESSION_TITLE && currentSession !== sessionID) return
         const message = (() => {

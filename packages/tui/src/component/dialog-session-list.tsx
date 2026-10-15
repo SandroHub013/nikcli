@@ -13,6 +13,7 @@ import { createDebouncedSignal } from "../util/signal"
 import { createRaguClient } from "@ragu/sdk/httpapi"
 import { useToast } from "../ui/toast"
 import { Keybind } from "@tui/util/keybind"
+import { sessionDisplayTitle } from "@tui/util/session-title"
 import { Spinner } from "./spinner"
 import { abbreviateHome } from "../util/path-format"
 import path from "path"
@@ -240,7 +241,7 @@ export function DialogSessionList(
         ) : undefined
 
         return {
-          title: isDeleting ? `Press ${keybind.print("session_delete")} again to confirm` : x.title,
+          title: isDeleting ? `Press ${keybind.print("session_delete")} again to confirm` : sessionDisplayTitle(x.title),
           bg: isDeleting ? theme.status.error.fg : undefined,
           value: x.id,
           category,
