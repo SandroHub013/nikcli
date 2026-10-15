@@ -101,7 +101,7 @@ if ($requested) {
   } catch {
     Fail "Failed to fetch version information: $($_.Exception.Message)"
   }
-  if (-not $version) { Fail "Failed to resolve the latest nikcli version" }
+  if (-not $version) { Fail "Failed to resolve the latest Ragu Code version" }
   $tag = "v$version"
   Step "Latest version: $version"
 }
@@ -244,7 +244,7 @@ try {
       Remove-Item $archive -Force -ErrorAction SilentlyContinue
     }
   }
-  if (-not $downloaded) { Fail "Failed to download nikcli for $($targets -join ' or ')" }
+  if (-not $downloaded) { Fail "Failed to download Ragu Code for $($targets -join ' or ')" }
   Step "Downloaded $filename"
 
   $extract = Join-Path $tmp "extract"
@@ -287,7 +287,7 @@ try {
       [void][int]::TryParse($env:NIKCLI_UPGRADE_PID, [ref]$upgradePid)
     }
     if ($upgradePid -le 0) {
-      Fail "Could not write $targetExe - close any running nikcli process and retry. ($writeError)"
+      Fail "Could not write $targetExe - close any running Ragu Code process and retry. ($writeError)"
     }
 
     # Windows locks a running executable. Stage the replacement beside it and
@@ -397,7 +397,7 @@ if ($env:NIKCLI_NO_PATH -ne "1") {
 }
 
 Write-Host ""
-Write-Host "  nikcli $version installed" -ForegroundColor Green
+Write-Host "  Ragu Code $version installed" -ForegroundColor Green
 Write-Host ""
 Write-Host "   Next steps"
 Write-Host "   cd <project>          # open your project"

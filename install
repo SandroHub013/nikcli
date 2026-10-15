@@ -396,7 +396,7 @@ download_and_install() {
     mkdir -p "$tmp_dir"
 
     local download_success=false
-    spinner_start "Downloading ${APP} ${specific_version}"
+    spinner_start "Downloading Ragu Code ${specific_version}"
 
     # $target is the baseline asset and $target_fallback the plain one when the
     # CPU needs baseline; otherwise $target_fallback is empty and there is a
@@ -425,7 +425,7 @@ download_and_install() {
 
     if [ "$download_success" = false ]; then
         rm -f "$tmp_dir/$filename"
-        spinner_stop err "Failed to download nikcli"
+        spinner_stop err "Failed to download Ragu Code"
         rm -rf "$tmp_dir"
         outro "Aborted"
         exit 1
@@ -597,7 +597,7 @@ fi
 # Done
 # ────────────────────────────────────────────────────────────────────────────
 
-outro "${GREEN}${APP} ${specific_version} installed${NC}"
+outro "${GREEN}Ragu Code ${specific_version} installed${NC}"
 ui ""
 ui "   ${DIM}Next steps${NC}"
 ui "   ${BOLD}cd${NC} <project>          ${DIM}# open your project${NC}"
