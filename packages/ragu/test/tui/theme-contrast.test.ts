@@ -200,6 +200,21 @@ describe("the ragu theme", () => {
       expect(worse).toEqual([])
     })
 
+    // The captures showed code on the diff's context lines and on the panel (a written file's view) under 4.5:1, in
+    // greyscale too: pairs the catalog test does not measure yet. Ragu reaches the floor there.
+    test(`its code reaches 4.5:1 on the diff's context lines and on the panel in ${mode} mode`, async () => {
+      const t = createStandaloneTheme({ document: await loadBuiltInTheme("ragu"), mode }).theme
+      const ground = over(t.surface.base, TERMINAL[mode])
+      const colours = { ...t.syntax, error: t.status.error.fg, warning: t.status.warning.fg, info: t.status.info.fg }
+      const low: string[] = []
+      for (const [where, fill] of Object.entries({ context: t.diff.contextBg, panel: t.surface.panel })) {
+        const bg = over(fill, ground)
+        for (const [name, fg] of Object.entries(colours))
+          if (ratio(fg, bg) < 4.5) low.push(`${name}/${where}: ${ratio(fg, bg).toFixed(2)}`)
+      }
+      expect(low).toEqual([])
+    })
+
     test(`wears the brand's colours in ${mode} mode`, async () => {
       const t = createStandaloneTheme({ document: await loadBuiltInTheme("ragu"), mode }).theme
       const rgb = RGBA.fromHex
