@@ -814,6 +814,8 @@ export const en: Messages = {
   "gateway.approve.blocked": (what: string, reason: string) =>
     `I blocked «${what}»: it ${reason}. This command never runs, not even with a yes.`,
   "gateway.approve.once": "Yes, this once",
+  "gateway.approve.privateOnly":
+    "This needs your confirmation, and I do not ask for it in a channel. Write to me in private.",
   "gateway.approve.no": "Refuse",
   "gateway.approve.expired": "No answer in 5 minutes: I said no.",
   "gateway.approve.refused": (permission, what) =>

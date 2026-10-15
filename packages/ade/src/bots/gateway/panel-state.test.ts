@@ -187,6 +187,7 @@ describe("the Gateway section of a bot's card", () => {
       id: "1",
       redacted: true,
       button: false,
+      private: true,
     })
     expect(panel.redactedAt()).toBe(Date.UTC(2026, 8, 25, 10, 30))
     panel.dispose()

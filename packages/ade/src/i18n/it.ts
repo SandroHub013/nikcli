@@ -831,6 +831,8 @@ export const it = {
   "gateway.approve.question": (permission: string, what: string) =>
     `Il bot chiede il permesso «${permission}» per:\n${what}\n\nLo permetto questa volta? Senza risposta entro 5 minuti vale no.`,
   "gateway.approve.once": "Sì, questa volta",
+  "gateway.approve.privateOnly":
+    "Questo richiede una tua conferma, e in un canale non la chiedo. Scrivimi in privato.",
   "gateway.approve.danger": (reason: string) => `Attenzione: questo comando ${reason}.`,
   "gateway.approve.blocked": (what: string, reason: string) =>
     `Ho bloccato «${what}»: ${reason}. Questo comando non parte mai, nemmeno con un sì.`,
