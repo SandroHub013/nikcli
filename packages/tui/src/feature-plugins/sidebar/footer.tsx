@@ -63,9 +63,9 @@ function View() {
         <span style={{ fg: theme.foreground.default }}>{path().name}</span>
       </text>
       <text fg={theme.foreground.muted}>
-        <span style={{ fg: theme.status.success.fg }}>•</span> <b>NIK</b>
+        <span style={{ fg: theme.status.success.fg }}>•</span> <b>RA</b>
         <span style={{ fg: theme.foreground.default }}>
-          <b>CLI</b>
+          <b>GU</b>
         </span>{" "}
         <span>{VERSION}</span>
       </text>

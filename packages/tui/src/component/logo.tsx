@@ -140,10 +140,10 @@ export function Logo(props: { idle?: boolean; compact?: boolean }) {
       <box height={1} flexDirection="column">
         <text selectable={false} wrapMode="none">
           <span style={{ fg: theme.foreground.muted }}>
-            <b>NIK</b>
+            <b>RA</b>
           </span>
           <span style={{ fg: theme.foreground.default }}>
-            <b>CLI</b>
+            <b>GU</b>
           </span>
         </text>
       </box>

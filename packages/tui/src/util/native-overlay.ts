@@ -32,6 +32,13 @@ export type NativeOverlay = {
   rows: number
   /** Rows at the bottom of the terminal the overlay must not cover (prompt + hints). */
   chromeBottom?: number
+  /** Strict viewport used by scrolling inline images; partially visible images stay half-blocks. */
+  viewport?: () => OverlayRect | undefined
+  enabled?: () => boolean
+  writer?: (chunk: string) => void
+  onError?: (error: unknown) => void
+  /** Inline images must never use the dialog's whole-terminal cleanup. */
+  inline?: boolean
 }
 
 export type CellMetrics = {
@@ -43,7 +50,7 @@ type OverlayHost = {
   requestRender: () => void
   terminalWidth: number
   terminalHeight: number
-  renderNative: () => void
+  renderNative: () => string | void
   writeOut: (chunk: string) => void
   renderOffset: number
   /**
@@ -57,7 +64,11 @@ type OverlayHost = {
 type OverlayManager = {
   overlays: Set<NativeOverlay>
   lastRect: WeakMap<NativeOverlay, OverlayRect>
-  originalRenderNative: () => void
+  lastPayload: WeakMap<NativeOverlay, Uint8Array | string>
+  pendingRect: WeakMap<NativeOverlay, OverlayRect>
+  terminalWidth: number
+  terminalHeight: number
+  originalRenderNative: () => string | void
 }
 
 const managers = new WeakMap<CliRenderer, OverlayManager>()
@@ -160,6 +171,35 @@ function currentRect(overlay: NativeOverlay, offset: number): OverlayRect {
   }
 }
 
+export function overlayInsideViewport(rect: OverlayRect, viewport: OverlayRect) {
+  return (
+    rect.x >= viewport.x &&
+    rect.y >= viewport.y &&
+    rect.x + rect.columns <= viewport.x + viewport.columns &&
+    rect.y + rect.rows <= viewport.y + viewport.rows
+  )
+}
+
+function canPaint(overlay: NativeOverlay, rect: OverlayRect, termW: number, termH: number) {
+  if (!overlay.bytes || overlay.enabled?.() === false) return false
+  if (!overlayFullyVisible(rect, termW, termH, overlay.chromeBottom ?? 0)) return false
+  if (overlay.inline && !overlayInsideViewport(rect, { x: 0, y: 0, columns: termW, rows: termH })) return false
+  const viewport = overlay.viewport?.()
+  return !overlay.viewport || Boolean(viewport && overlayInsideViewport(rect, viewport))
+}
+
+function writeOverlay(host: OverlayHost, overlay: NativeOverlay, bytes: string) {
+  try {
+    if (overlay.writer) overlay.writer(bytes)
+    else host.writeOut(bytes)
+  } catch (error) {
+    overlay.bytes = ""
+    overlay.onError?.(error)
+    host.forceFullRepaintRequested = true
+    queueMicrotask(() => host.requestRender())
+  }
+}
+
 /**
  * Draw a cursor-positioned native image after OpenTUI flushes.
  * Mutate `overlay.bytes` and `requestRender()` to replace the picture in place.
@@ -169,30 +209,69 @@ export function registerNativeOverlay(renderer: CliRenderer, overlay: NativeOver
   let manager = managers.get(renderer)
   if (!manager) {
     const originalRenderNative = host.renderNative.bind(renderer)
-    manager = { overlays: new Set(), lastRect: new WeakMap(), originalRenderNative }
+    manager = {
+      overlays: new Set(),
+      lastRect: new WeakMap(),
+      lastPayload: new WeakMap(),
+      pendingRect: new WeakMap(),
+      terminalWidth: renderer.terminalWidth,
+      terminalHeight: renderer.terminalHeight,
+      originalRenderNative,
+    }
     managers.set(renderer, manager)
     host.renderNative = () => {
       const termW = renderer.terminalWidth
       const termH = renderer.terminalHeight
       const offset = host.renderOffset ?? 0
+      let invalidated =
+        Boolean(host.forceFullRepaintRequested) || termW !== manager!.terminalWidth || termH !== manager!.terminalHeight
       for (const item of manager!.overlays) {
         const last = manager!.lastRect.get(item)
         const next = currentRect(item, offset)
         const chrome = item.chromeBottom ?? 0
-        const visible = Boolean(item.bytes) && overlayFullyVisible(next, termW, termH, chrome)
+        const visible = canPaint(item, next, termW, termH)
         if (last && (!visible || !overlayRectsEqual(last, next))) {
-          host.writeOut(eraseOverlayRect(last, termW, termH, chrome))
-          if (!visible) manager!.lastRect.delete(item)
+          writeOverlay(host, item, eraseOverlayRect(last, termW, termH, chrome))
+          if (item.inline) {
+            host.forceFullRepaintRequested = true
+            invalidated = true
+          }
+          manager!.lastRect.delete(item)
+          manager!.lastPayload.delete(item)
         }
       }
-      originalRenderNative()
+      const status = originalRenderNative()
+      if (status && status !== "rendered") return status
+      manager!.terminalWidth = termW
+      manager!.terminalHeight = termH
       for (const item of manager!.overlays) {
         const rect = currentRect(item, offset)
-        const chrome = item.chromeBottom ?? 0
-        if (!item.bytes || !overlayFullyVisible(rect, termW, termH, chrome)) continue
-        host.writeOut(paintOverlay(rect, item.bytes))
+        if (!canPaint(item, rect, termW, termH)) {
+          manager!.pendingRect.delete(item)
+          continue
+        }
+        if (item.inline) {
+          // Wait for two matching flushed layouts before the first placement.
+          const pending = manager!.pendingRect.get(item)
+          if (!pending || (!manager!.lastPayload.has(item) && !overlayRectsEqual(pending, rect))) {
+            manager!.pendingRect.set(item, rect)
+            queueMicrotask(() => {
+              if (manager!.overlays.has(item)) host.requestRender()
+            })
+            continue
+          }
+          const last = manager!.lastRect.get(item)
+          if (!invalidated && last && overlayRectsEqual(last, rect) && manager!.lastPayload.get(item) === item.bytes)
+            continue
+        }
+        // Output callbacks can synchronously unmount the owner. Publish the
+        // placement first so its cleanup can erase the exact emitted cells.
         manager!.lastRect.set(item, rect)
+        manager!.lastPayload.set(item, item.bytes)
+        manager!.pendingRect.set(item, rect)
+        writeOverlay(host, item, paintOverlay(rect, item.bytes))
       }
+      return status
     }
   }
   manager.overlays.add(overlay)
@@ -207,8 +286,11 @@ export function registerNativeOverlay(renderer: CliRenderer, overlay: NativeOver
     released = true
     const current = managers.get(renderer)
     if (!current) return
-    const last = current.lastRect.get(overlay) ?? currentRect(overlay, host.renderOffset ?? 0)
+    const last =
+      current.lastRect.get(overlay) ?? (overlay.inline ? undefined : currentRect(overlay, host.renderOffset ?? 0))
     current.lastRect.delete(overlay)
+    current.lastPayload.delete(overlay)
+    current.pendingRect.delete(overlay)
     current.overlays.delete(overlay)
     const termW = renderer.terminalWidth
     const termH = renderer.terminalHeight
@@ -216,12 +298,13 @@ export function registerNativeOverlay(renderer: CliRenderer, overlay: NativeOver
     // A live WebView Sixel is routinely larger than its cell box (retina
     // metrics, sixel bands). Esc closed the dialog and erased the box —
     // Google stayed on screen around it. The last overlay wipes the terminal.
-    const wipe = lastOne
-      ? eraseTerminal(termW, termH)
-      : last
-        ? eraseOverlayRect(last, termW, termH, overlay.chromeBottom ?? 0)
-        : ""
-    if (wipe) host.writeOut(wipe)
+    const wipe =
+      lastOne && !overlay.inline
+        ? eraseTerminal(termW, termH)
+        : last
+          ? eraseOverlayRect(last, termW, termH, overlay.chromeBottom ?? 0)
+          : ""
+    if (wipe) writeOverlay(host, overlay, wipe)
     if (lastOne) {
       host.renderNative = current.originalRenderNative
       managers.delete(renderer)

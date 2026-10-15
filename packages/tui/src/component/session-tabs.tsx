@@ -36,6 +36,11 @@ export function truncateTabTitle(title: string, width: number) {
   return `${bunUtils.sliceAnsi(clean, 0, width - 1)}…`
 }
 
+export function shouldShowSessionTabs(sessionCount: number, env: Record<string, string | undefined>) {
+  if (env.ADE_PANE_ID && env.ADE_MAILBOX) return false
+  return sessionCount > 1
+}
+
 export function layoutSessionTabs(
   ids: string[],
   activeID: string | undefined,
@@ -93,6 +98,7 @@ export function SessionTabs() {
   const bordered = createMemo(() => style().box.borderSides.length > 0)
   const byID = createMemo(() => new Map(tabs.list().map((tab) => [tab.id, tab])))
   const layout = createMemo(() => layoutSessionTabs(tabs.ids(), activeID(), dimensions().width))
+  const visible = createMemo(() => shouldShowSessionTabs(tabs.ids().length, process.env))
 
   useKeyboard((event) => {
     // A modal owns the keyboard while it is up. Without this the tab shortcuts
@@ -120,177 +126,179 @@ export function SessionTabs() {
   })
 
   return (
-    <box
-      flexShrink={0}
-      height={contentHeight() + (bordered() ? 1 : 0)}
-      width="100%"
-      flexDirection="row"
-      alignItems="center"
-      backgroundColor={style().colors.background}
-      border={[...style().box.borderSides]}
-      customBorderChars={borderCharsFor(style().box.borderCharset)}
-      borderColor={style().colors.border}
-      overflow="hidden"
-    >
+    <Show when={visible()}>
       <box
-        width={9}
-        height={contentHeight()}
         flexShrink={0}
-        paddingTop={style().box.paddingTop}
-        paddingBottom={style().box.paddingBottom}
-        paddingLeft={1}
-        flexDirection="column"
+        height={contentHeight() + (bordered() ? 1 : 0)}
+        width="100%"
+        flexDirection="row"
+        alignItems="center"
+        backgroundColor={style().colors.background}
+        border={[...style().box.borderSides]}
+        customBorderChars={borderCharsFor(style().box.borderCharset)}
+        borderColor={style().colors.border}
+        overflow="hidden"
       >
-        <Logo compact idle={false} />
-      </box>
-      <box flexDirection="row" flexGrow={1} minWidth={0} height={contentHeight()} gap={TAB_GAP} overflow="hidden">
-        <For each={layout().ids}>
-          {(id) => {
-            const state = createMemo<SessionTabState | undefined>(() => byID().get(id))
-            const selected = () => state()?.active === true
-            const session = createMemo(() => sync.session.get(id))
-            const status = createMemo(() => sync.data.session_status[id]?.type ?? "idle")
-            // Semantic precedence: what blocks the user outranks what is merely running, which
-            // outranks work they have not looked at yet. Only one marker fits in a tab.
-            const marker = createMemo(() => {
-              if (state()?.attention) return { glyph: "◆", color: theme.status.warning.fg }
-              if (state()?.busy || status() === "busy") return { glyph: "●", color: theme.status.info.fg }
-              if (status() === "retry") return { glyph: "●", color: theme.status.warning.fg }
-              if (state()?.unread) return { glyph: "●", color: theme.accent.fg }
-              return { glyph: "·", color: theme.foreground.muted }
-            })
-            const linkedID = createMemo(() => sessionLinkOf(kv, id))
-            const title = () =>
-              truncateTabTitle(
-                session()?.title ?? state()?.title ?? `Session ${id.slice(-5)}`,
-                layout().width - 8 - (linkedID() ? 3 : 0),
-              )
-            return (
-              <box
-                width={layout().width}
-                minWidth={TAB_MIN_WIDTH}
-                flexShrink={0}
-                height={contentHeight()}
-                flexDirection="row"
-                paddingTop={style().box.paddingTop}
-                paddingBottom={style().box.paddingBottom}
-                overflow="hidden"
-                onMouseDown={() => tabs.open(id)}
-                backgroundColor={selected() ? style().colors.activeBackground : undefined}
-                border={selected() && bordered() ? ["left"] : undefined}
-                borderColor={selected() ? style().colors.activeBorder : undefined}
-                customBorderChars={selected() ? SplitBorder.customBorderChars : undefined}
-              >
-                <text fg={marker().color} wrapMode="none">
-                  {` ${marker().glyph} `}
-                </text>
-                <Show when={linkedID()}>
-                  <text
-                    fg={theme.status.info.fg}
-                    onMouseDown={(event) => {
-                      event.stopPropagation()
-                      openLinkDialog(id)
-                    }}
-                    wrapMode="none"
-                  >
-                    {"⇄ "}
-                  </text>
-                </Show>
-                <text
-                  fg={selected() ? theme.foreground.default : theme.foreground.muted}
-                  attributes={selected() ? TextAttributes.BOLD : TextAttributes.DIM}
-                  wrapMode="none"
-                  flexGrow={1}
+        <box
+          width={9}
+          height={contentHeight()}
+          flexShrink={0}
+          paddingTop={style().box.paddingTop}
+          paddingBottom={style().box.paddingBottom}
+          paddingLeft={1}
+          flexDirection="column"
+        >
+          <Logo compact idle={false} />
+        </box>
+        <box flexDirection="row" flexGrow={1} minWidth={0} height={contentHeight()} gap={TAB_GAP} overflow="hidden">
+          <For each={layout().ids}>
+            {(id) => {
+              const state = createMemo<SessionTabState | undefined>(() => byID().get(id))
+              const selected = () => state()?.active === true
+              const session = createMemo(() => sync.session.get(id))
+              const status = createMemo(() => sync.data.session_status[id]?.type ?? "idle")
+              // Semantic precedence: what blocks the user outranks what is merely running, which
+              // outranks work they have not looked at yet. Only one marker fits in a tab.
+              const marker = createMemo(() => {
+                if (state()?.attention) return { glyph: "◆", color: theme.status.warning.fg }
+                if (state()?.busy || status() === "busy") return { glyph: "●", color: theme.status.info.fg }
+                if (status() === "retry") return { glyph: "●", color: theme.status.warning.fg }
+                if (state()?.unread) return { glyph: "●", color: theme.accent.fg }
+                return { glyph: "·", color: theme.foreground.muted }
+              })
+              const linkedID = createMemo(() => sessionLinkOf(kv, id))
+              const title = () =>
+                truncateTabTitle(
+                  session()?.title ?? state()?.title ?? `Session ${id.slice(-5)}`,
+                  layout().width - 8 - (linkedID() ? 3 : 0),
+                )
+              return (
+                <box
+                  width={layout().width}
+                  minWidth={TAB_MIN_WIDTH}
+                  flexShrink={0}
+                  height={contentHeight()}
+                  flexDirection="row"
+                  paddingTop={style().box.paddingTop}
+                  paddingBottom={style().box.paddingBottom}
+                  overflow="hidden"
+                  onMouseDown={() => tabs.open(id)}
+                  backgroundColor={selected() ? style().colors.activeBackground : undefined}
+                  border={selected() && bordered() ? ["left"] : undefined}
+                  borderColor={selected() ? style().colors.activeBorder : undefined}
+                  customBorderChars={selected() ? SplitBorder.customBorderChars : undefined}
                 >
-                  {title()}
-                </text>
-                <Show when={selected()}>
-                  <Show when={!linkedID()}>
+                  <text fg={marker().color} wrapMode="none">
+                    {` ${marker().glyph} `}
+                  </text>
+                  <Show when={linkedID()}>
                     <text
-                      fg={theme.foreground.muted}
+                      fg={theme.status.info.fg}
                       onMouseDown={(event) => {
                         event.stopPropagation()
                         openLinkDialog(id)
                       }}
                       wrapMode="none"
                     >
-                      {" ⇄ "}
+                      {"⇄ "}
                     </text>
                   </Show>
                   <text
-                    fg={theme.foreground.muted}
-                    onMouseDown={(event) => {
-                      event.stopPropagation()
-                      tabs.close(id)
-                    }}
+                    fg={selected() ? theme.foreground.default : theme.foreground.muted}
+                    attributes={selected() ? TextAttributes.BOLD : TextAttributes.DIM}
                     wrapMode="none"
+                    flexGrow={1}
                   >
-                    {" × "}
+                    {title()}
                   </text>
-                </Show>
-              </box>
-            )
-          }}
-        </For>
-        <Show when={layout().hidden > 0}>
+                  <Show when={selected()}>
+                    <Show when={!linkedID()}>
+                      <text
+                        fg={theme.foreground.muted}
+                        onMouseDown={(event) => {
+                          event.stopPropagation()
+                          openLinkDialog(id)
+                        }}
+                        wrapMode="none"
+                      >
+                        {" ⇄ "}
+                      </text>
+                    </Show>
+                    <text
+                      fg={theme.foreground.muted}
+                      onMouseDown={(event) => {
+                        event.stopPropagation()
+                        tabs.close(id)
+                      }}
+                      wrapMode="none"
+                    >
+                      {" × "}
+                    </text>
+                  </Show>
+                </box>
+              )
+            }}
+          </For>
+          <Show when={layout().hidden > 0}>
+            <box
+              width={6}
+              height={contentHeight()}
+              flexShrink={0}
+              paddingTop={style().box.paddingTop}
+              paddingBottom={style().box.paddingBottom}
+              flexDirection="column"
+            >
+              <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
+                {` ·· +${layout().hidden}`}
+              </text>
+            </box>
+          </Show>
+        </box>
+        {/*
+          Stacked, one row each, so the close-all action costs no horizontal cells: the strip's
+          reserved chrome stays exactly the width of `+ new` and the tabs keep every column they had.
+        */}
+        <box
+          width={CHROME_BUTTON_WIDTH}
+          height={contentHeight()}
+          flexShrink={0}
+          flexDirection="column"
+          justifyContent="center"
+        >
           <box
-            width={6}
-            height={contentHeight()}
-            flexShrink={0}
-            paddingTop={style().box.paddingTop}
-            paddingBottom={style().box.paddingBottom}
-            flexDirection="column"
+            height={1}
+            flexDirection="row"
+            justifyContent="center"
+            onMouseDown={tabs.createSession}
+            backgroundColor={route.data.type === "home" ? theme.surface.offset : undefined}
+            border={route.data.type === "home" ? ["left"] : undefined}
+            borderColor={route.data.type === "home" ? theme.accent.fg : undefined}
+            customBorderChars={route.data.type === "home" ? SplitBorder.customBorderChars : undefined}
           >
-            <text fg={theme.foreground.muted} attributes={TextAttributes.DIM} wrapMode="none">
-              {` ·· +${layout().hidden}`}
+            <text
+              fg={route.data.type === "home" ? theme.accent.fg : theme.foreground.muted}
+              attributes={route.data.type === "home" ? TextAttributes.BOLD : undefined}
+              wrapMode="none"
+            >
+              {" + new"}
             </text>
           </box>
-        </Show>
-      </box>
-      {/*
-        Stacked, one row each, so the close-all action costs no horizontal cells: the strip's
-        reserved chrome stays exactly the width of `+ new` and the tabs keep every column they had.
-      */}
-      <box
-        width={CHROME_BUTTON_WIDTH}
-        height={contentHeight()}
-        flexShrink={0}
-        flexDirection="column"
-        justifyContent="center"
-      >
-        <box
-          height={1}
-          flexDirection="row"
-          justifyContent="center"
-          onMouseDown={tabs.createSession}
-          backgroundColor={route.data.type === "home" ? theme.surface.offset : undefined}
-          border={route.data.type === "home" ? ["left"] : undefined}
-          borderColor={route.data.type === "home" ? theme.accent.fg : undefined}
-          customBorderChars={route.data.type === "home" ? SplitBorder.customBorderChars : undefined}
-        >
-          <text
-            fg={route.data.type === "home" ? theme.accent.fg : theme.foreground.muted}
-            attributes={route.data.type === "home" ? TextAttributes.BOLD : undefined}
-            wrapMode="none"
+          <box
+            height={1}
+            flexDirection="row"
+            justifyContent="center"
+            onMouseDown={tabs.closeAll}
+            backgroundColor={theme.surface.offset}
+            border={["left"]}
+            borderColor={theme.status.error.fg}
+            customBorderChars={SplitBorder.customBorderChars}
           >
-            {" + new"}
-          </text>
-        </box>
-        <box
-          height={1}
-          flexDirection="row"
-          justifyContent="center"
-          onMouseDown={tabs.closeAll}
-          backgroundColor={theme.surface.offset}
-          border={["left"]}
-          borderColor={theme.status.error.fg}
-          customBorderChars={SplitBorder.customBorderChars}
-        >
-          <text fg={theme.status.error.fg} attributes={TextAttributes.BOLD} wrapMode="none">
-            {" × all"}
-          </text>
+            <text fg={theme.status.error.fg} attributes={TextAttributes.BOLD} wrapMode="none">
+              {" × all"}
+            </text>
+          </box>
         </box>
       </box>
-    </box>
+    </Show>
   )
 }

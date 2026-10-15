@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test"
+import { describe, expect, it, test } from "bun:test"
 import {
   KITTY_PLACEHOLDER,
   MAX_PLACEHOLDER_ID,
@@ -12,6 +12,7 @@ import {
   kittyPlaceholderRow,
   supportsKittyUnicodePlaceholders,
   chooseInlineImageRenderer,
+  encodeAdeImage,
 } from "../src/kitty-placeholder"
 import type { Capabilities } from "../src/capabilities"
 import { Protocol } from "../src/capabilities"
@@ -191,6 +192,16 @@ describe("supportsKittyUnicodePlaceholders", () => {
 })
 
 describe("chooseInlineImageRenderer", () => {
+  test("ADE needs both markers and takes priority over inherited Kitty hints", () => {
+    const capability = kittyCaps("kitty")
+    expect(chooseInlineImageRenderer(capability, { ADE_PANE_ID: "p", ADE_MAILBOX: "box" })).toBe("ade")
+    expect(chooseInlineImageRenderer({ ...capability, kitty: false }, { ADE_PANE_ID: "p" })).toBe("halfblock")
+    expect(chooseInlineImageRenderer({ ...capability, kitty: false }, { ADE_MAILBOX: "box" })).toBe("halfblock")
+    expect(chooseInlineImageRenderer({ ...capability, kitty: false }, { ADE_PANE_ID: " ", ADE_MAILBOX: "box" })).toBe(
+      "halfblock",
+    )
+    expect(chooseInlineImageRenderer(capability, {})).toBe("kitty")
+  })
   it("uses placeholders only when the terminal composites them", () => {
     expect(chooseInlineImageRenderer(kittyCaps("xterm-kitty"), {})).toBe("kitty")
     expect(chooseInlineImageRenderer(kittyCaps("ghostty"), {})).toBe("kitty")
@@ -217,5 +228,28 @@ describe("chooseInlineImageRenderer", () => {
       terminal: "WezTerm",
     }
     expect(chooseInlineImageRenderer(wezterm, { TERM_PROGRAM: "WezTerm" })).toBe("halfblock")
+  })
+})
+
+describe("encodeAdeImage", () => {
+  test("encodes a bounded PNG in OSC 1337 with cell dimensions", () => {
+    const encoded = encodeAdeImage(createPixelImage(1, 1), { columns: 12, rows: 4 })
+    expect(encoded).toStartWith("\x1b]1337;File=inline=1;width=12;height=4;preserveAspectRatio=0;size=")
+    expect(encoded).toEndWith("\x07")
+    expect(encoded).not.toContain("\x1b_G")
+    const base64 = encoded.slice(encoded.indexOf(":") + 1, -1)
+    expect(base64).toMatch(/^[A-Za-z0-9+/=]+$/)
+    const png = Uint8Array.fromBase64(base64)
+    expect(Number(/;size=(\d+):/.exec(encoded)?.[1])).toBe(png.byteLength)
+    expect(png.subarray(0, 8)).toEqual(new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]))
+  })
+  test("rejects invalid dimensions and oversized payloads", () => {
+    expect(() => encodeAdeImage(createPixelImage(1, 1), { columns: 0, rows: 1 })).toThrow()
+    expect(() => encodeAdeImage(createPixelImage(1, 1), { columns: 1, rows: 1, maxPayloadBytes: 1 })).toThrow(
+      "too large",
+    )
+    expect(() =>
+      encodeAdeImage({ width: 4001, height: 4001, data: new Uint8ClampedArray() }, { columns: 1, rows: 1 }),
+    ).toThrow()
   })
 })
