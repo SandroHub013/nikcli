@@ -28,7 +28,7 @@ import { createStore, produce } from "solid-js/store"
 import { useKeybind } from "@tui/context/keybind"
 import { usePromptHistory, type PromptInfo } from "./history"
 import { usePromptStash } from "./stash"
-import { chipText } from "./chip"
+import { chipText, voiceChip } from "./chip"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useCommandDialog } from "../dialog-command"
@@ -2391,12 +2391,12 @@ export function Prompt(props: PromptProps) {
                   onMouseUp={() => {
                     void handleVoiceButtonUp()
                   }}
-                  backgroundColor={theme.status.error.fg}
+                  backgroundColor={voiceChip(theme, voiceStatus()).bg}
                   paddingLeft={0.5}
                   paddingRight={0.5}
                   flexShrink={0}
                 >
-                  <text fg={chipText(theme.status.error.fg)} wrapMode="none">
+                  <text fg={voiceChip(theme, voiceStatus()).fg} wrapMode="none">
                     <span style={{ bold: voiceStatus() === "recording" }}>
                       {voiceStatus() === "recording"
                         ? "release to send"
@@ -2405,13 +2405,7 @@ export function Prompt(props: PromptProps) {
                           : (() => {
                               // eslint-disable-next-line @typescript-eslint/no-explicit-any
                               const shortcut = keybind.print("voice_record" as any)
-                              return shortcut ? (
-                                <>
-                                  ⏺ <span style={{ fg: theme.foreground.muted }}>rec</span>
-                                </>
-                              ) : (
-                                "⏺"
-                              )
+                              return shortcut ? <>⏺ rec</> : "⏺"
                             })()}
                     </span>
                   </text>
