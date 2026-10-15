@@ -43,15 +43,16 @@ export const Splash = (props: Pick<ComponentProps<"svg">, "ref" | "class">) => {
 }
 
 /**
- * The pixel wordmark. Pale letters on dark surfaces, ink letters on light ones; follows the
- * in-app color scheme (data-color-scheme) and falls back to the system preference.
+ * The pixel wordmark, RAGU CODE as the logo's combo spells it. The letters are outlined in dark tomato on
+ * dark surfaces and in ink on light ones; follows the in-app color scheme (data-color-scheme) and falls back
+ * to the system preference.
  */
 export const Logo = (props: { class?: string }) => {
   return (
     <span
       data-component="logo-wordmark"
       role="img"
-      aria-label="Ragu"
+      aria-label="Ragu Code"
       classList={{ [props.class ?? ""]: !!props.class }}
     >
       <img data-tone="dark" src={wordmarkDark} alt="" draggable={false} />
