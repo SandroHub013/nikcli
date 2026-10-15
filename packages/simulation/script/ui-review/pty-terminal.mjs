@@ -62,7 +62,7 @@ for (const profile of profiles) {
   term.onData((chunk) => {
     data += chunk
     if (firstQuery < 0 && data.includes("\x1b]11;?")) firstQuery = Date.now() - started
-    if (firstPaint < 0 && /Ask anything|Chiedi qualsiasi/.test(data.replace(/[[0-9;?]*[A-Za-z]/g, ""))) firstPaint = Date.now() - started
+    if (firstPaint < 0 && /Ask anything|Chiedi qualsiasi/.test(data.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, ""))) firstPaint = Date.now() - started
   })
   let exited = false
   term.onExit(() => (exited = true))
