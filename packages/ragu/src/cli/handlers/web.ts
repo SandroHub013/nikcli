@@ -29,7 +29,9 @@ export function webInterfaceUrl(base: string) {
  * `ragu.local` name. Every one is the web interface (`/companion`), as the localhost one is: the server answers `/`
  * with a 404, so a bare `http://ip:port` was a link that did not open anything.
  */
-export function networkAccessUrls(port: number, ips: readonly string[], mdns: boolean) {
+export function networkAccessUrls(port: number | undefined, ips: readonly string[], mdns: boolean) {
+  // A server that does not say which port it took has no address anyone else can be told.
+  if (port === undefined) return { network: [], mdns: undefined }
   return {
     network: ips.map((ip) => webInterfaceUrl(`http://${ip.includes(":") ? `[${ip}]` : ip}:${port}`)),
     mdns: mdns ? webInterfaceUrl(`http://ragu.local:${port}`) : undefined,
@@ -72,10 +74,12 @@ export default Runtime.handler(Commands.commands["web"], async (input) => {
   UI.empty()
 
   if (opts.hostname === "0.0.0.0") {
-    const localhostUrl = webInterfaceUrl(`http://localhost:${server.port}`)
+    // `server.port` is absent when the listener does not report one: its own URL carries the port then.
+    const port = server.port ?? (Number(server.url.port) || undefined)
+    const localhostUrl = webInterfaceUrl(port !== undefined ? `http://localhost:${port}` : server.url.toString())
     UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, localhostUrl)
 
-    const urls = networkAccessUrls(server.port, getNetworkIPs(), Boolean(opts.mdns))
+    const urls = networkAccessUrls(port, getNetworkIPs(), Boolean(opts.mdns))
     for (const url of urls.network) {
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Network access:    ", UI.Style.TEXT_NORMAL, url)
     }

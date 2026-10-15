@@ -40,9 +40,21 @@ describe("ragu web opens a page the server serves", () => {
     expect(networkAccessUrls(4096, [], false)).toEqual({ network: [], mdns: undefined })
   })
 
+  // `server.port` is `number | undefined`: with no port there is no address to print, not `:undefined`.
+  test("a server that reports no port gets no network links", async () => {
+    const { networkAccessUrls } = await import("@/cli/handlers/web")
+    expect(networkAccessUrls(undefined, ["192.168.1.7"], true)).toEqual({ network: [], mdns: undefined })
+  })
+
+  test("the command takes the port from the server's URL when the listener gives none", () => {
+    const source = fs.readFileSync(path.join(import.meta.dir, "../../src/cli/handlers/web.ts"), "utf8")
+    expect(source).toContain("server.port ?? (Number(server.url.port) || undefined)")
+    expect(source).not.toContain("`http://localhost:${server.port}`")
+  })
+
   test("the command prints those, not its own spelling of an address", () => {
     const source = fs.readFileSync(path.join(import.meta.dir, "../../src/cli/handlers/web.ts"), "utf8")
-    expect(source).toContain("networkAccessUrls(server.port")
+    expect(source).toContain("networkAccessUrls(port, getNetworkIPs()")
     expect(source).not.toContain("`http://${ip}:${server.port}`")
     expect(source).not.toContain("`ragu.local:${server.port}`")
   })
