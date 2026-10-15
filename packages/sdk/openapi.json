@@ -28425,6 +28425,16 @@
               }
             ]
           },
+          "image_open": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "messages_undo": {
             "anyOf": [
               {
@@ -38208,6 +38218,16 @@
             ]
           },
           "messages_copy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "image_open": {
             "anyOf": [
               {
                 "type": "string"
@@ -59627,6 +59647,16 @@
                     ]
                   },
                   "messages_copy": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "image_open": {
                     "anyOf": [
                       {
                         "type": "string"

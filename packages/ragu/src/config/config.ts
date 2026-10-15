@@ -1145,6 +1145,9 @@ export namespace Config {
       messages_previous: z.string().optional().default("none").describe("Navigate to previous message"),
       messages_last_user: z.string().optional().default("none").describe("Navigate to last user message"),
       messages_copy: z.string().optional().default("<leader>y").describe("Copy message"),
+      // A leader chord, not ctrl+shift+o: xterm 6 (ADE) sends nothing for ctrl+shift+letter and a
+      // classic terminal sends plain ctrl+o, which is session_tab_back.
+      image_open: z.string().optional().default("<leader>v").describe("Open an image at full resolution"),
       messages_undo: z.string().optional().default("<leader>u").describe("Undo message"),
       messages_redo: z.string().optional().default("<leader>r").describe("Redo message"),
       messages_toggle_conceal: z
