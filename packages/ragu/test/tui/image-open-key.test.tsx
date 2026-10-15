@@ -47,7 +47,7 @@ describe("opening an image at full resolution", () => {
   test("the chord opens the chooser, and the preview names the key", async () => {
     const screen = await mount(() => <TuiImageList urls={[PIXEL]} maxColumns={20} maxRows={6} writer={() => {}} />, 100, 30)
     try {
-      await screen.waitForFrame((frame) => frame.includes("ctrl+x v: open full size"))
+      await screen.waitForFrame((frame) => frame.includes("image · ctrl+x v to open"))
 
       screen.mockInput.pressKey("x", { ctrl: true })
       await screen.flush()
