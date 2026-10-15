@@ -67,12 +67,12 @@ export function PendingInputCard(props: {
             when={props.delivery === "queue"}
             fallback={
               <>
-                <span style={{ bg: props.color, fg: badgeFg(), bold: true }}> STEERING </span>
+                <span style={{ bg: props.color, fg: badgeFg(), bold: true }}> Steering </span>
                 <span> interrupts and sends now</span>
               </>
             }
           >
-            <span style={{ bg: props.color, fg: badgeFg(), bold: true }}> QUEUED </span>
+            <span style={{ bg: props.color, fg: badgeFg(), bold: true }}> Queued </span>
             <span> sends at the next safe step</span>
           </Show>
         </text>
