@@ -32,7 +32,7 @@
     },
     "secondary": {
       "dark": "darkSecondary",
-      "light": "lightSecondary"
+      "light": "#2f7ea5"
     },
     "accent": {
       "dark": "darkAccent",
@@ -147,7 +147,7 @@
       "light": "lightStep12"
     },
     "markdownHeading": {
-      "dark": "#628ada",
+      "dark": "#719aeb",
       "light": "#2c53a0"
     },
     "markdownLink": {
@@ -172,7 +172,7 @@
     },
     "markdownStrong": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#8d4517"
     },
     "markdownHorizontalRule": {
       "dark": "darkStep11",
@@ -208,7 +208,7 @@
     },
     "syntaxFunction": {
       "dark": "darkSecondary",
-      "light": "lightSecondary"
+      "light": "#2f7ea5"
     },
     "syntaxVariable": {
       "dark": "darkRed",

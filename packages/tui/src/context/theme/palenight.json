@@ -19,39 +19,39 @@
   "theme": {
     "primary": {
       "dark": "blue",
-      "light": "#4976eb"
+      "light": "#416ce1"
     },
     "secondary": {
       "dark": "purple",
-      "light": "#a854f2"
+      "light": "#9d47e5"
     },
     "accent": {
       "dark": "cyan",
-      "light": "#00acc1"
+      "light": "#007f8f"
     },
     "error": {
       "dark": "red",
-      "light": "#e53935"
+      "light": "#d82929"
     },
     "warning": {
       "dark": "yellow",
-      "light": "#ffb300"
+      "light": "#966800"
     },
     "success": {
       "dark": "green",
-      "light": "#91b859"
+      "light": "#587b15"
     },
     "info": {
       "dark": "orange",
-      "light": "#f4511e"
+      "light": "#cf3a00"
     },
     "text": {
-      "dark": "foreground",
+      "dark": "#c0c7e9",
       "light": "#292d3e"
     },
     "textMuted": {
-      "dark": "comment",
-      "light": "#8796b0"
+      "dark": "#969dc7",
+      "light": "#5b6881"
     },
     "background": {
       "dark": "#292d3e",
@@ -126,36 +126,36 @@
       "light": "#ffebee"
     },
     "markdownText": {
-      "dark": "foreground",
+      "dark": "#b2b9da",
       "light": "#292d3e"
     },
     "markdownHeading": {
-      "dark": "purple",
-      "light": "#a854f2"
+      "dark": "#daa5fe",
+      "light": "#7e1fc3"
     },
     "markdownLink": {
       "dark": "blue",
-      "light": "#4976eb"
+      "light": "#416ce1"
     },
     "markdownLinkText": {
       "dark": "cyan",
-      "light": "#00acc1"
+      "light": "#007f8f"
     },
     "markdownCode": {
       "dark": "green",
-      "light": "#91b859"
+      "light": "#5b7e1a"
     },
     "markdownBlockQuote": {
-      "dark": "comment",
-      "light": "#8796b0"
+      "dark": "#8b92bb",
+      "light": "#66748d"
     },
     "markdownEmph": {
       "dark": "yellow",
-      "light": "#ffb300"
+      "light": "#9a6a00"
     },
     "markdownStrong": {
-      "dark": "orange",
-      "light": "#f4511e"
+      "dark": "#ffa387",
+      "light": "#a12b00"
     },
     "markdownHorizontalRule": {
       "dark": "comment",
@@ -163,11 +163,11 @@
     },
     "markdownListItem": {
       "dark": "blue",
-      "light": "#4976eb"
+      "light": "#416ce1"
     },
     "markdownListEnumeration": {
       "dark": "cyan",
-      "light": "#00acc1"
+      "light": "#007f8f"
     },
     "markdownImage": {
       "dark": "blue",
@@ -178,20 +178,20 @@
       "light": "#00acc1"
     },
     "markdownCodeBlock": {
-      "dark": "foreground",
+      "dark": "#b2b9da",
       "light": "#292d3e"
     },
     "syntaxComment": {
-      "dark": "comment",
-      "light": "#8796b0"
+      "dark": "#979fc8",
+      "light": "#606e87"
     },
     "syntaxKeyword": {
       "dark": "purple",
-      "light": "#a854f2"
+      "light": "#963fde"
     },
     "syntaxFunction": {
       "dark": "blue",
-      "light": "#4976eb"
+      "light": "#3b65d9"
     },
     "syntaxVariable": {
       "dark": "foreground",
@@ -199,19 +199,19 @@
     },
     "syntaxString": {
       "dark": "green",
-      "light": "#91b859"
+      "light": "#557810"
     },
     "syntaxNumber": {
       "dark": "orange",
-      "light": "#f4511e"
+      "light": "#ca3800"
     },
     "syntaxType": {
       "dark": "yellow",
-      "light": "#ffb300"
+      "light": "#926400"
     },
     "syntaxOperator": {
       "dark": "cyan",
-      "light": "#00acc1"
+      "light": "#007888"
     },
     "syntaxPunctuation": {
       "dark": "foreground",

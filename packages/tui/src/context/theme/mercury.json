@@ -49,7 +49,7 @@
       "dark": "purple-300"
     },
     "accent": {
-      "light": "purple-400",
+      "light": "#5e72bf",
       "dark": "purple-400"
     },
     "error": {
@@ -73,7 +73,7 @@
       "dark": "neutral-200"
     },
     "textMuted": {
-      "light": "neutral-500",
+      "light": "#706f7c",
       "dark": "neutral-400"
     },
     "background": {
@@ -205,19 +205,19 @@
       "dark": "neutral-200"
     },
     "syntaxComment": {
-      "light": "neutral-500",
-      "dark": "neutral-400"
+      "light": "#6c6b78",
+      "dark": "#9e9faa"
     },
     "syntaxKeyword": {
       "light": "purple-700",
       "dark": "purple-400"
     },
     "syntaxFunction": {
-      "light": "purple-600",
+      "light": "#4c5ee3",
       "dark": "purple-400"
     },
     "syntaxVariable": {
-      "light": "blue-600",
+      "light": "#00778c",
       "dark": "blue-400"
     },
     "syntaxString": {
@@ -229,7 +229,7 @@
       "dark": "orange-400"
     },
     "syntaxType": {
-      "light": "blue-600",
+      "light": "#00778c",
       "dark": "blue-400"
     },
     "syntaxOperator": {

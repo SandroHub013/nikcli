@@ -20,38 +20,38 @@
   "theme": {
     "primary": {
       "dark": "nord8",
-      "light": "nord10"
+      "light": "#4c6f99"
     },
     "secondary": {
       "dark": "nord9",
-      "light": "nord9"
+      "light": "#516f8d"
     },
     "accent": {
       "dark": "nord7",
-      "light": "nord7"
+      "light": "#4a7474"
     },
     "error": {
-      "dark": "nord11",
-      "light": "nord11"
+      "dark": "#f59199",
+      "light": "#a74c56"
     },
     "warning": {
-      "dark": "nord12",
-      "light": "nord12"
+      "dark": "#e69c84",
+      "light": "#9b5641"
     },
     "success": {
       "dark": "nord14",
-      "light": "nord14"
+      "light": "#587042"
     },
     "info": {
       "dark": "nord8",
-      "light": "nord10"
+      "light": "#496b95"
     },
     "text": {
       "dark": "nord6",
       "light": "nord0"
     },
     "textMuted": {
-      "dark": "#8B95A7",
+      "dark": "#b1bcce",
       "light": "nord1"
     },
     "background": {
@@ -71,7 +71,7 @@
       "light": "nord3"
     },
     "borderActive": {
-      "dark": "nord3",
+      "dark": "#727d92",
       "light": "nord2"
     },
     "borderSubtle": {
@@ -131,32 +131,32 @@
       "light": "nord0"
     },
     "markdownHeading": {
-      "dark": "nord8",
-      "light": "nord10"
+      "dark": "#92cbdb",
+      "light": "#305179"
     },
     "markdownLink": {
       "dark": "nord9",
-      "light": "nord9"
+      "light": "#516f8d"
     },
     "markdownLinkText": {
       "dark": "nord7",
-      "light": "nord7"
+      "light": "#4a7474"
     },
     "markdownCode": {
       "dark": "nord14",
-      "light": "nord14"
+      "light": "#5c7446"
     },
     "markdownBlockQuote": {
-      "dark": "#8B95A7",
+      "dark": "#919cae",
       "light": "nord3"
     },
     "markdownEmph": {
-      "dark": "nord12",
-      "light": "nord12"
+      "dark": "#d38972",
+      "light": "#9f5a45"
     },
     "markdownStrong": {
       "dark": "nord13",
-      "light": "nord13"
+      "light": "#674b00"
     },
     "markdownHorizontalRule": {
       "dark": "#8B95A7",
@@ -164,11 +164,11 @@
     },
     "markdownListItem": {
       "dark": "nord8",
-      "light": "nord10"
+      "light": "#4c6f99"
     },
     "markdownListEnumeration": {
       "dark": "nord7",
-      "light": "nord7"
+      "light": "#4a7474"
     },
     "markdownImage": {
       "dark": "nord9",
@@ -183,36 +183,36 @@
       "light": "nord0"
     },
     "syntaxComment": {
-      "dark": "#8B95A7",
+      "dark": "#a4aec0",
       "light": "nord3"
     },
     "syntaxKeyword": {
-      "dark": "nord9",
-      "light": "nord9"
+      "dark": "#90b1d1",
+      "light": "#4e6c89"
     },
     "syntaxFunction": {
       "dark": "nord8",
-      "light": "nord8"
+      "light": "#3a707f"
     },
     "syntaxVariable": {
       "dark": "nord7",
-      "light": "nord7"
+      "light": "#467070"
     },
     "syntaxString": {
       "dark": "nord14",
-      "light": "nord14"
+      "light": "#587042"
     },
     "syntaxNumber": {
-      "dark": "nord15",
-      "light": "nord15"
+      "dark": "#c8a2c1",
+      "light": "#815e7b"
     },
     "syntaxType": {
       "dark": "nord7",
-      "light": "nord7"
+      "light": "#467070"
     },
     "syntaxOperator": {
-      "dark": "nord9",
-      "light": "nord9"
+      "dark": "#90b1d1",
+      "light": "#4e6c89"
     },
     "syntaxPunctuation": {
       "dark": "nord4",

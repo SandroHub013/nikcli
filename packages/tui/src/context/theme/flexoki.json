@@ -45,28 +45,28 @@
       "light": "orange600"
     },
     "error": {
-      "dark": "red400",
+      "dark": "#dc574a",
       "light": "red600"
     },
     "warning": {
       "dark": "orange400",
-      "light": "orange600"
+      "light": "#b74d0d"
     },
     "success": {
       "dark": "green400",
-      "light": "green600"
+      "light": "#5e7600"
     },
     "info": {
       "dark": "cyan400",
-      "light": "cyan600"
+      "light": "#177a73"
     },
     "text": {
       "dark": "base200",
       "light": "black"
     },
     "textMuted": {
-      "dark": "base600",
-      "light": "base600"
+      "dark": "#8f8e88",
+      "light": "#676662"
     },
     "background": {
       "dark": "black",
@@ -145,7 +145,7 @@
       "light": "black"
     },
     "markdownHeading": {
-      "dark": "purple400",
+      "dark": "#9f93de",
       "light": "purple600"
     },
     "markdownLink": {
@@ -154,23 +154,23 @@
     },
     "markdownLinkText": {
       "dark": "cyan400",
-      "light": "cyan600"
+      "light": "#22817a"
     },
     "markdownCode": {
       "dark": "cyan400",
-      "light": "cyan600"
+      "light": "#22817a"
     },
     "markdownBlockQuote": {
       "dark": "yellow400",
-      "light": "yellow600"
+      "light": "#946f00"
     },
     "markdownEmph": {
       "dark": "yellow400",
-      "light": "yellow600"
+      "light": "#946f00"
     },
     "markdownStrong": {
-      "dark": "orange400",
-      "light": "orange600"
+      "dark": "#eb803e",
+      "light": "#953b00"
     },
     "markdownHorizontalRule": {
       "dark": "base600",
@@ -182,7 +182,7 @@
     },
     "markdownListEnumeration": {
       "dark": "cyan400",
-      "light": "cyan600"
+      "light": "#22817a"
     },
     "markdownImage": {
       "dark": "magenta400",
@@ -197,40 +197,40 @@
       "light": "black"
     },
     "syntaxComment": {
-      "dark": "base600",
-      "light": "base600"
+      "dark": "#908f89",
+      "light": "#64635f"
     },
     "syntaxKeyword": {
       "dark": "green400",
-      "light": "green600"
+      "light": "#556b00"
     },
     "syntaxFunction": {
-      "dark": "orange400",
-      "light": "orange600"
+      "dark": "#dc722e",
+      "light": "#a84400"
     },
     "syntaxVariable": {
-      "dark": "blue400",
+      "dark": "#5294cd",
       "light": "blue600"
     },
     "syntaxString": {
       "dark": "cyan400",
-      "light": "cyan600"
+      "light": "#006f68"
     },
     "syntaxNumber": {
-      "dark": "purple400",
+      "dark": "#9185cf",
       "light": "purple600"
     },
     "syntaxType": {
       "dark": "yellow400",
-      "light": "yellow600"
+      "light": "#7e5e00"
     },
     "syntaxOperator": {
       "dark": "base300",
-      "light": "base600"
+      "light": "#64635f"
     },
     "syntaxPunctuation": {
       "dark": "base300",
-      "light": "base600"
+      "light": "#64635f"
     }
   }
 }

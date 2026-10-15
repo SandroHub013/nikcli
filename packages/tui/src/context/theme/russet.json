@@ -52,15 +52,15 @@
     },
     "warning": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#ac5519"
     },
     "success": {
       "dark": "darkGreen",
-      "light": "lightGreen"
+      "light": "#357a4d"
     },
     "info": {
       "dark": "darkCyan",
-      "light": "lightCyan"
+      "light": "#37767b"
     },
     "text": {
       "dark": "darkStep12",
@@ -156,7 +156,7 @@
     },
     "markdownHeading": {
       "dark": "#da8e62",
-      "light": "#a0562c"
+      "light": "#873f12"
     },
     "markdownLink": {
       "dark": "#da8e62",
@@ -164,7 +164,7 @@
     },
     "markdownLinkText": {
       "dark": "darkCyan",
-      "light": "lightCyan"
+      "light": "#3b7a7f"
     },
     "markdownCode": {
       "dark": "darkBlue",
@@ -172,15 +172,15 @@
     },
     "markdownBlockQuote": {
       "dark": "darkYellow",
-      "light": "lightYellow"
+      "light": "#906a1d"
     },
     "markdownEmph": {
       "dark": "darkYellow",
-      "light": "lightYellow"
+      "light": "#906a1d"
     },
     "markdownStrong": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#8a3d00"
     },
     "markdownHorizontalRule": {
       "dark": "darkStep11",
@@ -192,7 +192,7 @@
     },
     "markdownListEnumeration": {
       "dark": "darkCyan",
-      "light": "lightCyan"
+      "light": "#3b7a7f"
     },
     "markdownImage": {
       "dark": "#da8e62",
@@ -212,31 +212,31 @@
     },
     "syntaxKeyword": {
       "dark": "#da8e62",
-      "light": "#a0562c"
+      "light": "#9a5127"
     },
     "syntaxFunction": {
       "dark": "darkSecondary",
-      "light": "lightSecondary"
+      "light": "#a54830"
     },
     "syntaxVariable": {
-      "dark": "darkRed",
+      "dark": "#e07b72",
       "light": "lightRed"
     },
     "syntaxString": {
       "dark": "darkGreen",
-      "light": "lightGreen"
+      "light": "#2b7145"
     },
     "syntaxNumber": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#a24c0a"
     },
     "syntaxType": {
       "dark": "darkYellow",
-      "light": "lightYellow"
+      "light": "#835e08"
     },
     "syntaxOperator": {
       "dark": "darkCyan",
-      "light": "lightCyan"
+      "light": "#2e6d72"
     },
     "syntaxPunctuation": {
       "dark": "darkStep12",

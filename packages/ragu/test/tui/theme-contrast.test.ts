@@ -112,7 +112,27 @@ function measureDocument(id: string, document: unknown, mode: "dark" | "light"):
  * Pairs no change of lightness can close, each with the reason; `script/fix-themes.ts` lists them when it runs.
  * Kept honest both ways: a pair that starts passing has to leave this list.
  */
-const KNOWN: Record<string, string> = {}
+const ZENBURN =
+  "zenburn's surfaces are mid greys (#3f3f3f to #5f5f5f): no text colour reaches 7:1 on the lightest, the best is 6.4"
+const GITHUB_ELEMENT =
+  "github-light's backgroundElement is its `selection` def, solid #0366d6: no text reads on it and on the light grey both"
+const GITHUB_MUTED =
+  "github-light's muted is drawn on the solid blue backgroundElement too, so no lightness serves both; left as it was"
+const KNOWN: Record<string, string> = {
+  "zenburn/dark text/panel": ZENBURN,
+  "zenburn/dark text/offset": ZENBURN,
+  "zenburn/dark text/overlay": ZENBURN,
+  "zenburn/dark diff.text/added": ZENBURN,
+  "zenburn/dark diff.text/removed": ZENBURN,
+  "zenburn/dark diff.text/context": ZENBURN,
+  "github-light/light text/offset": GITHUB_ELEMENT,
+  "github-light/light text/overlay": GITHUB_ELEMENT,
+  "github-light/light muted/base": GITHUB_MUTED,
+  "github-light/light muted/panel": GITHUB_MUTED,
+  "github-light/light muted/offset": GITHUB_ELEMENT,
+  "github-light/light muted/overlay": GITHUB_ELEMENT,
+  "github-light/light reasoning/base": GITHUB_MUTED,
+}
 
 const key = (m: Measured) => `${m.theme}/${m.mode} ${m.id}`
 const describeFailure = (m: Measured) => `${key(m)}: ${m.ratio.toFixed(2)} < ${m.min} (${m.where})`

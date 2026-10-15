@@ -155,8 +155,8 @@
       "light": "lightStep12"
     },
     "markdownHeading": {
-      "dark": "#628ada",
-      "light": "#2c53a0"
+      "dark": "#759ff1",
+      "light": "#2b519e"
     },
     "markdownLink": {
       "dark": "#628ada",
@@ -179,8 +179,8 @@
       "light": "lightYellow"
     },
     "markdownStrong": {
-      "dark": "darkOrange",
-      "light": "lightOrange"
+      "dark": "#b49b8d",
+      "light": "#694f41"
     },
     "markdownHorizontalRule": {
       "dark": "darkStep11",
@@ -211,7 +211,7 @@
       "light": "lightStep11"
     },
     "syntaxKeyword": {
-      "dark": "#628ada",
+      "dark": "#6e97e8",
       "light": "#2c53a0"
     },
     "syntaxFunction": {
@@ -228,7 +228,7 @@
     },
     "syntaxNumber": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#7a5f51"
     },
     "syntaxType": {
       "dark": "darkYellow",
@@ -236,7 +236,7 @@
     },
     "syntaxOperator": {
       "dark": "darkCyan",
-      "light": "lightCyan"
+      "light": "#4d6972"
     },
     "syntaxPunctuation": {
       "dark": "darkStep12",

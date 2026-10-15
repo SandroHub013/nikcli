@@ -142,7 +142,7 @@
     },
     "markdownHeading": {
       "dark": "darkBlue",
-      "light": "lightBlue"
+      "light": "#0055b7"
     },
     "markdownLink": {
       "dark": "darkBlue",
@@ -166,7 +166,7 @@
     },
     "markdownStrong": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#983c00"
     },
     "markdownHorizontalRule": {
       "dark": "#30363d",
@@ -193,7 +193,7 @@
       "light": "lightFg"
     },
     "syntaxComment": {
-      "dark": "darkFgMuted",
+      "dark": "#909aa4",
       "light": "lightFgMuted"
     },
     "syntaxKeyword": {
@@ -202,11 +202,11 @@
     },
     "syntaxFunction": {
       "dark": "darkPurple",
-      "light": "lightPurple"
+      "light": "#814edd"
     },
     "syntaxVariable": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#b94b00"
     },
     "syntaxString": {
       "dark": "darkCyan",
@@ -214,11 +214,11 @@
     },
     "syntaxNumber": {
       "dark": "darkBlue",
-      "light": "lightCyan"
+      "light": "#15787f"
     },
     "syntaxType": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#b94b00"
     },
     "syntaxOperator": {
       "dark": "darkPink",

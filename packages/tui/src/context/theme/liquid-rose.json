@@ -147,7 +147,7 @@
       "light": "lightStep12"
     },
     "markdownHeading": {
-      "dark": "#da628a",
+      "dark": "#ed739a",
       "light": "#a02c53"
     },
     "markdownLink": {
@@ -172,7 +172,7 @@
     },
     "markdownStrong": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#973d01"
     },
     "markdownHorizontalRule": {
       "dark": "darkStep11",

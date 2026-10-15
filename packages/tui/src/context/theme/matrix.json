@@ -24,31 +24,31 @@
   "theme": {
     "primary": {
       "dark": "rainGreen",
-      "light": "rainGreenDim"
+      "light": "#00802c"
     },
     "secondary": {
       "dark": "rainCyan",
-      "light": "rainTeal"
+      "light": "#007c6d"
     },
     "accent": {
       "dark": "rainPurple",
-      "light": "rainPurple"
+      "light": "#9c43d1"
     },
     "error": {
       "dark": "alertRed",
-      "light": "alertRed"
+      "light": "#d20f25"
     },
     "warning": {
       "dark": "alertYellow",
-      "light": "alertYellow"
+      "light": "#636f00"
     },
     "success": {
       "dark": "rainGreenHi",
-      "light": "rainGreenDim"
+      "light": "#007a29"
     },
     "info": {
       "dark": "alertBlue",
-      "light": "alertBlue"
+      "light": "#006fa6"
     },
     "text": {
       "dark": "rainGreenHi",
@@ -56,7 +56,7 @@
     },
     "textMuted": {
       "dark": "rainGray",
-      "light": "lightGray"
+      "light": "#576759"
     },
     "background": {
       "dark": "matrixInk0",
@@ -76,7 +76,7 @@
     },
     "borderActive": {
       "dark": "rainGreen",
-      "light": "rainGreenDim"
+      "light": "#00a139"
     },
     "borderSubtle": {
       "dark": "matrixInk2",
@@ -136,31 +136,31 @@
     },
     "markdownHeading": {
       "dark": "rainCyan",
-      "light": "rainTeal"
+      "light": "#005c50"
     },
     "markdownLink": {
       "dark": "alertBlue",
-      "light": "alertBlue"
+      "light": "#0074ad"
     },
     "markdownLinkText": {
       "dark": "rainTeal",
-      "light": "rainTeal"
+      "light": "#007c6d"
     },
     "markdownCode": {
       "dark": "rainGreenDim",
-      "light": "rainGreenDim"
+      "light": "#00802c"
     },
     "markdownBlockQuote": {
       "dark": "rainGray",
-      "light": "lightGray"
+      "light": "#637265"
     },
     "markdownEmph": {
       "dark": "rainOrange",
-      "light": "rainOrange"
+      "light": "#9e6000"
     },
     "markdownStrong": {
       "dark": "alertYellow",
-      "light": "alertYellow"
+      "light": "#4c5600"
     },
     "markdownHorizontalRule": {
       "dark": "rainGray",
@@ -168,11 +168,11 @@
     },
     "markdownListItem": {
       "dark": "alertBlue",
-      "light": "alertBlue"
+      "light": "#0074ad"
     },
     "markdownListEnumeration": {
       "dark": "rainTeal",
-      "light": "rainTeal"
+      "light": "#007c6d"
     },
     "markdownImage": {
       "dark": "alertBlue",
@@ -188,15 +188,15 @@
     },
     "syntaxComment": {
       "dark": "rainGray",
-      "light": "lightGray"
+      "light": "#5e6d60"
     },
     "syntaxKeyword": {
       "dark": "rainPurple",
-      "light": "rainPurple"
+      "light": "#973dcb"
     },
     "syntaxFunction": {
       "dark": "alertBlue",
-      "light": "alertBlue"
+      "light": "#006fa6"
     },
     "syntaxVariable": {
       "dark": "rainGreenHi",
@@ -204,19 +204,19 @@
     },
     "syntaxString": {
       "dark": "rainGreenDim",
-      "light": "rainGreenDim"
+      "light": "#007a29"
     },
     "syntaxNumber": {
       "dark": "rainOrange",
-      "light": "rainOrange"
+      "light": "#975c00"
     },
     "syntaxType": {
       "dark": "alertYellow",
-      "light": "alertYellow"
+      "light": "#637000"
     },
     "syntaxOperator": {
       "dark": "rainTeal",
-      "light": "rainTeal"
+      "light": "#007768"
     },
     "syntaxPunctuation": {
       "dark": "rainGreenHi",

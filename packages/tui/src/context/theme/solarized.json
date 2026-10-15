@@ -19,40 +19,40 @@
   },
   "theme": {
     "primary": {
-      "dark": "blue",
-      "light": "blue"
+      "dark": "#3093da",
+      "light": "#0076bb"
     },
     "secondary": {
-      "dark": "violet",
-      "light": "violet"
+      "dark": "#7f86da",
+      "light": "#6569bc"
     },
     "accent": {
       "dark": "cyan",
-      "light": "cyan"
+      "light": "#007f78"
     },
     "error": {
-      "dark": "red",
-      "light": "red"
+      "dark": "#ff665a",
+      "light": "#cd1e21"
     },
     "warning": {
-      "dark": "yellow",
-      "light": "yellow"
+      "dark": "#be9218",
+      "light": "#856300"
     },
     "success": {
-      "dark": "green",
-      "light": "green"
+      "dark": "#8da218",
+      "light": "#606f00"
     },
     "info": {
-      "dark": "orange",
-      "light": "orange"
+      "dark": "#f47142",
+      "light": "#bb3e00"
     },
     "text": {
-      "dark": "base0",
-      "light": "base00"
+      "dark": "#b0c2c4",
+      "light": "#3b4f57"
     },
     "textMuted": {
-      "dark": "base01",
-      "light": "base1"
+      "dark": "#859ca3",
+      "light": "#5e6b6c"
     },
     "background": {
       "dark": "base03",
@@ -71,8 +71,8 @@
       "light": "base2"
     },
     "borderActive": {
-      "dark": "base01",
-      "light": "base1"
+      "dark": "#5d737a",
+      "light": "#849192"
     },
     "borderSubtle": {
       "dark": "#073642",
@@ -127,48 +127,48 @@
       "light": "#eee8d5"
     },
     "markdownText": {
-      "dark": "base0",
-      "light": "base00"
+      "dark": "#a3b5b7",
+      "light": "#42575f"
     },
     "markdownHeading": {
-      "dark": "blue",
-      "light": "blue"
+      "dark": "#60b8ff",
+      "light": "#00588d"
     },
     "markdownLink": {
       "dark": "cyan",
-      "light": "cyan"
+      "light": "#007f78"
     },
     "markdownLinkText": {
-      "dark": "violet",
-      "light": "violet"
+      "dark": "#7f86da",
+      "light": "#6569bc"
     },
     "markdownCode": {
       "dark": "green",
-      "light": "green"
+      "light": "#687900"
     },
     "markdownBlockQuote": {
-      "dark": "base01",
-      "light": "base1"
+      "dark": "#7a9198",
+      "light": "#667474"
     },
     "markdownEmph": {
       "dark": "yellow",
-      "light": "yellow"
+      "light": "#8f6c00"
     },
     "markdownStrong": {
-      "dark": "orange",
-      "light": "orange"
+      "dark": "#ff9572",
+      "light": "#983100"
     },
     "markdownHorizontalRule": {
       "dark": "base01",
       "light": "base1"
     },
     "markdownListItem": {
-      "dark": "blue",
-      "light": "blue"
+      "dark": "#3093da",
+      "light": "#0076bb"
     },
     "markdownListEnumeration": {
       "dark": "cyan",
-      "light": "cyan"
+      "light": "#007f78"
     },
     "markdownImage": {
       "dark": "cyan",
@@ -179,44 +179,44 @@
       "light": "violet"
     },
     "markdownCodeBlock": {
-      "dark": "base0",
-      "light": "base00"
+      "dark": "#a3b5b7",
+      "light": "#42575f"
     },
     "syntaxComment": {
-      "dark": "base01",
-      "light": "base1"
+      "dark": "#859ca3",
+      "light": "#5e6b6c"
     },
     "syntaxKeyword": {
-      "dark": "green",
-      "light": "green"
+      "dark": "#8da218",
+      "light": "#606f00"
     },
     "syntaxFunction": {
-      "dark": "blue",
-      "light": "blue"
+      "dark": "#3e9fe7",
+      "light": "#006dad"
     },
     "syntaxVariable": {
-      "dark": "cyan",
-      "light": "cyan"
+      "dark": "#35a99f",
+      "light": "#00756e"
     },
     "syntaxString": {
-      "dark": "cyan",
-      "light": "cyan"
+      "dark": "#35a99f",
+      "light": "#00756e"
     },
     "syntaxNumber": {
-      "dark": "magenta",
-      "light": "magenta"
+      "dark": "#fc5ea4",
+      "light": "#c22374"
     },
     "syntaxType": {
-      "dark": "yellow",
-      "light": "yellow"
+      "dark": "#be9218",
+      "light": "#856300"
     },
     "syntaxOperator": {
-      "dark": "green",
-      "light": "green"
+      "dark": "#8da218",
+      "light": "#606f00"
     },
     "syntaxPunctuation": {
-      "dark": "base0",
-      "light": "base00"
+      "dark": "#8a9c9e",
+      "light": "#576c74"
     }
   }
 }

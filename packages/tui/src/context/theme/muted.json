@@ -26,39 +26,39 @@
   "theme": {
     "primary": {
       "dark": "blue",
-      "light": "blue"
+      "light": "#537598"
     },
     "secondary": {
       "dark": "purple",
-      "light": "purple"
+      "light": "#8f619f"
     },
     "accent": {
       "dark": "cyan",
-      "light": "cyan"
+      "light": "#267e7f"
     },
     "error": {
       "dark": "red",
-      "light": "red"
+      "light": "#b75355"
     },
     "warning": {
       "dark": "orange",
-      "light": "orange"
+      "light": "#9d6629"
     },
     "success": {
       "dark": "green",
-      "light": "green"
+      "light": "#527e1b"
     },
     "info": {
       "dark": "cyan",
-      "light": "cyan"
+      "light": "#267e7f"
     },
     "text": {
       "dark": "fg",
       "light": "#1a1a1a"
     },
     "textMuted": {
-      "dark": "fgAlt",
-      "light": "fgAlt"
+      "dark": "#8c8b8b",
+      "light": "#696868"
     },
     "background": {
       "dark": "bg",
@@ -78,7 +78,7 @@
     },
     "borderActive": {
       "dark": "cyan",
-      "light": "blue"
+      "light": "#7093b7"
     },
     "borderSubtle": {
       "dark": "bgAlt",
@@ -137,32 +137,32 @@
       "light": "#1a1a1a"
     },
     "markdownHeading": {
-      "dark": "blue",
-      "light": "blue"
+      "dark": "#83a7cc",
+      "light": "#365878"
     },
     "markdownLink": {
       "dark": "cyan",
-      "light": "cyan"
+      "light": "#267e7f"
     },
     "markdownLinkText": {
       "dark": "green",
-      "light": "green"
+      "light": "#527e1b"
     },
     "markdownCode": {
       "dark": "yellow",
-      "light": "yellow"
+      "light": "#896e3b"
     },
     "markdownBlockQuote": {
-      "dark": "fgAlt",
+      "dark": "#818180",
       "light": "fgAlt"
     },
     "markdownEmph": {
       "dark": "pink",
-      "light": "pink"
+      "light": "#a25d7c"
     },
     "markdownStrong": {
       "dark": "orange",
-      "light": "orange"
+      "light": "#7c4900"
     },
     "markdownHorizontalRule": {
       "dark": "fgAlt",
@@ -170,11 +170,11 @@
     },
     "markdownListItem": {
       "dark": "blue",
-      "light": "blue"
+      "light": "#537598"
     },
     "markdownListEnumeration": {
       "dark": "cyan",
-      "light": "cyan"
+      "light": "#267e7f"
     },
     "markdownImage": {
       "dark": "cyan",
@@ -189,16 +189,16 @@
       "light": "#1a1a1a"
     },
     "syntaxComment": {
-      "dark": "fgAlt",
-      "light": "fgAlt"
+      "dark": "#8b8b8a",
+      "light": "#6a6969"
     },
     "syntaxKeyword": {
       "dark": "purple",
-      "light": "purple"
+      "light": "#865896"
     },
     "syntaxFunction": {
       "dark": "blue",
-      "light": "blue"
+      "light": "#4a6c8e"
     },
     "syntaxVariable": {
       "dark": "fg",
@@ -206,23 +206,23 @@
     },
     "syntaxString": {
       "dark": "green",
-      "light": "green"
+      "light": "#4a750c"
     },
     "syntaxNumber": {
       "dark": "orange",
-      "light": "orange"
+      "light": "#935d1e"
     },
     "syntaxType": {
       "dark": "cyan",
-      "light": "cyan"
+      "light": "#197576"
     },
     "syntaxOperator": {
-      "dark": "fgAlt",
-      "light": "fgAlt"
+      "dark": "#8b8b8a",
+      "light": "#6a6969"
     },
     "syntaxPunctuation": {
-      "dark": "fgAlt",
-      "light": "fgAlt"
+      "dark": "#8b8b8a",
+      "light": "#6a6969"
     }
   }
 }
