@@ -107,6 +107,8 @@ function panel(fake: ReturnType<typeof server>, serverOf: (path: string) => Retu
     always: {
       get: (path) => kept[path] ?? [],
       add: (path, key) => void (kept[path] = withAlways(kept[path] ?? [], key)),
+      remove: (path, key) => void (kept[path] = (kept[path] ?? []).filter((one) => one !== key)),
+      clear: (path) => void delete kept[path],
     },
     schedule: (run, ms) => {
       const timer = { run, ms, cancelled: false }
@@ -474,7 +476,7 @@ describe("B8d: a routine's run and a chat's turn on the server", () => {
       update: (path, change) => {
         talks[path] = change(talks[path] ?? emptyTalk())
       },
-      always: { get: () => [], add: () => {} },
+      always: { get: () => [], add: () => {}, remove: () => {}, clear: () => {} },
     })
     const free = { ...BOT, model: "openrouter/qwen/qwen3:free" }
     expect(turns.routine(free, "controlla i log", "C:/progetto", { free: true, maxCostUsd: 0 })).toBeDefined()
