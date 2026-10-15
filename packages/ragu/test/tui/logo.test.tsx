@@ -88,10 +88,13 @@ describe("the wordmark's colours", () => {
       .lines.map((line) => line.spans.flatMap((span) => [...span.text].map((char) => ({ char, fg: span.fg }))))
     screen.renderer.destroy()
     // The full form: «ragu» in columns 0-18, a gap, «code» in 20-38. The short one: RAGU then CODE.
-    const [ragu, code] = compact ? [[0, 4], [4, 8]] : [[0, 19], [20, 39]]
-    const glyphs = ([from, to]: number[]) =>
-      cells.flatMap((row) => row.slice(from, to).filter((cell) => cell.char.trim() !== "")).map((cell) => cell.fg)
-    return { base: standalone.theme.surface.base, ragu: glyphs(ragu!), code: glyphs(code!) }
+    const split = compact ? 4 : 20
+    const width = compact ? 4 : 19
+    const glyphs = (from: number) =>
+      cells
+        .flatMap((row) => row.slice(from, from + width).filter((cell) => cell.char.trim() !== ""))
+        .map((cell) => cell.fg)
+    return { base: standalone.theme.surface.base, ragu: glyphs(0), code: glyphs(split) }
   }
 
   for (const mode of ["dark", "light"] as const)
