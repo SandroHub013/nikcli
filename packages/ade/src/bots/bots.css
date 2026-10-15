@@ -956,7 +956,7 @@
 [data-slot="bots-btn"][data-tone="primary"] {
   border-color: var(--ade-accent);
   background: var(--ade-accent);
-  color: var(--ade-accent-fg, #fff);
+  color: var(--ade-accent-fg);
   font-weight: var(--ade-weight-semibold);
 }
 

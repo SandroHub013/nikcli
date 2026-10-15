@@ -226,7 +226,7 @@
 
 [data-slot="variant-pick-button"][data-on="true"] [data-slot="variant-key"] {
   background: var(--ade-accent);
-  color: var(--ade-accent-fg, #fff);
+  color: var(--ade-accent-fg);
 }
 
 [data-slot="variant-name"] {
@@ -354,7 +354,7 @@
 }
 
 [data-slot="preview-error"] {
-  color: var(--ade-danger, #e05252);
+  color: var(--ade-error);
   padding: var(--ade-space-2);
   text-align: center;
 }
@@ -393,7 +393,7 @@
   border: 0;
   border-radius: var(--ade-radius-sm);
   background: var(--ade-accent);
-  color: var(--ade-accent-fg, #fff);
+  color: var(--ade-accent-fg);
   font: inherit;
   font-size: var(--ade-font-sm);
   font-weight: var(--ade-weight-semibold);
@@ -455,8 +455,8 @@
 [data-slot="design-problem"] {
   padding: 6px 10px;
   border-radius: var(--ade-radius-sm);
-  background: rgba(220, 38, 38, 0.1);
-  color: #ef4444;
+  background: var(--ade-error-bg);
+  color: var(--ade-error);
   font-size: var(--ade-font-sm);
 }
 
@@ -600,7 +600,7 @@
 }
 
 [data-slot="recipient-inline-wrap"] [data-tone="warn"] {
-  color: var(--ade-warning, #b7791f);
+  color: var(--ade-warning);
 }
 
 [data-slot="recipient-inline"] {
@@ -610,7 +610,7 @@
   font-size: var(--ade-font-md);
   color: var(--ade-text);
   background: var(--ade-surface, transparent);
-  border: 1px solid var(--ade-warning, #b7791f);
+  border: 1px solid var(--ade-warning);
   border-radius: var(--ade-radius-sm);
   padding: 2px 6px;
 }
@@ -635,7 +635,7 @@
 /* Two variants on one page: the user would see it twice and never the variant. */
 [data-slot="design-shared-preview"] {
   font-size: var(--ade-font-sm);
-  color: var(--ade-warning, #b7791f);
+  color: var(--ade-warning);
 }
 
 /* «Scegli questa»: one press chooses (notifiche-design). Neutral, like every button of the sheet. */

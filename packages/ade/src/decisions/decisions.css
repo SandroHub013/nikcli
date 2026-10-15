@@ -118,7 +118,8 @@
   flex: 0 0 auto;
   font-family: var(--ade-font-mono, ui-monospace, monospace);
   font-size: var(--ade-font-sm);
-  color: var(--ade-accent-strong);
+  /* The accent, not its hover fill: in dark that is pomodoro, 3.6:1 as text. */
+  color: var(--ade-accent);
 }
 
 [data-slot="decision-title"] {
@@ -499,7 +500,7 @@ button[data-slot="decision-row"]:hover {
 [data-slot="sheet-foot"] [data-tone="warn"] {
   margin: 0;
   font-size: var(--ade-font-sm);
-  color: var(--ade-warning, #b7791f);
+  color: var(--ade-warning);
 }
 
 [data-slot="sheet-status"] {
@@ -530,7 +531,7 @@ button[data-slot="decision-row"]:hover {
 }
 
 [data-slot="recipient-inline-wrap"] [data-tone="warn"] {
-  color: var(--ade-warning, #b7791f);
+  color: var(--ade-warning);
 }
 
 [data-slot="recipient-inline"] {
@@ -540,7 +541,7 @@ button[data-slot="decision-row"]:hover {
   font-size: var(--ade-font-md);
   color: var(--ade-text);
   background: var(--ade-surface, transparent);
-  border: 1px solid var(--ade-warning, #b7791f);
+  border: 1px solid var(--ade-warning);
   border-radius: var(--ade-radius-sm);
   padding: 2px 6px;
 }

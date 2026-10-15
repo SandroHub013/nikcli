@@ -375,7 +375,7 @@
 }
 
 [data-slot="shot-viewer-close"][data-tone="danger"] {
-  color: var(--ade-danger, #b4342a);
+  color: var(--ade-error);
 }
 
 /* ── the pane being dropped on ─────────────────────────────────────────────── */

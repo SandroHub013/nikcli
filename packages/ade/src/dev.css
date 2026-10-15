@@ -157,7 +157,7 @@
   border: 1px solid var(--ade-border-strong);
   border-radius: var(--ade-radius-lg);
   background: var(--ade-raised);
-  box-shadow: var(--ade-shadow-lg, 0 12px 32px rgb(0 0 0 / 0.32));
+  box-shadow: var(--ade-shadow-lg);
 }
 
 [data-slot="ade-menu"][data-wide="true"] {
@@ -250,7 +250,7 @@
 }
 
 [data-slot="ade-menu-action"]:hover:not(:disabled) {
-  background: var(--ade-surface-hover, rgba(127, 127, 127, 0.12));
+  background: var(--ade-hover);
 }
 
 [data-slot="ade-menu-action"]:disabled {
@@ -306,8 +306,8 @@
   height: 14px;
   padding: 0 3px;
   border-radius: 7px;
-  background: var(--ade-error, #e5484d);
-  color: #fff;
+  background: var(--ade-error);
+  color: var(--ade-on-status);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-xs);
   font-weight: var(--ade-weight-bold);
@@ -316,7 +316,7 @@
 }
 
 [data-slot="ade-icon"][data-tone="alert"] {
-  color: var(--ade-error, #e5484d);
+  color: var(--ade-error);
 }
 
 [data-slot="ade-icon"][data-open="true"] {
@@ -340,11 +340,11 @@
 }
 
 [data-slot="ade-notice-row"][data-kind="error"] {
-  color: var(--ade-error, #e5484d);
+  color: var(--ade-error);
 }
 
 [data-slot="ade-notice-row"][data-kind="warning"] {
-  color: var(--ade-working, #d29922);
+  color: var(--ade-working);
 }
 
 [data-slot="ade-notice-text"] {
@@ -381,7 +381,7 @@
 
 [data-slot="ade-notice-link"]:hover,
 [data-slot="ade-notice-action"]:hover {
-  background: var(--ade-surface-hover, rgba(127, 127, 127, 0.12));
+  background: var(--ade-hover);
 }
 
 /* The download, where the «Aggiorna» button was: text above, a bar below. */
