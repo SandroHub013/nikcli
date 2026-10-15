@@ -27,6 +27,9 @@ ICON16, ICON32, COMBO, COMBO_LIGHT = G["icon16"], G["icon32"], G["combo"], G["co
 
 INK = "#120d0b"
 CREAM = "#f4e7cd"
+# The pot's steam, near-white, and the palette's colour that takes its place on light surfaces.
+STEAM = "#e8dfcf"
+STEAM_ON_LIGHT = "#f39a6b"
 # The phrase of the README's first lines, the one that says what Ragu Code is.
 TAGLINE = "The open source coding agent, with ADE"
 
@@ -106,28 +109,34 @@ def favicons() -> None:
         pot(96).save(HERE / "favicon" / name)
 
 
-def brand_logo() -> None:
-    """
-    The logo the RaguVerse builds its hologram from: one 15-unit square per pixel of the 16 px pot, a path per
-    colour, which is what `raguverse/city/logo.ts` reads. The pot has no light variant, so the two files match.
-    """
+def logo_svg(grid: list) -> str:
+    """One 15-unit square per pixel, a path per colour: what `raguverse/city/logo.ts` reads."""
     cell = 15
     paths = []
-    for colour in dict.fromkeys(c for row in ICON16 for c in row if c):
+    for colour in dict.fromkeys(c for row in grid for c in row if c):
         d = "".join(
             f"M{x * cell} {y * cell}H{(x + 1) * cell}V{(y + 1) * cell}H{x * cell}Z"
-            for y, row in enumerate(ICON16)
+            for y, row in enumerate(grid)
             for x, c in enumerate(row)
             if c == colour
         )
         paths.append(f'<path d="{d}" fill="{colour.upper()}"/>\n')
-    side = 16 * cell
-    svg = f'<svg width="{side}" height="{side}" viewBox="0 0 {side} {side}" fill="none" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">\n{"".join(paths)}</svg>\n'
+    side = len(grid) * cell
+    return f'<svg width="{side}" height="{side}" viewBox="0 0 {side} {side}" fill="none" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">\n{"".join(paths)}</svg>\n'
+
+
+def brand_logo() -> None:
+    """
+    The logo the RaguVerse builds its hologram from, the 16 px pot. The light one is for light surfaces, where the
+    steam's near-white vanishes: there it takes the palette's `STEAM_ON_LIGHT`, and nothing else changes.
+    """
+    light = [[STEAM_ON_LIGHT if c == STEAM else c for c in row] for row in ICON16]
     copy = HERE.parents[2] / "ade" / "src" / "raguverse" / "city" / "ragu-logo-dark.svg"
-    for path in [HERE / "brand" / "ragu-logo-dark.svg", HERE / "brand" / "ragu-logo-light.svg", copy]:
-        write(path, svg)
-    for tone in ["dark", "light"]:
-        picture(ICON16, 30).save(HERE / "brand" / f"ragu-logo-{tone}.png")
+    for path in [HERE / "brand" / "ragu-logo-dark.svg", copy]:
+        write(path, logo_svg(ICON16))
+    write(HERE / "brand" / "ragu-logo-light.svg", logo_svg(light))
+    picture(ICON16, 30).save(HERE / "brand" / "ragu-logo-dark.png")
+    picture(light, 30).save(HERE / "brand" / "ragu-logo-light.png")
 
 
 def name_words(grid: list) -> tuple[list, list]:
