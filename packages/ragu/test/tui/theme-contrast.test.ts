@@ -3,6 +3,7 @@ import { RGBA, type TerminalColors } from "@opentui/core"
 import { BUILT_IN_THEME_IDS, loadBuiltInTheme } from "@tui/context/theme-catalog"
 import { contrastFg, createStandaloneTheme, generateSystem, type Theme } from "@tui/context/theme"
 import { deriveSemanticTokens, type TokenSource } from "@tui/context/theme-tokens"
+import { toOklch } from "@tui/context/contrast"
 
 /**
  * Every built-in theme, in both modes, measured on the colour pairs the screens draw.
@@ -15,8 +16,9 @@ import { deriveSemanticTokens, type TokenSource } from "@tui/context/theme-token
  * also be the ruler.
  */
 
-type Role = "text" | "secondary" | "colour" | "syntax" | "graphic"
-const MIN: Record<Role, number> = { text: 7, secondary: 4.5, colour: 4.5, syntax: 4.5, graphic: 3 }
+type Role = "text" | "secondary" | "colour" | "syntax" | "graphic" | "decoration"
+/** Decoration, the plain borders, has no floor: those pairs are there for the comparison with greyscale. */
+const MIN: Record<Role, number> = { text: 7, secondary: 4.5, colour: 4.5, syntax: 4.5, graphic: 3, decoration: 1 }
 
 /** What a transparent theme background shows through to: a dark terminal, or a white one. */
 const TERMINAL = { dark: RGBA.fromHex("#0c0c0c"), light: RGBA.fromHex("#ffffff") }
@@ -101,6 +103,9 @@ function pairs(t: Theme, reasoning: RGBA): Pair[] {
   add("focus/base", "graphic", "focus ring", t.border.focus, base)
   add("selection.bar/overlay", "graphic", "selection bar in dialogs", t.badge.bg, overlay)
   add("accent.bar/panel", "graphic", "active tab border", t.accent.fg, panel)
+  add("border/base", "decoration", "borders", t.border.default, base)
+  add("border/overlay", "decoration", "borders in dialogs", t.border.default, overlay)
+  add("border.subtle/base", "decoration", "separators", t.border.subtle, base)
   return out
 }
 
@@ -159,6 +164,70 @@ describe("theme contrast", () => {
       const listed = Object.keys(KNOWN).filter((k) => k.split(" ")[0]!.endsWith(`/${mode}`))
       const stillFailing = (k: string) => failing.some((m) => key(m) === k || `${m.theme}/${m.mode}` === k)
       expect(listed.filter((k) => !stillFailing(k))).toEqual([])
+    })
+  }
+})
+
+/**
+ * The default theme is the brand's: ink and cream, tomato for the accent, basil for success, pasta for warnings. The
+ * user named greyscale the most legible theme there is, so ragu reads at least as well as greyscale on every pair it
+ * has in common with it, the brand's colours lightened or darkened where they would not.
+ */
+describe("the ragu theme", () => {
+  const BRAND = {
+    ink: "#120d0b",
+    cream: "#f4e7cd",
+    tomato: "#df4a2b",
+    basil: "#4f8a2e",
+    pasta: "#f1c14f",
+    pastaDark: "#c98f2a",
+  }
+  const hue = (c: RGBA) => toOklch(c).h
+  /** Apart by less than `max` radians on the hue circle. */
+  const near = (a: RGBA, b: RGBA, max = 0.25) => {
+    const d = Math.abs(hue(a) - hue(b)) % (2 * Math.PI)
+    return Math.min(d, 2 * Math.PI - d) < max
+  }
+
+  for (const mode of ["dark", "light"] as const) {
+    test(`reads at least as well as greyscale on every pair in ${mode} mode`, async () => {
+      const greyscale = new Map((await measure("greyscale", mode)).map((m) => [m.id, m.ratio]))
+      const ragu = await measure("ragu", mode)
+      expect(ragu.length).toBe(greyscale.size)
+      const worse = ragu
+        .filter((m) => m.ratio < greyscale.get(m.id)!)
+        .map((m) => `${m.id}: ${m.ratio.toFixed(2)} < greyscale ${greyscale.get(m.id)!.toFixed(2)} (${m.where})`)
+      expect(worse).toEqual([])
+    })
+
+    // The captures showed code on the diff's context lines and on the panel (a written file's view) under 4.5:1, in
+    // greyscale too: pairs the catalog test does not measure yet. Ragu reaches the floor there.
+    test(`its code reaches 4.5:1 on the diff's context lines and on the panel in ${mode} mode`, async () => {
+      const t = createStandaloneTheme({ document: await loadBuiltInTheme("ragu"), mode }).theme
+      const ground = over(t.surface.base, TERMINAL[mode])
+      const colours = { ...t.syntax, error: t.status.error.fg, warning: t.status.warning.fg, info: t.status.info.fg }
+      const low: string[] = []
+      for (const [where, fill] of Object.entries({ context: t.diff.contextBg, panel: t.surface.panel })) {
+        const bg = over(fill, ground)
+        for (const [name, fg] of Object.entries(colours))
+          if (ratio(fg, bg) < 4.5) low.push(`${name}/${where}: ${ratio(fg, bg).toFixed(2)}`)
+      }
+      expect(low).toEqual([])
+    })
+
+    test(`wears the brand's colours in ${mode} mode`, async () => {
+      const t = createStandaloneTheme({ document: await loadBuiltInTheme("ragu"), mode }).theme
+      const rgb = RGBA.fromHex
+      expect(t.surface.base).toEqual(rgb(mode === "dark" ? BRAND.ink : BRAND.cream))
+      expect(near(t.accent.fg, rgb(BRAND.tomato))).toBe(true)
+      expect(near(t.border.active, rgb(BRAND.tomato))).toBe(true)
+      expect(near(t.status.success.fg, rgb(BRAND.basil))).toBe(true)
+      expect(near(t.status.warning.fg, rgb(mode === "dark" ? BRAND.pasta : BRAND.pastaDark))).toBe(true)
+      // The error is a red apart from the tomato of the accent, or every link would look like a failure.
+      expect(near(t.status.error.fg, t.accent.fg, 0.12)).toBe(false)
+      // Ink and cream warm: the surfaces and the text lean to the brand's hue, never to a cold grey.
+      for (const c of [t.surface.panel, t.surface.offset, t.foreground.default, t.foreground.muted])
+        expect(near(c, rgb(BRAND.ink), 0.8)).toBe(true)
     })
   }
 })

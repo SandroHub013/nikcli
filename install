@@ -33,8 +33,14 @@ if [ "$TTY" = "true" ] && [ -z "${NO_COLOR:-}" ]; then
     CYAN='\033[0;36m'
     GRAY='\033[0;90m'
     NC='\033[0m'
+    # The wordmark in the logo's colours, «ragu» tomato and «code» basil, at the lightness that reads alike on a
+    # black and on a white terminal (4.6:1 on both): the installer cannot tell which one it runs in.
+    case "${COLORTERM:-}" in
+        truecolor|24bit) TOMATO='\033[38;2;213;64;32m'; BASIL='\033[38;2;73;131;39m' ;;
+        *) TOMATO='\033[38;5;160m'; BASIL='\033[38;5;28m' ;;
+    esac
 else
-    DIM=''; BOLD=''; RED=''; GREEN=''; YELLOW=''; CYAN=''; GRAY=''; NC=''
+    DIM=''; BOLD=''; RED=''; GREEN=''; YELLOW=''; CYAN=''; GRAY=''; NC=''; TOMATO=''; BASIL=''
 fi
 
 # Glyphs (use ASCII fallbacks if locale isn't UTF-8)
@@ -65,11 +71,11 @@ ui() { printf "%b\n" "$1" >&2; }
 logo() {
     if [ "$TTY" != "true" ]; then return 0; fi
     ui ""
-    ui "${GRAY}                                     ▄${NC}"
-    ui "${GRAY}    █▀▀▀ ▀▀▀█ █▀▀█ █  █ █▀▀▀ █▀▀█ █▀▀█ █▀▀█${NC}"
-    ui "${GRAY}    █    █▀▀█ █  █ █  █ █    █  █ █  █ █▀▀▀${NC}"
-    ui "${GRAY}    ▀    ▀▀▀▀ ▀▀▀█ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀${NC}"
-    ui "${GRAY}              ▀▀▀▀${NC}"
+    ui "                                     ${BASIL}▄${NC}"
+    ui "    ${TOMATO}█▀▀▀ ▀▀▀█ █▀▀█ █  █${NC} ${BASIL}█▀▀▀ █▀▀█ █▀▀█ █▀▀█${NC}"
+    ui "    ${TOMATO}█    █▀▀█ █  █ █  █${NC} ${BASIL}█    █  █ █  █ █▀▀▀${NC}"
+    ui "    ${TOMATO}▀    ▀▀▀▀ ▀▀▀█ ▀▀▀▀${NC} ${BASIL}▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀${NC}"
+    ui "              ${TOMATO}▀▀▀▀${NC}"
     ui ""
 }
 
