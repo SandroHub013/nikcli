@@ -5,6 +5,7 @@ import { useSync } from "@tui/context/sync"
 import { createSimpleContext } from "./helper"
 import {
   BUILT_IN_THEME_IDS,
+  canonicalThemeId,
   FALLBACK_THEME,
   FALLBACK_THEME_ID,
   isBuiltInTheme,
@@ -349,7 +350,10 @@ export const {
       // which is the point — it is the user's tweak, not the theme's opinion.
       const overrides = await getComponentOverrides().catch(() => ({}) as ComponentPatchMap)
       setStore("componentOverrides", overrides)
-      const active = store.active
+      // A built-in saved under its old id (`nikcli`) goes by its id of now, unless a theme of the user's has the name.
+      const requested = store.active
+      const active = extraThemes[requested] || custom[requested] ? requested : canonicalThemeId(requested)
+      if (active !== requested) setStore("active", active)
       let selected: ThemeJson | undefined
       if (active && active !== "system") {
         if (extraThemes[active]) selected = extraThemes[active]

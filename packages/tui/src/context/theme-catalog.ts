@@ -1,4 +1,4 @@
-import ragu from "./theme/nikcli.json" with { type: "json" }
+import ragu from "./theme/ragu.json" with { type: "json" }
 
 type JsonModule = { default: unknown }
 
@@ -106,7 +106,7 @@ const LOADERS: Record<string, () => Promise<JsonModule>> = {
   neutral: () => import("./theme/neutral.json", { with: { type: "json" } }),
   newsprint: () => import("./theme/newsprint.json", { with: { type: "json" } }),
   nightowl: () => import("./theme/nightowl.json", { with: { type: "json" } }),
-  ragu: () => import("./theme/nikcli.json", { with: { type: "json" } }),
+  ragu: () => import("./theme/ragu.json", { with: { type: "json" } }),
   nord: () => import("./theme/nord.json", { with: { type: "json" } }),
   nordic: () => import("./theme/nordic.json", { with: { type: "json" } }),
   nova: () => import("./theme/nova.json", { with: { type: "json" } }),
@@ -169,8 +169,19 @@ export const BUILT_IN_THEME_IDS: readonly string[] = Object.freeze(
 const parsed = new Map<string, unknown>([[FALLBACK_THEME_ID, FALLBACK_THEME]])
 const eagerParsedCount = parsed.size
 
+/**
+ * Ids a built-in theme had before, each with the one it has now. Read wherever an id is, so a theme someone saved
+ * keeps working, and listed nowhere: the picker shows each theme once.
+ */
+const LEGACY_THEME_IDS: Record<string, string> = { nikcli: FALLBACK_THEME_ID }
+
+/** The id a built-in theme goes by now: `nikcli`, saved before the rename, is `ragu`. Any other id as it is. */
+export function canonicalThemeId(id: string): string {
+  return Object.hasOwn(LEGACY_THEME_IDS, id) ? LEGACY_THEME_IDS[id]! : id
+}
+
 export function isBuiltInTheme(id: string): boolean {
-  return Object.hasOwn(LOADERS, id)
+  return Object.hasOwn(LOADERS, canonicalThemeId(id))
 }
 
 export function eagerParsedThemeIds(): readonly string[] {
@@ -181,7 +192,8 @@ export function eagerParsedThemeCount(): number {
   return eagerParsedCount
 }
 
-export async function loadBuiltInTheme(id: string): Promise<unknown | undefined> {
+export async function loadBuiltInTheme(requested: string): Promise<unknown | undefined> {
+  const id = canonicalThemeId(requested)
   const hit = parsed.get(id)
   if (hit !== undefined) return hit
   const load = LOADERS[id]
