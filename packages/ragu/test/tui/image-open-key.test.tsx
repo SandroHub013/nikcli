@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
+import { onMount, type JSX } from "solid-js"
 import { Config } from "@/config/config"
 import { ThemeContext, createStandaloneTheme } from "@tui/context/theme"
 import { loadBuiltInTheme } from "@tui/context/theme-catalog"
@@ -7,7 +8,8 @@ import { SyncContext } from "@tui/context/sync"
 import { KeybindProvider } from "@tui/context/keybind"
 import { RouteProvider } from "@tui/context/route"
 import { ToastProvider } from "@tui/ui/toast"
-import { DialogProvider } from "@tui/ui/dialog"
+import { DialogProvider, useDialog } from "@tui/ui/dialog"
+import { DialogHelp } from "@tui/ui/dialog-help"
 import { CommandProvider } from "@tui/component/dialog-command"
 import { TuiImageList } from "@tui/component/tui-image"
 import { Keybind } from "@tui/util/keybind"
@@ -43,26 +45,7 @@ describe("opening an image at full resolution", () => {
   })
 
   test("the chord opens the chooser, and the preview names the key", async () => {
-    const screen = await testRender(
-      () => (
-        <ThemeContext.Provider value={theme as never}>
-          <SyncContext.Provider value={{ data: { config: { keybinds } } } as never}>
-            <KeybindProvider>
-              <ToastProvider>
-                <DialogProvider>
-                  <RouteProvider>
-                    <CommandProvider>
-                      <TuiImageList urls={[PIXEL]} maxColumns={20} maxRows={6} writer={() => {}} />
-                    </CommandProvider>
-                  </RouteProvider>
-                </DialogProvider>
-              </ToastProvider>
-            </KeybindProvider>
-          </SyncContext.Provider>
-        </ThemeContext.Provider>
-      ),
-      { width: 100, height: 30 },
-    )
+    const screen = await mount(() => <TuiImageList urls={[PIXEL]} maxColumns={20} maxRows={6} writer={() => {}} />, 100, 30)
     try {
       await screen.waitForFrame((frame) => frame.includes("ctrl+x v: open full size"))
 
@@ -75,4 +58,41 @@ describe("opening an image at full resolution", () => {
       screen.renderer.destroy()
     }
   })
+
+  test("the help lists the chord whole", async () => {
+    function OpenHelp() {
+      const dialog = useDialog()
+      onMount(() => dialog.replace(() => <DialogHelp />))
+      return <text>background</text>
+    }
+    const screen = await mount(() => <OpenHelp />, 160, 45)
+    try {
+      // The column is narrower than the longer descriptions, which are cut; the
+      // key must not be. It was, to «ctrl+x», when the key could shrink.
+      await screen.waitForFrame((frame) => frame.includes("ctrl+x v — Open an image"))
+    } finally {
+      screen.renderer.destroy()
+    }
+  })
 })
+
+function mount(child: () => JSX.Element, width: number, height: number) {
+  return testRender(
+    () => (
+      <ThemeContext.Provider value={theme as never}>
+        <SyncContext.Provider value={{ data: { config: { keybinds } } } as never}>
+          <KeybindProvider>
+            <ToastProvider>
+              <DialogProvider>
+                <RouteProvider>
+                  <CommandProvider>{child()}</CommandProvider>
+                </RouteProvider>
+              </DialogProvider>
+            </ToastProvider>
+          </KeybindProvider>
+        </SyncContext.Provider>
+      </ThemeContext.Provider>
+    ),
+    { width, height },
+  )
+}
