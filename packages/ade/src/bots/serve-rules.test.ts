@@ -189,10 +189,12 @@ describe("B8d: the rules of a bot's session", () => {
     })
   })
 
-  test("the note on the rules says an «always» for edits opens the configuration too", () => {
-    // Given in the project, it comes after the session's rules and wins (bot-config-chiusa review).
-    expect(itDict["bots.serve.rulesNote"]).toContain("nikcli.json")
-    expect(enDict["bots.serve.rulesNote"]).toContain("nikcli.json")
+  test("the note on the rules says an «always» of the project does not reach a bot (S4: ragu ignores it for a bot's session)", () => {
+    // It used to say the opposite, and that an «always» for edits opened the configuration too.
+    expect(itDict["bots.serve.rulesNote"]).not.toContain("nikcli.json")
+    expect(enDict["bots.serve.rulesNote"]).not.toContain("nikcli.json")
+    expect(itDict["bots.serve.rulesNote"]).toContain("non lo raggiunge")
+    expect(enDict["bots.serve.rulesNote"]).toContain("does not reach it")
   })
 
   test("the list: every form, deduplicated", () => {

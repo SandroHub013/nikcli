@@ -66,6 +66,29 @@ export namespace PermissionRuleset {
   }
 
   /**
+   * The rule ADE puts first in every session a bot's turn makes (`BOT_SESSION_MARK`, `serve-rules.ts`): no tool
+   * asks for the permission it names, so it decides nothing and only says whose session this is.
+   */
+  export const BOT_SESSION_PERMISSION = "ade.bot"
+
+  /** Whether a ruleset is the one of a bot's session of ADE: it carries the mark. */
+  export function isBotSession(ruleset: Ruleset): boolean {
+    return ruleset.some((rule) => rule.permission === BOT_SESSION_PERMISSION && rule.pattern === "*" && rule.action === "deny")
+  }
+
+  /**
+   * What the user approved with «always» for the project, as it counts for a session with `ruleset`.
+   *
+   * A grant comes after every rule and wins over them, so a «sempre» given once, in the TUI too, opened what a bot's
+   * session shuts: `rm *` let `rm -rf ~` through, and a write to the configuration (review of the bots, S4). A bot's
+   * session is ADE's, with its own rules and its own «Sempre» per bot, which ADE answers once: the grants of the
+   * project do not reach it.
+   */
+  export function approvedFor(ruleset: Ruleset, approved: Ruleset): Ruleset {
+    return isBotSession(ruleset) ? [] : approved
+  }
+
+  /**
    * The "Full access" preset as a ruleset: every tool allowed without a prompt,
    * except the three internal permissions that must stay denied so an
    * unattended agent can never park itself waiting for a human

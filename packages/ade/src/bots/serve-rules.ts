@@ -32,9 +32,9 @@
  * user (a bot's thread has nowhere to answer it), and a write to the server's
  * own configuration (`configDenials`).
  *
- * What these rules do not cover, said where it matters (`bots.serve.rulesNote`):
- * an «always» the user gave in the project, in ragu's TUI too, comes last
- * and still wins, as for the Chat.
+ * An «always» the user gave in the project, in ragu's TUI too, used to come last and win over these rules, as for
+ * the Chat. ragu is ours now: a session with the mark below ignores the grants of the project (`approvedFor`,
+ * `permission/ruleset.ts`; review of the bots, S4), so what is here holds. Said in `bots.serve.rulesNote`.
  */
 
 import type { PermissionRule } from "../chat/rules"

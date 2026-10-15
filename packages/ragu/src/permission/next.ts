@@ -316,7 +316,7 @@ export namespace PermissionNext {
         const s = yield* getState()
         const { ruleset, agent, ...request } = parsed
         const evaluated: Evaluated[] = (request.patterns ?? []).map((pattern) => {
-          const rule = evaluate(request.permission, pattern, ruleset, s.approved)
+          const rule = evaluate(request.permission, pattern, ruleset, PermissionRuleset.approvedFor(ruleset, s.approved))
           log.info("evaluated", {
             permission: request.permission,
             pattern,
