@@ -89,7 +89,7 @@ describe("text contrast of the tokens (AA, 4.5:1)", () => {
     const overlay = over(rgba(glass("--ade-overlay")), white)
     // The reading ground at the default slider (75%), with the raised lift on it: the brightest ground in the theme.
     const read = 0.05 + 0.85 * 0.75 ** 0.24
-    const reading = over([255, 255, 255, 0.06], over([19, 17, 17, read], white))
+    const reading = over([255, 255, 255, 0.06], over([18, 13, 11, read], white))
     for (const text of TEXT) {
       const color = hex(glass(text))
       expect({ text, overlay: contrast(color, overlay) >= 4.5, reading: contrast(color, reading) >= 4.5 }).toEqual({

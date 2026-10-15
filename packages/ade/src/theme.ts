@@ -66,12 +66,14 @@ export const MAX_GLASS_OPACITY = 100
  *
  * Measured, not guessed: on a white desktop the worst ground in the glass
  * theme is the reading ground plus the 6% lift, and its three text levels read
- * 4.73 / 4.02 / 3.85:1 at 15% and 5.39 / 4.59 / 4.39 at 20% — with the veil
- * and reading curves in `index.css`. Nothing is forbidden below it; the
+ * 4.99 / 4.25 / 4.06:1 at 15% and 5.61 / 4.77 / 4.56 at 19% — with the veil
+ * and reading curves in `index.css`, over ink (the ragù palette's dark
+ * ground, darker than the grey it replaced, so the line moved down from 20%
+ * to 19%; `glass.test.ts` checks both sides of it). Nothing is forbidden below it; the
  * settings panel just says what happens, because how readable the window is
  * is the user's choice to make.
  */
-export const GLASS_READABLE_MIN = 20
+export const GLASS_READABLE_MIN = 19
 
 /** Whether text at this slider position still clears 4.5:1 on a pale desktop. */
 export function isGlassReadable(opacity: number): boolean {

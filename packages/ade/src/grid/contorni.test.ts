@@ -77,7 +77,7 @@ function readToken(name: string): { light: string; dark: string } {
 
 /** `--ade-glass-veil` over `--ade-glass-read`, with the sheet's own formulas. */
 function glassGround(opacity: number, desktop: number[]): number[] {
-  const veil = [19, 17, 17]
+  const veil = [18, 13, 11]
   const veilAlpha = 0.06 + 0.34 * opacity
   const readAlpha = 0.05 + 0.85 * Math.pow(opacity, 0.24)
   const over = (alpha: number) => desktop.map((d, i) => veil[i]! * alpha + d * (1 - alpha))

@@ -97,8 +97,8 @@ function distance(a: Rgb, b: Rgb, vision?: keyof typeof CVD): number {
 const TEXT = 4.5
 const COMPONENT = 3
 const SCHEMES: Scheme[] = ["light", "dark"]
-/** Every ground text and marks are drawn on. */
-const GROUNDS = ["--ade-bg", "--ade-surface", "--ade-raised", "--ade-overlay"] as const
+/** Every ground text and marks are drawn on; sunken is the transcript's well. */
+const GROUNDS = ["--ade-sunken", "--ade-bg", "--ade-surface", "--ade-raised", "--ade-overlay"] as const
 
 function pair(fg: string, bg: string, scheme: Scheme, floor: number) {
   const ratio = contrast(token(fg)[scheme], token(bg)[scheme])
