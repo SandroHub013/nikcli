@@ -17,7 +17,8 @@ export function DialogAgent(props: { markStarterPicked?: boolean }) {
         title: item.name,
         description: item.description,
         footer: footer || undefined,
-        gutter: <text fg={local.agent.color(item.name)}>@{item.name.slice(0, 8)}</text>,
+        // The colour only: the name is the title, and said twice it read «@general general».
+        gutter: <text fg={local.agent.color(item.name)}>●</text>,
       }
     }),
   )
