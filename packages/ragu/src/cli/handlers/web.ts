@@ -24,6 +24,18 @@ export function webInterfaceUrl(base: string) {
   return new URL("/companion", base).toString()
 }
 
+/**
+ * The addresses printed for a server on `0.0.0.0`, beyond localhost: one per network address and, with mDNS, the
+ * `ragu.local` name. Every one is the web interface (`/companion`), as the localhost one is: the server answers `/`
+ * with a 404, so a bare `http://ip:port` was a link that did not open anything.
+ */
+export function networkAccessUrls(port: number, ips: readonly string[], mdns: boolean) {
+  return {
+    network: ips.map((ip) => webInterfaceUrl(`http://${ip.includes(":") ? `[${ip}]` : ip}:${port}`)),
+    mdns: mdns ? webInterfaceUrl(`http://ragu.local:${port}`) : undefined,
+  }
+}
+
 export default Runtime.handler(Commands.commands["web"], async (input) => {
   const args = {
     _: [],
@@ -63,19 +75,13 @@ export default Runtime.handler(Commands.commands["web"], async (input) => {
     const localhostUrl = webInterfaceUrl(`http://localhost:${server.port}`)
     UI.println(UI.Style.TEXT_INFO_BOLD + "  Local access:      ", UI.Style.TEXT_NORMAL, localhostUrl)
 
-    const networkIPs = getNetworkIPs()
-    if (networkIPs.length > 0) {
-      for (const ip of networkIPs) {
-        UI.println(
-          UI.Style.TEXT_INFO_BOLD + "  Network access:    ",
-          UI.Style.TEXT_NORMAL,
-          `http://${ip}:${server.port}`,
-        )
-      }
+    const urls = networkAccessUrls(server.port, getNetworkIPs(), Boolean(opts.mdns))
+    for (const url of urls.network) {
+      UI.println(UI.Style.TEXT_INFO_BOLD + "  Network access:    ", UI.Style.TEXT_NORMAL, url)
     }
 
-    if (opts.mdns) {
-      UI.println(UI.Style.TEXT_INFO_BOLD + "  mDNS:              ", UI.Style.TEXT_NORMAL, `ragu.local:${server.port}`)
+    if (urls.mdns) {
+      UI.println(UI.Style.TEXT_INFO_BOLD + "  mDNS:              ", UI.Style.TEXT_NORMAL, urls.mdns)
     }
 
     open(localhostUrl).catch(() => {})
