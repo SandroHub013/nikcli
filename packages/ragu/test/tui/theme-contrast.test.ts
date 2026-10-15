@@ -171,4 +171,15 @@ describe("the colours the engine derives", () => {
     expect(declared.fg).toEqual(rgb("#ffffff"))
     expect(ratio(declared.fg, declared.bg)).toBeGreaterThanOrEqual(7)
   })
+
+  test("the reasoning is drawn in muted, opaque, not the code palette at an alpha", async () => {
+    const standalone = createStandaloneTheme({ document: await loadBuiltInTheme("ragu"), mode: "light" })
+    const styles = standalone.subtleSyntax().getAllStyles()
+    expect(styles.size).toBeGreaterThan(10)
+    for (const style of styles.values()) {
+      if (!style.fg) continue
+      expect(style.fg.a).toBe(1)
+      expect(style.fg).toEqual(standalone.theme.foreground.muted)
+    }
+  })
 })

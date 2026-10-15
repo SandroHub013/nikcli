@@ -806,26 +806,22 @@ function generateSyntax(theme: Theme) {
   return SyntaxStyle.fromTheme(getSyntaxRules(theme))
 }
 
+/**
+ * The reasoning's palette: every token in `foreground.muted`, opaque, keeping its weight and slant.
+ *
+ * It used to be the code palette at `thinkingOpacity` (0.6), which put the reasoning under 4.5:1 in about half the
+ * variants: an alpha over the background loses contrast in proportion, and the accents it scaled were tuned for the
+ * full colour. `muted` is a colour every theme already keeps readable for secondary text, so the reasoning reads as
+ * quieter than the answer without falling under the floor. `thinkingOpacity` stays in the documents and the tokens
+ * for the plugins that read it.
+ */
 function generateSubtleSyntax(theme: Theme) {
   const rules = getSyntaxRules(theme)
   return SyntaxStyle.fromTheme(
     rules.map((rule) => {
-      if (rule.style.foreground) {
-        const fg = rule.style.foreground
-        return {
-          ...rule,
-          style: {
-            ...rule.style,
-            foreground: RGBA.fromInts(
-              Math.round(fg.r * 255),
-              Math.round(fg.g * 255),
-              Math.round(fg.b * 255),
-              Math.round(theme.thinkingOpacity * 255),
-            ),
-          },
-        }
-      }
-      return rule
+      if (!rule.style.foreground) return rule
+      const { background: _background, ...style } = rule.style as typeof rule.style & { background?: RGBA }
+      return { ...rule, style: { ...style, foreground: theme.foreground.muted } }
     }),
   )
 }
