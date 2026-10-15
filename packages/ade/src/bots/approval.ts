@@ -407,6 +407,10 @@ export function claudeRefusals(always?: Always): string[] {
 export interface AlwaysStore {
   get(botPath: string): Always
   add(botPath: string, key: string): void
+  /** Takes one «Sempre» back: the danger is asked again (review of the bots, S5). */
+  remove(botPath: string, key: string): void
+  /** Takes back every «Sempre» of a bot: the bot was deleted, and one made again at its path starts clean (S9). */
+  clear(botPath: string): void
 }
 
 const STORE_KEY = "ade.bots.approvals"
@@ -415,6 +419,13 @@ const STORE_KEY = "ade.bots.approvals"
 export function localAlwaysStore(
   storage: Pick<Storage, "getItem" | "setItem"> | undefined = globalStorage(),
 ): AlwaysStore {
+  const write = (all: Record<string, string[]>) => {
+    try {
+      storage?.setItem(STORE_KEY, JSON.stringify(all))
+    } catch {
+      // Not kept: asked again next time, which errs on the safe side. A grant that cannot be taken back stays.
+    }
+  }
   const read = (): Record<string, string[]> => {
     try {
       const parsed = JSON.parse(storage?.getItem(STORE_KEY) ?? "{}") as unknown
@@ -431,11 +442,22 @@ export function localAlwaysStore(
     add: (botPath, key) => {
       const all = read()
       all[botPath] = withAlways(Array.isArray(all[botPath]) ? all[botPath]! : [], key)
-      try {
-        storage?.setItem(STORE_KEY, JSON.stringify(all))
-      } catch {
-        // Not kept: asked again next time, which errs on the safe side.
-      }
+      write(all)
+    },
+    remove: (botPath, key) => {
+      const all = read()
+      const list = all[botPath]
+      if (!Array.isArray(list) || !list.includes(key)) return
+      const rest = list.filter((kept) => kept !== key)
+      if (rest.length) all[botPath] = rest
+      else delete all[botPath]
+      write(all)
+    },
+    clear: (botPath) => {
+      const all = read()
+      if (!(botPath in all)) return
+      delete all[botPath]
+      write(all)
     },
   }
 }

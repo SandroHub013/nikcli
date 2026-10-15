@@ -31,7 +31,7 @@
 
 import { createEffect, createMemo, createResource, createRoot, createSignal, For, on, onMount, Show } from "solid-js"
 import { t } from "../i18n"
-import { APPROVAL_TIMEOUT_MS } from "./approval"
+import { APPROVAL_TIMEOUT_MS, localAlwaysStore } from "./approval"
 import { askDialog, askYesNo } from "../host/ask"
 import { getHost } from "../host/shell"
 import { every } from "../host/every"
@@ -1697,6 +1697,8 @@ function BotCard(props: {
       account: accounts,
       remote: localRemoteStore(),
       routines: writeRoutines,
+      always: localAlwaysStore(),
+      storage: typeof localStorage === "undefined" ? undefined : localStorage,
     })
     props.onDeleted()
   }
