@@ -242,7 +242,7 @@ function FilesystemContent() {
   return (
     <box gap={2}>
       <text fg={theme.foreground.muted} wrapMode="word">
-        Ragu stores all data under standard XDG directories. Nothing hidden outside these locations. All data stays on
+        Ragu Code stores all data under standard XDG directories. Nothing hidden outside these locations. All data stays on
         your machine — no telemetry.
       </text>
 
@@ -624,7 +624,7 @@ function ImageContent(props: {
   return (
     <box gap={2}>
       <text fg={theme.foreground.muted} wrapMode="word">
-        Pick the image model Ragu should use by default for image generation. Skip to configure later via
+        Pick the image model Ragu Code should use by default for image generation. Skip to configure later via
         <span style={{ fg: theme.accent.alt }}> Ctrl+P → Image Models</span>.
       </text>
       <SectionLabel title={`Available image models (${options().length})`} />

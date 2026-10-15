@@ -4,6 +4,7 @@ import { useTheme } from "../context/theme"
 import { useSync } from "@tui/context/sync"
 import { For, Match, Switch, Show, createMemo } from "solid-js"
 import { VERSION } from "@ragu/util/version"
+import { productVersion } from "@tui/util/product-name"
 
 export type DialogStatusProps = {}
 
@@ -42,7 +43,7 @@ export function DialogStatus() {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <DialogHeader title="Status" />
-      <text fg={theme.foreground.muted}>Ragu v{VERSION}</text>
+      <text fg={theme.foreground.muted}>{productVersion(VERSION)}</text>
       <text fg={theme.foreground.muted}>a fork of opencode — github.com/anomalyco/opencode</text>
       <Show
         when={Object.keys(sync.data.mcp).length > 0}

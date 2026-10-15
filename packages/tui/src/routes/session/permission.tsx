@@ -180,7 +180,7 @@ export function PermissionPrompt(props: { request: PermissionRequest }) {
               <Match when={true}>
                 <box paddingLeft={1} gap={1}>
                   <text fg={theme.foreground.muted}>
-                    This will allow the following patterns until Ragu is restarted
+                    This will allow the following patterns until Ragu Code is restarted
                   </text>
                   <box>
                     <For each={props.request.always}>
@@ -384,7 +384,7 @@ function RejectPrompt(props: { onConfirm: (message: string) => void; onCancel: (
           <text fg={theme.foreground.default}>Reject permission</text>
         </box>
         <box paddingLeft={1}>
-          <text fg={theme.foreground.muted}>Tell Ragu what to do differently</text>
+          <text fg={theme.foreground.muted}>Tell Ragu Code what to do differently</text>
         </box>
       </box>
       <box
