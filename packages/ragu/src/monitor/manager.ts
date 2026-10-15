@@ -8,7 +8,6 @@ import { SessionPrompt } from "@/session/prompt"
 import { SessionError } from "@/session/error"
 import { Log } from "@ragu/util/log"
 import { MonitorRepo } from "./repo"
-import { Runtime } from "@ragu/util/runtime"
 import { throttleTrailing } from "@/util/throttle"
 import { Shell } from "@/shell/shell"
 import { spawn, type ChildProcess } from "child_process"
@@ -545,9 +544,9 @@ export namespace Monitor {
     await fs.writeFile(commandPath, input.command, "utf8")
     await fs.writeFile(logPath, "", "utf8")
 
-    // Reuse the Bun runtime instead of spawning a separate Node one when the
-    // monitored command is a JS runner (`node`/`npm`/`npx`) and Bun is present.
-    const command = Runtime.preferBun(input.command)
+    // Run the command as written: rewriting `node`/`npm`/`npx` to Bun changes its semantics
+    // (`node --test` fails under Bun) and makes monitor disagree with the bash tool.
+    const command = input.command
     const proc = spawn(command, {
       windowsHide: true,
       shell: Shell.acceptable(),

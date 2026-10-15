@@ -95,21 +95,47 @@ export function supportsKittyUnicodePlaceholders(
   return termEnv.includes("kitty") || termEnv.includes("ghostty")
 }
 
-export type InlineImageRenderer = "kitty" | "halfblock"
+export type InlineImageRenderer = "ade" | "kitty" | "halfblock"
 
 /**
  * How an image preview should reach a scrolling OpenTUI grid.
  *
- * Only grid-native paths are allowed here. Sixel / iTerm2 overlays paint
- * after the frame at a cursor position: they do not scroll with the message
- * list, they CSI-erase the composer, and they leave xterm.js checkerboard
- * behind. Those protocols stay on the WebView dialog, which does not scroll.
+ * ADE uses a bounded, cursor-positioned iTerm2 image after the grid flush.
+ * Other terminals keep the grid-native Kitty or half-block paths.
  */
 export function chooseInlineImageRenderer(
   capabilities: Capabilities,
   env: Record<string, string | undefined> = typeof process !== "undefined" ? process.env : {},
 ): InlineImageRenderer {
+  if (env["ADE_PANE_ID"]?.trim() && env["ADE_MAILBOX"]?.trim()) return "ade"
   return supportsKittyUnicodePlaceholders(capabilities, env) ? "kitty" : "halfblock"
+}
+
+export const MAX_ADE_IMAGE_PAYLOAD = 2 * 1024 * 1024
+
+/** Standard iTerm2 File command; width and height are terminal cells, not pixels. */
+export function encodeAdeImage(
+  image: PixelImage,
+  options: { columns: number; rows: number; maxPayloadBytes?: number },
+): string {
+  if (![options.columns, options.rows].every((value) => Number.isInteger(value) && value > 0 && value <= 120)) {
+    throw new RangeError("ADE image dimensions must be 1..120 cells")
+  }
+  if (
+    !Number.isInteger(image.width) ||
+    !Number.isInteger(image.height) ||
+    image.width <= 0 ||
+    image.height <= 0 ||
+    image.width * image.height > 4_000_000 ||
+    image.data.length !== image.width * image.height * 4
+  ) {
+    throw new RangeError("invalid or oversized ADE image")
+  }
+  const limit = Math.min(options.maxPayloadBytes ?? MAX_ADE_IMAGE_PAYLOAD, MAX_ADE_IMAGE_PAYLOAD)
+  if (!Number.isFinite(limit) || limit <= 0) throw new RangeError("invalid ADE image payload limit")
+  const png = compressedPng(image)
+  if (Math.ceil(png.length / 3) * 4 > limit) throw new RangeError("ADE image payload is too large")
+  return `${ESC}]1337;File=inline=1;width=${options.columns};height=${options.rows};preserveAspectRatio=0;size=${png.length}:${base64FromBytes(png)}\x07`
 }
 
 export interface KittyVirtualOptions {

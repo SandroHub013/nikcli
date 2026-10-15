@@ -13,6 +13,7 @@ import {
 function fakeRenderer(width = 80, height = 24) {
   const writes: string[] = []
   let gridPaints = 0
+  let fullPaints = 0
   const host = {
     terminalWidth: width,
     terminalHeight: height,
@@ -23,12 +24,14 @@ function fakeRenderer(width = 80, height = 24) {
     },
     renderNative() {
       gridPaints++
+      if (host.forceFullRepaintRequested) fullPaints++
+      host.forceFullRepaintRequested = false
     },
     writeOut(chunk: string) {
       writes.push(chunk)
     },
   }
-  return { renderer: host as unknown as CliRenderer, host, writes, grid: () => gridPaints }
+  return { renderer: host as unknown as CliRenderer, host, writes, grid: () => gridPaints, full: () => fullPaints }
 }
 
 describe("fitOverlayCells", () => {
@@ -106,8 +109,195 @@ describe("overlayRectsEqual", () => {
 })
 
 describe("registerNativeOverlay", () => {
+  test("cleanup triggered during inline output erases the emitted placement", () => {
+    const { renderer, writes } = fakeRenderer()
+    let release = () => {}
+    release = registerNativeOverlay(renderer, {
+      box: { x: 2, y: 0 },
+      bytes: "OSC1337",
+      columns: 10,
+      rows: 5,
+      inline: true,
+      writer: (chunk) => {
+        writes.push(chunk)
+        if (chunk.includes("OSC1337")) release()
+      },
+    })
+    renderer.requestRender()
+    expect(writes).toEqual([
+      paintOverlay({ x: 2, y: 0, columns: 10, rows: 5 }, "OSC1337"),
+      eraseOverlayRect({ x: 2, y: 0, columns: 10, rows: 5 }, 80, 24),
+    ])
+  })
+  test("does not paint an unattached image at y=0 while awaiting its chat viewport", () => {
+    const { renderer, writes } = fakeRenderer()
+    let viewport: { x: number; y: number; columns: number; rows: number } | undefined
+    const overlay = {
+      box: { x: 2, y: 0 },
+      bytes: "OSC1337",
+      columns: 10,
+      rows: 5,
+      inline: true,
+      viewport: () => viewport,
+    }
+    const release = registerNativeOverlay(renderer, overlay)
+    for (let frame = 0; frame < 100; frame++) renderer.requestRender()
+    expect(writes).toEqual([])
+    viewport = { x: 2, y: 6, columns: 70, rows: 16 }
+    overlay.box.y = 6
+    renderer.requestRender()
+    renderer.requestRender()
+    expect(writes).toEqual([paintOverlay({ x: 2, y: 6, columns: 10, rows: 5 }, "OSC1337")])
+    release()
+  })
+  test("emits one OSC 1337 placement over 100 identical frames", () => {
+    const { renderer, writes } = fakeRenderer()
+    const bytes = "\x1b]1337;File=inline=1;size=1:YQ==\x07"
+    const release = registerNativeOverlay(renderer, { box: { x: 2, y: 3 }, bytes, columns: 10, rows: 5, inline: true })
+    for (let frame = 0; frame < 100; frame++) renderer.requestRender()
+    expect(writes.filter((chunk) => chunk.includes("\x1b]1337;File=")).length).toBe(1)
+    release()
+  })
+
+  test("moving y erases the previous placement then emits exactly once", () => {
+    const { renderer, writes } = fakeRenderer()
+    const bytes = "\x1b]1337;File=inline=1;size=1:YQ==\x07"
+    const overlay = { box: { x: 2, y: 3 }, bytes, columns: 10, rows: 5, inline: true }
+    const release = registerNativeOverlay(renderer, overlay)
+    renderer.requestRender()
+    writes.length = 0
+    overlay.box.y = 10
+    for (let frame = 0; frame < 10; frame++) renderer.requestRender()
+    expect(writes).toEqual([
+      eraseOverlayRect({ x: 2, y: 3, columns: 10, rows: 5 }, 80, 24),
+      paintOverlay({ x: 2, y: 10, columns: 10, rows: 5 }, bytes),
+    ])
+    release()
+  })
+
+  test("mount waits for a stable layout and never paints the transient top row", () => {
+    const { renderer, writes } = fakeRenderer()
+    const overlay = { box: { x: 2, y: 0 }, bytes: "OSC1337", columns: 10, rows: 5, inline: true }
+    const release = registerNativeOverlay(renderer, overlay)
+    expect(writes).toEqual([])
+    overlay.box.y = 10
+    renderer.requestRender()
+    expect(writes).toEqual([])
+    renderer.requestRender()
+    expect(writes).toEqual([paintOverlay({ x: 2, y: 10, columns: 10, rows: 5 }, "OSC1337")])
+    release()
+  })
+
+  test("resize and full clear invalidate a placement only once", () => {
+    const { renderer, host, writes } = fakeRenderer()
+    const release = registerNativeOverlay(renderer, {
+      box: { x: 2, y: 3 },
+      bytes: "OSC1337",
+      columns: 10,
+      rows: 5,
+      inline: true,
+    })
+    renderer.requestRender()
+    writes.length = 0
+    host.terminalWidth = 90
+    for (let frame = 0; frame < 10; frame++) renderer.requestRender()
+    expect(writes.filter((chunk) => chunk.includes("OSC1337"))).toHaveLength(1)
+    writes.length = 0
+    host.forceFullRepaintRequested = true
+    for (let frame = 0; frame < 10; frame++) renderer.requestRender()
+    expect(writes.filter((chunk) => chunk.includes("OSC1337"))).toHaveLength(1)
+    release()
+  })
+
+  test("payload or dimensions updates invalidate the inline placement", () => {
+    const { renderer, writes } = fakeRenderer()
+    const overlay = { box: { x: 2, y: 3 }, bytes: "OSC1337", columns: 10, rows: 5, inline: true }
+    const release = registerNativeOverlay(renderer, overlay)
+    renderer.requestRender()
+    writes.length = 0
+    overlay.bytes = "OSC1337-new"
+    for (let frame = 0; frame < 10; frame++) renderer.requestRender()
+    expect(writes).toEqual([paintOverlay({ x: 2, y: 3, columns: 10, rows: 5 }, overlay.bytes)])
+    writes.length = 0
+    overlay.columns = 12
+    for (let frame = 0; frame < 10; frame++) renderer.requestRender()
+    expect(writes).toEqual([
+      eraseOverlayRect({ x: 2, y: 3, columns: 10, rows: 5 }, 80, 24),
+      paintOverlay({ x: 2, y: 3, columns: 12, rows: 5 }, overlay.bytes),
+    ])
+    release()
+  })
+  test("inline overlays follow the box, skip clipped rows and clean only their last rectangle", () => {
+    const { renderer, full, writes } = fakeRenderer(80, 24)
+    const overlay = {
+      box: { x: 2, y: 3 },
+      bytes: "OSC1337",
+      columns: 10,
+      rows: 5,
+      inline: true,
+      viewport: () => ({ x: 0, y: 2, columns: 70, rows: 16 }),
+    }
+    const release = registerNativeOverlay(renderer, overlay)
+    renderer.requestRender()
+    expect(writes.at(-1)).toBe(paintOverlay({ x: 2, y: 3, columns: 10, rows: 5 }, "OSC1337"))
+    writes.length = 0
+    overlay.box.y = 16
+    renderer.requestRender()
+    expect(writes[0]).toBe(eraseOverlayRect({ x: 2, y: 3, columns: 10, rows: 5 }, 80, 24))
+    expect(writes.some((chunk) => chunk.includes("OSC1337"))).toBe(false)
+    expect(full()).toBeGreaterThan(0)
+    overlay.box.y = 5
+    renderer.requestRender()
+    renderer.requestRender()
+    writes.length = 0
+    release()
+    expect(writes[0]).toBe(eraseOverlayRect({ x: 2, y: 5, columns: 10, rows: 5 }, 80, 24))
+    expect(writes[0]).not.toBe(eraseTerminal(80, 24))
+  })
+
+  test("writer failure disables native output and preserves the grid fallback", () => {
+    const { renderer, host, grid } = fakeRenderer()
+    let failed = false
+    const release = registerNativeOverlay(renderer, {
+      box: { x: 2, y: 3 },
+      bytes: "OSC1337",
+      columns: 10,
+      rows: 5,
+      inline: true,
+      writer: () => {
+        throw new Error("closed output")
+      },
+      onError: () => {
+        failed = true
+      },
+    })
+    renderer.requestRender()
+    expect(failed).toBe(true)
+    expect(grid()).toBe(2)
+    expect(host.forceFullRepaintRequested).toBe(true)
+    release()
+  })
+
+  test("dialog visibility disables painting without wiping the terminal", () => {
+    const { renderer, writes } = fakeRenderer()
+    let enabled = true
+    const release = registerNativeOverlay(renderer, {
+      box: { x: 2, y: 3 },
+      bytes: "OSC1337",
+      columns: 10,
+      rows: 5,
+      inline: true,
+      enabled: () => enabled,
+    })
+    renderer.requestRender()
+    enabled = false
+    writes.length = 0
+    renderer.requestRender()
+    expect(writes.some((chunk) => chunk.includes("OSC1337"))).toBe(false)
+    release()
+  })
   test("paints after the grid and erases on unregister", () => {
-    const { renderer, host, writes, grid } = fakeRenderer()
+    const { renderer, full, writes, grid } = fakeRenderer()
     const overlay = { box: { x: 2, y: 3 }, bytes: "SIXEL", columns: 10, rows: 5 }
     const unregister = registerNativeOverlay(renderer, overlay)
 
@@ -118,7 +308,7 @@ describe("registerNativeOverlay", () => {
     unregister()
     expect(writes[0]).toBe(eraseTerminal(80, 24))
     expect(writes[0]).toContain(" ".repeat(80))
-    expect(host.forceFullRepaintRequested).toBe(true)
+    expect(full()).toBeGreaterThan(0)
   })
 
   test("does not erase on a same-place redraw", () => {
@@ -162,7 +352,7 @@ describe("registerNativeOverlay", () => {
   })
 
   test("erases the box on unregister even if it never painted", () => {
-    const { renderer, host, writes } = fakeRenderer(80, 24)
+    const { renderer, full, writes } = fakeRenderer(80, 24)
     const overlay = { box: { x: 2, y: 24 }, bytes: "SIXEL", columns: 10, rows: 5 }
     const unregister = registerNativeOverlay(renderer, overlay)
     expect(writes.some((chunk) => chunk.includes("SIXEL"))).toBe(false)
@@ -170,6 +360,6 @@ describe("registerNativeOverlay", () => {
     writes.length = 0
     unregister()
     expect(writes[0]).toBe(eraseTerminal(80, 24))
-    expect(host.forceFullRepaintRequested).toBe(true)
+    expect(full()).toBeGreaterThan(0)
   })
 })
