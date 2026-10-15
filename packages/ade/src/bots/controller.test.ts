@@ -81,6 +81,8 @@ function panel(
     always: {
       get: (path) => kept[path] ?? [],
       add: (path, key) => void (kept[path] = withAlways(kept[path] ?? [], key)),
+      remove: (path, key) => void (kept[path] = (kept[path] ?? []).filter((one) => one !== key)),
+      clear: (path) => void delete kept[path],
     },
     schedule: (run, ms) => {
       const timer = { run, ms, cancelled: false }
