@@ -25,6 +25,13 @@ import { DialogSelect } from "@tui/ui/dialog-select"
 import { useCommandDialog } from "@tui/component/dialog-command"
 import { useKeybind } from "@tui/context/keybind"
 import { localImagePath, openFullResolutionImage, readImageSource } from "@tui/util/image-open"
+import {
+  IMAGE_LOADING,
+  IMAGE_OPENED,
+  IMAGE_OPENING,
+  imageCaption,
+  imageOpenFailure,
+} from "@tui/util/image-caption"
 
 /**
  * Image preview in the scrolling message list.
@@ -460,7 +467,7 @@ function TuiImage(props: {
     >
       <Switch>
         <Match when={state().status === "loading"}>
-          <text fg={theme.foreground.muted}>Loading image preview...</text>
+          <text fg={theme.foreground.muted}>{IMAGE_LOADING}</text>
         </Match>
         <Match when={state().status === "error" ? (state() as { status: "error"; message: string }) : undefined}>
           {(error) => <text fg={theme.foreground.muted}>Image preview unavailable: {error().message}</text>}
@@ -470,10 +477,7 @@ function TuiImage(props: {
         >
           {(data) => (
             <>
-              <text fg={theme.foreground.muted}>
-                image | {data().host} | {overlayFailed() ? "halfblock" : data().renderer} | {props.openKey || "click"}: open full size
-                {data().placeholder ? " (native)" : ""}
-              </text>
+              <text fg={theme.foreground.muted}>{imageCaption(props.openKey)}</text>
               <Show when={data().placeholder}>
                 {(placeholder) => (
                   <box marginTop={1} flexDirection="column" flexShrink={0}>
@@ -546,19 +550,24 @@ function TuiImageEntries(props: { urls: string[]; maxColumns: number; maxRows: n
   const command = useCommandDialog()
   const keybind = useKeybind()
   const [openState, setOpenState] = createSignal("")
+  const [openFailed, setOpenFailed] = createSignal(false)
+  const { theme } = useTheme()
   let opening: AbortController | undefined
   onCleanup(() => opening?.abort())
   const openImage = async (url: string) => {
     if (opening) return
     const controller = new AbortController()
     opening = controller
-    setOpenState("Opening full-resolution image...")
+    setOpenFailed(false)
+    setOpenState(IMAGE_OPENING)
     try {
       await openFullResolutionImage(url, controller.signal)
-      if (!controller.signal.aborted) setOpenState("Opened in image viewer")
+      if (!controller.signal.aborted) setOpenState(IMAGE_OPENED)
     } catch (error) {
-      if (!controller.signal.aborted)
-        setOpenState(`Cannot open image: ${error instanceof Error ? error.message : String(error)}`)
+      if (!controller.signal.aborted) {
+        setOpenFailed(true)
+        setOpenState(imageOpenFailure(error))
+      }
     } finally {
       opening = undefined
     }
@@ -612,7 +621,7 @@ function TuiImageEntries(props: { urls: string[]; maxColumns: number; maxRows: n
         )}
       </For>
       <Show when={openState()}>
-        <text>{openState()}</text>
+        <text fg={openFailed() ? theme.status.error.fg : undefined}>{openState()}</text>
       </Show>
     </box>
   )
