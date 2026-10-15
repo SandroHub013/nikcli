@@ -110,6 +110,10 @@ export const { use: useKeybind, provider: KeybindProvider } = createSimpleContex
         const r = Keybind.toString(first)
         return r.replace("<leader>", Keybind.toString(keybinds().leader![0]!))
       },
+      /** Prints one binding, «<leader>» spelled out — for a binding that is not a named action. */
+      printInfo(info: Keybind.Info | undefined) {
+        return Keybind.display(info, keybinds().leader?.[0])
+      },
     }
     return result
   },

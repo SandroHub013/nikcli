@@ -9,10 +9,10 @@ import { isDeepEqual } from "remeda"
 import { DialogHeader, useDialog, type DialogContext } from "@tui/ui/dialog"
 import { useKeybind } from "@tui/context/keybind"
 import { Keybind } from "@tui/util/keybind"
-import { Locale } from "@ragu/util/locale"
 import { scrollChildIntoView, useScrollAcceleration } from "@tui/util/scroll"
 import { moveSelection, reconcileSelection } from "./select-controller"
 import { FooterHint, FooterHintGroup } from "./footer-hints"
+import { dialogWidth, fitOptionText } from "@tui/util/dialog-width"
 
 export interface DialogSelectProps<T> {
   /**
@@ -145,6 +145,12 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   })
 
   const dimensions = useTerminalDimensions()
+  // Columns a row's title and description may share: the panel, less its padding, the row's own padding and gaps,
+  // and what sits beside the text (a string footer by its length; a gutter is guessed at ten).
+  const rowTextWidth = (option: { footer?: unknown; gutter?: unknown }) => {
+    const footer = typeof option.footer === "string" ? option.footer.length + 1 : option.footer ? 10 : 0
+    return dialogWidth(dialog.size, dimensions().width) - 12 - footer - (option.gutter ? 10 : 0)
+  }
   const height = createMemo(() =>
     Math.max(1, Math.min(flat().length + grouped().length * 2 - 1, Math.floor(dimensions().height / 2) - 6)),
   )
@@ -353,6 +359,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                         <Option
                           title={row.option.title}
                           footer={row.option.footer}
+                          width={rowTextWidth(row.option)}
                           description={row.option.description !== group.category ? row.option.description : undefined}
                           active={active()}
                           current={current()}
@@ -394,7 +401,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                   <span style={{ fg: theme.foreground.default }}>
                     <b>{item.title}</b>{" "}
                   </span>
-                  <span style={{ fg: theme.accent.alt }}>{Keybind.toString(item.keybind)}</span>
+                  <span style={{ fg: theme.accent.alt }}>{keybind.printInfo(item.keybind)}</span>
                 </text>
               </box>
             )}
@@ -412,9 +419,11 @@ function Option(props: {
   current?: boolean
   footer?: JSX.Element | string
   gutter?: JSX.Element
+  width: number
 }) {
   const { theme } = useTheme()
   const fg = theme.badge.fg
+  const text = () => fitOptionText(props.title, props.description, props.width)
 
   return (
     <>
@@ -440,9 +449,9 @@ function Option(props: {
         wrapMode="none"
         paddingLeft={3}
       >
-        {Locale.truncate(props.title, 61)}
-        <Show when={props.description}>
-          <span style={{ fg: props.active ? fg : theme.foreground.muted }}> {props.description}</span>
+        {text().title}
+        <Show when={text().description}>
+          <span style={{ fg: props.active ? fg : theme.foreground.muted }}> {text().description}</span>
         </Show>
       </text>
       <Show when={props.footer}>
