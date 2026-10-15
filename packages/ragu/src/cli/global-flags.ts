@@ -102,7 +102,7 @@ export function normalizeArgv(
   if (first !== undefined && !first.startsWith("-") && !subcommands.includes(first)) {
     if (first === "help") {
       const topic = out[1]
-      out = topic !== undefined && subcommands.includes(topic) ? [topic, "--help", ...out.slice(2)] : ["--help", ...out.slice(1)]
+      out = topic !== undefined && subcommands.includes(topic) ? [topic, "--help", ...out.slice(2)] : ["--help"]
     } else if (looksLikePath(first) || isFolder(first)) {
       out = ["--project", first, ...out.slice(1)]
     }
