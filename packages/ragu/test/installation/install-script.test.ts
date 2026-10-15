@@ -68,3 +68,82 @@ describe("deferred Windows swap (install.ps1)", () => {
     expect(ps1).not.toContain("-Environment @{ NIKCLI_VERSION = $env:NIKCLI_VERSION }")
   })
 })
+
+/*
+ * The user, 2026-10-16 (ragu-brand, point 5): the installer's pixel logo in the
+ * home's colours, «ragu» tomato and «code» basil.
+ */
+describe("the wordmark (install)", () => {
+  const ROWS = [
+    "                                     ▄",
+    "    █▀▀▀ ▀▀▀█ █▀▀█ █  █ █▀▀▀ █▀▀█ █▀▀█ █▀▀█",
+    "    █    █▀▀█ █  █ █  █ █    █  █ █  █ █▀▀▀",
+    "    ▀    ▀▀▀▀ ▀▀▀█ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀",
+    "              ▀▀▀▀",
+  ]
+  const channel = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+  const luminance = ([r, g, b]: number[]) =>
+    0.2126 * channel(r! / 255) + 0.7152 * channel(g! / 255) + 0.0722 * channel(b! / 255)
+  const ratio = (a: number[], b: number[]) => {
+    const [x, y] = [luminance(a), luminance(b)]
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05)
+  }
+
+  async function logo() {
+    const sh = await readSrc("install")
+    const body = sh.match(/\nlogo\(\) \{\n([\s\S]*?)\n\}\n/)![1]!
+    return body
+      .split("\n")
+      .map((line) => line.match(/^\s*ui "(.*)"$/)?.[1])
+      .filter((line) => line !== undefined && line !== "")
+  }
+
+  it("draws the same letters, «ragu» in TOMATO and «code» in BASIL", async () => {
+    const rows = await logo()
+    expect(rows.map((row) => row!.replace(/\$\{\w+\}/g, ""))).toEqual(ROWS)
+    for (const row of rows) {
+      let colour = ""
+      let column = 0
+      for (const part of row!.split(/(\$\{\w+\})/)) {
+        const variable = part.match(/^\$\{(\w+)\}$/)?.[1]
+        if (variable) {
+          colour = variable
+          continue
+        }
+        for (const char of part) {
+          // Four columns of indent, then «ragu» in 19 and «code» after one of gap.
+          if (char.trim() !== "") expect(colour).toBe(column < 4 + 19 ? "TOMATO" : "BASIL")
+          column++
+        }
+      }
+    }
+  })
+
+  it("picks colours that read on a black and on a white terminal alike, in truecolor and in 256 colours", async () => {
+    const sh = await readSrc("install")
+    const truecolor = (name: string) =>
+      sh
+        .match(new RegExp(String.raw`${name}='\\033\[38;2;(\d+);(\d+);(\d+)m'`))!
+        .slice(1)
+        .map(Number)
+    /** The HSL hue, in degrees. */
+    const hueOf = ([r, g, b]: number[]) => {
+      const [max, min] = [Math.max(r!, g!, b!), Math.min(r!, g!, b!)]
+      const d = max - min
+      const h = max === r ? ((g! - b!) / d) % 6 : max === g ? (b! - r!) / d + 2 : (r! - g!) / d + 4
+      return (h * 60 + 360) % 360
+    }
+    for (const [name, brand] of [
+      ["TOMATO", [0xdf, 0x4a, 0x2b]],
+      ["BASIL", [0x4f, 0x8a, 0x2e]],
+    ] as const) {
+      const rgb = truecolor(name)
+      expect(ratio(rgb, [0, 0, 0])).toBeGreaterThanOrEqual(4.5)
+      expect(ratio(rgb, [255, 255, 255])).toBeGreaterThanOrEqual(4.5)
+      // The brand's colour, only darker.
+      expect(Math.abs(hueOf(rgb) - hueOf([...brand]))).toBeLessThan(3)
+      expect(sh).toMatch(new RegExp(String.raw`${name}='\\033\[38;5;\d+m'`))
+    }
+    expect(sh).toContain('case "${COLORTERM:-}" in')
+  })
+})
