@@ -105,10 +105,13 @@ export function worstRatio(fg: RGBA, backgrounds: readonly RGBA[]): number {
  *
  * It tries lighter and darker and keeps the closer of the two that work. When neither works, the backgrounds sit on
  * both sides of every lightness that could pass, and it returns the lightness with the best worst ratio: the caller
- * can tell from `worstRatio` that `min` was out of reach.
+ * can tell from `worstRatio` that `min` was out of reach. A translucent `fg` that fails is first laid on the first
+ * background and comes back opaque: an alpha caps the contrast whatever its lightness.
  */
-export function ensureContrast(fg: RGBA, backgrounds: readonly RGBA[], min: number): RGBA {
-  if (backgrounds.length === 0 || worstRatio(fg, backgrounds) >= min) return fg
+export function ensureContrast(color: RGBA, backgrounds: readonly RGBA[], min: number): RGBA {
+  if (backgrounds.length === 0 || worstRatio(color, backgrounds) >= min) return color
+  const fg = over(color, backgrounds[0]!)
+  if (worstRatio(fg, backgrounds) >= min) return fg
   const start = toOklch(fg).l
   const passes = (c: RGBA) => worstRatio(c, backgrounds) >= min
 

@@ -72,8 +72,10 @@ function pairs(t: Theme, reasoning: RGBA): Pair[] {
   }
   for (const k of ["link", "linkText", "code", "blockQuote", "emph", "listItem", "listEnumeration"] as const)
     add(`markdown.${k}/base`, "colour", "markdown", t.markdown[k], base)
-  add("diff.sign+/added", "colour", "+ sign of the diff", t.diff.highlightAdded, t.diff.addedBg)
-  add("diff.sign-/removed", "colour", "- sign of the diff", t.diff.highlightRemoved, t.diff.removedBg)
+  // The renderer draws the signs in the gutter, on the line-number fill of their line (phase A measured them on
+  // the line's own fill).
+  add("diff.sign+/added", "colour", "+ sign of the diff", t.diff.highlightAdded, t.diff.addedLineNumberBg)
+  add("diff.sign-/removed", "colour", "- sign of the diff", t.diff.highlightRemoved, t.diff.removedLineNumberBg)
 
   for (const k of Object.keys(t.syntax) as (keyof Theme["syntax"])[]) {
     add(`syntax.${k}/base`, "syntax", "code", t.syntax[k], base)

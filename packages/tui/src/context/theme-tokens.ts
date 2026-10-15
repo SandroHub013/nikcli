@@ -161,6 +161,9 @@ export function contrastFg(bg: RGBA): RGBA {
 /** The floors of the triple-A review for the colours the engine derives. */
 const SUBTLE_MIN = 4.5
 const BADGE_MIN = 7
+const DIFF_GUTTER_MIN = 4.5
+const TERMINAL_DARK = RGBA.fromInts(12, 12, 12)
+const TERMINAL_LIGHT = RGBA.fromInts(255, 255, 255)
 
 /**
  * `muted` faded toward the background, the colour of what a tool hides («▸ N more lines») and of its markers. Faded
@@ -191,15 +194,32 @@ export function deriveSemanticTokens(
   },
 ): SemanticTokens {
   const fill = options.mode === "dark" ? 0.28 : 0.16
-  // A transparent background shows the terminal's: assume the one the mode says.
-  const ground = over(
-    colors.background,
-    options.mode === "dark" ? RGBA.fromInts(0, 0, 0) : RGBA.fromInts(255, 255, 255),
-  )
+  // A transparent background shows the terminal's: assume the default of Windows Terminal and conhost when dark,
+  // white when light (the backgrounds the triple-A review measured transparent themes on).
+  const ground = over(colors.background, options.mode === "dark" ? TERMINAL_DARK : TERMINAL_LIGHT)
   // The selected row: the theme's text for it, or black or white; when neither reaches 7:1 on `primary`, the fill
   // moves in lightness rather than the text giving up.
   const badgeFg = options.hasSelectedListItemText ? colors.selectedListItemText : contrastFg(colors.primary)
   const badgeBg = ensureContrast(colors.primary, [badgeFg], BADGE_MIN)
+  // The diff's gutter: the line number on each line's gutter fill, and the + and - signs, which the renderer draws in
+  // the gutter too, on the fill of their own line. Both were near invisible (line numbers at 1.1:1 in the default
+  // theme) and the signs are the one cue left to whoever cannot tell the green from the red.
+  const gutter = (c: RGBA) => over(c, ground)
+  const lineNumber = ensureContrast(
+    colors.diffLineNumber,
+    [colors.diffContextBg, colors.diffAddedLineNumberBg, colors.diffRemovedLineNumberBg].map(gutter),
+    DIFF_GUTTER_MIN,
+  )
+  const highlightAdded = ensureContrast(
+    colors.diffHighlightAdded,
+    [gutter(colors.diffAddedLineNumberBg)],
+    DIFF_GUTTER_MIN,
+  )
+  const highlightRemoved = ensureContrast(
+    colors.diffHighlightRemoved,
+    [gutter(colors.diffRemovedLineNumberBg)],
+    DIFF_GUTTER_MIN,
+  )
   return {
     surface: {
       base: colors.background,
@@ -270,9 +290,9 @@ export function deriveSemanticTokens(
       removedBg: colors.diffRemovedBg,
       contextBg: colors.diffContextBg,
       hunkHeader: colors.diffHunkHeader,
-      highlightAdded: colors.diffHighlightAdded,
-      highlightRemoved: colors.diffHighlightRemoved,
-      lineNumber: colors.diffLineNumber,
+      highlightAdded,
+      highlightRemoved,
+      lineNumber,
       addedLineNumberBg: colors.diffAddedLineNumberBg,
       removedLineNumberBg: colors.diffRemovedLineNumberBg,
     },
