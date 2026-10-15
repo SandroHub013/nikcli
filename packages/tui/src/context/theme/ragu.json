@@ -170,15 +170,15 @@
     },
     "syntaxComment": {
       "dark": "#928a7a",
-      "light": "#6e605a"
+      "light": "#6c5e58"
     },
     "syntaxKeyword": {
       "dark": "#a07fb0",
-      "light": "#775786"
+      "light": "#765584"
     },
     "syntaxFunction": {
       "dark": "#5e91b0",
-      "light": "#366786"
+      "light": "#356685"
     },
     "syntaxVariable": {
       "dark": "#fffaef",
@@ -186,23 +186,23 @@
     },
     "syntaxString": {
       "dark": "#6a9a4a",
-      "light": "#416e1d"
+      "light": "#3f6c1a"
     },
     "syntaxNumber": {
       "dark": "#ca763e",
-      "light": "#9d4c0a"
+      "light": "#9b4b07"
     },
     "syntaxType": {
       "dark": "#4a9a8a",
-      "light": "#176f61"
+      "light": "#136d5e"
     },
     "syntaxOperator": {
       "dark": "#928a7a",
-      "light": "#6e605a"
+      "light": "#6c5e58"
     },
     "syntaxPunctuation": {
       "dark": "#928a7a",
-      "light": "#6e605a"
+      "light": "#6c5e58"
     }
   }
 }
