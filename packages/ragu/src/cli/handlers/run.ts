@@ -21,7 +21,7 @@ import { Config } from "@/config/config"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
 import { Effect } from "effect"
 import { Log } from "@ragu/util/log"
-import { FormatError } from "@ragu/util/cli-error"
+import { FormatError, FormatSessionError } from "@ragu/util/cli-error"
 
 export const log = Log.create({ service: "run-command" })
 
@@ -249,7 +249,8 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<{ error?: st
       if (event.type === "session.error") {
         const props = event.properties
         if (props.sessionID !== sessionID || !props.error) continue
-        const err = props.error.name === "MessageOutputLengthError" ? props.error.name : props.error.data.message
+        const err =
+          props.error.name === "MessageOutputLengthError" ? props.error.name : FormatSessionError(props.error)
         errorMsg = errorMsg ? errorMsg + EOL + err : err
         if (outputJsonEvent("error", { error: props.error })) continue
         UI.error(err)

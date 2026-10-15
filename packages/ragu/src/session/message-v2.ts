@@ -9,6 +9,7 @@ import { APICallError, LoadAPIKeyError, NoNativeRouteError } from "@/provider/er
 import { convertToModelMessages } from "@/session/llm/ui-messages"
 import { type ModelMessage, type ToolSet, type UIMessage } from "@/session/llm/types"
 import { Identifier } from "@ragu/util/id"
+import { FormatError } from "@ragu/util/cli-error"
 import { LSP } from "../lsp"
 import { Snapshot } from "@/snapshot"
 import { fn } from "@/util/fn"
@@ -1260,6 +1261,9 @@ export namespace MessageV2 {
           },
         }
       }
+      // A model that is not in the catalog says what to do about it (`ragu models`, the config), not `e.toString()`.
+      case (e as { _tag?: unknown } | null)?._tag === "ProviderModelNotFoundError":
+        return EventError.unknown(FormatError(e) ?? String(e))
       // falls through — both cases have return statements, so fall-through is unreachable
       case e instanceof Error:
         return EventError.unknown(e.toString())
