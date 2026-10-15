@@ -517,7 +517,7 @@ const SpecAgent = Spec.make("agent", {
 })
 
 const SpecUpgrade = Spec.make("upgrade", {
-  description: "say where Ragu Code updates come from",
+  description: "show how to get a newer build (Ragu Code does not update itself)",
 })
 
 const SpecQuickstart = Spec.make("quickstart", {
