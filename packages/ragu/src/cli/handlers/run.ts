@@ -21,6 +21,7 @@ import { Config } from "@/config/config"
 import { runPromiseWithLayer, withCurrentInstance } from "@/effect"
 import { Effect } from "effect"
 import { Log } from "@ragu/util/log"
+import { FormatError } from "@ragu/util/cli-error"
 
 export const log = Log.create({ service: "run-command" })
 
@@ -149,6 +150,25 @@ export type ExecuteTurnInput = {
   exitOnError?: boolean
 }
 
+/**
+ * What to print for the `error` of a result envelope: the formatter's text when it knows the error (a tagged one),
+ * else the server's own message, else the error as it is. Never an empty string.
+ */
+export function rejectionMessage(error: unknown): string {
+  const formatted = FormatError(error)
+  if (formatted) return formatted
+  if (error instanceof Error && error.message) return error.message
+  if (typeof error === "object" && error !== null) {
+    const shaped = error as { name?: unknown; message?: unknown; data?: { message?: unknown } }
+    const text = shaped.data?.message ?? shaped.message
+    if (typeof text === "string" && text) return typeof shaped.name === "string" ? `${shaped.name}: ${text}` : text
+    try {
+      return JSON.stringify(error)
+    } catch {}
+  }
+  return String(error)
+}
+
 export async function executeTurn(input: ExecuteTurnInput): Promise<{ error?: string }> {
   const { sdk, sessionID, message } = input
   const fileParts = input.fileParts ?? []
@@ -178,8 +198,11 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<{ error?: st
     return false
   }
 
-  const events = await sdk.event.subscribe()
+  // Ended by us when the server turns the prompt down: no turn is coming, so no `session.idle` either.
+  const stopListening = new AbortController()
+  const events = await sdk.event.subscribe({}, { signal: stopListening.signal })
   let errorMsg: string | undefined
+  let rejected: string | undefined
 
   const eventProcessor = (async () => {
     for await (const event of events.stream) {
@@ -294,27 +317,40 @@ export async function executeTurn(input: ExecuteTurnInput): Promise<{ error?: st
     return input.agent
   })()
 
-  if (input.command) {
-    await sdk.session.command({
-      sessionID,
-      agent: resolvedAgent,
-      model: input.model,
-      command: input.command,
-      arguments: message,
-      variant: input.variant,
-    })
-  } else {
-    const modelParam = input.model ? Provider.parseModel(input.model) : undefined
-    await sdk.session.prompt({
-      sessionID,
-      agent: resolvedAgent,
-      model: modelParam,
-      variant: input.variant,
-      parts: [...fileParts, { type: "text", text: message }],
-    })
+  const sent = input.command
+    ? await sdk.session.command({
+        sessionID,
+        agent: resolvedAgent,
+        model: input.model,
+        command: input.command,
+        arguments: message,
+        variant: input.variant,
+      })
+    : await sdk.session.prompt({
+        sessionID,
+        agent: resolvedAgent,
+        model: input.model ? Provider.parseModel(input.model) : undefined,
+        variant: input.variant,
+        parts: [...fileParts, { type: "text", text: message }],
+      })
+
+  // A refused request (an unknown `-s` session, a rejected input) starts no turn and ends in no `session.idle`:
+  // waiting for one waited for ever. Say what the server said and leave.
+  if (sent.error !== undefined) {
+    rejected = rejectionMessage(sent.error)
+    stopListening.abort()
   }
 
-  await eventProcessor
+  // After a refusal the stream is ended by the abort above; a stream that ignores the abort must not hold the exit.
+  if (rejected !== undefined) await Promise.race([eventProcessor, Bun.sleep(1_000)])
+  else await eventProcessor
+  if (rejected !== undefined) {
+    log.error("Server refused the request", { sessionID, error: rejected })
+    errorMsg = rejected
+    if (!outputJsonEvent("error", { error: { name: "UnknownError", data: { message: rejected } } })) UI.error(rejected)
+    if (input.exitOnError !== false) process.exit(1)
+    return { error: rejected }
+  }
   if (errorMsg) {
     log.error("Session completed with errors", {
       sessionID,
