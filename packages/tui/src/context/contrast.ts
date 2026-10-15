@@ -99,21 +99,40 @@ export function worstRatio(fg: RGBA, backgrounds: readonly RGBA[]): number {
   return Math.min(...backgrounds.map((bg) => contrastRatio(fg, bg)))
 }
 
+/** A background and the ratio a colour needs on it. */
+export type ContrastTarget = { bg: RGBA; min: number }
+
+/** How far `fg` is from passing every target, as the worst ratio over its floor: 1 or more passes. */
+export function contrastScore(fg: RGBA, targets: readonly ContrastTarget[]): number {
+  return Math.min(...targets.map((t) => contrastRatio(fg, t.bg) / t.min))
+}
+
 /**
  * `fg` with the smallest change of OKLCH lightness that reaches `min` against every one of `backgrounds`; `fg`
- * itself when it already does.
- *
- * It tries lighter and darker and keeps the closer of the two that work. When neither works, the backgrounds sit on
- * both sides of every lightness that could pass, and it returns the lightness with the best worst ratio: the caller
- * can tell from `worstRatio` that `min` was out of reach. A translucent `fg` that fails is first laid on the first
- * background and comes back opaque: an alpha caps the contrast whatever its lightness.
+ * itself when it already does. See `ensureContrastFor`.
  */
 export function ensureContrast(color: RGBA, backgrounds: readonly RGBA[], min: number): RGBA {
-  if (backgrounds.length === 0 || worstRatio(color, backgrounds) >= min) return color
-  const fg = over(color, backgrounds[0]!)
-  if (worstRatio(fg, backgrounds) >= min) return fg
+  return ensureContrastFor(
+    color,
+    backgrounds.map((bg) => ({ bg, min })),
+  )
+}
+
+/**
+ * `fg` with the smallest change of OKLCH lightness that reaches each target's floor on its background; `fg` itself
+ * when it already does.
+ *
+ * It tries lighter and darker and keeps the closer of the two that work. When neither works, the backgrounds sit on
+ * both sides of every lightness that could pass, and it returns the lightness with the best score: the caller can
+ * tell from `contrastScore` that the floor was out of reach. A translucent `fg` that fails is first laid on the first
+ * background and comes back opaque: an alpha caps the contrast whatever its lightness.
+ */
+export function ensureContrastFor(color: RGBA, targets: readonly ContrastTarget[]): RGBA {
+  if (targets.length === 0 || contrastScore(color, targets) >= 1) return color
+  const fg = over(color, targets[0]!.bg)
+  const passes = (c: RGBA) => contrastScore(c, targets) >= 1
+  if (passes(fg)) return fg
   const start = toOklch(fg).l
-  const passes = (c: RGBA) => worstRatio(c, backgrounds) >= min
 
   const toward = (end: 0 | 1): { color: RGBA; distance: number } | undefined => {
     if (!passes(withLightness(fg, end))) return undefined
@@ -139,7 +158,7 @@ export function ensureContrast(color: RGBA, backgrounds: readonly RGBA[], min: n
   for (let i = 0; i < 40; i++) {
     const a = lo + (hi - lo) / 3
     const b = hi - (hi - lo) / 3
-    if (worstRatio(withLightness(fg, a), backgrounds) < worstRatio(withLightness(fg, b), backgrounds)) lo = a
+    if (contrastScore(withLightness(fg, a), targets) < contrastScore(withLightness(fg, b), targets)) lo = a
     else hi = b
   }
   return withLightness(fg, (lo + hi) / 2)

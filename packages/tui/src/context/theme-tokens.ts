@@ -1,5 +1,13 @@
 import { RGBA } from "@opentui/core"
-import { blackOrWhite, contrastRatio, ensureContrast, over } from "./contrast"
+import {
+  blackOrWhite,
+  contrastRatio,
+  contrastScore,
+  ensureContrast,
+  ensureContrastFor,
+  over,
+  toOklch,
+} from "./contrast"
 
 export type StatusPair = {
   fg: RGBA
@@ -161,9 +169,13 @@ export function contrastFg(bg: RGBA): RGBA {
 /** The floors of the triple-A review for the colours the engine derives. */
 const SUBTLE_MIN = 4.5
 const BADGE_MIN = 7
+/** The selected row's fill is also the bar that marks it in a dialog: a mark, 3:1 on the dialog. */
+const BAR_MIN = 3
 const DIFF_GUTTER_MIN = 4.5
 const TERMINAL_DARK = RGBA.fromInts(12, 12, 12)
 const TERMINAL_LIGHT = RGBA.fromInts(255, 255, 255)
+const BLACK = RGBA.fromInts(0, 0, 0)
+const WHITE = RGBA.fromInts(255, 255, 255)
 
 /**
  * `muted` faded toward the background, the colour of what a tool hides («▸ N more lines») and of its markers. Faded
@@ -176,6 +188,35 @@ function subtleOf(muted: RGBA, ground: RGBA): RGBA {
     if (contrastRatio(faded, ground) >= SUBTLE_MIN) return faded
   }
   return ensureContrast(muted, [ground], SUBTLE_MIN)
+}
+
+/**
+ * The selected row: its text and its fill. The text is the theme's (`selectedListItemText`) or black or white; the
+ * fill is `primary`, moved in lightness only when the text does not reach 7:1 on it or the fill does not stand 3:1
+ * off the dialog it marks a row in. The theme's own text wins when some fill works with it. Otherwise black and white
+ * are both tried and the pair whose fill moves least wins: on a light theme a mid-tone primary under black text would
+ * go pale and vanish into the dialog, where under white it only has to darken a little.
+ */
+function badgeOf(primary: RGBA, overlay: RGBA, declared: RGBA | undefined): StatusPair {
+  const pair = (fg: RGBA) => {
+    const targets = [
+      { bg: fg, min: BADGE_MIN },
+      { bg: overlay, min: BAR_MIN },
+    ]
+    const bg = ensureContrastFor(primary, targets)
+    if (contrastScore(bg, targets) < 1) return undefined
+    return { fg, bg, distance: Math.abs(toOklch(bg).l - toOklch(primary).l) }
+  }
+  const own = declared && pair(declared)
+  if (own) return { fg: own.fg, bg: own.bg }
+  const best = [BLACK, WHITE]
+    .map(pair)
+    .filter((p) => p !== undefined)
+    .sort((a, b) => a.distance - b.distance)[0]
+  if (best) return { fg: best.fg, bg: best.bg }
+  // No fill does both: the text reads, the bar is what gives.
+  const fg = declared ?? contrastFg(primary)
+  return { fg, bg: ensureContrast(primary, [fg], BADGE_MIN) }
 }
 
 function statusPair(base: RGBA, hue: RGBA, alpha: number): StatusPair {
@@ -197,10 +238,11 @@ export function deriveSemanticTokens(
   // A transparent background shows the terminal's: assume the default of Windows Terminal and conhost when dark,
   // white when light (the backgrounds the triple-A review measured transparent themes on).
   const ground = over(colors.background, options.mode === "dark" ? TERMINAL_DARK : TERMINAL_LIGHT)
-  // The selected row: the theme's text for it, or black or white; when neither reaches 7:1 on `primary`, the fill
-  // moves in lightness rather than the text giving up.
-  const badgeFg = options.hasSelectedListItemText ? colors.selectedListItemText : contrastFg(colors.primary)
-  const badgeBg = ensureContrast(colors.primary, [badgeFg], BADGE_MIN)
+  const badge = badgeOf(
+    colors.primary,
+    over(colors.backgroundMenu, ground),
+    options.hasSelectedListItemText ? colors.selectedListItemText : undefined,
+  )
   // The diff's gutter: the line number on each line's gutter fill, and the + and - signs, which the renderer draws in
   // the gutter too, on the fill of their own line. Both were near invisible (line numbers at 1.1:1 in the default
   // theme) and the signs are the one cue left to whoever cannot tell the green from the red.
@@ -252,8 +294,8 @@ export function deriveSemanticTokens(
       focus: tint(colors.primary, colors.text, 0.35),
     },
     badge: {
-      fg: badgeFg,
-      bg: badgeBg,
+      fg: badge.fg,
+      bg: badge.bg,
     },
     syntax: {
       comment: colors.syntaxComment,
