@@ -172,10 +172,12 @@ function spellings(word: string): string[] {
  * repository that points at `.nikcli` under another name is not seen. A bot
  * cannot make one without the shell.
  *
- * They open the session's rules rather than close them: any session rule
- * comes after the bot's file and wins over it, and a routine's `edit` denied
- * whole must stay the last `edit` rule, the one ragu reads to hide the tool
- * from the model (`disabled`, ruleset.ts).
+ * They open the session's rules rather than close them. The session only
+ * restricts: ragu reads the agent's rules and the session's apart and keeps the
+ * stricter decision (`PermissionRuleset.evaluate`), so an allow at the head
+ * cannot open what the bot's file, ragu's `.env` asks or the project closed.
+ * A routine's `edit` denied whole must stay the last `edit` rule, the one ragu
+ * reads to hide the tool from the model (`disabled`, ruleset.ts).
  */
 export function configDenials(): string[] {
   const denied: string[] = ["*::*"]

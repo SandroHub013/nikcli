@@ -135,14 +135,34 @@ export namespace PermissionRuleset {
     ]
   }
 
+  const SEVERITY: Record<Rule["action"], number> = { allow: 0, ask: 1, deny: 2 }
+
+  /**
+   * A merged ruleset cut at the bot mark: the agent's rules before it, the session's from it on. A bot's session of
+   * ADE may only restrict (`evaluate`, `disabled`), so the two halves are read apart. `undefined` for any other
+   * ruleset, which is read as one list, the last rule winning.
+   */
+  function splitAtBotMark(rules: Ruleset): { agent: Ruleset; session: Ruleset } | undefined {
+    const at = rules.findIndex((rule) => rule.permission === BOT_SESSION_PERMISSION && rule.pattern === "*" && rule.action === "deny")
+    return at < 0 ? undefined : { agent: rules.slice(0, at), session: rules.slice(at) }
+  }
+
   export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
     const merged = merge(...rulesets)
     // debug + count only: stringifying the full ruleset on every tool call is
     // measurable overhead at the default INFO level.
     log.debug("evaluate", { permission, pattern, rules: merged.length })
-    const match = merged.findLast(
-      (rule: Rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern),
-    )
+    const matches = (rule: Rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern)
+    // A bot's session only restricts (review of the review, N1): its allows come after the agent's rules and would
+    // win over `read *.env: ask`, a bot file's `edit: false` and the project's denials. The agent's rules and the
+    // session's are read apart, and the stricter decision stands.
+    const parts = splitAtBotMark(merged)
+    const match = parts
+      ? [parts.agent.findLast(matches), parts.session.findLast(matches)].reduce<Rule | undefined>(
+          (strictest, found) => (found && (!strictest || SEVERITY[found.action] > SEVERITY[strictest.action]) ? found : strictest),
+          undefined,
+        )
+      : merged.findLast(matches)
     const decision = match ?? { action: "ask" as const, permission, pattern: "*" }
 
     // `specs/effect-tui/17-sandbox-permission-boundaries.md` requirement 10:
@@ -206,9 +226,12 @@ export namespace PermissionRuleset {
     for (const tool of tools) {
       const permission = TOOL_PERMISSION[tool] ?? tool
 
-      const rule = ruleset.findLast((r: Rule) => Wildcard.match(permission, r.permission))
-      if (!rule) continue
-      if (rule.pattern === "*" && rule.action === "deny") result.add(tool)
+      // A bot's session only restricts: a tool its agent denies whole stays hidden under the session's allows.
+      const parts = splitAtBotMark(ruleset)
+      for (const rules of parts ? [parts.agent, parts.session] : [ruleset]) {
+        const rule = rules.findLast((r: Rule) => Wildcard.match(permission, r.permission))
+        if (rule && rule.pattern === "*" && rule.action === "deny") result.add(tool)
+      }
     }
     return result
   }
