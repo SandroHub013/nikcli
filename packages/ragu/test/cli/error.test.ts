@@ -1,7 +1,8 @@
 import { describe, expect, it } from "bun:test"
 import { ConfigMarkdown } from "@/config/markdown"
 import { Config } from "@/config/config"
-import { FormatError, FormatUnknownError, formatStack } from "@ragu/util/cli-error"
+import { FormatError, FormatSessionError, FormatUnknownError, formatStack } from "@ragu/util/cli-error"
+import { MessageV2 } from "@/session/message-v2"
 import { Agent } from "@/agent/agent"
 import { MCP } from "@/mcp"
 import { Provider } from "@/provider/provider"
@@ -22,6 +23,40 @@ describe("FormatError", () => {
     const out = FormatError(e)!
     expect(out).toContain("p/m")
     expect(out).toContain("ragu models")
+  })
+
+  // Review of the CLI, P1: an error has to say what to do next, and name the files ragu reads.
+  it("a model that is not found points at ragu.json, not at nikcli.json", () => {
+    const out = FormatError(new Provider.ModelNotFoundError({ providerID: "p", modelID: "m" }))!
+    expect(out).toContain("ragu.json")
+    expect(out).not.toContain("nikcli.json")
+  })
+
+  it("a missing key names `ragu auth login <provider>`, as a tagged error and as a session's {name, data}", () => {
+    const tagged = FormatError({ _tag: "ProviderAuthError", providerID: "openai", message: "API key is missing for provider openai" })!
+    expect(tagged).toContain("API key is missing for provider openai")
+    expect(tagged).toContain("ragu auth login openai")
+    const session = FormatSessionError({
+      name: "ProviderAuthError",
+      data: { providerID: "openai", message: "API key is missing for provider openai" },
+    })
+    expect(session).toBe(tagged)
+    expect(FormatSessionError({ name: "ProviderAuthError", data: { message: "no key" } })).toContain("ragu auth login`")
+  })
+
+  it("the other errors of a session keep their message", () => {
+    expect(FormatSessionError({ name: "APIError", data: { message: "rate limited" } })).toBe("rate limited")
+    expect(FormatSessionError({ name: "MessageAbortedError" })).toBe("MessageAbortedError")
+  })
+
+  it("a model that is not in the catalog reaches `ragu run` as the formatted text, not as e.toString()", () => {
+    const body = MessageV2.fromError(new Provider.ModelNotFoundError({ providerID: "p", modelID: "m" }), {
+      providerID: "p",
+    })
+    expect(body.name).toBe("UnknownError")
+    const message = (body.data as { message: string }).message
+    expect(message).toContain("ragu models")
+    expect(message).toContain("ragu.json")
   })
 
   it("formats Provider.ModelNotFoundError with suggestions", () => {

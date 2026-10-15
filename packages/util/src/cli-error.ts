@@ -13,6 +13,22 @@ export function formatStack(error: Error): string | null {
   return null
 }
 
+/** A missing or refused credential, with the step that fixes it: the message alone left the user to find it. */
+function authFailure(providerID: unknown, message: unknown): string {
+  const text = typeof message === "string" && message ? message : "Missing or invalid credentials"
+  if (typeof providerID !== "string" || !providerID) return `${text}\nRun \`ragu auth login\` to add a key.`
+  return `${text}\nRun \`ragu auth login ${providerID}\` to add a key, or set that provider's API key environment variable.`
+}
+
+/**
+ * The text of an error as a session reports it (`{ name, data }`, what `session.error` carries), for the commands
+ * that print it. The ones with a next step get it; the rest keep the message they came with.
+ */
+export function FormatSessionError(error: { name: string; data?: { message?: string; providerID?: string } }): string {
+  if (error.name === "ProviderAuthError") return authFailure(error.data?.providerID, error.data?.message)
+  return error.data?.message ?? error.name
+}
+
 /**
  * Dispatch table keyed by the error's `_tag` discriminator.
  *
@@ -37,11 +53,12 @@ const formatters: Record<string, Formatter> = {
       `Model not found: ${providerID}/${modelID}`,
       ...(Array.isArray(suggestions) && suggestions.length ? ["Did you mean: " + suggestions.join(", ")] : []),
       `Try: \`ragu models\` to list available models`,
-      `Or check your config (nikcli.json) provider/model names`,
+      `Or check your config (ragu.json) provider/model names`,
     ].join("\n")
     log.debug("Formatting model not found error", { providerID, modelID })
     return message
   },
+  ProviderAuthError: (e) => authFailure(e.providerID, e.message),
   ProviderInitError: (e) => {
     log.debug("Formatting provider init error", { providerID: e.providerID })
     return `Failed to initialize provider "${e.providerID}". Check credentials and configuration.`

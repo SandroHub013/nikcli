@@ -42,6 +42,36 @@ describe("doctor reads the config file ragu reads", () => {
     expect(deprecated.detail).toContain("keybinds")
   })
 
+  // Review of the CLI, P0 3: `JSON.parse` called a ragu.json with a comment broken, and the advice was to delete it.
+  test("a ragu.json with comments and a trailing comma is valid: the loader reads JSONC", async () => {
+    fs.mkdirSync(Global.Path.config, { recursive: true })
+    fs.writeFileSync(at("ragu.json"), '{\n  // my model\n  "model": "xai/grok-4.7",\n  "keybinds": {},\n}\n')
+    const { config, deprecated } = await checks()
+    expect(config).toMatchObject({ ok: true, detail: `${at("ragu.json")} parses as JSON` })
+    // The deprecated-keys check reads it the same way.
+    expect(deprecated.ok).toBe(false)
+    expect(deprecated.detail).toContain("keybinds")
+  })
+
+  test("a broken ragu.json is reported with its line, and the file is never advised to be deleted", async () => {
+    fs.mkdirSync(Global.Path.config, { recursive: true })
+    fs.writeFileSync(at("ragu.json"), '{\n  "model": \n}\n')
+    const { config } = await checks()
+    expect(config.ok).toBe(false)
+    expect(config.detail).toContain("line")
+    expect(config.fix).not.toContain("or delete")
+    expect(config.fix).toContain("Do not delete")
+  })
+
+  test("a ragu.jsonc in the user folder is seen, and said not to be read there", async () => {
+    fs.mkdirSync(Global.Path.config, { recursive: true })
+    fs.writeFileSync(at("ragu.jsonc"), "{ // comment\n}\n")
+    const { config } = await checks()
+    expect(config.ok).toBe(false)
+    expect(config.detail).toContain(at("ragu.jsonc"))
+    expect(config.fix).toContain("ragu.json")
+  })
+
   test("config.json is not ragu's file: not read", async () => {
     fs.mkdirSync(Global.Path.config, { recursive: true })
     fs.writeFileSync(at("config.json"), "{ not json")

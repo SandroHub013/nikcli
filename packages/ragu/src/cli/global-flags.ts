@@ -1,3 +1,5 @@
+import { statSync } from "fs"
+import path from "path"
 import { Flag, GlobalFlag } from "effect/unstable/cli"
 
 /**
@@ -75,13 +77,20 @@ export const GlobalFlags = [PrintLogs, Island, Auto, Yolo, DangerouslySkipPermis
  *
  * - `--log-level DEBUG` → `--log-level debug`, since effect's built-in flag
  *   declares lower-case choices and ragu has always taken upper-case.
- * - A leading path (`ragu ~/proj`) becomes `--project ~/proj`. yargs' default
+ * - A leading folder (`ragu ~/proj`, `ragu ..\app`) becomes `--project <folder>`. yargs' default
  *   command could own a positional while subcommands still matched; in effect an
  *   optional positional on the root swallows the subcommand name as soon as a
  *   flag follows, so `ragu heap --detailed` would run the TUI. Rewriting here
  *   keeps the spelling users type without giving the root a positional.
+ *   Only a word that is a folder, or is written like a path, is one: any other
+ *   (`ragu login`, `ragu modles`) is left for the parser to call an unknown
+ *   subcommand and say what it may have meant. `ragu help [command]` is `--help`.
  */
-export function normalizeArgv(argv: string[], subcommands: ReadonlyArray<string>): string[] {
+export function normalizeArgv(
+  argv: string[],
+  subcommands: ReadonlyArray<string>,
+  isFolder: (path: string) => boolean = isExistingFolder,
+): string[] {
   let out = [...argv]
 
   const level = out.indexOf("--log-level")
@@ -91,7 +100,25 @@ export function normalizeArgv(argv: string[], subcommands: ReadonlyArray<string>
 
   const first = out[0]
   if (first !== undefined && !first.startsWith("-") && !subcommands.includes(first)) {
-    out = ["--project", first, ...out.slice(1)]
+    if (first === "help") {
+      const topic = out[1]
+      out = topic !== undefined && subcommands.includes(topic) ? [topic, "--help", ...out.slice(2)] : ["--help"]
+    } else if (looksLikePath(first) || isFolder(first)) {
+      out = ["--project", first, ...out.slice(1)]
+    }
   }
   return out
+}
+
+/** Written as a path: a separator, a leading dot or `~`, or a drive letter. */
+function looksLikePath(word: string): boolean {
+  return /[\\/]/.test(word) || word.startsWith(".") || word.startsWith("~") || /^[A-Za-z]:/.test(word)
+}
+
+function isExistingFolder(word: string): boolean {
+  try {
+    return statSync(path.resolve(word)).isDirectory()
+  } catch {
+    return false
+  }
 }
