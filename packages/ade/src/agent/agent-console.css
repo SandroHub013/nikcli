@@ -270,7 +270,7 @@
 [data-slot="agent-onboarding-row"][data-done="true"] [data-slot="agent-check-mark"] {
   border-color: var(--ade-done);
   background: var(--ade-done);
-  color: var(--ade-done-fg, #ffffff);
+  color: var(--ade-on-status);
 }
 
 [data-slot="agent-onboarding-body"] {

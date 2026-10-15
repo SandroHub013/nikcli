@@ -128,11 +128,12 @@
    * The linear line is a fallback: an engine without `pow()` gets a
    * reasonable ground rather than no declaration at all.
    */
-  --ade-glass-ground: #131111;
+  /* Ink, the ragù palette's dark ground (palette-ragu.test.ts). */
+  --ade-glass-ground: #120d0b;
   --ade-on-ink: var(--ade-glass-ground);
-  --ade-glass-veil: rgba(19, 17, 17, calc(0.06 + 0.34 * var(--ade-glass-opacity, 0.75)));
-  --ade-glass-read: rgba(19, 17, 17, calc(0.05 + 0.85 * var(--ade-glass-opacity, 0.75)));
-  --ade-glass-read: rgba(19, 17, 17, calc(0.05 + 0.85 * pow(var(--ade-glass-opacity, 0.75), 0.24)));
+  --ade-glass-veil: rgba(18, 13, 11, calc(0.06 + 0.34 * var(--ade-glass-opacity, 0.75)));
+  --ade-glass-read: rgba(18, 13, 11, calc(0.05 + 0.85 * var(--ade-glass-opacity, 0.75)));
+  --ade-glass-read: rgba(18, 13, 11, calc(0.05 + 0.85 * pow(var(--ade-glass-opacity, 0.75), 0.24)));
 
   /* Containers hold; they do not paint. */
   --ade-bg: transparent;
@@ -153,7 +154,7 @@
    * away. 0.92 keeps a hint of translucency and still hides what is below.
    */
   --ade-raised: rgba(255, 255, 255, 0.06);
-  --ade-overlay: rgba(28, 25, 25, 0.92);
+  --ade-overlay: rgba(36, 30, 27, 0.92);
 
   --ade-border-subtle: rgba(255, 255, 255, 0.08);
   --ade-border: rgba(255, 255, 255, 0.12);
@@ -282,13 +283,22 @@ body[data-theme="glass"] #root,
    * Five depth stops, deepest to highest. `sunken` sits below `bg` for inset
    * wells (the transcript). `overlay` is for floating layers (palette, menus).
    * `scrim` is the semi-transparent backdrop behind them.
+   *
+   * The ragù palette (brand choice 3, «tutta ragù»): the ground is ink
+   * #120d0b in dark and crema #f4e7cd in light, and every other level is
+   * mixed from the two, so no grey from outside the palette comes back.
+   *   dark   sunken ink with 30% black · surface, raised, overlay ink with
+   *          4%, 8%, 12% crema
+   *   light  sunken crema with 3% ink · surface halfway to panna #fffaf0 ·
+   *          raised and overlay panna
+   * `palette-ragu.test.ts` measures every pair drawn on these grounds.
    */
-  --ade-bg: light-dark(#f4f2f0, #131111);
-  --ade-sunken: light-dark(#eae7e4, #0e0c0c);
-  --ade-surface: light-dark(#faf9f8, #1a1818);
-  --ade-raised: light-dark(#ffffff, #211e1e);
-  --ade-overlay: light-dark(#ffffff, #2a2626);
-  --ade-scrim: light-dark(rgba(0, 0, 0, 0.3), rgba(0, 0, 0, 0.55));
+  --ade-bg: light-dark(#f4e7cd, #120d0b);
+  --ade-sunken: light-dark(#ede0c7, #0d0908);
+  --ade-surface: light-dark(#faf1df, #1b1613);
+  --ade-raised: light-dark(#fffaf0, #241e1b);
+  --ade-overlay: light-dark(#fffaf0, #2d2722);
+  --ade-scrim: light-dark(rgba(18, 13, 11, 0.3), rgba(8, 6, 5, 0.6));
 
   /* ── borders ───────────────────────────────────────────────────────────── */
   /*
@@ -297,26 +307,27 @@ body[data-theme="glass"] #root,
    * perceived thickness — the technique that makes a card read as a surface
    * rather than as a drawn rectangle.
    */
-  --ade-border-subtle: light-dark(#e8e5e2, #232020);
-  --ade-border: light-dark(#d8d4d0, #2b2727);
-  --ade-border-strong: light-dark(#c2bdb8, #3a3535);
-  --ade-highlight: light-dark(rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.04));
+  /* Ink into crema at 6/12/21% in light, crema into ink at 9/13/20% in dark. */
+  --ade-border-subtle: light-dark(#e6dac1, #26211c);
+  --ade-border: light-dark(#d9cdb6, #2f2924);
+  --ade-border-strong: light-dark(#c5b9a4, #3f3932);
+  --ade-highlight: light-dark(rgba(255, 250, 240, 0.6), rgba(244, 231, 205, 0.04));
 
   /* ── text ───────────────────────────────────────────────────────────────── */
   /*
    * Three-step ramp, every step at least 4.5:1 (AA) on every ground text sits
-   * on — bg, surface, raised and overlay — measured by `text-contrast.test.ts`.
-   * The worst ground is bg in light (#f4f2f0) and overlay in dark (#2a2626):
-   *   text  15.84:1 light · 12.57:1 dark — primary content, headings
-   *   soft   6.09:1 light ·  6.08:1 dark — secondary content, inactive labels
-   *   weak   4.64:1 light ·  4.64:1 dark — meta, counters, option details
-   * Weak used to be 3.30 light and 4.40 dark: the sheet's counter, meta and
-   * option details were under AA (polish-aaa, piece 0). Soft was darkened in
-   * light with it, so the two steps still read as two.
+   * on — sunken, bg, surface, raised and overlay — measured by
+   * `text-contrast.test.ts` and `palette-ragu.test.ts`. The text is the other
+   * end of the palette (crema on ink, ink on crema); soft and weak are it
+   * mixed 30% and 38-40% toward the ground. The worst ground is sunken in
+   * light (#ede0c7) and overlay in dark (#2d2722):
+   *   text  14.6:1 light · 12.0:1 dark — primary content, headings
+   *   soft   6.2:1 light ·  6.1:1 dark — secondary content, inactive labels
+   *   weak   4.7:1 light ·  4.7:1 dark — meta, counters, option details
    */
-  --ade-text: light-dark(#1a1817, #ecebeb);
-  --ade-text-soft: light-dark(#5f5a57, #a9a4a4);
-  --ade-text-weak: light-dark(#716c69, #938e8e);
+  --ade-text: light-dark(#120d0b, #f4e7cd);
+  --ade-text-soft: light-dark(#564e45, #b0a693);
+  --ade-text-weak: light-dark(#686055, #9a907f);
   /*
    * The words on a solid `--ade-text` fill (the chosen value, the primary
    * action). It is the page ground, except in glass where the ground is
@@ -328,44 +339,66 @@ body[data-theme="glass"] #root,
   /* ── accent ─────────────────────────────────────────────────────────────── */
   /*
    * The accent is for state, focus and primary actions — never decoration.
-   * The light value is darkened to clear 4.5:1 on white (4.62:1); the dark one
-   * measures 6.8:1 on raised.
+   *
+   * Pomodoro #df4a2b, which is one value as a fill and too dim as text: 3.6:1
+   * on the dark overlay, 3.3:1 on crema. The accent is drawn both ways (about
+   * thirty sheets set it as `color`, thirty as `background`), so it holds the
+   * variant that reads as text, and `-strong`, the hover of a filled button,
+   * is the palette's own value:
+   *   dark   accent pomodoro 45% toward hi #f39a6b — 4.7:1 on overlay, ink on
+   *          it 6.2:1 · strong pomodoro, ink on it 4.7:1
+   *   light  accent pomodoro 65% toward red #a3271b — 4.5:1 on sunken, panna
+   *          on it 5.7:1 · strong red, panna on it 7.1:1
    */
-  --ade-accent: light-dark(#1a9e87, #7fd6c4);
-  --ade-accent-soft: light-dark(rgba(26, 158, 135, 0.1), rgba(127, 214, 196, 0.15));
-  --ade-accent-strong: light-dark(#148272, #5ec4ae);
-  --ade-accent-fg: light-dark(#ffffff, #0a1613);
-  --ade-accent-glow: light-dark(rgba(26, 158, 135, 0.15), rgba(127, 214, 196, 0.2));
+  --ade-accent: light-dark(#b83321, #e86e48);
+  --ade-accent-soft: light-dark(rgba(184, 51, 33, 0.1), rgba(232, 110, 72, 0.15));
+  --ade-accent-strong: light-dark(#a3271b, #df4a2b);
+  --ade-accent-fg: light-dark(#fffaf0, #120d0b);
+  --ade-accent-glow: light-dark(rgba(184, 51, 33, 0.15), rgba(232, 110, 72, 0.2));
 
   /* ── status ─────────────────────────────────────────────────────────────── */
   /*
-   * One family, near-equal perceived lightness, so no status shouts over
-   * another across a six-pane grid. Dark values clear 6.3:1 on all three
-   * surfaces; light values clear 4.5:1 on white. Each has a low-alpha `-bg`
-   * for badges and tinted rows.
+   * One family from the palette. Every value clears 4.5:1 as text on every
+   * ground of its scheme. Each has a low-alpha `-bg` for badges and tinted rows.
+   *
+   *   done     basil #7fb850 in dark; basil-dark #24501a in light, because
+   *            basil is 3.4:1 on crema
+   *   working  pasta #f1c14f in dark; in light pasta is 1.4:1 on crema, so an
+   *            ochre in its hue, #845b00
+   *   error    raspberry, not the palette's red. Red #a3271b is the light
+   *            accent's own hover, and an error must not read as a pomodoro
+   *            button: raspberry sits about 30° of hue off pomodoro, and the
+   *            OKLab distance between the two stays over 0.1 in both schemes,
+   *            over 0.06 for protan and deutan vision (the test holds it)
+   *   waiting  the one hue the palette has not got: blue, kept, retuned for
+   *            ink and crema
    */
-  --ade-working: light-dark(#9a6d28, #d9a45f);
-  --ade-working-bg: light-dark(rgba(154, 109, 40, 0.1), rgba(217, 164, 95, 0.12));
-  --ade-waiting: light-dark(#3b6fb0, #7da9e4);
-  --ade-waiting-bg: light-dark(rgba(59, 111, 176, 0.1), rgba(125, 169, 228, 0.12));
-  --ade-done: light-dark(#2e8a50, #71c491);
-  --ade-done-bg: light-dark(rgba(46, 138, 80, 0.1), rgba(113, 196, 145, 0.12));
-  --ade-error: light-dark(#b74a5e, #e0879a);
-  --ade-error-bg: light-dark(rgba(183, 74, 94, 0.1), rgba(224, 135, 154, 0.12));
+  --ade-working: light-dark(#845b00, #f1c14f);
+  --ade-working-bg: light-dark(rgba(132, 91, 0, 0.1), rgba(241, 193, 79, 0.12));
+  --ade-waiting: light-dark(#39659b, #84aee3);
+  --ade-waiting-bg: light-dark(rgba(57, 101, 155, 0.1), rgba(132, 174, 227, 0.12));
+  --ade-done: light-dark(#24501a, #7fb850);
+  --ade-done-bg: light-dark(rgba(36, 80, 26, 0.1), rgba(127, 184, 80, 0.12));
+  --ade-error: light-dark(#9a2f62, #e87da9);
+  --ade-error-bg: light-dark(rgba(154, 47, 98, 0.1), rgba(232, 125, 169, 0.12));
   /*
-   * Amber for what waits on someone (a recipient still missing, a check not yet
-   * run). It was only ever a fallback, #b7791f, which reads under 4.5:1 as text
-   * on every theme's sheet; these two reach it on overlay and surface alike.
+   * For what waits on someone (a recipient still missing, a check not yet
+   * run): pasta in dark, the same ochre as `working` in light. It was only
+   * ever a fallback, #b7791f, which read under 4.5:1 as text on every sheet.
    */
-  --ade-warning: light-dark(#8f5c14, #dba047);
+  --ade-warning: light-dark(#845b00, #f1c14f);
+  /* The words on a solid status fill (a badge, a check mark): panna in light, ink in dark. */
+  --ade-on-status: light-dark(#fffaf0, #120d0b);
+  /* What a recording paints over a secret: one opaque block in every theme, glass included. */
+  --ade-redact: #2d2722;
 
   /* ── interaction fills ──────────────────────────────────────────────────── */
   /*
    * Alpha ramps, not solid stops: they composite identically over bg, surface
    * and raised. They darken on light grounds and lighten on dark ones.
    */
-  --ade-hover: light-dark(rgba(0, 0, 0, 0.04), rgba(255, 255, 255, 0.045));
-  --ade-active: light-dark(rgba(0, 0, 0, 0.07), rgba(255, 255, 255, 0.08));
+  --ade-hover: light-dark(rgba(18, 13, 11, 0.045), rgba(244, 231, 205, 0.05));
+  --ade-active: light-dark(rgba(18, 13, 11, 0.08), rgba(244, 231, 205, 0.09));
 
   /* ── radii ──────────────────────────────────────────────────────────────── */
   --ade-radius-sm: 5px;
@@ -429,7 +462,7 @@ body[data-theme="glass"] #root,
      unchanged and only the hue moved. */
   --ade-focus-ring: 0 0 0 2px var(--ade-text-weak), 0 0 0 4px color-mix(in srgb, var(--ade-text-weak) 45%, transparent);
 
-  --ade-scrollbar-thumb: light-dark(rgba(0, 0, 0, 0.18), rgba(255, 255, 255, 0.14));
+  --ade-scrollbar-thumb: light-dark(rgba(18, 13, 11, 0.2), rgba(244, 231, 205, 0.14));
 
   /* Locked to GRID_GAP in grid/layout.ts. A separating line, not a gutter:
      every pixel between two panes is a pixel not showing a terminal. */
@@ -454,7 +487,8 @@ body[data-theme="glass"] #root,
    */
   --ade-terminal-bg: light-dark(#fdfcfc, #0e0c0c);
   --ade-terminal-fg: light-dark(#1a1817, #ecebeb);
-  --ade-selection: light-dark(rgba(10, 124, 107, 0.22), rgba(122, 215, 195, 0.26));
+  /* The selection and the cursor (`--ade-accent`) are the accent's; the emulator's own colours are not touched. */
+  --ade-selection: light-dark(rgba(184, 51, 33, 0.2), rgba(232, 110, 72, 0.3));
 
   --ade-ansi-black: light-dark(#3b3634, #4a4444);
   --ade-ansi-red: light-dark(#b03651, #e0879a);
@@ -1340,7 +1374,7 @@ body,
   margin: 0;
 }
 [data-component="update-dialog"] [data-stage="error"] [data-slot="update-dialog-body"] p {
-  color: var(--ade-error, #e5484d);
+  color: var(--ade-error);
 }
 [data-component="update-dialog"] [data-slot="update-dialog-problem"] {
   font-family: var(--ade-mono);
@@ -1526,7 +1560,7 @@ html[data-ade-recording] [data-secrets] * {
   color: transparent !important;
   text-shadow: none !important;
   caret-color: transparent !important;
-  background: #2a2a2a !important;
+  background: var(--ade-redact) !important;
   -webkit-text-security: disc;
 }
 html[data-ade-recording] [data-sensitive]::selection,
@@ -1806,7 +1840,7 @@ html[data-ade-recording] [data-slot="browser-record-veil"] {
 /* In glass --ade-bg is transparent, and the veil must stay opaque. */
 html[data-ade-recording][data-theme="glass"] [data-slot="browser-record-veil"],
 html[data-ade-recording] [data-theme="glass"] [data-slot="browser-record-veil"] {
-  background: #131111;
+  background: var(--ade-glass-ground);
 }
 
 html[data-ade-recording] [data-slot="browser-frame"] {

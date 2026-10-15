@@ -7,9 +7,9 @@
   height: min(90vh, calc(100vh - 2 * var(--space-6, 24px)));
   max-width: 1100px;
   background-color: var(--ade-surface);
-  color: var(--ade-text, #1d2330);
+  color: var(--ade-text);
   border-radius: var(--ade-radius-lg, 12px);
-  border: 1px solid var(--ade-border, #d4d8df);
+  border: 1px solid var(--ade-border);
   box-shadow: var(--ade-shadow-lg);
   overflow: hidden;
   box-sizing: border-box;
@@ -32,7 +32,7 @@
   width: 220px;
   min-width: 220px;
   background-color: var(--ade-sunken);
-  border-right: 1px solid var(--ade-border, #e3e6eb);
+  border-right: 1px solid var(--ade-border);
   display: flex;
   flex-direction: column;
   padding: var(--space-3, 12px) 0;
@@ -48,7 +48,7 @@
   margin: 0;
   font-size: var(--ade-font-2xl);
   font-weight: var(--ade-weight-semibold);
-  color: var(--ade-text, #1d2330);
+  color: var(--ade-text);
 }
 
 [data-slot="settings-rail-categories"] {
@@ -79,8 +79,8 @@
 }
 
 [data-slot="category-button"]:hover {
-  background-color: var(--ade-hover, rgba(0, 0, 0, 0.04));
-  color: var(--ade-text, #1d2330);
+  background-color: var(--ade-hover);
+  color: var(--ade-text);
 }
 
 [data-slot="category-button"]:focus-visible {
@@ -90,10 +90,10 @@
 
 [data-slot="category-button"][data-active="true"] {
   background-color: var(--ade-raised);
-  border-color: var(--ade-border, #d4d8df);
+  border-color: var(--ade-border);
   color: var(--ade-accent);
   font-weight: var(--ade-weight-semibold);
-  box-shadow: var(--ade-shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.05));
+  box-shadow: var(--ade-shadow-sm);
 }
 
 [data-slot="category-label"] {
@@ -107,7 +107,7 @@
 [data-slot="settings-rail-footer"] {
   margin-top: auto;
   padding: var(--space-3, 12px) var(--space-4, 16px) 0;
-  border-top: 1px solid var(--ade-border, #e3e6eb);
+  border-top: 1px solid var(--ade-border);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -120,18 +120,18 @@
 
 [data-slot="settings-check-update"] {
   background: transparent;
-  border: 1px solid var(--ade-border, #d4d8df);
+  border: 1px solid var(--ade-border);
   border-radius: var(--ade-radius-sm, 6px);
   padding: 4px 8px;
   font-size: var(--ade-font-sm);
-  color: var(--ade-text, #1d2330);
+  color: var(--ade-text);
   cursor: pointer;
   text-align: center;
   transition: background-color 0.12s ease;
 }
 
 [data-slot="settings-check-update"]:hover {
-  background-color: var(--ade-hover, rgba(0, 0, 0, 0.04));
+  background-color: var(--ade-hover);
 }
 
 [data-slot="settings-check-update"]:focus-visible {
@@ -146,7 +146,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background-color: var(--ade-bg, #ffffff);
+  background-color: var(--ade-bg);
   overflow: hidden;
 }
 
@@ -155,7 +155,7 @@
   align-items: flex-start;
   justify-content: space-between;
   padding: var(--space-4, 16px) var(--space-6, 24px) var(--space-2, 8px);
-  border-bottom: 1px solid var(--ade-border, #e3e6eb);
+  border-bottom: 1px solid var(--ade-border);
   flex-shrink: 0;
 }
 
@@ -169,7 +169,7 @@
   margin: 0;
   font-size: var(--ade-font-2xl);
   font-weight: var(--ade-weight-semibold);
-  color: var(--ade-text, #1d2330);
+  color: var(--ade-text);
 }
 
 [data-slot="settings-subtitle"] {
@@ -191,8 +191,8 @@
 }
 
 [data-slot="settings-close"]:hover {
-  background-color: var(--ade-hover, rgba(0, 0, 0, 0.06));
-  color: var(--ade-text, #1d2330);
+  background-color: var(--ade-hover);
+  color: var(--ade-text);
 }
 
 [data-slot="settings-close"]:focus-visible {
@@ -206,7 +206,7 @@
   display: flex;
   gap: var(--space-2, 8px);
   padding: 0 var(--space-6, 24px);
-  border-bottom: 1px solid var(--ade-border, #e3e6eb);
+  border-bottom: 1px solid var(--ade-border);
   overflow-x: auto;
   flex-shrink: 0;
 }
@@ -225,7 +225,7 @@
 }
 
 [data-slot="settings-tab"]:hover {
-  color: var(--ade-text, #1d2330);
+  color: var(--ade-text);
 }
 
 [data-slot="settings-tab"]:focus-visible {
@@ -277,7 +277,7 @@
 
 [data-slot="settings-footer"] {
   padding: var(--space-3, 12px) var(--space-6, 24px);
-  border-top: 1px solid var(--ade-border, #e3e6eb);
+  border-top: 1px solid var(--ade-border);
   display: flex;
   align-items: center;
   gap: var(--space-3, 12px);
@@ -290,15 +290,15 @@
   font-size: var(--ade-font-lg);
   font-weight: var(--ade-weight-medium);
   border-radius: var(--ade-radius-md, 8px);
-  border: 1px solid var(--ade-border, #d4d8df);
-  background-color: var(--ade-surface, #ffffff);
-  color: var(--ade-text, #1d2330);
+  border: 1px solid var(--ade-border);
+  background-color: var(--ade-surface);
+  color: var(--ade-text);
   cursor: pointer;
   transition: background-color 0.12s ease;
 }
 
 [data-slot="settings-done"]:hover {
-  background-color: var(--ade-hover, rgba(0, 0, 0, 0.04));
+  background-color: var(--ade-hover);
 }
 
 [data-slot="settings-done"]:focus-visible {

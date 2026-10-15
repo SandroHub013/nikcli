@@ -21,6 +21,7 @@
  */
 
 import type { JSX } from "solid-js"
+import { POT_RUNS } from "./pot-runs"
 
 export interface RaguMicProps {
   /** Rendered edge length in px. The drawing is square. */
@@ -42,35 +43,6 @@ export interface RaguMicProps {
  * scaled and centred inside the capsule.
  */
 const CAPSULE = { x: 7.5, y: 2, w: 9, h: 12.5, r: 4.5 }
-
-/**
- * Pixel runs of the ADE Ragu pot (from POT_16 / icon-16).
- * Each run is [x, y, width].
- */
-const POT_RUNS: readonly [number, number, number][] = [
-  // Steam
-  [9, 0, 1],
-  [6, 1, 1],
-  [10, 1, 1],
-  [7, 2, 1],
-  [9, 2, 1],
-  [6, 3, 1],
-  [9, 3, 2],
-  // Lid & handles
-  [5, 4, 7],
-  [2, 5, 12],
-  // Body
-  [1, 6, 14],
-  [1, 7, 14],
-  [0, 8, 16],
-  [1, 9, 14],
-  [2, 10, 12],
-  [2, 11, 12],
-  [2, 12, 12],
-  // Base
-  [3, 13, 10],
-  [4, 14, 8],
-]
 
 /** The cradle and stem, identical in both cuts. */
 function Cradle(props: { width: number }) {

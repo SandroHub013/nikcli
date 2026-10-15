@@ -137,8 +137,8 @@
  * The glow the mark stands in, and the part that answers a person directly:
  * speak and it opens, stop and it settles.
  *
- * It used to be the pupil itself, a solid disc. With the N in the middle a
- * solid disc would either swallow the letter or force it to be knocked out of
+ * It used to be the pupil itself, a solid disc. With the mark in the middle a
+ * solid disc would either swallow the mark or force it to be knocked out of
  * one — and a knockout is a second colour to keep in step with the theme. A
  * soft radial instead: the mark sits on top and stays the same ink at every
  * level, while the light behind it breathes.
@@ -164,7 +164,7 @@
 }
 
 /*
- * The N, dead centre and a fixed size.
+ * The pot, dead centre and a fixed size.
  *
  * Everything else in the orb reacts to the voice; the mark does not. It is the
  * identity, and an identity that pulses is a logo animation — the sphere is
@@ -172,7 +172,7 @@
  * diameter, which is what fits inside the iris with air on both sides at the
  * 26px the toolbar draws it.
  */
-[data-component="orb-mark"] [data-slot="orb-mark-n"] {
+[data-component="orb-mark"] [data-slot="orb-mark-pot"] {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -320,7 +320,7 @@
 
 /* Awake, the mark is the ground colour outright — the brightest thing in the
    sphere, standing in its own light. */
-[data-component="orb-mark"][data-awake] [data-slot="orb-mark-n"] {
+[data-component="orb-mark"][data-awake] [data-slot="orb-mark-pot"] {
   color: var(--orb-lit);
 }
 

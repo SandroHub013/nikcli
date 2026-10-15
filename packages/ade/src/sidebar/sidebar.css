@@ -1154,16 +1154,16 @@
     background-color var(--ade-dur-fast) var(--ade-ease);
 }
 
-/* 1. Disponibile (Green / Idle) */
+/* 1. Disponibile (basil / Idle) */
 [data-slot="agent-status-dot"][data-agent-status="disponibile"] {
-  background-color: #22c55e;
-  box-shadow: 0 0 5px rgba(34, 197, 94, 0.55);
+  background-color: var(--ade-done);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--ade-done) 55%, transparent);
 }
 
-/* 2. A lavoro (Yellow / Working con pulse) */
+/* 2. A lavoro (pasta / Working con pulse) */
 [data-slot="agent-status-dot"][data-agent-status="a lavoro"] {
-  background-color: #facc15;
-  box-shadow: 0 0 5px rgba(250, 204, 21, 0.55);
+  background-color: var(--ade-working);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--ade-working) 55%, transparent);
 }
 
 /* Sospesa (P1-C6): no process, so no colour and no glow. */
@@ -1172,10 +1172,10 @@
   box-shadow: none;
 }
 
-/* 3. In attesa di input (Orange / Blocked-Waiting con pulse) */
+/* 3. In attesa di input (pomodoro / Blocked-Waiting con pulse): the accent, what asks for you */
 [data-slot="agent-status-dot"][data-agent-status="in attesa di input"] {
-  background-color: #f97316;
-  box-shadow: 0 0 5px rgba(249, 115, 22, 0.55);
+  background-color: var(--ade-accent);
+  box-shadow: 0 0 5px color-mix(in srgb, var(--ade-accent) 55%, transparent);
 }
 
 /*
@@ -1220,26 +1220,26 @@
   }
 
   [data-slot="agent-status-dot"][data-agent-status="a lavoro"]::after {
-    background: rgba(250, 204, 21, 0.6);
+    background: color-mix(in srgb, var(--ade-working) 60%, transparent);
     animation: ade-agent-ripple 1.6s cubic-bezier(0.4, 0, 0.6, 1) infinite var(--ade-loops, running);
   }
 
   [data-slot="agent-status-dot"][data-agent-status="in attesa di input"]::after {
-    background: rgba(249, 115, 22, 0.6);
+    background: color-mix(in srgb, var(--ade-accent) 60%, transparent);
     animation: ade-agent-ripple 1.4s ease-in-out infinite var(--ade-loops, running);
   }
 }
 
-/* 4. Task completata (Slate / Done) */
+/* 4. Task completata (soft text / Done) */
 [data-slot="agent-status-dot"][data-agent-status="task completata"] {
-  background-color: #94a3b8;
+  background-color: var(--ade-text-soft);
   box-shadow: none;
 }
 
-/* 5. Errore (Red / Error) */
+/* 5. Errore (raspberry / Error) */
 [data-slot="agent-status-dot"][data-agent-status="errore"] {
-  background-color: #ef4444;
-  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+  background-color: var(--ade-error);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--ade-error) 60%, transparent);
 }
 
 @keyframes ade-agent-pulse-yellow {
@@ -1938,7 +1938,7 @@ aside[data-component="ade-sidebar"] {
   border: 1px solid var(--ade-border-strong);
   border-radius: var(--ade-radius-lg);
   background: var(--ade-raised);
-  box-shadow: var(--ade-shadow-lg, 0 12px 32px rgb(0 0 0 / 0.32));
+  box-shadow: var(--ade-shadow-lg);
 }
 
 [data-slot="ade-row-menu-separator"] {

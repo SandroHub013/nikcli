@@ -1105,7 +1105,7 @@
 :root {
   --st-ask: var(--ade-ansi-magenta);
   --st-limit: color-mix(in srgb, var(--ade-working) 45%, var(--ade-error));
-  --on-st: light-dark(#ffffff, #0e0c0c);
+  --on-st: var(--ade-on-status);
 }
 
 /* Canonical 6-state status colors on session pane */

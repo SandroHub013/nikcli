@@ -374,8 +374,8 @@ describe("a take on the browser pane (D78)", () => {
     expect(glassSectionBody).toMatch(/--ade-bg:\s*transparent/)
 
     // Rule 1: Default veil rule for light and dark themes keeps var(--ade-bg).
-    // In light theme --ade-bg is #f4f2f0 and text is #1a1817 (dark text on light ground).
-    // In dark theme --ade-bg is #131111 and text is #ecebeb (light text on dark ground).
+    // In light theme --ade-bg is crema #f4e7cd and text is ink #120d0b (dark text on light ground).
+    // In dark theme --ade-bg is ink #120d0b and text is crema #f4e7cd (light text on dark ground).
     const defaultVeilRule = css.slice(css.indexOf(`html[${RECORDING_ATTRIBUTE}] [data-slot="browser-record-veil"]`))
     const defaultVeilBody = defaultVeilRule.slice(defaultVeilRule.indexOf("{"), defaultVeilRule.indexOf("}"))
     expect(defaultVeilBody).toMatch(/background:\s*var\(--ade-bg\)/)
@@ -386,13 +386,13 @@ describe("a take on the browser pane (D78)", () => {
       css.indexOf(`html[${RECORDING_ATTRIBUTE}][data-theme="glass"] [data-slot="browser-record-veil"]`),
     )
     const glassVeilBody = glassVeilRule.slice(glassVeilRule.indexOf("{"), glassVeilRule.indexOf("}"))
-    expect(glassVeilBody).toMatch(/background:\s*#131111/)
+    expect(glassVeilBody).toMatch(/background:\s*var\(--ade-glass-ground\)/)
 
-    // Verify #131111 is full 6-digit hex without alpha channel (solid, alpha 1).
-    const bgMatch = glassVeilBody.match(/background:\s*(#[0-9a-fA-F]{6})/)
+    // The glass ground is ink, a full 6-digit hex without alpha channel (solid, alpha 1).
+    const bgMatch = css.match(/--ade-glass-ground:\s*(#[0-9a-fA-F]+);/)
     expect(bgMatch).not.toBeNull()
     const hexColor = bgMatch![1]
-    expect(hexColor).toBe("#131111")
+    expect(hexColor).toBe("#120d0b")
     expect(hexColor.length).toBe(7) // # followed by 6 hex chars (alpha 1)
 
     // Selector matching check:

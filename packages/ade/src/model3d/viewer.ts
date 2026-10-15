@@ -162,8 +162,8 @@ export function createModelViewer(stage: HTMLElement, onLost: (reason: string) =
 
   const syncTheme = () => {
     const style = getComputedStyle(stage)
-    scene.background = new THREE.Color().setStyle(style.backgroundColor || "#1a1818", THREE.SRGBColorSpace)
-    gridColor = new THREE.Color().setStyle(style.color || "#444444", THREE.SRGBColorSpace)
+    scene.background = new THREE.Color().setStyle(style.backgroundColor || "#1b1613", THREE.SRGBColorSpace)
+    gridColor = new THREE.Color().setStyle(style.color || "#3f3932", THREE.SRGBColorSpace)
     if (grid) rebuildGrid()
     invalidate()
   }
