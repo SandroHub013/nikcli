@@ -7,9 +7,9 @@ interpolation, in the palette's own colours.
 
     python make-ragu.py [path to grids.json]
 
-Run from this folder. Then, for the home-screen icons drawn from favicon-v3.svg:
+Run from this folder. Then, from packages/terminal-control, for the home-screen icons drawn from favicon-v3.svg:
 
-    bun --cwd packages/terminal-control run script/regenerate-favicon.ts
+    bun script/regenerate-favicon.ts
 
 Needs Pillow. The line under the social picture is set in Consolas, which Windows finds by name.
 """
