@@ -33,32 +33,32 @@
   },
   "theme": {
     "primary": {
-      "dark": "orange400",
+      "dark": "#db702d",
       "light": "blue600"
     },
     "secondary": {
-      "dark": "blue400",
+      "dark": "#5193cc",
       "light": "purple600"
     },
     "accent": {
-      "dark": "purple400",
-      "light": "orange600"
+      "dark": "#9084ce",
+      "light": "#ad4600"
     },
     "error": {
-      "dark": "#dc574a",
+      "dark": "#ea6456",
       "light": "red600"
     },
     "warning": {
-      "dark": "orange400",
-      "light": "#b74d0d"
+      "dark": "#dc722e",
+      "light": "#a94300"
     },
     "success": {
       "dark": "green400",
-      "light": "#5e7600"
+      "light": "#586e00"
     },
     "info": {
       "dark": "cyan400",
-      "light": "#177a73"
+      "light": "#006f69"
     },
     "text": {
       "dark": "base200",

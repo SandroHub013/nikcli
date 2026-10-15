@@ -35,7 +35,7 @@
   },
   "theme": {
     "primary": {
-      "dark": "#628ada",
+      "dark": "#638bdb",
       "light": "#2c53a0"
     },
     "secondary": {
@@ -52,7 +52,7 @@
     },
     "warning": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#7a5f51"
     },
     "success": {
       "dark": "darkGreen",
@@ -60,7 +60,7 @@
     },
     "info": {
       "dark": "darkCyan",
-      "light": "lightCyan"
+      "light": "#4d6972"
     },
     "text": {
       "dark": "darkStep12",

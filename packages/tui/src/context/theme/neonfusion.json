@@ -35,28 +35,28 @@
       "light": "blue"
     },
     "secondary": {
-      "dark": "#a05dbb",
-      "light": "#9957b4"
+      "dark": "#aa67c5",
+      "light": "#8f4da9"
     },
     "accent": {
       "dark": "teal",
-      "light": "#007f80"
+      "light": "#007576"
     },
     "error": {
       "dark": "red",
-      "light": "#ce3d43"
+      "light": "#c2313a"
     },
     "warning": {
       "dark": "orange",
-      "light": "#926c00"
+      "light": "#866300"
     },
     "success": {
       "dark": "green",
-      "light": "#008263"
+      "light": "#00775b"
     },
     "info": {
       "dark": "cyan",
-      "light": "#2472ce"
+      "light": "#1868c3"
     },
     "text": {
       "dark": "fg",

@@ -38,15 +38,15 @@
     },
     "accent": {
       "dark": "darkCyan",
-      "light": "lightCyan"
+      "light": "#187b81"
     },
     "error": {
-      "dark": "darkRed",
+      "dark": "#ff665b",
       "light": "lightRed"
     },
     "warning": {
       "dark": "darkYellow",
-      "light": "lightYellow"
+      "light": "#956300"
     },
     "success": {
       "dark": "darkGreen",
@@ -54,7 +54,7 @@
     },
     "info": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#b94b00"
     },
     "text": {
       "dark": "darkFg",

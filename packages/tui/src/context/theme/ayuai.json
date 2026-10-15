@@ -26,31 +26,31 @@
   "theme": {
     "primary": {
       "dark": "blue",
-      "light": "#4d71c2"
+      "light": "#4366b5"
     },
     "secondary": {
       "dark": "purple",
-      "light": "#8763af"
+      "light": "#7c58a4"
     },
     "accent": {
       "dark": "cyan",
-      "light": "#1a8173"
+      "light": "#017669"
     },
     "error": {
       "dark": "red",
-      "light": "#c44a54"
+      "light": "#b73e4a"
     },
     "warning": {
       "dark": "orange",
-      "light": "#b55a1a"
+      "light": "#a94f07"
     },
     "success": {
       "dark": "green",
-      "light": "#45813e"
+      "light": "#3a7533"
     },
     "info": {
       "dark": "cyan",
-      "light": "#1a8173"
+      "light": "#017669"
     },
     "text": {
       "dark": "fg",

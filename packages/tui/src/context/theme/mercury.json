@@ -41,7 +41,7 @@
   },
   "theme": {
     "primary": {
-      "light": "purple-600",
+      "light": "#4f63e8",
       "dark": "purple-400"
     },
     "secondary": {
@@ -49,7 +49,7 @@
       "dark": "purple-300"
     },
     "accent": {
-      "light": "#5e72bf",
+      "light": "#596cb9",
       "dark": "purple-400"
     },
     "error": {
@@ -65,7 +65,7 @@
       "dark": "green-400"
     },
     "info": {
-      "light": "blue-600",
+      "light": "#00778c",
       "dark": "blue-400"
     },
     "text": {

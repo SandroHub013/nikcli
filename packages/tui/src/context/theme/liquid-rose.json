@@ -44,15 +44,15 @@
     },
     "warning": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#ae5221"
     },
     "success": {
       "dark": "darkGreen",
-      "light": "lightGreen"
+      "light": "#397955"
     },
     "info": {
       "dark": "darkCyan",
-      "light": "lightCyan"
+      "light": "#3a7483"
     },
     "text": {
       "dark": "darkStep12",

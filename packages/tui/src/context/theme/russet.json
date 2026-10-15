@@ -36,7 +36,7 @@
   "theme": {
     "primary": {
       "dark": "#da8e62",
-      "light": "#a0562c"
+      "light": "#9f562c"
     },
     "secondary": {
       "dark": "darkSecondary",
@@ -44,23 +44,23 @@
     },
     "accent": {
       "dark": "darkAccent",
-      "light": "lightAccent"
+      "light": "#88622b"
     },
     "error": {
-      "dark": "darkRed",
+      "dark": "#e07b72",
       "light": "lightRed"
     },
     "warning": {
       "dark": "darkOrange",
-      "light": "#ac5519"
+      "light": "#a24c0a"
     },
     "success": {
       "dark": "darkGreen",
-      "light": "#357a4d"
+      "light": "#31764a"
     },
     "info": {
       "dark": "darkCyan",
-      "light": "#37767b"
+      "light": "#2e6d72"
     },
     "text": {
       "dark": "darkStep12",

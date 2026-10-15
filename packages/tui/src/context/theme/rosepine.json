@@ -31,31 +31,31 @@
   "theme": {
     "primary": {
       "dark": "foam",
-      "light": "pine"
+      "light": "#2e718c"
     },
     "secondary": {
       "dark": "iris",
-      "light": "#7d6795"
+      "light": "#77618f"
     },
     "accent": {
       "dark": "rose",
-      "light": "#aa5956"
+      "light": "#a35250"
     },
     "error": {
       "dark": "love",
-      "light": "#a7586f"
+      "light": "#a05169"
     },
     "warning": {
       "dark": "gold",
-      "light": "#9e6300"
+      "light": "#965d00"
     },
     "success": {
-      "dark": "#4c8ea9",
+      "dark": "#5394b0",
       "light": "#286983"
     },
     "info": {
       "dark": "foam",
-      "light": "#3b7984"
+      "light": "#34727d"
     },
     "text": {
       "dark": "#e0def4",

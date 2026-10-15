@@ -40,27 +40,27 @@
     },
     "secondary": {
       "dark": "darkSecondary",
-      "light": "#388201"
+      "light": "#347a00"
     },
     "accent": {
       "dark": "darkAccent",
-      "light": "#5e7b1a"
+      "light": "#587410"
     },
     "error": {
-      "dark": "darkRed",
+      "dark": "#e27882",
       "light": "lightRed"
     },
     "warning": {
       "dark": "darkOrange",
-      "light": "#b1542d"
+      "light": "#a54922"
     },
     "success": {
       "dark": "darkGreen",
-      "light": "#3a7a60"
+      "light": "#36765d"
     },
     "info": {
       "dark": "darkCyan",
-      "light": "#3c768e"
+      "light": "#316b83"
     },
     "text": {
       "dark": "darkStep12",

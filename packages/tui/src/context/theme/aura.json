@@ -17,10 +17,16 @@
     "primary": "purple",
     "secondary": "pink",
     "accent": "purple",
-    "error": "red",
+    "error": {
+      "dark": "#ff918d",
+      "light": "#ff918d"
+    },
     "warning": "orange",
     "success": "cyan",
-    "info": "purple",
+    "info": {
+      "dark": "#baa2ff",
+      "light": "#baa2ff"
+    },
     "text": "darkFg",
     "textMuted": {
       "dark": "#7e7e7d",

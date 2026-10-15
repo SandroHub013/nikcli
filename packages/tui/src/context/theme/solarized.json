@@ -19,16 +19,16 @@
   },
   "theme": {
     "primary": {
-      "dark": "#3093da",
-      "light": "#0076bb"
+      "dark": "#3e9fe6",
+      "light": "#006dae"
     },
     "secondary": {
-      "dark": "#7f86da",
-      "light": "#6569bc"
+      "dark": "#8a91e6",
+      "light": "#5d60b3"
     },
     "accent": {
-      "dark": "cyan",
-      "light": "#007f78"
+      "dark": "#35a99f",
+      "light": "#00756f"
     },
     "error": {
       "dark": "#ff665a",

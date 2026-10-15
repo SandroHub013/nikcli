@@ -28,7 +28,10 @@
     "primary": "darkEntity",
     "secondary": "darkConstant",
     "accent": "darkAccent",
-    "error": "darkError",
+    "error": {
+      "dark": "#ef6b69",
+      "light": "#ef6b69"
+    },
     "warning": "darkSpecial",
     "success": "darkAdded",
     "info": "darkTag",

@@ -47,20 +47,20 @@
       "light": "lightAccent"
     },
     "error": {
-      "dark": "darkRed",
+      "dark": "#e37977",
       "light": "lightRed"
     },
     "warning": {
       "dark": "darkOrange",
-      "light": "#af5220"
+      "light": "#a54915"
     },
     "success": {
       "dark": "darkGreen",
-      "light": "#397953"
+      "light": "#357550"
     },
     "info": {
       "dark": "darkCyan",
-      "light": "#3b7581"
+      "light": "#326c78"
     },
     "text": {
       "dark": "darkStep12",

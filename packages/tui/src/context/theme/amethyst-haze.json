@@ -35,7 +35,7 @@
   },
   "theme": {
     "primary": {
-      "dark": "#b262da",
+      "dark": "#ba69e2",
       "light": "#792ca0"
     },
     "secondary": {
@@ -47,20 +47,20 @@
       "light": "lightAccent"
     },
     "error": {
-      "dark": "darkRed",
+      "dark": "#df7a84",
       "light": "lightRed"
     },
     "warning": {
       "dark": "darkOrange",
-      "light": "#ae562e"
+      "light": "#a24b23"
     },
     "success": {
       "dark": "darkGreen",
-      "light": "#377b61"
+      "light": "#32765d"
     },
     "info": {
       "dark": "darkCyan",
-      "light": "#38768e"
+      "light": "#2d6b83"
     },
     "text": {
       "dark": "darkStep12",

@@ -32,7 +32,7 @@
     },
     "secondary": {
       "dark": "darkSecondary",
-      "light": "#2f7ea5"
+      "light": "#23749b"
     },
     "accent": {
       "dark": "darkAccent",
@@ -44,15 +44,15 @@
     },
     "warning": {
       "dark": "darkOrange",
-      "light": "lightOrange"
+      "light": "#a35a2e"
     },
     "success": {
       "dark": "darkGreen",
-      "light": "lightGreen"
+      "light": "#277a5b"
     },
     "info": {
       "dark": "darkCyan",
-      "light": "lightCyan"
+      "light": "#29768a"
     },
     "text": {
       "dark": "darkStep12",

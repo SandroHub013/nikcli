@@ -23,32 +23,32 @@
   },
   "theme": {
     "primary": {
-      "dark": "crystalBlue",
+      "dark": "#81a0dc",
       "light": "waveBlue"
     },
     "secondary": {
-      "dark": "oniViolet",
-      "light": "#756097"
+      "dark": "#ac96d0",
+      "light": "#6c588e"
     },
     "accent": {
-      "dark": "sakuraPink",
-      "light": "#9f516c"
+      "dark": "#db87a2",
+      "light": "#954964"
     },
     "error": {
-      "dark": "#ff564b",
-      "light": "#cf0011"
+      "dark": "#ff7567",
+      "light": "#c60010"
     },
     "warning": {
       "dark": "roninYellow",
-      "light": "#8a5e00"
+      "light": "#845900"
     },
     "success": {
       "dark": "lotusGreen",
-      "light": "#507020"
+      "light": "#4c6b1b"
     },
     "info": {
-      "dark": "#7b9a6f",
-      "light": "#526e46"
+      "dark": "#89a97d",
+      "light": "#4e6942"
     },
     "text": {
       "dark": "fujiWhite",

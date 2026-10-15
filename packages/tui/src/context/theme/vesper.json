@@ -15,31 +15,31 @@
   "theme": {
     "primary": {
       "dark": "#FFC799",
-      "light": "#9e6b40"
+      "light": "#8a582d"
     },
     "secondary": {
       "dark": "#99FFE4",
-      "light": "#068670"
+      "light": "#00715e"
     },
     "accent": {
       "dark": "#FFC799",
-      "light": "#9e6b40"
+      "light": "#8a582d"
     },
     "error": {
       "dark": "vesperError",
-      "light": "#bd4449"
+      "light": "#b13940"
     },
     "warning": {
       "dark": "vesperWarning",
-      "light": "#946237"
+      "light": "#8a582d"
     },
     "success": {
       "dark": "vesperSuccess",
-      "light": "#007c67"
+      "light": "#00715e"
     },
     "info": {
       "dark": "#FFC799",
-      "light": "#946237"
+      "light": "#8a582d"
     },
     "text": {
       "dark": "vesperFg",

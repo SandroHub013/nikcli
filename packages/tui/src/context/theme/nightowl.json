@@ -29,8 +29,8 @@
       "light": "nightOwlPurple"
     },
     "error": {
-      "dark": "#f05350",
-      "light": "#f05350"
+      "dark": "#f55854",
+      "light": "#f55854"
     },
     "warning": {
       "dark": "nightOwlYellow",
