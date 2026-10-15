@@ -177,7 +177,8 @@ function createColorResolver(theme: ThemeJson, mode: "dark" | "light"): (c: Colo
   return resolveColor
 }
 
-function resolveTheme(theme: ThemeJson, mode: "dark" | "light"): Theme {
+/** A theme document resolved for one mode: its colours and the tokens derived from them, nothing else. */
+export function resolveTheme(theme: ThemeJson, mode: "dark" | "light"): Theme {
   const resolveColor = createColorResolver(theme, mode)
 
   const resolved = Object.fromEntries(
