@@ -1,7 +1,7 @@
 /**
  * The orb, as a drawing.
  *
- * A sphere with an iris, the product's N for a pupil, and two counter-rotating
+ * A sphere with an iris, the product's pot for a pupil, and two counter-rotating
  * arcs swimming under its surface: an eye when it is still, a moving fluid
  * when it is listening. It is not a microphone and never becomes one — the
  * microphone is the hardware, and this is the thing on the other side of it.
@@ -26,6 +26,7 @@
 import type { DialogStatus } from "../dialog/session"
 import type { VoiceMode } from "../settings/model"
 import { orbSpins } from "./orb-spin"
+import { POT_BOX, POT_RUNS } from "./pot-runs"
 import "./orb-mark.css"
 
 export interface OrbMarkProps {
@@ -87,16 +88,21 @@ export function OrbMark(props: OrbMarkProps) {
         {/*
           The mark, as the pupil.
 
-          Whose eye it is, said in the one place the eye is looking from. Drawn
-          here rather than imported: inside a 28px sphere what is drawn is the
-          letter's construction: three strokes, meeting at their ends and nowhere else,
-          because a single polyline rounds the joins into a shape that stops being an N.
+          Whose eye it is, said in the one place the eye is looking from: the
+          Ragu Code pixel pot, the same runs the microphone draws. It was
+          nikcli's N, three hand-drawn strokes, until the rename reached it.
+          Pixels stay pixels: `crispEdges`, so at 40% of a 26px sphere the pot
+          is a pot and not a blur.
         */}
-        <svg data-slot="orb-mark-n" viewBox="0 0 12 12">
-          <g fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
-            <path d="M3.4 9V3" />
-            <path d="M3.4 3L8.6 9" />
-            <path d="M8.6 3V9" />
+        <svg
+          data-slot="orb-mark-pot"
+          viewBox={`0 0 ${POT_BOX.width} ${POT_BOX.height}`}
+          shape-rendering="crispEdges"
+        >
+          <g fill="currentColor">
+            {POT_RUNS.map(([x, y, w]) => (
+              <rect x={x} y={y} width={w} height={1} />
+            ))}
           </g>
         </svg>
         {/* Last, so the specular sits on top of the fluid and the whole thing
