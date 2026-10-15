@@ -601,6 +601,7 @@ export function DialogSupport() {
           ref={(r: TextareaRenderable) => {
             textarea = r
           }}
+          placeholderColor={theme.foreground.muted}
           placeholder={busy() ? "Support is responding — please wait..." : "Ask Support… paste a file path to attach"}
           textColor={theme.foreground.default}
           focusedTextColor={theme.foreground.default}

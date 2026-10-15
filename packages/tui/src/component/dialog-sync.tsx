@@ -225,6 +225,7 @@ export function DialogSync() {
                     setForm("url", v)
                     setForm("status", "")
                   }}
+                  placeholderColor={theme.foreground.muted}
                   placeholder="http://127.0.0.1:4096"
                   cursorColor={theme.accent.fg}
                   focusedTextColor={theme.foreground.default}
@@ -247,6 +248,7 @@ export function DialogSync() {
                     setForm("token", v)
                     setForm("status", "")
                   }}
+                  placeholderColor={theme.foreground.muted}
                   placeholder={
                     status().configured ? "leave blank to keep the current token" : "mobile or cli-sync bearer token"
                   }

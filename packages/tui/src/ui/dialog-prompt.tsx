@@ -73,6 +73,7 @@ export function DialogPrompt(props: DialogPromptProps) {
             keyBindings={[{ name: "return", action: "submit" }]}
             ref={(val: TextareaRenderable) => (textarea = val)}
             initialValue={props.value}
+            placeholderColor={theme.foreground.muted}
             placeholder={props.placeholder ?? "Enter text"}
             textColor={theme.foreground.default}
             focusedTextColor={theme.foreground.default}

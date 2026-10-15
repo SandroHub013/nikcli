@@ -403,6 +403,7 @@ export function DialogInteractionApp(props: { spec: AppSpecType }) {
                   })
                 }}
                 initialValue={String(getVal(w.id) ?? "")}
+                placeholderColor={theme.foreground.muted}
                 placeholder={w.placeholder ?? ""}
                 textColor={theme.foreground.default}
                 focusedTextColor={theme.foreground.default}

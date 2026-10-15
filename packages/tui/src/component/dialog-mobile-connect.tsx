@@ -273,11 +273,7 @@ function RemoteServerPanel(props: { onBack: () => void }) {
 
   return (
     <box paddingLeft={2} paddingRight={2} paddingTop={1} paddingBottom={1} gap={1} flexDirection="column">
-      <DialogHeader
-        title="Connect cloud server"
-        hint="esc back"
-        onClose={() => props.onBack()}
-      />
+      <DialogHeader title="Connect cloud server" hint="esc back" onClose={() => props.onBack()} />
 
       <Show
         when={pairing()}
@@ -300,6 +296,7 @@ function RemoteServerPanel(props: { onBack: () => void }) {
                     setForm("url", value)
                     setForm("status", "")
                   }}
+                  placeholderColor={theme.foreground.muted}
                   placeholder="https://my-ragu-server.example.com"
                   cursorColor={theme.accent.fg}
                   focusedTextColor={theme.foreground.default}
@@ -321,6 +318,7 @@ function RemoteServerPanel(props: { onBack: () => void }) {
                     setForm("token", value)
                     setForm("status", "")
                   }}
+                  placeholderColor={theme.foreground.muted}
                   placeholder="nkm_…"
                   cursorColor={theme.accent.fg}
                   focusedTextColor={theme.foreground.default}
@@ -559,7 +557,8 @@ function LocalMobileConnect(props: { onBack: () => void }) {
                 Scan from Ragu Mobile
               </text>
               <text fg={theme.foreground.muted} wrapMode="word">
-                The QR securely pairs this server and workspace. It enables mobile sessions, approvals and remote actions.
+                The QR securely pairs this server and workspace. It enables mobile sessions, approvals and remote
+                actions.
               </text>
               <box marginTop={1} flexDirection="column">
                 <text fg={theme.foreground.muted}>Server URL</text>

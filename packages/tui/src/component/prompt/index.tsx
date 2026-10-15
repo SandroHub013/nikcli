@@ -1911,6 +1911,7 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
           >
             <textarea
+              placeholderColor={theme.foreground.muted}
               placeholder={placeholderText()}
               textColor={keybind.leader ? theme.foreground.muted : theme.foreground.default}
               focusedTextColor={keybind.leader ? theme.foreground.muted : theme.foreground.default}

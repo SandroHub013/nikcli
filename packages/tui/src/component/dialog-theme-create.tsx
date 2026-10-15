@@ -559,6 +559,7 @@ export function DialogThemeCreate() {
               setStore("status", "")
               resetOverwriteArm()
             }}
+            placeholderColor={theme.foreground.muted}
             placeholder="my-theme"
             cursorColor={theme.accent.fg}
             focusedTextColor={theme.foreground.default}

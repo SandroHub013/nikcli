@@ -667,6 +667,7 @@ export function DialogWebPreview(props: DialogWebPreviewProps) {
                 evt.stopPropagation()
               }
             }}
+            placeholderColor={theme.foreground.muted}
             placeholder="https://example.com"
             textColor={theme.foreground.default}
             focusedTextColor={theme.foreground.default}
@@ -919,6 +920,7 @@ export function DialogWebPreview(props: DialogWebPreviewProps) {
                 evt.stopPropagation()
               }
             }}
+            placeholderColor={theme.foreground.muted}
             placeholder="type into the page…"
             textColor={theme.foreground.default}
             focusedTextColor={theme.foreground.default}

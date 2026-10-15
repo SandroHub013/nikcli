@@ -399,6 +399,7 @@ export function QuestionPrompt(props: { request: QuestionRequest }) {
                           })
                         }}
                         initialValue={input()}
+                        placeholderColor={theme.foreground.muted}
                         placeholder="Type your own answer"
                         textColor={theme.foreground.default}
                         focusedTextColor={theme.foreground.default}
