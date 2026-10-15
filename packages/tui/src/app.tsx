@@ -46,6 +46,7 @@ import { DialogWorkspaceList } from "@tui/component/dialog-workspace-list"
 import { DialogVariant } from "@tui/component/dialog-variant"
 import { KeybindProvider, useKeybind } from "@tui/context/keybind"
 import { ThemeProvider, useTheme } from "@tui/context/theme"
+import { fallbackThemeMode } from "@tui/context/theme-mode"
 import { Home } from "@tui/routes/home"
 import { Session } from "@tui/routes/session"
 import { Workspace } from "@tui/routes/workspace"
@@ -277,8 +278,13 @@ export function tui(input: {
         followListenerCount(renderer, "renderer")
         followListenerCount(renderer.keyInput, "keyInput")
         guardConsoleOverlay(renderer)
-        if (!headless) void renderer.getPalette({ size: 16 }).catch(() => undefined)
-        const mode = headless ? "dark" : ((await (renderer as any).waitForThemeMode?.(1000)) ?? "dark")
+        const palette = headless ? undefined : renderer.getPalette({ size: 16 }).catch(() => undefined)
+        // A terminal that does not answer the mode query in a second may still answer the palette one, or say what
+        // it is in COLORFGBG: dark only when nothing does. A later answer still applies (see ThemeProvider).
+        const mode = headless
+          ? "dark"
+          : ((await (renderer as any).waitForThemeMode?.(1000)) ??
+            (await fallbackThemeMode({ palette, colorFgBg: process.env.COLORFGBG })))
         const onExit = async () => {
           unguard?.()
           await input.onExit?.()
@@ -321,7 +327,10 @@ export function tui(input: {
                                                             <PromptRefProvider>
                                                               <AttentionProvider renderer={renderer}>
                                                                 <SessionTabsProvider>
-                                                                  <App onRestart={input.onRestart} restartTarget={input.restartTarget} />
+                                                                  <App
+                                                                    onRestart={input.onRestart}
+                                                                    restartTarget={input.restartTarget}
+                                                                  />
                                                                 </SessionTabsProvider>
                                                               </AttentionProvider>
                                                             </PromptRefProvider>
@@ -1430,6 +1439,15 @@ function App(props: {
       value: "theme.switch_mode",
       onSelect: (dialog) => {
         setMode(mode() === "dark" ? "light" : "dark")
+        dialog.clear()
+      },
+      category: "System",
+    },
+    {
+      title: "Follow terminal appearance",
+      value: "theme.follow_terminal",
+      onSelect: (dialog) => {
+        themeCtx.followTerminal()
         dialog.clear()
       },
       category: "System",

@@ -1,4 +1,4 @@
-import { SyntaxStyle, RGBA, type TerminalColors } from "@opentui/core"
+import { CliRenderEvents, SyntaxStyle, RGBA, type TerminalColors, type ThemeMode } from "@opentui/core"
 import path from "path"
 import { createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { useSync } from "@tui/context/sync"
@@ -413,6 +413,19 @@ export const {
     }
 
     const renderer = useRenderer()
+    // The terminal's own answer, which can come after the first frame (the startup waits one second) or change when
+    // the user switches the terminal's theme. It moves the mode unless the user chose one: a choice is kept in
+    // `theme_mode`, and "Follow terminal appearance" clears it.
+    let detected: "dark" | "light" = props.mode
+    const onThemeMode = (next: ThemeMode) => {
+      detected = next
+      if (kv.get("theme_mode") !== undefined) return
+      setStore("mode", next)
+      renderer.clearPaletteCache()
+      resolveSystemTheme()
+    }
+    renderer.on(CliRenderEvents.THEME_MODE, onThemeMode)
+    onCleanup(() => renderer.off(CliRenderEvents.THEME_MODE, onThemeMode))
     const onReloadSignal = async () => {
       renderer.clearPaletteCache()
       await reload()
@@ -529,6 +542,11 @@ export const {
       setMode(mode: "dark" | "light") {
         setStore("mode", mode)
         kv.set("theme_mode", mode)
+      },
+      /** Forget the mode the user chose and take the terminal's again. */
+      followTerminal() {
+        kv.set("theme_mode", undefined)
+        setStore("mode", renderer.themeMode ?? detected)
       },
       set(theme: string) {
         setStore("active", theme)
