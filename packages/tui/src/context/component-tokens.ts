@@ -315,7 +315,7 @@ export const COMPONENT_DEFAULTS = {
     colors: {
       background: "surface.panel",
       border: "status.error.fg",
-      text: "foreground.muted",
+      text: "status.error.fg",
     },
   },
   /** The per-turn token table. Off unless `tui.turn_tokens` is on. */

@@ -1,6 +1,6 @@
 import { features } from "@ragu/util/features"
 import { groupParts } from "../rows"
-import { friendlyErrorMessage } from "../../../util/error-message"
+import { turnErrorText } from "../../../util/session-error"
 import { TurnUsage } from "../../../util/turn-usage"
 import { use } from "../session-context"
 import { ExplorationSummary } from "../tool-view"
@@ -164,7 +164,7 @@ export function AssistantMessage(props: { turn: Turn; last: boolean; usage?: Tur
           customBorderChars={borderCharsFor(errorStyle().box.borderCharset)}
           borderColor={errorStyle().colors.border}
         >
-          <text fg={errorStyle().colors.text}>{friendlyErrorMessage(error())}</text>
+          <text fg={errorStyle().colors.text}>{turnErrorText(error())}</text>
         </box>
       </Show>
       <Switch>
