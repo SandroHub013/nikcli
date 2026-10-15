@@ -9,6 +9,7 @@ import { Commands } from "./commands"
 import { Handlers } from "./handlers"
 import { Runtime } from "./framework/runtime"
 import { Diagnostics } from "./diagnostics"
+import { outputLayer } from "./color"
 import { UI } from "./ui"
 import { Installation } from "@/installation"
 
@@ -114,6 +115,7 @@ export async function runEffectCli(): Promise<void> {
   BunRuntime.runMain(
     Runtime.run(Commands, Handlers, { version: Installation.VERSION }).pipe(
       Effect.provide(BunServices.layer),
+      Effect.provide(outputLayer()),
     ) as Effect.Effect<void, unknown, never>,
   )
 }
