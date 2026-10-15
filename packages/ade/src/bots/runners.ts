@@ -36,7 +36,7 @@ import {
   sealTurn,
   type Talk,
 } from "./talk"
-import { DOT_FOLDERS } from "./app-folder"
+import { EXECUTES_LATER } from "./app-folder"
 
 export type RunnerId = "ragu" | "claude" | "codex"
 
@@ -329,12 +329,7 @@ function fromRepository(bot: AgentFile): boolean {
   return bot.scope === "project"
 }
 
-/*
- * Folders where a write turns into a command run later, by git, an editor, CI
- * or the next agent session (review B3, M1): hooks, tasks, workflows, and the
- * settings and plugins of Claude Code, ragu and Codex.
- */
-const EXECUTES_LATER = [".git", ".claude", ...DOT_FOLDERS, ".codex", ".husky", ".vscode", ".github/workflows"]
+// `EXECUTES_LATER` (app-folder.ts): the folders where a write turns into a command run later.
 const EXECUTES_LATER_RULES = EXECUTES_LATER.flatMap((path) =>
   ["Edit", "Write", "NotebookEdit"].map((tool) => `${tool}(./${path}/**)`),
 )

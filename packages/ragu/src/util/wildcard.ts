@@ -6,7 +6,8 @@ export namespace Wildcard {
   // cap guards against unbounded growth if a caller ever feeds dynamic
   // patterns; config-sized pattern sets never come close to it.
   const compiled = new Map<string, RegExp>()
-  const COMPILED_CACHE_MAX = 2000
+  // A bot session of ADE carries about two thousand rules (block lists, every casing of the folders no turn may write).
+  const COMPILED_CACHE_MAX = 6000
 
   function regexFor(pattern: string): RegExp {
     const cached = compiled.get(pattern)
