@@ -26,15 +26,15 @@
   "theme": {
     "primary": {
       "dark": "#589eff",
-      "light": "#0062d0"
+      "light": "#0059bd"
     },
     "secondary": {
       "dark": "#aa89ff",
-      "light": "purple"
+      "light": "#6e40bf"
     },
     "accent": {
       "dark": "#589eff",
-      "light": "#0062d0"
+      "light": "#0059bd"
     },
     "error": {
       "dark": "#ff807a",
@@ -58,7 +58,7 @@
     },
     "textMuted": {
       "dark": "#959ea8",
-      "light": "fgAlt"
+      "light": "#555d67"
     },
     "background": {
       "dark": "#1b1f23",
@@ -70,7 +70,7 @@
     },
     "backgroundElement": {
       "dark": "#2f363d",
-      "light": "selection"
+      "light": "#bbd7ff"
     },
     "border": {
       "dark": "#30363d",
@@ -190,15 +190,15 @@
     },
     "syntaxComment": {
       "dark": "#9ea7b1",
-      "light": "#5e6771"
+      "light": "#555d67"
     },
     "syntaxKeyword": {
       "dark": "#b295ff",
-      "light": "purple"
+      "light": "#6e40bf"
     },
     "syntaxFunction": {
       "dark": "#6aa8ff",
-      "light": "#0062d0"
+      "light": "#0059bd"
     },
     "syntaxVariable": {
       "dark": "#e1e4e8",
@@ -206,23 +206,23 @@
     },
     "syntaxString": {
       "dark": "#5cba6b",
-      "light": "#04762b"
+      "light": "#006b26"
     },
     "syntaxNumber": {
       "dark": "#ff8082",
-      "light": "#c3243a"
+      "light": "#b71331"
     },
     "syntaxType": {
       "dark": "#6aa8ff",
-      "light": "#0062d0"
+      "light": "#0059bd"
     },
     "syntaxOperator": {
       "dark": "#9ea7b1",
-      "light": "#5e6771"
+      "light": "#555d67"
     },
     "syntaxPunctuation": {
       "dark": "#9ea7b1",
-      "light": "#5e6771"
+      "light": "#555d67"
     }
   }
 }
