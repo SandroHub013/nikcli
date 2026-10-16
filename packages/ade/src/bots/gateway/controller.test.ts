@@ -600,16 +600,114 @@ describe("the gateways' controller", () => {
     expect(turn.request.partial).toBe(true)
     expect(typeof turn.request.onUpdate).toBe("function")
 
-    const talk = { ...emptyTalk(), streaming: "Sto pensando..." }
+    const talk = { ...emptyTalk(), streaming: "Sto pensando alla risposta giusta..." }
     turn.request.onUpdate!(talk)
     await Promise.resolve()
 
     expect(b.previews).toEqual([
-      { bot: BOT.path, platform: "telegram", chat: "c42", text: "Sto pensando..." },
+      { bot: BOT.path, platform: "telegram", chat: "c42", text: "Sto pensando alla risposta giusta..." },
     ])
     turn.finish({ text: "Risposta finale." })
     await until("la risposta finale", () => b.sent.length === 1)
     expect(b.sent).toEqual([{ chat: "c42", text: "Risposta finale." }])
+  })
+
+  test("preview updates are throttled to at most ~1/s and at least 24 new characters", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    let now = 10_000
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      now: () => now,
+    })
+    b.emit("ciao")
+    await until("il turno è partito", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+
+    // Text < 24 chars -> no preview sent
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Breve" })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(0)
+
+    // Text >= 24 chars -> first preview sent
+    const part1 = "Questo testo ha almeno 24 caratteri."
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: part1 })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(1)
+    expect(b.previews[0]!.text).toBe(part1)
+
+    // Only 500ms later (less than 1s) with plenty of new characters -> throttled, not sent
+    now += 500
+    const part2 = part1 + " Altri caratteri aggiunti velocemente."
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: part2 })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(1)
+
+    // 1000ms later (now + 1000ms) but only 10 new chars (< 24 delta) -> not sent
+    now += 1_000
+    const part3 = part1 + " 123456789"
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: part3 })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(1)
+
+    // 1000ms later with >= 24 new chars -> sent!
+    const part4 = part1 + " E ora ci sono sicuramente più di ventiquattro caratteri in più."
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: part4 })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(2)
+    expect(b.previews[1]!.text).toBe(part4)
+  })
+
+  test("stops previewing after 3 consecutive 429 flood errors on that message", async () => {
+    let attempts = 0
+    let now = 10_000
+    const b = bridge()
+    b.fake.preview = async (_bot, _platform, _chat, _text) => {
+      attempts++
+      throw new Error("429 Too Many Requests (flood control)")
+    }
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      now: () => now,
+    })
+    b.emit("ciao")
+    await until("il turno è partito", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+
+    // Attempt 1 (429)
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Primo tentativo con più di ventiquattro caratteri." })
+    await Promise.resolve()
+    expect(attempts).toBe(1)
+
+    // Attempt 2 (429)
+    now += 1_100
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Primo tentativo con più di ventiquattro caratteri. Secondo tentativo lungo abbastanza." })
+    await Promise.resolve()
+    expect(attempts).toBe(2)
+
+    // Attempt 3 (429) -> flood limit reached
+    now += 1_100
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Primo tentativo con più di ventiquattro caratteri. Secondo tentativo lungo abbastanza. Terzo tentativo lungo abbastanza." })
+    await Promise.resolve()
+    expect(attempts).toBe(3)
+
+    // Attempt 4 -> preview disabled, should not even call preview
+    now += 1_100
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Primo tentativo con più di ventiquattro caratteri. Secondo tentativo lungo abbastanza. Terzo tentativo lungo abbastanza. Quarto tentativo lungo." })
+    await Promise.resolve()
+    expect(attempts).toBe(3)
+
+    // Turn finishes: final response is still delivered
+    turn.finish({ text: "Risposta finale dopo i 429." })
+    await until("risposta finale", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe("Risposta finale dopo i 429.")
   })
 })
 

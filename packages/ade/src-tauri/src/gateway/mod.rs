@@ -234,6 +234,11 @@ pub async fn gateway_typing(app: AppHandle, bot: String, platform: Platform, cha
     hub(&app)?.typing(&bot, platform, &chat).await
 }
 
+#[tauri::command]
+pub async fn gateway_preview(app: AppHandle, bot: String, platform: Platform, chat: String, text: String) -> Result<(), String> {
+    hub(&app)?.preview(&bot, platform, &chat, &text).await
+}
+
 /// Who waits to pair, who is paired, and whether wrong codes locked it. Never a code.
 #[tauri::command]
 pub async fn gateway_pairing_list(app: AppHandle, bot: String, platform: Platform) -> Result<PairingInfo, String> {

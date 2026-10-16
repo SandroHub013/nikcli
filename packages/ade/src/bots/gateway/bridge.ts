@@ -41,6 +41,7 @@ export function tauriGatewayBridge(): GatewayBridge {
     sendButtons: (bot, platform, chat, text, buttons) =>
       invoke<string>("gateway_send", { bot, platform, chat, text, buttons }),
     typing: (bot, platform, chat) => invoke<void>("gateway_typing", { bot, platform, chat }),
+    preview: (bot, platform, chat, text) => invoke<void>("gateway_preview", { bot, platform, chat, text }),
     async project(bot, platform) {
       const links = await invoke<LinkStatus[]>("gateway_status")
       return links.find((link) => link.bot === bot && link.platform === platform)?.project ?? undefined

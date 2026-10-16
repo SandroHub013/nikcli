@@ -180,6 +180,10 @@ pub trait Adapter: Send + Sync {
     async fn typing(&self, _chat: &str) -> Result<(), AdapterError> {
         Ok(())
     }
+    /// Sends a live partial text preview of the answer under way.
+    async fn preview(&self, _chat: &str, _text: &str) -> Result<(), AdapterError> {
+        Ok(())
+    }
     /// The bot's own name on the platform, for the panel's «Prova»: the token
     /// works, and it is this bot's.
     async fn whoami(&self) -> Result<String, AdapterError> {
@@ -199,6 +203,7 @@ pub mod fake {
         pub sent: Mutex<Vec<(String, String)>>,
         pub edited: Mutex<Vec<(String, String, String)>>,
         pub typing: Mutex<Vec<String>>,
+        pub previews: Mutex<Vec<(String, String)>>,
         pub buttons: Mutex<Vec<(String, String, Vec<Button>)>>,
         pub receives: std::sync::atomic::AtomicUsize,
         /// What `cursor` reports: the tests set it with each batch.
@@ -221,6 +226,7 @@ pub mod fake {
                 sent: Mutex::new(Vec::new()),
                 edited: Mutex::new(Vec::new()),
                 typing: Mutex::new(Vec::new()),
+                previews: Mutex::new(Vec::new()),
                 buttons: Mutex::new(Vec::new()),
                 receives: std::sync::atomic::AtomicUsize::new(0),
                 position: Mutex::new(None),
@@ -260,6 +266,10 @@ pub mod fake {
         }
         async fn typing(&self, chat: &str) -> Result<(), AdapterError> {
             self.typing.lock().unwrap().push(chat.into());
+            Ok(())
+        }
+        async fn preview(&self, chat: &str, text: &str) -> Result<(), AdapterError> {
+            self.previews.lock().unwrap().push((chat.into(), text.into()));
             Ok(())
         }
         async fn send_buttons(&self, chat: &str, text: &str, buttons: &[Button]) -> Result<String, AdapterError> {

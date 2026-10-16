@@ -128,9 +128,17 @@ export interface GatewayControllerDeps {
   readonly now?: () => number
   /** How often «sta scrivendo» is sent again: Telegram shows it for 5 s. */
   readonly typingEveryMs?: number
+  /** How often preview updates can be sent; `PREVIEW_CADENCE_MS` when absent. */
+  readonly previewCadenceMs?: number
+  /** Minimum new characters to trigger a preview update; `PREVIEW_MIN_DELTA_CHARS` when absent. */
+  readonly previewMinDeltaChars?: number
   /** Where a failure to reach the chat is noted; never the text of a message. */
   readonly warn?: (line: string) => void
 }
+
+export const PREVIEW_CADENCE_MS = 1_000
+export const PREVIEW_MIN_DELTA_CHARS = 24
+export const PREVIEW_FLOOD_LIMIT = 3
 
 /** Where a question goes: one chat of one bot's gateway. */
 export interface ChatTarget {
@@ -371,6 +379,41 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       const framed = message.recovered ? `${recoveredNotice()}\n\n${baseFramed}` : baseFramed
       const memory = deps.memory?.get(message.bot)
       const sent = memory && !sessionId ? `${memorySnapshot(memory)}\n\n${framed}` : framed
+
+      let lastPreviewAt = 0
+      let lastPreviewText = ""
+      let floodErrors = 0
+      let previewDisabled = false
+      let previewing = false
+
+      const cadenceMs = deps.previewCadenceMs ?? PREVIEW_CADENCE_MS
+      const minDeltaChars = deps.previewMinDeltaChars ?? PREVIEW_MIN_DELTA_CHARS
+
+      const sendPreview = async (text: string) => {
+        if (closed || previewDisabled || !deps.bridge.preview) return
+        const currentTime = now()
+        if (currentTime - lastPreviewAt < cadenceMs) return
+        if (text.length - lastPreviewText.length < minDeltaChars) return
+        if (previewing) return
+
+        previewing = true
+        lastPreviewAt = currentTime
+        lastPreviewText = text
+        try {
+          await deps.bridge.preview(message.bot, message.platform, message.chat, text)
+        } catch (error) {
+          const errStr = error instanceof Error ? error.message : String(error)
+          if (/429|flood|too many/i.test(errStr)) {
+            floodErrors += 1
+            if (floodErrors >= PREVIEW_FLOOD_LIMIT) {
+              previewDisabled = true
+            }
+          }
+        } finally {
+          previewing = false
+        }
+      }
+
       turn = deps.runTurn({
         runner,
         bot,
@@ -383,7 +426,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         onUpdate: (talk) => {
           const text = answerSoFar(talk)
           if (text) {
-            void deps.bridge.preview?.(message.bot, message.platform, message.chat, text)?.catch?.(() => {})
+            void sendPreview(text)
           }
         },
         ...(sessionId ? { sessionId } : {}),
