@@ -174,7 +174,7 @@ import { BotTabs } from "./bot-tabs"
 import { ConfirmAction } from "./confirm"
 import { PermissionsSection } from "./permissions-panel"
 import { shownTab, tabButtonId, tabPanelId, tabsOf, type BotTab } from "./tabs"
-import { visibleText } from "./visible-text"
+import { approvalAction } from "./approval-signal"
 
 /*
  * The conversations, outside any component.
@@ -1416,7 +1416,7 @@ function Thread(props: {
                   when={asked().patterns}
                   fallback={t("bots.permission.wants", asked().permission)}
                 >
-                  {(patterns) => t("bots.permission.wantsOn", asked().permission, visibleText(patterns()))}
+                  {(patterns) => t("bots.waiting.what", approvalAction({ permission: asked().permission, patterns: patterns() }))}
                 </Show>
                 {/* B8c: why ADE stops it, and that silence is a no. */}
                 <Show when={asked().reason}>
