@@ -41,7 +41,7 @@ pub fn redact(text: &str, secrets: &[String]) -> String {
             out = out.replace(secret.as_str(), HIDDEN);
         }
     }
-    known_shapes(&out)
+    hide_assignments(&hide_url_credentials(&known_shapes(&out)))
 }
 
 /// The same secret as it turns up in a log or a URL: base64 (both alphabets, with and without padding),
@@ -137,7 +137,20 @@ const PREFIXED: &[(&str, usize, fn(u8) -> bool)] = &[
     ("xoxs-", 10, is_alnum_dash),
     ("xapp-", 10, is_alnum_dash),
     ("AIza", 35, is_token),
+    // Stripe (with an underscore, not a dash), Hugging Face, Google OAuth, SendGrid, GitLab (N3).
+    ("sk_live_", 16, is_token),
+    ("rk_live_", 16, is_token),
+    ("sk_test_", 16, is_token),
+    ("whsec_", 16, is_token),
+    ("hf_", 30, is_alnum),
+    ("ya29.", 20, is_token_dot),
+    ("SG.", 30, is_token_dot),
+    ("glpat-", 20, is_token),
 ];
+
+fn is_token_dot(byte: u8) -> bool {
+    is_token(byte) || byte == b'.'
+}
 
 /// The length of the key that starts at the beginning of `rest`, if one does. The caller has checked that nothing
 /// word-like comes before it, so `risk-assessment-of-the-whole-plan` is not a key.
@@ -220,6 +233,108 @@ fn known_shapes(text: &str) -> String {
         out.push(ch);
         at += ch.len_utf8();
     }
+    out
+}
+
+/// The words of a variable's name that say its value is a secret.
+const SECRET_WORDS: &[&str] = &["key", "token", "secret", "password", "passwd", "pwd", "credential", "credentials", "apikey", "auth"];
+/// And the endings that say it when the name is in camel case or run together (`apiKey`, `accesstoken`).
+const SECRET_ENDINGS: &[&str] = &["apikey", "accesskey", "privatekey", "token", "secret", "password", "passwd"];
+
+fn is_name_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')
+}
+
+fn secret_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.split(['_', '-', '.']).any(|word| SECRET_WORDS.contains(&word)) || SECRET_ENDINGS.iter().any(|end| lower.ends_with(end))
+}
+
+/// `NAME=value` where the name says secret (`DB_PASSWORD`, `api_key`, `AWS_SECRET_ACCESS_KEY`, `?pwd=`), and
+/// `"password": "value"` in JSON: the value is hidden, the name stays. A colon counts only after a quoted name, so
+/// «the token: expired» is left alone. A value of under four characters, or one that is another variable
+/// (`$OTHER`), is not hidden (N3).
+fn hide_assignments(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = String::with_capacity(text.len());
+    let (mut last, mut at) = (0, 0);
+    while at < bytes.len() {
+        let separator = bytes[at];
+        if separator == b'=' || separator == b':' {
+            let mut end = at;
+            while end > 0 && bytes[end - 1] == b' ' {
+                end -= 1;
+            }
+            let quoted = end > 0 && matches!(bytes[end - 1], b'"' | b'\'');
+            if quoted {
+                end -= 1;
+            }
+            let mut begin = end;
+            while begin > 0 && is_name_byte(bytes[begin - 1]) {
+                begin -= 1;
+            }
+            if (separator == b'=' || quoted) && begin < end && secret_name(&text[begin..end]) {
+                let mut start = at + 1;
+                while start < bytes.len() && bytes[start] == b' ' {
+                    start += 1;
+                }
+                // A quoted value runs to its closing quote (it may hold spaces); a bare one, to the next blank.
+                let opening = bytes.get(start).copied().filter(|b| matches!(b, b'"' | b'\''));
+                if opening.is_some() {
+                    start += 1;
+                }
+                let mut stop = start;
+                while stop < bytes.len() && bytes[stop] != b'\n' {
+                    let ends = match opening {
+                        Some(quote) => bytes[stop] == quote,
+                        // `&` ends a bare value: `?pwd=abc&x=1` is a query string, whose next field is not the secret.
+                        None => bytes[stop].is_ascii_whitespace() || matches!(bytes[stop], b'"' | b'\'' | b'&'),
+                    };
+                    if ends {
+                        break;
+                    }
+                    stop += 1;
+                }
+                let value = &text[start..stop];
+                if value.chars().count() >= 4 && !value.starts_with(HIDDEN) && !value.starts_with('$') {
+                    out.push_str(&text[last..start]);
+                    out.push_str(HIDDEN);
+                    last = stop;
+                    at = stop;
+                    continue;
+                }
+            }
+        }
+        at += 1;
+    }
+    out.push_str(&text[last..]);
+    out
+}
+
+/// `scheme://user:password@host`: the password is hidden, the rest of the address is not (N3). A user with no
+/// password (`mail://utente@host`) is left alone.
+fn hide_url_credentials(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(found) = rest.find("://") {
+        let after = found + 3;
+        out.push_str(&rest[..after]);
+        rest = &rest[after..];
+        let authority_end = rest
+            .find(|c: char| c.is_whitespace() || matches!(c, '/' | '?' | '#' | '"' | '\'' | '<' | '>'))
+            .unwrap_or(rest.len());
+        let authority = &rest[..authority_end];
+        match (authority.rfind('@'), authority.find(':')) {
+            (Some(at), Some(colon)) if colon < at && at > colon + 1 && !authority[colon + 1..at].starts_with(HIDDEN) => {
+                out.push_str(&authority[..=colon]);
+                out.push_str(HIDDEN);
+                out.push_str(&authority[at..]);
+                rest = &rest[authority_end..];
+            }
+            _ => {}
+        }
+    }
+    out.push_str(rest);
     out
 }
 
@@ -341,6 +456,59 @@ mod tests {
         let tail: String = secret.chars().skip(secret.chars().count() - FRAGMENT).collect();
         let out = redact(&format!("{head}\n{tail}"), &[secret.clone()]);
         assert_eq!(out, format!("{HIDDEN}\n{HIDDEN}"));
+    }
+
+    /* N3: the shapes a `.env` has besides the known keys. */
+    #[test]
+    fn the_value_of_a_name_that_says_secret_is_hidden() {
+        let text = "DB_PASSWORD=hunter2hunter2\nSTRIPE_SECRET=abcd1234\napi_key = \"zzzz-1111\"\nAWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n{\"password\": \"correct horse\", \"token\":\"t0k3n-valore\"}\nfoo?pwd=abc12345&x=1";
+        let out = redact(text, &[]);
+        for leaked in ["hunter2", "abcd1234", "zzzz-1111", "wJalrXUtnFEMI", "correct", "t0k3n-valore", "abc12345"] {
+            assert!(!out.contains(leaked), "{leaked} in {out}");
+        }
+        assert!(out.contains("DB_PASSWORD=[nascosto]\n"), "{out}");
+        assert!(out.contains("&x=1"), "{out}");
+    }
+
+    #[test]
+    fn the_password_in_a_url_is_hidden_and_the_rest_of_it_is_not() {
+        let out = redact("DATABASE_URL: postgres://utente:p4ss%40word@db.example.com:5432/app e https://example.com/a", &[]);
+        assert!(!out.contains("p4ss"), "{out}");
+        assert!(out.contains("postgres://utente:[nascosto]@db.example.com:5432/app"), "{out}");
+        assert!(out.contains("https://example.com/a"), "{out}");
+        assert_eq!(redact("mail://solo-utente@host/x", &[]), "mail://solo-utente@host/x");
+    }
+
+    #[test]
+    fn more_shapes_of_keys() {
+        for key in [
+            "sk_live_AbCdEfGhIjKlMnOpQrStUvWx",
+            "rk_live_AbCdEfGhIjKlMnOpQrStUvWx",
+            "sk_test_AbCdEfGhIjKlMnOpQrStUvWx",
+            "hf_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
+            "ya29.a0AfH6SMBAbCdEfGhIjKlMnOpQrStUvWx",
+            "SG.AbCdEfGhIjKlMnOpQrStUv.AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcdefg",
+            "glpat-AbCdEfGhIjKlMnOpQrSt",
+        ] {
+            assert_eq!(redact(&format!("errore con {key} fine"), &[]), format!("errore con {HIDDEN} fine"), "{key}");
+        }
+    }
+
+    #[test]
+    fn names_that_only_look_like_secrets_are_left_alone() {
+        for text in [
+            "monkey=banana",
+            "keyboard=us",
+            "max_tokens=4096",
+            "author=ale",
+            "tokenizer=bpe",
+            "the token: expired",
+            "password reset needed",
+            "key=ab",
+            "TOKEN=$OTHER_VARIABLE",
+        ] {
+            assert_eq!(redact(text, &[]), text, "{text}");
+        }
     }
 
     #[test]

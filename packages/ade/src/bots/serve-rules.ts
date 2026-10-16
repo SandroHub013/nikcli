@@ -172,10 +172,12 @@ function spellings(word: string): string[] {
  * repository that points at `.nikcli` under another name is not seen. A bot
  * cannot make one without the shell.
  *
- * They open the session's rules rather than close them: any session rule
- * comes after the bot's file and wins over it, and a routine's `edit` denied
- * whole must stay the last `edit` rule, the one ragu reads to hide the tool
- * from the model (`disabled`, ruleset.ts).
+ * They open the session's rules rather than close them. The session only
+ * restricts: ragu reads the agent's rules and the session's apart and keeps the
+ * stricter decision (`PermissionRuleset.evaluate`), so an allow at the head
+ * cannot open what the bot's file, ragu's `.env` asks or the project closed.
+ * A routine's `edit` denied whole must stay the last `edit` rule, the one ragu
+ * reads to hide the tool from the model (`disabled`, ruleset.ts).
  */
 export function configDenials(): string[] {
   const denied: string[] = ["*::*"]
@@ -193,7 +195,9 @@ export function configDenials(): string[] {
  * (Windows does not count it, the glob does), and the short 8.3 name (`GIT~1`). The folder must be a whole segment:
  * `.gitignore` and `.github/CODEOWNERS` stay writable. `.github/workflows` has its second name spelled with `?`
  * (nine letters) since its 2^9 casings would be too many: any nine-letter folder under `.github` is refused as well,
- * on the safe side. `.ragu` and `.nikcli` are `configDenials`'.
+ * on the safe side. `.ragu` and `.nikcli` are `configDenials`'. A segment written with a trailing dot or space
+ * (`.git.\hooks`), which Windows opens as the folder, is read by ragu as Windows reads it before the rules
+ * (`PermissionRuleset.windowsPathForm`), so these patterns need no spelling of it.
  */
 const BACKSLASH = "\\"
 
