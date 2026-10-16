@@ -86,7 +86,7 @@ export interface GatewayBridge {
   ready: () => Promise<void>
   /** Tells Rust the message was delivered to the frontend, so the cursor can advance. */
   ack?: (bot: string, platform: string, chat: string, id: string) => Promise<void>
-  send: (bot: string, platform: string, chat: string, text: string) => Promise<string>
+  send: (bot: string, platform: string, chat: string, text: string, options?: { final?: boolean }) => Promise<string>
   sendButtons: (
     bot: string,
     platform: string,
@@ -97,6 +97,8 @@ export interface GatewayBridge {
   typing: (bot: string, platform: string, chat: string) => Promise<void>
   /** Sends live partial text preview to the chat. */
   preview?: (bot: string, platform: string, chat: string, text: string) => Promise<void>
+  /** Ends or cleans up active preview for the chat. */
+  previewEnd?: (bot: string, platform: string, chat: string) => Promise<void>
   /** The project the gateway's turns run in, fixed when it was switched on. */
   project: (bot: string, platform: string) => Promise<string | undefined>
 }
@@ -279,9 +281,9 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     return state
   }
 
-  const reply = async (message: GatewayMessage, text: string) => {
+  const reply = async (message: GatewayMessage, text: string, options?: { final?: boolean }) => {
     try {
-      await deps.bridge.send(message.bot, message.platform, message.chat, text)
+      await deps.bridge.send(message.bot, message.platform, message.chat, text, options)
     } catch (error) {
       warn(
         `ADE: risposta del gateway non mandata (${message.platform}): ${error instanceof Error ? error.message : String(error)}`,
@@ -469,12 +471,12 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       // The chat reads a fixed text: the detail (local paths, the server's words) stays in ADE (S10).
       if (result.status === "error") {
         failure(message, result.problem ?? "?")
-        return void (await reply(message, t("gateway.failed")))
+        return void (await reply(message, t("gateway.failed"), { final: true }))
       }
-      await reply(message, text.trim() ? text : t("gateway.empty"))
+      await reply(message, text.trim() ? text : t("gateway.empty"), { final: true })
     } catch (error) {
       failure(message, error instanceof Error ? error.message : String(error))
-      await reply(message, t("gateway.failed"))
+      await reply(message, t("gateway.failed"), { final: true })
     } finally {
       ended.abort()
       if (typing) clearInterval(typing)

@@ -814,9 +814,13 @@ impl Hub {
     }
 
     pub async fn send(&self, bot: &str, platform: Platform, chat: &str, text: &str) -> Result<String, String> {
+        self.send_with(bot, platform, chat, text, false).await
+    }
+
+    pub async fn send_with(&self, bot: &str, platform: Platform, chat: &str, text: &str, final_turn: bool) -> Result<String, String> {
         let adapter = self.reply_target(bot, platform, chat)?;
         let secrets = self.secrets();
-        adapter.send(chat, &redact(text, &secrets)).await.map_err(|error| redact(&error.message(), &secrets))
+        adapter.send_with(chat, &redact(text, &secrets), final_turn).await.map_err(|error| redact(&error.message(), &secrets))
     }
 
     /// A reply with buttons under it. A press comes back as a message with
@@ -864,6 +868,11 @@ impl Hub {
             .preview(chat, &redact(text, &secrets))
             .await
             .map_err(|error| redact(&error.message(), &secrets))
+    }
+
+    pub async fn preview_end(&self, bot: &str, platform: Platform, chat: &str) -> Result<(), String> {
+        let adapter = self.reply_target(bot, platform, chat)?;
+        adapter.preview_end(chat).await.map_err(|error| redact(&error.message(), &self.secrets()))
     }
 
     /* ── pairing ───────────────────────────────────────────────────────── */

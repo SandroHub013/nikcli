@@ -152,6 +152,9 @@ pub trait Adapter: Send + Sync {
     /// Sends `text` to `chat`, in as many messages as the platform's limit
     /// needs; returns the platform's id for the last one.
     async fn send(&self, chat: &str, text: &str) -> Result<String, AdapterError>;
+    async fn send_with(&self, chat: &str, text: &str, _final_turn: bool) -> Result<String, AdapterError> {
+        self.send(chat, text).await
+    }
     /// The same, with buttons under the last message.
     async fn send_buttons(&self, _chat: &str, _text: &str, _buttons: &[Button]) -> Result<String, AdapterError> {
         Err(AdapterError::Unsupported)
@@ -182,6 +185,10 @@ pub trait Adapter: Send + Sync {
     }
     /// Sends a live partial text preview of the answer under way.
     async fn preview(&self, _chat: &str, _text: &str) -> Result<(), AdapterError> {
+        Ok(())
+    }
+    /// Ends or clears any active preview for this chat.
+    async fn preview_end(&self, _chat: &str) -> Result<(), AdapterError> {
         Ok(())
     }
     /// The bot's own name on the platform, for the panel's «Prova»: the token

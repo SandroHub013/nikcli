@@ -654,41 +654,43 @@ impl Core {
 
     /// Sends `text` in pieces, stopping at the ceiling, and returns the id of
     /// the message that now holds the end of it.
-    async fn send_all(&self, chat: &str, text: &str, extra: Option<&Value>) -> Result<String, AdapterError> {
+    async fn send_all(&self, chat: &str, text: &str, extra: Option<&Value>, final_turn: bool) -> Result<String, AdapterError> {
         check_id("il canale", chat)?;
         let seed = self.shared.nonce_seed.wrapping_add(self.shared.epoch.load(Ordering::SeqCst));
-        let existing_preview = hold(&self.shared.active_preview).remove(chat);
-        if let Some(msg_id) = existing_preview {
-            let mut all_pieces = pieces(text);
-            if all_pieces.is_empty() {
-                return Err(AdapterError::Fatal("il messaggio è vuoto".into()));
-            }
-            let first = all_pieces.remove(0);
-            let edited = self.edit(chat, &msg_id, &first).await?;
-            let mut last = edited;
-            for piece in all_pieces {
-                let mut body = Core::body(&piece);
-                let seq = self.shared.nonce_counter.fetch_add(1, Ordering::SeqCst);
-                body["nonce"] = Value::from(nonce(seed, seq));
-                body["enforce_nonce"] = json!(true);
-                last = self.post(chat, &body).await.map_err(Failure::for_sending)?;
-            }
-            if let Some(extra) = extra {
-                check_id("il messaggio", &last)?;
-                let body = json!({ "components": extra["components"].clone(), "allowed_mentions": { "parse": [] }, "flags": SUPPRESS_EMBEDS });
-                if let Err(failure) = self
-                    .call_patiently(reqwest::Method::PATCH, &format!("/channels/{chat}/messages/{last}"), Some(&body))
-                    .await
-                {
-                    let unchanged =
-                        matches!(&failure, Failure::Api { description, .. } if description.contains("not modified"));
-                    if !unchanged {
-                        return Err(failure.for_sending());
+        if final_turn {
+            let existing_preview = hold(&self.shared.active_preview).remove(chat);
+            if let Some(msg_id) = existing_preview {
+                let mut all_pieces = pieces(text);
+                if all_pieces.is_empty() {
+                    return Err(AdapterError::Fatal("il messaggio è vuoto".into()));
+                }
+                let first = all_pieces.remove(0);
+                let edited = self.edit(chat, &msg_id, &first).await?;
+                let mut last = edited;
+                for piece in all_pieces {
+                    let mut body = Core::body(&piece);
+                    let seq = self.shared.nonce_counter.fetch_add(1, Ordering::SeqCst);
+                    body["nonce"] = Value::from(nonce(seed, seq));
+                    body["enforce_nonce"] = json!(true);
+                    last = self.post(chat, &body).await.map_err(Failure::for_sending)?;
+                }
+                if let Some(extra) = extra {
+                    check_id("il messaggio", &last)?;
+                    let body = json!({ "components": extra["components"].clone(), "allowed_mentions": { "parse": [] }, "flags": SUPPRESS_EMBEDS });
+                    if let Err(failure) = self
+                        .call_patiently(reqwest::Method::PATCH, &format!("/channels/{chat}/messages/{last}"), Some(&body))
+                        .await
+                    {
+                        let unchanged =
+                            matches!(&failure, Failure::Api { description, .. } if description.contains("not modified"));
+                        if !unchanged {
+                            return Err(failure.for_sending());
+                        }
                     }
                 }
+                chunk::remember(&mut hold(&self.shared.preview), format!("{chat}/{last}"), text.to_string());
+                return Ok(last);
             }
-            chunk::remember(&mut hold(&self.shared.preview), format!("{chat}/{last}"), text.to_string());
-            return Ok(last);
         }
 
         let mut queue: VecDeque<String> = pieces(text).into();
@@ -1219,7 +1221,11 @@ impl Adapter for Discord {
     }
 
     async fn send(&self, chat: &str, text: &str) -> Result<String, AdapterError> {
-        self.send_all(chat, text, None).await
+        self.send_with(chat, text, false).await
+    }
+
+    async fn send_with(&self, chat: &str, text: &str, final_turn: bool) -> Result<String, AdapterError> {
+        self.send_all(chat, text, None, final_turn).await
     }
 
     async fn send_buttons(&self, chat: &str, text: &str, buttons: &[Button]) -> Result<String, AdapterError> {
@@ -1234,7 +1240,13 @@ impl Adapter for Discord {
                 json!({ "type": 1, "components": row })
             })
             .collect();
-        self.send_all(chat, text, Some(&json!({ "components": components }))).await
+        self.send_all(chat, text, Some(&json!({ "components": components })), false).await
+    }
+
+    async fn preview_end(&self, chat: &str) -> Result<(), AdapterError> {
+        check_id("il canale", chat)?;
+        let _ = hold(&self.shared.active_preview).remove(chat);
+        Ok(())
     }
 
     async fn edit(&self, chat: &str, message: &str, text: &str) -> Result<String, AdapterError> {
@@ -2704,11 +2716,48 @@ mod tests {
 
         // 3. Final message: long enough to have 2 pieces (> 2000 chars)
         let long_final = format!("{}\n\n{}", "A".repeat(1990), "B".repeat(500));
-        let last_id = d.send("123", &long_final).await.unwrap();
+        let last_id = d.send_with("123", &long_final, true).await.unwrap();
         assert_eq!(last_id, "222");
         assert_eq!(rest.count(), 4);
         let reqs = rest.requests();
         assert!(reqs[2].0.starts_with("PATCH /channels/123/messages/111"));
         assert!(reqs[3].0.starts_with("POST /channels/123/messages"));
     }
+
+    #[tokio::test]
+    async fn intermediate_messages_do_not_consume_active_preview() {
+        let rest = FakeRest::start(vec![
+            ok(r#"{"id": "111"}"#), // preview 1 POST
+            ok(r#"{"id": "222"}"#), // send_buttons POST
+            ok(r#"{"id": "222"}"#), // send_buttons PATCH components
+            ok(r#"{"id": "333"}"#), // send "in coda" POST
+            ok(r#"{"id": "111"}"#), // preview 2 PATCH on 111
+        ]);
+        let gateway = FakeGateway::start(vec![]);
+        let d = adapter(&rest, &gateway);
+
+        // 1. Preview 1
+        d.preview("123", "prima anteprima").await.unwrap();
+
+        // 2. Mid-turn approval question with buttons: must post as NEW message, not touch preview 111
+        let btn = Button { label: "Sì".into(), data: "yes".into() };
+        let btn_id = d.send_buttons("123", "Approvi?", &[btn]).await.unwrap();
+        assert_eq!(btn_id, "222");
+
+        // 3. Mid-turn notice ("in coda"): must post as NEW message, not touch preview 111
+        let queued_id = d.send("123", "In coda").await.unwrap();
+        assert_eq!(queued_id, "333");
+
+        // 4. Preview 2: should still update original preview message 111!
+        d.preview("123", "seconda anteprima dopo la domanda").await.unwrap();
+
+        let reqs = rest.requests();
+        assert_eq!(reqs.len(), 5);
+        assert!(reqs[0].0.starts_with("POST /channels/123/messages"), "req 0 deve essere POST");
+        assert!(reqs[1].0.starts_with("POST /channels/123/messages"), "req 1 (buttons post) deve essere POST");
+        assert!(reqs[2].0.starts_with("PATCH /channels/123/messages/222"), "req 2 (buttons patch) deve essere PATCH su 222");
+        assert!(reqs[3].0.starts_with("POST /channels/123/messages"), "req 3 (queued) deve essere POST");
+        assert!(reqs[4].0.starts_with("PATCH /channels/123/messages/111"), "req 4 (preview 2) deve essere PATCH su 111");
+    }
 }
+

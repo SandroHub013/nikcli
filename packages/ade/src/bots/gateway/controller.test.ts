@@ -34,7 +34,7 @@ const BOT: AgentFile = {
 function bridge(project: string | null = PROJECT) {
   let handler: ((message: GatewayMessage) => void) | undefined
   const calls: string[] = []
-  const sent: { chat: string; text: string }[] = []
+  const sent: { chat: string; text: string; final?: boolean }[] = []
   const questions: { chat: string; text: string; buttons: readonly { label: string; data: string }[] }[] = []
   const typing: string[] = []
   const acks: { bot: string; platform: string; chat: string; id: string }[] = []
@@ -50,8 +50,8 @@ function bridge(project: string | null = PROJECT) {
     },
     ready: async () => void calls.push("ready"),
     ack: async (bot, platform, chat, id) => void acks.push({ bot, platform, chat, id }),
-    send: async (_bot, _platform, chat, text) => {
-      sent.push({ chat, text })
+    send: async (_bot, _platform, chat, text, options) => {
+      sent.push({ chat, text, final: options?.final })
       return String(sent.length)
     },
     sendButtons: async (_bot, _platform, chat, text, buttons) => {
@@ -609,7 +609,7 @@ describe("the gateways' controller", () => {
     ])
     turn.finish({ text: "Risposta finale." })
     await until("la risposta finale", () => b.sent.length === 1)
-    expect(b.sent).toEqual([{ chat: "c42", text: "Risposta finale." }])
+    expect(b.sent).toEqual([{ chat: "c42", text: "Risposta finale.", final: true }])
   })
 
   test("preview updates are throttled to at most ~1/s and at least 24 new characters", async () => {
@@ -835,6 +835,81 @@ describe("the gateways' controller", () => {
     turn.request.onUpdate!({ ...emptyTalk(), streaming: "Inizio esecuzione del comando... ripresa dopo approvazione con testo sufficientemente lungo." })
     await Promise.resolve()
     expect(b.previews).toHaveLength(2)
+  })
+
+  test("mid-turn approval question and queued notice do not consume preview; only final turn message has final: true", async () => {
+    const b = bridge()
+    const started: { request: TurnRequest; finish: (result: Partial<TurnResult>) => void }[] = []
+    const keys: string[] = []
+    const runTurn = (request: TurnRequest): Turn => {
+      let resolve!: (result: TurnResult) => void
+      const result = new Promise<TurnResult>((done) => (resolve = done))
+      const entry = {
+        request,
+        finish: (partial: Partial<TurnResult>) =>
+          resolve({ status: "done", text: "Fatto.", tokens: 0, costUsd: 0, talk: emptyTalk(), ...partial }),
+      }
+      started.push(entry)
+      return {
+        result,
+        stop: () => entry.finish({ status: "stopped" }),
+        answer: (_req, reply) => void keys.push(reply),
+      }
+    }
+    const RAGU: AgentFile = { ...BOT, runner: "ragu" }
+    const raguBot = async () => ({ ok: true as const, bot: RAGU, fingerprint: "f-1" })
+    let now = 10_000
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn,
+      loadBot: raguBot,
+      sessions: memorySessionStore(),
+      remote: () => ({ commands: true, fingerprint: "f-1" }),
+      now: () => now,
+    })
+    b.emit("comando primo", { private: true })
+    await until("il turno è partito", () => started.length === 1)
+    const turn = started[0]!
+
+    // 1. First preview
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Inizio esecuzione del comando prima della domanda..." })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(1)
+
+    // 2. Mid-turn permission question is asked
+    turn.request.onPermission?.({
+      requestID: "per_p1",
+      permission: "bash",
+      patterns: "cargo check",
+      askedAt: 0,
+    })
+    await until("domanda arrivata", () => b.questions.length === 1)
+    expect(b.questions[0]!.buttons.length).toBeGreaterThan(0)
+
+    // 3. Mid-turn message in queue while turn is live
+    b.emit("secondo messaggio in coda", { private: true })
+    await until("avviso in coda", () => b.sent.some((s) => s.text === t("gateway.queued", 1)))
+    const queuedNotice = b.sent.find((s) => s.text === t("gateway.queued", 1))
+    expect(queuedNotice?.final).toBeFalsy()
+
+    // 4. User answers the permission question
+    b.emit(b.questions[0]!.buttons[0]!.data, { button: true })
+    await until("risposta registrata", () => keys.length === 1)
+
+    // 5. Preview resumes
+    now += 1_100
+    turn.request.onUpdate!({
+      ...emptyTalk(),
+      streaming: "Inizio esecuzione del comando prima della domanda... e adesso continuiamo con moltissimi nuovi caratteri generati dopo l'approvazione.",
+    })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(2)
+
+    // 6. Final turn result
+    turn.finish({ text: "Risposta finale completa." })
+    await until("risposta finale arrivata", () => b.sent.some((s) => s.text === "Risposta finale completa."))
+    const finalMsg = b.sent.find((s) => s.text === "Risposta finale completa.")
+    expect(finalMsg?.final).toBe(true)
   })
 
   test("failed turn cleans up and sends failure message without hanging preview", async () => {
