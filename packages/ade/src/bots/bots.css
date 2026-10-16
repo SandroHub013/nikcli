@@ -938,7 +938,7 @@
   overflow-wrap: anywhere;
 }
 
-/* The next routine: a line of the head that is a link to the Routines tab, and looks it (bot-ui-4, P2-1). */
+/* The next routine: a line of the head that is a link to the Routines tab, and looks it, as `bots-link` (bot-ui-4, P2-1). */
 [data-slot="bots-page-routine"] {
   align-self: flex-start;
   max-width: 100%;
@@ -951,16 +951,6 @@
   text-align: start;
   overflow-wrap: anywhere;
   cursor: pointer;
-}
-
-/* The sign is not read aloud: the words say it. */
-[data-slot="bots-page-routine"]::before {
-  content: "⏱" / "";
-  display: inline-block;
-  margin-right: var(--ade-space-1);
-}
-
-[data-slot="bots-page-routine"]:hover {
   text-decoration: underline;
 }
 
@@ -1160,14 +1150,20 @@
   cursor: pointer;
 }
 
+/* The set's chevron (polish B5), turned down while «Avanzate» is open. */
 [data-slot="bots-form-summary"]::before {
-  content: "▸" / "";
+  content: "";
   display: inline-block;
+  width: var(--ade-icon-size);
+  height: var(--ade-icon-size);
   margin-right: var(--ade-space-1);
+  vertical-align: -1px;
+  background-color: currentColor;
+  mask: var(--ade-icon-chevron-right) center / contain no-repeat;
 }
 
 [data-slot="bots-form-summary"][aria-expanded="true"]::before {
-  content: "▾" / "";
+  transform: rotate(90deg);
 }
 
 [data-slot="bots-form-summary"]:hover {

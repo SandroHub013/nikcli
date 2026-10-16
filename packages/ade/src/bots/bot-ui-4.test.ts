@@ -165,13 +165,16 @@ const ruleOf = (selector: string) => {
 }
 
 describe("P2-1: the summary and the routine line look like what they are, things to press", () => {
-  test("lint: both have the colour of a link and a sign before the words", () => {
+  test("lint: both have the colour of a link; the summary the set's chevron, the routine line a link's underline", () => {
     for (const slot of ["bots-form-summary", "bots-page-routine"]) {
       expect(ruleOf(`[data-slot="${slot}"]`)).toContain("color: var(--ade-accent);")
-      expect(ruleOf(`[data-slot="${slot}"]::before`)).toMatch(/content: "[^"]+" \/ "";/)
     }
-    // The summary's sign turns when «Avanzate» is open.
-    expect(ruleOf('[data-slot="bots-form-summary"][aria-expanded="true"]::before')).toMatch(/content: "[^"]+" \/ "";/)
+    expect(ruleOf('[data-slot="bots-page-routine"]')).toContain("text-decoration: underline;")
+    // An icon of the set, not a glyph of the font (polish B5): it turns down when «Avanzate» is open.
+    expect(ruleOf('[data-slot="bots-form-summary"]::before')).toContain("mask: var(--ade-icon-chevron-right)")
+    expect(ruleOf('[data-slot="bots-form-summary"][aria-expanded="true"]::before')).toContain(
+      "transform: rotate(90deg);",
+    )
   })
 })
 
