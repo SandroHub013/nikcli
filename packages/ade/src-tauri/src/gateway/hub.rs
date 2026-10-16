@@ -47,6 +47,14 @@ pub struct GatewayMessage {
     pub private: bool,
     #[serde(default)]
     pub recovered: bool,
+    /// The sender is the owner of the account the bot runs on: the account paired from ADE (S16). A message kept on
+    /// disk before this field was made by such an account, so it reads as true; the page reads the lack of it as false.
+    #[serde(default = "owner_by_default")]
+    pub owner: bool,
+}
+
+fn owner_by_default() -> bool {
+    true
 }
 
 /// How many buttons a message may carry, and how long their parts may be:
@@ -959,7 +967,7 @@ impl Hub {
                 Err(error) => return Ok(Err(error)),
             };
             if !link.is_authorized(&pending.sender) {
-                link.authorized.push(Authorized { id: pending.sender.clone(), name: pending.name.clone(), added_ms: now });
+                link.authorized.push(Authorized { id: pending.sender.clone(), name: pending.name.clone(), added_ms: now, owner: true });
             }
             link.remember_chat(&pending.chat, &pending.sender);
             Ok(Ok(pending))
@@ -1284,12 +1292,15 @@ impl Task {
                 return Err("mittente non più autorizzato".into());
             }
             link.remember_chat(&message.chat, &message.sender.id);
-            Ok(())
+            Ok(link.is_owner(&message.sender.id))
         });
-        if let Err(error) = remembered {
-            self.env.log(&format!("{tag}: messaggio non consegnato, stato non salvato: {error}"));
-            return;
-        }
+        let owner = match remembered {
+            Ok(owner) => owner,
+            Err(error) => {
+                self.env.log(&format!("{tag}: messaggio non consegnato, stato non salvato: {error}"));
+                return;
+            }
+        };
         let at = self.env.now_ms();
         self.env.log(&format!("{tag}: messaggio da un mittente autorizzato ({} caratteri)", message.text.chars().count()));
         let name = redact(&message.sender.name, &self.secrets);
@@ -1309,6 +1320,7 @@ impl Task {
             button: message.button,
             private: message.private,
             recovered,
+            owner,
         };
         let cursor = message.cursor.clone().or_else(|| self.adapter.cursor());
         let mut pending = self.pending.lock().unwrap();
@@ -1358,7 +1370,7 @@ impl Task {
             let used = link.pairing.use_link(token, &message.sender.id, now);
             if used == LinkUse::Paired {
                 if !link.is_authorized(&message.sender.id) {
-                    link.authorized.push(Authorized { id: message.sender.id.clone(), name: name.clone(), added_ms: now });
+                    link.authorized.push(Authorized { id: message.sender.id.clone(), name: name.clone(), added_ms: now, owner: true });
                 }
                 link.remember_chat(&message.chat, &message.sender.id);
             }
@@ -1630,7 +1642,7 @@ mod tests {
             .hub
             .store
             .update(BOT, Platform::Fake, |link, _| {
-                link.authorized.push(Authorized { id: id.into(), name: "Io".into(), added_ms: 1 });
+                link.authorized.push(Authorized { id: id.into(), name: "Io".into(), added_ms: 1, owner: true });
                 Ok(())
             })
             .unwrap();
@@ -1916,7 +1928,7 @@ mod tests {
         s.hub
             .store
             .update(BOT, Platform::Slack, |link, _| {
-                link.authorized.push(Authorized { id: "U42".into(), name: "Io".into(), added_ms: 1 });
+                link.authorized.push(Authorized { id: "U42".into(), name: "Io".into(), added_ms: 1, owner: true });
                 Ok(())
             })
             .unwrap();
@@ -2859,6 +2871,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn every_message_says_whether_its_sender_is_the_owner_and_an_old_one_on_disk_reads_as_the_owner() {
+        let s = setup("owner");
+        authorize(&s, "42");
+        // A second account that is not the owner's, as a pairing of other people would make it.
+        s.hub
+            .store
+            .update(BOT, Platform::Fake, |link, _| {
+                link.authorized.push(Authorized { id: "43".into(), name: "Amico".into(), added_ms: 2, owner: false });
+                Ok(())
+            })
+            .unwrap();
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c42", "42", "ciao"), message("2", "c43", "43", "ciao")])).unwrap();
+        eventually("i due messaggi", || s.env.messages.lock().unwrap().len() == 2).await;
+        let messages = s.env.messages.lock().unwrap().clone();
+        assert!(messages.iter().find(|m| m.sender.id == "42").unwrap().owner);
+        assert!(!messages.iter().find(|m| m.sender.id == "43").unwrap().owner);
+        // On the wire the page reads it by name, and a message without it is not the owner's there.
+        assert!(serde_json::to_string(&messages[0]).unwrap().contains("\"owner\":"));
+        // A message kept on disk before the field existed, and a state saved before it, are the owner's.
+        let old: GatewayMessage = serde_json::from_value(serde_json::json!({
+            "bot": BOT, "platform": "fake", "chat": "c", "sender": { "id": "42", "name": "Ale" },
+            "text": "t", "id": "1", "redacted": false, "button": false, "private": true
+        }))
+        .unwrap();
+        assert!(old.owner);
+        let account: Authorized = serde_json::from_value(serde_json::json!({ "id": "42", "name": "Ale", "addedMs": 1 })).unwrap();
+        assert!(account.owner);
+    }
+
+    #[tokio::test]
     async fn a_plain_start_from_a_stranger_does_what_it_always_did() {
         let s = setup("link-plain-start");
         let (adapter, feed) = start(&s);
@@ -3003,6 +3046,7 @@ mod tests {
                         button: false,
                         private: true,
                         recovered: false,
+                        owner: true,
                     },
                     cursor: None,
                     acked: false,

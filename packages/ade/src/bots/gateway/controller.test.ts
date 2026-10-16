@@ -76,6 +76,7 @@ function bridge(project: string | null = PROJECT) {
       redacted: false,
       button: false,
       private: true,
+      owner: true,
       ...extra,
     })
   return { fake, calls, sent, typing, questions, acks, previews, previewEnds, emit }
@@ -1782,7 +1783,22 @@ describe("the owner check of a plan's turn (S16)", () => {
     expect(turns.started).toHaveLength(0)
   })
 
-  test("an owner's message, or one that says nothing (D92: every paired account is the owner's), runs", async () => {
+  test("a message that says nothing about its sender is not taken for the owner's: S16, absence is false", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("ciao", { owner: undefined })
+    await until("il rifiuto", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe(t("gateway.ownerOnly", "Claude Code"))
+    expect(turns.started).toHaveLength(0)
+  })
+
+  test("an owner's message runs", async () => {
     const b = bridge()
     const turns = fakeTurns()
     await startGatewayController({
@@ -1795,7 +1811,7 @@ describe("the owner check of a plan's turn (S16)", () => {
     await until("il primo turno", () => turns.started.length === 1)
     turns.started[0]!.finish({ text: "ok" })
     await until("la risposta", () => b.sent.length === 1)
-    b.emit("due")
+    b.emit("due", { owner: true })
     await until("il secondo turno", () => turns.started.length === 2)
     turns.started[1]!.finish({ text: "ok" })
   })

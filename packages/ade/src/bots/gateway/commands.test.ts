@@ -66,6 +66,7 @@ function bridge() {
       redacted: false,
       button: false,
       private: true,
+      owner: true,
       ...extra,
     })
   /** Presses a button of the last question. */

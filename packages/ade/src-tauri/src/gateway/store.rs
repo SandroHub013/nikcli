@@ -79,6 +79,11 @@ impl LinkState {
         self.authorized.iter().any(|entry| entry.id == sender)
     }
 
+    /// Whether `sender` is authorized and the owner. A sender who is not authorized is nobody's owner.
+    pub fn is_owner(&self, sender: &str) -> bool {
+        self.authorized.iter().any(|entry| entry.id == sender && entry.owner)
+    }
+
     pub fn knows_chat(&self, chat: &str) -> bool {
         self.chats.iter().any(|known| known.id == chat)
     }
@@ -109,6 +114,15 @@ pub struct Authorized {
     pub name: String,
     #[serde(default)]
     pub added_ms: u64,
+    /// The owner of the account the bot runs on: paired from ADE by the person at the computer (D92: so far the only
+    /// way anyone is paired). What the page is told with each of their messages (S16). A state saved before this field
+    /// held only such accounts, so it reads as true.
+    #[serde(default = "is_owner_by_default")]
+    pub owner: bool,
+}
+
+fn is_owner_by_default() -> bool {
+    true
 }
 
 pub struct Store {
@@ -284,7 +298,7 @@ mod tests {
         store
             .update("C:/p/.nikcli/agent/a.md", Platform::Fake, |link, _| {
                 link.enabled = true;
-                link.authorized.push(Authorized { id: "42".into(), name: "Ale".into(), added_ms: 1 });
+                link.authorized.push(Authorized { id: "42".into(), name: "Ale".into(), added_ms: 1, owner: true });
                 Ok(())
             })
             .unwrap();
