@@ -42,6 +42,10 @@ export interface GatewayStatus {
   readonly project?: string | null
   readonly lastError?: string | null
   readonly lastMessageMs?: number | null
+  readonly connectedAtMs?: number | null
+  readonly reconnecting?: boolean
+  readonly needsAttention?: boolean
+  readonly attentionReason?: string | null
   readonly authorized: readonly Sender[]
 }
 
@@ -53,6 +57,10 @@ export interface LinkStatus {
   readonly connected: boolean
   readonly lastError?: string | null
   readonly lastMessageMs?: number | null
+  readonly connectedAtMs?: number | null
+  readonly reconnecting?: boolean
+  readonly needsAttention?: boolean
+  readonly attentionReason?: string | null
 }
 
 /** `gateway:pairing`, and one waiting request in `gateway_pairing_list`. Never a code. */
@@ -144,7 +152,12 @@ const OFF: GatewayStatus = {
   connected: false,
   hasToken: false,
   authorized: [],
+  connectedAtMs: null,
+  reconnecting: false,
+  needsAttention: false,
+  attentionReason: null,
 }
+
 const NO_PAIRING: PairingInfo = { open: false, pending: [], authorized: [], attemptsLeft: 0 }
 
 /**
@@ -285,6 +298,11 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
               running: status.running,
               connected: status.connected,
               lastError: status.lastError ?? null,
+              lastMessageMs: status.lastMessageMs ?? current[status.platform]?.lastMessageMs ?? null,
+              connectedAtMs: status.connectedAtMs !== undefined ? status.connectedAtMs : current[status.platform]?.connectedAtMs ?? null,
+              reconnecting: status.reconnecting ?? false,
+              needsAttention: status.needsAttention ?? false,
+              attentionReason: status.attentionReason ?? null,
             },
           }))
         }
@@ -295,8 +313,13 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
           connected: status.connected,
           lastError: status.lastError ?? null,
           lastMessageMs: status.lastMessageMs ?? current.lastMessageMs ?? null,
+          connectedAtMs: status.connectedAtMs !== undefined ? status.connectedAtMs : current.connectedAtMs ?? null,
+          reconnecting: status.reconnecting ?? false,
+          needsAttention: status.needsAttention ?? false,
+          attentionReason: status.attentionReason ?? null,
         }))
       },
+
       pairing: (request) => {
         // Another platform's request is a badge on its tile; this one's is the list.
         if (request.bot === path()) void refresh()

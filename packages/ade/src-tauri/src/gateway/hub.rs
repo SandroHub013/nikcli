@@ -74,6 +74,10 @@ pub struct LinkStatus {
     pub connected: bool,
     pub last_error: Option<String>,
     pub last_message_ms: Option<u64>,
+    pub connected_at_ms: Option<u64>,
+    pub reconnecting: bool,
+    pub needs_attention: bool,
+    pub attention_reason: Option<String>,
 }
 
 /// What the panel shows of a gateway. No token: only whether there is one.
@@ -91,10 +95,15 @@ pub struct StatusInfo {
     pub project: Option<String>,
     pub last_error: Option<String>,
     pub last_message_ms: Option<u64>,
+    pub connected_at_ms: Option<u64>,
+    pub reconnecting: bool,
+    pub needs_attention: bool,
+    pub attention_reason: Option<String>,
     pub authorized: Vec<MessageSender>,
     /// The running adapter's: how long a message may be, whether it can be edited.
     pub capabilities: Option<Capabilities>,
 }
+
 
 /// A stranger asked to pair: for the panel, which asks the user for the code.
 /// The code itself is only in the stranger's chat.
@@ -186,9 +195,14 @@ struct Live {
     connected: bool,
     last_error: Option<String>,
     last_message_ms: Option<u64>,
+    connected_at_ms: Option<u64>,
+    reconnecting: bool,
+    needs_attention: bool,
+    attention_reason: Option<String>,
     /// A fatal error ended the task: switched on, but not reading or answering.
     stopped: bool,
 }
+
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct PendingEntry {
@@ -694,6 +708,10 @@ impl Hub {
                     connected: false,
                     last_error: Some(error.clone()),
                     last_message_ms: None,
+                    connected_at_ms: None,
+                    reconnecting: false,
+                    needs_attention: true,
+                    attention_reason: Some(error.clone()),
                 });
                 self.failed().insert((bot.to_string(), platform), error);
             }
@@ -703,7 +721,11 @@ impl Hub {
     fn launch(&self, bot: &str, platform: Platform, adapter: Arc<dyn Adapter>) {
         self.failed().remove(&(bot.to_string(), platform));
         let (stop, stopped) = watch::channel(false);
-        let live = Arc::new(Mutex::new(Live::default()));
+        let live = Arc::new(Mutex::new(Live {
+            reconnecting: true,
+            ..Live::default()
+        }));
+
         let mut initial_pending: VecDeque<PendingEntry> =
             read_pending_file(&pending_file_path(self.store.path(), bot, platform)).into();
         let ready_now = *self.ready.borrow();
@@ -729,18 +751,44 @@ impl Hub {
         };
         tokio::spawn(task.run(stopped, self.ready.subscribe()));
         self.links().insert((bot.to_string(), platform), Running { adapter, stop, live, pending });
+        self.env.status(&LinkStatus {
+            bot: bot.to_string(),
+            platform,
+            running: true,
+            connected: false,
+            last_error: None,
+            last_message_ms: None,
+            connected_at_ms: None,
+            reconnecting: true,
+            needs_attention: false,
+            attention_reason: None,
+        });
     }
+
 
     /// Switches the gateway off, and remembers it is off.
     pub fn stop(&self, bot: &str, platform: Platform) -> Result<(), String> {
         check_bot(bot)?;
         self.halt(bot, platform);
         self.failed().remove(&(bot.to_string(), platform));
+        self.env.status(&LinkStatus {
+            bot: bot.to_string(),
+            platform,
+            running: false,
+            connected: false,
+            last_error: None,
+            last_message_ms: None,
+            connected_at_ms: None,
+            reconnecting: false,
+            needs_attention: false,
+            attention_reason: None,
+        });
         self.store.update(bot, platform, |link, _| {
             link.enabled = false;
             Ok(())
         })
     }
+
 
     fn halt(&self, bot: &str, platform: Platform) {
         if let Some(running) = self.links().remove(&(bot.to_string(), platform)) {
@@ -1047,14 +1095,22 @@ impl Hub {
             .map(|link| {
                 let running = links.get(&(link.bot.clone(), link.platform));
                 let live = running.map(|running| running.live.lock().map(|live| live.clone()).unwrap_or_default()).unwrap_or_default();
+                let failed_error = failed.get(&(link.bot.clone(), link.platform)).cloned();
                 // A task a fatal error ended is not running, though the link stays on.
                 let running = running.filter(|_| !live.stopped);
+                let is_running = running.is_some();
+                let needs_attention = live.needs_attention || failed_error.is_some() || (link.enabled && !is_running);
+                let attention_reason = live.attention_reason.or_else(|| failed_error.clone());
                 StatusInfo {
                     capabilities: running.map(|running| running.adapter.capabilities()),
-                    running: running.is_some(),
+                    running: is_running,
                     connected: live.connected,
-                    last_error: live.last_error.or_else(|| failed.get(&(link.bot.clone(), link.platform)).cloned()),
+                    last_error: live.last_error.or(failed_error),
                     last_message_ms: live.last_message_ms,
+                    connected_at_ms: live.connected_at_ms,
+                    reconnecting: live.reconnecting && is_running,
+                    needs_attention,
+                    attention_reason,
                     has_token: link.token_hash.is_some(),
                     has_app_token: link.app_token_hash.is_some(),
                     enabled: link.enabled,
@@ -1066,6 +1122,7 @@ impl Hub {
             })
             .collect()
     }
+
 }
 
 fn pairing_request(bot: &str, platform: Platform, pending: &authz::Pending) -> PairingRequest {
@@ -1126,11 +1183,16 @@ impl Task {
             connected: live.connected,
             last_error: live.last_error,
             last_message_ms: live.last_message_ms,
+            connected_at_ms: live.connected_at_ms,
+            reconnecting: live.reconnecting,
+            needs_attention: live.needs_attention,
+            attention_reason: live.attention_reason,
         });
     }
 
     async fn run(self, mut stopped: watch::Receiver<bool>, mut ready: watch::Receiver<bool>) {
         let mut pause = self.backoff.0;
+        let mut disconnected_since = self.started_at;
         // A batch read and not handed on when the loop ended.
         let mut left_behind = 0;
         loop {
@@ -1158,8 +1220,13 @@ impl Task {
                 Ok(batch) => {
                     pause = self.backoff.0;
                     if !self.live.lock().map(|live| live.connected).unwrap_or(false) {
+                        let now = self.env.now_ms();
                         self.report(|live| {
                             live.connected = true;
+                            live.connected_at_ms = Some(now);
+                            live.reconnecting = false;
+                            live.needs_attention = false;
+                            live.attention_reason = None;
                             live.last_error = None;
                         });
                     }
@@ -1176,11 +1243,26 @@ impl Task {
                     }
                 }
                 Err(AdapterError::Transient(error)) => {
+                    let now = self.env.now_ms();
+                    if self.live.lock().map(|live| live.connected).unwrap_or(false) {
+                        disconnected_since = now;
+                    }
                     let error = redact(&error, &self.secrets);
                     self.env.log(&format!("{}: lettura non riuscita, riprovo tra {} s: {error}", self.tag(), pause.as_secs()));
+                    let timed_out = now.saturating_sub(disconnected_since) >= 600_000;
                     self.report(|live| {
                         live.connected = false;
-                        live.last_error = Some(error);
+                        live.connected_at_ms = None;
+                        live.last_error = Some(error.clone());
+                        if timed_out {
+                            live.needs_attention = true;
+                            live.attention_reason = Some("Impossibile connettersi da oltre 10 minuti".to_string());
+                            live.reconnecting = false;
+                        } else {
+                            live.reconnecting = true;
+                            live.needs_attention = false;
+                            live.attention_reason = None;
+                        }
                     });
                     tokio::select! {
                         biased;
@@ -1194,8 +1276,12 @@ impl Task {
                     self.env.log(&format!("{}: fermo: {error}", self.tag()));
                     self.report(|live| {
                         live.connected = false;
-                        live.last_error = Some(error);
+                        live.connected_at_ms = None;
+                        live.last_error = Some(error.clone());
                         live.stopped = true;
+                        live.reconnecting = false;
+                        live.needs_attention = true;
+                        live.attention_reason = Some(error);
                     });
                     break;
                 }
@@ -1203,6 +1289,7 @@ impl Task {
         }
         self.count_left_behind(left_behind);
     }
+
 
     /// How many messages the platform confirmed and this gateway did not hand
     /// on, said in the log when it ends: a number, never their text. Nothing
@@ -1950,6 +2037,46 @@ mod tests {
         assert!(refused.contains("si è fermato") && refused.contains("token rifiutato"), "{refused}");
         assert_eq!(adapter.sent.lock().unwrap().len(), 0);
     }
+
+    #[tokio::test]
+    async fn the_link_status_reports_connected_at_reconnecting_and_needs_attention() {
+        let s = setup("status-live");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        // Initially when launched, it is reconnecting/connecting
+        eventually("sta provando a connettersi", || {
+            s.env.statuses.lock().unwrap().last().is_some_and(|status| status.reconnecting && !status.connected && !status.needs_attention)
+        }).await;
+        // Connects
+        feed.send(Ok(vec![message("1", "c42", "42", "ok")])).unwrap();
+        eventually("connesso con timestamp", || {
+            s.env.statuses.lock().unwrap().last().is_some_and(|status| status.connected && status.connected_at_ms.is_some() && !status.reconnecting && !status.needs_attention)
+        }).await;
+        let connected_at = s.env.statuses.lock().unwrap().last().unwrap().connected_at_ms;
+        assert!(connected_at.is_some());
+        let hub_status = s.hub.status();
+        assert!(hub_status[0].connected);
+        assert_eq!(hub_status[0].connected_at_ms, connected_at);
+        assert!(!hub_status[0].reconnecting);
+        assert!(!hub_status[0].needs_attention);
+
+        // Transient failure -> reconnecting
+        feed.send(Err(AdapterError::Transient("rete caduta".into()))).unwrap();
+        eventually("disconnesso ma in ricollegamento", || {
+            s.env.statuses.lock().unwrap().last().is_some_and(|status| !status.connected && status.reconnecting && !status.needs_attention && status.connected_at_ms.is_none())
+        }).await;
+
+        // Fatal failure -> needs attention
+        feed.send(Err(AdapterError::Fatal("token revocato".into()))).unwrap();
+        eventually("richiede attenzione per errore grave", || {
+            s.env.statuses.lock().unwrap().last().is_some_and(|status| !status.connected && !status.running && !status.reconnecting && status.needs_attention && status.attention_reason.as_deref() == Some("token revocato"))
+        }).await;
+        let hub_status = s.hub.status();
+        assert!(!hub_status[0].running);
+        assert!(hub_status[0].needs_attention);
+        assert_eq!(hub_status[0].attention_reason.as_deref(), Some("token revocato"));
+    }
+
 
     #[tokio::test]
     async fn switching_off_ends_the_task_and_keeps_the_project_it_ran_in() {
