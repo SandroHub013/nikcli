@@ -11,7 +11,8 @@
  *   session id;
  * - one turn at a time per chat: what arrives meanwhile waits its turn, and
  *   the chat is told it is queued;
- * - `/nuova`, `/ferma`, `/stato`, `/aiuto` act at once, even mid-turn;
+ * - `/nuova`, `/ferma`, `/stato`, `/aiuto` act at once, even mid-turn; `/riprova` asks the last question again, once
+ *   the turn before it is over;
  * - the turn runs in the project fixed when the gateway was switched on, with
  *   the bot's file as it is now and only if the user's trust still holds for
  *   it (`policy.ts`); the plan's places are `runTurn`'s (`terms.ts`);
@@ -214,15 +215,22 @@ interface ChatState {
   times: number[]
   /** The limit was already said in this chat: said once, then silence. */
   limited: boolean
+  /** The last message that became a turn: what `/riprova` asks again. */
+  last?: GatewayMessage
   /**
    * How many times `/nuova` was said. A turn that was running when it came
    * must not write its session and thread back at its end: the next message
    * went on with the conversation the user had just dropped (review area 2).
    */
   fresh: number
+  /** How many times `/riprova` was said: what makes the ids of its messages different. */
+  retries: number
 }
 
 const TYPING_EVERY_MS = 4_000
+
+/** What a message made by `/riprova` has in its id: Rust never saw it, so it is not acknowledged. */
+const RETRY_MARK = ":retry:"
 
 /** What a question on the phone is about, and whose bot it is: the entry it has in the list of what waits. */
 interface ApprovalDetail extends AskDetail {
@@ -337,7 +345,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
   const stateOf = (key: string): ChatState => {
     let state = chats.get(key)
     if (!state) {
-      state = { queue: [], starting: false, cancelled: false, times: [], limited: false, fresh: 0 }
+      state = { queue: [], starting: false, cancelled: false, times: [], limited: false, fresh: 0, retries: 0 }
       chats.set(key, state)
     }
     return state
@@ -384,6 +392,28 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       }
       return reply(message, t("gateway.stopped"))
     }
+    if (which === "retry") {
+      if (running) return reply(message, t("gateway.retry.busy"))
+      const last = state.last
+      if (!last) return reply(message, t("gateway.retry.none"))
+      // It counts like any message: a loop of `/riprova` is a loop of turns.
+      const counted = countMessage(state.times, now())
+      state.times = counted.times
+      if (!counted.allowed) return reply(message, t("gateway.limit", CHAT_MESSAGES_PER_HOUR))
+      state.retries += 1
+      // The same words, asked by whoever said `/riprova`: the answers to a question on the phone are theirs.
+      state.queue.push({
+        ...last,
+        id: `${last.id}${RETRY_MARK}${state.retries}`,
+        sender: message.sender,
+        ...(message.owner === undefined ? {} : { owner: message.owner }),
+        private: message.private,
+        redacted: false,
+        recovered: false,
+      })
+      void reply(message, t("gateway.retry.again"))
+      return next(key)
+    }
     if (which === "status") {
       const said = running ? t("gateway.status.working", state.queue.length) : t("gateway.status.idle")
       const spent = await deps.spendToday?.(message.bot).catch(() => undefined)
@@ -398,7 +428,9 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     if (closed || state.turn || state.starting) return
     const message = state.queue.shift()
     if (!message) return
-    void deps.bridge.ack?.(message.bot, message.platform, message.chat, message.id)?.catch?.(() => {})
+    if (!message.id.includes(RETRY_MARK))
+      void deps.bridge.ack?.(message.bot, message.platform, message.chat, message.id)?.catch?.(() => {})
+    state.last = message
     state.starting = true
     state.cancelled = false
     state.current = message

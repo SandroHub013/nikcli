@@ -789,8 +789,11 @@ export const en: Messages = {
   "gateway.fresh": "New conversation: starting over.",
   "gateway.status.idle": "Free: go ahead.",
   "gateway.status.working": (queued) => `Working on a turn; messages queued: ${queued}.`,
+  "gateway.retry.none": "There is no question to ask again yet: write me one.",
+  "gateway.retry.busy": "I'm still working on the last question: wait for it to finish, or write /stop.",
+  "gateway.retry.again": "Asking the last question again.",
   "gateway.help":
-    "Commands: /new starts the conversation over, /stop stops the running turn and clears the queue, /status says what I'm doing, /help shows this list.",
+    "Commands: /new starts the conversation over, /stop stops the running turn and clears the queue, /status says what I'm doing, /retry asks the last question again, /help shows this list.",
   "gateway.limit": (count) =>
     `More than ${count} messages in an hour: I'll stay quiet for a while, so a loop of messages doesn't spend your plan. Try again later.`,
   "gateway.retrust": (name) =>
