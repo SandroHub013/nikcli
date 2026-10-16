@@ -225,7 +225,8 @@ impl Failure {
 /// Discord's own word for "this text is too long": code 50035, and its message
 /// names the limit. The count this adapter made is a guess; this is the truth.
 fn is_too_long(description: &str) -> bool {
-    description.contains("50035") || description.contains("2000 or fewer")
+    description.contains("2000 or fewer")
+        || (description.contains("50035") && description.to_lowercase().contains("content"))
 }
 
 /// Discord counts characters; a piece is this many of them.
@@ -279,8 +280,8 @@ fn cut_in_half(text: &str) -> (String, String) {
 
 /// A nonce, the same for every try at the same message, so that a send
 /// repeated after a timeout returns the message already posted.
-fn nonce(seed: u64, attempt: u64) -> String {
-    format!("{seed:016x}{attempt:016x}")
+fn nonce(seed: u64, seq: u64) -> String {
+    format!("{:012x}{:08x}", seed & 0x0000_ffff_ffff_ffff, seq & 0xffff_ffff)
 }
 
 /// Locks a mutex, taking a poisoned one rather than panicking: a thread that
@@ -307,6 +308,8 @@ struct Shared {
     /// the identify budget: a socket that started is not a failed attempt, and
     /// the flag is what says so across the inner loop that set it.
     ready: AtomicBool,
+    /// Monotonic sequence for message nonces to guarantee uniqueness across messages.
+    nonce_counter: AtomicU64,
 }
 
 impl Shared {
@@ -454,6 +457,7 @@ impl Discord {
                 preview: Mutex::new(HashMap::new()),
                 epoch: AtomicU64::new(0),
                 ready: AtomicBool::new(false),
+                nonce_counter: AtomicU64::new(0),
             }),
             inbox: tokio::sync::Mutex::new(inbox),
             sender,
@@ -576,14 +580,14 @@ impl Core {
         if queue.is_empty() {
             return Err(AdapterError::Fatal("il messaggio è vuoto".into()));
         }
-        let mut attempt = 0u64;
         let mut last = String::new();
         while let Some(piece) = queue.pop_front() {
             let mut body = Core::body(&piece);
+            let seq = self.shared.nonce_counter.fetch_add(1, Ordering::SeqCst);
             // The same nonce for every try at one piece: a repeat returns the
             // message already posted instead of posting it twice.
-            body["nonce"] = Value::from(nonce(seed, attempt));
-            attempt += 1;
+            body["nonce"] = Value::from(nonce(seed, seq));
+            body["enforce_nonce"] = json!(true);
             match self.post(chat, &body).await {
                 Ok(id) => last = id,
                 // Discord is the one that says the text is too long. Cut the
@@ -1406,6 +1410,7 @@ mod tests {
             preview: Mutex::new(HashMap::new()),
             epoch: AtomicU64::new(0),
             ready: AtomicBool::new(false),
+            nonce_counter: AtomicU64::new(0),
         }
     }
 
@@ -1620,6 +1625,30 @@ mod tests {
         let first = nonce_of(&rest.body_of(0));
         let second = nonce_of(&rest.body_of(1));
         assert_eq!(first, second, "il nonce resta lo stesso fra un tentativo e l'altro");
+    }
+
+    #[tokio::test]
+    async fn nonce_is_under_twenty_five_chars_enforces_nonce_and_differs_across_messages() {
+        let rest = FakeRest::start(vec![
+            ok(&json!({ "id": "1" }).to_string()),
+            ok(&json!({ "id": "2" }).to_string()),
+        ]);
+        let gateway = FakeGateway::start(vec![]);
+        let discord = adapter(&rest, &gateway);
+        discord.send("ch1", "msg1").await.expect("inviato 1");
+        discord.send("ch1", "msg2").await.expect("inviato 2");
+
+        let body1 = rest.body_of(0);
+        let body2 = rest.body_of(1);
+
+        let nonce1 = body1["nonce"].as_str().expect("nonce1 presente");
+        let nonce2 = body2["nonce"].as_str().expect("nonce2 presente");
+
+        assert!(nonce1.len() <= 25, "nonce1 length {} <= 25", nonce1.len());
+        assert!(nonce2.len() <= 25, "nonce2 length {} <= 25", nonce2.len());
+        assert_eq!(body1["enforce_nonce"], json!(true));
+        assert_eq!(body2["enforce_nonce"], json!(true));
+        assert_ne!(nonce1, nonce2, "nonces must differ across separate messages");
     }
 
     #[tokio::test]
