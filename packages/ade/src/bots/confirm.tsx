@@ -27,6 +27,19 @@ export function ConfirmAction(props: {
   const [asking, setAsking] = createSignal(false)
   const [busy, setBusy] = createSignal(false)
   const slot = () => (props.look === "button" ? "bots-btn" : "bots-link")
+  let first: HTMLButtonElement | undefined
+  let cancel: HTMLButtonElement | undefined
+
+  // The first button is taken out of the page and the others put in: `autofocus` does not act on an element added
+  // after the page loaded, so the focus is moved by hand, and given back when the question is closed (Escape, «Annulla»).
+  const ask = () => {
+    setAsking(true)
+    queueMicrotask(() => cancel?.focus())
+  }
+  const back = () => {
+    setAsking(false)
+    queueMicrotask(() => first?.focus())
+  }
 
   const run = async () => {
     if (busy()) return
@@ -44,11 +57,12 @@ export function ConfirmAction(props: {
       when={asking()}
       fallback={
         <button
+          ref={(element) => (first = element)}
           type="button"
           data-slot={slot()}
           data-tone="danger"
           disabled={props.disabled}
-          onClick={() => setAsking(true)}
+          onClick={ask}
         >
           {props.label}
         </button>
@@ -61,12 +75,18 @@ export function ConfirmAction(props: {
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             event.stopPropagation()
-            setAsking(false)
+            back()
           }
         }}
       >
         <span data-slot="bots-confirm-question">{props.question}</span>
-        <button type="button" data-slot="bots-btn" disabled={busy()} onClick={() => setAsking(false)} autofocus>
+        <button
+          ref={(element) => (cancel = element)}
+          type="button"
+          data-slot="bots-btn"
+          disabled={busy()}
+          onClick={back}
+        >
           {t("bots.confirm.cancel")}
         </button>
         <button

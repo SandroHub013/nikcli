@@ -71,6 +71,29 @@ describe("the one way to confirm what cannot be taken back", () => {
     expect(buttons().map((button) => button.textContent)).toEqual(["Elimina routine"])
   })
 
+  test("P2-P3: the focus goes to «Annulla» when the question opens, Escape from there closes it, and the focus comes back", async () => {
+    const { buttons, press } = mount(() => {})
+    const first = buttons()[0]!
+    first.focus()
+    press("Elimina routine")
+    await Promise.resolve()
+    expect(document.activeElement?.textContent).toBe("Annulla")
+    // Escape is read from where the focus is, not from the question's own element.
+    document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }))
+    await Promise.resolve()
+    expect(buttons().map((button) => button.textContent)).toEqual(["Elimina routine"])
+    expect(document.activeElement?.textContent).toBe("Elimina routine")
+  })
+
+  test("«Annulla» gives the focus back to the first button too", async () => {
+    const { press } = mount(() => {})
+    press("Elimina routine")
+    await Promise.resolve()
+    press("Annulla")
+    await Promise.resolve()
+    expect(document.activeElement?.textContent).toBe("Elimina routine")
+  })
+
   test("the second press does it, once, and the first button comes back", async () => {
     let done = 0
     const { buttons, press } = mount(async () => void done++)
