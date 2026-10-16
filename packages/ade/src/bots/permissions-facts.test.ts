@@ -55,16 +55,29 @@ const config = (args: readonly string[], key: string) =>
 const claude = (b: AgentFile, spec: object = {}) => {
   const { args } = turnCommand(runnerById("claude"), { bot: b, message: "x", ...spec })
   const allowed = flag(args, "--allowedTools")
+  const disallowed = flag(args, "--disallowedTools")
+  const settings = args.includes("--settings") ? JSON.parse(args[args.indexOf("--settings") + 1] ?? "{}") : {}
   return {
     shell: allowed.includes("Bash"),
     web: allowed.includes("WebFetch"),
     edits: args[args.indexOf("--permission-mode") + 1] === "acceptEdits",
-    refusedShell: flag(args, "--disallowedTools").includes("Bash"),
+    refusedShell: disallowed.includes("Bash"),
+    // No bare Read, and the setting that refuses reads outside the working folder (bot-lettura).
+    readsInProject: !allowed.includes("Read") && settings.permissions?.blockReadsOutsideWorkingDirectories === true,
+    // No bare write tool: `acceptEdits` writes in the working folder only (bot-lettura-2).
+    writesInProject: !allowed.some((name) => ["Edit", "Write", "NotebookEdit"].includes(name)),
+    talksToSessions: !disallowed.includes("SendMessage"),
   }
 }
 const codex = (b: AgentFile, spec: object = {}) => {
   const { args } = turnCommand(runnerById("codex"), { bot: b, message: "x", ...spec })
-  return { sandbox: config(args, "sandbox_mode"), approval: config(args, "approval_policy") }
+  return {
+    sandbox: config(args, "sandbox_mode"),
+    approval: config(args, "approval_policy"),
+    // The profile that reads the project only, or Codex does not start (bot-lettura-2).
+    projectOnly: config(args, "default_permissions") === "ade_project",
+    webOff: config(args, "web_search") === "disabled",
+  }
 }
 
 describe("«Nella Conversazione»: what each program really does", () => {
@@ -122,6 +135,23 @@ describe("«Nella Conversazione»: what each program really does", () => {
       expect(word("bots.permissions.panelTextCodexRead")).toMatch(/lettura|read/)
     }
   })
+
+  /*
+   * bot-lettura-2: in the panel Claude Code reads anywhere, writes files only in the project, and no longer messages
+   * other sessions; a command, with the shell, still reaches outside the project, and the text says so.
+   */
+  test("Claude Code writes files only in the project, and the words say a command can reach outside it", () => {
+    for (const b of bots("claude")) {
+      const real = claude(b, { lean: true, approvals: true })
+      expect(real.writesInProject, `${b.scope} ${b.disabledTools}`).toBe(true)
+      expect(real.talksToSessions).toBe(false)
+      expect(real.readsInProject).toBe(false)
+    }
+    for (const catalog of [itDict, en] as Record<string, unknown>[]) {
+      expect(String(catalog["bots.permissions.edits"])).toMatch(/del progetto|project's/)
+      expect(String(catalog["bots.permissions.panelTextClaude"])).toMatch(/fuori dal progetto|outside the project/)
+    }
+  })
 })
 
 describe("«Da telefono» and «Nelle routine»", () => {
@@ -157,13 +187,48 @@ describe("«Da telefono» and «Nelle routine»", () => {
     expect(routinesTextKey(bot("codex"))).toBe("bots.permissions.routinesTextCodex")
   })
 
-  test("Codex is not said to run no commands, and its MCP and web are not said to be shut", () => {
+  /*
+   * Codex from a chat and in a routine runs commands that read, with its MCP servers and web search off (choice 7,
+   * bot-spesa), and starts only with the sandbox that reads the project alone (bot-lettura-2).
+   */
+  test("Codex is not said to run no commands; it is said to read the project only, or not start, with MCP and web off", () => {
     expect(remoteNeverKey(bot("codex"))).toBe("gateway.panel.remoteNeverCodex")
     expect(remoteNeverKey(bot("claude"))).toBe("gateway.panel.remoteNever")
+    for (const b of bots("codex"))
+      for (const spec of [{ remote: { commands: false } }, { unattended: true }]) {
+        const real = codex(b, spec)
+        expect([b.scope, spec, real.projectOnly, real.webOff]).toEqual([b.scope, spec, true, true])
+      }
     for (const key of ["bots.permissions.phoneTextCodex", "bots.permissions.routinesTextCodex"]) {
-      expect(String(itDict[key as keyof typeof itDict]), key).not.toMatch(/non esegue comandi|non usa i server MCP/)
-      expect(String(en[key as keyof typeof en]), key).not.toMatch(/runs no commands|uses no MCP/)
+      const it = String(itDict[key as keyof typeof itDict])
+      const english = String(en[key as keyof typeof en])
+      expect(it, key).not.toMatch(/non esegue comandi/)
+      expect(english, key).not.toMatch(/runs no commands/)
+      expect(it, key).toMatch(/soltanto la cartella del progetto/)
+      expect(english, key).toMatch(/project folder alone/)
+      expect(it, key).toMatch(/non parte/)
+      expect(english, key).toMatch(/doesn't start/)
+      expect(it, key).toMatch(/non usa i server MCP né la ricerca web/)
+      expect(english, key).toMatch(/uses no MCP servers or web search/)
     }
     expect(phoneText(bot("codex")).key).toBe("bots.permissions.phoneTextCodex")
+  })
+
+  /* bot-lettura-2: from a chat Claude Code reads and writes only in the project, and messages no other session. */
+  test("from a chat Claude Code reads and writes only in the project, and the words say so", () => {
+    for (const b of bots("claude")) {
+      const real = claude(b, { remote: { commands: false }, lean: true })
+      expect([b.scope, b.disabledTools, real.readsInProject, real.writesInProject, real.talksToSessions]).toEqual([
+        b.scope,
+        b.disabledTools,
+        true,
+        true,
+        false,
+      ])
+    }
+    expect(String(itDict["bots.permissions.phoneTextClaude"])).toMatch(/solo nella cartella del progetto/)
+    expect(String(en["bots.permissions.phoneTextClaude"])).toMatch(/only in the project folder/)
+    expect(String(itDict["bots.permissions.phoneTextClaude"])).toMatch(/altre sessioni/)
+    expect(String(en["bots.permissions.phoneTextClaude"])).toMatch(/other sessions/)
   })
 })
