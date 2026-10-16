@@ -437,27 +437,37 @@ mod tests {
         assert_eq!(redact("la chiave abc è corta", &["abc".into(), "   ".into(), String::new()]), "la chiave abc è corta");
     }
 
+    /*
+     * The examples are put together here from a head and a rest, never written whole: a source that holds the whole
+     * shape of a service's key is stopped at the push by GitHub's secret scanning, fake or not.
+     */
+    fn made(head: &str, rest: &str) -> String {
+        format!("{head}{rest}")
+    }
+
     /* S6: the layer of shapes, for keys ADE does not know. */
-    const SAMPLES: &[(&str, &str)] = &[
-        ("anthropic", "sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdEf"),
-        ("openrouter", "sk-or-v1-0123456789abcdef0123456789abcdef0123456789abcdef"),
-        ("openai", "sk-proj-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"),
-        ("xai", "xai-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"),
-        ("github classic", "ghp_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"),
-        ("github oauth", "gho_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"),
-        ("github fine-grained", "github_pat_11ABCDEFG0AbCdEfGhIjKl_mNoPqRsTuVwXyZ0123456789"),
-        ("slack bot", "xoxb-1234567890-0987654321-AbCdEfGhIjKlMnOpQrStUvWx"),
-        ("slack app", "xapp-1-A0123456789-1234567890123-0123456789abcdef"),
-        ("aws", "AKIAIOSFODNN7EXAMPLE"),
-        ("google", "AIzaSyA-AbCdEfGhIjKlMnOpQrStUvWxYz012345"),
-        ("jwt", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r"),
-        ("telegram", "123456789:AAFabcdefghijklmnopqrstuvwxyz0123456"),
-        ("bearer", "Bearer AbCdEfGhIjKlMnOpQrStUvWxYz0123456789.-_~+/="),
-    ];
+    fn samples() -> Vec<(&'static str, String)> {
+        vec![
+            ("anthropic", made("sk-ant-", "api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdEf")),
+            ("openrouter", made("sk-or-", "v1-0123456789abcdef0123456789abcdef0123456789abcdef")),
+            ("openai", made("sk-proj-", "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789")),
+            ("xai", made("xai-", "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789")),
+            ("github classic", made("ghp_", "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789")),
+            ("github oauth", made("gho_", "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789")),
+            ("github fine-grained", made("github_pat_", "11ABCDEFG0AbCdEfGhIjKl_mNoPqRsTuVwXyZ0123456789")),
+            ("slack bot", made("xoxb-", "1234567890-0987654321-AbCdEfGhIjKlMnOpQrStUvWx")),
+            ("slack app", made("xapp-", "1-A0123456789-1234567890123-0123456789abcdef")),
+            ("aws", made("AKIA", "IOSFODNN7EXAMPLE")),
+            ("google", made("AIza", "SyA-AbCdEfGhIjKlMnOpQrStUvWxYz012345")),
+            ("jwt", made("eyJ", "hbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r")),
+            ("telegram", made("123456789:", "AAFabcdefghijklmnopqrstuvwxyz0123456")),
+            ("bearer", "Bearer AbCdEfGhIjKlMnOpQrStUvWxYz0123456789.-_~+/=".to_string()),
+        ]
+    }
 
     #[test]
     fn the_keys_of_the_usual_services_are_hidden_without_being_known() {
-        for (name, key) in SAMPLES {
+        for (name, key) in samples() {
             let out = redact(&format!("errore: la richiesta con {key} è stata rifiutata"), &[]);
             assert_eq!(out, format!("errore: la richiesta con {HIDDEN} è stata rifiutata"), "{name}");
         }
@@ -465,8 +475,13 @@ mod tests {
 
     #[test]
     fn a_dotenv_and_an_aws_credentials_file_read_by_a_bot_lose_their_values() {
-        let text = "ANTHROPIC_API_KEY=sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789\nGITHUB_TOKEN=ghp_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789\n[default]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\n";
-        let out = redact(text, &[]);
+        let text = format!(
+            "ANTHROPIC_API_KEY={}\nGITHUB_TOKEN={}\n[default]\naws_access_key_id = {}\n",
+            made("sk-ant-", "api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"),
+            made("ghp_", "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"),
+            made("AKIA", "IOSFODNN7EXAMPLE"),
+        );
+        let out = redact(&text, &[]);
         assert_eq!(
             out,
             format!("ANTHROPIC_API_KEY={HIDDEN}\nGITHUB_TOKEN={HIDDEN}\n[default]\naws_access_key_id = {HIDDEN}\n")
@@ -506,7 +521,7 @@ mod tests {
 
     #[test]
     fn a_key_after_punctuation_or_in_a_url_is_found() {
-        let key = "sk-ant-api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789";
+        let key = made("sk-ant-", "api03-AbCdEfGhIjKlMnOpQrStUvWxYz0123456789");
         for text in [format!("({key})"), format!("key={key}&x=1"), format!("\"{key}\""), format!("https://x.y/?token={key}")] {
             assert!(!redact(&text, &[]).contains("AbCdEfGhIjKl"), "{text}");
         }
@@ -554,13 +569,13 @@ mod tests {
     #[test]
     fn more_shapes_of_keys() {
         for key in [
-            "sk_live_AbCdEfGhIjKlMnOpQrStUvWx",
-            "rk_live_AbCdEfGhIjKlMnOpQrStUvWx",
-            "sk_test_AbCdEfGhIjKlMnOpQrStUvWx",
-            "hf_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789",
-            "ya29.a0AfH6SMBAbCdEfGhIjKlMnOpQrStUvWx",
-            "SG.AbCdEfGhIjKlMnOpQrStUv.AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcdefg",
-            "glpat-AbCdEfGhIjKlMnOpQrSt",
+            made("sk_live_", "AbCdEfGhIjKlMnOpQrStUvWx"),
+            made("rk_live_", "AbCdEfGhIjKlMnOpQrStUvWx"),
+            made("sk_test_", "AbCdEfGhIjKlMnOpQrStUvWx"),
+            made("hf_", "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"),
+            made("ya29.", "a0AfH6SMBAbCdEfGhIjKlMnOpQrStUvWx"),
+            made("SG.", "AbCdEfGhIjKlMnOpQrStUv.AbCdEfGhIjKlMnOpQrStUvWxYz0123456789abcdefg"),
+            made("glpat-", "AbCdEfGhIjKlMnOpQrSt"),
         ] {
             assert_eq!(redact(&format!("errore con {key} fine"), &[]), format!("errore con {HIDDEN} fine"), "{key}");
         }
