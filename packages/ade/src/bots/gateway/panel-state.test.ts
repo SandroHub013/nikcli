@@ -90,6 +90,8 @@ function fakeApi(initial: Partial<GatewayStatus> = {}) {
       return { url: `https://t.me/mio_bot?start=TOKEN${linkCount}`, svg: "<svg></svg>", expiresMs: Date.UTC(2026, 8, 25, 10, 40) }
     },
     pairingLinkCancel: async (bot, platform) => void calls.push(`cancel ${bot} ${platform}`),
+    wake: async () => void calls.push("wake"),
+    retry: async (bot, platform) => void calls.push(`retry ${bot} ${platform}`),
     listen: async (on) => {
       Object.assign(handlers, on)
       return () => void (stopped = true)
@@ -1021,5 +1023,23 @@ describe("the QR is cancelled when it leaves the screen", () => {
     expect(panel.link().attentionReason).toBe("token non valido")
     panel.dispose()
   })
+
+  test("wakes on online event and retry triggers api retry", async () => {
+    const fake = fakeApi({ enabled: true, running: true, needsAttention: true })
+    const { panel } = panelWith(fake)
+    await panel.ready
+
+    expect(typeof (panel as any).retry).toBe("function")
+    await (panel as any).retry()
+    expect(fake.calls).toContain(`retry ${BOT.path} telegram`)
+
+    window.dispatchEvent(new Event("online"))
+    await wait()
+    expect(fake.calls).toContain("wake")
+
+    panel.dispose()
+  })
 })
+
+
 

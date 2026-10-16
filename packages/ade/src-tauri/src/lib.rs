@@ -2759,6 +2759,8 @@ pub fn run() {
             gateway::gateway_pairing_link_cancel,
             gateway::gateway_slack_manifest,
             gateway::gateway_ack,
+            gateway::gateway_wake,
+            gateway::gateway_retry,
             serve::ragu_serve_start,
             serve::ragu_serve_status,
             serve::ragu_serve_stop,

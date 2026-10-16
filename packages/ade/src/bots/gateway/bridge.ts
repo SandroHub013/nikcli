@@ -88,6 +88,8 @@ export function tauriGatewayPanelApi(): GatewayPanelApi {
     pairingOpen: (bot, platform) => invoke("gateway_pairing_open", { bot, platform }),
     pairingLink: (bot, platform) => invoke("gateway_pairing_link", { bot, platform }),
     pairingLinkCancel: (bot, platform) => invoke("gateway_pairing_link_cancel", { bot, platform }),
+    wake: () => invoke("gateway_wake"),
+    retry: (bot, platform) => invoke("gateway_retry", { bot, platform }),
     async listen(handlers) {
       const { listen } = await import("@tauri-apps/api/event")
       const stops = await Promise.all([

@@ -215,9 +215,11 @@ struct PendingEntry {
 struct Running {
     adapter: Arc<dyn Adapter>,
     stop: watch::Sender<bool>,
+    wake: Arc<tokio::sync::Notify>,
     live: Arc<Mutex<Live>>,
     pending: Arc<Mutex<VecDeque<PendingEntry>>>,
 }
+
 
 /// Which of a link's secrets: the bot's token, or Slack's App-Level Token.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
@@ -737,12 +739,14 @@ impl Hub {
         }
         let pending = Arc::new(Mutex::new(initial_pending));
         let started_at = self.env.now_ms();
+        let wake = Arc::new(tokio::sync::Notify::new());
         let task = Task {
             env: self.env.clone(),
             store: self.store.clone(),
             adapter: adapter.clone(),
             bot: bot.to_string(),
             platform,
+            wake: wake.clone(),
             live: live.clone(),
             pending: pending.clone(),
             secrets: self.secrets(),
@@ -750,8 +754,9 @@ impl Hub {
             started_at,
         };
         tokio::spawn(task.run(stopped, self.ready.subscribe()));
-        self.links().insert((bot.to_string(), platform), Running { adapter, stop, live, pending });
+        self.links().insert((bot.to_string(), platform), Running { adapter, stop, wake, live, pending });
         self.env.status(&LinkStatus {
+
             bot: bot.to_string(),
             platform,
             running: true,
@@ -843,6 +848,68 @@ impl Hub {
         }
         Ok(())
     }
+
+    /// Wakes up all enabled gateways immediately: called when the computer wakes up from sleep or network returns.
+    pub fn wake_all(&self) {
+        let enabled_links: Vec<(String, Platform)> = self
+            .store
+            .read()
+            .links
+            .iter()
+            .filter(|l| l.enabled)
+            .map(|l| (l.bot.clone(), l.platform))
+            .collect();
+        for (bot, platform) in enabled_links {
+            let _ = self.retry(&bot, platform);
+        }
+    }
+
+    /// Wakes up or relaunches the gateway for `bot` on `platform` immediately.
+    pub fn wake(&self, bot: &str, platform: Platform) {
+        let _ = self.retry(bot, platform);
+    }
+
+    /// Retries connecting immediately, resetting backoff if waiting or relaunching if stopped.
+    pub fn retry(&self, bot: &str, platform: Platform) -> Result<(), String> {
+        check_bot(bot)?;
+        let running_active = {
+            let links = self.links();
+            links.get(&(bot.to_string(), platform)).and_then(|r| {
+                let live = r.live.lock().ok()?;
+                if !live.stopped {
+                    Some(r.wake.clone())
+                } else {
+                    None
+                }
+            })
+        };
+        if let Some(wake) = running_active {
+            wake.notify_one();
+        } else {
+            self.relaunch(bot, platform);
+        }
+        Ok(())
+    }
+}
+
+/// Monitors wall-clock time between 1-second sleeps. On Windows, when the PC suspends
+/// (sleep / Modern Standby / hibernation) and resumes, the wall-clock time jumps ahead
+/// by significantly more than the sleep duration (> 5s).
+/// Using a wall-clock comparison avoids Win32 HWND/WndProc hooks and unsafe code,
+/// and reliably works even when ADE is minimized to the system tray.
+pub fn spawn_time_jump_monitor(hub: Arc<Hub>) {
+    tauri::async_runtime::spawn(async move {
+        let mut last = std::time::SystemTime::now();
+        loop {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            let now = std::time::SystemTime::now();
+            let elapsed = now.duration_since(last).unwrap_or(Duration::from_secs(1));
+            last = now;
+            if elapsed >= Duration::from_secs(5) {
+                hub.wake_all();
+            }
+        }
+    });
 }
 
 fn is_cursor_ahead(existing: Option<&str>, candidate: &str) -> bool {
@@ -1156,6 +1223,7 @@ struct Task {
     adapter: Arc<dyn Adapter>,
     bot: String,
     platform: Platform,
+    wake: Arc<tokio::sync::Notify>,
     live: Arc<Mutex<Live>>,
     pending: Arc<Mutex<VecDeque<PendingEntry>>>,
     /// Taken at start; an error or a text holding one of these is cleaned before it is shown.
@@ -1163,6 +1231,7 @@ struct Task {
     backoff: (Duration, Duration),
     started_at: u64,
 }
+
 
 impl Task {
     /// `gateway telegram 3f2a…:` — the bot by the first characters of its key, never its path.
@@ -1267,9 +1336,13 @@ impl Task {
                     tokio::select! {
                         biased;
                         _ = stopped.changed() => break,
-                        _ = tokio::time::sleep(pause) => {}
+                        _ = self.wake.notified() => {
+                            pause = self.backoff.0;
+                        }
+                        _ = tokio::time::sleep(pause) => {
+                            pause = (pause * 2).min(self.backoff.1);
+                        }
                     }
-                    pause = (pause * 2).min(self.backoff.1);
                 }
                 Err(error) => {
                     let error = redact(&error.message(), &self.secrets);
@@ -3246,4 +3319,40 @@ mod tests {
         let previews = adapter.previews.lock().unwrap();
         assert_eq!(*previews, vec![("c42".to_string(), "anteprima parziale".to_string())]);
     }
+
+    #[tokio::test]
+    async fn wake_resets_backoff_pause_and_retries_immediately() {
+        let env = Arc::new(Recorder::default());
+        let made: Made = Arc::default();
+        let record = made.clone();
+        let connect: Connect = Arc::new(move |_platform, tokens: &Tokens, cursor: Option<String>| {
+            let (adapter, feed) = FakeAdapter::new();
+            let token = tokens.bot.clone();
+            record.lock().unwrap().push((token, cursor, adapter.clone(), feed));
+            Ok(adapter as Arc<dyn Adapter>)
+        });
+        let dir = std::env::temp_dir().join(format!("ade-gateway-hub-wake-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("state.json");
+        let hub = Hub::new(env.clone(), Arc::new(MapVault::default()), "ai.nikcli.ade.test.gateway".into(), Arc::new(Store::new(path.clone())), connect)
+            .with_backoff(Duration::from_secs(60), Duration::from_secs(120));
+        hub.ready();
+        let s = Setup { hub, env, path, made, vault: Arc::new(MapVault::default()) };
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+
+        feed.send(Ok(vec![message("1", "c42", "42", "prima")])).unwrap();
+        eventually("primo messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+
+        feed.send(Err(AdapterError::Transient("caduta di connessione".into()))).unwrap();
+        eventually("ricollegamento iniziato", || {
+            s.env.statuses.lock().unwrap().last().is_some_and(|status| status.reconnecting)
+        }).await;
+
+        s.hub.wake(BOT, Platform::Fake);
+
+        feed.send(Ok(vec![message("2", "c42", "42", "dopo wake")])).unwrap();
+        eventually("ricevuto subito dopo wake", || s.env.messages.lock().unwrap().len() == 2).await;
+    }
 }
+

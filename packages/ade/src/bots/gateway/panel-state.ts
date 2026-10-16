@@ -112,6 +112,10 @@ export interface GatewayPanelApi {
   pairingLink?: (bot: string, platform: string) => Promise<PairingLinkInfo>
   /** The QR left the screen: its token is cancelled, so a photo of it pairs nobody. Nothing to cancel is no error. */
   pairingLinkCancel?: (bot: string, platform: string) => Promise<void>
+  /** Wakes all gateways or relaunches them immediately (network restore or wake from sleep). */
+  wake?: () => Promise<void>
+  /** Retries a specific bot gateway immediately, resetting backoff if waiting. */
+  retry?: (bot: string, platform: string) => Promise<void>
   /** `gateway:status`, `gateway:pairing` and `gateway:message`; resolves with the way to stop. */
   listen: (handlers: {
     status: (status: LinkStatus) => void
@@ -252,6 +256,15 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
       setProblemArea(undefined)
     }
   }
+
+  const onOnline = () => {
+    void deps.api.wake?.()
+    void refresh()
+  }
+  if (typeof window !== "undefined") {
+    window.addEventListener("online", onOnline)
+  }
+
 
   /** The requests waiting on the platforms the panel is not looking at: a badge on their tiles. */
   const refreshWaiting = async () => {
@@ -536,10 +549,19 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
 
     /** The link or QR left the screen: see `cancelLink`. */
     cancelLink: () => cancelLink(),
+    /** Retries connecting immediately, resetting backoff if waiting or relaunching if stopped. */
+    retry: () =>
+      act(async () => {
+        await deps.api.retry?.(path(), platform())
+        await refresh()
+      }),
     dispose: () => {
       disposed = true
       void cancelLink()
       stopFailures()
+      if (typeof window !== "undefined") {
+        window.removeEventListener("online", onOnline)
+      }
       unlisten?.()
     },
   }

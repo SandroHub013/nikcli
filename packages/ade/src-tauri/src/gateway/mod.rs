@@ -121,7 +121,9 @@ fn hub(app: &AppHandle) -> Result<Arc<Hub>, String> {
         Arc::new(store::Store::new(path)),
         Arc::new(adapter_for),
     );
-    Ok(state.0.get_or_init(|| Arc::new(made)).clone())
+    let hub_arc = Arc::new(made);
+    hub::spawn_time_jump_monitor(hub_arc.clone());
+    Ok(state.0.get_or_init(|| hub_arc).clone())
 }
 
 /// The adapter for `platform`, reading on from `cursor`.
@@ -302,3 +304,17 @@ pub async fn gateway_pairing_reject(app: AppHandle, bot: String, platform: Platf
 pub async fn gateway_ack(app: AppHandle, bot: String, platform: Platform, chat: String, id: String) -> Result<(), String> {
     hub(&app)?.ack(&bot, platform, &chat, &id)
 }
+
+/// Wakes all gateways or relaunches them immediately (network restore or system resume).
+#[tauri::command]
+pub async fn gateway_wake(app: AppHandle) -> Result<(), String> {
+    hub(&app)?.wake_all();
+    Ok(())
+}
+
+/// Retries connecting immediately, resetting backoff if waiting or relaunching if stopped.
+#[tauri::command]
+pub async fn gateway_retry(app: AppHandle, bot: String, platform: Platform) -> Result<(), String> {
+    hub(&app)?.retry(&bot, platform)
+}
+
