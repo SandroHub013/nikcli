@@ -17,15 +17,13 @@ export interface SplashProps {
 const FADE_MS = 600
 
 /**
- * ADE Splash Screen: Pixel-Art Cooking Scene ("Ragù Code").
+ * ADE Splash Screen: Authentic Reference Cooking Scene ("Ragù Code").
  *
- * Left: Developer stirring, tasting, and thumbs-up in an 8-pose cycle.
- * Center: Canonical Ragu cooking pot boiling, steaming, and lid-bobbing at 8fps.
- * Right: Laptop with ADE code display.
- * Bottom: Colored "Ragù Code" pixel wordmark with grave accent on ù.
+ * Full reference artwork (1672x941) displayed whole with an overlay transparent canvas
+ * animating steam puffs, ragù bubbles with gravity, sparkles, eye blink, and blinking green cursor.
  *
- * Canvas-based rendering with integer pixelated scaling across 800px to 4K displays.
- * Respects prefers-reduced-motion with a single static frame (no animation loop).
+ * Responsive layout scales cleanly across viewports from 800px to 4K displays.
+ * Respects prefers-reduced-motion with the static image only (no animation loop).
  *
  * The workbench keeps this component mounted for the whole session and only
  * flips `visible`. The scene belongs to `SplashView`, which exists exactly as long
@@ -53,6 +51,7 @@ export function Splash(props: SplashProps) {
 }
 
 function SplashView(props: { visible: boolean; status?: string; onDismiss?: () => void }) {
+  let stageRef: HTMLDivElement | undefined
   let canvasRef: HTMLCanvasElement | undefined
   let controller: SceneController | undefined
   let disposed = false
@@ -60,6 +59,7 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
   let restartScene: ((opts?: { prefersReducedMotion?: boolean }) => void) | undefined
 
   const [imageLoaded, setImageLoaded] = createSignal(false)
+
   // Retain last known status message so it does not vanish prematurely during fade-out
   const [displayedStatus, setDisplayedStatus] = createSignal(props.status)
   createEffect(() => {
@@ -75,11 +75,10 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
   }
 
   const handleResize = () => {
-    const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1
     if (controller) {
-      controller.resize(window.innerWidth, window.innerHeight, dpr)
+      controller.resize(window.innerWidth, window.innerHeight)
     } else if (canvasRef) {
-      layoutSceneContainer(canvasRef, window.innerWidth, window.innerHeight, dpr)
+      layoutSceneContainer(canvasRef, window.innerWidth, window.innerHeight)
     }
   }
 
@@ -88,13 +87,21 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
     typeof window.matchMedia === "function" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches
 
-  // P3-8: Stop animation loop immediately when props.visible flips to false (at the start of fade)
+  let wasHidden = false
+  // Stop animation loop immediately when props.visible flips to false (at the start of fade)
   createEffect(() => {
     if (!props.visible) {
       controller?.stop()
-    } else if (startingFired) {
+      wasHidden = true
+    } else if (wasHidden && startingFired && imageLoaded()) {
+      wasHidden = false
       restartScene?.({ prefersReducedMotion: getPrefersReducedMotion() })
     }
+  })
+
+  onCleanup(() => {
+    disposed = true
+    controller?.stop()
   })
 
   onMount(() => {
@@ -104,11 +111,6 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
     canvas.height = 941
     handleResize()
     const appearedAt = performance.now()
-
-    onCleanup(() => {
-      disposed = true
-      controller?.stop()
-    })
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" || e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
@@ -144,12 +146,12 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
       }
     })
 
-    // P3-1 / P3-10: Live listener for prefers-reduced-motion changes
+    // Live listener for prefers-reduced-motion changes (P3-5: handles both reduce and turning back on)
     if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
       const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)")
       const handleMotionChange = (e: MediaQueryListEvent | MediaQueryList) => {
-        if (e.matches && startingFired) {
-          restartScene?.({ prefersReducedMotion: true })
+        if (startingFired && imageLoaded()) {
+          restartScene?.({ prefersReducedMotion: e.matches })
         }
       }
       if (motionQuery.addEventListener) {
@@ -173,19 +175,29 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
       if (!props.visible) return
       if (!sceneIsWorthBuilding(appearedAt, performance.now())) return
 
-      controller?.stop()
-      controller = startPixelScene(canvas, { prefersReducedMotion: getPrefersReducedMotion() })
-      handleResize()
-
       if (typeof Image !== "undefined") {
         try {
           const img = new Image()
           img.src = scenaUrl
+          img.setAttribute("data-slot", "splash-image")
+          img.draggable = false
+          img.alt = ""
+
           const onReady = () => {
-            if (!disposed && props.visible) {
-              setImageLoaded(true)
+            if (disposed || !props.visible) return
+            // P3-2: Insert decoded image element directly into DOM before data-loaded
+            if (stageRef && !stageRef.querySelector('[data-slot="splash-image"]')) {
+              stageRef.insertBefore(img, canvasRef!)
+            }
+            setImageLoaded(true)
+            // P3-1: Animation cycle starts only after image is decoded and ready
+            if (canvas) {
+              controller?.stop()
+              controller = startPixelScene(canvas, { prefersReducedMotion: getPrefersReducedMotion() })
+              handleResize()
             }
           }
+
           if (img.decode) {
             img.decode().then(onReady).catch(() => {})
           } else {
@@ -197,11 +209,16 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
         }
       } else {
         setImageLoaded(true)
+        if (canvas) {
+          controller?.stop()
+          controller = startPixelScene(canvas, { prefersReducedMotion: getPrefersReducedMotion() })
+          handleResize()
+        }
       }
     }, SPLASH_SCENE_DELAY_MS)
 
     restartScene = (opts) => {
-      if (!disposed && canvas && startingFired) {
+      if (!disposed && canvas && startingFired && imageLoaded()) {
         controller?.stop()
         controller = startPixelScene(canvas, opts)
         handleResize()
@@ -222,15 +239,7 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
       aria-modal="true"
     >
       <div data-slot="splash-scene-container">
-        <div data-slot="splash-stage" data-loaded={imageLoaded() ? "" : undefined}>
-          <Show when={imageLoaded()}>
-            <img
-              data-slot="splash-image"
-              src={scenaUrl}
-              alt=""
-              draggable={false}
-            />
-          </Show>
+        <div ref={stageRef} data-slot="splash-stage" data-loaded={imageLoaded() ? "" : undefined}>
           <canvas
             ref={canvasRef}
             data-slot="splash-canvas"

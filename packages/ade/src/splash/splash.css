@@ -1,8 +1,9 @@
 /*
- * ADE Splash Screen: Pixel-Art Cooking Scene ("Ragù Code").
+ * ADE Splash Screen: Reference Cooking Scene ("Ragù Code").
  *
- * Fullscreen ink backdrop with crisp pixel-art canvas centered,
- * integer scaling, status text, and subtle scanlines vignette.
+ * Fullscreen ink backdrop with high-res artwork (1672x941) and transparent
+ * effects canvas overlay (steam, bubbles, sparks, eye blink, cursor),
+ * status text grouped below.
  */
 
 [data-component="ade-splash"],
@@ -75,7 +76,6 @@
 [data-slot="splash-canvas"] {
   display: block;
   image-rendering: pixelated;
-  image-rendering: crisp-edges;
 }
 
 /* Status message under the cooking scene, grouped with the stage */

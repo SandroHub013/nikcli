@@ -25,7 +25,6 @@ export const REF_ASPECT_RATIO = 1672 / 941 // ~1.7768
 
 /** Background color matching the reference image border and splash root. */
 export const SPLASH_BACKGROUND = "#211410"
-export const INK_BACKGROUND = SPLASH_BACKGROUND
 
 export interface StageDimensions {
   width: number
@@ -43,7 +42,7 @@ export interface StageDimensions {
 export function computeStageDimensions(
   viewportWidth: number,
   viewportHeight: number,
-  dpr: number = 1,
+  _dpr: number = 1,
 ): StageDimensions {
   const statusSpace = 48
   const maxW = Math.max(1, viewportWidth * 0.94)
@@ -82,8 +81,8 @@ export function layoutSceneContainer(
 ): number {
   const dims = computeStageDimensions(viewportWidth, viewportHeight, dpr)
 
-  canvas.width = REF_WIDTH
-  canvas.height = REF_HEIGHT
+  if (canvas.width !== REF_WIDTH) canvas.width = REF_WIDTH
+  if (canvas.height !== REF_HEIGHT) canvas.height = REF_HEIGHT
 
   const stage = (canvas.closest?.('[data-slot="splash-stage"]') ?? (canvas.parentElement?.getAttribute("data-slot") === "splash-stage" ? canvas.parentElement : null)) as HTMLElement | null
   const container = (canvas.closest?.('[data-slot="splash-scene-container"]') ?? canvas.parentElement) as HTMLElement | null
@@ -102,7 +101,7 @@ export function layoutSceneContainer(
 }
 
 export interface SceneController {
-  /** Resizes canvas style dimensions to integer scale matching viewport. */
+  /** Resizes stage and container matching viewport. */
   resize: (viewportWidth: number, viewportHeight: number, dpr?: number) => number
   /** Stops the animation loop and frees listeners. */
   stop: () => void
@@ -121,8 +120,8 @@ export function startPixelScene(
   canvas: HTMLCanvasElement,
   options?: StartPixelSceneOptions,
 ): SceneController {
-  canvas.width = REF_WIDTH
-  canvas.height = REF_HEIGHT
+  if (canvas.width !== REF_WIDTH) canvas.width = REF_WIDTH
+  if (canvas.height !== REF_HEIGHT) canvas.height = REF_HEIGHT
 
   const ctx = canvas.getContext("2d")
   if (!ctx) {

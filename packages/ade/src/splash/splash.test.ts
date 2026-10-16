@@ -27,8 +27,11 @@ describe("splash component (step 3)", () => {
   function mountSplash(props: { visible: boolean; status?: string; onDismiss?: () => void }) {
     let disposeFn: (() => void) | undefined
     createRoot((dispose) => {
-      disposeFn = dispose
-      render(() => createComponent(Splash, props), container)
+      const unmount = render(() => createComponent(Splash, props), container)
+      disposeFn = () => {
+        unmount()
+        dispose()
+      }
     })
     return {
       dispose: () => disposeFn?.(),
@@ -318,7 +321,7 @@ describe("splash component (step 3)", () => {
     }
   })
 
-  test("complete lifecycle with mock timers and rAF queue (P2-3)", () => {
+  test("complete lifecycle with mock timers and rAF queue (P2-3)", async () => {
     let currentTime = 1000
     let nextTimerId = 1
     let timers: { id: number; due: number; cb: () => void }[] = []
@@ -469,6 +472,7 @@ describe("splash component (step 3)", () => {
 
       // 2. Advance 1 ms (at 300 ms): scene starts, exactly 1 rAF queued
       advance(1)
+      await Promise.resolve()
       expect(rafs.size).toBe(1)
 
       // Tick rAF: keeps 1 rAF in queue
@@ -492,6 +496,7 @@ describe("splash component (step 3)", () => {
       // 4. Remount during fade: true -> false -> true
       setVisibleSignal(true)
       advance(300)
+      await Promise.resolve()
       expect(rafs.size).toBe(1)
 
       setVisibleSignal(false)
@@ -530,7 +535,7 @@ describe("splash component (step 3)", () => {
     }
   })
 
-  test("dynamically responds to prefers-reduced-motion media query changes (P3-1, P3-10)", () => {
+  test("dynamically responds to prefers-reduced-motion media query changes (P3-1, P3-10)", async () => {
     let currentTime = 1000
     let nextTimerId = 1
     let timers: { id: number; due: number; cb: () => void }[] = []
@@ -618,6 +623,7 @@ describe("splash component (step 3)", () => {
     const handleB = mountSplash({ visible: true })
     try {
       advance(300)
+      await Promise.resolve()
       expect(rafs.size).toBe(1) // loop active
 
       mockMql.matches = true
