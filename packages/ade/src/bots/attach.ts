@@ -132,12 +132,18 @@ export async function checkedFileParts(
   return { parts: attachmentParts(files) }
 }
 
+/**
+ * What goes in the project's `.git/info/exclude`: a comment saying who wrote it, as `session/orchestra.ts` marks its
+ * own line, and the folder. The content of a git file, not a text of the interface: it is the same in every language.
+ */
+const BOT_FILES_EXCLUDE = "# ADE: immagini date ai bot\n.ade/bots/\n"
+
 /** The line a project's `.git/info/exclude` gets for the bots' pictures; undefined when a line there already covers it. */
 export function excludeWithBotFiles(current: string): string | undefined {
   const covered = new Set([".ade/bots/", ".ade/bots", "/.ade/bots/", "/.ade/bots", ".ade/", ".ade", "/.ade/", "/.ade"])
   if (current.split(/\r?\n/).some((line) => covered.has(line.trim()))) return undefined
   const base = current.length === 0 || current.endsWith("\n") ? current : `${current}\n`
-  return `${base}# ADE: immagini date ai bot\n.ade/bots/\n`
+  return `${base}${BOT_FILES_EXCLUDE}`
 }
 
 /**
