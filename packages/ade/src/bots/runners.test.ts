@@ -5,6 +5,7 @@ import {
   applyRunnerLine,
   codexMcpNames,
   codexOptionsRefused,
+  codexSandboxCannotRead,
   enforcesDisabledTools,
   finalText,
   formatUsd,
@@ -81,6 +82,28 @@ describe("gli argomenti di un turno", () => {
     const next = turnCommand(runnerById("codex"), { bot, message: "e poi?", sessionId: "t-1" })
     expect(next.args.slice(0, 3)).toEqual(["exec", "resume", "--json"])
     expect(next.args.slice(-2)).toEqual(["t-1", "e poi?"])
+  })
+
+  /*
+   * bot-lettura-2: in Claude Code 2.1.301 the subagent is `Agent`, and `Task` still its alias (a fake provider:
+   * `--tools Task` offers `Agent`, `--disallowedTools Task` takes it away); the old name stays for an older Claude
+   * Code. The todo list is `TaskCreate`, `TaskGet`, `TaskList` and `TaskUpdate`: `TodoWrite` alone gives none.
+   */
+  test("Claude Code: il sottoagente e le todo con i nomi di oggi, e quelli vecchi accanto", () => {
+    const list = (args: readonly string[], flag: string) => (args[args.indexOf(flag) + 1] ?? "").split(",")
+    const own: AgentFile = { ...bot, scope: "global" }
+    const names = ["Agent", "Task", "TodoWrite", "TaskCreate", "TaskGet", "TaskList", "TaskUpdate"]
+    const on = turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true }).args
+    for (const name of names) expect([name, list(on, "--allowedTools").includes(name)]).toEqual([name, true])
+    const off = turnCommand(runnerById("claude"), {
+      bot: { ...own, disabledTools: ["task", "todowrite"] },
+      message: "x",
+      lean: true,
+    }).args
+    for (const name of names) {
+      expect([name, list(off, "--allowedTools").includes(name)]).toEqual([name, false])
+      expect([name, list(off, "--disallowedTools").includes(name)]).toEqual([name, true])
+    }
   })
 
   test("un turno leggero di Claude Code salta MCP e impostazioni utente, ma può usare ade-msg", () => {
@@ -644,33 +667,73 @@ describe("un turno da chat non ha la shell", () => {
    * scrivevano da telefono anche fuori dal progetto, per esempio negli hook di ~/.claude/settings.json. Nel progetto
    * scrive `acceptEdits` da solo (provato su claude 2.1.301 con un finto provider).
    */
-  test("Claude: da chat un bot che scrive scrive solo nella cartella del progetto", () => {
+  /*
+   * bot-lettura-2, la scelta di Master: anche nel pannello, dove la lettura resta libera, si scrive solo nel progetto.
+   */
+  test("Claude: da chat e nel pannello un bot che scrive scrive solo nella cartella del progetto", () => {
     const own: AgentFile = { ...mine, runner: "claude" }
-    for (const remote of [off, on]) {
-      const { args } = turnCommand(runnerById("claude"), { bot: own, message: "x", remote })
+    for (const spec of [{ remote: off }, { remote: on }, { lean: true }, {}, { lean: true, approvals: true }]) {
+      const { args } = turnCommand(runnerById("claude"), { bot: own, message: "x", ...spec })
       for (const name of ["Edit", "NotebookEdit", "Write"])
-        expect([remote, name, allowedOf(args).includes(name)]).toEqual([remote, name, false])
-      expect(args[args.indexOf("--permission-mode") + 1]).toBe("acceptEdits")
+        expect([spec, name, allowedOf(args).includes(name)]).toEqual([spec, name, false])
+      expect([spec, args[args.indexOf("--permission-mode") + 1]]).toEqual([spec, "acceptEdits"])
     }
-    // Nel pannello resta com'è.
+    // Nel pannello `ade-msg` resta.
     const panel = turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true }).args
-    for (const name of ["Edit", "NotebookEdit", "Write"]) expect(allowedOf(panel)).toContain(name)
+    expect(allowedOf(panel)).toContain("Bash(ade-msg *)")
+    const noShell = { ...own, disabledTools: ["bash"] }
+    expect(allowedOf(turnCommand(runnerById("claude"), { bot: noShell, message: "x", lean: true }).args)).toContain(
+      "PowerShell(ade-msg *)",
+    )
+  })
+
+  /*
+   * bot-lettura-2: da chat e nelle routine un elenco chiuso (`--tools`), così uno strumento nuovo di Claude Code non
+   * entra da solo: `Agent`, `CronCreate`, `ScheduleWakeup`, `EnterWorktree`, `Skill` erano offerti. Provato su 2.1.301
+   * con un finto provider: offerti solo quelli nominati, e un nome sconosciuto si ignora.
+   */
+  test("Claude: da chat e nelle routine solo gli strumenti voluti", () => {
+    const own: AgentFile = { ...mine, runner: "claude" }
+    const tools = (spec: object, b: AgentFile = own) => {
+      const { args } = turnCommand(runnerById("claude"), { bot: b, message: "x", ...spec })
+      return args.includes("--tools") ? (args[args.indexOf("--tools") + 1] ?? "").split(",").sort() : undefined
+    }
+    const reads = ["Glob", "Grep", "Read", "TaskCreate", "TaskGet", "TaskList", "TaskUpdate", "TodoWrite"]
+    const writes = ["Edit", "NotebookEdit", "Write"]
+    for (const remote of [off, on]) expect([remote, tools({ remote })]).toEqual([remote, [...reads, ...writes].sort()])
+    for (const spec of [{ unattended: true }, { unattended: true, lean: true }]) expect(tools(spec)).toEqual(reads)
+    expect(tools({ remote: off }, { ...own, disabledTools: ["edit", "write"] })).toEqual(reads)
+    expect(tools({ remote: off }, { ...own, disabledTools: ["read", "todowrite"] })).toEqual(
+      ["Glob", "Grep", ...writes].sort(),
+    )
+    // Un bot di progetto da chat scrive nel progetto, fuori dalle cartelle che eseguono dopo.
+    expect(tools({ remote: off }, { ...own, scope: "project" })).toEqual([...reads, ...writes].sort())
+    // Nel pannello nessun elenco; il pianificatore della voce resta senza strumenti.
+    expect(tools({ lean: true })).toBeUndefined()
+    expect(tools({})).toBeUndefined()
+    expect(tools({ remote: off, noTools: true })).toEqual([""])
   })
 
   /*
    * `ListAgents` e `SendMessage` di Claude Code girano in `-p` senza domanda (claude 2.1.301, finto provider): da
-   * telefono un turno poteva scrivere a un'altra sessione Claude della macchina, magari in `bypassPermissions`.
+   * telefono un turno poteva scrivere a un'altra sessione Claude della macchina, magari in `bypassPermissions`. Nel
+   * pannello pure (bot-lettura-2): i bot parlano alle sessioni con `ade-msg`, che passa da ADE.
    */
-  test("Claude: da chat e in una routine niente messaggi alle altre sessioni", () => {
+  test("Claude: da chat, in una routine e nel pannello niente messaggi alle altre sessioni", () => {
     const own: AgentFile = { ...mine, runner: "claude" }
-    for (const spec of [{ remote: off }, { remote: on }, { unattended: true }, { unattended: true, lean: true }]) {
+    const specs = [
+      { remote: off },
+      { remote: on },
+      { unattended: true },
+      { unattended: true, lean: true },
+      { lean: true },
+      {},
+    ]
+    for (const spec of specs) {
       const { args } = turnCommand(runnerById("claude"), { bot: own, message: "x", ...spec })
       for (const name of ["ListAgents", "SendMessage"])
         expect([spec, name, disallowedOf(args).includes(name)]).toEqual([spec, name, true])
     }
-    // Nel pannello resta com'è.
-    const panel = turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true }).args
-    expect(disallowedOf(panel)).not.toContain("SendMessage")
   })
 
   /*
@@ -729,6 +792,43 @@ describe("un turno da chat non ha la shell", () => {
       expect(options(args).join(" ")).not.toContain("mcp_servers.")
     }
   })
+
+  /*
+   * bot-lettura-2, la scelta di Master: da chat e nelle routine Codex legge solo il progetto, o non parte. Il sandbox
+   * `read-only` legge tutto il disco, ~/.ssh compreso. Un profilo di permessi di ADE legge il progetto e i percorsi che
+   * servono agli strumenti (`:minimal`), e `prefer_mxc` lo fa girare nell'isolamento MXC di Windows dove c'è, senza
+   * setup da amministratore. Provato su codex-cli 0.162.1 con un provider finto: dentro legge, fuori «non trovato».
+   */
+  test("Codex: da chat e nelle routine il profilo che legge solo il progetto, in ogni forma del comando", () => {
+    const own: AgentFile = { ...mine, runner: "codex" }
+    const project = [
+      'permissions.ade_project.filesystem={":minimal"="read",":workspace_roots"={"."="read"}}',
+      'default_permissions="ade_project"',
+      "features.prefer_mxc=true",
+    ]
+    for (const spec of [{ remote: off }, { remote: on }, { unattended: true }]) {
+      for (const codexMcpServers of [["docs"], undefined]) {
+        for (const sessionId of [undefined, "s1"]) {
+          const { args } = turnCommand(runnerById("codex"), {
+            bot: own,
+            message: "x",
+            ...spec,
+            ...(codexMcpServers ? { codexMcpServers } : {}),
+            ...(sessionId ? { sessionId } : {}),
+          })
+          const at = [spec, codexMcpServers, sessionId]
+          for (const setting of project) expect([...at, setting, setBy(args, setting)]).toEqual([...at, setting, "-c"])
+          // Un Codex che non conosce i profili resta almeno in sola lettura.
+          expect([...at, setBy(args, 'sandbox_mode="read-only"')]).toEqual([...at, "-c"])
+          // Nessuno spazio: passa per lo shim .cmd di npm.
+          expect([...at, options(args).filter((arg) => /\s/.test(arg))]).toEqual([...at, []])
+        }
+      }
+    }
+    // Nel pannello no.
+    const panel = turnCommand(runnerById("codex"), { bot: own, message: "x" }).args
+    for (const setting of project) expect(panel).not.toContain(setting)
+  })
 })
 
 /*
@@ -782,6 +882,22 @@ describe("why a Codex turn from a chat or a routine failed", () => {
       expect([said, codexOptionsRefused(said)]).toEqual([said, true])
     expect(codexOptionsRefused("stream disconnected before completion")).toBe(false)
     expect(codexOptionsRefused(undefined)).toBe(false)
+  })
+
+  /* The line codex-cli 0.162.1 prints on the `unelevated` sandbox, before any model call; `turn.ts` keeps 300 characters. */
+  test("a sandbox that cannot keep reads in the project is told apart from refused options", () => {
+    const line =
+      "Error: thread/start: thread/start failed: error creating thread: failed to load AGENTS.md instructions for environment `local`: failed to prepare fs sandbox: failed to prepare windows sandbox wrapper: windows unelevated restricted-token sandbox cannot enforce split filesystem read restrictions directly; refusing to run unsandboxed (code -32603)"
+    expect(codexSandboxCannotRead(line.slice(0, 300))).toBe(true)
+    expect(codexOptionsRefused(line.slice(0, 300))).toBe(false)
+    // `codex sandbox` says it this way.
+    expect(
+      codexSandboxCannotRead(
+        "windows sandbox failed: Restricted read-only access requires the elevated Windows sandbox backend",
+      ),
+    ).toBe(true)
+    expect(codexSandboxCannotRead("stream disconnected before completion")).toBe(false)
+    expect(codexSandboxCannotRead(undefined)).toBe(false)
   })
 })
 
