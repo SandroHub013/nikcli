@@ -3,7 +3,7 @@ import { t } from "../i18n"
 import type { AlwaysStore } from "./approval"
 import { offersRemoteCommands, remoteKey, remoteTools, type RemoteStore } from "./gateway/remote"
 import { alwaysApplies, alwaysText } from "./permissions-always"
-import { conversationText, phoneText, remoteNeverKey, routinesTextKey } from "./permissions-facts"
+import { conversationText, phoneText, routinesTextKey } from "./permissions-facts"
 import type { AgentFile } from "./ragu"
 import { runnerById } from "./runners"
 
@@ -66,10 +66,8 @@ export function PermissionsSection(props: {
           </h3>
           <p data-slot="bots-hint">{t(phone().key)}</p>
           <p data-slot="bots-hint">{phone().edits ? t("bots.permissions.edits") : t("bots.permissions.noEdits")}</p>
-          <Show
-            when={offersRemoteCommands(props.bot.runner)}
-            fallback={<p data-slot="bots-hint">{t(remoteNeverKey(props.bot), runner().label)}</p>}
-          >
+          {/* No switch for Claude Code and Codex: the text above already says what they do from a chat, so it is not said twice. */}
+          <Show when={offersRemoteCommands(props.bot.runner)}>
             <ul data-slot="gateway-list">
               <For each={PLATFORMS}>
                 {(platform) => (
