@@ -84,6 +84,8 @@ pub struct Inbound {
     pub button: bool,
     /// The stream cursor corresponding to this message, if the platform provides one.
     pub cursor: Option<String>,
+    /// When the message was sent on the platform, if known.
+    pub timestamp_ms: Option<u64>,
 }
 
 /// Whether the hub hands a message to the page.
@@ -160,6 +162,8 @@ pub trait Adapter: Send + Sync {
     fn cursor(&self) -> Option<String> {
         None
     }
+    /// Confirms that messages up to `cursor` were delivered to the frontend.
+    fn ack(&self, _cursor: &str) {}
     /// Messages already confirmed to the platform and still waiting here to
     /// be read: a stop leaves them behind, and a platform without a cursor
     /// does not send them again. Only counted, for the log.

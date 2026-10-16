@@ -1,11 +1,13 @@
 //! The gateways' core: one task per bot and platform that is switched on.
 //!
 //! Each task reads its adapter and decides, here in Rust, what reaches the
-//! page: a message from an authorized sender, in a private chat, from a
-//! person and not a bot. Anything else stops here, so a stranger's text never
-//! becomes a turn: a stranger gets a pairing code instead (`authz.rs`), and
-//! becomes authorized only when the user types it in ADE. The page answers with `send`, which goes only to chats an
-//! authorized sender wrote from and loses every known secret on the way out.
+//! page: a message from an authorized sender, in a private chat or mentioning
+//! the bot in a group channel (or a button press), from a person and not a
+//! bot. Anything else stops here, so a stranger's text never becomes a turn: a
+//! stranger gets a pairing code instead (`authz.rs`), and becomes authorized
+//! only when the user types it in ADE. The page answers with `send`, which goes
+//! only to chats an authorized sender wrote from and loses every known secret
+//! on the way out.
 //!
 //! Nothing here needs the app: the events, the log and the secrets to hide
 //! come through `Env`, the keychain through `Vault`, so the tests drive it
@@ -24,7 +26,7 @@ use std::time::Duration;
 use tokio::sync::watch;
 
 /// A message for the page: from an authorized sender, secrets already out.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GatewayMessage {
     pub bot: String,
@@ -41,6 +43,8 @@ pub struct GatewayMessage {
     /// A one-to-one chat with the bot. A channel others read is not: no question about a command or a file goes
     /// there, whoever asked in it (review of the bots, S17).
     pub private: bool,
+    #[serde(default)]
+    pub recovered: bool,
 }
 
 /// How many buttons a message may carry, and how long their parts may be:
@@ -48,8 +52,10 @@ pub struct GatewayMessage {
 const MAX_BUTTONS: usize = 12;
 const MAX_BUTTON_DATA: usize = 64;
 const MAX_BUTTON_LABEL: usize = 64;
+const PENDING_CAP: usize = 1_000;
+const DISK_PENDING_CAP: usize = 200;
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MessageSender {
     pub id: String,
     pub name: String,
@@ -158,11 +164,19 @@ struct Live {
     stopped: bool,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct PendingEntry {
+    msg: GatewayMessage,
+    cursor: Option<String>,
+    #[serde(default)]
+    acked: bool,
+}
+
 struct Running {
     adapter: Arc<dyn Adapter>,
     stop: watch::Sender<bool>,
     live: Arc<Mutex<Live>>,
-    pending: Arc<Mutex<VecDeque<(GatewayMessage, Option<String>)>>>,
+    pending: Arc<Mutex<VecDeque<PendingEntry>>>,
 }
 
 /// Which of a link's secrets: the bot's token, or Slack's App-Level Token.
@@ -218,11 +232,79 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+fn pending_file_path(store_path: &std::path::Path, bot: &str, platform: Platform) -> std::path::PathBuf {
+    let dir = store_path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    dir.join(format!("pending-{}-{}.json", &bot_key(bot)[..16], platform.id()))
+}
+
+fn write_pending_file(path: &std::path::Path, entries: &[PendingEntry]) -> Result<(), String> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("registro consegne: {e}"))?;
+    }
+    let text = serde_json::to_string_pretty(entries).map_err(|e| e.to_string())?;
+    let temp = path.with_extension("json.tmp");
+    let mut file = std::fs::File::create(&temp).map_err(|e| format!("registro consegne: {e}"))?;
+    use std::io::Write;
+    file.write_all(text.as_bytes()).map_err(|e| format!("registro consegne: {e}"))?;
+    file.sync_all().map_err(|e| format!("registro consegne: {e}"))?;
+    drop(file);
+    std::fs::rename(&temp, path).map_err(|e| format!("registro consegne: {e}"))
+}
+
+fn read_pending_file(path: &std::path::Path) -> Vec<PendingEntry> {
+    if !path.exists() {
+        return Vec::new();
+    }
+    let raw = match std::fs::read(path) {
+        Ok(b) => b,
+        Err(_) => return Vec::new(),
+    };
+    let mut entries = serde_json::from_slice::<Vec<PendingEntry>>(&raw).unwrap_or_default();
+    if entries.len() > DISK_PENDING_CAP {
+        let dropped = entries.len() - DISK_PENDING_CAP;
+        entries.drain(0..dropped);
+    }
+    entries
+}
+
+fn remove_pending_file(path: &std::path::Path) {
+    if path.exists() {
+        let _ = std::fs::remove_file(path);
+    }
+    let tmp = path.with_extension("json.tmp");
+    if tmp.exists() {
+        let _ = std::fs::remove_file(tmp);
+    }
+}
+
+fn save_pending_to_disk(
+    env: &dyn Env,
+    store_path: &std::path::Path,
+    bot: &str,
+    platform: Platform,
+    pending: &VecDeque<PendingEntry>,
+) {
+    let path = pending_file_path(store_path, bot, platform);
+    let mut unacked: Vec<PendingEntry> = pending.iter().filter(|entry| !entry.acked).cloned().collect();
+    if unacked.len() > DISK_PENDING_CAP {
+        let dropped = unacked.len() - DISK_PENDING_CAP;
+        unacked.drain(0..dropped);
+        let tag = format!("gateway {} {}", platform.id(), &bot_key(bot)[..8]);
+        env.log(&format!("{tag}: registro delle consegne su disco ha superato il tetto ({DISK_PENDING_CAP}): eliminati {dropped} messaggi più vecchi"));
+    }
+    if unacked.is_empty() {
+        remove_pending_file(&path);
+    } else {
+        let _ = write_pending_file(&path, &unacked);
+    }
+}
+
 /// Every token of every link in the gateway's state, out of the vault: for the uninstall that is asked to delete the data. The state file is
 /// left to whoever removes the folder. A token the keychain will not give up is reported and does not stop the others.
 pub fn forget_all_tokens(vault: &dyn Vault, service: &str, state: &std::path::Path) -> crate::secrets::Forgotten {
     let mut out = crate::secrets::Forgotten::default();
     for link in Store::new(state.to_path_buf()).read().links {
+        remove_pending_file(&pending_file_path(state, &link.bot, link.platform));
         out.one(&token_name(&link.bot, link.platform), vault.delete(service, &token_name(&link.bot, link.platform)));
         if link.platform.needs_app_token() {
             let app = secret_name(&link.bot, link.platform, TokenKind::App);
@@ -401,6 +483,7 @@ impl Hub {
         check_bot(bot)?;
         self.halt(bot, platform);
         self.failed().remove(&(bot.to_string(), platform));
+        remove_pending_file(&pending_file_path(self.store.path(), bot, platform));
         let _keychain = self.keychain();
         self.vault.delete(&self.service, &token_name(bot, platform))?;
         if platform.needs_app_token() {
@@ -433,6 +516,9 @@ impl Hub {
             if !platforms.contains(&link.platform) {
                 platforms.push(link.platform);
             }
+        }
+        for platform in &platforms {
+            remove_pending_file(&pending_file_path(self.store.path(), bot, *platform));
         }
         // Every platform is tried, whatever failed before it: one keychain
         // error must not leave the next platforms with their tokens.
@@ -536,17 +622,28 @@ impl Hub {
 
     /// The page listens for `gateway:message`: the gateways may read.
     pub fn ready(&self) {
-        self.ready.send_replace(true);
         let pending: Vec<GatewayMessage> = {
             let links = self.links();
             links
                 .values()
-                .flat_map(|r| r.pending.lock().unwrap().iter().map(|(msg, _)| msg.clone()).collect::<Vec<_>>())
+                .flat_map(|r| {
+                    r.pending
+                        .lock()
+                        .unwrap()
+                        .iter_mut()
+                        .filter(|entry| !entry.acked)
+                        .map(|entry| {
+                            entry.msg.recovered = true;
+                            entry.msg.clone()
+                        })
+                        .collect::<Vec<_>>()
+                })
                 .collect()
         };
         for msg in pending {
             self.env.message(&msg);
         }
+        self.ready.send_replace(true);
     }
 
     /// The page is loading again (a reload, a renderer that crashed): its
@@ -581,7 +678,17 @@ impl Hub {
         self.failed().remove(&(bot.to_string(), platform));
         let (stop, stopped) = watch::channel(false);
         let live = Arc::new(Mutex::new(Live::default()));
-        let pending = Arc::new(Mutex::new(VecDeque::new()));
+        let mut initial_pending: VecDeque<PendingEntry> =
+            read_pending_file(&pending_file_path(self.store.path(), bot, platform)).into();
+        let ready_now = *self.ready.borrow();
+        if ready_now {
+            for entry in initial_pending.iter_mut().filter(|entry| !entry.acked) {
+                entry.msg.recovered = true;
+                self.env.message(&entry.msg);
+            }
+        }
+        let pending = Arc::new(Mutex::new(initial_pending));
+        let started_at = self.env.now_ms();
         let task = Task {
             env: self.env.clone(),
             store: self.store.clone(),
@@ -592,6 +699,7 @@ impl Hub {
             pending: pending.clone(),
             secrets: self.secrets(),
             backoff: self.backoff,
+            started_at,
         };
         tokio::spawn(task.run(stopped, self.ready.subscribe()));
         self.links().insert((bot.to_string(), platform), Running { adapter, stop, live, pending });
@@ -630,33 +738,61 @@ impl Hub {
     /// The webview acknowledged receipt of a message: advance the cursor up to this message in state.json.
     pub fn ack(&self, bot: &str, platform: Platform, chat: &str, id: &str) -> Result<(), String> {
         check_bot(bot)?;
-        let running = self.links().get(&(bot.to_string(), platform)).map(|r| r.pending.clone());
-        let Some(pending_lock) = running else {
-            return Ok(());
+        let (adapter, pending_lock) = match self.links().get(&(bot.to_string(), platform)) {
+            Some(r) => (r.adapter.clone(), r.pending.clone()),
+            None => return Ok(()),
         };
         let mut cursor_to_save = None;
         {
             let mut pending = pending_lock.lock().unwrap();
-            if let Some(pos) = pending.iter().position(|(m, _)| m.chat == chat && m.id == id) {
-                for _ in 0..=pos {
-                    if let Some((_, c)) = pending.pop_front() {
-                        if c.is_some() {
-                            cursor_to_save = c;
-                        }
-                    }
+            if let Some(entry) = pending.iter_mut().find(|entry| entry.msg.chat == chat && entry.msg.id == id) {
+                entry.acked = true;
+            }
+            while pending.front().map_or(false, |entry| entry.acked) {
+                let popped = pending.pop_front().unwrap();
+                if popped.cursor.is_some() {
+                    cursor_to_save = popped.cursor;
                 }
             }
+            save_pending_to_disk(&*self.env, self.store.path(), bot, platform, &pending);
         }
         if let Some(cursor) = cursor_to_save {
+            adapter.ack(&cursor);
             let written_at = self.env.now_ms();
             self.store.update(bot, platform, |link, _| {
-                link.cursor = Some(cursor.clone());
-                link.cursor_saved_ms = Some(written_at);
+                if is_cursor_ahead(link.cursor.as_deref(), &cursor) {
+                    link.cursor = Some(cursor.clone());
+                    link.cursor_saved_ms = Some(written_at);
+                }
                 Ok(())
             })?;
         }
         Ok(())
     }
+}
+
+fn is_cursor_ahead(existing: Option<&str>, candidate: &str) -> bool {
+    let Some(existing) = existing else {
+        return true;
+    };
+    if let (Ok(c), Ok(e)) = (candidate.parse::<i64>(), existing.parse::<i64>()) {
+        return c > e;
+    }
+    if let (Ok(c_val), Ok(e_val)) = (
+        serde_json::from_str::<serde_json::Value>(candidate),
+        serde_json::from_str::<serde_json::Value>(existing),
+    ) {
+        if let (Some(c_seq), Some(e_seq)) = (
+            c_val.get("seq").and_then(|v| v.as_i64()),
+            e_val.get("seq").and_then(|v| v.as_i64()),
+        ) {
+            return c_seq > e_seq;
+        }
+    }
+    candidate != existing
+}
+
+impl Hub {
 
     /* ── replies ───────────────────────────────────────────────────────── */
 
@@ -873,10 +1009,11 @@ struct Task {
     bot: String,
     platform: Platform,
     live: Arc<Mutex<Live>>,
-    pending: Arc<Mutex<VecDeque<(GatewayMessage, Option<String>)>>>,
+    pending: Arc<Mutex<VecDeque<PendingEntry>>>,
     /// Taken at start; an error or a text holding one of these is cleaned before it is shown.
     secrets: Vec<String>,
     backoff: (Duration, Duration),
+    started_at: u64,
 }
 
 impl Task {
@@ -943,7 +1080,7 @@ impl Task {
                     for message in batch {
                         self.deliver(message).await;
                     }
-                    if self.pending.lock().unwrap().is_empty() {
+                    if self.pending.lock().unwrap().iter().all(|entry| entry.acked) {
                         self.save_cursor();
                     }
                 }
@@ -997,11 +1134,10 @@ impl Task {
         }
         let written_at = self.env.now_ms();
         if let Err(error) = self.store.update(&self.bot, self.platform, |link, _| {
-            link.cursor = Some(cursor.clone());
-            // When, so a platform whose cursor carries a session can tell an
-            // old one from a fresh one instead of resuming a session the
-            // other end has already forgotten.
-            link.cursor_saved_ms = Some(written_at);
+            if is_cursor_ahead(link.cursor.as_deref(), &cursor) {
+                link.cursor = Some(cursor.clone());
+                link.cursor_saved_ms = Some(written_at);
+            }
             Ok(())
         }) {
             self.env.log(&format!("{}: posizione non salvata: {error}", self.tag()));
@@ -1049,6 +1185,7 @@ impl Task {
         let redacted = name != message.sender.name || text != message.text;
         // Whoever writes chose that name: no control or direction characters, not too long.
         let name = authz::clean_name(&name);
+        let recovered = message.timestamp_ms.is_some_and(|ts| ts < self.started_at);
         let msg = GatewayMessage {
             bot: self.bot.clone(),
             platform: self.platform,
@@ -1059,9 +1196,21 @@ impl Task {
             redacted,
             button: message.button,
             private: message.private,
+            recovered,
         };
         let cursor = message.cursor.clone().or_else(|| self.adapter.cursor());
-        self.pending.lock().unwrap().push_back((msg.clone(), cursor));
+        let mut pending = self.pending.lock().unwrap();
+        if pending.iter().any(|entry| entry.msg.chat == msg.chat && entry.msg.id == msg.id) {
+            self.env.log(&format!("{tag}: ignorato un messaggio già in coda"));
+            return;
+        }
+        if pending.len() >= PENDING_CAP {
+            self.env.log(&format!("{tag}: coda dei messaggi in attesa piena ({PENDING_CAP}): messaggio scartato"));
+            return;
+        }
+        pending.push_back(PendingEntry { msg: msg.clone(), cursor, acked: false });
+        save_pending_to_disk(&*self.env, self.store.path(), &self.bot, self.platform, &pending);
+        drop(pending);
         self.env.message(&msg);
         self.report(|live| live.last_message_ms = Some(at));
     }
@@ -1242,6 +1391,7 @@ mod tests {
         env: Arc<Recorder>,
         path: std::path::PathBuf,
         made: Made,
+        vault: Arc<dyn Vault>,
     }
 
     fn setup(name: &str) -> Setup {
@@ -1272,10 +1422,10 @@ mod tests {
             record.lock().unwrap().push((token, cursor, adapter.clone(), feed));
             Ok(adapter as Arc<dyn Adapter>)
         });
-        let hub = Hub::new(env.clone(), vault, "ai.nikcli.ade.test.gateway".into(), Arc::new(Store::new(path.clone())), connect)
+        let hub = Hub::new(env.clone(), vault.clone(), "ai.nikcli.ade.test.gateway".into(), Arc::new(Store::new(path.clone())), connect)
             .with_backoff(Duration::from_millis(5), Duration::from_millis(20));
         hub.ready();
-        Setup { hub, env, path, made }
+        Setup { hub, env, path, made, vault }
     }
 
     /// The last adapter the hub made, and the feed that drives it.
@@ -1306,6 +1456,7 @@ mod tests {
             text: text.into(),
             button: false,
             cursor: None,
+            timestamp_ms: None,
         }
     }
 
@@ -1971,8 +2122,8 @@ mod tests {
             record.lock().unwrap().push((token, cursor, adapter.clone(), feed));
             Ok(adapter as Arc<dyn Adapter>)
         });
-        let hub = Hub::new(env.clone(), vault, "ai.nikcli.ade.test.gateway".into(), Arc::new(Store::new(path.clone())), connect);
-        let s = Setup { hub, env, path, made };
+        let hub = Hub::new(env.clone(), vault.clone(), "ai.nikcli.ade.test.gateway".into(), Arc::new(Store::new(path.clone())), connect);
+        let s = Setup { hub, env, path, made, vault };
         s.hub.resume();
         {
             let made = s.made.lock().unwrap();
@@ -2174,6 +2325,96 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn ack_only_saves_a_cursor_ahead_of_existing_cursor() {
+        let s = setup("cursor-monotonic");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        // Pretend store already has cursor 501:
+        s.hub.store.update(BOT, Platform::Fake, |link, _| {
+            link.cursor = Some("501".into());
+            Ok(())
+        }).unwrap();
+
+        // Feed message with older cursor 500:
+        *adapter.position.lock().unwrap() = Some("500".into());
+        feed.send(Ok(vec![message("499", "c42", "42", "vecchio")])).unwrap();
+        eventually("il messaggio emesso", || s.env.messages.lock().unwrap().len() == 1).await;
+
+        s.hub.ack(BOT, Platform::Fake, "c42", "499").unwrap();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+
+        // An older cursor must NOT overwrite a newer cursor:
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref(), Some("501"));
+
+        // Feed message with newer cursor 502:
+        *adapter.position.lock().unwrap() = Some("502".into());
+        feed.send(Ok(vec![message("501", "c42", "42", "nuovo")])).unwrap();
+        eventually("il secondo messaggio emesso", || s.env.messages.lock().unwrap().len() == 2).await;
+
+        s.hub.ack(BOT, Platform::Fake, "c42", "501").unwrap();
+        eventually("il cursore avanzato", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("502")).await;
+    }
+
+    #[tokio::test]
+    async fn ack_only_removes_that_message_and_cursor_only_advances_when_preceding_are_confirmed() {
+        let s = setup("sliding-window-ack");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+
+        feed.send(Ok(vec![
+            Inbound { cursor: Some("101".into()), ..message("100", "c42", "42", "primo") },
+            Inbound { cursor: Some("103".into()), ..message("102", "c42", "42", "secondo") },
+        ])).unwrap();
+        eventually("due messaggi emessi", || s.env.messages.lock().unwrap().len() == 2).await;
+
+        // Acknowledging the second message while the first is unacknowledged:
+        s.hub.ack(BOT, Platform::Fake, "c42", "102").unwrap();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+
+        // The cursor must NOT advance to 103 yet, because message 100 before it is unconfirmed:
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor, None);
+
+        // Page reloads:
+        s.hub.unready();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        s.hub.ready();
+
+        // Only message 100 was unacknowledged, so only message 100 is re-emitted (total 3 messages):
+        eventually("solo il primo riemesso", || s.env.messages.lock().unwrap().len() == 3).await;
+        assert_eq!(s.env.messages.lock().unwrap()[2].id, "100");
+
+        // Now acknowledge the first message:
+        s.hub.ack(BOT, Platform::Fake, "c42", "100").unwrap();
+        // Since both 100 and 102 are now confirmed, cursor advances to 103:
+        eventually("il cursore avanza a 103", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("103")).await;
+    }
+
+    #[tokio::test]
+    async fn a_message_sent_while_ade_was_closed_is_marked_as_recovered() {
+        let s = setup("recovered-notice");
+        authorize(&s, "42");
+        s.env.later.store(100_000, std::sync::atomic::Ordering::SeqCst);
+        let (_adapter, feed) = start(&s);
+
+        // A message timestamped earlier than start:
+        let old_msg = Inbound {
+            timestamp_ms: Some(50_000),
+            ..message("1", "c42", "42", "mentre ADE era chiusa")
+        };
+        // A live message timestamped after start:
+        let live_msg = Inbound {
+            timestamp_ms: Some(150_000),
+            ..message("2", "c42", "42", "in diretta")
+        };
+        feed.send(Ok(vec![old_msg, live_msg])).unwrap();
+        eventually("due messaggi emessi", || s.env.messages.lock().unwrap().len() == 2).await;
+
+        let messages = s.env.messages.lock().unwrap().clone();
+        assert!(messages[0].recovered, "il messaggio prima dell'avvio deve essere contrassegnato come recuperato");
+        assert!(!messages[1].recovered, "il messaggio dopo l'avvio non deve essere contrassegnato come recuperato");
+    }
+
+    #[tokio::test]
     async fn the_senders_name_reaches_the_page_cleaned() {
         let s = setup("name");
         authorize(&s, "42");
@@ -2294,5 +2535,155 @@ mod tests {
         feed.send(Ok(vec![message("2", "c7", "7", "di nuovo")])).unwrap();
         eventually("il codice", || adapter.sent.lock().unwrap().len() == 1).await;
         assert_eq!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().pending.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn when_pending_queue_reaches_cap_messages_are_dropped_and_logged() {
+        let s = setup("pending-cap");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        {
+            let links = s.hub.links();
+            let running = links.get(&(BOT.to_string(), Platform::Fake)).unwrap();
+            let mut pending = running.pending.lock().unwrap();
+            for i in 0..PENDING_CAP {
+                pending.push_back(PendingEntry {
+                    msg: GatewayMessage {
+                        bot: BOT.to_string(),
+                        platform: Platform::Fake,
+                        chat: "c42".into(),
+                        sender: MessageSender { id: "42".into(), name: "utente".into() },
+                        text: format!("msg {i}"),
+                        id: format!("m{i}"),
+                        redacted: false,
+                        button: false,
+                        private: true,
+                        recovered: false,
+                    },
+                    cursor: None,
+                    acked: false,
+                });
+            }
+        }
+        feed.send(Ok(vec![message("overflow", "c42", "42", "troppo")])).unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let links = s.hub.links();
+        let running = links.get(&(BOT.to_string(), Platform::Fake)).unwrap();
+        assert_eq!(running.pending.lock().unwrap().len(), PENDING_CAP);
+        let logs = s.env.log.lock().unwrap();
+        assert!(logs.iter().any(|line| line.contains("coda dei messaggi in attesa piena") && line.contains("messaggio scartato")));
+    }
+
+    #[tokio::test]
+    async fn unacknowledged_messages_are_saved_to_disk_and_redelivered_on_restart() {
+        let s = setup("disk-pending");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c42", "42", "salvami")])).unwrap();
+        eventually("il messaggio consegnato", || s.env.messages.lock().unwrap().len() == 1).await;
+
+        let pending_path = pending_file_path(s.hub.store.path(), BOT, Platform::Fake);
+        assert!(pending_path.exists(), "il file delle consegne pendenti su disco deve esistere");
+        let content = std::fs::read_to_string(&pending_path).unwrap();
+        assert!(content.contains("salvami"), "il file deve contenere il messaggio salvato");
+
+        // Chiudiamo il primo hub senza mandare l'ack
+        s.hub.shutdown();
+
+        // Riapriamo ADE con lo stesso archivio e lo stesso portachiavi
+        let again = setup_vault(s.path.clone(), s.vault.clone());
+        again.hub.unready();
+        again.hub.resume();
+
+        // Finché la pagina non è pronta, nessun messaggio viene riemesso
+        assert!(again.env.messages.lock().unwrap().is_empty());
+
+        // La pagina dice ready: il messaggio viene riemesso con recovered = true
+        again.hub.ready();
+        eventually("il messaggio recuperato", || again.env.messages.lock().unwrap().len() == 1).await;
+        let recovered_msg = &again.env.messages.lock().unwrap()[0];
+        assert_eq!(recovered_msg.text, "salvami");
+        assert!(recovered_msg.recovered, "il messaggio riemesso deve avere recovered = true");
+
+        // Mandiamo l'ack dal frontend: il file su disco deve essere rimosso
+        again.hub.ack(BOT, Platform::Fake, "c42", "1").unwrap();
+        assert!(!pending_path.exists(), "il file pendente deve essere rimosso dopo l'ack di tutti i messaggi");
+    }
+
+    #[tokio::test]
+    async fn disk_pending_cap_drops_oldest_messages_with_log() {
+        let s = setup("disk-pending-cap");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+
+        // Inviamo 205 messaggi
+        let batch: Vec<Inbound> = (0..205)
+            .map(|i| message(&format!("m{i}"), "c42", "42", &format!("testo {i}")))
+            .collect();
+        feed.send(Ok(batch)).unwrap();
+
+        eventually("tutti i 205 messaggi consegnati", || s.env.messages.lock().unwrap().len() == 205).await;
+
+        let pending_path = pending_file_path(s.hub.store.path(), BOT, Platform::Fake);
+        assert!(pending_path.exists());
+        let entries = read_pending_file(&pending_path);
+        assert_eq!(entries.len(), DISK_PENDING_CAP, "su disco devono rimanere solo DISK_PENDING_CAP ({DISK_PENDING_CAP}) messaggi");
+        // I primi 5 (più vecchi) devono essere stati eliminati
+        assert_eq!(entries.first().unwrap().msg.id, "m5");
+        assert_eq!(entries.last().unwrap().msg.id, "m204");
+
+        let logs = s.env.log.lock().unwrap();
+        assert!(logs.iter().any(|line| {
+            line.contains("registro delle consegne su disco ha superato il tetto (200)") && line.contains("eliminati 5 messaggi più vecchi")
+        }));
+        // Nessun log deve contenere il testo dei messaggi
+        assert!(!logs.iter().any(|line| line.contains("testo ")));
+    }
+
+    #[tokio::test]
+    async fn forgetting_the_token_or_bot_removes_pending_file() {
+        let s = setup("disk-pending-clear");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c42", "42", "da cancellare")])).unwrap();
+        eventually("consegnato", || s.env.messages.lock().unwrap().len() == 1).await;
+
+        let pending_path = pending_file_path(s.hub.store.path(), BOT, Platform::Fake);
+        assert!(pending_path.exists());
+
+        // clear_token cancella il file pendente
+        s.hub.clear_token(BOT, Platform::Fake).unwrap();
+        assert!(!pending_path.exists(), "clear_token deve cancellare il file pendente");
+
+        // Ripristiniamo e inviamo un altro messaggio
+        s.hub.set_token(BOT, Platform::Fake, TOKEN).unwrap();
+        s.hub.start(BOT, Platform::Fake, "C:/progetto").unwrap();
+        let (_adapter2, feed2) = last_made(&s);
+        feed2.send(Ok(vec![message("2", "c42", "42", "da cancellare con forget")])).unwrap();
+        eventually("secondo messaggio", || s.env.messages.lock().unwrap().len() == 2).await;
+        assert!(pending_path.exists());
+
+        // forget_bot cancella il file pendente
+        s.hub.forget_bot(BOT).unwrap();
+        assert!(!pending_path.exists(), "forget_bot deve cancellare il file pendente");
+    }
+
+    #[tokio::test]
+    async fn messages_with_same_chat_and_id_are_deduplicated_in_deliver() {
+        let s = setup("dedup-deliver");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("100", "c42", "42", "prima volta")])).unwrap();
+        eventually("primo messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+
+        // Invio dello stesso messaggio (stessa chat e stesso id) mentre è ancora in pending
+        feed.send(Ok(vec![message("100", "c42", "42", "duplicato")])).unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Deve essere scartato: messages rimane a 1
+        assert_eq!(s.env.messages.lock().unwrap().len(), 1, "il duplicato con stesso chat e id deve essere scartato");
+        let logs = s.env.log.lock().unwrap();
+        assert!(logs.iter().any(|line| line.contains("ignorato un messaggio già in coda")));
     }
 }

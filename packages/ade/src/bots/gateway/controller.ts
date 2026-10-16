@@ -65,7 +65,18 @@ export interface GatewayMessage {
    * that says nothing counts as the owner's; `false` is refused on a plan (S16).
    */
   readonly owner?: boolean
+  /** The message was recovered after an ADE restart or reload. */
+  readonly recovered?: boolean
 }
+
+/**
+ * Notice prepended to the model prompt when a message was delivered after an ADE restart.
+ */
+export function recoveredNotice(): string {
+  return t("gateway.recoveredNotice")
+}
+
+export const RECOVERED_NOTICE = t("gateway.recoveredNotice")
 
 /** The Rust side, as the controller sees it. Tests pass a fake. */
 export interface GatewayBridge {
@@ -301,6 +312,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     if (closed || state.turn || state.starting) return
     const message = state.queue.shift()
     if (!message) return
+    void deps.bridge.ack?.(message.bot, message.platform, message.chat, message.id)?.catch?.(() => {})
     state.starting = true
     state.cancelled = false
     state.current = message
@@ -353,7 +365,8 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
               signal: ended.signal,
             })
           : undefined
-      const framed = framedMessage(message.platform, message.sender.name, message.text)
+      const baseFramed = framedMessage(message.platform, message.sender.name, message.text)
+      const framed = message.recovered ? `${recoveredNotice()}\n\n${baseFramed}` : baseFramed
       const memory = deps.memory?.get(message.bot)
       const sent = memory && !sessionId ? `${memorySnapshot(memory)}\n\n${framed}` : framed
       turn = deps.runTurn({
@@ -433,14 +446,37 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     return { talk: { ...talk, messages }, found }
   }
 
+  const SEEN_MESSAGES_CAP = 1_000
+  const seenMessages = new Set<string>()
+  const seenMessagesOrder: string[] = []
+
+  const isDuplicate = (m: GatewayMessage): boolean => {
+    const key = `${m.bot}:${m.platform}:${m.chat}:${m.id}`
+    if (seenMessages.has(key)) return true
+    if (seenMessagesOrder.length >= SEEN_MESSAGES_CAP) {
+      const oldest = seenMessagesOrder.shift()
+      if (oldest) seenMessages.delete(oldest)
+    }
+    seenMessages.add(key)
+    seenMessagesOrder.push(key)
+    return false
+  }
+
   const receive = async (message: GatewayMessage) => {
     if (closed) return
-    void deps.bridge.ack?.(message.bot, message.platform, message.chat, message.id)
+    const ack = () => void deps.bridge.ack?.(message.bot, message.platform, message.chat, message.id)?.catch?.(() => {})
+    if (isDuplicate(message)) return
     // A press answers a question; it never starts a turn.
-    if (message.button) return press(message)
+    if (message.button) {
+      ack()
+      return press(message)
+    }
     const key = sessionKey(message.bot, message.platform, message.chat)
     const which = chatCommand(message.text)
-    if (which) return command(message, key, which)
+    if (which) {
+      ack()
+      return command(message, key, which)
+    }
     const state = stateOf(key)
     const counted = countMessage(state.times, now())
     state.times = counted.times
@@ -449,6 +485,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
      * otherwise be queued first, and answered first (G4 review, BASSO 1).
      */
     if (!counted.allowed) {
+      ack()
       if (!state.limited) {
         state.limited = true
         void reply(message, t("gateway.limit", CHAT_MESSAGES_PER_HOUR))

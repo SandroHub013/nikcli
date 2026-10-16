@@ -475,6 +475,8 @@ pub struct Core {
     /// Epoch milliseconds, so a test can write a cursor of a chosen age.
     #[cfg(test)]
     now_ms: AtomicU64,
+    #[cfg(test)]
+    now_step_ms: AtomicU64,
 }
 
 fn real_now_ms() -> u64 {
@@ -530,6 +532,8 @@ impl Discord {
             jitter: AtomicU64::new(500),
             #[cfg(test)]
             now_ms: AtomicU64::new(0),
+            #[cfg(test)]
+            now_step_ms: AtomicU64::new(0),
         });
         Ok(Arc::new(Discord { core, alive: watch::channel(()).0 }))
     }
@@ -539,7 +543,12 @@ impl Core {
     fn now(&self) -> u64 {
         #[cfg(test)]
         {
-            self.now_ms.load(Ordering::SeqCst)
+            let step = self.now_step_ms.load(Ordering::SeqCst);
+            if step > 0 {
+                self.now_ms.fetch_add(step, Ordering::SeqCst)
+            } else {
+                self.now_ms.load(Ordering::SeqCst)
+            }
         }
         #[cfg(not(test))]
         {
@@ -577,6 +586,9 @@ impl Core {
             // is one of them: it is named in the message, not in a field.
             if let Some(code) = described["code"].as_i64() {
                 description = format!("{description} ({code})");
+            }
+            if !described["errors"].is_null() {
+                description = format!("{description}: {}", described["errors"]);
             }
             return Err(Failure::Api { status, description, retry_after });
         }
@@ -691,12 +703,19 @@ impl Core {
     }
 }
 
+/// How long a Discord session must stay connected/greeted before
+/// a disconnect resets the reconnection backoff to 1 second (N-A2).
+/// Below this duration (e.g. repeated immediate 4007/4009 disconnects),
+/// the backoff continues to double up to 300 seconds to protect the token
+/// from being revoked by Discord's 1000 identifies/day limit.
+const LIVE_SESSION_RESET_MS: u64 = 30_000;
+
 /// How a socket session ended.
 enum Ending {
     /// Stop, and tell the user why.
     Stopped(String),
     /// The socket dropped: go round again.
-    Dropped { greeted: bool },
+    Dropped { greeted: bool, reset_backoff: bool },
     /// The adapter is gone, the gateway switched off: the socket said goodbye.
     LetGo,
 }
@@ -721,6 +740,11 @@ async fn socket_session(
 ) -> Ending {
     let mut fresh_identifies = 0usize;
     let mut greeted = false;
+    let mut greeted_at: Option<u64> = None;
+    let finish_dropped = |greeted: bool, greeted_at: Option<u64>| {
+        let reset_backoff = greeted_at.is_some_and(|at| adapter.now().saturating_sub(at) >= LIVE_SESSION_RESET_MS);
+        Ending::Dropped { greeted, reset_backoff }
+    };
     loop {
         // Read at every turn, not once at the start: a session that lives for
         // days has to age, or a cursor from yesterday still looks resumable.
@@ -730,6 +754,9 @@ async fn socket_session(
         if adapter.shared.take_ready() {
             fresh_identifies = 0;
             greeted = true;
+            if greeted_at.is_none() {
+                greeted_at = Some(adapter.now());
+            }
         }
         if fresh_identifies > MAX_IDENTIFIES_WITHOUT_READY {
             return Ending::Stopped(format!(
@@ -766,7 +793,7 @@ async fn socket_session(
             Ok((socket, _handshake)) => socket.split(),
             Err(error) => {
                 let _ = sender.send(Err(AdapterError::Transient(format!("Discord non raggiungibile: {error}")))).await;
-                return Ending::Dropped { greeted };
+                return finish_dropped(greeted, greeted_at);
             }
         };
 
@@ -805,7 +832,7 @@ async fn socket_session(
             } }),
         };
         if sink.send(Message::Text(announce.to_string().into())).await.is_err() {
-            return Ending::Dropped { greeted };
+            return finish_dropped(greeted, greeted_at);
         }
 
         // The first heartbeat waits a share of the interval, since a client
@@ -844,9 +871,9 @@ async fn socket_session(
                                 // be refused the same way.
                                 Verdict::Fresh => {
                                     adapter.shared.forget_session();
-                                    Ending::Dropped { greeted }
+                                    finish_dropped(greeted, greeted_at)
                                 }
-                                Verdict::Again => Ending::Dropped { greeted },
+                                Verdict::Again => finish_dropped(greeted, greeted_at),
                             };
                         }
                         Message::Ping(payload) => {
@@ -888,10 +915,16 @@ async fn socket_session(
                                             }
                                             adapter.shared.mark_ready();
                                             greeted = true;
+                                            if greeted_at.is_none() {
+                                                greeted_at = Some(adapter.now());
+                                            }
                                         }
                                         "RESUMED" => {
                                             adapter.shared.mark_ready();
                                             greeted = true;
+                                            if greeted_at.is_none() {
+                                                greeted_at = Some(adapter.now());
+                                            }
                                         }
                                         "MESSAGE_CREATE" => {
                                             if let Some(inbound) = to_inbound(&frame.d, &adapter.shared, frame.s) {
@@ -987,8 +1020,8 @@ async fn run_socket(
                 let _ = sender.send(Err(AdapterError::Fatal(why))).await;
                 return;
             }
-            Ending::Dropped { greeted } => {
-                if greeted {
+            Ending::Dropped { greeted: _, reset_backoff } => {
+                if reset_backoff {
                     backoff = Duration::from_secs(1);
                 }
                 tokio::select! {
@@ -1037,6 +1070,7 @@ fn to_inbound(d: &Value, shared: &Shared, seq: Option<i64>) -> Option<Inbound> {
         text: text.to_string(),
         button: false,
         cursor,
+        timestamp_ms: None,
     })
 }
 
@@ -1083,6 +1117,7 @@ fn to_press(d: &Value, cursor: Option<String>) -> Option<Inbound> {
         text: data.to_string(),
         button: true,
         cursor,
+        timestamp_ms: None,
     })
 }
 
@@ -1703,7 +1738,20 @@ mod tests {
     #[tokio::test]
     async fn discord_says_the_text_is_too_long_and_the_piece_is_cut_in_two() {
         let rest = FakeRest::start(vec![
-            refused(&json!({ "message": "Must be 2000 or fewer in length." }).to_string()),
+            refused(&json!({
+                "code": 50035,
+                "message": "Invalid Form Body",
+                "errors": {
+                    "content": {
+                        "_errors": [
+                            {
+                                "code": "BASE_TYPE_MAX_LENGTH",
+                                "message": "Must be 2000 or fewer in length."
+                            }
+                        ]
+                    }
+                }
+            }).to_string()),
             ok(&json!({ "id": "1" }).to_string()),
             ok(&json!({ "id": "2" }).to_string()),
         ]);
@@ -1984,8 +2032,41 @@ mod tests {
         let (_alive_tx, mut alive_rx) = watch::channel(());
         let ending = socket_session(&discord.core, &sender, &gateway.address, &mut alive_rx).await;
         match ending {
-            Ending::Dropped { greeted } => assert!(greeted, "dovrebbe essere greeted dopo READY"),
+            Ending::Dropped { greeted, .. } => assert!(greeted, "dovrebbe essere greeted dopo READY"),
             _ => panic!("atteso Dropped, ottenuto altro"),
+        }
+    }
+
+    #[tokio::test]
+    async fn backoff_resets_only_after_30_seconds_of_live_session() {
+        let rest = FakeRest::start(vec![]);
+        let gateway = FakeGateway::start(vec![]);
+        let discord = adapter(&rest, &gateway);
+        set_jitter(&discord, 500);
+        let (sender, _receiver) = mpsc::channel(16);
+        let (_alive_tx, mut alive_rx) = watch::channel(());
+
+        // 1. Session drops immediately after READY: backoff must NOT reset (reset_backoff is false)
+        gateway.push(vec![hello(60), ready("SESSIONE1", &gateway.address), closed(1001)]);
+        let ending = socket_session(&discord.core, &sender, &gateway.address, &mut alive_rx).await;
+        match ending {
+            Ending::Dropped { greeted, reset_backoff } => {
+                assert!(greeted);
+                assert!(!reset_backoff, "una caduta immediata dopo READY non deve azzerare il backoff");
+            }
+            _ => panic!("atteso Dropped"),
+        }
+
+        // 2. Session drops after >= 30 seconds of live session: backoff DOES reset (reset_backoff is true)
+        discord.now_step_ms.store(35_000, Ordering::SeqCst);
+        gateway.push(vec![hello(60), ready("SESSIONE2", &gateway.address), closed(1001)]);
+        let ending = socket_session(&discord.core, &sender, &gateway.address, &mut alive_rx).await;
+        match ending {
+            Ending::Dropped { greeted, reset_backoff } => {
+                assert!(greeted);
+                assert!(reset_backoff, "dopo almeno 30 s di sessione viva il backoff torna a 1 s");
+            }
+            _ => panic!("atteso Dropped"),
         }
     }
 

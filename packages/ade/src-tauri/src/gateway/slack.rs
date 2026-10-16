@@ -376,6 +376,7 @@ fn to_inbound(event: &Value, bot: Option<&str>) -> Option<Inbound> {
         text: unescape(raw),
         button: false,
         cursor: None,
+        timestamp_ms: None,
     })
 }
 
@@ -400,6 +401,7 @@ fn to_press(payload: &Value) -> Option<Inbound> {
         text: data.to_string(),
         button: true,
         cursor: None,
+        timestamp_ms: None,
     })
 }
 
@@ -433,6 +435,7 @@ fn to_command(payload: &Value) -> Option<Inbound> {
         text,
         button: false,
         cursor: None,
+        timestamp_ms: None,
     })
 }
 

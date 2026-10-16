@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { t } from "../../i18n"
+import { t, setLocalePreference } from "../../i18n"
 import type { AgentFile } from "../ragu"
 import { emptyTalk, type PendingPermission } from "../talk"
 import { turnsRunning } from "../terms"
 import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "../turn"
-import { startGatewayController, type GatewayBridge, type GatewayMessage } from "./controller"
+import { startGatewayController, RECOVERED_NOTICE, recoveredNotice, type GatewayBridge, type GatewayMessage } from "./controller"
 import { forgetTurnFailures, turnFailureOf } from "./failures"
 import { chatHeader } from "./policy"
 import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteKey, remoteTools } from "./remote"
@@ -169,6 +169,77 @@ describe("the gateways' controller", () => {
     })
     b.emit("ciao", { id: "m42", bot: BOT.path, platform: "telegram" })
     expect(b.acks).toEqual([{ bot: BOT.path, platform: "telegram", chat: "c42", id: "m42" }])
+  })
+
+  test("a message waiting in queue behind a running turn is only acknowledged when its turn starts (A3)", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("primo", { id: "m1", bot: BOT.path, platform: "telegram", chat: "c42" })
+    await until("il primo turno", () => turns.started.length === 1)
+    b.emit("secondo", { id: "m2", bot: BOT.path, platform: "telegram", chat: "c42" })
+    await until("la seconda è in coda", () => b.sent.length === 1)
+
+    // Turn 1 started -> m1 is acked, but m2 is queued and NOT yet acked:
+    expect(b.acks).toEqual([{ bot: BOT.path, platform: "telegram", chat: "c42", id: "m1" }])
+
+    // Discarded command is acknowledged immediately even mid-turn:
+    b.emit("/stato", { id: "m3", bot: BOT.path, platform: "telegram", chat: "c42" })
+    expect(b.acks.some((a) => a.id === "m3")).toBe(true)
+
+    // Finish turn 1:
+    turns.started[0]!.finish({ text: "ok", sessionId: "s1" })
+    await until("il secondo turno", () => turns.started.length === 2)
+    // Now turn 2 starts -> m2 is acked:
+    expect(b.acks.some((a) => a.id === "m2")).toBe(true)
+  })
+
+  test("a recovered message carries a recovered warning line for the model (A3.8)", async () => {
+    setLocalePreference("it")
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("domanda salvata", { id: "m42", bot: BOT.path, platform: "telegram", chat: "c42", recovered: true })
+    await until("il turno è partito", () => turns.started.length === 1)
+    const request = turns.started[0]!.request
+    expect(request.message).toContain(recoveredNotice())
+    expect(request.message).toContain("domanda salvata")
+    expect(request.message.startsWith(recoveredNotice())).toBe(true)
+    expect(recoveredNotice()).toBe(
+      "[Messaggio recuperato: ricevuto mentre ADE era chiusa o in riavvio (può essere un duplicato).]",
+    )
+
+    setLocalePreference("en")
+    expect(recoveredNotice()).toBe(
+      "[Recovered message: received while ADE was closed or restarting (may be a duplicate).]",
+    )
+    setLocalePreference("system")
+  })
+
+  test("a message with the same (bot, platform, chat, id) is ignored and does not start a second turn (N-A3a)", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("prima domanda", { id: "m42", bot: BOT.path, platform: "telegram", chat: "c42" })
+    await until("il primo turno", () => turns.started.length === 1)
+    b.emit("prima domanda", { id: "m42", bot: BOT.path, platform: "telegram", chat: "c42" })
+    expect(turns.started).toHaveLength(1)
+    expect(b.sent).toHaveLength(0)
   })
 
   test("two messages in a row make one turn, then the other, in the same conversation", async () => {
