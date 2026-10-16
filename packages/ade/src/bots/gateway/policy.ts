@@ -3,7 +3,7 @@
  *
  * Rust already let through only an authorized sender: in a private chat, or in a channel when the message names the
  * bot (G9), and a button the bot itself put there. Here:
- * - the commands a chat can give (`/nuova`, `/ferma`, `/stato`, `/aiuto`);
+ * - the commands a chat can give (`/nuova`, `/ferma`, `/stato`, `/aiuto`, `/riprova`, `/costo`, `/modello`, `/sessioni`);
  * - how the text is framed for the model: a fixed line with the platform and
  *   the sender's name, quoted and cleaned, marked as a label and not an order;
  * - a ceiling of messages per chat per hour, against a loop of messages;
@@ -13,13 +13,13 @@
  *   the chat is told to approve it again in ADE.
  */
 
-import { t } from "../../i18n"
+import { t, translate, type Locale } from "../../i18n"
 import { agentDirs, readAgentFile, type AgentFile } from "../ragu"
 import { admitProject, configGrant, isConfigFile, type AdmitProjectDeps } from "../project-trust"
 import { admit, fileFingerprint, selfApproval, type TrustStore } from "../trust"
 import { runnerById } from "../runners"
 
-export type ChatCommand = "new" | "stop" | "status" | "help"
+export type ChatCommand = "new" | "stop" | "status" | "help" | "retry" | "cost" | "model" | "sessions"
 
 const COMMANDS: Record<string, ChatCommand> = {
   nuova: "new",
@@ -30,6 +30,14 @@ const COMMANDS: Record<string, ChatCommand> = {
   status: "status",
   aiuto: "help",
   help: "help",
+  riprova: "retry",
+  retry: "retry",
+  costo: "cost",
+  cost: "cost",
+  modello: "model",
+  model: "model",
+  sessioni: "sessions",
+  sessions: "sessions",
   // What Telegram sends when a chat with the bot is opened.
   start: "help",
 }
@@ -38,6 +46,44 @@ const COMMANDS: Record<string, ChatCommand> = {
 export function chatCommand(text: string): ChatCommand | undefined {
   const match = /^\/([a-z]+)(?:@\w+)?\s*$/i.exec(text.trim())
   return match ? COMMANDS[match[1]!.toLowerCase()] : undefined
+}
+
+/** One entry of the menu of commands a messaging app shows: the command with no slash, and what it does. */
+export interface MenuEntry {
+  readonly command: string
+  readonly description: string
+}
+
+/** Each command's name in each language, in the order a person reaches for them; the menu is made from this. */
+const MENU: readonly { readonly which: ChatCommand; readonly it: string; readonly en: string }[] = [
+  { which: "new", it: "nuova", en: "new" },
+  { which: "stop", it: "ferma", en: "stop" },
+  { which: "status", it: "stato", en: "status" },
+  { which: "retry", it: "riprova", en: "retry" },
+  { which: "cost", it: "costo", en: "cost" },
+  { which: "model", it: "modello", en: "model" },
+  { which: "sessions", it: "sessioni", en: "sessions" },
+  { which: "help", it: "aiuto", en: "help" },
+]
+
+/** What each command does, in `language`: the words beside it in the menu. */
+function menuWords(language: Locale): Record<ChatCommand, string> {
+  return {
+    new: translate(language, "gateway.menu.new"),
+    stop: translate(language, "gateway.menu.stop"),
+    status: translate(language, "gateway.menu.status"),
+    retry: translate(language, "gateway.menu.retry"),
+    cost: translate(language, "gateway.menu.cost"),
+    model: translate(language, "gateway.menu.model"),
+    sessions: translate(language, "gateway.menu.sessions"),
+    help: translate(language, "gateway.menu.help"),
+  }
+}
+
+/** The menu of commands in ADE's `language`: names a chat takes (`chatCommand`), and what each does. */
+export function chatMenu(language: Locale): MenuEntry[] {
+  const words = menuWords(language)
+  return MENU.map((entry) => ({ command: entry[language], description: words[entry.which] }))
 }
 
 const PLATFORM_NAMES: Record<string, string> = { telegram: "Telegram", discord: "Discord", slack: "Slack" }

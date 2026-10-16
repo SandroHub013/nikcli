@@ -26,6 +26,7 @@ mod telegram;
 pub use adapter::Platform;
 use adapter::Adapter;
 use hub::{AuthorizedInfo, Env, GatewayMessage, Hub, LinkStatus, PairingInfo, PairingLink, PairingRequest, StatusInfo, TokenKind, Tokens};
+use serde::Deserialize;
 use std::sync::{Arc, OnceLock};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -114,11 +115,16 @@ fn hub(app: &AppHandle) -> Result<Arc<Hub>, String> {
         .join("state.json");
     // Apart from the API keys: a gateway token is never given to an agent.
     let service = format!("{}.gateway", app.config().identifier);
+    // An unreadable state put aside is told to the page as it happens, and kept for the page to take at its start.
+    let told = app.clone();
+    let store = store::Store::new(path).on_set_aside(move |copy| {
+        let _ = told.emit("gateway:state-aside", copy.display().to_string());
+    });
     let made = Hub::new(
         Arc::new(AppEnv { app: app.clone() }),
         Arc::new(crate::secrets::SystemVault),
         service,
-        Arc::new(store::Store::new(path)),
+        Arc::new(store),
         Arc::new(adapter_for),
     );
     let hub_arc = Arc::new(made);
@@ -232,6 +238,28 @@ pub async fn gateway_edit(
     text: String,
 ) -> Result<String, String> {
     hub(&app)?.edit(&bot, platform, &chat, &message, &text).await
+}
+
+/// One entry of the menu of commands the page gives: the command with no slash, and what it does, in ADE's language.
+#[derive(Deserialize)]
+pub struct MenuEntry {
+    command: String,
+    description: String,
+}
+
+/// The menu of commands (`policy.ts`) for the bot's messaging app, once its gateway is running; Telegram shows it
+/// next to the message box. The same list is not sent twice.
+#[tauri::command]
+pub async fn gateway_set_commands(app: AppHandle, bot: String, platform: Platform, commands: Vec<MenuEntry>) -> Result<(), String> {
+    let commands: Vec<(String, String)> = commands.into_iter().map(|entry| (entry.command, entry.description)).collect();
+    hub(&app)?.set_commands(&bot, platform, &commands).await
+}
+
+/// The copies of the gateways' state put aside because it could not be read (`state.corrupt-<ms>.json`) since the page
+/// last asked, as paths; emptied. The page says it once. Also sent as `gateway:state-aside` when it happens.
+#[tauri::command]
+pub fn gateway_state_set_aside(app: AppHandle) -> Result<Vec<String>, String> {
+    Ok(hub(&app)?.take_state_set_aside())
 }
 
 #[tauri::command]

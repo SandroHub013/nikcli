@@ -199,6 +199,12 @@ pub trait Adapter: Send + Sync {
     async fn whoami(&self) -> Result<String, AdapterError> {
         Err(AdapterError::Unsupported)
     }
+    /// The menu of commands the platform's app shows next to the message box (`(command, what it does)`, with no
+    /// slash). One per bot, kept while this adapter lives: the same list is not sent twice. A platform without a menu
+    /// does nothing.
+    async fn set_commands(&self, _commands: &[(String, String)]) -> Result<(), AdapterError> {
+        Ok(())
+    }
 }
 
 /// The tests' adapter: batches go in through a channel, what is sent is kept.
@@ -215,6 +221,8 @@ pub mod fake {
         pub typing: Mutex<Vec<String>>,
         pub previews: Mutex<Vec<(String, String)>>,
         pub buttons: Mutex<Vec<(String, String, Vec<Button>)>>,
+        /// The menus `set_commands` was given.
+        pub menus: Mutex<Vec<Vec<(String, String)>>>,
         pub receives: std::sync::atomic::AtomicUsize,
         /// What `cursor` reports: the tests set it with each batch.
         pub position: Mutex<Option<String>>,
@@ -238,6 +246,7 @@ pub mod fake {
                 typing: Mutex::new(Vec::new()),
                 previews: Mutex::new(Vec::new()),
                 buttons: Mutex::new(Vec::new()),
+                menus: Mutex::new(Vec::new()),
                 receives: std::sync::atomic::AtomicUsize::new(0),
                 position: Mutex::new(None),
                 waiting: std::sync::atomic::AtomicUsize::new(0),
@@ -294,6 +303,10 @@ pub mod fake {
         }
         async fn whoami(&self) -> Result<String, AdapterError> {
             Ok("@finto_bot\u{202e}".into())
+        }
+        async fn set_commands(&self, commands: &[(String, String)]) -> Result<(), AdapterError> {
+            self.menus.lock().unwrap().push(commands.to_vec());
+            Ok(())
         }
     }
 }

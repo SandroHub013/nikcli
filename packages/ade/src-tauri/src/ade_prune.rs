@@ -1,10 +1,12 @@
 //! Removes what ADE itself left in a project's `.ade/` and no longer needs (`session/ade-prune.ts` chooses what).
 //!
-//! The window cannot delete files; this is the one door, and it opens on three folders only: a capture of the browser pane and its note in
-//! `.ade/browser/`, a session's result in `.ade/results/`, a note on a design sheet in `.ade/design/note/`. A path is removed only if it is
-//! inside an open project, is a plain file of one of those folders with the extension it has there, and is not one of the files that are
-//! the project's memory (`decisions.jsonl`, `design.jsonl`, `memory.md`) or that keep `.ade/` out of git (`.gitignore`). A link is never
-//! followed: what is removed is the link's own file or nothing.
+//! The window cannot delete files; this is the one door, and it opens on four folders only: a capture of the browser pane and its note in
+//! `.ade/browser/`, a session's result in `.ade/results/`, a note on a design sheet in `.ade/design/note/`, a picture given to a bot in
+//! `.ade/bots/<bot>/` (taken back when its message does not go, or with the bot; its folder goes too once empty). A path is removed
+//! only if it is inside an open project, is a plain file of one of those folders with the extension it has there, and is not one of the
+//! files that are the project's memory (`decisions.jsonl`, `design.jsonl`, `memory.md`) or that keep `.ade/` out of git (`.gitignore`).
+//! A link is never followed: what is removed is the link's own file or nothing. A bot's folder, `bots` and `.ade` above a picture must be
+//! folders, not links or junctions.
 
 use crate::WriteRoots;
 use std::path::{Component, Path};
@@ -24,7 +26,8 @@ const PROTECTED: [&str; 4] = ["decisions.jsonl", "design.jsonl", "memory.md", ".
 /// The most files one call removes: the window sends what it chose, and a runaway list is not a bigger prune.
 const MAX_PATHS: usize = 5_000;
 
-/// Whether `path` is a file ADE may prune: `.ade/browser/<x>.png|md`, `.ade/results/<x>.md`, `.ade/design/note/<x>.md`.
+/// Whether `path` is a file ADE may prune: `.ade/browser/<x>.png|md`, `.ade/results/<x>.md`, `.ade/design/note/<x>.md`,
+/// `.ade/bots/<bot>/<x>.png|jpg|jpeg|webp|gif` (a direct file of the bot's folder, no `:` in either name).
 pub fn prunable(path: &Path) -> bool {
     let parts: Vec<String> = path
         .components()
@@ -46,6 +49,8 @@ pub fn prunable(path: &Path) -> bool {
         ["browser", name] => (&["png", "md"], name),
         ["results", name] => (&["md"], name),
         ["design", "note", name] => (&["md"], name),
+        // `:` would name a stream of the file or of the folder (NTFS), not the picture.
+        ["bots", bot, name] if !bot.contains(':') && !name.contains(':') => (&["png", "jpg", "jpeg", "webp", "gif"], name),
         _ => return false,
     };
     if name.is_empty() || PROTECTED.contains(&name) {
@@ -57,10 +62,23 @@ pub fn prunable(path: &Path) -> bool {
     }
 }
 
+/// The bot's folder of a picture `prunable` lets go, `.ade/bots/<bot>/`; none for the other shapes.
+fn bot_folder(path: &Path) -> Option<&Path> {
+    if !prunable(path) {
+        return None;
+    }
+    let named = |at: &Path, name: &str| at.file_name().is_some_and(|own| own.to_string_lossy().eq_ignore_ascii_case(name));
+    let folder = path.parent()?;
+    let bots = folder.parent()?;
+    (named(bots, "bots") && bots.parent().is_some_and(|ade| named(ade, ".ade"))).then_some(folder)
+}
+
 /// Removes the files in `paths` that pass `prunable` and are plain files; the bytes freed. Nothing else is touched, and a file that will
-/// not go (it is open somewhere, say) is skipped: the next opening of the project tries it again.
+/// not go (it is open somewhere, say) is skipped: the next opening of the project tries it again. A bot's folder left empty by its
+/// pictures goes after them; one that still holds anything stays (`remove_dir` refuses it), and a link in its place is not a folder.
 pub fn prune_files(paths: &[std::path::PathBuf]) -> u64 {
     let mut freed = 0;
+    let mut emptied: Vec<&Path> = Vec::new();
     for path in paths {
         if !prunable(path) {
             continue;
@@ -73,6 +91,16 @@ pub fn prune_files(paths: &[std::path::PathBuf]) -> u64 {
         let size = meta.len();
         if std::fs::remove_file(path).is_ok() {
             freed += size;
+            if let Some(folder) = bot_folder(path) {
+                if !emptied.contains(&folder) {
+                    emptied.push(folder);
+                }
+            }
+        }
+    }
+    for folder in emptied {
+        if std::fs::symlink_metadata(folder).is_ok_and(|meta| meta.is_dir()) {
+            let _ = std::fs::remove_dir(folder);
         }
     }
     freed
@@ -88,6 +116,15 @@ pub fn prune_target(roots: &WriteRoots, path: &str) -> Result<std::path::PathBuf
     let (Some(parent), Some(name)) = (given.parent(), given.file_name()) else {
         return Err("percorso senza cartella".into());
     };
+    // A bot's picture (bot-ui-4, P1-1): its folder, `bots` and `.ade`, as given, are folders and not links or junctions. Only the
+    // bot's own pictures go, never what a link in their place points at, not even another bot's folder in the same project.
+    if bot_folder(given).is_some() {
+        for folder in parent.ancestors().take(3) {
+            if !std::fs::symlink_metadata(folder).is_ok_and(|meta| meta.is_dir()) {
+                return Err(format!("non è una cartella vera: {}", folder.display()));
+            }
+        }
+    }
     let folder = crate::within_roots(roots, &parent.to_string_lossy())?;
     // The folder itself may be the link: `.ade/results` as a junction into another open project resolves there and passes
     // `within_roots` as that project's. It must come out in the root it was asked in (review of F7c, B1). Judged on the text
@@ -420,6 +457,116 @@ mod tests {
         assert!(!prunable(&sep("/work/app/.ade/results/log")));
         assert!(!prunable(&sep("/work/app/.ade/results/.md")));
         assert!(!prunable(&sep("/work/app/.ade/design/note/a.html")));
+    }
+
+    // bot-ui-4, P1-1: a picture given to a bot, and nothing else of its folder.
+    #[test]
+    fn a_picture_given_to_a_bot_is_pruned_and_nothing_else_of_its_folder() {
+        for name in ["a.png", "a.jpg", "a.jpeg", "a.webp", "a.gif", "Schermata-20261016-140509-1.PNG"] {
+            assert!(prunable(&sep(&format!("/work/app/.ade/bots/alfa/{name}"))), "{name}");
+        }
+        assert!(prunable(&sep("/work/app/.ade/bots/a..b/a.png")), "two dots inside a name are a name");
+        assert!(!prunable(&sep("/work/app/.ade/bots/alfa/a.md")));
+        assert!(!prunable(&sep("/work/app/.ade/bots/alfa/a.svg")));
+        assert!(!prunable(&sep("/work/app/.ade/bots/alfa/.png")));
+        assert!(!prunable(&sep("/work/app/.ade/bots/a.png")));
+        assert!(!prunable(&sep("/work/app/.ade/bots/alfa/sub/a.png")));
+        assert!(!prunable(&sep("/work/app/.ade/bots/alfa/.gitignore")));
+        assert!(!prunable(&sep("/work/app/bots/alfa/a.png")));
+        // A bot's name that climbs: `..` is never a name.
+        assert!(!prunable(&sep("/work/app/.ade/bots/../a.png")));
+        assert!(!prunable(&sep("/work/app/.ade/bots/../results/a.png")));
+        assert!(!prunable(&sep("/work/app/.ade/bots/alfa/../../results/a.png")));
+        assert!(!prunable(&sep("/work/app/.ade/bots/../../../src/a.png")));
+        // A stream of a file or of a folder (NTFS) is not the picture.
+        assert!(!prunable(&sep("/work/app/.ade/bots/alfa/a.png:x.png")));
+        assert!(!prunable(&sep("/work/app/.ade/bots/alfa:$I30:$INDEX_ALLOCATION/a.png")));
+    }
+
+    #[test]
+    fn a_bots_pictures_go_its_other_files_stay_and_its_folder_goes_once_empty() {
+        let project = scratch("bot-pictures");
+        let alfa = project.join(".ade").join("bots").join("alfa");
+        let beta = project.join(".ade").join("bots").join("beta");
+        std::fs::create_dir_all(&alfa).unwrap();
+        std::fs::create_dir_all(&beta).unwrap();
+        std::fs::write(alfa.join("a.png"), b"1234").unwrap();
+        std::fs::write(alfa.join("b.jpeg"), b"12").unwrap();
+        std::fs::write(alfa.join("nota.md"), b"stays").unwrap();
+        std::fs::write(beta.join("c.webp"), b"123").unwrap();
+
+        let freed = prune_files(&[alfa.join("a.png"), alfa.join("b.jpeg"), alfa.join("nota.md"), beta.join("c.webp")]);
+        assert_eq!(freed, 4 + 2 + 3);
+        assert!(!alfa.join("a.png").exists() && !alfa.join("b.jpeg").exists());
+        // The `.md` in the same folder is not a picture: it stays, and so does the folder that holds it.
+        assert!(alfa.join("nota.md").exists());
+        assert!(alfa.is_dir());
+        // Emptied by its pictures, the folder goes; `bots` and `.ade` stay.
+        assert!(!beta.exists());
+        assert!(project.join(".ade").join("bots").is_dir());
+        let _ = std::fs::remove_dir_all(&project);
+    }
+
+    // A bot's folder that is a junction: into the same project's other bot, or anywhere else in it. Nothing is pruned through it.
+    #[cfg(windows)]
+    #[test]
+    fn a_bots_folder_that_is_a_junction_is_not_followed() {
+        let project = canonical_scratch("bot-junction");
+        let bots = project.join(".ade").join("bots");
+        let beta = bots.join("beta");
+        let elsewhere = project.join("src");
+        std::fs::create_dir_all(&beta).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        std::fs::write(beta.join("b.png"), b"beta's").unwrap();
+        std::fs::write(elsewhere.join("logo.png"), b"the project's").unwrap();
+        let junction = |link: &Path, target: &Path| {
+            let made = std::process::Command::new("cmd").args(["/C", "mklink", "/J"]).arg(link).arg(target).output().expect("cmd");
+            assert!(made.status.success(), "{}", String::from_utf8_lossy(&made.stdout));
+        };
+        let alfa = bots.join("alfa");
+        let gamma = bots.join("gamma");
+        junction(&alfa, &beta);
+        junction(&gamma, &elsewhere);
+        let roots = roots_at(&[&project]);
+
+        for asked in [alfa.join("b.png"), gamma.join("logo.png")] {
+            assert!(prune_target(&roots, &asked.to_string_lossy()).is_err(), "{} was followed", asked.display());
+        }
+        assert!(beta.join("b.png").exists());
+        assert!(elsewhere.join("logo.png").exists());
+        // `bots` itself as a junction: refused the same way.
+        let other = canonical_scratch("bot-junction-other");
+        std::fs::create_dir_all(other.join("pictures").join("delta")).unwrap();
+        std::fs::write(other.join("pictures").join("delta").join("d.png"), b"x").unwrap();
+        let second = canonical_scratch("bot-junction-second");
+        std::fs::create_dir_all(second.join(".ade")).unwrap();
+        junction(&second.join(".ade").join("bots"), &other.join("pictures"));
+        let both = roots_at(&[&second, &other]);
+        let through = second.join(".ade").join("bots").join("delta").join("d.png");
+        assert!(prune_target(&both, &through.to_string_lossy()).is_err());
+        assert!(other.join("pictures").join("delta").join("d.png").exists());
+        // Taking the junctions away does not touch what they pointed at.
+        for link in [alfa, gamma, second.join(".ade").join("bots")] {
+            let _ = std::process::Command::new("cmd").args(["/C", "rmdir"]).arg(&link).output();
+        }
+        assert!(beta.join("b.png").exists());
+        for dir in [&project, &other, &second] {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+
+    #[test]
+    fn a_bots_real_folder_is_resolved_and_its_picture_named_as_it_is() {
+        let project = canonical_scratch("bot-real");
+        let alfa = project.join(".ade").join("bots").join("alfa");
+        std::fs::create_dir_all(&alfa).unwrap();
+        std::fs::write(alfa.join("a.png"), b"x").unwrap();
+        let roots = roots_at(&[&project]);
+        let target = prune_target(&roots, &alfa.join("a.png").to_string_lossy()).unwrap();
+        assert_eq!(target, alfa.join("a.png"));
+        // A folder that is not there is not a folder: nothing to resolve.
+        assert!(prune_target(&roots, &project.join(".ade").join("bots").join("nessuno").join("a.png").to_string_lossy()).is_err());
+        let _ = std::fs::remove_dir_all(&project);
     }
 
     #[test]

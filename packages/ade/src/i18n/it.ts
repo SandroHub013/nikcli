@@ -810,8 +810,44 @@ export const it = {
   "gateway.status.idle": "Libero: scrivimi pure.",
   "gateway.status.working": (queued: number) => `Sto lavorando a un turno; messaggi in coda: ${queued}.`,
   "gateway.status.connectedSince": (time: string) => `Gateway collegato dalle ${time}.`,
+  "gateway.retry.none": "Non c'è ancora una domanda da rifare: scrivimene una.",
+  "gateway.retry.busy": "Sto ancora lavorando alla domanda di prima: aspetta che finisca, oppure scrivi /ferma.",
+  "gateway.retry.again": "Rifaccio l'ultima domanda.",
+  "gateway.model.default": (runner: string) => `quello di ${runner}`,
+  "gateway.model.tagCurrent": "in uso",
+  "gateway.model.tagOwn": "quello del bot",
+  "gateway.model.only": (model: string) => `In questa chat uso: ${model}.`,
+  "gateway.model.nothing": (model: string) => `In questa chat uso: ${model}. Per questo bot non ho altri modelli da proporre.`,
+  "gateway.model.freeOnly": "Ti propongo solo i modelli gratuiti.",
+  "gateway.model.ask": (current: string, list: string, note: string) =>
+    `In questa chat uso: ${current}.\n${list}\n${note ? `${note} ` : ""}Scegli quello da usare da ora (tocca un tasto o scrivi il numero).`,
+  "gateway.model.set": (model: string) => `Va bene: da ora, in questa chat, uso ${model}.`,
+  "gateway.pick.range": (max: number) => `Scegli un numero da 1 a ${max}.`,
+  "gateway.sessions.private": "Le conversazioni le elenco solo in una chat privata: qui le leggerebbero tutti.",
+  "gateway.sessions.busy": "Sto lavorando a un turno: aspetta che finisca, oppure scrivi /ferma, poi scegli.",
+  "gateway.sessions.none": "Non ho altre conversazioni di questa chat da riprendere.",
+  "gateway.sessions.untitled": "senza titolo",
+  "gateway.sessions.now": (what: string) => `Adesso sei in ${what}.`,
+  "gateway.sessions.item": (title: string, when: string) => `«${title}», ${when}`,
+  "gateway.sessions.ask": (now: string, list: string) =>
+    `${now ? `${now}\n` : ""}Le ultime conversazioni di questa chat:\n${list}\nScegli quale riprendere (tocca un tasto o scrivi il numero).`,
+  "gateway.sessions.other": (title: string) =>
+    `«${title}» è di un altro progetto o di un altro programma del bot: da qui non la riprendo.`,
+  "gateway.sessions.resumed": (title: string) => `Riprendo «${title}»: scrivi pure da dove eri rimasto.`,
+  "gateway.menu.new": "Ricomincia la conversazione",
+  "gateway.menu.stop": "Ferma il turno in corso",
+  "gateway.menu.status": "Dice cosa sto facendo",
+  "gateway.menu.retry": "Rifà l'ultima domanda",
+  "gateway.menu.cost": "Dice la spesa di oggi",
+  "gateway.menu.model": "Mostra e cambia il modello",
+  "gateway.menu.sessions": "Riprende una conversazione",
+  "gateway.menu.help": "Mostra i comandi",
+  "gateway.panel.stateAside": (copy: string) =>
+    `Lo stato delle app di messaggi era rovinato ed è stato messo da parte; gli abbinamenti vanno rifatti. La copia è in: ${copy}`,
+  "gateway.panel.stateAsideOk": "Ho capito",
+  "gateway.cost.none": "Oggi non c'è nessuna spesa da contare: questo bot usa un abbonamento o un modello gratuito.",
   "gateway.help":
-    "Comandi: /nuova ricomincia la conversazione, /ferma ferma il turno in corso e svuota la coda, /stato dice cosa sto facendo, /aiuto mostra questo elenco.",
+    "Comandi: /nuova ricomincia la conversazione, /ferma ferma il turno in corso e svuota la coda, /stato dice cosa sto facendo, /riprova rifà l'ultima domanda, /costo dice la spesa di oggi, /modello mostra il modello e lascia scegliere fra quelli del bot, /sessioni elenca le ultime conversazioni di questa chat e ne riprende una, /aiuto mostra questo elenco.",
   "gateway.limit": (count: number) =>
     `Più di ${count} messaggi in un'ora: per un po' non rispondo, così un giro di messaggi non consuma il tuo piano. Riprova più tardi.`,
   "gateway.retrust": (name: string) =>
@@ -964,7 +1000,7 @@ export const it = {
   "gateway.panel.switchOn": "Accendi",
   "gateway.panel.switchOff": "Spegni",
   "gateway.panel.authorized": "Chi può scrivere",
-  "gateway.panel.nobody": "Nessuno. Scrivi al bot da Telegram: ricevi un codice, e lo inserisci qui.",
+  "gateway.panel.nobody": "Nessuno ancora: abbina il tuo account qui sotto.",
   "gateway.panel.nobodyDiscord":
     "Nessuno. Scrivi al bot in un messaggio privato su Discord: ricevi un codice, e lo inserisci qui.",
   "gateway.panel.nobodySlack":
@@ -2036,6 +2072,7 @@ export const it = {
   "bots.attach.noWrite": "Qui non posso salvare immagini: incollarle funziona nell'app desktop.",
   "bots.notice.title": "Avvisi",
   "bots.notice.unread": "Nuova risposta, non ancora letta",
+  "bots.notice.muted": "Silenziato: le sue risposte non accendono il punto",
   "bots.notice.mute": "Silenzia questo bot",
   "bots.notice.muteHint":
     "Le sue risposte e le sue routine finite non accendono più il punto «non letto» sulla sua riga. Una richiesta di permesso (il bot che ti chiede il via libera per un comando) arriva comunque, con la campanella e l'avviso di sistema.",
@@ -2378,7 +2415,11 @@ export const it = {
   "bots.permissions.panelTextCodexWrite": "Esegue i comandi senza chiederti il permesso, e scrive solo nella cartella di lavoro: Codex non può chiedere.",
   "bots.permissions.panelTextCodexRead": "Esegue senza chiedere solo comandi che leggono (sandbox in sola lettura): Codex non può chiederti il permesso.",
   "bots.permissions.always": "«Sempre» dati a questo bot",
-  "bots.permissions.alwaysEmpty": "Nessuno: un comando pericoloso non va avanti senza il tuo sì.",
+  "bots.permissions.alwaysEmptyRagu": "Nessuno: ogni comando, e ogni passo fuori dal progetto, ti viene chiesto.",
+  "bots.permissions.alwaysEmptyRaguNoShell": "Nessuno: ogni passo fuori dal progetto ti viene chiesto.",
+  "bots.permissions.alwaysEmptyClaude":
+    "Nessuno: un comando rifiutato resta rifiutato finché non scegli «Sempre per questo bot» nel thread.",
+  "bots.permissions.alwaysEmptyClaudeNoShell": "Nessuno: non esegue comandi, quindi non c'è niente da concedere.",
   "bots.permissions.alwaysHow": "Un «Sempre» vale nella Conversazione, non dal telefono.",
   "bots.permissions.alwaysOutside": (folder: string) => `Scrivere fuori dal progetto, in «${folder}»`,
   "bots.permissions.alwaysTool": (tool: string) => `Usare «${tool}» senza chiedere`,
@@ -2398,7 +2439,6 @@ export const it = {
   "bots.form.title": "Nuovo bot",
   "bots.form.name": "Nome",
   "bots.form.namePlaceholder": "Revisore",
-  "bots.form.hintGenerating": "Con le istruzioni vuote Ragu Code sceglie il nome del bot: quello che scrivi qui è solo un promemoria.",
   "bots.form.hintNamed": "Diventa il nome del file del bot e il nome con cui lo richiami.",
   "bots.form.logo": "Faccia",
   "bots.form.description": "A cosa serve",

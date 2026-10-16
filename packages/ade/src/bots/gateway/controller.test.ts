@@ -80,6 +80,7 @@ function bridge(
       redacted: false,
       button: false,
       private: true,
+      owner: true,
       ...extra,
     })
   return { fake, calls, sent, typing, questions, acks, previews, previewEnds, emit }
@@ -284,10 +285,12 @@ describe("the gateways' controller", () => {
     await until("il motivo", () => b.sent.length === 3)
     expect(b.sent[2]!.text).toBe(t("gateway.failed"))
     expect(b.sent[2]!.text).not.toContain("rete giù")
-    expect(sessions.get(sessionKey(BOT.path, "telegram", "c42"))).toEqual({
+    // The conversation is named by the words it began with, and keeps them.
+    expect(sessions.get(sessionKey(BOT.path, "telegram", "c42"))).toMatchObject({
       project: PROJECT,
       runner: "claude",
       sessionId: "s-1",
+      title: "prima domanda",
     })
   })
 
@@ -478,7 +481,7 @@ describe("the gateways' controller", () => {
       expect(turns.started[0]!.request.sessionId).toBeUndefined()
       turns.started[0]!.finish({ text: "ok", sessionId: "s-nuova" })
       await until("la sessione nuova", () => sessions.get(key)?.sessionId === "s-nuova")
-      expect(sessions.get(key)).toEqual({ project: PROJECT, runner: "claude", sessionId: "s-nuova" })
+      expect(sessions.get(key)).toMatchObject({ project: PROJECT, runner: "claude", sessionId: "s-nuova", title: "ciao" })
     }
   })
 
@@ -1784,7 +1787,22 @@ describe("the owner check of a plan's turn (S16)", () => {
     expect(turns.started).toHaveLength(0)
   })
 
-  test("an owner's message, or one that says nothing (D92: every paired account is the owner's), runs", async () => {
+  test("a message that says nothing about its sender is not taken for the owner's: S16, absence is false", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("ciao", { owner: undefined })
+    await until("il rifiuto", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe(t("gateway.ownerOnly", "Claude Code"))
+    expect(turns.started).toHaveLength(0)
+  })
+
+  test("an owner's message runs", async () => {
     const b = bridge()
     const turns = fakeTurns()
     await startGatewayController({
@@ -1797,7 +1815,7 @@ describe("the owner check of a plan's turn (S16)", () => {
     await until("il primo turno", () => turns.started.length === 1)
     turns.started[0]!.finish({ text: "ok" })
     await until("la risposta", () => b.sent.length === 1)
-    b.emit("due")
+    b.emit("due", { owner: true })
     await until("il secondo turno", () => turns.started.length === 2)
     turns.started[1]!.finish({ text: "ok" })
   })

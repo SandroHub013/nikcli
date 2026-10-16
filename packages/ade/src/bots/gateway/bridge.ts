@@ -4,13 +4,14 @@
  * a bot's card (G6).
  */
 
-import { t } from "../../i18n"
+import { createEffect, createRoot, on } from "solid-js"
+import { locale, t } from "../../i18n"
 import { askDialog } from "../../host/ask"
 import { openExternally } from "../../browser/host-bridge"
 import { readAgentFile, type AgentFile } from "../ragu"
 import { admitProject, projectSurface, PROJECT_TRUST_KEY } from "../project-trust"
 import { runnerById } from "../runners"
-import { localGatewayThreads, projectFs, readBotText, resolveRoots } from "../store"
+import { listModels, localGatewayThreads, projectFs, readBotText, resolveRoots } from "../store"
 import { admit, localTrustStore } from "../trust"
 import { runBotTurn } from "../serve-turn"
 import { startGatewayController, type GatewayBridge, type GatewayController, type GatewayMessage } from "./controller"
@@ -19,7 +20,10 @@ import { recheckTrust, scopeOf } from "./policy"
 import { localAccountStore } from "../account"
 import { localRemoteStore, remoteKey } from "./remote"
 import { appMemoryStore } from "../memory-app"
-import { localSessionStore } from "./session"
+import { localHistoryStore, localSessionStore } from "./session"
+import { localChatModelStore } from "./chat-model"
+import { startMenuSync } from "./menu"
+import { appStateAside } from "./state-aside"
 import { spendStatus, spendTerms, withDailyCap } from "../spend"
 import { appSpendStore } from "../spend-app"
 import { appApprovals } from "../approvals-app"
@@ -171,16 +175,19 @@ export async function startAppGatewayController(): Promise<GatewayController> {
         globalRoot: (await resolveRoots()).global,
       }),
     sessions: localSessionStore(),
+    history: localHistoryStore(),
     threads: localGatewayThreads(),
     remote: (bot, platform) => localRemoteStore().get(remoteKey(bot, platform)),
     account: (bot) => localAccountStore().get(bot),
     memory: appMemoryStore,
     // A command waiting on a phone is listed in ADE too, and can be decided there.
     approvals: appApprovals,
-    spendToday: async (bot) => {
+    chatModels: localChatModelStore(),
+    modelCatalog: (project) => listModels(project),
+    spendToday: async (bot, model) => {
       try {
         const file = readAgentFile({ path: bot, scope: "global", text: await readBotText(bot) })
-        const terms = spendTerms(runnerById(file.runner).id, localAccountStore().get(bot), file.model)
+        const terms = spendTerms(runnerById(file.runner).id, localAccountStore().get(bot), model ?? file.model)
         return spendStatus(appSpendStore.get(bot), terms, Date.now())
       } catch {
         // The bot's file cannot be read: `/stato` says what it can.
@@ -193,11 +200,38 @@ export async function startAppGatewayController(): Promise<GatewayController> {
     approvals: appApprovals,
     api: tauriGatewayPanelApi(),
   })
+  // The menu of commands on Telegram, in ADE's language, once the bot's gateway is up.
+  const stopMenus = await startMenuSync({
+    statuses: () => invoke<LiveStatus[]>("gateway_status"),
+    onStatus: async (handler) => {
+      const { listen } = await import("@tauri-apps/api/event")
+      return listen<LiveStatus>("gateway:status", (event) => handler(event.payload))
+    },
+    set: (bot, platform, commands) => invoke<void>("gateway_set_commands", { bot, platform, commands }),
+    language: locale,
+    watchLanguage: (changed) =>
+      createRoot((dispose) => {
+        createEffect(on(locale, changed, { defer: true }))
+        return dispose
+      }),
+  }).catch(() => () => {})
+  // The state that could not be read and was put aside: said once in the Platforms tab (N-A11a).
+  const stopAside = await appStateAside
+    .start({
+      take: () => invoke<string[]>("gateway_state_set_aside"),
+      listen: async (heard) => {
+        const { listen } = await import("@tauri-apps/api/event")
+        return listen<string>("gateway:state-aside", (event) => heard(event.payload))
+      },
+    })
+    .catch(() => () => {})
   return {
     ...controller,
     stop: () => {
       if (activeController === controller) activeController = undefined
       attentionSync.stop()
+      stopAside()
+      stopMenus()
       controller.stop()
     },
   }

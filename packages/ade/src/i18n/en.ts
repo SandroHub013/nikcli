@@ -791,8 +791,44 @@ export const en: Messages = {
   "gateway.status.idle": "Free: go ahead.",
   "gateway.status.working": (queued) => `Working on a turn; messages queued: ${queued}.`,
   "gateway.status.connectedSince": (time) => `Gateway connected since ${time}.`,
+  "gateway.retry.none": "There is no question to ask again yet: write me one.",
+  "gateway.retry.busy": "I'm still working on the last question: wait for it to finish, or write /stop.",
+  "gateway.retry.again": "Asking the last question again.",
+  "gateway.model.default": (runner: string) => `${runner}'s own`,
+  "gateway.model.tagCurrent": "in use",
+  "gateway.model.tagOwn": "the bot's own",
+  "gateway.model.only": (model: string) => `In this chat I use: ${model}.`,
+  "gateway.model.nothing": (model: string) => `In this chat I use: ${model}. I have no other models to offer for this bot.`,
+  "gateway.model.freeOnly": "I only offer the free models.",
+  "gateway.model.ask": (current: string, list: string, note: string) =>
+    `In this chat I use: ${current}.\n${list}\n${note ? `${note} ` : ""}Choose the one to use from now on (tap a button or write the number).`,
+  "gateway.model.set": (model: string) => `Done: from now on, in this chat, I use ${model}.`,
+  "gateway.pick.range": (max: number) => `Choose a number from 1 to ${max}.`,
+  "gateway.sessions.private": "I only list conversations in a private chat: here everyone would read them.",
+  "gateway.sessions.busy": "I'm working on a turn: wait for it to finish, or write /stop, then choose.",
+  "gateway.sessions.none": "I have no other conversations of this chat to resume.",
+  "gateway.sessions.untitled": "untitled",
+  "gateway.sessions.now": (what: string) => `Right now you are in ${what}.`,
+  "gateway.sessions.item": (title: string, when: string) => `“${title}” (${when})`,
+  "gateway.sessions.ask": (now: string, list: string) =>
+    `${now ? `${now}\n` : ""}The last conversations of this chat:\n${list}\nChoose which to resume (tap a button or write the number).`,
+  "gateway.sessions.other": (title: string) =>
+    `“${title}” belongs to another project or to another program of the bot: I can't resume it from here.`,
+  "gateway.sessions.resumed": (title: string) => `Resuming “${title}”: write on from where you left off.`,
+  "gateway.menu.new": "Start the conversation over",
+  "gateway.menu.stop": "Stop the running turn",
+  "gateway.menu.status": "Say what I'm doing",
+  "gateway.menu.retry": "Ask the last question again",
+  "gateway.menu.cost": "Say today's spend",
+  "gateway.menu.model": "Show and change the model",
+  "gateway.menu.sessions": "Resume a conversation",
+  "gateway.menu.help": "Show the commands",
+  "gateway.panel.stateAside": (copy: string) =>
+    `The state of the messaging apps was damaged and has been set aside; the pairings need to be done again. The copy is in: ${copy}`,
+  "gateway.panel.stateAsideOk": "Got it",
+  "gateway.cost.none": "There is no spend to count today: this bot uses a subscription or a free model.",
   "gateway.help":
-    "Commands: /new starts the conversation over, /stop stops the running turn and clears the queue, /status says what I'm doing, /help shows this list.",
+    "Commands: /new starts the conversation over, /stop stops the running turn and clears the queue, /status says what I'm doing, /retry asks the last question again, /cost says today's spend, /model shows the model and lets you choose among the bot's own, /sessions lists the last conversations of this chat and resumes one, /help shows this list.",
   "gateway.limit": (count) =>
     `More than ${count} messages in an hour: I'll stay quiet for a while, so a loop of messages doesn't spend your plan. Try again later.`,
   "gateway.retrust": (name) =>
@@ -944,7 +980,7 @@ export const en: Messages = {
   "gateway.panel.switchOn": "Switch on",
   "gateway.panel.switchOff": "Switch off",
   "gateway.panel.authorized": "Who may write",
-  "gateway.panel.nobody": "Nobody. Write to the bot from Telegram: you get a code, and you enter it here.",
+  "gateway.panel.nobody": "Nobody yet: pair your account below.",
   "gateway.panel.nobodyDiscord":
     "Nobody. Write to the bot in a direct message on Discord: you get a code, and you enter it here.",
   "gateway.panel.nobodySlack":
@@ -1979,6 +2015,7 @@ export const en: Messages = {
   "bots.attach.noWrite": "I cannot save images here: pasting them works in the desktop app.",
   "bots.notice.title": "Alerts",
   "bots.notice.unread": "New reply, not read yet",
+  "bots.notice.muted": "Muted: its replies do not light the dot",
   "bots.notice.mute": "Mute this bot",
   "bots.notice.muteHint":
     "Its replies and finished routines no longer light the “unread” dot on its row. A permission request (the bot asking your go-ahead for a command) still comes through, with the bell and the system alert.",
@@ -2314,7 +2351,11 @@ export const en: Messages = {
   "bots.permissions.panelTextCodexWrite": "It runs commands without asking you, and writes only in the working folder: Codex cannot ask.",
   "bots.permissions.panelTextCodexRead": "It runs, without asking, only commands that read (a read-only sandbox): Codex cannot ask you for permission.",
   "bots.permissions.always": "“Always” given to this bot",
-  "bots.permissions.alwaysEmpty": "None: a dangerous command does not go ahead without your yes.",
+  "bots.permissions.alwaysEmptyRagu": "None: every command, and every step outside the project, is asked about.",
+  "bots.permissions.alwaysEmptyRaguNoShell": "None: every step outside the project is asked about.",
+  "bots.permissions.alwaysEmptyClaude":
+    "None: a refused command stays refused until you choose “Always for this bot” in the thread.",
+  "bots.permissions.alwaysEmptyClaudeNoShell": "None: it runs no commands, so there is nothing to give.",
   "bots.permissions.alwaysHow": "An “Always” holds in the Conversation, not from the phone.",
   "bots.permissions.alwaysOutside": (folder) => `Write outside the project, in “${folder}”`,
   "bots.permissions.alwaysTool": (tool) => `Use “${tool}” without asking`,
@@ -2334,7 +2375,6 @@ export const en: Messages = {
   "bots.form.title": "New bot",
   "bots.form.name": "Name",
   "bots.form.namePlaceholder": "Reviewer",
-  "bots.form.hintGenerating": "With empty instructions Ragu Code chooses the bot's name: what you write here is just a reminder.",
   "bots.form.hintNamed": "Becomes the bot's file name and the name you call it by.",
   "bots.form.logo": "Face",
   "bots.form.description": "Purpose",

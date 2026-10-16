@@ -79,6 +79,11 @@ impl LinkState {
         self.authorized.iter().any(|entry| entry.id == sender)
     }
 
+    /// Whether `sender` is authorized and the owner. A sender who is not authorized is nobody's owner.
+    pub fn is_owner(&self, sender: &str) -> bool {
+        self.authorized.iter().any(|entry| entry.id == sender && entry.owner)
+    }
+
     pub fn knows_chat(&self, chat: &str) -> bool {
         self.chats.iter().any(|known| known.id == chat)
     }
@@ -109,17 +114,58 @@ pub struct Authorized {
     pub name: String,
     #[serde(default)]
     pub added_ms: u64,
+    /// The owner of the account the bot runs on: paired from ADE by the person at the computer (D92: so far the only
+    /// way anyone is paired). What the page is told with each of their messages (S16). A state saved before this field
+    /// held only such accounts, so it reads as true.
+    #[serde(default = "is_owner_by_default")]
+    pub owner: bool,
+}
+
+fn is_owner_by_default() -> bool {
+    true
+}
+
+/// Where the copies of an unreadable state go to be told: kept until the page takes them, and given to `told` as they
+/// are made. Only the path of the copy, never what is in it.
+#[derive(Default)]
+struct Aside {
+    pending: Mutex<Vec<PathBuf>>,
+    told: Option<Box<dyn Fn(&Path) + Send + Sync>>,
+}
+
+impl Aside {
+    fn note(&self, copy: &Path) {
+        self.pending.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).push(copy.to_path_buf());
+        if let Some(told) = &self.told {
+            told(copy);
+        }
+    }
 }
 
 pub struct Store {
     path: PathBuf,
     /// One writer at a time: two updates at once would each drop the other's change.
     lock: Mutex<()>,
+    /// The state that could not be read and was put aside (`state.corrupt-<ms>.json`), for the page to say once.
+    aside: Aside,
 }
 
 impl Store {
     pub fn new(path: PathBuf) -> Store {
-        Store { path, lock: Mutex::new(()) }
+        Store { path, lock: Mutex::new(()), aside: Aside::default() }
+    }
+
+    /// Calls `told` with the path of the copy each time an unreadable state is put aside (N-A11a), so the page can say
+    /// it. The copies also wait for `take_set_aside`: the first read comes at start, before the page listens.
+    pub fn on_set_aside(mut self, told: impl Fn(&Path) + Send + Sync + 'static) -> Store {
+        self.aside.told = Some(Box::new(told));
+        self
+    }
+
+    /// The copies of an unreadable state put aside since the last call, as paths; the list is emptied. Never their content.
+    pub fn take_set_aside(&self) -> Vec<String> {
+        let mut pending = self.aside.pending.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        pending.drain(..).map(|path| path.display().to_string()).collect()
     }
 
     pub fn path(&self) -> &Path {
@@ -130,7 +176,7 @@ impl Store {
     /// parsed is logged, preserved as state.corrupt-<ms>.json, and recovered cleanly as an empty state.
     pub fn read(&self) -> State {
         let _guard = self.lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        read_file(&self.path).unwrap_or_default()
+        read_file(&self.path, Some(&self.aside)).unwrap_or_default()
     }
 
     pub fn link(&self, bot: &str, platform: Platform) -> Option<LinkState> {
@@ -142,7 +188,7 @@ impl Store {
     /// it recovers cleanly from an empty state.
     pub fn update<R>(&self, bot: &str, platform: Platform, change: impl FnOnce(&mut LinkState, &[LinkState]) -> Result<R, String>) -> Result<R, String> {
         let _guard = self.lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        let mut state = match read_file(&self.path) {
+        let mut state = match read_file(&self.path, Some(&self.aside)) {
             Some(state) => state,
             None if self.path.exists() => return Err("lo stato del gateway su disco non si legge: non lo sovrascrivo".into()),
             None => State::default(),
@@ -174,7 +220,7 @@ impl Store {
     /// it knew. Refused, like `update`, when the file cannot be read.
     pub fn forget(&self, bot: &str) -> Result<(), String> {
         let _guard = self.lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        let mut state = match read_file(&self.path) {
+        let mut state = match read_file(&self.path, Some(&self.aside)) {
             Some(state) => state,
             None if self.path.exists() => return Err("lo stato del gateway su disco non si legge: non lo sovrascrivo".into()),
             None => return Ok(()),
@@ -188,7 +234,7 @@ impl Store {
     }
 }
 
-fn read_file(path: &Path) -> Option<State> {
+fn read_file(path: &Path, aside: Option<&Aside>) -> Option<State> {
     if !path.exists() {
         return Some(State::default());
     }
@@ -224,6 +270,9 @@ fn read_file(path: &Path) -> Option<State> {
                 raw.len(),
                 corrupt_path.display()
             );
+            if let Some(aside) = aside {
+                aside.note(&corrupt_path);
+            }
             Some(State::default())
         }
     }
@@ -284,7 +333,7 @@ mod tests {
         store
             .update("C:/p/.nikcli/agent/a.md", Platform::Fake, |link, _| {
                 link.enabled = true;
-                link.authorized.push(Authorized { id: "42".into(), name: "Ale".into(), added_ms: 1 });
+                link.authorized.push(Authorized { id: "42".into(), name: "Ale".into(), added_ms: 1, owner: true });
                 Ok(())
             })
             .unwrap();
@@ -366,6 +415,39 @@ mod tests {
     }
 
     #[cfg(windows)]
+    #[test]
+    fn an_unreadable_state_put_aside_is_told_once_by_its_path_and_never_by_its_content() {
+        let path = temp_path("corrupt-told");
+        let dir = path.parent().unwrap();
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(&path, "{ abbinamenti: SEGRETO-DEL-FILE").unwrap();
+        let heard = std::sync::Arc::new(Mutex::new(Vec::<PathBuf>::new()));
+        let store = {
+            let heard = heard.clone();
+            Store::new(path.clone()).on_set_aside(move |copy| heard.lock().unwrap().push(copy.to_path_buf()))
+        };
+        assert!(store.take_set_aside().is_empty(), "nothing yet: the state was not read");
+        // The first read puts it aside, and tells it.
+        assert!(store.link("b", Platform::Fake).is_none());
+        let copies = corrupt_files(dir);
+        assert_eq!(copies.len(), 1);
+        assert_eq!(*heard.lock().unwrap(), copies, "told as it was made");
+        // The page that was not listening yet takes it: once, and only the path.
+        let taken = store.take_set_aside();
+        assert_eq!(taken, vec![copies[0].display().to_string()]);
+        assert!(!taken[0].contains("SEGRETO-DEL-FILE"));
+        assert!(store.take_set_aside().is_empty(), "once");
+        // A state that reads, and the clean one that replaced the broken one, say nothing more.
+        store.update("b", Platform::Fake, |link, _| {
+            link.enabled = true;
+            Ok(())
+        })
+        .unwrap();
+        assert!(store.link("b", Platform::Fake).unwrap().enabled);
+        assert!(store.take_set_aside().is_empty());
+        assert_eq!(heard.lock().unwrap().len(), 1);
+    }
+
     #[test]
     fn an_io_error_is_not_treated_as_corrupted_and_refuses_to_overwrite() {
         use std::os::windows::fs::OpenOptionsExt;

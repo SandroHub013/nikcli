@@ -11,7 +11,10 @@
  *   session id;
  * - one turn at a time per chat: what arrives meanwhile waits its turn, and
  *   the chat is told it is queued;
- * - `/nuova`, `/ferma`, `/stato`, `/aiuto` act at once, even mid-turn;
+ * - `/nuova`, `/ferma`, `/stato`, `/aiuto` act at once, even mid-turn; `/riprova` asks the last question again, once
+ *   the turn before it is over; `/costo` says today's spend, as `/stato` does at its end;
+ *   `/modello` shows the model and lets the chat choose another of the bot's own, for that chat alone (`chat-model.ts`);
+ *   `/sessioni` lists the last conversations of a private chat and resumes one (`session.ts`, `HistoryStore`);
  * - the turn runs in the project fixed when the gateway was switched on, with
  *   the bot's file as it is now and only if the user's trust still holds for
  *   it (`policy.ts`); the plan's places are `runTurn`'s (`terms.ts`);
@@ -30,7 +33,7 @@
  * once the listener is in place, and Rust holds every gateway until then.
  */
 
-import { t } from "../../i18n"
+import { locale, t } from "../../i18n"
 import { formatClock } from "../format"
 import { visibleText } from "../visible-text"
 import type { AgentFile } from "../ragu"
@@ -42,10 +45,11 @@ import type { Talk } from "../talk"
 import type { ApprovalRegistry } from "../approvals"
 import { permissionAnswerer, type AskDetail } from "./approval"
 import { forgetTurnFailuresOf, noteTurnFailure } from "./failures"
+import { botForChat, modelChoices, type ChatModelStore } from "./chat-model"
 import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
 import type { BotAccount } from "../account"
 import { offersRemoteCommands, REMOTE_OFF, remoteTools, type RemoteSetting } from "./remote"
-import { resumable, sessionKey, type SessionStore } from "./session"
+import { resumable, sessionKey, sessionTitle, type ChatSession, type HistoryStore, type SessionStore } from "./session"
 import { gatewayThreadKey, keptThread, type GatewayThreads } from "./threads"
 
 /** `gateway:message`, as Rust emits it. */
@@ -63,9 +67,8 @@ export interface GatewayMessage {
   /** A one-to-one chat with the bot. Anything else is a channel others read. */
   readonly private: boolean
   /**
-   * The sender is the owner of the account the bot runs on. Rust does not send
-   * it yet, and only the owner's own accounts are paired (D92), so a message
-   * that says nothing counts as the owner's; `false` is refused on a plan (S16).
+   * The sender is the owner of the account the bot runs on: Rust says it with every message, from who paired the
+   * account in ADE. A message that does not say counts as not the owner's, and is refused on a plan (S16).
    */
   readonly owner?: boolean
   /** The message was recovered after an ADE restart or reload. */
@@ -125,6 +128,8 @@ export interface GatewayControllerDeps {
     project: string,
   ) => Promise<{ ok: true; bot: AgentFile; fingerprint?: string } | { ok: false; problem: string; detail?: string }>
   readonly sessions: SessionStore
+  /** The conversations a chat left behind, for `/sessioni`. Absent, `/nuova` leaves none to resume. */
+  readonly history?: HistoryStore
   /** The chat's thread on disk, apart from the panel's. Absent in a test that does not keep one. */
   readonly threads?: GatewayThreads
   /** The bot's remote commands as saved (`remote.ts`); off when absent. */
@@ -138,8 +143,15 @@ export interface GatewayControllerDeps {
    * text is someone else's. Absent, the bots have none here.
    */
   readonly memory?: MemoryStore
-  /** The bot's money today for `/stato` (`spend.ts`): «Oggi 0,42 $ di 2,00 $.»; absent or undefined, not said. */
-  readonly spendToday?: (bot: string) => Promise<string | undefined>
+  /**
+   * The bot's money today for `/stato` and `/costo` (`spend.ts`): «Oggi 0,42 $ di 2,00 $.»; absent or undefined, not said.
+   * `model` is the one the chat chose with `/modello`, if any: it can be paid when the bot's own is not.
+   */
+  readonly spendToday?: (bot: string, model?: string) => Promise<string | undefined>
+  /** The model each chat chose with `/modello` (`chat-model.ts`); absent, `/modello` only shows the bot's. */
+  readonly chatModels?: ChatModelStore
+  /** ragu's models for `/modello`: its ids (`provider/model`), of which only the free ones are offered. */
+  readonly modelCatalog?: (project: string) => Promise<readonly string[]>
   /** How long a command waits for the phone before it is refused; `ASK_TIMEOUT_MS` when absent. */
   readonly approvalTimeoutMs?: number
   /** Where a question waiting on a phone is listed, so ADE can decide it too (`approvals.ts`); absent, only the phone can. */
@@ -219,15 +231,22 @@ interface ChatState {
   times: number[]
   /** The limit was already said in this chat: said once, then silence. */
   limited: boolean
+  /** The last message that became a turn: what `/riprova` asks again. */
+  last?: GatewayMessage
   /**
    * How many times `/nuova` was said. A turn that was running when it came
    * must not write its session and thread back at its end: the next message
    * went on with the conversation the user had just dropped (review area 2).
    */
   fresh: number
+  /** How many times `/riprova` was said: what makes the ids of its messages different. */
+  retries: number
 }
 
 const TYPING_EVERY_MS = 4_000
+
+/** What a message made by `/riprova` has in its id: Rust never saw it, so it is not acknowledged. */
+const RETRY_MARK = ":retry:"
 
 /** What a question on the phone is about, and whose bot it is: the entry it has in the list of what waits. */
 interface ApprovalDetail extends AskDetail {
@@ -241,7 +260,12 @@ interface Question {
   readonly target: ChatTarget
   readonly choices: readonly Choice[]
   readonly answer: (value: string | undefined) => void
+  /** The question lists its choices by number, and a bare number typed in the chat answers it as a press does. */
+  readonly numbered: boolean
 }
+
+/** How long a list `/modello` or `/sessioni` makes waits for a choice. */
+export const PICK_TIMEOUT_MS = 2 * 60_000
 
 /** 16 hex characters from the platform's random source: what a button's data start with. */
 function nonce(): string {
@@ -286,6 +310,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     timeoutMs = ASK_TIMEOUT_MS,
     signal?: AbortSignal,
     detail?: ApprovalDetail,
+    options?: { readonly numbered?: boolean },
   ) =>
     new Promise<string | undefined>((resolve) => {
       if (closed || choices.length === 0 || signal?.aborted) return resolve(undefined)
@@ -329,20 +354,29 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       }
       const ended = () => answer(undefined)
       signal?.addEventListener("abort", ended)
-      questions.set(id, { key: sessionKey(target.bot, target.platform, target.chat), target, choices, answer })
+      const numbered = options?.numbered === true
+      questions.set(id, {
+        key: sessionKey(target.bot, target.platform, target.chat),
+        target,
+        choices,
+        answer,
+        numbered,
+      })
       const buttons = choices.map((choice, index) => ({ label: choice.label, data: `${id}:${index}` }))
       deps.bridge.sendButtons(target.bot, target.platform, target.chat, question, buttons).catch((error) => {
         warn(
           `ADE: domanda del gateway non mandata (${target.platform}): ${error instanceof Error ? error.message : String(error)}`,
         )
-        answer(undefined)
+        // A list the text numbers can be answered without buttons: the same words as a plain message, and the number.
+        if (!numbered) return answer(undefined)
+        deps.bridge.send(target.bot, target.platform, target.chat, question).catch(() => answer(undefined))
       })
     })
 
   const stateOf = (key: string): ChatState => {
     let state = chats.get(key)
     if (!state) {
-      state = { queue: [], starting: false, cancelled: false, times: [], limited: false, fresh: 0 }
+      state = { queue: [], starting: false, cancelled: false, times: [], limited: false, fresh: 0, retries: 0 }
       chats.set(key, state)
     }
     return state
@@ -369,11 +403,137 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     noteTurnFailure(message.bot, message.platform, problem, now())
   }
 
+  /** Where a past conversation's thread is kept: the chat's thread key with the session id after it. */
+  const pastThreadKey = (message: GatewayMessage, sessionId: string) =>
+    gatewayThreadKey(message.bot, message.platform, message.chat, sessionId)
+
+  /**
+   * The conversation the chat is in, kept to resume with `/sessioni` before `/nuova` or another choice drops it: its CLI
+   * session, and the thread ADE shows. What the cap pushes out of the history goes with its thread.
+   */
+  const keepPast = (message: GatewayMessage, key: string) => {
+    const current = deps.sessions.get(key)
+    if (!current || !deps.history) return
+    const thread = deps.threads?.read(gatewayThreadKey(message.bot, message.platform, message.chat))
+    if (thread && thread.messages.length > 0) deps.threads?.save(pastThreadKey(message, current.sessionId), thread)
+    for (const gone of deps.history.add(key, current)) deps.threads?.forget(pastThreadKey(message, gone.sessionId))
+  }
+
+  /** A conversation as `/sessioni` lists it: «its first words» and when it last had a turn. */
+  const describeSession = (past: ChatSession) => {
+    const title = past.title || t("gateway.sessions.untitled")
+    if (past.at === undefined) return `«${title}»`
+    const when = new Intl.DateTimeFormat(locale() === "it" ? "it-IT" : "en-US", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(past.at)
+    return t("gateway.sessions.item", title, when)
+  }
+
+  /**
+   * `/sessioni`: the last conversations of this chat, and the one the person picks becomes the chat's own again. Only in
+   * a private chat (the first words of each are shown), and not while a turn runs.
+   */
+  const chooseSession = async (message: GatewayMessage, key: string) => {
+    if (message.private !== true) return reply(message, t("gateway.sessions.private"))
+    const state = stateOf(key)
+    const busy = () => state.turn !== undefined || state.starting
+    if (busy()) return reply(message, t("gateway.sessions.busy"))
+    const past = deps.history?.list(key) ?? []
+    const current = deps.sessions.get(key)
+    if (past.length === 0) return reply(message, t("gateway.sessions.none"))
+    const picked = await ask(
+      { bot: message.bot, platform: message.platform, chat: message.chat, asker: message.sender.id },
+      t(
+        "gateway.sessions.ask",
+        current ? t("gateway.sessions.now", describeSession(current)) : "",
+        numberedList(past.map(describeSession)),
+      ),
+      past.map((each, index) => ({
+        label: `${index + 1}. ${each.title || t("gateway.sessions.untitled")}`,
+        value: each.sessionId,
+      })),
+      PICK_TIMEOUT_MS,
+      undefined,
+      undefined,
+      { numbered: true },
+    )
+    if (picked === undefined) return
+    const chosen = deps.history?.list(key).find((each) => each.sessionId === picked)
+    if (!chosen) return
+    if (busy()) return reply(message, t("gateway.sessions.busy"))
+    // Resumed only where it can be: the project the gateway runs in now, and the CLI the bot is on now.
+    const project = await deps.bridge.project(message.bot, message.platform)
+    if (!project) return reply(message, t("gateway.noProject"))
+    const loaded = await deps.loadBot(message.bot, project)
+    if (!loaded.ok) return reply(message, loaded.problem)
+    if (!resumable(chosen, project, runnerById(loaded.bot.runner).id))
+      return reply(message, t("gateway.sessions.other", chosen.title || t("gateway.sessions.untitled")))
+    if (busy()) return reply(message, t("gateway.sessions.busy"))
+    state.fresh += 1
+    const thread = deps.threads?.read(pastThreadKey(message, chosen.sessionId))
+    deps.history?.remove(key, chosen.sessionId)
+    keepPast(message, key)
+    deps.sessions.set(key, chosen)
+    const stored = gatewayThreadKey(message.bot, message.platform, message.chat)
+    if (thread && thread.messages.length > 0) deps.threads?.save(stored, thread)
+    else deps.threads?.forget(stored)
+    deps.threads?.forget(pastThreadKey(message, chosen.sessionId))
+    return reply(message, t("gateway.sessions.resumed", chosen.title || t("gateway.sessions.untitled")))
+  }
+
+  /** The list of `lines` as the text of a question: one per line, numbered from 1. */
+  const numberedList = (lines: readonly string[]) => lines.map((line, index) => `${index + 1}. ${line}`).join("\n")
+
+  /**
+   * `/modello`: the model this chat runs the bot on, and the bot's own to choose from; the choice holds for this chat
+   * from its next message on, and is kept across `/nuova`.
+   */
+  const chooseModel = async (message: GatewayMessage, key: string) => {
+    const project = await deps.bridge.project(message.bot, message.platform)
+    if (!project) return reply(message, t("gateway.noProject"))
+    const loaded = await deps.loadBot(message.bot, project)
+    if (!loaded.ok) return reply(message, loaded.problem)
+    const bot = loaded.bot
+    const runner = runnerById(bot.runner)
+    const saved = deps.chatModels?.get(key)
+    const chosen = saved && saved.runner === runner.id ? saved.model : undefined
+    const own = bot.model ?? ""
+    const named = (model: string) => model || t("gateway.model.default", runner.label)
+    const current = chosen ?? own
+    if (!deps.chatModels) return reply(message, t("gateway.model.only", named(current)))
+    const catalog = runner.id === "ragu" ? await (deps.modelCatalog?.(project) ?? Promise.resolve([])).catch(() => []) : []
+    // The bot's own model comes first; without one, the way back to the CLI's default is there once another was chosen.
+    const options = modelChoices(bot, catalog)
+    if (!own && chosen !== undefined) options.unshift("")
+    if (options.length === 0) return reply(message, t("gateway.model.nothing", named(current)))
+    const marked = options.map((model) => {
+      const tags = [model === current ? t("gateway.model.tagCurrent") : "", model === own ? t("gateway.model.tagOwn") : ""]
+      return [named(model), ...tags.filter(Boolean).map((tag) => `(${tag})`)].join(" ")
+    })
+    const picked = await ask(
+      { bot: message.bot, platform: message.platform, chat: message.chat, asker: message.sender.id },
+      t("gateway.model.ask", named(current), numberedList(marked), runner.id === "ragu" ? t("gateway.model.freeOnly") : ""),
+      options.map((model, index) => ({ label: `${index + 1}. ${named(model)}`, value: model })),
+      PICK_TIMEOUT_MS,
+      undefined,
+      undefined,
+      { numbered: true },
+    )
+    if (picked === undefined) return
+    if (picked === own) deps.chatModels.forget(key)
+    else deps.chatModels.set(key, { runner: runner.id, model: picked })
+    return reply(message, t("gateway.model.set", named(picked)))
+  }
+
   const command = async (message: GatewayMessage, key: string, which: string) => {
     const state = stateOf(key)
     const running = state.turn !== undefined || state.starting
     if (which === "new") {
       state.fresh += 1
+      keepPast(message, key)
       deps.sessions.forget(key)
       deps.threads?.forget(gatewayThreadKey(message.bot, message.platform, message.chat))
       return reply(message, t("gateway.fresh"))
@@ -389,6 +549,34 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       }
       return reply(message, t("gateway.stopped"))
     }
+    if (which === "retry") {
+      if (running) return reply(message, t("gateway.retry.busy"))
+      const last = state.last
+      if (!last) return reply(message, t("gateway.retry.none"))
+      // It counts like any message: a loop of `/riprova` is a loop of turns.
+      const counted = countMessage(state.times, now())
+      state.times = counted.times
+      if (!counted.allowed) return reply(message, t("gateway.limit", CHAT_MESSAGES_PER_HOUR))
+      state.retries += 1
+      // The same words, asked by whoever said `/riprova`: the answers to a question on the phone are theirs.
+      state.queue.push({
+        ...last,
+        id: `${last.id}${RETRY_MARK}${state.retries}`,
+        sender: message.sender,
+        ...(message.owner === undefined ? {} : { owner: message.owner }),
+        private: message.private,
+        redacted: false,
+        recovered: false,
+      })
+      void reply(message, t("gateway.retry.again"))
+      return next(key)
+    }
+    if (which === "cost") {
+      const spent = await deps.spendToday?.(message.bot, deps.chatModels?.get(key)?.model).catch(() => undefined)
+      return reply(message, spent ?? t("gateway.cost.none"))
+    }
+    if (which === "model") return chooseModel(message, key)
+    if (which === "sessions") return chooseSession(message, key)
     if (which === "status") {
       const said = running ? t("gateway.status.working", state.queue.length) : t("gateway.status.idle")
       const link = await (
@@ -399,7 +587,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         link?.connected && link.connectedAtMs != null
           ? t("gateway.status.connectedSince", formatClock(link.connectedAtMs))
           : undefined
-      const spent = await deps.spendToday?.(message.bot).catch(() => undefined)
+      const spent = await deps.spendToday?.(message.bot, deps.chatModels?.get(key)?.model).catch(() => undefined)
       const lines = [said, connectedLine, spent].filter(Boolean).join("\n")
       return reply(message, lines)
     }
@@ -412,7 +600,9 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     if (closed || state.turn || state.starting) return
     const message = state.queue.shift()
     if (!message) return
-    void deps.bridge.ack?.(message.bot, message.platform, message.chat, message.id)?.catch?.(() => {})
+    if (!message.id.includes(RETRY_MARK))
+      void deps.bridge.ack?.(message.bot, message.platform, message.chat, message.id)?.catch?.(() => {})
+    state.last = message
     state.starting = true
     state.cancelled = false
     state.current = message
@@ -431,9 +621,9 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         if (loaded.detail) failure(message, loaded.detail)
         return void (await reply(message, loaded.problem))
       }
-      const bot = loaded.bot
+      const bot = botForChat(loaded.bot, deps.chatModels?.get(key))
       const runner = runnerById(bot.runner).id
-      const allowed = mayRun(runner, message.owner !== false)
+      const allowed = mayRun(runner, message.owner === true)
       if (!allowed.ok) return void (await reply(message, allowed.problem))
       // `/ferma` while the bot was being read: nothing starts.
       if (closed || state.cancelled) return
@@ -588,7 +778,17 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       clearInterval(typing)
       typing = undefined
       const kept = state.fresh === fresh
-      if (kept && result.sessionId) deps.sessions.set(key, { project, runner, sessionId: result.sessionId })
+      if (kept && result.sessionId) {
+        // The conversation keeps the words it began with; a new one begins with these.
+        const began = sessionId ? deps.sessions.get(key)?.title : undefined
+        deps.sessions.set(key, {
+          project,
+          runner,
+          sessionId: result.sessionId,
+          title: began ?? sessionTitle(message.text),
+          at: now(),
+        })
+      }
       const said = settleChatMemory(message.bot, result.talk, sent, framed)
       const text = said.found ? takeMemoryOps(result.text).text : result.text
       if (kept && deps.threads && result.talk) {
@@ -699,6 +899,23 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     if (which) {
       ack()
       return command(message, key, which)
+    }
+    // A list that numbers its choices is answered with the number, where the chat has no buttons or the person likes digits.
+    const typed = /^\d{1,2}$/.test(message.text.trim()) ? Number(message.text.trim()) : undefined
+    const listed =
+      typed === undefined
+        ? undefined
+        : [...questions.values()].find(
+            (question) =>
+              question.numbered &&
+              question.key === key &&
+              (question.target.asker === undefined || question.target.asker === message.sender.id),
+          )
+    if (typed !== undefined && listed) {
+      ack()
+      const choice = listed.choices[typed - 1]
+      if (choice) return listed.answer(choice.value)
+      return void (await reply(message, t("gateway.pick.range", listed.choices.length)))
     }
     const state = stateOf(key)
     const counted = countMessage(state.times, now())

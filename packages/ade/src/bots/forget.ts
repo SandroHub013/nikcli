@@ -8,6 +8,7 @@
 
 import { ACCOUNT_PLAN, type AccountStore } from "./account"
 import type { AlwaysStore } from "./approval"
+import { forgetPictures, picturesOf } from "./attach"
 import { EMPTY_MEMORY, type MemoryStore } from "./memory"
 import { forgetTurnFailuresOf } from "./gateway/failures"
 import { REMOTE_OFF, remoteKey, type RemoteStore } from "./gateway/remote"
@@ -42,8 +43,14 @@ export function forgetBotTraces(
     always?: AlwaysStore
     /** The renderer's storage, for the sessions and threads kept under the bot's path (S9). */
     storage?: KeyedStorage
+    /**
+     * Takes away the pictures it was given (`attach.ts`, bot-ui-4 P1-1): handed the ones remembered in `storage`, it
+     * prunes them, with what else its folder in the open project holds.
+     */
+    pictures?: (recorded: readonly string[]) => void
   },
 ): void {
+  if (stores.pictures) stores.pictures(stores.storage ? picturesOf(stores.storage, path) : [])
   stores.routines((book) => removeRoutinesOf(book, path))
   stores.notices?.((book) => forgetNotice(book, path))
   stores.memory.set(path, EMPTY_MEMORY)
@@ -80,6 +87,7 @@ export function forgetStoredKeys(path: string, storage: KeyedStorage): void {
   } catch {
     // As above.
   }
+  forgetPictures(storage, path)
   try {
     const gone: string[] = []
     for (let index = 0; index < storage.length; index++) {

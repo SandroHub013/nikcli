@@ -403,8 +403,9 @@ export interface Host {
   /** Deletes a bot's `.md` file; resolves to the failure, or null. */
   deleteBotFile?: (path: string) => Promise<string | null>
   /**
-   * Removes files ADE left in a project's `.ade/` (captures, results, design notes: `session/ade-prune.ts` chooses which); the bytes freed.
-   * The host refuses any path that is not a plain file of one of those three folders inside an open project.
+   * Removes files ADE left in a project's `.ade/` (captures, results, design notes: `session/ade-prune.ts` chooses which; the pictures
+   * given to a bot, `bots/attach.ts`); the bytes freed. The host refuses any path that is not a plain file of one of those four folders
+   * inside an open project.
    */
   adePrune?: (paths: string[]) => Promise<number>
   /** Removes the `<project>-worktrees` folder beside an open project, when nothing is left in it; whether it was removed. */
