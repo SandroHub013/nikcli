@@ -122,11 +122,11 @@ impl Store {
         Store { path, lock: Mutex::new(()) }
     }
 
-    /// The state as saved. A missing file is an empty state; so is one that
-    /// does not parse — nobody authorized, which is the safe reading.
+    /// The state as saved. A missing file is an empty state; one that does not
+    /// parse is logged, preserved with .corrupt extension, and recovered cleanly as an empty state.
     pub fn read(&self) -> State {
         let _guard = self.lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        read_file(&self.path).unwrap_or_default()
+        read_file(&self.path)
     }
 
     pub fn link(&self, bot: &str, platform: Platform) -> Option<LinkState> {
@@ -134,15 +134,10 @@ impl Store {
     }
 
     /// Changes the link for `bot` on `platform` (created if new) and saves.
-    /// Refused when the file exists but cannot be read: writing over it would
-    /// throw away every approval in it.
+    /// If the file is unreadable, it recovers cleanly and logs what was discarded.
     pub fn update<R>(&self, bot: &str, platform: Platform, change: impl FnOnce(&mut LinkState, &[LinkState]) -> Result<R, String>) -> Result<R, String> {
         let _guard = self.lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        let mut state = match read_file(&self.path) {
-            Some(state) => state,
-            None if self.path.exists() => return Err("lo stato del gateway su disco non si legge: non lo sovrascrivo".into()),
-            None => State::default(),
-        };
+        let mut state = read_file(&self.path);
         // What is on disk, to see whether the change made any difference: every message of a stranger came through here
         // and rewrote the file whether or not it had (full review 2026-10-06, rust minor).
         let before = serde_json::to_string(&state).ok();
@@ -167,14 +162,10 @@ impl Store {
 
 impl Store {
     /// Takes away every link of `bot`, with who was authorized and the chats
-    /// it knew. Refused, like `update`, when the file cannot be read.
+    /// it knew.
     pub fn forget(&self, bot: &str) -> Result<(), String> {
         let _guard = self.lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        let mut state = match read_file(&self.path) {
-            Some(state) => state,
-            None if self.path.exists() => return Err("lo stato del gateway su disco non si legge: non lo sovrascrivo".into()),
-            None => return Ok(()),
-        };
+        let mut state = read_file(&self.path);
         let before = state.links.len();
         state.links.retain(|link| link.bot != bot);
         if state.links.len() == before {
@@ -184,9 +175,29 @@ impl Store {
     }
 }
 
-fn read_file(path: &Path) -> Option<State> {
-    let text = std::fs::read_to_string(path).ok()?;
-    serde_json::from_str(&text).ok()
+fn read_file(path: &Path) -> State {
+    if !path.exists() {
+        return State::default();
+    }
+    let raw = match std::fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            eprintln!("ADE: stato del gateway non accessibile ({error}), riparto pulito");
+            let corrupt_path = path.with_extension("corrupt");
+            let _ = std::fs::rename(path, &corrupt_path);
+            return State::default();
+        }
+    };
+    match serde_json::from_slice::<State>(&raw) {
+        Ok(state) => state,
+        Err(error) => {
+            let discarded = String::from_utf8_lossy(&raw);
+            eprintln!("ADE: stato del gateway illeggibile ({error}), riparto pulito; scartato: {discarded}");
+            let corrupt_path = path.with_extension("corrupt");
+            let _ = std::fs::rename(path, &corrupt_path);
+            State::default()
+        }
+    }
 }
 
 fn write_file(path: &Path, state: &State) -> Result<(), String> {
@@ -195,7 +206,11 @@ fn write_file(path: &Path, state: &State) -> Result<(), String> {
     }
     let text = serde_json::to_string_pretty(state).map_err(|e| e.to_string())?;
     let temp = path.with_extension("json.tmp");
-    std::fs::write(&temp, text).map_err(|e| format!("stato del gateway: {e}"))?;
+    let mut file = std::fs::File::create(&temp).map_err(|e| format!("stato del gateway: {e}"))?;
+    use std::io::Write;
+    file.write_all(text.as_bytes()).map_err(|e| format!("stato del gateway: {e}"))?;
+    file.sync_all().map_err(|e| format!("stato del gateway: {e}"))?;
+    drop(file);
     std::fs::rename(&temp, path).map_err(|e| format!("stato del gateway: {e}"))
 }
 
@@ -265,13 +280,22 @@ mod tests {
     }
 
     #[test]
-    fn an_unreadable_file_means_nobody_authorized_and_is_not_overwritten() {
-        let path = temp_path("corrupt");
+    fn an_unreadable_state_recovers_cleanly_and_logs_discarded_content() {
+        let path = temp_path("corrupt-recover");
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(&path, "{ non json").unwrap();
         let store = Store::new(path.clone());
         assert!(store.link("b", Platform::Fake).is_none());
-        assert!(store.update("b", Platform::Fake, |_, _| Ok(())).is_err());
-        assert_eq!(std::fs::read_to_string(&path).unwrap(), "{ non json");
+        // A11: Gateway must not halt with an error; it starts clean and allows update:
+        store
+            .update("b", Platform::Fake, |link, _| {
+                link.enabled = true;
+                Ok(())
+            })
+            .expect("lo stato illeggibile deve ripartire pulito senza fermare il gateway");
+        let link = store.link("b", Platform::Fake).expect("il link deve esistere dopo il recupero pulito");
+        assert!(link.enabled);
+        assert!(path.with_extension("corrupt").exists());
+        assert_eq!(std::fs::read_to_string(path.with_extension("corrupt")).unwrap(), "{ non json");
     }
 }
