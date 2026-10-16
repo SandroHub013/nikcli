@@ -103,6 +103,9 @@ pub struct Pairing {
     /// Who was told a link no longer holds, and when: once each ten minutes, like a request for a code.
     #[serde(default)]
     pub stale_told: Vec<Asked>,
+    /// The account the last link paired (its id): what the panel names, instead of guessing from who appeared.
+    #[serde(default)]
+    pub linked_by: Option<String>,
 }
 
 /// A link's token, kept as the codes are: a salt and a hash, never the token.
@@ -283,6 +286,8 @@ impl Pairing {
         let expires_ms = now + LINK_TTL_MS;
         self.link = Some(LinkToken { token_hash: code_hash(&salt, &token), salt, expires_ms });
         self.link_made_ms = Some(now);
+        // A new link is a new question: who the last one paired is no longer its answer.
+        self.linked_by = None;
         Ok((token, expires_ms))
     }
 
@@ -315,6 +320,7 @@ impl Pairing {
             self.pending.retain(|pending| pending.sender != sender);
             self.asked.retain(|asked| asked.sender != sender);
             self.rejected.retain(|rejected| rejected.sender != sender);
+            self.linked_by = Some(sender.to_string());
             return LinkUse::Paired;
         }
         LinkUse::Wrong
@@ -888,6 +894,20 @@ mod tests {
         // An hour after the link, the bot is silent again.
         assert!(!pairing.may_say_stale("7", 1_000 + LINK_STALE_MS));
         assert!(pairing.link_made_ms.is_none());
+    }
+
+    #[test]
+    fn the_account_a_link_paired_is_named_by_its_id_and_a_new_link_forgets_it() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        assert_eq!(pairing.linked_by, None);
+        let (token, _) = pairing.issue_link(0, &mut random).unwrap();
+        assert_eq!(pairing.use_link(&"a".repeat(LINK_TOKEN_LEN), "9", 1), LinkUse::Wrong);
+        assert_eq!(pairing.linked_by, None, "a wrong one pairs nobody");
+        assert_eq!(pairing.use_link(&token, "42", 2), LinkUse::Paired);
+        assert_eq!(pairing.linked_by.as_deref(), Some("42"));
+        pairing.issue_link(3, &mut random).unwrap();
+        assert_eq!(pairing.linked_by, None);
     }
 
     #[test]

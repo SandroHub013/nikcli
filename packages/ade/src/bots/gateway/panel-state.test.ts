@@ -803,10 +803,37 @@ describe("the link or QR of a pairing (scelta 3)", () => {
     expect(panel.pairLink()).toBeDefined()
     expect(panel.linked()).toBeUndefined()
     // The owner scans it: Rust has a new authorized account, and the panel finds it while it waits.
-    fake.setPairing({ open: false, pending: [], authorized: [{ id: "42", name: "Ale", addedMs: 1 }], attemptsLeft: 5 })
+    fake.setPairing({ open: false, pending: [], authorized: [{ id: "42", name: "Ale", addedMs: 1 }], attemptsLeft: 5, linkedBy: "42" })
     await wait()
     expect(panel.pairLink()).toBeUndefined()
     expect(panel.linked()).toBe("Ale")
+    panel.dispose()
+  })
+
+  test("an account approved with a code meanwhile is not named: only the one Rust says the link paired", async () => {
+    const fake = fakeApi({ enabled: true, running: true, hasToken: true })
+    const { panel } = panelWith(fake)
+    await panel.ready
+    await panel.makeLink()
+    // A code is approved for another account: it appears among the authorized, the link is not used.
+    fake.setPairing({ open: false, pending: [], authorized: [{ id: "8", name: "Altro", addedMs: 1 }], attemptsLeft: 5 })
+    await wait()
+    expect(panel.pairLink()).toBeDefined()
+    expect(panel.linked()).toBeUndefined()
+    // Then the link is used, by another account again: that one is named.
+    fake.setPairing({
+      open: false,
+      pending: [],
+      authorized: [
+        { id: "8", name: "Altro", addedMs: 1 },
+        { id: "42", name: "Ale", addedMs: 2 },
+      ],
+      attemptsLeft: 5,
+      linkedBy: "42",
+    })
+    await wait()
+    expect(panel.linked()).toBe("Ale")
+    expect(panel.pairLink()).toBeUndefined()
     panel.dispose()
   })
 
@@ -924,7 +951,7 @@ describe("the QR is cancelled when it leaves the screen", () => {
     const { panel } = panelWith(fake)
     await panel.ready
     await panel.makeLink()
-    fake.setPairing({ open: false, pending: [], authorized: [{ id: "42", name: "Ale", addedMs: 1 }], attemptsLeft: 5 })
+    fake.setPairing({ open: false, pending: [], authorized: [{ id: "42", name: "Ale", addedMs: 1 }], attemptsLeft: 5, linkedBy: "42" })
     await wait()
     expect(panel.linked()).toBe("Ale")
     panel.dispose()

@@ -79,6 +79,8 @@ export interface PairingInfo {
   readonly authorized: readonly (Sender & { readonly addedMs: number })[]
   readonly lockedUntilMs?: number | null
   readonly attemptsLeft: number
+  /** The id of the account the last link or QR paired (Rust forgets it when a new link is made). */
+  readonly linkedBy?: string | null
 }
 
 /** Which of a link's secrets: the bot's token, or Slack's App-Level Token. */
@@ -459,7 +461,8 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
     openPairing: () => act(() => deps.api.pairingOpen(path(), platform()), "pair"),
     /**
      * A new link and QR (the old one is cancelled by Rust). While it is shown the panel asks every few seconds whether it
-     * was used: the account that appears among the authorized is the one it paired, and the QR goes.
+     * was used: Rust says which account the link paired (not whichever appeared, a code approved meanwhile is not it),
+     * and the QR goes.
      */
     makeLink: () =>
       act(async () => {
@@ -467,17 +470,16 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
         if (!make) throw new Error(t("gateway.panel.linkMissing"))
         stopPoll()
         setLinked(undefined)
-        const known = new Set(pairing().authorized.map((account) => account.id))
         const made = await make(path(), platform())
         setPairLink(made)
         if (typeof document !== "undefined") document.addEventListener("visibilitychange", onHidden)
         poll = setInterval(() => {
           if (disposed || now() >= made.expiresMs) return stopPoll()
           void refresh().then(() => {
-            const added = pairing().authorized.find((account) => !known.has(account.id))
-            if (!added || pairLink() !== made) return
+            const id = pairing().linkedBy
+            if (!id || pairLink() !== made) return
             // Used up by that account: nothing left to cancel.
-            setLinked(added.name)
+            setLinked(pairing().authorized.find((account) => account.id === id)?.name ?? id)
             setPairLink(undefined)
             stopPoll()
           })

@@ -122,6 +122,8 @@ pub struct PairingInfo {
     pub authorized: Vec<AuthorizedInfo>,
     pub locked_until_ms: Option<u64>,
     pub attempts_left: u32,
+    /// The id of the account the last link or QR paired, until a new one is made: what the panel names as paired by it.
+    pub linked_by: Option<String>,
 }
 
 /// The link and QR the panel shows to pair the owner's phone: the address, the picture of it, and when it stops
@@ -900,6 +902,7 @@ impl Hub {
                 .collect(),
             locked_until_ms: pairing.locked_until_ms,
             attempts_left: pairing.attempts_left(now),
+            linked_by: pairing.linked_by.clone(),
         })
     }
 
@@ -2777,6 +2780,30 @@ mod tests {
         feed.send(Ok(vec![message("1", "c9", "9", &format!("/start {token}"))])).unwrap();
         tokio::time::sleep(Duration::from_millis(80)).await;
         assert!(adapter.sent.lock().unwrap().is_empty(), "an hour on, the dead link gets silence: {:?}", adapter.sent.lock().unwrap());
+    }
+
+    #[tokio::test]
+    async fn the_panel_is_told_which_account_the_link_paired_not_which_one_appeared() {
+        let s = setup("link-linked-by");
+        let (adapter, feed) = start(&s);
+        let token = token_of(&s);
+        assert_eq!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().linked_by, None);
+        // Another account is approved with a code first; it is not the link's.
+        feed.send(Ok(vec![message("1", "c8", "8", "io")])).unwrap();
+        eventually("il codice", || adapter.sent.lock().unwrap().len() == 1).await;
+        let code = code_sent_to(&adapter, "c8");
+        s.hub.pairing_approve(BOT, Platform::Fake, &code).await.unwrap();
+        assert_eq!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().linked_by, None);
+        feed.send(Ok(vec![message("2", "c7", "7", &format!("/start {token}"))])).unwrap();
+        eventually("l'abbinamento", || s.hub.pairing_list(BOT, Platform::Fake).unwrap().linked_by.as_deref() == Some("7")).await;
+        let list = s.hub.pairing_list(BOT, Platform::Fake).unwrap();
+        assert!(list.authorized.iter().any(|a| a.id == "8") && list.authorized.iter().any(|a| a.id == "7"));
+        // The id says nothing a token could be made of.
+        let saved = std::fs::read_to_string(&s.path).unwrap();
+        assert!(!saved.contains(&token));
+        // A new link forgets it.
+        token_of(&s);
+        assert_eq!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().linked_by, None);
     }
 
     #[tokio::test]
