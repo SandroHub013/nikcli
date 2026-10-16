@@ -122,6 +122,10 @@ impl Store {
         Store { path, lock: Mutex::new(()) }
     }
 
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
     /// The state as saved. A missing file is an empty state; one that cannot be
     /// parsed is logged, preserved as state.corrupt-<ms>.json, and recovered cleanly as an empty state.
     pub fn read(&self) -> State {
