@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { createHash } from "node:crypto"
 import { existsSync, readFileSync, statSync } from "node:fs"
 import { join, resolve } from "node:path"
 import { inflateSync } from "node:zlib"
@@ -161,79 +162,95 @@ describe("splash reference image preparation and fidelity (P1-1)", () => {
     expect(stat.size).toBeLessThan(1400 * 1024)
   })
 
-  test("scena.png preserves authentic colors across all 4 critical zones (P1-1)", () => {
-    if (!existsSync(refPath)) {
-      console.warn(`Reference image not found at ${refPath}, skipping fidelity test`)
-      return
-    }
+  /**
+   * Exact SHA-256 digest of the uncompressed 1672x941 RGB pixel stream (4,720,056 bytes)
+   * from the authentic reference scene ("scena-sinistra.png").
+   */
+  const REFERENCE_RGB_SHA256 = "d80a371940211cb13356bb929f088b3a4a5760e938d86b77a80fa68122bb12ab"
 
-    const refBuf = readFileSync(refPath)
+  test("scena.png decoded RGB pixel stream matches authentic reference SHA-256 digest (N1)", () => {
     const testBuf = readFileSync(scenaPngPath)
+    const testPng = decodePngRgb(testBuf)
+    const hash = createHash("sha256").update(testPng.rgb).digest("hex")
+    expect(hash).toBe(REFERENCE_RGB_SHA256)
+  })
 
-    const refPng = decodePngRgb(refBuf)
+  test("scena.png preserves authentic colors across all 4 critical zones (P1-1, N1)", () => {
+    const testBuf = readFileSync(scenaPngPath)
     const testPng = decodePngRgb(testBuf)
 
-    expect(testPng.width).toBe(refPng.width)
-    expect(testPng.height).toBe(refPng.height)
+    if (existsSync(refPath)) {
+      const refBuf = readFileSync(refPath)
+      const refPng = decodePngRgb(refBuf)
 
-    // Check each of the 4 critical zones identified in review P1-1
-    for (const zone of CRITICAL_ZONES) {
-      let maxZoneDiff = 0
-      let errorPixelsCount = 0
+      expect(testPng.width).toBe(refPng.width)
+      expect(testPng.height).toBe(refPng.height)
 
-      for (let y = zone.y0; y < zone.y1; y++) {
-        for (let x = zone.x0; x < zone.x1; x++) {
-          const idx = (y * refPng.width + x) * 3
-          const dr = Math.abs(refPng.rgb[idx] - testPng.rgb[idx])
-          const dg = Math.abs(refPng.rgb[idx + 1] - testPng.rgb[idx + 1])
-          const db = Math.abs(refPng.rgb[idx + 2] - testPng.rgb[idx + 2])
-          const maxChan = Math.max(dr, dg, db)
-          if (maxChan > 24) {
-            errorPixelsCount++
-          }
-          if (maxChan > maxZoneDiff) {
-            maxZoneDiff = maxChan
+      // Check each of the 4 critical zones identified in review P1-1
+      for (const zone of CRITICAL_ZONES) {
+        let maxZoneDiff = 0
+        let errorPixelsCount = 0
+
+        for (let y = zone.y0; y < zone.y1; y++) {
+          for (let x = zone.x0; x < zone.x1; x++) {
+            const idx = (y * refPng.width + x) * 3
+            const dr = Math.abs(refPng.rgb[idx] - testPng.rgb[idx])
+            const dg = Math.abs(refPng.rgb[idx + 1] - testPng.rgb[idx + 1])
+            const db = Math.abs(refPng.rgb[idx + 2] - testPng.rgb[idx + 2])
+            const maxChan = Math.max(dr, dg, db)
+            if (maxChan > 24) {
+              errorPixelsCount++
+            }
+            if (maxChan > maxZoneDiff) {
+              maxZoneDiff = maxChan
+            }
           }
         }
-      }
 
-      // In the 256-color quantized image, every single one of these zones had errors > 24 (up to 81)
-      expect(errorPixelsCount).toBe(0)
-      expect(maxZoneDiff).toBeLessThanOrEqual(24)
+        // In the 256-color quantized image, every single one of these zones had errors > 24 (up to 81)
+        expect(errorPixelsCount).toBe(0)
+        expect(maxZoneDiff).toBeLessThanOrEqual(24)
+      }
+    } else {
+      // Standalone/CI verification: ensure authentic pixels via reference digest
+      const hash = createHash("sha256").update(testPng.rgb).digest("hex")
+      expect(hash).toBe(REFERENCE_RGB_SHA256)
     }
   })
 
-  test("scena.png overall fidelity: >= 99.9% pixels within 24 levels and no pixel exceeds 40 levels", () => {
-    if (!existsSync(refPath)) {
-      return
-    }
-
-    const refBuf = readFileSync(refPath)
+  test("scena.png overall fidelity: >= 99.9% pixels within 24 levels and no pixel exceeds 40 levels (N1)", () => {
     const testBuf = readFileSync(scenaPngPath)
-
-    const refPng = decodePngRgb(refBuf)
     const testPng = decodePngRgb(testBuf)
 
-    const totalPixels = refPng.width * refPng.height
-    let over24 = 0
-    let maxDiff = 0
+    if (existsSync(refPath)) {
+      const refBuf = readFileSync(refPath)
+      const refPng = decodePngRgb(refBuf)
 
-    for (let i = 0; i < totalPixels; i++) {
-      const idx = i * 3
-      const dr = Math.abs(refPng.rgb[idx] - testPng.rgb[idx])
-      const dg = Math.abs(refPng.rgb[idx + 1] - testPng.rgb[idx + 1])
-      const db = Math.abs(refPng.rgb[idx + 2] - testPng.rgb[idx + 2])
-      const maxChan = Math.max(dr, dg, db)
-      if (maxChan > 24) {
-        over24++
+      const totalPixels = refPng.width * refPng.height
+      let over24 = 0
+      let maxDiff = 0
+
+      for (let i = 0; i < totalPixels; i++) {
+        const idx = i * 3
+        const dr = Math.abs(refPng.rgb[idx] - testPng.rgb[idx])
+        const dg = Math.abs(refPng.rgb[idx + 1] - testPng.rgb[idx + 1])
+        const db = Math.abs(refPng.rgb[idx + 2] - testPng.rgb[idx + 2])
+        const maxChan = Math.max(dr, dg, db)
+        if (maxChan > 24) {
+          over24++
+        }
+        if (maxChan > maxDiff) {
+          maxDiff = maxChan
+        }
       }
-      if (maxChan > maxDiff) {
-        maxDiff = maxChan
-      }
+
+      const ratioUnder24 = (totalPixels - over24) / totalPixels
+      expect(ratioUnder24).toBeGreaterThanOrEqual(0.999)
+      expect(maxDiff).toBeLessThanOrEqual(40)
+    } else {
+      // Standalone/CI verification: ensure authentic pixels via reference digest
+      const hash = createHash("sha256").update(testPng.rgb).digest("hex")
+      expect(hash).toBe(REFERENCE_RGB_SHA256)
     }
-
-    const ratioUnder24 = (totalPixels - over24) / totalPixels
-    expect(ratioUnder24).toBeGreaterThanOrEqual(0.999)
-    expect(maxDiff).toBeLessThanOrEqual(40)
   })
 })
