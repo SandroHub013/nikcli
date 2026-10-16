@@ -2078,6 +2078,26 @@ export const en: Messages = {
   "bots.spend.free": "free",
   "bots.spend.metered": "usage-based (depends on the model)",
   "bots.spend.unreported": "cost not reported by the CLI",
+  "bots.daily.capLabel": "Daily spending cap",
+  "bots.daily.capPlaceholder": "no cap",
+  "bots.daily.capHint":
+    "In dollars, for conversations with the bot here and from your phone. At 80% ADE lets you know; at 100% the bot stops until tomorrow, or until you raise the cap. Routines and rooms have their own caps. Empty: no cap.",
+  "bots.daily.capSave": "Save cap",
+  "bots.daily.capSaved": "Cap saved.",
+  "bots.daily.capInvalid": (max) =>
+    `Enter an amount in dollars, more than 0 and up to ${max}, with at most two decimals. Empty means no cap.`,
+  "bots.daily.today": (spent, cap) => `Spent today: ${spent} of ${cap}`,
+  "bots.daily.todayNoCap": (spent) => `Spent today: ${spent}, no cap`,
+  "bots.daily.todayStopped": (spent, cap) =>
+    `Spent today: ${spent} of ${cap}. The bot is stopped until tomorrow, or until you raise the cap.`,
+  "bots.daily.unreported":
+    "Codex with an API key doesn't report dollars, so today's spend can't be counted or stopped by a cap.",
+  "bots.daily.status": (spent, cap) => `Today ${spent} of ${cap}.`,
+  "bots.daily.statusNoCap": (spent) => `Today ${spent}, no cap.`,
+  "bots.daily.notice": (spent, cap, name) =>
+    `Today the bot has spent ${spent} of its ${cap} daily cap: past 80%. At the cap it stops until tomorrow; you can raise it in ADE, in the settings of the bot${name ? ` “${name}”` : ""}.`,
+  "bots.daily.reached": (spent, cap, name) =>
+    `Today the bot has spent ${spent}, and its daily cap is ${cap}: it stops until tomorrow. To start it again sooner, raise the cap in ADE, in the settings of the bot${name ? ` “${name}”` : ""} (Daily spending cap).`,
   "bots.account.label": "Sign-in",
   "bots.account.plan": "Subscription (the CLI login)",
   "bots.account.key": "API key",
