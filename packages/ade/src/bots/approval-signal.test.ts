@@ -136,7 +136,7 @@ describe("the window flash", () => {
     const host = fakeHost({ calls })
     const one = waiting(request())[0]!
     expect(await notifySystem({ id: one.id, title: "ADE", body: approvalLine(one) }, host)).toEqual({ toast: true, flash: true })
-    expect(calls).toEqual(["toast:ADE|«alfa» aspetta te: vuole usare «bash» su «git push --force»", "flash"])
+    expect(calls).toEqual(["toast:ADE|«alfa» aspetta te: vuole eseguire un comando (bash): «git push --force»", "flash"])
   })
 
   test("the window in front: nothing, and the request is news later", async () => {
