@@ -3,6 +3,23 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { localePreference, setLocalePreference } from "../i18n/locale"
 import { EMPTY_BOOK, routineHeadText, routineHeadline, routineName, type Routine, type RoutineBook } from "./routine"
+import { forgetBotTraces } from "./forget"
+import { memoryAccountStore } from "./account"
+import { volatileMemoryStore } from "./memory"
+import { memoryRemoteStore } from "./gateway/remote"
+import {
+  forgetNotice,
+  lastNewsAt,
+  muteBot,
+  noticeOf,
+  parseNoticeBook,
+  seenUpTo,
+  unread,
+  type NoticeBook,
+} from "./notice"
+import { appendMessage, emptyTalk, sendMessage, type Talk } from "./talk"
+import { it as itText } from "../i18n/it"
+import { en as enText } from "../i18n/en"
 
 /*
  * The second page of choices (design/ade-bot-2, the user's answers of 2026-10-16). What is layout is held as rules on
@@ -112,5 +129,89 @@ describe("4. the next routine in the bot's head", () => {
     expect(page).toContain('tabs().includes("routines")')
     expect(page).toContain('onRoutines: () => select("routines")')
     expect(css).toContain('[data-slot="bots-page-routine"]')
+  })
+})
+
+describe("6. the «unread» dot and «Silenzia»", () => {
+  const bot = "C:/p/.claude/agents/news.md"
+  const replied = (at: number): Talk =>
+    appendMessage(sendMessage(emptyTalk(), "ciao", at - 10), { role: "bot", text: "Eccomi" }, at)
+  const book = (since = 100): NoticeBook => ({ since, bots: {} })
+
+  test("news is the last reply or failure, never the user's own words nor a tool line", () => {
+    expect(lastNewsAt(emptyTalk())).toBe(0)
+    expect(lastNewsAt(sendMessage(emptyTalk(), "ciao", 500))).toBe(0)
+    expect(lastNewsAt(replied(600))).toBe(600)
+    const tool = appendMessage(replied(600), { role: "tool", text: "read", tool: "read" }, 700)
+    expect(lastNewsAt(tool)).toBe(600)
+    expect(lastNewsAt(appendMessage(tool, { role: "error", text: "rete giù" }, 800))).toBe(800)
+  })
+
+  test("a reply after the last look is unread; looking at it makes it read", () => {
+    expect(unread(book(), bot, replied(600))).toBe(true)
+    const looked = seenUpTo(book(), bot, 600)
+    expect(unread(looked, bot, replied(600))).toBe(false)
+    expect(unread(looked, bot, replied(700))).toBe(true)
+    // Looking never goes back in time.
+    expect(seenUpTo(looked, bot, 300)).toBe(looked)
+  })
+
+  test("what was there before the dot existed is read: no row lights up on the first start", () => {
+    expect(unread(book(1000), bot, replied(600))).toBe(false)
+  })
+
+  test("a muted bot never has the dot, and unmuted it has it again for what came after the last look", () => {
+    const muted = muteBot(book(), bot, true)
+    expect(noticeOf(muted, bot).muted).toBe(true)
+    expect(unread(muted, bot, replied(600))).toBe(false)
+    expect(unread(muteBot(muted, bot, false), bot, replied(600))).toBe(true)
+  })
+
+  test("what was saved is read back, and a broken entry is dropped, never half-read", () => {
+    const saved = JSON.stringify({ since: 5, bots: { [bot]: { seenAt: 9, muted: true }, x: { seenAt: "no" }, y: 3 } })
+    expect(parseNoticeBook(saved, 1)).toEqual({ since: 5, bots: { [bot]: { seenAt: 9, muted: true } } })
+    expect(parseNoticeBook("{rotto", 42)).toEqual({ since: 42, bots: {} })
+    expect(parseNoticeBook(null, 42)).toEqual({ since: 42, bots: {} })
+  })
+
+  test("deleting the bot takes its mute and its last look away", () => {
+    let notices = muteBot(seenUpTo(book(), bot, 600), bot, true)
+    expect(forgetNotice(notices, bot).bots[bot]).toBeUndefined()
+    let routines: RoutineBook = EMPTY_BOOK
+    forgetBotTraces(bot, {
+      memory: volatileMemoryStore(),
+      account: memoryAccountStore(),
+      remote: memoryRemoteStore(),
+      routines: (change) => (routines = change(routines)),
+      notices: (change) => (notices = change(notices)),
+    })
+    expect(notices.bots[bot]).toBeUndefined()
+    expect(read("forget.ts")).toContain("stores.notices?.((book) => forgetNotice(book, path))")
+    expect(tsx).toContain("notices: writeNotices,")
+  })
+
+  test("the row has the dot and the name in bold while unread; looking at the bot reads it", () => {
+    const list = tsx.slice(tsx.indexOf('<div data-slot="bots-list">'))
+    expect(list).toContain('data-unread={isUnread() ? "true" : undefined}')
+    expect(list).toContain('data-slot="bots-row-unread"')
+    expect(css).toMatch(
+      /\[data-slot="bots-row"\]\[data-unread="true"\] \[data-slot="bots-row-name"\] \{[^}]*font-weight: var\(--ade-weight-bold\)/,
+    )
+    expect(css).toContain('[data-slot="bots-row-unread"]')
+    // Only the bot's page, shown, is looking at it.
+    const main = tsx.slice(tsx.indexOf("export function BotsMain("))
+    expect(main).toContain("seenUpTo(book, path, lastNewsAt(talkOf(path)))")
+  })
+
+  test("«Silenzia» is in the bot's settings, and says a permission request still comes through", () => {
+    const settings = tsx.slice(tsx.indexOf("function SettingsTab("), tsx.indexOf("/* ── the form"))
+    expect(settings).toContain('data-slot="bots-mute"')
+    expect(settings).toContain("muteBot(book, props.bot.path,")
+    for (const text of [itText, enText]) {
+      expect(text["bots.notice.mute"].length).toBeGreaterThan(0)
+      expect(text["bots.notice.unread"].length).toBeGreaterThan(0)
+    }
+    expect(itText["bots.notice.muteHint"]).toContain("richiesta di permesso")
+    expect(enText["bots.notice.muteHint"]).toContain("permission request")
   })
 })

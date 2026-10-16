@@ -364,6 +364,30 @@
   white-space: nowrap;
 }
 
+/* The time, and under it the «unread» dot. */
+[data-slot="bots-row-end"] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  align-self: start;
+  gap: var(--ade-space-2);
+}
+
+[data-slot="bots-row-unread"] {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ade-accent);
+}
+
+/* Unread: the name in bold and the last line in the text's own colour, until the bot is opened. */
+[data-slot="bots-row"][data-unread="true"] [data-slot="bots-row-name"] {
+  font-weight: var(--ade-weight-bold);
+}
+[data-slot="bots-row"][data-unread="true"] [data-slot="bots-row-line"] {
+  color: var(--ade-text);
+}
+
 [data-slot="bots-row"][data-status="working"] [data-slot="bots-row-when"] {
   color: var(--ade-working);
 }
@@ -1439,6 +1463,20 @@
 }
 
 [data-slot="routine-consent"] input {
+  margin-top: 3px;
+}
+
+[data-slot="bots-mute"] {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ade-space-2);
+  font-size: var(--ade-font-md);
+  color: var(--ade-text);
+  line-height: var(--ade-leading);
+  cursor: pointer;
+}
+
+[data-slot="bots-mute"] input {
   margin-top: 3px;
 }
 

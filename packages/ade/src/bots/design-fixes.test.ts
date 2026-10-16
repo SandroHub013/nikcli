@@ -141,7 +141,8 @@ describe("D22: the screen reader can follow", () => {
     expect(routines).toContain('<h3 data-slot="bots-section-title"')
     expect(memory).toContain('<h3 data-slot="bots-section-title"')
     expect(gateway).toContain('<h3 data-slot="bots-section-title"')
-    expect(view.slice(view.indexOf("function SettingsTab")).match(/<h3 data-slot="bots-section-title"/g)?.length).toBe(3)
+    // Settings: the bot, the money a day, the alerts (design/ade-bot-2, scelta 6), the deletion.
+    expect(view.slice(view.indexOf("function SettingsTab")).match(/<h3 data-slot="bots-section-title"/g)?.length).toBe(4)
   })
 
   test("the shapes and colours of the face are named in words, in both languages, not by their ids", () => {

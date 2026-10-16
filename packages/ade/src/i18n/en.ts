@@ -1922,6 +1922,11 @@ export const en: Messages = {
   "bots.routine.headIdle": (count: number) =>
     count === 1 ? "1 routine, paused or suspended" : `${count} routines, all paused or suspended`,
   "bots.routine.headTip": "Open the Routines tab",
+  "bots.notice.title": "Alerts",
+  "bots.notice.unread": "New reply, not read yet",
+  "bots.notice.mute": "Mute this bot",
+  "bots.notice.muteHint":
+    "Its replies and finished routines no longer light the “unread” dot on its row. A permission request (the bot asking your go-ahead for a command) still comes through, with the bell and the system alert.",
   "bots.routine.state.running": "running",
   "bots.routine.state.paused": "paused",
   "bots.routine.state.on": "on",

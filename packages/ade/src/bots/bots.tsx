@@ -177,6 +177,7 @@ import { ConfirmAction } from "./confirm"
 import { PermissionsSection } from "./permissions-panel"
 import { shownTab, tabButtonId, tabPanelId, tabsOf, type BotTab } from "./tabs"
 import { approvalAction } from "./approval-signal"
+import { lastNewsAt, localNoticeStore, muteBot, noticeOf, seenUpTo, unread, type NoticeBook } from "./notice"
 
 /*
  * The conversations, outside any component.
@@ -404,6 +405,19 @@ const writeRoutines = (change: (book: RoutineBook) => RoutineBook) => {
   const next = change(routineStore.get())
   routineStore.set(next)
   setRoutineBook(next)
+}
+
+/* ── the «unread» dot and «Silenzia» (design/ade-bot-2, scelta 6; `notice.ts`) ── */
+
+const noticeStore = localNoticeStore()
+const [noticeBook, setNoticeBook] = createSignal<NoticeBook>(noticeStore.get())
+
+const writeNotices = (change: (book: NoticeBook) => NoticeBook) => {
+  const before = noticeBook()
+  const next = change(before)
+  if (next === before) return
+  noticeStore.set(next)
+  setNoticeBook(next)
 }
 
 const routineScheduler = createRoutineScheduler({
@@ -913,12 +927,15 @@ export function BotsRoster(props: BotsRosterProps) {
           <For each={ordered()}>
             {(bot) => {
               const talk = () => talkOf(bot.path)
+              // It wrote while the user looked elsewhere: a dot and the name in bold until its page is opened.
+              const isUnread = () => unread(noticeBook(), bot.path, talk())
               return (
                 <button
                   type="button"
                   data-slot="bots-row"
                   data-active={bot.path === openId() ? "true" : undefined}
                   data-status={talk().status}
+                  data-unread={isUnread() ? "true" : undefined}
                   onClick={() => open(bot)}
                 >
                   <Face identifier={bot.identifier} avatar={bot.avatar} expression={expression(bot)} size={36} />
@@ -928,7 +945,17 @@ export function BotsRoster(props: BotsRosterProps) {
                       {lastLine(talk(), bot.description || t("bots.noDescription"))}
                     </span>
                   </span>
-                  <span data-slot="bots-row-when">{formatWhen(talk().updatedAt, now())}</span>
+                  <span data-slot="bots-row-end">
+                    <span data-slot="bots-row-when">{formatWhen(talk().updatedAt, now())}</span>
+                    <Show when={isUnread()}>
+                      <span
+                        data-slot="bots-row-unread"
+                        role="img"
+                        aria-label={t("bots.notice.unread")}
+                        title={t("bots.notice.unread")}
+                      />
+                    </Show>
+                  </span>
                 </button>
               )
             }}
@@ -963,6 +990,13 @@ export function BotsMain(props: BotsMainProps) {
   createEffect(() => void (roomProject = props.projectRoot))
 
   const { roster, roots, models, catalog, composing, current, identifiers, expression, reload, ordered, open } = shared
+
+  // The bot's page, shown, is the user looking at it: what it wrote is read (design/ade-bot-2, scelta 6).
+  createEffect(() => {
+    const path = shared.openId()
+    if (!path || composing()) return
+    writeNotices((book) => seenUpTo(book, path, lastNewsAt(talkOf(path))))
+  })
 
   /*
    * One message, one process.
@@ -1994,6 +2028,7 @@ function SettingsTab(props: {
       account: accounts,
       remote: localRemoteStore(),
       routines: writeRoutines,
+      notices: writeNotices,
       always: localAlwaysStore(),
       storage: typeof localStorage === "undefined" ? undefined : localStorage,
     })
@@ -2026,6 +2061,24 @@ function SettingsTab(props: {
           <SpendCapField bot={props.bot} account={props.account} free={free()} />
         </section>
       </Show>
+
+      <section data-slot="bots-section" aria-labelledby="bots-settings-notice">
+        <h3 data-slot="bots-section-title" id="bots-settings-notice">
+          {t("bots.notice.title")}
+        </h3>
+        <label data-slot="bots-mute">
+          <input
+            type="checkbox"
+            checked={noticeOf(noticeBook(), props.bot.path).muted === true}
+            onChange={(event) => {
+              const muted = event.currentTarget.checked
+              writeNotices((book) => muteBot(book, props.bot.path, muted))
+            }}
+          />
+          <span>{t("bots.notice.mute")}</span>
+        </label>
+        <p data-slot="bots-hint">{t("bots.notice.muteHint")}</p>
+      </section>
 
       <section data-slot="bots-section" aria-label={t("bots.details.title")}>
         <details data-slot="bots-details">
