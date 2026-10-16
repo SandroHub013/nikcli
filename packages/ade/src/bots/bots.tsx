@@ -166,7 +166,7 @@ import { readBotModels } from "./bot-models"
 import { launchBot } from "./launch"
 import { formatCount } from "./format"
 import { metaWords } from "./page-meta"
-import { sameFields, syncFields, type FormFields } from "./settings-sync"
+import { objectiveLines, sameFields, savedFields, syncFields, type FormFields } from "./settings-sync"
 import { BotTabs } from "./bot-tabs"
 import { ConfirmAction } from "./confirm"
 import { PermissionsSection } from "./permissions-panel"
@@ -2125,10 +2125,7 @@ function BotForm(props: {
         ...(effortToSave(effort(), staleEffort()) ? { effort: effortToSave(effort(), staleEffort()) } : {}),
         ...(avatar() ? { avatar: avatar() } : {}),
         ...(runner() !== "ragu" ? { runner: runner() } : {}),
-        objectives: objectives()
-          .split("\n")
-          .map((line) => line.replace(/^[-*•]\s*/, "").trim())
-          .filter((line) => line.length > 0),
+        objectives: objectiveLines(objectives()),
       },
       props.roots,
     )
@@ -2637,10 +2634,7 @@ function BotSettings(props: {
       runner: runner() === "ragu" ? undefined : runner(),
       persona: persona(),
       avatar: avatar(),
-      objectives: objectives()
-        .split("\n")
-        .map((line) => line.replace(/^[-*•]\s*/, "").trim())
-        .filter((line) => line.length > 0),
+      objectives: objectiveLines(objectives()),
     })
 
     setBusy(false)
@@ -2648,6 +2642,19 @@ function BotSettings(props: {
       setFailure(problem)
       return
     }
+    // The form shows what the file will give back (trimmed, the objectives as a list), so it is not "unsaved" after.
+    const kept = savedFields({
+      description: description(),
+      model: model(),
+      effort: effort(),
+      runner: runner(),
+      objectives: objectives(),
+      persona: persona(),
+      avatar: avatar() ?? "",
+    })
+    setDescription(kept.description)
+    setPersona(kept.persona)
+    setObjectives(kept.objectives)
     setSaved(true)
     props.onSaved()
   }

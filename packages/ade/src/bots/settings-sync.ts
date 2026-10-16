@@ -5,6 +5,8 @@
  * persona included, with no word.
  */
 
+import { joinPrompt, splitPrompt } from "./ragu"
+
 export interface FormFields {
   readonly description: string
   readonly model: string
@@ -30,4 +32,27 @@ export function syncFields(current: FormFields, before: FormFields, after: FormF
 
 export function sameFields(a: FormFields, b: FormFields): boolean {
   return FORM_FIELDS.every((key) => a[key] === b[key])
+}
+
+/** The objectives as the file keeps them: one per line, without the bullet the user may have typed, no empty line. */
+export function objectiveLines(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.replace(/^[-*•]\s*/, "").trim())
+    .filter((line) => line.length > 0)
+}
+
+/**
+ * The fields as the file will give them back once they are saved: the file trims the description and the persona
+ * and writes the objectives as a list, so «- uno», a blank line or a trailing newline come back different. After a
+ * save the form shows these, or it would go on saying «Modifiche non salvate» for a file that holds what was typed.
+ */
+export function savedFields(fields: FormFields): FormFields {
+  const parts = splitPrompt(joinPrompt({ persona: fields.persona, objectives: objectiveLines(fields.objectives) }))
+  return {
+    ...fields,
+    description: fields.description.trim(),
+    persona: parts.persona,
+    objectives: parts.objectives.join("\n"),
+  }
 }

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { sameFields, syncFields, type FormFields } from "./settings-sync"
+import { joinPrompt, splitPrompt } from "./ragu"
+import { objectiveLines, sameFields, savedFields, syncFields, type FormFields } from "./settings-sync"
 
 /*
  * D7: the model changed from the chip of the conversation put every field of the open form back to the file's,
@@ -46,6 +47,35 @@ describe("the form follows the file, field by field", () => {
   test("two sets of fields are the same when every field is", () => {
     expect(sameFields(file, { ...file })).toBe(true)
     expect(sameFields(file, { ...file, persona: "altro" })).toBe(false)
+  })
+
+  test("P2-P2: after a save the form holds what the file gives back, so it is not «unsaved» for ever", () => {
+    const typed: FormFields = {
+      ...file,
+      description: "  Revisiona  ",
+      persona: "Sei un revisore.\n\n",
+      objectives: "- uno\n\n* due\n",
+    }
+    const kept = savedFields(typed)
+    expect(kept.description).toBe("Revisiona")
+    expect(kept.persona).toBe("Sei un revisore.")
+    expect(kept.objectives).toBe("uno\ndue")
+    // The file written from the typed fields and read back is exactly these.
+    const written = joinPrompt({ persona: typed.persona, objectives: objectiveLines(typed.objectives) })
+    const read = splitPrompt(written)
+    expect(sameFields(kept, { ...typed, description: "Revisiona", persona: read.persona, objectives: read.objectives.join("\n") })).toBe(true)
+    // Already clean: nothing changes.
+    expect(sameFields(savedFields(file), file)).toBe(true)
+    // A heading typed inside the persona does not break the round trip into something else.
+    const odd = savedFields({ ...file, persona: "Sei un revisore.", objectives: "" })
+    expect(odd.objectives).toBe("")
+  })
+
+  test("the objectives are cleaned the same way in the form that makes a bot and the one that changes it", () => {
+    expect(objectiveLines("- uno\n\n• due\n  tre  \n")).toEqual(["uno", "due", "tre"])
+    const view = readFileSync(join(import.meta.dir, "bots.tsx"), "utf8")
+    expect(view.match(/objectiveLines\(objectives\(\)\)/g)?.length).toBe(2)
+    expect(view).toContain("const kept = savedFields({")
   })
 
   test("lint: the settings form syncs by field, and does not put every field back on any change of the file", () => {
