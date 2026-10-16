@@ -43,8 +43,24 @@ use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
 
 pub const API: &str = "https://discord.com/api/v10";
+pub const GATEWAY_URL: &str = "wss://gateway.discord.gg/?v=10&encoding=json";
 /// Discord counts characters, not UTF-16 units: an emoji is one.
 pub const MAX_LEN: usize = 2000;
+
+/// Appends Discord gateway protocol parameters (?v=10&encoding=json) if not already present.
+fn with_gateway_params(url: &str) -> String {
+    if url.contains("v=") && url.contains("encoding=") {
+        return url.to_string();
+    }
+    let sep = if url.contains('?') {
+        "&"
+    } else if url.ends_with('/') {
+        "?"
+    } else {
+        "/?"
+    };
+    format!("{url}{sep}v=10&encoding=json")
+}
 
 /// Discord's message flag that keeps a message's links from being embedded.
 const SUPPRESS_EMBEDS: u64 = 1 << 2;
@@ -431,7 +447,7 @@ fn real_now_ms() -> u64 {
 impl Discord {
     /// The adapter for the bot with `token`, reading on from `cursor`.
     pub fn new(token: &str, cursor: Option<String>) -> Result<Arc<Discord>, String> {
-        Discord::at("wss://gateway.discord.gg", API, token, cursor)
+        Discord::at(GATEWAY_URL, API, token, cursor)
     }
 
     fn at(socket: &str, api: &str, token: &str, cursor: Option<String>) -> Result<Arc<Discord>, String> {
@@ -669,11 +685,11 @@ async fn socket_session(
             ));
         }
         let (address, resume) = match adapter.shared.resumable(now) {
-            Some(session) => (session.resume_url.clone(), Some(session)),
+            Some(session) => (with_gateway_params(&session.resume_url), Some(session)),
             // Nothing to resume with, so this turn spends an identify.
             None => {
                 fresh_identifies += 1;
-                (first.to_string(), None)
+                (with_gateway_params(first), None)
             }
         };
         let connected = tokio::select! {
@@ -1649,6 +1665,19 @@ mod tests {
         assert_eq!(body1["enforce_nonce"], json!(true));
         assert_eq!(body2["enforce_nonce"], json!(true));
         assert_ne!(nonce1, nonce2, "nonces must differ across separate messages");
+    }
+
+    #[test]
+    fn gateway_url_and_resume_url_include_v10_and_json_encoding() {
+        let discord = Discord::new(TOKEN, None).expect("discord");
+        assert!(discord.core.socket.contains("v=10"), "initial gateway URL must specify API v10");
+        assert!(discord.core.socket.contains("encoding=json"), "initial gateway URL must specify json encoding");
+
+        let formatted = with_gateway_params("wss://us-east1.gateway.discord.gg");
+        assert_eq!(formatted, "wss://us-east1.gateway.discord.gg/?v=10&encoding=json");
+
+        let already_formatted = with_gateway_params("wss://gateway.discord.gg/?v=10&encoding=json");
+        assert_eq!(already_formatted, "wss://gateway.discord.gg/?v=10&encoding=json");
     }
 
     #[tokio::test]
