@@ -790,7 +790,8 @@ export const en: Messages = {
   "gateway.fresh": "New conversation: starting over.",
   "gateway.status.idle": "Free: go ahead.",
   "gateway.status.working": (queued: number) => `Working on a turn; messages queued: ${queued}.`,
-  "gateway.status.connectedSince": (time: string) => `Gateway connected since ${time}.`,
+  "gateway.status.connectedSince": (time: string, day?: string) =>
+    day ? `Gateway connected since ${day} at ${time}.` : `Gateway connected since ${time}.`,
   "gateway.retry.none": "There is no question to ask again yet: write me one.",
   "gateway.retry.busy": "I'm still working on the last question: wait for it to finish, or write /stop.",
   "gateway.retry.again": "Asking the last question again.",
@@ -948,7 +949,8 @@ export const en: Messages = {
   "gateway.panel.stopped": "On, but stopped by an error",
   "gateway.panel.needsAttention": "Needs attention",
   "gateway.panel.connected": "On · connected",
-  "gateway.panel.connectedSince": (time: string) => `On · connected since ${time}`,
+  "gateway.panel.connectedSince": (time: string, day?: string) =>
+    day ? `On · connected since ${day} at ${time}` : `On · connected since ${time}`,
   "gateway.panel.connecting": "On · connecting",
   "gateway.panel.reconnecting": "On · reconnecting",
   "gateway.panel.attentionTimeout": "Could not connect for over 10 minutes",
@@ -2186,6 +2188,9 @@ export const en: Messages = {
   "bots.when.date": (day: number, month: string) => `${month} ${day}`,
   "bots.when.month": (index) =>
     ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][index] ?? `month ${index}`,
+  "bots.format.yesterday": "yesterday",
+  "bots.format.date": (day: number, month: string) => `${month} ${day}`,
+  "bots.format.timeWithDay": (day: string, time: string) => `${day} at ${time}`,
   "bots.turn.timeout": (label, span) => `${label} did not finish the turn in ${span}: I stopped it.`,
   "bots.turn.overBudget": (label, cost, max) =>
     `${label} spent ${cost}, over the ${max} cap for this run: I stopped it.`,

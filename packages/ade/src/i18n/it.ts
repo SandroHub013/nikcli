@@ -809,8 +809,8 @@ export const it = {
   "gateway.fresh": "Nuova conversazione: riparto da zero.",
   "gateway.status.idle": "Libero: scrivimi pure.",
   "gateway.status.working": (queued: number) => `Sto lavorando a un turno; messaggi in coda: ${queued}.`,
-  "gateway.status.connectedSince": (time: string) =>
-    `Gateway collegato ${time.startsWith("dal") || time.startsWith("da ") ? time : `dalle ${time}`}.`,
+  "gateway.status.connectedSince": (time: string, day?: string) =>
+    day ? `Gateway collegato ${day} alle ${time}.` : `Gateway collegato dalle ${time}.`,
   "gateway.retry.none": "Non c'è ancora una domanda da rifare: scrivimene una.",
   "gateway.retry.busy": "Sto ancora lavorando alla domanda di prima: aspetta che finisca, oppure scrivi /ferma.",
   "gateway.retry.again": "Rifaccio l'ultima domanda.",
@@ -969,8 +969,8 @@ export const it = {
   "gateway.panel.stopped": "Acceso, ma fermo per un errore",
   "gateway.panel.needsAttention": "Richiede attenzione",
   "gateway.panel.connected": "Acceso · collegato",
-  "gateway.panel.connectedSince": (time: string) =>
-    `Acceso · collegato ${time.startsWith("dal") || time.startsWith("da ") ? time : `dalle ${time}`}`,
+  "gateway.panel.connectedSince": (time: string, day?: string) =>
+    day ? `Acceso · collegato ${day} alle ${time}` : `Acceso · collegato dalle ${time}`,
   "gateway.panel.connecting": "Acceso · in collegamento",
   "gateway.panel.reconnecting": "Acceso · riconnessione in corso",
   "gateway.panel.attentionTimeout": "Impossibile connettersi da oltre 10 minuti",
@@ -2250,6 +2250,9 @@ export const it = {
   "bots.when.date": (day: number, month: string) => `${day} ${month}`,
   "bots.when.month": (index: number) =>
     ["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"][index] ?? `mese ${index}`,
+  "bots.format.yesterday": "da ieri",
+  "bots.format.date": (day: number, month: string) => `dal ${day} ${month}`,
+  "bots.format.timeWithDay": (day: string, time: string) => `${day} alle ${time}`,
   "bots.turn.timeout": (label: string, span: string) => `${label} non ha finito il turno in ${span}: l'ho fermato.`,
   "bots.turn.overBudget": (label: string, cost: string, max: string) =>
     `${label} ha speso ${cost}, oltre il tetto di ${max} per questa esecuzione: l'ho fermato.`,

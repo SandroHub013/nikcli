@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { formatCap, formatClock, formatConnectedTime, formatCount, formatUsd } from "./format"
+import { formatCap, formatClock, formatConnectedDay, formatConnectedTime, formatCount, formatUsd } from "./format"
 
 /*
  * D32: numbers, money and hours as the language of ADE writes them. The comma and the dollar after the number in
@@ -49,6 +49,12 @@ describe("the numbers follow the language", () => {
     const threeDaysAgo = new Date(2026, 9, 13, 14, 5).getTime()
     expect(formatConnectedTime(threeDaysAgo, now, "it")).toMatch(/dal 13 (ott|ottobre) alle 14:05/)
     expect(formatConnectedTime(threeDaysAgo, now, "en")).toMatch(/Oct 13 at 0?2:05\s?PM/)
+
+    expect(formatConnectedDay(today, now, "it")).toBeUndefined()
+    expect(formatConnectedDay(yesterday, now, "it")).toBe("da ieri")
+    expect(formatConnectedDay(yesterday, now, "en")).toBe("yesterday")
+    expect(formatConnectedDay(threeDaysAgo, now, "it")).toMatch(/dal 13 (ott|ottobre)/)
+    expect(formatConnectedDay(threeDaysAgo, now, "en")).toMatch(/Oct 13/)
   })
 
   test("they follow the language of ADE when none is given", () => {
