@@ -2002,6 +2002,7 @@ export const en: Messages = {
   "bots.attach.noWrite": "I cannot save images here: pasting them works in the desktop app.",
   "bots.notice.title": "Alerts",
   "bots.notice.unread": "New reply, not read yet",
+  "bots.notice.muted": "Muted: its replies do not light the dot",
   "bots.notice.mute": "Mute this bot",
   "bots.notice.muteHint":
     "Its replies and finished routines no longer light the “unread” dot on its row. A permission request (the bot asking your go-ahead for a command) still comes through, with the bell and the system alert.",
@@ -2337,7 +2338,11 @@ export const en: Messages = {
   "bots.permissions.panelTextCodexWrite": "It runs commands without asking you, and writes only in the working folder: Codex cannot ask.",
   "bots.permissions.panelTextCodexRead": "It runs, without asking, only commands that read (a read-only sandbox): Codex cannot ask you for permission.",
   "bots.permissions.always": "“Always” given to this bot",
-  "bots.permissions.alwaysEmpty": "None: a dangerous command does not go ahead without your yes.",
+  "bots.permissions.alwaysEmptyRagu": "None: every command, and every step outside the project, is asked about.",
+  "bots.permissions.alwaysEmptyRaguNoShell": "None: every step outside the project is asked about.",
+  "bots.permissions.alwaysEmptyClaude":
+    "None: a refused command stays refused until you choose “Always for this bot” in the thread.",
+  "bots.permissions.alwaysEmptyClaudeNoShell": "None: it runs no commands, so there is nothing to give.",
   "bots.permissions.alwaysHow": "An “Always” holds in the Conversation, not from the phone.",
   "bots.permissions.alwaysOutside": (folder) => `Write outside the project, in “${folder}”`,
   "bots.permissions.alwaysTool": (tool) => `Use “${tool}” without asking`,

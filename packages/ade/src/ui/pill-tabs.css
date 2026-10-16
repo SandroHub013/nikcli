@@ -125,7 +125,12 @@
   display: none;
 }
 
-@media (max-width: 1099.98px) {
+/*
+ * The short label only under 800 px (bot-ui-4, P2-8): from 1100 px down, «Decisioni» read «Dec» at 800 px. The whole
+ * word is about 30 px more, which the bar's grid takes from the project's name on the left; at 800 px the name keeps
+ * its 48 px even beside the TEST badge.
+ */
+@media (max-width: 799.98px) {
   [data-slot="ade-pill-tab"]:has([data-slot="ade-pill-label-short"]) [data-slot="ade-pill-label-full"] {
     display: none;
   }

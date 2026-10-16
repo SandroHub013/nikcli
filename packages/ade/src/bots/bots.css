@@ -344,7 +344,21 @@
   gap: 1px;
 }
 
+/* The name, and beside it the crossed bell of a muted bot (bot-ui-4, P2-4). */
+[data-slot="bots-row-title"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-1);
+  min-width: 0;
+}
+
+[data-slot="bots-row-muted"] {
+  flex: none;
+  color: var(--ade-text-weak);
+}
+
 [data-slot="bots-row-name"] {
+  min-width: 0;
   font-size: var(--ade-font-md);
   font-weight: var(--ade-weight-semibold);
   white-space: nowrap;
@@ -752,6 +766,15 @@
   background: var(--ade-raised);
 }
 
+/* A picture from elsewhere shows what it is (bot-ui-4, P2-5). */
+[data-slot="bots-attachment-thumb"] {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--ade-radius-full);
+  object-fit: cover;
+}
+
 [data-slot="bots-attachment-name"] {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -915,23 +938,19 @@
   overflow-wrap: anywhere;
 }
 
-/* The next routine: a line of the head that is a link to the Routines tab. */
+/* The next routine: a line of the head that is a link to the Routines tab, and looks it, as `bots-link` (bot-ui-4, P2-1). */
 [data-slot="bots-page-routine"] {
   align-self: flex-start;
   max-width: 100%;
   padding: 0;
   border: 0;
   background: none;
-  color: var(--ade-text-weak);
+  color: var(--ade-accent);
   font: inherit;
   font-size: var(--ade-font-sm);
   text-align: start;
   overflow-wrap: anywhere;
   cursor: pointer;
-}
-
-[data-slot="bots-page-routine"]:hover {
-  color: var(--ade-text);
   text-decoration: underline;
 }
 
@@ -1116,14 +1135,14 @@
   border-top: 1px solid var(--ade-border-subtle);
 }
 
-/* The new bot's summary line: what «Avanzate» holds, a press away. */
+/* The new bot's summary line: what «Avanzate» holds, a press away, and looks it (bot-ui-4, P2-1). */
 [data-slot="bots-form-summary"] {
   align-self: flex-start;
   max-width: 100%;
   padding: 0;
   border: 0;
   background: none;
-  color: var(--ade-text-soft);
+  color: var(--ade-accent);
   font: inherit;
   font-size: var(--ade-font-sm);
   text-align: start;
@@ -1131,8 +1150,23 @@
   cursor: pointer;
 }
 
+/* The set's chevron (polish B5), turned down while «Avanzate» is open. */
+[data-slot="bots-form-summary"]::before {
+  content: "";
+  display: inline-block;
+  width: var(--ade-icon-size);
+  height: var(--ade-icon-size);
+  margin-right: var(--ade-space-1);
+  vertical-align: -1px;
+  background-color: currentColor;
+  mask: var(--ade-icon-chevron-right) center / contain no-repeat;
+}
+
+[data-slot="bots-form-summary"][aria-expanded="true"]::before {
+  transform: rotate(90deg);
+}
+
 [data-slot="bots-form-summary"]:hover {
-  color: var(--ade-text);
   text-decoration: underline;
 }
 

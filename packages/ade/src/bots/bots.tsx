@@ -39,6 +39,7 @@ import {
   createSignal,
   For,
   on,
+  onCleanup,
   onMount,
   Show,
   type JSX,
@@ -61,8 +62,19 @@ import {
   type Shape,
 } from "./avatar"
 import { browserFaceImage, loadFaceImage } from "./face-image"
-import { attachPath, BOT_ATTACH_MAX, excludeBotFiles, pastedExtension, savePasted, type Attachment } from "./attach"
-import { addAttachment, attachmentFor } from "../chat/attachments"
+import {
+  attachPath,
+  BOT_ATTACH_MAX,
+  botFilesDir,
+  excludeBotFiles,
+  pastedExtension,
+  pendingPicture,
+  rememberPictures,
+  writePictures,
+  type Attachment,
+  type PendingPicture,
+} from "./attach"
+import { attachmentFor } from "../chat/attachments"
 import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
 import {
   COMMON_EFFORTS,
@@ -423,6 +435,31 @@ function excludeBotFilesOnce(root: string, host: Host) {
   if (excludedRoots.has(root)) return
   excludedRoots.add(root)
   void excludeBotFiles(root, host)
+}
+
+/** Pictures written for a message that did not go: the host's pruning, the one door that deletes in `.ade/` (bot-ui-4, P1-1). */
+function prunePictures(host: Host | undefined, paths: readonly string[]) {
+  if (paths.length > 0) void host?.adePrune?.([...paths]).catch(() => 0)
+}
+
+/**
+ * A bot deleted: the pictures remembered for it, and what else its folder in the open project holds (pictures from
+ * before they were remembered). The folder is named after the bot, so it is left when another bot has the same name.
+ */
+async function pruneBotPictures(bot: AgentFile, recorded: readonly string[], root: string | undefined) {
+  const host = await getHost()
+  if (!host) return
+  const sameName = (shared.roster() ?? []).some(
+    (other) => other.path !== bot.path && other.identifier === bot.identifier,
+  )
+  const listed =
+    root && host.readDir && !sameName
+      ? await host
+          .readDir(botFilesDir(root, bot.identifier))
+          .then((entries) => entries.filter((entry) => !entry.is_dir).map((entry) => entry.path))
+          .catch(() => [])
+      : []
+  prunePictures(host, [...new Set([...recorded, ...listed])])
 }
 
 const writeRoutines = (change: (book: RoutineBook) => RoutineBook) => {
@@ -964,7 +1001,31 @@ export function BotsRoster(props: BotsRosterProps) {
                 >
                   <Face identifier={bot.identifier} avatar={bot.avatar} expression={expression(bot)} size={36} />
                   <span data-slot="bots-row-text">
-                    <span data-slot="bots-row-name">{bot.identifier}</span>
+                    <span data-slot="bots-row-title">
+                      <span data-slot="bots-row-name">{bot.identifier}</span>
+                      {/* Muted, it never lights the dot: the row says why (bot-ui-4, P2-4). */}
+                      <Show when={noticeOf(noticeBook(), bot.path).muted === true}>
+                        <svg
+                          data-slot="bots-row-muted"
+                          role="img"
+                          aria-label={t("bots.notice.muted")}
+                          viewBox="0 0 24 24"
+                          width="12"
+                          height="12"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <title>{t("bots.notice.muted")}</title>
+                          <path d="M10.3 21a2 2 0 0 0 3.4 0" />
+                          <path d="M17 17H4a1 1 0 0 1-.7-1.7C4.6 14 6 12.5 6 8a6 6 0 0 1 .3-1.7" />
+                          <path d="M8.7 3A6 6 0 0 1 18 8c0 2.7.8 4.7 1.7 6" />
+                          <path d="m2 2 20 20" />
+                        </svg>
+                      </Show>
+                    </span>
                     <span data-slot="bots-row-line">
                       {lastLine(talk(), bot.description || t("bots.noDescription"))}
                     </span>
@@ -1031,7 +1092,12 @@ export function BotsMain(props: BotsMainProps) {
    * orchestration — the room in `room.ts` is the next step, not this one.
    */
   /** Resolves to whether the message went; one that did not goes back into the composer. */
-  const send = async (from: AgentFile, raw: string, files: readonly Attachment[] = []): Promise<boolean> => {
+  const send = async (
+    from: AgentFile,
+    raw: string,
+    files: readonly Attachment[] = [],
+    pictures: readonly PendingPicture[] = [],
+  ): Promise<boolean> => {
     const text = raw.trim()
     if (text.length === 0) return false
 
@@ -1047,17 +1113,55 @@ export function BotsMain(props: BotsMainProps) {
       }
     }
 
-    return start(bot, message, files)
+    return start(bot, message, files, pictures)
   }
 
-  /* The checks of `admitTurn`, with the user's dialog. */
-  const start = async (bot: AgentFile, message: string, files: readonly Attachment[] = []): Promise<boolean> => {
+  /*
+   * The checks of `admitTurn`, with the user's dialog. Then the pictures pasted or dropped from elsewhere are written
+   * into the bot's folder, and only then: a message that does not go leaves nothing on disk (bot-ui-4, P1-1).
+   */
+  const start = async (
+    bot: AgentFile,
+    message: string,
+    projectFiles: readonly Attachment[] = [],
+    pictures: readonly PendingPicture[] = [],
+  ): Promise<boolean> => {
     const verdict = await admitTurn(bot, props.projectRoot, askTrust)
-    if (!verdict.ok) {
-      if (verdict.problem) updateTalk(bot.path, (talk) => applyProblem(talk, verdict.problem!, Date.now()))
+    const refuse = (problem: string) => {
+      updateTalk(verdict.ok ? verdict.bot.path : bot.path, (talk) => applyProblem(talk, problem, Date.now()))
       return false
     }
-    return turns.send(verdict.bot, message, props.projectRoot, files)
+    if (!verdict.ok) return verdict.problem ? refuse(verdict.problem) : false
+    let files = projectFiles
+    let written: string[] = []
+    const root = props.projectRoot
+    const host = pictures.length > 0 ? await getHost() : undefined
+    if (pictures.length > 0) {
+      if (!root) return refuse(t("bots.attach.noProject"))
+      if (!host?.writeBytes) return refuse(t("bots.attach.noWrite"))
+      const done = await writePictures({
+        root,
+        identifier: verdict.bot.identifier,
+        pictures,
+        at: Date.now(),
+        write: host.writeBytes,
+      })
+      if ("problem" in done) {
+        prunePictures(host, done.written)
+        return refuse(done.problem)
+      }
+      written = done.files.map((file) => file.path)
+      files = [...projectFiles, ...done.files]
+      // The pictures stay out of the project's git: its own `.git/info/exclude`, never its `.gitignore`.
+      excludeBotFilesOnce(root, host)
+    }
+    if (!turns.send(verdict.bot, message, props.projectRoot, files)) {
+      prunePictures(host, written)
+      return false
+    }
+    // Sent, they stay as long as the bot: remembered by its path, they go when it goes (`forget.ts`).
+    if (typeof localStorage !== "undefined") rememberPictures(localStorage, verdict.bot.path, written)
+    return true
   }
 
   const answer = (bot: AgentFile, choice: PermissionAnswer, requestID: string | undefined) =>
@@ -1132,7 +1236,7 @@ export function BotsMain(props: BotsMainProps) {
                 others={identifiers().filter((name) => name !== bot().identifier)}
                 expression={expression(bot())}
                 projectRoot={props.projectRoot}
-                onSend={(text, files) => send(bot(), text, files)}
+                onSend={(text, files, pictures) => send(bot(), text, files, pictures)}
                 onAnswer={(choice, requestID) => answer(bot(), choice, requestID)}
                 onGrant={() => turns.grant(bot())}
                 onStop={() => stop(bot())}
@@ -1234,8 +1338,16 @@ function Face(props: { identifier: string; avatar?: string; expression?: Express
  * the user makes their own. "Torna a quella del nome" clears the choice
  * rather than resetting to the default: an absent key is a different file
  * from a key that happens to equal the hash.
+ *
+ * `compact`, in the short form to make a bot (bot-ui-4, P2-6): the help on the picture is the button's tip, and
+ * shows as words only after a problem; the line on the name's face is left out.
  */
-function FacePicker(props: { identifier: string; value?: string; onChange: (value: string | undefined) => void }) {
+function FacePicker(props: {
+  identifier: string
+  value?: string
+  onChange: (value: string | undefined) => void
+  compact?: boolean
+}) {
   const chosen = createMemo(() => faceOf(props.identifier, props.value))
   // A picture: no shape or colour is the chosen one.
   const image = () => parseFaceImage(props.value) !== undefined
@@ -1301,7 +1413,13 @@ function FacePicker(props: { identifier: string; value?: string; onChange: (valu
           >
             {t("bots.face.random")}
           </button>
-          <button type="button" data-slot="bots-btn" data-face="upload" onClick={() => fileField?.click()}>
+          <button
+            type="button"
+            data-slot="bots-btn"
+            data-face="upload"
+            title={t("bots.face.uploadHint")}
+            onClick={() => fileField?.click()}
+          >
             {t("bots.face.upload")}
           </button>
           {/* The page's own file field: the WebView reads the one file picked, with no permission of ADE's. */}
@@ -1318,15 +1436,19 @@ function FacePicker(props: { identifier: string; value?: string; onChange: (valu
           />
         </div>
         <Show when={problem()}>{(text) => <span data-slot="bots-problem">{text()}</span>}</Show>
-        <span data-slot="bots-hint">
-          <Show when={props.value} fallback={<>{t("bots.face.fromName")}</>}>
-            {image() ? t("bots.face.imageChosen") : t("bots.face.custom")}{" "}
-            <button type="button" data-slot="bots-link" onClick={() => props.onChange(undefined)}>
-              {t("bots.face.reset")}
-            </button>
-          </Show>
-        </span>
-        <span data-slot="bots-hint">{t("bots.face.uploadHint")}</span>
+        <Show when={!props.compact || props.value}>
+          <span data-slot="bots-hint">
+            <Show when={props.value} fallback={<>{t("bots.face.fromName")}</>}>
+              {image() ? t("bots.face.imageChosen") : t("bots.face.custom")}{" "}
+              <button type="button" data-slot="bots-link" onClick={() => props.onChange(undefined)}>
+                {t("bots.face.reset")}
+              </button>
+            </Show>
+          </span>
+        </Show>
+        <Show when={!props.compact || problem()}>
+          <span data-slot="bots-hint">{t("bots.face.uploadHint")}</span>
+        </Show>
       </div>
     </div>
   )
@@ -1341,8 +1463,15 @@ function Thread(props: {
   expression: Expression
   /** The open project: where attached files come from, and where a pasted picture is kept. */
   projectRoot?: string | undefined
-  /** Whether the message went: one that did not comes back into the composer, with its files. */
-  onSend: (text: string, files: readonly Attachment[]) => boolean | Promise<boolean>
+  /**
+   * Whether the message went: one that did not comes back into the composer, with its files. The pictures from
+   * elsewhere are written into the bot's folder only as it goes (bot-ui-4, P1-1).
+   */
+  onSend: (
+    text: string,
+    files: readonly Attachment[],
+    pictures: readonly PendingPicture[],
+  ) => boolean | Promise<boolean>
   /** With the id of the question the card shows (B8d review, M1). */
   onAnswer: (choice: PermissionAnswer, requestID: string | undefined) => void
   /** «Sempre per questo bot» on a command Claude Code was refused (B8c). */
@@ -1371,9 +1500,32 @@ function Thread(props: {
     ),
   )
 
-  // Files and pictures that go with the next message (design/ade-bot-2, scelta 5; `attach.ts`).
+  // Files and pictures that go with the next message (design/ade-bot-2, scelta 5; `attach.ts`): the project's files by
+  // their path, and the pictures from elsewhere as they came, written only when the message goes.
   const [attachments, setAttachments] = createSignal<readonly Attachment[]>([])
+  const [pictures, setPictures] = createSignal<readonly PendingPicture[]>([])
   const [attachProblem, setAttachProblem] = createSignal<string>()
+  let pictureCount = 0
+
+  // What each picture from elsewhere shows in its chip (bot-ui-4, P2-5): a URL of its own, let go as soon as the
+  // picture leaves the composer (×, sent, another bot), and with the thread. One that comes back gets a new one.
+  const thumbs = new Map<string, string>()
+  const thumbOf = (picture: PendingPicture) => {
+    const known = thumbs.get(picture.id)
+    if (known) return known
+    const url = URL.createObjectURL(picture.file)
+    thumbs.set(picture.id, url)
+    return url
+  }
+  const letGoThumbs = (keep: ReadonlySet<string>) => {
+    for (const [id, url] of thumbs) {
+      if (keep.has(id)) continue
+      URL.revokeObjectURL(url)
+      thumbs.delete(id)
+    }
+  }
+  createEffect(on(pictures, (list) => letGoThumbs(new Set(list.map((picture) => picture.id)))))
+  onCleanup(() => letGoThumbs(new Set()))
 
   createEffect(
     on(
@@ -1381,6 +1533,7 @@ function Thread(props: {
       () => {
         setDraft("")
         setAttachments([])
+        setPictures([])
         setAttachProblem(undefined)
         field?.focus()
       },
@@ -1393,14 +1546,19 @@ function Thread(props: {
     const text = draft()
     if (text.trim().length === 0 || busy()) return
     const files = attachments()
+    const given = pictures()
     setAttachments([])
+    setPictures([])
     setAttachProblem(undefined)
     void submitDraft(
       text,
       async (words) => {
-        const sent = await props.onSend(words, files)
-        // A message that did not go keeps its files, as it keeps its words.
-        if (!sent && attachments().length === 0) setAttachments(files)
+        const sent = await props.onSend(words, files, given)
+        // A message that did not go keeps its files and pictures, as it keeps its words.
+        if (!sent && attachments().length === 0 && pictures().length === 0) {
+          setAttachments(files)
+          setPictures(given)
+        }
         return sent
       },
       { get: draft, set: setDraft },
@@ -1413,6 +1571,10 @@ function Thread(props: {
     let problem: string | undefined
     for (const path of paths) {
       const next = attachPath(props.projectRoot, list, path)
+      if (!next.problem && next.list.length + pictures().length > BOT_ATTACH_MAX) {
+        problem = t("bots.attach.tooMany", BOT_ATTACH_MAX)
+        break
+      }
       list = next.list
       if (next.problem) problem = next.problem
     }
@@ -1420,27 +1582,21 @@ function Thread(props: {
     setAttachProblem(problem)
   }
 
-  /** Pictures with no file in the project, pasted or dragged from elsewhere: kept in the bot's folder, then attached. */
-  const addPictures = async (pictures: readonly File[]) => {
-    const root = props.projectRoot
-    if (!root) return void setAttachProblem(t("bots.attach.noProject"))
-    const host = await getHost()
-    const write = host?.writeBytes
-    if (!host || !write) return void setAttachProblem(t("bots.attach.noWrite"))
-    const at = Date.now()
+  /**
+   * Pictures with no file in the project, pasted or dragged from elsewhere: kept in the page as they came, and written
+   * into the bot's folder only when the message goes (bot-ui-4, P1-1). × lets one go; nothing on disk to take back.
+   */
+  const addPictures = (files: readonly File[]) => {
+    if (!props.projectRoot) return void setAttachProblem(t("bots.attach.noProject"))
     let problem: string | undefined
-    for (const [index, file] of pictures.entries()) {
-      if (attachments().length >= BOT_ATTACH_MAX) {
+    for (const file of files) {
+      if (attachments().length + pictures().length >= BOT_ATTACH_MAX) {
         problem = t("bots.attach.tooMany", BOT_ATTACH_MAX)
         break
       }
-      const saved = await savePasted({ root, identifier: props.bot.identifier, file, at, index: index + 1, write })
-      if (saved.problem !== undefined) problem = saved.problem
-      else {
-        setAttachments((list) => addAttachment(list, saved.file))
-        // The pictures stay out of the project's git: its own `.git/info/exclude`, never its `.gitignore`.
-        excludeBotFilesOnce(root, host)
-      }
+      const kept = pendingPicture(file, file.name, `picture-${++pictureCount}`)
+      if ("problem" in kept) problem = kept.problem
+      else setPictures((list) => [...list, kept.picture])
     }
     setAttachProblem(problem)
   }
@@ -1465,14 +1621,14 @@ function Thread(props: {
     field?.focus()
   }
 
-  /** A drop: files of the project by their path; pictures from elsewhere copied into the bot's folder. */
+  /** A drop: files of the project by their path; pictures from elsewhere kept until the message goes. */
   const dropFiles = (data: DataTransfer) => {
     const root = props.projectRoot
     const paths = readDraggedPaths(data)
     const pictures = Array.from(data.files).filter((file) => pastedExtension(file.type) !== undefined)
     const inside = root ? paths.filter((path) => attachmentFor(root, path) !== undefined) : []
     if (paths.length > 0 && inside.length === paths.length) addPaths(paths)
-    else if (pictures.length > 0) void addPictures(pictures)
+    else if (pictures.length > 0) addPictures(pictures)
     else if (paths.length > 0) addPaths(paths)
     else setAttachProblem(t("bots.attach.notPicture"))
   }
@@ -1677,8 +1833,25 @@ function Thread(props: {
 
       <Show when={chipProblem()}>{(text) => <p data-slot="bots-problem">{text()}</p>}</Show>
 
-      <Show when={attachments().length > 0}>
+      <Show when={attachments().length + pictures().length > 0}>
         <ul data-slot="bots-attachments" aria-label={t("bots.attach.list")}>
+          <For each={pictures()}>
+            {(picture) => (
+              <li data-slot="bots-attachment" title={picture.name}>
+                <img data-slot="bots-attachment-thumb" src={thumbOf(picture)} alt="" />
+                <span data-slot="bots-attachment-name">{picture.name}</span>
+                <button
+                  type="button"
+                  data-slot="bots-attachment-remove"
+                  aria-label={t("bots.attach.remove", picture.name)}
+                  title={t("bots.attach.remove", picture.name)}
+                  onClick={() => setPictures((list) => list.filter((item) => item.id !== picture.id))}
+                >
+                  ×
+                </button>
+              </li>
+            )}
+          </For>
           <For each={attachments()}>
             {(file) => {
               const name = file.relative.split("/").at(-1) ?? file.relative
@@ -1740,7 +1913,7 @@ function Thread(props: {
             // Words copied with a picture (a page, a document) still paste as words.
             if (pictures.length === 0 || data.types.includes("text/plain")) return
             event.preventDefault()
-            void addPictures(pictures)
+            addPictures(pictures)
           }}
           onKeyDown={(event) => {
             // Enter sends, Shift+Enter breaks the line: what every messenger does.
@@ -2156,6 +2329,7 @@ function BotPage(props: {
             {...(props.onOpenKeys ? { onOpenKeys: props.onOpenKeys } : {})}
             onSaved={() => props.onChanged()}
             onDeleted={() => props.onDeleted()}
+            {...(props.projectRoot ? { projectRoot: props.projectRoot } : {})}
           />
         </TabPanel>
       </Show>
@@ -2221,6 +2395,8 @@ function SettingsTab(props: {
   onOpenKeys?: () => void
   onSaved: () => void
   onDeleted: () => void
+  /** The open project: where the pictures it was given are, to go with it. */
+  projectRoot?: string
 }) {
   const [problem, setProblem] = createSignal<string>()
   const routines = () => routineDeps.book().routines.filter((routine) => routine.bot === props.bot.path).length
@@ -2248,6 +2424,8 @@ function SettingsTab(props: {
       notices: writeNotices,
       always: localAlwaysStore(),
       storage: typeof localStorage === "undefined" ? undefined : localStorage,
+      // And the pictures it was given (bot-ui-4, P1-1).
+      pictures: (recorded) => void pruneBotPictures(props.bot, recorded, props.projectRoot),
     })
     props.onDeleted()
   }
@@ -2461,7 +2639,7 @@ function BotForm(props: {
 
       <div data-slot="bots-field">
         <span data-slot="bots-label">{t("bots.form.logo")}</span>
-        <FacePicker identifier={name() || "?"} value={avatar()} onChange={setAvatar} />
+        <FacePicker identifier={name() || "?"} value={avatar()} onChange={setAvatar} compact />
       </div>
 
       <label data-slot="bots-field">

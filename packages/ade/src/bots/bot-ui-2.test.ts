@@ -596,7 +596,7 @@ describe("5. the «+» in the composer: files and pictures for the bot", () => {
     expect(thread).toContain("onDrop=")
     expect(thread).toContain('data-slot="bots-attachments"')
     expect(thread).toContain("attachPath(props.projectRoot,")
-    expect(thread).toContain("savePasted(")
+    expect(thread).toContain("pendingPicture(")
     expect(tsx).toContain("turns.send(verdict.bot, message, props.projectRoot, files)")
     expect(read("serve-turn.ts")).toContain("checkedFileParts(cwd, request.attachments")
     expect(css).toContain('[data-slot="bots-attach"]')

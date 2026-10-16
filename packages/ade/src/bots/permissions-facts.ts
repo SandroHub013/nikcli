@@ -45,6 +45,20 @@ export function conversationText(bot: AgentFile) {
   }
 }
 
+/**
+ * The words under «Sempre» when none was given (bot-ui-4, P2-2): what happens instead. ragu asks; Claude Code is
+ * refused, and with no shell (switched off, or a project's bot) has nothing to be given. Codex has no «Sempre».
+ */
+export function alwaysEmptyKey(bot: AgentFile) {
+  if (kindOf(bot) === "ragu")
+    return shellOn(bot)
+      ? ("bots.permissions.alwaysEmptyRagu" as const)
+      : ("bots.permissions.alwaysEmptyRaguNoShell" as const)
+  return conversationText(bot).key === "bots.permissions.panelTextClaude"
+    ? ("bots.permissions.alwaysEmptyClaude" as const)
+    : ("bots.permissions.alwaysEmptyClaudeNoShell" as const)
+}
+
 /** The words for «Da telefono», and whether the bot may edit from a chat (Codex never: its sandbox is read-only). */
 export function phoneText(bot: AgentFile) {
   const kind = kindOf(bot)

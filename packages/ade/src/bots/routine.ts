@@ -821,10 +821,19 @@ export function routineHeadline(book: RoutineBook, bot: string, now: number): Ro
   return next ? { count: mine.length, next } : { count: mine.length }
 }
 
-/** A routine has no name: its prompt's first line stands for it, cut at `max` characters. */
+/**
+ * A routine has no name: its prompt's first line stands for it, cut at `max` characters with «…». The cut falls
+ * after the last whole word, and a comma or bracket left at the end goes (bot-ui-4, P2-7); one word longer than the
+ * room is cut where it must be. Counted in letters, so an emoji is never cut in half.
+ */
 export function routineName(prompt: string, max = 40): string {
   const line = prompt.trim().split(/\r?\n/, 1)[0]?.trim() ?? ""
-  return line.length <= max ? line : `${line.slice(0, max - 1).trimEnd()}…`
+  const letters = Array.from(line)
+  if (letters.length <= max) return line
+  const room = letters.slice(0, max - 1).join("")
+  const space = room.lastIndexOf(" ")
+  const whole = /\s/.test(letters[max - 1] ?? "") || space < room.length / 2 ? room : room.slice(0, space)
+  return `${whole.replace(/[\s,;:([{–-]+$/, "") || room}…`
 }
 
 export function routineHeadText(head: RoutineHeadline, now: number): string {
