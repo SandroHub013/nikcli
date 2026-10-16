@@ -808,6 +808,12 @@ export const en: Messages = {
     `This project's ${file} grants the bot «${name}» «${key}», which from a chat would override the shell's ban: not started from here. Remove it from ${file} to use it from the phone.`,
   "gateway.configUnreadable": (name, file) =>
     `This project's ${file} cannot be read, and it could grant the bot «${name}» the shell: not started from here.`,
+  "gateway.chat.configGrant": (name, key) =>
+    `This project's configuration grants the bot «${name}» «${key}», which from a chat would override the shell's ban: not started from here. The file is named in the bot's panel, in ADE.`,
+  "gateway.chat.configUnreadable": (name) =>
+    `This project's configuration cannot be read, and it could grant the bot «${name}» the shell: not started from here. The file is named in the bot's panel, in ADE.`,
+  "gateway.chat.notAdmitted":
+    "This project is not admitted for Ragu Code yet, or it changed: open the bot in ADE's panel, answer the question and try again.",
   "gateway.approve.question": (permission, what) =>
     `The bot asks for the permission «${permission}» for:\n${what}\n\nAllow it this once? No answer within 5 minutes means no.`,
   "gateway.approve.danger": (reason: string) => `Careful: this command ${reason}.`,

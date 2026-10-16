@@ -113,7 +113,7 @@ export async function approveForChat(
     surface: () => projectSurface(project, projectFs),
     globalRoot,
   })
-  return checked.ok ? { ok: true, fingerprint: checked.fingerprint } : { ok: false, problem: checked.problem }
+  return checked.ok ? { ok: true, fingerprint: checked.fingerprint } : { ok: false, problem: checked.detail ?? checked.problem }
 }
 
 /** What the panel needs in the app, but the bot. */

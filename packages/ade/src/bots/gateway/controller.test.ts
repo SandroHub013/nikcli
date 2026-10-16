@@ -1132,3 +1132,35 @@ describe("the detail of a failed turn stays in ADE, where the panel shows it (S1
     expect(turnFailureOf(BOT.path, "telegram")).toEqual(kept)
   })
 })
+
+describe("a refusal of the policy tells the chat no local path (S10)", () => {
+  test("the chat reads the text without it; the panel keeps the detail", async () => {
+    forgetTurnFailures()
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: async () => ({
+        ok: false as const,
+        problem: "Il progetto non e' ancora ammesso.",
+        detail: "Il progetto C:/Users/mario/progetto non e' ancora ammesso.",
+      }),
+      sessions: memorySessionStore(),
+      warn: () => {},
+      now: () => 42,
+    })
+    b.emit("ciao")
+    await until("la risposta", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe("Il progetto non e' ancora ammesso.")
+    expect(turnFailureOf(BOT.path, "telegram")).toEqual({
+      at: 42,
+      detail: "Il progetto C:/Users/mario/progetto non e' ancora ammesso.",
+    })
+    // A refusal with nothing more to say leaves the panel as it was.
+    forgetTurnFailures()
+    b.emit("ancora")
+    await until("la seconda risposta", () => b.sent.length === 2)
+    expect(turnFailureOf(BOT.path, "telegram")).toBeDefined()
+  })
+})

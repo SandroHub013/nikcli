@@ -159,8 +159,11 @@ describe("the trust checked again on every turn, with no dialog", () => {
     const own = "C:/Users/me/AppData/Roaming/nikcli/agent/mio.md"
     expect(await recheckTrust(own, PROJECT, await deps(file("ragu")))).toEqual({
       ok: false,
-      problem: t("bots.serve.notAdmitted", PROJECT),
+      problem: t("gateway.chat.notAdmitted"),
+      detail: t("bots.serve.notAdmitted", PROJECT),
     })
+    // What a chat reads has no local path in it; the path is in the detail, for the panel (S10).
+    expect(t("gateway.chat.notAdmitted")).not.toContain(PROJECT)
     // Claude Code and Codex do not read it.
     expect(
       (await recheckTrust("C:/Users/me/AppData/Roaming/nikcli/agent/altro.md", PROJECT, await deps(file("claude")))).ok,
@@ -181,12 +184,16 @@ describe("the trust checked again on every turn, with no dialog", () => {
     }
     expect(await recheckTrust(own, PROJECT, await withConfig(granting))).toEqual({
       ok: false,
-      problem: t("gateway.configGrant", "mio", 'agent."mio".permission."bash"."git *"', ".nikcli/nikcli.json"),
+      problem: t("gateway.chat.configGrant", "mio", 'agent."mio".permission."bash"."git *"'),
+      detail: t("gateway.configGrant", "mio", 'agent."mio".permission."bash"."git *"', ".nikcli/nikcli.json"),
     })
+    expect(t("gateway.chat.configGrant", "mio", "x")).not.toContain("nikcli.json")
     expect(await recheckTrust(own, PROJECT, await withConfig({ path: "nikcli.json", text: "{ rotto" }))).toEqual({
       ok: false,
-      problem: t("gateway.configUnreadable", "mio", "nikcli.json"),
+      problem: t("gateway.chat.configUnreadable", "mio"),
+      detail: t("gateway.configUnreadable", "mio", "nikcli.json"),
     })
+    expect(t("gateway.chat.configUnreadable", "mio")).not.toContain("nikcli.json")
     // Another file of .nikcli is not configuration: not read as such.
     expect(
       (await recheckTrust(own, PROJECT, await withConfig({ path: ".nikcli/tool/x.json", text: "{ rotto" }))).ok,

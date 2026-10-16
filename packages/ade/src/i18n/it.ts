@@ -828,6 +828,12 @@ export const it = {
     `${file} di questo progetto concede al bot «${name}» «${key}», che da remoto scavalcherebbe il divieto della shell: da qui non lo avvio. Toglilo da ${file} per usarlo dal telefono.`,
   "gateway.configUnreadable": (name: string, file: string) =>
     `Non riesco a leggere ${file} di questo progetto, che potrebbe concedere la shell al bot «${name}»: da qui non lo avvio.`,
+  "gateway.chat.configGrant": (name: string, key: string) =>
+    `La configurazione di questo progetto concede al bot «${name}» «${key}», che da remoto scavalcherebbe il divieto della shell: da qui non lo avvio. Quale file è indicato nel pannello del bot, in ADE.`,
+  "gateway.chat.configUnreadable": (name: string) =>
+    `Non riesco a leggere la configurazione di questo progetto, che potrebbe concedere la shell al bot «${name}»: da qui non lo avvio. Il file è indicato nel pannello del bot, in ADE.`,
+  "gateway.chat.notAdmitted":
+    "Questo progetto non è ancora ammesso per Ragu Code, o è cambiato: apri il bot nel pannello di ADE, rispondi alla domanda e riprova.",
   "gateway.approve.question": (permission: string, what: string) =>
     `Il bot chiede il permesso «${permission}» per:\n${what}\n\nLo permetto questa volta? Senza risposta entro 5 minuti vale no.`,
   "gateway.approve.once": "Sì, questa volta",

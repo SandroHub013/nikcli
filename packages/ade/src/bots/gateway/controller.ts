@@ -95,7 +95,7 @@ export interface GatewayControllerDeps {
   readonly loadBot: (
     path: string,
     project: string,
-  ) => Promise<{ ok: true; bot: AgentFile; fingerprint?: string } | { ok: false; problem: string }>
+  ) => Promise<{ ok: true; bot: AgentFile; fingerprint?: string } | { ok: false; problem: string; detail?: string }>
   readonly sessions: SessionStore
   /** The chat's thread on disk, apart from the panel's. Absent in a test that does not keep one. */
   readonly threads?: GatewayThreads
@@ -311,7 +311,11 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       const project = await deps.bridge.project(message.bot, message.platform)
       if (!project) return void (await reply(message, t("gateway.noProject")))
       const loaded = await deps.loadBot(message.bot, project)
-      if (!loaded.ok) return void (await reply(message, loaded.problem))
+      if (!loaded.ok) {
+        // The chat reads `problem`, which has no local path; the panel keeps `detail` (S10).
+        if (loaded.detail) failure(message, loaded.detail)
+        return void (await reply(message, loaded.problem))
+      }
       const bot = loaded.bot
       const runner = runnerById(bot.runner).id
       const allowed = mayRun(runner, message.owner !== false)
