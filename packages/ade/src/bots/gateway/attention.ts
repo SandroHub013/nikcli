@@ -4,6 +4,7 @@
  * the window when ADE is behind.
  */
 
+import { t } from "../../i18n"
 import type { ApprovalRegistry } from "../approvals"
 import type { GatewayPanelApi, LinkStatus } from "./panel-state"
 
@@ -22,12 +23,16 @@ export function syncGatewayAttention(deps: GatewayAttentionSyncDeps): { stop: ()
   const handleStatus = (status: Pick<LinkStatus, "bot" | "platform" | "needsAttention" | "attentionReason">) => {
     const key = `gateway:${status.bot}:${status.platform}`
     if (status.needsAttention) {
+      const reason =
+        status.attentionReason === "timeout_10m"
+          ? t("gateway.panel.attentionTimeout")
+          : status.attentionReason ?? undefined
       deps.approvals.openAttention({
         id: key,
         bot: status.bot,
         botName: deriveBotName(status.bot),
         platform: status.platform,
-        reason: status.attentionReason ?? undefined,
+        reason,
         at: Date.now(),
       })
     } else {

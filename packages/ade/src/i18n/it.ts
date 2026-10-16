@@ -808,6 +808,7 @@ export const it = {
   "gateway.nothingToStop": "Non c'è nessun turno da fermare.",
   "gateway.fresh": "Nuova conversazione: riparto da zero.",
   "gateway.status.idle": "Libero: scrivimi pure.",
+  "gateway.status.working": (queued: number) => `Sto lavorando a un turno; messaggi in coda: ${queued}.`,
   "gateway.status.connectedSince": (time: string) =>
     `Gateway collegato ${time.startsWith("dal") || time.startsWith("da ") ? time : `dalle ${time}`}.`,
   "gateway.retry.none": "Non c'è ancora una domanda da rifare: scrivimene una.",
@@ -972,6 +973,7 @@ export const it = {
     `Acceso · collegato ${time.startsWith("dal") || time.startsWith("da ") ? time : `dalle ${time}`}`,
   "gateway.panel.connecting": "Acceso · in collegamento",
   "gateway.panel.reconnecting": "Acceso · riconnessione in corso",
+  "gateway.panel.attentionTimeout": "Impossibile connettersi da oltre 10 minuti",
   "gateway.panel.retry": "Riprova",
   "gateway.panel.changeCode": "Cambia il codice",
   "gateway.panel.openPlatforms": "Apri piattaforme",

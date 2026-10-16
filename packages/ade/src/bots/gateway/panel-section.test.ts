@@ -267,4 +267,39 @@ describe("opening a tile starts the five steps", () => {
     expect(text).not.toContain("PID")
     expect(text).not.toContain("pid")
   })
+
+  test("Point 3 / P2-5: fatal error shows the error once in the attention box and not duplicated below it", async () => {
+    await mount([
+      link("telegram", {
+        hasToken: true,
+        enabled: true,
+        running: false,
+        needsAttention: true,
+        attentionReason: "token revocato",
+        lastError: "token revocato",
+      }),
+    ])
+    const attentionBox = document.querySelector('[data-slot="gateway-attention-box"]')
+    expect(attentionBox).not.toBeNull()
+    expect(attentionBox?.textContent).toContain("token revocato")
+
+    // The error should NOT appear a second time in bots-problem below the box
+    const problemEls = document.querySelectorAll('[data-slot="bots-problem"]')
+    expect(problemEls.length).toBe(0)
+  })
+
+  test("P2-5: timeout_10m attention reason is localized by the page", async () => {
+    await mount([
+      link("telegram", {
+        hasToken: true,
+        enabled: true,
+        running: true,
+        needsAttention: true,
+        attentionReason: "timeout_10m",
+      }),
+    ])
+    const reasonEl = document.querySelector('[data-slot="gateway-attention-reason"]')
+    expect(reasonEl).not.toBeNull()
+    expect(reasonEl?.textContent).toBe("Impossibile connettersi da oltre 10 minuti")
+  })
 })

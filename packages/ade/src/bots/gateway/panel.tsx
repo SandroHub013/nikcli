@@ -201,7 +201,11 @@ export function GatewaySection(props: {
         <Show when={panel.link().needsAttention}>
           <div data-slot="gateway-attention-box" data-tone="error">
             <Show when={panel.link().attentionReason}>
-              {(reason) => <p data-slot="gateway-attention-reason">{reason()}</p>}
+              {(reason) => (
+                <p data-slot="gateway-attention-reason">
+                  {reason() === "timeout_10m" ? t("gateway.panel.attentionTimeout") : reason()}
+                </p>
+              )}
             </Show>
             <div data-slot="gateway-attention-actions">
               <button
@@ -224,7 +228,7 @@ export function GatewaySection(props: {
             </div>
           </div>
         </Show>
-        <Show when={panel.link().enabled && panel.link().lastError}>
+        <Show when={panel.link().enabled && !panel.link().needsAttention && panel.link().lastError}>
           {(error) => <p data-slot="bots-problem">{error()}</p>}
         </Show>
         <Show when={panel.turnFailure()}>

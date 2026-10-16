@@ -1378,7 +1378,7 @@ impl Task {
                         live.last_error = Some(error.clone());
                         if timed_out {
                             live.needs_attention = true;
-                            live.attention_reason = Some("Impossibile connettersi da oltre 10 minuti".to_string());
+                            live.attention_reason = Some("timeout_10m".to_string());
                             live.reconnecting = false;
                         } else {
                             live.reconnecting = true;
@@ -3522,6 +3522,26 @@ mod tests {
         let stop_status = s.env.statuses.lock().unwrap().last().cloned().unwrap();
         assert!(!stop_status.enabled, "lo stop deve avere enabled: false");
         assert!(!stop_status.running);
+    }
+
+    #[tokio::test]
+    async fn ten_minutes_disconnected_emits_timeout_10m_code() {
+        let s = setup("timeout-10m");
+        let (_adapter, feed) = start(&s);
+        feed.send(Err(AdapterError::Transient("caduta di rete".into()))).unwrap();
+        eventually("primo errore transiente", || {
+            s.env.statuses.lock().unwrap().last().is_some_and(|st| st.reconnecting && !st.needs_attention)
+        }).await;
+
+        s.env.later.store(600_001, std::sync::atomic::Ordering::SeqCst);
+        s.hub.wake_all();
+        feed.send(Err(AdapterError::Transient("ancora giù".into()))).unwrap();
+
+        eventually("scatta attention con codice timeout_10m", || {
+            s.env.statuses.lock().unwrap().last().is_some_and(|st| {
+                st.needs_attention && st.attention_reason.as_deref() == Some("timeout_10m")
+            })
+        }).await;
     }
 }
 
