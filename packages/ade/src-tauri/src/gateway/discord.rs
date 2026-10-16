@@ -355,6 +355,8 @@ struct Shared {
     /// is not sent, because it would spend a slot in Discord's edit rate limit
     /// on a request that cannot do anything.
     preview: Mutex<HashMap<String, String>>,
+    /// The message currently being edited as live preview per chat.
+    active_preview: Mutex<HashMap<String, String>>,
     /// Bumped for every session, so an edit made before a drop does not write
     /// its text onto the message of the session that follows.
     epoch: AtomicU64,
@@ -521,6 +523,7 @@ impl Discord {
                 bot: Mutex::new(None),
                 cursor: Mutex::new(cursor),
                 preview: Mutex::new(HashMap::new()),
+                active_preview: Mutex::new(HashMap::new()),
                 epoch: AtomicU64::new(0),
                 ready: AtomicBool::new(false),
                 nonce_seed: random_nonce_seed(),
@@ -654,6 +657,40 @@ impl Core {
     async fn send_all(&self, chat: &str, text: &str, extra: Option<&Value>) -> Result<String, AdapterError> {
         check_id("il canale", chat)?;
         let seed = self.shared.nonce_seed.wrapping_add(self.shared.epoch.load(Ordering::SeqCst));
+        let existing_preview = hold(&self.shared.active_preview).remove(chat);
+        if let Some(msg_id) = existing_preview {
+            let mut all_pieces = pieces(text);
+            if all_pieces.is_empty() {
+                return Err(AdapterError::Fatal("il messaggio è vuoto".into()));
+            }
+            let first = all_pieces.remove(0);
+            let edited = self.edit(chat, &msg_id, &first).await?;
+            let mut last = edited;
+            for piece in all_pieces {
+                let mut body = Core::body(&piece);
+                let seq = self.shared.nonce_counter.fetch_add(1, Ordering::SeqCst);
+                body["nonce"] = Value::from(nonce(seed, seq));
+                body["enforce_nonce"] = json!(true);
+                last = self.post(chat, &body).await.map_err(Failure::for_sending)?;
+            }
+            if let Some(extra) = extra {
+                check_id("il messaggio", &last)?;
+                let body = json!({ "components": extra["components"].clone(), "allowed_mentions": { "parse": [] }, "flags": SUPPRESS_EMBEDS });
+                if let Err(failure) = self
+                    .call_patiently(reqwest::Method::PATCH, &format!("/channels/{chat}/messages/{last}"), Some(&body))
+                    .await
+                {
+                    let unchanged =
+                        matches!(&failure, Failure::Api { description, .. } if description.contains("not modified"));
+                    if !unchanged {
+                        return Err(failure.for_sending());
+                    }
+                }
+            }
+            chunk::remember(&mut hold(&self.shared.preview), format!("{chat}/{last}"), text.to_string());
+            return Ok(last);
+        }
+
         let mut queue: VecDeque<String> = pieces(text).into();
         if queue.is_empty() {
             return Err(AdapterError::Fatal("il messaggio è vuoto".into()));
@@ -700,6 +737,37 @@ impl Core {
         }
         chunk::remember(&mut hold(&self.shared.preview), format!("{chat}/{last}"), text.to_string());
         Ok(last)
+    }
+
+    async fn edit(&self, chat: &str, message: &str, text: &str) -> Result<String, AdapterError> {
+        check_id("il canale", chat)?;
+        check_id("il messaggio", message)?;
+        let key = format!("{chat}/{message}");
+        if hold(&self.shared.preview).get(&key).map(String::as_str) == Some(text) {
+            // The same text again. Discord would answer with an error and the
+            // request would still spend a slot in the edit rate limit.
+            return Ok(message.to_string());
+        }
+        let all = pieces(text);
+        let Some(first) = all.first() else {
+            return Err(AdapterError::Fatal("il messaggio è vuoto".into()));
+        };
+        let body = Core::body(first);
+        if let Err(failure) = self
+            .call_patiently(
+                reqwest::Method::PATCH,
+                &format!("/channels/{chat}/messages/{message}"),
+                Some(&body),
+            )
+            .await
+        {
+            let unchanged = matches!(&failure, Failure::Api { description, .. } if description.contains("not modified"));
+            if !unchanged {
+                return Err(failure.for_sending());
+            }
+        }
+        chunk::remember(&mut hold(&self.shared.preview), key, text.to_string());
+        Ok(message.to_string())
     }
 }
 
@@ -1170,43 +1238,7 @@ impl Adapter for Discord {
     }
 
     async fn edit(&self, chat: &str, message: &str, text: &str) -> Result<String, AdapterError> {
-        check_id("il canale", chat)?;
-        check_id("il messaggio", message)?;
-        let key = format!("{chat}/{message}");
-        if hold(&self.shared.preview).get(&key).map(String::as_str) == Some(text) {
-            // The same text again. Discord would answer with an error and the
-            // request would still spend a slot in the edit rate limit.
-            return Ok(message.to_string());
-        }
-        let all = pieces(text);
-        let Some(first) = all.first() else {
-            return Err(AdapterError::Fatal("il messaggio è vuoto".into()));
-        };
-        // Discord works the mentions of an edited message out of the new text with
-        // its own default, so the same "nothing is a mention" goes here as on
-        // every other message this adapter sends.
-        let body = Core::body(first);
-        if let Err(failure) = self
-            .call_patiently(
-                reqwest::Method::PATCH,
-                &format!("/channels/{chat}/messages/{message}"),
-                Some(&body),
-            )
-            .await
-        {
-            // A message that says the same thing is not a change; anything else
-            // is worth saying.
-            let unchanged = matches!(&failure, Failure::Api { description, .. } if description.contains("not modified"));
-            if !unchanged {
-                return Err(failure.for_sending());
-            }
-        }
-        // Only the first piece: an edit is the live text, and posting the rest
-        // on every call would flood the channel as the text grows, once per
-        // update. What does not fit goes out once, at the end of the turn, with
-        // the sending call.
-        chunk::remember(&mut hold(&self.shared.preview), key, text.to_string());
-        Ok(message.to_string())
+        self.core.edit(chat, message, text).await
     }
 
     async fn typing(&self, chat: &str) -> Result<(), AdapterError> {
@@ -1215,6 +1247,31 @@ impl Adapter for Discord {
             .await
             .map(|_| ())
             .map_err(Failure::for_sending)
+    }
+
+    async fn preview(&self, chat: &str, text: &str) -> Result<(), AdapterError> {
+        check_id("il canale", chat)?;
+        let existing = hold(&self.shared.active_preview).get(chat).cloned();
+        match existing {
+            Some(msg_id) => {
+                self.edit(chat, &msg_id, text).await.map(|_| ())
+            }
+            None => {
+                let pieces_vec = pieces(text);
+                let Some(first) = pieces_vec.first() else {
+                    return Err(AdapterError::Fatal("il messaggio è vuoto".into()));
+                };
+                let mut body = Core::body(first);
+                let seed = self.shared.nonce_seed.wrapping_add(self.shared.epoch.load(Ordering::SeqCst));
+                let seq = self.shared.nonce_counter.fetch_add(1, Ordering::SeqCst);
+                body["nonce"] = Value::from(nonce(seed, seq));
+                body["enforce_nonce"] = json!(true);
+                let id = self.post(chat, &body).await.map_err(Failure::for_sending)?;
+                hold(&self.shared.active_preview).insert(chat.to_string(), id.clone());
+                chunk::remember(&mut hold(&self.shared.preview), format!("{chat}/{id}"), first.to_string());
+                Ok(())
+            }
+        }
     }
 
     async fn whoami(&self) -> Result<String, AdapterError> {
@@ -1548,6 +1605,7 @@ mod tests {
             bot: Mutex::new(Some(BOT.to_string())),
             cursor: Mutex::new(None),
             preview: Mutex::new(HashMap::new()),
+            active_preview: Mutex::new(HashMap::new()),
             epoch: AtomicU64::new(0),
             ready: AtomicBool::new(false),
             nonce_seed: 0,
@@ -2617,5 +2675,40 @@ mod tests {
                 assert_eq!(gateway.op(6), None, "{name}: la sessione non viene ripresa");
             }
         }
+    }
+
+    #[tokio::test]
+    async fn preview_sends_first_message_then_edits_and_final_message_modifies_with_overflow() {
+        let rest = FakeRest::start(vec![
+            ok(r#"{"id": "111"}"#),
+            ok(r#"{"id": "111"}"#),
+            ok(r#"{"id": "111"}"#),
+            ok(r#"{"id": "222"}"#),
+        ]);
+        let gateway = FakeGateway::start(vec![]);
+        let d = adapter(&rest, &gateway);
+
+        // 1. First preview: sends new message
+        d.preview("123", "prima anteprima").await.unwrap();
+        assert_eq!(rest.count(), 1);
+        let req1 = rest.requests();
+        assert!(req1[0].0.starts_with("POST /channels/123/messages"));
+        assert_eq!(rest.body_of(0)["content"], "prima anteprima");
+
+        // 2. Second preview: edits that message in-place
+        d.preview("123", "seconda anteprima più lunga").await.unwrap();
+        assert_eq!(rest.count(), 2);
+        let req2 = rest.requests();
+        assert!(req2[1].0.starts_with("PATCH /channels/123/messages/111"));
+        assert_eq!(rest.body_of(1)["content"], "seconda anteprima più lunga");
+
+        // 3. Final message: long enough to have 2 pieces (> 2000 chars)
+        let long_final = format!("{}\n\n{}", "A".repeat(1990), "B".repeat(500));
+        let last_id = d.send("123", &long_final).await.unwrap();
+        assert_eq!(last_id, "222");
+        assert_eq!(rest.count(), 4);
+        let reqs = rest.requests();
+        assert!(reqs[2].0.starts_with("PATCH /channels/123/messages/111"));
+        assert!(reqs[3].0.starts_with("POST /channels/123/messages"));
     }
 }

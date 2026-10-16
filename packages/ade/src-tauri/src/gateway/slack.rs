@@ -1017,6 +1017,12 @@ impl Adapter for Slack {
         }
         Ok(format!("@{}", me.name))
     }
+
+    async fn preview(&self, _chat: &str, _text: &str) -> Result<(), AdapterError> {
+        // Slack previews are no-op per design (choice 8):
+        // only the final message is sent.
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1836,4 +1842,19 @@ mod tests {
         slack.edit("D1", "9.9", "testo nuovo").await.expect("modificato");
         assert_eq!(api.to("/chat.update").len(), 1, "lo stesso testo non viaggia");
     }
+
+    #[tokio::test]
+    async fn preview_is_noop_and_only_final_message_is_sent() {
+        let socket = FakeSocket::start(vec![], 100);
+        let api = FakeApi::start(&socket.address, HashMap::new());
+        let slack = adapter(&api);
+
+        slack.preview("D1", "anteprima non inviata su slack").await.unwrap();
+        assert_eq!(api.to("/chat.postMessage").len(), 0);
+        assert_eq!(api.to("/chat.update").len(), 0);
+
+        slack.send("D1", "messaggio finale").await.unwrap();
+        assert_eq!(api.to("/chat.postMessage").len(), 1);
+    }
 }
+

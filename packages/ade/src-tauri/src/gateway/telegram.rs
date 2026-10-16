@@ -436,6 +436,45 @@ impl Adapter for Telegram {
             .map_err(Failure::for_sending)
     }
 
+    async fn preview(&self, chat: &str, text: &str) -> Result<(), AdapterError> {
+        // Native drafts (sendMessageDraft, Bot API 9.5) apply to private chats.
+        // For groups/channels, draft is not supported and would create noise,
+        // so preview is a no-op (only the final message is sent).
+        if let Ok(id) = chat.parse::<i64>() {
+            if id <= 0 {
+                return Ok(());
+            }
+        } else if chat.starts_with('@') || chat.starts_with('-') {
+            return Ok(());
+        }
+
+        let piece = split(text, MAX_LEN, utf16).into_iter().next().unwrap_or_default();
+        if piece.is_empty() {
+            return Ok(());
+        }
+
+        let mut body = json!({
+            "chat_id": chat_id(chat),
+            "draft_id": 1,
+            "text": to_markdown_v2(&piece),
+            "parse_mode": "MarkdownV2"
+        });
+        let res = match self.call_patiently("sendMessageDraft", &body).await {
+            Err(failure) if failure.is_parse_error() => {
+                body["text"] = Value::from(piece);
+                body.as_object_mut().map(|fields| fields.remove("parse_mode"));
+                self.call_patiently("sendMessageDraft", &body).await
+            }
+            other => other,
+        };
+        match res {
+            Ok(_) => Ok(()),
+            Err(Failure::Api { code: 400, description, .. }) if description.contains("can't parse") => Ok(()),
+            Err(Failure::Api { code: 404, .. }) => Ok(()),
+            Err(failure) => Err(failure.for_sending()),
+        }
+    }
+
     fn cursor(&self) -> Option<String> {
         self.next.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).map(|next| next.to_string())
     }
@@ -885,5 +924,27 @@ mod tests {
         assert_eq!(api.calls_to("sendChatAction")[0]["action"], "typing");
         assert!(telegram.edit("42", "non-un-numero", "x").await.is_err());
         assert!(telegram.send("42", "   ").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn drafts_sent_to_private_chat_then_final_message() {
+        let api = FakeApi::start();
+        let telegram = adapter(&api, None);
+
+        // Preview in private chat calls sendMessageDraft
+        telegram.preview("42", "anteprima bozza parziale").await.unwrap();
+        let drafts = api.calls_to("sendMessageDraft");
+        assert_eq!(drafts.len(), 1);
+        assert_eq!(drafts[0]["chat_id"], 42);
+        assert_eq!(drafts[0]["draft_id"], 1);
+
+        // Preview in group/channel (negative id) is ignored (no-op)
+        telegram.preview("-10042", "in gruppo").await.unwrap();
+        assert_eq!(api.calls_to("sendMessageDraft").len(), 1);
+
+        // Final message uses sendMessage
+        telegram.send("42", "risposta finale completa").await.unwrap();
+        let sends = api.calls_to("sendMessage");
+        assert_eq!(sends.len(), 1);
     }
 }
