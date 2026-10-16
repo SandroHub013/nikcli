@@ -2081,5 +2081,23 @@ describe("the failure shown in the panel goes away when the bot works again (N7)
     expect(chatCommand("/riavvia")).toBeUndefined()
     expect(chatCommand("/restart")).toBeUndefined()
   })
+
+  test("/stato includes day when connection is from a previous day (P2-4)", async () => {
+    const b = bridge(PROJECT, async () => ({
+      connected: true,
+      connectedAtMs: new Date(2026, 9, 13, 14, 5).getTime(),
+    }))
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("/stato")
+    await until("stato ricevuto", () => b.sent.length === 1)
+    const replyText = b.sent[0]!.text
+    expect(replyText).toMatch(/collegato dal 13 (ott|ottobre) alle 14:05/)
+  })
 })
 

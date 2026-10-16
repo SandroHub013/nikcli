@@ -808,8 +808,8 @@ export const it = {
   "gateway.nothingToStop": "Non c'è nessun turno da fermare.",
   "gateway.fresh": "Nuova conversazione: riparto da zero.",
   "gateway.status.idle": "Libero: scrivimi pure.",
-  "gateway.status.working": (queued: number) => `Sto lavorando a un turno; messaggi in coda: ${queued}.`,
-  "gateway.status.connectedSince": (time: string) => `Gateway collegato dalle ${time}.`,
+  "gateway.status.connectedSince": (time: string) =>
+    `Gateway collegato ${time.startsWith("dal") || time.startsWith("da ") ? time : `dalle ${time}`}.`,
   "gateway.retry.none": "Non c'è ancora una domanda da rifare: scrivimene una.",
   "gateway.retry.busy": "Sto ancora lavorando alla domanda di prima: aspetta che finisca, oppure scrivi /ferma.",
   "gateway.retry.again": "Rifaccio l'ultima domanda.",
@@ -968,7 +968,8 @@ export const it = {
   "gateway.panel.stopped": "Acceso, ma fermo per un errore",
   "gateway.panel.needsAttention": "Richiede attenzione",
   "gateway.panel.connected": "Acceso · collegato",
-  "gateway.panel.connectedSince": (time: string) => `collegato da ${time}`,
+  "gateway.panel.connectedSince": (time: string) =>
+    `Acceso · collegato ${time.startsWith("dal") || time.startsWith("da ") ? time : `dalle ${time}`}`,
   "gateway.panel.connecting": "Acceso · in collegamento",
   "gateway.panel.reconnecting": "Acceso · riconnessione in corso",
   "gateway.panel.retry": "Riprova",
