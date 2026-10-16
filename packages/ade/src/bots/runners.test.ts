@@ -599,12 +599,78 @@ describe("un turno da chat non ha la shell", () => {
       expect(args[args.indexOf("--mcp-config") + 1]).toBe('{"mcpServers":{}}')
       expect(args[args.indexOf("--setting-sources") + 1]).toBe("")
       // Leggere e cercare nel progetto resta.
-      for (const name of ["Read", "Grep", "Glob"]) expect(allowedOf(args)).toContain(name)
+      expect([spec, allowedOf(args).includes("Read(./**)")]).toEqual([spec, true])
     }
     // Nel pannello l'utente guarda: il web resta.
     expect(allowedOf(turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true }).args)).toContain(
       "WebFetch",
     )
+  })
+
+  /*
+   * Review Bot (review-anteprima-pagina.md §3): `Read`, `Grep` e `Glob` senza percorso valgono per ogni file del disco,
+   * e un turno da telefono o una routine leggeva ~/.ssh o il .env di un altro progetto senza domanda (provato su
+   * claude 2.1.301 con un finto provider, results/bot-lettura.md). Da chat e nelle routine si legge solo nel progetto.
+   */
+  test("Claude: da chat e in una routine legge solo nella cartella del progetto", () => {
+    const own: AgentFile = { ...mine, runner: "claude" }
+    for (const spec of [{ remote: off }, { remote: on }, { unattended: true }, { unattended: true, lean: true }]) {
+      const { args } = turnCommand(runnerById("claude"), { bot: own, message: "x", ...spec })
+      const allowed = allowedOf(args)
+      for (const name of ["Read", "Grep", "Glob"])
+        expect([spec, name, allowed.includes(name)]).toEqual([spec, name, false])
+      expect([spec, allowed.includes("Read(./**)")]).toEqual([spec, true])
+      expect([spec, JSON.parse(args[args.indexOf("--settings") + 1] ?? "{}")]).toEqual([
+        spec,
+        { autoMemoryEnabled: false, permissions: { blockReadsOutsideWorkingDirectories: true } },
+      ])
+    }
+    // Un bot con la lettura spenta non ha nemmeno quella del progetto.
+    const blind = turnCommand(runnerById("claude"), {
+      bot: { ...own, disabledTools: ["read"] },
+      message: "x",
+      remote: off,
+    })
+    expect(allowedOf(blind.args).filter((rule) => rule.startsWith("Read"))).toEqual([])
+    expect(disallowedOf(blind.args)).toContain("Read")
+    // Nel pannello resta com'è.
+    const panel = turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true }).args
+    for (const name of ["Read", "Grep", "Glob"]) expect(allowedOf(panel)).toContain(name)
+    expect(panel[panel.indexOf("--settings") + 1]).toBe('{"autoMemoryEnabled":false}')
+  })
+
+  /*
+   * Lo stesso per la scrittura (bot-lettura): `Edit`, `Write` e `NotebookEdit` senza percorso, con `acceptEdits`,
+   * scrivevano da telefono anche fuori dal progetto, per esempio negli hook di ~/.claude/settings.json. Nel progetto
+   * scrive `acceptEdits` da solo (provato su claude 2.1.301 con un finto provider).
+   */
+  test("Claude: da chat un bot che scrive scrive solo nella cartella del progetto", () => {
+    const own: AgentFile = { ...mine, runner: "claude" }
+    for (const remote of [off, on]) {
+      const { args } = turnCommand(runnerById("claude"), { bot: own, message: "x", remote })
+      for (const name of ["Edit", "NotebookEdit", "Write"])
+        expect([remote, name, allowedOf(args).includes(name)]).toEqual([remote, name, false])
+      expect(args[args.indexOf("--permission-mode") + 1]).toBe("acceptEdits")
+    }
+    // Nel pannello resta com'è.
+    const panel = turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true }).args
+    for (const name of ["Edit", "NotebookEdit", "Write"]) expect(allowedOf(panel)).toContain(name)
+  })
+
+  /*
+   * `ListAgents` e `SendMessage` di Claude Code girano in `-p` senza domanda (claude 2.1.301, finto provider): da
+   * telefono un turno poteva scrivere a un'altra sessione Claude della macchina, magari in `bypassPermissions`.
+   */
+  test("Claude: da chat e in una routine niente messaggi alle altre sessioni", () => {
+    const own: AgentFile = { ...mine, runner: "claude" }
+    for (const spec of [{ remote: off }, { remote: on }, { unattended: true }, { unattended: true, lean: true }]) {
+      const { args } = turnCommand(runnerById("claude"), { bot: own, message: "x", ...spec })
+      for (const name of ["ListAgents", "SendMessage"])
+        expect([spec, name, disallowedOf(args).includes(name)]).toEqual([spec, name, true])
+    }
+    // Nel pannello resta com'è.
+    const panel = turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true }).args
+    expect(disallowedOf(panel)).not.toContain("SendMessage")
   })
 
   /*
@@ -927,7 +993,7 @@ describe("a turn nobody watches (B11, a routine)", () => {
       expect(option("--allowedTools")).not.toContain(name)
       expect(option("--disallowedTools")).toContain(name)
     }
-    expect(option("--allowedTools")).toContain("Read")
+    expect(option("--allowedTools")).toContain("Read(./**)")
     // The panel's own turn still writes.
     const panel = turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true })
     expect(panel.args[panel.args.indexOf("--permission-mode") + 1]).toBe("acceptEdits")
