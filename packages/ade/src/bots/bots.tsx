@@ -1946,6 +1946,7 @@ function BotPage(props: {
           <PermissionsSection
             bot={props.bot}
             fingerprintOf={async (bot) => fileFingerprint(await readBotText(bot.path))}
+            always={localAlwaysStore()}
             {...(props.gateway ? { remote: localRemoteStore() } : {})}
           />
         </TabPanel>
