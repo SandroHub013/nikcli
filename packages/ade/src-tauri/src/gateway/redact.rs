@@ -237,7 +237,7 @@ fn known_shapes(text: &str) -> String {
 }
 
 /// The words of a variable's name that say its value is a secret.
-const SECRET_WORDS: &[&str] = &["key", "token", "secret", "password", "passwd", "pwd", "credential", "credentials", "apikey", "auth"];
+const SECRET_WORDS: &[&str] = &["key", "token", "secret", "password", "passwd", "pwd", "credential", "credentials", "apikey", "auth", "authorization"];
 /// And the endings that say it when the name is in camel case or run together (`apiKey`, `accesstoken`).
 const SECRET_ENDINGS: &[&str] = &["apikey", "accesskey", "privatekey", "token", "secret", "password", "passwd"];
 
@@ -250,9 +250,18 @@ fn secret_name(name: &str) -> bool {
     lower.split(['_', '-', '.']).any(|word| SECRET_WORDS.contains(&word)) || SECRET_ENDINGS.iter().any(|end| lower.ends_with(end))
 }
 
+/// Whether `at` is the first word of its line: only blanks, and a YAML `- `, before it.
+fn starts_a_line(text: &str, at: usize) -> bool {
+    let before = &text[..at];
+    let line = &before[before.rfind('\n').map_or(0, |i| i + 1)..];
+    matches!(line.trim_matches([' ', '\t']), "" | "-")
+}
+
 /// `NAME=value` where the name says secret (`DB_PASSWORD`, `api_key`, `AWS_SECRET_ACCESS_KEY`, `?pwd=`), and
-/// `"password": "value"` in JSON: the value is hidden, the name stays. A colon counts only after a quoted name, so
-/// «the token: expired» is left alone. A value of under four characters, or one that is another variable
+/// `"password": "value"` in JSON, `password: value` in YAML or INI and `X-Api-Key: value` or `Authorization: Basic
+/// value` as headers: the value is hidden, the name stays. A colon counts only after a quoted name, as the first
+/// word of a line or right after an opening quote, so «the token: expired» is left alone. A bare value ends at an
+/// `&` only inside a query string. A value of under four characters, or one that is another variable
 /// (`$OTHER`), is not hidden (N3).
 fn hide_assignments(text: &str) -> String {
     let bytes = text.as_bytes();
@@ -273,10 +282,28 @@ fn hide_assignments(text: &str) -> String {
             while begin > 0 && is_name_byte(bytes[begin - 1]) {
                 begin -= 1;
             }
-            if (separator == b'=' || quoted) && begin < end && secret_name(&text[begin..end]) {
+            // A colon counts after a quoted name (JSON), as the first word of a line (YAML, INI, a header) and right
+            // after an opening quote (`curl -H "Authorization: …"`); `=` counts anywhere.
+            let colon_ok = quoted || starts_a_line(text, begin) || (begin > 0 && matches!(bytes[begin - 1], b'"' | b'\''));
+            if (separator == b'=' || colon_ok) && begin < end && secret_name(&text[begin..end]) {
+                let query = begin > 0 && matches!(bytes[begin - 1], b'?' | b'&');
                 let mut start = at + 1;
                 while start < bytes.len() && bytes[start] == b' ' {
                     start += 1;
+                }
+                // `Authorization: Basic dXNlcjpw`: the secret is what follows the scheme, which stays readable.
+                if text[begin..end].to_ascii_lowercase().ends_with("authorization") {
+                    let mut after = start;
+                    while after < bytes.len() && !bytes[after].is_ascii_whitespace() {
+                        after += 1;
+                    }
+                    let scheme_end = after;
+                    while after < bytes.len() && matches!(bytes[after], b' ' | b'\t') {
+                        after += 1;
+                    }
+                    if scheme_end > start && after > scheme_end && after < bytes.len() && !matches!(bytes[after], b'\n' | b'\r') {
+                        start = after;
+                    }
                 }
                 // A quoted value runs to its closing quote (it may hold spaces); a bare one, to the next blank.
                 let opening = bytes.get(start).copied().filter(|b| matches!(b, b'"' | b'\''));
@@ -287,8 +314,9 @@ fn hide_assignments(text: &str) -> String {
                 while stop < bytes.len() && bytes[stop] != b'\n' {
                     let ends = match opening {
                         Some(quote) => bytes[stop] == quote,
-                        // `&` ends a bare value: `?pwd=abc&x=1` is a query string, whose next field is not the secret.
-                        None => bytes[stop].is_ascii_whitespace() || matches!(bytes[stop], b'"' | b'\'' | b'&'),
+                        // `&` ends a bare value only in a query string (`?pwd=abc&x=1`), whose next field is not the
+                        // secret; in a `.env` it is part of the password.
+                        None => bytes[stop].is_ascii_whitespace() || matches!(bytes[stop], b'"' | b'\'') || (query && bytes[stop] == b'&'),
                     };
                     if ends {
                         break;
@@ -507,6 +535,40 @@ mod tests {
             "key=ab",
             "TOKEN=$OTHER_VARIABLE",
         ] {
+            assert_eq!(redact(text, &[]), text, "{text}");
+        }
+    }
+
+    /* N3, second round: YAML and INI with a colon, headers, a bare value with an `&`. */
+    #[test]
+    fn yaml_and_ini_with_a_colon_and_headers_lose_their_values() {
+        let text = "services:\n  db:\n    password: s3cret-value\n  - token: abcd1234efgh\nX-Api-Key: k3y-v4lue-9999\nAuthorization: Basic dXNlcjpwYXNzd29yZA==\ncurl -H \"Authorization: Basic QWxhZGRpbjpvcGVu\" https://x.y/z\nproxy-authorization: Digest abcdef123456\n";
+        let out = redact(text, &[]);
+        for leaked in ["s3cret-value", "abcd1234efgh", "k3y-v4lue", "dXNlcjpw", "QWxhZGRpbjpvcGVu", "abcdef123456"] {
+            assert!(!out.contains(leaked), "{leaked} in {out}");
+        }
+        assert!(out.contains("password: [nascosto]"), "{out}");
+        assert!(out.contains("Authorization: Basic [nascosto]"), "{out}");
+        assert!(out.contains("services:\n  db:\n"), "{out}");
+        assert!(out.contains("https://x.y/z"), "{out}");
+        // A Bearer value goes whole through the first layer (the word too), and is not hidden twice.
+        assert_eq!(
+            redact("Authorization: Bearer AbCdEfGhIjKlMnOpQrStUvWxYz0123456789", &[]),
+            format!("Authorization: {HIDDEN}")
+        );
+    }
+
+    #[test]
+    fn a_bare_value_is_cut_at_an_ampersand_only_inside_a_query_string() {
+        let out = redact("DB_PASSWORD=p4ss&w0rd\nurl?pwd=abc12345&x=1&token=zzzz9999&y=2", &[]);
+        assert!(!out.contains("w0rd") && !out.contains("abc12345") && !out.contains("zzzz9999"), "{out}");
+        assert!(out.contains("DB_PASSWORD=[nascosto]\n"), "{out}");
+        assert!(out.contains("&x=1&") && out.ends_with("&y=2"), "{out}");
+    }
+
+    #[test]
+    fn a_colon_after_an_ordinary_word_is_still_left_alone() {
+        for text in ["monkey: banana", "Note: key rotation planned", "token: ab", "il token: scaduto ieri", "a: b: c"] {
             assert_eq!(redact(text, &[]), text, "{text}");
         }
     }

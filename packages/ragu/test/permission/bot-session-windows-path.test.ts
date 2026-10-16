@@ -45,6 +45,20 @@ describe("the path of a bot's write, read as Windows reads it", () => {
     expect(decide(SESSION, "edit", ".github.\\workflows.\\ci.yml")).toBe("deny")
   })
 
+  it("cuts every segment at its first colon: `.git:$I30:$INDEX_ALLOCATION` is the folder `.git` (N2-bis)", () => {
+    expect(PermissionRuleset.windowsPathForm(".git:$I30:$INDEX_ALLOCATION\\hooks\\pre-commit")).toBe(".git\\hooks\\pre-commit")
+    expect(PermissionRuleset.windowsPathForm("a/.vscode:$I30:$INDEX_ALLOCATION/tasks.json")).toBe("a/.vscode/tasks.json")
+    expect(PermissionRuleset.windowsPathForm(".github\\workflows:$I30:$INDEX_ALLOCATION\\ci.yml")).toBe(".github\\workflows\\ci.yml")
+    expect(PermissionRuleset.windowsPathForm("ragu.json:stream")).toBe("ragu.json")
+    expect(PermissionRuleset.windowsPathForm(".git.:$I30:$INDEX_ALLOCATION\\x")).toBe(".git\\x")
+    // The drive of an absolute path keeps its colon.
+    expect(PermissionRuleset.windowsPathForm("D:\\other\\.git:$I30:$INDEX_ALLOCATION\\x")).toBe("D:\\other\\.git\\x")
+    expect(decide(SESSION, "edit", ".git:$I30:$INDEX_ALLOCATION\\hooks\\pre-commit")).toBe("deny")
+    expect(decide(SESSION, "edit", ".vscode:$I30:$INDEX_ALLOCATION\\tasks.json")).toBe("deny")
+    expect(decide(SESSION, "edit", ".github\\workflows:$I30:$INDEX_ALLOCATION\\ci.yml")).toBe("deny")
+    expect(decide(SESSION, "edit", "src\\index.ts")).toBe("allow")
+  })
+
   it("leaves an ordinary write alone", () => {
     expect(decide(SESSION, "edit", "src\\index.ts")).toBe("allow")
     expect(decide(SESSION, "edit", "docs.\\readme.md")).toBe("allow")

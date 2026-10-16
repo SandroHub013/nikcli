@@ -155,7 +155,13 @@ export namespace PermissionRuleset {
   export function windowsPathForm(path: string): string {
     return path
       .split(/([\\/])/)
-      .map((segment) => (/^\.*$/.test(segment) ? segment : segment.replace(/[. ]+$/, "")))
+      .map((segment, index) => {
+        // A colon opens an NTFS stream, and `.git:$I30:$INDEX_ALLOCATION` is the folder itself (N2-bis): the segment
+        // ends there, except the drive that starts an absolute path.
+        const colon = segment.indexOf(":")
+        const name = colon < 0 || (index === 0 && /^[A-Za-z]:$/.test(segment)) ? segment : segment.slice(0, colon)
+        return /^\.*$/.test(name) ? name : name.replace(/[. ]+$/, "")
+      })
       .join("")
   }
 
