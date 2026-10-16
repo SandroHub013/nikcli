@@ -7,7 +7,7 @@ compileSolidJsx()
 const { createComponent, createRoot, createSignal } = await import("solid-js")
 const { render } = await import("solid-js/web")
 const { Splash } = await import("./splash")
-const { calculateIntegerScale, layoutSceneContainer } = await import("./scene")
+const { layoutSceneContainer } = await import("./scene")
 
 describe("splash component (step 3)", () => {
   let container: HTMLDivElement
@@ -27,23 +27,26 @@ describe("splash component (step 3)", () => {
   function mountSplash(props: { visible: boolean; status?: string; onDismiss?: () => void }) {
     let disposeFn: (() => void) | undefined
     createRoot((dispose) => {
-      disposeFn = dispose
-      render(() => createComponent(Splash, props), container)
+      const unmount = render(() => createComponent(Splash, props), container)
+      disposeFn = () => {
+        unmount()
+        dispose()
+      }
     })
     return {
       dispose: () => disposeFn?.(),
     }
   }
 
-  test("splash has fixed ink background and dark color-scheme without theme tokens (P1-1)", () => {
+  test("splash has fixed scene background and dark color-scheme without theme tokens (Passo 1)", () => {
     const css = readFileSync(join(import.meta.dir, "splash.css"), "utf8")
     expect(css).not.toContain("var(--ade-bg")
     expect(css).not.toContain("var(--ade-text-weak")
     expect(css).toMatch(/color-scheme:\s*dark/)
-    expect(css).toMatch(/background:\s*#120d0b/)
+    expect(css).toMatch(/background:\s*#211410/)
   })
 
-  test("maintains ink background in glass theme over index.css dialog rule without removing dialog role (P1)", () => {
+  test("maintains scene background in glass theme over index.css dialog rule without removing dialog role (Passo 1)", () => {
     // 1. Accessibility: role="dialog" remains on root
     const handle = mountSplash({ visible: true })
     try {
@@ -61,12 +64,12 @@ describe("splash component (step 3)", () => {
     // index.css matches: [data-component="ade-shell"][data-theme="glass"] [role="dialog"] (specificity 0,3,0)
     expect(indexCss).toMatch(/\[data-component="ade-shell"\]\[data-theme="glass"\]\s*\[role="dialog"\]/)
 
-    // splash.css overrides with higher specificity (0,4,0) binding ink background
+    // splash.css overrides with higher specificity (0,4,0) binding scene background (#211410)
     expect(splashCss).toMatch(
       /\[data-component="ade-shell"\]\[data-theme="glass"\]\s*\[data-component="ade-splash"\]\[role="dialog"\]/,
     )
     expect(splashCss).toMatch(
-      /\[data-component="ade-shell"\]\[data-theme="glass"\]\s*\[data-component="ade-splash"\]\[role="dialog"\][\s\S]*?\{[^}]*background:\s*#120d0b/,
+      /\[data-component="ade-shell"\]\[data-theme="glass"\]\s*\[data-component="ade-splash"\]\[role="dialog"\][\s\S]*?\{[^}]*background:\s*#211410/,
     )
   })
 
@@ -83,12 +86,12 @@ describe("splash component (step 3)", () => {
       handle.dispose()
     }
 
-    // 2. CSS check: status has position absolute and row 76 positioning (top: calc(76 / 90 * 100%))
+    // 2. CSS check: status has position relative and is grouped with scene
     const css = readFileSync(join(import.meta.dir, "splash.css"), "utf8")
-    expect(css).toMatch(/\[data-slot="splash-status"\]\s*\{[^}]*position:\s*absolute;/)
-    expect(css).toMatch(/\[data-slot="splash-status"\]\s*\{[^}]*top:\s*calc\(76\s*\/\s*90\s*\*\s*100%\);/)
+    expect(css).toMatch(/\[data-slot="splash-status"\]\s*\{[^}]*position:\s*relative;/)
+    expect(css).toMatch(/\[data-slot="splash-scene-container"\]\s*\{[^}]*display:\s*flex;/)
 
-    // 3. Viewport containment: verify status bottom stays within innerHeight for 1366x720, 1920x1080, 1536x826, 1280x720
+    // 3. Viewport containment: verify stage and status stay within innerHeight for 1366x720, 1920x1080, 1536x826, 1280x720
     const viewports = [
       { w: 1366, h: 720 },
       { w: 1920, h: 1080 },
@@ -101,20 +104,20 @@ describe("splash component (step 3)", () => {
       splash.setAttribute("data-component", "ade-splash")
       const sceneBox = document.createElement("div")
       sceneBox.setAttribute("data-slot", "splash-scene-container")
+      const stageBox = document.createElement("div")
+      stageBox.setAttribute("data-slot", "splash-stage")
       const cv = document.createElement("canvas")
-      sceneBox.appendChild(cv)
+      cv.setAttribute("data-slot", "splash-canvas")
+      stageBox.appendChild(cv)
+      sceneBox.appendChild(stageBox)
       splash.appendChild(sceneBox)
 
-      const scale = layoutSceneContainer(cv, w, h, 1)
-      const containerHeight = parseFloat(sceneBox.style.height)
-      const containerTop = parseFloat(sceneBox.style.top)
-      const statusTop = containerTop + (76 / 90) * containerHeight // row 76
+      layoutSceneContainer(cv, w, h, 1)
+      const stageHeight = parseFloat(stageBox.style.height)
       const statusNominalHeight = 16
-      const statusBottom = statusTop + statusNominalHeight
-      expect(statusBottom).toBeLessThanOrEqual(h)
-      // Also verify it sits 3 logical pixels below wordmark (which ends at row 73)
-      const wordmarkBottom = containerTop + 73 * scale
-      expect(statusTop - wordmarkBottom).toBe(3 * scale)
+      const gap = 10
+      const totalHeight = stageHeight + gap + statusNominalHeight
+      expect(totalHeight).toBeLessThanOrEqual(h)
     }
   })
 
@@ -131,18 +134,16 @@ describe("splash component (step 3)", () => {
       try {
         const containerEl = container.querySelector<HTMLElement>('[data-slot="splash-scene-container"]')
         expect(containerEl).not.toBeNull()
-        // Container must be positioned and sized immediately on mount at t=0
-        expect(containerEl?.style.position).toBe("absolute")
-        expect(containerEl?.style.width).toBe("1280px")
-        expect(containerEl?.style.height).toBe("720px")
-        expect(containerEl?.style.top).toBe("0px")
-        expect(containerEl?.style.left).toBe("0px")
+        // Container must be sized immediately on mount at t=0
+        expect(containerEl?.style.width).toBe("1194px")
+
+        const stageEl = container.querySelector<HTMLElement>('[data-slot="splash-stage"]')
+        expect(stageEl?.style.width).toBe("1194px")
+        expect(stageEl?.style.height).toBe("672px")
 
         const canvas = container.querySelector<HTMLCanvasElement>('[data-slot="splash-canvas"]')
-        expect(canvas?.width).toBe(160)
-        expect(canvas?.height).toBe(90)
-        expect(canvas?.style.width).toBe("1280px")
-        expect(canvas?.style.height).toBe("720px")
+        expect(canvas?.width).toBe(1672)
+        expect(canvas?.height).toBe(941)
       } finally {
         handle.dispose()
       }
@@ -320,7 +321,7 @@ describe("splash component (step 3)", () => {
     }
   })
 
-  test("complete lifecycle with mock timers and rAF queue (P2-3)", () => {
+  test("complete lifecycle with mock timers and rAF queue (P2-3)", async () => {
     let currentTime = 1000
     let nextTimerId = 1
     let timers: { id: number; due: number; cb: () => void }[] = []
@@ -471,6 +472,7 @@ describe("splash component (step 3)", () => {
 
       // 2. Advance 1 ms (at 300 ms): scene starts, exactly 1 rAF queued
       advance(1)
+      await Promise.resolve()
       expect(rafs.size).toBe(1)
 
       // Tick rAF: keeps 1 rAF in queue
@@ -494,6 +496,7 @@ describe("splash component (step 3)", () => {
       // 4. Remount during fade: true -> false -> true
       setVisibleSignal(true)
       advance(300)
+      await Promise.resolve()
       expect(rafs.size).toBe(1)
 
       setVisibleSignal(false)
@@ -532,7 +535,7 @@ describe("splash component (step 3)", () => {
     }
   })
 
-  test("dynamically responds to prefers-reduced-motion media query changes (P3-1, P3-10)", () => {
+  test("dynamically responds to prefers-reduced-motion media query changes (P3-1, P3-10)", async () => {
     let currentTime = 1000
     let nextTimerId = 1
     let timers: { id: number; due: number; cb: () => void }[] = []
@@ -620,6 +623,7 @@ describe("splash component (step 3)", () => {
     const handleB = mountSplash({ visible: true })
     try {
       advance(300)
+      await Promise.resolve()
       expect(rafs.size).toBe(1) // loop active
 
       mockMql.matches = true

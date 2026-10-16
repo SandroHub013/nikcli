@@ -1,8 +1,9 @@
 /*
- * ADE Splash Screen: Pixel-Art Cooking Scene ("Ragù Code").
+ * ADE Splash Screen: Reference Cooking Scene ("Ragù Code").
  *
- * Fullscreen ink backdrop with crisp pixel-art canvas centered,
- * integer scaling, status text, and subtle scanlines vignette.
+ * Fullscreen ink backdrop with high-res artwork (1672x941) and transparent
+ * effects canvas overlay (steam, bubbles, sparks, eye blink, cursor),
+ * status text grouped below.
  */
 
 [data-component="ade-splash"],
@@ -15,7 +16,7 @@
   z-index: 9999;
   overflow: hidden;
   color-scheme: dark;
-  background: #120d0b;
+  background: #211410;
   transition: opacity var(--splash-fade, var(--ade-dur-slow, 280ms)) var(--ade-ease, ease);
   opacity: 1;
   cursor: default;
@@ -30,27 +31,56 @@
   pointer-events: none;
 }
 
-/* Canvas container: perfectly centered in viewport */
+/* Scene container / group: holds the stage and the status directly below */
 [data-slot="splash-scene-container"] {
   position: relative;
-  display: inline-block;
-  line-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: min(94vw, calc((100vh - 48px) * 1672 / 941));
+  max-width: 94vw;
   z-index: 1;
 }
 
-/* Pixel-art canvas: strict nearest-neighbor integer scaling */
+/* Stage: holds the reference image and overlay fx canvas with exact 1672/941 aspect ratio */
+[data-slot="splash-stage"] {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1672 / 941;
+  visibility: hidden;
+}
+
+[data-slot="splash-stage"][data-loaded] {
+  visibility: visible;
+}
+
+[data-slot="splash-stage"] img,
+[data-slot="splash-stage"] canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Reference artwork: auto rendering for smooth high-res scaling */
+[data-slot="splash-image"] {
+  image-rendering: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Effects overlay canvas: pixelated rendering for crisp 8px blocks */
 [data-slot="splash-canvas"] {
   display: block;
   image-rendering: pixelated;
-  image-rendering: crisp-edges;
 }
 
-/* Status message under the cooking scene, grouped with wordmark */
+/* Status message under the cooking scene, grouped with the stage */
 [data-slot="splash-status"] {
-  position: absolute;
-  top: calc(76 / 90 * 100%);
-  left: 0;
-  right: 0;
+  position: relative;
   line-height: normal;
   font-family: var(--ade-mono, monospace);
   font-size: var(--ade-font-xs);
@@ -59,31 +89,7 @@
   text-align: center;
   user-select: none;
   pointer-events: none;
-  z-index: 2;
   white-space: nowrap;
-}
-
-/* Subtle CRT scanlines & vignette for terminal atmosphere */
-[data-slot="splash-crt"] {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 3;
-  pointer-events: none;
-  background:
-    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.22) 50%),
-    radial-gradient(circle at center, transparent 65%, rgba(0, 0, 0, 0.7) 100%);
-  background-size:
-    100% var(--splash-scanline-period, 16px),
-    100% 100%;
-  background-position:
-    0 var(--splash-scanline-offset, 0px),
-    center center;
-  background-repeat:
-    repeat,
-    no-repeat;
-  opacity: 0.35;
 }
 
 @media (prefers-reduced-motion: reduce) {
