@@ -26,6 +26,7 @@ import {
   WORDMARK_SCALE,
   WORDMARK_WIDTH,
 } from "./sprites"
+import { createFxState, spawnFx, drawFx } from "./scene-fx"
 
 /** Logical resolution of the scene in pixels (exact 16:9 aspect ratio). */
 export const SCENE_WIDTH = 160
@@ -410,6 +411,93 @@ export function startPixelScene(
     onFirstFrameRendered?: () => void
   },
 ): SceneController {
+  const isStageScene =
+    canvas.getAttribute("data-slot") === "splash-canvas" ||
+    canvas.parentElement?.getAttribute("data-slot") === "splash-stage" ||
+    canvas.width === REF_WIDTH
+
+  if (isStageScene) {
+    canvas.width = REF_WIDTH
+    canvas.height = REF_HEIGHT
+
+    const ctx = canvas.getContext("2d")
+    if (!ctx) {
+      return { resize: () => 1, stop: () => {} }
+    }
+
+    ctx.imageSmoothingEnabled = false
+    const reducedMotion = options?.prefersReducedMotion ?? false
+    let animId: ReturnType<typeof requestAnimationFrame> | number | null = null
+    let stopped = false
+
+    const resize = (
+      viewportWidth: number,
+      viewportHeight: number,
+      dpr: number = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
+    ): number => layoutSceneContainer(canvas, viewportWidth, viewportHeight, dpr)
+
+    if (reducedMotion) {
+      ctx.clearRect(0, 0, REF_WIDTH, REF_HEIGHT)
+      options?.onFirstFrameRendered?.()
+      return {
+        resize,
+        stop: () => {
+          stopped = true
+        },
+      }
+    }
+
+    const state = createFxState()
+    let firstFrameReported = false
+    let lastTick = 0
+    const FPS_MS = 33 // ~30 FPS
+
+    const tick = (now: number) => {
+      animId = null
+      if (stopped) return
+
+      if (now - lastTick >= FPS_MS - 2) {
+        lastTick = now
+        spawnFx(state, now)
+        drawFx(ctx, state, now, REF_WIDTH, REF_HEIGHT)
+      }
+
+      if (!firstFrameReported) {
+        firstFrameReported = true
+        options?.onFirstFrameRendered?.()
+      }
+
+      if (!stopped && !document.hidden) {
+        animId = requestAnimationFrame(tick)
+      }
+    }
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (animId !== null) cancelAnimationFrame(animId as number)
+        animId = null
+      } else if (!stopped && animId === null) {
+        animId = requestAnimationFrame(tick)
+      }
+    }
+
+    document.addEventListener("visibilitychange", onVisibility)
+    animId = requestAnimationFrame(tick)
+
+    return {
+      resize,
+      stop: () => {
+        if (stopped) return
+        stopped = true
+        if (animId !== null) {
+          cancelAnimationFrame(animId as number)
+          animId = null
+        }
+        document.removeEventListener("visibilitychange", onVisibility)
+      },
+    }
+  }
+
   canvas.width = SCENE_WIDTH
   canvas.height = SCENE_HEIGHT
 
