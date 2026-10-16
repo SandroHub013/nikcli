@@ -5,7 +5,9 @@
  * integer scaling, status text, and subtle scanlines vignette.
  */
 
-[data-component="ade-splash"] {
+[data-component="ade-splash"],
+[data-component="ade-shell"][data-theme="glass"] [data-component="ade-splash"][role="dialog"],
+[data-component="ade-shell"] [data-component="ade-splash"][role="dialog"] {
   position: fixed;
   inset: 0;
   width: 100vw;
