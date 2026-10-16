@@ -88,6 +88,7 @@ impl Failure {
                 AdapterError::Transient("Telegram non ha risposto in tempo: il messaggio potrebbe essere arrivato lo stesso".into())
             }
             Failure::Network { .. } => AdapterError::Transient(self.text()),
+            Failure::Api { code: 429, .. } => AdapterError::Flood(self.text()),
             Failure::Api { .. } => AdapterError::Fatal(self.text()),
         }
     }
@@ -946,5 +947,11 @@ mod tests {
         telegram.send("42", "risposta finale completa").await.unwrap();
         let sends = api.calls_to("sendMessage");
         assert_eq!(sends.len(), 1);
+    }
+
+    #[test]
+    fn telegram_429_produces_structured_flood_error() {
+        let f = Failure::Api { code: 429, description: "Too Many Requests: retry after 5".into(), retry_after: Some(5) };
+        assert!(matches!(f.for_sending(), AdapterError::Flood(msg) if msg.contains("Too Many Requests")));
     }
 }

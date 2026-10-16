@@ -712,6 +712,50 @@ describe("the gateways' controller", () => {
     expect(b.sent[0]!.text).toBe("Risposta finale dopo i 429.")
   })
 
+  test("stops previewing after 3 consecutive structured Discord flood errors (Flood: prefix)", async () => {
+    let attempts = 0
+    let now = 10_000
+    const b = bridge()
+    b.fake.preview = async (_bot, _platform, _chat, _text) => {
+      attempts++
+      throw new Error("Flood: Discord: You are being rate limited.")
+    }
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      now: () => now,
+    })
+    b.emit("ciao")
+    await until("il turno è partito", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+
+    // Attempt 1 (Flood)
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Primo tentativo con più di ventiquattro caratteri. " })
+    await Promise.resolve()
+    expect(attempts).toBe(1)
+
+    // Attempt 2 (Flood)
+    now += 1_100
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Primo tentativo con più di ventiquattro caratteri. Secondo tentativo lungo abbastanza. " })
+    await Promise.resolve()
+    expect(attempts).toBe(2)
+
+    // Attempt 3 (Flood) -> limit reached
+    now += 1_100
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Primo tentativo con più di ventiquattro caratteri. Secondo tentativo lungo abbastanza. Terzo tentativo lungo abbastanza. " })
+    await Promise.resolve()
+    expect(attempts).toBe(3)
+
+    // Attempt 4 -> preview disabled, should not even call preview
+    now += 1_100
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Primo tentativo con più di ventiquattro caratteri. Secondo tentativo lungo abbastanza. Terzo tentativo lungo abbastanza. Quarto tentativo lungo. " })
+    await Promise.resolve()
+    expect(attempts).toBe(3)
+  })
+
   test("holds back trailing incomplete token/secret until terminated by delimiter", async () => {
     expect(safePreviewText("Ecco la chiave: sk-proj")).toBe("Ecco la chiave: ")
     expect(safePreviewText("Ecco la chiave: sk-proj-1234567890 ")).toBe("Ecco la chiave: sk-proj-1234567890 ")

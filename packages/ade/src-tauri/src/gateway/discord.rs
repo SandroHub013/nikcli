@@ -265,6 +265,7 @@ impl Failure {
                 "Discord non ha risposto in tempo: il messaggio potrebbe essere arrivato lo stesso".into(),
             ),
             Failure::Network { .. } => AdapterError::Transient(self.text()),
+            Failure::Api { status: 429, .. } => AdapterError::Flood(self.text()),
             Failure::Api { .. } => AdapterError::Fatal(self.text()),
         }
     }
@@ -2855,6 +2856,12 @@ mod tests {
         handle.await.unwrap().unwrap();
         assert_eq!(rest.count(), 3);
         assert_eq!(hold(&d.shared.active_preview).get("123"), None);
+    }
+
+    #[test]
+    fn discord_429_produces_structured_flood_error() {
+        let f = Failure::Api { status: 429, description: "You are being rate limited.".into(), retry_after: Some(2) };
+        assert!(matches!(f.for_sending(), AdapterError::Flood(msg) if msg.contains("rate limited")));
     }
 }
 

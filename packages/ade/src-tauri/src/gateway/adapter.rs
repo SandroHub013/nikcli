@@ -128,6 +128,8 @@ pub enum AdapterError {
     Unsupported,
     /// Worth trying again after a pause: the network, a timeout, a 5xx.
     Transient(String),
+    /// Rate limited / flood limit exceeded.
+    Flood(String),
     /// Not worth trying again: a refused token, a token in use elsewhere.
     Fatal(String),
 }
@@ -136,6 +138,7 @@ impl AdapterError {
     pub fn message(&self) -> String {
         match self {
             AdapterError::Unsupported => "operazione non disponibile su questa piattaforma".into(),
+            AdapterError::Flood(text) => format!("Flood: {text}"),
             AdapterError::Transient(text) | AdapterError::Fatal(text) => text.clone(),
         }
     }

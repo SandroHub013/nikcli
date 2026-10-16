@@ -423,8 +423,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
             if (closed || previewDisabled || pendingApproval || state.cancelled || ended.signal.aborted) return
             await previewFn(message.bot, message.platform, message.chat, text)
           } catch (error) {
-            const errStr = error instanceof Error ? error.message : String(error)
-            if (/429|flood|too many/i.test(errStr)) {
+            if (isFloodError(error)) {
               floodErrors += 1
               if (floodErrors >= PREVIEW_FLOOD_LIMIT) {
                 previewDisabled = true
@@ -660,5 +659,14 @@ export function safePreviewText(text: string): string {
   }
 
   return candidate
+}
+
+/**
+ * Recognizes structured flood errors from Rust (`Flood: ...`) as well as
+ * generic HTTP 429 / flood messages.
+ */
+export function isFloodError(error: unknown): boolean {
+  const errStr = error instanceof Error ? error.message : String(error)
+  return /^Flood:/i.test(errStr) || /429|flood|too many/i.test(errStr)
 }
 
