@@ -97,6 +97,48 @@ describe("createGatewayBarStore", () => {
     store.dispose()
     expect(unlistened).toBe(true)
   })
+
+  test("switching off a link clears the indicator and does not stay red", async () => {
+    let statusHandler: ((s: LinkStatus) => void) | undefined
+    const mockApi = {
+      status: async () => [
+        {
+          bot: "b1",
+          platform: "telegram",
+          enabled: true,
+          running: true,
+          connected: true,
+          hasToken: true,
+          authorized: [],
+        } as GatewayStatus,
+      ],
+      listen: async (handlers: {
+        status: (s: LinkStatus) => void
+        pairing: (p: PairingRequest) => void
+        message: (m: GatewayMessage) => void
+      }) => {
+        statusHandler = handlers.status
+        return () => {}
+      },
+    }
+
+    const store = createGatewayBarStore(mockApi)
+    await new Promise((r) => setTimeout(r, 10))
+    expect(store.status()?.tone).toBe("on")
+
+    // Event on switch off: stop() sends running: false, needsAttention: false, enabled: false
+    statusHandler?.({
+      bot: "b1",
+      platform: "telegram",
+      enabled: false,
+      running: false,
+      connected: false,
+      needsAttention: false,
+    })
+
+    expect(store.status()).toBeUndefined()
+    expect(store.hasActive()).toBe(false)
+  })
 })
 
 describe("the shell draws the gateway bottom bar indicator (Point 4)", () => {

@@ -77,6 +77,7 @@ pub struct MessageSender {
 pub struct LinkStatus {
     pub bot: String,
     pub platform: Platform,
+    pub enabled: bool,
     /// False once a fatal error stopped it: it stays on, but nothing reads.
     pub running: bool,
     pub connected: bool,
@@ -714,6 +715,7 @@ impl Hub {
                 self.env.status(&LinkStatus {
                     bot: bot.to_string(),
                     platform,
+                    enabled: self.store.link(bot, platform).map_or(false, |l| l.enabled),
                     running: false,
                     connected: false,
                     last_error: Some(error.clone()),
@@ -764,9 +766,9 @@ impl Hub {
         tokio::spawn(task.run(stopped, self.ready.subscribe()));
         self.links().insert((bot.to_string(), platform), Running { adapter, stop, wake, live, pending });
         self.env.status(&LinkStatus {
-
             bot: bot.to_string(),
             platform,
+            enabled: true,
             running: true,
             connected: false,
             last_error: None,
@@ -787,6 +789,7 @@ impl Hub {
         self.env.status(&LinkStatus {
             bot: bot.to_string(),
             platform,
+            enabled: false,
             running: false,
             connected: false,
             last_error: None,
@@ -1297,6 +1300,7 @@ impl Task {
         self.env.status(&LinkStatus {
             bot: self.bot.clone(),
             platform: self.platform,
+            enabled: true,
             running: !live.stopped,
             connected: live.connected,
             last_error: live.last_error,
@@ -3505,6 +3509,19 @@ mod tests {
         let retry_res = s.hub.retry(BOT, Platform::Fake);
         assert!(retry_res.is_err(), "retry deve fallire se il link è spento");
         assert_eq!(s.made.lock().unwrap().len(), count_before, "retry non deve rilanciare un link spento");
+    }
+
+    #[tokio::test]
+    async fn stop_sends_status_with_enabled_false() {
+        let s = setup("stop-status-enabled");
+        let (_adapter, _feed) = start(&s);
+        let launch_status = s.env.statuses.lock().unwrap().last().cloned().unwrap();
+        assert!(launch_status.enabled, "il lancio deve avere enabled: true");
+
+        s.hub.stop(BOT, Platform::Fake).unwrap();
+        let stop_status = s.env.statuses.lock().unwrap().last().cloned().unwrap();
+        assert!(!stop_status.enabled, "lo stop deve avere enabled: false");
+        assert!(!stop_status.running);
     }
 }
 

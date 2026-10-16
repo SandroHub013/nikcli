@@ -53,6 +53,7 @@ export interface GatewayStatus {
 export interface LinkStatus {
   readonly bot: string
   readonly platform: string
+  readonly enabled?: boolean
   readonly running: boolean
   readonly connected: boolean
   readonly lastError?: string | null

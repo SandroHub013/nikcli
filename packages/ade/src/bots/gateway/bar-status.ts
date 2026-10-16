@@ -89,13 +89,21 @@ export function createGatewayBarStore(api: Pick<GatewayPanelApi, "status" | "lis
         setLinks((prev) => {
           const k = key(status.bot, status.platform)
           const existing = prev[k]
+          const enabled =
+            status.enabled !== undefined
+              ? status.enabled
+              : !status.running && !status.needsAttention
+                ? false
+                : existing
+                  ? existing.enabled
+                  : status.running || status.connected
           if (!existing) {
             return {
               ...prev,
               [k]: {
                 bot: status.bot,
                 platform: status.platform,
-                enabled: status.running || status.connected,
+                enabled,
                 running: status.running,
                 connected: status.connected,
                 reconnecting: status.reconnecting ?? false,
@@ -107,6 +115,7 @@ export function createGatewayBarStore(api: Pick<GatewayPanelApi, "status" | "lis
             ...prev,
             [k]: {
               ...existing,
+              enabled,
               running: status.running,
               connected: status.connected,
               reconnecting: status.reconnecting ?? false,
