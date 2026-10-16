@@ -245,9 +245,6 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
           </div>
         </Show>
       </div>
-
-      {/* CRT Scanlines & Vignette */}
-      <div data-slot="splash-crt" aria-hidden="true" />
     </div>
   )
 }

@@ -7,7 +7,7 @@ compileSolidJsx()
 const { createComponent, createRoot, createSignal } = await import("solid-js")
 const { render } = await import("solid-js/web")
 const { Splash } = await import("./splash")
-const { calculateIntegerScale, layoutSceneContainer } = await import("./scene")
+const { layoutSceneContainer } = await import("./scene")
 
 describe("splash component (step 3)", () => {
   let container: HTMLDivElement

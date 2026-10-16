@@ -92,29 +92,6 @@
   white-space: nowrap;
 }
 
-/* Subtle CRT scanlines & vignette for terminal atmosphere */
-[data-slot="splash-crt"] {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 3;
-  pointer-events: none;
-  background:
-    linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.22) 50%),
-    radial-gradient(circle at center, transparent 65%, rgba(0, 0, 0, 0.7) 100%);
-  background-size:
-    100% var(--splash-scanline-period, 16px),
-    100% 100%;
-  background-position:
-    0 var(--splash-scanline-offset, 0px),
-    center center;
-  background-repeat:
-    repeat,
-    no-repeat;
-  opacity: 0.35;
-}
-
 @media (prefers-reduced-motion: reduce) {
   [data-component="ade-splash"] {
     transition: none;
