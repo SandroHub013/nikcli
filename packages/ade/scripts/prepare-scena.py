@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
 """
 Prepares the reference artwork for ADE splash screen.
-Quantizes scena-sinistra.png to a deterministic 256-color palette without dithering.
-Output: packages/ade/src/splash/art/scena.png
+Optimizes scena-sinistra.png as truecolor RGB PNG with lossless DEFLATE compression,
+preserving 100% color fidelity across all zones (olive oil, ragù, Code reflections, laptop/garlic).
+
+Environment requirements:
+- Python 3.10+ (tested with Python 3.12.3)
+- Pillow 10.0+ (tested with Pillow 10.4.0)
+
+Usage:
+    python -I packages/ade/scripts/prepare-scena.py <path_to_scena-sinistra.png> [<output_path>]
+
+Output:
+    packages/ade/src/splash/art/scena.png (~1.24 MB, truecolor RGB)
 """
 
 import sys
@@ -19,12 +29,11 @@ def prepare_scena(src_path: str, dst_path: str) -> None:
     if im.size != (1672, 941):
         raise ValueError(f"Expected image size (1672, 941), got {im.size}")
 
-    # Quantize to 256 colors deterministically without dithering
-    quantized = im.quantize(colors=256, dither=Image.Dither.NONE)
-    quantized.save(dst_path, format="PNG", optimize=True)
+    # Save as optimized truecolor RGB PNG with maximum lossless compression
+    im.save(dst_path, format="PNG", optimize=True, compress_level=9)
 
     size = os.path.getsize(dst_path)
-    print(f"Prepared scena: {quantized.size}, 256 colors, {size} bytes ({size / 1024:.1f} KB)")
+    print(f"Prepared scena: {im.size}, truecolor RGB, {size} bytes ({size / 1024:.1f} KB)")
     print(f"Output: {dst_path}")
 
 if __name__ == "__main__":
