@@ -414,12 +414,16 @@ const UNWATCHED_REFUSED: readonly string[] = ["webfetch", "websearch"]
  * A rule with no path matches every file on the disk: `Read`, `Grep` and `Glob` read ~/.ssh or another project's .env
  * with no question. `Read(./**)` is the project, and Read rules cover Grep and Glob; inside the working folder they need
  * no approval anyway. The setting below refuses all three outside it in every mode, Claude Code 2.1.257 and later.
+ * The same held for writes from a chat: `Edit` and `Write` wrote anywhere, ~/.claude/settings.json's hooks included.
+ * `acceptEdits` alone writes in the working folder and asks outside it, which `-p` refuses.
  * Checked on 2.1.301 with a fake provider: an absolute path, `..` and a junction out of the project refused.
  */
 const UNWATCHED_ALLOWED: Readonly<Record<string, readonly string[]>> = {
   read: ["Read(./**)"],
   grep: [],
   glob: [],
+  edit: [],
+  write: [],
 }
 const UNWATCHED_SETTINGS = '{"autoMemoryEnabled":false,"permissions":{"blockReadsOutsideWorkingDirectories":true}}'
 

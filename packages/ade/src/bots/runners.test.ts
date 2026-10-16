@@ -640,6 +640,24 @@ describe("un turno da chat non ha la shell", () => {
   })
 
   /*
+   * Lo stesso per la scrittura (bot-lettura): `Edit`, `Write` e `NotebookEdit` senza percorso, con `acceptEdits`,
+   * scrivevano da telefono anche fuori dal progetto, per esempio negli hook di ~/.claude/settings.json. Nel progetto
+   * scrive `acceptEdits` da solo (provato su claude 2.1.301 con un finto provider).
+   */
+  test("Claude: da chat un bot che scrive scrive solo nella cartella del progetto", () => {
+    const own: AgentFile = { ...mine, runner: "claude" }
+    for (const remote of [off, on]) {
+      const { args } = turnCommand(runnerById("claude"), { bot: own, message: "x", remote })
+      for (const name of ["Edit", "NotebookEdit", "Write"])
+        expect([remote, name, allowedOf(args).includes(name)]).toEqual([remote, name, false])
+      expect(args[args.indexOf("--permission-mode") + 1]).toBe("acceptEdits")
+    }
+    // Nel pannello resta com'è.
+    const panel = turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true }).args
+    for (const name of ["Edit", "NotebookEdit", "Write"]) expect(allowedOf(panel)).toContain(name)
+  })
+
+  /*
    * Scelta 7 anche per Codex. Verificato su codex-cli 0.162.1 senza turni di modello, leggendo gli strumenti che un
    * turno offre al modello da un provider finto: 21 con il server MCP dell'utente, le app di ChatGPT e `web_search`;
    * 8 con queste opzioni, nessuno di quelli. `-c mcp_servers={}` non basta: si fonde con la tabella dell'utente. Ogni
