@@ -39,6 +39,7 @@ function bridge(project: string | null = PROJECT) {
   const typing: string[] = []
   const acks: { bot: string; platform: string; chat: string; id: string }[] = []
   const previews: { bot: string; platform: string; chat: string; text: string }[] = []
+  const previewEnds: { bot: string; platform: string; chat: string }[] = []
   const fake: GatewayBridge = {
     listen: async (on) => {
       handler = on
@@ -60,6 +61,7 @@ function bridge(project: string | null = PROJECT) {
     },
     typing: async (_bot, _platform, chat) => void typing.push(chat),
     preview: async (bot, platform, chat, text) => void previews.push({ bot, platform, chat, text }),
+    previewEnd: async (bot, platform, chat) => void previewEnds.push({ bot, platform, chat }),
     project: async () => project ?? undefined,
   }
   const emit = (text: string, extra: Partial<GatewayMessage> = {}) =>
@@ -75,7 +77,7 @@ function bridge(project: string | null = PROJECT) {
       private: true,
       ...extra,
     })
-  return { fake, calls, sent, typing, questions, acks, previews, emit }
+  return { fake, calls, sent, typing, questions, acks, previews, previewEnds, emit }
 }
 
 /** Turns that end when the test says so. */
@@ -910,6 +912,69 @@ describe("the gateways' controller", () => {
     await until("risposta finale arrivata", () => b.sent.some((s) => s.text === "Risposta finale completa."))
     const finalMsg = b.sent.find((s) => s.text === "Risposta finale completa.")
     expect(finalMsg?.final).toBe(true)
+  })
+
+  test("Case A: fast turn awaits in-flight preview before sending final reply", async () => {
+    const b = bridge()
+    let previewRunning = false
+    let previewFinished = false
+    let finalSentWhilePreviewInFlight = false
+    b.fake.preview = async (_bot, _platform, _chat, _text) => {
+      previewRunning = true
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      previewRunning = false
+      previewFinished = true
+    }
+    const origSend = b.fake.send
+    b.fake.send = async (bot, platform, chat, text, options) => {
+      if (options?.final && previewRunning) {
+        finalSentWhilePreviewInFlight = true
+      }
+      return origSend(bot, platform, chat, text, options)
+    }
+
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("turno rapido")
+    await until("il turno è partito", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+
+    // Start in-flight preview
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Sto generando testo parziale sufficientemente lungo..." })
+    // Turn finishes immediately while preview is still in flight!
+    turn.finish({ text: "Risposta finale immediata." })
+
+    await until("risposta finale arrivata", () => b.sent.some((s) => s.text === "Risposta finale immediata."))
+    expect(previewFinished).toBe(true)
+    expect(finalSentWhilePreviewInFlight).toBe(false)
+  })
+
+  test("Case C: turn closed without reply (revoke / /ferma) cleans up preview in finally", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    const controller = await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("messaggio da revocare", { sender: { id: "rev_user", name: "Rev" } })
+    await until("il turno è partito", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Generazione parziale prima della revoca..." })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(1)
+
+    // User is revoked mid-turn
+    controller.revoke(BOT.path, "telegram", "rev_user")
+    await until("previewEnd chiamato in finally", () => b.previewEnds.length === 1)
+    expect(b.previewEnds).toEqual([{ bot: BOT.path, platform: "telegram", chat: "c42" }])
   })
 
   test("failed turn cleans up and sends failure message without hanging preview", async () => {

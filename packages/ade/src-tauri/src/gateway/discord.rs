@@ -357,6 +357,10 @@ struct Shared {
     preview: Mutex<HashMap<String, String>>,
     /// The message currently being edited as live preview per chat.
     active_preview: Mutex<HashMap<String, String>>,
+    /// Per-chat lock to serialize preview updates and sends.
+    chat_locks: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
+    /// Generation counter per chat, incremented at the end of each turn, to drop stale previews.
+    chat_generations: Mutex<HashMap<String, u64>>,
     /// Bumped for every session, so an edit made before a drop does not write
     /// its text onto the message of the session that follows.
     epoch: AtomicU64,
@@ -524,6 +528,8 @@ impl Discord {
                 cursor: Mutex::new(cursor),
                 preview: Mutex::new(HashMap::new()),
                 active_preview: Mutex::new(HashMap::new()),
+                chat_locks: Mutex::new(HashMap::new()),
+                chat_generations: Mutex::new(HashMap::new()),
                 epoch: AtomicU64::new(0),
                 ready: AtomicBool::new(false),
                 nonce_seed: random_nonce_seed(),
@@ -543,6 +549,11 @@ impl Discord {
 }
 
 impl Core {
+    fn chat_lock(&self, chat: &str) -> Arc<tokio::sync::Mutex<()>> {
+        let mut locks = hold(&self.shared.chat_locks);
+        locks.entry(chat.to_string()).or_insert_with(|| Arc::new(tokio::sync::Mutex::new(()))).clone()
+    }
+
     fn now(&self) -> u64 {
         #[cfg(test)]
         {
@@ -656,8 +667,11 @@ impl Core {
     /// the message that now holds the end of it.
     async fn send_all(&self, chat: &str, text: &str, extra: Option<&Value>, final_turn: bool) -> Result<String, AdapterError> {
         check_id("il canale", chat)?;
+        let lock = self.chat_lock(chat);
+        let _guard = lock.lock().await;
         let seed = self.shared.nonce_seed.wrapping_add(self.shared.epoch.load(Ordering::SeqCst));
         if final_turn {
+            *hold(&self.shared.chat_generations).entry(chat.to_string()).or_default() += 1;
             let existing_preview = hold(&self.shared.active_preview).remove(chat);
             if let Some(msg_id) = existing_preview {
                 let mut all_pieces = pieces(text);
@@ -1245,6 +1259,9 @@ impl Adapter for Discord {
 
     async fn preview_end(&self, chat: &str) -> Result<(), AdapterError> {
         check_id("il canale", chat)?;
+        let lock = self.chat_lock(chat);
+        let _guard = lock.lock().await;
+        *hold(&self.shared.chat_generations).entry(chat.to_string()).or_default() += 1;
         let _ = hold(&self.shared.active_preview).remove(chat);
         Ok(())
     }
@@ -1263,6 +1280,12 @@ impl Adapter for Discord {
 
     async fn preview(&self, chat: &str, text: &str) -> Result<(), AdapterError> {
         check_id("il canale", chat)?;
+        let gen = hold(&self.shared.chat_generations).get(chat).copied().unwrap_or(0);
+        let lock = self.chat_lock(chat);
+        let _guard = lock.lock().await;
+        if hold(&self.shared.chat_generations).get(chat).copied().unwrap_or(0) != gen {
+            return Ok(());
+        }
         let existing = hold(&self.shared.active_preview).get(chat).cloned();
         match existing {
             Some(msg_id) => {
@@ -1279,6 +1302,9 @@ impl Adapter for Discord {
                 body["nonce"] = Value::from(nonce(seed, seq));
                 body["enforce_nonce"] = json!(true);
                 let id = self.post(chat, &body).await.map_err(Failure::for_sending)?;
+                if hold(&self.shared.chat_generations).get(chat).copied().unwrap_or(0) != gen {
+                    return Ok(());
+                }
                 hold(&self.shared.active_preview).insert(chat.to_string(), id.clone());
                 chunk::remember(&mut hold(&self.shared.preview), format!("{chat}/{id}"), first.to_string());
                 Ok(())
@@ -1618,6 +1644,8 @@ mod tests {
             cursor: Mutex::new(None),
             preview: Mutex::new(HashMap::new()),
             active_preview: Mutex::new(HashMap::new()),
+            chat_locks: Mutex::new(HashMap::new()),
+            chat_generations: Mutex::new(HashMap::new()),
             epoch: AtomicU64::new(0),
             ready: AtomicBool::new(false),
             nonce_seed: 0,
@@ -2758,6 +2786,51 @@ mod tests {
         assert!(reqs[2].0.starts_with("PATCH /channels/123/messages/222"), "req 2 (buttons patch) deve essere PATCH su 222");
         assert!(reqs[3].0.starts_with("POST /channels/123/messages"), "req 3 (queued) deve essere POST");
         assert!(reqs[4].0.starts_with("PATCH /channels/123/messages/111"), "req 4 (preview 2) deve essere PATCH su 111");
+    }
+
+    #[tokio::test]
+    async fn case_b_stale_delayed_preview_from_old_turn_is_discarded_by_generation() {
+        let rest = FakeRest::start(vec![
+            ok(r#"{"id": "111"}"#), // preview 1
+            ok(r#"{"id": "222"}"#), // final turn send
+        ]);
+        let gateway = FakeGateway::start(vec![]);
+        let d = adapter(&rest, &gateway);
+
+        // Turn 1 starts: first preview creates message 111
+        d.preview("123", "anteprima turno 1").await.unwrap();
+        assert_eq!(hold(&d.shared.active_preview).get("123").map(String::as_str), Some("111"));
+
+        // Turn 1 ends: final message sent, bumps generation and clears active_preview
+        d.send_with("123", "risposta finale turno 1", true).await.unwrap();
+        assert_eq!(hold(&d.shared.active_preview).get("123"), None);
+
+        // Generation in chat is now bumped
+        let gen_now = hold(&d.shared.chat_generations).get("123").copied().unwrap_or(0);
+        assert!(gen_now > 0, "la generazione deve essere avanzata");
+
+        // If a delayed preview from turn 1 (which had old gen) acquires lock after final:
+        // We simulate this by setting generation back for the check or by checking that bumping generation drops it:
+        // Bump generation to simulate next turn having ended
+        *hold(&d.shared.chat_generations).entry("123".to_string()).or_default() += 1;
+        // With rest queue having no more responses, if an HTTP call were attempted it would panic!
+        // Calling preview when generation changed while waiting for lock drops without HTTP call:
+        let lock = d.chat_lock("123");
+        let guard = lock.lock().await;
+        // Launch a delayed preview in background while lock is held
+        let d_clone = d.clone();
+        let handle = tokio::spawn(async move {
+            d_clone.preview("123", "anteprima ritardata").await
+        });
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        // Bump generation while lock is held, simulating turn completion
+        *hold(&d.shared.chat_generations).entry("123".to_string()).or_default() += 1;
+        drop(guard); // release lock so delayed preview can proceed
+
+        // It must succeed without making any REST call (rest has no responses left)
+        handle.await.unwrap().unwrap();
+        assert_eq!(rest.count(), 2);
+        assert_eq!(hold(&d.shared.active_preview).get("123"), None);
     }
 }
 

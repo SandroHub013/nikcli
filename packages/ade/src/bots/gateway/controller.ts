@@ -338,6 +338,8 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     state.current = message
     const fresh = state.fresh
     let typing: ReturnType<typeof setInterval> | undefined
+    let inFlightPreview: Promise<void> | undefined
+    let previewDisabled = false
     const ended = new AbortController()
     try {
       const project = await deps.bridge.project(message.bot, message.platform)
@@ -400,14 +402,14 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       let lastPreviewAt = 0
       let lastPreviewText = ""
       let floodErrors = 0
-      let previewDisabled = false
       let previewing = false
 
       const cadenceMs = deps.previewCadenceMs ?? PREVIEW_CADENCE_MS
       const minDeltaChars = deps.previewMinDeltaChars ?? PREVIEW_MIN_DELTA_CHARS
 
-      const sendPreview = async (text: string) => {
-        if (closed || previewDisabled || pendingApproval || state.cancelled || ended.signal.aborted || !deps.bridge.preview) return
+      const sendPreview = (text: string) => {
+        const previewFn = deps.bridge.preview
+        if (closed || previewDisabled || pendingApproval || state.cancelled || ended.signal.aborted || !previewFn) return
         const currentTime = now()
         if (currentTime - lastPreviewAt < cadenceMs) return
         if (text.length - lastPreviewText.length < minDeltaChars) return
@@ -416,20 +418,23 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         previewing = true
         lastPreviewAt = currentTime
         lastPreviewText = text
-        try {
-          if (closed || previewDisabled || pendingApproval || state.cancelled || ended.signal.aborted) return
-          await deps.bridge.preview(message.bot, message.platform, message.chat, text)
-        } catch (error) {
-          const errStr = error instanceof Error ? error.message : String(error)
-          if (/429|flood|too many/i.test(errStr)) {
-            floodErrors += 1
-            if (floodErrors >= PREVIEW_FLOOD_LIMIT) {
-              previewDisabled = true
+        const promise = (async () => {
+          try {
+            if (closed || previewDisabled || pendingApproval || state.cancelled || ended.signal.aborted) return
+            await previewFn(message.bot, message.platform, message.chat, text)
+          } catch (error) {
+            const errStr = error instanceof Error ? error.message : String(error)
+            if (/429|flood|too many/i.test(errStr)) {
+              floodErrors += 1
+              if (floodErrors >= PREVIEW_FLOOD_LIMIT) {
+                previewDisabled = true
+              }
             }
+          } finally {
+            previewing = false
           }
-        } finally {
-          previewing = false
-        }
+        })()
+        inFlightPreview = promise
       }
 
       turn = deps.runTurn({
@@ -456,6 +461,12 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       state.turn = turn
       state.starting = false
       const result = await turn.result
+      previewDisabled = true
+      if (inFlightPreview) {
+        try {
+          await inFlightPreview
+        } catch {}
+      }
       clearInterval(typing)
       typing = undefined
       const kept = state.fresh === fresh
@@ -478,6 +489,15 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       failure(message, error instanceof Error ? error.message : String(error))
       await reply(message, t("gateway.failed"), { final: true })
     } finally {
+      previewDisabled = true
+      if (inFlightPreview) {
+        try {
+          await inFlightPreview
+        } catch {}
+      }
+      try {
+        await deps.bridge.previewEnd?.(message.bot, message.platform, message.chat)
+      } catch {}
       ended.abort()
       if (typing) clearInterval(typing)
       state.turn = undefined
