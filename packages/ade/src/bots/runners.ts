@@ -264,6 +264,98 @@ export interface TurnSpec {
   readonly unattended?: boolean
   /** Claude Code only: the dollars the turn may spend (`--max-budget-usd`, B11). */
   readonly maxBudgetUsd?: number
+  /**
+   * Codex only, from a chat and in a routine: the MCP servers of the user's config.toml (`codexMcpNames`), each
+   * switched off by name. Absent, or with a name that is not a plain one: the whole file is left out.
+   */
+  readonly codexMcpServers?: readonly string[]
+}
+
+/** An MCP server's name as it may go on Codex's command line: through npm's `.cmd` shim, nothing cmd.exe reads. */
+const SAFE_MCP_NAME = /^[A-Za-z0-9_-]{1,64}$/
+
+/** One part of a TOML dotted key: bare, "basic" or 'literal'. */
+const TOML_KEY_PART = String.raw`(?:[A-Za-z0-9_-]+|"(?:[^"\\]|\\.)*"|'[^']*')`
+const TOML_KEY = new RegExp(String.raw`^(${TOML_KEY_PART}(?:\s*\.\s*${TOML_KEY_PART})*)\s*=(.*)$`)
+const TOML_HEADER = /^\[\[?\s*(.*?)\s*\]\]?\s*(?:#.*)?$/
+
+/** A TOML dotted key's parts, unquoted; undefined when it is not one. */
+function tomlKey(text: string): string[] | undefined {
+  const part = new RegExp(String.raw`\s*(?:([A-Za-z0-9_-]+)|"((?:[^"\\]|\\.)*)"|'([^']*)')\s*(\.|$)`, "y")
+  const parts: string[] = []
+  let at = 0
+  while (at < text.length) {
+    part.lastIndex = at
+    const found = part.exec(text)
+    if (!found) return undefined
+    try {
+      parts.push(found[1] ?? found[3] ?? (JSON.parse(`"${found[2] ?? ""}"`) as string))
+    } catch {
+      return undefined
+    }
+    at = part.lastIndex
+    if (found[4] === "") break
+  }
+  return parts.length > 0 && at >= text.length ? parts : undefined
+}
+
+/**
+ * The MCP servers named in Codex's config.toml, read without a TOML library: tables (`[mcp_servers.docs]` and the
+ * ones under it), dotted keys and inline tables under `[mcp_servers]`. Undefined when the file says something this
+ * reading cannot be sure of — an inline `mcp_servers = { … }`, a header it cannot read, a name that is not a plain
+ * one: the turn then leaves the whole file out rather than miss a server.
+ */
+export function codexMcpNames(toml: string): readonly string[] | undefined {
+  const names = new Set<string>()
+  let table: string[] = []
+  let open: string | undefined
+  for (const raw of toml.split(/\r?\n/)) {
+    if (open) {
+      if (raw.includes(open)) open = undefined
+      continue
+    }
+    const line = raw.trim()
+    if (!line || line.startsWith("#")) continue
+    if (line.startsWith("[")) {
+      const header = TOML_HEADER.exec(line)
+      const path = header ? tomlKey(header[1] ?? "") : undefined
+      if (!path) {
+        // A continuation of an array (`[`, `["a",`) cannot name a table: only a broken header that might is a doubt.
+        if (/mcp_servers/.test(line)) return undefined
+        continue
+      }
+      table = path
+      if (path[0] === "mcp_servers" && path[1] !== undefined) names.add(path[1])
+      continue
+    }
+    const assignment = TOML_KEY.exec(line)
+    if (!assignment) continue
+    const key = [...table, ...(tomlKey(assignment[1] ?? "") ?? [])]
+    if (key[0] === "mcp_servers") {
+      if (key[1] === undefined) return undefined
+      names.add(key[1])
+    }
+    // A string over several lines opens here when its quotes are odd in number: its lines are not keys.
+    for (const quotes of ['"""', "'''"]) {
+      if (((assignment[2] ?? "").split(quotes).length - 1) % 2 === 1) {
+        open = quotes
+        break
+      }
+    }
+  }
+  const all = [...names]
+  return all.every((name) => SAFE_MCP_NAME.test(name)) ? all : undefined
+}
+
+/**
+ * Whether Codex, from a chat or in a routine, refused the options that switch its MCP servers and the web off: an
+ * older version that does not know them, or a config.toml other than the one ADE read (`CODEX_HOME`), where a server
+ * switched off by name is not there (`invalid transport`).
+ */
+export function codexOptionsRefused(said: string | undefined): boolean {
+  return /unexpected argument|error loading config\.toml|unknown field|unknown variant|invalid transport/i.test(
+    said ?? "",
+  )
 }
 
 /**
@@ -495,16 +587,22 @@ export function turnCommand(
       /*
        * From a chat and in a routine: no MCP server and no web, as ragu and Claude Code there (the user's choice 7).
        * `-c mcp_servers={}` does not do it: Codex merges it into the user's table, which stays whole (`codex mcp
-       * list`). `--ignore-user-config` leaves the user's config.toml out, its MCP servers with it; the login stays.
-       * The ChatGPT apps are MCP servers of their own (`features.apps`), plugins can bring more, and the web search is
-       * on by default. Checked on codex-cli 0.162.1 with no model turn, by the tools a turn offers the model, read
-       * from a fake provider: 21 with the user's server, the apps and `web_search`; 8 with these, none of those.
+       * list`). Each of the user's servers is switched off by name instead (`codexMcpServers`), so the rest of
+       * config.toml — a provider of the user's own, the profiles — still holds. When the names could not be read,
+       * `--ignore-user-config` leaves the whole file out, its servers with it; the login stays. The ChatGPT apps are
+       * MCP servers of their own (`features.apps`), plugins can bring more, and the web search is on by default.
+       * Checked on codex-cli 0.162.1 with no model turn, by the tools a turn offers the model, read from a fake
+       * provider: 21 with the user's server, the apps and `web_search`; 8 with these, either way, none of those.
        * A feature goes through `-c`: `--disable` refuses a name an older Codex does not know.
        */
+      const servers = spec.codexMcpServers
+      const byName = servers !== undefined && servers.every((name) => SAFE_MCP_NAME.test(name))
       const unwatched =
         spec.remote !== undefined || spec.unattended === true
           ? [
-              "--ignore-user-config",
+              ...(byName
+                ? servers.flatMap((name) => ["-c", `mcp_servers.${name}.enabled=false`])
+                : ["--ignore-user-config"]),
               "-c",
               'web_search="disabled"',
               "-c",

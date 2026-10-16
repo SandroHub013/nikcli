@@ -270,3 +270,108 @@ describe("le opzioni di avvio arrivano all'host", () => {
     expect(result.problem).not.toContain("sk-")
   })
 })
+
+/*
+ * Scelta 7 per Codex: da chat e nelle routine i server MCP del config.toml dell'utente si spengono per nome, letti dal
+ * file; il resto del file (un provider, i profili) resta. Se il file non si legge, il turno lo lascia fuori tutto, e un
+ * errore lo dice.
+ */
+describe("a Codex turn nobody watches reads the user's MCP servers", () => {
+  const CONFIG = "C:/Users/u/.codex/config.toml"
+
+  function codexMachine(config: { text?: string; unreadable?: boolean } = {}) {
+    const argv: (readonly string[])[] = []
+    const exits: ((code: number | null) => void)[] = []
+    const lines: ((line: string) => void)[] = []
+    const reads: string[] = []
+    const host = {
+      homeDir: async () => "C:/Users/u",
+      exists: async (path: string) => path === CONFIG && (config.text !== undefined || config.unreadable === true),
+      readTextFile: async (path: string) => {
+        reads.push(path)
+        if (config.unreadable) throw new Error("accesso negato")
+        return { text: config.text ?? "", truncated: false, bytes: (config.text ?? "").length }
+      },
+      spawn: async (options: {
+        args?: readonly string[]
+        onExit: (code: number | null) => void
+        onLine: (line: string) => void
+      }) => {
+        argv.push(options.args ?? [])
+        exits.push(options.onExit)
+        lines.push(options.onLine)
+        return { kill: () => {}, write: () => {}, resize: () => {} }
+      },
+    }
+    const deps: TurnDeps = { host: async () => host as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>> }
+    return {
+      deps,
+      argv,
+      reads,
+      exit: (code: number | null) => exits.at(-1)?.(code),
+      say: (line: string) => lines.at(-1)?.(line),
+      spawned: () => argv.length,
+    }
+  }
+
+  const until = async (check: () => boolean) => {
+    for (let i = 0; i < 200 && !check(); i++) await new Promise((resolve) => setTimeout(resolve, 1))
+  }
+
+  test("each server named in ~/.codex/config.toml is switched off by name, and the file is kept", async () => {
+    const m = codexMachine({
+      text: '[mcp_servers.docs]\nurl = "https://example.com"\n[mcp_servers.git]\ncommand = "x"\n',
+    })
+    const turn = runTurn({ runner: "codex", message: "ciao", remote: { commands: false } }, m.deps)
+    await until(() => m.spawned() > 0)
+    expect(m.argv[0]).toContain("mcp_servers.docs.enabled=false")
+    expect(m.argv[0]).toContain("mcp_servers.git.enabled=false")
+    expect(m.argv[0]).not.toContain("--ignore-user-config")
+    m.exit(0)
+    await turn.result
+  })
+
+  test("no config.toml: nothing to switch off, nothing left out", async () => {
+    const m = codexMachine()
+    const turn = runTurn({ runner: "codex", message: "ciao", unattended: true }, m.deps)
+    await until(() => m.spawned() > 0)
+    expect(m.argv[0]).not.toContain("--ignore-user-config")
+    expect(m.argv[0]!.join(" ")).not.toContain("mcp_servers.")
+    expect(m.argv[0]).toContain('web_search="disabled"')
+    m.exit(0)
+    await turn.result
+  })
+
+  test("a config.toml that cannot be read: the whole file is left out, and a failure says so", async () => {
+    const m = codexMachine({ unreadable: true })
+    const turn = runTurn({ runner: "codex", message: "ciao", remote: { commands: false } }, m.deps)
+    await until(() => m.spawned() > 0)
+    expect(m.argv[0]).toContain("--ignore-user-config")
+    m.say("Error: model_provider `azure` not found")
+    m.exit(1)
+    const result = await turn.result
+    expect(result.status).toBe("error")
+    expect(result.problem).toContain(t("bots.codex.withoutUserConfig"))
+  })
+
+  test("a Codex that refuses the options says why, and to update it", async () => {
+    const m = codexMachine({ text: '[mcp_servers.docs]\nurl = "x"\n' })
+    const turn = runTurn({ runner: "codex", message: "ciao", remote: { commands: false } }, m.deps)
+    await until(() => m.spawned() > 0)
+    m.say("Error loading config.toml: unknown field `enabled`")
+    m.exit(1)
+    const result = await turn.result
+    expect(result.problem).toContain(t("bots.codex.optionsRefused"))
+  })
+
+  test("a turn in the panel does not read the file and keeps Codex as the user set it", async () => {
+    const m = codexMachine({ text: '[mcp_servers.docs]\nurl = "x"\n' })
+    const turn = runTurn({ runner: "codex", message: "ciao" }, m.deps)
+    await until(() => m.spawned() > 0)
+    expect(m.reads).toEqual([])
+    expect(m.argv[0]!.join(" ")).not.toContain("mcp_servers.")
+    expect(m.argv[0]).not.toContain('web_search="disabled"')
+    m.exit(0)
+    await turn.result
+  })
+})
