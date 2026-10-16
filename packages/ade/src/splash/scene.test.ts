@@ -67,6 +67,22 @@ describe("splash scene renderer (step 2)", () => {
       expect(leftMargin).toBe(rightMargin)
       expect(leftMargin).toBe(40)
     })
+
+    test("wordmark is placed 6-8 pixels below the kitchen counter line", () => {
+      const gap = SCENE_LAYOUT.wordmark.y - SCENE_LAYOUT.counter.y
+      expect(gap).toBeGreaterThanOrEqual(6)
+      expect(gap).toBeLessThanOrEqual(8)
+      expect(gap).toBe(7)
+    })
+
+    test("entire scene is unified into a single vertically centered composition", () => {
+      const topPadding = SCENE_LAYOUT.developer.y
+      const bottomPadding = SCENE_HEIGHT - (SCENE_LAYOUT.wordmark.y + WORDMARK_SIZE.height)
+      // Top padding is around 12px, bottom padding is around 17px (well balanced across 90px)
+      expect(topPadding).toBeGreaterThanOrEqual(10)
+      expect(bottomPadding).toBeGreaterThanOrEqual(14)
+      expect(Math.abs(topPadding - bottomPadding)).toBeLessThanOrEqual(6)
+    })
   })
 
   describe("integer scale calculation", () => {
