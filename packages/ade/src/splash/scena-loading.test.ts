@@ -29,23 +29,46 @@ describe("splash delayed loading and graceful fallback (Passo 4)", () => {
     expect(SPLASH_SCENE_DELAY_MS).toBe(300)
   })
 
-  test("before SPLASH_SCENE_DELAY_MS (t=0), stage is hidden and status is visible", () => {
-    const { container, dispose } = mountSplash({ visible: true, status: "Apro il progetto..." })
+  test("before SPLASH_SCENE_DELAY_MS (t=0), stage is hidden, status is visible, and no Image src is assigned (P2-2)", () => {
+    let srcAssignedCount = 0
+    const origSrcDesc = Object.getOwnPropertyDescriptor(Image.prototype, "src")
+    Object.defineProperty(Image.prototype, "src", {
+      set(val) {
+        srcAssignedCount++
+        origSrcDesc?.set?.call(this, val)
+      },
+      get() {
+        return origSrcDesc?.get?.call(this)
+      },
+      configurable: true,
+    })
+
     try {
-      const stage = container.querySelector<HTMLElement>('[data-slot="splash-stage"]')
-      expect(stage).not.toBeNull()
-      // Stage must not have data-loaded before delay
-      expect(stage?.hasAttribute("data-loaded")).toBe(false)
+      const { container, dispose } = mountSplash({ visible: true, status: "Apro il progetto..." })
+      try {
+        expect(srcAssignedCount).toBe(0)
 
-      const status = container.querySelector<HTMLElement>('[data-slot="splash-status"]')
-      expect(status).not.toBeNull()
-      expect(status?.textContent).toContain("Apro il progetto...")
+        const stage = container.querySelector<HTMLElement>('[data-slot="splash-stage"]')
+        expect(stage).not.toBeNull()
+        // Stage must not have data-loaded before delay
+        expect(stage?.hasAttribute("data-loaded")).toBe(false)
 
-      // Image element is not mounted yet
-      const img = container.querySelector('[data-slot="splash-image"]')
-      expect(img).toBeNull()
+        const status = container.querySelector<HTMLElement>('[data-slot="splash-status"]')
+        expect(status).not.toBeNull()
+        expect(status?.textContent).toContain("Apro il progetto...")
+
+        // Image element is not mounted yet
+        const img = container.querySelector('[data-slot="splash-image"]')
+        expect(img).toBeNull()
+      } finally {
+        dispose()
+      }
     } finally {
-      dispose()
+      if (origSrcDesc) {
+        Object.defineProperty(Image.prototype, "src", origSrcDesc)
+      } else {
+        delete (Image.prototype as any).src
+      }
     }
   })
 
@@ -67,7 +90,7 @@ describe("splash delayed loading and graceful fallback (Passo 4)", () => {
     }
   })
 
-  test("graceful fallback: if image decode throws, splash maintains background and status without console errors", async () => {
+  test("graceful fallback: if image decode throws, stage stays without data-loaded, status remains and no console errors (P2-2)", async () => {
     const origDecode = Image.prototype.decode
     let consoleErrorCount = 0
     const origConsoleError = console.error
@@ -84,6 +107,11 @@ describe("splash delayed loading and graceful fallback (Passo 4)", () => {
 
         const splash = container.querySelector('[data-component="ade-splash"]')
         expect(splash).not.toBeNull()
+
+        // Stage must stay without data-loaded so no empty scene is shown (P2-2)
+        const stage = container.querySelector<HTMLElement>('[data-slot="splash-stage"]')
+        expect(stage).not.toBeNull()
+        expect(stage?.hasAttribute("data-loaded")).toBe(false)
 
         const status = container.querySelector('[data-slot="splash-status"]')
         expect(status?.textContent).toContain("In attesa...")

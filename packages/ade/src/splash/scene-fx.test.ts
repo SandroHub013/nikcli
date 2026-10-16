@@ -96,18 +96,58 @@ describe("splash scene FX animation (Passo 3)", () => {
     controller.stop()
   })
 
-  test("startPixelScene stop cancels active frame and unregisters visibilitychange", () => {
-    const canvas = document.createElement("canvas")
-    canvas.setAttribute("data-slot", "splash-canvas")
-    canvas.getContext = (() => ({
-      imageSmoothingEnabled: true,
-      clearRect: () => {},
-      fillRect: () => {},
-    })) as any
+  test("startPixelScene stop cancels active frame and unregisters visibilitychange (P2-2)", () => {
+    let activeRafId: number | null = null
+    let cancelledRafId: number | null = null
+    let nextId = 500
 
-    const controller = startPixelScene(canvas)
-    expect(controller).toBeDefined()
-    expect(typeof controller.stop).toBe("function")
-    controller.stop()
+    const origRaf = window.requestAnimationFrame
+    const origCaf = window.cancelAnimationFrame
+    let visibilityListenerCount = 0
+
+    const origAdd = document.addEventListener.bind(document)
+    const origRemove = document.removeEventListener.bind(document)
+
+    window.requestAnimationFrame = () => {
+      activeRafId = ++nextId
+      return activeRafId
+    }
+    window.cancelAnimationFrame = (id: number) => {
+      cancelledRafId = id
+    }
+
+    const addSpy = (type: string, listener: any, options?: any) => {
+      if (type === "visibilitychange") visibilityListenerCount++
+      return origAdd(type, listener, options)
+    }
+    const removeSpy = (type: string, listener: any, options?: any) => {
+      if (type === "visibilitychange") visibilityListenerCount--
+      return origRemove(type, listener, options)
+    }
+    document.addEventListener = addSpy as any
+    document.removeEventListener = removeSpy as any
+
+    try {
+      const canvas = document.createElement("canvas")
+      canvas.setAttribute("data-slot", "splash-canvas")
+      canvas.getContext = (() => ({
+        imageSmoothingEnabled: true,
+        clearRect: () => {},
+        fillRect: () => {},
+      })) as any
+
+      const controller = startPixelScene(canvas)
+      expect(activeRafId).not.toBeNull()
+      expect(visibilityListenerCount).toBe(1)
+
+      controller.stop()
+      expect(cancelledRafId).toBe(activeRafId)
+      expect(visibilityListenerCount).toBe(0)
+    } finally {
+      window.requestAnimationFrame = origRaf
+      window.cancelAnimationFrame = origCaf
+      document.addEventListener = origAdd
+      document.removeEventListener = origRemove
+    }
   })
 })

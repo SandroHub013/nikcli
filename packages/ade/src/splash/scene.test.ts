@@ -99,13 +99,133 @@ describe("splash scene renderer and stage layout (clean reference scene)", () =>
       controller.stop()
     })
 
-    test("calling stop cancels active animation frame and removes visibility listener", () => {
-      const canvas = document.createElement("canvas")
-      const controller = startPixelScene(canvas)
-      expect(controller).toBeDefined()
-      expect(typeof controller.stop).toBe("function")
-      expect(typeof controller.resize).toBe("function")
-      controller.stop()
+    test("calling stop cancels active animation frame and removes visibility listener (P2-2)", () => {
+      let activeRafId: number | null = null
+      let cancelledRafId: number | null = null
+      let nextId = 100
+
+      const origRaf = window.requestAnimationFrame
+      const origCaf = window.cancelAnimationFrame
+      let visibilityListenerCount = 0
+
+      const origAdd = document.addEventListener.bind(document)
+      const origRemove = document.removeEventListener.bind(document)
+
+      window.requestAnimationFrame = () => {
+        activeRafId = ++nextId
+        return activeRafId
+      }
+      window.cancelAnimationFrame = (id: number) => {
+        cancelledRafId = id
+      }
+
+      const addSpy = (type: string, listener: any, options?: any) => {
+        if (type === "visibilitychange") visibilityListenerCount++
+        return origAdd(type, listener, options)
+      }
+      const removeSpy = (type: string, listener: any, options?: any) => {
+        if (type === "visibilitychange") visibilityListenerCount--
+        return origRemove(type, listener, options)
+      }
+      document.addEventListener = addSpy as any
+      document.removeEventListener = removeSpy as any
+
+      try {
+        const canvas = document.createElement("canvas")
+        canvas.getContext = (() => ({
+          imageSmoothingEnabled: false,
+          clearRect: () => {},
+          fillRect: () => {},
+        })) as any
+
+        const controller = startPixelScene(canvas)
+        expect(activeRafId).not.toBeNull()
+        expect(visibilityListenerCount).toBe(1)
+
+        controller.stop()
+        expect(cancelledRafId).toBe(activeRafId)
+        expect(visibilityListenerCount).toBe(0)
+      } finally {
+        window.requestAnimationFrame = origRaf
+        window.cancelAnimationFrame = origCaf
+        document.addEventListener = origAdd
+        document.removeEventListener = origRemove
+      }
+    })
+
+    test("when document.hidden becomes true, cancels active rAF, and resumes when visible again (P2-2)", () => {
+      let sceneTickCb: FrameRequestCallback | null = null
+      let sceneRafCalls = 0
+      let activeRafId: number | null = null
+      const cancelledRafIds: number[] = []
+      let nextId = 200
+
+      const origRaf = window.requestAnimationFrame
+      const origCaf = window.cancelAnimationFrame
+
+      window.requestAnimationFrame = (cb: FrameRequestCallback) => {
+        const id = ++nextId
+        if (!sceneTickCb) {
+          sceneTickCb = cb
+        }
+        if (cb === sceneTickCb) {
+          sceneRafCalls++
+          activeRafId = id
+        }
+        return id
+      }
+      window.cancelAnimationFrame = (id: number) => {
+        cancelledRafIds.push(id)
+        if (id === activeRafId) {
+          activeRafId = null
+        }
+      }
+
+      let isHidden = false
+      const origHidden = Object.getOwnPropertyDescriptor(Document.prototype, "hidden")
+      Object.defineProperty(document, "hidden", {
+        get: () => isHidden,
+        configurable: true,
+      })
+
+      try {
+        const canvas = document.createElement("canvas")
+        canvas.getContext = (() => ({
+          imageSmoothingEnabled: false,
+          clearRect: () => {},
+          fillRect: () => {},
+        })) as any
+
+        const controller = startPixelScene(canvas)
+        expect(sceneRafCalls).toBe(1)
+        const initialId = activeRafId
+        expect(initialId).not.toBeNull()
+
+        // Page becomes hidden: active frame is cancelled
+        isHidden = true
+        document.dispatchEvent(new Event("visibilitychange"))
+        expect(cancelledRafIds).toContain(initialId!)
+        expect(activeRafId).toBeNull()
+
+        // Page becomes visible: new frame is requested to resume loop
+        isHidden = false
+        document.dispatchEvent(new Event("visibilitychange"))
+        expect(sceneRafCalls).toBe(2)
+        expect(activeRafId).not.toBeNull()
+        expect(activeRafId).not.toBe(initialId!)
+        const resumedId = activeRafId
+
+        controller.stop()
+        expect(cancelledRafIds).toContain(resumedId!)
+      } finally {
+        window.requestAnimationFrame = origRaf
+        window.cancelAnimationFrame = origCaf
+        if (origHidden) {
+          Object.defineProperty(Document.prototype, "hidden", origHidden)
+        } else {
+          delete (document as any).hidden
+        }
+      }
     })
 
     test("no inline styles are left on body or documentElement", () => {
