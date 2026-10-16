@@ -202,11 +202,11 @@
       "light": "lightFg1"
     },
     "syntaxComment": {
-      "dark": "#a49585",
+      "dark": "#ae9f8f",
       "light": "#6b5e54"
     },
     "syntaxKeyword": {
-      "dark": "#ff654f",
+      "dark": "#ff7964",
       "light": "lightRed"
     },
     "syntaxFunction": {
@@ -214,7 +214,7 @@
       "light": "#686300"
     },
     "syntaxVariable": {
-      "dark": "darkBlueBright",
+      "dark": "#86a99b",
       "light": "lightBlue"
     },
     "syntaxString": {
@@ -222,7 +222,7 @@
       "light": "#885600"
     },
     "syntaxNumber": {
-      "dark": "darkPurpleBright",
+      "dark": "#d98ba0",
       "light": "lightPurple"
     },
     "syntaxType": {

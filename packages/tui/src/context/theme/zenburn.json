@@ -3,7 +3,7 @@
     "bg": "#3f3f3f",
     "bgAlt": "#4f4f4f",
     "bgPanel": "#5f5f5f",
-    "fg": "#dcdccc",
+    "fg": "#f4f4e4",
     "fgMuted": "#9f9f9f",
     "red": "#cc9393",
     "redBright": "#dca3a3",
@@ -51,7 +51,7 @@
       "light": "#3f3f3f"
     },
     "textMuted": {
-      "dark": "#d9d9d8",
+      "dark": "#c5c5c4",
       "light": "#6a6969"
     },
     "background": {
@@ -63,7 +63,7 @@
       "light": "#f5f5e5"
     },
     "backgroundElement": {
-      "dark": "bgPanel",
+      "dark": "#525252",
       "light": "#ebebdb"
     },
     "border": {
@@ -103,11 +103,11 @@
       "light": "#8f5f5f"
     },
     "diffAddedBg": {
-      "dark": "#4f5f4f",
+      "dark": "#465646",
       "light": "#efffef"
     },
     "diffRemovedBg": {
-      "dark": "#5f4f4f",
+      "dark": "#5e4e4e",
       "light": "#ffefef"
     },
     "diffContextBg": {

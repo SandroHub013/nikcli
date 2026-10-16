@@ -69,6 +69,7 @@ function bridge(project: string | null = PROJECT) {
       id: String(Math.random()),
       redacted: false,
       button: false,
+      private: true,
       ...extra,
     })
   return { fake, calls, sent, typing, questions, acks, emit }
@@ -635,6 +636,53 @@ describe("the tools of a turn from a chat", () => {
     await until("il turno", () => turns.started.length === 1)
     const turn = turns.started[0]!
     expect(turn.request.onPermission).toBeDefined()
+  })
+
+  /* S17 (review of the bots): a mention in a channel is a turn, so its questions went to the channel, command whole. */
+  test("from a channel others read, the turn has no commands and no question is put there", async () => {
+    const b = bridge()
+    const turns = typedTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: ragu,
+      sessions: memorySessionStore(),
+      remote: () => on,
+    })
+    b.emit("@bot pulisci la build", { private: false, chat: "canale1" })
+    await until("il turno", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+    // The owner turned the commands on, for private chats: not here.
+    expect(turn.request.remote).toEqual({ commands: false })
+    turn.request.onPermission!(asking("bash", "rm -rf build"))
+    turn.request.onPermission!(asking("external_directory", "C:/Users/me/Documents/*"))
+    await until("i due no", () => turn.keys.length === 2)
+    expect(turn.keys).toEqual(["reject", "reject"])
+    // Nothing asked; one fixed line, with no command, once.
+    await until("la riga", () => b.sent.length === 1)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(b.questions).toHaveLength(0)
+    expect(b.sent).toEqual([{ chat: "canale1", text: t("gateway.approve.privateOnly") }])
+    expect(JSON.stringify(b.sent)).not.toContain("rm -rf")
+    // The same bot in a private chat still asks, on the phone.
+    b.emit("pulisci la build", { chat: "d42", id: "p1" })
+    await until("il turno privato", () => turns.started.length === 2)
+    expect(turns.started[1]!.request.remote).toEqual({ commands: true })
+  })
+
+  test("a message that does not say where it came from is a channel", async () => {
+    const b = bridge()
+    const turns = typedTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: ragu,
+      sessions: memorySessionStore(),
+      remote: () => on,
+    })
+    b.emit("ciao", { private: undefined as unknown as boolean })
+    await until("il turno", () => turns.started.length === 1)
+    expect(turns.started[0]!.request.remote).toEqual({ commands: false })
   })
 
   test("a Claude or Codex turn has nothing to watch", async () => {

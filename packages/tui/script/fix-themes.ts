@@ -51,9 +51,10 @@ const RULES: [keys: string[], on: [backgrounds: string[], min: number][]][] = [
   // Accents and states are text on every surface: the transcript, the panels, the prompt's line, the dialogs.
   [["primary", "accent", "secondary", "success"], [[SURFACES, 4.5]]],
   // Error, warning and info are also syntax colours (builtins, tags, annotations, todo notes): on the diff's lines too.
-  [["error", "warning", "info"], [[[...SURFACES, ...DIFF_LINES], 4.5]]],
+  [["error", "warning", "info"], [[[...SURFACES, ...DIFF_LINES, "diffContextBg"], 4.5]]],
   [MARKDOWN.map((k) => `markdown${k}`), [[["background"], 4.5]]],
-  [SYNTAX.map((k) => `syntax${k}`), [[["background", ...DIFF_LINES], 4.5]]],
+  // Code: in the transcript, on every line of a diff, and on the panel, where a written file is shown.
+  [SYNTAX.map((k) => `syntax${k}`), [[["background", "backgroundPanel", ...DIFF_LINES, "diffContextBg"], 4.5]]],
   [["borderActive"], [[["background"], 3]]],
 ]
 

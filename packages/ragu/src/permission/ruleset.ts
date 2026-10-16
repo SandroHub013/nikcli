@@ -66,6 +66,29 @@ export namespace PermissionRuleset {
   }
 
   /**
+   * The rule ADE puts first in every session a bot's turn makes (`BOT_SESSION_MARK`, `serve-rules.ts`): no tool
+   * asks for the permission it names, so it decides nothing and only says whose session this is.
+   */
+  export const BOT_SESSION_PERMISSION = "ade.bot"
+
+  /** Whether a ruleset is the one of a bot's session of ADE: it carries the mark. */
+  export function isBotSession(ruleset: Ruleset): boolean {
+    return ruleset.some((rule) => rule.permission === BOT_SESSION_PERMISSION && rule.pattern === "*" && rule.action === "deny")
+  }
+
+  /**
+   * What the user approved with «always» for the project, as it counts for a session with `ruleset`.
+   *
+   * A grant comes after every rule and wins over them, so a «sempre» given once, in the TUI too, opened what a bot's
+   * session shuts: `rm *` let `rm -rf ~` through, and a write to the configuration (review of the bots, S4). A bot's
+   * session is ADE's, with its own rules and its own «Sempre» per bot, which ADE answers once: the grants of the
+   * project do not reach it.
+   */
+  export function approvedFor(ruleset: Ruleset, approved: Ruleset): Ruleset {
+    return isBotSession(ruleset) ? [] : approved
+  }
+
+  /**
    * The "Full access" preset as a ruleset: every tool allowed without a prompt,
    * except the three internal permissions that must stay denied so an
    * unattended agent can never park itself waiting for a human
@@ -112,14 +135,58 @@ export namespace PermissionRuleset {
     ]
   }
 
+  const SEVERITY: Record<Rule["action"], number> = { allow: 0, ask: 1, deny: 2 }
+
+  /**
+   * A merged ruleset cut at the bot mark: the agent's rules before it, the session's from it on. A bot's session of
+   * ADE may only restrict (`evaluate`, `disabled`), so the two halves are read apart. `undefined` for any other
+   * ruleset, which is read as one list, the last rule winning.
+   */
+  function splitAtBotMark(rules: Ruleset): { agent: Ruleset; session: Ruleset } | undefined {
+    const at = rules.findIndex((rule) => rule.permission === BOT_SESSION_PERMISSION && rule.pattern === "*" && rule.action === "deny")
+    return at < 0 ? undefined : { agent: rules.slice(0, at), session: rules.slice(at) }
+  }
+
+  /**
+   * A path as Windows opens it: the dots and spaces that end a segment are dropped (`.git.\hooks` is `.git\hooks`),
+   * a segment made only of dots (`.`, `..`) stays. Written for the rules of a bot's session, which name a folder
+   * by its name (N2); the same on every platform, since a rule that denies more is on the safe side.
+   */
+  export function windowsPathForm(path: string): string {
+    return path
+      .split(/([\\/])/)
+      .map((segment, index) => {
+        // A colon opens an NTFS stream, and `.git:$I30:$INDEX_ALLOCATION` is the folder itself (N2-bis): the segment
+        // ends there, except the drive that starts an absolute path.
+        const colon = segment.indexOf(":")
+        const name = colon < 0 || (index === 0 && /^[A-Za-z]:$/.test(segment)) ? segment : segment.slice(0, colon)
+        return /^\.*$/.test(name) ? name : name.replace(/[. ]+$/, "")
+      })
+      .join("")
+  }
+
   export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
     const merged = merge(...rulesets)
     // debug + count only: stringifying the full ruleset on every tool call is
     // measurable overhead at the default INFO level.
     log.debug("evaluate", { permission, pattern, rules: merged.length })
-    const match = merged.findLast(
-      (rule: Rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern),
-    )
+    const strictest = (found: (Rule | undefined)[]) =>
+      found.reduce<Rule | undefined>(
+        (best, one) => (one && (!best || SEVERITY[one.action] > SEVERITY[best.action]) ? one : best),
+        undefined,
+      )
+    // A bot's session only restricts (review of the review, N1): its allows come after the agent's rules and would
+    // win over `read *.env: ask`, a bot file's `edit: false` and the project's denials. The agent's rules and the
+    // session's are read apart, and the stricter decision stands.
+    const parts = splitAtBotMark(merged)
+    const decideFor = (target: string) => {
+      const matches = (rule: Rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(target, rule.pattern)
+      return parts ? strictest([parts.agent.findLast(matches), parts.session.findLast(matches)]) : merged.findLast(matches)
+    }
+    // And a write is read twice (N2): as written, and as Windows reads it, which drops the dots and spaces that end a
+    // segment, so `.git.\hooks\pre-commit` is `.git\hooks\pre-commit`.
+    const windows = parts && permission === "edit" ? windowsPathForm(pattern) : pattern
+    const match = windows === pattern ? decideFor(pattern) : strictest([decideFor(pattern), decideFor(windows)])
     const decision = match ?? { action: "ask" as const, permission, pattern: "*" }
 
     // `specs/effect-tui/17-sandbox-permission-boundaries.md` requirement 10:
@@ -183,9 +250,12 @@ export namespace PermissionRuleset {
     for (const tool of tools) {
       const permission = TOOL_PERMISSION[tool] ?? tool
 
-      const rule = ruleset.findLast((r: Rule) => Wildcard.match(permission, r.permission))
-      if (!rule) continue
-      if (rule.pattern === "*" && rule.action === "deny") result.add(tool)
+      // A bot's session only restricts: a tool its agent denies whole stays hidden under the session's allows.
+      const parts = splitAtBotMark(ruleset)
+      for (const rules of parts ? [parts.agent, parts.session] : [ruleset]) {
+        const rule = rules.findLast((r: Rule) => Wildcard.match(permission, r.permission))
+        if (rule && rule.pattern === "*" && rule.action === "deny") result.add(tool)
+      }
     }
     return result
   }

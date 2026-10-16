@@ -68,6 +68,11 @@ export function permissionAnswerer(deps: {
   readonly ask: Ask
   /** Answer no at once, without asking: the bot's remote commands are off. */
   readonly refuse: boolean
+  /**
+   * The turn came from a channel others read: nothing is asked there and no command is written there, only that
+   * a confirmation needs a private chat, once (S17).
+   */
+  readonly publicChat?: boolean
   /** The answer to the question with that id (`Turn.answer`): never to another that took its place. */
   readonly answer: (requestID: string | undefined, reply: "once" | "reject") => void
   /** A line for the chat, when a question went unanswered. */
@@ -76,8 +81,17 @@ export function permissionAnswerer(deps: {
   readonly signal: AbortSignal
 }): (pending: PendingPermission) => void {
   const refused = new Set<string>()
+  let told = false
   return (pending) => {
     if (deps.signal.aborted) return
+    if (deps.publicChat) {
+      deps.answer(pending.requestID, "reject")
+      if (!told) {
+        told = true
+        deps.say(t("gateway.approve.privateOnly"))
+      }
+      return
+    }
     const command = shown(pending.patterns)
     // No «Sempre» from a chat: every command is asked, the block list refused.
     const verdict = decide(pending.permission, pending.patterns, [])

@@ -9,6 +9,13 @@
 export const CONFIG_STEMS = ["ragu", "nikcli"] as const
 export const DOT_FOLDERS = [".ragu", ".nikcli"] as const
 
+/**
+ * Folders where a write turns into a command run later, by git, an editor, CI or the next agent session
+ * (review B3, M1; review of the bots, S2): hooks, tasks, workflows, and the settings and plugins of Claude Code, ragu
+ * and Codex. One list for every runner: `runners.ts` refuses them to Claude, `serve-rules.ts` to ragu.
+ */
+export const EXECUTES_LATER = [".git", ".claude", ...DOT_FOLDERS, ".codex", ".husky", ".vscode", ".github/workflows"] as const
+
 /** Every name a project's config file has: the root's and the one in its dot folder. */
 export const CONFIG_FILE_NAMES = CONFIG_STEMS.flatMap((stem) => [`${stem}.json`, `${stem}.jsonc`])
 

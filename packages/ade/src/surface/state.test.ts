@@ -1,4 +1,6 @@
 import { describe, test, expect, spyOn } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { parseWorkspace, serializeWorkspace } from "../session/persist"
 import {
   ADE_VIEWS,
@@ -6,6 +8,8 @@ import {
   CHAT_ENABLED,
   VISIBLE_VIEWS,
   visibleViews,
+  gatewayControllerOn,
+  gatewayVisible,
   isViewVisible,
   nextView,
   reachableView,
@@ -172,6 +176,27 @@ describe("the Chat and Bot switches (S40)", () => {
       })
     }
   }
+})
+
+describe("the bots' gateway controller (A6)", () => {
+  test("listens only on the desktop, with the Bot section on and the Gateway section shown", () => {
+    expect(gatewayControllerOn(true, true, true)).toBe(true)
+    expect(gatewayControllerOn(false, true, true)).toBe(false)
+    expect(gatewayControllerOn(true, false, true)).toBe(false)
+    expect(gatewayControllerOn(true, true, false)).toBe(false)
+  })
+
+  test("in a release the Gateway section is hidden, so nothing listens", () => {
+    expect(gatewayVisible(false, false)).toBe(false)
+    expect(gatewayControllerOn(true, true, gatewayVisible(false, false))).toBe(false)
+    expect(gatewayControllerOn(true, true, gatewayVisible(false, true))).toBe(true)
+  })
+
+  test("the workbench asks it before starting the controller", () => {
+    const source = readFileSync(join(__dirname, "workbench.tsx"), "utf-8")
+    expect(source).toContain("if (gatewayControllerOn(isTauriDesktop())) {")
+    expect(source).not.toMatch(/if \(isTauriDesktop\(\)\) \{\s*let gateway/)
+  })
 })
 
 describe("a layout saved by a release that had plugin panels", () => {

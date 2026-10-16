@@ -3,6 +3,7 @@ import { readdirSync } from "fs"
 import path from "path"
 import {
   BUILT_IN_THEME_IDS,
+  canonicalThemeId,
   FALLBACK_THEME,
   FALLBACK_THEME_ID,
   eagerParsedThemeCount,
@@ -62,6 +63,17 @@ describe("built-in theme catalog", () => {
     const dim = (await loadBuiltInTheme("dim")) as { theme?: unknown }
     const shadow = (await loadBuiltInTheme("shadow")) as { theme?: unknown }
     expect(dim?.theme).toEqual(shadow?.theme)
+  })
+
+  it("keeps reading the default theme under its old id, nikcli, without listing it twice", async () => {
+    expect(readdirSync(THEME_DIR)).toContain("ragu.json")
+    expect(readdirSync(THEME_DIR)).not.toContain("nikcli.json")
+    expect(isBuiltInTheme("nikcli")).toBe(true)
+    expect(canonicalThemeId("nikcli")).toBe("ragu")
+    expect(canonicalThemeId("ragu")).toBe("ragu")
+    expect(canonicalThemeId("my-own")).toBe("my-own")
+    expect(await loadBuiltInTheme("nikcli")).toBe(await loadBuiltInTheme("ragu"))
+    expect(BUILT_IN_THEME_IDS).not.toContain("nikcli")
   })
 
   it("returns undefined for an unknown id", async () => {

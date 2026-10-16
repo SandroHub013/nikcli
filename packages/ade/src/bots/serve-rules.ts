@@ -21,18 +21,24 @@
  * - `remote-ask` and `remote-none`: a chat's turn through a gateway (G5), with
  *   the bot's «Comandi da remoto» on or off.
  *
+ * The four profiles with nobody to look at what a turn does (`remote-ask`, `remote-none`, `read-only`, `no-shell`)
+ * begin with `"*": "deny"` and open only what they need (`READ_TOOLS`, and the edits where the profile has them).
+ * ragu's default is `"*": "allow"`, so rules that only denied left webfetch, websearch, code execution and every MCP
+ * tool of the server — the user's own — running without a question (review of the bots, S1). A tool that does not
+ * exist yet is closed until someone opens it here, with a test that names it.
+ *
  * Every profile denies what no bot turn may do: a subagent (a `task` runs in
  * a child session these rules do not reach), plan mode, a question to the
  * user (a bot's thread has nowhere to answer it), and a write to the server's
  * own configuration (`configDenials`).
  *
- * What these rules do not cover, said where it matters (`bots.serve.rulesNote`):
- * an «always» the user gave in the project, in ragu's TUI too, comes last
- * and still wins, as for the Chat.
+ * An «always» the user gave in the project, in ragu's TUI too, used to come last and win over these rules, as for
+ * the Chat. ragu is ours now: a session with the mark below ignores the grants of the project (`approvedFor`,
+ * `permission/ruleset.ts`; review of the bots, S4), so what is here holds. Said in `bots.serve.rulesNote`.
  */
 
 import type { PermissionRule } from "../chat/rules"
-import { CONFIG_STEMS } from "./app-folder"
+import { CONFIG_STEMS, EXECUTES_LATER, DOT_FOLDERS } from "./app-folder"
 
 export type BotProfile = "ask" | "ask-outside" | "no-shell" | "read-only" | "remote-ask" | "remote-none" | "planner"
 
@@ -166,10 +172,12 @@ function spellings(word: string): string[] {
  * repository that points at `.nikcli` under another name is not seen. A bot
  * cannot make one without the shell.
  *
- * They open the session's rules rather than close them: any session rule
- * comes after the bot's file and wins over it, and a routine's `edit` denied
- * whole must stay the last `edit` rule, the one ragu reads to hide the tool
- * from the model (`disabled`, ruleset.ts).
+ * They open the session's rules rather than close them. The session only
+ * restricts: ragu reads the agent's rules and the session's apart and keeps the
+ * stricter decision (`PermissionRuleset.evaluate`), so an allow at the head
+ * cannot open what the bot's file, ragu's `.env` asks or the project closed.
+ * A routine's `edit` denied whole must stay the last `edit` rule, the one ragu
+ * reads to hide the tool from the model (`disabled`, ruleset.ts).
  */
 export function configDenials(): string[] {
   const denied: string[] = ["*::*"]
@@ -180,6 +188,38 @@ export function configDenials(): string[] {
   return denied
 }
 
+/*
+ * Folders where a write turns into a command run later (`EXECUTES_LATER`), refused to ragu as they are to Claude
+ * (review of the bots, S2): `.git/hooks/pre-commit` runs at the next commit, `.vscode/tasks.json` when the folder is
+ * opened, a workflow in CI. As for `configDenials`: the path as the tool resolved it, either separator, every casing
+ * (Windows does not count it, the glob does), and the short 8.3 name (`GIT~1`). The folder must be a whole segment:
+ * `.gitignore` and `.github/CODEOWNERS` stay writable. `.github/workflows` has its second name spelled with `?`
+ * (nine letters) since its 2^9 casings would be too many: any nine-letter folder under `.github` is refused as well,
+ * on the safe side. `.ragu` and `.nikcli` are `configDenials`'. A segment written with a trailing dot or space
+ * (`.git.\hooks`), which Windows opens as the folder, is read by ragu as Windows reads it before the rules
+ * (`PermissionRuleset.windowsPathForm`), so these patterns need no spelling of it.
+ */
+const BACKSLASH = "\\"
+
+export function executesLaterDenials(): string[] {
+  const denied: string[] = []
+  for (const folder of EXECUTES_LATER) {
+    if ((DOT_FOLDERS as readonly string[]).includes(folder)) continue
+    const [first, second] = folder.split("/") as [string, string | undefined]
+    for (const name of casings(first)) {
+      denied.push(`*${name.slice(1)}~?*`)
+      if (second === undefined) {
+        denied.push(`*${name}/*`, `*${name}${BACKSLASH}*`)
+        if (folder === ".git") denied.push(name, `*/${name}`, `*${BACKSLASH}${name}`)
+      } else {
+        const hidden = "?".repeat(second.length)
+        for (const a of ["/", BACKSLASH]) for (const b of ["/", BACKSLASH]) denied.push(`*${name}${a}${hidden}${b}*`)
+      }
+    }
+  }
+  return [...new Set(denied)]
+}
+
 /* Every way of writing `word` with capitals and small letters. */
 function casings(word: string): string[] {
   let all = [""]
@@ -187,6 +227,46 @@ function casings(word: string): string[] {
     all = all.flatMap((start) => [...new Set([start + letter.toLowerCase(), start + letter.toUpperCase()])])
   }
   return all
+}
+
+/**
+ * The tools a turn with no one to ask may use: they read the project and keep a list of todos. Real ids of ragu's
+ * tools (`packages/ragu/src/tool`, `Tool.define("…")`; the test reads them from there). Not here, on purpose:
+ * `webfetch` (asked in `remote-ask` only), `websearch`, `codesearch`, `call_tool` and every MCP tool, `exec_code`,
+ * `code_mode`, `batch`, `repo_clone`, `generate_image`, `plugin` tools.
+ */
+export const READ_TOOLS: readonly string[] = [
+  "read",
+  "glob",
+  "grep",
+  "list",
+  "tree",
+  "lsp",
+  "todowrite",
+  "todoread",
+  "context_related",
+  "context_diagnostics",
+  "repo_overview",
+  "memory_search",
+  "skill",
+  "get_goal",
+  // The sink of a malformed call: it must answer, or the model never learns what it got wrong.
+  "invalid",
+]
+
+/** Profiles that open from `"*": "deny"`: the ones where no person looks at what a turn does. */
+const FROM_A_LIST = new Set<BotProfile>(["remote-ask", "remote-none", "read-only", "no-shell"])
+
+/** The head of such a profile: everything closed, then what it needs. Before every other rule, so none is shaded. */
+function listHead(profile: BotProfile): PermissionRule[] {
+  return [
+    rule("*", "deny"),
+    ...READ_TOOLS.map((tool) => rule(tool, "allow")),
+    // Writes stay in the project, as with the spawn flags: a routine's are denied further down, whole.
+    ...(profile === "read-only" ? [] : [rule("edit", "allow")]),
+    // The one turn that can ask someone about it: a question to the phone, as for a command.
+    ...(profile === "remote-ask" ? [rule("webfetch", "ask")] : []),
+  ]
 }
 
 /** What each profile says about the tools the spawn flags named, in their order. */
@@ -247,7 +327,9 @@ export function botPermission(profile: BotProfile): readonly PermissionRule[] {
   let rules = cache.get(profile)
   if (!rules) {
     rules = [
+      ...(FROM_A_LIST.has(profile) ? listHead(profile) : []),
       ...configDenials().map((pattern) => rule("edit", "deny", pattern)),
+      ...executesLaterDenials().map((pattern) => rule("edit", "deny", pattern)),
       ...PROFILE_RULES[profile],
       ...NEVER,
       ...(WITH_BLOCK_LIST.has(profile) ? blockedBashDenials().map((pattern) => rule("bash", "deny", pattern)) : []),

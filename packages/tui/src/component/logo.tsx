@@ -1,10 +1,12 @@
 import { TextAttributes, RGBA } from "@opentui/core"
-import { For, Show } from "solid-js"
+import { For, Show, createMemo } from "solid-js"
 import { useTheme, tint } from "@tui/context/theme"
+import { ensureContrast } from "@tui/context/contrast"
+import { groundOf } from "@tui/context/theme-tokens"
 
 /*
- * The wordmark, in the pixel letters OpenCode's home uses: "ragu" muted, "code"
- * bright, like its "open"/"code". Half blocks draw two pixel rows per text row.
+ * The wordmark, in the pixel letters OpenCode's home uses: "ragu" in tomato,
+ * "code" in basil, the logo's colours. Half blocks draw two pixel rows per text row.
  * Three markers paint the inside of a letter in a shadow tone:
  *   _  a shadow cell
  *   ^  the letter's top half over a shadow cell
@@ -26,6 +28,14 @@ export const LOGO_CODE = [
   "                   ",
 ]
 const GAP = " "
+
+/** The brand's tomato and basil (ade-team/design/ragu-code), the colours of «ragu» and «code» in the logo. */
+export const WORDMARK = { ragu: RGBA.fromHex("#df4a2b"), code: RGBA.fromHex("#4f8a2e") }
+/**
+ * Coloured text's floor. Tomato and basil reach it on ink (4.7 and 4.6), not on cream (3.3 and 3.4): on a light
+ * background they darken, hue kept, as far as it takes.
+ */
+const WORDMARK_MIN = 4.5
 
 /** The wordmark as plain rows, markers turned into the cells they draw: for the exit summary. */
 export const LOGO_LINES = LOGO_RAGU.map((left, row) =>
@@ -54,15 +64,25 @@ function cells(line: string, fg: RGBA, shadow: RGBA, bold: boolean): Cell[] {
 }
 
 export function Logo(props: { compact?: boolean }) {
-  const { theme } = useTheme()
+  const { theme, mode } = useTheme()
+  const colours = createMemo(() => {
+    const ground = groundOf(theme.surface.base, mode())
+    return {
+      ragu: ensureContrast(WORDMARK.ragu, [ground], WORDMARK_MIN),
+      code: ensureContrast(WORDMARK.code, [ground], WORDMARK_MIN),
+    }
+  })
   // Opaque on purpose: the background may be transparent (ADE draws its own),
   // and a shadow mixed from it must still be a colour.
   const shadow = (fg: RGBA) => tint(theme.surface.base, fg, 0.25)
-  const row = (index: number) => [
-    ...cells(LOGO_RAGU[index]!, theme.foreground.muted, shadow(theme.foreground.muted), false),
-    { text: GAP, fg: theme.foreground.muted, bold: false },
-    ...cells(LOGO_CODE[index]!, theme.foreground.default, shadow(theme.foreground.default), true),
-  ]
+  const row = (index: number) => {
+    const { ragu, code } = colours()
+    return [
+      ...cells(LOGO_RAGU[index]!, ragu, shadow(ragu), false),
+      { text: GAP, fg: ragu, bold: false },
+      ...cells(LOGO_CODE[index]!, code, shadow(code), true),
+    ]
+  }
 
   return (
     <Show
@@ -93,10 +113,10 @@ export function Logo(props: { compact?: boolean }) {
     >
       <box height={1} flexDirection="column">
         <text selectable={false} wrapMode="none">
-          <span style={{ fg: theme.foreground.muted }}>
+          <span style={{ fg: colours().ragu }}>
             <b>RAGU</b>
           </span>
-          <span style={{ fg: theme.foreground.default }}>
+          <span style={{ fg: colours().code }}>
             <b>CODE</b>
           </span>
         </text>
