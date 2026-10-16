@@ -94,6 +94,17 @@ describe("the page has the six tabs and each section in its own", () => {
     expect(view).toContain("hidden={props.shown !== props.tab}")
   })
 
+  test("P2-P5: platforms, routines and memory are drawn the first time and then hidden, so what was typed in them stays", () => {
+    const page = view.slice(view.indexOf("function BotPage"), view.indexOf("function SettingsTab"))
+    expect(page).toContain('seen().has("platforms")')
+    expect(page).toContain('seen().has("routines")')
+    expect(page).toContain('seen().has("memory")')
+    // Not the old way: gone from the page the moment another tab is chosen.
+    expect(page).not.toMatch(/shown\(\) === "(platforms|routines|memory)"/)
+    // Another bot starts over: the seen tabs are forgotten with the bot.
+    expect(page).toContain('setSeen(new Set<BotTab>(["talk"]))')
+  })
+
   test("lint: the page falls back to the conversation when the bot changes", () => {
     const page = view.slice(view.indexOf("function BotPage"), view.indexOf("function SettingsTab"))
     expect(page).toContain('setTab("talk")')

@@ -1805,8 +1805,9 @@ function TabPanel(props: { tab: BotTab; shown: BotTab; scroll?: boolean; childre
 /**
  * The bot's page: the head, the six tabs, and the tab's section at the whole width of the middle.
  * There is no column on the right, so at any width of the window every section is one press away
- * (D2, D12). The conversation and the settings form stay mounted once opened, so what was typed in
- * them is still there when the user comes back; the other sections are drawn when shown.
+ * (D2, D12). A tab's section is drawn the first time it is opened and then only hidden, so what was typed in
+ * it (a bot's code, a routine, a memory) is still there when the user comes back. Permissions is drawn when
+ * shown, so it reads the bot's file again each time. Another bot starts all over.
  */
 function BotPage(props: {
   bot: AgentFile
@@ -1883,7 +1884,7 @@ function BotPage(props: {
         </TabPanel>
       </Show>
 
-      <Show when={shown() === "platforms" ? props.gateway : undefined}>
+      <Show when={seen().has("platforms") ? props.gateway : undefined}>
         {(deps) => (
           <TabPanel tab="platforms" shown={shown()} scroll>
             <div data-slot="bots-tab-body" data-tab="platforms">
@@ -1895,7 +1896,7 @@ function BotPage(props: {
         )}
       </Show>
 
-      <Show when={shown() === "routines"}>
+      <Show when={seen().has("routines")}>
         <TabPanel tab="routines" shown={shown()} scroll>
           <div data-slot="bots-tab-body" data-tab="routines">
             {/* Keyed on the bot, like the gateway: the routine form and its consent tick belong to one bot (full review 2026-10-06, bots 16). */}
@@ -1906,7 +1907,7 @@ function BotPage(props: {
         </TabPanel>
       </Show>
 
-      <Show when={shown() === "memory"}>
+      <Show when={seen().has("memory")}>
         <TabPanel tab="memory" shown={shown()} scroll>
           <div data-slot="bots-tab-body" data-tab="memory">
             <Show when={props.bot.path} keyed>
