@@ -280,6 +280,44 @@ export interface SceneController {
 }
 
 /**
+ * Computes integer scale and positions the scene container within the viewport.
+ * Callable immediately on mount so the status text is positioned correctly before the scene starts.
+ */
+export function layoutSceneContainer(
+  canvas: HTMLCanvasElement,
+  viewportWidth: number,
+  viewportHeight: number,
+  dpr: number = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
+): number {
+  const scale = calculateIntegerScale(viewportWidth, viewportHeight, dpr)
+  const cssWidth = (SCENE_WIDTH * scale) / dpr
+  const cssHeight = (SCENE_HEIGHT * scale) / dpr
+  const left = Math.round((viewportWidth * dpr - SCENE_WIDTH * scale) / 2) / dpr
+  const top = Math.round((viewportHeight * dpr - SCENE_HEIGHT * scale) / 2) / dpr
+
+  canvas.style.width = `${cssWidth}px`
+  canvas.style.height = `${cssHeight}px`
+
+  const scanlinePeriod = `${(2 * scale) / dpr}px`
+  const container = canvas.parentElement
+  if (container && container.getAttribute("data-slot") === "splash-scene-container") {
+    container.style.position = "absolute"
+    container.style.left = `${left}px`
+    container.style.top = `${top}px`
+    container.style.width = `${cssWidth}px`
+    container.style.height = `${cssHeight}px`
+  }
+
+  const splashRoot = canvas.closest?.('[data-component="ade-splash"]') as HTMLElement | null
+  if (splashRoot?.style) {
+    splashRoot.style.setProperty("--splash-scanline-period", scanlinePeriod)
+    splashRoot.style.setProperty("--splash-scanline-offset", `${top}px`)
+  }
+
+  return scale
+}
+
+/**
  * Mounts and starts the pixel-art splash scene on a canvas element.
  * Respects prefers-reduced-motion by rendering a single static frame without running a loop.
  */
@@ -313,34 +351,7 @@ export function startPixelScene(
     viewportWidth: number,
     viewportHeight: number,
     dpr: number = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
-  ): number => {
-    const scale = calculateIntegerScale(viewportWidth, viewportHeight, dpr)
-    const cssWidth = (SCENE_WIDTH * scale) / dpr
-    const cssHeight = (SCENE_HEIGHT * scale) / dpr
-    const left = Math.round((viewportWidth * dpr - SCENE_WIDTH * scale) / 2) / dpr
-    const top = Math.round((viewportHeight * dpr - SCENE_HEIGHT * scale) / 2) / dpr
-
-    canvas.style.width = `${cssWidth}px`
-    canvas.style.height = `${cssHeight}px`
-
-    const scanlinePeriod = `${(2 * scale) / dpr}px`
-    const container = canvas.parentElement
-    if (container && container.getAttribute("data-slot") === "splash-scene-container") {
-      container.style.position = "absolute"
-      container.style.left = `${left}px`
-      container.style.top = `${top}px`
-      container.style.width = `${cssWidth}px`
-      container.style.height = `${cssHeight}px`
-    }
-
-    const splashRoot = canvas.closest?.('[data-component="ade-splash"]') as HTMLElement | null
-    if (splashRoot?.style) {
-      splashRoot.style.setProperty("--splash-scanline-period", scanlinePeriod)
-      splashRoot.style.setProperty("--splash-scanline-offset", `${top}px`)
-    }
-
-    return scale
-  }
+  ): number => layoutSceneContainer(canvas, viewportWidth, viewportHeight, dpr)
 
   const staticBg = createStaticBackground()
 

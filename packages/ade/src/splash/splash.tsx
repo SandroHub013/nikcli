@@ -1,6 +1,6 @@
 import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { t } from "../i18n"
-import { startPixelScene, type SceneController } from "./scene"
+import { layoutSceneContainer, startPixelScene, type SceneController } from "./scene"
 import "./splash.css"
 import { SPLASH_SCENE_DELAY_MS, sceneIsWorthBuilding } from "./timing"
 
@@ -64,7 +64,11 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
 
   const handleResize = () => {
     const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1
-    controller?.resize(window.innerWidth, window.innerHeight, dpr)
+    if (controller) {
+      controller.resize(window.innerWidth, window.innerHeight, dpr)
+    } else if (canvasRef) {
+      layoutSceneContainer(canvasRef, window.innerWidth, window.innerHeight, dpr)
+    }
   }
 
   const getPrefersReducedMotion = () =>
@@ -84,6 +88,9 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
   onMount(() => {
     const canvas = canvasRef
     if (!canvas) return
+    canvas.width = 160
+    canvas.height = 90
+    handleResize()
     const appearedAt = performance.now()
 
     onCleanup(() => {

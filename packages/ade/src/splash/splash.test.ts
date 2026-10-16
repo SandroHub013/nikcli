@@ -7,7 +7,7 @@ compileSolidJsx()
 const { createComponent, createRoot, createSignal } = await import("solid-js")
 const { render } = await import("solid-js/web")
 const { Splash } = await import("./splash")
-const { calculateIntegerScale } = await import("./scene")
+const { calculateIntegerScale, layoutSceneContainer } = await import("./scene")
 
 describe("splash component (step 3)", () => {
   let container: HTMLDivElement
@@ -70,16 +70,59 @@ describe("splash component (step 3)", () => {
     ]
 
     for (const { w, h } of viewports) {
-      const scale = calculateIntegerScale(w, h)
-      const canvasHeight = 90 * scale
-      const canvasTop = (h - canvasHeight) / 2
-      const statusTop = canvasTop + (76 / 90) * canvasHeight // row 76
+      const splash = document.createElement("div")
+      splash.setAttribute("data-component", "ade-splash")
+      const sceneBox = document.createElement("div")
+      sceneBox.setAttribute("data-slot", "splash-scene-container")
+      const cv = document.createElement("canvas")
+      sceneBox.appendChild(cv)
+      splash.appendChild(sceneBox)
+
+      const scale = layoutSceneContainer(cv, w, h, 1)
+      const containerHeight = parseFloat(sceneBox.style.height)
+      const containerTop = parseFloat(sceneBox.style.top)
+      const statusTop = containerTop + (76 / 90) * containerHeight // row 76
       const statusNominalHeight = 16
       const statusBottom = statusTop + statusNominalHeight
       expect(statusBottom).toBeLessThanOrEqual(h)
       // Also verify it sits 3 logical pixels below wordmark (which ends at row 73)
-      const wordmarkBottom = canvasTop + 73 * scale
+      const wordmarkBottom = containerTop + 73 * scale
       expect(statusTop - wordmarkBottom).toBe(3 * scale)
+    }
+  })
+
+  test("positions scene container immediately on mount before delay to prevent status jump (P3-12)", () => {
+    const origWidth = window.innerWidth
+    const origHeight = window.innerHeight
+    const origDpr = window.devicePixelRatio
+    try {
+      window.innerWidth = 1280
+      window.innerHeight = 720
+      window.devicePixelRatio = 1
+
+      const handle = mountSplash({ visible: true, status: "Caricamento..." })
+      try {
+        const containerEl = container.querySelector<HTMLElement>('[data-slot="splash-scene-container"]')
+        expect(containerEl).not.toBeNull()
+        // Container must be positioned and sized immediately on mount at t=0
+        expect(containerEl?.style.position).toBe("absolute")
+        expect(containerEl?.style.width).toBe("1280px")
+        expect(containerEl?.style.height).toBe("720px")
+        expect(containerEl?.style.top).toBe("0px")
+        expect(containerEl?.style.left).toBe("0px")
+
+        const canvas = container.querySelector<HTMLCanvasElement>('[data-slot="splash-canvas"]')
+        expect(canvas?.width).toBe(160)
+        expect(canvas?.height).toBe(90)
+        expect(canvas?.style.width).toBe("1280px")
+        expect(canvas?.style.height).toBe("720px")
+      } finally {
+        handle.dispose()
+      }
+    } finally {
+      window.innerWidth = origWidth
+      window.innerHeight = origHeight
+      window.devicePixelRatio = origDpr
     }
   })
 
@@ -216,6 +259,10 @@ describe("splash component (step 3)", () => {
       resize: 0,
       visibilitychange: 0,
     }
+    const matchMediaListeners = {
+      dpr: 0,
+      motion: 0,
+    }
 
     const origSetTimeout = globalThis.setTimeout
     const origClearTimeout = globalThis.clearTimeout
@@ -229,6 +276,40 @@ describe("splash component (step 3)", () => {
     const origMatchMedia = window.matchMedia
 
     performance.now = () => currentTime
+
+    let reducedMotionActive = false
+    window.matchMedia = (query: string) => {
+      const isMotion = query.includes("prefers-reduced-motion")
+      const isDpr = query.includes("resolution")
+      return {
+        get matches() {
+          return isMotion ? reducedMotionActive : false
+        },
+        media: query,
+        onchange: null,
+        addListener: (cb: any) => {
+          if (isMotion) matchMediaListeners.motion++
+          if (isDpr) matchMediaListeners.dpr++
+        },
+        removeListener: (cb: any) => {
+          if (isMotion) matchMediaListeners.motion--
+          if (isDpr) matchMediaListeners.dpr--
+        },
+        addEventListener: (event: string, cb: any) => {
+          if (event === "change") {
+            if (isMotion) matchMediaListeners.motion++
+            if (isDpr) matchMediaListeners.dpr++
+          }
+        },
+        removeEventListener: (event: string, cb: any) => {
+          if (event === "change") {
+            if (isMotion) matchMediaListeners.motion--
+            if (isDpr) matchMediaListeners.dpr--
+          }
+        },
+        dispatchEvent: () => false,
+      } as any
+    }
 
     globalThis.setTimeout = ((cb: any, ms: number = 0) => {
       const id = nextTimerId++
@@ -307,6 +388,10 @@ describe("splash component (step 3)", () => {
         render(() => createComponent(Splash, { get visible() { return visible() } }), container)
       })
 
+      // Active listeners counted upon mount
+      expect(matchMediaListeners.dpr).toBe(1)
+      expect(matchMediaListeners.motion).toBe(1)
+
       // 1. Advance 299 ms: scene delay is 300 ms, so 0 rAF queued
       advance(299)
       expect(rafs.size).toBe(0)
@@ -330,6 +415,8 @@ describe("splash component (step 3)", () => {
       expect(listeners.keydown).toBe(0)
       expect(listeners.resize).toBe(0)
       expect(listeners.visibilitychange).toBe(0)
+      expect(matchMediaListeners.dpr).toBe(0)
+      expect(matchMediaListeners.motion).toBe(0)
 
       // 4. Remount during fade: true -> false -> true
       setVisibleSignal(true)
@@ -339,29 +426,24 @@ describe("splash component (step 3)", () => {
       setVisibleSignal(false)
       advance(200) // 200ms into fade
       setVisibleSignal(true) // aborted fade, re-activated
-      expect(rafs.size).toBeLessThanOrEqual(1)
+      expect(rafs.size).toBe(1)
 
       // 5. prefersReducedMotion via matchMedia: 0 rAF
-      window.matchMedia = (query: string) => ({
-        matches: query.includes("prefers-reduced-motion: reduce"),
-        media: query,
-        onchange: null,
-        addListener: () => {},
-        removeListener: () => {},
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-      }) as any
+      reducedMotionActive = true
 
       // Unmount previous
       setVisibleSignal(false)
       advance(600)
       expect(rafs.size).toBe(0)
+      expect(matchMediaListeners.dpr).toBe(0)
+      expect(matchMediaListeners.motion).toBe(0)
 
       // Mount again with reduced motion active
       setVisibleSignal(true)
       advance(350)
       expect(rafs.size).toBe(0) // static frame rendered, 0 rAF
+      expect(matchMediaListeners.dpr).toBe(1)
+      expect(matchMediaListeners.motion).toBe(1)
     } finally {
       disposeRoot?.()
       globalThis.setTimeout = origSetTimeout
