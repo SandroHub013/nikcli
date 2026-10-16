@@ -13,10 +13,14 @@ import {
 } from "./scene"
 import {
   BASIL_SIZE,
+  DEVELOPER_POSES,
   DEVELOPER_SPRITE_SIZE,
   LAPTOP_SIZE,
+  POT_FRAMES,
   POT_SPRITE_SIZE,
+  SPLASH_PALETTE,
   TOMATO_SIZE,
+  WORDMARK_GRID,
   WORDMARK_SIZE,
 } from "./sprites"
 
@@ -200,6 +204,66 @@ describe("splash scene renderer (step 2)", () => {
       } finally {
         window.cancelAnimationFrame = origCancel
       }
+    })
+  })
+
+  describe("contrast against ink background (rev2 step 5)", () => {
+    const channel = (v: number) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+    const luminance = (hex: string) => {
+      const r = parseInt(hex.slice(1, 3), 16) / 255
+      const g = parseInt(hex.slice(3, 5), 16) / 255
+      const b = parseInt(hex.slice(5, 7), 16) / 255
+      return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+    }
+    const contrastRatio = (hex1: string, hex2: string) => {
+      const l1 = luminance(hex1)
+      const l2 = luminance(hex2)
+      return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05)
+    }
+
+    test("every non-transparent pixel in the wordmark has contrast >= 1.5 against ink background", () => {
+      let count = 0
+      for (const row of WORDMARK_GRID) {
+        for (const pixel of row) {
+          if (!pixel) continue
+          count++
+          const cr = contrastRatio(pixel, INK_BACKGROUND)
+          expect(cr).toBeGreaterThanOrEqual(1.5)
+        }
+      }
+      expect(count).toBeGreaterThan(100)
+    })
+
+    test("every non-transparent pixel in developer poses has contrast >= 1.5 against ink background", () => {
+      let count = 0
+      for (const pose of DEVELOPER_POSES) {
+        for (const row of pose) {
+          for (const char of row) {
+            if (char === ".") continue
+            count++
+            const color = SPLASH_PALETTE[char]!
+            const cr = contrastRatio(color, INK_BACKGROUND)
+            expect(cr).toBeGreaterThanOrEqual(1.5)
+          }
+        }
+      }
+      expect(count).toBeGreaterThan(1000)
+    })
+
+    test("every non-transparent pixel in pot frames has contrast >= 1.5 against ink background", () => {
+      let count = 0
+      for (const frame of POT_FRAMES) {
+        for (const row of frame) {
+          for (const char of row) {
+            if (char === ".") continue
+            count++
+            const color = SPLASH_PALETTE[char]!
+            const cr = contrastRatio(color, INK_BACKGROUND)
+            expect(cr).toBeGreaterThanOrEqual(1.5)
+          }
+        }
+      }
+      expect(count).toBeGreaterThan(1000)
     })
   })
 })

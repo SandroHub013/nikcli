@@ -66,12 +66,12 @@ describe("splash sprite data (step 1)", () => {
 
     test("pot base and handles match the iconic Ragu pot silhouette at 32x32", () => {
       for (const frame of POT_FRAMES) {
-        expect(frame[30]).toBe(".........aaaaaaaaaaaa...........")
-        expect(frame[29]).toBe(".......aaddddddddddddaa.........")
+        expect(frame[30]).toBe(".........dddddddddddd...........")
+        expect(frame[29]).toBe(".......dddddddddddddddd.........")
         expect(frame[12]).toContain("i")
         expect(frame[13]).toContain("i")
-        expect(frame[17]![0]).toBe("a")
-        expect(frame[17]![31]).toBe("a")
+        expect(frame[17]![0]).toBe("d")
+        expect(frame[17]![31]).toBe("d")
       }
     })
   })
