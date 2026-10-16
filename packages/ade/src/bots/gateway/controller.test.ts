@@ -869,6 +869,29 @@ describe("the gateways' controller", () => {
     expect(b.previews[1]!.text).toBe("Questo è il prefisso prima del segreto: sk-proj-1234567890abcdef ")
   })
 
+  test("preview does not show memory operation tags (P2-N2)", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("ricordati di me")
+    await until("il turno è partito", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+
+    // Text with memory tags
+    const rawWithMemory = 'Risposta normale.\n<ade-memory block="notes" op="add">\nNota da ricordare\n</ade-memory>\nAltra riga di risposta. Coda'
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: rawWithMemory })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(1)
+    expect(b.previews[0]!.text).not.toContain("ade-memory")
+    expect(b.previews[0]!.text).not.toContain("Nota da ricordare")
+    expect(b.previews[0]!.text).toBe("Risposta normale.\n\nAltra riga di risposta. ")
+  })
+
   test("/ferma closes the preview with the stopped message and stops further previewing", async () => {
     const b = bridge()
     const turns = fakeTurns()

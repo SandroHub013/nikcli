@@ -539,7 +539,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         onUpdate: (talk) => {
           const raw = answerSoFar(talk)
           if (raw) {
-            const text = safePreviewText(raw)
+            const text = safePreviewText(takeMemoryOps(raw).text)
             if (text) {
               void sendPreview(text)
             }
