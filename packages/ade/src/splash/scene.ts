@@ -128,27 +128,74 @@ export function drawWordmark(
 }
 
 /**
- * Renders the entire splash cooking scene for a given developer pose and pot frame.
+ * Pre-renders the static background layer (ink background, counter, tomato, basil, laptop, wordmark).
+ */
+export function createStaticBackground(): HTMLCanvasElement | OffscreenCanvas | null {
+  let bgCanvas: any
+  if (typeof document !== "undefined") {
+    bgCanvas = document.createElement("canvas")
+  } else if (typeof OffscreenCanvas !== "undefined") {
+    bgCanvas = new OffscreenCanvas(SCENE_WIDTH, SCENE_HEIGHT)
+  } else {
+    return null
+  }
+  bgCanvas.width = SCENE_WIDTH
+  bgCanvas.height = SCENE_HEIGHT
+  const bgCtx = bgCanvas.getContext("2d")
+  if (!bgCtx) return null
+
+  // 1. Fill ink background
+  bgCtx.fillStyle = INK_BACKGROUND
+  bgCtx.fillRect(0, 0, SCENE_WIDTH, SCENE_HEIGHT)
+
+  // 2. Kitchen counter line
+  bgCtx.fillStyle = COUNTER_COLOR
+  bgCtx.fillRect(16, SCENE_LAYOUT.counter.y, SCENE_WIDTH - 32, 2)
+
+  // 3. Counter fresh ingredients: tomato & basil sprig
+  drawSpriteGrid(bgCtx, TOMATO_SPRITE, SCENE_LAYOUT.tomato.x, SCENE_LAYOUT.tomato.y)
+  drawSpriteGrid(bgCtx, BASIL_SPRITE, SCENE_LAYOUT.basil.x, SCENE_LAYOUT.basil.y)
+
+  // 4. Laptop on desk running ADE code
+  drawSpriteGrid(bgCtx, LAPTOP_SPRITE, SCENE_LAYOUT.laptop.x, SCENE_LAYOUT.laptop.y)
+
+  // 7. Wordmark "Ragù Code" (centered bottom, 50% width / 80px)
+  drawWordmark(bgCtx, SCENE_LAYOUT.wordmark.x, SCENE_LAYOUT.wordmark.y)
+
+  return bgCanvas
+}
+
+/**
+ * Renders the splash cooking scene for a given developer pose and pot frame.
+ * Uses pre-rendered static background if provided to avoid redrawing static elements.
  */
 export function renderScene(
   ctx: CanvasRenderingContext2D,
   devPoseIndex: number,
   potFrameIndex: number,
+  staticBg?: HTMLCanvasElement | OffscreenCanvas | null,
 ): void {
-  // 1. Fill ink background
-  ctx.fillStyle = INK_BACKGROUND
-  ctx.fillRect(0, 0, SCENE_WIDTH, SCENE_HEIGHT)
+  if (staticBg && typeof ctx.drawImage === "function") {
+    ctx.drawImage(staticBg as any, 0, 0)
+  } else {
+    // 1. Fill ink background
+    ctx.fillStyle = INK_BACKGROUND
+    ctx.fillRect(0, 0, SCENE_WIDTH, SCENE_HEIGHT)
 
-  // 2. Kitchen counter / desk line
-  ctx.fillStyle = COUNTER_COLOR
-  ctx.fillRect(16, SCENE_LAYOUT.counter.y, SCENE_WIDTH - 32, 2)
+    // 2. Kitchen counter / desk line
+    ctx.fillStyle = COUNTER_COLOR
+    ctx.fillRect(16, SCENE_LAYOUT.counter.y, SCENE_WIDTH - 32, 2)
 
-  // 3. Counter fresh ingredients: tomato & basil sprig
-  drawSpriteGrid(ctx, TOMATO_SPRITE, SCENE_LAYOUT.tomato.x, SCENE_LAYOUT.tomato.y)
-  drawSpriteGrid(ctx, BASIL_SPRITE, SCENE_LAYOUT.basil.x, SCENE_LAYOUT.basil.y)
+    // 3. Counter fresh ingredients: tomato & basil sprig
+    drawSpriteGrid(ctx, TOMATO_SPRITE, SCENE_LAYOUT.tomato.x, SCENE_LAYOUT.tomato.y)
+    drawSpriteGrid(ctx, BASIL_SPRITE, SCENE_LAYOUT.basil.x, SCENE_LAYOUT.basil.y)
 
-  // 4. Laptop on desk running ADE code
-  drawSpriteGrid(ctx, LAPTOP_SPRITE, SCENE_LAYOUT.laptop.x, SCENE_LAYOUT.laptop.y)
+    // 4. Laptop on desk running ADE code
+    drawSpriteGrid(ctx, LAPTOP_SPRITE, SCENE_LAYOUT.laptop.x, SCENE_LAYOUT.laptop.y)
+
+    // 7. Wordmark "Ragù Code" (centered bottom, 50% width / 80px, CLI half-block)
+    drawWordmark(ctx, SCENE_LAYOUT.wordmark.x, SCENE_LAYOUT.wordmark.y)
+  }
 
   // 5. Canonical Ragu cooking pot (center)
   const potFrame = POT_FRAMES[potFrameIndex] ?? POT_FRAMES[0]!
@@ -157,9 +204,6 @@ export function renderScene(
   // 6. Developer (left, stirring into pot / tasting)
   const devPose = DEVELOPER_POSES[devPoseIndex] ?? DEVELOPER_POSES[0]!
   drawSpriteGrid(ctx, devPose, SCENE_LAYOUT.developer.x, SCENE_LAYOUT.developer.y)
-
-  // 7. Wordmark "Ragù Code" (centered bottom, 50% width / 80px, CLI half-block)
-  drawWordmark(ctx, SCENE_LAYOUT.wordmark.x, SCENE_LAYOUT.wordmark.y)
 }
 
 export interface SceneController {
@@ -224,9 +268,11 @@ export function startPixelScene(
     return scale
   }
 
+  const staticBg = createStaticBackground()
+
   if (reducedMotion) {
     // Static pose: thumbs up (pose 6) and simmering pot (frame 0)
-    renderScene(ctx, 6, 0)
+    renderScene(ctx, 6, 0, staticBg)
     options?.onFirstFrameRendered?.()
     return {
       resize,
@@ -237,6 +283,8 @@ export function startPixelScene(
   }
 
   let firstFrameReported = false
+  let lastDevPoseIndex = -1
+  let lastPotFrameIndex = -1
 
   const tick = (now: number) => {
     animId = null
@@ -244,7 +292,12 @@ export function startPixelScene(
 
     const elapsed = now - startTime
     const { potFrameIndex, devPoseIndex } = getActiveFrames(elapsed)
-    renderScene(ctx, devPoseIndex, potFrameIndex)
+
+    if (potFrameIndex !== lastPotFrameIndex || devPoseIndex !== lastDevPoseIndex) {
+      lastPotFrameIndex = potFrameIndex
+      lastDevPoseIndex = devPoseIndex
+      renderScene(ctx, devPoseIndex, potFrameIndex, staticBg)
+    }
 
     if (!firstFrameReported) {
       firstFrameReported = true

@@ -7,6 +7,7 @@ import {
   SCENE_LAYOUT,
   SCENE_WIDTH,
   calculateIntegerScale,
+  createStaticBackground,
   getActiveFrames,
   renderScene,
   startPixelScene,
@@ -195,6 +196,71 @@ describe("splash scene renderer (step 2)", () => {
       })
 
       expect(drawnRects.length).toBeGreaterThan(100)
+    })
+
+    test("createStaticBackground returns cached canvas with static elements (P2-2)", () => {
+      const bg = createStaticBackground()
+      expect(bg).not.toBeNull()
+      expect(bg?.width).toBe(SCENE_WIDTH)
+      expect(bg?.height).toBe(SCENE_HEIGHT)
+    })
+
+    test("renderScene uses static background drawImage when provided (P2-2)", () => {
+      let drawImageCalls = 0
+      let fillRectCalls = 0
+      const fakeCtx = {
+        fillStyle: "",
+        fillRect: () => { fillRectCalls++ },
+        drawImage: () => { drawImageCalls++ },
+      } as unknown as CanvasRenderingContext2D
+
+      const bg = createStaticBackground()
+      renderScene(fakeCtx, 0, 0, bg)
+
+      expect(drawImageCalls).toBe(1)
+      expect(fillRectCalls).toBeLessThan(900)
+    })
+
+    test("animation loop redraws only when frame index changes (P2-2)", () => {
+      let rAFCallback: ((now: number) => void) | null = null
+      const origRAF = window.requestAnimationFrame
+      window.requestAnimationFrame = (cb: FrameRequestCallback) => {
+        rAFCallback = cb
+        return 1
+      }
+
+      const canvas = document.createElement("canvas")
+      let drawImageCalls = 0
+      let fillRectCalls = 0
+      const mockCtx = {
+        fillStyle: "",
+        fillRect: () => { fillRectCalls++ },
+        drawImage: () => { drawImageCalls++ },
+        imageSmoothingEnabled: false,
+      }
+      canvas.getContext = (() => mockCtx) as any
+
+      try {
+        const controller = startPixelScene(canvas)
+        expect(rAFCallback).not.toBeNull()
+        rAFCallback!(1000)
+        const initialDraws = drawImageCalls
+        expect(initialDraws).toBe(1)
+
+        // Second tick at now = 1016 (only 16ms later, same frame indices) -> no redraw
+        expect(rAFCallback).not.toBeNull()
+        rAFCallback!(1016)
+        expect(drawImageCalls).toBe(initialDraws)
+
+        // Third tick at now = 1130 (130ms later, elapsed crossed 125ms threshold) -> redraw
+        expect(rAFCallback).not.toBeNull()
+        rAFCallback!(1130)
+        expect(drawImageCalls).toBe(initialDraws + 1)
+
+        controller.stop()
+      } finally {
+        window.requestAnimationFrame = origRAF
+      }
     })
   })
 
