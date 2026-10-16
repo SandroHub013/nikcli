@@ -30,8 +30,6 @@ export interface StageDimensions {
   width: number
   height: number
   scale: number
-  left: number
-  top: number
 }
 
 /**
@@ -42,7 +40,6 @@ export interface StageDimensions {
 export function computeStageDimensions(
   viewportWidth: number,
   viewportHeight: number,
-  _dpr: number = 1,
 ): StageDimensions {
   const statusSpace = 48
   const maxW = Math.max(1, viewportWidth * 0.94)
@@ -57,15 +54,11 @@ export function computeStageDimensions(
 
   width = Math.round(width)
   height = Math.round(height)
-  const left = Math.round((viewportWidth - width) / 2)
-  const top = Math.round((viewportHeight - (height + 26)) / 2)
 
   return {
     width,
     height,
     scale: width / REF_WIDTH,
-    left: Math.max(0, left),
-    top: Math.max(0, top),
   }
 }
 
@@ -77,9 +70,8 @@ export function layoutSceneContainer(
   canvas: HTMLCanvasElement,
   viewportWidth: number,
   viewportHeight: number,
-  dpr: number = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
 ): number {
-  const dims = computeStageDimensions(viewportWidth, viewportHeight, dpr)
+  const dims = computeStageDimensions(viewportWidth, viewportHeight)
 
   if (canvas.width !== REF_WIDTH) canvas.width = REF_WIDTH
   if (canvas.height !== REF_HEIGHT) canvas.height = REF_HEIGHT
@@ -102,7 +94,7 @@ export function layoutSceneContainer(
 
 export interface SceneController {
   /** Resizes stage and container matching viewport. */
-  resize: (viewportWidth: number, viewportHeight: number, dpr?: number) => number
+  resize: (viewportWidth: number, viewportHeight: number) => number
   /** Stops the animation loop and frees listeners. */
   stop: () => void
 }
@@ -139,8 +131,7 @@ export function startPixelScene(
   const resize = (
     viewportWidth: number,
     viewportHeight: number,
-    dpr: number = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
-  ): number => layoutSceneContainer(canvas, viewportWidth, viewportHeight, dpr)
+  ): number => layoutSceneContainer(canvas, viewportWidth, viewportHeight)
 
   if (reducedMotion) {
     ctx.clearRect(0, 0, REF_WIDTH, REF_HEIGHT)

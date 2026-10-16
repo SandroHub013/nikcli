@@ -123,28 +123,6 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
     window.addEventListener("resize", handleResize)
     onCleanup(() => window.removeEventListener("resize", handleResize))
 
-    let dprMediaQuery: MediaQueryList | undefined
-    let handleDprChange: (() => void) | undefined
-
-    const setupDprListener = () => {
-      if (typeof window === "undefined" || typeof window.matchMedia !== "function") return
-      if (dprMediaQuery && handleDprChange) {
-        dprMediaQuery.removeEventListener?.("change", handleDprChange)
-      }
-      const dpr = window.devicePixelRatio || 1
-      dprMediaQuery = window.matchMedia(`(resolution: ${dpr}dppx)`)
-      handleDprChange = () => {
-        handleResize()
-        setupDprListener()
-      }
-      dprMediaQuery.addEventListener?.("change", handleDprChange)
-    }
-    setupDprListener()
-    onCleanup(() => {
-      if (dprMediaQuery && handleDprChange) {
-        dprMediaQuery.removeEventListener?.("change", handleDprChange)
-      }
-    })
 
     // Live listener for prefers-reduced-motion changes (P3-5: handles both reduce and turning back on)
     if (typeof window !== "undefined" && typeof window.matchMedia === "function") {

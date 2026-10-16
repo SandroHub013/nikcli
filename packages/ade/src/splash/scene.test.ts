@@ -43,8 +43,8 @@ describe("splash scene renderer and stage layout (clean reference scene)", () =>
         { w: 3840, h: 2160, dpr: 1.5 },
       ]
 
-      for (const { w, h, dpr } of viewports) {
-        const dims = computeStageDimensions(w, h, dpr)
+      for (const { w, h } of viewports) {
+        const dims = computeStageDimensions(w, h)
         expect(dims.width).toBeLessThanOrEqual(w)
         expect(dims.height).toBeLessThanOrEqual(h)
 
@@ -71,7 +71,7 @@ describe("splash scene renderer and stage layout (clean reference scene)", () =>
       document.body.appendChild(container)
 
       try {
-        const scale = layoutSceneContainer(canvas, 1280, 720, 1)
+        const scale = layoutSceneContainer(canvas, 1280, 720)
         expect(canvas.width).toBe(1672)
         expect(canvas.height).toBe(941)
         expect(stage.style.width).toBe("1194px")

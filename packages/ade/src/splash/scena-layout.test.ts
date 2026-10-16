@@ -45,8 +45,8 @@ describe("splash scene responsive stage layout (Passo 2)", () => {
       { name: "3840x2160 4K at 2.0 DPR", w: 3840, h: 2160, dpr: 2 },
     ]
 
-    for (const { w, h, dpr } of testCases) {
-      const dims = computeStageDimensions(w, h, dpr)
+    for (const { w, h } of testCases) {
+      const dims = computeStageDimensions(w, h)
 
       // Width and height stay strictly within viewport
       expect(dims.width).toBeLessThanOrEqual(w)

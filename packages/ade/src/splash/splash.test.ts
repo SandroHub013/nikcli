@@ -112,7 +112,7 @@ describe("splash component (step 3)", () => {
       sceneBox.appendChild(stageBox)
       splash.appendChild(sceneBox)
 
-      layoutSceneContainer(cv, w, h, 1)
+      layoutSceneContainer(cv, w, h)
       const stageHeight = parseFloat(stageBox.style.height)
       const statusNominalHeight = 16
       const gap = 10
@@ -334,8 +334,24 @@ describe("splash component (step 3)", () => {
       visibilitychange: 0,
     }
     const matchMediaListeners = {
-      dpr: 0,
       motion: 0,
+    }
+
+    let pendingDecodePromise: Promise<void> | null = null
+    const origDecode = Image.prototype.decode
+    Image.prototype.decode = function () {
+      const p = origDecode ? origDecode.call(this) : Promise.resolve()
+      pendingDecodePromise = p
+      return p
+    }
+
+    const waitForDecode = async () => {
+      if (pendingDecodePromise) {
+        const p = pendingDecodePromise
+        pendingDecodePromise = null
+        await p.catch(() => {})
+        await Promise.resolve()
+      }
     }
 
     const origSetTimeout = globalThis.setTimeout
@@ -354,7 +370,6 @@ describe("splash component (step 3)", () => {
     let reducedMotionActive = false
     window.matchMedia = (query: string) => {
       const isMotion = query.includes("prefers-reduced-motion")
-      const isDpr = query.includes("resolution")
       return {
         get matches() {
           return isMotion ? reducedMotionActive : false
@@ -363,22 +378,18 @@ describe("splash component (step 3)", () => {
         onchange: null,
         addListener: (cb: any) => {
           if (isMotion) matchMediaListeners.motion++
-          if (isDpr) matchMediaListeners.dpr++
         },
         removeListener: (cb: any) => {
           if (isMotion) matchMediaListeners.motion--
-          if (isDpr) matchMediaListeners.dpr--
         },
         addEventListener: (event: string, cb: any) => {
-          if (event === "change") {
-            if (isMotion) matchMediaListeners.motion++
-            if (isDpr) matchMediaListeners.dpr++
+          if (event === "change" && isMotion) {
+            matchMediaListeners.motion++
           }
         },
         removeEventListener: (event: string, cb: any) => {
-          if (event === "change") {
-            if (isMotion) matchMediaListeners.motion--
-            if (isDpr) matchMediaListeners.dpr--
+          if (event === "change" && isMotion) {
+            matchMediaListeners.motion--
           }
         },
         dispatchEvent: () => false,
@@ -463,7 +474,6 @@ describe("splash component (step 3)", () => {
       })
 
       // Active listeners counted upon mount
-      expect(matchMediaListeners.dpr).toBe(1)
       expect(matchMediaListeners.motion).toBe(1)
 
       // 1. Advance 299 ms: scene delay is 300 ms, so 0 rAF queued
@@ -472,7 +482,7 @@ describe("splash component (step 3)", () => {
 
       // 2. Advance 1 ms (at 300 ms): scene starts, exactly 1 rAF queued
       advance(1)
-      await Promise.resolve()
+      await waitForDecode()
       expect(rafs.size).toBe(1)
 
       // Tick rAF: keeps 1 rAF in queue
@@ -490,13 +500,12 @@ describe("splash component (step 3)", () => {
       expect(listeners.keydown).toBe(0)
       expect(listeners.resize).toBe(0)
       expect(listeners.visibilitychange).toBe(0)
-      expect(matchMediaListeners.dpr).toBe(0)
       expect(matchMediaListeners.motion).toBe(0)
 
       // 4. Remount during fade: true -> false -> true
       setVisibleSignal(true)
       advance(300)
-      await Promise.resolve()
+      await waitForDecode()
       expect(rafs.size).toBe(1)
 
       setVisibleSignal(false)
@@ -511,17 +520,17 @@ describe("splash component (step 3)", () => {
       setVisibleSignal(false)
       advance(600)
       expect(rafs.size).toBe(0)
-      expect(matchMediaListeners.dpr).toBe(0)
       expect(matchMediaListeners.motion).toBe(0)
 
       // Mount again with reduced motion active
       setVisibleSignal(true)
       advance(350)
+      await waitForDecode()
       expect(rafs.size).toBe(0) // static frame rendered, 0 rAF
-      expect(matchMediaListeners.dpr).toBe(1)
       expect(matchMediaListeners.motion).toBe(1)
     } finally {
       disposeRoot?.()
+      Image.prototype.decode = origDecode
       globalThis.setTimeout = origSetTimeout
       globalThis.clearTimeout = origClearTimeout
       window.requestAnimationFrame = origRAF
@@ -552,6 +561,23 @@ describe("splash component (step 3)", () => {
       removeEventListener: (evt: string, fn: any) => {
         if (evt === "change" && changeHandler === fn) changeHandler = undefined
       },
+    }
+
+    let pendingDecodePromise: Promise<void> | null = null
+    const origDecode = Image.prototype.decode
+    Image.prototype.decode = function () {
+      const p = origDecode ? origDecode.call(this) : Promise.resolve()
+      pendingDecodePromise = p
+      return p
+    }
+
+    const waitForDecode = async () => {
+      if (pendingDecodePromise) {
+        const p = pendingDecodePromise
+        pendingDecodePromise = null
+        await p.catch(() => {})
+        await Promise.resolve()
+      }
     }
 
     const origSetTimeout = globalThis.setTimeout
@@ -611,6 +637,7 @@ describe("splash component (step 3)", () => {
       expect(rafs.size).toBe(0)
 
       advance(150) // reaches 300ms delay
+      await waitForDecode()
       expect(rafs.size).toBe(0) // static scene, 0 rAF
     } finally {
       handleA.dispose()
@@ -623,7 +650,7 @@ describe("splash component (step 3)", () => {
     const handleB = mountSplash({ visible: true })
     try {
       advance(300)
-      await Promise.resolve()
+      await waitForDecode()
       expect(rafs.size).toBe(1) // loop active
 
       mockMql.matches = true
@@ -634,6 +661,7 @@ describe("splash component (step 3)", () => {
       expect(rafs.size).toBe(0)
     } finally {
       handleB.dispose()
+      Image.prototype.decode = origDecode
       globalThis.setTimeout = origSetTimeout
       globalThis.clearTimeout = origClearTimeout
       window.requestAnimationFrame = origRAF
