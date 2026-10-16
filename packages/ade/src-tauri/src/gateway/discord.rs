@@ -63,6 +63,43 @@ fn with_gateway_params(url: &str) -> String {
     format!("{url}{sep}v=10&encoding=json")
 }
 
+/// The scheme and the host (with a port, if any) of an address; `None` when it has a user part or no `://`.
+fn scheme_and_authority(url: &str) -> Option<(String, String)> {
+    let (scheme, rest) = url.split_once("://")?;
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    if authority.is_empty() || authority.contains('@') {
+        return None;
+    }
+    Some((scheme.to_ascii_lowercase(), authority.to_ascii_lowercase()))
+}
+
+/// Whether the address Discord gave to resume a session may be followed (S14): `wss` on a host under `discord.gg`.
+/// The address is read from a saved cursor and from `READY`, so it is data from outside, and a socket opened on it
+/// would carry the bot's token (`IDENTIFY`/`RESUME`) to whoever answers. The address the adapter itself was made
+/// with is its own as well (in production that is `gateway.discord.gg`; the tests' gateway is on this machine).
+fn trusted_resume(url: &str, base: &str) -> bool {
+    let Some((scheme, authority)) = scheme_and_authority(url) else { return false };
+    if scheme_and_authority(base).is_some_and(|own| own == (scheme.clone(), authority.clone())) {
+        return true;
+    }
+    let host = authority.strip_suffix(":443").unwrap_or(&authority);
+    scheme == "wss"
+        && host.len() > ".discord.gg".len()
+        && host.ends_with(".discord.gg")
+        && host.split('.').all(|label| !label.is_empty() && label.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-'))
+}
+
+/// A Discord id for a path or an address: digits only (a snowflake is a 64-bit number), never anything that could
+/// add a segment, a query or a way up (S14). The value comes from the page or from Discord, and `/channels/{chat}`
+/// is built from it.
+fn check_id<'a>(what: &str, value: &'a str) -> Result<&'a str, AdapterError> {
+    if (1..=20).contains(&value.len()) && value.bytes().all(|b| b.is_ascii_digit()) {
+        Ok(value)
+    } else {
+        Err(AdapterError::Fatal(format!("{what} di Discord non valido: devono essere solo cifre")))
+    }
+}
+
 /// Discord's message flag that keeps a message's links from being embedded.
 const SUPPRESS_EMBEDS: u64 = 1 << 2;
 /// How many messages one reply may become. A degenerate turn once produced
@@ -603,6 +640,7 @@ impl Core {
     /// Sends `text` in pieces, stopping at the ceiling, and returns the id of
     /// the message that now holds the end of it.
     async fn send_all(&self, chat: &str, text: &str, extra: Option<&Value>) -> Result<String, AdapterError> {
+        check_id("il canale", chat)?;
         let seed = self.shared.nonce_seed.wrapping_add(self.shared.epoch.load(Ordering::SeqCst));
         let mut queue: VecDeque<String> = pieces(text).into();
         if queue.is_empty() {
@@ -632,6 +670,8 @@ impl Core {
             }
         }
         if let Some(extra) = extra {
+            // The id comes from Discord's answer and goes into a path.
+            check_id("il messaggio", &last)?;
             // The buttons go on the last message, whatever the text became.
             // A patch without a content leaves the text as it is.
             let body = json!({ "components": extra["components"].clone(), "allowed_mentions": { "parse": [] }, "flags": SUPPRESS_EMBEDS });
@@ -697,6 +737,19 @@ async fn socket_session(
             ));
         }
         let (address, resume) = match adapter.shared.resumable(now) {
+            // The address to resume on is not Discord's (a saved cursor can say anything): it is not followed and
+            // the session is dropped, so this turn spends an identify on the base address (S14).
+            Some(session) if !trusted_resume(&session.resume_url, first) => {
+                adapter.shared.forget_session();
+                let _ = sender
+                    .send(Err(AdapterError::Transient(
+                        "Discord: l'indirizzo per riprendere la sessione non è di Discord, quindi non lo seguo: la sessione riparte da zero"
+                            .into(),
+                    )))
+                    .await;
+                fresh_identifies += 1;
+                (with_gateway_params(first), None)
+            }
             Some(session) => (with_gateway_params(&session.resume_url), Some(session)),
             // Nothing to resume with, so this turn spends an identify.
             None => {
@@ -997,6 +1050,13 @@ fn to_inbound(d: &Value, shared: &Shared, seq: Option<i64>) -> Option<Inbound> {
 fn confirm_press(d: &Value) -> Option<(String, Value)> {
     let id = id_text(&d["id"])?;
     let token = d["token"].as_str()?;
+    // Both go into the path of the answer: an id of digits, a token of the characters Discord's are made of.
+    if check_id("l'interazione", &id).is_err()
+        || token.is_empty()
+        || !token.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.'))
+    {
+        return None;
+    }
     // 6 is DEFERRED_UPDATE_MESSAGE: the button is answered, the message stays
     // as it is for ADE to edit later.
     Some((format!("/interactions/{id}/{token}/callback"), json!({ "type": 6 })))
@@ -1075,6 +1135,8 @@ impl Adapter for Discord {
     }
 
     async fn edit(&self, chat: &str, message: &str, text: &str) -> Result<String, AdapterError> {
+        check_id("il canale", chat)?;
+        check_id("il messaggio", message)?;
         let key = format!("{chat}/{message}");
         if hold(&self.shared.preview).get(&key).map(String::as_str) == Some(text) {
             // The same text again. Discord would answer with an error and the
@@ -1113,6 +1175,7 @@ impl Adapter for Discord {
     }
 
     async fn typing(&self, chat: &str) -> Result<(), AdapterError> {
+        check_id("il canale", chat)?;
         self.call_patiently(reqwest::Method::POST, &format!("/channels/{chat}/typing"), Some(&json!({})))
             .await
             .map(|_| ())
@@ -1492,7 +1555,7 @@ mod tests {
     fn a_group_message_is_answered_only_when_it_names_the_bot() {
         let shared = shared();
         let named: Value = json!({
-            "id": "c1", "channel_id": "ch1", "guild_id": "9001",
+            "id": "c1", "channel_id": "4001", "guild_id": "9001",
             "content": "ciao <@42>", "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
         let named = to_inbound(&named, &shared, None).expect("messaggio");
@@ -1501,7 +1564,7 @@ mod tests {
         assert!(admits(&named));
 
         let quiet: Value = json!({
-            "id": "c2", "channel_id": "ch1", "guild_id": "9001",
+            "id": "c2", "channel_id": "4001", "guild_id": "9001",
             "content": "si parla di altro", "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
         let quiet = to_inbound(&quiet, &shared, None).expect("messaggio");
@@ -1523,7 +1586,7 @@ mod tests {
         // that trust the list answer each other for ever.
         let shared = shared();
         let quoted: Value = json!({
-            "id": "c9", "channel_id": "ch1", "guild_id": "9001",
+            "id": "c9", "channel_id": "4001", "guild_id": "9001",
             "content": "come stai?",
             "mentions": [{ "id": BOT }],
             "author": { "id": "u1", "username": "qualcuno", "bot": false },
@@ -1552,7 +1615,7 @@ mod tests {
         // Without MESSAGE_CONTENT a guild message the bot was not named in
         // arrives with no text at all: it must not become an empty turn.
         let empty: Value = json!({
-            "id": "m2", "channel_id": "ch1", "guild_id": "9001", "content": "",
+            "id": "m2", "channel_id": "4001", "guild_id": "9001", "content": "",
             "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
         assert!(to_inbound(&empty, &shared, None).is_none());
@@ -1569,7 +1632,7 @@ mod tests {
         ]);
         let gateway = FakeGateway::start(vec![]);
         let discord = adapter(&rest, &gateway);
-        discord.send("ch1", &"a".repeat(4500)).await.expect("inviato");
+        discord.send("4001", &"a".repeat(4500)).await.expect("inviato");
         assert_eq!(rest.count(), 3);
         for nth in 0..3 {
             let body = rest.body_of(nth);
@@ -1586,7 +1649,7 @@ mod tests {
         let rest = FakeRest::start(vec![ok(&json!({ "id": "1" }).to_string())]);
         let gateway = FakeGateway::start(vec![]);
         let discord = adapter(&rest, &gateway);
-        discord.send("ch1", "@everyone @here guardate questo").await.expect("inviato");
+        discord.send("4001", "@everyone @here guardate questo").await.expect("inviato");
         let body = rest.body_of(0);
         assert!(body["content"].as_str().unwrap_or_default().contains("@everyone"));
         assert_eq!(
@@ -1608,7 +1671,7 @@ mod tests {
         // 20.000 characters is ten full messages: the ceiling holds seven and
         // says where the rest went, and the rest is really left out.
         let text = "b".repeat(20_000);
-        let last = discord.send("ch1", &text).await.expect("inviato");
+        let last = discord.send("4001", &text).await.expect("inviato");
         assert_eq!(rest.count(), MAX_PIECES);
         assert_eq!(last, "8");
         let final_body = rest.body_of(MAX_PIECES - 1);
@@ -1630,7 +1693,7 @@ mod tests {
         let gateway = FakeGateway::start(vec![]);
         let discord = adapter(&rest, &gateway);
         let text = format!("```rust\nlet x = 1;\n{}\n```", "let y = 2;\n".repeat(300));
-        discord.send("ch1", &text).await.expect("inviato");
+        discord.send("4001", &text).await.expect("inviato");
         for nth in 0..2 {
             let content = rest.body_of(nth)["content"].as_str().unwrap_or_default().to_string();
             assert_eq!(content.matches("```").count() % 2, 0, "fence aperto in un pezzo: {content}");
@@ -1648,7 +1711,7 @@ mod tests {
         let discord = adapter(&rest, &gateway);
         // Short enough for the adapter's own count, and Discord says otherwise:
         // the platform is the one that decides the limit.
-        let last = discord.send("ch1", &"c".repeat(1900)).await.expect("inviato");
+        let last = discord.send("4001", &"c".repeat(1900)).await.expect("inviato");
         assert_eq!(rest.count(), 3, "un rifiuto e i due mezzi");
         assert_eq!(last, "2");
         for nth in 1..3 {
@@ -1662,7 +1725,7 @@ mod tests {
         let rest = FakeRest::start(vec![refused_with_wait("{}", 0), ok(&json!({ "id": "9" }).to_string())]);
         let gateway = FakeGateway::start(vec![]);
         let discord = adapter(&rest, &gateway);
-        let last = discord.send("ch1", "ciao").await.expect("inviato");
+        let last = discord.send("4001", "ciao").await.expect("inviato");
         assert_eq!(last, "9");
         assert_eq!(rest.count(), 2, "il 429 e poi il tentativo");
         let first = nonce_of(&rest.body_of(0));
@@ -1678,8 +1741,8 @@ mod tests {
         ]);
         let gateway = FakeGateway::start(vec![]);
         let discord = adapter(&rest, &gateway);
-        discord.send("ch1", "msg1").await.expect("inviato 1");
-        discord.send("ch1", "msg2").await.expect("inviato 2");
+        discord.send("4001", "msg1").await.expect("inviato 1");
+        discord.send("4001", "msg2").await.expect("inviato 2");
 
         let body1 = rest.body_of(0);
         let body2 = rest.body_of(1);
@@ -1699,13 +1762,13 @@ mod tests {
         let rest1 = FakeRest::start(vec![ok(&json!({ "id": "1" }).to_string())]);
         let gateway1 = FakeGateway::start(vec![]);
         let discord1 = adapter(&rest1, &gateway1);
-        discord1.send("ch1", "msg").await.expect("inviato 1");
+        discord1.send("4001", "msg").await.expect("inviato 1");
         let nonce1 = rest1.body_of(0)["nonce"].as_str().unwrap().to_string();
 
         let rest2 = FakeRest::start(vec![ok(&json!({ "id": "2" }).to_string())]);
         let gateway2 = FakeGateway::start(vec![]);
         let discord2 = adapter(&rest2, &gateway2);
-        discord2.send("ch1", "msg").await.expect("inviato 2");
+        discord2.send("4001", "msg").await.expect("inviato 2");
         let nonce2 = rest2.body_of(0)["nonce"].as_str().unwrap().to_string();
 
         assert_ne!(nonce1, nonce2, "due adapter che simulano un riavvio devono produrre nonce diversi al primo messaggio");
@@ -1736,9 +1799,9 @@ mod tests {
         let gateway = FakeGateway::start(vec![]);
         let discord = adapter(&rest, &gateway);
         let link = "guarda https://esempio.invalid/?dati=segreti";
-        discord.send("ch1", link).await.expect("inviato");
-        discord.send_buttons("ch1", link, &[Button { label: "Si'".into(), data: "si".into() }]).await.expect("inviato");
-        discord.edit("ch1", "1", &format!("{link} e ancora")).await.expect("modificato");
+        discord.send("4001", link).await.expect("inviato");
+        discord.send_buttons("4001", link, &[Button { label: "Si'".into(), data: "si".into() }]).await.expect("inviato");
+        discord.edit("4001", "1", &format!("{link} e ancora")).await.expect("modificato");
         assert_eq!(rest.count(), 4, "un invio, un invio con la patch dei pulsanti, una modifica");
         for nth in 0..rest.count() {
             let body = rest.body_of(nth);
@@ -1754,10 +1817,10 @@ mod tests {
         ]);
         let gateway = FakeGateway::start(vec![]);
         let discord = adapter(&rest, &gateway);
-        let last = discord.send("ch1", "prima versione").await.expect("inviato");
-        discord.edit("ch1", &last, "una versione nuova").await.expect("modificato");
+        let last = discord.send("4001", "prima versione").await.expect("inviato");
+        discord.edit("4001", &last, "una versione nuova").await.expect("modificato");
         let after_first = rest.count();
-        discord.edit("ch1", &last, "una versione nuova").await.expect("modificato");
+        discord.edit("4001", &last, "una versione nuova").await.expect("modificato");
         assert_eq!(rest.count(), after_first, "lo stesso testo non viaggia: ogni modifica costa un posto nel limite");
     }
 
@@ -1770,7 +1833,7 @@ mod tests {
         let rest = FakeRest::start(vec![ok("{}"), ok(&json!({ "id": "8" }).to_string())]);
         let gateway = FakeGateway::start(vec![]);
         let discord = adapter(&rest, &gateway);
-        let last = discord.edit("ch1", "7", &"d".repeat(4500)).await.expect("modificato");
+        let last = discord.edit("4001", "7", &"d".repeat(4500)).await.expect("modificato");
         assert_eq!(rest.count(), 1, "una modifica e nient'altro");
         assert_eq!(last, "7", "l'id non cambia: e' la stessa risposta che si aggiorna");
         assert!(rest.requests()[0].0.contains("PATCH"));
@@ -1790,7 +1853,7 @@ mod tests {
             "type": 3,
             "token": "TOKEN-INTERAZIONE-DA-NON-MOSTRARE",
             "version": 1,
-            "channel_id": "ch1",
+            "channel_id": "4001",
             "guild_id": if guild { json!("9001") } else { Value::Null },
             "member": if guild { json!({ "user": who }) } else { Value::Null },
             "user": if guild { Value::Null } else { who },
@@ -1839,7 +1902,7 @@ mod tests {
         });
         assert!(to_inbound(&direct, &shared, None).expect("messaggio").private);
         let in_server: Value = json!({
-            "id": "m2", "channel_id": "ch1", "guild_id": "9001",
+            "id": "m2", "channel_id": "4001", "guild_id": "9001",
             "content": "ciao <@42>", "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
         let in_server = to_inbound(&in_server, &shared, None).expect("messaggio");
@@ -1852,7 +1915,7 @@ mod tests {
         let rest = FakeRest::start(vec![ok("{}")]);
         let gateway = FakeGateway::start(vec![]);
         let discord = adapter(&rest, &gateway);
-        discord.edit("ch1", "7", "@everyone guardate").await.expect("modificato");
+        discord.edit("4001", "7", "@everyone guardate").await.expect("modificato");
         let body = rest.body_of(0);
         assert!(body["content"].as_str().unwrap_or_default().contains("@everyone"));
         assert_eq!(
@@ -1871,7 +1934,7 @@ mod tests {
         let gateway = FakeGateway::start(vec![]);
         let discord = adapter(&rest, &gateway);
         discord
-            .send_buttons("ch1", "vuoi continuare?", &[Button { label: "Si'".into(), data: "continua".into() }])
+            .send_buttons("4001", "vuoi continuare?", &[Button { label: "Si'".into(), data: "continua".into() }])
             .await
             .expect("inviato");
         let component = &rest.body_of(1)["components"][0]["components"][0];
@@ -1891,7 +1954,7 @@ mod tests {
             .map(|i| Button { label: format!("b{i}"), data: format!("d{i}") })
             .collect();
         discord
-            .send_buttons("ch1", "scegli", &buttons)
+            .send_buttons("4001", "scegli", &buttons)
             .await
             .expect("inviato");
         let body = rest.body_of(1);
@@ -1930,7 +1993,7 @@ mod tests {
     #[test]
     fn a_press_becomes_a_message_with_its_data_and_a_command_does_not() {
         let press: Value = json!({
-            "id": "i1", "channel_id": "ch1", "channel_type": 0, "type": 3,
+            "id": "i1", "channel_id": "4001", "channel_type": 0, "type": 3,
             "data": { "custom_id": "continua" },
             "member": { "user": { "id": "u1", "username": "qualcuno" } },
         });
@@ -1939,7 +2002,7 @@ mod tests {
         assert_eq!(inbound.text, "continua");
         assert_eq!(inbound.sender.id, "u1");
         // A slash command is not a press under a message.
-        let command: Value = json!({ "id": "i2", "channel_id": "ch1", "type": 2, "data": { "custom_id": "x" } });
+        let command: Value = json!({ "id": "i2", "channel_id": "4001", "type": 2, "data": { "custom_id": "x" } });
         assert!(to_press(&command, None).is_none());
     }
 
@@ -2133,6 +2196,87 @@ mod tests {
         set_jitter(&discord, 0);
         start(&discord).await;
         assert!(gateway.wait_for(2, 1).await, "una sessione scaduta si identifica di nuovo");
+    }
+
+    /* S14: what is put into a path or an address is checked first. */
+
+    #[test]
+    fn a_resume_address_is_followed_only_on_discord_over_wss() {
+        let base = "wss://gateway.discord.gg/?v=10&encoding=json";
+        for good in [
+            "wss://gateway-us-east1-b.discord.gg",
+            "wss://gateway-us-east1-b.discord.gg/?v=10&encoding=json",
+            "wss://gateway-us-east1-b.discord.gg:443/",
+            "WSS://Gateway.Discord.GG/",
+        ] {
+            assert!(trusted_resume(good, base), "{good}");
+        }
+        for bad in [
+            "ws://gateway.discord.gg",
+            "wss://evil.example.com/",
+            "wss://evil.example.com/.discord.gg",
+            "wss://evil.example.com?x=.discord.gg",
+            "wss://evil.example.com#.discord.gg",
+            "wss://gateway.discord.gg@evil.example.com/",
+            "wss://gateway.discord.gg.evil.example.com/",
+            "wss://gateway.discord.gg:8443/",
+            "wss://discord.gg/",
+            "wss://.discord.gg/",
+            "wss://a..discord.gg/",
+            "wss://evil.example.com:443@gateway.discord.gg/",
+            "https://gateway.discord.gg/",
+            "gateway.discord.gg",
+            "",
+        ] {
+            assert!(!trusted_resume(bad, base), "{bad}");
+        }
+        // The address the adapter itself was made with is its own: the tests' gateway is on this machine.
+        assert!(trusted_resume("ws://127.0.0.1:5000/?v=10", "ws://127.0.0.1:5000"));
+        assert!(!trusted_resume("ws://127.0.0.1:5001/", "ws://127.0.0.1:5000"));
+    }
+
+    #[tokio::test]
+    async fn a_saved_session_with_a_foreign_resume_address_identifies_on_the_base_address_instead() {
+        let rest = FakeRest::start(vec![]);
+        let gateway = FakeGateway::start(vec![vec![hello(60)]]);
+        let cursor = serde_json::to_string(&Session {
+            session_id: "S-ALTRUI".into(),
+            seq: 9,
+            resume_url: "wss://evil.example.com/".into(),
+            at_ms: 0,
+        })
+        .expect("cursore");
+        let discord = Discord::at(&gateway.address, &rest.address, TOKEN, Some(cursor)).expect("adapter");
+        set_jitter(&discord, 0);
+        start(&discord).await;
+        assert!(gateway.wait_for(2, 1).await, "un indirizzo che non e' di Discord non si segue: si identifica sulla base");
+        assert_eq!(gateway.op(6), None, "nessun resume verso un indirizzo estraneo");
+        let saved = discord.cursor().unwrap_or_default();
+        assert!(!saved.contains("evil.example.com"), "{saved}");
+    }
+
+    #[test]
+    fn only_digits_are_an_id_for_a_path() {
+        assert!(check_id("canale", "123456789012345678").is_ok());
+        for bad in ["", "ch1", "1/../../users/@me", "12 34", "1?x=1", "1#", "١٢٣", "-1", "123456789012345678901234567890"] {
+            assert!(check_id("canale", bad).is_err(), "{bad:?}");
+        }
+        assert!(confirm_press(&json!({ "id": "5001", "token": "abc_DEF-123.x" })).is_some());
+        assert!(confirm_press(&json!({ "id": "5001", "token": "../../channels/1" })).is_none());
+        assert!(confirm_press(&json!({ "id": "5001/../x", "token": "abc" })).is_none());
+    }
+
+    #[tokio::test]
+    async fn a_value_that_is_not_an_id_never_reaches_the_rest_api() {
+        let rest = FakeRest::start(vec![]);
+        let gateway = FakeGateway::start(vec![]);
+        let discord = adapter(&rest, &gateway);
+        assert!(discord.send("1/../../users/@me", "ciao").await.is_err());
+        assert!(discord.send_buttons("ch1", "ciao", &[]).await.is_err());
+        assert!(discord.edit("4001", "7/../../x", "ciao").await.is_err());
+        assert!(discord.edit("..", "7", "ciao").await.is_err());
+        assert!(discord.typing("4001?x=1").await.is_err());
+        assert!(rest.requests().is_empty(), "{:?}", rest.requests());
     }
 
     #[tokio::test]

@@ -873,6 +873,7 @@ export const en: Messages = {
   "gateway.panel.lastMessage": (time) => `last message at ${time}`,
   "gateway.panel.redacted": (time) =>
     `The message at ${time} held a key: it was hidden, the bot did not see it and it was not saved.`,
+  "gateway.panel.turnFailed": (time, detail) => `Last chat turn that failed (${time}): ${detail}`,
   "gateway.panel.token": "Bot token",
   "gateway.panel.tokenHelp":
     "Paste the token BotFather gave you. It stays in the system keychain: ADE never shows it again.",

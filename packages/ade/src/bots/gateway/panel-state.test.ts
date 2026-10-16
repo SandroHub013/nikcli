@@ -12,6 +12,7 @@ import {
   type PairingInfo,
   type PairingRequest,
 } from "./panel-state"
+import { forgetTurnFailures, noteTurnFailure } from "./failures"
 import { memoryRemoteStore, REMOTE_OFF, remoteKey } from "./remote"
 
 /*
@@ -192,6 +193,25 @@ describe("the Gateway section of a bot's card", () => {
     expect(panel.redactedAt()).toBe(Date.UTC(2026, 8, 25, 10, 30))
     panel.dispose()
     expect(fake.stopped()).toBe(true)
+  })
+
+  test("the last failed turn of this bot and platform is shown, and follows a new one (S10)", async () => {
+    forgetTurnFailures()
+    noteTurnFailure(BOT.path, "telegram", "prima del pannello", 1)
+    const fake = fakeApi()
+    const { panel } = panelWith(fake)
+    await panel.ready
+    expect(panel.turnFailure()).toEqual({ at: 1, detail: "prima del pannello" })
+    noteTurnFailure("C:/altro.md", "telegram", "di un altro bot", 2)
+    noteTurnFailure(BOT.path, "discord", "di un'altra piattaforma", 3)
+    expect(panel.turnFailure()).toEqual({ at: 1, detail: "prima del pannello" })
+    noteTurnFailure(BOT.path, "telegram", "dopo", 4)
+    expect(panel.turnFailure()).toEqual({ at: 4, detail: "dopo" })
+    panel.choose("discord")
+    expect(panel.turnFailure()).toEqual({ at: 3, detail: "di un'altra piattaforma" })
+    panel.dispose()
+    noteTurnFailure(BOT.path, "discord", "a pannello chiuso", 5)
+    forgetTurnFailures()
   })
 
   test("a request to pair shows up at once, can be refused, and a code pairs", async () => {

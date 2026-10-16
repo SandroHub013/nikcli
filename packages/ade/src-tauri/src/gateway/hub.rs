@@ -1101,6 +1101,11 @@ impl Task {
         };
         if let Err(error) = self.adapter.send(&message.chat, &code_message(&code)).await {
             self.env.log(&format!("{tag}: codice di abbinamento non mandato: {}", redact(&error.message(), &self.secrets)));
+            // Nobody has a code: the request goes, and the stranger may write again at once (S12).
+            let _ = self.store.update(&self.bot, self.platform, |link, _| {
+                link.pairing.undo(&pending.request);
+                Ok(())
+            });
             return;
         }
         self.env.log(&format!("{tag}: codice di abbinamento mandato a un mittente non autorizzato"));
@@ -2271,5 +2276,23 @@ mod tests {
         // Writing again, they get a new one.
         feed.send(Ok(vec![message("2", "c7", "7", "di nuovo")])).unwrap();
         eventually("un codice nuovo", || adapter.sent.lock().unwrap().len() == 2).await;
+    }
+
+    /* S12 (review of the bots): a request whose code could not be sent is taken back. */
+    #[tokio::test]
+    async fn a_code_that_could_not_be_sent_leaves_no_request_and_the_stranger_may_write_again() {
+        let s = setup("undo-send");
+        let (adapter, feed) = start(&s);
+        adapter.fail_sends.store(true, std::sync::atomic::Ordering::SeqCst);
+        feed.send(Ok(vec![message("1", "c7", "7", "io")])).unwrap();
+        eventually("il tentativo", || adapter.send_attempts.load(std::sync::atomic::Ordering::SeqCst) == 1).await;
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        assert!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().pending.is_empty(), "una richiesta senza un codice mandato");
+        assert!(s.env.pairings.lock().unwrap().is_empty());
+        // The chat answers again: the same stranger gets a code at once, not after ten minutes.
+        adapter.fail_sends.store(false, std::sync::atomic::Ordering::SeqCst);
+        feed.send(Ok(vec![message("2", "c7", "7", "di nuovo")])).unwrap();
+        eventually("il codice", || adapter.sent.lock().unwrap().len() == 1).await;
+        assert_eq!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().pending.len(), 1);
     }
 }

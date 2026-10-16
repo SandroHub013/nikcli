@@ -38,6 +38,7 @@ import { BOT_TURN_TIMEOUT_MS } from "../controller"
 import { memorySnapshot, settleMemoryOps, takeMemoryOps, type MemoryOp, type MemoryStore } from "../memory"
 import type { Talk } from "../talk"
 import { permissionAnswerer } from "./approval"
+import { noteTurnFailure } from "./failures"
 import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
 import type { BotAccount } from "../account"
 import { offersRemoteCommands, REMOTE_OFF, remoteTools, type RemoteSetting } from "./remote"
@@ -266,8 +267,11 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
   }
 
   /** Why a turn failed, for ADE's own log; never for the chat. */
-  const failure = (message: GatewayMessage, problem: string) =>
+  const failure = (message: GatewayMessage, problem: string) => {
     warn(`ADE: turno del gateway non riuscito (${message.platform}): ${problem}`)
+    // The gateway panel shows the last one of this bot, where the owner can read it (S10).
+    noteTurnFailure(message.bot, message.platform, problem, now())
+  }
 
   const command = async (message: GatewayMessage, key: string, which: string) => {
     const state = stateOf(key)

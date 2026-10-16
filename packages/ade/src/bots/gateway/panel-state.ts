@@ -20,6 +20,7 @@ import { createSignal, type Accessor } from "solid-js"
 import { t } from "../../i18n"
 import type { AgentFile } from "../ragu"
 import type { GatewayMessage } from "./controller"
+import { onTurnFailure, turnFailureOf } from "./failures"
 import { offersRemoteCommands, REMOTE_OFF, remoteKey, type RemoteStore } from "./remote"
 
 export interface Sender {
@@ -157,6 +158,10 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
   const [problem, setProblem] = createSignal<string>()
   const [probed, setProbed] = createSignal<string>()
   const [redactedAt, setRedactedAt] = createSignal<number>()
+  // The last chat turn that failed (S10): read again whenever one is noted or the platform changes.
+  const [failureTick, setFailureTick] = createSignal(0)
+  const stopFailures = onTurnFailure(() => setFailureTick((tick) => tick + 1))
+  const turnFailure = () => (failureTick(), turnFailureOf(path(), platform()))
   const [confirmingRemote, setConfirmingRemote] = createSignal(false)
   const [remote, setRemote] = createSignal(deps.remote.get(remoteKey(path(), platform())))
 
@@ -263,6 +268,7 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
     problem,
     probed,
     redactedAt,
+    turnFailure,
     remote,
     confirmingRemote,
     /** Whether the remote commands switch means anything for this bot. */
@@ -355,6 +361,7 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
 
     dispose: () => {
       disposed = true
+      stopFailures()
       unlisten?.()
     },
   }

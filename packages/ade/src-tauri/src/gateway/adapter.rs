@@ -201,6 +201,10 @@ pub mod fake {
         pub position: Mutex<Option<String>>,
         /// What `unread` reports.
         pub waiting: std::sync::atomic::AtomicUsize,
+        /// While set, `send` fails: the stranger's chat is unreachable.
+        pub fail_sends: std::sync::atomic::AtomicBool,
+        /// How many times `send` was called, failed or not.
+        pub send_attempts: std::sync::atomic::AtomicUsize,
     }
 
     pub type Feed = mpsc::UnboundedSender<Result<Vec<Inbound>, AdapterError>>;
@@ -217,6 +221,8 @@ pub mod fake {
                 receives: std::sync::atomic::AtomicUsize::new(0),
                 position: Mutex::new(None),
                 waiting: std::sync::atomic::AtomicUsize::new(0),
+                fail_sends: std::sync::atomic::AtomicBool::new(false),
+                send_attempts: std::sync::atomic::AtomicUsize::new(0),
             };
             (std::sync::Arc::new(adapter), tx)
         }
@@ -236,6 +242,10 @@ pub mod fake {
             }
         }
         async fn send(&self, chat: &str, text: &str) -> Result<String, AdapterError> {
+            self.send_attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if self.fail_sends.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err(AdapterError::Transient("rete giù".into()));
+            }
             let mut sent = self.sent.lock().unwrap();
             sent.push((chat.into(), text.into()));
             Ok(format!("m{}", sent.len()))
