@@ -688,6 +688,33 @@ describe("un turno da chat non ha la shell", () => {
   })
 
   /*
+   * bot-lettura-2: da chat e nelle routine un elenco chiuso (`--tools`), così uno strumento nuovo di Claude Code non
+   * entra da solo: `Agent`, `CronCreate`, `ScheduleWakeup`, `EnterWorktree`, `Skill` erano offerti. Provato su 2.1.301
+   * con un finto provider: offerti solo quelli nominati, e un nome sconosciuto si ignora.
+   */
+  test("Claude: da chat e nelle routine solo gli strumenti voluti", () => {
+    const own: AgentFile = { ...mine, runner: "claude" }
+    const tools = (spec: object, b: AgentFile = own) => {
+      const { args } = turnCommand(runnerById("claude"), { bot: b, message: "x", ...spec })
+      return args.includes("--tools") ? (args[args.indexOf("--tools") + 1] ?? "").split(",").sort() : undefined
+    }
+    const reads = ["Glob", "Grep", "Read", "TaskCreate", "TaskGet", "TaskList", "TaskUpdate", "TodoWrite"]
+    const writes = ["Edit", "NotebookEdit", "Write"]
+    for (const remote of [off, on]) expect([remote, tools({ remote })]).toEqual([remote, [...reads, ...writes].sort()])
+    for (const spec of [{ unattended: true }, { unattended: true, lean: true }]) expect(tools(spec)).toEqual(reads)
+    expect(tools({ remote: off }, { ...own, disabledTools: ["edit", "write"] })).toEqual(reads)
+    expect(tools({ remote: off }, { ...own, disabledTools: ["read", "todowrite"] })).toEqual(
+      ["Glob", "Grep", ...writes].sort(),
+    )
+    // Un bot di progetto da chat scrive nel progetto, fuori dalle cartelle che eseguono dopo.
+    expect(tools({ remote: off }, { ...own, scope: "project" })).toEqual([...reads, ...writes].sort())
+    // Nel pannello nessun elenco; il pianificatore della voce resta senza strumenti.
+    expect(tools({ lean: true })).toBeUndefined()
+    expect(tools({})).toBeUndefined()
+    expect(tools({ remote: off, noTools: true })).toEqual([""])
+  })
+
+  /*
    * `ListAgents` e `SendMessage` di Claude Code girano in `-p` senza domanda (claude 2.1.301, finto provider): da
    * telefono un turno poteva scrivere a un'altra sessione Claude della macchina, magari in `bypassPermissions`. Nel
    * pannello pure (bot-lettura-2): i bot parlano alle sessioni con `ade-msg`, che passa da ADE.

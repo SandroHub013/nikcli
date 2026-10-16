@@ -464,6 +464,15 @@ const UNWATCHED_ALLOWED: Readonly<Record<string, readonly string[]>> = {
 const UNWATCHED_SETTINGS = '{"autoMemoryEnabled":false,"permissions":{"blockReadsOutsideWorkingDirectories":true}}'
 
 /*
+ * From a chat and in a routine Claude Code is offered these tools and no other (`--tools`), so one a new Claude Code
+ * adds does not come in by itself: `Agent`, `CronCreate`, `ScheduleWakeup`, `EnterWorktree`, `Skill` were offered
+ * there (bot-lettura-2). Writing only when the turn writes. Checked on 2.1.301 with a fake provider: only the named
+ * ones are offered, and an unknown name is ignored.
+ */
+const UNWATCHED_TOOLS: readonly string[] = ["read", "grep", "glob", "todowrite"]
+const UNWATCHED_WRITE_TOOLS: readonly string[] = ["edit", "write"]
+
+/*
  * Claude Code's messages to the other Claude sessions on the machine: `ListAgents` and `SendMessage` run in `-p` with
  * no question (2.1.301, the same fake provider), so a turn could ask another session, one in `bypassPermissions` say,
  * to do what it may not. Refused on every turn: a bot talks to the sessions with `ade-msg`, through ADE. They have no
@@ -624,6 +633,12 @@ export function turnCommand(
         // Nothing to allow and nothing to refuse: with no tool there is no `ade-msg` to run either.
         args.push("--tools", "")
       } else {
+        if (unwatched) {
+          const offered = [...UNWATCHED_TOOLS, ...(canWrite(bot) && !unattended ? UNWATCHED_WRITE_TOOLS : [])]
+            .filter((tool) => !bot.disabledTools.includes(tool))
+            .flatMap((tool) => CLAUDE_TOOLS[tool] ?? [])
+          args.push("--tools", offered.join(","))
+        }
         if (allowed.length > 0) args.push("--allowedTools", allowed.join(","))
         if (disallowed.length > 0) args.push("--disallowedTools", disallowed.join(","))
       }
