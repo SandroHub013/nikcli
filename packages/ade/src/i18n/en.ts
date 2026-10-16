@@ -995,6 +995,17 @@ export const en: Messages = {
   "gateway.panel.moveProject": (from, to) =>
     `This bot on this messaging app ran in:\n${from}\n\nSwitched on now, chat turns will run in:\n${to}\n\nSwitch on in this project?`,
   "gateway.panel.pairingOpenUntil": (time) => `Whoever writes to the bot until ${time} gets a code.`,
+  "gateway.panel.linkMake": "Show the QR",
+  "gateway.panel.linkNeedsOn": "Switch the messaging app on first: only while it is on does the bot hear the pairing.",
+  "gateway.panel.linkAnother": "Another QR",
+  "gateway.panel.linkOpen": (address) => `Open ${address} on this computer`,
+  "gateway.panel.linkHow": "Scan the QR with your phone's camera: Telegram opens on the bot, tap Start and you are paired. It lasts 10 minutes and works once.",
+  "gateway.panel.linkLeft": (clock) => `${clock} left`,
+  "gateway.panel.linkExpired": "The QR has expired: make another one.",
+  "gateway.panel.linkDone": (name) => `Paired: ${name}.`,
+  "gateway.panel.linkFallback": "Can't? Write to the bot and enter the code it answers with here.",
+  "gateway.panel.linkQrAlt": "QR to pair your phone with the bot on Telegram",
+  "gateway.panel.linkMissing": "This version of ADE cannot make the QR: use the code.",
   "gateway.panel.remote": "Remote commands",
   "gateway.panel.remoteNeverCodex": (runner) =>
     `From a chat this bot runs only commands that read, without asking: ${runner} cannot ask you command by command.`,

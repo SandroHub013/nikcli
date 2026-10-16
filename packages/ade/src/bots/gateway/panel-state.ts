@@ -65,6 +65,13 @@ export interface PairingRequest {
   readonly expiresMs: number
 }
 
+/** A link and a QR for the owner's phone (Telegram): the address with the token in it, its picture, and when it stops. */
+export interface PairingLinkInfo {
+  readonly url: string
+  readonly svg: string
+  readonly expiresMs: number
+}
+
 export interface PairingInfo {
   readonly open: boolean
   readonly openUntilMs?: number | null
@@ -91,6 +98,8 @@ export interface GatewayPanelApi {
   pairingReject: (bot: string, platform: string, request: string) => Promise<void>
   pairingRevoke: (bot: string, platform: string, sender: string) => Promise<void>
   pairingOpen: (bot: string, platform: string) => Promise<number>
+  /** A link and a QR for the owner's phone: good for ten minutes and once, a new one cancels the old. Telegram only. */
+  pairingLink?: (bot: string, platform: string) => Promise<PairingLinkInfo>
   /** `gateway:status`, `gateway:pairing` and `gateway:message`; resolves with the way to stop. */
   listen: (handlers: {
     status: (status: LinkStatus) => void
@@ -119,6 +128,8 @@ export interface GatewayPanelDeps {
   readonly now?: () => number
   /** Opens a page (BotFather, the developer portal) in the system browser; absent, the step shows the address. */
   readonly openLink?: (url: string) => void
+  /** How often the panel asks whether the link was used while one is shown. Absent, 2.5 seconds; a test passes its own. */
+  readonly linkPollMs?: number
 }
 
 const OFF: GatewayStatus = {
@@ -176,6 +187,14 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
   const stopFailures = onTurnFailure(() => setFailureTick((tick) => tick + 1))
   const turnFailure = () => (failureTick(), turnFailureOf(path(), platform()))
   const [confirmingRemote, setConfirmingRemote] = createSignal(false)
+  // The link or QR being shown, and the name of the account it paired once it did. Only in memory: the token is in `url`.
+  const [pairLink, setPairLink] = createSignal<PairingLinkInfo>()
+  const [linked, setLinked] = createSignal<string>()
+  let poll: ReturnType<typeof setInterval> | undefined
+  const stopPoll = () => {
+    if (poll !== undefined) clearInterval(poll)
+    poll = undefined
+  }
   const [remote, setRemote] = createSignal(deps.remote.get(remoteKey(path(), platform())))
 
   const refresh = async () => {
@@ -299,10 +318,17 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
       setProblem(undefined)
       setProblemArea(undefined)
       setRedactedAt(undefined)
+      // The link was for the other platform's bot.
+      stopPoll()
+      setPairLink(undefined)
+      setLinked(undefined)
       void refresh()
     },
     link,
     pairing,
+    pairLink,
+    /** The account the link just paired, until the next one is made. */
+    linked,
     draft,
     setDraft,
     appDraft,
@@ -409,6 +435,30 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
     reject: (request: string) => act(() => deps.api.pairingReject(path(), platform(), request), "pair"),
     revoke: (sender: string) => act(() => deps.api.pairingRevoke(path(), platform(), sender), "pair"),
     openPairing: () => act(() => deps.api.pairingOpen(path(), platform()), "pair"),
+    /**
+     * A new link and QR (the old one is cancelled by Rust). While it is shown the panel asks every few seconds whether it
+     * was used: the account that appears among the authorized is the one it paired, and the QR goes.
+     */
+    makeLink: () =>
+      act(async () => {
+        const make = deps.api.pairingLink
+        if (!make) throw new Error(t("gateway.panel.linkMissing"))
+        stopPoll()
+        setLinked(undefined)
+        const known = new Set(pairing().authorized.map((account) => account.id))
+        const made = await make(path(), platform())
+        setPairLink(made)
+        poll = setInterval(() => {
+          if (disposed || now() >= made.expiresMs) return stopPoll()
+          void refresh().then(() => {
+            const added = pairing().authorized.find((account) => !known.has(account.id))
+            if (!added || pairLink() !== made) return
+            setLinked(added.name)
+            setPairLink(undefined)
+            stopPoll()
+          })
+        }, deps.linkPollMs ?? 2500)
+      }, "pair"),
 
     /** The first step: the panel says what turning them on means, and waits for the yes. */
     askRemote: () => {
@@ -437,6 +487,7 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
 
     dispose: () => {
       disposed = true
+      stopPoll()
       stopFailures()
       unlisten?.()
     },
