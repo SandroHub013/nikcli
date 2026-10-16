@@ -578,6 +578,9 @@ impl Core {
             if let Some(code) = described["code"].as_i64() {
                 description = format!("{description} ({code})");
             }
+            if !described["errors"].is_null() {
+                description = format!("{description}: {}", described["errors"]);
+            }
             return Err(Failure::Api { status, description, retry_after });
         }
         if bytes.is_empty() {
@@ -1703,7 +1706,20 @@ mod tests {
     #[tokio::test]
     async fn discord_says_the_text_is_too_long_and_the_piece_is_cut_in_two() {
         let rest = FakeRest::start(vec![
-            refused(&json!({ "message": "Must be 2000 or fewer in length." }).to_string()),
+            refused(&json!({
+                "code": 50035,
+                "message": "Invalid Form Body",
+                "errors": {
+                    "content": {
+                        "_errors": [
+                            {
+                                "code": "BASE_TYPE_MAX_LENGTH",
+                                "message": "Must be 2000 or fewer in length."
+                            }
+                        ]
+                    }
+                }
+            }).to_string()),
             ok(&json!({ "id": "1" }).to_string()),
             ok(&json!({ "id": "2" }).to_string()),
         ]);
