@@ -833,7 +833,7 @@ export function routineName(prompt: string, max = 40): string {
   const room = letters.slice(0, max - 1).join("")
   const space = room.lastIndexOf(" ")
   const whole = /\s/.test(letters[max - 1] ?? "") || space < room.length / 2 ? room : room.slice(0, space)
-  return `${whole.replace(/[\s,;:(\[{–-]+$/, "") || room}…`
+  return `${whole.replace(/[\s,;:([{–-]+$/, "") || room}…`
 }
 
 export function routineHeadText(head: RoutineHeadline, now: number): string {
