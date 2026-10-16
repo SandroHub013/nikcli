@@ -946,6 +946,8 @@ export const it = {
   "gateway.panel.onlyYours": "Abbina solo un tuo account: chi abbini comanda il bot sul tuo PC e sui tuoi abbonamenti.",
   "gateway.panel.expires": (time: string) => `scade alle ${time}`,
   "gateway.panel.reject": "Rifiuta",
+  "gateway.panel.rejectQuestion": (name: string) => `Rifiutare la richiesta di «${name}»? Per 24 ore non potrà chiedere un nuovo codice.`,
+  "gateway.panel.rejectConfirm": "Rifiuta",
   "gateway.panel.code": "Codice di abbinamento",
   "gateway.panel.approve": "Abbina",
   "gateway.panel.locked": (time: string) => `Troppi codici sbagliati: abbinamento bloccato fino alle ${time}.`,

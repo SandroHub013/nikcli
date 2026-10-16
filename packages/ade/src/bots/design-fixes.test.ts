@@ -44,7 +44,7 @@ describe("D25: every irreversible action asks the same way", () => {
   test("lint: routines, memory, the bot's code, the accounts, the rooms and the bot itself use the one confirmation", () => {
     expect(routines).toContain("<ConfirmAction")
     expect(memory).toContain("<ConfirmAction")
-    expect(gateway.match(/<ConfirmAction/g)?.length).toBe(2)
+    expect(gateway.match(/<ConfirmAction/g)?.length).toBe(3)
     expect(rooms).toContain("<ConfirmAction")
     expect(view.slice(view.indexOf("function SettingsTab"))).toContain("<ConfirmAction")
   })
@@ -54,6 +54,12 @@ describe("D25: every irreversible action asks the same way", () => {
     expect(memory).not.toContain("onClick={() => drop(block, at())}")
     expect(gateway).not.toContain("onClick={() => void panel.clearToken()}")
     expect(gateway).not.toContain("onClick={() => void panel.revoke(")
+    // P2-P4: a refusal shuts the account out for 24 hours, so it asks, and the server counts from the press.
+    expect(gateway).not.toContain("onClick={() => void panel.reject(")
+    const hub = readFileSync(join(import.meta.dir, "../../src-tauri/src/gateway/hub.rs"), "utf8")
+    const reject = hub.slice(hub.indexOf("pub fn pairing_reject"), hub.indexOf("/* ── the panel"))
+    expect(reject).toContain("link.pairing.reject_at(request, now)")
+    expect(reject).toContain("self.env.now_ms()")
     expect(view.slice(view.indexOf("remove: async (roomId)"), view.indexOf("payOf,\n}"))).not.toContain("askYesNo")
   })
 
@@ -63,6 +69,7 @@ describe("D25: every irreversible action asks the same way", () => {
         "bots.routine.removeQuestion",
         "bots.memory.removeQuestion",
         "gateway.panel.revokeQuestion",
+        "gateway.panel.rejectQuestion",
         "bots.room.deleteAsk",
       ]) {
         const question = (catalog[key] as (a: string) => string)("QUESTO")

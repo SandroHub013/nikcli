@@ -525,15 +525,13 @@ export function GatewaySection(props: { bot: AgentFile; deps: Omit<GatewayPanelD
                                 <span data-slot="gateway-meta">
                                   {request.sender.id} · {t("gateway.panel.expires", time(request.expiresMs))}
                                 </span>
-                                <button
-                                  type="button"
-                                  data-slot="bots-link"
-                                  data-tone="danger"
+                                <ConfirmAction
+                                  label={t("gateway.panel.reject")}
+                                  question={t("gateway.panel.rejectQuestion", request.sender.name)}
+                                  confirm={t("gateway.panel.rejectConfirm")}
                                   disabled={panel.busy()}
-                                  onClick={() => void panel.reject(request.request)}
-                                >
-                                  {t("gateway.panel.reject")}
-                                </button>
+                                  onConfirm={() => panel.reject(request.request)}
+                                />
                               </li>
                             )}
                           </For>

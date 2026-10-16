@@ -927,6 +927,8 @@ export const en: Messages = {
     "Pair only an account of yours: whoever you pair drives the bot on your PC and your subscriptions.",
   "gateway.panel.expires": (time) => `expires at ${time}`,
   "gateway.panel.reject": "Refuse",
+  "gateway.panel.rejectQuestion": (name) => `Refuse the request from «${name}»? For 24 hours it will not be able to ask for a new code.`,
+  "gateway.panel.rejectConfirm": "Refuse",
   "gateway.panel.code": "Pairing code",
   "gateway.panel.approve": "Pair",
   "gateway.panel.locked": (time) => `Too many wrong codes: pairing locked until ${time}.`,
