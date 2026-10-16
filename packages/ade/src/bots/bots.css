@@ -1388,13 +1388,16 @@
   background: var(--ade-text-weak);
 }
 
-[data-slot="gateway-state"][data-tone="on"] [data-slot="gateway-dot"] {
+[data-slot="gateway-state"][data-tone="on"] [data-slot="gateway-dot"],
+[data-action="gateway-status"][data-tone="on"] [data-slot="gateway-dot"] {
   background: var(--ade-done, var(--ade-accent));
 }
-[data-slot="gateway-state"][data-tone="wait"] [data-slot="gateway-dot"] {
+[data-slot="gateway-state"][data-tone="wait"] [data-slot="gateway-dot"],
+[data-action="gateway-status"][data-tone="wait"] [data-slot="gateway-dot"] {
   background: var(--ade-warning, var(--ade-accent));
 }
-[data-slot="gateway-state"][data-tone="error"] [data-slot="gateway-dot"] {
+[data-slot="gateway-state"][data-tone="error"] [data-slot="gateway-dot"],
+[data-action="gateway-status"][data-tone="error"] [data-slot="gateway-dot"] {
   background: var(--ade-error);
 }
 

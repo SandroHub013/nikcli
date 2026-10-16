@@ -267,6 +267,8 @@ import { BotsMain, BotsRoster, openBotByPath } from "../bots/bots"
 import { approvalBadge, approvalLine, attentionLine, freshApprovals, freshAttentions, shouldNotifySystem } from "../bots/approval-signal"
 import { waitingApprovals, waitingAttentions } from "../bots/approvals-app"
 import { forgetSystemNotice, notifySystem, windowInFront } from "../bots/system-notify"
+import { createGatewayBarStore } from "../bots/gateway/bar-status"
+import { tauriGatewayPanelApi } from "../bots/gateway/bridge"
 import { scrubSecrets } from "../bots/terms"
 import type { AgentFile } from "../bots/ragu"
 import type { Runner } from "../bots/runners"
@@ -982,6 +984,13 @@ export function Workbench() {
     openBotByPath(path, room, tab)
     setNoticesOpen(false)
   }
+  /*
+   * Gateway indicator in the bottom bar (Point 4): only shown if a messaging app is enabled.
+   */
+  const gatewayBar = gatewayControllerOn(isTauriDesktop())
+    ? createGatewayBarStore(tauriGatewayPanelApi())
+    : undefined
+  onCleanup(() => gatewayBar?.dispose())
   /* A button on the strip, for the one notice it was made for: shown only while that text is. */
   const [noticeAction, setNoticeAction] = createSignal<{ text: string; label: string; run: () => void }>()
 
@@ -9844,6 +9853,22 @@ export function Workbench() {
                   </svg>
                 </Show>
               </button>
+
+              <Show when={gatewayBar?.status()}>
+                {(bar) => (
+                  <button
+                    type="button"
+                    data-slot="ade-icon"
+                    data-action="gateway-status"
+                    data-tone={bar().tone}
+                    aria-label={bar().label}
+                    title={bar().label}
+                    onClick={() => openWaitingBot(bar().bot, undefined, "platforms")}
+                  >
+                    <span data-slot="gateway-dot" aria-hidden="true" />
+                  </button>
+                )}
+              </Show>
 
               {/* The bell, and the only place a notice survives being missed.
                   `data-drop="up"` because at the foot of the column there is

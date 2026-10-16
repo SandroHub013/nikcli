@@ -937,6 +937,9 @@ export const it = {
   "gateway.panel.openPlatforms": "Apri piattaforme",
   "gateway.panel.attentionNotice": (name: string, platform: string) =>
     `Il gateway di ${name} su ${platform} richiede attenzione.`,
+  "gateway.bar.connected": "Gateway: collegato",
+  "gateway.bar.reconnecting": "Gateway: riconnessione in corso",
+  "gateway.bar.needsAttention": "Gateway: richiede attenzione",
   "gateway.panel.lastMessage": (time: string) => `ultimo messaggio alle ${time}`,
   "gateway.panel.redacted": (time: string) =>
     `Nel messaggio delle ${time} c'era una chiave: l'ho nascosta, il bot non l'ha vista e non è stata salvata.`,

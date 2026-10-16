@@ -917,6 +917,9 @@ export const en: Messages = {
   "gateway.panel.openPlatforms": "Open platforms",
   "gateway.panel.attentionNotice": (name: string, platform: string) =>
     `Gateway for ${name} on ${platform} needs attention.`,
+  "gateway.bar.connected": "Gateway: connected",
+  "gateway.bar.reconnecting": "Gateway: reconnecting",
+  "gateway.bar.needsAttention": "Gateway: needs attention",
   "gateway.panel.lastMessage": (time) => `last message at ${time}`,
   "gateway.panel.redacted": (time) =>
     `The message at ${time} held a key: it was hidden, the bot did not see it and it was not saved.`,
