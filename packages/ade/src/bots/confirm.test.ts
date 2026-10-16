@@ -85,6 +85,22 @@ describe("the one way to confirm what cannot be taken back", () => {
     expect(document.activeElement?.textContent).toBe("Elimina routine")
   })
 
+  test("P2-2: the question is brought into view when it opens, whole and only as far as needed", async () => {
+    const seen: unknown[] = []
+    const original = HTMLElement.prototype.scrollIntoView
+    HTMLElement.prototype.scrollIntoView = function (this: HTMLElement, arg?: unknown) {
+      seen.push([this.getAttribute("data-slot"), arg])
+    }
+    try {
+      const { press } = mount(() => {})
+      press("Elimina routine")
+      await Promise.resolve()
+      expect(seen).toEqual([["bots-confirm", { block: "nearest" }]])
+    } finally {
+      HTMLElement.prototype.scrollIntoView = original
+    }
+  })
+
   test("«Annulla» gives the focus back to the first button too", async () => {
     const { press } = mount(() => {})
     press("Elimina routine")
