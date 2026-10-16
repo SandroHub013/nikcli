@@ -331,12 +331,12 @@ export function startPixelScene(
       container.style.top = `${top}px`
       container.style.width = `${cssWidth}px`
       container.style.height = `${cssHeight}px`
-      container.style.setProperty("--splash-scanline-period", scanlinePeriod)
     }
 
     const splashRoot = canvas.closest?.('[data-component="ade-splash"]') as HTMLElement | null
     if (splashRoot?.style) {
       splashRoot.style.setProperty("--splash-scanline-period", scanlinePeriod)
+      splashRoot.style.setProperty("--splash-scanline-offset", `${top}px`)
     }
 
     return scale

@@ -75,6 +75,12 @@
   background-size:
     100% var(--splash-scanline-period, 16px),
     100% 100%;
+  background-position:
+    0 var(--splash-scanline-offset, 0px),
+    center center;
+  background-repeat:
+    repeat,
+    no-repeat;
   opacity: 0.35;
 }
 

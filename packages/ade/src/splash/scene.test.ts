@@ -169,7 +169,7 @@ describe("splash scene renderer (step 2)", () => {
       }
     })
 
-    test("sets --splash-scanline-period to exact 2 * scale in device pixels to prevent moiré (P3-6)", () => {
+    test("sets --splash-scanline-period and aligns --splash-scanline-offset with canvas top (P3-6, P3-11)", () => {
       const splash = document.createElement("div")
       splash.setAttribute("data-component", "ade-splash")
       const container = document.createElement("div")
@@ -181,13 +181,19 @@ describe("splash scene renderer (step 2)", () => {
 
       try {
         const controller = startPixelScene(canvas)
-        // Scale 5 at DPR 1: 2 * 5 / 1 = 10px
+        // Scale 5 at DPR 1: 2 * 5 / 1 = 10px; top = round((600*1 - 90*5)/2) = 75px
         controller.resize(800, 600, 1)
         expect(splash.style.getPropertyValue("--splash-scanline-period")).toBe("10px")
+        expect(splash.style.getPropertyValue("--splash-scanline-offset")).toBe("75px")
 
-        // Scale 11 at DPR 1.25 (1536x826): 2 * 11 / 1.25 = 17.6px (22 device pixels)
+        // Scale 11 at DPR 1.25 (1536x826): 2 * 11 / 1.25 = 17.6px (22 device pixels); top = 21/1.25 = 16.8px
         controller.resize(1536, 826, 1.25)
         expect(splash.style.getPropertyValue("--splash-scanline-period")).toBe("17.6px")
+        expect(splash.style.getPropertyValue("--splash-scanline-offset")).toBe("16.8px")
+
+        // Container does not have unused scanline property written on it
+        expect(container.style.getPropertyValue("--splash-scanline-period")).toBe("")
+
         controller.stop()
       } finally {
         splash.remove()
