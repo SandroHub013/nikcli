@@ -410,6 +410,20 @@ const READ_ONLY_REFUSED: readonly string[] = ["edit", "write"]
 const UNWATCHED_REFUSED: readonly string[] = ["webfetch", "websearch"]
 
 /*
+ * What a turn from a chat and a routine are pre-approved in place of a tool's bare name (review-anteprima-pagina §3).
+ * A rule with no path matches every file on the disk: `Read`, `Grep` and `Glob` read ~/.ssh or another project's .env
+ * with no question. `Read(./**)` is the project, and Read rules cover Grep and Glob; inside the working folder they need
+ * no approval anyway. The setting below refuses all three outside it in every mode, Claude Code 2.1.257 and later.
+ * Checked on 2.1.301 with a fake provider: an absolute path, `..` and a junction out of the project refused.
+ */
+const UNWATCHED_ALLOWED: Readonly<Record<string, readonly string[]>> = {
+  read: ["Read(./**)"],
+  grep: [],
+  glob: [],
+}
+const UNWATCHED_SETTINGS = '{"autoMemoryEnabled":false,"permissions":{"blockReadsOutsideWorkingDirectories":true}}'
+
+/*
  * A bot from the open project's `.nikcli/agent/` (B3, audit A4): its persona
  * and settings were written by whoever wrote the repository. It runs only
  * once the user trusted that file (`trust.ts`), and even then with nothing
@@ -527,7 +541,7 @@ export function turnCommand(
          * bot may do is said below, tool by tool.
          */
         args.push("--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", "")
-        args.push("--settings", '{"autoMemoryEnabled":false}')
+        args.push("--settings", unwatched ? UNWATCHED_SETTINGS : '{"autoMemoryEnabled":false}')
       }
       args.push("--permission-mode", canWrite(bot) && !unattended ? "acceptEdits" : "default")
       const allowed = Object.entries(CLAUDE_TOOLS)
@@ -536,7 +550,7 @@ export function turnCommand(
         )
         .filter(([tool]) => !(unattended && READ_ONLY_REFUSED.includes(tool)))
         .filter(([tool]) => !(unwatched && UNWATCHED_REFUSED.includes(tool)))
-        .flatMap(([, names]) => names)
+        .flatMap(([tool, names]) => (unwatched ? (UNWATCHED_ALLOWED[tool] ?? names) : names))
       if (lean && !repository && !remote && !unattended) allowed.push("Bash(ade-msg *)", "PowerShell(ade-msg *)")
       const disallowed = bot.disabledTools
         .filter((tool) => !(adeMsgOnly && tool === "bash"))
