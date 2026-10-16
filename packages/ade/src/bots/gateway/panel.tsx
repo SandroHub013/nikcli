@@ -16,7 +16,7 @@ import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid
 import { t } from "../../i18n"
 import { ConfirmAction } from "../confirm"
 import { remoteNeverKey } from "../permissions-facts"
-import { formatClock, formatConnectedTime } from "../format"
+import { formatClock, formatConnectedDay } from "../format"
 import type { AgentFile } from "../ragu"
 import { runnerById } from "../runners"
 import { PairLink } from "./pair-link"
@@ -100,7 +100,7 @@ export function GatewaySection(props: {
       return {
         tone: "on",
         text: link.connectedAtMs
-          ? t("gateway.panel.connectedSince", formatConnectedTime(link.connectedAtMs))
+          ? t("gateway.panel.connectedSince", formatClock(link.connectedAtMs), formatConnectedDay(link.connectedAtMs))
           : t("gateway.panel.connected"),
       }
     }

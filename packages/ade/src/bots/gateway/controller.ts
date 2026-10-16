@@ -34,7 +34,7 @@
  */
 
 import { locale, t } from "../../i18n"
-import { formatClock, formatConnectedTime } from "../format"
+import { formatClock, formatConnectedDay } from "../format"
 import { visibleText } from "../visible-text"
 import type { AgentFile } from "../ragu"
 import { answerSoFar, runnerById } from "../runners"
@@ -585,7 +585,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       )?.catch(() => undefined)
       const connectedLine =
         link?.connected && link.connectedAtMs != null
-          ? t("gateway.status.connectedSince", formatConnectedTime(link.connectedAtMs))
+          ? t("gateway.status.connectedSince", formatClock(link.connectedAtMs), formatConnectedDay(link.connectedAtMs))
           : undefined
       const spent = await deps.spendToday?.(message.bot, deps.chatModels?.get(key)?.model).catch(() => undefined)
       const lines = [said, connectedLine, spent].filter(Boolean).join("\n")
