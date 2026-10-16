@@ -3,6 +3,7 @@ import {
   addNotice,
   bellTone,
   COALESCE_MS,
+  dismissClosedAttentions,
   dismissNotice,
   markAllRead,
   MAX_NOTICES,
@@ -155,5 +156,21 @@ describe("bellTone", () => {
     let list = addNotice([], { kind: "done", text: "finita", at })
     list = addNotice(list, { kind: "error", text: "non salvato", at: at + COALESCE_MS })
     expect(bellTone(list)).toBe("alert")
+  })
+})
+
+describe("dismissClosedAttentions", () => {
+  test("removes notices whose gateway attention is no longer open", () => {
+    const list = addNotice([], {
+      kind: "error",
+      text: "Attenzione bot",
+      bot: "C:/bots/b.md",
+      gatewayAttention: "gateway:C:/bots/b.md:telegram",
+      at,
+    })
+    const other = addNotice(list, { kind: "info", text: "normale", at: at + 1 })
+    expect(dismissClosedAttentions(other, new Set(["gateway:C:/bots/b.md:telegram"]))).toHaveLength(2)
+    expect(dismissClosedAttentions(other, new Set())).toHaveLength(1)
+    expect(dismissClosedAttentions(other, new Set())[0]!.text).toBe("normale")
   })
 })

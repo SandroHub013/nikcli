@@ -928,8 +928,15 @@ export const it = {
     "Scrivi a questo bot da Telegram, mentre ADE è aperta. Ogni bot ha il suo bot Telegram, creato con BotFather.",
   "gateway.panel.off": "Spento",
   "gateway.panel.stopped": "Acceso, ma fermo per un errore",
+  "gateway.panel.needsAttention": "Richiede attenzione",
   "gateway.panel.connected": "Acceso · collegato",
   "gateway.panel.connecting": "Acceso · in collegamento",
+  "gateway.panel.reconnecting": "Acceso · riconnessione in corso",
+  "gateway.panel.retry": "Riprova",
+  "gateway.panel.changeCode": "Cambia il codice",
+  "gateway.panel.openPlatforms": "Apri piattaforme",
+  "gateway.panel.attentionNotice": (name: string, platform: string) =>
+    `Il gateway di ${name} su ${platform} richiede attenzione.`,
   "gateway.panel.lastMessage": (time: string) => `ultimo messaggio alle ${time}`,
   "gateway.panel.redacted": (time: string) =>
     `Nel messaggio delle ${time} c'era una chiave: l'ho nascosta, il bot non l'ha vista e non è stata salvata.`,

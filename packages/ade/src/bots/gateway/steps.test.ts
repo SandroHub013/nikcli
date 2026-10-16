@@ -20,6 +20,10 @@ describe("a platform's tile", () => {
     expect(tileState({ enabled: true, running: true, connected: false, lastError: "401" })).toBe("error")
   })
 
+  test("says «error» when the link requires attention", () => {
+    expect(tileState({ enabled: true, running: true, connected: false, needsAttention: true })).toBe("error")
+  })
+
   test("an error left on a link that is off is not shown: it is to connect again", () => {
     expect(tileState({ enabled: false, running: false, connected: false, lastError: "401" })).toBe("setup")
   })

@@ -93,6 +93,8 @@ export function GatewaySection(props: {
     const link = panel.link()
     if (!link.enabled) return { tone: "off", text: t("gateway.panel.off") }
     if (!link.running) return { tone: "error", text: t("gateway.panel.stopped") }
+    if (link.needsAttention) return { tone: "error", text: t("gateway.panel.needsAttention") }
+    if (link.reconnecting) return { tone: "wait", text: t("gateway.panel.reconnecting") }
     return link.connected
       ? { tone: "on", text: t("gateway.panel.connected") }
       : { tone: "wait", text: t("gateway.panel.connecting") }
@@ -186,6 +188,32 @@ export function GatewaySection(props: {
             {(at) => <span data-slot="gateway-meta">{t("gateway.panel.lastMessage", time(at()))}</span>}
           </Show>
         </div>
+        <Show when={panel.link().needsAttention}>
+          <div data-slot="gateway-attention-box" data-tone="error">
+            <Show when={panel.link().attentionReason}>
+              {(reason) => <p data-slot="gateway-attention-reason">{reason()}</p>}
+            </Show>
+            <div data-slot="gateway-attention-actions">
+              <button
+                type="button"
+                data-slot="bots-btn"
+                data-tone="primary"
+                disabled={panel.busy()}
+                onClick={() => void panel.retry()}
+              >
+                {t("gateway.panel.retry")}
+              </button>
+              <button
+                type="button"
+                data-slot="bots-btn"
+                disabled={panel.busy()}
+                onClick={() => setPicked("paste")}
+              >
+                {t("gateway.panel.changeCode")}
+              </button>
+            </div>
+          </div>
+        </Show>
         <Show when={panel.link().enabled && panel.link().lastError}>
           {(error) => <p data-slot="bots-problem">{error()}</p>}
         </Show>

@@ -28,8 +28,14 @@ export interface Notice {
   readonly bot?: string
   /** The room the request was asked in, when it was: the notice opens the room instead. */
   readonly room?: string
+  /** Which tab of the bot page to open, such as "platforms". */
+  readonly tab?: "talk" | "platforms" | "routines" | "memory" | "permissions"
+  /** The platform of the gateway link, when relevant. */
+  readonly platform?: string
   /** The request the notice is about; the notice goes when the request is answered or runs out. */
   readonly approval?: string
+  /** The gateway attention this notice is about; goes when the link no longer requires attention. */
+  readonly gatewayAttention?: string
   readonly at: number
   readonly read: boolean
 }
@@ -59,7 +65,10 @@ export interface NoticeInput {
   readonly href?: string
   readonly bot?: string
   readonly room?: string
+  readonly tab?: "talk" | "platforms" | "routines" | "memory" | "permissions"
+  readonly platform?: string
   readonly approval?: string
+  readonly gatewayAttention?: string
   readonly at: number
 }
 
@@ -97,7 +106,10 @@ export function addNotice(list: readonly Notice[], input: NoticeInput): Notice[]
     ...(input.href !== undefined ? { href: input.href } : {}),
     ...(input.bot !== undefined ? { bot: input.bot } : {}),
     ...(input.room !== undefined ? { room: input.room } : {}),
+    ...(input.tab !== undefined ? { tab: input.tab } : {}),
+    ...(input.platform !== undefined ? { platform: input.platform } : {}),
     ...(input.approval !== undefined ? { approval: input.approval } : {}),
+    ...(input.gatewayAttention !== undefined ? { gatewayAttention: input.gatewayAttention } : {}),
     at: input.at,
     read: false,
   }
@@ -128,6 +140,14 @@ export function markAllRead(list: readonly Notice[]): Notice[] {
 export function dismissClosedApprovals(list: readonly Notice[], open: ReadonlySet<string>): Notice[] {
   if (list.every((notice) => notice.approval === undefined || open.has(notice.approval))) return [...list]
   return list.filter((notice) => notice.approval === undefined || open.has(notice.approval))
+}
+
+/**
+ * Takes out notices about gateway links that no longer require attention (reconnected, retried, or stopped).
+ */
+export function dismissClosedAttentions(list: readonly Notice[], open: ReadonlySet<string>): Notice[] {
+  if (list.every((notice) => notice.gatewayAttention === undefined || open.has(notice.gatewayAttention))) return [...list]
+  return list.filter((notice) => notice.gatewayAttention === undefined || open.has(notice.gatewayAttention))
 }
 
 /** Removes one, for the row's own dismiss. */

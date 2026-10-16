@@ -4,7 +4,7 @@
  */
 
 import { createSignal } from "solid-js"
-import { createApprovalRegistry, mergeApprovals, type WaitingApproval } from "./approvals"
+import { createApprovalRegistry, mergeApprovals, type GatewayAttentionItem, type WaitingApproval } from "./approvals"
 
 const [writes, setWrites] = createSignal(0)
 
@@ -15,3 +15,10 @@ export function waitingApprovals(): WaitingApproval[] {
   writes()
   return mergeApprovals(appApprovals.list())
 }
+
+/** Gateways that need attention now. Reactive. */
+export function waitingAttentions(): readonly GatewayAttentionItem[] {
+  writes()
+  return appApprovals.listAttentions()
+}
+

@@ -23,6 +23,7 @@ import { localSessionStore } from "./session"
 import { spendStatus, spendTerms, withDailyCap } from "../spend"
 import { appSpendStore } from "../spend-app"
 import { appApprovals } from "../approvals-app"
+import { syncGatewayAttention } from "./attention"
 
 interface LinkStatus {
   readonly bot: string
@@ -181,10 +182,15 @@ export async function startAppGatewayController(): Promise<GatewayController> {
     },
   })
   activeController = controller
+  const attentionSync = syncGatewayAttention({
+    approvals: appApprovals,
+    api: tauriGatewayPanelApi(),
+  })
   return {
     ...controller,
     stop: () => {
       if (activeController === controller) activeController = undefined
+      attentionSync.stop()
       controller.stop()
     },
   }

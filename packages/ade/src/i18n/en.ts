@@ -908,8 +908,15 @@ export const en: Messages = {
     "Write to this bot from Telegram while ADE is open. Each bot has its own Telegram bot, made with BotFather.",
   "gateway.panel.off": "Off",
   "gateway.panel.stopped": "On, but stopped by an error",
+  "gateway.panel.needsAttention": "Needs attention",
   "gateway.panel.connected": "On · connected",
   "gateway.panel.connecting": "On · connecting",
+  "gateway.panel.reconnecting": "On · reconnecting",
+  "gateway.panel.retry": "Retry",
+  "gateway.panel.changeCode": "Change code",
+  "gateway.panel.openPlatforms": "Open platforms",
+  "gateway.panel.attentionNotice": (name: string, platform: string) =>
+    `Gateway for ${name} on ${platform} needs attention.`,
   "gateway.panel.lastMessage": (time) => `last message at ${time}`,
   "gateway.panel.redacted": (time) =>
     `The message at ${time} held a key: it was hidden, the bot did not see it and it was not saved.`,

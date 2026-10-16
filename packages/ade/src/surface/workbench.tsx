@@ -264,8 +264,8 @@ import { Chat } from "../chat/chat"
 import { appChatStore } from "../chat/store"
 import { barSessionCount } from "./bar-sessions"
 import { BotsMain, BotsRoster, openBotByPath } from "../bots/bots"
-import { approvalBadge, approvalLine, freshApprovals, shouldNotifySystem } from "../bots/approval-signal"
-import { waitingApprovals } from "../bots/approvals-app"
+import { approvalBadge, approvalLine, attentionLine, freshApprovals, freshAttentions, shouldNotifySystem } from "../bots/approval-signal"
+import { waitingApprovals, waitingAttentions } from "../bots/approvals-app"
 import { forgetSystemNotice, notifySystem, windowInFront } from "../bots/system-notify"
 import { scrubSecrets } from "../bots/terms"
 import type { AgentFile } from "../bots/ragu"
@@ -634,6 +634,7 @@ import {
   addNotice,
   bellTone,
   dismissClosedApprovals,
+  dismissClosedAttentions,
   dismissNotice,
   markAllRead,
   unreadCount,
@@ -949,10 +950,36 @@ export function Workbench() {
     }
     forgetSystemNotice(seen)
   })
+  /*
+   * A bot's gateway link requires attention (fatal error or 10 min without connecting): an error line in the bell,
+   * gone when the link reconnects, and taskbar flash when ADE is behind.
+   */
+  let attentionsSeen: ReadonlySet<string> = new Set()
+  createEffect(() => {
+    const waiting = waitingAttentions()
+    const { fresh, seen } = freshAttentions(attentionsSeen, waiting)
+    attentionsSeen = seen
+    setNotices((list) => dismissClosedAttentions(list, seen))
+    for (const one of fresh) {
+      setNotices((list) =>
+        addNotice(list, {
+          kind: "error",
+          text: attentionLine(one),
+          bot: one.bot,
+          platform: one.platform,
+          tab: "platforms",
+          gatewayAttention: one.id,
+          at: Date.now(),
+        }),
+      )
+      if (shouldNotifySystem(windowInFront())) void notifySystem({ id: one.id, title: "ADE", body: attentionLine(one) })
+    }
+    forgetSystemNotice(seen)
+  })
   /** The bell's «Apri»: the Bot section, on that bot, or on the room where it was asked. */
-  const openWaitingBot = (path: string, room?: string) => {
+  const openWaitingBot = (path: string, room?: string, tab?: "talk" | "platforms" | "routines" | "memory" | "permissions") => {
     setWb((w) => ({ ...w, view: "bot" }))
-    openBotByPath(path, room)
+    openBotByPath(path, room, tab)
     setNoticesOpen(false)
   }
   /* A button on the strip, for the one notice it was made for: shown only while that text is. */
@@ -9893,9 +9920,9 @@ export function Workbench() {
                                 <button
                                   type="button"
                                   data-slot="ade-notice-link"
-                                  onClick={() => openWaitingBot(bot(), notice.room)}
+                                  onClick={() => (notice.tab ? openWaitingBot(bot(), undefined, notice.tab) : openWaitingBot(bot(), notice.room))}
                                 >
-                                  {notice.room ? t("bots.waiting.openRoom") : t("bots.waiting.open")}
+                                  {notice.tab === "platforms" ? t("gateway.panel.openPlatforms") : notice.room ? t("bots.waiting.openRoom") : t("bots.waiting.open")}
                                 </button>
                               )}
                             </Show>
