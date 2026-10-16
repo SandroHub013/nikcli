@@ -180,6 +180,7 @@ fn inbound(update: &Value) -> Option<Inbound> {
     let cursor = update["update_id"].as_i64().map(|id| (id + 1).to_string());
     if let Some(message) = update.get("message") {
         let text = message["text"].as_str().or_else(|| message["caption"].as_str())?;
+        let timestamp_ms = message["date"].as_i64().map(|s| (s * 1000) as u64);
         return Some(Inbound {
             id: id_text(&message["message_id"])?,
             chat: id_text(&message["chat"]["id"])?,
@@ -194,10 +195,12 @@ fn inbound(update: &Value) -> Option<Inbound> {
             },
             button: false,
             cursor,
+            timestamp_ms,
         });
     }
     let press = update.get("callback_query")?;
     let message = press.get("message")?;
+    let timestamp_ms = message["date"].as_i64().map(|s| (s * 1000) as u64);
     Some(Inbound {
         id: id_text(&press["id"])?,
         chat: id_text(&message["chat"]["id"])?,
@@ -207,6 +210,7 @@ fn inbound(update: &Value) -> Option<Inbound> {
         text: press["data"].as_str().unwrap_or_default().to_string(),
         button: true,
         cursor,
+        timestamp_ms,
     })
 }
 
@@ -540,6 +544,7 @@ mod tests {
         /// Every call: the path it went to and its JSON body.
         calls: Arc<Mutex<Vec<(String, Value)>>>,
         script: Arc<Mutex<HashMap<String, VecDeque<Reply>>>>,
+        pending_updates: Arc<Mutex<Vec<Value>>>,
     }
 
     impl FakeApi {
@@ -554,6 +559,10 @@ mod tests {
                 }
             });
             api
+        }
+
+        fn with_updates(&self, updates: Vec<Value>) {
+            *self.pending_updates.lock().unwrap() = updates;
         }
 
         fn then(&self, method: &str, status: u16, body: Value) {
@@ -596,10 +605,23 @@ mod tests {
             let path = head.split_whitespace().nth(1).unwrap_or_default().to_string();
             let body: Value = serde_json::from_slice(&data[head_end..]).unwrap_or(Value::Null);
             let method = path.rsplit('/').next().unwrap_or_default().to_string();
-            self.calls.lock().unwrap().push((path, body));
+            self.calls.lock().unwrap().push((path, body.clone()));
             let scripted = self.script.lock().unwrap().get_mut(&method).and_then(VecDeque::pop_front);
             let (status, reply, delay) = scripted.unwrap_or_else(|| match method.as_str() {
-                "getUpdates" => (200, json!({ "ok": true, "result": [] }).to_string(), 30),
+                "getUpdates" => {
+                    let pending = self.pending_updates.lock().unwrap();
+                    if !pending.is_empty() {
+                        let offset = body["offset"].as_i64();
+                        let filtered: Vec<Value> = pending
+                            .iter()
+                            .filter(|u| offset.map_or(true, |off| u["update_id"].as_i64().unwrap_or(0) >= off))
+                            .cloned()
+                            .collect();
+                        (200, json!({ "ok": true, "result": filtered }).to_string(), 0)
+                    } else {
+                        (200, json!({ "ok": true, "result": [] }).to_string(), 30)
+                    }
+                }
                 "sendMessage" => {
                     let sent = self.calls_to("sendMessage").len();
                     (200, json!({ "ok": true, "result": { "message_id": 100 + sent } }).to_string(), 0)
@@ -654,6 +676,28 @@ mod tests {
         assert_eq!(polls[1]["offset"], 13);
         assert_eq!(api.calls_to("getWebhookInfo").len(), 1, "una volta sola");
         assert!(api.calls_to("deleteWebhook").is_empty());
+    }
+
+    #[tokio::test]
+    async fn updates_are_confirmed_to_telegram_immediately_so_strangers_and_queued_are_not_reread() {
+        let api = FakeApi::start();
+        api.with_updates(vec![
+            text_update(10, "private", 99, "messaggio di un estraneo"),
+            text_update(11, "private", 42, "messaggio in coda"),
+        ]);
+        let telegram = adapter(&api, None);
+        let batch1 = telegram.receive().await.unwrap();
+        assert_eq!(batch1.len(), 2);
+        assert_eq!(batch1[0].text, "messaggio di un estraneo");
+        assert_eq!(batch1[1].text, "messaggio in coda");
+
+        let batch2 = telegram.receive().await.unwrap();
+        assert!(batch2.is_empty(), "gli update già letti non devono essere restituiti di nuovo");
+
+        let polls = api.calls_to("getUpdates");
+        assert_eq!(polls.len(), 2);
+        assert_eq!(polls[0].get("offset"), None);
+        assert_eq!(polls[1]["offset"], 12);
     }
 
     #[tokio::test]
