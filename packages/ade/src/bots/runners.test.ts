@@ -538,6 +538,26 @@ describe("un turno da chat non ha la shell", () => {
   })
 
   /*
+   * Writes into `.git/hooks` and the other places that run code later (S2, checked on Claude's side for S-P2). The
+   * spellings of a path that Windows opens as the folder (`.git.\hooks`, `.git::$INDEX_ALLOCATION`, `\\?\`, `GIT~1`,
+   * three dots) are refused by Claude Code itself before any rule or mode: its `checkPathSafetyForAutoEdit` asks for
+   * manual approval, which a `-p` turn cannot give (read in claude 2.1.301; it cannot be run here without a model turn).
+   * What stays ours is that the rule for the plain spelling is there on every turn, for every writing tool: Claude
+   * resolves `..\` and an absolute path before it compares them with it, and compares them without case on Windows.
+   */
+  test("Claude: le cartelle che eseguono dopo sono negate a Edit, Write e NotebookEdit, in ogni profilo di chat", () => {
+    for (const remote of [off, on]) {
+      const { args } = turnCommand(runnerById("claude"), { bot: mine, message: "x", remote })
+      const denied = disallowedOf(args)
+      for (const folder of [".git", ".claude", ".codex", ".husky", ".vscode", ".github/workflows"]) {
+        for (const tool of ["Edit", "Write", "NotebookEdit"]) expect(denied).toContain(`${tool}(./${folder}/**)`)
+      }
+      // A refusal beats an allow: no rule that lets a write through is given beside them.
+      expect(allowedOf(args).filter((rule) => /^(Edit|Write|NotebookEdit)\(/.test(rule))).toEqual([])
+    }
+  })
+
+  /*
    * G5 review, M1: `claude -p` cannot have each command approved, so a list
    * of allowed commands was an approval in advance (`npm *` runs any script).
    * In V1 a Claude bot from a chat never has a shell.

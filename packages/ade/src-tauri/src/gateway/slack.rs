@@ -414,10 +414,16 @@ fn to_command(payload: &Value) -> Option<Inbound> {
     let chat = payload["channel_id"].as_str()?;
     let rest = payload["text"].as_str().unwrap_or_default().trim();
     let text = if rest.is_empty() { command.to_string() } else { format!("{command} {}", unescape(rest)) };
+    // Private when Slack says the channel is a direct message: the payload names it `directmessage`. Only a payload
+    // with no name falls back on the id's first letter, as an event without `channel_type` does (S15).
+    let private = match payload["channel_name"].as_str().filter(|name| !name.is_empty()) {
+        Some(name) => name == "directmessage",
+        None => chat.starts_with('D'),
+    };
     Some(Inbound {
         id: payload["trigger_id"].as_str()?.to_string(),
         chat: chat.to_string(),
-        private: chat.starts_with('D'),
+        private,
         mentioned: true,
         sender: Sender {
             id: payload["user_id"].as_str()?.to_string(),
@@ -1584,6 +1590,29 @@ mod tests {
         assert_eq!(with_words.text, "/nuova a < b");
         // Another app's command is not ours.
         assert!(to_command(&json!({ "command": "/giphy", "trigger_id": "T4", "user_id": "U1", "channel_id": "D1" })).is_none());
+    }
+
+    /// S15: a command is private when Slack says the channel is a direct message (`channel_name` is `directmessage`),
+    /// not because the id starts with a D. Without a name the id is all there is, as for an event without `channel_type`.
+    #[test]
+    fn a_slash_command_is_private_by_the_channel_name_slack_sends() {
+        let command = |extra: Value| {
+            let mut payload = json!({ "command": "/stato", "trigger_id": "T1", "user_id": "U1", "channel_id": "D1" });
+            for (key, value) in extra.as_object().unwrap() {
+                payload[key] = value.clone();
+            }
+            to_command(&payload).expect("comando")
+        };
+        assert!(command(json!({ "channel_name": "directmessage" })).private);
+        // A D-id with the name of a channel is a channel: the name is what Slack says about it.
+        assert!(!command(json!({ "channel_name": "general" })).private);
+        assert!(!command(json!({ "channel_name": "privategroup", "channel_id": "G1" })).private);
+        assert!(!command(json!({ "channel_name": "", "channel_id": "C1" })).private);
+        // The name is read whole: nothing that merely contains it.
+        assert!(!command(json!({ "channel_name": "directmessage-team" })).private);
+        // No name: the id, as before.
+        assert!(command(json!({})).private);
+        assert!(!command(json!({ "channel_id": "C1" })).private);
     }
 
     #[tokio::test]

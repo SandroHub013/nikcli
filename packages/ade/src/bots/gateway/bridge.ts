@@ -48,6 +48,9 @@ export function tauriGatewayBridge(): GatewayBridge {
   }
 }
 
+/** The controller listening now, so a revocation from the panel reaches its queued turns (S13). */
+let activeController: GatewayController | undefined
+
 /** The panel's side of the Rust commands. No command returns a token. */
 export function tauriGatewayPanelApi(): GatewayPanelApi {
   return {
@@ -61,7 +64,11 @@ export function tauriGatewayPanelApi(): GatewayPanelApi {
     pairingList: (bot, platform) => invoke("gateway_pairing_list", { bot, platform }),
     pairingApprove: (bot, platform, code) => invoke("gateway_pairing_approve", { bot, platform, code }),
     pairingReject: (bot, platform, request) => invoke("gateway_pairing_reject", { bot, platform, request }),
-    pairingRevoke: (bot, platform, sender) => invoke("gateway_pairing_revoke", { bot, platform, sender }),
+    pairingRevoke: async (bot, platform, sender) => {
+      await invoke("gateway_pairing_revoke", { bot, platform, sender })
+      // Rust no longer hears the sender; what was already queued here stops too.
+      activeController?.revoke(bot, platform, sender)
+    },
     pairingOpen: (bot, platform) => invoke("gateway_pairing_open", { bot, platform }),
     async listen(handlers) {
       const { listen } = await import("@tauri-apps/api/event")
@@ -121,8 +128,8 @@ export function appGatewayPanelDeps(project: () => string | undefined): Omit<Gat
 }
 
 /** Starts listening for the chats' messages; the gateways read from then on. */
-export function startAppGatewayController(): Promise<GatewayController> {
-  return startGatewayController({
+export async function startAppGatewayController(): Promise<GatewayController> {
+  const controller = await startGatewayController({
     bridge: tauriGatewayBridge(),
     runTurn: (request) => runBotTurn(request),
     loadBot: async (path, project) =>
@@ -139,4 +146,12 @@ export function startAppGatewayController(): Promise<GatewayController> {
     account: (bot) => localAccountStore().get(bot),
     memory: appMemoryStore,
   })
+  activeController = controller
+  return {
+    ...controller,
+    stop: () => {
+      if (activeController === controller) activeController = undefined
+      controller.stop()
+    },
+  }
 }
