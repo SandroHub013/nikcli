@@ -1,6 +1,7 @@
 import { createResource, For, Show } from "solid-js"
 import { t } from "../i18n"
 import { offersRemoteCommands, remoteKey, remoteTools, type RemoteStore } from "./gateway/remote"
+import { conversationText, phoneText, remoteNeverKey, routinesTextKey } from "./permissions-facts"
 import type { AgentFile } from "./ragu"
 import { runnerById } from "./runners"
 
@@ -24,6 +25,8 @@ export function PermissionsSection(props: {
   fingerprintOf?: (bot: AgentFile) => Promise<string | undefined>
 }) {
   const runner = () => runnerById(props.bot.runner)
+  const phone = () => phoneText(props.bot)
+  const conversation = () => conversationText(props.bot)
   // The same check as a chat's turn (`remoteTools`): a switch saved for another version of the file is off.
   const [fingerprint] = createResource(
     () => props.bot,
@@ -42,15 +45,17 @@ export function PermissionsSection(props: {
   }
   return (
     <div data-slot="bots-tab-body" data-tab="permissions">
-      <section data-slot="bots-section" aria-labelledby="bots-permissions-phone">
-        <h3 data-slot="bots-section-title" id="bots-permissions-phone">
-          {t("bots.permissions.phone")}
-        </h3>
-        <p data-slot="bots-hint">{t("bots.permissions.phoneText")}</p>
-        <Show when={props.remote !== undefined}>
+      {/* From a phone: only where there are messaging apps (not in the official build yet). */}
+      <Show when={props.remote !== undefined}>
+        <section data-slot="bots-section" aria-labelledby="bots-permissions-phone">
+          <h3 data-slot="bots-section-title" id="bots-permissions-phone">
+            {t("bots.permissions.phone")}
+          </h3>
+          <p data-slot="bots-hint">{t(phone().key)}</p>
+          <p data-slot="bots-hint">{phone().edits ? t("bots.permissions.edits") : t("bots.permissions.noEdits")}</p>
           <Show
             when={offersRemoteCommands(props.bot.runner)}
-            fallback={<p data-slot="bots-hint">{t("gateway.panel.remoteNever", runner().label)}</p>}
+            fallback={<p data-slot="bots-hint">{t(remoteNeverKey(props.bot), runner().label)}</p>}
           >
             <ul data-slot="gateway-list">
               <For each={PLATFORMS}>
@@ -67,21 +72,24 @@ export function PermissionsSection(props: {
             </ul>
             <p data-slot="bots-hint">{t("bots.permissions.remoteHow")}</p>
           </Show>
-        </Show>
-      </section>
+        </section>
+      </Show>
 
       <section data-slot="bots-section" aria-labelledby="bots-permissions-routines">
         <h3 data-slot="bots-section-title" id="bots-permissions-routines">
           {t("bots.permissions.routines")}
         </h3>
-        <p data-slot="bots-hint">{t("bots.permissions.routinesText")}</p>
+        <p data-slot="bots-hint">{t(routinesTextKey(props.bot))}</p>
       </section>
 
       <section data-slot="bots-section" aria-labelledby="bots-permissions-panel">
         <h3 data-slot="bots-section-title" id="bots-permissions-panel">
           {t("bots.permissions.panel")}
         </h3>
-        <p data-slot="bots-hint">{t("bots.permissions.panelText")}</p>
+        <p data-slot="bots-hint">{t(conversation().key)}</p>
+        <p data-slot="bots-hint">
+          {conversation().edits ? t("bots.permissions.edits") : t("bots.permissions.noEdits")}
+        </p>
       </section>
 
       <section data-slot="bots-section" aria-labelledby="bots-permissions-trust">

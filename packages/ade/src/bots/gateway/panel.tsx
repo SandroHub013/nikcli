@@ -15,6 +15,7 @@
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { t } from "../../i18n"
 import { ConfirmAction } from "../confirm"
+import { remoteNeverKey } from "../permissions-facts"
 import { formatClock } from "../format"
 import type { AgentFile } from "../ragu"
 import { runnerById } from "../runners"
@@ -605,7 +606,7 @@ export function GatewaySection(props: { bot: AgentFile; deps: Omit<GatewayPanelD
           <span data-slot="gateway-subtitle">{t("gateway.panel.remote")}</span>
           <Show
             when={panel.offersRemote()}
-            fallback={<p data-slot="bots-hint">{t("gateway.panel.remoteNever", runnerById(props.bot.runner).label)}</p>}
+            fallback={<p data-slot="bots-hint">{t(remoteNeverKey(props.bot), runnerById(props.bot.runner).label)}</p>}
           >
             <p data-slot="bots-hint">
               {panel.remote().commands
