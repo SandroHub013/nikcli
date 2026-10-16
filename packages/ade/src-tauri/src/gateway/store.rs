@@ -208,7 +208,13 @@ fn read_file(path: &Path) -> Option<State> {
                     counter += 1;
                 }
             }
-            let _ = std::fs::rename(path, &corrupt_path);
+            if let Err(rename_err) = std::fs::rename(path, &corrupt_path) {
+                eprintln!(
+                    "ADE: impossibile mettere da parte lo stato corrotto in {} ({rename_err}): non lo sovrascrivo",
+                    corrupt_path.display()
+                );
+                return None;
+            }
             eprintln!(
                 "ADE: stato del gateway non interpretabile ({error}), {} byte messi da parte in {}; riparto pulito",
                 raw.len(),
@@ -389,5 +395,34 @@ mod tests {
         drop(locked_file);
         // After lock is released, original file is intact and readable:
         assert!(store.link("b", Platform::Fake).unwrap().enabled);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn if_rename_of_corrupt_file_fails_it_refuses_to_overwrite() {
+        let path = temp_path("corrupt-rename-fail");
+        let dir = path.parent().unwrap();
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(&path, "{ non json").unwrap();
+
+        use std::os::windows::fs::OpenOptionsExt;
+        // Holding OpenOptions with share_mode(1) allows reading, but forbids renaming/deleting (no FILE_SHARE_DELETE):
+        let open_file = std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(1)
+            .open(&path)
+            .unwrap();
+
+        let store = Store::new(path.clone());
+        let err = store.update("b", Platform::Fake, |link, _| {
+            link.enabled = true;
+            Ok(())
+        });
+        // If rename of corrupt file fails, update MUST fail and refuse to overwrite:
+        assert!(err.is_err(), "se il rename fallisce, l'aggiornamento deve essere rifiutato");
+
+        drop(open_file);
+        // Original corrupt content was not overwritten:
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "{ non json");
     }
 }
