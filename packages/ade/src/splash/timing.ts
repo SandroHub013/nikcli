@@ -14,18 +14,18 @@
 export const SPLASH_FLOOR_MS = 1500
 
 /**
- * How long the splash waits before it builds its WebGL scene. A boot that is over sooner never loads
- * three.js (729 kB) nor takes a GPU context for a screen that is already going; until then it is the dark
- * background with the status line.
+ * How long the splash waits before it builds its 2D canvas pixel-art scene. A boot that is over sooner
+ * never starts the frame loop for a screen that is already fading; until then it is the ink background
+ * with the status line.
  */
 export const SPLASH_SCENE_DELAY_MS = 300
 
 /**
  * Until when a scene is still worth building, from the moment the splash appeared.
  *
- * three.js is fetched and parsed after the delay, and on a slow disk that can take a second. A scene that
- * shows up then is on screen for a moment and goes with the splash, at the price of a GPU context and a
- * frame loop that nobody looks at. Past this the screen stays what it already is: the dark background with
+ * A boot that is delayed or heavily throttled might only become ready after the floor is nearly reached.
+ * A scene that shows up then is on screen for a moment and goes with the splash, at the price of a
+ * frame loop that nobody looks at. Past this the screen stays what it already is: the ink background with
  * the status line. Between the delay and the floor, so the scene has time to arrive and the floor time to end.
  */
 export const SPLASH_SCENE_DEADLINE_MS = 1100
