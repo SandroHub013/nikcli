@@ -524,6 +524,7 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
               }
               if (request.maxCostUsd !== undefined && talk.costUsd > request.maxCostUsd) end({ kind: "budget" })
               for (const part of waiting.get(id) ?? []) applyPart(part)
+              change((thread) => ({ ...thread, streaming: undefined }))
             }
             waiting.delete(id)
             return
@@ -536,6 +537,11 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
               const list = (waiting.get(part.messageID) ?? []).filter((kept) => kept.id !== part.id)
               waiting.set(part.messageID, [...list, part])
             }
+            if (role !== "user" && part.type === "text" && typeof part.text === "string") {
+              change((thread) => ({ ...thread, streaming: part.text }))
+            } else if (part.type === "tool") {
+              change((thread) => ({ ...thread, streaming: undefined }))
+            }
             return
           }
           case "session.error": {
@@ -544,7 +550,7 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
             const text = errorText(error)
             failed = text
             const at = now()
-            change((thread) => ({ ...appendMessage(thread, { role: "error", text }, at), status: "error" }))
+            change((thread) => ({ ...appendMessage(thread, { role: "error", text }, at), status: "error", streaming: undefined }))
             return
           }
           case "permission.asked": {

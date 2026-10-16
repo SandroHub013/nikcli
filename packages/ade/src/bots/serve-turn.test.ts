@@ -222,6 +222,67 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(result.text.length).toBeGreaterThan(0)
   })
 
+  test("streams partial text tokens through onUpdate (talk.streaming) and clears when message completes", async () => {
+    const events: ChatEvent[] = [
+      busyOf(),
+      {
+        type: "message.part.updated",
+        properties: {
+          sessionID: SESSION,
+          part: {
+            id: "prt_1",
+            messageID: "msg_1",
+            sessionID: SESSION,
+            type: "text",
+            text: "Prima parte di testo...",
+          },
+        },
+      },
+      {
+        type: "message.part.updated",
+        properties: {
+          sessionID: SESSION,
+          part: {
+            id: "prt_1",
+            messageID: "msg_1",
+            sessionID: SESSION,
+            type: "text",
+            text: "Prima parte di testo... continua con altro testo.",
+          },
+        },
+      },
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "msg_1",
+            sessionID: SESSION,
+            role: "assistant",
+            time: { created: 1000, completed: 2000 },
+          },
+        },
+      },
+      {
+        type: "session.status",
+        properties: { sessionID: SESSION, status: { type: "idle" } },
+      },
+    ]
+    const fake = server({ session: SESSION, events })
+    const updates: (string | undefined)[] = []
+    const turn = runServeTurn(
+      panel({
+        partial: true,
+        onUpdate: (talk) => updates.push(talk.streaming),
+      }),
+      fake.deps,
+    )
+    const result = await turn.result
+    expect(result.status).toBe("done")
+    expect(updates).toContain("Prima parte di testo...")
+    expect(updates).toContain("Prima parte di testo... continua con altro testo.")
+    expect(updates.at(-1)).toBeUndefined()
+  })
+
   // Full review 2026-10-06, bots 18: a turn that fails at once goes busy → idle on the stream before the HTTP answer of the prompt.
   test("a turn that goes busy and idle before the prompt's answer comes back ends there", async () => {
     const fake = server({ session: SESSION })
