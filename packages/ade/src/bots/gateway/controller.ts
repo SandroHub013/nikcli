@@ -433,9 +433,26 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     return { talk: { ...talk, messages }, found }
   }
 
+  const SEEN_MESSAGES_CAP = 1_000
+  const seenMessages = new Set<string>()
+  const seenMessagesOrder: string[] = []
+
+  const isDuplicate = (m: GatewayMessage): boolean => {
+    const key = `${m.bot}:${m.platform}:${m.chat}:${m.id}`
+    if (seenMessages.has(key)) return true
+    if (seenMessagesOrder.length >= SEEN_MESSAGES_CAP) {
+      const oldest = seenMessagesOrder.shift()
+      if (oldest) seenMessages.delete(oldest)
+    }
+    seenMessages.add(key)
+    seenMessagesOrder.push(key)
+    return false
+  }
+
   const receive = async (message: GatewayMessage) => {
     if (closed) return
-    void deps.bridge.ack?.(message.bot, message.platform, message.chat, message.id)
+    void deps.bridge.ack?.(message.bot, message.platform, message.chat, message.id)?.catch?.(() => {})
+    if (isDuplicate(message)) return
     // A press answers a question; it never starts a turn.
     if (message.button) return press(message)
     const key = sessionKey(message.bot, message.platform, message.chat)

@@ -536,7 +536,6 @@ impl Hub {
 
     /// The page listens for `gateway:message`: the gateways may read.
     pub fn ready(&self) {
-        self.ready.send_replace(true);
         let pending: Vec<GatewayMessage> = {
             let links = self.links();
             links
@@ -547,6 +546,7 @@ impl Hub {
         for msg in pending {
             self.env.message(&msg);
         }
+        self.ready.send_replace(true);
     }
 
     /// The page is loading again (a reload, a renderer that crashed): its

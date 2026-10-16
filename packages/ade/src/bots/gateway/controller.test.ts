@@ -171,6 +171,22 @@ describe("the gateways' controller", () => {
     expect(b.acks).toEqual([{ bot: BOT.path, platform: "telegram", chat: "c42", id: "m42" }])
   })
 
+  test("a message with the same (bot, platform, chat, id) is ignored and does not start a second turn (N-A3a)", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("prima domanda", { id: "m42", bot: BOT.path, platform: "telegram", chat: "c42" })
+    await until("il primo turno", () => turns.started.length === 1)
+    b.emit("prima domanda", { id: "m42", bot: BOT.path, platform: "telegram", chat: "c42" })
+    expect(turns.started).toHaveLength(1)
+    expect(b.sent).toHaveLength(0)
+  })
+
   test("two messages in a row make one turn, then the other, in the same conversation", async () => {
     const b = bridge()
     const turns = fakeTurns()
