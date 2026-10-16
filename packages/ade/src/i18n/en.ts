@@ -781,6 +781,8 @@ export const en: Messages = {
     `ADE could not ask you about the Ragu Code configuration of ${root}: bots on Ragu Code do not start here.`,
   "bots.trust.unreadable": (name) => `Can't read the file of the bot «${name}»: not started.`,
   // A bot's gateway, in the chat it answers (G4): what the bot says there on its own.
+  "gateway.recoveredNotice":
+    "[Recovered message: received while ADE was closed or restarting (may be a duplicate).]",
   "gateway.redacted": "I hid a key you wrote: I won't use it or save it.",
   "gateway.queued": (place) => `I'm finishing the previous turn: this message is queued, in place ${place}.`,
   "gateway.stopped": "Stopped. I cleared the queued messages.",

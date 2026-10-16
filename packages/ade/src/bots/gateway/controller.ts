@@ -72,8 +72,11 @@ export interface GatewayMessage {
 /**
  * Notice prepended to the model prompt when a message was delivered after an ADE restart.
  */
-export const RECOVERED_NOTICE =
-  "[Messaggio recuperato: ricevuto mentre ADE era chiusa o in riavvio (Recovered message: received while ADE was closed or restarting, may be a duplicate).]"
+export function recoveredNotice(): string {
+  return t("gateway.recoveredNotice")
+}
+
+export const RECOVERED_NOTICE = t("gateway.recoveredNotice")
 
 /** The Rust side, as the controller sees it. Tests pass a fake. */
 export interface GatewayBridge {
@@ -363,7 +366,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
             })
           : undefined
       const baseFramed = framedMessage(message.platform, message.sender.name, message.text)
-      const framed = message.recovered ? `${RECOVERED_NOTICE}\n\n${baseFramed}` : baseFramed
+      const framed = message.recovered ? `${recoveredNotice()}\n\n${baseFramed}` : baseFramed
       const memory = deps.memory?.get(message.bot)
       const sent = memory && !sessionId ? `${memorySnapshot(memory)}\n\n${framed}` : framed
       turn = deps.runTurn({
