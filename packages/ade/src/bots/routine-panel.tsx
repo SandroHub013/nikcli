@@ -18,6 +18,7 @@ import {
   logOn,
   modeLabel,
   nextRun,
+  routineName,
   routineReadOnly,
   routineOffer,
   routineProblem,
@@ -198,7 +199,7 @@ export function RoutineSection(props: {
                     </Show>
                     <ConfirmAction
                       label={t("bots.routine.remove")}
-                      question={t("bots.routine.removeQuestion", Array.from(routine.prompt).slice(0, 60).join(""))}
+                      question={t("bots.routine.removeQuestion", routineName(routine.prompt, 60))}
                       confirm={t("bots.routine.removeConfirm")}
                       onConfirm={() => props.deps.remove(routine.id)}
                     />

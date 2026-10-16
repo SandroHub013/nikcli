@@ -8,7 +8,7 @@ import { forgetBotTraces, type KeyedStorage } from "./forget"
 import { memoryAccountStore } from "./account"
 import { volatileMemoryStore } from "./memory"
 import { memoryRemoteStore } from "./gateway/remote"
-import { EMPTY_BOOK, type RoutineBook } from "./routine"
+import { EMPTY_BOOK, routineName, type RoutineBook } from "./routine"
 import { alwaysEmptyKey, conversationText } from "./permissions-facts"
 import type { AgentFile } from "./ragu"
 
@@ -232,7 +232,7 @@ describe("P2-6: the face's help stays closed in the short form", () => {
 
   test("lint: the upload help is the button's tip, and shows as words only after a problem or outside the short form", () => {
     expect(picker).toContain('data-face="upload"\n            title={t("bots.face.uploadHint")}')
-    expect(picker).toContain('<Show when={!props.compact || problem()}>')
+    expect(picker).toContain("<Show when={!props.compact || problem()}>")
     // «Forma e colore vengono dal nome…» only where there is room for it.
     expect(picker).toContain("<Show when={!props.compact || props.value}>")
   })
@@ -241,5 +241,26 @@ describe("P2-6: the face's help stays closed in the short form", () => {
     const form = tsx.slice(tsx.indexOf("function BotForm("), tsx.indexOf("/* ── the settings, in the card"))
     expect(form).toContain('<FacePicker identifier={name() || "?"} value={avatar()} onChange={setAvatar} compact />')
     expect(tsx).toContain("<FacePicker identifier={props.bot.identifier} value={avatar()} onChange={setAvatar} />")
+  })
+})
+
+describe("P2-7: a routine's name is never cut in the middle of a word", () => {
+  test("cut at the last whole word, with «…» and no space before it", () => {
+    const prompt = "Riassumi le pull request aperte (routine di prova, non deve andare)\nE poi altro"
+    expect(routineName(prompt, 60)).toBe("Riassumi le pull request aperte (routine di prova, non deve…")
+    expect(routineName("Controlla ogni mattina le dipendenze aggiornate del progetto")).toBe(
+      "Controlla ogni mattina le dipendenze…",
+    )
+    // A comma or a bracket left at the end goes too.
+    expect(routineName("Riassumi le novità, poi scrivile in una nota breve", 22)).toBe("Riassumi le novità…")
+    // One word longer than the room is cut where it must be.
+    expect(routineName("a".repeat(80))).toBe(`${"a".repeat(39)}…`)
+    expect(routineName("Breve")).toBe("Breve")
+  })
+
+  test("lint: the removal's question names the routine as the head line does", () => {
+    const panel = read("routine-panel.tsx")
+    expect(panel).toContain('t("bots.routine.removeQuestion", routineName(routine.prompt, 60))')
+    expect(panel).not.toContain("Array.from(routine.prompt).slice(0, 60)")
   })
 })

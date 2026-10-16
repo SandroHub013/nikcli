@@ -5,6 +5,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator"
 import { en } from "../i18n/en"
 import { compileSolidJsx } from "../test-support/solid-jsx"
 import type { GatewayPanelApi, PairingInfo } from "./gateway/panel-state"
+import { routineName } from "./routine"
 
 if (typeof document === "undefined") GlobalRegistrator.register()
 compileSolidJsx()
@@ -126,11 +127,12 @@ describe("the small ones", () => {
   })
 
   test("a routine's name in the question is cut by letters, not in the middle of an emoji", () => {
-    expect(read("routine-panel.tsx")).toContain('Array.from(routine.prompt).slice(0, 60).join("")')
+    // Since bot-ui-4 (P2-7) the question names it as the head line does: `routineName`, which counts letters.
+    expect(read("routine-panel.tsx")).toContain("routineName(routine.prompt, 60)")
     expect(read("routine-panel.tsx")).not.toContain("routine.prompt.slice(0, 60)")
-    const cut = Array.from("👍".repeat(70)).slice(0, 60).join("")
+    const cut = routineName("👍".repeat(70), 60)
     expect(Array.from(cut).length).toBe(60)
-    expect(cut.endsWith("👍")).toBe(true)
+    expect(cut.endsWith("👍…")).toBe(true)
   })
 
   test("«Da telefono» is not drawn where there are no messaging apps", () => {
