@@ -84,6 +84,11 @@ export function GatewaySection(props: { bot: AgentFile; deps: Omit<GatewayPanelD
       <Show when={panel.link().enabled && panel.link().lastError}>
         {(error) => <p data-slot="bots-problem">{error()}</p>}
       </Show>
+      <Show when={panel.turnFailure()}>
+        {(failure) => (
+          <p data-slot="bots-problem">{t("gateway.panel.turnFailed", time(failure().at), failure().detail)}</p>
+        )}
+      </Show>
       <Show when={panel.redactedAt()}>
         {(at) => (
           <p data-slot="bots-hint" data-state="warn">

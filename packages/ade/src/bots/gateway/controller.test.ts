@@ -5,6 +5,7 @@ import { emptyTalk, type PendingPermission } from "../talk"
 import { turnsRunning } from "../terms"
 import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "../turn"
 import { startGatewayController, type GatewayBridge, type GatewayMessage } from "./controller"
+import { forgetTurnFailures, turnFailureOf } from "./failures"
 import { chatHeader } from "./policy"
 import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteKey, remoteTools } from "./remote"
 import { localSessionStore, memorySessionStore, sessionKey } from "./session"
@@ -1093,5 +1094,41 @@ describe("who a button and a revocation speak for (S13)", () => {
     expect(turns.started[0]!.stopped).toBe(false)
     turns.started[0]!.finish({ text: "ok" })
     await until("la seconda", () => turns.started.length === 2)
+  })
+})
+
+describe("the detail of a failed turn stays in ADE, where the panel shows it (S10)", () => {
+  test("the last failed turn of a bot's platform is kept, with its time, without a key and not too long", async () => {
+    forgetTurnFailures()
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      now: () => 1_700_000_000_000,
+      warn: () => {},
+    })
+    b.emit("uno")
+    await until("il turno", () => turns.started.length === 1)
+    turns.started[0]!.finish({ status: "error", problem: "ENOENT: C:/Users/mario/x.json" })
+    await until("la risposta", () => b.sent.length === 1)
+    expect(turnFailureOf(BOT.path, "telegram")).toEqual({ at: 1_700_000_000_000, detail: "ENOENT: C:/Users/mario/x.json" })
+    expect(turnFailureOf(BOT.path, "slack")).toBeUndefined()
+    // The next one replaces it; a key in it is hidden; a long one is cut.
+    b.emit("due")
+    await until("il secondo turno", () => turns.started.length === 2)
+    turns.started[1]!.finish({ status: "error", problem: `chiave sk-${"a1B2c3D4".repeat(5)} ${"x".repeat(2000)}` })
+    await until("la seconda risposta", () => b.sent.length === 2)
+    const kept = turnFailureOf(BOT.path, "telegram")!
+    expect(kept.detail).not.toContain("a1B2c3D4")
+    expect(kept.detail.length).toBeLessThanOrEqual(600)
+    // A turn that goes well leaves what was there: the last failure, not the last turn.
+    b.emit("tre")
+    await until("il terzo turno", () => turns.started.length === 3)
+    turns.started[2]!.finish({ text: "ok" })
+    await until("la terza risposta", () => b.sent.length === 3)
+    expect(turnFailureOf(BOT.path, "telegram")).toEqual(kept)
   })
 })

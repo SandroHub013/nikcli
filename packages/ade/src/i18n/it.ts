@@ -893,6 +893,7 @@ export const it = {
   "gateway.panel.lastMessage": (time: string) => `ultimo messaggio alle ${time}`,
   "gateway.panel.redacted": (time: string) =>
     `Nel messaggio delle ${time} c'era una chiave: l'ho nascosta, il bot non l'ha vista e non è stata salvata.`,
+  "gateway.panel.turnFailed": (time: string, detail: string) => `Ultimo turno da chat non riuscito (${time}): ${detail}`,
   "gateway.panel.token": "Token del bot",
   "gateway.panel.tokenHelp":
     "Incolla il token che BotFather ti ha dato. Resta nel portachiavi del sistema: ADE non lo mostra più.",
