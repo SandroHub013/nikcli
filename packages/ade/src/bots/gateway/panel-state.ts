@@ -258,14 +258,6 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
     }
   }
 
-  const onOnline = () => {
-    void deps.api.wake?.()
-    void refresh()
-  }
-  if (typeof window !== "undefined") {
-    window.addEventListener("online", onOnline)
-  }
-
 
   /** The requests waiting on the platforms the panel is not looking at: a badge on their tiles. */
   const refreshWaiting = async () => {
@@ -560,9 +552,6 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
       disposed = true
       void cancelLink()
       stopFailures()
-      if (typeof window !== "undefined") {
-        window.removeEventListener("online", onOnline)
-      }
       unlisten?.()
     },
   }

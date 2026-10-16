@@ -1024,7 +1024,14 @@ describe("the QR is cancelled when it leaves the screen", () => {
     panel.dispose()
   })
 
-  test("wakes on online event and retry triggers api retry", async () => {
+  test("retry triggers api retry and panel does not bind window online listener (P2-1 handled globally)", async () => {
+    let addCalls = 0
+    const originalAdd = window.addEventListener
+    window.addEventListener = ((type: string, listener: any, options: any) => {
+      if (type === "online") addCalls++
+      return originalAdd.call(window, type, listener, options)
+    }) as any
+
     const fake = fakeApi({ enabled: true, running: true, needsAttention: true })
     const { panel } = panelWith(fake)
     await panel.ready
@@ -1033,11 +1040,9 @@ describe("the QR is cancelled when it leaves the screen", () => {
     await (panel as any).retry()
     expect(fake.calls).toContain(`retry ${BOT.path} telegram`)
 
-    window.dispatchEvent(new Event("online"))
-    await wait()
-    expect(fake.calls).toContain("wake")
-
     panel.dispose()
+    window.addEventListener = originalAdd
+    expect(addCalls).toBe(0)
   })
 })
 

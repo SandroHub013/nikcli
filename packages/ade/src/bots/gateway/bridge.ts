@@ -225,9 +225,18 @@ export async function startAppGatewayController(): Promise<GatewayController> {
       },
     })
     .catch(() => () => {})
+  const onOnline = () => {
+    void tauriGatewayPanelApi().wake?.()
+  }
+  if (typeof window !== "undefined") {
+    window.addEventListener("online", onOnline)
+  }
   return {
     ...controller,
     stop: () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("online", onOnline)
+      }
       if (activeController === controller) activeController = undefined
       attentionSync.stop()
       stopAside()
