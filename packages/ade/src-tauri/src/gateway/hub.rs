@@ -158,6 +158,10 @@ fn code_message(code: &str) -> String {
     )
 }
 
+/// What a stranger reads when the link they opened no longer holds (wrong, expired or used): a new QR comes from ADE, and
+/// the way of a plain `/start`, the code, follows if pairing is open.
+const LINK_STALE_MESSAGE: &str = "Questo link non vale più: chiedine uno nuovo a chi gestisce il bot in ADE.\nThis link is no longer valid: ask for a new QR in ADE.";
+
 const PAIRED_MESSAGE: &str = "Abbinamento fatto: ora questo bot ti risponde.\nPaired: this bot now answers you.";
 
 /// Where the hub reports, and what it hides.
@@ -1276,9 +1280,10 @@ impl Task {
     ///
     /// - from someone already paired: said again that they are, and nothing else (the token is not spent);
     /// - from a stranger in a private chat: a right token pairs them as a typed code would (same owner check: the token
-    ///   only exists because the owner asked for it in ADE), a wrong or expired one is counted and the stranger goes on
-    ///   to the ordinary way, a code if pairing is open: the code is the reserve;
-    /// - in a group or channel the token is worth nothing, and nothing is counted.
+    ///   only exists because the owner asked for it in ADE); a wrong, expired or used one counts for nothing (192 bits are
+    ///   not guessed, and a count would only let a stranger shut the owner's link), the stranger is told the link no
+    ///   longer holds and goes on to the ordinary way, a code if pairing is open: the code is the reserve;
+    /// - in a group or channel the token is worth nothing, and nothing happens.
     ///
     /// The log has the fact and never the token.
     async fn link_arrived(&self, message: &Inbound, token: &str, authorized: bool) -> bool {
@@ -1306,7 +1311,6 @@ impl Task {
                 }
                 link.remember_chat(&message.chat, &message.sender.id);
             }
-            // Saved whatever came of it: a wrong token counts toward the lockout across a restart.
             Ok(used)
         });
         match outcome {
@@ -1319,10 +1323,9 @@ impl Task {
             }
             Ok(LinkUse::Wrong) => {
                 self.env.log(&format!("{tag}: link di abbinamento sbagliato, scaduto o già usato"));
-                false
-            }
-            Ok(LinkUse::Locked) => {
-                self.env.log(&format!("{tag}: link di abbinamento chiusi per troppi tentativi"));
+                if let Err(error) = self.adapter.send(&message.chat, LINK_STALE_MESSAGE).await {
+                    self.env.log(&format!("{tag}: avviso del link non mandato: {}", redact(&error.message(), &self.secrets)));
+                }
                 false
             }
             Ok(LinkUse::NotAToken) => false,
@@ -2679,7 +2682,6 @@ mod tests {
         assert!(list.authorized.is_empty() && list.pending.is_empty());
         assert!(adapter.sent.lock().unwrap().is_empty(), "no code and no answer in a channel");
         let state = s.hub.store.link(BOT, Platform::Fake).unwrap();
-        assert_eq!(state.pairing.link_failures, 0, "nothing counted");
         assert!(state.pairing.link.is_some(), "the token is still there for the owner's phone");
         // And the owner's own private chat still works with it.
         feed.send(Ok(vec![message("2", "c7", "7", &format!("/start {token}"))])).unwrap();
@@ -2687,23 +2689,54 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn an_expired_or_wrong_token_counts_and_the_stranger_gets_a_code_as_before() {
-        let s = setup("link-wrong");
+    async fn an_expired_token_is_told_it_no_longer_holds_and_the_stranger_gets_the_code_as_before() {
+        let s = setup("link-expired");
         let (adapter, feed) = start(&s);
         let token = token_of(&s);
         s.env.later.store(authz::LINK_TTL_MS, std::sync::atomic::Ordering::SeqCst);
         feed.send(Ok(vec![message("1", "c7", "7", &format!("/start {token}"))])).unwrap();
-        // Expired: not paired, and the code that is the way in when the link does not work arrives.
-        eventually("il codice di riserva", || adapter.sent.lock().unwrap().len() == 1).await;
+        // Expired: not paired; they are told, and then the code that is the way in when the link does not work arrives.
+        eventually("l'avviso e il codice di riserva", || adapter.sent.lock().unwrap().len() == 2).await;
+        assert_eq!(adapter.sent.lock().unwrap()[0], ("c7".to_string(), LINK_STALE_MESSAGE.to_string()));
         let code = code_sent_to(&adapter, "c7");
         assert!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().authorized.is_empty());
-        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().pairing.link_failures, 1);
-        // A token of the right shape that was never issued counts the same.
-        feed.send(Ok(vec![message("2", "c8", "8", &format!("/start {}", "z".repeat(authz::LINK_TOKEN_LEN)))])).unwrap();
-        eventually("il secondo conteggio", || s.hub.store.link(BOT, Platform::Fake).unwrap().pairing.link_failures == 2).await;
-        // The typed code is unaffected by link failures: it still pairs.
-        s.hub.pairing_approve(BOT, Platform::Fake, &code).await.unwrap();
+        // The typed code is unaffected, and has all its attempts.
         assert_eq!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().attempts_left, 5);
+        s.hub.pairing_approve(BOT, Platform::Fake, &code).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn ten_wrong_starts_of_a_stranger_leave_the_owner_qr_and_the_limits_of_the_codes_as_they_were() {
+        let s = setup("link-ten-wrong");
+        let (adapter, feed) = start(&s);
+        let token = token_of(&s);
+        for round in 0..10 {
+            let wrong = format!("{:0>width$}", round, width = authz::LINK_TOKEN_LEN);
+            feed.send(Ok(vec![message(&format!("w{round}"), "c9", "9", &format!("/start {wrong}"))])).unwrap();
+        }
+        eventually("l'avviso almeno una volta", || {
+            adapter.sent.lock().unwrap().iter().any(|(to, text)| to == "c9" && text == LINK_STALE_MESSAGE)
+        })
+        .await;
+        tokio::time::sleep(Duration::from_millis(60)).await;
+        // Every wrong one was told; none counted: the codes have all their attempts and nothing is locked.
+        let list = s.hub.pairing_list(BOT, Platform::Fake).unwrap();
+        assert_eq!(list.attempts_left, 5);
+        assert!(list.locked_until_ms.is_none());
+        assert!(list.authorized.is_empty());
+        // The stranger is no one: no message reached the page, and the live token is the one ADE made.
+        assert!(s.env.messages.lock().unwrap().is_empty());
+        assert!(s.hub.store.link(BOT, Platform::Fake).unwrap().pairing.link.is_some());
+        // And the owner's phone, opening the same QR now, pairs.
+        feed.send(Ok(vec![message("o1", "c7", "7", &format!("/start {token}"))])).unwrap();
+        eventually("l'abbinamento del proprietario", || {
+            s.hub.pairing_list(BOT, Platform::Fake).unwrap().authorized.iter().any(|a| a.id == "7")
+        })
+        .await;
+        assert!(!s.hub.pairing_list(BOT, Platform::Fake).unwrap().authorized.iter().any(|a| a.id == "9"));
+        // The log has the facts and not one token.
+        let log = s.env.log.lock().unwrap().join("\n");
+        assert!(!log.contains(&token), "{log}");
     }
 
     #[tokio::test]
@@ -2713,7 +2746,6 @@ mod tests {
         feed.send(Ok(vec![message("1", "c7", "7", "/start")])).unwrap();
         eventually("il codice", || adapter.sent.lock().unwrap().len() == 1).await;
         assert_eq!(code_sent_to(&adapter, "c7").len(), 9);
-        assert!(s.hub.store.link(BOT, Platform::Fake).is_none_or(|link| link.pairing.link_failures == 0));
     }
 
     #[tokio::test]
@@ -2743,7 +2775,8 @@ mod tests {
         let new = token_of(&s);
         let (adapter, feed) = start(&s);
         feed.send(Ok(vec![message("1", "c7", "7", &format!("/start {old}"))])).unwrap();
-        eventually("il codice di riserva", || adapter.sent.lock().unwrap().len() == 1).await;
+        // Told the link no longer holds, then the code that is the reserve.
+        eventually("l'avviso e il codice di riserva", || adapter.sent.lock().unwrap().len() == 2).await;
         assert!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().authorized.is_empty(), "the old token is dead");
         feed.send(Ok(vec![message("2", "c7", "7", &format!("/start {new}"))])).unwrap();
         eventually("l'abbinamento", || s.hub.pairing_list(BOT, Platform::Fake).unwrap().authorized.iter().any(|a| a.id == "7")).await;
