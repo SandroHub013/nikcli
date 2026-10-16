@@ -650,13 +650,39 @@ impl Hub {
         if let Some(cursor) = cursor_to_save {
             let written_at = self.env.now_ms();
             self.store.update(bot, platform, |link, _| {
-                link.cursor = Some(cursor.clone());
-                link.cursor_saved_ms = Some(written_at);
+                if is_cursor_ahead(link.cursor.as_deref(), &cursor) {
+                    link.cursor = Some(cursor.clone());
+                    link.cursor_saved_ms = Some(written_at);
+                }
                 Ok(())
             })?;
         }
         Ok(())
     }
+}
+
+fn is_cursor_ahead(existing: Option<&str>, candidate: &str) -> bool {
+    let Some(existing) = existing else {
+        return true;
+    };
+    if let (Ok(c), Ok(e)) = (candidate.parse::<i64>(), existing.parse::<i64>()) {
+        return c > e;
+    }
+    if let (Ok(c_val), Ok(e_val)) = (
+        serde_json::from_str::<serde_json::Value>(candidate),
+        serde_json::from_str::<serde_json::Value>(existing),
+    ) {
+        if let (Some(c_seq), Some(e_seq)) = (
+            c_val.get("seq").and_then(|v| v.as_i64()),
+            e_val.get("seq").and_then(|v| v.as_i64()),
+        ) {
+            return c_seq > e_seq;
+        }
+    }
+    candidate != existing
+}
+
+impl Hub {
 
     /* ── replies ───────────────────────────────────────────────────────── */
 
@@ -997,11 +1023,10 @@ impl Task {
         }
         let written_at = self.env.now_ms();
         if let Err(error) = self.store.update(&self.bot, self.platform, |link, _| {
-            link.cursor = Some(cursor.clone());
-            // When, so a platform whose cursor carries a session can tell an
-            // old one from a fresh one instead of resuming a session the
-            // other end has already forgotten.
-            link.cursor_saved_ms = Some(written_at);
+            if is_cursor_ahead(link.cursor.as_deref(), &cursor) {
+                link.cursor = Some(cursor.clone());
+                link.cursor_saved_ms = Some(written_at);
+            }
             Ok(())
         }) {
             self.env.log(&format!("{}: posizione non salvata: {error}", self.tag()));
@@ -2171,6 +2196,37 @@ mod tests {
 
         s.hub.ack(BOT, Platform::Fake, "c42", "500").expect("ack riuscito");
         eventually("la posizione salvata dopo ack", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("501")).await;
+    }
+
+    #[tokio::test]
+    async fn ack_only_saves_a_cursor_ahead_of_existing_cursor() {
+        let s = setup("cursor-monotonic");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        // Pretend store already has cursor 501:
+        s.hub.store.update(BOT, Platform::Fake, |link, _| {
+            link.cursor = Some("501".into());
+            Ok(())
+        }).unwrap();
+
+        // Feed message with older cursor 500:
+        *adapter.position.lock().unwrap() = Some("500".into());
+        feed.send(Ok(vec![message("499", "c42", "42", "vecchio")])).unwrap();
+        eventually("il messaggio emesso", || s.env.messages.lock().unwrap().len() == 1).await;
+
+        s.hub.ack(BOT, Platform::Fake, "c42", "499").unwrap();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+
+        // An older cursor must NOT overwrite a newer cursor:
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref(), Some("501"));
+
+        // Feed message with newer cursor 502:
+        *adapter.position.lock().unwrap() = Some("502".into());
+        feed.send(Ok(vec![message("501", "c42", "42", "nuovo")])).unwrap();
+        eventually("il secondo messaggio emesso", || s.env.messages.lock().unwrap().len() == 2).await;
+
+        s.hub.ack(BOT, Platform::Fake, "c42", "501").unwrap();
+        eventually("il cursore avanzato", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("502")).await;
     }
 
     #[tokio::test]
