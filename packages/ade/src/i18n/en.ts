@@ -2319,7 +2319,6 @@ export const en: Messages = {
   "bots.form.title": "New bot",
   "bots.form.name": "Name",
   "bots.form.namePlaceholder": "Reviewer",
-  "bots.form.hintGenerating": "With empty instructions Ragu Code chooses the bot's name: what you write here is just a reminder.",
   "bots.form.hintNamed": "Becomes the bot's file name and the name you call it by.",
   "bots.form.logo": "Face",
   "bots.form.description": "Purpose",

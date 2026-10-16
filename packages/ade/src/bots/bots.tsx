@@ -2395,7 +2395,7 @@ function BotForm(props: {
       setProblem(t("bots.form.problemDesc"))
       return
     }
-    if (!generating() && name().trim().length === 0) {
+    if (name().trim().length === 0) {
       setProblem(t("bots.form.problemName"))
       return
     }
@@ -2463,9 +2463,8 @@ function BotForm(props: {
           placeholder={t("bots.form.namePlaceholder")}
         />
         <span data-slot="bots-hint">
-          {/* Said plainly, because the two routes name the bot differently and
-              a field that is sometimes ignored is worse than one that says so. */}
-          {generating() ? t("bots.form.hintGenerating") : t("bots.form.hintNamed")}
+          {/* The same on both routes: with empty instructions ragu writes them, and the file still takes this name. */}
+          {t("bots.form.hintNamed")}
         </span>
       </label>
 
