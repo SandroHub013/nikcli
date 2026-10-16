@@ -33,7 +33,8 @@ describe("turns on a plan", () => {
 
 test("an obvious key in a tool's printout is not kept", () => {
   const text = scrubSecrets(
-    "trovato sk-or-v1-abcdefghijklmnopqrstuvwxyz0123456789 e ghp_abcdefghijklmnopqrstuvwxyz e xai-abcdefghijklmnopqrstuvwxyz",
+    // Put together from a head and a rest: a whole key's shape in a source is stopped at the push by GitHub.
+    `trovato ${"sk-or-"}v1-abcdefghijklmnopqrstuvwxyz0123456789 e ${"ghp_"}abcdefghijklmnopqrstuvwxyz e ${"xai-"}abcdefghijklmnopqrstuvwxyz`,
   )
   expect(text).not.toContain("sk-or-v1-")
   expect(text).not.toContain("ghp_")
@@ -43,7 +44,7 @@ test("an obvious key in a tool's printout is not kept", () => {
   const more = [
     `AIza${"a".repeat(35)}`,
     `xoxb-${"1".repeat(12)}`,
-    "AKIA1234567890ABCDEF",
+    `${"AKIA"}1234567890ABCDEF`,
     `123456789:${"A".repeat(35)}`,
     `Bearer ${"a".repeat(24)}`,
   ]

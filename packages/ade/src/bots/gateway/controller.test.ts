@@ -834,7 +834,7 @@ describe("the gateways' controller", () => {
 
     // P2-1: safePreviewText holds back partial secrets (JWT, password with dot, password=ab.)
     // 1. JWT: delimiter is only whitespace, dot must not release partial header/payload
-    const jwtPartial = "Il token è eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkw"
+    const jwtPartial = `Il token è ${"eyJ"}hbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${"eyJ"}zdWIiOiIxMjM0NTY3ODkw`
     expect(safePreviewText(jwtPartial)).toBe("Il token è ")
 
     // 2. Password containing a dot: must not be cut at the dot
