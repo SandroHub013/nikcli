@@ -6764,13 +6764,15 @@ export function Workbench() {
 
           try {
             const working = countWorkingSessions(wb().panes, running)
-            if (!shouldConfirmWindowClose({ working })) {
+            const payload = event.payload as { requestId?: number; gatewayOn?: boolean } | undefined
+            const gatewayOn = payload?.gatewayOn ?? gatewayBar?.hasActive() ?? false
+            if (!shouldConfirmWindowClose({ working, gatewayOn })) {
               closingConfirmed = true
               await closeForGood()
               return
             }
 
-            const message = closeConfirmationMessage(working)
+            const message = closeConfirmationMessage({ working, gatewayOn })
             const allowed = await askCloseConfirmation(message)
             if (allowed) {
               closingConfirmed = true

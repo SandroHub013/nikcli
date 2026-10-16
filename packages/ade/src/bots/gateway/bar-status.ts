@@ -141,9 +141,11 @@ export function createGatewayBarStore(api: Pick<GatewayPanelApi, "status" | "lis
   }
 
   const status = () => computeGatewayBarStatus(Object.values(links()))
+  const hasActive = () => Object.values(links()).some((link) => link.enabled)
 
   return {
     status,
+    hasActive,
     refresh,
     dispose,
   }

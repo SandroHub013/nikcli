@@ -36,6 +36,20 @@ describe("closing the window (D81, d81-chiusura - option B)", () => {
     expect(shouldConfirmWindowClose({ working: 3 })).toBe(true)
     expect(closeConfirmationMessage(3)).toBe("3 sessioni stanno lavorando. Chiudere lo stesso?")
   })
+
+  test("Point 7: active gateway asks confirmation on exit with warning «I bot smettono di rispondere finché non riapri ADE.»", () => {
+    expect(shouldConfirmWindowClose({ working: 0, gatewayOn: true })).toBe(true)
+    expect(closeConfirmationMessage({ working: 0, gatewayOn: true })).toBe(
+      "I bot smettono di rispondere finché non riapri ADE.",
+    )
+  })
+
+  test("Point 7: active gateway combined with working sessions includes both warnings", () => {
+    expect(shouldConfirmWindowClose({ working: 2, gatewayOn: true })).toBe(true)
+    const msg = closeConfirmationMessage({ working: 2, gatewayOn: true })
+    expect(msg).toContain("2 sessioni stanno lavorando. Chiudere lo stesso?")
+    expect(msg).toContain("I bot smettono di rispondere finché non riapri ADE.")
+  })
 })
 
 describe("counting active working sessions for window close (D81)", () => {

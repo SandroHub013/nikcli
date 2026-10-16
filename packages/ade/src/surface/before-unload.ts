@@ -67,17 +67,28 @@ export function countWorkingSessions(
 }
 
 /**
- * Whether closing the window requires user confirmation (D81).
+ * Whether closing the window requires user confirmation (D81, P7).
  *
- * Distinct from `mustConfirmLeaving`: asks only if there are agent sessions at work.
+ * Distinct from `mustConfirmLeaving`: asks if there are agent sessions at work
+ * or if a bot gateway is on (P7: «I bot smettono di rispondere finché non riapri ADE.»).
  */
-export function shouldConfirmWindowClose(state: { working: number }): boolean {
-  return state.working > 0
+export function shouldConfirmWindowClose(state: { working: number; gatewayOn?: boolean }): boolean {
+  return state.working > 0 || !!state.gatewayOn
 }
 
 /**
- * Message shown when window close is requested with active sessions.
+ * Message shown when window close is requested with active sessions or active gateways.
  */
-export function closeConfirmationMessage(workingSessions: number): string {
-  return t("window.closeConfirm.message", workingSessions)
+export function closeConfirmationMessage(state: number | { working: number; gatewayOn?: boolean }): string {
+  if (typeof state === "number") {
+    return t("window.closeConfirm.message", state)
+  }
+  const parts: string[] = []
+  if (state.working > 0) {
+    parts.push(t("window.closeConfirm.message", state.working))
+  }
+  if (state.gatewayOn) {
+    parts.push(t("window.closeConfirm.gatewayOn"))
+  }
+  return parts.join("\n\n")
 }

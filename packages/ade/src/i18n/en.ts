@@ -663,6 +663,7 @@ export const en: Messages = {
     `${count} ${count === 1 ? "session is working" : "sessions are working"}. Close anyway?`,
   "window.closeConfirm.ok": "Close",
   "window.closeConfirm.cancel": "Cancel",
+  "window.closeConfirm.gatewayOn": "Bots will stop responding until you reopen ADE.",
   "ask.yes": "Yes",
   "ask.no": "No",
   "tray.hide.working": (count) =>

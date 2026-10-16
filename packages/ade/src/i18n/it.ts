@@ -679,6 +679,7 @@ export const it = {
     `${count} ${count === 1 ? "sessione sta lavorando" : "sessioni stanno lavorando"}. Chiudere lo stesso?`,
   "window.closeConfirm.ok": "Chiudi",
   "window.closeConfirm.cancel": "Annulla",
+  "window.closeConfirm.gatewayOn": "I bot smettono di rispondere finché non riapri ADE.",
   "ask.yes": "Sì",
   "ask.no": "No",
   "tray.hide.working": (count: number) =>
