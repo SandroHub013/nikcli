@@ -698,6 +698,9 @@ impl Core {
             let mut last = String::new();
             while let Some(piece) = queue.pop_front() {
                 let mut body = Core::body(&piece);
+                if !queue.is_empty() {
+                    body["flags"] = json!(SUPPRESS_EMBEDS | SUPPRESS_NOTIFICATIONS);
+                }
                 let seq = self.shared.nonce_counter.fetch_add(1, Ordering::SeqCst);
                 // The same nonce for every try at one piece: a repeat returns the
                 // message already posted instead of posting it twice.
@@ -2763,8 +2766,9 @@ mod tests {
         assert_eq!(rest.count(), 5);
         let reqs = rest.requests();
         assert!(reqs[2].0.starts_with("POST /channels/123/messages"));
-        assert_eq!(rest.body_of(2)["flags"], json!(4), "finale non deve silenziare le notifiche (solo SUPPRESS_EMBEDS 4)");
+        assert_eq!(rest.body_of(2)["flags"], json!(4100), "pezzi prima dell'ultimo devono silenziare le notifiche (4100)");
         assert!(reqs[3].0.starts_with("POST /channels/123/messages"));
+        assert_eq!(rest.body_of(3)["flags"], json!(4), "l'ultimo pezzo suona (solo SUPPRESS_EMBEDS 4)");
         assert!(reqs[4].0.starts_with("DELETE /channels/123/messages/111"), "anteprima deve essere cancellata dopo il finale");
         assert_eq!(hold(&d.shared.active_preview).get("123"), None);
     }
