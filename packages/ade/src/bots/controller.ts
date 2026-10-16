@@ -140,6 +140,8 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     })
   /** The thread each running turn writes to, when it is not the bot's own (a room, B8b). */
   const threads = new Map<string, string>()
+  /** The folder each running turn runs in, when it was given one: part of what makes two requests the same one. */
+  const cwds = new Map<string, string>()
   const threadOf = (path: string) => threads.get(path) ?? path
   /** The Nega waiting on each bot's open question. */
   const expiries = new Map<string, () => void>()
@@ -206,6 +208,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
         source: "ade",
         permission: asked.permission,
         patterns: asked.patterns,
+        ...(cwds.get(path) ? { cwd: cwds.get(path)! } : {}),
         reason: verdict.reason,
         ...(roomOfThread(threadOf(path), path) ? { room: roomOfThread(threadOf(path), path)! } : {}),
         askedAt: asked.askedAt,
@@ -332,6 +335,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
         : deps.runTurn(request)
     turns.set(path, turn)
     if (thread !== path) threads.set(path, thread)
+    if (cwd) cwds.set(path, cwd)
     void turn.result.then((result) => {
       /* What the turn spent counts even when it was stopped or forgotten; the notice only where it can be read. */
       const counted = money && gate.ok ? addSpend(spend.get(path), result.costUsd, now()) : undefined
@@ -341,6 +345,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       settleMemory(path, thread, from, routine ? "routine" : room ? "room" : "panel")
       turns.delete(path)
       threads.delete(path)
+      cwds.delete(path)
       cancelExpiry(path)
       const at = Date.now()
       deps.update(thread, (talk) => {
@@ -421,6 +426,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     if (!turn) return undefined
     turns.delete(path)
     threads.delete(path)
+    cwds.delete(path)
     cancelExpiry(path)
     turn.stop()
     return turn

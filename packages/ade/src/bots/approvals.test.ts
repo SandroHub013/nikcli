@@ -56,6 +56,36 @@ describe("merging", () => {
     expect(merged.map((one) => one.members[0]!.key)).toEqual(["a", "b", "c", "d"])
   })
 
+  test("P2-1: the same command in another folder is another request, so one «Consenti» never runs both", () => {
+    const merged = mergeApprovals([
+      request({ key: "panel", cwd: "C:/progetti/b" }),
+      request({ key: "phone", source: "telegram", cwd: "C:/progetti/a" }),
+    ])
+    expect(merged).toHaveLength(2)
+    expect(merged.map((one) => one.sources)).toEqual([["ade"], ["telegram"]])
+    const answers: ApprovalChoice[] = []
+    decideApproval(
+      mergeApprovals([
+        request({ key: "panel", cwd: "C:/progetti/b", answers }),
+        request({ key: "phone", source: "telegram", cwd: "C:/progetti/a", answers: [], choices: ["once", "reject"] }),
+      ])[0]!,
+      "once",
+    )
+    // Only the request that was decided is answered (the other one's answers list stays empty).
+    expect(answers).toEqual(["once"])
+  })
+
+  test("the same folder written another way is the same; a folder not known merges only with another not known", () => {
+    const same = mergeApprovals([
+      request({ key: "a", cwd: "C:\\Progetti\\A\\" }),
+      request({ key: "b", source: "telegram", cwd: "c:/progetti/a" }),
+    ])
+    expect(same).toHaveLength(1)
+    expect(same[0]!.sources).toEqual(["ade", "telegram"])
+    expect(mergeApprovals([request({ key: "a" }), request({ key: "b", source: "telegram" })])).toHaveLength(1)
+    expect(mergeApprovals([request({ key: "a", cwd: "C:/p" }), request({ key: "b", source: "telegram" })])).toHaveLength(2)
+  })
+
   test("the same command with a stray space is the same; the earliest expiry decides", () => {
     const merged = mergeApprovals([
       request({ key: "a", expiresAt: 500_000 }),

@@ -23,6 +23,8 @@ export interface ApprovalRequest {
   readonly permission: string
   /** What it wants to do it on: the command, whole, or the folder. */
   readonly patterns: string
+  /** The folder the turn runs in: the same command in another folder is another request. Absent when it is not known. */
+  readonly cwd?: string
   /** Why ADE asks, in words (`approval.ts`). */
   readonly reason?: string
   /** The room the question was asked in, when a room's member asked it: the place where it is seen. */
@@ -47,6 +49,7 @@ export interface WaitingApproval {
   readonly botName: string
   readonly permission: string
   readonly patterns: string
+  readonly cwd?: string
   readonly reason?: string
   readonly sources: readonly ApprovalSource[]
   /** The room it was asked in, if one of its members was asked there. */
@@ -59,9 +62,17 @@ export interface WaitingApproval {
   readonly members: readonly ApprovalRequest[]
 }
 
-/** What makes two requests one: the same bot asking for the same thing. Stable while the request is open. */
-export const approvalSignature = (request: Pick<ApprovalRequest, "bot" | "permission" | "patterns">) =>
-  [request.bot, request.permission, request.patterns.trim()].join("\n")
+/** A folder as a name to compare: one kind of slash, none at the end, the case of Windows. Empty when it is not known. */
+const folderName = (cwd: string | undefined) => (cwd ?? "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase()
+
+/**
+ * What makes two requests one: the same bot asking for the same thing in the same folder. The folder matters: the
+ * gateway runs in the project fixed when it was switched on and the panel in the one open in ADE, so `rm -rf dist` from
+ * the phone and from the panel can be two different folders, and a single «Consenti» must not run both. A request whose
+ * folder is not known merges only with others of unknown folder. Stable while the request is open.
+ */
+export const approvalSignature = (request: Pick<ApprovalRequest, "bot" | "permission" | "patterns" | "cwd">) =>
+  [request.bot, request.permission, request.patterns.trim(), folderName(request.cwd)].join("\n")
 
 const sameThing = (a: ApprovalRequest, b: ApprovalRequest) => approvalSignature(a) === approvalSignature(b)
 
@@ -86,6 +97,7 @@ export function mergeApprovals(requests: readonly ApprovalRequest[]): WaitingApp
       botName: first.botName,
       permission: first.permission,
       patterns: first.patterns,
+      ...(first.cwd !== undefined ? { cwd: first.cwd } : {}),
       ...(reason !== undefined ? { reason } : {}),
       ...(room !== undefined ? { room } : {}),
       sources: [...new Set(members.map((member) => member.source))],

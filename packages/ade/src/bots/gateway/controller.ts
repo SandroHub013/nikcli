@@ -203,6 +203,8 @@ const TYPING_EVERY_MS = 4_000
 /** What a question on the phone is about, and whose bot it is: the entry it has in the list of what waits. */
 interface ApprovalDetail extends AskDetail {
   readonly botName: string
+  /** The project the turn runs in: the same command in another project is another request. */
+  readonly cwd: string
 }
 
 interface Question {
@@ -269,6 +271,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
           source: target.platform,
           permission: detail.permission,
           patterns: detail.patterns,
+          cwd: detail.cwd,
           ...(detail.reason ? { reason: detail.reason } : {}),
           askedAt: asked,
           expiresAt: asked + timeoutMs,
@@ -397,7 +400,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
                   choices,
                   deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS,
                   signal,
-                  detail && { ...detail, botName: bot.identifier },
+                  detail && { ...detail, botName: bot.identifier, cwd: project },
                 ),
               refuse: !remote.commands,
               publicChat,

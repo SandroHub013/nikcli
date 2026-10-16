@@ -839,6 +839,8 @@ describe("the tools of a turn from a chat", () => {
       botName: "aiuto",
       permission: "bash",
       patterns: "rm -rf build",
+      // The project the gateway runs in: the same command from the panel in another project is another request (P2-1).
+      cwd: PROJECT,
       sources: ["telegram"],
       // A standing «Sempre» is not the phone's to give, nor ADE's for the phone.
       choices: ["once", "reject"],
