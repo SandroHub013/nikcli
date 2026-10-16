@@ -5,7 +5,8 @@
 //! the bot in a group channel (or a button press), from a person and not a
 //! bot. Anything else stops here, so a stranger's text never becomes a turn: a
 //! stranger gets a pairing code instead (`authz.rs`), and becomes authorized
-//! only when the user types it in ADE. The page answers with `send`, which goes
+//! only when the user types it in ADE, or opens the link or QR ADE itself showed
+//! (`/start <token>`, which only the owner's window can make). The page answers with `send`, which goes
 //! only to chats an authorized sender wrote from and loses every known secret
 //! on the way out.
 //!
