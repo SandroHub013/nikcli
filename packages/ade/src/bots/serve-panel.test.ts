@@ -4,6 +4,7 @@ import type { ChatEvent } from "../chat/events"
 import type { ServerBridge } from "../chat/transport"
 import { t } from "../i18n"
 import { APPROVAL_TIMEOUT_MS, withAlways } from "./approval"
+import { createApprovalRegistry, decideApproval, mergeApprovals, type ApprovalRegistry } from "./approvals"
 import { createBotTurns } from "./controller"
 import type { AgentFile } from "./ragu"
 import { admitProject } from "./project-trust"
@@ -94,12 +95,17 @@ async function until(done: () => boolean) {
 }
 
 /** The panel, each bot's turns on its own server (`serverOf`), or all on `fake`. */
-function panel(fake: ReturnType<typeof server>, serverOf: (path: string) => ReturnType<typeof server> = () => fake) {
+function panel(
+  fake: ReturnType<typeof server>,
+  serverOf: (path: string) => ReturnType<typeof server> = () => fake,
+  approvals?: ApprovalRegistry,
+) {
   const talks: Record<string, Talk> = {}
   const kept: Record<string, string[]> = {}
   const timers: { run: () => void; ms: number; cancelled: boolean }[] = []
   const turns = createBotTurns({
     runTurn: (request) => runServeTurn(request, serverOf(request.bot?.path ?? "").deps),
+    ...(approvals ? { approvals } : {}),
     talkOf: (path) => talks[path] ?? emptyTalk(),
     update: (path, change) => {
       talks[path] = change(talks[path] ?? emptyTalk())
@@ -158,6 +164,58 @@ describe("B8d: ragu's questions in the panel and a room, by their id", () => {
     await until(() => !view.turns.running(BOT.path))
     expect(view.talk().status).toBe("idle")
     expect(fake.replies.every(([, reply]) => reply !== "always")).toBe(true)
+  })
+
+  test("a question waiting is listed for the whole app, decided from there, and gone when it is answered, expires or the turn stops", async () => {
+    const fake = server()
+    const registry = createApprovalRegistry()
+    const view = panel(fake, () => fake, registry)
+    view.turns.send(BOT, "ciao", "C:/progetto")
+    await until(() => fake.prompts.length === 1)
+    // An everyday command and a blocked one are never listed: nobody is asked.
+    fake.push(status("busy"), asked("per_a", "git status"), asked("per_b", "rm -rf ~"))
+    await until(() => fake.replies.length === 2)
+    expect(registry.list()).toEqual([])
+
+    fake.push(asked("per_c", "git push --force"))
+    await until(() => registry.list().length === 1)
+    const [listed] = mergeApprovals(registry.list())
+    expect(listed).toMatchObject({
+      bot: BOT.path,
+      botName: "alfa",
+      permission: "bash",
+      patterns: "git push --force",
+      sources: ["ade"],
+      choices: ["once", "always", "reject"],
+    })
+    expect(listed!.expiresAt - listed!.askedAt).toBe(APPROVAL_TIMEOUT_MS)
+    expect(listed!.reason).toBeTruthy()
+
+    // Decided from the list, as from the card: the same answer by the same id.
+    expect(decideApproval(listed!, "reject")).toBe(true)
+    await until(() => fake.replies.length === 3)
+    expect(fake.replies[2]).toEqual(["per_c", "reject"])
+    expect(registry.list()).toEqual([])
+    expect(view.talk().permission).toBeUndefined()
+
+    // «Sempre» from the list is the bot's, as from the card.
+    fake.push(asked("per_d", "git push --force"))
+    await until(() => registry.list().length === 1)
+    expect(decideApproval(mergeApprovals(registry.list())[0]!, "always")).toBe(true)
+    await until(() => fake.replies.length === 4)
+    expect(fake.replies[3]).toEqual(["per_d", "once"])
+    expect(view.kept[BOT.path]?.length).toBeGreaterThan(0)
+    expect(registry.list()).toEqual([])
+
+    // The expiry closes it too, and so does a stop.
+    fake.push(asked("per_e", "kill -9 123"))
+    await until(() => registry.list().length === 1)
+    view.timers.find((timer) => timer.ms === APPROVAL_TIMEOUT_MS && !timer.cancelled)!.run()
+    await until(() => registry.list().length === 0)
+    fake.push(asked("per_f", "sudo apt update"))
+    await until(() => registry.list().length === 1)
+    view.turns.stop(BOT)
+    expect(registry.list()).toEqual([])
   })
 
   test("a Nega is said in the thread (Verifiche): refused by the user, not silently", async () => {

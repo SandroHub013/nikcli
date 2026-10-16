@@ -843,6 +843,8 @@ export const it = {
   "gateway.approve.danger": (reason: string) => `Attenzione: questo comando ${reason}.`,
   "gateway.approve.blocked": (what: string, reason: string) =>
     `Ho bloccato «${what}»: ${reason}. Questo comando non parte mai, nemmeno con un sì.`,
+  "gateway.approve.byAdeOnce": "Consentito da ADE.",
+  "gateway.approve.byAdeNo": "Negato da ADE.",
   "gateway.approve.no": "No",
   "gateway.approve.expired": "Nessuna risposta in 5 minuti: ho detto di no.",
   "gateway.approve.refused": (permission: string, what: string) =>

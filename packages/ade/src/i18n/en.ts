@@ -823,6 +823,8 @@ export const en: Messages = {
   "gateway.approve.once": "Yes, this once",
   "gateway.approve.privateOnly":
     "This needs your confirmation, and I do not ask for it in a channel. Write to me in private.",
+  "gateway.approve.byAdeOnce": "Allowed from ADE.",
+  "gateway.approve.byAdeNo": "Refused from ADE.",
   "gateway.approve.no": "No",
   "gateway.approve.expired": "No answer in 5 minutes: I said no.",
   "gateway.approve.refused": (permission, what) =>

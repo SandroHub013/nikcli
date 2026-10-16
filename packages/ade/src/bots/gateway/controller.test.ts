@@ -4,7 +4,8 @@ import type { AgentFile } from "../ragu"
 import { emptyTalk, type PendingPermission } from "../talk"
 import { turnsRunning } from "../terms"
 import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "../turn"
-import { startGatewayController, RECOVERED_NOTICE, recoveredNotice, type GatewayBridge, type GatewayMessage } from "./controller"
+import { createApprovalRegistry, decideApproval, mergeApprovals } from "../approvals"
+import { ASK_TIMEOUT_MS, startGatewayController, RECOVERED_NOTICE, recoveredNotice, type GatewayBridge, type GatewayMessage } from "./controller"
 import { forgetTurnFailures, noteTurnFailure, turnFailureOf } from "./failures"
 import { chatHeader } from "./policy"
 import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteKey, remoteTools } from "./remote"
@@ -810,6 +811,87 @@ describe("the tools of a turn from a chat", () => {
     b.emit(b.questions[1]!.buttons[1]!.data, { button: true })
     await until("il no", () => turn.keys.length === 2)
     expect(turn.keys[1]).toBe("reject")
+  })
+
+  /* The user's choice 4: a question waiting on a phone is in the list of what waits, and ADE can decide it. */
+  test("a question on the phone is listed for ADE, decided from there, and the phone is told and its buttons stop counting", async () => {
+    const registry = createApprovalRegistry()
+    const b = bridge()
+    const turns = typedTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: ragu,
+      sessions: memorySessionStore(),
+      remote: () => on,
+      approvals: registry,
+      now: () => 1_000,
+    })
+    b.emit("pulisci la build")
+    await until("il turno", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+    turn.request.onPermission!(asking("bash", "rm -rf build"))
+    await until("la domanda", () => b.questions.length === 1)
+
+    const [listed] = mergeApprovals(registry.list())
+    expect(listed).toMatchObject({
+      bot: BOT.path,
+      botName: "aiuto",
+      permission: "bash",
+      patterns: "rm -rf build",
+      sources: ["telegram"],
+      // A standing «Sempre» is not the phone's to give, nor ADE's for the phone.
+      choices: ["once", "reject"],
+      askedAt: 1_000,
+      expiresAt: 1_000 + ASK_TIMEOUT_MS,
+    })
+    expect(listed!.reason).toBe(t("bots.approval.reason.recursiveDelete"))
+
+    expect(decideApproval(listed!, "once")).toBe(true)
+    await until("il sì", () => turn.keys.length === 1)
+    expect(turn.keys).toEqual(["once"])
+    expect(turn.ids).toEqual(["per_rm -rf build"])
+    expect(registry.list()).toEqual([])
+    // The phone is told who answered.
+    await until("l'esito", () => b.sent.some((line) => line.text === t("gateway.approve.byAdeOnce")))
+
+    // The button still on the phone no longer counts, and a second answer from ADE does nothing.
+    b.emit(b.questions[0]!.buttons[1]!.data, { button: true })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(turn.keys).toEqual(["once"])
+    expect(decideApproval(listed!, "reject")).toBe(true)
+    expect(turn.keys).toEqual(["once"])
+    expect(b.sent.filter((line) => line.text === t("gateway.approve.byAdeNo"))).toEqual([])
+  })
+
+  test("a no from ADE reaches the phone as a no; a press on the phone closes the entry too", async () => {
+    const registry = createApprovalRegistry()
+    const b = bridge()
+    const turns = typedTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: ragu,
+      sessions: memorySessionStore(),
+      remote: () => on,
+      approvals: registry,
+    })
+    b.emit("pulisci la build")
+    await until("il turno", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+    turn.request.onPermission!(asking("bash", "rm -rf build"))
+    await until("la domanda", () => b.questions.length === 1)
+    decideApproval(mergeApprovals(registry.list())[0]!, "reject")
+    await until("il no", () => turn.keys.length === 1)
+    expect(turn.keys).toEqual(["reject"])
+    await until("l'esito", () => b.sent.some((line) => line.text === t("gateway.approve.byAdeNo")))
+
+    turn.request.onPermission!(asking("bash", "npm publish"))
+    await until("la seconda domanda", () => b.questions.length === 2)
+    expect(registry.list()).toHaveLength(1)
+    b.emit(b.questions[1]!.buttons[0]!.data, { button: true })
+    await until("il sì dal telefono", () => turn.keys.length === 2)
+    expect(registry.list()).toEqual([])
   })
 
   test("a press from another person of the chat does not answer the question of the one who asked (S13)", async () => {
