@@ -195,7 +195,9 @@ export function configDenials(): string[] {
  * (Windows does not count it, the glob does), and the short 8.3 name (`GIT~1`). The folder must be a whole segment:
  * `.gitignore` and `.github/CODEOWNERS` stay writable. `.github/workflows` has its second name spelled with `?`
  * (nine letters) since its 2^9 casings would be too many: any nine-letter folder under `.github` is refused as well,
- * on the safe side. `.ragu` and `.nikcli` are `configDenials`'.
+ * on the safe side. `.ragu` and `.nikcli` are `configDenials`'. A segment written with a trailing dot or space
+ * (`.git.\hooks`), which Windows opens as the folder, is read by ragu as Windows reads it before the rules
+ * (`PermissionRuleset.windowsPathForm`), so these patterns need no spelling of it.
  */
 const BACKSLASH = "\\"
 

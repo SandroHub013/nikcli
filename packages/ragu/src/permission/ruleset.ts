@@ -147,22 +147,40 @@ export namespace PermissionRuleset {
     return at < 0 ? undefined : { agent: rules.slice(0, at), session: rules.slice(at) }
   }
 
+  /**
+   * A path as Windows opens it: the dots and spaces that end a segment are dropped (`.git.\hooks` is `.git\hooks`),
+   * a segment made only of dots (`.`, `..`) stays. Written for the rules of a bot's session, which name a folder
+   * by its name (N2); the same on every platform, since a rule that denies more is on the safe side.
+   */
+  export function windowsPathForm(path: string): string {
+    return path
+      .split(/([\\/])/)
+      .map((segment) => (/^\.*$/.test(segment) ? segment : segment.replace(/[. ]+$/, "")))
+      .join("")
+  }
+
   export function evaluate(permission: string, pattern: string, ...rulesets: Ruleset[]): Rule {
     const merged = merge(...rulesets)
     // debug + count only: stringifying the full ruleset on every tool call is
     // measurable overhead at the default INFO level.
     log.debug("evaluate", { permission, pattern, rules: merged.length })
-    const matches = (rule: Rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(pattern, rule.pattern)
+    const strictest = (found: (Rule | undefined)[]) =>
+      found.reduce<Rule | undefined>(
+        (best, one) => (one && (!best || SEVERITY[one.action] > SEVERITY[best.action]) ? one : best),
+        undefined,
+      )
     // A bot's session only restricts (review of the review, N1): its allows come after the agent's rules and would
     // win over `read *.env: ask`, a bot file's `edit: false` and the project's denials. The agent's rules and the
     // session's are read apart, and the stricter decision stands.
     const parts = splitAtBotMark(merged)
-    const match = parts
-      ? [parts.agent.findLast(matches), parts.session.findLast(matches)].reduce<Rule | undefined>(
-          (strictest, found) => (found && (!strictest || SEVERITY[found.action] > SEVERITY[strictest.action]) ? found : strictest),
-          undefined,
-        )
-      : merged.findLast(matches)
+    const decideFor = (target: string) => {
+      const matches = (rule: Rule) => Wildcard.match(permission, rule.permission) && Wildcard.match(target, rule.pattern)
+      return parts ? strictest([parts.agent.findLast(matches), parts.session.findLast(matches)]) : merged.findLast(matches)
+    }
+    // And a write is read twice (N2): as written, and as Windows reads it, which drops the dots and spaces that end a
+    // segment, so `.git.\hooks\pre-commit` is `.git\hooks\pre-commit`.
+    const windows = parts && permission === "edit" ? windowsPathForm(pattern) : pattern
+    const match = windows === pattern ? decideFor(pattern) : strictest([decideFor(pattern), decideFor(windows)])
     const decision = match ?? { action: "ask" as const, permission, pattern: "*" }
 
     // `specs/effect-tui/17-sandbox-permission-boundaries.md` requirement 10:
