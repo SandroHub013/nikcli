@@ -12,7 +12,8 @@
   height: 100vh;
   z-index: 9999;
   overflow: hidden;
-  background: var(--ade-bg, #120d0b);
+  color-scheme: dark;
+  background: #120d0b;
   transition: opacity var(--splash-fade, var(--ade-dur-slow, 280ms)) var(--ade-ease, ease);
   opacity: 1;
   cursor: default;
@@ -48,7 +49,7 @@
   margin-top: var(--ade-space-3, 8px);
   font-family: var(--ade-mono, monospace);
   font-size: var(--ade-font-xs);
-  color: var(--ade-text-weak, #9a907f);
+  color: #9a907f;
   letter-spacing: 0.5px;
   text-align: center;
   user-select: none;

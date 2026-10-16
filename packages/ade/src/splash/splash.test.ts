@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 import { compileSolidJsx } from "../test-support/solid-jsx"
 
 compileSolidJsx()
@@ -29,6 +31,14 @@ describe("splash component (step 3)", () => {
       dispose: () => disposeFn?.(),
     }
   }
+
+  test("splash has fixed ink background and dark color-scheme without theme tokens (P1-1)", () => {
+    const css = readFileSync(join(import.meta.dir, "splash.css"), "utf8")
+    expect(css).not.toContain("var(--ade-bg")
+    expect(css).not.toContain("var(--ade-text-weak")
+    expect(css).toMatch(/color-scheme:\s*dark/)
+    expect(css).toMatch(/background:\s*#120d0b/)
+  })
 
   test("renders dialog with accessibility attributes and canvas", () => {
     const handle = mountSplash({ visible: true })
