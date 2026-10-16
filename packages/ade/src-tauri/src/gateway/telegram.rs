@@ -449,7 +449,7 @@ impl Adapter for Telegram {
             return Ok(());
         }
 
-        let piece = split(text, MAX_LEN, utf16).into_iter().next().unwrap_or_default();
+        let piece = split(text, MAX_LEN, utf16).into_iter().last().unwrap_or_default();
         if piece.is_empty() {
             return Ok(());
         }
@@ -954,4 +954,20 @@ mod tests {
         let f = Failure::Api { code: 429, description: "Too Many Requests: retry after 5".into(), retry_after: Some(5) };
         assert!(matches!(f.for_sending(), AdapterError::Flood(msg) if msg.contains("Too Many Requests")));
     }
+
+    #[tokio::test]
+    async fn draft_shows_tail_piece_when_preview_exceeds_max_len() {
+        let api = FakeApi::start();
+        let telegram = adapter(&api, None);
+        let head = "A".repeat(4100);
+        let tail = "Questo e il pezzo finale nella coda.";
+        let text = format!("{head}\n\n{tail}");
+        telegram.preview("42", &text).await.unwrap();
+        let drafts = api.calls_to("sendMessageDraft");
+        assert_eq!(drafts.len(), 1);
+        let sent_text = drafts[0]["text"].as_str().unwrap();
+        assert!(sent_text.contains("Questo e il pezzo finale nella coda"));
+        assert!(!sent_text.contains("AAAAA"));
+    }
 }
+

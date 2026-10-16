@@ -136,6 +136,8 @@ export interface GatewayControllerDeps {
   readonly previewCadenceMs?: number
   /** Minimum new characters to trigger a preview update; `PREVIEW_MIN_DELTA_CHARS` when absent. */
   readonly previewMinDeltaChars?: number
+  /** How often Telegram drafts are refreshed to avoid disappearing; `TELEGRAM_DRAFT_KEEP_ALIVE_MS` when absent. */
+  readonly draftKeepAliveMs?: number
   /** Where a failure to reach the chat is noted; never the text of a message. */
   readonly warn?: (line: string) => void
 }
@@ -143,6 +145,7 @@ export interface GatewayControllerDeps {
 export const PREVIEW_CADENCE_MS = 1_000
 export const PREVIEW_MIN_DELTA_CHARS = 24
 export const PREVIEW_FLOOD_LIMIT = 3
+export const TELEGRAM_DRAFT_KEEP_ALIVE_MS = 20_000
 
 /** Where a question goes: one chat of one bot's gateway. */
 export interface ChatTarget {
@@ -338,6 +341,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     state.current = message
     const fresh = state.fresh
     let typing: ReturnType<typeof setInterval> | undefined
+    let draftKeepAlive: ReturnType<typeof setInterval> | undefined
     let inFlightPreview: Promise<void> | undefined
     let previewDisabled = false
     const ended = new AbortController()
@@ -436,6 +440,34 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         inFlightPreview = promise
       }
 
+      if (message.platform === "telegram") {
+        const keepAliveMs = deps.draftKeepAliveMs ?? TELEGRAM_DRAFT_KEEP_ALIVE_MS
+        draftKeepAlive = setInterval(() => {
+          const previewFn = deps.bridge.preview
+          if (closed || previewDisabled || state.cancelled || ended.signal.aborted || !previewFn) return
+          if (!lastPreviewText) return
+          if (previewing) return
+          previewing = true
+          const textToRefresh = lastPreviewText
+          const promise = (async () => {
+            try {
+              if (closed || previewDisabled || state.cancelled || ended.signal.aborted) return
+              await previewFn(message.bot, message.platform, message.chat, textToRefresh)
+            } catch (error) {
+              if (isFloodError(error)) {
+                floodErrors += 1
+                if (floodErrors >= PREVIEW_FLOOD_LIMIT) {
+                  previewDisabled = true
+                }
+              }
+            } finally {
+              previewing = false
+            }
+          })()
+          inFlightPreview = promise
+        }, keepAliveMs)
+      }
+
       turn = deps.runTurn({
         runner,
         bot,
@@ -465,6 +497,10 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         try {
           await inFlightPreview
         } catch {}
+      }
+      if (draftKeepAlive) {
+        clearInterval(draftKeepAlive)
+        draftKeepAlive = undefined
       }
       clearInterval(typing)
       typing = undefined
@@ -499,6 +535,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       } catch {}
       ended.abort()
       if (typing) clearInterval(typing)
+      if (draftKeepAlive) clearInterval(draftKeepAlive)
       state.turn = undefined
       state.starting = false
       state.current = undefined

@@ -1702,4 +1702,50 @@ describe("the detail of a failed turn stays in ADE, where the panel shows it (S1
     await until("la terza risposta", () => b.sent.length === 3)
     expect(turnFailureOf(BOT.path, "telegram")).toEqual(kept)
   })
+
+  test("repeats active telegram draft every 20s during tool execution and approval question", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    const RAGU: AgentFile = { ...BOT, runner: "ragu" }
+    const raguBot = async () => ({ ok: true as const, bot: RAGU, fingerprint: "f-1" })
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: raguBot,
+      sessions: memorySessionStore(),
+      remote: () => ({ commands: true, fingerprint: "f-1" }),
+      draftKeepAliveMs: 15,
+    })
+    b.emit("ciao", { private: true })
+    await until("il turno è partito", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+
+    // Send first preview
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Inizio della risposta parziale con abbastanza caratteri per superare la soglia minima." })
+    await until("prima anteprima inviata", () => b.previews.length === 1)
+    expect(b.previews[0]!.text).toContain("Inizio della risposta")
+
+    // Tool runs without text updates: draftKeepAlive fires after 15ms and repeats the same draft
+    await until("bozza ripetuta durante strumento lungo", () => b.previews.length >= 2)
+    expect(b.previews[1]!.text).toBe(b.previews[0]!.text)
+
+    // Approval question asked
+    turn.request.onPermission?.({
+      requestID: "per_2",
+      permission: "bash",
+      patterns: "cargo test",
+      askedAt: 0,
+    })
+    await until("domanda approvazione arrivata", () => b.questions.length === 1)
+
+    // During approval question, draft keep alive continues to repeat
+    const countBeforeApprovalWait = b.previews.length
+    await until("bozza ripetuta durante attesa approvazione", () => b.previews.length > countBeforeApprovalWait)
+    expect(b.previews[b.previews.length - 1]!.text).toBe(b.previews[0]!.text)
+
+    // Finish turn
+    turn.finish({ text: "Risposta completata dopo approvazione." })
+    await until("messaggio finale inviato", () => b.sent.length === 1)
+  })
 })
+
