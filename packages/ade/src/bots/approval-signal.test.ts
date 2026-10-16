@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { setLocalePreference, t } from "../i18n"
 import { addNotice, dismissClosedApprovals, unreadCount } from "../surface/notifications"
-import { approvalBadge, approvalLine, freshApprovals, shouldNotifySystem, sourcesText } from "./approval-signal"
+import { approvalAction, approvalBadge, approvalLine, freshApprovals, shouldNotifySystem, sourcesText } from "./approval-signal"
 import { mergeApprovals, type ApprovalRequest } from "./approvals"
 import { notifySystem, windowInFront } from "./system-notify"
 
@@ -58,9 +58,21 @@ describe("the badge", () => {
 describe("the words", () => {
   test("the line says whose bot and what it wants", () => {
     const one = waiting(request())[0]!
-    expect(approvalLine(one)).toBe("«alfa» aspetta te: vuole usare «bash» su «git push --force»")
+    expect(approvalLine(one)).toBe("«alfa» aspetta te: vuole eseguire un comando (bash): «git push --force»")
     setLocalePreference("en")
-    expect(approvalLine(one)).toBe("“alfa” is waiting for you: it wants to use “bash” on “git push --force”")
+    expect(approvalLine(one)).toBe("“alfa” is waiting for you: it wants to run a command (bash): “git push --force”")
+    setLocalePreference("it")
+  })
+
+  test("P2-2: everyday words with the technical name in brackets; a permission with no words is named as ragu names it", () => {
+    const one = (permission: string, patterns: string) => ({ permission, patterns })
+    expect(approvalAction(one("bash", "ls"))).toBe("eseguire un comando (bash): «ls»")
+    expect(approvalAction(one("external_directory", "C:/altro"))).toBe("scrivere fuori dal progetto (external_directory): «C:/altro»")
+    expect(approvalAction(one("edit", "src/a.ts"))).toBe("modificare un file (edit): «src/a.ts»")
+    expect(approvalAction(one("webfetch", "https://x.it"))).toBe("usare «webfetch» su «https://x.it»")
+    expect(approvalAction(one("bash", "  "))).toBe("eseguire un comando (bash): «?»")
+    setLocalePreference("en")
+    expect(approvalAction(one("external_directory", "C:/other"))).toBe("write outside the project (external_directory): “C:/other”")
     setLocalePreference("it")
   })
 

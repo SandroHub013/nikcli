@@ -1,6 +1,6 @@
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js"
 import { t } from "../i18n"
-import { sourcesText } from "./approval-signal"
+import { approvalAction, sourcesText } from "./approval-signal"
 import { decideApproval, remainingClock, type ApprovalChoice, type WaitingApproval } from "./approvals"
 
 /**
@@ -44,7 +44,7 @@ export function WaitingList(props: {
                   {waiting.botName}
                 </button>
                 <span data-slot="bots-waiting-what" title={`${waiting.permission} ${waiting.patterns}`}>
-                  {t("bots.waiting.what", waiting.permission, waiting.patterns.trim() || "?")}
+                  {t("bots.waiting.what", approvalAction(waiting))}
                 </span>
                 <Show when={waiting.reason}>{(reason) => <span data-slot="bots-hint">{reason()}</span>}</Show>
                 <span data-slot="bots-hint">
