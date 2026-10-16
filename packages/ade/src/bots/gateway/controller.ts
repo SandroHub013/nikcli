@@ -58,6 +58,12 @@ export interface GatewayMessage {
   readonly button: boolean
   /** A one-to-one chat with the bot. Anything else is a channel others read. */
   readonly private: boolean
+  /**
+   * The sender is the owner of the account the bot runs on. Rust does not send
+   * it yet, and only the owner's own accounts are paired (D92), so a message
+   * that says nothing counts as the owner's; `false` is refused on a plan (S16).
+   */
+  readonly owner?: boolean
 }
 
 /** The Rust side, as the controller sees it. Tests pass a fake. */
@@ -286,7 +292,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       if (!loaded.ok) return void (await reply(message, loaded.problem))
       const bot = loaded.bot
       const runner = runnerById(bot.runner).id
-      const allowed = mayRun(runner, true)
+      const allowed = mayRun(runner, message.owner !== false)
       if (!allowed.ok) return void (await reply(message, allowed.problem))
       // `/ferma` while the bot was being read: nothing starts.
       if (closed || state.cancelled) return

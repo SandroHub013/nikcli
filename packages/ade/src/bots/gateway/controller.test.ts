@@ -933,3 +933,38 @@ describe("what a failed turn says in the chat (S10)", () => {
     expect(warned.some((line) => line.includes(LEAK))).toBe(true)
   })
 })
+
+describe("the owner check of a plan's turn (S16)", () => {
+  test("a message that says its sender is not the owner is refused on a plan, with the reason", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("ciao", { owner: false })
+    await until("il rifiuto", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe(t("gateway.ownerOnly", "Claude Code"))
+    expect(turns.started).toHaveLength(0)
+  })
+
+  test("an owner's message, or one that says nothing (D92: every paired account is the owner's), runs", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("uno", { owner: true })
+    await until("il primo turno", () => turns.started.length === 1)
+    turns.started[0]!.finish({ text: "ok" })
+    await until("la risposta", () => b.sent.length === 1)
+    b.emit("due")
+    await until("il secondo turno", () => turns.started.length === 2)
+    turns.started[1]!.finish({ text: "ok" })
+  })
+})
