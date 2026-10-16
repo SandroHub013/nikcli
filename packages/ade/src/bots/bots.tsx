@@ -1367,7 +1367,8 @@ function Thread(props: {
         data-slot="bots-messages"
         role="log"
         aria-live="polite"
-        aria-relevant="additions text"
+        aria-relevant="additions"
+        aria-busy={props.talk.status === "working"}
         aria-label={t("bots.thread.label", props.bot.identifier)}
         ref={(el) => (scroller = el)}
       >

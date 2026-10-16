@@ -104,6 +104,17 @@ describe("D22: the screen reader can follow", () => {
     }
   })
 
+  test("P2-P6: the log announces what is added, not every piece of a streaming answer, and holds while the turn works", () => {
+    const thread = view.slice(view.indexOf("function Thread"), view.indexOf("function Message"))
+    expect(thread).toContain('aria-relevant="additions"')
+    expect(thread).not.toContain('aria-relevant="additions text"')
+    expect(thread).toContain('aria-busy={props.talk.status === "working"}')
+    // A question waiting for the user is not «working»: it is announced.
+    expect(rooms).toContain('aria-relevant="additions"')
+    expect(rooms).not.toContain('aria-relevant="additions text"')
+    expect(rooms).toContain("aria-busy={speaking() !== undefined && !asked()}")
+  })
+
   test("lint: the message field, the routine's kind and the memory's fields have a name", () => {
     expect(view).toContain('aria-label={t("bots.composer.label", props.bot.identifier)}')
     expect(rooms).toContain('aria-label={t("bots.room.composerLabel", current().name)}')

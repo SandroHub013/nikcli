@@ -184,7 +184,8 @@ export function RoomMain(props: { deps: RoomPanelDeps; roomId: string; onRemoved
             data-slot="bots-messages"
             role="log"
             aria-live="polite"
-            aria-relevant="additions text"
+            aria-relevant="additions"
+            aria-busy={speaking() !== undefined && !asked()}
             aria-label={t("bots.room.threadLabel", current().name)}
             ref={(el) => (scroller = el)}
           >
