@@ -263,7 +263,10 @@ import {
 import { Chat } from "../chat/chat"
 import { appChatStore } from "../chat/store"
 import { barSessionCount } from "./bar-sessions"
-import { BotsMain, BotsRoster } from "../bots/bots"
+import { BotsMain, BotsRoster, openBotByPath } from "../bots/bots"
+import { approvalBadge, approvalLine, freshApprovals, shouldNotifySystem } from "../bots/approval-signal"
+import { waitingApprovals } from "../bots/approvals-app"
+import { notifySystem, windowInFront } from "../bots/system-notify"
 import { scrubSecrets } from "../bots/terms"
 import type { AgentFile } from "../bots/ragu"
 import type { Runner } from "../bots/runners"
@@ -630,6 +633,7 @@ import { NEW_PANE_ITEMS, showsNewPane, type NewPaneItem } from "./new-pane"
 import {
   addNotice,
   bellTone,
+  dismissClosedApprovals,
   dismissNotice,
   markAllRead,
   unreadCount,
@@ -918,6 +922,37 @@ export function Workbench() {
   const report = (text: string, kind: NoticeKind = "error", paneId?: string) => {
     setNotice(text)
     setNotices((list) => addNotice(list, { kind, text, at: Date.now(), ...(paneId ? { paneId } : {}) }))
+  }
+  /*
+   * A bot waits for the user (the user's choice 4): a line in the bell for each new request, gone when the request is
+   * answered or runs out, and a system notification when ADE is behind. The rules are in `bots/approval-signal.ts`.
+   */
+  let approvalsSeen: ReadonlySet<string> = new Set()
+  createEffect(() => {
+    const waiting = waitingApprovals()
+    const { fresh, seen } = freshApprovals(approvalsSeen, waiting)
+    approvalsSeen = seen
+    setNotices((list) => dismissClosedApprovals(list, seen))
+    for (const one of fresh) {
+      setNotices((list) =>
+        addNotice(list, {
+          kind: "warning",
+          text: approvalLine(one),
+          bot: one.bot,
+          ...(one.room ? { room: one.room } : {}),
+          approval: one.id,
+          at: Date.now(),
+        }),
+      )
+      // ADE is behind: the window flashes in the taskbar (`bots/system-notify.ts`).
+      if (shouldNotifySystem(windowInFront())) void notifySystem()
+    }
+  })
+  /** The bell's «Apri»: the Bot section, on that bot, or on the room where it was asked. */
+  const openWaitingBot = (path: string, room?: string) => {
+    setWb((w) => ({ ...w, view: "bot" }))
+    openBotByPath(path, room)
+    setNoticesOpen(false)
   }
   /* A button on the strip, for the one notice it was made for: shown only while that text is. */
   const [noticeAction, setNoticeAction] = createSignal<{ text: string; label: string; run: () => void }>()
@@ -9362,6 +9397,8 @@ export function Workbench() {
             items={VISIBLE_VIEWS.map((view) => ({
               id: view,
               label: ADE_VIEW_LABELS[view],
+              // The Bot section says how many bots wait for the user, from any section.
+              ...(view === "bot" ? approvalBadge(waitingApprovals()) : {}),
             }))}
             active={wb().view}
             onSelect={(id) => setWb((w) => ({ ...w, view: id as AdeView }))}
@@ -9850,6 +9887,17 @@ export function Workbench() {
                         {(notice) => (
                           <div data-slot="ade-notice-row" data-kind={notice.kind}>
                             <span data-slot="ade-notice-text">{notice.text}</span>
+                            <Show when={notice.bot}>
+                              {(bot) => (
+                                <button
+                                  type="button"
+                                  data-slot="ade-notice-link"
+                                  onClick={() => openWaitingBot(bot(), notice.room)}
+                                >
+                                  {notice.room ? t("bots.waiting.openRoom") : t("bots.waiting.open")}
+                                </button>
+                              )}
+                            </Show>
                             <Show when={notice.href}>
                               {(href) => (
                                 <Show

@@ -167,6 +167,8 @@ import { launchBot } from "./launch"
 import { formatCount } from "./format"
 import { metaWords } from "./page-meta"
 import { createWaitingCount } from "./gateway/waiting"
+import { waitingApprovals } from "./approvals-app"
+import { WaitingList } from "./waiting-list"
 import { objectiveLines, sameFields, savedFields, syncFields, type FormFields } from "./settings-sync"
 import { BotTabs } from "./bot-tabs"
 import { ConfirmAction } from "./confirm"
@@ -840,6 +842,17 @@ const shared = createRoot(() => {
   }
 })
 
+/**
+ * Opens what a request that waits for the user is in: the room, when its member was asked there (the question is
+ * seen in the room), or the bot's page.
+ */
+export function openBotByPath(path: string, room?: string) {
+  if (room) return shared.openRoom(room)
+  shared.openRoom(undefined)
+  shared.setOpenId(path)
+  shared.setComposing(false)
+}
+
 export interface BotsRosterProps {
   /** The open project, when there is one. Decides whether project bots exist. */
   projectRoot?: string
@@ -881,6 +894,9 @@ export function BotsRoster(props: BotsRosterProps) {
           +
         </button>
       </header>
+
+      {/* What the bots wait for, first: a yes or a no from here, the phone's questions too. */}
+      <WaitingList waiting={waitingApprovals} onOpen={openBotByPath} />
 
       <Show when={pinned().length > 0}>
         <div data-slot="bots-pinned">
@@ -1934,6 +1950,7 @@ function BotPage(props: {
           <PermissionsSection
             bot={props.bot}
             fingerprintOf={async (bot) => fileFingerprint(await readBotText(bot.path))}
+            always={localAlwaysStore()}
             {...(props.gateway ? { remote: localRemoteStore() } : {})}
           />
         </TabPanel>

@@ -37,7 +37,8 @@ import type { Turn, TurnRequest } from "../turn"
 import { BOT_TURN_TIMEOUT_MS } from "../controller"
 import { memorySnapshot, settleMemoryOps, takeMemoryOps, type MemoryOp, type MemoryStore } from "../memory"
 import type { Talk } from "../talk"
-import { permissionAnswerer } from "./approval"
+import type { ApprovalRegistry } from "../approvals"
+import { permissionAnswerer, type AskDetail } from "./approval"
 import { forgetTurnFailuresOf, noteTurnFailure } from "./failures"
 import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
 import type { BotAccount } from "../account"
@@ -125,6 +126,8 @@ export interface GatewayControllerDeps {
   readonly spendToday?: (bot: string) => Promise<string | undefined>
   /** How long a command waits for the phone before it is refused; `ASK_TIMEOUT_MS` when absent. */
   readonly approvalTimeoutMs?: number
+  /** Where a question waiting on a phone is listed, so ADE can decide it too (`approvals.ts`); absent, only the phone can. */
+  readonly approvals?: ApprovalRegistry
   readonly now?: () => number
   /** How often «sta scrivendo» is sent again: Telegram shows it for 5 s. */
   readonly typingEveryMs?: number
@@ -197,6 +200,11 @@ interface ChatState {
 
 const TYPING_EVERY_MS = 4_000
 
+/** What a question on the phone is about, and whose bot it is: the entry it has in the list of what waits. */
+interface ApprovalDetail extends AskDetail {
+  readonly botName: string
+}
+
 interface Question {
   readonly key: string
   readonly target: ChatTarget
@@ -236,17 +244,43 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     choices: readonly Choice[],
     timeoutMs = ASK_TIMEOUT_MS,
     signal?: AbortSignal,
+    detail?: ApprovalDetail,
   ) =>
     new Promise<string | undefined>((resolve) => {
       if (closed || choices.length === 0 || signal?.aborted) return resolve(undefined)
       const id = nonce()
       const timer = setTimeout(() => answer(undefined), timeoutMs)
+      let unlist: (() => void) | undefined
       // Once: whichever comes first — a press, the timeout, the stop, the turn's end — ends it.
       const answer = (value: string | undefined) => {
         if (!questions.delete(id)) return
         clearTimeout(timer)
+        unlist?.()
         signal?.removeEventListener("abort", ended)
         resolve(value)
+      }
+      // ADE can answer it too, from the list of what waits: the phone is told, and its buttons stop counting.
+      if (detail && deps.approvals) {
+        const asked = now()
+        unlist = deps.approvals.open({
+          key: `${target.platform}:${target.bot}:${id}`,
+          bot: target.bot,
+          botName: detail.botName,
+          source: target.platform,
+          permission: detail.permission,
+          patterns: detail.patterns,
+          ...(detail.reason ? { reason: detail.reason } : {}),
+          askedAt: asked,
+          expiresAt: asked + timeoutMs,
+          choices: ["once", "reject"],
+          answer: (choice) => {
+            if (!questions.has(id)) return
+            const value = choice === "once" ? "once" : "reject"
+            answer(value)
+            const told = t(value === "once" ? "gateway.approve.byAdeOnce" : "gateway.approve.byAdeNo")
+            deps.bridge.send(target.bot, target.platform, target.chat, told).catch(() => {})
+          },
+        })
       }
       const ended = () => answer(undefined)
       signal?.addEventListener("abort", ended)
@@ -356,13 +390,14 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       const onPermission =
         runner === "ragu"
           ? permissionAnswerer({
-              ask: (question, choices, signal) =>
+              ask: (question, choices, signal, detail) =>
                 ask(
                   { bot: message.bot, platform: message.platform, chat: message.chat, asker: message.sender.id },
                   question,
                   choices,
                   deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS,
                   signal,
+                  detail && { ...detail, botName: bot.identifier },
                 ),
               refuse: !remote.commands,
               publicChat,

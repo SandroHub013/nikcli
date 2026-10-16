@@ -17,6 +17,8 @@
 import { t } from "../i18n"
 import type { BotAccount } from "./account"
 import { APPROVAL_TIMEOUT_MS, decide, localAlwaysStore, type AlwaysStore } from "./approval"
+import { appApprovals } from "./approvals-app"
+import { roomOfThread, type ApprovalRegistry } from "./approvals"
 import {
   memoryPreface,
   settleMemoryOps,
@@ -69,6 +71,8 @@ export interface BotTurnsDeps {
   readonly accountOf?: (path: string) => BotAccount
   /** Each bot's «Sempre» (B8c). */
   readonly always?: AlwaysStore
+  /** Where a question waiting for the user is listed, to be seen and decided from anywhere in ADE; absent, the app's. */
+  readonly approvals?: ApprovalRegistry
   /** Each bot's memory (B8a); absent, the bots have none. */
   readonly memory?: MemoryStore
   /** Each bot's money a day (`spend.ts`): a conversation's turns are capped and counted. Absent, the app's store. */
@@ -125,6 +129,7 @@ export interface BotTurns {
 export function createBotTurns(deps: BotTurnsDeps): BotTurns {
   const turns = new Map<string, Turn>()
   const always = deps.always ?? localAlwaysStore()
+  const approvals = deps.approvals ?? appApprovals
   const spend = deps.spend ?? appSpendStore
   const now = deps.now ?? Date.now
   const schedule =
@@ -138,9 +143,14 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
   const threadOf = (path: string) => threads.get(path) ?? path
   /** The Nega waiting on each bot's open question. */
   const expiries = new Map<string, () => void>()
+  /** The entry each bot's open question has in the list of what waits for the user (`approvals.ts`). */
+  const listed = new Map<string, () => void>()
   const cancelExpiry = (path: string) => {
     expiries.get(path)?.()
     expiries.delete(path)
+    // The question is over, however it ended: answered, expired, or its turn stopped.
+    listed.get(path)?.()
+    listed.delete(path)
   }
 
   /** Answers ragu's question `asked` and closes it; a line in the thread when there is something to say. */
@@ -187,6 +197,23 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
         : talk,
     )
     cancelExpiry(path)
+    listed.set(
+      path,
+      approvals.open({
+        key: `ade:${path}:${asked.requestID ?? asked.askedAt}`,
+        bot: path,
+        botName: bot.identifier,
+        source: "ade",
+        permission: asked.permission,
+        patterns: asked.patterns,
+        reason: verdict.reason,
+        ...(roomOfThread(threadOf(path), path) ? { room: roomOfThread(threadOf(path), path)! } : {}),
+        askedAt: asked.askedAt,
+        expiresAt,
+        choices: verdict.keys ? ["once", "always", "reject"] : ["once", "reject"],
+        answer: (choice) => answerAsked(bot, choice, asked.requestID),
+      }),
+    )
     expiries.set(
       path,
       schedule(() => {
@@ -196,6 +223,20 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
         reply(path, turn, asked, "reject", t("bots.approval.expired", asked.patterns))
       }, APPROVAL_TIMEOUT_MS),
     )
+  }
+
+  /** The user's answer to the question on screen: from its card, or from anywhere the list of what waits shows it. */
+  const answerAsked = (bot: AgentFile, choice: PermissionAnswer, requestID: string | undefined) => {
+    const turn = turns.get(bot.path)
+    const asked = deps.talkOf(threadOf(bot.path)).permission
+    if (!turn || !asked) return
+    // The card the user clicked, not whatever question took its place meanwhile (review, M1).
+    if (asked.requestID !== requestID) return
+    // Every danger of the command: «Sempre» on one must not let the others through (M3).
+    if (choice === "always" && asked.always) for (const key of asked.always) always.add(bot.path, key)
+    // A Nega is said in the thread, as a block or an expiry is: the bot's next words come after a refusal.
+    if (choice === "reject") reply(bot.path, turn, asked, "reject", t("bots.approval.denied", asked.patterns))
+    else reply(bot.path, turn, asked, "once")
   }
 
   const begin = (
@@ -411,18 +452,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
         )
       })
     },
-    answer: (bot, choice, requestID) => {
-      const turn = turns.get(bot.path)
-      const asked = deps.talkOf(threadOf(bot.path)).permission
-      if (!turn || !asked) return
-      // The card the user clicked, not whatever question took its place meanwhile (review, M1).
-      if (asked.requestID !== requestID) return
-      // Every danger of the command: «Sempre» on one must not let the others through (M3).
-      if (choice === "always" && asked.always) for (const key of asked.always) always.add(bot.path, key)
-      // A Nega is said in the thread, as a block or an expiry is: the bot's next words come after a refusal.
-      if (choice === "reject") reply(bot.path, turn, asked, "reject", t("bots.approval.denied", asked.patterns))
-      else reply(bot.path, turn, asked, "once")
-    },
+    answer: answerAsked,
     grant: (bot) => {
       const offer = deps.talkOf(bot.path).offer
       if (!offer) return

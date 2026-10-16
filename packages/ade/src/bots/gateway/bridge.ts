@@ -22,6 +22,7 @@ import { appMemoryStore } from "../memory-app"
 import { localSessionStore } from "./session"
 import { spendStatus, spendTerms, withDailyCap } from "../spend"
 import { appSpendStore } from "../spend-app"
+import { appApprovals } from "../approvals-app"
 
 interface LinkStatus {
   readonly bot: string
@@ -150,6 +151,8 @@ export async function startAppGatewayController(): Promise<GatewayController> {
     remote: (bot, platform) => localRemoteStore().get(remoteKey(bot, platform)),
     account: (bot) => localAccountStore().get(bot),
     memory: appMemoryStore,
+    // A command waiting on a phone is listed in ADE too, and can be decided there.
+    approvals: appApprovals,
     spendToday: async (bot) => {
       try {
         const file = readAgentFile({ path: bot, scope: "global", text: await readBotText(bot) })

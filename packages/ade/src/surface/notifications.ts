@@ -24,6 +24,12 @@ export interface Notice {
   readonly paneId?: string
   /** A page the notice can open, such as a new release. */
   readonly href?: string
+  /** The bot (its file path) a notice about a request waiting for the user opens. */
+  readonly bot?: string
+  /** The room the request was asked in, when it was: the notice opens the room instead. */
+  readonly room?: string
+  /** The request the notice is about; the notice goes when the request is answered or runs out. */
+  readonly approval?: string
   readonly at: number
   readonly read: boolean
 }
@@ -51,6 +57,9 @@ export interface NoticeInput {
   readonly text: string
   readonly paneId?: string
   readonly href?: string
+  readonly bot?: string
+  readonly room?: string
+  readonly approval?: string
   readonly at: number
 }
 
@@ -86,6 +95,9 @@ export function addNotice(list: readonly Notice[], input: NoticeInput): Notice[]
     text: input.text,
     ...(input.paneId !== undefined ? { paneId: input.paneId } : {}),
     ...(input.href !== undefined ? { href: input.href } : {}),
+    ...(input.bot !== undefined ? { bot: input.bot } : {}),
+    ...(input.room !== undefined ? { room: input.room } : {}),
+    ...(input.approval !== undefined ? { approval: input.approval } : {}),
     at: input.at,
     read: false,
   }
@@ -107,6 +119,15 @@ export function unreadCount(list: readonly Notice[]): number {
 export function markAllRead(list: readonly Notice[]): Notice[] {
   if (list.every((notice) => notice.read)) return [...list]
   return list.map((notice) => (notice.read ? notice : { ...notice, read: true }))
+}
+
+/**
+ * Takes out the notices about requests that are no longer waiting: answered, expired, or their turn stopped. A line
+ * that says a bot waits for the user, once it does not, would send them to a question that is not there.
+ */
+export function dismissClosedApprovals(list: readonly Notice[], open: ReadonlySet<string>): Notice[] {
+  if (list.every((notice) => notice.approval === undefined || open.has(notice.approval))) return [...list]
+  return list.filter((notice) => notice.approval === undefined || open.has(notice.approval))
 }
 
 /** Removes one, for the row's own dismiss. */
