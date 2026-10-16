@@ -26,6 +26,7 @@ mod telegram;
 pub use adapter::Platform;
 use adapter::Adapter;
 use hub::{AuthorizedInfo, Env, GatewayMessage, Hub, LinkStatus, PairingInfo, PairingLink, PairingRequest, StatusInfo, TokenKind, Tokens};
+use serde::Deserialize;
 use std::sync::{Arc, OnceLock};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -230,6 +231,21 @@ pub async fn gateway_edit(
     text: String,
 ) -> Result<String, String> {
     hub(&app)?.edit(&bot, platform, &chat, &message, &text).await
+}
+
+/// One entry of the menu of commands the page gives: the command with no slash, and what it does, in ADE's language.
+#[derive(Deserialize)]
+pub struct MenuEntry {
+    command: String,
+    description: String,
+}
+
+/// The menu of commands (`policy.ts`) for the bot's messaging app, once its gateway is running; Telegram shows it
+/// next to the message box. The same list is not sent twice.
+#[tauri::command]
+pub async fn gateway_set_commands(app: AppHandle, bot: String, platform: Platform, commands: Vec<MenuEntry>) -> Result<(), String> {
+    let commands: Vec<(String, String)> = commands.into_iter().map(|entry| (entry.command, entry.description)).collect();
+    hub(&app)?.set_commands(&bot, platform, &commands).await
 }
 
 #[tauri::command]

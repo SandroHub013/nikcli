@@ -52,6 +52,22 @@ pub struct Telegram {
     next: Mutex<Option<i64>>,
     /// No webhook was found on the bot: long polling may go on.
     webhook_checked: AtomicBool,
+    /// The menu of commands Telegram has from this adapter (a hash of it): the same list is not sent again.
+    menu: Mutex<Option<u64>>,
+}
+
+/// Telegram's menu takes a command of 1 to 32 characters, `a-z`, `0-9` and `_`, and 1 to 256 for what it does; at most 100.
+const MENU_MAX: usize = 100;
+
+/// One entry of the menu as Telegram takes it, or none when it would be refused.
+fn menu_entry(command: &str, description: &str) -> Option<Value> {
+    let command = command.trim().trim_start_matches('/');
+    let valid = !command.is_empty()
+        && command.len() <= 32
+        && command.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_');
+    let description: String = description.chars().filter(|c| !c.is_control()).take(256).collect();
+    let description = description.trim();
+    (valid && !description.is_empty()).then(|| json!({ "command": command, "description": description }))
 }
 
 /// Why a call failed, before it becomes the adapter's error.
@@ -253,6 +269,7 @@ impl Telegram {
             poll_secs,
             next: Mutex::new(cursor.and_then(|cursor| cursor.parse().ok())),
             webhook_checked: AtomicBool::new(false),
+            menu: Mutex::new(None),
         })
     }
 
@@ -422,6 +439,24 @@ impl Adapter for Telegram {
             last = self.send_piece(chat, &piece, None, false).await?;
         }
         Ok(last)
+    }
+
+    async fn set_commands(&self, commands: &[(String, String)]) -> Result<(), AdapterError> {
+        let entries: Vec<Value> = commands.iter().filter_map(|(command, what)| menu_entry(command, what)).take(MENU_MAX).collect();
+        if entries.is_empty() {
+            return Ok(());
+        }
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        std::hash::Hash::hash(&json!(entries).to_string(), &mut hasher);
+        let key = std::hash::Hasher::finish(&hasher);
+        if *self.menu.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) == Some(key) {
+            return Ok(());
+        }
+        // The default menu, for every language and every chat: one per bot. It is in ADE's language, and sent again when
+        // that changes. Not remembered when Telegram refuses it, so the next try asks again.
+        self.call_patiently("setMyCommands", &json!({ "commands": entries })).await.map_err(Failure::for_sending)?;
+        *self.menu.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(key);
+        Ok(())
     }
 
     async fn whoami(&self) -> Result<String, AdapterError> {
@@ -741,6 +776,82 @@ mod tests {
         assert_eq!(polls.len(), 2);
         assert_eq!(polls[0].get("offset"), None);
         assert_eq!(polls[1]["offset"], 12);
+    }
+
+    fn menu(items: &[(&str, &str)]) -> Vec<(String, String)> {
+        items.iter().map(|(command, what)| (command.to_string(), what.to_string())).collect()
+    }
+
+    #[tokio::test]
+    async fn the_menu_of_commands_goes_to_telegram_once_and_again_only_when_the_list_changes() {
+        let api = FakeApi::start();
+        let telegram = adapter(&api, None);
+        let italian = menu(&[("nuova", "Ricomincia la conversazione"), ("ferma", "Ferma il turno in corso")]);
+        telegram.set_commands(&italian).await.unwrap();
+        let sent = api.calls_to("setMyCommands");
+        assert_eq!(sent.len(), 1);
+        assert_eq!(
+            sent[0],
+            json!({ "commands": [
+                { "command": "nuova", "description": "Ricomincia la conversazione" },
+                { "command": "ferma", "description": "Ferma il turno in corso" },
+            ]}),
+            "the default menu: no scope and no language, one per bot"
+        );
+        // The same list, as many times as the page asks: nothing more to Telegram.
+        telegram.set_commands(&italian).await.unwrap();
+        telegram.set_commands(&italian).await.unwrap();
+        assert_eq!(api.calls_to("setMyCommands").len(), 1);
+        // The language changed: the list is made again, in its words.
+        telegram.set_commands(&menu(&[("new", "Start over"), ("stop", "Stop the running turn")])).await.unwrap();
+        let sent = api.calls_to("setMyCommands");
+        assert_eq!(sent.len(), 2);
+        assert_eq!(sent[1]["commands"][0], json!({ "command": "new", "description": "Start over" }));
+        // The adapter of a bot switched off and on again is a new one, and puts its menu once more.
+        adapter(&api, None).set_commands(&italian).await.unwrap();
+        assert_eq!(api.calls_to("setMyCommands").len(), 3);
+    }
+
+    #[tokio::test]
+    async fn only_what_telegram_takes_is_put_in_the_menu() {
+        let api = FakeApi::start();
+        let telegram = adapter(&api, None);
+        let long = "x".repeat(400);
+        telegram
+            .set_commands(&menu(&[
+                ("/riprova", "Rifà l'ultima domanda"),
+                ("Maiuscola", "no"),
+                ("con spazio", "no"),
+                ("lungo_lungo_lungo_lungo_lungo_lungo", "nome di 35 caratteri"),
+                ("senza", "   "),
+                ("costo", &long),
+                ("a\nb", "no"),
+            ]))
+            .await
+            .unwrap();
+        let sent = api.calls_to("setMyCommands");
+        let commands = sent[0]["commands"].as_array().unwrap();
+        assert_eq!(commands.iter().map(|c| c["command"].as_str().unwrap()).collect::<Vec<_>>(), ["riprova", "costo"]);
+        assert_eq!(commands[1]["description"].as_str().unwrap().chars().count(), 256);
+        // Nothing valid, nothing sent.
+        let api = FakeApi::start();
+        adapter(&api, None).set_commands(&menu(&[("Sì", "no"), ("", "no")])).await.unwrap();
+        adapter(&api, None).set_commands(&[]).await.unwrap();
+        assert!(api.calls_to("setMyCommands").is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_menu_telegram_refuses_is_an_error_and_is_asked_again_next_time() {
+        let api = FakeApi::start();
+        api.then("setMyCommands", 400, json!({ "ok": false, "error_code": 400, "description": "Bad Request: BOT_COMMAND_INVALID" }));
+        let telegram = adapter(&api, None);
+        let list = menu(&[("nuova", "Ricomincia")]);
+        let Err(error) = telegram.set_commands(&list).await else { panic!("rifiutato e basta") };
+        assert!(error.message().contains("BOT_COMMAND_INVALID"), "{}", error.message());
+        assert!(!error.message().contains(TOKEN));
+        // Not remembered: the next try goes to Telegram again.
+        telegram.set_commands(&list).await.unwrap();
+        assert_eq!(api.calls_to("setMyCommands").len(), 2);
     }
 
     #[tokio::test]
