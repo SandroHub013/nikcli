@@ -1,5 +1,6 @@
 import { t } from "../i18n"
 import type { WaitingApproval } from "./approvals"
+import { visibleText } from "./visible-text"
 
 /**
  * How ADE tells the user that a bot waits for them (the user's choice 4): the badge on the Bot section, a line in the
@@ -40,7 +41,7 @@ export function sourcesText(sources: readonly string[]): string {
  * comando (bash)», not «usare "bash"». A permission this version has no words for is named as ragu names it.
  */
 export function approvalAction(waiting: Pick<WaitingApproval, "permission" | "patterns">): string {
-  const patterns = waiting.patterns.trim() || "?"
+  const patterns = visibleText(waiting.patterns.trim()) || "?"
   if (waiting.permission === "bash") return t("bots.waiting.actionBash", patterns)
   if (waiting.permission === "external_directory") return t("bots.waiting.actionOutside", patterns)
   if (waiting.permission === "edit") return t("bots.waiting.actionEdit", patterns)
