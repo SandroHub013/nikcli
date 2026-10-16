@@ -13,6 +13,7 @@
  *   the chat is told it is queued;
  * - `/nuova`, `/ferma`, `/stato`, `/aiuto` act at once, even mid-turn; `/riprova` asks the last question again, once
  *   the turn before it is over; `/costo` says today's spend, as `/stato` does at its end;
+ *   `/modello` shows the model and lets the chat choose another of the bot's own, for that chat alone (`chat-model.ts`);
  * - the turn runs in the project fixed when the gateway was switched on, with
  *   the bot's file as it is now and only if the user's trust still holds for
  *   it (`policy.ts`); the plan's places are `runTurn`'s (`terms.ts`);
@@ -42,6 +43,7 @@ import type { Talk } from "../talk"
 import type { ApprovalRegistry } from "../approvals"
 import { permissionAnswerer, type AskDetail } from "./approval"
 import { forgetTurnFailuresOf, noteTurnFailure } from "./failures"
+import { botForChat, modelChoices, type ChatModelStore } from "./chat-model"
 import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
 import type { BotAccount } from "../account"
 import { offersRemoteCommands, REMOTE_OFF, remoteTools, type RemoteSetting } from "./remote"
@@ -134,8 +136,15 @@ export interface GatewayControllerDeps {
    * text is someone else's. Absent, the bots have none here.
    */
   readonly memory?: MemoryStore
-  /** The bot's money today for `/stato` (`spend.ts`): «Oggi 0,42 $ di 2,00 $.»; absent or undefined, not said. */
-  readonly spendToday?: (bot: string) => Promise<string | undefined>
+  /**
+   * The bot's money today for `/stato` and `/costo` (`spend.ts`): «Oggi 0,42 $ di 2,00 $.»; absent or undefined, not said.
+   * `model` is the one the chat chose with `/modello`, if any: it can be paid when the bot's own is not.
+   */
+  readonly spendToday?: (bot: string, model?: string) => Promise<string | undefined>
+  /** The model each chat chose with `/modello` (`chat-model.ts`); absent, `/modello` only shows the bot's. */
+  readonly chatModels?: ChatModelStore
+  /** ragu's models for `/modello`: its ids (`provider/model`), of which only the free ones are offered. */
+  readonly modelCatalog?: (project: string) => Promise<readonly string[]>
   /** How long a command waits for the phone before it is refused; `ASK_TIMEOUT_MS` when absent. */
   readonly approvalTimeoutMs?: number
   /** Where a question waiting on a phone is listed, so ADE can decide it too (`approvals.ts`); absent, only the phone can. */
@@ -244,7 +253,12 @@ interface Question {
   readonly target: ChatTarget
   readonly choices: readonly Choice[]
   readonly answer: (value: string | undefined) => void
+  /** The question lists its choices by number, and a bare number typed in the chat answers it as a press does. */
+  readonly numbered: boolean
 }
+
+/** How long a list `/modello` or `/sessioni` makes waits for a choice. */
+export const PICK_TIMEOUT_MS = 2 * 60_000
 
 /** 16 hex characters from the platform's random source: what a button's data start with. */
 function nonce(): string {
@@ -289,6 +303,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     timeoutMs = ASK_TIMEOUT_MS,
     signal?: AbortSignal,
     detail?: ApprovalDetail,
+    options?: { readonly numbered?: boolean },
   ) =>
     new Promise<string | undefined>((resolve) => {
       if (closed || choices.length === 0 || signal?.aborted) return resolve(undefined)
@@ -332,13 +347,22 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       }
       const ended = () => answer(undefined)
       signal?.addEventListener("abort", ended)
-      questions.set(id, { key: sessionKey(target.bot, target.platform, target.chat), target, choices, answer })
+      const numbered = options?.numbered === true
+      questions.set(id, {
+        key: sessionKey(target.bot, target.platform, target.chat),
+        target,
+        choices,
+        answer,
+        numbered,
+      })
       const buttons = choices.map((choice, index) => ({ label: choice.label, data: `${id}:${index}` }))
       deps.bridge.sendButtons(target.bot, target.platform, target.chat, question, buttons).catch((error) => {
         warn(
           `ADE: domanda del gateway non mandata (${target.platform}): ${error instanceof Error ? error.message : String(error)}`,
         )
-        answer(undefined)
+        // A list the text numbers can be answered without buttons: the same words as a plain message, and the number.
+        if (!numbered) return answer(undefined)
+        deps.bridge.send(target.bot, target.platform, target.chat, question).catch(() => answer(undefined))
       })
     })
 
@@ -370,6 +394,50 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     warn(`ADE: turno del gateway non riuscito (${message.platform}): ${problem}`)
     // The gateway panel shows the last one of this bot, where the owner can read it (S10).
     noteTurnFailure(message.bot, message.platform, problem, now())
+  }
+
+  /** The list of `lines` as the text of a question: one per line, numbered from 1. */
+  const numberedList = (lines: readonly string[]) => lines.map((line, index) => `${index + 1}. ${line}`).join("\n")
+
+  /**
+   * `/modello`: the model this chat runs the bot on, and the bot's own to choose from; the choice holds for this chat
+   * from its next message on, and is kept across `/nuova`.
+   */
+  const chooseModel = async (message: GatewayMessage, key: string) => {
+    const project = await deps.bridge.project(message.bot, message.platform)
+    if (!project) return reply(message, t("gateway.noProject"))
+    const loaded = await deps.loadBot(message.bot, project)
+    if (!loaded.ok) return reply(message, loaded.problem)
+    const bot = loaded.bot
+    const runner = runnerById(bot.runner)
+    const saved = deps.chatModels?.get(key)
+    const chosen = saved && saved.runner === runner.id ? saved.model : undefined
+    const own = bot.model ?? ""
+    const named = (model: string) => model || t("gateway.model.default", runner.label)
+    const current = chosen ?? own
+    if (!deps.chatModels) return reply(message, t("gateway.model.only", named(current)))
+    const catalog = runner.id === "ragu" ? await (deps.modelCatalog?.(project) ?? Promise.resolve([])).catch(() => []) : []
+    // The bot's own model comes first; without one, the way back to the CLI's default is there once another was chosen.
+    const options = modelChoices(bot, catalog)
+    if (!own && chosen !== undefined) options.unshift("")
+    if (options.length === 0) return reply(message, t("gateway.model.nothing", named(current)))
+    const marked = options.map((model) => {
+      const tags = [model === current ? t("gateway.model.tagCurrent") : "", model === own ? t("gateway.model.tagOwn") : ""]
+      return [named(model), ...tags.filter(Boolean).map((tag) => `(${tag})`)].join(" ")
+    })
+    const picked = await ask(
+      { bot: message.bot, platform: message.platform, chat: message.chat, asker: message.sender.id },
+      t("gateway.model.ask", named(current), numberedList(marked), runner.id === "ragu"),
+      options.map((model, index) => ({ label: `${index + 1}. ${named(model)}`, value: model })),
+      PICK_TIMEOUT_MS,
+      undefined,
+      undefined,
+      { numbered: true },
+    )
+    if (picked === undefined) return
+    if (picked === own) deps.chatModels.forget(key)
+    else deps.chatModels.set(key, { runner: runner.id, model: picked })
+    return reply(message, t("gateway.model.set", named(picked)))
   }
 
   const command = async (message: GatewayMessage, key: string, which: string) => {
@@ -415,12 +483,13 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       return next(key)
     }
     if (which === "cost") {
-      const spent = await deps.spendToday?.(message.bot).catch(() => undefined)
+      const spent = await deps.spendToday?.(message.bot, deps.chatModels?.get(key)?.model).catch(() => undefined)
       return reply(message, spent ?? t("gateway.cost.none"))
     }
+    if (which === "model") return chooseModel(message, key)
     if (which === "status") {
       const said = running ? t("gateway.status.working", state.queue.length) : t("gateway.status.idle")
-      const spent = await deps.spendToday?.(message.bot).catch(() => undefined)
+      const spent = await deps.spendToday?.(message.bot, deps.chatModels?.get(key)?.model).catch(() => undefined)
       return reply(message, spent ? `${said}\n${spent}` : said)
     }
     return reply(message, t("gateway.help"))
@@ -453,7 +522,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         if (loaded.detail) failure(message, loaded.detail)
         return void (await reply(message, loaded.problem))
       }
-      const bot = loaded.bot
+      const bot = botForChat(loaded.bot, deps.chatModels?.get(key))
       const runner = runnerById(bot.runner).id
       const allowed = mayRun(runner, message.owner !== false)
       if (!allowed.ok) return void (await reply(message, allowed.problem))
@@ -721,6 +790,23 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     if (which) {
       ack()
       return command(message, key, which)
+    }
+    // A list that numbers its choices is answered with the number, where the chat has no buttons or the person likes digits.
+    const typed = /^\d{1,2}$/.test(message.text.trim()) ? Number(message.text.trim()) : undefined
+    const listed =
+      typed === undefined
+        ? undefined
+        : [...questions.values()].find(
+            (question) =>
+              question.numbered &&
+              question.key === key &&
+              (question.target.asker === undefined || question.target.asker === message.sender.id),
+          )
+    if (typed !== undefined && listed) {
+      ack()
+      const choice = listed.choices[typed - 1]
+      if (choice) return listed.answer(choice.value)
+      return void (await reply(message, t("gateway.pick.range", listed.choices.length)))
     }
     const state = stateOf(key)
     const counted = countMessage(state.times, now())

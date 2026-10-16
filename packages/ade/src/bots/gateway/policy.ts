@@ -3,7 +3,7 @@
  *
  * Rust already let through only an authorized sender: in a private chat, or in a channel when the message names the
  * bot (G9), and a button the bot itself put there. Here:
- * - the commands a chat can give (`/nuova`, `/ferma`, `/stato`, `/aiuto`, `/riprova`, `/costo`);
+ * - the commands a chat can give (`/nuova`, `/ferma`, `/stato`, `/aiuto`, `/riprova`, `/costo`, `/modello`);
  * - how the text is framed for the model: a fixed line with the platform and
  *   the sender's name, quoted and cleaned, marked as a label and not an order;
  * - a ceiling of messages per chat per hour, against a loop of messages;
@@ -19,7 +19,7 @@ import { admitProject, configGrant, isConfigFile, type AdmitProjectDeps } from "
 import { admit, fileFingerprint, selfApproval, type TrustStore } from "../trust"
 import { runnerById } from "../runners"
 
-export type ChatCommand = "new" | "stop" | "status" | "help" | "retry" | "cost"
+export type ChatCommand = "new" | "stop" | "status" | "help" | "retry" | "cost" | "model"
 
 const COMMANDS: Record<string, ChatCommand> = {
   nuova: "new",
@@ -34,6 +34,8 @@ const COMMANDS: Record<string, ChatCommand> = {
   retry: "retry",
   costo: "cost",
   cost: "cost",
+  modello: "model",
+  model: "model",
   // What Telegram sends when a chat with the bot is opened.
   start: "help",
 }

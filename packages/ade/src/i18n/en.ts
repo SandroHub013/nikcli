@@ -792,9 +792,18 @@ export const en: Messages = {
   "gateway.retry.none": "There is no question to ask again yet: write me one.",
   "gateway.retry.busy": "I'm still working on the last question: wait for it to finish, or write /stop.",
   "gateway.retry.again": "Asking the last question again.",
+  "gateway.model.default": (runner: string) => `${runner}'s own`,
+  "gateway.model.tagCurrent": "in use",
+  "gateway.model.tagOwn": "the bot's own",
+  "gateway.model.only": (model: string) => `In this chat I use: ${model}.`,
+  "gateway.model.nothing": (model: string) => `In this chat I use: ${model}. I have no other models to offer for this bot.`,
+  "gateway.model.ask": (current: string, list: string, freeOnly: boolean) =>
+    `In this chat I use: ${current}.\n${list}\n${freeOnly ? "I only offer the free models. " : ""}Choose the one to use from now on (tap a button or write the number).`,
+  "gateway.model.set": (model: string) => `Done: from now on, in this chat, I use ${model}.`,
+  "gateway.pick.range": (max: number) => `Choose a number from 1 to ${max}.`,
   "gateway.cost.none": "There is no spend to count today: this bot uses a subscription or a free model.",
   "gateway.help":
-    "Commands: /new starts the conversation over, /stop stops the running turn and clears the queue, /status says what I'm doing, /retry asks the last question again, /cost says today's spend, /help shows this list.",
+    "Commands: /new starts the conversation over, /stop stops the running turn and clears the queue, /status says what I'm doing, /retry asks the last question again, /cost says today's spend, /model shows the model and lets you choose among the bot's own, /help shows this list.",
   "gateway.limit": (count) =>
     `More than ${count} messages in an hour: I'll stay quiet for a while, so a loop of messages doesn't spend your plan. Try again later.`,
   "gateway.retrust": (name) =>

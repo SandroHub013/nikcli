@@ -6,6 +6,7 @@ import type { Turn, TurnRequest, TurnResult } from "../turn"
 import { chatCommand } from "./policy"
 import { startGatewayController, type GatewayBridge, type GatewayMessage } from "./controller"
 import { memorySessionStore } from "./session"
+import { botForChat, memoryChatModelStore, modelChoices, MODEL_CHOICES_MAX } from "./chat-model"
 
 /*
  * Choice 9: the four commands a chat gained, `/riprova`, `/costo`, `/modello` and `/sessioni`, with a fake Rust side
@@ -32,6 +33,7 @@ function bridge() {
   const questions: { chat: string; text: string; buttons: readonly { label: string; data: string }[] }[] = []
   const acks: string[] = []
   let counter = 0
+  const flags = { buttonsFail: false }
   const fake: GatewayBridge = {
     listen: async (on) => {
       handler = on
@@ -44,6 +46,7 @@ function bridge() {
       return String(sent.length)
     },
     sendButtons: async (_bot, _platform, chat, text, buttons) => {
+      if (flags.buttonsFail) throw new Error("niente tasti")
       questions.push({ chat, text, buttons })
       return "q"
     },
@@ -68,7 +71,7 @@ function bridge() {
     const question = questions.at(-1)!
     emit(question.buttons[index]!.data, { button: true, ...from })
   }
-  return { fake, sent, questions, acks, emit, press }
+  return { fake, sent, questions, acks, emit, press, flags }
 }
 
 function fakeTurns() {
@@ -104,6 +107,8 @@ describe("the names of the commands", () => {
     expect(chatCommand("/riprova adesso")).toBeUndefined()
     expect(chatCommand("/costo")).toBe("cost")
     expect(chatCommand("/cost")).toBe("cost")
+    expect(chatCommand("/modello")).toBe("model")
+    expect(chatCommand("/MODEL@MioBot")).toBe("model")
   })
 })
 
@@ -204,6 +209,206 @@ describe("/costo", () => {
     expect(t("gateway.help")).toContain("/costo")
     setLocalePreference("en")
     expect(t("gateway.help")).toContain("/cost ")
+    setLocalePreference("it")
+  })
+})
+
+describe("the models a chat may choose", () => {
+  const claude: AgentFile = { ...BOT, runner: "claude" }
+  const ragu: AgentFile = { ...BOT, runner: "ragu" }
+
+  test("a bot on a CLI: its own model first, then that CLI's list, each once and no more than a phone reads", () => {
+    const list = modelChoices({ ...claude, model: "sonnet" }, [])
+    expect(list[0]).toBe("sonnet")
+    expect(list.filter((model) => model === "sonnet")).toHaveLength(1)
+    expect(list.length).toBeLessThanOrEqual(MODEL_CHOICES_MAX)
+    expect(modelChoices(claude, [])[0]).toBe("fable")
+    expect(modelChoices({ ...claude, runner: "codex" }, [])).toContain("gpt-5.5")
+  })
+
+  test("a ragu bot: only the free models of the catalog, and its own even if it is a paid one", () => {
+    const catalog = ["openrouter/a/b:free", "anthropic/claude-opus", "openrouter/c/d:free", "openai/gpt"]
+    expect(modelChoices(ragu, catalog)).toEqual(["openrouter/a/b:free", "openrouter/c/d:free"])
+    expect(modelChoices({ ...ragu, model: "anthropic/claude-opus" }, catalog)).toEqual([
+      "anthropic/claude-opus",
+      "openrouter/a/b:free",
+      "openrouter/c/d:free",
+    ])
+    expect(modelChoices(ragu, [])).toEqual([])
+  })
+
+  test("an id a command line could take as something else is never offered", () => {
+    expect(modelChoices({ ...ragu, model: "--yolo" }, ["x y/z:free", "ok/model:free", "-rf/z:free"])).toEqual(["ok/model:free"])
+  })
+
+  test("the chat's choice holds only for the CLI it was made on", () => {
+    expect(botForChat(claude, { runner: "claude", model: "opus" }).model).toBe("opus")
+    expect(botForChat({ ...claude, model: "sonnet" }, { runner: "codex", model: "gpt-5.5" }).model).toBe("sonnet")
+    expect(botForChat(claude, undefined)).toBe(claude)
+  })
+
+  test("a saved choice that is not an id is none", () => {
+    const store = memoryChatModelStore()
+    store.set("k", { runner: "claude", model: "opus" })
+    expect(store.get("k")).toEqual({ runner: "claude", model: "opus" })
+    store.forget("k")
+    expect(store.get("k")).toBeUndefined()
+  })
+})
+
+describe("/modello", () => {
+  const withModels = async (extra: Partial<Parameters<typeof startGatewayController>[0]> = {}) => {
+    const b = bridge()
+    const turns = fakeTurns()
+    const chatModels = memoryChatModelStore()
+    const controller = await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      chatModels,
+      ...extra,
+    })
+    return { b, turns, chatModels, controller }
+  }
+
+  test("it shows the model and lets a button choose another of the bot's own, for that chat from the next message on", async () => {
+    const { b, turns, chatModels } = await withModels()
+    b.emit("/modello")
+    await until("la lista", () => b.questions.length === 1)
+    const question = b.questions[0]!
+    expect(question.text).toContain(t("gateway.model.default", "Claude Code"))
+    expect(question.text).toContain("1. ")
+    expect(question.buttons.map((button) => button.label)[0]).toStartWith("1. ")
+    b.press(2)
+    await until("la conferma", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toContain("sonnet")
+    expect(chatModels.get(`${BOT.path}:telegram:c42`)).toEqual({ runner: "claude", model: "sonnet" })
+    b.emit("ciao")
+    await until("il turno", () => turns.started.length === 1)
+    expect(turns.started[0]!.request.bot?.model).toBe("sonnet")
+    turns.started[0]!.finish({ text: "ok" })
+    // Another chat of the same bot is not touched.
+    await until("risposto", () => b.sent.at(-1)!.text === "ok")
+    b.emit("ciao", { chat: "c99" })
+    await until("il turno dell'altra chat", () => turns.started.length === 2)
+    expect(turns.started[1]!.request.bot?.model).toBeUndefined()
+    turns.started[1]!.finish({ text: "ok" })
+  })
+
+  test("a number typed in the chat answers it, a number out of the list is told so and the list stays", async () => {
+    const { b, chatModels } = await withModels()
+    b.emit("/modello")
+    await until("la lista", () => b.questions.length === 1)
+    b.emit("99")
+    await until("fuori elenco", () => b.sent.at(-1)?.text === t("gateway.pick.range", b.questions[0]!.buttons.length))
+    expect(chatModels.get(`${BOT.path}:telegram:c42`)).toBeUndefined()
+    b.emit("1")
+    await until("scelto", () => chatModels.get(`${BOT.path}:telegram:c42`) !== undefined)
+    expect(chatModels.get(`${BOT.path}:telegram:c42`)!.model).toBe("fable")
+  })
+
+  test("a number is a message when no list waits", async () => {
+    const { b, turns } = await withModels()
+    b.emit("2")
+    await until("il turno", () => turns.started.length === 1)
+    expect(turns.started[0]!.request.message).toContain("2")
+    turns.started[0]!.finish({ text: "ok" })
+  })
+
+  test("a list is answered by the person who asked, and by no other", async () => {
+    const { b, chatModels } = await withModels()
+    b.emit("/modello")
+    await until("la lista", () => b.questions.length === 1)
+    b.press(1, { sender: { id: "43", name: "Bea" } })
+    b.emit("1", { sender: { id: "43", name: "Bea" } })
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(chatModels.get(`${BOT.path}:telegram:c42`)).toBeUndefined()
+    b.press(1)
+    await until("scelto", () => chatModels.get(`${BOT.path}:telegram:c42`) !== undefined)
+  })
+
+  test("where the buttons cannot be sent, the list goes as text and the number answers it", async () => {
+    const { b, chatModels } = await withModels()
+    b.flags.buttonsFail = true
+    b.emit("/modello")
+    await until("la lista in testo", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toContain("1. ")
+    b.emit("2")
+    await until("scelto", () => chatModels.get(`${BOT.path}:telegram:c42`) !== undefined)
+    expect(chatModels.get(`${BOT.path}:telegram:c42`)!.model).toBe("opus")
+  })
+
+  test("the bot's own model goes back by choosing it, and /nuova keeps the choice", async () => {
+    const own: AgentFile = { ...BOT, model: "haiku" }
+    const { b, chatModels } = await withModels({ loadBot: async () => ({ ok: true as const, bot: own }) })
+    chatModels.set(`${BOT.path}:telegram:c42`, { runner: "claude", model: "opus" })
+    b.emit("/nuova")
+    await until("nuova", () => b.sent.length === 1)
+    expect(chatModels.get(`${BOT.path}:telegram:c42`)).toBeDefined()
+    b.emit("/modello")
+    await until("la lista", () => b.questions.length === 1)
+    // The bot's own is first, and the one in use is marked.
+    expect(b.questions[0]!.text).toContain(`1. haiku (${t("gateway.model.tagOwn")})`)
+    expect(b.questions[0]!.text).toContain(`(${t("gateway.model.tagCurrent")})`)
+    b.press(0)
+    await until("tolto", () => chatModels.get(`${BOT.path}:telegram:c42`) === undefined)
+  })
+
+  test("on ragu only the free models are offered, and it says so", async () => {
+    const raguBot: AgentFile = { ...BOT, runner: "ragu" }
+    const { b } = await withModels({
+      loadBot: async () => ({ ok: true as const, bot: raguBot }),
+      modelCatalog: async () => ["openrouter/a/b:free", "anthropic/claude-opus"],
+    })
+    b.emit("/modello")
+    await until("la lista", () => b.questions.length === 1)
+    expect(b.questions[0]!.buttons).toHaveLength(1)
+    expect(b.questions[0]!.text).not.toContain("claude-opus")
+    expect(b.questions[0]!.text).toContain("gratuiti")
+  })
+
+  test("with nothing to offer, or no way to keep a choice, it only says the model in use", async () => {
+    const raguBot: AgentFile = { ...BOT, runner: "ragu", model: "openrouter/x/y:free" }
+    const empty = await withModels({
+      loadBot: async () => ({ ok: true as const, bot: { ...raguBot, model: undefined } as AgentFile }),
+      modelCatalog: async () => [],
+    })
+    empty.b.emit("/modello")
+    await until("niente", () => empty.b.sent.length === 1)
+    expect(empty.b.sent[0]!.text).toBe(t("gateway.model.nothing", t("gateway.model.default", "Ragu Code")))
+    const bare = bridge()
+    await startGatewayController({
+      bridge: bare.fake,
+      runTurn: fakeTurns().runTurn,
+      loadBot: async () => ({ ok: true as const, bot: raguBot }),
+      sessions: memorySessionStore(),
+    })
+    bare.emit("/modello")
+    await until("solo il modello", () => bare.sent.length === 1)
+    expect(bare.sent[0]!.text).toBe(t("gateway.model.only", "openrouter/x/y:free"))
+  })
+
+  test("/costo and /stato are given the chat's model, so a paid choice is counted as paid", async () => {
+    const seen: (string | undefined)[] = []
+    const { b, chatModels } = await withModels({
+      spendToday: async (_bot, model) => {
+        seen.push(model)
+        return "Oggi 0,00 $."
+      },
+    })
+    b.emit("/costo")
+    await until("senza scelta", () => seen.length === 1)
+    chatModels.set(`${BOT.path}:telegram:c42`, { runner: "claude", model: "opus" })
+    b.emit("/costo")
+    await until("con la scelta", () => seen.length === 2)
+    expect(seen).toEqual([undefined, "opus"])
+  })
+
+  test("the help lists it, in both languages", () => {
+    expect(t("gateway.help")).toContain("/modello")
+    setLocalePreference("en")
+    expect(t("gateway.help")).toContain("/model ")
     setLocalePreference("it")
   })
 })

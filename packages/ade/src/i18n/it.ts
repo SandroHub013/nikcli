@@ -811,9 +811,18 @@ export const it = {
   "gateway.retry.none": "Non c'è ancora una domanda da rifare: scrivimene una.",
   "gateway.retry.busy": "Sto ancora lavorando alla domanda di prima: aspetta che finisca, oppure scrivi /ferma.",
   "gateway.retry.again": "Rifaccio l'ultima domanda.",
+  "gateway.model.default": (runner: string) => `quello di ${runner}`,
+  "gateway.model.tagCurrent": "in uso",
+  "gateway.model.tagOwn": "quello del bot",
+  "gateway.model.only": (model: string) => `In questa chat uso: ${model}.`,
+  "gateway.model.nothing": (model: string) => `In questa chat uso: ${model}. Per questo bot non ho altri modelli da proporre.`,
+  "gateway.model.ask": (current: string, list: string, freeOnly: boolean) =>
+    `In questa chat uso: ${current}.\n${list}\n${freeOnly ? "Ti propongo solo i modelli gratuiti. " : ""}Scegli quello da usare da ora (tocca un tasto o scrivi il numero).`,
+  "gateway.model.set": (model: string) => `Va bene: da ora, in questa chat, uso ${model}.`,
+  "gateway.pick.range": (max: number) => `Scegli un numero da 1 a ${max}.`,
   "gateway.cost.none": "Oggi non c'è nessuna spesa da contare: questo bot usa un abbonamento o un modello gratuito.",
   "gateway.help":
-    "Comandi: /nuova ricomincia la conversazione, /ferma ferma il turno in corso e svuota la coda, /stato dice cosa sto facendo, /riprova rifà l'ultima domanda, /costo dice la spesa di oggi, /aiuto mostra questo elenco.",
+    "Comandi: /nuova ricomincia la conversazione, /ferma ferma il turno in corso e svuota la coda, /stato dice cosa sto facendo, /riprova rifà l'ultima domanda, /costo dice la spesa di oggi, /modello mostra il modello e lascia scegliere fra quelli del bot, /aiuto mostra questo elenco.",
   "gateway.limit": (count: number) =>
     `Più di ${count} messaggi in un'ora: per un po' non rispondo, così un giro di messaggi non consuma il tuo piano. Riprova più tardi.`,
   "gateway.retrust": (name: string) =>
