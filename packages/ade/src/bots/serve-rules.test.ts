@@ -359,9 +359,25 @@ describe("S1: a turn nobody watches starts from a list, not from everything", ()
     for (const profile of LIST_PROFILES) {
       for (const tool of ["websearch", "codesearch", "call_tool", "exec_code", "code_mode", "generate_image", "repo_clone", ...MCP])
         expect([profile, tool, decide(tool, "*", HOSTILE, botPermission(profile))]).toEqual([profile, tool, "deny"])
-      const webfetch = decide("webfetch", "https://example.com", HOSTILE, botPermission(profile))
-      expect([profile, webfetch]).toEqual([profile, profile === "remote-ask" ? "ask" : "deny"])
     }
+  })
+
+  // The user's choice 7: no web from a phone or in a routine, not even asked about, with the commands on as well.
+  test("webfetch is denied in every one of them, a chat with the remote commands on included", () => {
+    for (const profile of LIST_PROFILES) {
+      const webfetch = decide("webfetch", "https://example.com", HOSTILE, botPermission(profile))
+      expect([profile, webfetch]).toEqual([profile, "deny"])
+      expect(
+        botPermission(profile).filter((entry) => entry.permission === "webfetch" && entry.action !== "deny"),
+      ).toEqual([])
+    }
+  })
+
+  test("the gateway panel no longer says a chat uses the user's MCP servers and plugins", () => {
+    expect(itDict["gateway.panel.mcp"]).not.toContain("usa anche")
+    expect(itDict["gateway.panel.mcp"]).toContain("niente server MCP")
+    expect(enDict["gateway.panel.mcp"]).not.toContain("also uses")
+    expect(enDict["gateway.panel.mcp"]).toContain("no MCP servers")
   })
 
   test("what a read-only turn does with the project still works: read, glob, grep, list, tree, todos, lsp, skills", () => {

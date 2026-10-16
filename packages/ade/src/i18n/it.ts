@@ -992,7 +992,8 @@ export const it = {
     "Da chat il bot potrà chiederti di eseguire comandi sul PC. Ogni comando arriva su Slack con Sì o No, e senza risposta in 5 minuti vale no. È un aiuto, non una protezione: approva solo ciò che riconosci per intero. Se il file del bot cambia, i comandi si spengono.",
   "gateway.panel.cancel": "Annulla",
   "gateway.panel.remoteConfirm": "Accendi i comandi",
-  "gateway.panel.mcp": "Da chat il bot usa anche i tuoi server MCP e i plugin della tua configurazione di Ragu Code.",
+  "gateway.panel.mcp":
+    "Da chat il bot legge e cerca nel progetto, e lo modifica dove previsto: niente server MCP, plugin né web.",
   "design.variant.missing": (k: string, variant: number) => `${k} non ha la variante ${variant}.`,
   "browser.forget": "Dimentica questo sito",
   "browser.forget.tip": "Cancella cookie e dati che questo sito ha lasciato nel profilo di ADE.",

@@ -970,7 +970,8 @@ export const en: Messages = {
     "From a chat the bot will be able to ask you to run commands on the PC. Each command comes to Slack with Yes or No, and no answer in 5 minutes means no. It is a help, not a protection: approve only what you recognize in full. If the bot's file changes, the commands switch off.",
   "gateway.panel.cancel": "Cancel",
   "gateway.panel.remoteConfirm": "Switch the commands on",
-  "gateway.panel.mcp": "From a chat the bot also uses your MCP servers and the plugins of your Ragu Code configuration.",
+  "gateway.panel.mcp":
+    "From a chat the bot reads and searches the project, and edits it where allowed: no MCP servers, plugins or web access.",
   "design.variant.missing": (k, variant) => `${k} has no variant ${variant}.`,
   "browser.forget": "Forget this site",
   "browser.forget.tip": "Clear cookies and data this site left in ADE's profile.",

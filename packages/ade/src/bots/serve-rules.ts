@@ -231,9 +231,11 @@ function casings(word: string): string[] {
 
 /**
  * The tools a turn with no one to ask may use: they read the project and keep a list of todos. Real ids of ragu's
- * tools (`packages/ragu/src/tool`, `Tool.define("…")`; the test reads them from there). Not here, on purpose:
- * `webfetch` (asked in `remote-ask` only), `websearch`, `codesearch`, `call_tool` and every MCP tool, `exec_code`,
- * `code_mode`, `batch`, `repo_clone`, `generate_image`, `plugin` tools.
+ * tools (`packages/ragu/src/tool`, `Tool.define("…")`; the test reads them from there). Not here, on purpose, and in
+ * no profile of this list, `remote-ask` included: `webfetch`, `websearch`, `codesearch`, `call_tool` and every MCP
+ * tool, `exec_code`, `code_mode`, `batch`, `repo_clone`, `generate_image`, `plugin` tools. From a phone and in a
+ * routine a bot reads and searches the project and edits it where the profile allows, with no MCP and no web, as
+ * Claude Code there (`runners.ts`, the user's choice 7).
  */
 export const READ_TOOLS: readonly string[] = [
   "read",
@@ -264,8 +266,6 @@ function listHead(profile: BotProfile): PermissionRule[] {
     ...READ_TOOLS.map((tool) => rule(tool, "allow")),
     // Writes stay in the project, as with the spawn flags: a routine's are denied further down, whole.
     ...(profile === "read-only" ? [] : [rule("edit", "allow")]),
-    // The one turn that can ask someone about it: a question to the phone, as for a command.
-    ...(profile === "remote-ask" ? [rule("webfetch", "ask")] : []),
   ]
 }
 
