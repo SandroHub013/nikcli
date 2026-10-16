@@ -108,7 +108,7 @@ describe("D22: the screen reader can follow", () => {
     expect(routines).toContain('<h3 data-slot="bots-section-title"')
     expect(memory).toContain('<h3 data-slot="bots-section-title"')
     expect(gateway).toContain('<h3 data-slot="bots-section-title"')
-    expect(view.slice(view.indexOf("function SettingsTab")).match(/<h3 data-slot="bots-section-title"/g)?.length).toBe(2)
+    expect(view.slice(view.indexOf("function SettingsTab")).match(/<h3 data-slot="bots-section-title"/g)?.length).toBe(3)
   })
 
   test("the shapes and colours of the face are named in words, in both languages, not by their ids", () => {

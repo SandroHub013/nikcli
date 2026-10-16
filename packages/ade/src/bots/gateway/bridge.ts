@@ -7,7 +7,7 @@
 import { t } from "../../i18n"
 import { askDialog } from "../../host/ask"
 import { openExternally } from "../../browser/host-bridge"
-import type { AgentFile } from "../ragu"
+import { readAgentFile, type AgentFile } from "../ragu"
 import { admitProject, projectSurface, PROJECT_TRUST_KEY } from "../project-trust"
 import { runnerById } from "../runners"
 import { localGatewayThreads, projectFs, readBotText, resolveRoots } from "../store"
@@ -20,6 +20,8 @@ import { localAccountStore } from "../account"
 import { localRemoteStore, remoteKey } from "./remote"
 import { appMemoryStore } from "../memory-app"
 import { localSessionStore } from "./session"
+import { spendStatus, spendTerms, withDailyCap } from "../spend"
+import { appSpendStore } from "../spend-app"
 
 interface LinkStatus {
   readonly bot: string
@@ -133,7 +135,8 @@ export function appGatewayPanelDeps(project: () => string | undefined): Omit<Gat
 export async function startAppGatewayController(): Promise<GatewayController> {
   const controller = await startGatewayController({
     bridge: tauriGatewayBridge(),
-    runTurn: (request) => runBotTurn(request),
+    // Within the bot's money a day (`spend.ts`, the user's choice 5).
+    runTurn: withDailyCap((request) => runBotTurn(request), { store: appSpendStore }),
     loadBot: async (path, project) =>
       recheckTrust(path, project, {
         bots: localTrustStore(),
@@ -147,6 +150,16 @@ export async function startAppGatewayController(): Promise<GatewayController> {
     remote: (bot, platform) => localRemoteStore().get(remoteKey(bot, platform)),
     account: (bot) => localAccountStore().get(bot),
     memory: appMemoryStore,
+    spendToday: async (bot) => {
+      try {
+        const file = readAgentFile({ path: bot, scope: "global", text: await readBotText(bot) })
+        const terms = spendTerms(runnerById(file.runner).id, localAccountStore().get(bot), file.model)
+        return spendStatus(appSpendStore.get(bot), terms, Date.now())
+      } catch {
+        // The bot's file cannot be read: `/stato` says what it can.
+        return undefined
+      }
+    },
   })
   activeController = controller
   return {

@@ -2193,6 +2193,31 @@ export const it = {
   "bots.spend.free": "gratis",
   "bots.spend.metered": "a consumo (dipende dal modello)",
   "bots.spend.unreported": "costo non riportato dalla CLI",
+  "bots.daily.capLabel": "Tetto di spesa al giorno",
+  "bots.daily.capPlaceholder": "nessun tetto",
+  "bots.daily.capHint":
+    "In dollari, per le conversazioni con il bot qui e dal telefono. All'80 % ADE ti avvisa; al 100 % il bot si ferma fino a domani, o finché non alzi il tetto. Routine e stanze hanno i loro tetti. Vuoto: nessun tetto.",
+  "bots.daily.capSave": "Salva il tetto",
+  "bots.daily.capSaved": "Tetto salvato.",
+  "bots.daily.capInvalid": (max: string) =>
+    `Scrivi un importo in dollari, più di 0 e fino a ${max}, con al massimo due decimali. Vuoto vuol dire nessun tetto.`,
+  "bots.daily.today": (spent: string, cap: string) => `Spesa di oggi: ${spent} di ${cap}`,
+  "bots.daily.todayNoCap": (spent: string) => `Spesa di oggi: ${spent}, senza tetto`,
+  "bots.daily.todayStopped": (spent: string, cap: string) =>
+    `Spesa di oggi: ${spent} di ${cap}. Il bot è fermo fino a domani, o finché non alzi il tetto.`,
+  "bots.daily.unreported":
+    "Codex con una chiave API non riporta i dollari: la sua spesa di oggi non si può contare né fermare con un tetto.",
+  "bots.daily.title": "Spesa",
+  "bots.daily.missing":
+    "Questo bot spende soldi e non ha un tetto: può spendere senza limite. Metti qui un tetto al giorno.",
+  "bots.daily.newHint":
+    "Proposto: il bot si ferma fino a domani quando lo raggiunge. Lascia vuoto per nessun tetto. Lo cambi quando vuoi nelle Impostazioni del bot.",
+  "bots.daily.status": (spent: string, cap: string) => `Oggi ${spent} di ${cap}.`,
+  "bots.daily.statusNoCap": (spent: string) => `Oggi ${spent}, senza tetto.`,
+  "bots.daily.notice": (spent: string, cap: string, name: string) =>
+    `Oggi il bot ha speso ${spent} dei ${cap} del suo tetto al giorno: ha passato l'80 %. Al tetto si ferma fino a domani; puoi alzarlo in ADE, nelle Impostazioni del bot${name ? ` «${name}»` : ""}.`,
+  "bots.daily.reached": (spent: string, cap: string, name: string) =>
+    `Oggi il bot ha speso ${spent}, e il suo tetto al giorno è ${cap}: si ferma fino a domani. Per farlo ripartire prima alza il tetto in ADE, nelle Impostazioni del bot${name ? ` «${name}»` : ""} (Tetto di spesa al giorno).`,
   "bots.account.label": "Account",
   "bots.account.plan": "Abbonamento (il login della CLI)",
   "bots.account.key": "Chiave API",

@@ -22,6 +22,7 @@ import { isAdeTestBuild } from "../chat/model"
 import { t } from "../i18n"
 import type { BotAccount } from "./account"
 import {
+  dayOf,
   routineConsentHash,
   routineModeOf,
   routinePolicy,
@@ -382,12 +383,8 @@ export function routineProblem(
 
 /* ── when ─────────────────────────────────────────────────────────────── */
 
-/** The local day of `at`, `YYYY-MM-DD`. */
-export function dayOf(at: number): string {
-  const date = new Date(at)
-  const pad = (n: number) => String(n).padStart(2, "0")
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
-}
+/** The local day of `at`, `YYYY-MM-DD` (in `terms.ts`, which a bot's money a day counts by too). */
+export { dayOf }
 
 /** The moment of `HH:MM` on the local day of `at`. */
 function slotOn(at: number, time: string): number {

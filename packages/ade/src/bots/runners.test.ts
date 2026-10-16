@@ -580,6 +580,30 @@ describe("un turno da chat non ha la shell", () => {
   test("un turno del pannello resta com'era", () => {
     expect(allowedOf(turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true }).args)).toContain("Bash")
   })
+
+  /*
+   * Scelta 7: da telefono e nelle routine il perimetro è quello di ragu (`serve-rules.ts`, `READ_TOOLS`): lettura e
+   * ricerca nel progetto, modifiche dove previsto, niente MCP né web. WebFetch e WebSearch erano tra i consentiti.
+   */
+  test("Claude: niente web né server MCP da chat e in una routine, anche senza lean", () => {
+    const own: AgentFile = { ...mine, runner: "claude" }
+    for (const spec of [{ remote: off }, { remote: on }, { unattended: true }, { unattended: true, lean: true }]) {
+      const { args } = turnCommand(runnerById("claude"), { bot: own, message: "x", ...spec })
+      for (const name of ["WebFetch", "WebSearch"]) {
+        expect([spec, name, allowedOf(args).includes(name)]).toEqual([spec, name, false])
+        expect([spec, name, disallowedOf(args).includes(name)]).toEqual([spec, name, true])
+      }
+      expect([spec, args.includes("--strict-mcp-config")]).toEqual([spec, true])
+      expect(args[args.indexOf("--mcp-config") + 1]).toBe('{"mcpServers":{}}')
+      expect(args[args.indexOf("--setting-sources") + 1]).toBe("")
+      // Leggere e cercare nel progetto resta.
+      for (const name of ["Read", "Grep", "Glob"]) expect(allowedOf(args)).toContain(name)
+    }
+    // Nel pannello l'utente guarda: il web resta.
+    expect(allowedOf(turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true }).args)).toContain(
+      "WebFetch",
+    )
+  })
 })
 
 describe("abbonamento o chiave", () => {

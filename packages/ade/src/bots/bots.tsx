@@ -69,6 +69,9 @@ import {
   type SpendKind,
 } from "./runners"
 import { PLAN_RUNNERS, routineModeOf } from "./terms"
+import { capText, parseCap, spendTerms, withCap } from "./spend"
+import { appSpendStore } from "./spend-app"
+import { NewBotCapField, newBotSpendTerms, SPEND_CAP_PROPOSED_USD, SpendCapField, SpendTodayLine } from "./spend-panel"
 import { createBotTurns } from "./controller"
 import { admit, localTrustStore } from "./trust"
 import { effortChange, modelChange, runnerModelItems, submitDraft } from "./composer"
@@ -1939,6 +1942,13 @@ function SettingsTab(props: {
 }) {
   const [problem, setProblem] = createSignal<string>()
   const routines = () => routineDeps.book().routines.filter((routine) => routine.bot === props.bot.path).length
+  // The catalog's word on a ragu model, so a free model without the `:free` suffix is not asked for a cap.
+  const [free] = createResource(
+    () => props.bot,
+    (bot) => catalogFreeOf(bot),
+  )
+  const spends = () =>
+    !free.loading && spendTerms(runnerById(props.bot.runner).id, props.account, props.bot.model, free()) !== "none"
 
   const remove = async () => {
     setProblem(undefined)
@@ -1975,6 +1985,16 @@ function SettingsTab(props: {
           onSaved={() => props.onSaved()}
         />
       </section>
+
+      <Show when={spends()}>
+        <section data-slot="bots-section" aria-labelledby="bots-settings-spend">
+          <h3 data-slot="bots-section-title" id="bots-settings-spend">
+            {t("bots.daily.title")}
+          </h3>
+          <SpendTodayLine bot={props.bot} account={props.account} free={free()} />
+          <SpendCapField bot={props.bot} account={props.account} free={free()} />
+        </section>
+      </Show>
 
       <section data-slot="bots-section" aria-label={t("bots.details.title")}>
         <details data-slot="bots-details">
@@ -2049,6 +2069,13 @@ function BotForm(props: {
   const [avatar, setAvatar] = createSignal<string>()
   const [problem, setProblem] = createSignal<string>()
   const [busy, setBusy] = createSignal(false)
+  // A bot that spends money is made with a daily cap: proposed, and the user's to change or to empty.
+  const [cap, setCap] = createSignal(capText(SPEND_CAP_PROPOSED_USD))
+  const [free] = createResource(
+    () => (runner() === "ragu" && model() ? model() : null),
+    (name) => catalogFree(name, loadCatalog),
+  )
+  const asksCap = () => newBotSpendTerms(runner(), model(), model() ? free() : undefined) === "money"
 
   let nameField: HTMLInputElement | undefined
   onMount(() => nameField?.focus())
@@ -2065,6 +2092,12 @@ function BotForm(props: {
     }
     if (!generating() && name().trim().length === 0) {
       setProblem(t("bots.form.problemName"))
+      return
+    }
+
+    const capRead = asksCap() ? parseCap(cap()) : undefined
+    if (capRead && !capRead.ok) {
+      setProblem(capRead.problem)
       return
     }
 
@@ -2101,6 +2134,8 @@ function BotForm(props: {
       setProblem(result.problem)
       return
     }
+    if (capRead?.ok && capRead.capUsd !== undefined)
+      appSpendStore.set(result.path, withCap(appSpendStore.get(result.path), capRead.capUsd))
     props.onCreated(result.path)
   }
 
@@ -2160,6 +2195,17 @@ function BotForm(props: {
         }}
         onModel={setModel}
         onEffort={setEffort}
+      />
+
+      <NewBotCapField
+        runner={runner()}
+        model={model() || undefined}
+        free={model() ? free() : undefined}
+        value={cap()}
+        onInput={(text) => {
+          setCap(text)
+          setProblem(undefined)
+        }}
       />
 
       <label data-slot="bots-field">

@@ -12,6 +12,7 @@ import { EMPTY_MEMORY, type MemoryStore } from "./memory"
 import { forgetTurnFailuresOf } from "./gateway/failures"
 import { REMOTE_OFF, remoteKey, type RemoteStore } from "./gateway/remote"
 import { removeRoutinesOf, type RoutineBook } from "./routine"
+import { SPEND_STORAGE_KEY } from "./spend"
 import { TALK_KEY_PREFIX } from "./talk"
 
 /** What `localStorage` offers to find and take away the keys of a bot. */
@@ -53,7 +54,8 @@ export function forgetBotTraces(
  * The conversations kept under a bot's path, by prefix (review of the bots, S9): its chats' CLI sessions (one object,
  * a key per `bot:platform:chat`), their threads (`ade.gateway.talk`, a key each), and the thread of the panel
  * (`ade.bots.talk:<project>`, a line break and `<path>`, or the older form with no project). A bot made again at the same path would
- * otherwise continue them. The transcripts the CLIs keep on disk are theirs, and stay.
+ * otherwise continue them. The transcripts the CLIs keep on disk are theirs, and stay. So is its money a day, cap
+ * and count (`spend.ts`, one object, a key per bot): a bot made again would find the cap someone else chose.
  */
 export function forgetStoredKeys(path: string, storage: KeyedStorage): void {
   try {
@@ -64,6 +66,15 @@ export function forgetStoredKeys(path: string, storage: KeyedStorage): void {
     }
   } catch {
     // Unreadable or blocked: nothing to take away that could be found.
+  }
+  try {
+    const book = JSON.parse(storage.getItem(SPEND_STORAGE_KEY) ?? "{}") as unknown
+    if (book && typeof book === "object" && !Array.isArray(book) && Object.hasOwn(book, path)) {
+      const { [path]: _gone, ...kept } = book as Record<string, unknown>
+      storage.setItem(SPEND_STORAGE_KEY, JSON.stringify(kept))
+    }
+  } catch {
+    // As above.
   }
   try {
     const gone: string[] = []
