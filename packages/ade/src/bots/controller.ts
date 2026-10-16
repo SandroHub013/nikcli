@@ -29,6 +29,17 @@ import type { AgentFile } from "./ragu"
 import type { RoutineRun } from "./routine"
 import { applyRunnerLine, runnerById, spendKind } from "./runners"
 import {
+  addSpend,
+  noticeGiven,
+  refusedTurn,
+  spendGate,
+  spendNotice,
+  spendTerms,
+  type SpendGate,
+  type SpendStore,
+} from "./spend"
+import { appSpendStore } from "./spend-app"
+import {
   appendMessage,
   applyExit,
   applyProblem,
@@ -60,6 +71,10 @@ export interface BotTurnsDeps {
   readonly always?: AlwaysStore
   /** Each bot's memory (B8a); absent, the bots have none. */
   readonly memory?: MemoryStore
+  /** Each bot's money a day (`spend.ts`): a conversation's turns are capped and counted. Absent, the app's store. */
+  readonly spend?: SpendStore
+  /** The catalog's word on a ragu bot's model (`catalog.ts`), for its cap; absent, the `:free` suffix. */
+  readonly freeOf?: (bot: AgentFile) => boolean | undefined
   /** Runs `run` after `ms`; the function returned cancels it. For tests. */
   readonly schedule?: (run: () => void, ms: number) => () => void
   readonly now?: () => number
@@ -110,6 +125,7 @@ export interface BotTurns {
 export function createBotTurns(deps: BotTurnsDeps): BotTurns {
   const turns = new Map<string, Turn>()
   const always = deps.always ?? localAlwaysStore()
+  const spend = deps.spend ?? appSpendStore
   const now = deps.now ?? Date.now
   const schedule =
     deps.schedule ??
@@ -195,6 +211,12 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     const thread = room?.thread ?? path
     const runner = runnerById(bot.runner)
     const account = deps.accountOf?.(path) ?? { mode: "plan" as const }
+    /*
+     * A conversation by hand runs within the bot's money a day (`spend.ts`, the user's choice 5): what is left of it,
+     * or nothing at all once it is spent. A routine and a room keep their own caps.
+     */
+    const money = !routine && !room && spendTerms(runner.id, account, bot.model, deps.freeOf?.(bot)) === "money"
+    const gate: SpendGate = money ? spendGate(spend.get(path), now(), bot.identifier) : { ok: true }
     deps.update(thread, (talk) => {
       // An offer from the last turn is not for this one.
       const { offer: _stale, ...rest } = talk
@@ -211,7 +233,8 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
      */
     const memory = deps.memory?.get(path)
     const preface = memory ? memoryPreface(memory, !sessionId) : ""
-    if (memory?.pending && deps.memory) {
+    // Told once the turn runs: a turn the cap refuses leaves it for the next.
+    if (memory?.pending && deps.memory && gate.ok) {
       const { pending: _told, ...kept } = memory
       deps.memory.set(path, kept)
     }
@@ -243,6 +266,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       ...(routine ? { unattended: true } : { approvals: true, always: always.get(path) }),
       // A routine's cap per run holds during the turn, not after it (B11 review, M1).
       ...((routine ?? room)?.maxCostUsd !== undefined ? { maxCostUsd: (routine ?? room)!.maxCostUsd! } : {}),
+      ...(gate.ok && gate.maxCostUsd !== undefined ? { maxCostUsd: gate.maxCostUsd } : {}),
       timeoutMs: BOT_TURN_TIMEOUT_MS,
       // Someone is watching the panel and a room: a project not admitted yet is asked about (B8d).
       interactive: !routine,
@@ -260,10 +284,18 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
         if (current()) deps.update(thread, (talk) => applyRunnerLine(runner, talk, line, Date.now()))
       },
     }
-    const turn = routine && deps.runRoutine ? deps.runRoutine(request, routine) : deps.runTurn(request)
+    const turn = !gate.ok
+      ? refusedTurn(sent, gate.problem, now(), false)
+      : routine && deps.runRoutine
+        ? deps.runRoutine(request, routine)
+        : deps.runTurn(request)
     turns.set(path, turn)
     if (thread !== path) threads.set(path, thread)
     void turn.result.then((result) => {
+      /* What the turn spent counts even when it was stopped or forgotten; the notice only where it can be read. */
+      const counted = money && gate.ok ? addSpend(spend.get(path), result.costUsd, now()) : undefined
+      const notice = counted && current() ? spendNotice(counted, now(), bot.identifier) : undefined
+      if (counted) spend.set(path, notice ? noticeGiven(counted, now()) : counted)
       if (!current()) return
       settleMemory(path, thread, from, routine ? "routine" : room ? "room" : "panel")
       turns.delete(path)
@@ -275,6 +307,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
         if (result.exitCode !== undefined) return applyExit(talk, result.exitCode, at, runner.label, result.lastWords)
         return applyProblem(talk, result.problem ?? t("bots.didNotReply", runner.label), at)
       })
+      if (notice) deps.update(thread, (talk) => appendMessage(talk, { role: "tool", tool: "ade", text: notice }, at))
     })
     return turn
   }

@@ -3,6 +3,8 @@ import type { AgentFile } from "./ragu"
 import {
   answerSoFar,
   applyRunnerLine,
+  codexMcpNames,
+  codexOptionsRefused,
   enforcesDisabledTools,
   finalText,
   formatUsd,
@@ -579,6 +581,141 @@ describe("un turno da chat non ha la shell", () => {
 
   test("un turno del pannello resta com'era", () => {
     expect(allowedOf(turnCommand(runnerById("claude"), { bot: mine, message: "x", lean: true }).args)).toContain("Bash")
+  })
+
+  /*
+   * Scelta 7: da telefono e nelle routine il perimetro è quello di ragu (`serve-rules.ts`, `READ_TOOLS`): lettura e
+   * ricerca nel progetto, modifiche dove previsto, niente MCP né web. WebFetch e WebSearch erano tra i consentiti.
+   */
+  test("Claude: niente web né server MCP da chat e in una routine, anche senza lean", () => {
+    const own: AgentFile = { ...mine, runner: "claude" }
+    for (const spec of [{ remote: off }, { remote: on }, { unattended: true }, { unattended: true, lean: true }]) {
+      const { args } = turnCommand(runnerById("claude"), { bot: own, message: "x", ...spec })
+      for (const name of ["WebFetch", "WebSearch"]) {
+        expect([spec, name, allowedOf(args).includes(name)]).toEqual([spec, name, false])
+        expect([spec, name, disallowedOf(args).includes(name)]).toEqual([spec, name, true])
+      }
+      expect([spec, args.includes("--strict-mcp-config")]).toEqual([spec, true])
+      expect(args[args.indexOf("--mcp-config") + 1]).toBe('{"mcpServers":{}}')
+      expect(args[args.indexOf("--setting-sources") + 1]).toBe("")
+      // Leggere e cercare nel progetto resta.
+      for (const name of ["Read", "Grep", "Glob"]) expect(allowedOf(args)).toContain(name)
+    }
+    // Nel pannello l'utente guarda: il web resta.
+    expect(allowedOf(turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true }).args)).toContain(
+      "WebFetch",
+    )
+  })
+
+  /*
+   * Scelta 7 anche per Codex. Verificato su codex-cli 0.162.1 senza turni di modello, leggendo gli strumenti che un
+   * turno offre al modello da un provider finto: 21 con il server MCP dell'utente, le app di ChatGPT e `web_search`;
+   * 8 con queste opzioni, nessuno di quelli. `-c mcp_servers={}` non basta: si fonde con la tabella dell'utente. Ogni
+   * server si spegne per nome (`mcp_servers.<nome>.enabled=false`), così il resto del config.toml resta: un bot che
+   * usa un provider definito lì funziona anche da chat (richiesta di Master).
+   */
+  const options = (args: readonly string[]) => args.slice(0, args.indexOf("--"))
+  const setBy = (args: readonly string[], setting: string) => options(args)[options(args).indexOf(setting) - 1]
+
+  test("Codex: i server MCP del config.toml spenti uno per uno, niente app di ChatGPT né ricerca web", () => {
+    const own: AgentFile = { ...mine, runner: "codex" }
+    for (const spec of [{ remote: off }, { remote: on }, { unattended: true }]) {
+      for (const sessionId of [undefined, "s1"]) {
+        const { args } = turnCommand(runnerById("codex"), {
+          bot: own,
+          message: "x",
+          ...spec,
+          codexMcpServers: ["docs", "git-hub_2"],
+          ...(sessionId ? { sessionId } : {}),
+        })
+        expect([spec, sessionId, options(args).includes("--ignore-user-config")]).toEqual([spec, sessionId, false])
+        for (const setting of [
+          "mcp_servers.docs.enabled=false",
+          "mcp_servers.git-hub_2.enabled=false",
+          'web_search="disabled"',
+          "features.apps=false",
+          "features.plugins=false",
+        ])
+          expect([spec, sessionId, setting, setBy(args, setting)]).toEqual([spec, sessionId, setting, "-c"])
+        expect(options(args).join(" ")).not.toContain("mcp_servers={}")
+      }
+    }
+    // Nel pannello resta la configurazione dell'utente.
+    const panel = turnCommand(runnerById("codex"), { bot: own, message: "x", codexMcpServers: ["docs"] }).args
+    expect(panel).not.toContain("--ignore-user-config")
+    expect(panel).not.toContain("mcp_servers.docs.enabled=false")
+    expect(panel).not.toContain('web_search="disabled"')
+  })
+
+  test("Codex: server che non si sanno leggere, o con un nome strano, lasciano fuori tutto il config.toml", () => {
+    const own: AgentFile = { ...mine, runner: "codex" }
+    for (const codexMcpServers of [undefined, ["a&b"], ["docs", 'x" --y']]) {
+      const { args } = turnCommand(runnerById("codex"), {
+        bot: own,
+        message: "x",
+        remote: off,
+        ...(codexMcpServers ? { codexMcpServers } : {}),
+      })
+      expect([codexMcpServers, options(args).includes("--ignore-user-config")]).toEqual([codexMcpServers, true])
+      expect(setBy(args, 'web_search="disabled"')).toBe("-c")
+      // Un nome che non è sicuro non arriva mai sulla riga di comando (lo shim .cmd di npm lo leggerebbe).
+      expect(options(args).join(" ")).not.toContain("&")
+      expect(options(args).join(" ")).not.toContain("mcp_servers.")
+    }
+  })
+})
+
+/*
+ * I nomi dei server MCP nel config.toml di Codex, letti senza una libreria TOML: le forme che Codex documenta. Quello
+ * che la lettura non sa dire con certezza è `undefined`, e il turno lascia fuori tutto il file.
+ */
+describe("i server MCP nel config.toml di Codex", () => {
+  test("tabelle, sottotabelle, chiavi puntate e tabelle in linea", () => {
+    const toml = [
+      'model = "gpt-5"',
+      "[mcp_servers.docs]",
+      'url = "https://example.com/mcp"',
+      "[mcp_servers.docs.env] # le variabili del server",
+      'TOKEN = "non-un-nome"',
+      '[mcp_servers."git-hub"]',
+      'command = "npx"',
+      "args = [",
+      '  "--port=1",',
+      '  "x = y",',
+      "]",
+      "[mcp_servers]",
+      'inline = { command = "a" }',
+      "[profiles.lavoro]",
+      'model = "o3"',
+    ].join("\n")
+    expect(codexMcpNames(toml)).toEqual(["docs", "git-hub", "inline"])
+    expect(codexMcpNames('mcp_servers.dotted.command = "x"\n[tui]\n')).toEqual(["dotted"])
+    expect(codexMcpNames('model = "x"\r\n[tui]\r\n')).toEqual([])
+    expect(codexMcpNames("")).toEqual([])
+  })
+
+  test("una stringa su più righe che sembra una tabella non lo è", () => {
+    const toml = ['notes = """', "[mcp_servers.finto]", '"""', "[mcp_servers.vero]", 'command = "x"'].join("\n")
+    expect(codexMcpNames(toml)).toEqual(["vero"])
+  })
+
+  test("quello che non sa dire con certezza: undefined", () => {
+    expect(codexMcpNames('mcp_servers = { a = { command = "x" } }')).toBeUndefined()
+    expect(codexMcpNames('[mcp_servers."a&b"]\ncommand = "x"')).toBeUndefined()
+    expect(codexMcpNames("[mcp_servers.a\ncommand = 1")).toBeUndefined()
+  })
+})
+
+describe("why a Codex turn from a chat or a routine failed", () => {
+  test("Codex refused the options that switch MCP and the web off: it says to update Codex", () => {
+    for (const said of [
+      "error: unexpected argument '--ignore-user-config' found",
+      "Error loading config.toml: invalid transport",
+      "unknown field `enabled`, expected one of `command`, `args`",
+    ])
+      expect([said, codexOptionsRefused(said)]).toEqual([said, true])
+    expect(codexOptionsRefused("stream disconnected before completion")).toBe(false)
+    expect(codexOptionsRefused(undefined)).toBe(false)
   })
 })
 
