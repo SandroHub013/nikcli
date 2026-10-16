@@ -204,39 +204,39 @@
     },
     "syntaxComment": {
       "dark": "#8993c0",
-      "light": "#5d6375"
+      "light": "#585d6f"
     },
     "syntaxKeyword": {
       "dark": "darkPurple",
-      "light": "#8239d6"
+      "light": "#7c32cf"
     },
     "syntaxFunction": {
       "dark": "darkStep9",
-      "light": "#055fc9"
+      "light": "#0059c1"
     },
     "syntaxVariable": {
       "dark": "darkRed",
-      "light": "#c6004b"
+      "light": "#bb0047"
     },
     "syntaxString": {
       "dark": "darkGreen",
-      "light": "#4f6b30"
+      "light": "#4a652b"
     },
     "syntaxNumber": {
       "dark": "darkOrange",
-      "light": "#9a4f00"
+      "light": "#924a00"
     },
     "syntaxType": {
       "dark": "darkYellow",
-      "light": "#7d5d2f"
+      "light": "#77582a"
     },
     "syntaxOperator": {
       "dark": "darkCyan",
-      "light": "#006b90"
+      "light": "#006488"
     },
     "syntaxPunctuation": {
       "dark": "darkStep12",
-      "light": "#365ebd"
+      "light": "#3158b7"
     }
   }
 }

@@ -194,15 +194,15 @@
     },
     "syntaxComment": {
       "dark": "overlay0",
-      "light": "#66687e"
+      "light": "#66677d"
     },
     "syntaxKeyword": {
       "dark": "#a97cff",
-      "light": "#8838ee"
+      "light": "#8837ee"
     },
     "syntaxFunction": {
       "dark": "#5a93ff",
-      "light": "#155eec"
+      "light": "#145eeb"
     },
     "syntaxVariable": {
       "dark": "#778dff",
@@ -210,11 +210,11 @@
     },
     "syntaxString": {
       "dark": "#49a935",
-      "light": "#1f7a00"
+      "light": "#1f7900"
     },
     "syntaxNumber": {
       "dark": "peach",
-      "light": "#b74400"
+      "light": "#b64400"
     },
     "syntaxType": {
       "dark": "#33a4aa",
@@ -222,11 +222,11 @@
     },
     "syntaxOperator": {
       "dark": "overlay0",
-      "light": "#66687e"
+      "light": "#66677d"
     },
     "syntaxPunctuation": {
       "dark": "overlay0",
-      "light": "#66687e"
+      "light": "#66677d"
     }
   }
 }

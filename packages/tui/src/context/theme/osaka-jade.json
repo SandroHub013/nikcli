@@ -200,7 +200,7 @@
       "light": "lightFg0"
     },
     "syntaxComment": {
-      "dark": "#778d7f",
+      "dark": "#788f80",
       "light": "lightGray"
     },
     "syntaxKeyword": {
@@ -208,7 +208,7 @@
       "light": "#007360"
     },
     "syntaxFunction": {
-      "dark": "#519575",
+      "dark": "#529676",
       "light": "#38705b"
     },
     "syntaxVariable": {
@@ -228,7 +228,7 @@
       "light": "#34714a"
     },
     "syntaxOperator": {
-      "dark": "#499854",
+      "dark": "#4b9955",
       "light": "#756500"
     },
     "syntaxPunctuation": {

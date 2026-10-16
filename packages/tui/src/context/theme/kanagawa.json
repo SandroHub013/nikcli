@@ -188,11 +188,11 @@
     },
     "syntaxComment": {
       "dark": "#94928a",
-      "light": "#73685f"
+      "light": "#6f645c"
     },
     "syntaxKeyword": {
       "dark": "#9e88c1",
-      "light": "#756097"
+      "light": "#715c93"
     },
     "syntaxFunction": {
       "dark": "crystalBlue",
@@ -204,19 +204,19 @@
     },
     "syntaxString": {
       "dark": "lotusGreen",
-      "light": "#547324"
+      "light": "#516f20"
     },
     "syntaxNumber": {
       "dark": "roninYellow",
-      "light": "#8e6100"
+      "light": "#8a5e00"
     },
     "syntaxType": {
       "dark": "carpYellow",
-      "light": "#8e5b6b"
+      "light": "#8a5868"
     },
     "syntaxOperator": {
       "dark": "sakuraPink",
-      "light": "#9f516c"
+      "light": "#9b4d69"
     },
     "syntaxPunctuation": {
       "dark": "fujiWhite",

@@ -11,8 +11,7 @@
  *   the tomato;
  * - every other colour, the syntax and the markdown, starts as greyscale's.
  * Then each colour moves in OKLCH lightness, hue kept, until every pair it is drawn in reads at least as well as the
- * same pair in greyscale and reaches the floor of `test/tui/theme-contrast.test.ts`. The pairs are that test's, and
- * the code on the diff's context lines and on the panel, which its ragu tests add.
+ * same pair in greyscale and reaches the floor of `test/tui/theme-contrast.test.ts`. The pairs are that test's.
  *
  * Usage, from packages/tui:
  *   bun script/ragu-theme.ts                                       rewrite ragu.json
@@ -117,8 +116,7 @@ function pairs(t: Theme, reasoning: RGBA): Pair[] {
     add(`syntax.${k}/added`, k, SECONDARY, t.status[k].fg, t.diff.addedBg)
     add(`syntax.${k}/removed`, k, SECONDARY, t.status[k].fg, t.diff.removedBg)
   }
-  // Code on the diff's context lines and on the panel, where a written file is shown: pairs the catalog test does not
-  // measure yet, and where the captures found greyscale itself under 4.5:1.
+  // Code on the diff's context lines and on the panel, where a written file is shown.
   const code = [
     ...(Object.keys(t.syntax) as (keyof Theme["syntax"])[]).map(
       (k) => [k, `syntax${k[0]!.toUpperCase()}${k.slice(1)}`, t.syntax[k]] as const,

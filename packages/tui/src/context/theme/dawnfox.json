@@ -193,27 +193,27 @@
       "light": "#676a70"
     },
     "syntaxKeyword": {
-      "dark": "#a87ab9",
+      "dark": "#ad7fbe",
       "light": "#855a96"
     },
     "syntaxFunction": {
-      "dark": "#5087f7",
+      "dark": "#558cfc",
       "light": "#3264d2"
     },
     "syntaxVariable": {
-      "dark": "#848c94",
+      "dark": "#889199",
       "light": "#5e656d"
     },
     "syntaxString": {
-      "dark": "#609860",
+      "dark": "#649d64",
       "light": "#407641"
     },
     "syntaxNumber": {
-      "dark": "#d96d29",
+      "dark": "#de722f",
       "light": "#ae4e00"
     },
     "syntaxType": {
-      "dark": "cyan",
+      "dark": "#499ca6",
       "light": "#1b757f"
     },
     "syntaxOperator": {
