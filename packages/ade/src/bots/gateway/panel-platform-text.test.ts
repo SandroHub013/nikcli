@@ -37,4 +37,12 @@ describe("the gateway panel speaks of the platform it shows", () => {
       }
     }
   })
+
+  test("lint: shows attention box with retry and change code buttons when needsAttention", () => {
+    expect(panel).toContain('data-slot="gateway-attention-box"')
+    expect(panel).toContain("onClick={() => void panel.retry()}")
+    expect(panel).toContain('onClick={() => setPicked("paste")}')
+    expect(panel).toContain('t("gateway.panel.retry")')
+    expect(panel).toContain('t("gateway.panel.changeCode")')
+  })
 })

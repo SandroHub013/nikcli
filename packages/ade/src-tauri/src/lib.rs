@@ -2049,6 +2049,8 @@ impl Default for CloseManager {
 struct CloseRequestPayload {
     #[serde(rename = "requestId")]
     request_id: u64,
+    #[serde(rename = "gatewayOn")]
+    gateway_on: bool,
 }
 
 fn attach_close_handler(window: &tauri::WebviewWindow, manager: std::sync::Arc<CloseManager>) {
@@ -2059,7 +2061,8 @@ fn attach_close_handler(window: &tauri::WebviewWindow, manager: std::sync::Arc<C
             use tauri::Manager;
             // A bot's gateway is on: the window goes, ADE stays in the tray (G11), once the page is asked.
             let app = target.app_handle();
-            if tray::hides_on_close(app.state::<gateway::Gateway>().any_on(), app.state::<tray::Tray>().quitting()) {
+            let gateway_on = app.state::<gateway::Gateway>().any_on();
+            if tray::hides_on_close(gateway_on, app.state::<tray::Tray>().quitting()) {
                 api.prevent_close();
                 tray::request_hide(app);
                 return;
@@ -2077,7 +2080,7 @@ fn attach_close_handler(window: &tauri::WebviewWindow, manager: std::sync::Arc<C
                     };
                     if let Err(err) = target.emit(
                         "ade-window-close-requested",
-                        CloseRequestPayload { request_id },
+                        CloseRequestPayload { request_id, gateway_on },
                     ) {
                         eprintln!("ADE: errore emissione ade-window-close-requested: {err}");
                     }
@@ -2763,6 +2766,8 @@ pub fn run() {
             gateway::gateway_pairing_link_cancel,
             gateway::gateway_slack_manifest,
             gateway::gateway_ack,
+            gateway::gateway_wake,
+            gateway::gateway_retry,
             serve::ragu_serve_start,
             serve::ragu_serve_status,
             serve::ragu_serve_stop,

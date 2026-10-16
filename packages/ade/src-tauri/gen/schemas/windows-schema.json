@@ -711,6 +711,12 @@
           "markdownDescription": "Enables the gateway_ready command without any pre-configured scope."
         },
         {
+          "description": "Enables the gateway_retry command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-gateway-retry",
+          "markdownDescription": "Enables the gateway_retry command without any pre-configured scope."
+        },
+        {
           "description": "Enables the gateway_send command without any pre-configured scope.",
           "type": "string",
           "const": "allow-gateway-send",
@@ -757,6 +763,12 @@
           "type": "string",
           "const": "allow-gateway-typing",
           "markdownDescription": "Enables the gateway_typing command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the gateway_wake command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-gateway-wake",
+          "markdownDescription": "Enables the gateway_wake command without any pre-configured scope."
         },
         {
           "description": "Enables the git_run command without any pre-configured scope.",
@@ -1551,6 +1563,12 @@
           "markdownDescription": "Denies the gateway_ready command without any pre-configured scope."
         },
         {
+          "description": "Denies the gateway_retry command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-gateway-retry",
+          "markdownDescription": "Denies the gateway_retry command without any pre-configured scope."
+        },
+        {
           "description": "Denies the gateway_send command without any pre-configured scope.",
           "type": "string",
           "const": "deny-gateway-send",
@@ -1597,6 +1615,12 @@
           "type": "string",
           "const": "deny-gateway-typing",
           "markdownDescription": "Denies the gateway_typing command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the gateway_wake command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-gateway-wake",
+          "markdownDescription": "Denies the gateway_wake command without any pre-configured scope."
         },
         {
           "description": "Denies the git_run command without any pre-configured scope.",

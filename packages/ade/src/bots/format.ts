@@ -36,3 +36,35 @@ export function formatCap(usd: number, loc: Locale = locale()): string {
 export function formatClock(ms: number, loc: Locale = locale()): string {
   return new Date(ms).toLocaleTimeString(BCP47[loc], { hour: "2-digit", minute: "2-digit" })
 }
+
+/**
+ * The connection moment for a gateway (P2-4):
+ * - today: clock hour (14:05 in Italian, 2:05 PM in English);
+ * - yesterday: "da ieri alle 14:05" in Italian, "yesterday at 2:05 PM" in English;
+ * - older: includes day and month ("dal 14 ott alle 14:05" in Italian, "Oct 14 at 2:05 PM" in English).
+ */
+export function formatConnectedTime(ms: number, now: number = Date.now(), loc: Locale = locale()): string {
+  const date = new Date(ms)
+  const nowDate = new Date(now)
+  const isToday =
+    date.getFullYear() === nowDate.getFullYear() &&
+    date.getMonth() === nowDate.getMonth() &&
+    date.getDate() === nowDate.getDate()
+
+  const clock = formatClock(ms, loc)
+  if (isToday) return clock
+
+  const yesterday = new Date(now - 86_400_000)
+  const isYesterday =
+    date.getFullYear() === yesterday.getFullYear() &&
+    date.getMonth() === yesterday.getMonth() &&
+    date.getDate() === yesterday.getDate()
+
+  if (isYesterday) {
+    return loc === "it" ? `da ieri alle ${clock}` : `yesterday at ${clock}`
+  }
+
+  const day = date.getDate()
+  const month = date.toLocaleDateString(BCP47[loc], { month: "short" })
+  return loc === "it" ? `dal ${day} ${month} alle ${clock}` : `${month} ${day} at ${clock}`
+}

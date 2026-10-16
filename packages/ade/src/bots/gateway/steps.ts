@@ -19,11 +19,12 @@ export interface TileInput {
   readonly running: boolean
   readonly connected: boolean
   readonly lastError?: string | null
+  readonly needsAttention?: boolean
 }
 
 export function tileState(link: TileInput | undefined): TileState {
   if (!link || !link.enabled) return "setup"
-  if (!link.running || link.lastError) return "error"
+  if (!link.running || link.lastError || link.needsAttention) return "error"
   return link.connected ? "on" : "connecting"
 }
 

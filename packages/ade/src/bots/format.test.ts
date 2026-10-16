@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { formatCap, formatClock, formatCount, formatUsd } from "./format"
+import { formatCap, formatClock, formatConnectedTime, formatCount, formatUsd } from "./format"
 
 /*
  * D32: numbers, money and hours as the language of ADE writes them. The comma and the dollar after the number in
@@ -34,6 +34,21 @@ describe("the numbers follow the language", () => {
     const at = new Date(2026, 9, 16, 14, 5).getTime()
     expect(formatClock(at, "it")).toBe("14:05")
     expect(formatClock(at, "en")).toMatch(/^0?2:05\s?PM$/)
+  })
+
+  test("the gateway connection time formats today with hour, yesterday, and older with day (P2-4)", () => {
+    const now = new Date(2026, 9, 16, 18, 0).getTime()
+    const today = new Date(2026, 9, 16, 14, 5).getTime()
+    expect(formatConnectedTime(today, now, "it")).toBe("14:05")
+    expect(formatConnectedTime(today, now, "en")).toMatch(/^0?2:05\s?PM$/)
+
+    const yesterday = new Date(2026, 9, 15, 14, 5).getTime()
+    expect(formatConnectedTime(yesterday, now, "it")).toBe("da ieri alle 14:05")
+    expect(formatConnectedTime(yesterday, now, "en")).toMatch(/^yesterday at 0?2:05\s?PM$/)
+
+    const threeDaysAgo = new Date(2026, 9, 13, 14, 5).getTime()
+    expect(formatConnectedTime(threeDaysAgo, now, "it")).toMatch(/dal 13 (ott|ottobre) alle 14:05/)
+    expect(formatConnectedTime(threeDaysAgo, now, "en")).toMatch(/Oct 13 at 0?2:05\s?PM/)
   })
 
   test("they follow the language of ADE when none is given", () => {

@@ -42,6 +42,10 @@ export interface GatewayStatus {
   readonly project?: string | null
   readonly lastError?: string | null
   readonly lastMessageMs?: number | null
+  readonly connectedAtMs?: number | null
+  readonly reconnecting?: boolean
+  readonly needsAttention?: boolean
+  readonly attentionReason?: string | null
   readonly authorized: readonly Sender[]
 }
 
@@ -49,10 +53,15 @@ export interface GatewayStatus {
 export interface LinkStatus {
   readonly bot: string
   readonly platform: string
+  readonly enabled?: boolean
   readonly running: boolean
   readonly connected: boolean
   readonly lastError?: string | null
   readonly lastMessageMs?: number | null
+  readonly connectedAtMs?: number | null
+  readonly reconnecting?: boolean
+  readonly needsAttention?: boolean
+  readonly attentionReason?: string | null
 }
 
 /** `gateway:pairing`, and one waiting request in `gateway_pairing_list`. Never a code. */
@@ -104,6 +113,10 @@ export interface GatewayPanelApi {
   pairingLink?: (bot: string, platform: string) => Promise<PairingLinkInfo>
   /** The QR left the screen: its token is cancelled, so a photo of it pairs nobody. Nothing to cancel is no error. */
   pairingLinkCancel?: (bot: string, platform: string) => Promise<void>
+  /** Wakes all gateways or relaunches them immediately (network restore or wake from sleep). */
+  wake?: () => Promise<void>
+  /** Retries a specific bot gateway immediately, resetting backoff if waiting. */
+  retry?: (bot: string, platform: string) => Promise<void>
   /** `gateway:status`, `gateway:pairing` and `gateway:message`; resolves with the way to stop. */
   listen: (handlers: {
     status: (status: LinkStatus) => void
@@ -144,7 +157,12 @@ const OFF: GatewayStatus = {
   connected: false,
   hasToken: false,
   authorized: [],
+  connectedAtMs: null,
+  reconnecting: false,
+  needsAttention: false,
+  attentionReason: null,
 }
+
 const NO_PAIRING: PairingInfo = { open: false, pending: [], authorized: [], attemptsLeft: 0 }
 
 /**
@@ -240,6 +258,7 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
     }
   }
 
+
   /** The requests waiting on the platforms the panel is not looking at: a badge on their tiles. */
   const refreshWaiting = async () => {
     const counts: Record<string, number> = {}
@@ -285,6 +304,11 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
               running: status.running,
               connected: status.connected,
               lastError: status.lastError ?? null,
+              lastMessageMs: status.lastMessageMs ?? current[status.platform]?.lastMessageMs ?? null,
+              connectedAtMs: status.connectedAtMs !== undefined ? status.connectedAtMs : current[status.platform]?.connectedAtMs ?? null,
+              reconnecting: status.reconnecting ?? false,
+              needsAttention: status.needsAttention ?? false,
+              attentionReason: status.attentionReason ?? null,
             },
           }))
         }
@@ -295,8 +319,13 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
           connected: status.connected,
           lastError: status.lastError ?? null,
           lastMessageMs: status.lastMessageMs ?? current.lastMessageMs ?? null,
+          connectedAtMs: status.connectedAtMs !== undefined ? status.connectedAtMs : current.connectedAtMs ?? null,
+          reconnecting: status.reconnecting ?? false,
+          needsAttention: status.needsAttention ?? false,
+          attentionReason: status.attentionReason ?? null,
         }))
       },
+
       pairing: (request) => {
         // Another platform's request is a badge on its tile; this one's is the list.
         if (request.bot === path()) void refresh()
@@ -513,6 +542,12 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
 
     /** The link or QR left the screen: see `cancelLink`. */
     cancelLink: () => cancelLink(),
+    /** Retries connecting immediately, resetting backoff if waiting or relaunching if stopped. */
+    retry: () =>
+      act(async () => {
+        await deps.api.retry?.(path(), platform())
+        await refresh()
+      }),
     dispose: () => {
       disposed = true
       void cancelLink()

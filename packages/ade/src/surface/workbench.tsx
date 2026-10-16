@@ -263,10 +263,12 @@ import {
 import { Chat } from "../chat/chat"
 import { appChatStore } from "../chat/store"
 import { barSessionCount } from "./bar-sessions"
-import { BotsMain, BotsRoster, openBotByPath } from "../bots/bots"
-import { approvalBadge, approvalLine, freshApprovals, shouldNotifySystem } from "../bots/approval-signal"
-import { waitingApprovals } from "../bots/approvals-app"
+import { BotsMain, BotsRoster, botNameFromRoster, openBotByPath } from "../bots/bots"
+import { approvalBadge, approvalLine, attentionLine, freshApprovals, freshAttentions, shouldNotifySystem } from "../bots/approval-signal"
+import { waitingApprovals, waitingAttentions } from "../bots/approvals-app"
 import { forgetSystemNotice, notifySystem, windowInFront } from "../bots/system-notify"
+import { createGatewayBarStore } from "../bots/gateway/bar-status"
+import { tauriGatewayPanelApi } from "../bots/gateway/bridge"
 import { scrubSecrets } from "../bots/terms"
 import type { AgentFile } from "../bots/ragu"
 import type { Runner } from "../bots/runners"
@@ -634,6 +636,7 @@ import {
   addNotice,
   bellTone,
   dismissClosedApprovals,
+  dismissClosedAttentions,
   dismissNotice,
   markAllRead,
   unreadCount,
@@ -949,12 +952,45 @@ export function Workbench() {
     }
     forgetSystemNotice(seen)
   })
+  /*
+   * A bot's gateway link requires attention (fatal error or 10 min without connecting): an error line in the bell,
+   * gone when the link reconnects, and taskbar flash when ADE is behind.
+   */
+  let attentionsSeen: ReadonlySet<string> = new Set()
+  createEffect(() => {
+    const waiting = waitingAttentions()
+    const { fresh, seen } = freshAttentions(attentionsSeen, waiting)
+    attentionsSeen = seen
+    setNotices((list) => dismissClosedAttentions(list, seen))
+    for (const one of fresh) {
+      setNotices((list) =>
+        addNotice(list, {
+          kind: "error",
+          text: attentionLine(one),
+          bot: one.bot,
+          platform: one.platform,
+          tab: "platforms",
+          gatewayAttention: one.id,
+          at: Date.now(),
+        }),
+      )
+      if (shouldNotifySystem(windowInFront())) void notifySystem({ id: one.id, title: "ADE", body: attentionLine(one) })
+    }
+    forgetSystemNotice(seen)
+  })
   /** The bell's «Apri»: the Bot section, on that bot, or on the room where it was asked. */
-  const openWaitingBot = (path: string, room?: string) => {
+  const openWaitingBot = (path: string, room?: string, tab?: "talk" | "platforms" | "routines" | "memory" | "permissions") => {
     setWb((w) => ({ ...w, view: "bot" }))
-    openBotByPath(path, room)
+    openBotByPath(path, room, tab)
     setNoticesOpen(false)
   }
+  /*
+   * Gateway indicator in the bottom bar (Point 4): only shown if a messaging app is enabled.
+   */
+  const gatewayBar = gatewayControllerOn(isTauriDesktop())
+    ? createGatewayBarStore(tauriGatewayPanelApi())
+    : undefined
+  onCleanup(() => gatewayBar?.dispose())
   /* A button on the strip, for the one notice it was made for: shown only while that text is. */
   const [noticeAction, setNoticeAction] = createSignal<{ text: string; label: string; run: () => void }>()
 
@@ -6728,13 +6764,15 @@ export function Workbench() {
 
           try {
             const working = countWorkingSessions(wb().panes, running)
-            if (!shouldConfirmWindowClose({ working })) {
+            const payload = event.payload as { requestId?: number; gatewayOn?: boolean } | undefined
+            const gatewayOn = payload?.gatewayOn ?? gatewayBar?.hasActive() ?? false
+            if (!shouldConfirmWindowClose({ working, gatewayOn })) {
               closingConfirmed = true
               await closeForGood()
               return
             }
 
-            const message = closeConfirmationMessage(working)
+            const message = closeConfirmationMessage({ working, gatewayOn })
             const allowed = await askCloseConfirmation(message)
             if (allowed) {
               closingConfirmed = true
@@ -6821,7 +6859,11 @@ export function Workbench() {
         gateway?.stop()
       })
       void import("../bots/gateway/bridge")
-        .then(({ startAppGatewayController }) => startAppGatewayController())
+        .then(({ startAppGatewayController }) =>
+          startAppGatewayController({
+            botName: (path) => botNameFromRoster(path) ?? path.split(/[/\\]/).pop()?.replace(/\.md$/, "") ?? path,
+          }),
+        )
         .then((started) => (gatewayGone ? started.stop() : (gateway = started)))
         .catch((error) => console.warn("ADE: gateway dei bot non avviato", error))
     }
@@ -9818,6 +9860,22 @@ export function Workbench() {
                 </Show>
               </button>
 
+              <Show when={gatewayBar?.status()}>
+                {(bar) => (
+                  <button
+                    type="button"
+                    data-slot="ade-icon"
+                    data-action="gateway-status"
+                    data-tone={bar().tone}
+                    aria-label={bar().label}
+                    title={bar().label}
+                    onClick={() => openWaitingBot(bar().bot, undefined, "platforms")}
+                  >
+                    <span data-slot="gateway-dot" aria-hidden="true" />
+                  </button>
+                )}
+              </Show>
+
               {/* The bell, and the only place a notice survives being missed.
                   `data-drop="up"` because at the foot of the column there is
                   nothing below the button to hang a menu on. */}
@@ -9893,9 +9951,9 @@ export function Workbench() {
                                 <button
                                   type="button"
                                   data-slot="ade-notice-link"
-                                  onClick={() => openWaitingBot(bot(), notice.room)}
+                                  onClick={() => (notice.tab ? openWaitingBot(bot(), undefined, notice.tab) : openWaitingBot(bot(), notice.room))}
                                 >
-                                  {notice.room ? t("bots.waiting.openRoom") : t("bots.waiting.open")}
+                                  {notice.tab === "platforms" ? t("gateway.panel.openPlatforms") : notice.room ? t("bots.waiting.openRoom") : t("bots.waiting.open")}
                                 </button>
                               )}
                             </Show>

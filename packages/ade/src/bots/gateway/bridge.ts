@@ -27,11 +27,14 @@ import { appStateAside } from "./state-aside"
 import { spendStatus, spendTerms, withDailyCap } from "../spend"
 import { appSpendStore } from "../spend-app"
 import { appApprovals } from "../approvals-app"
+import { syncGatewayAttention } from "./attention"
 
 interface LinkStatus {
   readonly bot: string
   readonly platform: string
   readonly project?: string | null
+  readonly connected?: boolean
+  readonly connectedAtMs?: number | null
 }
 
 const invoke = async <T>(command: string, args?: Record<string, unknown>) =>
@@ -65,6 +68,11 @@ export function tauriGatewayBridge(): GatewayBridge {
       const links = await invoke<LinkStatus[]>("gateway_status")
       return links.find((link) => link.bot === bot && link.platform === platform)?.project ?? undefined
     },
+    async linkStatus(bot, platform) {
+      const links = await invoke<LinkStatus[]>("gateway_status")
+      const l = links.find((link) => link.bot === bot && link.platform === platform)
+      return l ? { connected: l.connected ?? false, connectedAtMs: l.connectedAtMs } : undefined
+    },
   }
 }
 
@@ -92,6 +100,8 @@ export function tauriGatewayPanelApi(): GatewayPanelApi {
     pairingOpen: (bot, platform) => invoke("gateway_pairing_open", { bot, platform }),
     pairingLink: (bot, platform) => invoke("gateway_pairing_link", { bot, platform }),
     pairingLinkCancel: (bot, platform) => invoke("gateway_pairing_link_cancel", { bot, platform }),
+    wake: () => invoke("gateway_wake"),
+    retry: (bot, platform) => invoke("gateway_retry", { bot, platform }),
     async listen(handlers) {
       const { listen } = await import("@tauri-apps/api/event")
       const stops = await Promise.all([
@@ -151,7 +161,9 @@ export function appGatewayPanelDeps(project: () => string | undefined): Omit<Gat
 }
 
 /** Starts listening for the chats' messages; the gateways read from then on. */
-export async function startAppGatewayController(): Promise<GatewayController> {
+export async function startAppGatewayController(options?: {
+  readonly botName?: (botPath: string) => string
+}): Promise<GatewayController> {
   const controller = await startGatewayController({
     bridge: tauriGatewayBridge(),
     // Within the bot's money a day (`spend.ts`, the user's choice 5).
@@ -186,6 +198,11 @@ export async function startAppGatewayController(): Promise<GatewayController> {
     },
   })
   activeController = controller
+  const attentionSync = syncGatewayAttention({
+    approvals: appApprovals,
+    api: tauriGatewayPanelApi(),
+    botName: options?.botName,
+  })
   // The menu of commands on Telegram, in ADE's language, once the bot's gateway is up.
   const stopMenus = await startMenuSync({
     statuses: () => invoke<LiveStatus[]>("gateway_status"),
@@ -211,10 +228,20 @@ export async function startAppGatewayController(): Promise<GatewayController> {
       },
     })
     .catch(() => () => {})
+  const onOnline = () => {
+    void tauriGatewayPanelApi().wake?.()
+  }
+  if (typeof window !== "undefined") {
+    window.addEventListener("online", onOnline)
+  }
   return {
     ...controller,
     stop: () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("online", onOnline)
+      }
       if (activeController === controller) activeController = undefined
+      attentionSync.stop()
       stopAside()
       stopMenus()
       controller.stop()

@@ -90,6 +90,8 @@ function fakeApi(initial: Partial<GatewayStatus> = {}) {
       return { url: `https://t.me/mio_bot?start=TOKEN${linkCount}`, svg: "<svg></svg>", expiresMs: Date.UTC(2026, 8, 25, 10, 40) }
     },
     pairingLinkCancel: async (bot, platform) => void calls.push(`cancel ${bot} ${platform}`),
+    wake: async () => void calls.push("wake"),
+    retry: async (bot, platform) => void calls.push(`retry ${bot} ${platform}`),
     listen: async (on) => {
       Object.assign(handlers, on)
       return () => void (stopped = true)
@@ -955,7 +957,94 @@ describe("the QR is cancelled when it leaves the screen", () => {
     await wait()
     expect(panel.linked()).toBe("Ale")
     panel.dispose()
+
     await wait(5)
     expect(cancels(fake)).toEqual([])
   })
+
+  test("the live status event updates connectedAtMs, reconnecting, and needsAttention with reason without polling", async () => {
+    const fake = fakeApi({ enabled: true, running: true })
+    const { panel } = panelWith(fake)
+    await panel.ready
+
+    fake.handlers.status?.({
+      bot: BOT.path,
+      platform: "telegram",
+      running: true,
+      connected: true,
+      connectedAtMs: 1727260200000,
+      reconnecting: false,
+      needsAttention: false,
+      lastMessageMs: 1727260210000,
+    })
+    await wait()
+
+    expect(panel.link().connected).toBe(true)
+    expect(panel.link().connectedAtMs).toBe(1727260200000)
+    expect(panel.link().reconnecting).toBe(false)
+    expect(panel.link().needsAttention).toBe(false)
+    expect(panel.link().lastMessageMs).toBe(1727260210000)
+
+    // Reconnecting transiently
+    fake.handlers.status?.({
+      bot: BOT.path,
+      platform: "telegram",
+      running: true,
+      connected: false,
+      connectedAtMs: null,
+      reconnecting: true,
+      needsAttention: false,
+      lastError: "rete non raggiungibile",
+    })
+    await wait()
+
+    expect(panel.link().connected).toBe(false)
+    expect(panel.link().connectedAtMs).toBeNull()
+    expect(panel.link().reconnecting).toBe(true)
+    expect(panel.link().needsAttention).toBe(false)
+
+    // Needs attention after fatal error
+    fake.handlers.status?.({
+      bot: BOT.path,
+      platform: "telegram",
+      running: false,
+      connected: false,
+      reconnecting: false,
+      needsAttention: true,
+      attentionReason: "token non valido",
+      lastError: "token non valido",
+    })
+    await wait()
+
+    expect(panel.link().running).toBe(false)
+    expect(panel.link().connected).toBe(false)
+    expect(panel.link().reconnecting).toBe(false)
+    expect(panel.link().needsAttention).toBe(true)
+    expect(panel.link().attentionReason).toBe("token non valido")
+    panel.dispose()
+  })
+
+  test("retry triggers api retry and panel does not bind window online listener (P2-1 handled globally)", async () => {
+    let addCalls = 0
+    const originalAdd = window.addEventListener
+    window.addEventListener = ((type: string, listener: any, options: any) => {
+      if (type === "online") addCalls++
+      return originalAdd.call(window, type, listener, options)
+    }) as any
+
+    const fake = fakeApi({ enabled: true, running: true, needsAttention: true })
+    const { panel } = panelWith(fake)
+    await panel.ready
+
+    expect(typeof (panel as any).retry).toBe("function")
+    await (panel as any).retry()
+    expect(fake.calls).toContain(`retry ${BOT.path} telegram`)
+
+    panel.dispose()
+    window.addEventListener = originalAdd
+    expect(addCalls).toBe(0)
+  })
 })
+
+
+

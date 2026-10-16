@@ -138,19 +138,37 @@ export function decideApproval(waiting: WaitingApproval, choice: ApprovalChoice)
   return true
 }
 
+export interface GatewayAttentionItem {
+  /** Unique id for the attention: e.g. `gateway:${bot}:${platform}` */
+  readonly id: string
+  readonly bot: string
+  readonly botName: string
+  readonly platform: string
+  readonly reason?: string
+  readonly at: number
+}
+
 export interface ApprovalRegistry {
   /** Opens an entry; the function returned closes it (once). Opening a key again replaces the entry. */
   open: (request: ApprovalRequest) => () => void
   close: (key: string) => void
   /** The open requests, as asked. */
   list: () => readonly ApprovalRequest[]
+  /** Opens a gateway attention item. The function returned closes it. */
+  openAttention: (item: GatewayAttentionItem) => () => void
+  closeAttention: (id: string) => void
+  listAttentions: () => readonly GatewayAttentionItem[]
 }
 
 /** The registry, with `changed` called after every change (the app's wrapper makes it reactive). */
 export function createApprovalRegistry(changed: () => void = () => {}): ApprovalRegistry {
   const open = new Map<string, ApprovalRequest>()
+  const attentions = new Map<string, GatewayAttentionItem>()
   const close = (key: string) => {
     if (open.delete(key)) changed()
+  }
+  const closeAttention = (id: string) => {
+    if (attentions.delete(id)) changed()
   }
   return {
     open: (request) => {
@@ -163,5 +181,14 @@ export function createApprovalRegistry(changed: () => void = () => {}): Approval
     },
     close,
     list: () => [...open.values()],
+    openAttention: (item) => {
+      attentions.set(item.id, item)
+      changed()
+      return () => {
+        if (attentions.get(item.id) === item) closeAttention(item.id)
+      }
+    },
+    closeAttention,
+    listAttentions: () => [...attentions.values()],
   }
 }

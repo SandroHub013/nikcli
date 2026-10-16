@@ -679,6 +679,7 @@ export const it = {
     `${count} ${count === 1 ? "sessione sta lavorando" : "sessioni stanno lavorando"}. Chiudere lo stesso?`,
   "window.closeConfirm.ok": "Chiudi",
   "window.closeConfirm.cancel": "Annulla",
+  "window.closeConfirm.gatewayOn": "I bot smettono di rispondere finché non riapri ADE.",
   "ask.yes": "Sì",
   "ask.no": "No",
   "tray.hide.working": (count: number) =>
@@ -808,6 +809,8 @@ export const it = {
   "gateway.fresh": "Nuova conversazione: riparto da zero.",
   "gateway.status.idle": "Libero: scrivimi pure.",
   "gateway.status.working": (queued: number) => `Sto lavorando a un turno; messaggi in coda: ${queued}.`,
+  "gateway.status.connectedSince": (time: string) =>
+    `Gateway collegato ${time.startsWith("dal") || time.startsWith("da ") ? time : `dalle ${time}`}.`,
   "gateway.retry.none": "Non c'è ancora una domanda da rifare: scrivimene una.",
   "gateway.retry.busy": "Sto ancora lavorando alla domanda di prima: aspetta che finisca, oppure scrivi /ferma.",
   "gateway.retry.again": "Rifaccio l'ultima domanda.",
@@ -964,8 +967,21 @@ export const it = {
     "Scrivi a questo bot da Telegram, mentre ADE è aperta. Ogni bot ha il suo bot Telegram, creato con BotFather.",
   "gateway.panel.off": "Spento",
   "gateway.panel.stopped": "Acceso, ma fermo per un errore",
+  "gateway.panel.needsAttention": "Richiede attenzione",
   "gateway.panel.connected": "Acceso · collegato",
+  "gateway.panel.connectedSince": (time: string) =>
+    `Acceso · collegato ${time.startsWith("dal") || time.startsWith("da ") ? time : `dalle ${time}`}`,
   "gateway.panel.connecting": "Acceso · in collegamento",
+  "gateway.panel.reconnecting": "Acceso · riconnessione in corso",
+  "gateway.panel.attentionTimeout": "Impossibile connettersi da oltre 10 minuti",
+  "gateway.panel.retry": "Riprova",
+  "gateway.panel.changeCode": "Cambia il codice",
+  "gateway.panel.openPlatforms": "Apri piattaforme",
+  "gateway.panel.attentionNotice": (name: string, platform: string) =>
+    `Il gateway di ${name} su ${platform} richiede attenzione.`,
+  "gateway.bar.connected": "Gateway: collegato",
+  "gateway.bar.reconnecting": "Gateway: riconnessione in corso",
+  "gateway.bar.needsAttention": "Gateway: richiede attenzione",
   "gateway.panel.lastMessage": (time: string) => `ultimo messaggio alle ${time}`,
   "gateway.panel.redacted": (time: string) =>
     `Nel messaggio delle ${time} c'era una chiave: l'ho nascosta, il bot non l'ha vista e non è stata salvata.`,

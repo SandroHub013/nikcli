@@ -896,6 +896,8 @@ const shared = createRoot(() => {
     return expressionFor(talkOf(bot.path).status)
   }
 
+  const [targetTab, setTargetTab] = createSignal<BotTab>()
+
   return {
     projectRoot,
     setProjectRoot,
@@ -911,6 +913,8 @@ const shared = createRoot(() => {
     openRoomId,
     roomComposing,
     openRoom,
+    targetTab,
+    setTargetTab,
     now,
     reload,
     current,
@@ -924,11 +928,17 @@ const shared = createRoot(() => {
  * Opens what a request that waits for the user is in: the room, when its member was asked there (the question is
  * seen in the room), or the bot's page.
  */
-export function openBotByPath(path: string, room?: string) {
+export function openBotByPath(path: string, room?: string, tab?: BotTab) {
   if (room) return shared.openRoom(room)
   shared.openRoom(undefined)
   shared.setOpenId(path)
   shared.setComposing(false)
+  if (tab) shared.setTargetTab(tab)
+}
+
+/** Resolves the identifier of a bot by its path from the current roster, if loaded. */
+export function botNameFromRoster(path: string): string | undefined {
+  return shared.roster()?.find((b) => b.path === path)?.identifier
 }
 
 export interface BotsRosterProps {
@@ -2273,6 +2283,14 @@ function BotPage(props: {
   // The requests waiting to pair, as a badge on the Platforms tab, whichever tab is open.
   const waiting = props.gateway ? createWaitingCount(props.gateway.api, () => props.bot.path) : undefined
   createEffect(on(shown, () => waiting?.refresh(), { defer: true }))
+
+  createEffect(() => {
+    const target = shared.targetTab()
+    if (target) {
+      select(target)
+      shared.setTargetTab(undefined)
+    }
+  })
 
   createEffect(
     on(

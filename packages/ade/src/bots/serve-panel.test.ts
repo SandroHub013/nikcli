@@ -591,6 +591,13 @@ describe("B8d: a routine's run and a chat's turn on the server", () => {
     // Within the bot's money a day (`spend.ts`), which hands the request on as it is but for its cap.
     expect(bridge).toContain("runTurn: withDailyCap((request) => runBotTurn(request), { store: appSpendStore })")
   })
+
+  test("lint: startAppGatewayController registers global online listener that wakes gateway (P2-1)", () => {
+    const bridge = readFileSync(new URL("./gateway/bridge.ts", import.meta.url), "utf8")
+    expect(bridge).toContain('window.addEventListener("online", onOnline)')
+    expect(bridge).toContain('window.removeEventListener("online", onOnline)')
+    expect(bridge).toContain("tauriGatewayPanelApi().wake?.()")
+  })
 })
 
 describe("B8d: the project admitted on every turn, asked about once", () => {

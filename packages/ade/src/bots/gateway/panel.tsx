@@ -16,7 +16,7 @@ import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid
 import { t } from "../../i18n"
 import { ConfirmAction } from "../confirm"
 import { remoteNeverKey } from "../permissions-facts"
-import { formatClock } from "../format"
+import { formatClock, formatConnectedTime } from "../format"
 import type { AgentFile } from "../ragu"
 import { runnerById } from "../runners"
 import { PairLink } from "./pair-link"
@@ -94,9 +94,17 @@ export function GatewaySection(props: {
     const link = panel.link()
     if (!link.enabled) return { tone: "off", text: t("gateway.panel.off") }
     if (!link.running) return { tone: "error", text: t("gateway.panel.stopped") }
-    return link.connected
-      ? { tone: "on", text: t("gateway.panel.connected") }
-      : { tone: "wait", text: t("gateway.panel.connecting") }
+    if (link.needsAttention) return { tone: "error", text: t("gateway.panel.needsAttention") }
+    if (link.reconnecting) return { tone: "wait", text: t("gateway.panel.reconnecting") }
+    if (link.connected) {
+      return {
+        tone: "on",
+        text: link.connectedAtMs
+          ? t("gateway.panel.connectedSince", formatConnectedTime(link.connectedAtMs))
+          : t("gateway.panel.connected"),
+      }
+    }
+    return { tone: "wait", text: t("gateway.panel.connecting") }
   }
 
   const approve = () => {
@@ -187,10 +195,40 @@ export function GatewaySection(props: {
           <span data-slot="gateway-dot" aria-hidden="true" />
           <span>{state().text}</span>
           <Show when={panel.link().lastMessageMs}>
-            {(at) => <span data-slot="gateway-meta">{t("gateway.panel.lastMessage", time(at()))}</span>}
+            {(at) => <span data-slot="gateway-meta"> · {t("gateway.panel.lastMessage", time(at()))}</span>}
           </Show>
         </div>
-        <Show when={panel.link().enabled && panel.link().lastError}>
+        <Show when={panel.link().needsAttention}>
+          <div data-slot="gateway-attention-box" data-tone="error">
+            <Show when={panel.link().attentionReason}>
+              {(reason) => (
+                <p data-slot="gateway-attention-reason">
+                  {reason() === "timeout_10m" ? t("gateway.panel.attentionTimeout") : reason()}
+                </p>
+              )}
+            </Show>
+            <div data-slot="gateway-attention-actions">
+              <button
+                type="button"
+                data-slot="bots-btn"
+                data-tone="primary"
+                disabled={panel.busy()}
+                onClick={() => void panel.retry()}
+              >
+                {t("gateway.panel.retry")}
+              </button>
+              <button
+                type="button"
+                data-slot="bots-btn"
+                disabled={panel.busy()}
+                onClick={() => setPicked("paste")}
+              >
+                {t("gateway.panel.changeCode")}
+              </button>
+            </div>
+          </div>
+        </Show>
+        <Show when={panel.link().enabled && !panel.link().needsAttention && panel.link().lastError}>
           {(error) => <p data-slot="bots-problem">{error()}</p>}
         </Show>
         <Show when={panel.turnFailure()}>

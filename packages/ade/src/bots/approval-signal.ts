@@ -1,5 +1,5 @@
 import { t } from "../i18n"
-import type { WaitingApproval } from "./approvals"
+import type { GatewayAttentionItem, WaitingApproval } from "./approvals"
 import { visibleText } from "./visible-text"
 
 /**
@@ -12,6 +12,17 @@ export function freshApprovals(
   seen: ReadonlySet<string>,
   waiting: readonly WaitingApproval[],
 ): { readonly fresh: WaitingApproval[]; readonly seen: Set<string> } {
+  return {
+    fresh: waiting.filter((one) => !seen.has(one.id)),
+    seen: new Set(waiting.map((one) => one.id)),
+  }
+}
+
+/** Gateway attention items that were not in `seen`, and the new `seen`. */
+export function freshAttentions(
+  seen: ReadonlySet<string>,
+  waiting: readonly GatewayAttentionItem[],
+): { readonly fresh: GatewayAttentionItem[]; readonly seen: Set<string> } {
   return {
     fresh: waiting.filter((one) => !seen.has(one.id)),
     seen: new Set(waiting.map((one) => one.id)),
@@ -51,6 +62,19 @@ export function approvalAction(waiting: Pick<WaitingApproval, "permission" | "pa
 /** The bell's line: whose bot, and what it wants to do. */
 export function approvalLine(waiting: Pick<WaitingApproval, "botName" | "permission" | "patterns">): string {
   return t("bots.waiting.notice", waiting.botName, approvalAction(waiting))
+}
+
+/** The bell's line for gateway attention: whose bot and on which platform. */
+export function attentionLine(item: Pick<GatewayAttentionItem, "botName" | "platform" | "reason">): string {
+  const platform =
+    item.platform === "telegram"
+      ? t("gateway.panel.platformTelegram")
+      : item.platform === "discord"
+        ? t("gateway.panel.platformDiscord")
+        : item.platform === "slack"
+          ? t("gateway.panel.platformSlack")
+          : item.platform
+  return t("gateway.panel.attentionNotice", item.botName, platform)
 }
 
 /** The window flashes in the taskbar only when the user is not looking at ADE: the bell and the badge are enough when they are. */

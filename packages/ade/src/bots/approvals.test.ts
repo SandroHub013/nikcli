@@ -171,4 +171,23 @@ describe("the registry", () => {
     expect(registry.list()).toEqual([])
     expect(changes).toBe(3)
   })
+
+  test("gateway attention: opened, listed, closed; closer closes only its own entry", () => {
+    let changes = 0
+    const registry = createApprovalRegistry(() => void changes++)
+    const item = {
+      id: "gateway:C:/p/a.md:telegram",
+      bot: "C:/p/a.md",
+      botName: "alfa",
+      platform: "telegram",
+      reason: "10 minuti senza risposta",
+      at: 1000,
+    }
+    const close = registry.openAttention(item)
+    expect(registry.listAttentions()).toEqual([item])
+    expect(changes).toBe(1)
+    close()
+    expect(registry.listAttentions()).toEqual([])
+    expect(changes).toBe(2)
+  })
 })
