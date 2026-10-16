@@ -12,7 +12,7 @@ import {
   type PairingInfo,
   type PairingRequest,
 } from "./panel-state"
-import { forgetTurnFailures, noteTurnFailure } from "./failures"
+import { forgetTurnFailures, forgetTurnFailuresOf, noteTurnFailure } from "./failures"
 import { memoryRemoteStore, REMOTE_OFF, remoteKey } from "./remote"
 
 /*
@@ -209,6 +209,9 @@ describe("the Gateway section of a bot's card", () => {
     expect(panel.turnFailure()).toEqual({ at: 4, detail: "dopo" })
     panel.choose("discord")
     expect(panel.turnFailure()).toEqual({ at: 3, detail: "di un'altra piattaforma" })
+    // It goes away when the bot works again (N7).
+    forgetTurnFailuresOf(BOT.path)
+    expect(panel.turnFailure()).toBeUndefined()
     panel.dispose()
     noteTurnFailure(BOT.path, "discord", "a pannello chiuso", 5)
     forgetTurnFailures()

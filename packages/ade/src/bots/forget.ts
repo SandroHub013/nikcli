@@ -9,6 +9,7 @@
 import { ACCOUNT_PLAN, type AccountStore } from "./account"
 import type { AlwaysStore } from "./approval"
 import { EMPTY_MEMORY, type MemoryStore } from "./memory"
+import { forgetTurnFailuresOf } from "./gateway/failures"
 import { REMOTE_OFF, remoteKey, type RemoteStore } from "./gateway/remote"
 import { removeRoutinesOf, type RoutineBook } from "./routine"
 import { TALK_KEY_PREFIX } from "./talk"
@@ -44,6 +45,7 @@ export function forgetBotTraces(
   stores.account.set(path, ACCOUNT_PLAN)
   for (const platform of GATEWAY_PLATFORMS) stores.remote.set(remoteKey(path, platform), REMOTE_OFF)
   stores.always?.clear(path)
+  forgetTurnFailuresOf(path)
   if (stores.storage) forgetStoredKeys(path, stores.storage)
 }
 

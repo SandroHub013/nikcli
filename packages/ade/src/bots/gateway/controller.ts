@@ -38,7 +38,7 @@ import { BOT_TURN_TIMEOUT_MS } from "../controller"
 import { memorySnapshot, settleMemoryOps, takeMemoryOps, type MemoryOp, type MemoryStore } from "../memory"
 import type { Talk } from "../talk"
 import { permissionAnswerer } from "./approval"
-import { noteTurnFailure } from "./failures"
+import { forgetTurnFailuresOf, noteTurnFailure } from "./failures"
 import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
 import type { BotAccount } from "../account"
 import { offersRemoteCommands, REMOTE_OFF, remoteTools, type RemoteSetting } from "./remote"
@@ -391,6 +391,8 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         failure(message, result.problem ?? "?")
         return void (await reply(message, t("gateway.failed")))
       }
+      // The bot works: what the panel kept of an earlier failure goes (N7).
+      forgetTurnFailuresOf(message.bot)
       await reply(message, text.trim() ? text : t("gateway.empty"))
     } catch (error) {
       failure(message, error instanceof Error ? error.message : String(error))

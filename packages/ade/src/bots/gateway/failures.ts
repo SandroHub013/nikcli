@@ -36,6 +36,15 @@ export function onTurnFailure(listener: () => void): () => void {
   return () => void listeners.delete(listener)
 }
 
+/** The bot works again, or is gone: its failures, on every platform, go away (N7). */
+export function forgetTurnFailuresOf(bot: string): void {
+  let any = false
+  for (const key of [...last.keys()]) {
+    if (key.endsWith(`\n${bot}`)) any = last.delete(key) || any
+  }
+  if (any) for (const listener of [...listeners]) listener()
+}
+
 /** For tests. */
 export function forgetTurnFailures(): void {
   last.clear()

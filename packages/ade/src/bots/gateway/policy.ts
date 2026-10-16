@@ -1,7 +1,8 @@
 /**
  * The rules a message from a chat meets before it becomes a turn (G4).
  *
- * Rust already let through only an authorized sender in a private chat. Here:
+ * Rust already let through only an authorized sender: in a private chat, or in a channel when the message names the
+ * bot (G9), and a button the bot itself put there. Here:
  * - the commands a chat can give (`/nuova`, `/ferma`, `/stato`, `/aiuto`);
  * - how the text is framed for the model: a fixed line with the platform and
  *   the sender's name, quoted and cleaned, marked as a label and not an order;

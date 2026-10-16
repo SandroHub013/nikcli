@@ -5,7 +5,7 @@ import { emptyTalk, type PendingPermission } from "../talk"
 import { turnsRunning } from "../terms"
 import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "../turn"
 import { startGatewayController, type GatewayBridge, type GatewayMessage } from "./controller"
-import { forgetTurnFailures, turnFailureOf } from "./failures"
+import { forgetTurnFailures, noteTurnFailure, turnFailureOf } from "./failures"
 import { chatHeader } from "./policy"
 import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteKey, remoteTools } from "./remote"
 import { localSessionStore, memorySessionStore, sessionKey } from "./session"
@@ -1124,12 +1124,12 @@ describe("the detail of a failed turn stays in ADE, where the panel shows it (S1
     const kept = turnFailureOf(BOT.path, "telegram")!
     expect(kept.detail).not.toContain("a1B2c3D4")
     expect(kept.detail.length).toBeLessThanOrEqual(600)
-    // A turn that goes well leaves what was there: the last failure, not the last turn.
+    // A turn that goes well takes it away (N7).
     b.emit("tre")
     await until("il terzo turno", () => turns.started.length === 3)
     turns.started[2]!.finish({ text: "ok" })
     await until("la terza risposta", () => b.sent.length === 3)
-    expect(turnFailureOf(BOT.path, "telegram")).toEqual(kept)
+    expect(turnFailureOf(BOT.path, "telegram")).toBeUndefined()
   })
 })
 
@@ -1162,5 +1162,42 @@ describe("a refusal of the policy tells the chat no local path (S10)", () => {
     b.emit("ancora")
     await until("la seconda risposta", () => b.sent.length === 2)
     expect(turnFailureOf(BOT.path, "telegram")).toBeDefined()
+  })
+})
+
+describe("the failure shown in the panel goes away when the bot works again (N7)", () => {
+  test("the first turn that goes well clears the bot's failure, whatever the platform, and no other bot's", async () => {
+    forgetTurnFailures()
+    noteTurnFailure("C:/altro.md", "telegram", "di un altro bot", 1)
+    noteTurnFailure(BOT.path, "discord", "su un'altra piattaforma", 2)
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      warn: () => {},
+      now: () => 3,
+    })
+    b.emit("uno")
+    await until("il primo turno", () => turns.started.length === 1)
+    turns.started[0]!.finish({ status: "error", problem: "rete giù" })
+    await until("la risposta", () => b.sent.length === 1)
+    expect(turnFailureOf(BOT.path, "telegram")?.detail).toBe("rete giù")
+    // A turn that was stopped is not a turn that went well.
+    b.emit("due")
+    await until("il secondo turno", () => turns.started.length === 2)
+    turns.started[1]!.finish({ status: "stopped" })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(turnFailureOf(BOT.path, "telegram")).toBeDefined()
+    b.emit("tre")
+    await until("il terzo turno", () => turns.started.length === 3)
+    turns.started[2]!.finish({ text: "ok" })
+    await until("la risposta riuscita", () => b.sent.length === 2)
+    expect(turnFailureOf(BOT.path, "telegram")).toBeUndefined()
+    expect(turnFailureOf(BOT.path, "discord")).toBeUndefined()
+    expect(turnFailureOf("C:/altro.md", "telegram")?.detail).toBe("di un altro bot")
+    forgetTurnFailures()
   })
 })
