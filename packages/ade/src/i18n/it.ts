@@ -851,6 +851,7 @@ export const it = {
   "bots.waiting.actionEdit": (file: string) => `modificare un file (edit): «${file}»`,
   "bots.waiting.actionTool": (permission: string, patterns: string) => `usare «${permission}» su «${patterns}»`,
   "bots.waiting.left": (clock: string) => `restano ${clock}`,
+  "bots.waiting.expired": "scaduta: vale come Nega",
   "bots.waiting.notice": (bot: string, action: string) => `«${bot}» aspetta te: vuole ${action}`,
   "bots.waiting.open": "Apri il bot",
   "bots.waiting.openRoom": "Apri la stanza",

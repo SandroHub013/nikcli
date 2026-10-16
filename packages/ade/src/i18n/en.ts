@@ -831,6 +831,7 @@ export const en: Messages = {
   "bots.waiting.actionEdit": (file) => `edit a file (edit): “${file}”`,
   "bots.waiting.actionTool": (permission, patterns) => `use “${permission}” on “${patterns}”`,
   "bots.waiting.left": (clock) => `${clock} left`,
+  "bots.waiting.expired": "expired: it counts as a No",
   "bots.waiting.notice": (bot, action) => `“${bot}” is waiting for you: it wants to ${action}`,
   "bots.waiting.open": "Open the bot",
   "bots.waiting.openRoom": "Open the room",
