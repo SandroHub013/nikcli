@@ -4,7 +4,7 @@ import type { AgentFile } from "../ragu"
 import { emptyTalk, type PendingPermission } from "../talk"
 import { turnsRunning } from "../terms"
 import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "../turn"
-import { startGatewayController, RECOVERED_NOTICE, recoveredNotice, type GatewayBridge, type GatewayMessage } from "./controller"
+import { startGatewayController, safePreviewText, RECOVERED_NOTICE, recoveredNotice, type GatewayBridge, type GatewayMessage } from "./controller"
 import { forgetTurnFailures, turnFailureOf } from "./failures"
 import { chatHeader } from "./policy"
 import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteKey, remoteTools } from "./remote"
@@ -708,6 +708,182 @@ describe("the gateways' controller", () => {
     turn.finish({ text: "Risposta finale dopo i 429." })
     await until("risposta finale", () => b.sent.length === 1)
     expect(b.sent[0]!.text).toBe("Risposta finale dopo i 429.")
+  })
+
+  test("holds back trailing incomplete token/secret until terminated by delimiter", async () => {
+    expect(safePreviewText("Ecco la chiave: sk-proj")).toBe("Ecco la chiave: ")
+    expect(safePreviewText("Ecco la chiave: sk-proj-1234567890 ")).toBe("Ecco la chiave: sk-proj-1234567890 ")
+    expect(safePreviewText("Prima riga.\nSeconda")).toBe("Prima riga.\n")
+    expect(safePreviewText("Incompleto")).toBe("")
+    expect(safePreviewText("Completato.")).toBe("Completato.")
+
+    const b = bridge()
+    const turns = fakeTurns()
+    let now = 10_000
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      now: () => now,
+    })
+    b.emit("ciao")
+    await until("il turno è partito", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+
+    // Incomplete secret: trailing "sk-proj" has no delimiter, so only the prefix is sent
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Questo è il prefisso prima del segreto: sk-proj" })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(1)
+    expect(b.previews[0]!.text).toBe("Questo è il prefisso prima del segreto: ")
+
+    // Once delimiter is present, the full token is included
+    now += 1_100
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Questo è il prefisso prima del segreto: sk-proj-1234567890abcdef " })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(2)
+    expect(b.previews[1]!.text).toBe("Questo è il prefisso prima del segreto: sk-proj-1234567890abcdef ")
+  })
+
+  test("/ferma closes the preview with the stopped message and stops further previewing", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("fai qualcosa")
+    await until("il turno è partito", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+
+    // Send a preview
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Sto elaborando la tua richiesta..." })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(1)
+
+    // Stop with /ferma
+    b.emit("/ferma")
+    await until("fermato", () => b.sent.some((s) => s.text === t("gateway.stopped")))
+
+    // Subsequent updates do not send previews
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Sto elaborando la tua richiesta... altro testo lungo aggiunto dopo lo stop." })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(1)
+  })
+
+  test("mid-turn approval pauses preview updates until user answers", async () => {
+    const b = bridge()
+    const started: { request: TurnRequest; finish: () => void }[] = []
+    const keys: string[] = []
+    const runTurn = (request: TurnRequest): Turn => {
+      let resolve!: (result: TurnResult) => void
+      const result = new Promise<TurnResult>((done) => (resolve = done))
+      const entry = {
+        request,
+        finish: () => resolve({ status: "done", text: "Fatto.", tokens: 0, costUsd: 0, talk: emptyTalk() }),
+      }
+      started.push(entry)
+      return {
+        result,
+        stop: () => entry.finish(),
+        answer: (_req, reply) => void keys.push(reply),
+      }
+    }
+    const RAGU: AgentFile = { ...BOT, runner: "ragu" }
+    const raguBot = async () => ({ ok: true as const, bot: RAGU, fingerprint: "f-1" })
+    let now = 10_000
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn,
+      loadBot: raguBot,
+      sessions: memorySessionStore(),
+      remote: () => ({ commands: true, fingerprint: "f-1" }),
+      now: () => now,
+    })
+    b.emit("esegui comando", { private: true })
+    await until("il turno è partito", () => started.length === 1)
+    const turn = started[0]!
+
+    // Send preview before approval
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Inizio esecuzione del comando..." })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(1)
+
+    // Mid-turn permission question is asked
+    turn.request.onPermission?.({
+      requestID: "per_1",
+      permission: "bash",
+      patterns: "rm -rf build",
+      askedAt: 0,
+    })
+    await until("domanda arrivata", () => b.questions.length === 1)
+
+    // During pending approval, updates do NOT send previews even after cadence
+    now += 1_100
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Inizio esecuzione del comando... ancora testo generato durante l'attesa dell'approvazione." })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(1)
+
+    // User answers the question
+    b.emit(b.questions[0]!.buttons[0]!.data, { button: true })
+    await until("risposta registrata", () => keys.length === 1)
+
+    // After approval answered, preview updates resume
+    now += 1_100
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Inizio esecuzione del comando... ripresa dopo approvazione con testo sufficientemente lungo." })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(2)
+  })
+
+  test("failed turn cleans up and sends failure message without hanging preview", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("fai crashare")
+    await until("il turno è partito", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Sto per fallire male in questo turno lungo..." })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(1)
+
+    turn.finish({ status: "error", problem: "crash fatale" })
+    await until("messaggio di errore", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe(t("gateway.failed"))
+  })
+
+  test("recovered message and preview do not touch ack twice", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("messaggio recuperato", { recovered: true, id: "msg-rec-1" })
+    await until("il turno è partito", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+
+    // Ack called on turn start
+    expect(b.acks).toEqual([{ bot: BOT.path, platform: "telegram", chat: "c42", id: "msg-rec-1" }])
+
+    // Preview does not call ack
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Anteprima di un messaggio recuperato..." })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(1)
+    expect(b.acks).toHaveLength(1)
+
+    turn.finish({ text: "Completato." })
+    await until("finito", () => b.sent.length === 1)
+    expect(b.acks).toHaveLength(1)
   })
 })
 

@@ -306,8 +306,12 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     if (which === "stop") {
       state.queue.length = 0
       if (!running) return reply(message, t("gateway.nothingToStop"))
-      if (state.turn) state.turn.stop()
-      else state.cancelled = true
+      if (state.turn) {
+        state.cancelled = true
+        state.turn.stop()
+      } else {
+        state.cancelled = true
+      }
       return reply(message, t("gateway.stopped"))
     }
     if (which === "status") {
@@ -354,18 +358,25 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
             loaded.fingerprint,
           )
       let turn: Turn | undefined
+      let pendingApproval = false
       // ragu's questions, by their id on ADE's server (B8d): answered on the phone, or no at once.
       const onPermission =
         runner === "ragu"
           ? permissionAnswerer({
-              ask: (question, choices, signal) =>
-                ask(
-                  { bot: message.bot, platform: message.platform, chat: message.chat, asker: message.sender.id },
-                  question,
-                  choices,
-                  deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS,
-                  signal,
-                ),
+              ask: async (question, choices, signal) => {
+                pendingApproval = true
+                try {
+                  return await ask(
+                    { bot: message.bot, platform: message.platform, chat: message.chat, asker: message.sender.id },
+                    question,
+                    choices,
+                    deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS,
+                    signal,
+                  )
+                } finally {
+                  pendingApproval = false
+                }
+              },
               refuse: !remote.commands,
               publicChat,
               answer: (requestID, reply) => {
@@ -390,7 +401,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       const minDeltaChars = deps.previewMinDeltaChars ?? PREVIEW_MIN_DELTA_CHARS
 
       const sendPreview = async (text: string) => {
-        if (closed || previewDisabled || !deps.bridge.preview) return
+        if (closed || previewDisabled || pendingApproval || state.cancelled || ended.signal.aborted || !deps.bridge.preview) return
         const currentTime = now()
         if (currentTime - lastPreviewAt < cadenceMs) return
         if (text.length - lastPreviewText.length < minDeltaChars) return
@@ -400,6 +411,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         lastPreviewAt = currentTime
         lastPreviewText = text
         try {
+          if (closed || previewDisabled || pendingApproval || state.cancelled || ended.signal.aborted) return
           await deps.bridge.preview(message.bot, message.platform, message.chat, text)
         } catch (error) {
           const errStr = error instanceof Error ? error.message : String(error)
@@ -424,9 +436,12 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         account: deps.account?.(message.bot) ?? { mode: "plan" },
         partial: true,
         onUpdate: (talk) => {
-          const text = answerSoFar(talk)
-          if (text) {
-            void sendPreview(text)
+          const raw = answerSoFar(talk)
+          if (raw) {
+            const text = safePreviewText(raw)
+            if (text) {
+              void sendPreview(text)
+            }
           }
         },
         ...(sessionId ? { sessionId } : {}),
@@ -586,3 +601,18 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     busy: () => [...chats.entries()].filter(([, state]) => state.turn || state.starting).map(([key]) => key),
   }
 }
+
+/**
+ * An incomplete word/token at the end of partial streaming text might be a secret
+ * mid-emission (e.g. `sk-proj...`) that would escape redaction patterns until complete.
+ * We hold back the trailing incomplete word/token until terminated by whitespace or punctuation.
+ */
+export function safePreviewText(text: string): string {
+  if (!text) return ""
+  if (/[\s.,;:!?()[\]{}"'<>`]$/.test(text)) {
+    return text
+  }
+  const match = /^([\s\S]*[\s.,;:!?()[\]{}"'<>`])/.exec(text)
+  return match ? match[1] : ""
+}
+
