@@ -12,7 +12,7 @@
  * shows it again: only whether one is saved.
  */
 
-import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { t } from "../../i18n"
 import { ConfirmAction } from "../confirm"
 import { remoteNeverKey } from "../permissions-facts"
@@ -48,7 +48,12 @@ const STEP_TITLE: Record<StepId, () => string> = {
   pair: () => t("gateway.step.pair"),
 }
 
-export function GatewaySection(props: { bot: AgentFile; deps: Omit<GatewayPanelDeps, "bot"> }) {
+export function GatewaySection(props: {
+  bot: AgentFile
+  deps: Omit<GatewayPanelDeps, "bot">
+  /** Whether this tab is the one on screen: hidden (not gone) while another is shown, and then a QR must not hold. */
+  onScreen?: () => boolean
+}) {
   const panel = createGatewayPanel({ ...props.deps, bot: () => props.bot })
   const [code, setCode] = createSignal("")
   // The tile open: undefined until the user chooses, then the platform (null: closed). Until then the one that is on.
@@ -57,6 +62,10 @@ export function GatewaySection(props: { bot: AgentFile; deps: Omit<GatewayPanelD
   const [picked, setPicked] = createSignal<StepId>()
   onMount(() => void panel.refresh())
   onCleanup(() => panel.dispose())
+  // The tab is hidden, not gone: the QR is off the screen then, and its token is cancelled.
+  createEffect(() => {
+    if (props.onScreen && !props.onScreen()) void panel.cancelLink()
+  })
 
   const onDiscord = () => panel.platform() === "discord"
   const onSlack = () => panel.platform() === "slack"
@@ -525,6 +534,7 @@ export function GatewaySection(props: { bot: AgentFile; deps: Omit<GatewayPanelD
                             busy={panel.busy}
                             onMake={() => void panel.makeLink()}
                             onOpen={props.deps.openLink}
+                            onGone={() => void panel.cancelLink()}
                           />
                         </Show>
                       </div>

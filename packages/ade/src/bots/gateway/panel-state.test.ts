@@ -89,6 +89,7 @@ function fakeApi(initial: Partial<GatewayStatus> = {}) {
       linkCount += 1
       return { url: `https://t.me/mio_bot?start=TOKEN${linkCount}`, svg: "<svg></svg>", expiresMs: Date.UTC(2026, 8, 25, 10, 40) }
     },
+    pairingLinkCancel: async (bot, platform) => void calls.push(`cancel ${bot} ${platform}`),
     listen: async (on) => {
       Object.assign(handlers, on)
       return () => void (stopped = true)
@@ -802,10 +803,37 @@ describe("the link or QR of a pairing (scelta 3)", () => {
     expect(panel.pairLink()).toBeDefined()
     expect(panel.linked()).toBeUndefined()
     // The owner scans it: Rust has a new authorized account, and the panel finds it while it waits.
-    fake.setPairing({ open: false, pending: [], authorized: [{ id: "42", name: "Ale", addedMs: 1 }], attemptsLeft: 5 })
+    fake.setPairing({ open: false, pending: [], authorized: [{ id: "42", name: "Ale", addedMs: 1 }], attemptsLeft: 5, linkedBy: "42" })
     await wait()
     expect(panel.pairLink()).toBeUndefined()
     expect(panel.linked()).toBe("Ale")
+    panel.dispose()
+  })
+
+  test("an account approved with a code meanwhile is not named: only the one Rust says the link paired", async () => {
+    const fake = fakeApi({ enabled: true, running: true, hasToken: true })
+    const { panel } = panelWith(fake)
+    await panel.ready
+    await panel.makeLink()
+    // A code is approved for another account: it appears among the authorized, the link is not used.
+    fake.setPairing({ open: false, pending: [], authorized: [{ id: "8", name: "Altro", addedMs: 1 }], attemptsLeft: 5 })
+    await wait()
+    expect(panel.pairLink()).toBeDefined()
+    expect(panel.linked()).toBeUndefined()
+    // Then the link is used, by another account again: that one is named.
+    fake.setPairing({
+      open: false,
+      pending: [],
+      authorized: [
+        { id: "8", name: "Altro", addedMs: 1 },
+        { id: "42", name: "Ale", addedMs: 2 },
+      ],
+      attemptsLeft: 5,
+      linkedBy: "42",
+    })
+    await wait()
+    expect(panel.linked()).toBe("Ale")
+    expect(panel.pairLink()).toBeUndefined()
     panel.dispose()
   })
 
@@ -846,5 +874,88 @@ describe("the link or QR of a pairing (scelta 3)", () => {
     expect(panel.pairLink()).toBeUndefined()
     expect(panel.problemIn("pair")).toBe(t("gateway.panel.linkMissing"))
     panel.dispose()
+  })
+})
+
+describe("the QR is cancelled when it leaves the screen", () => {
+  const wait = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms))
+  const cancels = (fake: ReturnType<typeof fakeApi>) => fake.calls.filter((call) => call.startsWith("cancel"))
+  const live = () => fakeApi({ enabled: true, running: true, hasToken: true })
+
+  test("closing the card or the page cancels it; with no QR there is nothing to cancel", async () => {
+    const fake = live()
+    const { panel } = panelWith(fake)
+    await panel.ready
+    panel.dispose()
+    await wait(5)
+    expect(cancels(fake)).toEqual([])
+    const shown = live()
+    const again = panelWith(shown)
+    await again.panel.ready
+    await again.panel.makeLink()
+    again.panel.dispose()
+    await wait(5)
+    expect(cancels(shown)).toEqual([`cancel ${BOT.path} telegram`])
+    expect(again.panel.pairLink()).toBeUndefined()
+  })
+
+  test("the step or the tab going away says so once: a second call finds nothing to cancel", async () => {
+    const fake = live()
+    const { panel } = panelWith(fake)
+    await panel.ready
+    await panel.makeLink()
+    await panel.cancelLink()
+    await panel.cancelLink()
+    expect(cancels(fake)).toHaveLength(1)
+    expect(panel.pairLink()).toBeUndefined()
+    panel.dispose()
+  })
+
+  test("another platform cancels the one that was shown, by its own name", async () => {
+    const fake = live()
+    const { panel } = panelWith(fake)
+    await panel.ready
+    await panel.makeLink()
+    panel.choose("discord")
+    await wait(5)
+    expect(cancels(fake)).toEqual([`cancel ${BOT.path} telegram`])
+    panel.dispose()
+  })
+
+  test("the window hidden cancels it too, and the page showing again does not bring it back", async () => {
+    const fake = live()
+    const { panel } = panelWith(fake)
+    await panel.ready
+    await panel.makeLink()
+    const was = Object.getOwnPropertyDescriptor(document, "visibilityState")
+    Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "hidden" })
+    try {
+      document.dispatchEvent(new Event("visibilitychange"))
+      await wait(5)
+      expect(cancels(fake)).toHaveLength(1)
+      expect(panel.pairLink()).toBeUndefined()
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" })
+      document.dispatchEvent(new Event("visibilitychange"))
+      await wait(5)
+      expect(panel.pairLink()).toBeUndefined()
+      expect(cancels(fake)).toHaveLength(1)
+    } finally {
+      if (was) Object.defineProperty(document, "visibilityState", was)
+      else Reflect.deleteProperty(document, "visibilityState")
+      panel.dispose()
+    }
+  })
+
+  test("a QR that paired the account is used up: there is nothing to cancel afterwards", async () => {
+    const fake = live()
+    const { panel } = panelWith(fake)
+    await panel.ready
+    await panel.makeLink()
+    fake.setPairing({ open: false, pending: [], authorized: [{ id: "42", name: "Ale", addedMs: 1 }], attemptsLeft: 5, linkedBy: "42" })
+    await wait()
+    expect(panel.linked()).toBe("Ale")
+    panel.dispose()
+    await wait(5)
+    expect(cancels(fake)).toEqual([])
   })
 })

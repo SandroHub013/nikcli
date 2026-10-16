@@ -254,6 +254,12 @@ pub async fn gateway_pairing_link(app: AppHandle, bot: String, platform: Platfor
     hub(&app)?.pairing_link(&bot, platform).await
 }
 
+/// The QR left ADE's screen: its token is cancelled. Nothing to cancel is no error.
+#[tauri::command]
+pub async fn gateway_pairing_link_cancel(app: AppHandle, bot: String, platform: Platform) -> Result<(), String> {
+    hub(&app)?.pairing_link_cancel(&bot, platform)
+}
+
 /// Takes an account off the authorized: the bot stops hearing and answering it.
 #[tauri::command]
 pub async fn gateway_pairing_revoke(app: AppHandle, bot: String, platform: Platform, sender: String) -> Result<(), String> {

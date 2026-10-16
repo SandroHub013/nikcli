@@ -122,6 +122,8 @@ pub struct PairingInfo {
     pub authorized: Vec<AuthorizedInfo>,
     pub locked_until_ms: Option<u64>,
     pub attempts_left: u32,
+    /// The id of the account the last link or QR paired, until a new one is made: what the panel names as paired by it.
+    pub linked_by: Option<String>,
 }
 
 /// The link and QR the panel shows to pair the owner's phone: the address, the picture of it, and when it stops
@@ -900,6 +902,7 @@ impl Hub {
                 .collect(),
             locked_until_ms: pairing.locked_until_ms,
             attempts_left: pairing.attempts_left(now),
+            linked_by: pairing.linked_by.clone(),
         })
     }
 
@@ -955,6 +958,13 @@ impl Hub {
         let svg = pairing_link::qr_svg(&url)?;
         self.env.log(&format!("gateway {} {}: link di abbinamento creato in ADE", platform.id(), &bot_key(bot)[..8]));
         Ok(PairingLink { url, svg, expires_ms })
+    }
+
+    /// The QR is off ADE's screen (another tab, step, bot, the window closed): its token is cancelled, so a photo of it
+    /// pairs nobody. Nothing to cancel is no error.
+    pub fn pairing_link_cancel(&self, bot: &str, platform: Platform) -> Result<(), String> {
+        check_bot(bot)?;
+        self.store.update(bot, platform, |link, _| Ok(link.pairing.cancel_link())).map(|_| ())
     }
 
     /// A new link token for the bot's link, saved as a hash; the old one is gone.
@@ -1311,24 +1321,29 @@ impl Task {
                 }
                 link.remember_chat(&message.chat, &message.sender.id);
             }
-            Ok(used)
+            // Told the link no longer holds only after a link ADE made recently, and once each ten minutes: otherwise the
+            // bot is as silent as for any stranger, and the way of a plain `/start` follows.
+            let say = used == LinkUse::Wrong && link.pairing.may_say_stale(&message.sender.id, now);
+            Ok((used, say))
         });
         match outcome {
-            Ok(LinkUse::Paired) => {
+            Ok((LinkUse::Paired, _)) => {
                 self.env.log(&format!("{tag}: abbinamento fatto con il link di ADE"));
                 if let Err(error) = self.adapter.send(&message.chat, PAIRED_MESSAGE).await {
                     self.env.log(&format!("{tag}: conferma dell'abbinamento non mandata: {}", redact(&error.message(), &self.secrets)));
                 }
                 true
             }
-            Ok(LinkUse::Wrong) => {
+            Ok((LinkUse::Wrong, say)) => {
                 self.env.log(&format!("{tag}: link di abbinamento sbagliato, scaduto o già usato"));
-                if let Err(error) = self.adapter.send(&message.chat, LINK_STALE_MESSAGE).await {
-                    self.env.log(&format!("{tag}: avviso del link non mandato: {}", redact(&error.message(), &self.secrets)));
+                if say {
+                    if let Err(error) = self.adapter.send(&message.chat, LINK_STALE_MESSAGE).await {
+                        self.env.log(&format!("{tag}: avviso del link non mandato: {}", redact(&error.message(), &self.secrets)));
+                    }
                 }
                 false
             }
-            Ok(LinkUse::NotAToken) => false,
+            Ok((LinkUse::NotAToken, _)) => false,
             Err(error) => {
                 self.env.log(&format!("{tag}: link di abbinamento non verificato, stato non salvato: {error}"));
                 false
@@ -2714,12 +2729,11 @@ mod tests {
             let wrong = format!("{:0>width$}", round, width = authz::LINK_TOKEN_LEN);
             feed.send(Ok(vec![message(&format!("w{round}"), "c9", "9", &format!("/start {wrong}"))])).unwrap();
         }
-        eventually("l'avviso almeno una volta", || {
-            adapter.sent.lock().unwrap().iter().any(|(to, text)| to == "c9" && text == LINK_STALE_MESSAGE)
-        })
-        .await;
+        eventually("l'avviso", || adapter.sent.lock().unwrap().iter().any(|(to, text)| to == "c9" && text == LINK_STALE_MESSAGE)).await;
         tokio::time::sleep(Duration::from_millis(60)).await;
-        // Every wrong one was told; none counted: the codes have all their attempts and nothing is locked.
+        // Told once, not ten times; none counted: the codes have all their attempts and nothing is locked.
+        let told = adapter.sent.lock().unwrap().iter().filter(|(to, text)| to == "c9" && text == LINK_STALE_MESSAGE).count();
+        assert_eq!(told, 1);
         let list = s.hub.pairing_list(BOT, Platform::Fake).unwrap();
         assert_eq!(list.attempts_left, 5);
         assert!(list.locked_until_ms.is_none());
@@ -2737,6 +2751,59 @@ mod tests {
         // The log has the facts and not one token.
         let log = s.env.log.lock().unwrap().join("\n");
         assert!(!log.contains(&token), "{log}");
+    }
+
+    #[tokio::test]
+    async fn with_no_link_made_a_wrong_token_gets_what_any_stranger_gets_and_nothing_is_written() {
+        let s = setup("link-none-made");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        let before = std::fs::read_to_string(&s.path).unwrap();
+        for round in 0..5 {
+            let wrong = format!("{:0>width$}", round, width = authz::LINK_TOKEN_LEN);
+            feed.send(Ok(vec![message(&format!("w{round}"), "c9", "9", &format!("/start {wrong}"))])).unwrap();
+        }
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        // Someone is in and no pairing is open: silence, nothing that says the bot is there, and the file is untouched.
+        assert!(adapter.sent.lock().unwrap().is_empty(), "{:?}", adapter.sent.lock().unwrap());
+        assert!(s.env.pairings.lock().unwrap().is_empty());
+        assert_eq!(std::fs::read_to_string(&s.path).unwrap(), before);
+    }
+
+    #[tokio::test]
+    async fn a_dead_link_is_told_only_within_an_hour_of_the_last_one_made() {
+        let s = setup("link-hour");
+        authorize(&s, "42");
+        let token = token_of(&s);
+        s.env.later.store(authz::LINK_STALE_MS + 1, std::sync::atomic::Ordering::SeqCst);
+        let (adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c9", "9", &format!("/start {token}"))])).unwrap();
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        assert!(adapter.sent.lock().unwrap().is_empty(), "an hour on, the dead link gets silence: {:?}", adapter.sent.lock().unwrap());
+    }
+
+    #[tokio::test]
+    async fn the_panel_is_told_which_account_the_link_paired_not_which_one_appeared() {
+        let s = setup("link-linked-by");
+        let (adapter, feed) = start(&s);
+        let token = token_of(&s);
+        assert_eq!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().linked_by, None);
+        // Another account is approved with a code first; it is not the link's.
+        feed.send(Ok(vec![message("1", "c8", "8", "io")])).unwrap();
+        eventually("il codice", || adapter.sent.lock().unwrap().len() == 1).await;
+        let code = code_sent_to(&adapter, "c8");
+        s.hub.pairing_approve(BOT, Platform::Fake, &code).await.unwrap();
+        assert_eq!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().linked_by, None);
+        feed.send(Ok(vec![message("2", "c7", "7", &format!("/start {token}"))])).unwrap();
+        eventually("l'abbinamento", || s.hub.pairing_list(BOT, Platform::Fake).unwrap().linked_by.as_deref() == Some("7")).await;
+        let list = s.hub.pairing_list(BOT, Platform::Fake).unwrap();
+        assert!(list.authorized.iter().any(|a| a.id == "8") && list.authorized.iter().any(|a| a.id == "7"));
+        // The id says nothing a token could be made of.
+        let saved = std::fs::read_to_string(&s.path).unwrap();
+        assert!(!saved.contains(&token));
+        // A new link forgets it.
+        token_of(&s);
+        assert_eq!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().linked_by, None);
     }
 
     #[tokio::test]
@@ -2759,6 +2826,21 @@ mod tests {
         assert_eq!(adapter.sent.lock().unwrap()[0].1, PAIRED_MESSAGE);
         assert!(s.env.messages.lock().unwrap().is_empty(), "the token never reaches the page's thread");
         assert!(s.hub.store.link(BOT, Platform::Fake).unwrap().pairing.link.is_some(), "not spent");
+        let log = s.env.log.lock().unwrap().join("\n");
+        assert!(!log.contains(&token), "{log}");
+    }
+
+    #[tokio::test]
+    async fn a_cancelled_link_pairs_nobody_even_with_the_right_token() {
+        let s = setup("link-cancelled");
+        let (adapter, feed) = start(&s);
+        let token = token_of(&s);
+        s.hub.pairing_link_cancel(BOT, Platform::Fake).unwrap();
+        // Cancelling again, or when there is none, is no error.
+        s.hub.pairing_link_cancel(BOT, Platform::Fake).unwrap();
+        feed.send(Ok(vec![message("1", "c7", "7", &format!("/start {token}"))])).unwrap();
+        eventually("l'avviso", || adapter.sent.lock().unwrap().iter().any(|(_, text)| text == LINK_STALE_MESSAGE)).await;
+        assert!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().authorized.is_empty());
         let log = s.env.log.lock().unwrap().join("\n");
         assert!(!log.contains(&token), "{log}");
     }
