@@ -2048,6 +2048,7 @@ export const it = {
   "bots.attach.noWrite": "Qui non posso salvare immagini: incollarle funziona nell'app desktop.",
   "bots.notice.title": "Avvisi",
   "bots.notice.unread": "Nuova risposta, non ancora letta",
+  "bots.notice.muted": "Silenziato: le sue risposte non accendono il punto",
   "bots.notice.mute": "Silenzia questo bot",
   "bots.notice.muteHint":
     "Le sue risposte e le sue routine finite non accendono più il punto «non letto» sulla sua riga. Una richiesta di permesso (il bot che ti chiede il via libera per un comando) arriva comunque, con la campanella e l'avviso di sistema.",

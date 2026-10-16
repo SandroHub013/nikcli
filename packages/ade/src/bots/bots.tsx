@@ -1001,7 +1001,31 @@ export function BotsRoster(props: BotsRosterProps) {
                 >
                   <Face identifier={bot.identifier} avatar={bot.avatar} expression={expression(bot)} size={36} />
                   <span data-slot="bots-row-text">
-                    <span data-slot="bots-row-name">{bot.identifier}</span>
+                    <span data-slot="bots-row-title">
+                      <span data-slot="bots-row-name">{bot.identifier}</span>
+                      {/* Muted, it never lights the dot: the row says why (bot-ui-4, P2-4). */}
+                      <Show when={noticeOf(noticeBook(), bot.path).muted === true}>
+                        <svg
+                          data-slot="bots-row-muted"
+                          role="img"
+                          aria-label={t("bots.notice.muted")}
+                          viewBox="0 0 24 24"
+                          width="12"
+                          height="12"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                        >
+                          <title>{t("bots.notice.muted")}</title>
+                          <path d="M10.3 21a2 2 0 0 0 3.4 0" />
+                          <path d="M17 17H4a1 1 0 0 1-.7-1.7C4.6 14 6 12.5 6 8a6 6 0 0 1 .3-1.7" />
+                          <path d="M8.7 3A6 6 0 0 1 18 8c0 2.7.8 4.7 1.7 6" />
+                          <path d="m2 2 20 20" />
+                        </svg>
+                      </Show>
+                    </span>
                     <span data-slot="bots-row-line">
                       {lastLine(talk(), bot.description || t("bots.noDescription"))}
                     </span>

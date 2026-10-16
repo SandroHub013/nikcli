@@ -213,3 +213,16 @@ describe("P2-2: the empty «Sempre» says what happens instead, for each program
     expect(Object.keys(itText)).not.toContain("bots.permissions.alwaysEmpty")
   })
 })
+
+describe("P2-4: a muted bot says so in the list", () => {
+  test("lint: beside the name, a crossed bell with its words, only while «Silenzia» is on", () => {
+    const row = tsx.slice(tsx.indexOf('data-slot="bots-row"'), tsx.indexOf('data-slot="bots-row-end"'))
+    expect(row).toContain("<Show when={noticeOf(noticeBook(), bot.path).muted === true}>")
+    expect(row).toContain('data-slot="bots-row-muted"')
+    expect(row).toContain('aria-label={t("bots.notice.muted")}')
+    expect(row.indexOf('data-slot="bots-row-name"')).toBeLessThan(row.indexOf('data-slot="bots-row-muted"'))
+    expect(itText["bots.notice.muted"]).toBe("Silenziato: le sue risposte non accendono il punto")
+    expect(ruleOf('[data-slot="bots-row-title"]')).toContain("display: flex;")
+    expect(ruleOf('[data-slot="bots-row-muted"]')).toContain("flex: none;")
+  })
+})

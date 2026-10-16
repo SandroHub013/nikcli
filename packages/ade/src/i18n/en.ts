@@ -1991,6 +1991,7 @@ export const en: Messages = {
   "bots.attach.noWrite": "I cannot save images here: pasting them works in the desktop app.",
   "bots.notice.title": "Alerts",
   "bots.notice.unread": "New reply, not read yet",
+  "bots.notice.muted": "Muted: its replies do not light the dot",
   "bots.notice.mute": "Mute this bot",
   "bots.notice.muteHint":
     "Its replies and finished routines no longer light the “unread” dot on its row. A permission request (the bot asking your go-ahead for a command) still comes through, with the bell and the system alert.",

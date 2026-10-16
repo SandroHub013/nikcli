@@ -344,7 +344,21 @@
   gap: 1px;
 }
 
+/* The name, and beside it the crossed bell of a muted bot (bot-ui-4, P2-4). */
+[data-slot="bots-row-title"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-1);
+  min-width: 0;
+}
+
+[data-slot="bots-row-muted"] {
+  flex: none;
+  color: var(--ade-text-weak);
+}
+
 [data-slot="bots-row-name"] {
+  min-width: 0;
   font-size: var(--ade-font-md);
   font-weight: var(--ade-weight-semibold);
   white-space: nowrap;
