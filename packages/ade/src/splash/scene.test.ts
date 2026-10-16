@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import {
   DEV_POSE_INTERVAL_MS,
   INK_BACKGROUND,
@@ -30,6 +30,14 @@ import {
 } from "./sprites"
 
 describe("splash scene renderer (step 2)", () => {
+  afterEach(() => {
+    document.body.removeAttribute("style")
+    document.documentElement.removeAttribute("style")
+    while (document.body.firstChild) {
+      document.body.removeChild(document.body.firstChild)
+    }
+  })
+
   describe("scene dimensions and layout bounds", () => {
     test("logical dimensions are 160x90 with exact 16:9 aspect ratio", () => {
       expect(SCENE_WIDTH).toBe(160)
@@ -156,6 +164,8 @@ describe("splash scene renderer (step 2)", () => {
         controller.stop()
       } finally {
         container.remove()
+        document.body.removeAttribute("style")
+        document.documentElement.removeAttribute("style")
       }
     })
 
@@ -181,6 +191,30 @@ describe("splash scene renderer (step 2)", () => {
         controller.stop()
       } finally {
         splash.remove()
+        document.body.removeAttribute("style")
+        document.documentElement.removeAttribute("style")
+      }
+    })
+
+    test("resize with canvas outside ade-splash leaves document.body without style attribute", () => {
+      const container = document.createElement("div")
+      const canvas = document.createElement("canvas")
+      container.appendChild(canvas)
+      document.body.appendChild(container)
+
+      try {
+        const controller = startPixelScene(canvas)
+        controller.resize(1280, 720, 1)
+        controller.resize(1536, 826, 1.25)
+        controller.stop()
+
+        expect(document.body.hasAttribute("style")).toBe(false)
+        expect(document.documentElement.hasAttribute("style")).toBe(false)
+        expect(container.hasAttribute("style")).toBe(false)
+      } finally {
+        container.remove()
+        document.body.removeAttribute("style")
+        document.documentElement.removeAttribute("style")
       }
     })
   })

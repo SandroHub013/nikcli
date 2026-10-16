@@ -20,6 +20,8 @@ describe("splash component (step 3)", () => {
   afterEach(() => {
     container.remove()
     document.body.innerHTML = ""
+    document.body.removeAttribute("style")
+    document.documentElement.removeAttribute("style")
   })
 
   function mountSplash(props: { visible: boolean; status?: string; onDismiss?: () => void }) {

@@ -323,6 +323,7 @@ export function startPixelScene(
     canvas.style.width = `${cssWidth}px`
     canvas.style.height = `${cssHeight}px`
 
+    const scanlinePeriod = `${(2 * scale) / dpr}px`
     const container = canvas.parentElement
     if (container && container.getAttribute("data-slot") === "splash-scene-container") {
       container.style.position = "absolute"
@@ -330,16 +331,12 @@ export function startPixelScene(
       container.style.top = `${top}px`
       container.style.width = `${cssWidth}px`
       container.style.height = `${cssHeight}px`
+      container.style.setProperty("--splash-scanline-period", scanlinePeriod)
     }
 
-    const scanlinePeriod = `${(2 * scale) / dpr}px`
-    const splashRoot = (canvas.closest?.('[data-component="ade-splash"]') ??
-      container?.parentElement) as HTMLElement | null
+    const splashRoot = canvas.closest?.('[data-component="ade-splash"]') as HTMLElement | null
     if (splashRoot?.style) {
       splashRoot.style.setProperty("--splash-scanline-period", scanlinePeriod)
-    }
-    if (container?.style) {
-      container.style.setProperty("--splash-scanline-period", scanlinePeriod)
     }
 
     return scale
