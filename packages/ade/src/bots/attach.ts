@@ -5,7 +5,8 @@
  * The Chat's rules (`chat/attachments.ts`), because the danger is the same: a file of the open project only, never a
  * `.env`, checked again with links followed before anything is sent. A file from elsewhere is not read: a picture that
  * is not a file of the project (pasted, or dragged from another folder) is written into the bot's own folder under the
- * project, `.ade/bots/<name>/`, and attached from there.
+ * project, `.ade/bots/<name>/`, and attached from there. That folder is kept out of the project's git by its own
+ * `.git/info/exclude` (`excludeBotFiles`), never by its `.gitignore`, which is the user's.
  *
  * How each program gets them: ragu as file parts of the prompt (`serve-turn.ts`), which it reads itself as the user;
  * Claude Code and Codex by their path in the project, under the user's words, to open with their own tools.
@@ -21,7 +22,6 @@ import {
   isEnvFile,
   type Attachment,
 } from "../chat/attachments"
-
 import type { AttachmentCheck } from "../chat/store"
 
 export type { Attachment }
@@ -130,4 +130,46 @@ export async function checkedFileParts(
     if (verdict !== "ok") return { problem: t("bots.attach.outside", file.path) }
   }
   return { parts: attachmentParts(files) }
+}
+
+/** The line a project's `.git/info/exclude` gets for the bots' pictures; undefined when a line there already covers it. */
+export function excludeWithBotFiles(current: string): string | undefined {
+  const covered = new Set([".ade/bots/", ".ade/bots", "/.ade/bots/", "/.ade/bots", ".ade/", ".ade", "/.ade/", "/.ade"])
+  if (current.split(/\r?\n/).some((line) => covered.has(line.trim()))) return undefined
+  const base = current.length === 0 || current.endsWith("\n") ? current : `${current}\n`
+  return `${base}# ADE: immagini date ai bot\n.ade/bots/\n`
+}
+
+/**
+ * `.ade/bots/` in the project's own `.git/info/exclude`, when the project is a git repository and no line covers it
+ * yet (bot-ui-3, 2): the pictures stay on disk and out of `git status`, and nothing goes in a commit. The folder is
+ * git's common one, so a worktree's line is its repository's. Never throws: a picture in `git status` is a nuisance,
+ * not a reason to refuse it.
+ */
+export async function excludeBotFiles(
+  root: string,
+  /** What of the host it asks: git, and one text file read and written (`Host` in the app). */
+  host: {
+    readonly run: (command: string, args: string[], cwd?: string) => Promise<{ code: number | null; stdout: string }>
+    readonly readTextFile?: (path: string) => Promise<{ readonly text: string }>
+    readonly writeTextFile?: (path: string, contents: string) => Promise<string | null>
+  },
+): Promise<"added" | "there" | "none"> {
+  try {
+    if (!host.readTextFile || !host.writeTextFile) return "none"
+    const common = await host.run("git", ["rev-parse", "--git-common-dir"], root)
+    const dir = common.stdout.trim()
+    if (common.code !== 0 || !dir) return "none"
+    const absolute = /^([A-Za-z]:[\\/]|[\\/])/.test(dir) ? dir : `${root.replace(/[\\/]+$/, "")}/${dir}`
+    const file = `${absolute.replace(/[\\/]+$/, "")}/info/exclude`
+    const current = await host
+      .readTextFile(file)
+      .then((read) => read.text)
+      .catch(() => "")
+    const next = excludeWithBotFiles(current)
+    if (next === undefined) return "there"
+    return (await host.writeTextFile(file, next)) ? "none" : "added"
+  } catch {
+    return "none"
+  }
 }

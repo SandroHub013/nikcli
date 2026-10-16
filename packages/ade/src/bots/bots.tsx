@@ -46,7 +46,7 @@ import {
 import { t } from "../i18n"
 import { APPROVAL_TIMEOUT_MS, localAlwaysStore } from "./approval"
 import { askDialog, askYesNo } from "../host/ask"
-import { getHost } from "../host/shell"
+import { getHost, type Host } from "../host/shell"
 import { every } from "../host/every"
 import {
   avatarKey,
@@ -61,7 +61,7 @@ import {
   type Shape,
 } from "./avatar"
 import { browserFaceImage, loadFaceImage } from "./face-image"
-import { attachPath, BOT_ATTACH_MAX, pastedExtension, savePasted, type Attachment } from "./attach"
+import { attachPath, BOT_ATTACH_MAX, excludeBotFiles, pastedExtension, savePasted, type Attachment } from "./attach"
 import { addAttachment, attachmentFor } from "../chat/attachments"
 import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
 import {
@@ -415,6 +415,15 @@ const botContext = async (bot: AgentFile): Promise<RoutineContext> => ({
   account: accounts.get(bot.path),
   free: await catalogFreeOf(bot),
 })
+
+/** The projects whose `.git/info/exclude` was looked at in this run: once each, at the first picture saved (bot-ui-3, 2). */
+const excludedRoots = new Set<string>()
+
+function excludeBotFilesOnce(root: string, host: Host) {
+  if (excludedRoots.has(root)) return
+  excludedRoots.add(root)
+  void excludeBotFiles(root, host)
+}
 
 const writeRoutines = (change: (book: RoutineBook) => RoutineBook) => {
   const next = change(routineStore.get())
@@ -1415,8 +1424,9 @@ function Thread(props: {
   const addPictures = async (pictures: readonly File[]) => {
     const root = props.projectRoot
     if (!root) return void setAttachProblem(t("bots.attach.noProject"))
-    const write = (await getHost())?.writeBytes
-    if (!write) return void setAttachProblem(t("bots.attach.noWrite"))
+    const host = await getHost()
+    const write = host?.writeBytes
+    if (!host || !write) return void setAttachProblem(t("bots.attach.noWrite"))
     const at = Date.now()
     let problem: string | undefined
     for (const [index, file] of pictures.entries()) {
@@ -1426,7 +1436,11 @@ function Thread(props: {
       }
       const saved = await savePasted({ root, identifier: props.bot.identifier, file, at, index: index + 1, write })
       if (saved.problem !== undefined) problem = saved.problem
-      else setAttachments((list) => addAttachment(list, saved.file))
+      else {
+        setAttachments((list) => addAttachment(list, saved.file))
+        // The pictures stay out of the project's git: its own `.git/info/exclude`, never its `.gitignore`.
+        excludeBotFilesOnce(root, host)
+      }
     }
     setAttachProblem(problem)
   }
