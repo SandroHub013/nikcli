@@ -1,27 +1,31 @@
 /**
  * Scene renderer for the ADE pixel-art splash screen.
  *
- * Renders the cooking scene:
- * - Developer at left stirring, tasting, and thumbs-up in an 8-pose cycle;
+ * Renders the cooking scene at 160x90 logical resolution (16:9):
+ * - Developer at left (human-scale, ~2x pot height) stirring, tasting, and thumbs-up;
  * - Iconic Ragu pot at center boiling, steaming, and bobbing at 8fps;
- * - Laptop running ADE code at right;
- * - "Ragù Code" wordmark centered below;
+ * - Fresh counter tomato and basil sprig;
+ * - Open laptop running colorful ADE code at right;
+ * - Large 100px "Ragù Code" wordmark centered below (~60% width);
  * - Crisp integer pixelated scaling on <canvas> across 800px to 4K.
  */
 
 import {
+  BASIL_SPRITE,
   DEVELOPER_POSES,
   DEVELOPER_SPRITE_SIZE,
+  LAPTOP_SPRITE,
   POT_FRAMES,
   POT_SPRITE_SIZE,
   SPLASH_PALETTE,
+  TOMATO_SPRITE,
   WORDMARK_MATRIX,
   WORDMARK_SIZE,
 } from "./sprites"
 
 /** Logical resolution of the scene in pixels (exact 16:9 aspect ratio). */
-export const SCENE_WIDTH = 96
-export const SCENE_HEIGHT = 54
+export const SCENE_WIDTH = 160
+export const SCENE_HEIGHT = 90
 
 /** Background color (brand ink ground). */
 export const INK_BACKGROUND = SPLASH_PALETTE.a! // #120d0b
@@ -29,38 +33,23 @@ export const INK_BACKGROUND = SPLASH_PALETTE.a! // #120d0b
 /** Kitchen counter / desk line color. */
 export const COUNTER_COLOR = SPLASH_PALETTE.l! // #241e1b
 
-/** Layout coordinates within the 96x54 logical canvas. */
+/** Layout coordinates within the 160x90 logical canvas. */
 export const SCENE_LAYOUT = {
-  developer: { x: 18, y: 5 },
-  pot: { x: 40, y: 13 },
-  laptop: { x: 62, y: 21 },
-  counter: { y: 29 },
-  wordmark: { x: 16, y: 38 },
+  developer: { x: 30, y: 15 },
+  tomato: { x: 62, y: 44 },
+  basil: { x: 68, y: 45 },
+  pot: { x: 74, y: 33 },
+  laptop: { x: 96, y: 35 },
+  counter: { y: 49 },
+  wordmark: { x: 30, y: 62 },
 } as const
 
 /** Cadence timings in milliseconds. */
 export const POT_FRAME_INTERVAL_MS = 125 // ~8 frames per second
 export const DEV_POSE_INTERVAL_MS = 1000 // 1 second per developer pose
 
-/** Small 11x8 pixel laptop with ADE code display. */
-export const LAPTOP_SPRITE: readonly string[] = [
-  "...aiiiiia.",
-  ".aaccaccaa.",
-  ".aacckkcaa.",
-  ".aaccaccaa.",
-  ".aakkkkcaa.",
-  ".aaaaaaaaa.",
-  "addddddddda",
-  "aaaaaaaaaaa",
-] as const
-
-export const LAPTOP_SIZE = {
-  width: LAPTOP_SPRITE[0]!.length,
-  height: LAPTOP_SPRITE.length,
-} as const
-
 /**
- * Calculates the integer scale factor so the logical 96x54 canvas fills as much
+ * Calculates the integer scale factor so the logical 160x90 canvas fills as much
  * of the viewport as possible without clipping, staying pixel-perfect.
  */
 export function calculateIntegerScale(viewportWidth: number, viewportHeight: number): number {
@@ -121,20 +110,24 @@ export function renderScene(
 
   // 2. Kitchen counter / desk line
   ctx.fillStyle = COUNTER_COLOR
-  ctx.fillRect(10, SCENE_LAYOUT.counter.y, SCENE_WIDTH - 20, 1)
+  ctx.fillRect(16, SCENE_LAYOUT.counter.y, SCENE_WIDTH - 32, 2)
 
-  // 3. Laptop on desk
+  // 3. Counter fresh ingredients: tomato & basil sprig
+  drawSpriteGrid(ctx, TOMATO_SPRITE, SCENE_LAYOUT.tomato.x, SCENE_LAYOUT.tomato.y)
+  drawSpriteGrid(ctx, BASIL_SPRITE, SCENE_LAYOUT.basil.x, SCENE_LAYOUT.basil.y)
+
+  // 4. Laptop on desk running ADE code
   drawSpriteGrid(ctx, LAPTOP_SPRITE, SCENE_LAYOUT.laptop.x, SCENE_LAYOUT.laptop.y)
 
-  // 4. Canonical Ragu cooking pot (center)
+  // 5. Canonical Ragu cooking pot (center)
   const potFrame = POT_FRAMES[potFrameIndex] ?? POT_FRAMES[0]!
   drawSpriteGrid(ctx, potFrame, SCENE_LAYOUT.pot.x, SCENE_LAYOUT.pot.y)
 
-  // 5. Developer (left, stirring into pot)
+  // 6. Developer (left, stirring into pot / tasting)
   const devPose = DEVELOPER_POSES[devPoseIndex] ?? DEVELOPER_POSES[0]!
   drawSpriteGrid(ctx, devPose, SCENE_LAYOUT.developer.x, SCENE_LAYOUT.developer.y)
 
-  // 6. Wordmark "Ragù Code" (centered bottom)
+  // 7. Wordmark "Ragù Code" (centered bottom, ~60% width)
   drawSpriteGrid(ctx, WORDMARK_MATRIX, SCENE_LAYOUT.wordmark.x, SCENE_LAYOUT.wordmark.y)
 }
 
