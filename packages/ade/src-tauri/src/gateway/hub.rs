@@ -840,9 +840,24 @@ impl Hub {
     }
 
     pub async fn send(&self, bot: &str, platform: Platform, chat: &str, text: &str) -> Result<String, String> {
+        self.send_with(bot, platform, chat, text, false, None).await
+    }
+
+    pub async fn send_with(
+        &self,
+        bot: &str,
+        platform: Platform,
+        chat: &str,
+        text: &str,
+        final_turn: bool,
+        preview_fallback: Option<&str>,
+    ) -> Result<String, String> {
         let adapter = self.reply_target(bot, platform, chat)?;
         let secrets = self.secrets();
-        adapter.send(chat, &redact(text, &secrets)).await.map_err(|error| redact(&error.message(), &secrets))
+        adapter
+            .send_with(chat, &redact(text, &secrets), final_turn, preview_fallback)
+            .await
+            .map_err(|error| redact(&error.message(), &secrets))
     }
 
     /// A reply with buttons under it. A press comes back as a message with
@@ -881,6 +896,20 @@ impl Hub {
     pub async fn typing(&self, bot: &str, platform: Platform, chat: &str) -> Result<(), String> {
         let adapter = self.reply_target(bot, platform, chat)?;
         adapter.typing(chat).await.map_err(|error| redact(&error.message(), &self.secrets()))
+    }
+
+    pub async fn preview(&self, bot: &str, platform: Platform, chat: &str, text: &str) -> Result<(), String> {
+        let adapter = self.reply_target(bot, platform, chat)?;
+        let secrets = self.secrets();
+        adapter
+            .preview(chat, &redact(text, &secrets))
+            .await
+            .map_err(|error| redact(&error.message(), &secrets))
+    }
+
+    pub async fn preview_end(&self, bot: &str, platform: Platform, chat: &str, fallback: Option<&str>) -> Result<(), String> {
+        let adapter = self.reply_target(bot, platform, chat)?;
+        adapter.preview_end(chat, fallback).await.map_err(|error| redact(&error.message(), &self.secrets()))
     }
 
     /* ── pairing ───────────────────────────────────────────────────────── */
@@ -3077,5 +3106,17 @@ mod tests {
         assert_eq!(s.env.messages.lock().unwrap().len(), 1, "il duplicato con stesso chat e id deve essere scartato");
         let logs = s.env.log.lock().unwrap();
         assert!(logs.iter().any(|line| line.contains("ignorato un messaggio già in coda")));
+    }
+
+    #[tokio::test]
+    async fn preview_forwards_redacted_text_to_adapter() {
+        let s = setup("preview-hub");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c42", "42", "ciao")])).unwrap();
+        eventually("il messaggio arriva", || s.env.messages.lock().unwrap().len() == 1).await;
+        s.hub.preview(BOT, Platform::Fake, "c42", "anteprima parziale").await.unwrap();
+        let previews = adapter.previews.lock().unwrap();
+        assert_eq!(*previews, vec![("c42".to_string(), "anteprima parziale".to_string())]);
     }
 }

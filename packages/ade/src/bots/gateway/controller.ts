@@ -33,7 +33,7 @@
 import { t } from "../../i18n"
 import { visibleText } from "../visible-text"
 import type { AgentFile } from "../ragu"
-import { runnerById } from "../runners"
+import { answerSoFar, runnerById } from "../runners"
 import type { Turn, TurnRequest } from "../turn"
 import { BOT_TURN_TIMEOUT_MS } from "../controller"
 import { memorySnapshot, settleMemoryOps, takeMemoryOps, type MemoryOp, type MemoryStore } from "../memory"
@@ -88,7 +88,13 @@ export interface GatewayBridge {
   ready: () => Promise<void>
   /** Tells Rust the message was delivered to the frontend, so the cursor can advance. */
   ack?: (bot: string, platform: string, chat: string, id: string) => Promise<void>
-  send: (bot: string, platform: string, chat: string, text: string) => Promise<string>
+  send: (
+    bot: string,
+    platform: string,
+    chat: string,
+    text: string,
+    options?: { final?: boolean; previewFallback?: string },
+  ) => Promise<string>
   sendButtons: (
     bot: string,
     platform: string,
@@ -97,6 +103,10 @@ export interface GatewayBridge {
     buttons: readonly { label: string; data: string }[],
   ) => Promise<string>
   typing: (bot: string, platform: string, chat: string) => Promise<void>
+  /** Sends live partial text preview to the chat. */
+  preview?: (bot: string, platform: string, chat: string, text: string) => Promise<void>
+  /** Ends or cleans up active preview for the chat. */
+  previewEnd?: (bot: string, platform: string, chat: string, fallback?: string) => Promise<void>
   /** The project the gateway's turns run in, fixed when it was switched on. */
   project: (bot: string, platform: string) => Promise<string | undefined>
 }
@@ -132,9 +142,22 @@ export interface GatewayControllerDeps {
   readonly now?: () => number
   /** How often «sta scrivendo» is sent again: Telegram shows it for 5 s. */
   readonly typingEveryMs?: number
+  /** How often preview updates can be sent; `PREVIEW_CADENCE_MS` when absent. */
+  readonly previewCadenceMs?: number
+  /** Minimum new characters to trigger a preview update; `PREVIEW_MIN_DELTA_CHARS` when absent. */
+  readonly previewMinDeltaChars?: number
+  /** How often Telegram drafts are refreshed to avoid disappearing; `TELEGRAM_DRAFT_KEEP_ALIVE_MS` when absent. */
+  readonly draftKeepAliveMs?: number
   /** Where a failure to reach the chat is noted; never the text of a message. */
   readonly warn?: (line: string) => void
 }
+
+export const PREVIEW_CADENCE_MS = 1_000
+export const PREVIEW_CADENCE_DISCORD_MS = 2_000
+export const PREVIEW_CADENCE_TELEGRAM_MS = 1_000
+export const PREVIEW_MIN_DELTA_CHARS = 24
+export const PREVIEW_FLOOD_LIMIT = 3
+export const TELEGRAM_DRAFT_KEEP_ALIVE_MS = 20_000
 
 /** Where a question goes: one chat of one bot's gateway. */
 export interface ChatTarget {
@@ -320,9 +343,13 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     return state
   }
 
-  const reply = async (message: GatewayMessage, text: string) => {
+  const reply = async (
+    message: GatewayMessage,
+    text: string,
+    options?: { final?: boolean; previewFallback?: string },
+  ) => {
     try {
-      await deps.bridge.send(message.bot, message.platform, message.chat, text)
+      await deps.bridge.send(message.bot, message.platform, message.chat, text, options)
     } catch (error) {
       warn(
         `ADE: risposta del gateway non mandata (${message.platform}): ${error instanceof Error ? error.message : String(error)}`,
@@ -349,8 +376,12 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     if (which === "stop") {
       state.queue.length = 0
       if (!running) return reply(message, t("gateway.nothingToStop"))
-      if (state.turn) state.turn.stop()
-      else state.cancelled = true
+      if (state.turn) {
+        state.cancelled = true
+        state.turn.stop()
+      } else {
+        state.cancelled = true
+      }
       return reply(message, t("gateway.stopped"))
     }
     if (which === "status") {
@@ -373,6 +404,9 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     state.current = message
     const fresh = state.fresh
     let typing: ReturnType<typeof setInterval> | undefined
+    let draftKeepAlive: ReturnType<typeof setInterval> | undefined
+    let inFlightPreview: Promise<void> | undefined
+    let previewDisabled = false
     const ended = new AbortController()
     try {
       const project = await deps.bridge.project(message.bot, message.platform)
@@ -403,19 +437,26 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
             loaded.fingerprint,
           )
       let turn: Turn | undefined
+      let pendingApproval = false
       // ragu's questions, by their id on ADE's server (B8d): answered on the phone, or no at once.
       const onPermission =
         runner === "ragu"
           ? permissionAnswerer({
-              ask: (question, choices, signal, detail) =>
-                ask(
-                  { bot: message.bot, platform: message.platform, chat: message.chat, asker: message.sender.id },
-                  question,
-                  choices,
-                  deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS,
-                  signal,
-                  detail && { ...detail, botName: bot.identifier, cwd: project },
-                ),
+              ask: async (question, choices, signal, detail) => {
+                pendingApproval = true
+                try {
+                  return await ask(
+                    { bot: message.bot, platform: message.platform, chat: message.chat, asker: message.sender.id },
+                    question,
+                    choices,
+                    deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS,
+                    signal,
+                    detail && { ...detail, botName: bot.identifier, cwd: project },
+                  )
+                } finally {
+                  pendingApproval = false
+                }
+              },
               refuse: !remote.commands,
               publicChat,
               answer: (requestID, reply) => {
@@ -429,6 +470,73 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       const framed = message.recovered ? `${recoveredNotice()}\n\n${baseFramed}` : baseFramed
       const memory = deps.memory?.get(message.bot)
       const sent = memory && !sessionId ? `${memorySnapshot(memory)}\n\n${framed}` : framed
+
+      let lastPreviewAt = 0
+      let lastPreviewText = ""
+      let floodErrors = 0
+      let previewing = false
+
+      const defaultCadence = message.platform === "discord" ? PREVIEW_CADENCE_DISCORD_MS : PREVIEW_CADENCE_TELEGRAM_MS
+      const cadenceMs = deps.previewCadenceMs ?? defaultCadence
+      const minDeltaChars = deps.previewMinDeltaChars ?? PREVIEW_MIN_DELTA_CHARS
+
+      const sendPreview = (text: string) => {
+        const previewFn = deps.bridge.preview
+        if (closed || previewDisabled || pendingApproval || state.cancelled || ended.signal.aborted || !previewFn) return
+        const currentTime = now()
+        if (currentTime - lastPreviewAt < cadenceMs) return
+        if (text.length - lastPreviewText.length < minDeltaChars) return
+        if (previewing) return
+
+        previewing = true
+        lastPreviewAt = currentTime
+        lastPreviewText = text
+        const promise = (async () => {
+          try {
+            if (closed || previewDisabled || pendingApproval || state.cancelled || ended.signal.aborted) return
+            await previewFn(message.bot, message.platform, message.chat, text)
+          } catch (error) {
+            if (isFloodError(error)) {
+              floodErrors += 1
+              if (floodErrors >= PREVIEW_FLOOD_LIMIT) {
+                previewDisabled = true
+              }
+            }
+          } finally {
+            previewing = false
+          }
+        })()
+        inFlightPreview = promise
+      }
+
+      if (message.platform === "telegram") {
+        const keepAliveMs = deps.draftKeepAliveMs ?? TELEGRAM_DRAFT_KEEP_ALIVE_MS
+        draftKeepAlive = setInterval(() => {
+          const previewFn = deps.bridge.preview
+          if (closed || previewDisabled || state.cancelled || ended.signal.aborted || !previewFn) return
+          if (!lastPreviewText) return
+          if (previewing) return
+          previewing = true
+          const textToRefresh = lastPreviewText
+          const promise = (async () => {
+            try {
+              if (closed || previewDisabled || state.cancelled || ended.signal.aborted) return
+              await previewFn(message.bot, message.platform, message.chat, textToRefresh)
+            } catch (error) {
+              if (isFloodError(error)) {
+                floodErrors += 1
+                if (floodErrors >= PREVIEW_FLOOD_LIMIT) {
+                  previewDisabled = true
+                }
+              }
+            } finally {
+              previewing = false
+            }
+          })()
+          inFlightPreview = promise
+        }, keepAliveMs)
+      }
+
       turn = deps.runTurn({
         runner,
         bot,
@@ -437,12 +545,32 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         timeoutMs: BOT_TURN_TIMEOUT_MS,
         remote,
         account: deps.account?.(message.bot) ?? { mode: "plan" },
+        partial: true,
+        onUpdate: (talk) => {
+          const raw = answerSoFar(talk)
+          if (raw) {
+            const text = safePreviewText(takeMemoryOps(raw).text)
+            if (text) {
+              void sendPreview(text)
+            }
+          }
+        },
         ...(sessionId ? { sessionId } : {}),
         ...(onPermission ? { onPermission } : {}),
       })
       state.turn = turn
       state.starting = false
       const result = await turn.result
+      previewDisabled = true
+      if (inFlightPreview) {
+        try {
+          await inFlightPreview
+        } catch {}
+      }
+      if (draftKeepAlive) {
+        clearInterval(draftKeepAlive)
+        draftKeepAlive = undefined
+      }
       clearInterval(typing)
       typing = undefined
       const kept = state.fresh === fresh
@@ -458,17 +586,36 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       // The chat reads a fixed text: the detail (local paths, the server's words) stays in ADE (S10).
       if (result.status === "error") {
         failure(message, result.problem ?? "?")
-        return void (await reply(message, t("gateway.failed")))
+        return void (await reply(message, t("gateway.failed"), {
+          final: true,
+          previewFallback: t("gateway.preview.sentBelow"),
+        }))
       }
       // The bot works: what the panel kept of an earlier failure goes (N7).
       forgetTurnFailuresOf(message.bot)
-      await reply(message, text.trim() ? text : t("gateway.empty"))
+      await reply(message, text.trim() ? text : t("gateway.empty"), {
+        final: true,
+        previewFallback: t("gateway.preview.sentBelow"),
+      })
     } catch (error) {
       failure(message, error instanceof Error ? error.message : String(error))
-      await reply(message, t("gateway.failed"))
+      await reply(message, t("gateway.failed"), {
+        final: true,
+        previewFallback: t("gateway.preview.sentBelow"),
+      })
     } finally {
+      previewDisabled = true
+      if (inFlightPreview) {
+        try {
+          await inFlightPreview
+        } catch {}
+      }
+      try {
+        await deps.bridge.previewEnd?.(message.bot, message.platform, message.chat, t("gateway.preview.interrupted"))
+      } catch {}
       ended.abort()
       if (typing) clearInterval(typing)
+      if (draftKeepAlive) clearInterval(draftKeepAlive)
       state.turn = undefined
       state.starting = false
       state.current = undefined
@@ -596,3 +743,47 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     busy: () => [...chats.entries()].filter(([, state]) => state.turn || state.starting).map(([key]) => key),
   }
 }
+
+const SECRET_ASSIGNMENT_PATTERN = /(?:key|token|secret|password|passwd|auth|bearer|credential|jwt|api[_-]?key)\s*[:=]/i
+
+/**
+ * An incomplete word/token at the end of partial streaming text might be a secret
+ * mid-emission (e.g. `sk-proj...`, JWT, dotted password) that would escape redaction patterns.
+ * We hold back the trailing incomplete word/token until terminated by whitespace.
+ * In addition, if the trailing line contains an assignment (`=` or `:`) following a
+ * secret-like name (e.g. `password=ab.`, `token: `), we hold back that entire line until
+ * a newline terminates it, preventing partial leaks of secrets containing dots or short passwords.
+ */
+export function safePreviewText(text: string): string {
+  if (!text) return ""
+
+  // 1. Delimiter is only whitespace: hold back trailing incomplete word
+  let candidate = text
+  if (!/\s$/.test(candidate)) {
+    const lastSpace = candidate.search(/\s\S*$/)
+    if (lastSpace >= 0) {
+      candidate = candidate.slice(0, lastSpace + 1)
+    } else {
+      return ""
+    }
+  }
+
+  // 2. If the trailing line contains an assignment after a secret-like name, hold back the line
+  const lastNewline = candidate.lastIndexOf("\n")
+  const trailingLine = lastNewline >= 0 ? candidate.slice(lastNewline + 1) : candidate
+  if (SECRET_ASSIGNMENT_PATTERN.test(trailingLine)) {
+    return lastNewline >= 0 ? candidate.slice(0, lastNewline + 1) : ""
+  }
+
+  return candidate
+}
+
+/**
+ * Recognizes structured flood errors from Rust (`Flood: ...`) as well as
+ * generic HTTP 429 / flood messages.
+ */
+export function isFloodError(error: unknown): boolean {
+  const errStr = error instanceof Error ? error.message : String(error)
+  return /^Flood:/i.test(errStr) || /429|flood|too many/i.test(errStr)
+}
+

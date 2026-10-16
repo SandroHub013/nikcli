@@ -558,7 +558,7 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
             const text = errorText(error)
             failed = text
             const at = now()
-            change((thread) => ({ ...appendMessage(thread, { role: "error", text }, at), status: "error" }))
+            change((thread) => ({ ...appendMessage(thread, { role: "error", text }, at), status: "error", streaming: undefined }))
             return
           }
           case "permission.asked": {

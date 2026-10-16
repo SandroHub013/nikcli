@@ -88,6 +88,7 @@ impl Failure {
                 AdapterError::Transient("Telegram non ha risposto in tempo: il messaggio potrebbe essere arrivato lo stesso".into())
             }
             Failure::Network { .. } => AdapterError::Transient(self.text()),
+            Failure::Api { code: 429, .. } => AdapterError::Flood(self.text()),
             Failure::Api { .. } => AdapterError::Fatal(self.text()),
         }
     }
@@ -306,8 +307,11 @@ impl Telegram {
     }
 
     /// One piece, as MarkdownV2, or as plain text when Telegram cannot parse it.
-    async fn send_piece(&self, chat: &str, piece: &str, markup: Option<&Value>) -> Result<String, AdapterError> {
+    async fn send_piece(&self, chat: &str, piece: &str, markup: Option<&Value>, silent: bool) -> Result<String, AdapterError> {
         let mut body = json!({ "chat_id": chat_id(chat), "text": to_markdown_v2(piece), "parse_mode": "MarkdownV2", "link_preview_options": no_preview() });
+        if silent {
+            body["disable_notification"] = json!(true);
+        }
         if let Some(markup) = markup {
             body["reply_markup"] = markup.clone();
         }
@@ -330,7 +334,7 @@ impl Telegram {
         };
         let mut id = String::new();
         for (index, piece) in pieces.iter().enumerate() {
-            id = self.send_piece(chat, piece, if index == last { markup.as_ref() } else { None }).await?;
+            id = self.send_piece(chat, piece, if index == last { markup.as_ref() } else { None }, index < last).await?;
         }
         Ok(id)
     }
@@ -415,7 +419,7 @@ impl Adapter for Telegram {
         // Past the limit the text goes on in new messages, never cut off.
         let mut last = message.to_string();
         for piece in pieces {
-            last = self.send_piece(chat, &piece, None).await?;
+            last = self.send_piece(chat, &piece, None, false).await?;
         }
         Ok(last)
     }
@@ -434,6 +438,45 @@ impl Adapter for Telegram {
             .await
             .map(|_| ())
             .map_err(Failure::for_sending)
+    }
+
+    async fn preview(&self, chat: &str, text: &str) -> Result<(), AdapterError> {
+        // Native drafts (sendMessageDraft, Bot API 9.5) apply to private chats.
+        // For groups/channels, draft is not supported and would create noise,
+        // so preview is a no-op (only the final message is sent).
+        if let Ok(id) = chat.parse::<i64>() {
+            if id <= 0 {
+                return Ok(());
+            }
+        } else if chat.starts_with('@') || chat.starts_with('-') {
+            return Ok(());
+        }
+
+        let piece = split(text, MAX_LEN, utf16).into_iter().last().unwrap_or_default();
+        if piece.is_empty() {
+            return Ok(());
+        }
+
+        let mut body = json!({
+            "chat_id": chat_id(chat),
+            "draft_id": 1,
+            "text": to_markdown_v2(&piece),
+            "parse_mode": "MarkdownV2"
+        });
+        let res = match self.call_patiently("sendMessageDraft", &body).await {
+            Err(failure) if failure.is_parse_error() => {
+                body["text"] = Value::from(piece);
+                body.as_object_mut().map(|fields| fields.remove("parse_mode"));
+                self.call_patiently("sendMessageDraft", &body).await
+            }
+            other => other,
+        };
+        match res {
+            Ok(_) => Ok(()),
+            Err(Failure::Api { code: 400, description, .. }) if description.contains("can't parse") => Ok(()),
+            Err(Failure::Api { code: 404, .. }) => Ok(()),
+            Err(failure) => Err(failure.for_sending()),
+        }
     }
 
     fn cursor(&self) -> Option<String> {
@@ -782,7 +825,12 @@ mod tests {
         let sent = api.calls_to("sendMessage");
         assert!(sent.len() >= 3, "{}", sent.len());
         assert_eq!(id, format!("{}", 100 + sent.len()));
-        for body in &sent {
+        for (i, body) in sent.iter().enumerate() {
+            if i + 1 < sent.len() {
+                assert_eq!(body["disable_notification"], json!(true), "pezzo intermedio deve essere muto");
+            } else {
+                assert!(body.get("disable_notification").is_none(), "ultimo pezzo deve suonare");
+            }
             assert_eq!(body["parse_mode"], "MarkdownV2");
             assert_eq!(body["chat_id"], 42);
             let text = body["text"].as_str().unwrap();
@@ -886,4 +934,48 @@ mod tests {
         assert!(telegram.edit("42", "non-un-numero", "x").await.is_err());
         assert!(telegram.send("42", "   ").await.is_err());
     }
+
+    #[tokio::test]
+    async fn drafts_sent_to_private_chat_then_final_message() {
+        let api = FakeApi::start();
+        let telegram = adapter(&api, None);
+
+        // Preview in private chat calls sendMessageDraft
+        telegram.preview("42", "anteprima bozza parziale").await.unwrap();
+        let drafts = api.calls_to("sendMessageDraft");
+        assert_eq!(drafts.len(), 1);
+        assert_eq!(drafts[0]["chat_id"], 42);
+        assert_eq!(drafts[0]["draft_id"], 1);
+
+        // Preview in group/channel (negative id) is ignored (no-op)
+        telegram.preview("-10042", "in gruppo").await.unwrap();
+        assert_eq!(api.calls_to("sendMessageDraft").len(), 1);
+
+        // Final message uses sendMessage
+        telegram.send("42", "risposta finale completa").await.unwrap();
+        let sends = api.calls_to("sendMessage");
+        assert_eq!(sends.len(), 1);
+    }
+
+    #[test]
+    fn telegram_429_produces_structured_flood_error() {
+        let f = Failure::Api { code: 429, description: "Too Many Requests: retry after 5".into(), retry_after: Some(5) };
+        assert!(matches!(f.for_sending(), AdapterError::Flood(msg) if msg.contains("Too Many Requests")));
+    }
+
+    #[tokio::test]
+    async fn draft_shows_tail_piece_when_preview_exceeds_max_len() {
+        let api = FakeApi::start();
+        let telegram = adapter(&api, None);
+        let head = "A".repeat(4100);
+        let tail = "Questo e il pezzo finale nella coda.";
+        let text = format!("{head}\n\n{tail}");
+        telegram.preview("42", &text).await.unwrap();
+        let drafts = api.calls_to("sendMessageDraft");
+        assert_eq!(drafts.len(), 1);
+        let sent_text = drafts[0]["text"].as_str().unwrap();
+        assert!(sent_text.contains("Questo e il pezzo finale nella coda"));
+        assert!(!sent_text.contains("AAAAA"));
+    }
 }
+

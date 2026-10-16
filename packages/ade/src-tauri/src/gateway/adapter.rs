@@ -128,6 +128,8 @@ pub enum AdapterError {
     Unsupported,
     /// Worth trying again after a pause: the network, a timeout, a 5xx.
     Transient(String),
+    /// Rate limited / flood limit exceeded.
+    Flood(String),
     /// Not worth trying again: a refused token, a token in use elsewhere.
     Fatal(String),
 }
@@ -136,6 +138,7 @@ impl AdapterError {
     pub fn message(&self) -> String {
         match self {
             AdapterError::Unsupported => "operazione non disponibile su questa piattaforma".into(),
+            AdapterError::Flood(text) => format!("Flood: {text}"),
             AdapterError::Transient(text) | AdapterError::Fatal(text) => text.clone(),
         }
     }
@@ -152,6 +155,9 @@ pub trait Adapter: Send + Sync {
     /// Sends `text` to `chat`, in as many messages as the platform's limit
     /// needs; returns the platform's id for the last one.
     async fn send(&self, chat: &str, text: &str) -> Result<String, AdapterError>;
+    async fn send_with(&self, chat: &str, text: &str, _final_turn: bool, _preview_fallback: Option<&str>) -> Result<String, AdapterError> {
+        self.send(chat, text).await
+    }
     /// The same, with buttons under the last message.
     async fn send_buttons(&self, _chat: &str, _text: &str, _buttons: &[Button]) -> Result<String, AdapterError> {
         Err(AdapterError::Unsupported)
@@ -180,6 +186,14 @@ pub trait Adapter: Send + Sync {
     async fn typing(&self, _chat: &str) -> Result<(), AdapterError> {
         Ok(())
     }
+    /// Sends a live partial text preview of the answer under way.
+    async fn preview(&self, _chat: &str, _text: &str) -> Result<(), AdapterError> {
+        Ok(())
+    }
+    /// Ends or clears any active preview for this chat.
+    async fn preview_end(&self, _chat: &str, _fallback: Option<&str>) -> Result<(), AdapterError> {
+        Ok(())
+    }
     /// The bot's own name on the platform, for the panel's «Prova»: the token
     /// works, and it is this bot's.
     async fn whoami(&self) -> Result<String, AdapterError> {
@@ -199,6 +213,7 @@ pub mod fake {
         pub sent: Mutex<Vec<(String, String)>>,
         pub edited: Mutex<Vec<(String, String, String)>>,
         pub typing: Mutex<Vec<String>>,
+        pub previews: Mutex<Vec<(String, String)>>,
         pub buttons: Mutex<Vec<(String, String, Vec<Button>)>>,
         pub receives: std::sync::atomic::AtomicUsize,
         /// What `cursor` reports: the tests set it with each batch.
@@ -221,6 +236,7 @@ pub mod fake {
                 sent: Mutex::new(Vec::new()),
                 edited: Mutex::new(Vec::new()),
                 typing: Mutex::new(Vec::new()),
+                previews: Mutex::new(Vec::new()),
                 buttons: Mutex::new(Vec::new()),
                 receives: std::sync::atomic::AtomicUsize::new(0),
                 position: Mutex::new(None),
@@ -260,6 +276,10 @@ pub mod fake {
         }
         async fn typing(&self, chat: &str) -> Result<(), AdapterError> {
             self.typing.lock().unwrap().push(chat.into());
+            Ok(())
+        }
+        async fn preview(&self, chat: &str, text: &str) -> Result<(), AdapterError> {
+            self.previews.lock().unwrap().push((chat.into(), text.into()));
             Ok(())
         }
         async fn send_buttons(&self, chat: &str, text: &str, buttons: &[Button]) -> Result<String, AdapterError> {

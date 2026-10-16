@@ -2748,6 +2748,8 @@ pub fn run() {
             gateway::gateway_send,
             gateway::gateway_edit,
             gateway::gateway_typing,
+            gateway::gateway_preview,
+            gateway::gateway_preview_end,
             gateway::gateway_pairing_list,
             gateway::gateway_pairing_approve,
             gateway::gateway_pairing_reject,
