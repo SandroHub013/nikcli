@@ -2198,9 +2198,10 @@ export const en: Messages = {
   "bots.delete.questionGlobal": (name, file, routines) =>
     `Delete «${name}»? Its memory goes with it, ${routines === 0 ? "no routines" : routines === 1 ? "one routine" : `${routines} routines`}, the conversations saved in ADE, the messaging apps bot codes and who was paired. The file ${file} is deleted.`,
   "bots.permissions.phone": "From your phone",
-  "bots.permissions.phoneText": "It reads and searches the project and can edit its files. It uses no MCP servers and does not search the web. Web pages and commands only if you turn on «Remote commands»: then you are asked every time.",
+  "bots.permissions.phoneText": "It reads and searches the project and can edit its files. It uses no MCP servers and opens no web pages or web searches, even with the commands on. It runs commands only if you turn on «Remote commands»: then you are asked every time.",
   "bots.permissions.remoteOn": (platform) => `${platform}: remote commands on`,
   "bots.permissions.remoteOff": (platform) => `${platform}: remote commands off`,
+  "bots.permissions.remoteStale": (platform) => `${platform}: remote commands off, because the bot's file changed after you turned them on`,
   "bots.permissions.remoteHow": "They are turned on and off in Platforms.",
   "bots.permissions.routines": "In routines",
   "bots.permissions.routinesText": "It only reads and searches the project. It edits no files, runs no commands and uses neither MCP servers nor the web.",

@@ -73,7 +73,7 @@ import { capText, parseCap, spendTerms, withCap } from "./spend"
 import { appSpendStore } from "./spend-app"
 import { NewBotCapField, newBotSpendTerms, SPEND_CAP_PROPOSED_USD, SpendCapField, SpendTodayLine } from "./spend-panel"
 import { createBotTurns } from "./controller"
-import { admit, localTrustStore } from "./trust"
+import { admit, fileFingerprint, localTrustStore } from "./trust"
 import { effortChange, modelChange, runnerModelItems, submitDraft } from "./composer"
 import { admitProject, PROJECT_TRUST_KEY, projectSurface } from "./project-trust"
 import { runBotTurn } from "./serve-turn"
@@ -1918,7 +1918,11 @@ function BotPage(props: {
 
       <Show when={shown() === "permissions"}>
         <TabPanel tab="permissions" shown={shown()} scroll>
-          <PermissionsSection bot={props.bot} {...(props.gateway ? { remote: localRemoteStore() } : {})} />
+          <PermissionsSection
+            bot={props.bot}
+            fingerprintOf={async (bot) => fileFingerprint(await readBotText(bot.path))}
+            {...(props.gateway ? { remote: localRemoteStore() } : {})}
+          />
         </TabPanel>
       </Show>
     </div>
