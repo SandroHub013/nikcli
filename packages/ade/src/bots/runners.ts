@@ -410,6 +410,10 @@ export function enforcesDisabledTools(id: RunnerId): boolean {
 /**
  * ragu's tool names, as Claude Code spells them. A bot with a tool turned
  * off in ragu has it refused in Claude Code too.
+ *
+ * In Claude Code 2.1.301 the subagent is `Agent`, and `Task` still its alias, kept for an older version. The todo list
+ * is `TaskCreate`, `TaskGet`, `TaskList` and `TaskUpdate`; `TodoWrite` comes back only with CLAUDE_CODE_ENABLE_TASKS=0
+ * (bot-lettura-2, checked with a fake provider). An unknown name is ignored.
  */
 const CLAUDE_TOOLS: Record<string, readonly string[]> = {
   bash: ["Bash", "PowerShell"],
@@ -420,8 +424,8 @@ const CLAUDE_TOOLS: Record<string, readonly string[]> = {
   glob: ["Glob"],
   webfetch: ["WebFetch"],
   websearch: ["WebSearch"],
-  task: ["Task"],
-  todowrite: ["TodoWrite"],
+  task: ["Agent", "Task"],
+  todowrite: ["TodoWrite", "TaskCreate", "TaskGet", "TaskList", "TaskUpdate"],
 }
 
 /** What a routine's Claude Code turn is refused besides the shell: it reads, it does not write. */

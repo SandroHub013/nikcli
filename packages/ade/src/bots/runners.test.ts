@@ -84,6 +84,28 @@ describe("gli argomenti di un turno", () => {
     expect(next.args.slice(-2)).toEqual(["t-1", "e poi?"])
   })
 
+  /*
+   * bot-lettura-2: in Claude Code 2.1.301 the subagent is `Agent`, and `Task` still its alias (a fake provider:
+   * `--tools Task` offers `Agent`, `--disallowedTools Task` takes it away); the old name stays for an older Claude
+   * Code. The todo list is `TaskCreate`, `TaskGet`, `TaskList` and `TaskUpdate`: `TodoWrite` alone gives none.
+   */
+  test("Claude Code: il sottoagente e le todo con i nomi di oggi, e quelli vecchi accanto", () => {
+    const list = (args: readonly string[], flag: string) => (args[args.indexOf(flag) + 1] ?? "").split(",")
+    const own: AgentFile = { ...bot, scope: "global" }
+    const names = ["Agent", "Task", "TodoWrite", "TaskCreate", "TaskGet", "TaskList", "TaskUpdate"]
+    const on = turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true }).args
+    for (const name of names) expect([name, list(on, "--allowedTools").includes(name)]).toEqual([name, true])
+    const off = turnCommand(runnerById("claude"), {
+      bot: { ...own, disabledTools: ["task", "todowrite"] },
+      message: "x",
+      lean: true,
+    }).args
+    for (const name of names) {
+      expect([name, list(off, "--allowedTools").includes(name)]).toEqual([name, false])
+      expect([name, list(off, "--disallowedTools").includes(name)]).toEqual([name, true])
+    }
+  })
+
   test("un turno leggero di Claude Code salta MCP e impostazioni utente, ma può usare ade-msg", () => {
     // The user's own bot: a project's gets none of this (B3, below).
     const mine: AgentFile = { ...bot, scope: "global" }
