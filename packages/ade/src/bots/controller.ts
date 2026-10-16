@@ -28,6 +28,8 @@ import {
   type MemoryStore,
 } from "./memory"
 import type { AgentFile } from "./ragu"
+import type { Attachment } from "../chat/attachments"
+import { attachedLine, withFilePaths } from "./attach"
 import type { RoutineRun } from "./routine"
 import { applyRunnerLine, runnerById, spendKind } from "./runners"
 import {
@@ -85,8 +87,8 @@ export interface BotTurnsDeps {
 }
 
 export interface BotTurns {
-  /** Starts a turn of `bot` on `message`; false when one is already running. */
-  send: (bot: AgentFile, message: string, cwd?: string) => boolean
+  /** Starts a turn of `bot` on `message`, with the project's `files`; false when one is already running. */
+  send: (bot: AgentFile, message: string, cwd?: string, files?: readonly Attachment[]) => boolean
   /**
    * A routine's run of `bot` (B11), in its thread like any other turn, but
    * with nobody to answer: no shell, whatever the bot may do in the panel
@@ -248,6 +250,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     cwd: string | undefined,
     routine: RoutineRun | undefined,
     room?: { readonly thread: string; readonly maxCostUsd?: number },
+    files: readonly Attachment[] = [],
   ): Turn | undefined => {
     const path = bot.path
     if (turns.has(path)) return undefined
@@ -267,7 +270,9 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       const marked = routine
         ? appendMessage(rest, { role: "tool", tool: "ade", text: t("bots.routine.thread") }, Date.now())
         : rest
-      return { ...sendMessage(marked, message, Date.now()), turnMode: spendKind(runner.id, bot.model, account) }
+      // The thread says which files went with the words (design/ade-bot-2, scelta 5).
+      const shown = files.length > 0 ? `${message}\n\n${attachedLine(files)}` : message
+      return { ...sendMessage(marked, shown, Date.now()), turnMode: spendKind(runner.id, bot.model, account) }
     })
     const sessionId = deps.talkOf(thread).sessionId
     /*
@@ -282,7 +287,10 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       const { pending: _told, ...kept } = memory
       deps.memory.set(path, kept)
     }
-    const sent = preface ? `${preface}\n\n${message}` : message
+    // ragu takes the files as parts of the prompt; Claude Code and Codex by their path, under the words (`attach.ts`).
+    const ragu = runner.id === "ragu"
+    const words = ragu ? message : withFilePaths(message, files)
+    const sent = preface ? `${preface}\n\n${words}` : words
     /* The thread's messages from here on are this turn's. */
     const from = deps.talkOf(thread).messages.length
     const current = () => turns.get(path) === turn
@@ -300,6 +308,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       runner: runner.id,
       bot,
       message: sent,
+      ...(ragu && files.length > 0 ? { attachments: files } : {}),
       account,
       ...(sessionId ? { sessionId } : {}),
       ...(cwd ? { cwd } : {}),
@@ -358,8 +367,8 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     return turn
   }
 
-  const send = (bot: AgentFile, message: string, cwd?: string): boolean =>
-    begin(bot, message, cwd, undefined) !== undefined
+  const send = (bot: AgentFile, message: string, cwd?: string, files?: readonly Attachment[]): boolean =>
+    begin(bot, message, cwd, undefined, undefined, files) !== undefined
 
   /**
    * The memory tags in what the bot said this turn: taken out of its words,

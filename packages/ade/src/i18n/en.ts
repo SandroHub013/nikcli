@@ -1932,6 +1932,25 @@ export const en: Messages = {
   "bots.routine.headIdle": (count: number) =>
     count === 1 ? "1 routine, paused or suspended" : `${count} routines, all paused or suspended`,
   "bots.routine.headTip": "Open the Routines tab",
+  "bots.attach.add": "Attach files or images",
+  "bots.attach.addHint": "Attach project files or images; you can also drag them here or paste them",
+  "bots.attach.pickTitle": "Attach project files",
+  "bots.attach.list": "Attached files",
+  "bots.attach.remove": (name: string) => `Remove ${name}`,
+  "bots.attach.line": (names: string) => `Attached: ${names}`,
+  "bots.attach.forModel": "Files the user attached (paths in the project folder):",
+  "bots.attach.noProject": "Open a project to attach files: the bot only reads the project's files.",
+  "bots.attach.outside": (path: string) =>
+    `${path} is not in the project folder: I only attach the project's files. Copy it into the project, or paste the image here.`,
+  "bots.attach.env": (path: string) =>
+    `${path} is not attached: .env files usually hold keys and passwords, and an attachment reaches the model's provider.`,
+  "bots.attach.notFile": (path: string) => `${path} is not a file: I only attach files.`,
+  "bots.attach.tooMany": (max: number) => `At most ${max} attachments per message.`,
+  "bots.attach.notPicture":
+    "From outside the project I only take PNG, JPG, WebP or GIF images: for another file, copy it into the project and attach it with “+”.",
+  "bots.attach.tooBig": (megabytes: number) => `The image is over ${megabytes} MB.`,
+  "bots.attach.notSaved": (why: string) => `I could not save the image in the bot's folder: ${why}`,
+  "bots.attach.noWrite": "I cannot save images here: pasting them works in the desktop app.",
   "bots.notice.title": "Alerts",
   "bots.notice.unread": "New reply, not read yet",
   "bots.notice.mute": "Mute this bot",

@@ -697,6 +697,81 @@
   field-sizing: content;
 }
 
+/* The «+» of the composer: files of the project and pictures for the bot (design/ade-bot-2, scelta 5). */
+[data-slot="bots-attach"] {
+  flex: 0 0 auto;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-surface);
+  color: var(--ade-text-soft);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-lg);
+  line-height: 1;
+  cursor: pointer;
+}
+
+[data-slot="bots-attach"]:hover:not(:disabled) {
+  border-color: var(--ade-border-strong);
+  color: var(--ade-text);
+}
+
+[data-slot="bots-attach"]:disabled {
+  color: var(--ade-text-weak);
+  cursor: default;
+}
+
+[data-slot="bots-attach"]:focus-visible,
+[data-slot="bots-attachment-remove"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+/* What goes with the next message, over the composer. */
+[data-slot="bots-attachments"] {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: var(--ade-space-3);
+  margin: 0;
+  padding: var(--ade-space-3) var(--ade-space-8) 0;
+  list-style: none;
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="bots-attachment"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ade-space-2);
+  max-width: 100%;
+  padding: var(--ade-space-1) var(--ade-space-3);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-raised);
+}
+
+[data-slot="bots-attachment-name"] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="bots-attachment-remove"] {
+  padding: 0 var(--ade-space-1);
+  border: 0;
+  border-radius: var(--ade-radius-sm);
+  background: none;
+  color: var(--ade-text-soft);
+  font: inherit;
+  cursor: pointer;
+}
+
+[data-slot="bots-attachment-remove"]:hover {
+  color: var(--ade-text);
+}
+
 /* The composer draws the ring around the field: the global :focus-visible
    drew a second one inside it (bot-sforzo, A occhio). */
 [data-slot="bots-composer-field"]:focus {

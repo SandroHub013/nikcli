@@ -35,6 +35,19 @@ import {
 import { FACE_IMAGE_MAX_INPUT, loadFaceImage, type FaceImageDeps } from "./face-image"
 import { readAgentFile, serializeAgentFile } from "./ragu"
 import { newBotSummary } from "./page-meta"
+import {
+  attachPath,
+  BOT_ATTACH_MAX,
+  botFilesDir,
+  checkedFileParts,
+  pastedExtension,
+  pastedFileName,
+  savePasted,
+  withFilePaths,
+} from "./attach"
+import { createBotTurns } from "./controller"
+import type { Turn, TurnRequest } from "./turn"
+import type { Attachment } from "../chat/attachments"
 
 /*
  * The second page of choices (design/ade-bot-2, the user's answers of 2026-10-16). What is layout is held as rules on
@@ -426,5 +439,165 @@ describe("1. a short form to make a bot", () => {
     }
     expect(itText["bots.form.summaryCap"]("1 $")).toBe("tetto 1 $ al giorno")
     expect(itText["bots.form.summaryProject"]).toBe("nel progetto")
+  })
+})
+
+describe("5. the «+» in the composer: files and pictures for the bot", () => {
+  const root = "C:/progetto"
+  const file = (relative: string, mime = "text/plain"): Attachment => ({ path: `${root}/${relative}`, relative, mime })
+
+  test("a file of the project is attached; outside it, a .env, or one too many is refused in words", () => {
+    const before = localePreference()
+    setLocalePreference("it")
+    try {
+      const one = attachPath(root, [], "C:\\progetto\\docs\\nota.md")
+      expect(one).toEqual({ list: [file("docs/nota.md")] })
+      // Twice the same file is once.
+      expect(attachPath(root, one.list, "C:/progetto/docs/nota.md").list).toEqual(one.list)
+      expect(attachPath(root, [], "C:/progetto/foto.PNG").list[0]?.mime).toBe("image/png")
+      expect(attachPath(root, [], "C:/altrove/segreto.txt")).toEqual({
+        list: [],
+        problem: itText["bots.attach.outside"]("C:/altrove/segreto.txt"),
+      })
+      expect(attachPath(root, [], "C:/progetto/../altrove/x.txt").problem).toBeDefined()
+      expect(attachPath(root, [], "C:/progetto/.env").problem).toBe(itText["bots.attach.env"]("C:/progetto/.env"))
+      expect(attachPath(undefined, [], "C:/progetto/a.md").problem).toBe(itText["bots.attach.noProject"])
+      const full = Array.from({ length: BOT_ATTACH_MAX }, (_, index) => file(`f${index}.md`))
+      expect(attachPath(root, full, "C:/progetto/altro.md")).toEqual({
+        list: full,
+        problem: itText["bots.attach.tooMany"](BOT_ATTACH_MAX),
+      })
+    } finally {
+      setLocalePreference(before)
+    }
+  })
+
+  test("a pasted or dropped picture is kept in the bot's own folder under the project", () => {
+    expect(botFilesDir(root, "revisore-pr")).toBe("C:/progetto/.ade/bots/revisore-pr")
+    // A name that is not a plain file name still makes one folder, inside.
+    expect(botFilesDir(root, "../fuori")).toBe("C:/progetto/.ade/bots/fuori")
+    expect(pastedExtension("image/png")).toBe("png")
+    expect(pastedExtension("image/jpeg")).toBe("jpg")
+    expect(pastedExtension("image/svg+xml")).toBeUndefined()
+    expect(pastedExtension("application/pdf")).toBeUndefined()
+    expect(pastedFileName(new Date(2026, 9, 16, 14, 5, 9).getTime(), 2, "png")).toBe("img-20261016-140509-2.png")
+  })
+
+  test("saving a picture: written in the bot's folder and attached; too big, another kind, or a failed write said", async () => {
+    const before = localePreference()
+    setLocalePreference("it")
+    try {
+      const writes: string[] = []
+      const write = async (path: string, bytes: Uint8Array) => {
+        writes.push(`${path}:${bytes.length}`)
+        return null
+      }
+      const at = new Date(2026, 9, 16, 14, 5, 9).getTime()
+      const png = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: "image/png" })
+      const saved = await savePasted({ root, identifier: "alfa", file: png, at, index: 1, write })
+      expect(saved).toEqual({ file: file(".ade/bots/alfa/img-20261016-140509-1.png", "image/png") })
+      expect(writes).toEqual(["C:/progetto/.ade/bots/alfa/img-20261016-140509-1.png:4"])
+      const svg = new Blob(["<svg/>"], { type: "image/svg+xml" })
+      expect(await savePasted({ root, identifier: "alfa", file: svg, at, index: 1, write })).toEqual({
+        problem: itText["bots.attach.notPicture"],
+      })
+      const huge = { size: 50 * 1024 * 1024, type: "image/png" } as unknown as Blob
+      expect((await savePasted({ root, identifier: "alfa", file: huge, at, index: 1, write })).problem).toBe(
+        itText["bots.attach.tooBig"](10),
+      )
+      const failing = async () => "disco pieno"
+      expect((await savePasted({ root, identifier: "alfa", file: png, at, index: 1, write: failing })).problem).toBe(
+        itText["bots.attach.notSaved"]("disco pieno"),
+      )
+    } finally {
+      setLocalePreference(before)
+    }
+  })
+
+  test("Claude Code and Codex get the files by their path in the project, under the user's words", () => {
+    const text = withFilePaths("guarda questi", [file("docs/nota.md"), file("img/a.png", "image/png")])
+    expect(text.startsWith("guarda questi\n\n")).toBe(true)
+    expect(text).toContain("- docs/nota.md")
+    expect(text).toContain("- img/a.png")
+    expect(withFilePaths("ciao", [])).toBe("ciao")
+  })
+
+  test("ragu gets them as file parts, each checked again, links followed, before anything is sent", async () => {
+    const checked: string[] = []
+    const ok = await checkedFileParts(root, [file("docs/nota.md")], async (folder, path) => {
+      checked.push(`${folder}|${path}`)
+      return "ok"
+    })
+    expect(ok).toEqual({
+      parts: [{ type: "file", mime: "text/plain", url: "file:///C:/progetto/docs/nota.md", filename: "nota.md" }],
+    })
+    expect(checked).toEqual(["C:/progetto|C:/progetto/docs/nota.md"])
+    const outside = await checkedFileParts(root, [file("docs/nota.md")], async () => "outside")
+    expect("problem" in outside).toBe(true)
+    const moved = { path: "C:/altrove/x.md", relative: "x.md", mime: "text/plain" }
+    expect("problem" in (await checkedFileParts(root, [moved], async () => "ok"))).toBe(true)
+    expect(await checkedFileParts(root, [], async () => "outside")).toEqual({ parts: [] })
+  })
+
+  describe("the turn", () => {
+    const capture = () => {
+      const requests: TurnRequest[] = []
+      const talks: Record<string, import("./talk").Talk> = {}
+      const turns = createBotTurns({
+        runTurn: (request): Turn => {
+          requests.push(request)
+          return { result: new Promise(() => {}), stop: () => {} }
+        },
+        talkOf: (path) => talks[path] ?? emptyTalk(),
+        update: (path, change) => void (talks[path] = change(talks[path] ?? emptyTalk())),
+      })
+      return { turns, requests, talks }
+    }
+    const botOf = (runner: string) => ({
+      identifier: runner,
+      path: `C:/progetto/.nikcli/agent/${runner}.md`,
+      scope: "project" as const,
+      description: "",
+      mode: "primary" as const,
+      prompt: "",
+      disabledTools: [],
+      runner,
+    })
+
+    test("ragu: the words as they are and the files beside them; the thread says what went", () => {
+      const { turns, requests, talks } = capture()
+      expect(turns.send(botOf("ragu"), "guarda", root, [file("docs/nota.md")])).toBe(true)
+      expect(requests[0]?.message).toBe("guarda")
+      expect(requests[0]?.attachments).toEqual([file("docs/nota.md")])
+      const said = talks["C:/progetto/.nikcli/agent/ragu.md"]!.messages.at(-1)!
+      expect(said.role).toBe("user")
+      expect(said.text).toContain("guarda")
+      expect(said.text).toContain("nota.md")
+    })
+
+    test("Claude Code and Codex: the paths in the message, no file parts", () => {
+      for (const runner of ["claude", "codex"]) {
+        const { turns, requests } = capture()
+        turns.send(botOf(runner), "guarda", root, [file("docs/nota.md")])
+        expect(requests[0]?.message).toContain("- docs/nota.md")
+        expect(requests[0]?.attachments).toBeUndefined()
+      }
+    })
+  })
+
+  test("the composer has the «+», takes pasted and dropped files, and lists what goes with the message", () => {
+    const thread = tsx.slice(
+      tsx.indexOf("function Thread("),
+      tsx.indexOf("function LastFigures") > 0 ? tsx.indexOf("function LastFigures") : undefined,
+    )
+    expect(thread).toContain('data-slot="bots-attach"')
+    expect(thread).toContain("onPaste=")
+    expect(thread).toContain("onDrop=")
+    expect(thread).toContain('data-slot="bots-attachments"')
+    expect(thread).toContain("attachPath(props.projectRoot,")
+    expect(thread).toContain("savePasted(")
+    expect(tsx).toContain("turns.send(verdict.bot, message, props.projectRoot, files)")
+    expect(read("serve-turn.ts")).toContain("checkedFileParts(cwd, request.attachments")
+    expect(css).toContain('[data-slot="bots-attach"]')
   })
 })

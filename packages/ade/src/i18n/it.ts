@@ -1989,6 +1989,25 @@ export const it = {
   "bots.routine.headIdle": (count: number) =>
     count === 1 ? "1 routine, in pausa o sospesa" : `${count} routine, tutte in pausa o sospese`,
   "bots.routine.headTip": "Apri la scheda Routine",
+  "bots.attach.add": "Allega file o immagini",
+  "bots.attach.addHint": "Allega file del progetto o immagini; puoi anche trascinarli qui o incollarli",
+  "bots.attach.pickTitle": "Allega file del progetto",
+  "bots.attach.list": "File allegati",
+  "bots.attach.remove": (name: string) => `Togli ${name}`,
+  "bots.attach.line": (names: string) => `Allegati: ${names}`,
+  "bots.attach.forModel": "File allegati dall'utente (percorsi nella cartella del progetto):",
+  "bots.attach.noProject": "Per allegare file apri un progetto: il bot legge solo file del progetto.",
+  "bots.attach.outside": (path: string) =>
+    `${path} non è nella cartella del progetto: allego solo file del progetto. Copialo nel progetto, oppure incolla qui l'immagine.`,
+  "bots.attach.env": (path: string) =>
+    `${path} non si allega: i file .env contengono di solito chiavi e password, e un allegato arriva al fornitore del modello.`,
+  "bots.attach.notFile": (path: string) => `${path} non è un file: allego solo file.`,
+  "bots.attach.tooMany": (max: number) => `Al massimo ${max} allegati per messaggio.`,
+  "bots.attach.notPicture":
+    "Da fuori del progetto prendo solo immagini PNG, JPG, WebP o GIF: per un altro file, copialo nel progetto e allegalo con «+».",
+  "bots.attach.tooBig": (megabytes: number) => `L'immagine supera ${megabytes} MB.`,
+  "bots.attach.notSaved": (why: string) => `Non ho potuto salvare l'immagine nella cartella del bot: ${why}`,
+  "bots.attach.noWrite": "Qui non posso salvare immagini: incollarle funziona nell'app desktop.",
   "bots.notice.title": "Avvisi",
   "bots.notice.unread": "Nuova risposta, non ancora letta",
   "bots.notice.mute": "Silenzia questo bot",

@@ -61,6 +61,9 @@ import {
   type Shape,
 } from "./avatar"
 import { browserFaceImage, loadFaceImage } from "./face-image"
+import { attachPath, BOT_ATTACH_MAX, pastedExtension, savePasted, type Attachment } from "./attach"
+import { addAttachment, attachmentFor } from "../chat/attachments"
+import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
 import {
   COMMON_EFFORTS,
   OBJECTIVES_HEADING,
@@ -1019,7 +1022,7 @@ export function BotsMain(props: BotsMainProps) {
    * orchestration — the room in `room.ts` is the next step, not this one.
    */
   /** Resolves to whether the message went; one that did not goes back into the composer. */
-  const send = async (from: AgentFile, raw: string): Promise<boolean> => {
+  const send = async (from: AgentFile, raw: string, files: readonly Attachment[] = []): Promise<boolean> => {
     const text = raw.trim()
     if (text.length === 0) return false
 
@@ -1035,17 +1038,17 @@ export function BotsMain(props: BotsMainProps) {
       }
     }
 
-    return start(bot, message)
+    return start(bot, message, files)
   }
 
   /* The checks of `admitTurn`, with the user's dialog. */
-  const start = async (bot: AgentFile, message: string): Promise<boolean> => {
+  const start = async (bot: AgentFile, message: string, files: readonly Attachment[] = []): Promise<boolean> => {
     const verdict = await admitTurn(bot, props.projectRoot, askTrust)
     if (!verdict.ok) {
       if (verdict.problem) updateTalk(bot.path, (talk) => applyProblem(talk, verdict.problem!, Date.now()))
       return false
     }
-    return turns.send(verdict.bot, message, props.projectRoot)
+    return turns.send(verdict.bot, message, props.projectRoot, files)
   }
 
   const answer = (bot: AgentFile, choice: PermissionAnswer, requestID: string | undefined) =>
@@ -1119,7 +1122,8 @@ export function BotsMain(props: BotsMainProps) {
                 talk={talkOf(bot().path)}
                 others={identifiers().filter((name) => name !== bot().identifier)}
                 expression={expression(bot())}
-                onSend={(text) => send(bot(), text)}
+                projectRoot={props.projectRoot}
+                onSend={(text, files) => send(bot(), text, files)}
                 onAnswer={(choice, requestID) => answer(bot(), choice, requestID)}
                 onGrant={() => turns.grant(bot())}
                 onStop={() => stop(bot())}
@@ -1326,8 +1330,10 @@ function Thread(props: {
   talk: Talk
   others: readonly string[]
   expression: Expression
-  /** Whether the message went: one that did not comes back into the composer. */
-  onSend: (text: string) => boolean | Promise<boolean>
+  /** The open project: where attached files come from, and where a pasted picture is kept. */
+  projectRoot?: string | undefined
+  /** Whether the message went: one that did not comes back into the composer, with its files. */
+  onSend: (text: string, files: readonly Attachment[]) => boolean | Promise<boolean>
   /** With the id of the question the card shows (B8d review, M1). */
   onAnswer: (choice: PermissionAnswer, requestID: string | undefined) => void
   /** «Sempre per questo bot» on a command Claude Code was refused (B8c). */
@@ -1356,11 +1362,17 @@ function Thread(props: {
     ),
   )
 
+  // Files and pictures that go with the next message (design/ade-bot-2, scelta 5; `attach.ts`).
+  const [attachments, setAttachments] = createSignal<readonly Attachment[]>([])
+  const [attachProblem, setAttachProblem] = createSignal<string>()
+
   createEffect(
     on(
       () => props.bot.path,
       () => {
         setDraft("")
+        setAttachments([])
+        setAttachProblem(undefined)
         field?.focus()
       },
     ),
@@ -1371,7 +1383,84 @@ function Thread(props: {
   const submit = () => {
     const text = draft()
     if (text.trim().length === 0 || busy()) return
-    void submitDraft(text, props.onSend, { get: draft, set: setDraft })
+    const files = attachments()
+    setAttachments([])
+    setAttachProblem(undefined)
+    void submitDraft(
+      text,
+      async (words) => {
+        const sent = await props.onSend(words, files)
+        // A message that did not go keeps its files, as it keeps its words.
+        if (!sent && attachments().length === 0) setAttachments(files)
+        return sent
+      },
+      { get: draft, set: setDraft },
+    )
+  }
+
+  /** Files of the project, picked or dragged: each added, or why not. */
+  const addPaths = (paths: readonly string[]) => {
+    let list: readonly Attachment[] = attachments()
+    let problem: string | undefined
+    for (const path of paths) {
+      const next = attachPath(props.projectRoot, list, path)
+      list = next.list
+      if (next.problem) problem = next.problem
+    }
+    setAttachments(list)
+    setAttachProblem(problem)
+  }
+
+  /** Pictures with no file in the project, pasted or dragged from elsewhere: kept in the bot's folder, then attached. */
+  const addPictures = async (pictures: readonly File[]) => {
+    const root = props.projectRoot
+    if (!root) return void setAttachProblem(t("bots.attach.noProject"))
+    const write = (await getHost())?.writeBytes
+    if (!write) return void setAttachProblem(t("bots.attach.noWrite"))
+    const at = Date.now()
+    let problem: string | undefined
+    for (const [index, file] of pictures.entries()) {
+      if (attachments().length >= BOT_ATTACH_MAX) {
+        problem = t("bots.attach.tooMany", BOT_ATTACH_MAX)
+        break
+      }
+      const saved = await savePasted({ root, identifier: props.bot.identifier, file, at, index: index + 1, write })
+      if (saved.problem !== undefined) problem = saved.problem
+      else setAttachments((list) => addAttachment(list, saved.file))
+    }
+    setAttachProblem(problem)
+  }
+
+  /** The «+»: the system's dialog, opened in the project, as the Chat's. */
+  const pickFiles = async () => {
+    const root = props.projectRoot
+    if (!root) return void setAttachProblem(t("bots.attach.noProject"))
+    let picked: string | string[] | null = null
+    try {
+      const dialog = await import("@tauri-apps/plugin-dialog")
+      picked = await dialog.open({
+        multiple: true,
+        directory: false,
+        defaultPath: root,
+        title: t("bots.attach.pickTitle"),
+      })
+    } catch {
+      return
+    }
+    if (picked !== null) addPaths(Array.isArray(picked) ? picked : [picked])
+    field?.focus()
+  }
+
+  /** A drop: files of the project by their path; pictures from elsewhere copied into the bot's folder. */
+  const dropFiles = (data: DataTransfer) => {
+    const root = props.projectRoot
+    const paths = readDraggedPaths(data)
+    const pictures = Array.from(data.files).filter((file) => pastedExtension(file.type) !== undefined)
+    const inside = root ? paths.filter((path) => attachmentFor(root, path) !== undefined) : []
+    if (paths.length > 0 && inside.length === paths.length) addPaths(paths)
+    else if (pictures.length > 0) void addPictures(pictures)
+    else if (paths.length > 0) addPaths(paths)
+    else setAttachProblem(t("bots.attach.notPicture"))
   }
 
   const subagent = () => props.bot.mode === "subagent"
@@ -1574,11 +1663,48 @@ function Thread(props: {
 
       <Show when={chipProblem()}>{(text) => <p data-slot="bots-problem">{text()}</p>}</Show>
 
+      <Show when={attachments().length > 0}>
+        <ul data-slot="bots-attachments" aria-label={t("bots.attach.list")}>
+          <For each={attachments()}>
+            {(file) => {
+              const name = file.relative.split("/").at(-1) ?? file.relative
+              return (
+                <li data-slot="bots-attachment" title={file.relative}>
+                  <span data-slot="bots-attachment-name">{name}</span>
+                  <button
+                    type="button"
+                    data-slot="bots-attachment-remove"
+                    aria-label={t("bots.attach.remove", name)}
+                    title={t("bots.attach.remove", name)}
+                    onClick={() => setAttachments((list) => list.filter((item) => item.path !== file.path))}
+                  >
+                    ×
+                  </button>
+                </li>
+              )
+            }}
+          </For>
+        </ul>
+      </Show>
+      <Show when={attachProblem()}>{(text) => <p data-slot="bots-problem">{text()}</p>}</Show>
+
       <form
         data-slot="bots-composer"
         onSubmit={(event) => {
           event.preventDefault()
           submit()
+        }}
+        onDragOver={(event) => {
+          const data = event.dataTransfer
+          if (!data || !(dragCarriesPaths(data) || data.types.includes("Files"))) return
+          event.preventDefault()
+          data.dropEffect = "copy"
+        }}
+        onDrop={(event) => {
+          const data = event.dataTransfer
+          if (!data || !(dragCarriesPaths(data) || data.files.length > 0)) return
+          event.preventDefault()
+          dropFiles(data)
         }}
       >
         <textarea
@@ -1593,6 +1719,15 @@ function Thread(props: {
               : t("bots.composer.placeholder", props.bot.identifier)
           }
           onInput={(event) => setDraft(event.currentTarget.value)}
+          onPaste={(event) => {
+            const data = event.clipboardData
+            if (!data) return
+            const pictures = Array.from(data.files).filter((file) => pastedExtension(file.type) !== undefined)
+            // Words copied with a picture (a page, a document) still paste as words.
+            if (pictures.length === 0 || data.types.includes("text/plain")) return
+            event.preventDefault()
+            void addPictures(pictures)
+          }}
           onKeyDown={(event) => {
             // Enter sends, Shift+Enter breaks the line: what every messenger does.
             if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
@@ -1603,6 +1738,16 @@ function Thread(props: {
         />
         {/* Under the text, in the same box: the bot's model and effort, then Invia (as the Chat's). */}
         <div data-slot="bots-composer-row">
+          <button
+            type="button"
+            data-slot="bots-attach"
+            aria-label={t("bots.attach.add")}
+            title={props.projectRoot ? t("bots.attach.addHint") : t("bots.attach.noProject")}
+            disabled={!props.projectRoot}
+            onClick={() => void pickFiles()}
+          >
+            +
+          </button>
           <Show
             when={runner().id === "ragu"}
             fallback={
