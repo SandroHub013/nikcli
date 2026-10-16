@@ -1946,7 +1946,7 @@ export const it = {
   "bots.routine.cap": (text: string) => `Tetto di questo modo: ${text}.`,
   "bots.routine.cap.perDay": (runs: number) => `${runs} esecuzioni al giorno per tutte le routine insieme`,
   "bots.routine.cap.gap": (minutes: number) => `almeno ${minutes} minuti tra due esecuzioni della stessa routine`,
-  "bots.routine.cap.money": (run: number, day: number) => `al massimo ${run} $ per esecuzione e ${day} $ al giorno`,
+  "bots.routine.cap.money": (run: string, day: string) => `al massimo ${run} per esecuzione e ${day} al giorno`,
   "bots.routine.consent": (runner: string, mode: string, model: string) =>
     `Acconsento: questa routine gira da sola con ${runner} (${mode}, ${model}), senza shell, solo mentre ADE è aperta ed entro il tetto qui sopra.`,
   "bots.routine.consentReadOnly": (runner: string, mode: string, model: string) =>
@@ -1986,8 +1986,8 @@ export const it = {
   "bots.routine.problem.every": "Scegli ogni quante ore (da 1 a 168) o un orario.",
   "bots.routine.problem.gap": (minutes: number) => `Tra due esecuzioni servono almeno ${minutes} minuti.`,
   "bots.routine.problem.spendRequired": "Con questo modo serve un tetto di spesa, per esecuzione e al giorno.",
-  "bots.routine.problem.perRun": (max: number) => `Il tetto per esecuzione arriva al massimo a ${max} $.`,
-  "bots.routine.problem.perDay": (max: number) => `Il tetto al giorno arriva al massimo a ${max} $.`,
+  "bots.routine.problem.perRun": (max: string) => `Il tetto per esecuzione arriva al massimo a ${max}.`,
+  "bots.routine.problem.perDay": (max: string) => `Il tetto al giorno arriva al massimo a ${max}.`,
   "bots.routine.problem.runOverDay": "Il tetto per esecuzione non può superare quello al giorno.",
   "bots.routine.suspended.noBot": "Il file del bot non c'è più.",
   "bots.routine.suspended.consent":

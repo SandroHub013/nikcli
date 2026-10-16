@@ -49,6 +49,19 @@ const start = (m: ReturnType<typeof machine>, timeoutMs?: number) => {
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5))
 
 describe("runTurn", () => {
+  /* D32: the dollars of a turn stopped past its cap, as the language of ADE writes them (Italian in the tests). */
+  test("a turn past its cap says what it spent and the cap in the language of ADE", async () => {
+    const m = machine()
+    const turn = runTurn({ runner: "claude", message: "ciao", maxCostUsd: 0.01 }, m.deps)
+    open.push(turn)
+    await tick()
+    m.say(
+      '{"type":"result","subtype":"success","is_error":false,"result":"ok","session_id":"s","total_cost_usd":0.0234}',
+    )
+    const result = await turn.result
+    expect(result.problem).toBe(t("bots.turn.overBudget", "Claude Code", "0,02 $", "0,01 $"))
+  })
+
   test("a turn that runs past its time is stopped with its children and says so", async () => {
     const m = machine()
     const result = await start(m, 30).result

@@ -1890,7 +1890,7 @@ export const en: Messages = {
   "bots.routine.cap": (text: string) => `This mode's cap: ${text}.`,
   "bots.routine.cap.perDay": (runs: number) => `${runs} runs a day for all routines together`,
   "bots.routine.cap.gap": (minutes: number) => `at least ${minutes} minutes between two runs of the same routine`,
-  "bots.routine.cap.money": (run: number, day: number) => `at most ${run} $ per run and ${day} $ a day`,
+  "bots.routine.cap.money": (run: string, day: string) => `at most ${run} per run and ${day} a day`,
   "bots.routine.consent": (runner: string, mode: string, model: string) =>
     `I agree: this routine runs on its own with ${runner} (${mode}, ${model}), without a shell, only while ADE is open and within the cap above.`,
   "bots.routine.consentReadOnly": (runner: string, mode: string, model: string) =>
@@ -1929,8 +1929,8 @@ export const en: Messages = {
   "bots.routine.problem.every": "Choose every how many hours (1 to 168) or a time.",
   "bots.routine.problem.gap": (minutes: number) => `Two runs need at least ${minutes} minutes between them.`,
   "bots.routine.problem.spendRequired": "This mode needs a spending cap, per run and per day.",
-  "bots.routine.problem.perRun": (max: number) => `The cap per run goes up to ${max} $.`,
-  "bots.routine.problem.perDay": (max: number) => `The cap per day goes up to ${max} $.`,
+  "bots.routine.problem.perRun": (max: string) => `The cap per run goes up to ${max}.`,
+  "bots.routine.problem.perDay": (max: string) => `The cap per day goes up to ${max}.`,
   "bots.routine.problem.runOverDay": "The cap per run cannot exceed the one per day.",
   "bots.routine.suspended.noBot": "The bot's file is gone.",
   "bots.routine.suspended.consent": "The model, mode, key, prompt, schedule or cap changed: give your consent again.",

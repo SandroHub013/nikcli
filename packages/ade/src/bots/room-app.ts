@@ -11,6 +11,7 @@
 
 import { t } from "../i18n"
 import type { BotTurns } from "./controller"
+import { formatCap } from "./format"
 import { takeMemoryOps } from "./memory"
 import type { AgentFile } from "./ragu"
 import {
@@ -190,7 +191,7 @@ export function payNote(pay: RoomPay): string {
 export function endNote(end: RoomEnd, perRoundUsd?: number): string | undefined {
   if (end === "rounds") return t("bots.room.end.rounds")
   if (end === "messages") return t("bots.room.end.messages")
-  if (end === "budget") return t("bots.room.end.budget", `${(perRoundUsd ?? 0).toFixed(2)} $`)
+  if (end === "budget") return t("bots.room.end.budget", formatCap(perRoundUsd ?? 0))
   return undefined
 }
 

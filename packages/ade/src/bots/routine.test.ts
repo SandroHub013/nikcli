@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { AgentFile } from "./ragu"
-import { runRoutine } from "./routine"
+import { localePreference, setLocalePreference } from "../i18n/locale"
+import { describeCap, formatNext, routineProblem, runRoutine } from "./routine"
 import { routineConsentHash, routineConsentHolds, routineModeOf, routinePolicy, ROUTINE_POLICY } from "./terms"
 import type { TurnDeps } from "./turn"
 
@@ -153,5 +154,35 @@ describe("una routine parte come gli altri spawn", () => {
     } finally {
       root.document = before
     }
+  })
+})
+
+/* D32: the routines' numbers, dollars and hours as the language of ADE writes them (`format.ts`). */
+describe("i numeri delle routine nella lingua di ADE", () => {
+  const offer = {
+    mode: "key" as const,
+    allowed: true,
+    cap: { spendCapRequired: true, perRunUsd: 0.5, perDayUsd: 2 },
+  }
+
+  test("i tetti in dollari con la virgola e il dollaro dopo, in italiano", () => {
+    expect(describeCap({ perRunUsd: 0.1, perDayUsd: 1 })).toContain("0,10 $ per esecuzione e 1,00 $ al giorno")
+    const draft = { prompt: "fai il punto", every: { kind: "hours" as const, hours: 2 } }
+    expect(routineProblem({ ...draft, spend: { perRunUsd: 0.6, perDayUsd: 1 } }, offer)).toContain("0,50 $")
+    expect(routineProblem({ ...draft, spend: { perRunUsd: 0.1, perDayUsd: 3 } }, offer)).toContain("2,00 $")
+  })
+
+  test("in inglese il dollaro davanti, e l'ora della prossima esecuzione come la scrive l'inglese", () => {
+    const before = localePreference()
+    setLocalePreference("en")
+    try {
+      expect(describeCap({ perRunUsd: 0.1, perDayUsd: 1 })).toContain("$0.10")
+      const now = new Date(2026, 9, 16, 9, 0).getTime()
+      expect(formatNext(new Date(2026, 9, 16, 14, 5).getTime(), now)).toBe("02:05 PM")
+    } finally {
+      setLocalePreference(before)
+    }
+    const now = new Date(2026, 9, 16, 9, 0).getTime()
+    expect(formatNext(new Date(2026, 9, 16, 14, 5).getTime(), now)).toBe("14:05")
   })
 })

@@ -27,6 +27,7 @@ import { t } from "../i18n"
 import { acquireTurn, scrubSecrets } from "./terms"
 import type { BotAccount } from "./account"
 import { codexVersion } from "./codex-version"
+import { formatCap, formatUsd } from "./format"
 import type { AgentFile } from "./ragu"
 import {
   applyRunnerLine,
@@ -458,8 +459,13 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
         return finish("error", problem)
       }
       if (overBudget) {
-        const usd = (value: number) => `${value.toFixed(2)} $`
-        const problem = t("bots.turn.overBudget", runner.label, usd(talk.costUsd), usd(request.maxCostUsd ?? 0))
+        // In the language of ADE (D32): what it spent, then the cap.
+        const problem = t(
+          "bots.turn.overBudget",
+          runner.label,
+          formatUsd(talk.costUsd),
+          formatCap(request.maxCostUsd ?? 0),
+        )
         update(applyProblem(talk, problem, Date.now()))
         return finish("error", problem)
       }
