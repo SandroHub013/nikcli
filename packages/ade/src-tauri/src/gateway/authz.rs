@@ -11,11 +11,18 @@
 //! 5 wrong codes typed in ADE lock approvals for an hour. Everything here is
 //! saved with the link, so a restart forgets none of it.
 //!
-//! Codes go out only while pairing is open: until the first account is
-//! paired, and after that for 10 minutes each time the user asks for it in
-//! ADE. The bots answer only the user's own accounts (D92), so once one is in,
-//! a stranger writing gets silence rather than a code — no requests to wade
-//! through, and nothing that says the bot is there.
+//! Codes go out only while pairing is open: for two hours from the first
+//! stranger's message while nobody is paired, and after that for 10 minutes
+//! each time the user asks for it in ADE (S12). The bots answer only the
+//! user's own accounts (D92), so once one is in, a stranger writing gets
+//! silence rather than a code — no requests to wade through, and nothing that
+//! says the bot is there.
+//!
+//! Hygiene (S12): an account the user refused gets no code for a day; a
+//! request whose code could not be sent is taken back (`undo`); when the
+//! waiting requests are all taken, a new one replaces the oldest instead of
+//! shutting the owner out, so a handful of throwaway accounts cannot hold
+//! every place.
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -24,7 +31,13 @@ const ALPHABET: &[u8; 32] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 pub const CODE_LEN: usize = 8;
 pub const CODE_TTL_MS: u64 = 60 * 60 * 1000;
 pub const REQUEST_EVERY_MS: u64 = 10 * 60 * 1000;
-pub const MAX_PENDING: usize = 3;
+pub const MAX_PENDING: usize = 5;
+/// While nobody is paired, how long pairing stays open from the first stranger's message.
+pub const FIRST_WINDOW_MS: u64 = 2 * 60 * 60 * 1000;
+/// How long an account the user refused gets no code, counted from its request.
+pub const REJECT_BLOCK_MS: u64 = 24 * 60 * 60 * 1000;
+/// How many refused accounts are remembered: the oldest go first.
+const MAX_REJECTED: usize = 100;
 pub const MAX_FAILURES: u32 = 5;
 pub const LOCKOUT_MS: u64 = 60 * 60 * 1000;
 /// How long pairing stays open when the user opens it from ADE.
@@ -49,6 +62,19 @@ pub struct Pairing {
     /// Until when the user opened pairing from ADE, with someone already paired.
     #[serde(default)]
     pub open_until_ms: Option<u64>,
+    /// When the first stranger wrote with nobody paired: the first window runs from here.
+    #[serde(default)]
+    pub first_since_ms: Option<u64>,
+    /// Accounts the user refused, who get no code until `until_ms`.
+    #[serde(default)]
+    pub rejected: Vec<Rejected>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Rejected {
+    pub sender: String,
+    pub until_ms: u64,
 }
 
 /// A request waiting for the user. Holds the code's hash, never the code.
@@ -146,6 +172,7 @@ impl Pairing {
     pub fn prune(&mut self, now: u64) {
         self.pending.retain(|pending| pending.expires_ms > now);
         self.asked.retain(|asked| asked.at_ms + REQUEST_EVERY_MS > now);
+        self.rejected.retain(|rejected| rejected.until_ms > now);
         if self.locked_until_ms.is_some_and(|until| until <= now) {
             self.locked_until_ms = None;
         }
@@ -154,10 +181,11 @@ impl Pairing {
         }
     }
 
-    /// Whether a stranger writing gets a code: always while nobody is paired,
-    /// otherwise only while the user has pairing open.
+    /// Whether a stranger writing gets a code: with nobody paired, for two hours
+    /// from the first one's message; always while the user has pairing open.
     pub fn is_open(&self, anyone_paired: bool, now: u64) -> bool {
-        !anyone_paired || self.open_until_ms.is_some_and(|until| until > now)
+        let first = !anyone_paired && self.first_since_ms.is_none_or(|since| now < since + FIRST_WINDOW_MS);
+        first || self.open_until_ms.is_some_and(|until| until > now)
     }
 
     /// The user asked, from ADE, to pair one more account.
@@ -176,14 +204,20 @@ impl Pairing {
     /// replaces their previous one.
     pub fn request(&mut self, sender: &str, name: &str, chat: &str, anyone_paired: bool, now: u64, random: Random) -> Result<Request, String> {
         self.prune(now);
+        if !anyone_paired && self.first_since_ms.is_none() {
+            self.first_since_ms = Some(now);
+        }
         if !self.is_open(anyone_paired, now) {
+            return Ok(Request::Closed);
+        }
+        // The user refused this account: silence, as for any stranger with pairing shut.
+        if self.rejected.iter().any(|rejected| rejected.sender == sender) {
             return Ok(Request::Closed);
         }
         if self.asked.iter().any(|asked| asked.sender == sender) {
             return Ok(Request::Waiting);
         }
-        let others = self.pending.iter().filter(|pending| pending.sender != sender).count();
-        if self.locked(now) || others >= MAX_PENDING {
+        if self.locked(now) {
             return Ok(Request::Closed);
         }
         let mut bytes = [0u8; CODE_LEN + 16 + 16];
@@ -202,6 +236,14 @@ impl Pairing {
             expires_ms: now + CODE_TTL_MS,
         };
         self.pending.retain(|old| old.sender != sender);
+        // All the places taken: the oldest request goes, so throwaway accounts cannot shut the owner out.
+        while self.pending.len() >= MAX_PENDING {
+            let oldest = self.pending.iter().enumerate().min_by_key(|(_, pending)| pending.created_ms).map(|(index, _)| index);
+            match oldest {
+                Some(index) => self.pending.remove(index),
+                None => break,
+            };
+        }
         self.pending.push(pending.clone());
         self.asked.push(Asked { sender: sender.to_string(), at_ms: now });
         Ok(Request::Code { code, pending })
@@ -245,14 +287,30 @@ impl Pairing {
         }
     }
 
-    /// The user refused a request from the panel. Not a wrong code: nothing counts.
+    /// The user refused a request from the panel. Not a wrong code: nothing
+    /// counts. The account gets no new code for a day from its request (S12).
     pub fn reject(&mut self, request: &str) -> Result<Pending, String> {
         let index = self
             .pending
             .iter()
             .position(|pending| pending.request == request)
             .ok_or_else(|| "questa richiesta di abbinamento non c'è più".to_string())?;
-        Ok(self.pending.remove(index))
+        let pending = self.pending.remove(index);
+        self.rejected.retain(|rejected| rejected.sender != pending.sender);
+        self.rejected.push(Rejected { sender: pending.sender.clone(), until_ms: pending.created_ms + REJECT_BLOCK_MS });
+        while self.rejected.len() > MAX_REJECTED {
+            self.rejected.remove(0);
+        }
+        Ok(pending)
+    }
+
+    /// The code of `request` could not be sent: the request is taken back as if
+    /// it had not been made, and its sender may write again at once (S12).
+    pub fn undo(&mut self, request: &str) {
+        if let Some(index) = self.pending.iter().position(|pending| pending.request == request) {
+            let pending = self.pending.remove(index);
+            self.asked.retain(|asked| asked.sender != pending.sender);
+        }
     }
 
     pub fn attempts_left(&self, now: u64) -> u32 {
@@ -272,6 +330,8 @@ mod tests {
     fn counter() -> impl FnMut(&mut [u8]) -> Result<(), String> {
         let mut next = 0u8;
         move |buffer: &mut [u8]| {
+            // One more per call, so no two requests of a test draw the same code.
+            next = next.wrapping_add(1);
             for byte in buffer.iter_mut() {
                 *byte = next;
                 next = next.wrapping_add(7);
@@ -321,7 +381,7 @@ mod tests {
     }
 
     #[test]
-    fn one_code_every_ten_minutes_and_at_most_three_waiting() {
+    fn one_code_every_ten_minutes_and_at_most_five_waiting() {
         let mut random = counter();
         let mut pairing = Pairing::default();
         let (first, _) = code_of(pairing.request("42", "Ale", "c42", false, 0, &mut random).unwrap());
@@ -330,10 +390,10 @@ mod tests {
         let (second, _) = code_of(pairing.request("42", "Ale", "c42", false, REQUEST_EVERY_MS, &mut random).unwrap());
         assert_eq!(pairing.pending.len(), 1);
         assert!(pairing.approve(&first, REQUEST_EVERY_MS + 1).is_err());
-        code_of(pairing.request("2", "B", "c2", false, REQUEST_EVERY_MS, &mut random).unwrap());
-        code_of(pairing.request("3", "C", "c3", false, REQUEST_EVERY_MS, &mut random).unwrap());
-        assert_eq!(pairing.request("4", "D", "c4", false, REQUEST_EVERY_MS, &mut random).unwrap(), Request::Closed);
-        assert_eq!(pairing.pending.len(), 3);
+        for other in ["2", "3", "4", "5"] {
+            code_of(pairing.request(other, "B", "c", false, REQUEST_EVERY_MS, &mut random).unwrap());
+        }
+        assert_eq!(pairing.pending.len(), MAX_PENDING);
         assert_eq!(pairing.approve(&second, REQUEST_EVERY_MS + 2).unwrap().sender, "42");
     }
 
@@ -406,5 +466,98 @@ mod tests {
         pairing.open(10);
         assert_eq!(pairing.request("8", "C", "c8", true, 10 + OPEN_MS, &mut random).unwrap(), Request::Closed);
         assert_eq!(pairing.open_until_ms, None);
+    }
+
+    #[test]
+    fn the_window_before_the_first_pairing_closes_two_hours_after_the_first_stranger() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        // Nobody wrote yet: the panel still shows it open, whatever the time.
+        assert!(pairing.is_open(false, 5 * FIRST_WINDOW_MS));
+        code_of(pairing.request("42", "Ale", "c42", false, 1_000, &mut random).unwrap());
+        assert_eq!(pairing.first_since_ms, Some(1_000));
+        // Within the hour another stranger still gets a code.
+        code_of(pairing.request("7", "B", "c7", false, 1_000 + FIRST_WINDOW_MS - 1, &mut random).unwrap());
+        // After it, silence — for the one who had a code too, once the ten minutes passed.
+        let late = 1_000 + FIRST_WINDOW_MS;
+        assert!(!pairing.is_open(false, late));
+        assert_eq!(pairing.request("9", "C", "c9", false, late, &mut random).unwrap(), Request::Closed);
+        assert_eq!(pairing.request("42", "Ale", "c42", false, late + REQUEST_EVERY_MS, &mut random).unwrap(), Request::Closed);
+        // The user opens it from ADE: codes go out again for ten minutes.
+        pairing.open(late + REQUEST_EVERY_MS + 1);
+        code_of(pairing.request("9", "C", "c9", false, late + REQUEST_EVERY_MS + 2, &mut random).unwrap());
+    }
+
+    #[test]
+    fn an_account_the_user_refused_gets_no_new_code_for_a_day() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        let (_, pending) = code_of(pairing.request("42", "Spam", "c42", false, 0, &mut random).unwrap());
+        pairing.reject(&pending.request).unwrap();
+        // Past the ten minutes that used to let it ask again: still nothing.
+        assert_eq!(pairing.request("42", "Spam", "c42", false, REQUEST_EVERY_MS, &mut random).unwrap(), Request::Closed);
+        // Pairing opened by the user a day later still leaves it out, to the last millisecond.
+        pairing.open(REJECT_BLOCK_MS - 100);
+        assert_eq!(pairing.request("42", "Spam", "c42", false, REJECT_BLOCK_MS - 1, &mut random).unwrap(), Request::Closed);
+        // Someone else is not affected.
+        code_of(pairing.request("7", "B", "c7", false, REQUEST_EVERY_MS, &mut random).unwrap());
+        // The block is saved with the link and ends by itself.
+        let saved: Pairing = serde_json::from_str(&serde_json::to_string(&pairing).unwrap()).unwrap();
+        assert_eq!(saved.rejected.len(), 1);
+        pairing.open(REJECT_BLOCK_MS);
+        code_of(pairing.request("42", "Spam", "c42", false, REJECT_BLOCK_MS + 1, &mut random).unwrap());
+        assert!(pairing.rejected.is_empty());
+    }
+
+    #[test]
+    fn the_refused_are_remembered_up_to_a_limit() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        for index in 0..(MAX_REJECTED + 5) {
+            let sender = format!("s{index}");
+            let (_, pending) = code_of(pairing.request(&sender, "x", "c", false, index as u64, &mut random).unwrap());
+            pairing.reject(&pending.request).unwrap();
+        }
+        assert_eq!(pairing.rejected.len(), MAX_REJECTED);
+        assert_eq!(pairing.rejected.first().unwrap().sender, "s5");
+    }
+
+    #[test]
+    fn a_request_whose_code_could_not_be_sent_is_taken_back() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        let (code, pending) = code_of(pairing.request("42", "Ale", "c42", false, 0, &mut random).unwrap());
+        pairing.undo(&pending.request);
+        assert!(pairing.pending.is_empty());
+        assert!(pairing.approve(&code, 1).is_err());
+        // The sender may write again at once, and nothing else was touched.
+        code_of(pairing.request("42", "Ale", "c42", false, 2, &mut random).unwrap());
+        pairing.undo("sconosciuta");
+        assert_eq!(pairing.pending.len(), 1);
+    }
+
+    #[test]
+    fn throwaway_accounts_cannot_take_every_place_from_the_owner() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        let (owner_code, _) = code_of(pairing.request("owner", "Ale", "c0", false, 0, &mut random).unwrap());
+        // Four more fill the places; a fifth stranger replaces the oldest instead of being shut out.
+        for index in 1..=MAX_PENDING {
+            code_of(pairing.request(&format!("t{index}"), "x", "c", false, index as u64, &mut random).unwrap());
+        }
+        assert_eq!(pairing.pending.len(), MAX_PENDING);
+        assert!(pairing.pending.iter().all(|pending| pending.sender != "owner"));
+        assert!(pairing.approve(&owner_code, 100).is_err());
+        // The owner, asking again after ten minutes, gets a place like anyone.
+        let (again, _) = code_of(pairing.request("owner", "Ale", "c0", false, REQUEST_EVERY_MS + 10, &mut random).unwrap());
+        assert_eq!(pairing.approve(&again, REQUEST_EVERY_MS + 11).unwrap().sender, "owner");
+    }
+
+    #[test]
+    fn a_state_saved_before_this_loads_with_the_new_fields_empty() {
+        let old = r#"{"pending":[],"asked":[],"failures":0}"#;
+        let pairing: Pairing = serde_json::from_str(old).unwrap();
+        assert_eq!(pairing.first_since_ms, None);
+        assert!(pairing.rejected.is_empty());
     }
 }
