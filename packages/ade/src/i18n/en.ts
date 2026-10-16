@@ -755,9 +755,9 @@ export const en: Messages = {
   "shots.noFolder": "No screenshots folder on this computer",
   "browser.adeOrigin": "That address is ADE itself; it isn't opened in the pane.",
   "bots.trust.new": (name, can) =>
-    `The bot «${name}» comes from this project (from the project's bots folder): its instructions were written by whoever wrote the repository, and it will run on your account. ${can} Use it?`,
+    `The bot “${name}” comes from this project (from the project's bots folder): its instructions were written by whoever wrote the repository, and it will run on your account. ${can} Use it?`,
   "bots.trust.changed": (name, can) =>
-    `The file of this project's bot «${name}» changed since you approved it: the new instructions were written by whoever changed the repository. ${can} Use it as it is now?`,
+    `The file of this project's bot “${name}” changed since you approved it: the new instructions were written by whoever changed the repository. ${can} Use it as it is now?`,
   "bots.trust.can.codex":
     "It runs read-only: it can read the project's files and run commands that write nothing, but not change files.",
   "bots.trust.can.claude":
@@ -765,7 +765,7 @@ export const en: Messages = {
   "bots.trust.can.claudeReadOnly": "It cannot run commands or change files: it can only read the project.",
   "bots.trust.can.ragu": "It can do what your Ragu Code configuration allows: the bot's file cannot grant itself more.",
   "bots.trust.selfApproves": (name, what, line) =>
-    `This project's bot «${name}» grants itself «${what}» in its file, with the line «${line}», and Ragu Code would run it without asking: not started. Remove that line from the file, or copy the bot to your own.`,
+    `This project's bot “${name}” grants itself “${what}” in its file, with the line “${line}”, and Ragu Code would run it without asking: not started. Remove that line from the file, or copy the bot to your own.`,
   "bots.projectTrust.new": (root, files) =>
     `The folder ${root} has a Ragu Code configuration of its own (${files}): plugins, tools and settings Ragu Code loads and runs on every turn, on your account, written by whoever wrote the project. Load them? If not, bots on Ragu Code do not start here; bots on Claude Code and Codex do, since they do not read it.`,
   "bots.projectTrust.changed": (root, files) =>
@@ -775,10 +775,10 @@ export const en: Messages = {
     `Bots on Ragu Code do not start in ${root} until you accept the project's Ragu Code configuration. Bots on Claude Code and Codex do not read it.`,
   "bots.ask.yes": "Yes",
   "bots.ask.no": "No",
-  "bots.ask.failed": (name) => `ADE could not ask you about this project's bot «${name}»: not started.`,
+  "bots.ask.failed": (name) => `ADE could not ask you about this project's bot “${name}”: not started.`,
   "bots.projectTrust.failed": (root) =>
     `ADE could not ask you about the Ragu Code configuration of ${root}: bots on Ragu Code do not start here.`,
-  "bots.trust.unreadable": (name) => `Can't read the file of the bot «${name}»: not started.`,
+  "bots.trust.unreadable": (name) => `Can't read the file of the bot “${name}”: not started.`,
   // A bot's gateway, in the chat it answers (G4): what the bot says there on its own.
   "gateway.recoveredNotice":
     "[Recovered message: received while ADE was closed or restarting (may be a duplicate).]",
@@ -794,39 +794,39 @@ export const en: Messages = {
   "gateway.limit": (count) =>
     `More than ${count} messages in an hour: I'll stay quiet for a while, so a loop of messages doesn't spend your plan. Try again later.`,
   "gateway.retrust": (name) =>
-    `The bot «${name}» or its project's configuration changed since you approved them: open ADE on the computer, approve them again, then write to me.`,
+    `The bot “${name}” or its project's configuration changed since you approved them: open ADE on the computer, approve them again, then write to me.`,
   "gateway.noProject": "This messaging app has no project: in ADE switch it off and on again, choosing one.",
   "gateway.channelIsPublic": (name) =>
-    `In the «${name}» channel everyone who is in it reads the answer, even though only the owner's command runs it. In a private chat only the person who wrote reads it.`,
+    `In the “${name}” channel everyone who is in it reads the answer, even though only the owner's command runs it. In a private chat only the person who wrote reads it.`,
   "gateway.noProxy":
     "On Discord the bot holds a connection open, and the client that speaks it cannot go through a proxy: if this computer only reaches the internet through a proxy, the Discord bot will not get there. Telegram has no such problem.",
   "gateway.ownerOnly": (runner) => `This bot runs on ${runner} with the owner's account: it answers the owner only.`,
   "gateway.empty": "The turn ended without an answer.",
   "gateway.failed": "The turn did not work. The detail is in ADE.",
   "gateway.selfGrant": (name, what) =>
-    `The bot «${name}» grants itself «${what}» in its file, and from a chat that permission cannot be taken away: not started from here. Remove it from the file to use the bot from your phone.`,
+    `The bot “${name}” grants itself “${what}” in its file, and from a chat that permission cannot be taken away: not started from here. Remove it from the file to use the bot from your phone.`,
   "gateway.configGrant": (name, key, file) =>
-    `This project's ${file} grants the bot «${name}» «${key}», which from a chat would override the shell's ban: not started from here. Remove it from ${file} to use it from the phone.`,
+    `This project's ${file} grants the bot “${name}” “${key}”, which from a chat would override the shell's ban: not started from here. Remove it from ${file} to use it from the phone.`,
   "gateway.configUnreadable": (name, file) =>
-    `This project's ${file} cannot be read, and it could grant the bot «${name}» the shell: not started from here.`,
+    `This project's ${file} cannot be read, and it could grant the bot “${name}” the shell: not started from here.`,
   "gateway.chat.configGrant": (name, key) =>
-    `This project's configuration grants the bot «${name}» «${key}», which from a chat would override the shell's ban: not started from here. The file is named in the bot's panel, in ADE.`,
+    `This project's configuration grants the bot “${name}” “${key}”, which from a chat would override the shell's ban: not started from here. The file is named in the bot's panel, in ADE.`,
   "gateway.chat.configUnreadable": (name) =>
-    `This project's configuration cannot be read, and it could grant the bot «${name}» the shell: not started from here. The file is named in the bot's panel, in ADE.`,
+    `This project's configuration cannot be read, and it could grant the bot “${name}” the shell: not started from here. The file is named in the bot's panel, in ADE.`,
   "gateway.chat.notAdmitted":
     "This project is not admitted for Ragu Code yet, or it changed: open the bot in ADE's panel, answer the question and try again.",
   "gateway.approve.question": (permission, what) =>
-    `The bot asks for the permission «${permission}» for:\n${what}\n\nAllow it this once? No answer within 5 minutes means no.`,
+    `The bot asks for the permission “${permission}” for:\n${what}\n\nAllow it this once? No answer within 5 minutes means no.`,
   "gateway.approve.danger": (reason: string) => `Careful: this command ${reason}.`,
   "gateway.approve.blocked": (what: string, reason: string) =>
-    `I blocked «${what}»: it ${reason}. This command never runs, not even with a yes.`,
+    `I blocked “${what}”: it ${reason}. This command never runs, not even with a yes.`,
   "gateway.approve.once": "Yes, this once",
   "gateway.approve.privateOnly":
     "This needs your confirmation, and I do not ask for it in a channel. Write to me in private.",
   "gateway.approve.no": "No",
   "gateway.approve.expired": "No answer in 5 minutes: I said no.",
   "gateway.approve.refused": (permission, what) =>
-    `The bot asked for the permission «${permission}» for:\n${what}\n\nNot granted from a chat: I said no.`,
+    `The bot asked for the permission “${permission}” for:\n${what}\n\nNot granted from a chat: I said no.`,
   "gateway.noProxySlack":
     "On Slack the bot holds a connection open, and the client that speaks it cannot go through a proxy: if this computer only reaches the internet through a proxy, the Slack bot will not get there.",
   "gateway.panel.heading": "Messaging apps (gateway)",
@@ -865,12 +865,12 @@ export const en: Messages = {
   "gateway.panel.appTokenPlaceholder": "xapp-…",
   "gateway.panel.needAppToken": "Switching on also needs Slack's second code (xapp-…): save it in step 2.",
   "gateway.panel.slackManifestHow":
-    "On api.slack.com/apps choose «Create New App», then «From a manifest», and paste this bot's manifest. Then install the app in the workspace: the xoxb- code shows up in OAuth & Permissions.",
+    "On api.slack.com/apps choose “Create New App”, then “From a manifest”, and paste this bot's manifest. Then install the app in the workspace: the xoxb- code shows up in OAuth & Permissions.",
   "gateway.panel.slackManifestShow": "Show the manifest",
   "gateway.panel.slackManifest": "Slack app manifest",
   "gateway.panel.slackManifestMissing": "The manifest is only prepared in the ADE app.",
   "gateway.panel.slackReinstall":
-    "If you change the app's scopes, reinstall it in the workspace: until you do, Slack does not send the missing events, and the bot stays silent with no error at all. «Test» says which scopes are missing.",
+    "If you change the app's scopes, reinstall it in the workspace: until you do, Slack does not send the missing events, and the bot stays silent with no error at all. “Test” says which scopes are missing.",
   "gateway.panel.slackInvite":
     "In channels and group messages the bot gets only the messages that name it, and only where you added it (in a channel, with /invite): the rest never reaches it. A direct message to it alone needs nothing.",
   "gateway.panel.platform": "The bot's platform",
@@ -882,7 +882,7 @@ export const en: Messages = {
     "Paste the bot code (token) the developer portal gave you, in the Bot section. It stays in the system keychain: ADE never shows it again.",
   "gateway.panel.tokenPlaceholderDiscord": "THE-BOT-CODE…",
   "gateway.panel.portalWhere":
-    "Create the bot in the developer portal: «New Application», then «Add Bot» in the Bot section. Right under the bot's name is its code: that is what you paste in the next step, and there is no second one.",
+    "Create the bot in the developer portal: “New Application”, then “Add Bot” in the Bot section. Right under the bot's name is its code: that is what you paste in the next step, and there is no second one.",
   "gateway.panel.intentsOff":
     "Leave the three privileged intents off (Message Content, Server Members and Presence): none is needed. Direct messages and mentions arrive with their text all the same.",
   "gateway.panel.invite":
@@ -919,7 +919,7 @@ export const en: Messages = {
     "Nobody. Write to the bot in a direct message on Discord: you get a code, and you enter it here.",
   "gateway.panel.nobodySlack":
     "Nobody. Write to the bot in a direct message on Slack: you get a code, and you enter it here.",
-  "gateway.panel.revokeQuestion": (name) => `Revoke «${name}»? It will no longer be able to write to the bot.`,
+  "gateway.panel.revokeQuestion": (name) => `Revoke “${name}”? It will no longer be able to write to the bot.`,
   "gateway.panel.revokeConfirm": "Revoke",
   "gateway.panel.revoke": "Revoke",
   "gateway.panel.pairing": "Pairing",
@@ -927,7 +927,7 @@ export const en: Messages = {
     "Pair only an account of yours: whoever you pair drives the bot on your PC and your subscriptions.",
   "gateway.panel.expires": (time) => `expires at ${time}`,
   "gateway.panel.reject": "Refuse",
-  "gateway.panel.rejectQuestion": (name) => `Refuse the request from «${name}»? For 24 hours it will not be able to ask for a new code.`,
+  "gateway.panel.rejectQuestion": (name) => `Refuse the request from “${name}”? For 24 hours it will not be able to ask for a new code.`,
   "gateway.panel.rejectConfirm": "Refuse",
   "gateway.panel.code": "Pairing code",
   "gateway.panel.approve": "Pair",
@@ -1837,10 +1837,10 @@ export const en: Messages = {
   "bots.composer.label": (name) => `Write to ${name}`,
   "bots.room.composerLabel": (name) => `Write in the room ${name}`,
   "bots.permission.request": "Permission request",
-  "bots.permission.wants": (permission) => `Wants to use «${permission}»`,
-  "bots.permission.wantsOn": (permission, patterns) => `Wants to use «${permission}» on «${patterns}»`,
-  "bots.permission.roomWants": (name, permission) => `@${name} wants to use «${permission}»`,
-  "bots.permission.roomWantsOn": (name, permission, patterns) => `@${name} wants to use «${permission}» on «${patterns}»`,
+  "bots.permission.wants": (permission) => `Wants to use “${permission}”`,
+  "bots.permission.wantsOn": (permission, patterns) => `Wants to use “${permission}” on “${patterns}”`,
+  "bots.permission.roomWants": (name, permission) => `@${name} wants to use “${permission}”`,
+  "bots.permission.roomWantsOn": (name, permission, patterns) => `@${name} wants to use “${permission}” on “${patterns}”`,
   "bots.permission.allow": "Allow",
   "bots.permission.deny": "Deny",
   "bots.approval.reason.deleteRoot": "deletes from the root of the disk or from the user folder",
@@ -1867,12 +1867,12 @@ export const en: Messages = {
   "bots.approval.always": "Always for this bot",
   "bots.approval.timeout": (minutes: number) => `No answer within ${minutes} minutes counts as Deny.`,
   "bots.approval.blocked": (command: string, reason: string) =>
-    `Blocked: «${command}» ${reason}. This command never runs, whatever is chosen.`,
+    `Blocked: “${command}” ${reason}. This command never runs, whatever is chosen.`,
   "bots.approval.refused": (command: string, reason: string) =>
-    `Claude Code did not run «${command}»: it ${reason}. It can from the next turn if you choose «Always for this bot».`,
-  "bots.approval.offer": (command: string) => `Allow this bot commands like «${command}», from the next turn?`,
-  "bots.approval.denied": (command: string) => `Denied: «${command}» was not run.`,
-  "bots.approval.expired": (command: string) => `No answer: «${command}» was denied.`,
+    `Claude Code did not run “${command}”: it ${reason}. It can from the next turn if you choose “Always for this bot”.`,
+  "bots.approval.offer": (command: string) => `Allow this bot commands like “${command}”, from the next turn?`,
+  "bots.approval.denied": (command: string) => `Denied: “${command}” was not run.`,
+  "bots.approval.expired": (command: string) => `No answer: “${command}” was denied.`,
   "bots.routine.label": "Routines",
   "bots.routine.off": (reason: string) => `This bot cannot have routines: ${reason}.`,
   "bots.routine.source": "Source",
@@ -1910,7 +1910,7 @@ export const en: Messages = {
   "bots.routine.resume": "Resume",
   "bots.routine.reconsent": "Give consent again",
   "bots.routine.reconsentConfirm": "I agree",
-  "bots.routine.removeQuestion": (prompt) => `Delete the routine «${prompt}»? It no longer runs and cannot be taken back.`,
+  "bots.routine.removeQuestion": (prompt) => `Delete the routine “${prompt}”? It no longer runs and cannot be taken back.`,
   "bots.routine.removeConfirm": "Delete",
   "bots.routine.kind.label": "When it runs",
   "bots.routine.remove": "Delete",
@@ -1922,7 +1922,7 @@ export const en: Messages = {
   "bots.routine.mode.free": "free model",
   "bots.routine.mode.paid": "paid model",
   "bots.routine.refused": (permission: string, patterns: string) =>
-    `Refused: the routine asked for «${permission}» (${patterns}) and nobody can answer.`,
+    `Refused: the routine asked for “${permission}” (${patterns}) and nobody can answer.`,
   "bots.routine.thread": "Routine: the message below went on its own, without a shell.",
   "bots.routine.problem.notAllowed": "this program cannot run routines",
   "bots.routine.problem.prompt": "Write what the routine should do.",
@@ -1955,7 +1955,7 @@ export const en: Messages = {
     "The bot sees it at the start of every conversation and changes it from its answers; changes count from the next conversation.",
   "bots.memory.usage": (block: string, size: number, limit: number) => `${block} · ${size}/${limit} characters`,
   "bots.memory.emptyBlock": "Empty: add an entry below.",
-  "bots.memory.removeQuestion": (text) => `Take «${text}» out of the bot's memory? It will not remember it any more.`,
+  "bots.memory.removeQuestion": (text) => `Take “${text}” out of the bot's memory? It will not remember it any more.`,
   "bots.memory.removeConfirm": "Remove",
   "bots.memory.fieldLabel": (block) => `New entry in: ${block}`,
   "bots.memory.remove": "Remove",
@@ -1975,9 +1975,9 @@ export const en: Messages = {
   "bots.memory.error.full": (block: string, size: number, limit: number) =>
     `Memory full (${block}): it would be ${size} characters of ${limit}. Shorten or remove an entry, then try again.`,
   "bots.memory.error.duplicate": (block: string) => `The same entry is already there (${block}): not added.`,
-  "bots.memory.error.noMatch": (block: string, match: string) => `No entry (${block}) contains «${match}».`,
+  "bots.memory.error.noMatch": (block: string, match: string) => `No entry (${block}) contains “${match}”.`,
   "bots.memory.error.manyMatches": (block: string, match: string) =>
-    `Several entries (${block}) contain «${match}»: write a piece that points at only one.`,
+    `Several entries (${block}) contain “${match}”: write a piece that points at only one.`,
   "bots.memory.error.unreadable": (count: number) =>
     count === 1
       ? "An ade-memory tag could not be read and was not applied."
@@ -1987,10 +1987,10 @@ export const en: Messages = {
   "bots.memory.proposed": (block: string) =>
     `Memory: an entry proposed (${block}), waiting for the user to confirm it in the bot's Memory section.`,
   "bots.memory.proposals": "To confirm",
-  "bots.memory.proposal.add": (block: string, text: string) => `Add (${block}): «${text}»`,
+  "bots.memory.proposal.add": (block: string, text: string) => `Add (${block}): “${text}”`,
   "bots.memory.proposal.replace": (block: string, match: string, text: string) =>
-    `Change (${block}) «${match}» to «${text}»`,
-  "bots.memory.proposal.remove": (block: string, match: string) => `Remove (${block}) the entry with «${match}»`,
+    `Change (${block}) “${match}” to “${text}”`,
+  "bots.memory.proposal.remove": (block: string, match: string) => `Remove (${block}) the entry with “${match}”`,
   "bots.memory.from.panel": "from the conversation",
   "bots.memory.from.routine": "from a routine",
   "bots.memory.from.gateway": "from a chat",
@@ -2010,7 +2010,7 @@ export const en: Messages = {
   "bots.room.listEmpty": "No rooms yet.",
   "bots.room.createFirst": "Create a room",
   "bots.room.delete": "Delete room",
-  "bots.room.deleteAsk": (name: string) => `Delete the room «${name}» with its conversation? The bots stay.`,
+  "bots.room.deleteAsk": (name: string) => `Delete the room “${name}” with its conversation? The bots stay.`,
   "bots.room.notTrusted": (name: string) => `@${name} does not have your trust: the room does not start.`,
   "bots.room.empty":
     "Write a message: everyone answers, or only whoever you name with @name (@everyone for all). A round in which nobody has anything to say ends the exchange.",
@@ -2082,24 +2082,24 @@ export const en: Messages = {
   "bots.serve.noFolder": "A Ragu Code bot answers from a project: open a folder to talk to it.",
   "bots.serve.notAdmitted": (root) =>
     `The project ${root} is not admitted for Ragu Code yet, or it changed: open the bot in the panel, answer the question and try again.`,
-  "bots.serve.noAgent": (name) => `The Ragu Code server does not see the bot «${name}» in this folder.`,
+  "bots.serve.noAgent": (name) => `The Ragu Code server does not see the bot “${name}” in this folder.`,
   "bots.serve.noModel": (model) =>
     `The model ${model} is not in the Ragu Code server's catalog: it was removed, or its provider is not connected. The turn did not start: change the bot's model.`,
-  "bots.serve.toolInPlanner": (tool) => `A turn with no tools tried to use «${tool}»: the turn was stopped.`,
+  "bots.serve.toolInPlanner": (tool) => `A turn with no tools tried to use “${tool}”: the turn was stopped.`,
   "bots.serve.noFreeModel":
     "None of the free models this turn may use is in the Ragu Code server's catalog: the turn did not start.",
   "bots.serve.effortNoModel": (effort) =>
-    `The reasoning level «${effort}» applies to a chosen model: this bot uses Ragu Code's default model, and this turn uses the default reasoning. Choose a model in the bot's settings.`,
+    `The reasoning level “${effort}” applies to a chosen model: this bot uses Ragu Code's default model, and this turn uses the default reasoning. Choose a model in the bot's settings.`,
   "bots.serve.effortDropped": (effort, model, variants) =>
-    `The reasoning level «${effort}» does not exist for ${model}: this turn uses the default. ${variants ? `This model's levels: ${variants}.` : "This model has no reasoning levels."} Change it in the bot's settings.`,
+    `The reasoning level “${effort}” does not exist for ${model}: this turn uses the default. ${variants ? `This model's levels: ${variants}.` : "This model has no reasoning levels."} Change it in the bot's settings.`,
   "bots.serve.agentTaken": (name) =>
-    `The project has its own agent «${name}», different from this bot: on the server it would answer in its place, so the turn does not start. Rename one of the two.`,
+    `The project has its own agent “${name}”, different from this bot: on the server it would answer in its place, so the turn does not start. Rename one of the two.`,
   "bots.serve.newSession":
-    "New conversation: the previous one was «ragu run»'s, or had other rules, and on ADE's server every bot conversation starts with its own. The bot does not remember what came before.",
+    "New conversation: the previous one was “ragu run”'s, or had other rules, and on ADE's server every bot conversation starts with its own. The bot does not remember what came before.",
   "bots.serve.refused": (permission, patterns) =>
-    `Refused: Ragu Code asked for «${permission}» (${patterns}) and nobody here can answer.`,
+    `Refused: Ragu Code asked for “${permission}” (${patterns}) and nobody here can answer.`,
   "bots.serve.rulesNote":
-    "The bot asks before every command, and an «always» given for this project (in Ragu Code's terminal, say) does not reach it: the Chat has it, a bot does not. Only the «Always» you give this bot here counts, and never for what is blocked.",
+    "The bot asks before every command, and an “always” given for this project (in Ragu Code's terminal, say) does not reach it: the Chat has it, a bot does not. Only the “Always” you give this bot here counts, and never for what is blocked.",
   "bots.serve.lost": "The Ragu Code server closed the event stream before the turn ended.",
   "bots.runner.protectedPath": (paths) =>
     `Claude Code could not write on a path protected for project bots (${paths}): a write there becomes code that runs later, so it is refused on purpose.`,
@@ -2198,11 +2198,11 @@ export const en: Messages = {
   "bots.details.title": "Details",
   "bots.delete.title": "Delete the bot",
   "bots.delete.questionProject": (name, file, routines) =>
-    `Delete «${name}»? Its memory goes with it, ${routines === 0 ? "no routines" : routines === 1 ? "one routine" : `${routines} routines`}, the conversations saved in ADE, the messaging apps bot codes and who was paired. The file ${file} is in the project and is deleted.`,
+    `Delete “${name}”? Its memory goes with it, ${routines === 0 ? "no routines" : routines === 1 ? "one routine" : `${routines} routines`}, the conversations saved in ADE, the messaging apps bot codes and who was paired. The file ${file} is in the project and is deleted.`,
   "bots.delete.questionGlobal": (name, file, routines) =>
-    `Delete «${name}»? Its memory goes with it, ${routines === 0 ? "no routines" : routines === 1 ? "one routine" : `${routines} routines`}, the conversations saved in ADE, the messaging apps bot codes and who was paired. The file ${file} is deleted.`,
+    `Delete “${name}”? Its memory goes with it, ${routines === 0 ? "no routines" : routines === 1 ? "one routine" : `${routines} routines`}, the conversations saved in ADE, the messaging apps bot codes and who was paired. The file ${file} is deleted.`,
   "bots.permissions.phone": "From your phone",
-  "bots.permissions.phoneText": "It reads and searches the project. It uses no MCP servers and opens no web pages or web searches, even with the commands on. It runs commands only if you turn on «Remote commands»: then you are asked every time.",
+  "bots.permissions.phoneText": "It reads and searches the project. It uses no MCP servers and opens no web pages or web searches, even with the commands on. It runs commands only if you turn on “Remote commands”: then you are asked every time.",
   "bots.permissions.phoneTextClaude": "It reads and searches the project. It uses no MCP servers, opens no web pages or web searches, and never runs commands: Claude Code cannot ask you for permission from here.",
   "bots.permissions.phoneTextCodex": "It reads and searches the project, and runs, without asking, only commands that read (a read-only sandbox). Codex's own MCP servers and web search stay as its settings have them: ADE does not shut them.",
   "bots.permissions.edits": "It can edit the project's files.",
@@ -2215,9 +2215,9 @@ export const en: Messages = {
   "bots.permissions.routinesText": "It only reads and searches the project. It edits no files, runs no commands and uses neither MCP servers nor the web.",
   "bots.permissions.routinesTextCodex": "Read-only: it edits no files and runs, without asking, only commands that read. Codex's own MCP servers and web search stay as its settings have them.",
   "bots.permissions.panel": "In the Conversation",
-  "bots.permissions.panelTextRagu": "It asks before every command and every step outside the project: Allow, Deny or «Always for this bot». It uses MCP servers and the web without asking.",
-  "bots.permissions.panelTextRaguNoShell": "It runs no commands. It asks before every step outside the project: Allow, Deny or «Always for this bot». It uses MCP servers and the web without asking.",
-  "bots.permissions.panelTextClaude": "It runs commands without asking you: Claude Code cannot ask. It refuses the dangerous ones, and the thread offers them to you with «Always for this bot». It can use the web too.",
+  "bots.permissions.panelTextRagu": "It asks before every command and every step outside the project: Allow, Deny or “Always for this bot”. It uses MCP servers and the web without asking.",
+  "bots.permissions.panelTextRaguNoShell": "It runs no commands. It asks before every step outside the project: Allow, Deny or “Always for this bot”. It uses MCP servers and the web without asking.",
+  "bots.permissions.panelTextClaude": "It runs commands without asking you: Claude Code cannot ask. It refuses the dangerous ones, and the thread offers them to you with “Always for this bot”. It can use the web too.",
   "bots.permissions.panelTextClaudeNoShell": "It runs no commands: Claude Code cannot ask you for permission, so it refuses them. It can use the web too.",
   "bots.permissions.panelTextCodexWrite": "It runs commands without asking you, and writes only in the working folder: Codex cannot ask.",
   "bots.permissions.panelTextCodexRead": "It runs, without asking, only commands that read (a read-only sandbox): Codex cannot ask you for permission.",
@@ -2267,12 +2267,12 @@ export const en: Messages = {
   "bots.engine.effort": "Reasoning",
   "bots.engine.effortNotSupported": "not supported",
   "bots.engine.effortStaleHint": (effort) =>
-    `The reasoning level «${effort}» does not exist for this model: the bot uses the default. Pick one of the model's.`,
+    `The reasoning level “${effort}” does not exist for this model: the bot uses the default. Pick one of the model's.`,
   "bots.engine.effortPickModel": "Pick a model to see its reasoning levels.",
   "bots.settings.whenToUse": "Purpose",
   "bots.settings.whenToUseHint": "The file's description field: Ragu Code reads it to decide when to call this bot as a subagent.",
   "bots.settings.objectivesPlaceholder": "One per line.\nE.g. Flag risks before opinions",
-  "bots.settings.objectivesHint": (heading) => `One per line. Added to the instructions, under «${heading}».`,
+  "bots.settings.objectivesHint": (heading) => `One per line. Added to the instructions, under “${heading}”.`,
   "bots.settings.saved": "Saved.",
   "bots.settings.unsaved": "Unsaved changes.",
   "bots.settings.saving": "Saving…",

@@ -77,7 +77,7 @@ describe("no sentence is put together from pieces (D19)", () => {
     }
     expect(say("bots.permission.wantsOn", "bash", "rm -rf x")).toEqual({
       it: "Vuole usare «bash» su «rm -rf x»",
-      en: "Wants to use «bash» on «rm -rf x»",
+      en: "Wants to use “bash” on “rm -rf x”",
     })
     expect(say("bots.permission.roomWants", "Ale", "edit").it).toBe("@Ale vuole usare «edit»")
     expect(say("bots.login.usingMethod", "ChatGPT").en).toBe("Signed in with ChatGPT")

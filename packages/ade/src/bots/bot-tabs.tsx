@@ -14,6 +14,8 @@ export function BotTabs(props: {
   idPrefix: string
   /** A count shown on a tab (the pairings waiting, say); nothing for 0. */
   badges?: Partial<Record<BotTab, number>>
+  /** The tabs whose panel is in the page: only they have one to control. Absent: all of them. */
+  mounted?: ReadonlySet<BotTab>
   onSelect: (tab: BotTab) => void
 }) {
   let strip: HTMLDivElement | undefined
@@ -37,7 +39,7 @@ export function BotTabs(props: {
             data-tab={tab}
             data-active={props.active === tab ? "true" : undefined}
             id={tabButtonId(props.idPrefix, tab)}
-            aria-controls={tabPanelId(props.idPrefix, tab)}
+            aria-controls={props.mounted && !props.mounted.has(tab) ? undefined : tabPanelId(props.idPrefix, tab)}
             aria-selected={props.active === tab}
             tabIndex={props.active === tab ? 0 : -1}
             onClick={() => props.onSelect(tab)}

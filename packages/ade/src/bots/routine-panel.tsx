@@ -198,7 +198,7 @@ export function RoutineSection(props: {
                     </Show>
                     <ConfirmAction
                       label={t("bots.routine.remove")}
-                      question={t("bots.routine.removeQuestion", routine.prompt.slice(0, 60))}
+                      question={t("bots.routine.removeQuestion", Array.from(routine.prompt).slice(0, 60).join(""))}
                       confirm={t("bots.routine.removeConfirm")}
                       onConfirm={() => props.deps.remove(routine.id)}
                     />

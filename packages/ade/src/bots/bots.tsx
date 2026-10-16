@@ -166,6 +166,7 @@ import { readBotModels } from "./bot-models"
 import { launchBot } from "./launch"
 import { formatCount } from "./format"
 import { metaWords } from "./page-meta"
+import { createWaitingCount } from "./gateway/waiting"
 import { objectiveLines, sameFields, savedFields, syncFields, type FormFields } from "./settings-sync"
 import { BotTabs } from "./bot-tabs"
 import { ConfirmAction } from "./confirm"
@@ -1833,6 +1834,9 @@ function BotPage(props: {
   const [seen, setSeen] = createSignal<ReadonlySet<BotTab>>(new Set<BotTab>(["talk"]))
   const tabs = createMemo(() => tabsOf(props.bot, { platforms: Boolean(props.gateway) }))
   const shown = () => shownTab(tabs(), tab())
+  // The requests waiting to pair, as a badge on the Platforms tab, whichever tab is open.
+  const waiting = props.gateway ? createWaitingCount(props.gateway.api, () => props.bot.path) : undefined
+  createEffect(on(shown, () => waiting?.refresh(), { defer: true }))
 
   createEffect(
     on(
@@ -1860,7 +1864,14 @@ function BotPage(props: {
         onLaunch={props.onLaunch}
         onOpenFile={props.onOpenFile}
       />
-      <BotTabs tabs={tabs()} active={shown()} idPrefix={PAGE_ID} onSelect={select} />
+      <BotTabs
+        tabs={tabs()}
+        active={shown()}
+        idPrefix={PAGE_ID}
+        badges={{ platforms: waiting?.count() ?? 0 }}
+        mounted={new Set<BotTab>([...seen(), shown()])}
+        onSelect={select}
+      />
 
       <TabPanel tab="talk" shown={shown()}>
         {props.children}
