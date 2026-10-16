@@ -34,6 +34,7 @@ import {
 } from "./avatar"
 import { FACE_IMAGE_MAX_INPUT, loadFaceImage, type FaceImageDeps } from "./face-image"
 import { readAgentFile, serializeAgentFile } from "./ragu"
+import { newBotSummary } from "./page-meta"
 
 /*
  * The second page of choices (design/ade-bot-2, the user's answers of 2026-10-16). What is layout is held as rules on
@@ -364,5 +365,66 @@ describe("2. the face: «A caso» and «Carica un'immagine»", () => {
     }
     expect(itText["bots.face.uploadHint"]).toContain("PNG o JPG")
     expect(enText["bots.face.uploadHint"]).toContain("PNG or JPG")
+  })
+})
+
+describe("1. a short form to make a bot", () => {
+  const form = tsx.slice(tsx.indexOf("function BotForm("), tsx.indexOf("/* ── the settings, in the card"))
+  const advanced = form.slice(form.indexOf('data-slot="bots-advanced"'), form.indexOf("</details>"))
+
+  test("the summary line says program, model, cap and place, in that order, and leaves out what is not there", () => {
+    expect(
+      newBotSummary({
+        runner: "Ragu Code",
+        model: "modello predefinito",
+        cap: "tetto 1 $ al giorno",
+        where: "nel progetto",
+      }),
+    ).toBe("Ragu Code · modello predefinito · tetto 1 $ al giorno · nel progetto")
+    expect(newBotSummary({ runner: "Claude Code", model: "Sonnet", where: "in tutti i progetti" })).toBe(
+      "Claude Code · Sonnet · in tutti i progetti",
+    )
+  })
+
+  test("outside stay the face, the name, what it is for and the summary; one name, no title besides", () => {
+    const face = form.indexOf("<FacePicker")
+    const name = form.indexOf('t("bots.form.name")')
+    const description = form.indexOf('t("bots.form.description")')
+    const summary = form.indexOf('data-slot="bots-form-summary"')
+    const details = form.indexOf('data-slot="bots-advanced"')
+    expect(face).toBeGreaterThan(-1)
+    expect(face).toBeLessThan(name)
+    expect(name).toBeLessThan(description)
+    expect(description).toBeLessThan(summary)
+    expect(summary).toBeLessThan(details)
+    expect(form.match(/data-slot="bots-input"\s/g)?.length ?? 0).toBeGreaterThan(0)
+    expect(form).not.toContain("bots.form.titleField")
+  })
+
+  test("program, model, effort, place, objectives and instructions are under «Avanzate», closed", () => {
+    expect(form).toContain("const [advanced, setAdvanced] = createSignal(false)")
+    expect(advanced).toContain("open={advanced()}")
+    expect(advanced).toContain('t("bots.form.advanced")')
+    for (const part of ["<EngineFields", 't("bots.form.where")', 't("bots.form.objectives")', 't("bots.form.persona")'])
+      expect(advanced).toContain(part)
+  })
+
+  test("the cap is outside «Avanzate», so a paid model shows it by itself (choice 5 of the first page)", () => {
+    const cap = form.indexOf("<NewBotCapField")
+    expect(cap).toBeGreaterThan(-1)
+    expect(cap).toBeLessThan(form.indexOf('data-slot="bots-advanced"'))
+    expect(advanced).not.toContain("<NewBotCapField")
+  })
+
+  test("a press on the summary opens «Avanzate»", () => {
+    const summary = form.slice(form.indexOf('data-slot="bots-form-summary"'))
+    expect(summary.slice(0, 400)).toContain("onClick={() => setAdvanced(true)}")
+    expect(summary.slice(0, 400)).toContain("aria-expanded={advanced()}")
+    for (const text of [itText, enText]) {
+      expect(text["bots.form.advanced"].length).toBeGreaterThan(0)
+      expect(text["bots.form.summaryCap"]("1 $").length).toBeGreaterThan(0)
+    }
+    expect(itText["bots.form.summaryCap"]("1 $")).toBe("tetto 1 $ al giorno")
+    expect(itText["bots.form.summaryProject"]).toBe("nel progetto")
   })
 })

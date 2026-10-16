@@ -178,8 +178,8 @@ import { effortLabel, readableModelName } from "../chat/picker"
 import { createModelSource, stateOf, type ModelRead, type ModelSourceState } from "../chat/model-source"
 import { readBotModels } from "./bot-models"
 import { launchBot } from "./launch"
-import { formatCount } from "./format"
-import { metaWords } from "./page-meta"
+import { formatCap, formatCount } from "./format"
+import { metaWords, newBotSummary } from "./page-meta"
 import { createWaitingCount } from "./gateway/waiting"
 import { waitingApprovals } from "./approvals-app"
 import { WaitingList } from "./waiting-list"
@@ -2218,6 +2218,24 @@ function BotForm(props: {
     (name) => catalogFree(name, loadCatalog),
   )
   const asksCap = () => newBotSpendTerms(runner(), model(), model() ? free() : undefined) === "money"
+  // «Avanzate», closed: the form is the face, the name and what it is for (design/ade-bot-2, scelta 1).
+  const [advanced, setAdvanced] = createSignal(false)
+  const summary = () => {
+    const read = parseCap(cap())
+    const capWords = !asksCap()
+      ? undefined
+      : !read.ok
+        ? t("bots.form.summaryCap", cap().trim())
+        : read.capUsd === undefined
+          ? t("bots.form.summaryNoCap")
+          : t("bots.form.summaryCap", formatCap(read.capUsd))
+    return newBotSummary({
+      runner: runnerById(runner()).label,
+      model: model() ? readableModelName(model()) : t("bots.defaultModel"),
+      ...(capWords ? { cap: capWords } : {}),
+      where: scope() === "project" ? t("bots.form.summaryProject") : t("bots.form.summaryGlobal"),
+    })
+  }
 
   let nameField: HTMLInputElement | undefined
   onMount(() => nameField?.focus())
@@ -2282,6 +2300,11 @@ function BotForm(props: {
     <form data-slot="bots-form" onSubmit={(e) => void submit(e)}>
       <h2 data-slot="bots-form-title">{t("bots.form.title")}</h2>
 
+      <div data-slot="bots-field">
+        <span data-slot="bots-label">{t("bots.form.logo")}</span>
+        <FacePicker identifier={name() || "?"} value={avatar()} onChange={setAvatar} />
+      </div>
+
       <label data-slot="bots-field">
         <span data-slot="bots-label">{t("bots.form.name")}</span>
         <input
@@ -2301,11 +2324,6 @@ function BotForm(props: {
         </span>
       </label>
 
-      <div data-slot="bots-field">
-        <span data-slot="bots-label">{t("bots.form.logo")}</span>
-        <FacePicker identifier={name() || "?"} value={avatar()} onChange={setAvatar} />
-      </div>
-
       <label data-slot="bots-field">
         <span data-slot="bots-label">{t("bots.form.description")}</span>
         <input
@@ -2319,23 +2337,19 @@ function BotForm(props: {
         />
       </label>
 
-      <EngineFields
-        listId="bots-new"
-        runner={runner()}
-        model={model()}
-        effort={effort()}
-        raguModels={props.models}
-        {...(props.catalog ? { catalog: props.catalog } : {})}
-        onStale={setStaleEffort}
-        onRunner={(id) => {
-          setRunner(id)
-          setModel("")
-          setEffort("")
-        }}
-        onModel={setModel}
-        onEffort={setEffort}
-      />
+      {/* What «Avanzate» holds, in a line; a press opens it. */}
+      <button
+        type="button"
+        data-slot="bots-form-summary"
+        aria-expanded={advanced()}
+        aria-controls="bots-new-advanced"
+        title={t("bots.form.summaryTip")}
+        onClick={() => setAdvanced(true)}
+      >
+        {summary()}
+      </button>
 
+      {/* Out of «Avanzate»: a bot that spends money asks its cap by itself (choice 5 of the first page). */}
       <NewBotCapField
         runner={runner()}
         model={model() || undefined}
@@ -2347,43 +2361,70 @@ function BotForm(props: {
         }}
       />
 
-      <label data-slot="bots-field">
-        <span data-slot="bots-label">{t("bots.form.where")}</span>
-        <select
-          data-slot="bots-input"
-          value={scope()}
-          onChange={(event) => setScope(event.currentTarget.value === "project" ? "project" : "global")}
-        >
-          <option value="project" disabled={!props.hasProject}>
-            {t("bots.form.scopeProject")}
-          </option>
-          <option value="global">{t("bots.form.scopeGlobal")}</option>
-        </select>
-      </label>
+      <details
+        data-slot="bots-advanced"
+        id="bots-new-advanced"
+        open={advanced()}
+        onToggle={(event) => setAdvanced(event.currentTarget.open)}
+      >
+        <summary>{t("bots.form.advanced")}</summary>
+        <div data-slot="bots-advanced-body">
+          <EngineFields
+            listId="bots-new"
+            runner={runner()}
+            model={model()}
+            effort={effort()}
+            raguModels={props.models}
+            {...(props.catalog ? { catalog: props.catalog } : {})}
+            onStale={setStaleEffort}
+            onRunner={(id) => {
+              setRunner(id)
+              setModel("")
+              setEffort("")
+            }}
+            onModel={setModel}
+            onEffort={setEffort}
+          />
 
-      <label data-slot="bots-field">
-        <span data-slot="bots-label">{t("bots.form.objectives")}</span>
-        <textarea
-          data-slot="bots-input"
-          data-multiline="true"
-          rows="3"
-          value={objectives()}
-          placeholder={t("bots.form.objectivesPlaceholder")}
-          onInput={(event) => setObjectives(event.currentTarget.value)}
-        />
-      </label>
+          <label data-slot="bots-field">
+            <span data-slot="bots-label">{t("bots.form.where")}</span>
+            <select
+              data-slot="bots-input"
+              value={scope()}
+              onChange={(event) => setScope(event.currentTarget.value === "project" ? "project" : "global")}
+            >
+              <option value="project" disabled={!props.hasProject}>
+                {t("bots.form.scopeProject")}
+              </option>
+              <option value="global">{t("bots.form.scopeGlobal")}</option>
+            </select>
+          </label>
 
-      <label data-slot="bots-field">
-        <span data-slot="bots-label">{t("bots.form.persona")}</span>
-        <textarea
-          data-slot="bots-input"
-          data-multiline="true"
-          rows="6"
-          value={persona()}
-          onInput={(event) => setPersona(event.currentTarget.value)}
-          placeholder={t("bots.form.personaPlaceholder")}
-        />
-      </label>
+          <label data-slot="bots-field">
+            <span data-slot="bots-label">{t("bots.form.objectives")}</span>
+            <textarea
+              data-slot="bots-input"
+              data-multiline="true"
+              rows="3"
+              value={objectives()}
+              placeholder={t("bots.form.objectivesPlaceholder")}
+              onInput={(event) => setObjectives(event.currentTarget.value)}
+            />
+          </label>
+
+          <label data-slot="bots-field">
+            <span data-slot="bots-label">{t("bots.form.persona")}</span>
+            <textarea
+              data-slot="bots-input"
+              data-multiline="true"
+              rows="6"
+              value={persona()}
+              onInput={(event) => setPersona(event.currentTarget.value)}
+              placeholder={t("bots.form.personaPlaceholder")}
+            />
+          </label>
+        </div>
+      </details>
 
       <Show when={problem()}>{(text) => <p data-slot="bots-problem">{text()}</p>}</Show>
 

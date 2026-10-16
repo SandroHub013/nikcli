@@ -1041,6 +1041,47 @@
   border-top: 1px solid var(--ade-border-subtle);
 }
 
+/* The new bot's summary line: what «Avanzate» holds, a press away. */
+[data-slot="bots-form-summary"] {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ade-text-soft);
+  font: inherit;
+  font-size: var(--ade-font-sm);
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+[data-slot="bots-form-summary"]:hover {
+  color: var(--ade-text);
+  text-decoration: underline;
+}
+
+[data-slot="bots-form-summary"]:focus-visible,
+[data-slot="bots-advanced"] > summary:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="bots-advanced"] > summary {
+  align-self: flex-start;
+  font-size: var(--ade-font-md);
+  font-weight: var(--ade-weight-medium);
+  color: var(--ade-text);
+  cursor: pointer;
+}
+
+[data-slot="bots-advanced-body"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-5);
+  padding-top: var(--ade-space-5);
+}
+
 [data-slot="bots-form-title"] {
   margin: 0;
   font-size: var(--ade-font-xl);

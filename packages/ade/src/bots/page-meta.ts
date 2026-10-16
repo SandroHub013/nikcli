@@ -3,6 +3,19 @@
  * progetto». What a developer reads («primary», «high», the session id, the full path) is not in it: the path and the
  * session are in the Details of the Settings tab, and `primary`, the ordinary kind of bot, is not said at all.
  */
+/**
+ * The new-bot form's line under what it is for (design/ade-bot-2, scelta 1): what the closed «Avanzate» holds, in
+ * words. «Ragu Code · modello predefinito · tetto 1 $ al giorno · nel progetto»; the cap only when one is asked.
+ */
+export function newBotSummary(input: {
+  readonly runner: string
+  readonly model: string
+  readonly cap?: string
+  readonly where: string
+}): string {
+  return [input.runner, input.model, input.cap, input.where].filter((part): part is string => Boolean(part)).join(" · ")
+}
+
 export function metaWords(input: {
   readonly runner: string
   readonly model: string
