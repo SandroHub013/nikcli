@@ -15,7 +15,7 @@
   z-index: 9999;
   overflow: hidden;
   color-scheme: dark;
-  background: #120d0b;
+  background: #211410;
   transition: opacity var(--splash-fade, var(--ade-dur-slow, 280ms)) var(--ade-ease, ease);
   opacity: 1;
   cursor: default;

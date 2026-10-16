@@ -35,15 +35,15 @@ describe("splash component (step 3)", () => {
     }
   }
 
-  test("splash has fixed ink background and dark color-scheme without theme tokens (P1-1)", () => {
+  test("splash has fixed scene background and dark color-scheme without theme tokens (Passo 1)", () => {
     const css = readFileSync(join(import.meta.dir, "splash.css"), "utf8")
     expect(css).not.toContain("var(--ade-bg")
     expect(css).not.toContain("var(--ade-text-weak")
     expect(css).toMatch(/color-scheme:\s*dark/)
-    expect(css).toMatch(/background:\s*#120d0b/)
+    expect(css).toMatch(/background:\s*#211410/)
   })
 
-  test("maintains ink background in glass theme over index.css dialog rule without removing dialog role (P1)", () => {
+  test("maintains scene background in glass theme over index.css dialog rule without removing dialog role (Passo 1)", () => {
     // 1. Accessibility: role="dialog" remains on root
     const handle = mountSplash({ visible: true })
     try {
@@ -61,12 +61,12 @@ describe("splash component (step 3)", () => {
     // index.css matches: [data-component="ade-shell"][data-theme="glass"] [role="dialog"] (specificity 0,3,0)
     expect(indexCss).toMatch(/\[data-component="ade-shell"\]\[data-theme="glass"\]\s*\[role="dialog"\]/)
 
-    // splash.css overrides with higher specificity (0,4,0) binding ink background
+    // splash.css overrides with higher specificity (0,4,0) binding scene background (#211410)
     expect(splashCss).toMatch(
       /\[data-component="ade-shell"\]\[data-theme="glass"\]\s*\[data-component="ade-splash"\]\[role="dialog"\]/,
     )
     expect(splashCss).toMatch(
-      /\[data-component="ade-shell"\]\[data-theme="glass"\]\s*\[data-component="ade-splash"\]\[role="dialog"\][\s\S]*?\{[^}]*background:\s*#120d0b/,
+      /\[data-component="ade-shell"\]\[data-theme="glass"\]\s*\[data-component="ade-splash"\]\[role="dialog"\][\s\S]*?\{[^}]*background:\s*#211410/,
     )
   })
 
