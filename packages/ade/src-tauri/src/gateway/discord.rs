@@ -1006,13 +1006,14 @@ impl Adapter for Discord {
 
     async fn send_buttons(&self, chat: &str, text: &str, buttons: &[Button]) -> Result<String, AdapterError> {
         let components: Vec<Value> = buttons
-            .chunks(2)
+            .chunks(5)
+            .take(5)
             .map(|row| {
                 let row: Vec<Value> = row
                     .iter()
                     .map(|button| json!({ "type": 2, "style": 1, "label": button.label, "custom_id": button.data }))
                     .collect();
-                json!([{ "type": 1, "components": row }])
+                json!({ "type": 1, "components": row })
             })
             .collect();
         self.send_all(chat, text, Some(&json!({ "components": components }))).await
@@ -1762,9 +1763,40 @@ mod tests {
             .send_buttons("ch1", "vuoi continuare?", &[Button { label: "Si'".into(), data: "continua".into() }])
             .await
             .expect("inviato");
-        let component = &rest.body_of(1)["components"][0][0]["components"][0];
+        let component = &rest.body_of(1)["components"][0]["components"][0];
         assert_eq!(component["custom_id"], "continua");
         assert_eq!(component["label"], "Si'");
+    }
+
+    #[tokio::test]
+    async fn button_components_respect_action_row_limits() {
+        let rest = FakeRest::start(vec![
+            ok(&json!({ "id": "1" }).to_string()),
+            ok(&json!({ "id": "1" }).to_string()),
+        ]);
+        let gateway = FakeGateway::start(vec![]);
+        let discord = adapter(&rest, &gateway);
+        let buttons: Vec<Button> = (0..30)
+            .map(|i| Button { label: format!("b{i}"), data: format!("d{i}") })
+            .collect();
+        discord
+            .send_buttons("ch1", "scegli", &buttons)
+            .await
+            .expect("inviato");
+        let body = rest.body_of(1);
+        let rows = body["components"].as_array().expect("array di righe");
+        assert_eq!(rows.len(), 5, "massimo 5 action row");
+        for (r_idx, row) in rows.iter().enumerate() {
+            assert_eq!(row["type"], 1, "tipo ActionRow");
+            let comps = row["components"].as_array().expect("array pulsanti");
+            assert_eq!(comps.len(), 5, "5 pulsanti per riga");
+            for (c_idx, btn) in comps.iter().enumerate() {
+                let expected_idx = r_idx * 5 + c_idx;
+                assert_eq!(btn["type"], 2);
+                assert_eq!(btn["custom_id"], format!("d{expected_idx}"));
+                assert_eq!(btn["label"], format!("b{expected_idx}"));
+            }
+        }
     }
 
     #[test]
