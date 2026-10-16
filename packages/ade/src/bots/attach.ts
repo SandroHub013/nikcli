@@ -4,8 +4,10 @@
  *
  * The Chat's rules (`chat/attachments.ts`), because the danger is the same: a file of the open project only, never a
  * `.env`, checked again with links followed before anything is sent. A file from elsewhere is not read: a picture that
- * is not a file of the project (pasted, or dragged from another folder) is written into the bot's own folder under the
- * project, `.ade/bots/<name>/`, and attached from there. That folder is kept out of the project's git by its own
+ * is not a file of the project (pasted, or dragged from another folder) stays in the page (`pendingPicture`) until its
+ * message goes, and is written then into the bot's own folder under the project, `.ade/bots/<name>/`, and attached
+ * from there (`writePictures`). Taken off with ×, it never touches the disk; once sent, it stays as long as the bot,
+ * and goes with it (`picturesOf`, `forget.ts`). That folder is kept out of the project's git by its own
  * `.git/info/exclude` (`excludeBotFiles`), never by its `.gitignore`, which is the user's.
  *
  * How each program gets them: ragu as file parts of the prompt (`serve-turn.ts`), which it reads itself as the user;
@@ -71,12 +73,52 @@ export function pastedExtension(mime: string): string | undefined {
 
 const two = (value: number) => String(value).padStart(2, "0")
 
-/** `img-20261016-140509-2.png`: when it came, and which of the ones that came together. */
-export function pastedFileName(at: number, index: number, extension: string): string {
+/** The name a picture came with, as a plain file name with no extension; `img` when nothing of it is left. */
+function pastedStem(original: string | undefined): string {
+  const last = (original ?? "").split(/[\\/]/).at(-1) ?? ""
+  const dot = last.lastIndexOf(".")
+  const stem = (dot > 0 ? last.slice(0, dot) : last)
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^[.-]+|[.-]+$/g, "")
+    .slice(0, 40)
+    .replace(/[.-]+$/, "")
+  return stem || "img"
+}
+
+/**
+ * `schermata-20261016-140509-2.png`: the name it came with (`img` with none), when it went, and which of the ones that
+ * went together.
+ */
+export function pastedFileName(at: number, index: number, extension: string, original?: string): string {
   const date = new Date(at)
   const day = `${date.getFullYear()}${two(date.getMonth() + 1)}${two(date.getDate())}`
   const time = `${two(date.getHours())}${two(date.getMinutes())}${two(date.getSeconds())}`
-  return `img-${day}-${time}-${index}.${extension}`
+  return `${pastedStem(original)}-${day}-${time}-${index}.${extension}`
+}
+
+/** Whether a picture of this kind and size may be given to a bot: the problem, or undefined. */
+function pictureProblem(file: Blob): string | undefined {
+  if (!pastedExtension(file.type)) return t("bots.attach.notPicture")
+  if (file.size > BOT_PICTURE_MAX_MB * 1024 * 1024) return t("bots.attach.tooBig", BOT_PICTURE_MAX_MB)
+  return undefined
+}
+
+/** A picture pasted or dropped from elsewhere, kept in the page until its message goes: nothing of it is on disk yet. */
+export interface PendingPicture {
+  readonly id: string
+  /** The name it came with, as the chip shows it. */
+  readonly name: string
+  readonly file: Blob
+}
+
+/** A picture pasted or dropped, kept as it came; refused at once when it is not one, or too big. */
+export function pendingPicture(
+  file: Blob,
+  name: string,
+  id: string,
+): { readonly picture: PendingPicture } | { readonly problem: string } {
+  const problem = pictureProblem(file)
+  return problem ? { problem } : { picture: { id, name, file } }
 }
 
 /** A picture with no file in the project, written into the bot's folder and attached from there. */
@@ -86,18 +128,99 @@ export async function savePasted(input: {
   readonly file: Blob
   readonly at: number
   readonly index: number
+  /** The name it came with, kept in the file's (`pastedFileName`). */
+  readonly name?: string
   /** The host's `writeBytes`: the failure, or null. */
   readonly write: (path: string, bytes: Uint8Array) => Promise<string | null>
-}): Promise<{ readonly file: Attachment; readonly problem?: undefined } | { readonly problem: string }> {
-  const extension = pastedExtension(input.file.type)
-  if (!extension) return { problem: t("bots.attach.notPicture") }
-  if (input.file.size > BOT_PICTURE_MAX_MB * 1024 * 1024)
-    return { problem: t("bots.attach.tooBig", BOT_PICTURE_MAX_MB) }
-  const path = `${botFilesDir(input.root, input.identifier)}/${pastedFileName(input.at, input.index, extension)}`
+}): Promise<
+  | { readonly file: Attachment; readonly problem?: undefined }
+  /** `written`: the file written all the same, when it could not be attached. */
+  | { readonly problem: string; readonly written?: string }
+> {
+  const problem = pictureProblem(input.file)
+  if (problem) return { problem }
+  const extension = pastedExtension(input.file.type)!
+  const path = `${botFilesDir(input.root, input.identifier)}/${pastedFileName(input.at, input.index, extension, input.name)}`
   const failure = await input.write(path, new Uint8Array(await input.file.arrayBuffer()))
   if (failure) return { problem: t("bots.attach.notSaved", failure) }
   const file = attachmentFor(input.root, path)
-  return file ? { file } : { problem: t("bots.attach.outside", path) }
+  return file ? { file } : { problem: t("bots.attach.outside", path), written: path }
+}
+
+/**
+ * The pictures of a message, written into the bot's folder as it goes (bot-ui-4, P1-1): the files to attach, or the
+ * problem and the paths already written, for the caller to take back.
+ */
+export async function writePictures(input: {
+  readonly root: string
+  readonly identifier: string
+  readonly pictures: readonly PendingPicture[]
+  readonly at: number
+  readonly write: (path: string, bytes: Uint8Array) => Promise<string | null>
+}): Promise<{ readonly files: Attachment[] } | { readonly problem: string; readonly written: string[] }> {
+  const files: Attachment[] = []
+  const written: string[] = []
+  for (const [index, picture] of input.pictures.entries()) {
+    const saved = await savePasted({ ...input, file: picture.file, index: index + 1, name: picture.name })
+    if (saved.problem !== undefined) {
+      if (saved.written) written.push(saved.written)
+      return { problem: saved.problem, written }
+    }
+    written.push(saved.file.path)
+    files.push(saved.file)
+  }
+  return { files }
+}
+
+/** Where the pictures written for each bot are remembered, by the path of its file: they go when it goes. */
+export const BOT_PICTURES_KEY = "ade.bots.pictures"
+
+function pictureBook(storage: Pick<Storage, "getItem">): Record<string, string[]> {
+  try {
+    const book = JSON.parse(storage.getItem(BOT_PICTURES_KEY) ?? "{}") as unknown
+    if (!book || typeof book !== "object" || Array.isArray(book)) return {}
+    return Object.fromEntries(
+      Object.entries(book).map(([bot, paths]) => [
+        bot,
+        Array.isArray(paths) ? paths.filter((path): path is string => typeof path === "string") : [],
+      ]),
+    )
+  } catch {
+    return {}
+  }
+}
+
+/** The pictures written for the bot at `bot`, remembered so that they go with it. */
+export function rememberPictures(
+  storage: Pick<Storage, "getItem" | "setItem">,
+  bot: string,
+  paths: readonly string[],
+): void {
+  if (paths.length === 0) return
+  try {
+    const book = pictureBook(storage)
+    book[bot] = [...new Set([...(book[bot] ?? []), ...paths])]
+    storage.setItem(BOT_PICTURES_KEY, JSON.stringify(book))
+  } catch {
+    // Storage full or blocked: the pictures stay until the bot's folder is listed when it goes (`forget.ts`).
+  }
+}
+
+/** The pictures written for the bot at `bot`. */
+export function picturesOf(storage: Pick<Storage, "getItem">, bot: string): string[] {
+  return pictureBook(storage)[bot] ?? []
+}
+
+/** The bot at `bot` taken out of the book of pictures (`forget.ts`); its files are the caller's to take away. */
+export function forgetPictures(storage: Pick<Storage, "getItem" | "setItem">, bot: string): void {
+  try {
+    const book = pictureBook(storage)
+    if (!Object.hasOwn(book, bot)) return
+    delete book[bot]
+    storage.setItem(BOT_PICTURES_KEY, JSON.stringify(book))
+  } catch {
+    // As above.
+  }
 }
 
 /** The message for Claude Code and Codex: the files by their path in the project, under the user's words. */

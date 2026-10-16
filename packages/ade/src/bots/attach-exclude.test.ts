@@ -77,8 +77,9 @@ describe("the bots' pictures stay out of the project's git", () => {
     const attach = readFileSync(join(import.meta.dir, "attach.ts"), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "")
     expect(attach).not.toContain(".gitignore")
     const tsx = readFileSync(join(import.meta.dir, "bots.tsx"), "utf8")
-    const pictures = tsx.slice(tsx.indexOf("const addPictures = async"), tsx.indexOf("const pickFiles = async"))
+    // Since bot-ui-4 (P1-1) the pictures are written when the message goes, in `start`.
+    const pictures = tsx.slice(tsx.indexOf("const start = async"), tsx.indexOf("const answer = (bot: AgentFile"))
     expect(pictures).toContain("excludeBotFilesOnce(root, host)")
-    expect(pictures.indexOf("savePasted(")).toBeLessThan(pictures.indexOf("excludeBotFilesOnce(root, host)"))
+    expect(pictures.indexOf("writePictures(")).toBeLessThan(pictures.indexOf("excludeBotFilesOnce(root, host)"))
   })
 })

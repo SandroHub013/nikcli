@@ -1,7 +1,8 @@
 //! Removes what ADE itself left in a project's `.ade/` and no longer needs (`session/ade-prune.ts` chooses what).
 //!
-//! The window cannot delete files; this is the one door, and it opens on three folders only: a capture of the browser pane and its note in
-//! `.ade/browser/`, a session's result in `.ade/results/`, a note on a design sheet in `.ade/design/note/`. A path is removed only if it is
+//! The window cannot delete files; this is the one door, and it opens on four folders only: a capture of the browser pane and its note in
+//! `.ade/browser/`, a session's result in `.ade/results/`, a note on a design sheet in `.ade/design/note/`, a picture given to a bot in
+//! `.ade/bots/<bot>/` (taken back when its message does not go, or with the bot). A path is removed only if it is
 //! inside an open project, is a plain file of one of those folders with the extension it has there, and is not one of the files that are
 //! the project's memory (`decisions.jsonl`, `design.jsonl`, `memory.md`) or that keep `.ade/` out of git (`.gitignore`). A link is never
 //! followed: what is removed is the link's own file or nothing.
@@ -24,7 +25,8 @@ const PROTECTED: [&str; 4] = ["decisions.jsonl", "design.jsonl", "memory.md", ".
 /// The most files one call removes: the window sends what it chose, and a runaway list is not a bigger prune.
 const MAX_PATHS: usize = 5_000;
 
-/// Whether `path` is a file ADE may prune: `.ade/browser/<x>.png|md`, `.ade/results/<x>.md`, `.ade/design/note/<x>.md`.
+/// Whether `path` is a file ADE may prune: `.ade/browser/<x>.png|md`, `.ade/results/<x>.md`, `.ade/design/note/<x>.md`,
+/// `.ade/bots/<bot>/<x>.png|jpg|webp|gif`.
 pub fn prunable(path: &Path) -> bool {
     let parts: Vec<String> = path
         .components()
@@ -46,6 +48,7 @@ pub fn prunable(path: &Path) -> bool {
         ["browser", name] => (&["png", "md"], name),
         ["results", name] => (&["md"], name),
         ["design", "note", name] => (&["md"], name),
+        ["bots", _, name] => (&["png", "jpg", "webp", "gif"], name),
         _ => return false,
     };
     if name.is_empty() || PROTECTED.contains(&name) {
@@ -420,6 +423,22 @@ mod tests {
         assert!(!prunable(&sep("/work/app/.ade/results/log")));
         assert!(!prunable(&sep("/work/app/.ade/results/.md")));
         assert!(!prunable(&sep("/work/app/.ade/design/note/a.html")));
+    }
+
+    // bot-ui-4, P1-1: a picture given to a bot, and nothing else of its folder.
+    #[test]
+    fn a_picture_given_to_a_bot_is_pruned_and_nothing_else_of_its_folder() {
+        for name in ["a.png", "a.jpg", "a.webp", "a.gif", "Schermata-20261016-140509-1.PNG"] {
+            assert!(prunable(&sep(&format!("/work/app/.ade/bots/alfa/{name}"))), "{name}");
+        }
+        assert!(!prunable(&sep("/work/app/.ade/bots/alfa/a.md")));
+        assert!(!prunable(&sep("/work/app/.ade/bots/alfa/a.svg")));
+        assert!(!prunable(&sep("/work/app/.ade/bots/alfa/.png")));
+        assert!(!prunable(&sep("/work/app/.ade/bots/a.png")));
+        assert!(!prunable(&sep("/work/app/.ade/bots/alfa/sub/a.png")));
+        assert!(!prunable(&sep("/work/app/.ade/bots/alfa/../../results/a.png")));
+        assert!(!prunable(&sep("/work/app/.ade/bots/alfa/.gitignore")));
+        assert!(!prunable(&sep("/work/app/bots/alfa/a.png")));
     }
 
     #[test]

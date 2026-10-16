@@ -1,0 +1,143 @@
+import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import { localePreference, setLocalePreference } from "../i18n/locale"
+import { it as itText } from "../i18n/it"
+import { BOT_PICTURES_KEY, pastedFileName, pendingPicture, picturesOf, rememberPictures, writePictures } from "./attach"
+import { forgetBotTraces, type KeyedStorage } from "./forget"
+import { memoryAccountStore } from "./account"
+import { volatileMemoryStore } from "./memory"
+import { memoryRemoteStore } from "./gateway/remote"
+import { EMPTY_BOOK, type RoutineBook } from "./routine"
+
+/*
+ * The second round of captures (results/bot-scatti-2.md), the fixes Master asked for on 2026-10-16. What is layout is held as
+ * rules on the source, since `bots.tsx` cannot be rendered under `bun test`.
+ */
+const read = (file: string) => readFileSync(join(import.meta.dir, file), "utf8")
+const tsx = read("bots.tsx")
+
+/** A `localStorage` of a test's own. */
+function storage(): KeyedStorage & { readonly map: Map<string, string> } {
+  const map = new Map<string, string>()
+  return {
+    map,
+    get length() {
+      return map.size
+    },
+    key: (index) => [...map.keys()][index] ?? null,
+    getItem: (key) => map.get(key) ?? null,
+    setItem: (key, value) => void map.set(key, value),
+    removeItem: (key) => void map.delete(key),
+  }
+}
+
+describe("P1-1: a pasted picture is written only when its message goes, and goes with the bot", () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
+  const at = new Date(2026, 9, 16, 14, 5, 9).getTime()
+
+  test("a picture is kept in the page as it came: refused at once when it is not one, or too big", () => {
+    const before = localePreference()
+    setLocalePreference("it")
+    try {
+      const kept = pendingPicture(new Blob([png], { type: "image/png" }), "schermata.png", "p1")
+      expect("picture" in kept && kept.picture.name).toBe("schermata.png")
+      expect(pendingPicture(new Blob(["<svg/>"], { type: "image/svg+xml" }), "x.svg", "p2")).toEqual({
+        problem: itText["bots.attach.notPicture"],
+      })
+      const huge = { size: 50 * 1024 * 1024, type: "image/png" } as unknown as Blob
+      expect(pendingPicture(huge, "grande.png", "p3")).toEqual({ problem: itText["bots.attach.tooBig"](10) })
+    } finally {
+      setLocalePreference(before)
+    }
+  })
+
+  test("the file keeps the name it came with, made safe, then when and which", () => {
+    expect(pastedFileName(at, 2, "png")).toBe("img-20261016-140509-2.png")
+    expect(pastedFileName(at, 1, "png", "Schermata del 16.png")).toBe("Schermata-del-16-20261016-140509-1.png")
+    expect(pastedFileName(at, 1, "jpg", "../../fuori.jpeg")).toBe("fuori-20261016-140509-1.jpg")
+    expect(pastedFileName(at, 1, "png", "....png")).toBe("img-20261016-140509-1.png")
+  })
+
+  test("the pictures are written into the bot's folder when the message goes; a failure says what was written", async () => {
+    const pictures = [
+      { id: "a", name: "uno.png", file: new Blob([png], { type: "image/png" }) },
+      { id: "b", name: "due.png", file: new Blob([png], { type: "image/png" }) },
+    ]
+    const writes: string[] = []
+    const write = async (path: string) => (writes.push(path), null)
+    const done = await writePictures({ root: "C:/p", identifier: "alfa", pictures, at, write })
+    expect(done).toEqual({
+      files: [
+        {
+          path: "C:/p/.ade/bots/alfa/uno-20261016-140509-1.png",
+          relative: ".ade/bots/alfa/uno-20261016-140509-1.png",
+          mime: "image/png",
+        },
+        {
+          path: "C:/p/.ade/bots/alfa/due-20261016-140509-2.png",
+          relative: ".ade/bots/alfa/due-20261016-140509-2.png",
+          mime: "image/png",
+        },
+      ],
+    })
+    let calls = 0
+    const second = async () => (++calls === 2 ? "disco pieno" : null)
+    const failed = await writePictures({ root: "C:/p", identifier: "alfa", pictures, at, write: second })
+    expect("problem" in failed && failed.written).toEqual(["C:/p/.ade/bots/alfa/uno-20261016-140509-1.png"])
+  })
+
+  test("the pictures a bot was sent are remembered by its file's path, each once", () => {
+    const kept = storage()
+    rememberPictures(kept, "C:/p/.ragu/agent/alfa.md", ["C:/p/.ade/bots/alfa/a.png"])
+    rememberPictures(kept, "C:/p/.ragu/agent/alfa.md", ["C:/p/.ade/bots/alfa/a.png", "C:/p/.ade/bots/alfa/b.png"])
+    rememberPictures(kept, "C:/p/.ragu/agent/beta.md", ["C:/p/.ade/bots/beta/c.png"])
+    expect(picturesOf(kept, "C:/p/.ragu/agent/alfa.md")).toEqual([
+      "C:/p/.ade/bots/alfa/a.png",
+      "C:/p/.ade/bots/alfa/b.png",
+    ])
+    expect(picturesOf(kept, "C:/p/.ragu/agent/nessuno.md")).toEqual([])
+    kept.setItem(BOT_PICTURES_KEY, "{rotto")
+    expect(picturesOf(kept, "C:/p/.ragu/agent/alfa.md")).toEqual([])
+  })
+
+  test("deleting the bot takes its pictures away, and only its own", () => {
+    const kept = storage()
+    rememberPictures(kept, "C:/p/.ragu/agent/alfa.md", ["C:/p/.ade/bots/alfa/a.png"])
+    rememberPictures(kept, "C:/p/.ragu/agent/beta.md", ["C:/p/.ade/bots/beta/c.png"])
+    const removed: string[][] = []
+    let routines: RoutineBook = EMPTY_BOOK
+    forgetBotTraces("C:/p/.ragu/agent/alfa.md", {
+      memory: volatileMemoryStore(),
+      account: memoryAccountStore(),
+      remote: memoryRemoteStore(),
+      routines: (change) => (routines = change(routines)),
+      storage: kept,
+      pictures: (paths) => void removed.push([...paths]),
+    })
+    expect(removed).toEqual([["C:/p/.ade/bots/alfa/a.png"]])
+    expect(picturesOf(kept, "C:/p/.ragu/agent/alfa.md")).toEqual([])
+    expect(picturesOf(kept, "C:/p/.ragu/agent/beta.md")).toEqual(["C:/p/.ade/bots/beta/c.png"])
+  })
+
+  test("lint: paste and drop only keep the picture; it is written after the checks, and taken back when the turn does not go", () => {
+    const thread = tsx.slice(tsx.indexOf("function Thread("), tsx.indexOf("function LastFigures"))
+    expect(thread).not.toContain("savePasted(")
+    expect(thread).not.toContain("writeBytes")
+    expect(thread).toContain("pendingPicture(")
+    // × lets the picture go: nothing on disk to take back.
+    expect(thread).toContain("setPictures((list) => list.filter((item) => item.id !== picture.id))")
+    const start = tsx.slice(tsx.indexOf("const start = async"), tsx.indexOf("const answer = (bot: AgentFile"))
+    const checks = start.indexOf("await admitTurn(")
+    const writes = start.indexOf("await writePictures(")
+    const sends = start.indexOf("turns.send(")
+    expect(checks).toBeGreaterThan(-1)
+    expect(checks).toBeLessThan(writes)
+    expect(writes).toBeLessThan(sends)
+    expect(start).toContain("prunePictures(")
+    expect(start).toContain("rememberPictures(")
+    // The deletion of the bot hands its pictures to the host's pruning.
+    const settings = tsx.slice(tsx.indexOf("function SettingsTab("), tsx.indexOf("/* ── the form"))
+    expect(settings).toContain("pictures: (recorded) =>")
+  })
+})
