@@ -829,14 +829,20 @@ async fn socket_session(
                                             greeted = true;
                                         }
                                         "MESSAGE_CREATE" => {
-                                            if let Some(inbound) = to_inbound(&frame.d, &adapter.shared) {
+                                            if let Some(inbound) = to_inbound(&frame.d, &adapter.shared, frame.s) {
                                                 if sender.send(Ok(inbound)).await.is_err() {
                                                     break;
                                                 }
                                             }
                                         }
                                         "INTERACTION_CREATE" => {
-                                            if let Some(press) = to_press(&frame.d) {
+                                            let cursor = frame.s.and_then(|s| {
+                                                hold(&adapter.shared.session).clone().and_then(|mut sess| {
+                                                    sess.seq = s;
+                                                    serde_json::to_string(&sess).ok()
+                                                })
+                                            });
+                                            if let Some(press) = to_press(&frame.d, cursor) {
                                                 // Answered here, on the spot: Discord
                                                 // wants the confirmation within three
                                                 // seconds, and the hub may be busy.
@@ -931,7 +937,7 @@ async fn run_socket(
 }
 
 /// A message as the hub sees it, or `None` for what the gateway does not take.
-fn to_inbound(d: &Value, shared: &Shared) -> Option<Inbound> {
+fn to_inbound(d: &Value, shared: &Shared, seq: Option<i64>) -> Option<Inbound> {
     let text = d["content"].as_str().unwrap_or_default();
     if text.is_empty() {
         return None;
@@ -943,6 +949,12 @@ fn to_inbound(d: &Value, shared: &Shared) -> Option<Inbound> {
         .or_else(|| author["username"].as_str())
         .unwrap_or_default()
         .to_string();
+    let cursor = seq.and_then(|s| {
+        hold(&shared.session).clone().and_then(|mut sess| {
+            sess.seq = s;
+            serde_json::to_string(&sess).ok()
+        })
+    });
     Some(Inbound {
         id: id_text(&d["id"])?,
         chat,
@@ -959,6 +971,7 @@ fn to_inbound(d: &Value, shared: &Shared) -> Option<Inbound> {
         },
         text: text.to_string(),
         button: false,
+        cursor,
     })
 }
 
@@ -978,7 +991,7 @@ fn confirm_press(d: &Value) -> Option<(String, Value)> {
 }
 
 /// A button press: not a message, and the data comes back as the text.
-fn to_press(d: &Value) -> Option<Inbound> {
+fn to_press(d: &Value, cursor: Option<String>) -> Option<Inbound> {
     // 3 is MESSAGE_COMPONENT, the only interaction a button under a message
     // makes; the others (a slash command, a modal) are not a press.
     if d["type"].as_i64() != Some(3) {
@@ -997,6 +1010,7 @@ fn to_press(d: &Value) -> Option<Inbound> {
         sender: Sender { id: id_text(&who["id"])?, name, is_bot: false },
         text: data.to_string(),
         button: true,
+        cursor,
     })
 }
 
@@ -1468,7 +1482,7 @@ mod tests {
             "id": "c1", "channel_id": "ch1", "guild_id": "9001",
             "content": "ciao <@42>", "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
-        let named = to_inbound(&named, &shared).expect("messaggio");
+        let named = to_inbound(&named, &shared, None).expect("messaggio");
         assert!(named.mentioned, "una menzione in un canale abilita il canale");
         assert!(!named.private);
         assert!(admits(&named));
@@ -1477,7 +1491,7 @@ mod tests {
             "id": "c2", "channel_id": "ch1", "guild_id": "9001",
             "content": "si parla di altro", "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
-        let quiet = to_inbound(&quiet, &shared).expect("messaggio");
+        let quiet = to_inbound(&quiet, &shared, None).expect("messaggio");
         assert!(!quiet.mentioned);
         assert!(!admits(&quiet), "senza menzione il canale non e' per il bot");
 
@@ -1485,7 +1499,7 @@ mod tests {
             "id": "c3", "channel_id": "d1", "guild_id": Value::Null,
             "content": "ciao", "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
-        let direct = to_inbound(&direct, &shared).expect("messaggio");
+        let direct = to_inbound(&direct, &shared, None).expect("messaggio");
         assert!(direct.private);
         assert!(admits(&direct), "una chat privata non ha bisogno di menzione");
     }
@@ -1501,7 +1515,7 @@ mod tests {
             "mentions": [{ "id": BOT }],
             "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
-        assert!(!to_inbound(&quoted, &shared).expect("messaggio").mentioned);
+        assert!(!to_inbound(&quoted, &shared, None).expect("messaggio").mentioned);
     }
 
     #[test]
@@ -1511,12 +1525,12 @@ mod tests {
             "id": "b1", "channel_id": "d1", "content": "ciao",
             "author": { "id": "u2", "username": "robot", "bot": true },
         });
-        assert!(to_inbound(&from_bot, &shared).expect("messaggio").sender.is_bot);
+        assert!(to_inbound(&from_bot, &shared, None).expect("messaggio").sender.is_bot);
         let from_hook: Value = json!({
             "id": "b2", "channel_id": "d1", "content": "ciao",
             "webhook_id": "w1", "author": { "id": "u3", "username": "hook", "bot": false },
         });
-        assert!(to_inbound(&from_hook, &shared).expect("messaggio").sender.is_bot);
+        assert!(to_inbound(&from_hook, &shared, None).expect("messaggio").sender.is_bot);
     }
 
     #[test]
@@ -1528,7 +1542,7 @@ mod tests {
             "id": "m2", "channel_id": "ch1", "guild_id": "9001", "content": "",
             "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
-        assert!(to_inbound(&empty, &shared).is_none());
+        assert!(to_inbound(&empty, &shared, None).is_none());
     }
 
     /* Sending. */
@@ -1762,7 +1776,7 @@ mod tests {
         let gateway = FakeGateway::start(vec![]);
         let discord = adapter(&rest, &gateway);
         // A press in a private chat: no guild, the author at the top level.
-        let press = to_press(&interaction(false)).expect("pressione");
+        let press = to_press(&interaction(false), None).expect("pressione");
         assert!(press.private, "una interazione privata non ha guild_id");
         assert!(admits(&press), "una pressione in privato deve passare: e' il caso di G5");
         // And it is confirmed, with the deferred type, on the documented path.
@@ -1780,7 +1794,7 @@ mod tests {
 
         // In a server the press has a guild, so it is not a private chat: it
         // gets through because the hub checks the author and the code.
-        let in_server = to_press(&interaction(true)).expect("pressione");
+        let in_server = to_press(&interaction(true), None).expect("pressione");
         assert!(!in_server.private, "una pressione in un canale ha guild_id");
         assert!(admits(&in_server), "una pressione arriva comunque: e' ADE ad averla messa");
     }
@@ -1793,12 +1807,12 @@ mod tests {
             // A direct message: no guild. There is no channel type to read.
             "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
-        assert!(to_inbound(&direct, &shared).expect("messaggio").private);
+        assert!(to_inbound(&direct, &shared, None).expect("messaggio").private);
         let in_server: Value = json!({
             "id": "m2", "channel_id": "ch1", "guild_id": "9001",
             "content": "ciao <@42>", "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
-        let in_server = to_inbound(&in_server, &shared).expect("messaggio");
+        let in_server = to_inbound(&in_server, &shared, None).expect("messaggio");
         assert!(!in_server.private, "in un canale di un server non e' privato");
         assert!(in_server.mentioned, "ma la menzione lo abilita");
     }
@@ -1916,13 +1930,13 @@ mod tests {
             "data": { "custom_id": "continua" },
             "member": { "user": { "id": "u1", "username": "qualcuno" } },
         });
-        let inbound = to_press(&press).expect("pressione");
+        let inbound = to_press(&press, None).expect("pressione");
         assert!(inbound.button);
         assert_eq!(inbound.text, "continua");
         assert_eq!(inbound.sender.id, "u1");
         // A slash command is not a press under a message.
         let command: Value = json!({ "id": "i2", "channel_id": "ch1", "type": 2, "data": { "custom_id": "x" } });
-        assert!(to_press(&command).is_none());
+        assert!(to_press(&command, None).is_none());
     }
 
     #[tokio::test]

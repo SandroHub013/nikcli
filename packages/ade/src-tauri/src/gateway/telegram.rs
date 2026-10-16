@@ -129,6 +129,7 @@ fn sender(from: &Value) -> Option<Sender> {
 /// An update as the hub sees it; `None` for what the gateway does not take
 /// (no text, an edit, a channel post).
 fn inbound(update: &Value) -> Option<Inbound> {
+    let cursor = update["update_id"].as_i64().map(|id| (id + 1).to_string());
     if let Some(message) = update.get("message") {
         let text = message["text"].as_str().or_else(|| message["caption"].as_str())?;
         return Some(Inbound {
@@ -141,6 +142,7 @@ fn inbound(update: &Value) -> Option<Inbound> {
             sender: sender(&message["from"])?,
             text: text.to_string(),
             button: false,
+            cursor,
         });
     }
     let press = update.get("callback_query")?;
@@ -153,6 +155,7 @@ fn inbound(update: &Value) -> Option<Inbound> {
         sender: sender(&press["from"])?,
         text: press["data"].as_str().unwrap_or_default().to_string(),
         button: true,
+        cursor,
     })
 }
 

@@ -270,3 +270,9 @@ pub fn gateway_slack_manifest(name: String) -> String {
 pub async fn gateway_pairing_reject(app: AppHandle, bot: String, platform: Platform, request: String) -> Result<(), String> {
     hub(&app)?.pairing_reject(&bot, platform, &request)
 }
+
+/// The page acknowledged receipt of a message: the cursor can now be advanced in state.json.
+#[tauri::command]
+pub async fn gateway_ack(app: AppHandle, bot: String, platform: Platform, id: String) -> Result<(), String> {
+    hub(&app)?.ack(&bot, platform, &id)
+}
