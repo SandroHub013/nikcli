@@ -910,6 +910,7 @@ export const en: Messages = {
   "gateway.panel.stopped": "On, but stopped by an error",
   "gateway.panel.needsAttention": "Needs attention",
   "gateway.panel.connected": "On · connected",
+  "gateway.panel.connectedSince": (time: string) => `connected since ${time}`,
   "gateway.panel.connecting": "On · connecting",
   "gateway.panel.reconnecting": "On · reconnecting",
   "gateway.panel.retry": "Retry",

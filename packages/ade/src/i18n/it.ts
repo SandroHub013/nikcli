@@ -930,6 +930,7 @@ export const it = {
   "gateway.panel.stopped": "Acceso, ma fermo per un errore",
   "gateway.panel.needsAttention": "Richiede attenzione",
   "gateway.panel.connected": "Acceso · collegato",
+  "gateway.panel.connectedSince": (time: string) => `collegato da ${time}`,
   "gateway.panel.connecting": "Acceso · in collegamento",
   "gateway.panel.reconnecting": "Acceso · riconnessione in corso",
   "gateway.panel.retry": "Riprova",

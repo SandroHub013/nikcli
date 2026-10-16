@@ -95,9 +95,15 @@ export function GatewaySection(props: {
     if (!link.running) return { tone: "error", text: t("gateway.panel.stopped") }
     if (link.needsAttention) return { tone: "error", text: t("gateway.panel.needsAttention") }
     if (link.reconnecting) return { tone: "wait", text: t("gateway.panel.reconnecting") }
-    return link.connected
-      ? { tone: "on", text: t("gateway.panel.connected") }
-      : { tone: "wait", text: t("gateway.panel.connecting") }
+    if (link.connected) {
+      return {
+        tone: "on",
+        text: link.connectedAtMs
+          ? t("gateway.panel.connectedSince", time(link.connectedAtMs))
+          : t("gateway.panel.connected"),
+      }
+    }
+    return { tone: "wait", text: t("gateway.panel.connecting") }
   }
 
   const approve = () => {
@@ -185,7 +191,7 @@ export function GatewaySection(props: {
           <span data-slot="gateway-dot" aria-hidden="true" />
           <span>{state().text}</span>
           <Show when={panel.link().lastMessageMs}>
-            {(at) => <span data-slot="gateway-meta">{t("gateway.panel.lastMessage", time(at()))}</span>}
+            {(at) => <span data-slot="gateway-meta"> · {t("gateway.panel.lastMessage", time(at()))}</span>}
           </Show>
         </div>
         <Show when={panel.link().needsAttention}>

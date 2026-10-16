@@ -245,4 +245,26 @@ describe("opening a tile starts the five steps", () => {
     expect(slot.textContent).toContain("Apri t.me/mio_bot su questo computer")
     expect(slot.textContent).not.toContain("SEGRETO")
   })
+
+  test("Point 5: platform status box shows «collegato da … · ultimo messaggio …» and never a PID", async () => {
+    const connAt = 10_000_000
+    const msgAt = 12_000_000
+    await mount([
+      link("telegram", {
+        hasToken: true,
+        enabled: true,
+        running: true,
+        connected: true,
+        connectedAtMs: connAt,
+        lastMessageMs: msgAt,
+      }),
+    ])
+    const stateEl = document.querySelector('div[data-slot="gateway-state"][role="status"]')
+    expect(stateEl).not.toBeNull()
+    const text = stateEl?.textContent ?? ""
+    expect(text).toContain("collegato da")
+    expect(text).toContain("ultimo messaggio")
+    expect(text).not.toContain("PID")
+    expect(text).not.toContain("pid")
+  })
 })
