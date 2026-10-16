@@ -109,6 +109,18 @@ describe("«Aspettano te»", () => {
     expect(opened).toEqual([["C:/p/a.md", "uno"]])
   })
 
+  test("P2-6: at 0:00 the buttons are off and the line says it expired", () => {
+    const host = mount(() => [request({ expiresAt: 61_000 })])
+    expect(host.querySelector('[data-slot="bots-waiting-item"]')!.textContent).toContain("scaduta: vale come Nega")
+    expect(host.querySelector('[data-slot="bots-waiting-item"]')!.textContent).not.toContain("restano")
+    const buttons = [...host.querySelectorAll("button")].filter((button) => button.textContent === "Consenti" || button.textContent === "Nega")
+    expect(buttons).toHaveLength(2)
+    expect(buttons.every((button) => button.disabled)).toBe(true)
+    // One second before, they work.
+    const live = mount(() => [request({ expiresAt: 62_000 })])
+    expect(live.textContent).toContain("restano 0:01")
+  })
+
   test("it follows the list as requests come and go", () => {
     const [list, setList] = createSignal<ApprovalRequest[]>([])
     const host = mount(list)

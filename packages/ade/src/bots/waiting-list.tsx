@@ -2,7 +2,7 @@ import { createEffect, createSignal, For, onCleanup, Show } from "solid-js"
 import { t } from "../i18n"
 import { approvalAction, sourcesText } from "./approval-signal"
 import { visibleText } from "./visible-text"
-import { decideApproval, remainingClock, type ApprovalChoice, type WaitingApproval } from "./approvals"
+import { decideApproval, remainingClock, remainingMs, type ApprovalChoice, type WaitingApproval } from "./approvals"
 
 /**
  * «Aspettano te»: what the bots wait for, at the top of the list of bots (the user's choice 4). Each one says whose
@@ -30,6 +30,9 @@ export function WaitingList(props: {
     onCleanup(() => clearInterval(timer))
   })
 
+  // A request that ran out stays for an instant, at 0:00, until its source closes it: nothing to answer any more.
+  const expired = (waiting: WaitingApproval) => remainingMs(waiting, now()) === 0
+
   const decide = (waiting: WaitingApproval, choice: ApprovalChoice) =>
     props.onDecide ? props.onDecide(waiting, choice) : void decideApproval(waiting, choice)
 
@@ -49,16 +52,23 @@ export function WaitingList(props: {
                 </span>
                 <Show when={waiting.reason}>{(reason) => <span data-slot="bots-hint">{reason()}</span>}</Show>
                 <span data-slot="bots-hint">
-                  {sourcesText(waiting.sources)} · {t("bots.waiting.left", remainingClock(waiting, now()))}
+                  {sourcesText(waiting.sources)} ·{" "}
+                  {expired(waiting) ? t("bots.waiting.expired") : t("bots.waiting.left", remainingClock(waiting, now()))}
                 </span>
                 <span data-slot="bots-waiting-actions">
                   <Show when={waiting.choices.includes("once")}>
-                    <button type="button" data-slot="bots-btn" onClick={() => decide(waiting, "once")}>
+                    <button type="button" data-slot="bots-btn" disabled={expired(waiting)} onClick={() => decide(waiting, "once")}>
                       {t("bots.permission.allow")}
                     </button>
                   </Show>
                   <Show when={waiting.choices.includes("reject")}>
-                    <button type="button" data-slot="bots-btn" data-tone="danger" onClick={() => decide(waiting, "reject")}>
+                    <button
+                      type="button"
+                      data-slot="bots-btn"
+                      data-tone="danger"
+                      disabled={expired(waiting)}
+                      onClick={() => decide(waiting, "reject")}
+                    >
                       {t("bots.permission.deny")}
                     </button>
                   </Show>
