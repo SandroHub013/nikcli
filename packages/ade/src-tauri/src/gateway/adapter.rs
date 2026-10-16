@@ -160,6 +160,8 @@ pub trait Adapter: Send + Sync {
     fn cursor(&self) -> Option<String> {
         None
     }
+    /// Confirms that messages up to `cursor` were delivered to the frontend.
+    fn ack(&self, _cursor: &str) {}
     /// Messages already confirmed to the platform and still waiting here to
     /// be read: a stop leaves them behind, and a platform without a cursor
     /// does not send them again. Only counted, for the log.

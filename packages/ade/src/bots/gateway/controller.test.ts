@@ -171,6 +171,34 @@ describe("the gateways' controller", () => {
     expect(b.acks).toEqual([{ bot: BOT.path, platform: "telegram", chat: "c42", id: "m42" }])
   })
 
+  test("a message waiting in queue behind a running turn is only acknowledged when its turn starts (A3)", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("primo", { id: "m1", bot: BOT.path, platform: "telegram", chat: "c42" })
+    await until("il primo turno", () => turns.started.length === 1)
+    b.emit("secondo", { id: "m2", bot: BOT.path, platform: "telegram", chat: "c42" })
+    await until("la seconda è in coda", () => b.sent.length === 1)
+
+    // Turn 1 started -> m1 is acked, but m2 is queued and NOT yet acked:
+    expect(b.acks).toEqual([{ bot: BOT.path, platform: "telegram", chat: "c42", id: "m1" }])
+
+    // Discarded command is acknowledged immediately even mid-turn:
+    b.emit("/stato", { id: "m3", bot: BOT.path, platform: "telegram", chat: "c42" })
+    expect(b.acks.some((a) => a.id === "m3")).toBe(true)
+
+    // Finish turn 1:
+    turns.started[0]!.finish({ text: "ok", sessionId: "s1" })
+    await until("il secondo turno", () => turns.started.length === 2)
+    // Now turn 2 starts -> m2 is acked:
+    expect(b.acks.some((a) => a.id === "m2")).toBe(true)
+  })
+
   test("a message with the same (bot, platform, chat, id) is ignored and does not start a second turn (N-A3a)", async () => {
     const b = bridge()
     const turns = fakeTurns()

@@ -301,6 +301,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     if (closed || state.turn || state.starting) return
     const message = state.queue.shift()
     if (!message) return
+    void deps.bridge.ack?.(message.bot, message.platform, message.chat, message.id)?.catch?.(() => {})
     state.starting = true
     state.cancelled = false
     state.current = message
@@ -451,13 +452,19 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
 
   const receive = async (message: GatewayMessage) => {
     if (closed) return
-    void deps.bridge.ack?.(message.bot, message.platform, message.chat, message.id)?.catch?.(() => {})
+    const ack = () => void deps.bridge.ack?.(message.bot, message.platform, message.chat, message.id)?.catch?.(() => {})
     if (isDuplicate(message)) return
     // A press answers a question; it never starts a turn.
-    if (message.button) return press(message)
+    if (message.button) {
+      ack()
+      return press(message)
+    }
     const key = sessionKey(message.bot, message.platform, message.chat)
     const which = chatCommand(message.text)
-    if (which) return command(message, key, which)
+    if (which) {
+      ack()
+      return command(message, key, which)
+    }
     const state = stateOf(key)
     const counted = countMessage(state.times, now())
     state.times = counted.times
@@ -466,6 +473,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
      * otherwise be queued first, and answered first (G4 review, BASSO 1).
      */
     if (!counted.allowed) {
+      ack()
       if (!state.limited) {
         state.limited = true
         void reply(message, t("gateway.limit", CHAT_MESSAGES_PER_HOUR))

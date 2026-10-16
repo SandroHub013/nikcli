@@ -160,11 +160,18 @@ struct Live {
     stopped: bool,
 }
 
+#[derive(Clone, Debug)]
+struct PendingEntry {
+    msg: GatewayMessage,
+    cursor: Option<String>,
+    acked: bool,
+}
+
 struct Running {
     adapter: Arc<dyn Adapter>,
     stop: watch::Sender<bool>,
     live: Arc<Mutex<Live>>,
-    pending: Arc<Mutex<VecDeque<(GatewayMessage, Option<String>)>>>,
+    pending: Arc<Mutex<VecDeque<PendingEntry>>>,
 }
 
 /// Which of a link's secrets: the bot's token, or Slack's App-Level Token.
@@ -542,7 +549,15 @@ impl Hub {
             let links = self.links();
             links
                 .values()
-                .flat_map(|r| r.pending.lock().unwrap().iter().map(|(msg, _)| msg.clone()).collect::<Vec<_>>())
+                .flat_map(|r| {
+                    r.pending
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .filter(|entry| !entry.acked)
+                        .map(|entry| entry.msg.clone())
+                        .collect::<Vec<_>>()
+                })
                 .collect()
         };
         for msg in pending {
@@ -632,24 +647,25 @@ impl Hub {
     /// The webview acknowledged receipt of a message: advance the cursor up to this message in state.json.
     pub fn ack(&self, bot: &str, platform: Platform, chat: &str, id: &str) -> Result<(), String> {
         check_bot(bot)?;
-        let running = self.links().get(&(bot.to_string(), platform)).map(|r| r.pending.clone());
-        let Some(pending_lock) = running else {
-            return Ok(());
+        let (adapter, pending_lock) = match self.links().get(&(bot.to_string(), platform)) {
+            Some(r) => (r.adapter.clone(), r.pending.clone()),
+            None => return Ok(()),
         };
         let mut cursor_to_save = None;
         {
             let mut pending = pending_lock.lock().unwrap();
-            if let Some(pos) = pending.iter().position(|(m, _)| m.chat == chat && m.id == id) {
-                for _ in 0..=pos {
-                    if let Some((_, c)) = pending.pop_front() {
-                        if c.is_some() {
-                            cursor_to_save = c;
-                        }
-                    }
+            if let Some(entry) = pending.iter_mut().find(|entry| entry.msg.chat == chat && entry.msg.id == id) {
+                entry.acked = true;
+            }
+            while pending.front().map_or(false, |entry| entry.acked) {
+                let popped = pending.pop_front().unwrap();
+                if popped.cursor.is_some() {
+                    cursor_to_save = popped.cursor;
                 }
             }
         }
         if let Some(cursor) = cursor_to_save {
+            adapter.ack(&cursor);
             let written_at = self.env.now_ms();
             self.store.update(bot, platform, |link, _| {
                 if is_cursor_ahead(link.cursor.as_deref(), &cursor) {
@@ -901,7 +917,7 @@ struct Task {
     bot: String,
     platform: Platform,
     live: Arc<Mutex<Live>>,
-    pending: Arc<Mutex<VecDeque<(GatewayMessage, Option<String>)>>>,
+    pending: Arc<Mutex<VecDeque<PendingEntry>>>,
     /// Taken at start; an error or a text holding one of these is cleaned before it is shown.
     secrets: Vec<String>,
     backoff: (Duration, Duration),
@@ -971,7 +987,7 @@ impl Task {
                     for message in batch {
                         self.deliver(message).await;
                     }
-                    if self.pending.lock().unwrap().is_empty() {
+                    if self.pending.lock().unwrap().iter().all(|entry| entry.acked) {
                         self.save_cursor();
                     }
                 }
@@ -1088,7 +1104,7 @@ impl Task {
             private: message.private,
         };
         let cursor = message.cursor.clone().or_else(|| self.adapter.cursor());
-        self.pending.lock().unwrap().push_back((msg.clone(), cursor));
+        self.pending.lock().unwrap().push_back(PendingEntry { msg: msg.clone(), cursor, acked: false });
         self.env.message(&msg);
         self.report(|live| live.last_message_ms = Some(at));
     }
@@ -2229,6 +2245,40 @@ mod tests {
 
         s.hub.ack(BOT, Platform::Fake, "c42", "501").unwrap();
         eventually("il cursore avanzato", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("502")).await;
+    }
+
+    #[tokio::test]
+    async fn ack_only_removes_that_message_and_cursor_only_advances_when_preceding_are_confirmed() {
+        let s = setup("sliding-window-ack");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+
+        feed.send(Ok(vec![
+            Inbound { cursor: Some("101".into()), ..message("100", "c42", "42", "primo") },
+            Inbound { cursor: Some("103".into()), ..message("102", "c42", "42", "secondo") },
+        ])).unwrap();
+        eventually("due messaggi emessi", || s.env.messages.lock().unwrap().len() == 2).await;
+
+        // Acknowledging the second message while the first is unacknowledged:
+        s.hub.ack(BOT, Platform::Fake, "c42", "102").unwrap();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+
+        // The cursor must NOT advance to 103 yet, because message 100 before it is unconfirmed:
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor, None);
+
+        // Page reloads:
+        s.hub.unready();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        s.hub.ready();
+
+        // Only message 100 was unacknowledged, so only message 100 is re-emitted (total 3 messages):
+        eventually("solo il primo riemesso", || s.env.messages.lock().unwrap().len() == 3).await;
+        assert_eq!(s.env.messages.lock().unwrap()[2].id, "100");
+
+        // Now acknowledge the first message:
+        s.hub.ack(BOT, Platform::Fake, "c42", "100").unwrap();
+        // Since both 100 and 102 are now confirmed, cursor advances to 103:
+        eventually("il cursore avanza a 103", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("103")).await;
     }
 
     #[tokio::test]
