@@ -24,6 +24,17 @@ export interface ChatSession {
   readonly project: string
   readonly runner: string
   readonly sessionId: string
+  /** The words that opened the conversation, short: how `/sessioni` names it. */
+  readonly title?: string
+  /** When the conversation last had a turn. */
+  readonly at?: number
+}
+
+/** The title of a conversation: its first line, on one line, short. */
+export function sessionTitle(text: string): string {
+  const line = (text.split(/\r?\n/).find((each) => each.trim()) ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim()
+  const chars = [...line]
+  return chars.length > 40 ? `${chars.slice(0, 39).join("")}…` : line
 }
 
 /** The CLI session each chat continues. */
@@ -41,9 +52,15 @@ export function resumable(saved: ChatSession | undefined, project: string, runne
 /** A saved session as far as it can be trusted; one saved before this shape is none. */
 function parse(value: unknown): ChatSession | undefined {
   if (!value || typeof value !== "object") return undefined
-  const { project, runner, sessionId } = value as Record<string, unknown>
+  const { project, runner, sessionId, title, at } = value as Record<string, unknown>
   return typeof project === "string" && typeof runner === "string" && typeof sessionId === "string" && sessionId
-    ? { project, runner: currentAgentId(runner), sessionId }
+    ? {
+        project,
+        runner: currentAgentId(runner),
+        sessionId,
+        ...(typeof title === "string" ? { title: sessionTitle(title) } : {}),
+        ...(typeof at === "number" && Number.isFinite(at) ? { at } : {}),
+      }
     : undefined
 }
 
@@ -82,5 +99,87 @@ export function memorySessionStore(): SessionStore {
     get: (key) => sessions.get(key),
     set: (key, session) => void sessions.set(key, session),
     forget: (key) => void sessions.delete(key),
+  }
+}
+
+/** How many past conversations a chat keeps to resume. */
+export const HISTORY_PER_CHAT = 5
+
+/**
+ * The conversations a chat left with `/nuova` or `/sessioni`, newest first, for `/sessioni` to list. Each is the CLI's
+ * session id with the project and runner it ran in, so it is only resumed where it can be (`resumable`).
+ */
+export interface HistoryStore {
+  list: (key: string) => ChatSession[]
+  /** Keeps `past` as the newest; returns the ones the cap pushed out. */
+  add: (key: string, past: ChatSession) => ChatSession[]
+  remove: (key: string, sessionId: string) => void
+  /** Takes the chat's whole history away; returns what it held. */
+  clear: (key: string) => ChatSession[]
+}
+
+function rememberPast(list: readonly ChatSession[], past: ChatSession): { kept: ChatSession[]; pushedOut: ChatSession[] } {
+  const all = [past, ...list.filter((each) => each.sessionId !== past.sessionId)]
+  return { kept: all.slice(0, HISTORY_PER_CHAT), pushedOut: all.slice(HISTORY_PER_CHAT) }
+}
+
+const HISTORY_KEY = "ade.gateway.history"
+
+/** In the renderer's storage, next to the sessions. */
+export function localHistoryStore(key: string = HISTORY_KEY): HistoryStore {
+  const read = (): Record<string, unknown> => {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) ?? "{}") as unknown
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {}
+    } catch {
+      return {}
+    }
+  }
+  const write = (all: Record<string, unknown>) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(all))
+    } catch {
+      // Storage blocked: the history lasts until ADE closes.
+    }
+  }
+  const listOf = (all: Record<string, unknown>, chat: string): ChatSession[] => {
+    const value = all[chat]
+    return Array.isArray(value) ? value.map(parse).filter((each) => each !== undefined) : []
+  }
+  return {
+    list: (chat) => listOf(read(), chat),
+    add: (chat, past) => {
+      const all = read()
+      const { kept, pushedOut } = rememberPast(listOf(all, chat), past)
+      write({ ...all, [chat]: kept })
+      return pushedOut
+    },
+    remove: (chat, sessionId) => {
+      const all = read()
+      write({ ...all, [chat]: listOf(all, chat).filter((each) => each.sessionId !== sessionId) })
+    },
+    clear: (chat) => {
+      const { [chat]: gone, ...rest } = read()
+      write(rest)
+      return Array.isArray(gone) ? gone.map(parse).filter((each) => each !== undefined) : []
+    },
+  }
+}
+
+export function memoryHistoryStore(): HistoryStore {
+  const all = new Map<string, ChatSession[]>()
+  return {
+    list: (key) => [...(all.get(key) ?? [])],
+    add: (key, past) => {
+      const { kept, pushedOut } = rememberPast(all.get(key) ?? [], past)
+      all.set(key, kept)
+      return pushedOut
+    },
+    remove: (key, sessionId) => void all.set(key, (all.get(key) ?? []).filter((each) => each.sessionId !== sessionId)),
+    clear: (key) => {
+      const gone = all.get(key) ?? []
+      all.delete(key)
+      return gone
+    },
   }
 }

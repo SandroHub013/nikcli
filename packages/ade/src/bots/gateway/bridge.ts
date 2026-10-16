@@ -19,7 +19,7 @@ import { recheckTrust, scopeOf } from "./policy"
 import { localAccountStore } from "../account"
 import { localRemoteStore, remoteKey } from "./remote"
 import { appMemoryStore } from "../memory-app"
-import { localSessionStore } from "./session"
+import { localHistoryStore, localSessionStore } from "./session"
 import { localChatModelStore } from "./chat-model"
 import { spendStatus, spendTerms, withDailyCap } from "../spend"
 import { appSpendStore } from "../spend-app"
@@ -162,6 +162,7 @@ export async function startAppGatewayController(): Promise<GatewayController> {
         globalRoot: (await resolveRoots()).global,
       }),
     sessions: localSessionStore(),
+    history: localHistoryStore(),
     threads: localGatewayThreads(),
     remote: (bot, platform) => localRemoteStore().get(remoteKey(bot, platform)),
     account: (bot) => localAccountStore().get(bot),

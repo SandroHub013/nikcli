@@ -14,6 +14,7 @@
  * - `/nuova`, `/ferma`, `/stato`, `/aiuto` act at once, even mid-turn; `/riprova` asks the last question again, once
  *   the turn before it is over; `/costo` says today's spend, as `/stato` does at its end;
  *   `/modello` shows the model and lets the chat choose another of the bot's own, for that chat alone (`chat-model.ts`);
+ *   `/sessioni` lists the last conversations of a private chat and resumes one (`session.ts`, `HistoryStore`);
  * - the turn runs in the project fixed when the gateway was switched on, with
  *   the bot's file as it is now and only if the user's trust still holds for
  *   it (`policy.ts`); the plan's places are `runTurn`'s (`terms.ts`);
@@ -32,7 +33,7 @@
  * once the listener is in place, and Rust holds every gateway until then.
  */
 
-import { t } from "../../i18n"
+import { locale, t } from "../../i18n"
 import { visibleText } from "../visible-text"
 import type { AgentFile } from "../ragu"
 import { answerSoFar, runnerById } from "../runners"
@@ -47,7 +48,7 @@ import { botForChat, modelChoices, type ChatModelStore } from "./chat-model"
 import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
 import type { BotAccount } from "../account"
 import { offersRemoteCommands, REMOTE_OFF, remoteTools, type RemoteSetting } from "./remote"
-import { resumable, sessionKey, type SessionStore } from "./session"
+import { resumable, sessionKey, sessionTitle, type ChatSession, type HistoryStore, type SessionStore } from "./session"
 import { gatewayThreadKey, keptThread, type GatewayThreads } from "./threads"
 
 /** `gateway:message`, as Rust emits it. */
@@ -123,6 +124,8 @@ export interface GatewayControllerDeps {
     project: string,
   ) => Promise<{ ok: true; bot: AgentFile; fingerprint?: string } | { ok: false; problem: string; detail?: string }>
   readonly sessions: SessionStore
+  /** The conversations a chat left behind, for `/sessioni`. Absent, `/nuova` leaves none to resume. */
+  readonly history?: HistoryStore
   /** The chat's thread on disk, apart from the panel's. Absent in a test that does not keep one. */
   readonly threads?: GatewayThreads
   /** The bot's remote commands as saved (`remote.ts`); off when absent. */
@@ -396,6 +399,87 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     noteTurnFailure(message.bot, message.platform, problem, now())
   }
 
+  /** Where a past conversation's thread is kept: the chat's thread key with the session id after it. */
+  const pastThreadKey = (message: GatewayMessage, sessionId: string) =>
+    gatewayThreadKey(message.bot, message.platform, message.chat, sessionId)
+
+  /**
+   * The conversation the chat is in, kept to resume with `/sessioni` before `/nuova` or another choice drops it: its CLI
+   * session, and the thread ADE shows. What the cap pushes out of the history goes with its thread.
+   */
+  const keepPast = (message: GatewayMessage, key: string) => {
+    const current = deps.sessions.get(key)
+    if (!current || !deps.history) return
+    const thread = deps.threads?.read(gatewayThreadKey(message.bot, message.platform, message.chat))
+    if (thread && thread.messages.length > 0) deps.threads?.save(pastThreadKey(message, current.sessionId), thread)
+    for (const gone of deps.history.add(key, current)) deps.threads?.forget(pastThreadKey(message, gone.sessionId))
+  }
+
+  /** A conversation as `/sessioni` lists it: «its first words» and when it last had a turn. */
+  const describeSession = (past: ChatSession) => {
+    const title = past.title || t("gateway.sessions.untitled")
+    if (past.at === undefined) return `«${title}»`
+    const when = new Intl.DateTimeFormat(locale() === "it" ? "it-IT" : "en-US", {
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(past.at)
+    return t("gateway.sessions.item", title, when)
+  }
+
+  /**
+   * `/sessioni`: the last conversations of this chat, and the one the person picks becomes the chat's own again. Only in
+   * a private chat (the first words of each are shown), and not while a turn runs.
+   */
+  const chooseSession = async (message: GatewayMessage, key: string) => {
+    if (message.private !== true) return reply(message, t("gateway.sessions.private"))
+    const state = stateOf(key)
+    const busy = () => state.turn !== undefined || state.starting
+    if (busy()) return reply(message, t("gateway.sessions.busy"))
+    const past = deps.history?.list(key) ?? []
+    const current = deps.sessions.get(key)
+    if (past.length === 0) return reply(message, t("gateway.sessions.none"))
+    const picked = await ask(
+      { bot: message.bot, platform: message.platform, chat: message.chat, asker: message.sender.id },
+      t(
+        "gateway.sessions.ask",
+        current ? t("gateway.sessions.now", describeSession(current)) : "",
+        numberedList(past.map(describeSession)),
+      ),
+      past.map((each, index) => ({
+        label: `${index + 1}. ${each.title || t("gateway.sessions.untitled")}`,
+        value: each.sessionId,
+      })),
+      PICK_TIMEOUT_MS,
+      undefined,
+      undefined,
+      { numbered: true },
+    )
+    if (picked === undefined) return
+    const chosen = deps.history?.list(key).find((each) => each.sessionId === picked)
+    if (!chosen) return
+    if (busy()) return reply(message, t("gateway.sessions.busy"))
+    // Resumed only where it can be: the project the gateway runs in now, and the CLI the bot is on now.
+    const project = await deps.bridge.project(message.bot, message.platform)
+    if (!project) return reply(message, t("gateway.noProject"))
+    const loaded = await deps.loadBot(message.bot, project)
+    if (!loaded.ok) return reply(message, loaded.problem)
+    if (!resumable(chosen, project, runnerById(loaded.bot.runner).id))
+      return reply(message, t("gateway.sessions.other", chosen.title || t("gateway.sessions.untitled")))
+    if (busy()) return reply(message, t("gateway.sessions.busy"))
+    state.fresh += 1
+    const thread = deps.threads?.read(pastThreadKey(message, chosen.sessionId))
+    deps.history?.remove(key, chosen.sessionId)
+    keepPast(message, key)
+    deps.sessions.set(key, chosen)
+    const stored = gatewayThreadKey(message.bot, message.platform, message.chat)
+    if (thread && thread.messages.length > 0) deps.threads?.save(stored, thread)
+    else deps.threads?.forget(stored)
+    deps.threads?.forget(pastThreadKey(message, chosen.sessionId))
+    return reply(message, t("gateway.sessions.resumed", chosen.title || t("gateway.sessions.untitled")))
+  }
+
   /** The list of `lines` as the text of a question: one per line, numbered from 1. */
   const numberedList = (lines: readonly string[]) => lines.map((line, index) => `${index + 1}. ${line}`).join("\n")
 
@@ -427,7 +511,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     })
     const picked = await ask(
       { bot: message.bot, platform: message.platform, chat: message.chat, asker: message.sender.id },
-      t("gateway.model.ask", named(current), numberedList(marked), runner.id === "ragu"),
+      t("gateway.model.ask", named(current), numberedList(marked), runner.id === "ragu" ? t("gateway.model.freeOnly") : ""),
       options.map((model, index) => ({ label: `${index + 1}. ${named(model)}`, value: model })),
       PICK_TIMEOUT_MS,
       undefined,
@@ -445,6 +529,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     const running = state.turn !== undefined || state.starting
     if (which === "new") {
       state.fresh += 1
+      keepPast(message, key)
       deps.sessions.forget(key)
       deps.threads?.forget(gatewayThreadKey(message.bot, message.platform, message.chat))
       return reply(message, t("gateway.fresh"))
@@ -487,6 +572,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       return reply(message, spent ?? t("gateway.cost.none"))
     }
     if (which === "model") return chooseModel(message, key)
+    if (which === "sessions") return chooseSession(message, key)
     if (which === "status") {
       const said = running ? t("gateway.status.working", state.queue.length) : t("gateway.status.idle")
       const spent = await deps.spendToday?.(message.bot, deps.chatModels?.get(key)?.model).catch(() => undefined)
@@ -679,7 +765,17 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       clearInterval(typing)
       typing = undefined
       const kept = state.fresh === fresh
-      if (kept && result.sessionId) deps.sessions.set(key, { project, runner, sessionId: result.sessionId })
+      if (kept && result.sessionId) {
+        // The conversation keeps the words it began with; a new one begins with these.
+        const began = sessionId ? deps.sessions.get(key)?.title : undefined
+        deps.sessions.set(key, {
+          project,
+          runner,
+          sessionId: result.sessionId,
+          title: began ?? sessionTitle(message.text),
+          at: now(),
+        })
+      }
       const said = settleChatMemory(message.bot, result.talk, sent, framed)
       const text = said.found ? takeMemoryOps(result.text).text : result.text
       if (kept && deps.threads && result.talk) {

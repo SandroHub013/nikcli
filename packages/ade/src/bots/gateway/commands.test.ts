@@ -5,7 +5,9 @@ import { emptyTalk } from "../talk"
 import type { Turn, TurnRequest, TurnResult } from "../turn"
 import { chatCommand } from "./policy"
 import { startGatewayController, type GatewayBridge, type GatewayMessage } from "./controller"
-import { memorySessionStore } from "./session"
+import { HISTORY_PER_CHAT, memoryHistoryStore, memorySessionStore, sessionTitle } from "./session"
+import { createGatewayThreads, gatewayThreadKey, type ThreadDisk } from "./threads"
+import { appendMessage, sendMessage } from "../talk"
 import { botForChat, memoryChatModelStore, modelChoices, MODEL_CHOICES_MAX } from "./chat-model"
 
 /*
@@ -109,6 +111,8 @@ describe("the names of the commands", () => {
     expect(chatCommand("/cost")).toBe("cost")
     expect(chatCommand("/modello")).toBe("model")
     expect(chatCommand("/MODEL@MioBot")).toBe("model")
+    expect(chatCommand("/sessioni")).toBe("sessions")
+    expect(chatCommand("/sessions")).toBe("sessions")
   })
 })
 
@@ -409,6 +413,165 @@ describe("/modello", () => {
     expect(t("gateway.help")).toContain("/modello")
     setLocalePreference("en")
     expect(t("gateway.help")).toContain("/model ")
+    setLocalePreference("it")
+  })
+})
+
+describe("/sessioni", () => {
+  const KEY = `${BOT.path}:telegram:c42`
+  const memoryDisk = (): ThreadDisk & { items: Map<string, string> } => {
+    const items = new Map<string, string>()
+    return {
+      items,
+      getItem: (key) => items.get(key) ?? null,
+      setItem: (key, value) => void items.set(key, value),
+      removeItem: (key) => void items.delete(key),
+    }
+  }
+  const setup = async (extra: Partial<Parameters<typeof startGatewayController>[0]> = {}) => {
+    const b = bridge()
+    const turns = fakeTurns()
+    const sessions = memorySessionStore()
+    const history = memoryHistoryStore()
+    const disk = memoryDisk()
+    const threads = createGatewayThreads(disk)
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions,
+      history,
+      threads,
+      ...extra,
+    })
+    /** One whole turn of the chat: the words, and the session the CLI gave. */
+    const say = async (text: string, sessionId: string, chat = "c42") => {
+      const before = turns.started.length
+      b.emit(text, { chat })
+      await until("il turno", () => turns.started.length === before + 1)
+      const talk = appendMessage(sendMessage(emptyTalk(), text, 1), { role: "bot", text: `risposta a ${text}` }, 2)
+      turns.started[before]!.finish({ text: `risposta a ${text}`, sessionId, talk })
+      await until("la risposta", () => b.sent.at(-1)?.text === `risposta a ${text}`)
+    }
+    return { b, turns, sessions, history, disk, threads, say }
+  }
+
+  test("a conversation gets the first words it began with as its title, and keeps them", async () => {
+    const { sessions, say } = await setup()
+    await say("  \n  fammi un riassunto del progetto  ", "s-1")
+    expect(sessions.get(KEY)?.title).toBe("fammi un riassunto del progetto")
+    await say("e poi?", "s-1")
+    expect(sessions.get(KEY)?.title).toBe("fammi un riassunto del progetto")
+    expect(sessions.get(KEY)?.at).toBeGreaterThan(0)
+    expect(sessionTitle("x".repeat(80))).toHaveLength(40)
+    expect(sessionTitle("riga uno\nriga due")).toBe("riga uno")
+  })
+
+  test("/nuova keeps the conversation it drops, and /sessioni lists it and resumes it with its thread", async () => {
+    const { b, sessions, history, threads, say, turns } = await setup()
+    await say("prima conversazione", "s-1")
+    b.emit("/nuova")
+    await until("nuova", () => b.sent.at(-1)?.text === t("gateway.fresh"))
+    expect(sessions.get(KEY)).toBeUndefined()
+    expect(history.list(KEY).map((past) => past.sessionId)).toEqual(["s-1"])
+    await say("seconda conversazione", "s-2")
+    // The chat's thread is the second one now; the first is kept apart.
+    expect(threads.read(gatewayThreadKey(BOT.path, "telegram", "c42")).messages.some((m) => m.text === "seconda conversazione")).toBe(true)
+    b.emit("/sessioni")
+    await until("la lista", () => b.questions.length === 1)
+    expect(b.questions[0]!.text).toContain("prima conversazione")
+    expect(b.questions[0]!.text).toContain("seconda conversazione")
+    expect(b.questions[0]!.buttons).toHaveLength(1)
+    b.press(0)
+    await until("ripresa", () => b.sent.at(-1)?.text === t("gateway.sessions.resumed", "prima conversazione"))
+    expect(sessions.get(KEY)?.sessionId).toBe("s-1")
+    // The one it left is kept in its turn, and the thread on screen is the first one again.
+    expect(history.list(KEY).map((past) => past.sessionId)).toEqual(["s-2"])
+    const thread = threads.read(gatewayThreadKey(BOT.path, "telegram", "c42"))
+    expect(thread.messages.some((m) => m.text === "prima conversazione")).toBe(true)
+    expect(thread.messages.some((m) => m.text === "seconda conversazione")).toBe(false)
+    // The next message goes on in the resumed conversation.
+    b.emit("ancora")
+    await until("il turno", () => turns.started.length === 3)
+    expect(turns.started[2]!.request.sessionId).toBe("s-1")
+    turns.started[2]!.finish({ text: "ok", sessionId: "s-1" })
+  })
+
+  test("with nothing to resume it says so; in a channel it lists nothing", async () => {
+    const { b, say } = await setup()
+    b.emit("/sessioni")
+    await until("niente", () => b.sent.at(-1)?.text === t("gateway.sessions.none"))
+    await say("una cosa", "s-1")
+    b.emit("/nuova")
+    await until("nuova", () => b.sent.at(-1)?.text === t("gateway.fresh"))
+    b.emit("/sessioni", { private: false })
+    await until("canale", () => b.sent.at(-1)?.text === t("gateway.sessions.private"))
+    expect(b.questions).toHaveLength(0)
+  })
+
+  test("while a turn runs it asks to wait, and a turn that came during the choice stops it", async () => {
+    const { b, turns, say } = await setup()
+    await say("vecchia", "s-1")
+    b.emit("/nuova")
+    await until("nuova", () => b.sent.at(-1)?.text === t("gateway.fresh"))
+    b.emit("lavoro lungo")
+    await until("il turno", () => turns.started.length === 2)
+    b.emit("/sessioni")
+    await until("occupato", () => b.sent.at(-1)?.text === t("gateway.sessions.busy"))
+    turns.started[1]!.finish({ text: "fatto", sessionId: "s-2" })
+    await until("finito", () => b.sent.at(-1)?.text === "fatto")
+    b.emit("/sessioni")
+    await until("la lista", () => b.questions.length === 1)
+    // A turn starts before the choice is made: resuming now would swap the conversation under it.
+    b.emit("un altro lavoro")
+    await until("il turno", () => turns.started.length === 3)
+    b.press(0)
+    await until("occupato di nuovo", () => b.sent.at(-1)?.text === t("gateway.sessions.busy"))
+    turns.started[2]!.finish({ text: "ok", sessionId: "s-2" })
+  })
+
+  test("a conversation of another project or another engine is not resumed from here", async () => {
+    const { b, history } = await setup()
+    history.add(KEY, { project: "C:/altro", runner: "claude", sessionId: "s-9", title: "di un altro progetto", at: 1 })
+    b.emit("/sessioni")
+    await until("la lista", () => b.questions.length === 1)
+    b.press(0)
+    await until("rifiutata", () => b.sent.at(-1)?.text === t("gateway.sessions.other", "di un altro progetto"))
+    expect(history.list(KEY)).toHaveLength(1)
+  })
+
+  test("only the person who asked chooses", async () => {
+    const { b, history, sessions } = await setup()
+    history.add(KEY, { project: PROJECT, runner: "claude", sessionId: "s-9", title: "mia", at: 1 })
+    b.emit("/sessioni")
+    await until("la lista", () => b.questions.length === 1)
+    b.press(0, { sender: { id: "43", name: "Bea" } })
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(sessions.get(KEY)).toBeUndefined()
+    b.emit("1")
+    await until("ripresa", () => sessions.get(KEY)?.sessionId === "s-9")
+  })
+
+  test("a chat keeps its last few conversations, and what is pushed out takes its thread along", async () => {
+    const { b, history, disk, say } = await setup()
+    for (let round = 1; round <= HISTORY_PER_CHAT + 2; round++) {
+      await say(`conversazione ${round}`, `s-${round}`)
+      b.emit("/nuova")
+      await until("nuova", () => b.sent.at(-1)?.text === t("gateway.fresh") && b.sent.filter((s) => s.text === t("gateway.fresh")).length === round)
+    }
+    const kept = history.list(KEY).map((past) => past.sessionId)
+    expect(kept).toHaveLength(HISTORY_PER_CHAT)
+    expect(kept[0]).toBe(`s-${HISTORY_PER_CHAT + 2}`)
+    expect(kept).not.toContain("s-1")
+    const threadKeys = [...disk.items.keys()]
+    expect(threadKeys.some((key) => key.endsWith(":s-1"))).toBe(false)
+    expect(threadKeys.some((key) => key.endsWith(`:s-${HISTORY_PER_CHAT + 2}`))).toBe(true)
+  })
+
+  test("the help lists it, in both languages", () => {
+    expect(t("gateway.help")).toContain("/sessioni")
+    setLocalePreference("en")
+    expect(t("gateway.help")).toContain("/sessions ")
     setLocalePreference("it")
   })
 })
