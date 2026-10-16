@@ -372,6 +372,23 @@ const CODEX_PROJECT_ONLY = [
   "features.prefer_mxc=true",
 ]
 
+/*
+ * The first Codex that reads that profile (bot-lettura-3). `:workspace_roots` is a special path from codex-cli 0.131.0
+ * (`codex-rs/core/src/config/permissions.rs` at the tag rust-v0.131.0; at rust-v0.130.0 only `:project_roots`);
+ * `default_permissions` and `:minimal` from 0.113.0, and the refusal on Windows' `unelevated` sandbox from 0.117.0.
+ * An older Codex ignores or refuses the profile, and its read-only sandbox reads the whole disk.
+ */
+export const CODEX_PROFILES_SINCE = [0, 131, 0] as const
+
+/** Whether `codex --version` printed a version that reads the project-only profile. Unreadable is no. */
+export function codexKnowsProfiles(versionText: string | null | undefined): boolean {
+  const found = /(\d+)\.(\d+)\.(\d+)/.exec(versionText ?? "")
+  if (!found) return false
+  const version = [Number(found[1]), Number(found[2]), Number(found[3])]
+  for (let i = 0; i < 3; i++) if (version[i] !== CODEX_PROFILES_SINCE[i]) return version[i]! > CODEX_PROFILES_SINCE[i]!
+  return true
+}
+
 /**
  * Whether Codex would not start with that profile: Windows' `unelevated` sandbox cannot keep reads in the project, and
  * Codex says so before any model call. The turn fails closed, never tried again with a wider sandbox.

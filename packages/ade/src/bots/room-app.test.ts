@@ -198,7 +198,7 @@ describe("B8b: a room's run, through each bot's own turn", () => {
     // An end is news, not a problem (B8b review): it is drawn plain.
     expect(r.current().noteKind).toBe("end")
     expect(endNote("settled")).toBeUndefined()
-    expect(endNote("budget", 0.1)).toContain("0.10 $")
+    expect(endNote("budget", 0.1)).toContain("0,10 $")
   })
 })
 

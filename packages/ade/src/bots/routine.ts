@@ -30,6 +30,7 @@ import {
   type RoutineCap,
   type RoutineMode,
 } from "./terms"
+import { formatCap, formatClock, formatUsd } from "./format"
 import { applyProblem, emptyTalk } from "./talk"
 import { runBotTurn, type ServeTurnDeps } from "./serve-turn"
 import type { Turn, TurnDeps, TurnRequest, TurnResult } from "./turn"
@@ -373,9 +374,9 @@ export function routineProblem(
     const spend = draft.spend && parseSpend(draft.spend)
     if (!spend) return t("bots.routine.problem.spendRequired")
     if (cap.perRunUsd !== undefined && spend.perRunUsd > cap.perRunUsd)
-      return t("bots.routine.problem.perRun", cap.perRunUsd)
+      return t("bots.routine.problem.perRun", formatCap(cap.perRunUsd))
     if (cap.perDayUsd !== undefined && spend.perDayUsd > cap.perDayUsd)
-      return t("bots.routine.problem.perDay", cap.perDayUsd)
+      return t("bots.routine.problem.perDay", formatCap(cap.perDayUsd))
     if (spend.perRunUsd > spend.perDayUsd) return t("bots.routine.problem.runOverDay")
   }
   return undefined
@@ -473,8 +474,6 @@ export function logOn(book: RoutineBook, id: string, now: number): RoutineLog {
   return { ...log, day: dayOf(now), runs: 0, spentUsd: 0 }
 }
 
-const usd = (value: number) => `${value.toFixed(2)} $`
-
 /**
  * Asked before every run: the list, the consent, the caps, the plan's limit.
  * A routine the user must look at again is suspended; one that only has to
@@ -504,10 +503,10 @@ export function checkRoutine(book: RoutineBook, routine: Routine, check: Routine
   }
   if (routine.spend) {
     if (log.spentUsd + routine.spend.perRunUsd > routine.spend.perDayUsd) {
-      return { kind: "wait", note: t("bots.routine.note.spendDay", usd(routine.spend.perDayUsd)) }
+      return { kind: "wait", note: t("bots.routine.note.spendDay", formatCap(routine.spend.perDayUsd)) }
     }
     if (cap.perDayUsd !== undefined && plan.spentUsd + routine.spend.perRunUsd > cap.perDayUsd) {
-      return { kind: "wait", note: t("bots.routine.note.spendDay", usd(cap.perDayUsd)) }
+      return { kind: "wait", note: t("bots.routine.note.spendDay", formatCap(cap.perDayUsd)) }
     }
   }
   /*
@@ -590,7 +589,7 @@ export function recordResult(
   const note = result.limited
     ? t("bots.routine.note.limit")
     : result.status === "done"
-      ? t("bots.routine.note.done", cost > 0 ? usd(cost) : "")
+      ? t("bots.routine.note.done", cost > 0 ? formatUsd(cost) : "")
       : result.status === "stopped"
         ? t("bots.routine.note.stopped")
         : t("bots.routine.note.failed", result.problem ?? "")
@@ -605,9 +604,9 @@ export function recordResult(
     note,
     noteAt: now,
     ...(over && routine.spend
-      ? { suspended: t("bots.routine.suspended.overRun", usd(cost), usd(routine.spend.perRunUsd)) }
+      ? { suspended: t("bots.routine.suspended.overRun", formatUsd(cost), formatCap(routine.spend.perRunUsd)) }
       : {}),
-    ...(notFree ? { suspended: t("bots.routine.suspended.notFree", usd(cost)) } : {}),
+    ...(notFree ? { suspended: t("bots.routine.suspended.notFree", formatUsd(cost)) } : {}),
   })
 }
 
@@ -775,7 +774,7 @@ export function describeCap(cap: RoutineCap): string {
   if (cap.perDay !== undefined) parts.push(t("bots.routine.cap.perDay", cap.perDay))
   if (cap.minGapMin !== undefined) parts.push(t("bots.routine.cap.gap", cap.minGapMin))
   if (cap.perRunUsd !== undefined && cap.perDayUsd !== undefined)
-    parts.push(t("bots.routine.cap.money", cap.perRunUsd, cap.perDayUsd))
+    parts.push(t("bots.routine.cap.money", formatCap(cap.perRunUsd), formatCap(cap.perDayUsd)))
   return parts.join("; ")
 }
 
@@ -791,7 +790,8 @@ export function modeLabel(mode: RoutineMode): string {
 /** When the next run is: a time today, tomorrow, or a date. */
 export function formatNext(at: number, now: number): string {
   const date = new Date(at)
-  const time = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
+  // As the language writes it (D32): 14:05 in Italian, 02:05 PM in English.
+  const time = formatClock(at)
   if (dayOf(at) === dayOf(now)) return time
   if (dayOf(at) === dayOf(nextDay(now))) return t("bots.routine.tomorrow", time)
   return `${date.getDate()} ${t("bots.when.month", date.getMonth())} ${time}`

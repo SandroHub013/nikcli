@@ -1905,7 +1905,7 @@ export const en: Messages = {
   "bots.routine.cap": (text: string) => `This mode's cap: ${text}.`,
   "bots.routine.cap.perDay": (runs: number) => `${runs} runs a day for all routines together`,
   "bots.routine.cap.gap": (minutes: number) => `at least ${minutes} minutes between two runs of the same routine`,
-  "bots.routine.cap.money": (run: number, day: number) => `at most ${run} $ per run and ${day} $ a day`,
+  "bots.routine.cap.money": (run: string, day: string) => `at most ${run} per run and ${day} a day`,
   "bots.routine.consent": (runner: string, mode: string, model: string) =>
     `I agree: this routine runs on its own with ${runner} (${mode}, ${model}), without a shell, only while ADE is open and within the cap above.`,
   "bots.routine.consentReadOnly": (runner: string, mode: string, model: string) =>
@@ -1944,8 +1944,8 @@ export const en: Messages = {
   "bots.routine.problem.every": "Choose every how many hours (1 to 168) or a time.",
   "bots.routine.problem.gap": (minutes: number) => `Two runs need at least ${minutes} minutes between them.`,
   "bots.routine.problem.spendRequired": "This mode needs a spending cap, per run and per day.",
-  "bots.routine.problem.perRun": (max: number) => `The cap per run goes up to ${max} $.`,
-  "bots.routine.problem.perDay": (max: number) => `The cap per day goes up to ${max} $.`,
+  "bots.routine.problem.perRun": (max: string) => `The cap per run goes up to ${max}.`,
+  "bots.routine.problem.perDay": (max: string) => `The cap per day goes up to ${max}.`,
   "bots.routine.problem.runOverDay": "The cap per run cannot exceed the one per day.",
   "bots.routine.suspended.noBot": "The bot's file is gone.",
   "bots.routine.suspended.consent": "The model, mode, key, prompt, schedule or cap changed: give your consent again.",
@@ -2153,6 +2153,10 @@ export const en: Messages = {
     "Codex refused the options ADE uses to switch off its MCP servers and web access from a chat and in routines. This happens with a Codex version that's too old, or when Codex reads a config.toml other than ~/.codex/config.toml (CODEX_HOME): update Codex or unset CODEX_HOME.",
   "bots.codex.sandboxCannotRead":
     "The turn didn't start. From a chat and in routines Codex starts only with a sandbox that reads the project alone, and its sandbox on this computer (unelevated) can't do that. You need one of these two: the MXC isolation of an up-to-date Windows 11 24H2 or 25H2, which ADE uses by itself when it's there; or Codex's elevated sandbox, set up once with “codex sandbox setup --elevated --current-user”, which asks for an administrator.",
+  "bots.codex.tooOld": (since, found) =>
+    `The turn didn't start. From a chat and in routines Codex starts only from version ${since}, the first that can read the project alone; this one is ${found}. Update Codex, for example with “npm install -g @openai/codex”.`,
+  "bots.codex.versionUnknown":
+    "The turn didn't start: ADE couldn't read Codex's version (“codex --version”). From a chat and in routines Codex starts only with a version that can read the project alone.",
   "bots.codex.projectConfig":
     "The project has a .codex/config.toml, which Codex reads in trusted projects along with its MCP servers. To keep them off, this turn ran without your Codex configuration: also without the provider and profiles in your ~/.codex/config.toml.",
   "bots.codex.withoutUserConfig":
