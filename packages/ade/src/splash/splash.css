@@ -48,6 +48,11 @@
   position: relative;
   width: 100%;
   aspect-ratio: 1672 / 941;
+  visibility: hidden;
+}
+
+[data-slot="splash-stage"][data-loaded] {
+  visibility: visible;
 }
 
 [data-slot="splash-stage"] img,

@@ -59,6 +59,7 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
   let startingFired = false
   let restartScene: ((opts?: { prefersReducedMotion?: boolean }) => void) | undefined
 
+  const [imageLoaded, setImageLoaded] = createSignal(false)
   // Retain last known status message so it does not vanish prematurely during fade-out
   const [displayedStatus, setDisplayedStatus] = createSignal(props.status)
   createEffect(() => {
@@ -175,6 +176,28 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
       controller?.stop()
       controller = startPixelScene(canvas, { prefersReducedMotion: getPrefersReducedMotion() })
       handleResize()
+
+      if (typeof Image !== "undefined") {
+        try {
+          const img = new Image()
+          img.src = scenaUrl
+          const onReady = () => {
+            if (!disposed && props.visible) {
+              setImageLoaded(true)
+            }
+          }
+          if (img.decode) {
+            img.decode().then(onReady).catch(() => {})
+          } else {
+            img.onload = onReady
+            img.onerror = () => {}
+          }
+        } catch {
+          // Graceful fallback: maintain background and status without console errors
+        }
+      } else {
+        setImageLoaded(true)
+      }
     }, SPLASH_SCENE_DELAY_MS)
 
     restartScene = (opts) => {
@@ -199,13 +222,15 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
       aria-modal="true"
     >
       <div data-slot="splash-scene-container">
-        <div data-slot="splash-stage">
-          <img
-            data-slot="splash-image"
-            src={scenaUrl}
-            alt=""
-            draggable={false}
-          />
+        <div data-slot="splash-stage" data-loaded={imageLoaded() ? "" : undefined}>
+          <Show when={imageLoaded()}>
+            <img
+              data-slot="splash-image"
+              src={scenaUrl}
+              alt=""
+              draggable={false}
+            />
+          </Show>
           <canvas
             ref={canvasRef}
             data-slot="splash-canvas"
