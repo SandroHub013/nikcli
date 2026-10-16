@@ -956,7 +956,7 @@ export const en: Messages = {
   "gateway.panel.switchOn": "Switch on",
   "gateway.panel.switchOff": "Switch off",
   "gateway.panel.authorized": "Who may write",
-  "gateway.panel.nobody": "Nobody. Write to the bot from Telegram: you get a code, and you enter it here.",
+  "gateway.panel.nobody": "Nobody yet: pair your account below.",
   "gateway.panel.nobodyDiscord":
     "Nobody. Write to the bot in a direct message on Discord: you get a code, and you enter it here.",
   "gateway.panel.nobodySlack":

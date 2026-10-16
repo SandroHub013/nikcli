@@ -19,6 +19,14 @@ describe("the gateway panel speaks of the platform it shows", () => {
       expect(codeOf(panel)).toContain(codeOf(`said(t("${key}"), t("${key}Discord"), t("${key}Slack"))`))
   })
 
+  test("Telegram's «nobody» points to the QR below it, not to a code: the code is the reserve (choice 3)", () => {
+    expect(it["gateway.panel.nobody"]).toBe("Nessuno ancora: abbina il tuo account qui sotto.")
+    expect(en["gateway.panel.nobody"]).toBe("Nobody yet: pair your account below.")
+    // The QR sits below the line, in the same step, and the code is told as the reserve under it.
+    expect(panel.indexOf('t("gateway.panel.nobody")')).toBeLessThan(panel.indexOf("<PairLink"))
+    expect(String(it["gateway.panel.linkFallback"])).toContain("codice")
+  })
+
   test("Discord's and Slack's never send you to Telegram, in either language", () => {
     for (const catalog of [it, en] as Record<string, unknown>[]) {
       for (const key of KEYS) {

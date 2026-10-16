@@ -976,7 +976,7 @@ export const it = {
   "gateway.panel.switchOn": "Accendi",
   "gateway.panel.switchOff": "Spegni",
   "gateway.panel.authorized": "Chi può scrivere",
-  "gateway.panel.nobody": "Nessuno. Scrivi al bot da Telegram: ricevi un codice, e lo inserisci qui.",
+  "gateway.panel.nobody": "Nessuno ancora: abbina il tuo account qui sotto.",
   "gateway.panel.nobodyDiscord":
     "Nessuno. Scrivi al bot in un messaggio privato su Discord: ricevi un codice, e lo inserisci qui.",
   "gateway.panel.nobodySlack":
