@@ -273,6 +273,6 @@ pub async fn gateway_pairing_reject(app: AppHandle, bot: String, platform: Platf
 
 /// The page acknowledged receipt of a message: the cursor can now be advanced in state.json.
 #[tauri::command]
-pub async fn gateway_ack(app: AppHandle, bot: String, platform: Platform, id: String) -> Result<(), String> {
-    hub(&app)?.ack(&bot, platform, &id)
+pub async fn gateway_ack(app: AppHandle, bot: String, platform: Platform, chat: String, id: String) -> Result<(), String> {
+    hub(&app)?.ack(&bot, platform, &chat, &id)
 }

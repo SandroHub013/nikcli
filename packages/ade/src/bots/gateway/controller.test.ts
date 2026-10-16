@@ -36,7 +36,7 @@ function bridge(project: string | null = PROJECT) {
   const sent: { chat: string; text: string }[] = []
   const questions: { chat: string; text: string; buttons: readonly { label: string; data: string }[] }[] = []
   const typing: string[] = []
-  const acks: { bot: string; platform: string; id: string }[] = []
+  const acks: { bot: string; platform: string; chat: string; id: string }[] = []
   const fake: GatewayBridge = {
     listen: async (on) => {
       handler = on
@@ -47,7 +47,7 @@ function bridge(project: string | null = PROJECT) {
       }
     },
     ready: async () => void calls.push("ready"),
-    ack: async (bot, platform, id) => void acks.push({ bot, platform, id }),
+    ack: async (bot, platform, chat, id) => void acks.push({ bot, platform, chat, id }),
     send: async (_bot, _platform, chat, text) => {
       sent.push({ chat, text })
       return String(sent.length)
@@ -167,7 +167,7 @@ describe("the gateways' controller", () => {
       sessions: memorySessionStore(),
     })
     b.emit("ciao", { id: "m42", bot: BOT.path, platform: "telegram" })
-    expect(b.acks).toEqual([{ bot: BOT.path, platform: "telegram", id: "m42" }])
+    expect(b.acks).toEqual([{ bot: BOT.path, platform: "telegram", chat: "c42", id: "m42" }])
   })
 
   test("two messages in a row make one turn, then the other, in the same conversation", async () => {

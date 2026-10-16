@@ -67,7 +67,7 @@ export interface GatewayBridge {
   /** Tells Rust the page listens: the gateways may read. */
   ready: () => Promise<void>
   /** Tells Rust the message was delivered to the frontend, so the cursor can advance. */
-  ack?: (bot: string, platform: string, id: string) => Promise<void>
+  ack?: (bot: string, platform: string, chat: string, id: string) => Promise<void>
   send: (bot: string, platform: string, chat: string, text: string) => Promise<string>
   sendButtons: (
     bot: string,
@@ -393,7 +393,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
 
   const receive = async (message: GatewayMessage) => {
     if (closed) return
-    void deps.bridge.ack?.(message.bot, message.platform, message.id)
+    void deps.bridge.ack?.(message.bot, message.platform, message.chat, message.id)
     // A press answers a question; it never starts a turn.
     if (message.button) return press(message)
     const key = sessionKey(message.bot, message.platform, message.chat)
