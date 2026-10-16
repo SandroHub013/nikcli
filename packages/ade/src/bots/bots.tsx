@@ -39,6 +39,7 @@ import {
   createSignal,
   For,
   on,
+  onCleanup,
   onMount,
   Show,
   type JSX,
@@ -1464,6 +1465,26 @@ function Thread(props: {
   const [attachProblem, setAttachProblem] = createSignal<string>()
   let pictureCount = 0
 
+  // What each picture from elsewhere shows in its chip (bot-ui-4, P2-5): a URL of its own, let go as soon as the
+  // picture leaves the composer (×, sent, another bot), and with the thread. One that comes back gets a new one.
+  const thumbs = new Map<string, string>()
+  const thumbOf = (picture: PendingPicture) => {
+    const known = thumbs.get(picture.id)
+    if (known) return known
+    const url = URL.createObjectURL(picture.file)
+    thumbs.set(picture.id, url)
+    return url
+  }
+  const letGoThumbs = (keep: ReadonlySet<string>) => {
+    for (const [id, url] of thumbs) {
+      if (keep.has(id)) continue
+      URL.revokeObjectURL(url)
+      thumbs.delete(id)
+    }
+  }
+  createEffect(on(pictures, (list) => letGoThumbs(new Set(list.map((picture) => picture.id)))))
+  onCleanup(() => letGoThumbs(new Set()))
+
   createEffect(
     on(
       () => props.bot.path,
@@ -1775,6 +1796,7 @@ function Thread(props: {
           <For each={pictures()}>
             {(picture) => (
               <li data-slot="bots-attachment" title={picture.name}>
+                <img data-slot="bots-attachment-thumb" src={thumbOf(picture)} alt="" />
                 <span data-slot="bots-attachment-name">{picture.name}</span>
                 <button
                   type="button"

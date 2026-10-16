@@ -752,6 +752,15 @@
   background: var(--ade-raised);
 }
 
+/* A picture from elsewhere shows what it is (bot-ui-4, P2-5). */
+[data-slot="bots-attachment-thumb"] {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--ade-radius-full);
+  object-fit: cover;
+}
+
 [data-slot="bots-attachment-name"] {
   overflow: hidden;
   text-overflow: ellipsis;

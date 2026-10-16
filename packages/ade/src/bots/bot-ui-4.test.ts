@@ -16,6 +16,8 @@ import { EMPTY_BOOK, type RoutineBook } from "./routine"
  */
 const read = (file: string) => readFileSync(join(import.meta.dir, file), "utf8")
 const tsx = read("bots.tsx")
+const css = read("bots.css")
+const thread = tsx.slice(tsx.indexOf("function Thread("), tsx.indexOf("function LastFigures"))
 
 /** A `localStorage` of a test's own. */
 function storage(): KeyedStorage & { readonly map: Map<string, string> } {
@@ -121,7 +123,6 @@ describe("P1-1: a pasted picture is written only when its message goes, and goes
   })
 
   test("lint: paste and drop only keep the picture; it is written after the checks, and taken back when the turn does not go", () => {
-    const thread = tsx.slice(tsx.indexOf("function Thread("), tsx.indexOf("function LastFigures"))
     expect(thread).not.toContain("savePasted(")
     expect(thread).not.toContain("writeBytes")
     expect(thread).toContain("pendingPicture(")
@@ -139,5 +140,18 @@ describe("P1-1: a pasted picture is written only when its message goes, and goes
     // The deletion of the bot hands its pictures to the host's pruning.
     const settings = tsx.slice(tsx.indexOf("function SettingsTab("), tsx.indexOf("/* ── the form"))
     expect(settings).toContain("pictures: (recorded) =>")
+  })
+})
+
+describe("P2-5: a pasted picture keeps its name and shows what it is", () => {
+  test("lint: the chip has the name it came with and a 24 px thumbnail, let go with the picture", () => {
+    const chip = thread.slice(thread.indexOf("<For each={pictures()}>"), thread.indexOf("<For each={attachments()}>"))
+    expect(chip).toContain('<img data-slot="bots-attachment-thumb" src={thumbOf(picture)} alt="" />')
+    expect(chip).toContain("{picture.name}")
+    // Its URL goes when the picture leaves the composer (x, sent, another bot) and when the thread goes.
+    expect(thread).toContain("URL.revokeObjectURL(")
+    expect(thread).toContain("onCleanup(")
+    const rule = css.slice(css.indexOf('[data-slot="bots-attachment-thumb"]'))
+    expect(rule.slice(0, rule.indexOf("}"))).toMatch(/width: 24px;[\s\S]*height: 24px;[\s\S]*object-fit: cover;/)
   })
 })
