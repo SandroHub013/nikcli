@@ -5,7 +5,7 @@ import { setLocalePreference, t } from "../i18n"
 import { addNotice, dismissClosedApprovals, unreadCount } from "../surface/notifications"
 import { approvalBadge, approvalLine, freshApprovals, shouldNotifySystem, sourcesText } from "./approval-signal"
 import { mergeApprovals, type ApprovalRequest } from "./approvals"
-import { notifySystem, windowInFront } from "./system-notify"
+import { forgetSystemNotice, notifySystem, resetSystemNotices, windowInFront, type SystemHost } from "./system-notify"
 
 setLocalePreference("it")
 
@@ -27,6 +27,25 @@ const request = (over: Partial<ApprovalRequest> = {}): ApprovalRequest => ({
   ...over,
 })
 const waiting = (...requests: ApprovalRequest[]) => mergeApprovals(requests)
+
+/* A window that records what it is asked, and fails where a test says so. */
+function fakeHost(opts: { calls: string[]; focused?: boolean; toastError?: boolean; flashError?: boolean; focusError?: boolean }): SystemHost {
+  return {
+    focused: async () => {
+      if (opts.focusError) throw new Error("no window")
+      return opts.focused ?? false
+    },
+    flash: async () => {
+      if (opts.flashError) throw new Error("no flash")
+      opts.calls.push("flash")
+    },
+    toast: async (title, body) => {
+      await Promise.resolve()
+      if (opts.toastError) throw new Error("refused")
+      opts.calls.push(`toast:${title}|${body}`)
+    },
+  }
+}
 
 describe("what is new", () => {
   test("a request is new once; the same asked by the phone too is still the same one", () => {
@@ -99,22 +118,79 @@ describe("the window flash", () => {
     expect(windowInFront(undefined)).toBe(true)
   })
 
-  test("the window flashes through the function it is given; a failure is no reason to lose the request", async () => {
-    let flashes = 0
-    expect(await notifySystem(async () => (flashes++, true))).toBe(true)
-    expect(flashes).toBe(1)
-    expect(await notifySystem(async () => false)).toBe(false)
-    expect(await notifySystem(async () => Promise.reject(new Error("no window")))).toBe(false)
-    // Outside the app (here) there is no window to flash, and nothing breaks.
-    expect(await notifySystem()).toBe(false)
+  test("the window behind: the toast says the bot and what it wants, and the icon flashes", async () => {
+    resetSystemNotices()
+    const calls: string[] = []
+    const host = fakeHost({ calls })
+    const one = waiting(request())[0]!
+    expect(await notifySystem({ id: one.id, title: "ADE", body: approvalLine(one) }, host)).toEqual({ toast: true, flash: true })
+    expect(calls).toEqual(["toast:ADE|«alfa» aspetta te: vuole usare «bash» su «git push --force»", "flash"])
   })
 
-  test("it is the taskbar flash host/ask.ts uses, only when the window has no focus, and the browser's Notification is gone", () => {
+  test("the window in front: nothing, and the request is news later", async () => {
+    resetSystemNotices()
+    const calls: string[] = []
+    const notice = { id: "r1", title: "ADE", body: "x" }
+    expect(await notifySystem(notice, fakeHost({ calls, focused: true }))).toEqual({ toast: false, flash: false })
+    expect(calls).toEqual([])
+    expect(await notifySystem(notice, fakeHost({ calls }))).toEqual({ toast: true, flash: true })
+  })
+
+  test("a toast that fails leaves the flash; a flash that fails leaves the toast; neither breaks", async () => {
+    resetSystemNotices()
+    const calls: string[] = []
+    expect(await notifySystem({ id: "a", title: "ADE", body: "x" }, fakeHost({ calls, toastError: true }))).toEqual({ toast: false, flash: true })
+    expect(calls).toEqual(["flash"])
+    expect(await notifySystem({ id: "b", title: "ADE", body: "x" }, fakeHost({ calls, flashError: true }))).toEqual({ toast: true, flash: false })
+    expect(await notifySystem({ id: "c", title: "ADE", body: "x" }, fakeHost({ calls, focusError: true }))).toEqual({ toast: false, flash: false })
+  })
+
+  test("one toast per request: the same one again, even while the first is in flight, makes none; closed and asked again it does", async () => {
+    resetSystemNotices()
+    const calls: string[] = []
+    const notice = { id: "r1", title: "ADE", body: "x" }
+    const both = await Promise.all([notifySystem(notice, fakeHost({ calls })), notifySystem(notice, fakeHost({ calls }))])
+    expect(both.filter((o) => o.toast)).toHaveLength(1)
+    expect(calls.filter((c) => c.startsWith("toast"))).toHaveLength(1)
+    forgetSystemNotice(new Set(["r1"]))
+    expect((await notifySystem(notice, fakeHost({ calls }))).toast).toBe(false)
+    forgetSystemNotice(new Set())
+    expect((await notifySystem(notice, fakeHost({ calls }))).toast).toBe(true)
+  })
+
+  test("what leaves the window in a toast has its secrets taken out", async () => {
+    resetSystemNotices()
+    const calls: string[] = []
+    const secret = "sk-" + "a1B2c3D4e5F6g7H8i9J0k1L2m3N4o5P6"
+    await notifySystem({ id: "s", title: "ADE", body: `curl -H key=${secret}` }, fakeHost({ calls }))
+    expect(calls[0]).not.toContain(secret)
+  })
+
+  test("outside the app there is no window to be behind: nothing happens", async () => {
+    resetSystemNotices()
+    expect(await notifySystem({ id: "x", title: "ADE", body: "x" })).toEqual({ toast: false, flash: false })
+  })
+
+  test("it is our command and the taskbar flash host/ask.ts uses; the plugin's notify and the browser's Notification are not used", () => {
     const source = readFileSync(join(import.meta.dir, "system-notify.ts"), "utf8")
+    expect(source).toContain('invoke("system_notify", { title, body })')
     expect(source).toContain("requestUserAttention(UserAttentionType.Critical)")
-    expect(source).toContain("win.isFocused()")
-    expect(source).not.toMatch(/new\s+Native|Notification\.permission|requestPermission/)
+    expect(source).toContain("isFocused()")
+    expect(source).not.toMatch(/new\s+Native|Notification\.permission|requestPermission|plugin:notification|plugin-notification/)
     expect(readFileSync(join(import.meta.dir, "../host/ask.ts"), "utf8")).toContain("requestUserAttention(UserAttentionType.Critical)")
+  })
+})
+
+describe("the Rust side", () => {
+  const tauri = join(import.meta.dir, "../../src-tauri")
+
+  test("lint: the plugin is registered, the command is handled and the capability grants the page no notification", () => {
+    expect(readFileSync(join(tauri, "Cargo.toml"), "utf8")).toContain('tauri-plugin-notification = "2"')
+    const lib = readFileSync(join(tauri, "src/lib.rs"), "utf8")
+    expect(lib).toContain(".plugin(tauri_plugin_notification::init())")
+    expect(lib).toContain("notify::system_notify,")
+    expect(lib).toContain("mod notify;")
+    expect(readFileSync(join(tauri, "capabilities/default.json"), "utf8")).not.toContain("notification")
   })
 })
 
@@ -130,7 +206,8 @@ describe("the shell draws it", () => {
 
   test("lint: the flash only when the window is not in front, and the row opens the bot", () => {
     expect(shell).toContain("shouldNotifySystem(windowInFront())")
-    expect(shell).toContain("void notifySystem()")
+    expect(shell).toContain("void notifySystem({ id: one.id, title: \"ADE\", body: approvalLine(one) })")
+    expect(shell).toContain("forgetSystemNotice(seen)")
     expect(shell).toContain("openWaitingBot(bot(), notice.room)")
     expect(shell).toContain('t("bots.waiting.openRoom")')
     expect(shell).toContain('t("bots.waiting.open")')

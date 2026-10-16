@@ -55,6 +55,7 @@ tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"
+tauri-plugin-notification = "2"
 # One ADE per identity: a second start brings the first one's window forward,
 # out of the tray too, instead of a second gateway on the same bots (G11).
 tauri-plugin-single-instance = "2"

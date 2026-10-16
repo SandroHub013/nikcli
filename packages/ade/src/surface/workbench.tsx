@@ -266,7 +266,7 @@ import { barSessionCount } from "./bar-sessions"
 import { BotsMain, BotsRoster, openBotByPath } from "../bots/bots"
 import { approvalBadge, approvalLine, freshApprovals, shouldNotifySystem } from "../bots/approval-signal"
 import { waitingApprovals } from "../bots/approvals-app"
-import { notifySystem, windowInFront } from "../bots/system-notify"
+import { forgetSystemNotice, notifySystem, windowInFront } from "../bots/system-notify"
 import { scrubSecrets } from "../bots/terms"
 import type { AgentFile } from "../bots/ragu"
 import type { Runner } from "../bots/runners"
@@ -944,9 +944,10 @@ export function Workbench() {
           at: Date.now(),
         }),
       )
-      // ADE is behind: the window flashes in the taskbar (`bots/system-notify.ts`).
-      if (shouldNotifySystem(windowInFront())) void notifySystem()
+      // ADE is behind: a system notification saying whose bot and what it wants, and the taskbar flash (`bots/system-notify.ts`).
+      if (shouldNotifySystem(windowInFront())) void notifySystem({ id: one.id, title: "ADE", body: approvalLine(one) })
     }
+    forgetSystemNotice(seen)
   })
   /** The bell's «Apri»: the Bot section, on that bot, or on the room where it was asked. */
   const openWaitingBot = (path: string, room?: string) => {
