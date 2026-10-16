@@ -95,6 +95,9 @@ describe("options a session may choose for its subagent", () => {
     expect(modelArgs("claude-code", "sonnet")).toEqual(["--model", "sonnet"])
     expect(modelArgs("codex", "gpt-5-codex")).toEqual(["-m", "gpt-5-codex"])
     expect(modelArgs("agy", "gemini-3.1-pro-high")).toEqual(["--model", "gemini-3.1-pro-high"])
+    // OpenCode takes provider/model: the slash passes, and nothing else is added.
+    expect(modelArgs("opencode", "opencode/deepseek-v4.1-flash-free")).toEqual(["--model", "opencode/deepseek-v4.1-flash-free"])
+    expect("error" in (modelArgs("opencode", "x --dangerously-skip-permissions") as object)).toBe(true)
   })
 
   test("not a way to smuggle other arguments in", () => {
