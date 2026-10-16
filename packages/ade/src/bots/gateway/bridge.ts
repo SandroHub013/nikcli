@@ -10,7 +10,7 @@ import { openExternally } from "../../browser/host-bridge"
 import { readAgentFile, type AgentFile } from "../ragu"
 import { admitProject, projectSurface, PROJECT_TRUST_KEY } from "../project-trust"
 import { runnerById } from "../runners"
-import { localGatewayThreads, projectFs, readBotText, resolveRoots } from "../store"
+import { listModels, localGatewayThreads, projectFs, readBotText, resolveRoots } from "../store"
 import { admit, localTrustStore } from "../trust"
 import { runBotTurn } from "../serve-turn"
 import { startGatewayController, type GatewayBridge, type GatewayController, type GatewayMessage } from "./controller"
@@ -19,7 +19,8 @@ import { recheckTrust, scopeOf } from "./policy"
 import { localAccountStore } from "../account"
 import { localRemoteStore, remoteKey } from "./remote"
 import { appMemoryStore } from "../memory-app"
-import { localSessionStore } from "./session"
+import { localHistoryStore, localSessionStore } from "./session"
+import { localChatModelStore } from "./chat-model"
 import { spendStatus, spendTerms, withDailyCap } from "../spend"
 import { appSpendStore } from "../spend-app"
 import { appApprovals } from "../approvals-app"
@@ -161,16 +162,19 @@ export async function startAppGatewayController(): Promise<GatewayController> {
         globalRoot: (await resolveRoots()).global,
       }),
     sessions: localSessionStore(),
+    history: localHistoryStore(),
     threads: localGatewayThreads(),
     remote: (bot, platform) => localRemoteStore().get(remoteKey(bot, platform)),
     account: (bot) => localAccountStore().get(bot),
     memory: appMemoryStore,
     // A command waiting on a phone is listed in ADE too, and can be decided there.
     approvals: appApprovals,
-    spendToday: async (bot) => {
+    chatModels: localChatModelStore(),
+    modelCatalog: (project) => listModels(project),
+    spendToday: async (bot, model) => {
       try {
         const file = readAgentFile({ path: bot, scope: "global", text: await readBotText(bot) })
-        const terms = spendTerms(runnerById(file.runner).id, localAccountStore().get(bot), file.model)
+        const terms = spendTerms(runnerById(file.runner).id, localAccountStore().get(bot), model ?? file.model)
         return spendStatus(appSpendStore.get(bot), terms, Date.now())
       } catch {
         // The bot's file cannot be read: `/stato` says what it can.

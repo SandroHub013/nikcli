@@ -280,10 +280,12 @@ describe("the gateways' controller", () => {
     await until("il motivo", () => b.sent.length === 3)
     expect(b.sent[2]!.text).toBe(t("gateway.failed"))
     expect(b.sent[2]!.text).not.toContain("rete giù")
-    expect(sessions.get(sessionKey(BOT.path, "telegram", "c42"))).toEqual({
+    // The conversation is named by the words it began with, and keeps them.
+    expect(sessions.get(sessionKey(BOT.path, "telegram", "c42"))).toMatchObject({
       project: PROJECT,
       runner: "claude",
       sessionId: "s-1",
+      title: "prima domanda",
     })
   })
 
@@ -474,7 +476,7 @@ describe("the gateways' controller", () => {
       expect(turns.started[0]!.request.sessionId).toBeUndefined()
       turns.started[0]!.finish({ text: "ok", sessionId: "s-nuova" })
       await until("la sessione nuova", () => sessions.get(key)?.sessionId === "s-nuova")
-      expect(sessions.get(key)).toEqual({ project: PROJECT, runner: "claude", sessionId: "s-nuova" })
+      expect(sessions.get(key)).toMatchObject({ project: PROJECT, runner: "claude", sessionId: "s-nuova", title: "ciao" })
     }
   })
 

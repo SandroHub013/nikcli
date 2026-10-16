@@ -808,8 +808,33 @@ export const it = {
   "gateway.fresh": "Nuova conversazione: riparto da zero.",
   "gateway.status.idle": "Libero: scrivimi pure.",
   "gateway.status.working": (queued: number) => `Sto lavorando a un turno; messaggi in coda: ${queued}.`,
+  "gateway.retry.none": "Non c'è ancora una domanda da rifare: scrivimene una.",
+  "gateway.retry.busy": "Sto ancora lavorando alla domanda di prima: aspetta che finisca, oppure scrivi /ferma.",
+  "gateway.retry.again": "Rifaccio l'ultima domanda.",
+  "gateway.model.default": (runner: string) => `quello di ${runner}`,
+  "gateway.model.tagCurrent": "in uso",
+  "gateway.model.tagOwn": "quello del bot",
+  "gateway.model.only": (model: string) => `In questa chat uso: ${model}.`,
+  "gateway.model.nothing": (model: string) => `In questa chat uso: ${model}. Per questo bot non ho altri modelli da proporre.`,
+  "gateway.model.freeOnly": "Ti propongo solo i modelli gratuiti.",
+  "gateway.model.ask": (current: string, list: string, note: string) =>
+    `In questa chat uso: ${current}.\n${list}\n${note ? `${note} ` : ""}Scegli quello da usare da ora (tocca un tasto o scrivi il numero).`,
+  "gateway.model.set": (model: string) => `Va bene: da ora, in questa chat, uso ${model}.`,
+  "gateway.pick.range": (max: number) => `Scegli un numero da 1 a ${max}.`,
+  "gateway.sessions.private": "Le conversazioni le elenco solo in una chat privata: qui le leggerebbero tutti.",
+  "gateway.sessions.busy": "Sto lavorando a un turno: aspetta che finisca, oppure scrivi /ferma, poi scegli.",
+  "gateway.sessions.none": "Non ho altre conversazioni di questa chat da riprendere.",
+  "gateway.sessions.untitled": "senza titolo",
+  "gateway.sessions.now": (what: string) => `Adesso sei in ${what}.`,
+  "gateway.sessions.item": (title: string, when: string) => `«${title}», ${when}`,
+  "gateway.sessions.ask": (now: string, list: string) =>
+    `${now ? `${now}\n` : ""}Le ultime conversazioni di questa chat:\n${list}\nScegli quale riprendere (tocca un tasto o scrivi il numero).`,
+  "gateway.sessions.other": (title: string) =>
+    `«${title}» è di un altro progetto o di un altro programma del bot: da qui non la riprendo.`,
+  "gateway.sessions.resumed": (title: string) => `Riprendo «${title}»: scrivi pure da dove eri rimasto.`,
+  "gateway.cost.none": "Oggi non c'è nessuna spesa da contare: questo bot usa un abbonamento o un modello gratuito.",
   "gateway.help":
-    "Comandi: /nuova ricomincia la conversazione, /ferma ferma il turno in corso e svuota la coda, /stato dice cosa sto facendo, /aiuto mostra questo elenco.",
+    "Comandi: /nuova ricomincia la conversazione, /ferma ferma il turno in corso e svuota la coda, /stato dice cosa sto facendo, /riprova rifà l'ultima domanda, /costo dice la spesa di oggi, /modello mostra il modello e lascia scegliere fra quelli del bot, /sessioni elenca le ultime conversazioni di questa chat e ne riprende una, /aiuto mostra questo elenco.",
   "gateway.limit": (count: number) =>
     `Più di ${count} messaggi in un'ora: per un po' non rispondo, così un giro di messaggi non consuma il tuo piano. Riprova più tardi.`,
   "gateway.retrust": (name: string) =>
