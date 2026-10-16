@@ -32,7 +32,7 @@
 
 import { t } from "../../i18n"
 import type { AgentFile } from "../ragu"
-import { runnerById } from "../runners"
+import { answerSoFar, runnerById } from "../runners"
 import type { Turn, TurnRequest } from "../turn"
 import { BOT_TURN_TIMEOUT_MS } from "../controller"
 import { memorySnapshot, settleMemoryOps, takeMemoryOps, type MemoryOp, type MemoryStore } from "../memory"
@@ -95,6 +95,8 @@ export interface GatewayBridge {
     buttons: readonly { label: string; data: string }[],
   ) => Promise<string>
   typing: (bot: string, platform: string, chat: string) => Promise<void>
+  /** Sends live partial text preview to the chat. */
+  preview?: (bot: string, platform: string, chat: string, text: string) => Promise<void>
   /** The project the gateway's turns run in, fixed when it was switched on. */
   project: (bot: string, platform: string) => Promise<string | undefined>
 }
@@ -377,6 +379,13 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         timeoutMs: BOT_TURN_TIMEOUT_MS,
         remote,
         account: deps.account?.(message.bot) ?? { mode: "plan" },
+        partial: true,
+        onUpdate: (talk) => {
+          const text = answerSoFar(talk)
+          if (text) {
+            void deps.bridge.preview?.(message.bot, message.platform, message.chat, text)?.catch?.(() => {})
+          }
+        },
         ...(sessionId ? { sessionId } : {}),
         ...(onPermission ? { onPermission } : {}),
       })

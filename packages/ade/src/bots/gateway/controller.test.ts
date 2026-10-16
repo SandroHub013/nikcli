@@ -38,6 +38,7 @@ function bridge(project: string | null = PROJECT) {
   const questions: { chat: string; text: string; buttons: readonly { label: string; data: string }[] }[] = []
   const typing: string[] = []
   const acks: { bot: string; platform: string; chat: string; id: string }[] = []
+  const previews: { bot: string; platform: string; chat: string; text: string }[] = []
   const fake: GatewayBridge = {
     listen: async (on) => {
       handler = on
@@ -58,6 +59,7 @@ function bridge(project: string | null = PROJECT) {
       return "q"
     },
     typing: async (_bot, _platform, chat) => void typing.push(chat),
+    preview: async (bot, platform, chat, text) => void previews.push({ bot, platform, chat, text }),
     project: async () => project ?? undefined,
   }
   const emit = (text: string, extra: Partial<GatewayMessage> = {}) =>
@@ -73,7 +75,7 @@ function bridge(project: string | null = PROJECT) {
       private: true,
       ...extra,
     })
-  return { fake, calls, sent, typing, questions, acks, emit }
+  return { fake, calls, sent, typing, questions, acks, previews, emit }
 }
 
 /** Turns that end when the test says so. */
@@ -581,6 +583,33 @@ describe("the gateways' controller", () => {
     b.emit("di nuovo")
     await until("di nuovo accettato", () => b.sent.length === before + 1)
     expect(b.sent.at(-1)!.text).toBe(t("gateway.queued", 30))
+  })
+
+  test("a turn exposes partial text to the gateway controller during generation", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("ciao")
+    await until("il turno è partito", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+    expect(turn.request.partial).toBe(true)
+    expect(typeof turn.request.onUpdate).toBe("function")
+
+    const talk = { ...emptyTalk(), streaming: "Sto pensando..." }
+    turn.request.onUpdate!(talk)
+    await Promise.resolve()
+
+    expect(b.previews).toEqual([
+      { bot: BOT.path, platform: "telegram", chat: "c42", text: "Sto pensando..." },
+    ])
+    turn.finish({ text: "Risposta finale." })
+    await until("la risposta finale", () => b.sent.length === 1)
+    expect(b.sent).toEqual([{ chat: "c42", text: "Risposta finale." }])
   })
 })
 
