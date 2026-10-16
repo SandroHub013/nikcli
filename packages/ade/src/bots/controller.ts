@@ -18,7 +18,7 @@ import { t } from "../i18n"
 import type { BotAccount } from "./account"
 import { APPROVAL_TIMEOUT_MS, decide, localAlwaysStore, type AlwaysStore } from "./approval"
 import { appApprovals } from "./approvals-app"
-import type { ApprovalRegistry } from "./approvals"
+import { roomOfThread, type ApprovalRegistry } from "./approvals"
 import {
   memoryPreface,
   settleMemoryOps,
@@ -207,6 +207,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
         permission: asked.permission,
         patterns: asked.patterns,
         reason: verdict.reason,
+        ...(roomOfThread(threadOf(path), path) ? { room: roomOfThread(threadOf(path), path)! } : {}),
         askedAt: asked.askedAt,
         expiresAt,
         choices: verdict.keys ? ["once", "always", "reject"] : ["once", "reject"],

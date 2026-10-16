@@ -842,8 +842,12 @@ const shared = createRoot(() => {
   }
 })
 
-/** Opens the bot at `path` in the main area: from the bell, for a request that waits for the user. */
-export function openBotByPath(path: string) {
+/**
+ * Opens what a request that waits for the user is in: the room, when its member was asked there (the question is
+ * seen in the room), or the bot's page.
+ */
+export function openBotByPath(path: string, room?: string) {
+  if (room) return shared.openRoom(room)
   shared.openRoom(undefined)
   shared.setOpenId(path)
   shared.setComposing(false)

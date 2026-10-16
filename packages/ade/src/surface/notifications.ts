@@ -26,6 +26,8 @@ export interface Notice {
   readonly href?: string
   /** The bot (its file path) a notice about a request waiting for the user opens. */
   readonly bot?: string
+  /** The room the request was asked in, when it was: the notice opens the room instead. */
+  readonly room?: string
   /** The request the notice is about; the notice goes when the request is answered or runs out. */
   readonly approval?: string
   readonly at: number
@@ -56,6 +58,7 @@ export interface NoticeInput {
   readonly paneId?: string
   readonly href?: string
   readonly bot?: string
+  readonly room?: string
   readonly approval?: string
   readonly at: number
 }
@@ -93,6 +96,7 @@ export function addNotice(list: readonly Notice[], input: NoticeInput): Notice[]
     ...(input.paneId !== undefined ? { paneId: input.paneId } : {}),
     ...(input.href !== undefined ? { href: input.href } : {}),
     ...(input.bot !== undefined ? { bot: input.bot } : {}),
+    ...(input.room !== undefined ? { room: input.room } : {}),
     ...(input.approval !== undefined ? { approval: input.approval } : {}),
     at: input.at,
     read: false,

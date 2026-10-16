@@ -25,6 +25,8 @@ export interface ApprovalRequest {
   readonly patterns: string
   /** Why ADE asks, in words (`approval.ts`). */
   readonly reason?: string
+  /** The room the question was asked in, when a room's member asked it: the place where it is seen. */
+  readonly room?: string
   readonly askedAt: number
   /** When the question becomes a no. */
   readonly expiresAt: number
@@ -47,6 +49,8 @@ export interface WaitingApproval {
   readonly patterns: string
   readonly reason?: string
   readonly sources: readonly ApprovalSource[]
+  /** The room it was asked in, if one of its members was asked there. */
+  readonly room?: string
   /** The earliest ask, and the earliest expiry: the one that runs out first decides how long it can wait. */
   readonly askedAt: number
   readonly expiresAt: number
@@ -75,6 +79,7 @@ export function mergeApprovals(requests: readonly ApprovalRequest[]): WaitingApp
       members.every((member) => member.choices.includes(choice)),
     )
     const reason = members.find((member) => member.reason !== undefined)?.reason
+    const room = members.find((member) => member.room !== undefined)?.room
     return {
       id: approvalSignature(first),
       bot: first.bot,
@@ -82,6 +87,7 @@ export function mergeApprovals(requests: readonly ApprovalRequest[]): WaitingApp
       permission: first.permission,
       patterns: first.patterns,
       ...(reason !== undefined ? { reason } : {}),
+      ...(room !== undefined ? { room } : {}),
       sources: [...new Set(members.map((member) => member.source))],
       askedAt: first.askedAt,
       expiresAt: Math.min(...members.map((member) => member.expiresAt)),
@@ -89,6 +95,17 @@ export function mergeApprovals(requests: readonly ApprovalRequest[]): WaitingApp
       members,
     }
   })
+}
+
+/**
+ * The room a thread belongs to, when it is a room member's place there (`roomThread` in `room-app.ts`:
+ * `room:<id>:<bot path>`); undefined for the bot's own thread.
+ */
+export function roomOfThread(thread: string, bot: string): string | undefined {
+  const prefix = "room:"
+  const suffix = `:${bot}`
+  if (!thread.startsWith(prefix) || !thread.endsWith(suffix) || thread.length <= prefix.length + suffix.length) return undefined
+  return thread.slice(prefix.length, thread.length - suffix.length)
 }
 
 /** How long is left before the request becomes a no; never below zero. */

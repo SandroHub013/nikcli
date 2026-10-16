@@ -131,7 +131,8 @@ describe("the shell draws it", () => {
   test("lint: the flash only when the window is not in front, and the row opens the bot", () => {
     expect(shell).toContain("shouldNotifySystem(windowInFront())")
     expect(shell).toContain("void notifySystem()")
-    expect(shell).toContain("openWaitingBot(bot())")
+    expect(shell).toContain("openWaitingBot(bot(), notice.room)")
+    expect(shell).toContain('t("bots.waiting.openRoom")')
     expect(shell).toContain('t("bots.waiting.open")')
   })
 })

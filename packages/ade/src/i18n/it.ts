@@ -850,6 +850,7 @@ export const it = {
   "bots.waiting.notice": (bot: string, permission: string, patterns: string) =>
     `«${bot}» aspetta te: vuole usare «${permission}» su «${patterns}»`,
   "bots.waiting.open": "Apri il bot",
+  "bots.waiting.openRoom": "Apri la stanza",
   "gateway.approve.byAdeOnce": "Consentito da ADE.",
   "gateway.approve.byAdeNo": "Negato da ADE.",
   "gateway.approve.no": "No",

@@ -6,6 +6,7 @@ import {
   mergeApprovals,
   remainingClock,
   remainingMs,
+  roomOfThread,
   type ApprovalChoice,
   type ApprovalRequest,
 } from "./approvals"
@@ -93,6 +94,22 @@ describe("deciding", () => {
     expect(decideApproval(one!, "always")).toBe(false)
     expect(answers).toEqual([])
     expect(phone).toEqual([])
+  })
+})
+
+describe("the room", () => {
+  test("a room member's thread names its room; the bot's own, and a thread of another bot, do not", () => {
+    expect(roomOfThread("room:uno:C:/p/a.md", "C:/p/a.md")).toBe("uno")
+    expect(roomOfThread("room:a:b:C:/p/a.md", "C:/p/a.md")).toBe("a:b")
+    expect(roomOfThread("C:/p/a.md", "C:/p/a.md")).toBeUndefined()
+    expect(roomOfThread("room:uno:C:/p/b.md", "C:/p/a.md")).toBeUndefined()
+    expect(roomOfThread("room::C:/p/a.md", "C:/p/a.md")).toBeUndefined()
+  })
+
+  test("a merged request keeps the room of the member that has one", () => {
+    const [one] = mergeApprovals([request({ key: "tg", source: "telegram" }), request({ key: "ade", room: "uno", askedAt: 2000 })])
+    expect(one!.room).toBe("uno")
+    expect(mergeApprovals([request()])[0]!.room).toBeUndefined()
   })
 })
 

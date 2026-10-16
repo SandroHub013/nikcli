@@ -267,6 +267,27 @@ describe("B8d: ragu's questions in the panel and a room, by their id", () => {
     view.turns.stop(BOT)
   })
 
+  test("a room's member's question is listed with its room, so «Apri» opens the room; the bot's own is not", async () => {
+    const fake = server()
+    const registry = createApprovalRegistry()
+    const view = panel(fake, () => fake, registry)
+    const thread = `room:uno:${BOT.path}`
+    view.turns.room(BOT, "ciao", thread, "C:/progetto")
+    await until(() => fake.prompts.length === 1)
+    fake.push(status("busy"), asked("per_r", "git push --force"))
+    await until(() => registry.list().length === 1)
+    expect(mergeApprovals(registry.list())[0]).toMatchObject({ bot: BOT.path, room: "uno" })
+    view.turns.stop(BOT)
+    expect(registry.list()).toEqual([])
+
+    view.turns.send(BOT, "ciao", "C:/progetto")
+    await until(() => fake.prompts.length === 2)
+    fake.push(status("busy"), asked("per_s", "git push --force"))
+    await until(() => registry.list().length === 1)
+    expect(mergeApprovals(registry.list())[0]!.room).toBeUndefined()
+    view.turns.stop(BOT)
+  })
+
   test("the panel runs ragu on the server, the other runners as before", async () => {
     const fake = server()
     const ragu = runBotTurn(

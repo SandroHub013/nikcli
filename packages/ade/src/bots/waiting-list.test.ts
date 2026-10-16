@@ -79,17 +79,17 @@ describe("«Aspettano te»", () => {
 
   test("Consenti and Nega answer every member; the name opens the bot", () => {
     const answers: [string, ApprovalChoice][] = []
-    const opened: string[] = []
+    const opened: [string, string | undefined][] = []
     const host = mount(
       () => [
         request({ answer: (choice) => void answers.push(["ade", choice]) }),
         request({ key: "tg:1", source: "telegram", choices: ["once", "reject"], answer: (choice) => void answers.push(["telegram", choice]) }),
       ],
-      { onOpen: (bot: string) => void opened.push(bot) },
+      { onOpen: (bot: string, room?: string) => void opened.push([bot, room]) },
     )
     const press = (text: string) => [...host.querySelectorAll("button")].find((button) => button.textContent === text)!.click()
     press("alfa")
-    expect(opened).toEqual(["C:/p/a.md"])
+    expect(opened).toEqual([["C:/p/a.md", undefined]])
     press("Consenti")
     expect(answers).toEqual([
       ["ade", "once"],
@@ -100,6 +100,13 @@ describe("«Aspettano te»", () => {
       ["ade", "reject"],
       ["telegram", "reject"],
     ])
+  })
+
+  test("a question asked in a room opens the room", () => {
+    const opened: [string, string | undefined][] = []
+    const host = mount(() => [request({ room: "uno" })], { onOpen: (bot: string, room?: string) => void opened.push([bot, room]) })
+    ;[...host.querySelectorAll("button")].find((button) => button.textContent === "alfa")!.click()
+    expect(opened).toEqual([["C:/p/a.md", "uno"]])
   })
 
   test("it follows the list as requests come and go", () => {

@@ -935,16 +935,23 @@ export function Workbench() {
     setNotices((list) => dismissClosedApprovals(list, seen))
     for (const one of fresh) {
       setNotices((list) =>
-        addNotice(list, { kind: "warning", text: approvalLine(one), bot: one.bot, approval: one.id, at: Date.now() }),
+        addNotice(list, {
+          kind: "warning",
+          text: approvalLine(one),
+          bot: one.bot,
+          ...(one.room ? { room: one.room } : {}),
+          approval: one.id,
+          at: Date.now(),
+        }),
       )
       // ADE is behind: the window flashes in the taskbar (`bots/system-notify.ts`).
       if (shouldNotifySystem(windowInFront())) void notifySystem()
     }
   })
-  /** The bell's «Apri il bot»: the Bot section, on that bot. */
-  const openWaitingBot = (path: string) => {
+  /** The bell's «Apri»: the Bot section, on that bot, or on the room where it was asked. */
+  const openWaitingBot = (path: string, room?: string) => {
     setWb((w) => ({ ...w, view: "bot" }))
-    openBotByPath(path)
+    openBotByPath(path, room)
     setNoticesOpen(false)
   }
   /* A button on the strip, for the one notice it was made for: shown only while that text is. */
@@ -9885,9 +9892,9 @@ export function Workbench() {
                                 <button
                                   type="button"
                                   data-slot="ade-notice-link"
-                                  onClick={() => openWaitingBot(bot())}
+                                  onClick={() => openWaitingBot(bot(), notice.room)}
                                 >
-                                  {t("bots.waiting.open")}
+                                  {notice.room ? t("bots.waiting.openRoom") : t("bots.waiting.open")}
                                 </button>
                               )}
                             </Show>

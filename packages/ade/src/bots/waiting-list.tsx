@@ -11,7 +11,8 @@ import { decideApproval, remainingClock, type ApprovalChoice, type WaitingApprov
  */
 export function WaitingList(props: {
   waiting: () => readonly WaitingApproval[]
-  onOpen: (bot: string) => void
+  /** The bot's page, or the room when the question was asked in one. */
+  onOpen: (bot: string, room?: string) => void
   /** Absent, `decideApproval`: the answer goes to every member of the request. */
   onDecide?: (waiting: WaitingApproval, choice: ApprovalChoice) => void
   /** Absent, the clock; a test passes its own. */
@@ -39,7 +40,7 @@ export function WaitingList(props: {
           <For each={props.waiting()}>
             {(waiting) => (
               <li data-slot="bots-waiting-item">
-                <button type="button" data-slot="bots-link" onClick={() => props.onOpen(waiting.bot)}>
+                <button type="button" data-slot="bots-link" onClick={() => props.onOpen(waiting.bot, waiting.room)}>
                   {waiting.botName}
                 </button>
                 <span data-slot="bots-waiting-what" title={`${waiting.permission} ${waiting.patterns}`}>
