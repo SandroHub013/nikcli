@@ -30,6 +30,7 @@ const SAME_IN_BOTH = new Set<string>([
   "gateway.panel.platformSlack",
   // «Telegram: On»: the platform's name and the state's word, in the same shape in both.
   "gateway.tile.aria",
+  "bots.face.color.magenta",
   "gateway.panel.tokenPlaceholderSlack",
   "gateway.panel.tokenPlaceholder",
   "gateway.approve.no",

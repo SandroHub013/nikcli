@@ -169,7 +169,7 @@ describe("no key of the bot's screens is dead (D34)", () => {
   const code = sources.join("\n")
 
   /** Keys read through a template (`bots.memory.from.${origin}`): their stems. */
-  const DYNAMIC = ["bots.routine.mode.", "bots.memory.from."]
+  const DYNAMIC = ["bots.routine.mode.", "bots.memory.from.", "bots.face.shape.", "bots.face.color."]
 
   test("every bots.* and gateway.* text is read by something", () => {
     const dead = (Object.keys(it) as string[])

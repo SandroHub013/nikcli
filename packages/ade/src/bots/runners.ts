@@ -20,6 +20,7 @@
  */
 
 import { t } from "../i18n"
+import { formatUsd } from "./format"
 import { stripAnsi } from "../session/stream"
 import type { BotAccount } from "./account"
 import type { AgentFile } from "./ragu"
@@ -134,10 +135,7 @@ export interface SpendLine {
   readonly unreported?: true
 }
 
-/** Dollars of a real charge: three places under a cent, two otherwise. */
-export function formatUsd(usd: number): string {
-  return `$${usd < 0.01 ? usd.toFixed(3) : usd.toFixed(2)}`
-}
+export { formatUsd }
 
 /** What a turn shows for its model and its cost. The dollar amount is omitted when it is not money spent. */
 export function spendLine(input: {

@@ -14,12 +14,14 @@
 
 import { createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { t } from "../../i18n"
+import { ConfirmAction } from "../confirm"
+import { formatClock } from "../format"
 import type { AgentFile } from "../ragu"
 import { runnerById } from "../runners"
 import { createGatewayPanel, type GatewayPanelDeps, type ProblemArea } from "./panel-state"
 import { CREATE_LINK, STEP_IDS, type PlatformId, type StepId, type TileState } from "./steps"
 
-const time = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+const time = (ms: number) => formatClock(ms)
 
 const PLATFORMS: readonly { readonly id: PlatformId; readonly label: () => string }[] = [
   { id: "telegram", label: () => t("gateway.panel.platformTelegram") },
@@ -381,15 +383,13 @@ export function GatewaySection(props: { bot: AgentFile; deps: Omit<GatewayPanelD
                       <Failure of="paste" />
                       <Show when={panel.link().hasToken}>
                         <div data-slot="gateway-row">
-                          <button
-                            type="button"
-                            data-slot="bots-link"
-                            data-tone="danger"
+                          <ConfirmAction
+                            label={t("gateway.panel.clearToken")}
+                            question={t("gateway.panel.clearTokenQuestion")}
+                            confirm={t("gateway.panel.clearTokenConfirm")}
                             disabled={panel.busy()}
-                            onClick={() => void panel.clearToken()}
-                          >
-                            {t("gateway.panel.clearToken")}
-                          </button>
+                            onConfirm={() => panel.clearToken()}
+                          />
                         </div>
                       </Show>
                     </Show>
@@ -488,15 +488,13 @@ export function GatewaySection(props: { bot: AgentFile; deps: Omit<GatewayPanelD
                               <li>
                                 <span>{account.name}</span>
                                 <span data-slot="gateway-meta">{account.id}</span>
-                                <button
-                                  type="button"
-                                  data-slot="bots-link"
-                                  data-tone="danger"
+                                <ConfirmAction
+                                  label={t("gateway.panel.revoke")}
+                                  question={t("gateway.panel.revokeQuestion", account.name)}
+                                  confirm={t("gateway.panel.revokeConfirm")}
                                   disabled={panel.busy()}
-                                  onClick={() => void panel.revoke(account.id)}
-                                >
-                                  {t("gateway.panel.revoke")}
-                                </button>
+                                  onConfirm={() => panel.revoke(account.id)}
+                                />
                               </li>
                             )}
                           </For>

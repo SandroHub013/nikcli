@@ -8,6 +8,7 @@
 
 import { createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { t } from "../i18n"
+import { ConfirmAction } from "./confirm"
 import type { BotAccount } from "./account"
 import type { AgentFile } from "./ragu"
 import {
@@ -140,8 +141,10 @@ export function RoutineSection(props: {
   )
 
   return (
-    <section data-slot="bots-card-section">
-      <span data-slot="bots-label">{t("bots.routine.label")}</span>
+    <section data-slot="bots-card-section" aria-labelledby="bots-routines-title">
+      <h3 data-slot="bots-section-title" id="bots-routines-title">
+        {t("bots.routine.label")}
+      </h3>
       <Show
         when={offer().allowed}
         fallback={
@@ -193,14 +196,12 @@ export function RoutineSection(props: {
                         {t("bots.routine.reconsent")}
                       </button>
                     </Show>
-                    <button
-                      type="button"
-                      data-slot="bots-link"
-                      data-tone="danger"
-                      onClick={() => props.deps.remove(routine.id)}
-                    >
-                      {t("bots.routine.remove")}
-                    </button>
+                    <ConfirmAction
+                      label={t("bots.routine.remove")}
+                      question={t("bots.routine.removeQuestion", routine.prompt.slice(0, 60))}
+                      confirm={t("bots.routine.removeConfirm")}
+                      onConfirm={() => props.deps.remove(routine.id)}
+                    />
                   </span>
                   <Show when={reconsenting() === routine.id}>
                     <div data-slot="gateway-confirm">
@@ -251,6 +252,7 @@ export function RoutineSection(props: {
             </label>
             <select
               data-slot="bots-input"
+              aria-label={t("bots.routine.kind.label")}
               value={kind()}
               onChange={(event) => setKind(event.currentTarget.value === "daily" ? "daily" : "hours")}
             >

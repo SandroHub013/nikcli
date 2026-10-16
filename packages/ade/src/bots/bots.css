@@ -219,6 +219,25 @@
   line-height: var(--ade-leading);
 }
 
+/* The empty centre: a line, and what to press (D26). */
+[data-slot="bots-blank"] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ade-space-5);
+  padding: var(--ade-space-7) var(--ade-space-8);
+}
+
+[data-slot="bots-blank-text"] {
+  margin: 0;
+}
+
+[data-slot="bots-blank-list"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ade-space-3);
+}
+
 /* The three at the top, large. A row of portraits, names under them. */
 [data-slot="bots-pinned"] {
   display: grid;

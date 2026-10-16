@@ -161,7 +161,9 @@ import { effortLabel, readableModelName } from "../chat/picker"
 import { createModelSource, stateOf, type ModelRead, type ModelSourceState } from "../chat/model-source"
 import { readBotModels } from "./bot-models"
 import { launchBot } from "./launch"
+import { formatCount } from "./format"
 import { metaWords } from "./page-meta"
+import { sameFields, syncFields, type FormFields } from "./settings-sync"
 import { BotTabs } from "./bot-tabs"
 import { ConfirmAction } from "./confirm"
 import { PermissionsSection } from "./permissions-panel"
@@ -605,11 +607,7 @@ const roomDeps: RoomPanelDeps = {
   remove: async (roomId) => {
     const room = roomStore.get().rooms.find((entry) => entry.id === roomId)
     if (!room) return false
-    const yes = await askYesNo(t("bots.room.deleteAsk", room.name), {
-      ok: t("bots.room.delete"),
-      cancel: t("bots.room.form.cancel"),
-    })
-    if (!yes) return false
+    // Asked before, on the room's own screen (`ConfirmAction`): the user has already said yes.
     await roomRunner.stop(roomId)
     writeRooms((book) => ({ rooms: book.rooms.filter((entry) => entry.id !== roomId) }))
     // Each member's session in the room goes with it.
@@ -849,6 +847,12 @@ export interface BotsRosterProps {
  * The three most recently active at the top, large; the rest in a list, each
  * with the last thing said or done and when. Sized to the sidebar it is in.
  */
+/** The form for a new bot, in the middle: from the «+», and from the empty states that say to press it. */
+function startNewBot() {
+  shared.openRoom(undefined)
+  shared.setComposing(true)
+}
+
 export function BotsRoster(props: BotsRosterProps) {
   createEffect(() => shared.setProjectRoot(props.projectRoot))
 
@@ -866,10 +870,7 @@ export function BotsRoster(props: BotsRosterProps) {
         <button
           type="button"
           data-slot="bots-new"
-          onClick={() => {
-            shared.openRoom(undefined)
-            shared.setComposing(true)
-          }}
+          onClick={startNewBot}
           aria-label={t("bots.newBot")}
           title={t("bots.newBot")}
         >
@@ -901,7 +902,10 @@ export function BotsRoster(props: BotsRosterProps) {
         fallback={
           <p data-slot="bots-roster-empty">
             <Show when={!roster.loading} fallback={<>{t("bots.roster.loading")}</>}>
-              {t("bots.roster.empty")}
+              {t("bots.roster.empty")}{" "}
+              <button type="button" data-slot="bots-link" onClick={startNewBot}>
+                {t("bots.roster.createFirst")}
+              </button>
             </Show>
           </p>
         }
@@ -959,7 +963,7 @@ export function BotsMain(props: BotsMainProps) {
   createEffect(() => shared.setProjectRoot(props.projectRoot))
   createEffect(() => void (roomProject = props.projectRoot))
 
-  const { roster, roots, models, catalog, composing, current, identifiers, expression, reload } = shared
+  const { roster, roots, models, catalog, composing, current, identifiers, expression, reload, ordered, open } = shared
 
   /*
    * One message, one process.
@@ -1103,11 +1107,34 @@ export function BotsMain(props: BotsMainProps) {
         </Show>
 
         <Show when={!composing() && !current() && !shared.roomComposing() && !shared.openRoomId()}>
-          <p data-slot="bots-blank">
-            <Show when={(roster() ?? []).length > 0} fallback={<>{t("bots.blank.empty")}</>}>
-              {t("bots.blank.pick")}
+          <div data-slot="bots-blank">
+            <Show
+              when={(roster() ?? []).length > 0}
+              fallback={
+                <>
+                  <p data-slot="bots-blank-text">{t("bots.blank.empty")}</p>
+                  <button type="button" data-slot="bots-btn" data-tone="primary" onClick={startNewBot}>
+                    {t("bots.blank.create")}
+                  </button>
+                </>
+              }
+            >
+              {/* With the sidebar hidden there is nowhere else to choose from: the list is here too. */}
+              <p data-slot="bots-blank-text">{t("bots.blank.pick")}</p>
+              <div data-slot="bots-blank-list">
+                <For each={ordered()}>
+                  {(bot) => (
+                    <button type="button" data-slot="bots-btn" onClick={() => open(bot)}>
+                      {bot.identifier}
+                    </button>
+                  )}
+                </For>
+              </div>
+              <button type="button" data-slot="bots-link" onClick={startNewBot}>
+                {t("bots.blank.createAnother")}
+              </button>
             </Show>
-          </p>
+          </div>
         </Show>
       </div>
     </section>
@@ -1162,7 +1189,8 @@ function FacePicker(props: { identifier: string; value?: string; onChange: (valu
                 aria-checked={chosen().shape === shape}
                 data-slot="bots-picker-option"
                 data-on={chosen().shape === shape ? "true" : undefined}
-                title={shape}
+                title={t(`bots.face.shape.${shape}`)}
+                aria-label={t(`bots.face.shape.${shape}`)}
                 onClick={() => pick(shape, chosen().color)}
               >
                 <Face identifier={props.identifier} avatar={avatarKey({ shape, color: chosen().color })} size={26} />
@@ -1180,7 +1208,8 @@ function FacePicker(props: { identifier: string; value?: string; onChange: (valu
                 data-slot="bots-picker-swatch"
                 data-on={chosen().color === color ? "true" : undefined}
                 style={{ "--bot-color": `var(--ade-ansi-${color})` }}
-                title={color}
+                title={t(`bots.face.color.${color}`)}
+                aria-label={t(`bots.face.color.${color}`)}
                 onClick={() => pick(chosen().shape, color)}
               />
             )}
@@ -1331,7 +1360,14 @@ function Thread(props: {
           />
         </Show>
       </div>
-      <div data-slot="bots-messages" ref={(el) => (scroller = el)}>
+      <div
+        data-slot="bots-messages"
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions text"
+        aria-label={t("bots.thread.label", props.bot.identifier)}
+        ref={(el) => (scroller = el)}
+      >
         <Show when={props.talk.messages.length === 0 && !props.talk.problem}>
           <div data-slot="bots-thread-empty">
             <Face identifier={props.bot.identifier} avatar={props.bot.avatar} expression={props.expression} size={72} />
@@ -1456,6 +1492,7 @@ function Thread(props: {
         <textarea
           ref={(el) => (field = el)}
           data-slot="bots-composer-field"
+          aria-label={t("bots.composer.label", props.bot.identifier)}
           rows="1"
           value={draft()}
           placeholder={
@@ -1572,12 +1609,6 @@ function Message(props: { message: TalkMessage; bot: AgentFile; onUndo?: () => v
       </div>
     </div>
   )
-}
-
-function formatCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}k`
-  return String(n)
 }
 
 function spendKey(kind: SpendKind): "bots.spend.plan" | "bots.spend.api" | "bots.spend.free" | "bots.spend.metered" {
@@ -2487,25 +2518,44 @@ function BotSettings(props: {
   const [failure, setFailure] = createSignal<string>()
   const [saved, setSaved] = createSignal(false)
 
-  /* Re-read when the file changes under the form: these are fields over a
-     file, and the file is the truth. */
+  /*
+   * Re-read when the file changes under the form: these are fields over a file, and the file is the truth. A bot
+   * that is another bot starts the fields over; the same bot changed (a model picked from the chip, a save) moves
+   * only the fields the user has not touched, so a persona typed and not saved stays (D7).
+   */
+  const fileFields = createMemo<FormFields>(() => ({
+    description: props.bot.description,
+    model: props.bot.model ?? "",
+    effort: props.bot.effort ?? "",
+    runner: runnerById(props.bot.runner).id,
+    objectives: parts().objectives.join("\n"),
+    persona: parts().persona,
+    avatar: props.bot.avatar ?? "",
+  }))
   createEffect(
     on(
-      () =>
-        props.bot.path +
-        props.bot.prompt +
-        (props.bot.model ?? "") +
-        (props.bot.effort ?? "") +
-        (props.bot.runner ?? ""),
-      () => {
-        setRunner(runnerById(props.bot.runner).id)
-        setDescription(props.bot.description)
-        setModel(props.bot.model ?? "")
-        setEffort(props.bot.effort ?? "")
-        setObjectives(parts().objectives.join("\n"))
-        setPersona(parts().persona)
-        setAvatar(props.bot.avatar)
-        setSaved(false)
+      () => [props.bot.path, fileFields()] as const,
+      ([path, after], previous) => {
+        const [beforePath, before] = previous ?? [path, after]
+        const current: FormFields = {
+          description: description(),
+          model: model(),
+          effort: effort(),
+          runner: runner(),
+          objectives: objectives(),
+          persona: persona(),
+          avatar: avatar() ?? "",
+        }
+        const next = path === beforePath ? syncFields(current, before, after) : after
+        setRunner(next.runner)
+        setDescription(next.description)
+        setModel(next.model)
+        setEffort(next.effort)
+        setObjectives(next.objectives)
+        setPersona(next.persona)
+        setAvatar(next.avatar || undefined)
+        // «Salvato.» stays when the file only caught up with what was saved.
+        if (!sameFields(current, next)) setSaved(false)
       },
       { defer: true },
     ),

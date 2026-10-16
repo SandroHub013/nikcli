@@ -1,4 +1,4 @@
-import { createSignal, Show, type JSX } from "solid-js"
+import { createSignal, Show } from "solid-js"
 import { t } from "../i18n"
 
 /**
@@ -23,9 +23,6 @@ export function ConfirmAction(props: {
   disabled?: boolean
   /** A text link (the default, as the destructive links of the cards), or a button. */
   look?: "link" | "button"
-  /** The accessible name of the first button, when `label` alone does not say what it acts on. */
-  describedBy?: string
-  children?: JSX.Element
 }) {
   const [asking, setAsking] = createSignal(false)
   const [busy, setBusy] = createSignal(false)
@@ -51,7 +48,6 @@ export function ConfirmAction(props: {
           data-slot={slot()}
           data-tone="danger"
           disabled={props.disabled}
-          aria-describedby={props.describedBy}
           onClick={() => setAsking(true)}
         >
           {props.label}

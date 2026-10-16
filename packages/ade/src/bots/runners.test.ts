@@ -608,13 +608,13 @@ describe("il costo di un turno", () => {
 
   test("ragu mostra il costo del turno, e un modello :free no", () => {
     const paid = spendLine({ runnerId: "ragu", model: "openai/gpt-4o", tokens: 800, costUsd: 0.04 })
-    expect(paid).toMatchObject({ kind: "api", model: "openai/gpt-4o", usd: "$0.04" })
+    expect(paid).toMatchObject({ kind: "api", model: "openai/gpt-4o", usd: "0,04 $" })
     const free = spendLine({ runnerId: "ragu", model: "google/gemini-2.0-flash:free", tokens: 800, costUsd: 0.5 })
     expect(free.kind).toBe("free")
     expect(free.usd).toBeUndefined()
     const unnamed = spendLine({ runnerId: "ragu", tokens: 10, costUsd: 0.004 })
     expect(unnamed.kind).toBe("metered")
-    expect(unnamed.usd).toBe("$0.004")
+    expect(unnamed.usd).toBe("0,004 $")
     expect(spendLine({ runnerId: "ragu", model: "openai/gpt-4o", tokens: 1, costUsd: 0 }).usd).toBeUndefined()
   })
 
@@ -626,7 +626,7 @@ describe("il costo di un turno", () => {
       costUsd: 0.04,
       account: { mode: "key", key: "lavoro" },
     })
-    expect(claude).toMatchObject({ kind: "api", usd: "$0.04" })
+    expect(claude).toMatchObject({ kind: "api", usd: "0,04 $" })
     const codex = spendLine({
       runnerId: "codex",
       model: "gpt-5.5",
@@ -663,9 +663,12 @@ describe("il costo di un turno", () => {
   })
 
   test("i dollari hanno tre cifre sotto il centesimo e due sopra", () => {
-    expect(formatUsd(0.009)).toBe("$0.009")
-    expect(formatUsd(0.01)).toBe("$0.01")
-    expect(formatUsd(1.2)).toBe("$1.20")
+    // In the language of ADE (Italian in the tests): the comma, and the dollar after the number (D32).
+    expect(formatUsd(0.009)).toBe("0,009 $")
+    expect(formatUsd(0.01)).toBe("0,01 $")
+    expect(formatUsd(1.2)).toBe("1,20 $")
+    expect(formatUsd(0.009, "en")).toBe("$0.009")
+    expect(formatUsd(1.2, "en")).toBe("$1.20")
   })
 
   test("l'ultimo turno di Claude Code tiene il modello dell'init e solo i token di quel result", () => {
