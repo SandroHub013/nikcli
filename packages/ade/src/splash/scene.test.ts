@@ -182,7 +182,6 @@ describe("splash scene renderer and stage layout (clean reference scene)", () =>
       }
 
       let isHidden = false
-      const origHidden = Object.getOwnPropertyDescriptor(Document.prototype, "hidden")
       Object.defineProperty(document, "hidden", {
         get: () => isHidden,
         configurable: true,
@@ -220,12 +219,10 @@ describe("splash scene renderer and stage layout (clean reference scene)", () =>
       } finally {
         window.requestAnimationFrame = origRaf
         window.cancelAnimationFrame = origCaf
-        if (origHidden) {
-          Object.defineProperty(Document.prototype, "hidden", origHidden)
-        } else {
-          delete (document as any).hidden
-        }
+        delete (document as any).hidden
       }
+
+      expect(Object.prototype.hasOwnProperty.call(document, "hidden")).toBe(false)
     })
 
     test("no inline styles are left on body or documentElement", () => {
