@@ -29,7 +29,7 @@ import {
 } from "./memory"
 import type { AgentFile } from "./ragu"
 import type { Attachment } from "../chat/attachments"
-import { attachedLine, withFilePaths } from "./attach"
+import { attachedLine, isPicture, withFilePaths } from "./attach"
 import type { RoutineRun } from "./routine"
 import { applyRunnerLine, runnerById, spendKind } from "./runners"
 import {
@@ -289,7 +289,9 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
     }
     // ragu takes the files as parts of the prompt; Claude Code and Codex by their path, under the words (`attach.ts`).
     const ragu = runner.id === "ragu"
-    const words = ragu ? message : withFilePaths(message, files)
+    // Codex takes the pictures with `--image` (`turn.ts`): the message names only the other files.
+    const codex = runner.id === "codex"
+    const words = ragu ? message : withFilePaths(message, codex ? files.filter((file) => !isPicture(file)) : files)
     const sent = preface ? `${preface}\n\n${words}` : words
     /* The thread's messages from here on are this turn's. */
     const from = deps.talkOf(thread).messages.length
@@ -308,7 +310,7 @@ export function createBotTurns(deps: BotTurnsDeps): BotTurns {
       runner: runner.id,
       bot,
       message: sent,
-      ...(ragu && files.length > 0 ? { attachments: files } : {}),
+      ...((ragu || codex) && files.length > 0 ? { attachments: files } : {}),
       account,
       ...(sessionId ? { sessionId } : {}),
       ...(cwd ? { cwd } : {}),

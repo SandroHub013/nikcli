@@ -71,10 +71,7 @@ import {
 } from "./turn"
 import type { PermissionRule } from "../chat/rules"
 import { tauriAttachmentCheck, type AttachmentCheck } from "../chat/store"
-import { checkedFileParts } from "./attach"
-
-/** No check to ask: no file goes. */
-const refuseFile = async (): Promise<AttachmentCheck> => "outside"
+import { checkedFileParts, refuseAttachment } from "./attach"
 
 /** What a turn asks of the server: the SDK's calls it makes, and nothing else. */
 export interface ServeClient {
@@ -311,7 +308,7 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
     const cwd = request.cwd
     if (!cwd) return finish("error", t("bots.serve.noFolder"))
     // ragu reads a file part as the user, with no question: each file is the project's, checked again now, or nothing goes.
-    const files = await checkedFileParts(cwd, request.attachments ?? [], deps.checkAttachment ?? refuseFile)
+    const files = await checkedFileParts(cwd, request.attachments ?? [], deps.checkAttachment ?? refuseAttachment)
     if ("problem" in files) return finish("error", files.problem)
     const slot = acquireTurn("ragu", "ragu")
     if ("problem" in slot) return finish("error", slot.problem)
@@ -705,10 +702,13 @@ export function appProjectTrust(directory: string): Omit<AdmitProjectDeps, "conf
  * question has an id (B8d) — the panel's, a room's, a routine's and a chat's;
  * the others as `runTurn` runs them.
  */
+/** The app's: Codex's pictures checked by Rust, links followed, as ragu's files are. */
+const APP_TURN_DEPS: TurnDeps = { checkAttachment: tauriAttachmentCheck }
+
 export function runBotTurn(
   request: TurnRequest,
   serve: () => ServeTurnDeps = appServeTurnDeps,
-  deps: TurnDeps = {},
+  deps: TurnDeps = APP_TURN_DEPS,
 ): Turn {
   if (request.runner === "ragu") return runServeTurn(request, serve())
   return runTurn(request, deps)

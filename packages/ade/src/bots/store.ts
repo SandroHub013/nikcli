@@ -207,8 +207,12 @@ export type CreateBotResult =
  * Either way the model is pinned afterwards, because `agent create` spends
  * `--model` on the model that *writes* the agent and never records one.
  */
-export async function createBot(input: CreateBotInput, roots: BotRoots): Promise<CreateBotResult> {
-  const host = await getHost()
+export async function createBot(
+  input: CreateBotInput,
+  roots: BotRoots,
+  hostOf: () => Promise<Host | undefined> = getHost,
+): Promise<CreateBotResult> {
+  const host = await hostOf()
   if (!host) return { ok: false, problem: t("bots.store.noHost") }
 
   const base = input.scope === "project" ? roots.project : roots.global
@@ -227,6 +231,12 @@ export async function createBot(input: CreateBotInput, roots: BotRoots): Promise
   }
 
   if (!host.raguBot) return { ok: false, problem: t("bots.store.noRagu") }
+  /*
+   * The name is the user's (bot-ui-3, 1): ragu writes the instructions, and the file is then kept under the name the
+   * form was given, whatever ragu called it. Settled first, so a name already taken costs no generation.
+   */
+  const target = await newBotPath({ ...input, home, base }, host)
+  if ("problem" in target) return { ok: false, problem: target.problem }
   const result = await host.raguBot(
     createArgs({
       home,
@@ -264,23 +274,74 @@ export async function createBot(input: CreateBotInput, roots: BotRoots): Promise
    * through untouched.
    */
   const settings = {
+    // What it is for is the user's words, as the name is; ragu's own line is for its generator.
+    ...(input.description.trim() ? { description: input.description.trim() } : {}),
     ...(input.model ? { model: input.model } : {}),
     ...(input.effort ? { effort: input.effort } : {}),
     ...(input.avatar ? { avatar: input.avatar } : {}),
     ...(input.runner && input.runner !== "ragu" ? { runner: input.runner } : {}),
     ...(input.objectives && input.objectives.length > 0 ? { objectives: input.objectives } : {}),
   }
-  if (Object.keys(settings).length > 0 && host.readTextFile && host.writeTextFile) {
-    try {
-      const read = await host.readTextFile(created)
-      await host.writeTextFile(created, editedAgentFile(read.text, settings))
-    } catch {
-      // The bot exists and works on ragu's defaults; only these are missing,
-      // and the detail view says plainly what a bot is set to.
-    }
+  if (!host.readTextFile || !host.writeTextFile) {
+    return { ok: true, path: created, identifier: identifierFromCreated(created) }
   }
+  const same = samePath(created, target.path)
+  let failure: string | null
+  try {
+    const read = await host.readTextFile(created)
+    failure = await host.writeTextFile(target.path, editedAgentFile(read.text, settings))
+  } catch (error) {
+    failure = error instanceof Error ? error.message : String(error)
+  }
+  if (same) {
+    // The bot exists under its name and works on ragu's defaults; only these are missing, and the detail view says
+    // plainly what a bot is set to.
+    return { ok: true, path: created, identifier: identifierFromCreated(created) }
+  }
+  // ragu's own file goes either way: one bot, under the user's name, or none and the reason.
+  await host.deleteBotFile?.(created).catch(() => null)
+  if (failure) return { ok: false, problem: failure }
+  return { ok: true, path: target.path, identifier: target.identifier }
+}
 
-  return { ok: true, path: created, identifier: identifierFromCreated(created) }
+/** One file, however its path is written: slashes either way, a drive letter in either case. */
+function samePath(a: string, b: string): boolean {
+  const key = (path: string) => path.replace(/\\/g, "/").toLowerCase()
+  return key(a) === key(b)
+}
+
+/**
+ * Where a bot named `name` is written: `agent/<identifier>.md` in its home, the name made a file name as it always is
+ * (`identifierFor`), never over a file that is there.
+ */
+async function newBotPath(
+  input: { readonly name: string; readonly scope: AgentScope; readonly home: string; readonly base: string },
+  host: Host,
+): Promise<{ readonly identifier: string; readonly path: string } | { readonly problem: string }> {
+  const existing = await listBots(input.scope === "project" ? { project: input.base } : { global: input.base })
+  const identifier = identifierFor(
+    input.name,
+    existing.map((bot) => bot.identifier),
+  )
+  // `agent`, not `agents`: ragu reads both but writes the first, and a
+  // roster split across two spellings is one the user has to think about.
+  const path = joinPath(input.home, "agent", `${identifier}.md`)
+  /*
+   * Refused rather than overwritten, which is also what `agent create` does:
+   * a bot's file is its memory of how to behave, and silently replacing one
+   * because two names collapsed to the same identifier is the kind of loss
+   * nobody notices until the bot answers differently.
+   */
+  let there: boolean | undefined
+  try {
+    there = await host.exists?.(path)
+  } catch (error) {
+    // `path_exists` rejects when the check itself fails (a drive that does not answer, access denied). Not «absent»: that
+    // would let the write below go over a file that may be there. Said, so the form does not stay busy for good (review of F7d, O1).
+    return { problem: error instanceof Error ? error.message : String(error) }
+  }
+  if (there) return { problem: t("bots.alreadyExists", identifier) }
+  return { identifier, path }
 }
 
 function identifierFromCreated(path: string): string {
@@ -296,32 +357,9 @@ export async function writeBot(
     return { ok: false, problem: t("bots.store.noWrite") }
   }
 
-  const existing = await listBots(input.scope === "project" ? { project: input.base } : { global: input.base })
-  const identifier = identifierFor(
-    input.name,
-    existing.map((bot) => bot.identifier),
-  )
-  // `agent`, not `agents`: ragu reads both but writes the first, and a
-  // roster split across two spellings is one the user has to think about.
-  const path = joinPath(input.home, "agent", `${identifier}.md`)
-
-  /*
-   * Refused rather than overwritten, which is also what `agent create` does:
-   * a bot's file is its memory of how to behave, and silently replacing one
-   * because two names collapsed to the same identifier is the kind of loss
-   * nobody notices until the bot answers differently.
-   */
-  let there: boolean | undefined
-  try {
-    there = await host.exists?.(path)
-  } catch (error) {
-    // `path_exists` rejects when the check itself fails (a drive that does not answer, access denied). Not «absent»: that
-    // would let the write below go over a file that may be there. Said, so the form does not stay busy for good (review of F7d, O1).
-    return { ok: false, problem: error instanceof Error ? error.message : String(error) }
-  }
-  if (there) {
-    return { ok: false, problem: t("bots.alreadyExists", identifier) }
-  }
+  const target = await newBotPath(input, host)
+  if ("problem" in target) return { ok: false, problem: target.problem }
+  const { identifier, path } = target
 
   const failure = await host.writeTextFile(
     path,

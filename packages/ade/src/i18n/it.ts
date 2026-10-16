@@ -2385,7 +2385,6 @@ export const it = {
   "bots.form.title": "Nuovo bot",
   "bots.form.name": "Nome",
   "bots.form.namePlaceholder": "Revisore",
-  "bots.form.hintGenerating": "Con le istruzioni vuote Ragu Code sceglie il nome del bot: quello che scrivi qui è solo un promemoria.",
   "bots.form.hintNamed": "Diventa il nome del file del bot e il nome con cui lo richiami.",
   "bots.form.logo": "Faccia",
   "bots.form.description": "A cosa serve",

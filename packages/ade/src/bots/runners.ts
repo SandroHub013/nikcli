@@ -267,6 +267,13 @@ export interface TurnSpec {
    * switched off by name. Absent, or with a name that is not a plain one: the whole file is left out.
    */
   readonly codexMcpServers?: readonly string[]
+  /**
+   * Codex only: pictures of the project for the model, each an `--image` (bot-ui-3, 3), absolute and checked
+   * (`turn.ts`). codex-cli 0.162.1 takes `-i, --image <FILE>...` on `exec` and on `exec resume`; each goes before
+   * `--`, so the list of files ends there and the message stays the message (a fake provider: two `input_image`, then
+   * the words).
+   */
+  readonly images?: readonly string[]
 }
 
 /** An MCP server's name as it may go on Codex's command line: through npm's `.cmd` shim, nothing cmd.exe reads. */
@@ -707,6 +714,7 @@ export function turnCommand(
               ...CODEX_PROJECT_ONLY,
             ]
           : []
+      const images = (spec.images ?? []).flatMap((path) => ["--image", path])
       if (sessionId) {
         return {
           command: runner.command,
@@ -719,6 +727,7 @@ export function turnCommand(
             ...unwatched,
             ...model,
             ...config,
+            ...images,
             "--",
             sessionId,
             notStdin(message),
@@ -736,6 +745,7 @@ export function turnCommand(
           ...unwatched,
           ...model,
           ...config,
+          ...images,
           "--",
           notStdin(withInstructions(bot, message)),
         ],

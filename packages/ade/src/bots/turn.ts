@@ -30,6 +30,8 @@ import { codexVersion } from "./codex-version"
 import { formatCap, formatUsd } from "./format"
 import type { AgentFile } from "./ragu"
 import type { Attachment } from "../chat/attachments"
+import type { AttachmentCheck } from "../chat/store"
+import { checkedFiles, isPicture, refuseAttachment } from "./attach"
 import {
   applyRunnerLine,
   codexMcpNames,
@@ -128,8 +130,9 @@ export interface TurnRequest {
   /** Someone is in front of the screen: a project not admitted yet is asked about, not refused (B8d). */
   readonly interactive?: boolean
   /**
-   * ragu on ADE's server: files of the project sent with the message, as file parts (design/ade-bot-2, scelta 5;
-   * `attach.ts`). Claude Code and Codex get them by their path in the message instead.
+   * Files of the project sent with the message (design/ade-bot-2, scelta 5; `attach.ts`): ragu on ADE's server takes
+   * them as file parts, Codex its pictures with `--image` (bot-ui-3, 3). Claude Code gets them by their path in the
+   * message instead.
    */
   readonly attachments?: readonly Attachment[]
 }
@@ -170,6 +173,8 @@ export interface TurnDeps {
   readonly host?: () => ReturnType<typeof getHost>
   /** `codex --version`, for a Codex turn from a chat or a routine; by default asked once per start (`codex-version.ts`). */
   readonly codexVersion?: () => Promise<string | null>
+  /** Rust's check of an attached picture, links followed (`tauriAttachmentCheck`); absent, every picture is refused. */
+  readonly checkAttachment?: (root: string, path: string) => Promise<AttachmentCheck>
 }
 
 export interface TurnResult {
@@ -306,6 +311,22 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       update(applyProblem(talk, t("bots.turn.noHost"), Date.now()))
       return finish("error", talk.problem)
     }
+    /*
+     * Codex reads an `--image` itself, as the user (bot-ui-3, 3): each picture is the project's, checked again now with
+     * links followed, or Codex does not start. Its other files are named in the message (`controller.ts`).
+     */
+    let images: readonly string[] = []
+    const pictures = runner.id === "codex" ? (request.attachments ?? []).filter(isPicture) : []
+    if (pictures.length > 0) {
+      const checked = request.cwd
+        ? await checkedFiles(request.cwd, pictures, deps.checkAttachment ?? refuseAttachment)
+        : { problem: t("bots.attach.outside", pictures[0]!.path) }
+      if ("problem" in checked) {
+        update(applyProblem(talk, checked.problem, Date.now()))
+        return finish("error", checked.problem)
+      }
+      images = checked.files.map((file) => file.path)
+    }
 
     const bot: AgentFile = request.bot ?? {
       identifier: request.agent ?? "",
@@ -365,6 +386,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       ...(request.unattended ? { unattended: true } : {}),
       ...(request.maxCostUsd !== undefined ? { maxBudgetUsd: request.maxCostUsd } : {}),
       ...(codexMcpServers ? { codexMcpServers } : {}),
+      ...(images.length > 0 ? { images } : {}),
     })
     const spawnCwd = cwd ?? request.cwd
 
