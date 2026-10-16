@@ -47,7 +47,7 @@
 [data-slot="splash-status"] {
   margin-top: var(--ade-space-6, 16px);
   font-family: var(--ade-mono, monospace);
-  font-size: var(--ade-font-xs, 10px);
+  font-size: var(--ade-font-xs);
   color: var(--ade-text-weak, #9a907f);
   letter-spacing: 0.5px;
   text-align: center;
