@@ -210,11 +210,12 @@ pub async fn gateway_send(
     text: String,
     buttons: Option<Vec<adapter::Button>>,
     final_turn: Option<bool>,
+    preview_fallback: Option<String>,
 ) -> Result<String, String> {
     let hub = hub(&app)?;
     match buttons {
         Some(buttons) => hub.send_buttons(&bot, platform, &chat, &text, &buttons).await,
-        None => hub.send_with(&bot, platform, &chat, &text, final_turn.unwrap_or(false)).await,
+        None => hub.send_with(&bot, platform, &chat, &text, final_turn.unwrap_or(false), preview_fallback.as_deref()).await,
     }
 }
 
@@ -241,8 +242,8 @@ pub async fn gateway_preview(app: AppHandle, bot: String, platform: Platform, ch
 }
 
 #[tauri::command]
-pub async fn gateway_preview_end(app: AppHandle, bot: String, platform: Platform, chat: String) -> Result<(), String> {
-    hub(&app)?.preview_end(&bot, platform, &chat).await
+pub async fn gateway_preview_end(app: AppHandle, bot: String, platform: Platform, chat: String, fallback: Option<String>) -> Result<(), String> {
+    hub(&app)?.preview_end(&bot, platform, &chat, fallback.as_deref()).await
 }
 
 /// Who waits to pair, who is paired, and whether wrong codes locked it. Never a code.

@@ -823,6 +823,8 @@ export const it = {
     `Questo bot gira su ${runner} con l'account del proprietario: risponde solo al proprietario.`,
   "gateway.empty": "Il turno è finito senza una risposta.",
   "gateway.failed": "Il turno non è riuscito. Il dettaglio è in ADE.",
+  "gateway.preview.sentBelow": "(risposta inviata sotto)",
+  "gateway.preview.interrupted": "(interrotto)",
   "gateway.selfGrant": (name: string, what: string) =>
     `Il bot «${name}» si concede «${what}» nel suo file, e da remoto quel permesso non si può togliere: da qui non lo avvio. Toglilo dal file per usarlo dal telefono.`,
   "gateway.configGrant": (name: string, key: string, file: string) =>

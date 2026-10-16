@@ -676,7 +676,14 @@ impl Core {
 
     /// Sends `text` in pieces, stopping at the ceiling, and returns the id of
     /// the message that now holds the end of it.
-    async fn send_all(&self, chat: &str, text: &str, extra: Option<&Value>, final_turn: bool) -> Result<String, AdapterError> {
+    async fn send_all(
+        &self,
+        chat: &str,
+        text: &str,
+        extra: Option<&Value>,
+        final_turn: bool,
+        fallback: Option<&str>,
+    ) -> Result<String, AdapterError> {
         check_id("il canale", chat)?;
         let lock = self.chat_lock(chat);
         let _guard = lock.lock().await;
@@ -754,7 +761,8 @@ impl Core {
 
         if let Some(preview_id) = existing_preview {
             if self.delete(chat, &preview_id).await.is_err() {
-                let _ = self.edit(chat, &preview_id, "(risposta inviata sotto)").await;
+                let notice = fallback.unwrap_or("(risposta inviata sotto)");
+                let _ = self.edit(chat, &preview_id, notice).await;
             }
         }
         chunk::remember(&mut hold(&self.shared.preview), format!("{chat}/{last}"), text.to_string());
@@ -1241,11 +1249,17 @@ impl Adapter for Discord {
     }
 
     async fn send(&self, chat: &str, text: &str) -> Result<String, AdapterError> {
-        self.send_with(chat, text, false).await
+        self.send_with(chat, text, false, None).await
     }
 
-    async fn send_with(&self, chat: &str, text: &str, final_turn: bool) -> Result<String, AdapterError> {
-        self.send_all(chat, text, None, final_turn).await
+    async fn send_with(
+        &self,
+        chat: &str,
+        text: &str,
+        final_turn: bool,
+        fallback: Option<&str>,
+    ) -> Result<String, AdapterError> {
+        self.send_all(chat, text, None, final_turn, fallback).await
     }
 
     async fn send_buttons(&self, chat: &str, text: &str, buttons: &[Button]) -> Result<String, AdapterError> {
@@ -1260,10 +1274,10 @@ impl Adapter for Discord {
                 json!({ "type": 1, "components": row })
             })
             .collect();
-        self.send_all(chat, text, Some(&json!({ "components": components })), false).await
+        self.send_all(chat, text, Some(&json!({ "components": components })), false, None).await
     }
 
-    async fn preview_end(&self, chat: &str) -> Result<(), AdapterError> {
+    async fn preview_end(&self, chat: &str, fallback: Option<&str>) -> Result<(), AdapterError> {
         check_id("il canale", chat)?;
         let lock = self.chat_lock(chat);
         let _guard = lock.lock().await;
@@ -1271,7 +1285,8 @@ impl Adapter for Discord {
         let existing = hold(&self.shared.active_preview).remove(chat);
         if let Some(msg_id) = existing {
             if self.delete(chat, &msg_id).await.is_err() {
-                let _ = self.edit(chat, &msg_id, "(interrotto)").await;
+                let notice = fallback.unwrap_or("(interrotto)");
+                let _ = self.edit(chat, &msg_id, notice).await;
             }
         }
         Ok(())
@@ -2761,7 +2776,7 @@ mod tests {
 
         // 3. Final message: long enough to have 2 pieces (> 2000 chars)
         let long_final = format!("{}\n\n{}", "A".repeat(1990), "B".repeat(500));
-        let last_id = d.send_with("123", &long_final, true).await.unwrap();
+        let last_id = d.send_with("123", &long_final, true, None).await.unwrap();
         assert_eq!(last_id, "333");
         assert_eq!(rest.count(), 5);
         let reqs = rest.requests();
@@ -2785,7 +2800,7 @@ mod tests {
         let d = adapter(&rest, &gateway);
 
         d.preview("123", "anteprima").await.unwrap();
-        let last_id = d.send_with("123", "risposta finale", true).await.unwrap();
+        let last_id = d.send_with("123", "risposta finale", true, None).await.unwrap();
         assert_eq!(last_id, "222");
         assert_eq!(rest.count(), 4);
         let reqs = rest.requests();
@@ -2793,6 +2808,42 @@ mod tests {
         assert!(reqs[3].0.starts_with("PATCH /channels/123/messages/111"));
         assert_eq!(rest.body_of(3)["content"], "(risposta inviata sotto)");
         assert_eq!(hold(&d.shared.active_preview).get("123"), None);
+    }
+
+    #[tokio::test]
+    async fn preview_deletion_failure_uses_custom_fallback_notice() {
+        let rest = FakeRest::start(vec![
+            ok(r#"{"id": "111"}"#), // preview 1 POST
+            ok(r#"{"id": "222"}"#), // final message POST
+            refused(r#"{"message": "cannot delete"}"#), // DELETE fails
+            ok(r#"{"id": "111"}"#), // PATCH fallback notice
+        ]);
+        let gateway = FakeGateway::start(vec![]);
+        let d = adapter(&rest, &gateway);
+
+        d.preview("123", "anteprima").await.unwrap();
+        let last_id = d.send_with("123", "final answer", true, Some("(reply sent below)")).await.unwrap();
+        assert_eq!(last_id, "222");
+        let reqs = rest.requests();
+        assert_eq!(reqs.len(), 4);
+        assert_eq!(rest.body_of(3)["content"], "(reply sent below)");
+    }
+
+    #[tokio::test]
+    async fn preview_end_deletion_failure_uses_custom_fallback_notice() {
+        let rest = FakeRest::start(vec![
+            ok(r#"{"id": "111"}"#), // preview 1 POST
+            refused(r#"{"message": "cannot delete"}"#), // DELETE fails
+            ok(r#"{"id": "111"}"#), // PATCH fallback notice
+        ]);
+        let gateway = FakeGateway::start(vec![]);
+        let d = adapter(&rest, &gateway);
+
+        d.preview("123", "anteprima").await.unwrap();
+        d.preview_end("123", Some("(interrupted)")).await.unwrap();
+        let reqs = rest.requests();
+        assert_eq!(reqs.len(), 3);
+        assert_eq!(rest.body_of(2)["content"], "(interrupted)");
     }
 
     #[tokio::test]
@@ -2809,13 +2860,13 @@ mod tests {
         assert_eq!(hold(&d.shared.active_preview).get("123").map(String::as_str), Some("111"));
 
         // final message fails
-        let res = d.send_with("123", "risposta finale", true).await;
+        let res = d.send_with("123", "risposta finale", true, None).await;
         assert!(res.is_err());
 
         // active_preview was restored so preview_end can clean it up
         assert_eq!(hold(&d.shared.active_preview).get("123").map(String::as_str), Some("111"));
 
-        d.preview_end("123").await.unwrap();
+        d.preview_end("123", None).await.unwrap();
         assert_eq!(hold(&d.shared.active_preview).get("123"), None);
 
         let reqs = rest.requests();
@@ -2876,7 +2927,7 @@ mod tests {
         assert_eq!(hold(&d.shared.active_preview).get("123").map(String::as_str), Some("111"));
 
         // Turn 1 ends: final message sent, bumps generation and clears active_preview
-        d.send_with("123", "risposta finale turno 1", true).await.unwrap();
+        d.send_with("123", "risposta finale turno 1", true, None).await.unwrap();
         assert_eq!(hold(&d.shared.active_preview).get("123"), None);
 
         // Generation in chat is now bumped

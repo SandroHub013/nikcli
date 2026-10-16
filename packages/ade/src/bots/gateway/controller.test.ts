@@ -35,12 +35,12 @@ const BOT: AgentFile = {
 function bridge(project: string | null = PROJECT) {
   let handler: ((message: GatewayMessage) => void) | undefined
   const calls: string[] = []
-  const sent: { chat: string; text: string; final?: boolean }[] = []
+  const sent: { chat: string; text: string; final?: boolean; previewFallback?: string }[] = []
   const questions: { chat: string; text: string; buttons: readonly { label: string; data: string }[] }[] = []
   const typing: string[] = []
   const acks: { bot: string; platform: string; chat: string; id: string }[] = []
   const previews: { bot: string; platform: string; chat: string; text: string }[] = []
-  const previewEnds: { bot: string; platform: string; chat: string }[] = []
+  const previewEnds: { bot: string; platform: string; chat: string; fallback?: string }[] = []
   const fake: GatewayBridge = {
     listen: async (on) => {
       handler = on
@@ -53,7 +53,7 @@ function bridge(project: string | null = PROJECT) {
     ready: async () => void calls.push("ready"),
     ack: async (bot, platform, chat, id) => void acks.push({ bot, platform, chat, id }),
     send: async (_bot, _platform, chat, text, options) => {
-      sent.push({ chat, text, final: options?.final })
+      sent.push({ chat, text, final: options?.final, previewFallback: options?.previewFallback })
       return String(sent.length)
     },
     sendButtons: async (_bot, _platform, chat, text, buttons) => {
@@ -62,7 +62,7 @@ function bridge(project: string | null = PROJECT) {
     },
     typing: async (_bot, _platform, chat) => void typing.push(chat),
     preview: async (bot, platform, chat, text) => void previews.push({ bot, platform, chat, text }),
-    previewEnd: async (bot, platform, chat) => void previewEnds.push({ bot, platform, chat }),
+    previewEnd: async (bot, platform, chat, fallback) => void previewEnds.push({ bot, platform, chat, fallback }),
     project: async () => project ?? undefined,
   }
   const emit = (text: string, extra: Partial<GatewayMessage> = {}) =>
@@ -612,7 +612,9 @@ describe("the gateways' controller", () => {
     ])
     turn.finish({ text: "Risposta finale." })
     await until("la risposta finale", () => b.sent.length === 1)
-    expect(b.sent).toEqual([{ chat: "c42", text: "Risposta finale.", final: true }])
+    expect(b.sent).toEqual([
+      { chat: "c42", text: "Risposta finale.", final: true, previewFallback: t("gateway.preview.sentBelow") },
+    ])
   })
 
   test("preview updates are throttled to at most ~1/s and at least 24 new characters", async () => {
@@ -1119,7 +1121,49 @@ describe("the gateways' controller", () => {
     // User is revoked mid-turn
     controller.revoke(BOT.path, "telegram", "rev_user")
     await until("previewEnd chiamato in finally", () => b.previewEnds.length === 1)
-    expect(b.previewEnds).toEqual([{ bot: BOT.path, platform: "telegram", chat: "c42" }])
+    expect(b.previewEnds).toEqual([{ bot: BOT.path, platform: "telegram", chat: "c42", fallback: t("gateway.preview.interrupted") }])
+  })
+
+  test("fallback preview notice texts follow ADE language (P2-N4)", async () => {
+    // 1. Italian
+    setLocalePreference("it")
+    const bIt = bridge()
+    const turnsIt = fakeTurns()
+    await startGatewayController({
+      bridge: bIt.fake,
+      runTurn: turnsIt.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    bIt.emit("ciao")
+    await until("il turno è partito", () => turnsIt.started.length === 1)
+    turnsIt.started[0]!.finish({ text: "Risposta completata" })
+    await until("risposta inviata", () => bIt.sent.length === 1)
+    expect(bIt.sent[0]!.previewFallback).toBe("(risposta inviata sotto)")
+    await until("previewEnd chiamato in finally", () => bIt.previewEnds.length === 1)
+    expect(bIt.previewEnds[0]!.fallback).toBe("(interrotto)")
+
+    // 2. English
+    setLocalePreference("en")
+    try {
+      const bEn = bridge()
+      const turnsEn = fakeTurns()
+      await startGatewayController({
+        bridge: bEn.fake,
+        runTurn: turnsEn.runTurn,
+        loadBot: trusted,
+        sessions: memorySessionStore(),
+      })
+      bEn.emit("hello")
+      await until("il turno è partito", () => turnsEn.started.length === 1)
+      turnsEn.started[0]!.finish({ text: "Completed reply" })
+      await until("risposta inviata", () => bEn.sent.length === 1)
+      expect(bEn.sent[0]!.previewFallback).toBe("(reply sent below)")
+      await until("previewEnd chiamato in finally", () => bEn.previewEnds.length === 1)
+      expect(bEn.previewEnds[0]!.fallback).toBe("(interrupted)")
+    } finally {
+      setLocalePreference("it")
+    }
   })
 
   test("failed turn cleans up and sends failure message without hanging preview", async () => {

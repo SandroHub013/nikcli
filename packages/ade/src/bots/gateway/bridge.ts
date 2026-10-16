@@ -49,12 +49,14 @@ export function tauriGatewayBridge(): GatewayBridge {
         text,
         buttons: null,
         finalTurn: options?.final ?? false,
+        previewFallback: options?.previewFallback ?? null,
       }),
     sendButtons: (bot, platform, chat, text, buttons) =>
-      invoke<string>("gateway_send", { bot, platform, chat, text, buttons, finalTurn: false }),
+      invoke<string>("gateway_send", { bot, platform, chat, text, buttons, finalTurn: false, previewFallback: null }),
     typing: (bot, platform, chat) => invoke<void>("gateway_typing", { bot, platform, chat }),
     preview: (bot, platform, chat, text) => invoke<void>("gateway_preview", { bot, platform, chat, text }),
-    previewEnd: (bot, platform, chat) => invoke<void>("gateway_preview_end", { bot, platform, chat }),
+    previewEnd: (bot, platform, chat, fallback) =>
+      invoke<void>("gateway_preview_end", { bot, platform, chat, fallback: fallback ?? null }),
     async project(bot, platform) {
       const links = await invoke<LinkStatus[]>("gateway_status")
       return links.find((link) => link.bot === bot && link.platform === platform)?.project ?? undefined

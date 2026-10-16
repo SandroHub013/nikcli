@@ -88,7 +88,13 @@ export interface GatewayBridge {
   ready: () => Promise<void>
   /** Tells Rust the message was delivered to the frontend, so the cursor can advance. */
   ack?: (bot: string, platform: string, chat: string, id: string) => Promise<void>
-  send: (bot: string, platform: string, chat: string, text: string, options?: { final?: boolean }) => Promise<string>
+  send: (
+    bot: string,
+    platform: string,
+    chat: string,
+    text: string,
+    options?: { final?: boolean; previewFallback?: string },
+  ) => Promise<string>
   sendButtons: (
     bot: string,
     platform: string,
@@ -100,7 +106,7 @@ export interface GatewayBridge {
   /** Sends live partial text preview to the chat. */
   preview?: (bot: string, platform: string, chat: string, text: string) => Promise<void>
   /** Ends or cleans up active preview for the chat. */
-  previewEnd?: (bot: string, platform: string, chat: string) => Promise<void>
+  previewEnd?: (bot: string, platform: string, chat: string, fallback?: string) => Promise<void>
   /** The project the gateway's turns run in, fixed when it was switched on. */
   project: (bot: string, platform: string) => Promise<string | undefined>
 }
@@ -337,7 +343,11 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     return state
   }
 
-  const reply = async (message: GatewayMessage, text: string, options?: { final?: boolean }) => {
+  const reply = async (
+    message: GatewayMessage,
+    text: string,
+    options?: { final?: boolean; previewFallback?: string },
+  ) => {
     try {
       await deps.bridge.send(message.bot, message.platform, message.chat, text, options)
     } catch (error) {
@@ -576,14 +586,23 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       // The chat reads a fixed text: the detail (local paths, the server's words) stays in ADE (S10).
       if (result.status === "error") {
         failure(message, result.problem ?? "?")
-        return void (await reply(message, t("gateway.failed"), { final: true }))
+        return void (await reply(message, t("gateway.failed"), {
+          final: true,
+          previewFallback: t("gateway.preview.sentBelow"),
+        }))
       }
       // The bot works: what the panel kept of an earlier failure goes (N7).
       forgetTurnFailuresOf(message.bot)
-      await reply(message, text.trim() ? text : t("gateway.empty"), { final: true })
+      await reply(message, text.trim() ? text : t("gateway.empty"), {
+        final: true,
+        previewFallback: t("gateway.preview.sentBelow"),
+      })
     } catch (error) {
       failure(message, error instanceof Error ? error.message : String(error))
-      await reply(message, t("gateway.failed"), { final: true })
+      await reply(message, t("gateway.failed"), {
+        final: true,
+        previewFallback: t("gateway.preview.sentBelow"),
+      })
     } finally {
       previewDisabled = true
       if (inFlightPreview) {
@@ -592,7 +611,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         } catch {}
       }
       try {
-        await deps.bridge.previewEnd?.(message.bot, message.platform, message.chat)
+        await deps.bridge.previewEnd?.(message.bot, message.platform, message.chat, t("gateway.preview.interrupted"))
       } catch {}
       ended.abort()
       if (typing) clearInterval(typing)
