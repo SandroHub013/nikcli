@@ -58,6 +58,12 @@ export interface GatewayMessage {
   readonly button: boolean
   /** A one-to-one chat with the bot. Anything else is a channel others read. */
   readonly private: boolean
+  /**
+   * The sender is the owner of the account the bot runs on. Rust does not send
+   * it yet, and only the owner's own accounts are paired (D92), so a message
+   * that says nothing counts as the owner's; `false` is refused on a plan (S16).
+   */
+  readonly owner?: boolean
 }
 
 /** The Rust side, as the controller sees it. Tests pass a fake. */
@@ -115,6 +121,11 @@ export interface ChatTarget {
   readonly bot: string
   readonly platform: string
   readonly chat: string
+  /**
+   * The sender the question is for: only that person's press answers it (S13).
+   * Absent, any sender of the chat may answer.
+   */
+  readonly asker?: string
 }
 
 export interface Choice {
@@ -139,12 +150,19 @@ export interface GatewayController {
     choices: readonly Choice[],
     timeoutMs?: number,
   ) => Promise<string | undefined>
+  /**
+   * `sender` was revoked: their queued messages are dropped, their turn is
+   * stopped without a word to them, and their questions close with no answer.
+   */
+  revoke: (bot: string, platform: string, sender: string) => void
   /** Chats with a turn running, for tests and the panel. */
   busy: () => string[]
 }
 
 interface ChatState {
   readonly queue: GatewayMessage[]
+  /** The message the running (or starting) turn answers. */
+  current?: GatewayMessage
   turn?: Turn
   /** Set while a turn is being prepared, before `turn` exists. */
   starting: boolean
@@ -165,6 +183,7 @@ const TYPING_EVERY_MS = 4_000
 
 interface Question {
   readonly key: string
+  readonly target: ChatTarget
   readonly choices: readonly Choice[]
   readonly answer: (value: string | undefined) => void
 }
@@ -187,6 +206,8 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     const [id, index] = message.text.split(":")
     const question = id ? questions.get(id) : undefined
     if (!question || question.key !== sessionKey(message.bot, message.platform, message.chat)) return
+    // A question made for a person is answered by that person (S13).
+    if (question.target.asker !== undefined && question.target.asker !== message.sender.id) return
     const choice = question.choices[Number(index)]
     if (!choice || String(Number(index)) !== index) return
     question.answer(choice.value)
@@ -213,7 +234,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       }
       const ended = () => answer(undefined)
       signal?.addEventListener("abort", ended)
-      questions.set(id, { key: sessionKey(target.bot, target.platform, target.chat), choices, answer })
+      questions.set(id, { key: sessionKey(target.bot, target.platform, target.chat), target, choices, answer })
       const buttons = choices.map((choice, index) => ({ label: choice.label, data: `${id}:${index}` }))
       deps.bridge.sendButtons(target.bot, target.platform, target.chat, question, buttons).catch((error) => {
         warn(
@@ -241,6 +262,10 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       )
     }
   }
+
+  /** Why a turn failed, for ADE's own log; never for the chat. */
+  const failure = (message: GatewayMessage, problem: string) =>
+    warn(`ADE: turno del gateway non riuscito (${message.platform}): ${problem}`)
 
   const command = async (message: GatewayMessage, key: string, which: string) => {
     const state = stateOf(key)
@@ -272,6 +297,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     if (!message) return
     state.starting = true
     state.cancelled = false
+    state.current = message
     const fresh = state.fresh
     let typing: ReturnType<typeof setInterval> | undefined
     const ended = new AbortController()
@@ -282,7 +308,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       if (!loaded.ok) return void (await reply(message, loaded.problem))
       const bot = loaded.bot
       const runner = runnerById(bot.runner).id
-      const allowed = mayRun(runner, true)
+      const allowed = mayRun(runner, message.owner !== false)
       if (!allowed.ok) return void (await reply(message, allowed.problem))
       // `/ferma` while the bot was being read: nothing starts.
       if (closed || state.cancelled) return
@@ -305,7 +331,13 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         runner === "ragu"
           ? permissionAnswerer({
               ask: (question, choices, signal) =>
-                ask(message, question, choices, deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS, signal),
+                ask(
+                  { bot: message.bot, platform: message.platform, chat: message.chat, asker: message.sender.id },
+                  question,
+                  choices,
+                  deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS,
+                  signal,
+                ),
               refuse: !remote.commands,
               publicChat,
               answer: (requestID, reply) => {
@@ -344,15 +376,21 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       }
       // A stopped turn was already answered by `/ferma`.
       if (result.status === "stopped") return
-      if (result.status === "error") return void (await reply(message, t("gateway.failed", result.problem ?? "?")))
+      // The chat reads a fixed text: the detail (local paths, the server's words) stays in ADE (S10).
+      if (result.status === "error") {
+        failure(message, result.problem ?? "?")
+        return void (await reply(message, t("gateway.failed")))
+      }
       await reply(message, text.trim() ? text : t("gateway.empty"))
     } catch (error) {
-      await reply(message, t("gateway.failed", error instanceof Error ? error.message : String(error)))
+      failure(message, error instanceof Error ? error.message : String(error))
+      await reply(message, t("gateway.failed"))
     } finally {
       ended.abort()
       if (typing) clearInterval(typing)
       state.turn = undefined
       state.starting = false
+      state.current = undefined
       void next(key)
     }
   }
@@ -432,6 +470,23 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       for (const question of [...questions.values()]) question.answer(undefined)
     },
     ask,
+    revoke: (bot, platform, sender) => {
+      const theirs = (message: GatewayMessage) =>
+        message.bot === bot && message.platform === platform && message.sender.id === sender
+      for (const state of chats.values()) {
+        for (let index = state.queue.length - 1; index >= 0; index--) {
+          if (theirs(state.queue[index]!)) state.queue.splice(index, 1)
+        }
+        if (state.current && theirs(state.current)) {
+          if (state.turn) state.turn.stop()
+          else if (state.starting) state.cancelled = true
+        }
+      }
+      for (const question of [...questions.values()]) {
+        const target = question.target
+        if (target.bot === bot && target.platform === platform && target.asker === sender) question.answer(undefined)
+      }
+    },
     busy: () => [...chats.entries()].filter(([, state]) => state.turn || state.starting).map(([key]) => key),
   }
 }

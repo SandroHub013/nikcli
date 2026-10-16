@@ -187,7 +187,8 @@ describe("the gateways' controller", () => {
     expect(turns.started[1]!.request.message.endsWith("seconda domanda")).toBe(true)
     turns.started[1]!.finish({ status: "error", problem: "rete giù" })
     await until("il motivo", () => b.sent.length === 3)
-    expect(b.sent[2]!.text).toBe(t("gateway.failed", "rete giù"))
+    expect(b.sent[2]!.text).toBe(t("gateway.failed"))
+    expect(b.sent[2]!.text).not.toContain("rete giù")
     expect(sessions.get(sessionKey(BOT.path, "telegram", "c42"))).toEqual({
       project: PROJECT,
       runner: "claude",
@@ -725,6 +726,30 @@ describe("the tools of a turn from a chat", () => {
     expect(turn.keys[1]).toBe("reject")
   })
 
+  test("a press from another person of the chat does not answer the question of the one who asked (S13)", async () => {
+    const b = bridge()
+    const turns = typedTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: ragu,
+      sessions: memorySessionStore(),
+      remote: () => on,
+    })
+    b.emit("pulisci la build")
+    await until("il turno", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+    turn.request.onPermission!(asking("bash", "rm -rf build"))
+    await until("la domanda", () => b.questions.length === 1)
+    const yes = b.questions[0]!.buttons[0]!.data
+    b.emit(yes, { button: true, sender: { id: "99", name: "Altro" } })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(turn.keys).toEqual([])
+    b.emit(yes, { button: true })
+    await until("il sì di chi ha chiesto", () => turn.keys.length === 1)
+    expect(turn.keys).toEqual(["once"])
+  })
+
   test("no answer in time is a no, and the chat is told", async () => {
     const b = bridge()
     const turns = typedTurns()
@@ -887,5 +912,172 @@ describe("the remote commands saved per bot", () => {
     expect(offersRemoteCommands(undefined)).toBe(true)
     expect(offersRemoteCommands("claude")).toBe(false)
     expect(offersRemoteCommands("codex")).toBe(false)
+  })
+})
+
+describe("what a failed turn says in the chat (S10)", () => {
+  const LEAK = "ENOENT: C:/Users/mario/progetto/.ragu/token.json (server 10.0.0.5:4096)"
+
+  test("a failed turn says a fixed text; the detail goes to ADE's own log", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    const warned: string[] = []
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      warn: (line) => void warned.push(line),
+    })
+    b.emit("ciao")
+    await until("il turno", () => turns.started.length === 1)
+    turns.started[0]!.finish({ status: "error", problem: LEAK })
+    await until("la risposta", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe(t("gateway.failed"))
+    expect(b.sent[0]!.text).not.toContain("mario")
+    expect(b.sent[0]!.text).not.toContain("10.0.0.5")
+    expect(warned.some((line) => line.includes(LEAK))).toBe(true)
+  })
+
+  test("a turn that throws says the same fixed text", async () => {
+    const b = bridge()
+    const warned: string[] = []
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: () => {
+        throw new Error(LEAK)
+      },
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      warn: (line) => void warned.push(line),
+    })
+    b.emit("ciao")
+    await until("la risposta", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe(t("gateway.failed"))
+    expect(warned.some((line) => line.includes(LEAK))).toBe(true)
+  })
+})
+
+describe("the owner check of a plan's turn (S16)", () => {
+  test("a message that says its sender is not the owner is refused on a plan, with the reason", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("ciao", { owner: false })
+    await until("il rifiuto", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe(t("gateway.ownerOnly", "Claude Code"))
+    expect(turns.started).toHaveLength(0)
+  })
+
+  test("an owner's message, or one that says nothing (D92: every paired account is the owner's), runs", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("uno", { owner: true })
+    await until("il primo turno", () => turns.started.length === 1)
+    turns.started[0]!.finish({ text: "ok" })
+    await until("la risposta", () => b.sent.length === 1)
+    b.emit("due")
+    await until("il secondo turno", () => turns.started.length === 2)
+    turns.started[1]!.finish({ text: "ok" })
+  })
+})
+
+describe("who a button and a revocation speak for (S13)", () => {
+  const target = { bot: BOT.path, platform: "telegram", chat: "c42" }
+  const other = { sender: { id: "99", name: "Altro" } }
+
+  test("a question made for a person is answered by that person's press only", async () => {
+    const b = bridge()
+    const controller = await startGatewayController({
+      bridge: b.fake,
+      runTurn: fakeTurns().runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    const answer = controller.ask({ ...target, asker: "42" }, "Eseguo?", [{ label: "Sì", value: "yes" }])
+    await until("la domanda", () => b.questions.length === 1)
+    const data = b.questions[0]!.buttons[0]!.data
+    b.emit(data, { button: true, ...other })
+    let settled = false
+    void answer.then(() => (settled = true))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(settled).toBe(false)
+    b.emit(data, { button: true })
+    expect(await answer).toBe("yes")
+  })
+
+  test("a question made for nobody in particular stays open to the chat, as before", async () => {
+    const b = bridge()
+    const controller = await startGatewayController({
+      bridge: b.fake,
+      runTurn: fakeTurns().runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    const answer = controller.ask(target, "Eseguo?", [{ label: "Sì", value: "yes" }])
+    await until("la domanda", () => b.questions.length === 1)
+    b.emit(b.questions[0]!.buttons[0]!.data, { button: true, ...other })
+    expect(await answer).toBe("yes")
+  })
+
+  test("a revocation drops the person's queued messages, stops their turn and closes their questions", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    const controller = await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("prima")
+    await until("il turno", () => turns.started.length === 1)
+    b.emit("seconda")
+    b.emit("terza di un altro", { ...other, id: "x3" })
+    await until("le code", () => b.sent.length === 2)
+    const answer = controller.ask({ ...target, asker: "42" }, "Eseguo?", [{ label: "Sì", value: "yes" }])
+    await until("la domanda", () => b.questions.length === 1)
+    controller.revoke(BOT.path, "telegram", "42")
+    expect(turns.started[0]!.stopped).toBe(true)
+    expect(await answer).toBeUndefined()
+    // The other person's message goes on; the revoked one's second never starts.
+    await until("il turno dell'altro", () => turns.started.length === 2)
+    expect(turns.started[1]!.request.message.endsWith("terza di un altro")).toBe(true)
+    turns.started[1]!.finish({ text: "ok" })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(turns.started).toHaveLength(2)
+    // Nothing was said to the revoked person about the turn that stopped.
+    expect(b.sent.map((sent) => sent.text)).not.toContain(t("gateway.stopped"))
+  })
+
+  test("a revocation of someone else, or of another bot, changes nothing", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    const controller = await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("prima")
+    await until("il turno", () => turns.started.length === 1)
+    b.emit("seconda")
+    await until("in coda", () => b.sent.length === 1)
+    controller.revoke(BOT.path, "telegram", "99")
+    controller.revoke("altro-bot", "telegram", "42")
+    controller.revoke(BOT.path, "slack", "42")
+    expect(turns.started[0]!.stopped).toBe(false)
+    turns.started[0]!.finish({ text: "ok" })
+    await until("la seconda", () => turns.started.length === 2)
   })
 })
