@@ -95,7 +95,16 @@ class WipeableTarget extends EventTarget {
   }
 }
 
-function makeWindow(input: { name?: string; nested?: boolean; top?: boolean; href?: string }) {
+function makeWindow(input: {
+  name?: string
+  nested?: boolean
+  top?: boolean
+  href?: string
+  /** The document's real origin (`window.origin`), which `location.origin` hides for `about:srcdoc`. */
+  origin?: string
+  /** ADE's own origin as the top window says it; `"throws"`: a top this frame cannot read, as a cross-origin one. */
+  topOrigin?: string
+}) {
   const win = new WipeableTarget() as any
   const topPosted: any[] = []
   const transfers: any[] = []
@@ -103,7 +112,17 @@ function makeWindow(input: { name?: string; nested?: boolean; top?: boolean; hre
     topPosted.push(message)
     transfers.push(transfer)
   }
-  const top = input.top ? win : { postMessage: toParent }
+  const top: any = input.top ? win : { postMessage: toParent }
+  if (!input.top && input.topOrigin === "throws") {
+    const refuse = () => {
+      throw new DOMException("Blocked a frame from accessing a cross-origin frame.", "SecurityError")
+    }
+    Object.defineProperty(top, "origin", { get: refuse })
+    Object.defineProperty(top, "location", { get: refuse })
+  } else if (!input.top && input.topOrigin) {
+    top.origin = input.topOrigin
+    top.location = { origin: input.topOrigin }
+  }
   const { SpyHeaders, seen } = spyHeaders()
   const webview = { postMessage: () => topPosted.push("webview") }
   Object.assign(win, {
@@ -119,6 +138,7 @@ function makeWindow(input: { name?: string; nested?: boolean; top?: boolean; hre
     getComputedStyle: () => ({}),
     chrome: { webview },
     location: new URL(input.href ?? "http://localhost:5173/"),
+    ...(input.origin === undefined ? {} : { origin: input.origin }),
   })
   win.location.replace = (href: string) => {
     win.location = new URL(href, "http://localhost/")
@@ -222,6 +242,40 @@ describe("frameGuard: any frame", () => {
     expect(topPosted).toEqual([])
     expect(started).toBe(false)
     expect(() => tauriRequest(win)).not.toThrow()
+  })
+
+  test("a srcdoc frame that has ADE's origin is blanked too: location.origin says «null» for it (H1)", () => {
+    // `about:srcdoc` has no origin in `location`, but the document inherited ADE's.
+    const { win, topPosted } = makeWindow({
+      name: "ade-browser",
+      href: "about:srcdoc",
+      origin: "http://tauri.localhost",
+      topOrigin: "http://tauri.localhost",
+    })
+    expect(win.location.origin).toBe("null")
+    let started = false
+    frameGuard(win, () => (started = true))
+    expect(String(win.location.href)).toBe("about:blank")
+    expect(topPosted).toEqual([])
+    expect(started).toBe(false)
+  })
+
+  test("the same in the dev server's origin, and a srcdoc under another origin than the top's is left alone", () => {
+    const dev = makeWindow({ name: "ade-browser", href: "about:srcdoc", origin: "http://localhost:5173", topOrigin: "http://localhost:5173" })
+    frameGuard(dev.win, () => {})
+    expect(String(dev.win.location.href)).toBe("about:blank")
+    const other = makeWindow({ name: "ade-browser", href: "about:srcdoc", origin: "https://example.com", topOrigin: "http://localhost:5173" })
+    frameGuard(other.win, () => {})
+    expect(String(other.win.location.href)).toBe("about:srcdoc")
+  })
+
+  test("a sandboxed srcdoc (an opaque origin) cannot read the top and is not taken for ADE; two «null» are not the same origin", () => {
+    const sandboxed = makeWindow({ name: "ade-browser", href: "about:srcdoc", origin: "null", topOrigin: "throws" })
+    frameGuard(sandboxed.win, () => {})
+    expect(String(sandboxed.win.location.href)).toBe("about:srcdoc")
+    const bothOpaque = makeWindow({ name: "ade-browser", href: "about:srcdoc", origin: "null", topOrigin: "null" })
+    frameGuard(bothOpaque.win, () => {})
+    expect(String(bothOpaque.win.location.href)).toBe("about:srcdoc")
   })
 
   test("a frame that is not a pane gets no bridge", () => {

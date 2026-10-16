@@ -7,7 +7,10 @@
     return;
   define(win, "__ADE_FRAME__", { value: !0 });
   try {
-    const here = String(win.location && win.location.origin || ""), topOrigin = String(win.top && win.top.location && win.top.location.origin || "");
+    const real = (value) => {
+      const text = String(value || "");
+      return text === "null" ? "" : text;
+    }, here = real(win.origin) || real(win.location && win.location.origin), topOrigin = real(win.top && win.top.origin) || real(win.top && win.top.location && win.top.location.origin);
     if (String(win.location && win.location.hostname || "").toLowerCase() === "tauri.localhost" || here && topOrigin && here === topOrigin) {
       try {
         win.location.replace("about:blank");
