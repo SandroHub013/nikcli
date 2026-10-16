@@ -201,10 +201,13 @@ export function RoomMain(props: { deps: RoomPanelDeps; roomId: string; onRemoved
               {(pending) => (
                 <div data-slot="bots-permission" role="group" aria-label={t("bots.permission.request")}>
                   <span data-slot="bots-permission-text">
-                    @{nameOf(speaking()!)} {t("bots.permission.wantsToUse")} <code>{pending().permission}</code>
-                    <Show when={pending().patterns}>
-                      {" "}
-                      {t("bots.permission.on")} <code>{pending().patterns}</code>
+                    <Show
+                      when={pending().patterns}
+                      fallback={t("bots.permission.roomWants", nameOf(speaking()!), pending().permission)}
+                    >
+                      {(patterns) =>
+                        t("bots.permission.roomWantsOn", nameOf(speaking()!), pending().permission, patterns())
+                      }
                     </Show>
                     <Show when={pending().reason}>
                       {(reason) => <span data-slot="bots-permission-why">{t("bots.approval.why", reason())}</span>}

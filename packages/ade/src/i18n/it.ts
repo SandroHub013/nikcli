@@ -530,9 +530,8 @@ export const it = {
   "settings.mcp.instead":
     "Le CLI agente che ADE avvia usano intanto la propria configurazione MCP, quella che userebbero da un terminale.",
   "settings.bots.title": "Bot",
-  "settings.bots.desc":
-    "Gli agenti di Ragu Code che questa macchina conosce: con quale modello girano, e se appartengono al progetto o a tutti. Si creano e si modificano nella vista Bot.",
-  "settings.bots.empty": "Nessun agente Ragu Code. Se ne crea uno dalla vista Bot.",
+  "settings.bots.desc": "I bot di Ragu Code che questa macchina conosce: con quale modello girano, e se appartengono al progetto o a tutti. Si creano e si modificano nella vista Bot.",
+  "settings.bots.empty": "Nessun bot Ragu Code. Se ne crea uno dalla vista Bot.",
   "settings.bots.reading": "Lettura delle cartelle di Ragu Code…",
   "settings.bots.defaultModel": "modello di Ragu Code",
   "settings.bots.scopeProject": "progetto",
@@ -772,7 +771,7 @@ export const it = {
   "shots.noFolder": "Nessuna cartella delle schermate su questo computer",
   "browser.adeOrigin": "Questo indirizzo è ADE stessa; non si apre nel pannello.",
   "bots.trust.new": (name: string, can: string) =>
-    `Il bot «${name}» viene da questo progetto (.ragu/agent): le sue istruzioni le ha scritte chi ha scritto il repository, e girerà con il tuo account. ${can} Lo usi?`,
+    `Il bot «${name}» viene da questo progetto (dalla cartella dei bot del progetto): le sue istruzioni le ha scritte chi ha scritto il repository, e girerà con il tuo account. ${can} Lo usi?`,
   "bots.trust.changed": (name: string, can: string) =>
     `Il file del bot «${name}» di questo progetto è cambiato da quando l'hai approvato: le istruzioni nuove le ha scritte chi ha modificato il repository. ${can} Lo usi così com'è ora?`,
   // What a project's bot may do once trusted, by runner (review B3, BASSO 2).
@@ -789,7 +788,7 @@ export const it = {
     `La cartella ${root} ha una configurazione di Ragu Code sua (${files}): plugin, strumenti e impostazioni che Ragu Code carica ed esegue a ogni turno, con il tuo account, scritti da chi ha scritto il progetto. Li carichi? Se dici di no, qui i bot su Ragu Code non partono; quelli su Claude Code e Codex sì, perché non la leggono.`,
   "bots.projectTrust.changed": (root: string, files: string) =>
     `La configurazione di Ragu Code della cartella ${root} è cambiata da quando l'hai accettata (${files}): Ragu Code la carica ed esegue a ogni turno. La carichi così com'è ora?`,
-  "bots.projectTrust.more": (count: number) => ` e altri ${count}`,
+  "bots.projectTrust.listMore": (list: string, count: number) => `${list} e altri ${count}`,
   "bots.projectTrust.refused": (root: string) =>
     `I bot su Ragu Code non partono in ${root} finché non accetti la configurazione di Ragu Code del progetto. I bot su Claude Code e Codex non la leggono.`,
   "bots.ask.yes": "Sì",
@@ -815,7 +814,7 @@ export const it = {
     `Più di ${count} messaggi in un'ora: per un po' non rispondo, così un giro di messaggi non consuma il tuo piano. Riprova più tardi.`,
   "gateway.retrust": (name: string) =>
     `Il bot «${name}» o la configurazione del suo progetto sono cambiati da quando li hai approvati: apri ADE sul computer e riapprovali, poi riscrivimi.`,
-  "gateway.noProject": "Questo gateway non ha un progetto: in ADE spegnilo e riaccendilo scegliendone uno.",
+  "gateway.noProject": "Questa app di messaggi non ha un progetto: in ADE spegnila e riaccendila scegliendone uno.",
   "gateway.channelIsPublic": (name: string) =>
     `Nel canale «${name}» la risposta la leggono tutti i membri del canale, anche se il comando lo esegue solo il proprietario. Nelle chat private la legge solo chi ha scritto.`,
   "gateway.noProxy":
@@ -831,7 +830,7 @@ export const it = {
   "gateway.configUnreadable": (name: string, file: string) =>
     `Non riesco a leggere ${file} di questo progetto, che potrebbe concedere la shell al bot «${name}»: da qui non lo avvio.`,
   "gateway.chat.configGrant": (name: string, key: string) =>
-    `La configurazione di questo progetto concede al bot «${name}» «${key}», che da remoto scavalcherebbe il divieto della shell: da qui non lo avvio. Quale file è indicato nel pannello del bot, in ADE.`,
+    `La configurazione di questo progetto concede al bot «${name}» «${key}», che da remoto scavalcherebbe il divieto della shell: da qui non lo avvio. Il file è indicato nel pannello del bot, in ADE.`,
   "gateway.chat.configUnreadable": (name: string) =>
     `Non riesco a leggere la configurazione di questo progetto, che potrebbe concedere la shell al bot «${name}»: da qui non lo avvio. Il file è indicato nel pannello del bot, in ADE.`,
   "gateway.chat.notAdmitted":
@@ -850,7 +849,7 @@ export const it = {
     `Il bot ha chiesto il permesso «${permission}» per:\n${what}\n\nDa remoto non è concesso: ho detto di no.`,
   "gateway.noProxySlack":
     "Su Slack il bot tiene aperta una connessione e il client che la parla non sa passare da un proxy: se questo computer esce su internet solo attraverso un proxy, il bot Slack non ci arriva.",
-  "gateway.panel.heading": "App di messaggi",
+  "gateway.panel.heading": "App di messaggi (gateway)",
   "gateway.panel.chooseHint": "Scegli dove vuoi scrivere a questo bot. Ogni app ha il suo bot, che si crea in pochi passi.",
   "gateway.tile.on": "Acceso",
   "gateway.tile.connecting": "Si collega…",
@@ -874,21 +873,19 @@ export const it = {
   "gateway.step.openSlack": "Apri Slack API",
   "gateway.step.testText": "Controlla che il codice funzioni: ADE chiede alla piattaforma come si chiama il bot.",
   "gateway.panel.platformSlack": "Slack",
-  "gateway.panel.titleSlack": "Gateway · Slack",
   "gateway.panel.introSlack":
     "Scrivi a questo bot da Slack, mentre ADE è aperta. Ogni bot ha la sua app Slack, creata dal manifest che ADE prepara qui sotto.",
   "gateway.panel.tokenHelpSlack":
-    "Incolla il Bot User OAuth Token, che comincia con xoxb-: lo trovi in OAuth & Permissions dopo aver installato l'app nel workspace. Resta nel portachiavi del sistema: ADE non lo mostra più.",
+    "Incolla il codice del bot (token): il Bot User OAuth Token, che comincia con xoxb-. Lo trovi in OAuth & Permissions dopo aver installato l'app nel workspace. Resta nel portachiavi del sistema: ADE non lo mostra più.",
   "gateway.panel.tokenPlaceholderSlack": "xoxb-…",
-  "gateway.panel.appToken": "Token dell'app (App-Level Token)",
+  "gateway.panel.appToken": "Secondo codice (App-Level Token)",
   "gateway.panel.appTokenHelp":
-    "Il secondo token apre la connessione del bot. Il manifest non lo crea: fallo a mano in Basic Information › App-Level Tokens, con lo scope connections:write, e incollalo qui. Comincia con xapp-.",
-  "gateway.panel.appTokenSaved": "App-Level Token salvato nel portachiavi",
+    "Il secondo codice apre la connessione del bot. Il manifest non lo crea: fallo a mano in Basic Information › App-Level Tokens, con lo scope connections:write, e incollalo qui. Comincia con xapp-.",
+  "gateway.panel.appTokenSaved": "Secondo codice (App-Level Token) salvato nel portachiavi",
   "gateway.panel.appTokenPlaceholder": "xapp-…",
-  "gateway.panel.needAppToken": "Per accendere serve anche l'App-Level Token di Slack (xapp-…): salvalo qui sopra.",
-  "gateway.panel.slackSetup": "Nell'app Slack",
+  "gateway.panel.needAppToken": "Per accendere serve anche il secondo codice di Slack (xapp-…): salvalo nel passo 2.",
   "gateway.panel.slackManifestHow":
-    "Su api.slack.com/apps scegli «Create New App», poi «From a manifest», e incolla il manifest di questo bot. Poi installa l'app nel workspace: il token xoxb- compare in OAuth & Permissions.",
+    "Su api.slack.com/apps scegli «Create New App», poi «From a manifest», e incolla il manifest di questo bot. Poi installa l'app nel workspace: il codice xoxb- compare in OAuth & Permissions.",
   "gateway.panel.slackManifestShow": "Mostra il manifest",
   "gateway.panel.slackManifest": "Manifest dell'app Slack",
   "gateway.panel.slackManifestMissing": "Il manifest si prepara solo nell'app di ADE.",
@@ -899,22 +896,17 @@ export const it = {
   "gateway.panel.platform": "Piattaforma del bot",
   "gateway.panel.platformTelegram": "Telegram",
   "gateway.panel.platformDiscord": "Discord",
-  "gateway.panel.titleDiscord": "Gateway · Discord",
   "gateway.panel.introDiscord":
     "Scrivi a questo bot da Discord, mentre ADE è aperta. Ogni bot ha il suo bot Discord, creato nel portale sviluppatori.",
   "gateway.panel.tokenHelpDiscord":
-    "Incolla il token che il portale sviluppatori ti ha dato, nella sezione Bot. Resta nel portachiavi del sistema: ADE non lo mostra più.",
-  "gateway.panel.tokenPlaceholderDiscord": "TOKEN-DEL-BOT…",
-  "gateway.panel.portal": "Nel portale sviluppatori",
+    "Incolla il codice del bot (token) che il portale per sviluppatori ti ha dato, nella sezione Bot. Resta nel portachiavi del sistema: ADE non lo mostra più.",
+  "gateway.panel.tokenPlaceholderDiscord": "CODICE-DEL-BOT…",
   "gateway.panel.portalWhere":
     "Crea il bot nel portale per sviluppatori: «New Application», poi nella sezione Bot «Add Bot». Subito sotto il nome del bot trovi il suo codice: è quello che incolli al passo dopo, e non ne esiste un secondo.",
   "gateway.panel.intentsOff":
     "Lascia spenti i tre intent privilegiati (Message Content, Server Members e Presence): non servono. I messaggi privati e le menzioni arrivano lo stesso, con il loro testo.",
-  "gateway.panel.intents":
-    "Gli intent del bot devono essere quelli di base, senza «Message Content»: una chat privata e una menzione nel tuo messaggio arrivano con il testo anche senza. Con «Message Content» chiuso il bot non si collega e te lo dice.",
   "gateway.panel.invite":
     "Invita il bot nel tuo server da OAuth2 › URL Generator, con gli scope bot e applications.commands. In una chat privata non serve nessun invito.",
-  "gateway.panel.title": "Gateway · Telegram",
   "gateway.panel.intro":
     "Scrivi a questo bot da Telegram, mentre ADE è aperta. Ogni bot ha il suo bot Telegram, creato con BotFather.",
   "gateway.panel.off": "Spento",
@@ -925,16 +917,16 @@ export const it = {
   "gateway.panel.redacted": (time: string) =>
     `Nel messaggio delle ${time} c'era una chiave: l'ho nascosta, il bot non l'ha vista e non è stata salvata.`,
   "gateway.panel.turnFailed": (time: string, detail: string) => `Ultimo turno da chat non riuscito (${time}): ${detail}`,
-  "gateway.panel.token": "Token del bot",
+  "gateway.panel.token": "Codice del bot (token)",
   "gateway.panel.tokenHelp":
-    "Incolla il token che BotFather ti ha dato. Resta nel portachiavi del sistema: ADE non lo mostra più.",
-  "gateway.panel.tokenSaved": "Token salvato nel portachiavi",
+    "Incolla il codice del bot (token) che BotFather ti ha dato. Resta nel portachiavi del sistema: ADE non lo mostra più.",
+  "gateway.panel.tokenSaved": "Codice salvato nel portachiavi",
   "gateway.panel.probed": (name: string) => `risponde come ${name}`,
-  "gateway.panel.tokenReplace": "Incolla un token nuovo per sostituirlo",
+  "gateway.panel.tokenReplace": "Incolla un codice nuovo per sostituirlo",
   "gateway.panel.tokenPlaceholder": "123456789:AA…",
   "gateway.panel.save": "Salva",
   "gateway.panel.probe": "Prova",
-  "gateway.panel.clearToken": "Rimuovi il token",
+  "gateway.panel.clearToken": "Rimuovi il codice",
   "gateway.panel.noProject": "Apri un progetto: i turni da chat girano in quello, fissato quando accendi.",
   "gateway.panel.project": (project: string) => `I turni da chat girano in: ${project}`,
   "gateway.panel.switchOn": "Accendi",
@@ -996,11 +988,11 @@ export const it = {
   "chat.answer.failed": "La risposta non è arrivata al server: riprova.",
   "chat.trustPending": (directory: string) =>
     `La fiducia nel progetto ${directory} non è ancora decisa: riprova tra poco.`,
-  "gateway.panel.pairingAfterOn": "Il gateway è spento: dopo l'accensione, chi scrive al bot riceve un codice.",
-  "gateway.panel.needToken": "Per accendere serve il token del bot: salvalo qui sopra.",
+  "gateway.panel.pairingAfterOn": "L'app di messaggi è spenta: dopo l'accensione, chi scrive al bot riceve un codice.",
+  "gateway.panel.needToken": "Per accendere serve il codice del bot: salvalo nel passo 2.",
   "gateway.panel.previousProject": (project: string) => `Prima i turni da chat giravano in: ${project}`,
   "gateway.panel.moveProject": (from: string, to: string) =>
-    `Il gateway di questo bot girava in:\n${from}\n\nSe lo accendi adesso, i turni da chat gireranno in:\n${to}\n\nAccendo in questo progetto?`,
+    `Il bot su questa app di messaggi girava in:\n${from}\n\nSe lo accendi adesso, i turni da chat gireranno in:\n${to}\n\nAccendo in questo progetto?`,
   "gateway.panel.pairingOpenUntil": (time: string) => `Chi scrive al bot fino alle ${time} riceve un codice.`,
   "gateway.panel.remote": "Comandi da remoto",
   "gateway.panel.remoteNever": (runner: string) =>
@@ -1857,7 +1849,7 @@ export const it = {
   "bots.roster.title": "bot",
   "bots.newBot": "Nuovo bot",
   "bots.roster.loading": "Lettura…",
-  "bots.roster.empty": "Nessun agente Ragu Code. Creane uno.",
+  "bots.roster.empty": "Nessun bot ancora. Creane uno.",
   "bots.noDescription": "Nessuna descrizione.",
   "bots.blank.empty": "Nessun bot ancora. Premi + nella barra laterale per crearne uno.",
   "bots.blank.pick": "Scegli un bot nella barra laterale, o creane un altro.",
@@ -1866,15 +1858,12 @@ export const it = {
   "bots.face.fromName": "Forma e colore vengono dal nome finché non li scegli.",
   "bots.face.custom": "Scelta tua.",
   "bots.face.reset": "Torna a quella del nome",
-  "bots.subagent.isA": "È un ",
-  "bots.subagent.label": "subagente",
-  "bots.subagent.desc":
-    ": non risponde da solo, lo chiama un altro agente. Puoi comunque scrivergli, ma Ragu Code userà l'agente predefinito al suo posto.",
+  "bots.subagent.note": "È un sottoagente: non risponde da solo, lo chiama un altro bot. Puoi comunque scrivergli, ma Ragu Code userà l'agente predefinito al suo posto.",
   "bots.permission.request": "Richiesta di permesso",
-  "bots.permission.wantsToUse": "Vuole usare",
-  "bots.permission.on": "su",
-  "bots.permission.reject": "Rifiuta",
-  "bots.permission.always": "Sempre",
+  "bots.permission.wants": (permission: string) => `Vuole usare «${permission}»`,
+  "bots.permission.wantsOn": (permission: string, patterns: string) => `Vuole usare «${permission}» su «${patterns}»`,
+  "bots.permission.roomWants": (name: string, permission: string) => `@${name} vuole usare «${permission}»`,
+  "bots.permission.roomWantsOn": (name: string, permission: string, patterns: string) => `@${name} vuole usare «${permission}» su «${patterns}»`,
   "bots.permission.allow": "Consenti",
   "bots.permission.deny": "Nega",
   "bots.approval.reason.deleteRoot": "cancella dalla radice del disco o dalla cartella utente",
@@ -1959,7 +1948,7 @@ export const it = {
   "bots.routine.refused": (permission: string, patterns: string) =>
     `Rifiutato: la routine ha chiesto «${permission}» (${patterns}) e nessuno può rispondere.`,
   "bots.routine.thread": "Routine: il messaggio qui sotto è partito da solo, senza shell.",
-  "bots.routine.problem.notAllowed": "questo runner non può eseguire routine",
+  "bots.routine.problem.notAllowed": "questo programma non può eseguire routine",
   "bots.routine.problem.prompt": "Scrivi che cosa deve fare la routine.",
   "bots.routine.problem.every": "Scegli ogni quante ore (da 1 a 168) o un orario.",
   "bots.routine.problem.gap": (minutes: number) => `Tra due esecuzioni servono almeno ${minutes} minuti.`,
@@ -2040,7 +2029,7 @@ export const it = {
   "bots.room.missingBot": (name: string) => `Il bot ${name} non c'è più: toglilo dalla stanza o fanne una nuova.`,
   "bots.room.section": "Stanze",
   "bots.room.new": "Nuova stanza",
-  "bots.room.needsYou": "ti serve",
+  "bots.room.needsYou": "aspetta te",
   "bots.room.needsYouTitle": "Un bot ha scritto @utente: serve una tua decisione o un tuo risultato.",
   "bots.room.capLine": (max: string) => `tetto per giro ${max}`,
   "bots.room.delete": "Elimina stanza",
@@ -2123,9 +2112,9 @@ export const it = {
   "bots.serve.noFreeModel":
     "Nel catalogo del server di Ragu Code non c'è nessun modello gratuito tra quelli previsti per questo turno: il turno non è partito.",
   "bots.serve.effortNoModel": (effort: string) =>
-    `Lo sforzo «${effort}» vale per un modello scelto: questo bot usa il modello predefinito di Ragu Code, e questo turno usa lo sforzo predefinito. Scegli un modello nelle impostazioni del bot.`,
+    `Il ragionamento «${effort}» vale per un modello scelto: questo bot usa il modello predefinito di Ragu Code, e questo turno usa il ragionamento predefinito. Scegli un modello nelle impostazioni del bot.`,
   "bots.serve.effortDropped": (effort: string, model: string, variants: string) =>
-    `Lo sforzo «${effort}» non esiste per ${model}: questo turno usa quello predefinito. ${variants ? `Livelli di questo modello: ${variants}.` : "Questo modello non ha livelli di sforzo."} Cambialo nelle impostazioni del bot.`,
+    `Il ragionamento «${effort}» non esiste per ${model}: questo turno usa quello predefinito. ${variants ? `Livelli di questo modello: ${variants}.` : "Questo modello non ha livelli di ragionamento."} Cambialo nelle impostazioni del bot.`,
   "bots.serve.agentTaken": (name: string) =>
     `Il progetto ha un suo agente «${name}», diverso da questo bot: sul server risponderebbe al suo posto, quindi il turno non parte. Rinomina uno dei due.`,
   "bots.serve.newSession":
@@ -2138,7 +2127,7 @@ export const it = {
   "bots.runner.protectedPath": (paths: string) =>
     `Claude Code non ha potuto scrivere in un percorso protetto per i bot di progetto (${paths}): lì una scrittura diventa codice che parte dopo, quindi è negata di proposito.`,
   "bots.runner.permissionDenied": (names: string) =>
-    `Claude Code non ha avuto il permesso per: ${names}. Abilita lo strumento nella scheda del bot.`,
+    `Claude Code non ha avuto il permesso per: ${names}. In una conversazione qui non può chiederlo: se ti serve, apri il bot nel Terminale.`,
   "bots.runner.conversationGone":
     "Claude Code non ha più questa conversazione: il prossimo messaggio ne apre una nuova.",
   "bots.runner.claudeError": "Claude Code ha concluso con un errore.",
@@ -2150,7 +2139,7 @@ export const it = {
   "bots.login.done": "Accesso eseguito",
   "bots.login.out": "Non collegato",
   "bots.login.unreadable": "Stato non leggibile",
-  "bots.login.using": "Accesso con ",
+  "bots.login.usingMethod": (method: string) => `Accesso con ${method}`,
   "bots.login.noProvider": "Nessun provider collegato",
   "bots.store.noHost": "Nessun host: i bot si creano solo nell'app desktop.",
   "bots.store.noProject": "Nessun progetto aperto: scegli «globale» o apri un progetto.",
@@ -2161,7 +2150,7 @@ export const it = {
   "bots.store.noDir": "Questo host non può leggere cartelle.",
   "bots.store.hostMissing": "Nessun host.",
   "bots.store.gatewayKept": (error: string) =>
-    `Non ho tolto i token e i gateway di questo bot (${error}): il bot non è cancellato. Riprova: toglie quello che è rimasto.`,
+    `Non ho tolto i codici e i collegamenti alle app di messaggi di questo bot (${error}): il bot non è cancellato. Riprova: toglie quello che è rimasto.`,
   "bots.store.raguExited": (code: string) => `Ragu Code è uscito con codice ${code}.`,
   "bots.store.unknownCode": "sconosciuto",
   "bots.spend.plan": "abbonamento",
@@ -2181,15 +2170,10 @@ export const it = {
   "bots.lastTurn.label": "ultimo turno:",
   "bots.lastTurn.unknownModel": "modello non riportato",
   "bots.conversation.total": "in questa conversazione:",
-  "bots.form.generateCostDefault":
-    "Ragu Code scrive la persona con il suo modello predefinito. Se quel modello è a pagamento, questa chiamata consuma credito.",
-  "bots.form.generateCostPaid": (model: string) =>
-    `Ragu Code scrive la persona con ${model}. Questa chiamata consuma credito.`,
-  "bots.form.generateCostFree": (model: string) =>
-    `Ragu Code scrive la persona con ${model}, un modello gratuito. Questa chiamata non consuma credito.`,
-  "bots.scope.project": "progetto",
-  "bots.scope.global": "globale",
-  "bots.terminal.subagentTip": "Un subagente non si avvia da solo: lo chiama un altro agente",
+  "bots.form.generateCostDefault": "Ragu Code scrive le istruzioni con il suo modello predefinito. Se quel modello è a pagamento, questa chiamata consuma credito.",
+  "bots.form.generateCostPaid": (model: string) => `Ragu Code scrive le istruzioni con ${model}. Questa chiamata consuma credito.`,
+  "bots.form.generateCostFree": (model: string) => `Ragu Code scrive le istruzioni con ${model}, un modello gratuito. Questa chiamata non consuma credito.`,
+  "bots.terminal.subagentTip": "Un sottoagente non si avvia da solo: lo chiama un altro bot",
   "bots.terminal.launchTip": "Apre la TUI di Ragu Code con questo bot in un pannello",
   "bots.terminal.button": "Terminale",
   "bots.tab.list": "Sezioni del bot",
@@ -2229,7 +2213,6 @@ export const it = {
   "bots.permissions.trustText": "Un bot che viene da un progetto ti viene chiesto una volta, e di nuovo se il suo file cambia.",
   "bots.openFile": "Apri il file",
   "bots.card.objectives": "Obiettivi",
-  "bots.card.conversation": "Conversazione",
   "bots.card.messages": (count: number) => `${count} ${count === 1 ? "messaggio" : "messaggi"}`,
   "bots.card.session": (id: string) => `sessione ${id}`,
   "bots.card.file": "File",
@@ -2240,46 +2223,44 @@ export const it = {
   "bots.form.title": "Nuovo bot",
   "bots.form.name": "Nome",
   "bots.form.namePlaceholder": "Revisore",
-  "bots.form.hintGenerating":
-    "Con la persona vuota è Ragu Code a scegliere l'identificativo: questo nome è solo un promemoria.",
-  "bots.form.hintNamed": "Diventa il nome del file e l'identificativo passato a --agent.",
-  "bots.form.logo": "Logo",
+  "bots.form.hintGenerating": "Con le istruzioni vuote Ragu Code sceglie il nome del bot: quello che scrivi qui è solo un promemoria.",
+  "bots.form.hintNamed": "Diventa il nome del file del bot e il nome con cui lo richiami.",
+  "bots.form.logo": "Faccia",
   "bots.form.description": "A cosa serve",
   "bots.form.descPlaceholder": "Revisiona le pull request e segnala i rischi",
   "bots.form.where": "Dove",
-  "bots.form.scopeProject": "Nel progetto (.ragu/agent)",
+  "bots.form.scopeProject": "Nel progetto (nella sua cartella dei bot)",
   "bots.form.scopeGlobal": "Globale (per tutti i progetti)",
   "bots.form.objectives": "Obiettivi",
   "bots.form.objectivesPlaceholder": "Uno per riga. Restano veri in ogni conversazione.",
-  "bots.form.persona": "Persona",
+  "bots.form.persona": "Istruzioni (persona)",
   "bots.form.personaPlaceholder":
     "Lascia vuoto e la scrive Ragu Code dalla descrizione. Oppure scrivila tu: come deve comportarsi, e cosa non deve fare.",
   "bots.form.cancel": "Annulla",
   "bots.form.creating": "Creazione…",
   "bots.form.generateWithRagu": "Genera con Ragu Code",
   "bots.form.create": "Crea",
-  "bots.form.generatingHint": "Ragu Code sta scrivendo l'agente. Ci vuole qualche secondo.",
-  "bots.engine.label": "Motore",
+  "bots.form.generatingHint": "Ragu Code sta scrivendo il bot. Ci vuole qualche secondo.",
+  "bots.engine.label": "Programma (runner)",
   "bots.runner.account.ragu": "I provider collegati a Ragu Code (ragu auth).",
   "bots.runner.account.claude": "L'abbonamento Anthropic o la chiave API di Claude Code.",
   "bots.runner.account.codex": "L'abbonamento ChatGPT o la chiave API di Codex.",
-  "bots.engine.accountHint": "Gli accessi si controllano in Impostazioni › Provider.",
+  "bots.engine.accountHint": "Gli accessi si controllano in Impostazioni › Agenti e account › Account.",
   "bots.terms.notice":
     "ADE avvia la CLI ufficiale installata sul tuo computer, con l'account con cui vi hai fatto l'accesso, e non vede le tue credenziali. L'abbonamento è per uso personale e consuma i limiti del tuo piano: per automazioni intensive o non presidiate usa una chiave API nella CLI.",
   "bots.engine.model": "Modello",
   "bots.engine.modelDefaultOf": (label: string) => `predefinito di ${label}`,
   "bots.engine.raguDefault": "Predefinito di Ragu Code",
-  "bots.engine.effort": "Sforzo",
+  "bots.engine.effortField": "Ragionamento (effort)",
+  "bots.engine.effort": "Ragionamento",
   "bots.engine.effortNotSupported": "non previsto",
-  "bots.engine.effortDefault": "predefinito",
   "bots.engine.effortStaleHint": (effort: string) =>
-    `Lo sforzo «${effort}» non esiste per questo modello: il bot usa quello predefinito. Scegline uno tra quelli del modello.`,
-  "bots.engine.effortPickModel": "Scegli un modello per vedere i suoi livelli di sforzo.",
-  "bots.settings.whenToUse": "Quando usarlo",
-  "bots.settings.whenToUseHint1": "È il",
-  "bots.settings.whenToUseHint2": "del file: Ragu Code lo legge per decidere quando chiamare questo bot come subagente.",
+    `Il ragionamento «${effort}» non esiste per questo modello: il bot usa quello predefinito. Scegline uno tra quelli del modello.`,
+  "bots.engine.effortPickModel": "Scegli un modello per vedere i suoi livelli di ragionamento.",
+  "bots.settings.whenToUse": "A cosa serve",
+  "bots.settings.whenToUseHint": "È il campo description del file: Ragu Code lo legge per decidere quando chiamare questo bot come sottoagente.",
   "bots.settings.objectivesPlaceholder": "Uno per riga.\nEs. Segnala i rischi prima delle opinioni",
-  "bots.settings.objectivesHint": "Uno per riga. Finiscono nel prompt sotto",
+  "bots.settings.objectivesHint": (heading: string) => `Uno per riga. Finiscono nelle istruzioni, sotto «${heading}».`,
   "bots.settings.saved": "Salvato.",
   "bots.settings.unsaved": "Modifiche non salvate.",
   "bots.settings.saving": "Salvataggio…",
@@ -2334,7 +2315,7 @@ export const it = {
   "bots.defaultDescription": (name: string) => `Bot «${name}».`,
   "bots.terms.codexNoCost": "Codex non riporta un costo, quindi il tetto di spesa non si può controllare",
   "bots.terms.xaiNotRead": "i termini xAI non sono stati letti",
-  "bots.terms.runnerCannotRunRoutines": "questo runner non può eseguire routine",
+  "bots.terms.runnerCannotRunRoutines": "questo programma non può eseguire routine",
   "bots.room.few": (min: number) => `Servono almeno ${min} bot: con uno solo è una chat.`,
   "bots.room.many": (max: number) => `Al massimo ${max} bot: oltre, un messaggio ne produce troppi.`,
   "bots.room.duplicate": "Lo stesso bot è stato aggiunto due volte.",

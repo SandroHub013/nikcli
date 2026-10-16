@@ -1338,11 +1338,7 @@ function Thread(props: {
             <p data-slot="bots-thread-empty-name">{props.bot.identifier}</p>
             <p data-slot="bots-thread-empty-text">{props.bot.description || t("bots.noDescription")}</p>
             <Show when={subagent()}>
-              <p data-slot="bots-hint">
-                {t("bots.subagent.isA")}
-                <strong>{t("bots.subagent.label")}</strong>
-                {t("bots.subagent.desc")}
-              </p>
+              <p data-slot="bots-hint">{t("bots.subagent.note")}</p>
             </Show>
           </div>
         </Show>
@@ -1358,10 +1354,11 @@ function Thread(props: {
             <div data-slot="bots-permission" role="group" aria-label={t("bots.permission.request")}>
               <Face identifier={props.bot.identifier} avatar={props.bot.avatar} expression="waiting" size={20} />
               <span data-slot="bots-permission-text">
-                {t("bots.permission.wantsToUse")} <code>{asked().permission}</code>
-                <Show when={asked().patterns}>
-                  {" "}
-                  {t("bots.permission.on")} <code>{asked().patterns}</code>
+                <Show
+                  when={asked().patterns}
+                  fallback={t("bots.permission.wants", asked().permission)}
+                >
+                  {(patterns) => t("bots.permission.wantsOn", asked().permission, patterns())}
                 </Show>
                 {/* B8c: why ADE stops it, and that silence is a no. */}
                 <Show when={asked().reason}>
@@ -2430,7 +2427,7 @@ function EngineFields(props: {
         </div>
 
         <div data-slot="bots-field">
-          <span data-slot="bots-label">{t("bots.engine.effort")}</span>
+          <span data-slot="bots-label">{t("bots.engine.effortField")}</span>
           <Show
             when={!efforts().none}
             fallback={
@@ -2570,7 +2567,7 @@ function BotSettings(props: {
           onInput={(event) => setDescription(event.currentTarget.value)}
         />
         <span data-slot="bots-hint">
-          {t("bots.settings.whenToUseHint1")} <code>{"description"}</code> {t("bots.settings.whenToUseHint2")}
+          {t("bots.settings.whenToUseHint")}
         </span>
       </label>
 
@@ -2611,7 +2608,7 @@ function BotSettings(props: {
           onInput={(event) => setObjectives(event.currentTarget.value)}
         />
         <span data-slot="bots-hint">
-          {t("bots.settings.objectivesHint")} <code>{OBJECTIVES_HEADING}</code>.
+          {t("bots.settings.objectivesHint", OBJECTIVES_HEADING)}
         </span>
       </label>
 

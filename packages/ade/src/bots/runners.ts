@@ -857,7 +857,8 @@ export function readLoginStatus(runner: Runner, output: string, code: number | n
     case "codex": {
       const line = text.split("\n").find((l) => /logged in/i.test(l))
       if (line && !/not logged in/i.test(line)) {
-        return { state: "in", detail: line.trim().replace(/^Logged in using /i, t("bots.login.using")) }
+        const using = /^Logged in using (.*)$/i.exec(line.trim())
+        return { state: "in", detail: using ? t("bots.login.usingMethod", using[1] ?? "") : line.trim() }
       }
       return { state: line ? "out" : code === 0 ? "unknown" : "out", detail: first || t("bots.login.out") }
     }

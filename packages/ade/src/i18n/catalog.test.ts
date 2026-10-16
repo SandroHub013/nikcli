@@ -31,6 +31,10 @@ const SAME_IN_BOTH = new Set<string>([
   // «Telegram: On»: the platform's name and the state's word, in the same shape in both.
   "gateway.tile.aria",
   "gateway.panel.tokenPlaceholderSlack",
+  "gateway.panel.tokenPlaceholder",
+  "gateway.approve.no",
+  "bots.account.label",
+  "bots.account.option",
   "gateway.panel.appTokenPlaceholder",
   "record.consent.no",
   "bots.ask.no",
@@ -40,7 +44,6 @@ const SAME_IN_BOTH = new Set<string>([
   "settings.tab.voiceDevices",
   "browser.owner.ready",
   "bots.card.file",
-  "bots.form.persona",
   "settings.providers.desc2After",
   "agent.empty.example1",
   "agent.empty.example2",

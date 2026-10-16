@@ -225,7 +225,7 @@ const asking = new Map<string, Promise<{ ok: true } | { ok: false; problem?: str
 function listed(files: readonly SurfaceFile[]): string {
   const shown = files.slice(0, 6).map((file) => file.path.replace(/^\.(?:ragu|nikcli)\//, ""))
   const more = files.length - shown.length
-  return more > 0 ? `${shown.join(", ")}${t("bots.projectTrust.more", more)}` : shown.join(", ")
+  return more > 0 ? t("bots.projectTrust.listMore", shown.join(", "), more) : shown.join(", ")
 }
 
 /**
