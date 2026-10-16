@@ -5,7 +5,9 @@
  * integer scaling, status text, and subtle scanlines vignette.
  */
 
-[data-component="ade-splash"] {
+[data-component="ade-splash"],
+[data-component="ade-shell"][data-theme="glass"] [data-component="ade-splash"][role="dialog"],
+[data-component="ade-shell"] [data-component="ade-splash"][role="dialog"] {
   position: fixed;
   inset: 0;
   width: 100vw;
@@ -75,6 +77,12 @@
   background-size:
     100% var(--splash-scanline-period, 16px),
     100% 100%;
+  background-position:
+    0 var(--splash-scanline-offset, 0px),
+    center center;
+  background-repeat:
+    repeat,
+    no-repeat;
   opacity: 0.35;
 }
 

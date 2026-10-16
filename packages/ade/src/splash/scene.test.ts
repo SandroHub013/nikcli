@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import {
   DEV_POSE_INTERVAL_MS,
   INK_BACKGROUND,
@@ -30,6 +30,14 @@ import {
 } from "./sprites"
 
 describe("splash scene renderer (step 2)", () => {
+  afterEach(() => {
+    document.body.removeAttribute("style")
+    document.documentElement.removeAttribute("style")
+    while (document.body.firstChild) {
+      document.body.removeChild(document.body.firstChild)
+    }
+  })
+
   describe("scene dimensions and layout bounds", () => {
     test("logical dimensions are 160x90 with exact 16:9 aspect ratio", () => {
       expect(SCENE_WIDTH).toBe(160)
@@ -156,10 +164,12 @@ describe("splash scene renderer (step 2)", () => {
         controller.stop()
       } finally {
         container.remove()
+        document.body.removeAttribute("style")
+        document.documentElement.removeAttribute("style")
       }
     })
 
-    test("sets --splash-scanline-period to exact 2 * scale in device pixels to prevent moiré (P3-6)", () => {
+    test("sets --splash-scanline-period and aligns --splash-scanline-offset with canvas top (P3-6, P3-11)", () => {
       const splash = document.createElement("div")
       splash.setAttribute("data-component", "ade-splash")
       const container = document.createElement("div")
@@ -171,16 +181,46 @@ describe("splash scene renderer (step 2)", () => {
 
       try {
         const controller = startPixelScene(canvas)
-        // Scale 5 at DPR 1: 2 * 5 / 1 = 10px
+        // Scale 5 at DPR 1: 2 * 5 / 1 = 10px; top = round((600*1 - 90*5)/2) = 75px
         controller.resize(800, 600, 1)
         expect(splash.style.getPropertyValue("--splash-scanline-period")).toBe("10px")
+        expect(splash.style.getPropertyValue("--splash-scanline-offset")).toBe("75px")
 
-        // Scale 11 at DPR 1.25 (1536x826): 2 * 11 / 1.25 = 17.6px (22 device pixels)
+        // Scale 11 at DPR 1.25 (1536x826): 2 * 11 / 1.25 = 17.6px (22 device pixels); top = 21/1.25 = 16.8px
         controller.resize(1536, 826, 1.25)
         expect(splash.style.getPropertyValue("--splash-scanline-period")).toBe("17.6px")
+        expect(splash.style.getPropertyValue("--splash-scanline-offset")).toBe("16.8px")
+
+        // Container does not have unused scanline property written on it
+        expect(container.style.getPropertyValue("--splash-scanline-period")).toBe("")
+
         controller.stop()
       } finally {
         splash.remove()
+        document.body.removeAttribute("style")
+        document.documentElement.removeAttribute("style")
+      }
+    })
+
+    test("resize with canvas outside ade-splash leaves document.body without style attribute", () => {
+      const container = document.createElement("div")
+      const canvas = document.createElement("canvas")
+      container.appendChild(canvas)
+      document.body.appendChild(container)
+
+      try {
+        const controller = startPixelScene(canvas)
+        controller.resize(1280, 720, 1)
+        controller.resize(1536, 826, 1.25)
+        controller.stop()
+
+        expect(document.body.hasAttribute("style")).toBe(false)
+        expect(document.documentElement.hasAttribute("style")).toBe(false)
+        expect(container.hasAttribute("style")).toBe(false)
+      } finally {
+        container.remove()
+        document.body.removeAttribute("style")
+        document.documentElement.removeAttribute("style")
       }
     })
   })
@@ -299,8 +339,8 @@ describe("splash scene renderer (step 2)", () => {
       }
     })
 
-    test("ladle reaches into pot sauce in scene coordinates between [pot.x+7, pot.x+25] (P2-4)", () => {
-      const drawnPixels: { x: number; y: number; color: string }[] = []
+    test("ladle arcs over rim (y <= 25) and reaches into pot sauce behind cream rim (P2-4, P3-9)", () => {
+      let drawnPixels: { x: number; y: number; color: string }[] = []
       const fakeCtx = {
         fillStyle: "",
         fillRect: (x: number, y: number, w: number, h: number) => {
@@ -314,13 +354,28 @@ describe("splash scene renderer (step 2)", () => {
       expect(tipSinistra!.tipX).toBeGreaterThanOrEqual(SCENE_LAYOUT.pot.x + 7)
       expect(tipSinistra!.tipX).toBeLessThanOrEqual(SCENE_LAYOUT.pot.x + 25)
       expect(tipSinistra!.tipY).toBeGreaterThanOrEqual(SCENE_LAYOUT.pot.y + 14) // in sauce
+      // Handle rises over the rim (y <= 25)
+      expect(drawnPixels.some((p) => p.y <= 25)).toBe(true)
+      // Passes behind the cream rim (rows y=26..27 inside the pot rim x=68..91 are not overwritten)
+      const sinistraRimOverlap = drawnPixels.filter(
+        (p) => (p.y === 26 || p.y === 27) && p.x >= SCENE_LAYOUT.pot.x + 4,
+      )
+      expect(sinistraRimOverlap.length).toBe(0)
 
       // Test mescola destra (pose 2)
+      drawnPixels = []
       const tipDestra = drawLadle(fakeCtx, 2, SCENE_LAYOUT.pot.x, SCENE_LAYOUT.pot.y)
       expect(tipDestra).not.toBeNull()
       expect(tipDestra!.tipX).toBeGreaterThanOrEqual(SCENE_LAYOUT.pot.x + 7)
       expect(tipDestra!.tipX).toBeLessThanOrEqual(SCENE_LAYOUT.pot.x + 25)
       expect(tipDestra!.tipY).toBeGreaterThanOrEqual(SCENE_LAYOUT.pot.y + 14) // in sauce
+      // Handle rises over the rim (y <= 25)
+      expect(drawnPixels.some((p) => p.y <= 25)).toBe(true)
+      // Passes behind the cream rim (rows y=26..27 inside the pot rim x=68..91 are not overwritten)
+      const destraRimOverlap = drawnPixels.filter(
+        (p) => (p.y === 26 || p.y === 27) && p.x >= SCENE_LAYOUT.pot.x + 4,
+      )
+      expect(destraRimOverlap.length).toBe(0)
 
       // Verify tip moved to the right between sinistra and destra (stirring motion)
       expect(tipDestra!.tipX).toBeGreaterThan(tipSinistra!.tipX)

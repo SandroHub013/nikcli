@@ -1,6 +1,6 @@
 import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js"
 import { t } from "../i18n"
-import { startPixelScene, type SceneController } from "./scene"
+import { layoutSceneContainer, startPixelScene, type SceneController } from "./scene"
 import "./splash.css"
 import { SPLASH_SCENE_DELAY_MS, sceneIsWorthBuilding } from "./timing"
 
@@ -58,13 +58,27 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
   let startingFired = false
   let restartScene: ((opts?: { prefersReducedMotion?: boolean }) => void) | undefined
 
+  // Retain last known status message so it does not vanish prematurely during fade-out
+  const [displayedStatus, setDisplayedStatus] = createSignal(props.status)
+  createEffect(() => {
+    if (props.visible) {
+      setDisplayedStatus(props.status)
+    } else if (props.status) {
+      setDisplayedStatus(props.status)
+    }
+  })
+
   const dismiss = () => {
     if (props.visible) props.onDismiss?.()
   }
 
   const handleResize = () => {
     const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1
-    controller?.resize(window.innerWidth, window.innerHeight, dpr)
+    if (controller) {
+      controller.resize(window.innerWidth, window.innerHeight, dpr)
+    } else if (canvasRef) {
+      layoutSceneContainer(canvasRef, window.innerWidth, window.innerHeight, dpr)
+    }
   }
 
   const getPrefersReducedMotion = () =>
@@ -84,6 +98,9 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
   onMount(() => {
     const canvas = canvasRef
     if (!canvas) return
+    canvas.width = 160
+    canvas.height = 90
+    handleResize()
     const appearedAt = performance.now()
 
     onCleanup(() => {
@@ -125,11 +142,11 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
       }
     })
 
-    // P3-1: Live listener for prefers-reduced-motion changes
+    // P3-1 / P3-10: Live listener for prefers-reduced-motion changes
     if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
       const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)")
       const handleMotionChange = (e: MediaQueryListEvent | MediaQueryList) => {
-        if (e.matches) {
+        if (e.matches && startingFired) {
           restartScene?.({ prefersReducedMotion: true })
         }
       }
@@ -154,12 +171,13 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
       if (!props.visible) return
       if (!sceneIsWorthBuilding(appearedAt, performance.now())) return
 
+      controller?.stop()
       controller = startPixelScene(canvas, { prefersReducedMotion: getPrefersReducedMotion() })
       handleResize()
     }, SPLASH_SCENE_DELAY_MS)
 
     restartScene = (opts) => {
-      if (!disposed && canvas) {
+      if (!disposed && canvas && startingFired) {
         controller?.stop()
         controller = startPixelScene(canvas, opts)
         handleResize()
@@ -181,9 +199,9 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
     >
       <div data-slot="splash-scene-container">
         <canvas ref={canvasRef} data-slot="splash-canvas" aria-hidden="true" />
-        <Show when={props.status}>
+        <Show when={displayedStatus()}>
           <div data-slot="splash-status" aria-live="polite">
-            {props.status}
+            {displayedStatus()}
           </div>
         </Show>
       </div>

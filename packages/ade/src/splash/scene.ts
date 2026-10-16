@@ -211,9 +211,9 @@ export function renderScene(
 
 /**
  * Draws the stirring ladle in scene coordinates during mescola poses.
- * Passes over the pot crema rim into the sauce:
- * - mescola_sinistra (pose 1): ladle dips in left side of sauce [pot.x + 9, pot.y + 18] (scene x=75, y=34)
- * - mescola_destra (pose 2): ladle reaches across to right side of sauce [pot.x + 19, pot.y + 18] (scene x=85, y=34)
+ * Passes over the pot rim (y <= 25) and dips into the sauce behind the cream rim:
+ * - mescola_sinistra (pose 1): handle arcs up over the left rim into left sauce [pot.x + 11, pot.y + 19] (scene x=75, y=33)
+ * - mescola_destra (pose 2): handle arcs up over the rim and reaches across into right sauce [pot.x + 21, pot.y + 19] (scene x=85, y=33)
  */
 export function drawLadle(
   ctx: CanvasRenderingContext2D,
@@ -227,49 +227,65 @@ export function drawLadle(
   const sauceColor = SPLASH_PALETTE.f
 
   if (devPoseIndex === 1) {
-    // Mescola sinistra: handle passes over left rim (x=68..71) into left sauce (x=75)
+    // Mescola sinistra: handle rises from cook hand over left rim (y <= 25) and dips behind cream rim into sauce
     ctx.fillStyle = woodColor
-    const handle = [
-      [64, 29], [65, 29],
-      [66, 30], [67, 30],
-      [68, 30], [69, 31],
-      [70, 31], [71, 32],
-      [72, 32], [73, 33],
-      [74, 33], [75, 33],
+    const handleOverRim = [
+      [63, 28], [64, 27],
+      [65, 26], [66, 25],
+      [67, 24], [68, 24],
+      [69, 25],
     ]
-    for (const [x, y] of handle) {
+    for (const [x, y] of handleOverRim) {
+      ctx.fillRect(x!, y!, 1, 1)
+    }
+
+    // Inside pot dipping into left sauce (behind cream rim at y=26..27)
+    const handleInSauce = [
+      [70, 28], [71, 29],
+      [72, 30], [73, 31],
+      [74, 32],
+    ]
+    for (const [x, y] of handleInSauce) {
       ctx.fillRect(x!, y!, 1, 1)
     }
 
     ctx.fillStyle = woodColor
-    ctx.fillRect(74, 34, 1, 1)
+    ctx.fillRect(74, 33, 1, 1)
     ctx.fillStyle = sauceColor
-    ctx.fillRect(75, 34, 1, 1)
+    ctx.fillRect(75, 33, 1, 1)
 
-    return { tipX: 75, tipY: 34 }
+    return { tipX: 75, tipY: 33 }
   }
 
-  // Mescola destra: handle reaches across pot into right sauce (x=85)
+  // Mescola destra: handle rises from cook hand over rim (y <= 25) and reaches across into right sauce
   ctx.fillStyle = woodColor
-  const handle = [
-    [66, 29], [67, 29],
-    [68, 30], [69, 30],
-    [70, 30], [72, 31],
-    [74, 31], [76, 31],
-    [78, 32], [80, 32],
-    [82, 32], [83, 33],
-    [84, 33], [85, 33],
+  const handleOverRim = [
+    [64, 28], [65, 27],
+    [66, 26], [67, 25],
+    [68, 24], [69, 24],
+    [70, 24], [71, 25],
+    [72, 25],
   ]
-  for (const [x, y] of handle) {
+  for (const [x, y] of handleOverRim) {
+    ctx.fillRect(x!, y!, 1, 1)
+  }
+
+  // Inside pot reaching across into right sauce (behind cream rim at y=26..27)
+  const handleInSauce = [
+    [76, 28], [78, 29],
+    [80, 30], [82, 31],
+    [84, 32],
+  ]
+  for (const [x, y] of handleInSauce) {
     ctx.fillRect(x!, y!, 1, 1)
   }
 
   ctx.fillStyle = woodColor
-  ctx.fillRect(84, 34, 1, 1)
+  ctx.fillRect(84, 33, 1, 1)
   ctx.fillStyle = sauceColor
-  ctx.fillRect(85, 34, 1, 1)
+  ctx.fillRect(85, 33, 1, 1)
 
-  return { tipX: 85, tipY: 34 }
+  return { tipX: 85, tipY: 33 }
 }
 
 export interface SceneController {
@@ -277,6 +293,44 @@ export interface SceneController {
   resize: (viewportWidth: number, viewportHeight: number, dpr?: number) => number
   /** Stops the animation loop and frees listeners. */
   stop: () => void
+}
+
+/**
+ * Computes integer scale and positions the scene container within the viewport.
+ * Callable immediately on mount so the status text is positioned correctly before the scene starts.
+ */
+export function layoutSceneContainer(
+  canvas: HTMLCanvasElement,
+  viewportWidth: number,
+  viewportHeight: number,
+  dpr: number = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
+): number {
+  const scale = calculateIntegerScale(viewportWidth, viewportHeight, dpr)
+  const cssWidth = (SCENE_WIDTH * scale) / dpr
+  const cssHeight = (SCENE_HEIGHT * scale) / dpr
+  const left = Math.round((viewportWidth * dpr - SCENE_WIDTH * scale) / 2) / dpr
+  const top = Math.round((viewportHeight * dpr - SCENE_HEIGHT * scale) / 2) / dpr
+
+  canvas.style.width = `${cssWidth}px`
+  canvas.style.height = `${cssHeight}px`
+
+  const scanlinePeriod = `${(2 * scale) / dpr}px`
+  const container = canvas.parentElement
+  if (container && container.getAttribute("data-slot") === "splash-scene-container") {
+    container.style.position = "absolute"
+    container.style.left = `${left}px`
+    container.style.top = `${top}px`
+    container.style.width = `${cssWidth}px`
+    container.style.height = `${cssHeight}px`
+  }
+
+  const splashRoot = canvas.closest?.('[data-component="ade-splash"]') as HTMLElement | null
+  if (splashRoot?.style) {
+    splashRoot.style.setProperty("--splash-scanline-period", scanlinePeriod)
+    splashRoot.style.setProperty("--splash-scanline-offset", `${top}px`)
+  }
+
+  return scale
 }
 
 /**
@@ -313,37 +367,7 @@ export function startPixelScene(
     viewportWidth: number,
     viewportHeight: number,
     dpr: number = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
-  ): number => {
-    const scale = calculateIntegerScale(viewportWidth, viewportHeight, dpr)
-    const cssWidth = (SCENE_WIDTH * scale) / dpr
-    const cssHeight = (SCENE_HEIGHT * scale) / dpr
-    const left = Math.round((viewportWidth * dpr - SCENE_WIDTH * scale) / 2) / dpr
-    const top = Math.round((viewportHeight * dpr - SCENE_HEIGHT * scale) / 2) / dpr
-
-    canvas.style.width = `${cssWidth}px`
-    canvas.style.height = `${cssHeight}px`
-
-    const container = canvas.parentElement
-    if (container && container.getAttribute("data-slot") === "splash-scene-container") {
-      container.style.position = "absolute"
-      container.style.left = `${left}px`
-      container.style.top = `${top}px`
-      container.style.width = `${cssWidth}px`
-      container.style.height = `${cssHeight}px`
-    }
-
-    const scanlinePeriod = `${(2 * scale) / dpr}px`
-    const splashRoot = (canvas.closest?.('[data-component="ade-splash"]') ??
-      container?.parentElement) as HTMLElement | null
-    if (splashRoot?.style) {
-      splashRoot.style.setProperty("--splash-scanline-period", scanlinePeriod)
-    }
-    if (container?.style) {
-      container.style.setProperty("--splash-scanline-period", scanlinePeriod)
-    }
-
-    return scale
-  }
+  ): number => layoutSceneContainer(canvas, viewportWidth, viewportHeight, dpr)
 
   const staticBg = createStaticBackground()
 

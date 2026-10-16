@@ -7,7 +7,7 @@ compileSolidJsx()
 const { createComponent, createRoot, createSignal } = await import("solid-js")
 const { render } = await import("solid-js/web")
 const { Splash } = await import("./splash")
-const { calculateIntegerScale } = await import("./scene")
+const { calculateIntegerScale, layoutSceneContainer } = await import("./scene")
 
 describe("splash component (step 3)", () => {
   let container: HTMLDivElement
@@ -20,6 +20,8 @@ describe("splash component (step 3)", () => {
   afterEach(() => {
     container.remove()
     document.body.innerHTML = ""
+    document.body.removeAttribute("style")
+    document.documentElement.removeAttribute("style")
   })
 
   function mountSplash(props: { visible: boolean; status?: string; onDismiss?: () => void }) {
@@ -39,6 +41,33 @@ describe("splash component (step 3)", () => {
     expect(css).not.toContain("var(--ade-text-weak")
     expect(css).toMatch(/color-scheme:\s*dark/)
     expect(css).toMatch(/background:\s*#120d0b/)
+  })
+
+  test("maintains ink background in glass theme over index.css dialog rule without removing dialog role (P1)", () => {
+    // 1. Accessibility: role="dialog" remains on root
+    const handle = mountSplash({ visible: true })
+    try {
+      const splash = container.querySelector('[data-component="ade-splash"]')
+      expect(splash).not.toBeNull()
+      expect(splash?.getAttribute("role")).toBe("dialog")
+    } finally {
+      handle.dispose()
+    }
+
+    // 2. Specificity verification: splash.css glass rule has higher specificity than index.css dialog rule
+    const splashCss = readFileSync(join(import.meta.dir, "splash.css"), "utf8")
+    const indexCss = readFileSync(join(import.meta.dir, "../index.css"), "utf8")
+
+    // index.css matches: [data-component="ade-shell"][data-theme="glass"] [role="dialog"] (specificity 0,3,0)
+    expect(indexCss).toMatch(/\[data-component="ade-shell"\]\[data-theme="glass"\]\s*\[role="dialog"\]/)
+
+    // splash.css overrides with higher specificity (0,4,0) binding ink background
+    expect(splashCss).toMatch(
+      /\[data-component="ade-shell"\]\[data-theme="glass"\]\s*\[data-component="ade-splash"\]\[role="dialog"\]/,
+    )
+    expect(splashCss).toMatch(
+      /\[data-component="ade-shell"\]\[data-theme="glass"\]\s*\[data-component="ade-splash"\]\[role="dialog"\][\s\S]*?\{[^}]*background:\s*#120d0b/,
+    )
   })
 
   test("status is placed inside scene container and stays within innerHeight across viewports (P1-2)", () => {
@@ -68,16 +97,59 @@ describe("splash component (step 3)", () => {
     ]
 
     for (const { w, h } of viewports) {
-      const scale = calculateIntegerScale(w, h)
-      const canvasHeight = 90 * scale
-      const canvasTop = (h - canvasHeight) / 2
-      const statusTop = canvasTop + (76 / 90) * canvasHeight // row 76
+      const splash = document.createElement("div")
+      splash.setAttribute("data-component", "ade-splash")
+      const sceneBox = document.createElement("div")
+      sceneBox.setAttribute("data-slot", "splash-scene-container")
+      const cv = document.createElement("canvas")
+      sceneBox.appendChild(cv)
+      splash.appendChild(sceneBox)
+
+      const scale = layoutSceneContainer(cv, w, h, 1)
+      const containerHeight = parseFloat(sceneBox.style.height)
+      const containerTop = parseFloat(sceneBox.style.top)
+      const statusTop = containerTop + (76 / 90) * containerHeight // row 76
       const statusNominalHeight = 16
       const statusBottom = statusTop + statusNominalHeight
       expect(statusBottom).toBeLessThanOrEqual(h)
       // Also verify it sits 3 logical pixels below wordmark (which ends at row 73)
-      const wordmarkBottom = canvasTop + 73 * scale
+      const wordmarkBottom = containerTop + 73 * scale
       expect(statusTop - wordmarkBottom).toBe(3 * scale)
+    }
+  })
+
+  test("positions scene container immediately on mount before delay to prevent status jump (P3-12)", () => {
+    const origWidth = window.innerWidth
+    const origHeight = window.innerHeight
+    const origDpr = window.devicePixelRatio
+    try {
+      window.innerWidth = 1280
+      window.innerHeight = 720
+      window.devicePixelRatio = 1
+
+      const handle = mountSplash({ visible: true, status: "Caricamento..." })
+      try {
+        const containerEl = container.querySelector<HTMLElement>('[data-slot="splash-scene-container"]')
+        expect(containerEl).not.toBeNull()
+        // Container must be positioned and sized immediately on mount at t=0
+        expect(containerEl?.style.position).toBe("absolute")
+        expect(containerEl?.style.width).toBe("1280px")
+        expect(containerEl?.style.height).toBe("720px")
+        expect(containerEl?.style.top).toBe("0px")
+        expect(containerEl?.style.left).toBe("0px")
+
+        const canvas = container.querySelector<HTMLCanvasElement>('[data-slot="splash-canvas"]')
+        expect(canvas?.width).toBe(160)
+        expect(canvas?.height).toBe(90)
+        expect(canvas?.style.width).toBe("1280px")
+        expect(canvas?.style.height).toBe("720px")
+      } finally {
+        handle.dispose()
+      }
+    } finally {
+      window.innerWidth = origWidth
+      window.innerHeight = origHeight
+      window.devicePixelRatio = origDpr
     }
   })
 
@@ -170,6 +242,52 @@ describe("splash component (step 3)", () => {
     }
   })
 
+  test("retains last status during fade-out when props.visible flips to false (P3)", async () => {
+    let setVisibleSignal!: (v: boolean) => void
+    let setStatusSignal!: (s: string | undefined) => void
+    let disposeFn: (() => void) | undefined
+
+    createRoot((dispose) => {
+      disposeFn = dispose
+      const [visible, setVisible] = createSignal(true)
+      const [status, setStatus] = createSignal<string | undefined>("Inizializzazione...")
+      setVisibleSignal = setVisible
+      setStatusSignal = setStatus
+      render(
+        () => createComponent(Splash, {
+          get visible() { return visible() },
+          get status() { return status() },
+        }),
+        container,
+      )
+    })
+
+    try {
+      const statusEl = container.querySelector('[data-slot="splash-status"]')
+      expect(statusEl).not.toBeNull()
+      expect(statusEl?.textContent).toBe("Inizializzazione...")
+
+      // Boot finishes: visible flips to false, status becomes undefined simultaneously
+      setVisibleSignal(false)
+      setStatusSignal(undefined)
+
+      // Status must stay visible in DOM during fade-out
+      const statusElDuringFade = container.querySelector('[data-slot="splash-status"]')
+      expect(statusElDuringFade).not.toBeNull()
+      expect(statusElDuringFade?.textContent).toBe("Inizializzazione...")
+
+      const splash = container.querySelector('[data-component="ade-splash"]')
+      expect(splash?.hasAttribute("data-leaving")).toBe(true)
+
+      // After fade completes (650ms), entire splash is unmounted
+      await new Promise((resolve) => setTimeout(resolve, 650))
+      expect(container.querySelector('[data-slot="splash-status"]')).toBeNull()
+      expect(container.querySelector('[data-component="ade-splash"]')).toBeNull()
+    } finally {
+      disposeFn?.()
+    }
+  })
+
   test("dismiss during fade-out does not trigger onDismiss", () => {
     let dismissed = false
     let setVisibleSignal!: (v: boolean) => void
@@ -214,6 +332,10 @@ describe("splash component (step 3)", () => {
       resize: 0,
       visibilitychange: 0,
     }
+    const matchMediaListeners = {
+      dpr: 0,
+      motion: 0,
+    }
 
     const origSetTimeout = globalThis.setTimeout
     const origClearTimeout = globalThis.clearTimeout
@@ -227,6 +349,40 @@ describe("splash component (step 3)", () => {
     const origMatchMedia = window.matchMedia
 
     performance.now = () => currentTime
+
+    let reducedMotionActive = false
+    window.matchMedia = (query: string) => {
+      const isMotion = query.includes("prefers-reduced-motion")
+      const isDpr = query.includes("resolution")
+      return {
+        get matches() {
+          return isMotion ? reducedMotionActive : false
+        },
+        media: query,
+        onchange: null,
+        addListener: (cb: any) => {
+          if (isMotion) matchMediaListeners.motion++
+          if (isDpr) matchMediaListeners.dpr++
+        },
+        removeListener: (cb: any) => {
+          if (isMotion) matchMediaListeners.motion--
+          if (isDpr) matchMediaListeners.dpr--
+        },
+        addEventListener: (event: string, cb: any) => {
+          if (event === "change") {
+            if (isMotion) matchMediaListeners.motion++
+            if (isDpr) matchMediaListeners.dpr++
+          }
+        },
+        removeEventListener: (event: string, cb: any) => {
+          if (event === "change") {
+            if (isMotion) matchMediaListeners.motion--
+            if (isDpr) matchMediaListeners.dpr--
+          }
+        },
+        dispatchEvent: () => false,
+      } as any
+    }
 
     globalThis.setTimeout = ((cb: any, ms: number = 0) => {
       const id = nextTimerId++
@@ -305,6 +461,10 @@ describe("splash component (step 3)", () => {
         render(() => createComponent(Splash, { get visible() { return visible() } }), container)
       })
 
+      // Active listeners counted upon mount
+      expect(matchMediaListeners.dpr).toBe(1)
+      expect(matchMediaListeners.motion).toBe(1)
+
       // 1. Advance 299 ms: scene delay is 300 ms, so 0 rAF queued
       advance(299)
       expect(rafs.size).toBe(0)
@@ -328,6 +488,8 @@ describe("splash component (step 3)", () => {
       expect(listeners.keydown).toBe(0)
       expect(listeners.resize).toBe(0)
       expect(listeners.visibilitychange).toBe(0)
+      expect(matchMediaListeners.dpr).toBe(0)
+      expect(matchMediaListeners.motion).toBe(0)
 
       // 4. Remount during fade: true -> false -> true
       setVisibleSignal(true)
@@ -337,29 +499,24 @@ describe("splash component (step 3)", () => {
       setVisibleSignal(false)
       advance(200) // 200ms into fade
       setVisibleSignal(true) // aborted fade, re-activated
-      expect(rafs.size).toBeLessThanOrEqual(1)
+      expect(rafs.size).toBe(1)
 
       // 5. prefersReducedMotion via matchMedia: 0 rAF
-      window.matchMedia = (query: string) => ({
-        matches: query.includes("prefers-reduced-motion: reduce"),
-        media: query,
-        onchange: null,
-        addListener: () => {},
-        removeListener: () => {},
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-      }) as any
+      reducedMotionActive = true
 
       // Unmount previous
       setVisibleSignal(false)
       advance(600)
       expect(rafs.size).toBe(0)
+      expect(matchMediaListeners.dpr).toBe(0)
+      expect(matchMediaListeners.motion).toBe(0)
 
       // Mount again with reduced motion active
       setVisibleSignal(true)
       advance(350)
       expect(rafs.size).toBe(0) // static frame rendered, 0 rAF
+      expect(matchMediaListeners.dpr).toBe(1)
+      expect(matchMediaListeners.motion).toBe(1)
     } finally {
       disposeRoot?.()
       globalThis.setTimeout = origSetTimeout
@@ -375,7 +532,13 @@ describe("splash component (step 3)", () => {
     }
   })
 
-  test("dynamically responds to prefers-reduced-motion media query changes (P3-1)", () => {
+  test("dynamically responds to prefers-reduced-motion media query changes (P3-1, P3-10)", () => {
+    let currentTime = 1000
+    let nextTimerId = 1
+    let timers: { id: number; due: number; cb: () => void }[] = []
+    const rafs = new Map<number, FrameRequestCallback>()
+    let nextRafId = 1
+
     let changeHandler: ((e: any) => void) | undefined
     const mockMql = {
       matches: false,
@@ -387,20 +550,91 @@ describe("splash component (step 3)", () => {
         if (evt === "change" && changeHandler === fn) changeHandler = undefined
       },
     }
+
+    const origSetTimeout = globalThis.setTimeout
+    const origClearTimeout = globalThis.clearTimeout
+    const origRAF = window.requestAnimationFrame
+    const origCancelRAF = window.cancelAnimationFrame
+    const origPerfNow = performance.now
     const origMatchMedia = window.matchMedia
+
+    performance.now = () => currentTime
+    globalThis.setTimeout = ((cb: any, ms: number = 0) => {
+      const id = nextTimerId++
+      timers.push({ id, due: currentTime + ms, cb })
+      return id as any
+    }) as any
+    globalThis.clearTimeout = ((id: any) => {
+      timers = timers.filter((t) => t.id !== id)
+    }) as any
+    window.requestAnimationFrame = (cb: FrameRequestCallback) => {
+      const id = nextRafId++
+      rafs.set(id, cb)
+      return id
+    }
+    window.cancelAnimationFrame = (id: number) => {
+      rafs.delete(id)
+    }
     window.matchMedia = ((query: string) => {
       if (query.includes("prefers-reduced-motion")) return mockMql as any
       return { matches: false, addEventListener: () => {}, removeEventListener: () => {} } as any
     }) as any
 
-    const handle = mountSplash({ visible: true })
+    const advance = (ms: number) => {
+      currentTime += ms
+      let firedAny = true
+      while (firedAny) {
+        firedAny = false
+        const dueTimers = timers.filter((t) => t.due <= currentTime)
+        if (dueTimers.length > 0) {
+          dueTimers.sort((a, b) => a.due - b.due)
+          const t = dueTimers[0]!
+          timers = timers.filter((x) => x.id !== t.id)
+          t.cb()
+          firedAny = true
+        }
+      }
+    }
+
+    // Case A: reduce changes BEFORE 300ms delay -> builds 0 scenes early, 1 static scene at 300ms
+    const handleA = mountSplash({ visible: true })
     try {
       expect(typeof changeHandler).toBe("function")
-      // Trigger media query change to reduce
+      advance(150)
+      expect(rafs.size).toBe(0)
+
       mockMql.matches = true
       changeHandler!({ matches: true })
+      expect(rafs.size).toBe(0)
+
+      advance(150) // reaches 300ms delay
+      expect(rafs.size).toBe(0) // static scene, 0 rAF
     } finally {
-      handle.dispose()
+      handleA.dispose()
+    }
+
+    // Case B: reduce changes AFTER 300ms while loop is actively running
+    mockMql.matches = false
+    timers = []
+    rafs.clear()
+    const handleB = mountSplash({ visible: true })
+    try {
+      advance(300)
+      expect(rafs.size).toBe(1) // loop active
+
+      mockMql.matches = true
+      changeHandler!({ matches: true })
+      expect(rafs.size).toBe(0) // loop stopped immediately
+
+      advance(200)
+      expect(rafs.size).toBe(0)
+    } finally {
+      handleB.dispose()
+      globalThis.setTimeout = origSetTimeout
+      globalThis.clearTimeout = origClearTimeout
+      window.requestAnimationFrame = origRAF
+      window.cancelAnimationFrame = origCancelRAF
+      performance.now = origPerfNow
       window.matchMedia = origMatchMedia
     }
   })
