@@ -628,17 +628,37 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
   }
 }
 
+const SECRET_ASSIGNMENT_PATTERN = /(?:key|token|secret|password|passwd|auth|bearer|credential|jwt|api[_-]?key)\s*[:=]/i
+
 /**
  * An incomplete word/token at the end of partial streaming text might be a secret
- * mid-emission (e.g. `sk-proj...`) that would escape redaction patterns until complete.
- * We hold back the trailing incomplete word/token until terminated by whitespace or punctuation.
+ * mid-emission (e.g. `sk-proj...`, JWT, dotted password) that would escape redaction patterns.
+ * We hold back the trailing incomplete word/token until terminated by whitespace.
+ * In addition, if the trailing line contains an assignment (`=` or `:`) following a
+ * secret-like name (e.g. `password=ab.`, `token: `), we hold back that entire line until
+ * a newline terminates it, preventing partial leaks of secrets containing dots or short passwords.
  */
 export function safePreviewText(text: string): string {
   if (!text) return ""
-  if (/[\s.,;:!?()[\]{}"'<>`]$/.test(text)) {
-    return text
+
+  // 1. Delimiter is only whitespace: hold back trailing incomplete word
+  let candidate = text
+  if (!/\s$/.test(candidate)) {
+    const lastSpace = candidate.search(/\s\S*$/)
+    if (lastSpace >= 0) {
+      candidate = candidate.slice(0, lastSpace + 1)
+    } else {
+      return ""
+    }
   }
-  const match = /^([\s\S]*[\s.,;:!?()[\]{}"'<>`])/.exec(text)
-  return match ? match[1] : ""
+
+  // 2. If the trailing line contains an assignment after a secret-like name, hold back the line
+  const lastNewline = candidate.lastIndexOf("\n")
+  const trailingLine = lastNewline >= 0 ? candidate.slice(lastNewline + 1) : candidate
+  if (SECRET_ASSIGNMENT_PATTERN.test(trailingLine)) {
+    return lastNewline >= 0 ? candidate.slice(0, lastNewline + 1) : ""
+  }
+
+  return candidate
 }
 

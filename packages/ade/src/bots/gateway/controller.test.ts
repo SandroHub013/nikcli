@@ -602,12 +602,12 @@ describe("the gateways' controller", () => {
     expect(turn.request.partial).toBe(true)
     expect(typeof turn.request.onUpdate).toBe("function")
 
-    const talk = { ...emptyTalk(), streaming: "Sto pensando alla risposta giusta..." }
+    const talk = { ...emptyTalk(), streaming: "Sto pensando alla risposta giusta... " }
     turn.request.onUpdate!(talk)
     await Promise.resolve()
 
     expect(b.previews).toEqual([
-      { bot: BOT.path, platform: "telegram", chat: "c42", text: "Sto pensando alla risposta giusta..." },
+      { bot: BOT.path, platform: "telegram", chat: "c42", text: "Sto pensando alla risposta giusta... " },
     ])
     turn.finish({ text: "Risposta finale." })
     await until("la risposta finale", () => b.sent.length === 1)
@@ -635,7 +635,7 @@ describe("the gateways' controller", () => {
     expect(b.previews).toHaveLength(0)
 
     // Text >= 24 chars -> first preview sent
-    const part1 = "Questo testo ha almeno 24 caratteri."
+    const part1 = "Questo testo ha almeno 24 caratteri. "
     turn.request.onUpdate!({ ...emptyTalk(), streaming: part1 })
     await Promise.resolve()
     expect(b.previews).toHaveLength(1)
@@ -643,7 +643,7 @@ describe("the gateways' controller", () => {
 
     // Only 500ms later (less than 1s) with plenty of new characters -> throttled, not sent
     now += 500
-    const part2 = part1 + " Altri caratteri aggiunti velocemente."
+    const part2 = part1 + "Altri caratteri aggiunti velocemente. "
     turn.request.onUpdate!({ ...emptyTalk(), streaming: part2 })
     await Promise.resolve()
     expect(b.previews).toHaveLength(1)
@@ -656,7 +656,7 @@ describe("the gateways' controller", () => {
     expect(b.previews).toHaveLength(1)
 
     // 1000ms later with >= 24 new chars -> sent!
-    const part4 = part1 + " E ora ci sono sicuramente più di ventiquattro caratteri in più."
+    const part4 = part1 + "E ora ci sono sicuramente più di ventiquattro caratteri in più. "
     turn.request.onUpdate!({ ...emptyTalk(), streaming: part4 })
     await Promise.resolve()
     expect(b.previews).toHaveLength(2)
@@ -717,7 +717,20 @@ describe("the gateways' controller", () => {
     expect(safePreviewText("Ecco la chiave: sk-proj-1234567890 ")).toBe("Ecco la chiave: sk-proj-1234567890 ")
     expect(safePreviewText("Prima riga.\nSeconda")).toBe("Prima riga.\n")
     expect(safePreviewText("Incompleto")).toBe("")
-    expect(safePreviewText("Completato.")).toBe("Completato.")
+
+    // P2-1: safePreviewText holds back partial secrets (JWT, password with dot, password=ab.)
+    // 1. JWT: delimiter is only whitespace, dot must not release partial header/payload
+    const jwtPartial = "Il token è eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkw"
+    expect(safePreviewText(jwtPartial)).toBe("Il token è ")
+
+    // 2. Password containing a dot: must not be cut at the dot
+    const passWithDot = "Ecco la password: pass.word123"
+    expect(safePreviewText(passWithDot)).toBe("")
+
+    // 3. password=ab.
+    expect(safePreviewText("password=ab.")).toBe("")
+    expect(safePreviewText("Configurazione:\npassword=ab.")).toBe("Configurazione:\n")
+    expect(safePreviewText("Configurazione:\npassword=ab. ")).toBe("Configurazione:\n")
 
     const b = bridge()
     const turns = fakeTurns()
@@ -761,7 +774,7 @@ describe("the gateways' controller", () => {
     const turn = turns.started[0]!
 
     // Send a preview
-    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Sto elaborando la tua richiesta..." })
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Sto elaborando la tua richiesta... " })
     await Promise.resolve()
     expect(b.previews).toHaveLength(1)
 
@@ -809,7 +822,7 @@ describe("the gateways' controller", () => {
     const turn = started[0]!
 
     // Send preview before approval
-    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Inizio esecuzione del comando..." })
+    turn.request.onUpdate!({ ...emptyTalk(), streaming: "Inizio esecuzione del comando... " })
     await Promise.resolve()
     expect(b.previews).toHaveLength(1)
 
