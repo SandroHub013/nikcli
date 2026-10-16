@@ -1918,7 +1918,7 @@ function BotPage(props: {
           <TabPanel tab="platforms" shown={shown()} scroll>
             <div data-slot="bots-tab-body" data-tab="platforms">
               <Show when={props.bot.path} keyed>
-                <GatewaySection bot={props.bot} deps={deps()} />
+                <GatewaySection bot={props.bot} deps={deps()} onScreen={() => "platforms" === shown()} />
               </Show>
             </div>
           </TabPanel>

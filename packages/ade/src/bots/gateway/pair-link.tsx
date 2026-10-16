@@ -31,7 +31,10 @@ export function PairLink(props: {
   onOpen?: ((url: string) => void) | undefined
   /** Absent, the clock; a test passes its own. */
   now?: () => number
+  /** The QR is leaving the screen (the step closed, the card gone): its token is to be cancelled. */
+  onGone?: (() => void) | undefined
 }) {
+  onCleanup(() => props.onGone?.())
   const [tick, setTick] = createSignal(Date.now())
   const now = () => props.now?.() ?? tick()
 

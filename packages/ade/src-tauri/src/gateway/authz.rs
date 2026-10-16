@@ -272,6 +272,12 @@ impl Pairing {
         Ok((token, expires_ms))
     }
 
+    /// The link or QR is no longer on ADE's screen: its token is cancelled, so a photo of it, or a screen shared, pairs
+    /// nobody. True when there was one.
+    pub fn cancel_link(&mut self) -> bool {
+        self.link.take().is_some()
+    }
+
     /// `typed` arrived as the token of a link, from `sender` in a private chat. Right: the link is used up, the sender's
     /// own request for a code (if they made one) and any refusal of them go, and the caller authorizes them. Wrong or
     /// expired: nothing changes, not even a count: no number of them can touch the live link or the limits of the codes.
@@ -838,6 +844,21 @@ mod tests {
         assert_eq!(pairing.use_link(&token, "42", LINK_TTL_MS), LinkUse::Wrong, "at ten minutes it is over");
         let (token, _) = pairing.issue_link(0, &mut random).unwrap();
         assert_eq!(pairing.use_link(&token, "42", LINK_TTL_MS - 1), LinkUse::Paired);
+    }
+
+    #[test]
+    fn a_cancelled_link_token_pairs_nobody() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        assert!(!pairing.cancel_link(), "nothing to cancel");
+        let (token, _) = pairing.issue_link(0, &mut random).unwrap();
+        assert!(pairing.cancel_link());
+        assert!(pairing.link.is_none());
+        assert_eq!(pairing.use_link(&token, "42", 1), LinkUse::Wrong);
+        assert!(!pairing.cancel_link(), "cancelling twice is no error");
+        // A new one can be made at once.
+        let (fresh, _) = pairing.issue_link(2, &mut random).unwrap();
+        assert_eq!(pairing.use_link(&fresh, "42", 3), LinkUse::Paired);
     }
 
     #[test]

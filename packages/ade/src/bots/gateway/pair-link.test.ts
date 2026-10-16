@@ -39,6 +39,7 @@ function mount(props: {
   now?: number
   onMake?: () => void
   onOpen?: ((url: string) => void) | undefined
+  onGone?: () => void
 }) {
   const host = document.createElement("div")
   document.body.append(host)
@@ -52,6 +53,7 @@ function mount(props: {
         busy: () => props.busy ?? false,
         onMake: props.onMake ?? (() => {}),
         onOpen: props.onOpen,
+        onGone: props.onGone,
         now,
       }),
     host,
@@ -127,6 +129,15 @@ describe("the link or QR", () => {
     expect(host.textContent).toContain("Abbinato: Ale.")
   })
 
+  test("when the step closes or the card goes, it says the QR is off the screen, once", () => {
+    const gone: string[] = []
+    mount({ link: link(), onGone: () => void gone.push("gone") })
+    expect(gone).toEqual([])
+    dispose?.()
+    dispose = undefined
+    expect(gone).toEqual(["gone"])
+  })
+
   test("addressOf cuts everything after the question mark", () => {
     expect(addressOf(`https://t.me/mio_bot?start=${TOKEN}`)).toBe("t.me/mio_bot")
     expect(addressOf("t.me/x")).toBe("t.me/x")
@@ -141,6 +152,14 @@ describe("in the section", () => {
     expect(slot.indexOf('<Show when={panel.platform() === "telegram"}>')).toBeGreaterThan(-1)
     expect(slot.indexOf("<PairLink")).toBeGreaterThan(slot.indexOf('panel.platform() === "telegram"'))
     expect(slot.indexOf("<PairLink")).toBeLessThan(slot.indexOf('data-slot="gateway-list"'))
+  })
+
+  test("lint: a hidden tab, a closed step and a gone card all cancel the token", () => {
+    expect(panel).toContain("if (props.onScreen && !props.onScreen()) void panel.cancelLink()")
+    expect(panel).toContain("onGone={() => void panel.cancelLink()}")
+    expect(panel).toContain("onCleanup(() => panel.dispose())")
+    const bots = readFileSync(join(import.meta.dir, "..", "bots.tsx"), "utf8")
+    expect(bots).toContain('onScreen={() => "platforms" === shown()}')
   })
 
   test("lint: the token is never logged or put in a text by the page", () => {

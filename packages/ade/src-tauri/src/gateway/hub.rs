@@ -957,6 +957,13 @@ impl Hub {
         Ok(PairingLink { url, svg, expires_ms })
     }
 
+    /// The QR is off ADE's screen (another tab, step, bot, the window closed): its token is cancelled, so a photo of it
+    /// pairs nobody. Nothing to cancel is no error.
+    pub fn pairing_link_cancel(&self, bot: &str, platform: Platform) -> Result<(), String> {
+        check_bot(bot)?;
+        self.store.update(bot, platform, |link, _| Ok(link.pairing.cancel_link())).map(|_| ())
+    }
+
     /// A new link token for the bot's link, saved as a hash; the old one is gone.
     fn issue_link_token(&self, bot: &str, platform: Platform) -> Result<(String, u64), String> {
         let now = self.env.now_ms();
@@ -2759,6 +2766,21 @@ mod tests {
         assert_eq!(adapter.sent.lock().unwrap()[0].1, PAIRED_MESSAGE);
         assert!(s.env.messages.lock().unwrap().is_empty(), "the token never reaches the page's thread");
         assert!(s.hub.store.link(BOT, Platform::Fake).unwrap().pairing.link.is_some(), "not spent");
+        let log = s.env.log.lock().unwrap().join("\n");
+        assert!(!log.contains(&token), "{log}");
+    }
+
+    #[tokio::test]
+    async fn a_cancelled_link_pairs_nobody_even_with_the_right_token() {
+        let s = setup("link-cancelled");
+        let (adapter, feed) = start(&s);
+        let token = token_of(&s);
+        s.hub.pairing_link_cancel(BOT, Platform::Fake).unwrap();
+        // Cancelling again, or when there is none, is no error.
+        s.hub.pairing_link_cancel(BOT, Platform::Fake).unwrap();
+        feed.send(Ok(vec![message("1", "c7", "7", &format!("/start {token}"))])).unwrap();
+        eventually("l'avviso", || adapter.sent.lock().unwrap().iter().any(|(_, text)| text == LINK_STALE_MESSAGE)).await;
+        assert!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().authorized.is_empty());
         let log = s.env.log.lock().unwrap().join("\n");
         assert!(!log.contains(&token), "{log}");
     }

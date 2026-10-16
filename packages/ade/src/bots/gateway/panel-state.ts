@@ -100,6 +100,8 @@ export interface GatewayPanelApi {
   pairingOpen: (bot: string, platform: string) => Promise<number>
   /** A link and a QR for the owner's phone: good for ten minutes and once, a new one cancels the old. Telegram only. */
   pairingLink?: (bot: string, platform: string) => Promise<PairingLinkInfo>
+  /** The QR left the screen: its token is cancelled, so a photo of it pairs nobody. Nothing to cancel is no error. */
+  pairingLinkCancel?: (bot: string, platform: string) => Promise<void>
   /** `gateway:status`, `gateway:pairing` and `gateway:message`; resolves with the way to stop. */
   listen: (handlers: {
     status: (status: LinkStatus) => void
@@ -191,9 +193,29 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
   const [pairLink, setPairLink] = createSignal<PairingLinkInfo>()
   const [linked, setLinked] = createSignal<string>()
   let poll: ReturnType<typeof setInterval> | undefined
+  /** The window hidden (closed to the tray, minimized) is the QR off the screen too. */
+  const onHidden = () => {
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") void cancelLink()
+  }
   const stopPoll = () => {
     if (poll !== undefined) clearInterval(poll)
     poll = undefined
+    if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onHidden)
+  }
+  /**
+   * The link or QR left the screen (another tab, step, platform or bot, the card closed, the window hidden): the token is
+   * cancelled in Rust, so a photo of the QR or a shared screen pairs nobody later. Idempotent; a failure is not shown, the
+   * token runs out in ten minutes anyway.
+   */
+  const cancelLink = async (on: string = platform()) => {
+    stopPoll()
+    if (!pairLink()) return
+    setPairLink(undefined)
+    try {
+      await deps.api.pairingLinkCancel?.(path(), on)
+    } catch {
+      // Nothing to show: the token has its own end.
+    }
   }
   const [remote, setRemote] = createSignal(deps.remote.get(remoteKey(path(), platform())))
 
@@ -310,6 +332,7 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
     choose: (next: string) => {
       chosen = true
       if (next === platform()) return
+      const was = platform()
       setPlatform(next)
       setDraft("")
       setAppDraft("")
@@ -319,8 +342,7 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
       setProblemArea(undefined)
       setRedactedAt(undefined)
       // The link was for the other platform's bot.
-      stopPoll()
-      setPairLink(undefined)
+      void cancelLink(was)
       setLinked(undefined)
       void refresh()
     },
@@ -448,11 +470,13 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
         const known = new Set(pairing().authorized.map((account) => account.id))
         const made = await make(path(), platform())
         setPairLink(made)
+        if (typeof document !== "undefined") document.addEventListener("visibilitychange", onHidden)
         poll = setInterval(() => {
           if (disposed || now() >= made.expiresMs) return stopPoll()
           void refresh().then(() => {
             const added = pairing().authorized.find((account) => !known.has(account.id))
             if (!added || pairLink() !== made) return
+            // Used up by that account: nothing left to cancel.
             setLinked(added.name)
             setPairLink(undefined)
             stopPoll()
@@ -485,9 +509,11 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
         deps.remote.set(remoteKey(path(), platform()), REMOTE_OFF)
       }, "remote"),
 
+    /** The link or QR left the screen: see `cancelLink`. */
+    cancelLink: () => cancelLink(),
     dispose: () => {
       disposed = true
-      stopPoll()
+      void cancelLink()
       stopFailures()
       unlisten?.()
     },
