@@ -9,8 +9,8 @@
  * messaging app lays out its contacts:
  *
  *   - in the sidebar the bots, where the sessions and files are in the other
- *     views, each a shape and a colour rather than an initial, the three most
- *     recently active pinned large at the top, and under each name the last
+ *     views, each a shape and a colour rather than an initial, every one a
+ *     row alike in the order of last use, and under each name the last
  *     thing said or done and when — with the screenshots and the settings
  *     strip at the foot of the column, as everywhere else;
  *   - in the middle the conversation with the chosen one — what you wrote,
@@ -48,7 +48,22 @@ import { APPROVAL_TIMEOUT_MS, localAlwaysStore } from "./approval"
 import { askDialog, askYesNo } from "../host/ask"
 import { getHost } from "../host/shell"
 import { every } from "../host/every"
-import { avatarKey, COLORS, expressionFor, faceOf, SHAPES, type Color, type Expression, type Shape } from "./avatar"
+import {
+  avatarKey,
+  COLORS,
+  expressionFor,
+  faceOf,
+  parseFaceImage,
+  randomAvatar,
+  SHAPES,
+  type Color,
+  type Expression,
+  type Shape,
+} from "./avatar"
+import { browserFaceImage, loadFaceImage } from "./face-image"
+import { attachPath, BOT_ATTACH_MAX, pastedExtension, savePasted, type Attachment } from "./attach"
+import { addAttachment, attachmentFor } from "../chat/attachments"
+import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
 import {
   COMMON_EFFORTS,
   OBJECTIVES_HEADING,
@@ -119,6 +134,8 @@ import {
   reconsent,
   removeRoutine,
   routineConsent,
+  routineHeadline,
+  routineHeadText,
   routineProblem,
   runRoutine,
   type Routine,
@@ -164,8 +181,8 @@ import { effortLabel, readableModelName } from "../chat/picker"
 import { createModelSource, stateOf, type ModelRead, type ModelSourceState } from "../chat/model-source"
 import { readBotModels } from "./bot-models"
 import { launchBot } from "./launch"
-import { formatCount } from "./format"
-import { metaWords } from "./page-meta"
+import { formatCap, formatCount } from "./format"
+import { metaWords, newBotSummary } from "./page-meta"
 import { createWaitingCount } from "./gateway/waiting"
 import { waitingApprovals } from "./approvals-app"
 import { WaitingList } from "./waiting-list"
@@ -175,6 +192,7 @@ import { ConfirmAction } from "./confirm"
 import { PermissionsSection } from "./permissions-panel"
 import { shownTab, tabButtonId, tabPanelId, tabsOf, type BotTab } from "./tabs"
 import { approvalAction } from "./approval-signal"
+import { lastNewsAt, localNoticeStore, muteBot, noticeOf, seenUpTo, unread, type NoticeBook } from "./notice"
 
 /*
  * The conversations, outside any component.
@@ -402,6 +420,19 @@ const writeRoutines = (change: (book: RoutineBook) => RoutineBook) => {
   const next = change(routineStore.get())
   routineStore.set(next)
   setRoutineBook(next)
+}
+
+/* ── the «unread» dot and «Silenzia» (design/ade-bot-2, scelta 6; `notice.ts`) ── */
+
+const noticeStore = localNoticeStore()
+const [noticeBook, setNoticeBook] = createSignal<NoticeBook>(noticeStore.get())
+
+const writeNotices = (change: (book: NoticeBook) => NoticeBook) => {
+  const before = noticeBook()
+  const next = change(before)
+  if (next === before) return
+  noticeStore.set(next)
+  setNoticeBook(next)
 }
 
 const routineScheduler = createRoutineScheduler({
@@ -862,8 +893,8 @@ export interface BotsRosterProps {
 /**
  * The contact list, drawn in the sidebar.
  *
- * The three most recently active at the top, large; the rest in a list, each
- * with the last thing said or done and when. Sized to the sidebar it is in.
+ * Every bot a row alike, whoever spoke last first, each with the last thing said or done and when (the user's choice
+ * 3 of the second page: the three large ones at the top took the room of three rows). Sized to the sidebar it is in.
  */
 /** The form for a new bot, in the middle: from the «+», and from the empty states that say to press it. */
 function startNewBot() {
@@ -875,11 +906,6 @@ export function BotsRoster(props: BotsRosterProps) {
   createEffect(() => shared.setProjectRoot(props.projectRoot))
 
   const { roster, ordered, openId, now, open, expression } = shared
-
-  /* The three at the top, large, only when there are enough for the split to
-     mean something: three portraits over an empty list is a list drawn twice. */
-  const pinned = createMemo(() => (ordered().length >= 4 ? ordered().slice(0, 3) : []))
-  const listed = createMemo(() => (ordered().length >= 4 ? ordered().slice(3) : ordered()))
 
   return (
     <div data-component="ade-bots-roster">
@@ -899,25 +925,6 @@ export function BotsRoster(props: BotsRosterProps) {
       {/* What the bots wait for, first: a yes or a no from here, the phone's questions too. */}
       <WaitingList waiting={waitingApprovals} onOpen={openBotByPath} />
 
-      <Show when={pinned().length > 0}>
-        <div data-slot="bots-pinned">
-          <For each={pinned()}>
-            {(bot) => (
-              <button
-                type="button"
-                data-slot="bots-pin"
-                data-active={bot.path === openId() ? "true" : undefined}
-                onClick={() => open(bot)}
-                title={bot.description}
-              >
-                <Face identifier={bot.identifier} avatar={bot.avatar} expression={expression(bot)} size={56} />
-                <span data-slot="bots-pin-name">{bot.identifier}</span>
-              </button>
-            )}
-          </For>
-        </div>
-      </Show>
-
       <Show
         when={(roster() ?? []).length > 0}
         fallback={
@@ -932,15 +939,18 @@ export function BotsRoster(props: BotsRosterProps) {
         }
       >
         <div data-slot="bots-list">
-          <For each={listed()}>
+          <For each={ordered()}>
             {(bot) => {
               const talk = () => talkOf(bot.path)
+              // It wrote while the user looked elsewhere: a dot and the name in bold until its page is opened.
+              const isUnread = () => unread(noticeBook(), bot.path, talk())
               return (
                 <button
                   type="button"
                   data-slot="bots-row"
                   data-active={bot.path === openId() ? "true" : undefined}
                   data-status={talk().status}
+                  data-unread={isUnread() ? "true" : undefined}
                   onClick={() => open(bot)}
                 >
                   <Face identifier={bot.identifier} avatar={bot.avatar} expression={expression(bot)} size={36} />
@@ -950,7 +960,17 @@ export function BotsRoster(props: BotsRosterProps) {
                       {lastLine(talk(), bot.description || t("bots.noDescription"))}
                     </span>
                   </span>
-                  <span data-slot="bots-row-when">{formatWhen(talk().updatedAt, now())}</span>
+                  <span data-slot="bots-row-end">
+                    <span data-slot="bots-row-when">{formatWhen(talk().updatedAt, now())}</span>
+                    <Show when={isUnread()}>
+                      <span
+                        data-slot="bots-row-unread"
+                        role="img"
+                        aria-label={t("bots.notice.unread")}
+                        title={t("bots.notice.unread")}
+                      />
+                    </Show>
+                  </span>
                 </button>
               )
             }}
@@ -986,6 +1006,13 @@ export function BotsMain(props: BotsMainProps) {
 
   const { roster, roots, models, catalog, composing, current, identifiers, expression, reload, ordered, open } = shared
 
+  // The bot's page, shown, is the user looking at it: what it wrote is read (design/ade-bot-2, scelta 6).
+  createEffect(() => {
+    const path = shared.openId()
+    if (!path || composing()) return
+    writeNotices((book) => seenUpTo(book, path, lastNewsAt(talkOf(path))))
+  })
+
   /*
    * One message, one process.
    *
@@ -995,7 +1022,7 @@ export function BotsMain(props: BotsMainProps) {
    * orchestration — the room in `room.ts` is the next step, not this one.
    */
   /** Resolves to whether the message went; one that did not goes back into the composer. */
-  const send = async (from: AgentFile, raw: string): Promise<boolean> => {
+  const send = async (from: AgentFile, raw: string, files: readonly Attachment[] = []): Promise<boolean> => {
     const text = raw.trim()
     if (text.length === 0) return false
 
@@ -1011,17 +1038,17 @@ export function BotsMain(props: BotsMainProps) {
       }
     }
 
-    return start(bot, message)
+    return start(bot, message, files)
   }
 
   /* The checks of `admitTurn`, with the user's dialog. */
-  const start = async (bot: AgentFile, message: string): Promise<boolean> => {
+  const start = async (bot: AgentFile, message: string, files: readonly Attachment[] = []): Promise<boolean> => {
     const verdict = await admitTurn(bot, props.projectRoot, askTrust)
     if (!verdict.ok) {
       if (verdict.problem) updateTalk(bot.path, (talk) => applyProblem(talk, verdict.problem!, Date.now()))
       return false
     }
-    return turns.send(verdict.bot, message, props.projectRoot)
+    return turns.send(verdict.bot, message, props.projectRoot, files)
   }
 
   const answer = (bot: AgentFile, choice: PermissionAnswer, requestID: string | undefined) =>
@@ -1095,7 +1122,8 @@ export function BotsMain(props: BotsMainProps) {
                 talk={talkOf(bot().path)}
                 others={identifiers().filter((name) => name !== bot().identifier)}
                 expression={expression(bot())}
-                onSend={(text) => send(bot(), text)}
+                projectRoot={props.projectRoot}
+                onSend={(text, files) => send(bot(), text, files)}
                 onAnswer={(choice, requestID) => answer(bot(), choice, requestID)}
                 onGrant={() => turns.grant(bot())}
                 onStop={() => stop(bot())}
@@ -1172,15 +1200,19 @@ export function BotsMain(props: BotsMainProps) {
  */
 function Face(props: { identifier: string; avatar?: string; expression?: Expression; size: number }) {
   const avatar = createMemo(() => faceOf(props.identifier, props.avatar))
+  // A picture the user loaded (design/ade-bot-2, scelta 2): drawn as it is, without the eyes.
+  const image = createMemo(() => parseFaceImage(props.avatar))
   return (
     <span
       data-slot="bots-face"
-      data-shape={avatar().shape}
+      data-shape={image() ? "image" : avatar().shape}
       data-expression={props.expression ?? "still"}
       style={{ "--bot-color": `var(--ade-ansi-${avatar().color})`, "--bot-size": `${props.size}px` }}
       aria-hidden="true"
     >
-      <b data-slot="bots-face-shape" />
+      <Show when={image()} fallback={<b data-slot="bots-face-shape" />}>
+        {(src) => <img data-slot="bots-face-image" src={src()} alt="" draggable={false} />}
+      </Show>
     </span>
   )
 }
@@ -1196,7 +1228,18 @@ function Face(props: { identifier: string; avatar?: string; expression?: Express
  */
 function FacePicker(props: { identifier: string; value?: string; onChange: (value: string | undefined) => void }) {
   const chosen = createMemo(() => faceOf(props.identifier, props.value))
+  // A picture: no shape or colour is the chosen one.
+  const image = () => parseFaceImage(props.value) !== undefined
   const pick = (shape: Shape, color: Color) => props.onChange(avatarKey({ shape, color }))
+  const [problem, setProblem] = createSignal<string>()
+  let fileField: HTMLInputElement | undefined
+  const upload = async (file: File | undefined) => {
+    setProblem(undefined)
+    if (!file) return
+    const loaded = await loadFaceImage(file, browserFaceImage)
+    if (loaded.ok) props.onChange(loaded.url)
+    else setProblem(loaded.problem)
+  }
   return (
     <div data-slot="bots-picker">
       <Face identifier={props.identifier} avatar={props.value} size={64} />
@@ -1207,9 +1250,9 @@ function FacePicker(props: { identifier: string; value?: string; onChange: (valu
               <button
                 type="button"
                 role="radio"
-                aria-checked={chosen().shape === shape}
+                aria-checked={!image() && chosen().shape === shape}
                 data-slot="bots-picker-option"
-                data-on={chosen().shape === shape ? "true" : undefined}
+                data-on={!image() && chosen().shape === shape ? "true" : undefined}
                 title={t(`bots.face.shape.${shape}`)}
                 aria-label={t(`bots.face.shape.${shape}`)}
                 onClick={() => pick(shape, chosen().color)}
@@ -1225,9 +1268,9 @@ function FacePicker(props: { identifier: string; value?: string; onChange: (valu
               <button
                 type="button"
                 role="radio"
-                aria-checked={chosen().color === color}
+                aria-checked={!image() && chosen().color === color}
                 data-slot="bots-picker-swatch"
-                data-on={chosen().color === color ? "true" : undefined}
+                data-on={!image() && chosen().color === color ? "true" : undefined}
                 style={{ "--bot-color": `var(--ade-ansi-${color})` }}
                 title={t(`bots.face.color.${color}`)}
                 aria-label={t(`bots.face.color.${color}`)}
@@ -1236,14 +1279,45 @@ function FacePicker(props: { identifier: string; value?: string; onChange: (valu
             )}
           </For>
         </div>
+        <div data-slot="bots-face-actions">
+          <button
+            type="button"
+            data-slot="bots-btn"
+            data-face="random"
+            title={t("bots.face.randomTip")}
+            onClick={() => {
+              setProblem(undefined)
+              props.onChange(avatarKey(randomAvatar()))
+            }}
+          >
+            {t("bots.face.random")}
+          </button>
+          <button type="button" data-slot="bots-btn" data-face="upload" onClick={() => fileField?.click()}>
+            {t("bots.face.upload")}
+          </button>
+          {/* The page's own file field: the WebView reads the one file picked, with no permission of ADE's. */}
+          <input
+            ref={(element) => (fileField = element)}
+            type="file"
+            accept="image/png,image/jpeg"
+            data-slot="bots-face-upload"
+            hidden
+            onChange={(event) => {
+              const field = event.currentTarget
+              void upload(field.files?.[0]).finally(() => (field.value = ""))
+            }}
+          />
+        </div>
+        <Show when={problem()}>{(text) => <span data-slot="bots-problem">{text()}</span>}</Show>
         <span data-slot="bots-hint">
           <Show when={props.value} fallback={<>{t("bots.face.fromName")}</>}>
-            {t("bots.face.custom")}{" "}
+            {image() ? t("bots.face.imageChosen") : t("bots.face.custom")}{" "}
             <button type="button" data-slot="bots-link" onClick={() => props.onChange(undefined)}>
               {t("bots.face.reset")}
             </button>
           </Show>
         </span>
+        <span data-slot="bots-hint">{t("bots.face.uploadHint")}</span>
       </div>
     </div>
   )
@@ -1256,8 +1330,10 @@ function Thread(props: {
   talk: Talk
   others: readonly string[]
   expression: Expression
-  /** Whether the message went: one that did not comes back into the composer. */
-  onSend: (text: string) => boolean | Promise<boolean>
+  /** The open project: where attached files come from, and where a pasted picture is kept. */
+  projectRoot?: string | undefined
+  /** Whether the message went: one that did not comes back into the composer, with its files. */
+  onSend: (text: string, files: readonly Attachment[]) => boolean | Promise<boolean>
   /** With the id of the question the card shows (B8d review, M1). */
   onAnswer: (choice: PermissionAnswer, requestID: string | undefined) => void
   /** «Sempre per questo bot» on a command Claude Code was refused (B8c). */
@@ -1286,11 +1362,17 @@ function Thread(props: {
     ),
   )
 
+  // Files and pictures that go with the next message (design/ade-bot-2, scelta 5; `attach.ts`).
+  const [attachments, setAttachments] = createSignal<readonly Attachment[]>([])
+  const [attachProblem, setAttachProblem] = createSignal<string>()
+
   createEffect(
     on(
       () => props.bot.path,
       () => {
         setDraft("")
+        setAttachments([])
+        setAttachProblem(undefined)
         field?.focus()
       },
     ),
@@ -1301,7 +1383,84 @@ function Thread(props: {
   const submit = () => {
     const text = draft()
     if (text.trim().length === 0 || busy()) return
-    void submitDraft(text, props.onSend, { get: draft, set: setDraft })
+    const files = attachments()
+    setAttachments([])
+    setAttachProblem(undefined)
+    void submitDraft(
+      text,
+      async (words) => {
+        const sent = await props.onSend(words, files)
+        // A message that did not go keeps its files, as it keeps its words.
+        if (!sent && attachments().length === 0) setAttachments(files)
+        return sent
+      },
+      { get: draft, set: setDraft },
+    )
+  }
+
+  /** Files of the project, picked or dragged: each added, or why not. */
+  const addPaths = (paths: readonly string[]) => {
+    let list: readonly Attachment[] = attachments()
+    let problem: string | undefined
+    for (const path of paths) {
+      const next = attachPath(props.projectRoot, list, path)
+      list = next.list
+      if (next.problem) problem = next.problem
+    }
+    setAttachments(list)
+    setAttachProblem(problem)
+  }
+
+  /** Pictures with no file in the project, pasted or dragged from elsewhere: kept in the bot's folder, then attached. */
+  const addPictures = async (pictures: readonly File[]) => {
+    const root = props.projectRoot
+    if (!root) return void setAttachProblem(t("bots.attach.noProject"))
+    const write = (await getHost())?.writeBytes
+    if (!write) return void setAttachProblem(t("bots.attach.noWrite"))
+    const at = Date.now()
+    let problem: string | undefined
+    for (const [index, file] of pictures.entries()) {
+      if (attachments().length >= BOT_ATTACH_MAX) {
+        problem = t("bots.attach.tooMany", BOT_ATTACH_MAX)
+        break
+      }
+      const saved = await savePasted({ root, identifier: props.bot.identifier, file, at, index: index + 1, write })
+      if (saved.problem !== undefined) problem = saved.problem
+      else setAttachments((list) => addAttachment(list, saved.file))
+    }
+    setAttachProblem(problem)
+  }
+
+  /** The «+»: the system's dialog, opened in the project, as the Chat's. */
+  const pickFiles = async () => {
+    const root = props.projectRoot
+    if (!root) return void setAttachProblem(t("bots.attach.noProject"))
+    let picked: string | string[] | null = null
+    try {
+      const dialog = await import("@tauri-apps/plugin-dialog")
+      picked = await dialog.open({
+        multiple: true,
+        directory: false,
+        defaultPath: root,
+        title: t("bots.attach.pickTitle"),
+      })
+    } catch {
+      return
+    }
+    if (picked !== null) addPaths(Array.isArray(picked) ? picked : [picked])
+    field?.focus()
+  }
+
+  /** A drop: files of the project by their path; pictures from elsewhere copied into the bot's folder. */
+  const dropFiles = (data: DataTransfer) => {
+    const root = props.projectRoot
+    const paths = readDraggedPaths(data)
+    const pictures = Array.from(data.files).filter((file) => pastedExtension(file.type) !== undefined)
+    const inside = root ? paths.filter((path) => attachmentFor(root, path) !== undefined) : []
+    if (paths.length > 0 && inside.length === paths.length) addPaths(paths)
+    else if (pictures.length > 0) void addPictures(pictures)
+    else if (paths.length > 0) addPaths(paths)
+    else setAttachProblem(t("bots.attach.notPicture"))
   }
 
   const subagent = () => props.bot.mode === "subagent"
@@ -1504,11 +1663,48 @@ function Thread(props: {
 
       <Show when={chipProblem()}>{(text) => <p data-slot="bots-problem">{text()}</p>}</Show>
 
+      <Show when={attachments().length > 0}>
+        <ul data-slot="bots-attachments" aria-label={t("bots.attach.list")}>
+          <For each={attachments()}>
+            {(file) => {
+              const name = file.relative.split("/").at(-1) ?? file.relative
+              return (
+                <li data-slot="bots-attachment" title={file.relative}>
+                  <span data-slot="bots-attachment-name">{name}</span>
+                  <button
+                    type="button"
+                    data-slot="bots-attachment-remove"
+                    aria-label={t("bots.attach.remove", name)}
+                    title={t("bots.attach.remove", name)}
+                    onClick={() => setAttachments((list) => list.filter((item) => item.path !== file.path))}
+                  >
+                    ×
+                  </button>
+                </li>
+              )
+            }}
+          </For>
+        </ul>
+      </Show>
+      <Show when={attachProblem()}>{(text) => <p data-slot="bots-problem">{text()}</p>}</Show>
+
       <form
         data-slot="bots-composer"
         onSubmit={(event) => {
           event.preventDefault()
           submit()
+        }}
+        onDragOver={(event) => {
+          const data = event.dataTransfer
+          if (!data || !(dragCarriesPaths(data) || data.types.includes("Files"))) return
+          event.preventDefault()
+          data.dropEffect = "copy"
+        }}
+        onDrop={(event) => {
+          const data = event.dataTransfer
+          if (!data || !(dragCarriesPaths(data) || data.files.length > 0)) return
+          event.preventDefault()
+          dropFiles(data)
         }}
       >
         <textarea
@@ -1523,6 +1719,15 @@ function Thread(props: {
               : t("bots.composer.placeholder", props.bot.identifier)
           }
           onInput={(event) => setDraft(event.currentTarget.value)}
+          onPaste={(event) => {
+            const data = event.clipboardData
+            if (!data) return
+            const pictures = Array.from(data.files).filter((file) => pastedExtension(file.type) !== undefined)
+            // Words copied with a picture (a page, a document) still paste as words.
+            if (pictures.length === 0 || data.types.includes("text/plain")) return
+            event.preventDefault()
+            void addPictures(pictures)
+          }}
           onKeyDown={(event) => {
             // Enter sends, Shift+Enter breaks the line: what every messenger does.
             if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
@@ -1533,6 +1738,16 @@ function Thread(props: {
         />
         {/* Under the text, in the same box: the bot's model and effort, then Invia (as the Chat's). */}
         <div data-slot="bots-composer-row">
+          <button
+            type="button"
+            data-slot="bots-attach"
+            aria-label={t("bots.attach.add")}
+            title={props.projectRoot ? t("bots.attach.addHint") : t("bots.attach.noProject")}
+            disabled={!props.projectRoot}
+            onClick={() => void pickFiles()}
+          >
+            +
+          </button>
           <Show
             when={runner().id === "ragu"}
             fallback={
@@ -1741,7 +1956,11 @@ function PageHead(props: {
   expression: Expression
   onLaunch: ((bot: AgentFile) => void) | undefined
   onOpenFile: ((path: string) => void) | undefined
+  /** The Routines tab, from the line with the next routine; absent, the bot has no such tab and no line. */
+  onRoutines?: () => void
 }) {
+  const routines = () =>
+    props.onRoutines ? routineHeadline(routineDeps.book(), props.bot.path, routineNow()) : undefined
   const modelIsGone = createGone(() => ({ runner: props.bot.runner, model: props.bot.model ?? "" }))
   const words = () =>
     metaWords({
@@ -1777,6 +1996,19 @@ function PageHead(props: {
           </Show>
           {words().rest.map((part) => ` · ${part}`).join("")}
         </span>
+        {/* The next routine, one press from its tab; no routine, no line (design/ade-bot-2, scelta 4). */}
+        <Show when={routines()}>
+          {(head) => (
+            <button
+              type="button"
+              data-slot="bots-page-routine"
+              title={t("bots.routine.headTip")}
+              onClick={() => props.onRoutines?.()}
+            >
+              {routineHeadText(head(), routineNow())}
+            </button>
+          )}
+        </Show>
       </div>
       <div data-slot="bots-page-actions">
         <Show when={props.onLaunch}>
@@ -1880,6 +2112,7 @@ function BotPage(props: {
         expression={props.expression}
         onLaunch={props.onLaunch}
         onOpenFile={props.onOpenFile}
+        {...(tabs().includes("routines") ? { onRoutines: () => select("routines") } : {})}
       />
       <BotTabs
         tabs={tabs()}
@@ -1998,6 +2231,7 @@ function SettingsTab(props: {
       account: accounts,
       remote: localRemoteStore(),
       routines: writeRoutines,
+      notices: writeNotices,
       always: localAlwaysStore(),
       storage: typeof localStorage === "undefined" ? undefined : localStorage,
     })
@@ -2030,6 +2264,24 @@ function SettingsTab(props: {
           <SpendCapField bot={props.bot} account={props.account} free={free()} />
         </section>
       </Show>
+
+      <section data-slot="bots-section" aria-labelledby="bots-settings-notice">
+        <h3 data-slot="bots-section-title" id="bots-settings-notice">
+          {t("bots.notice.title")}
+        </h3>
+        <label data-slot="bots-mute">
+          <input
+            type="checkbox"
+            checked={noticeOf(noticeBook(), props.bot.path).muted === true}
+            onChange={(event) => {
+              const muted = event.currentTarget.checked
+              writeNotices((book) => muteBot(book, props.bot.path, muted))
+            }}
+          />
+          <span>{t("bots.notice.mute")}</span>
+        </label>
+        <p data-slot="bots-hint">{t("bots.notice.muteHint")}</p>
+      </section>
 
       <section data-slot="bots-section" aria-label={t("bots.details.title")}>
         <details data-slot="bots-details">
@@ -2111,6 +2363,24 @@ function BotForm(props: {
     (name) => catalogFree(name, loadCatalog),
   )
   const asksCap = () => newBotSpendTerms(runner(), model(), model() ? free() : undefined) === "money"
+  // «Avanzate», closed: the form is the face, the name and what it is for (design/ade-bot-2, scelta 1).
+  const [advanced, setAdvanced] = createSignal(false)
+  const summary = () => {
+    const read = parseCap(cap())
+    const capWords = !asksCap()
+      ? undefined
+      : !read.ok
+        ? t("bots.form.summaryCap", cap().trim())
+        : read.capUsd === undefined
+          ? t("bots.form.summaryNoCap")
+          : t("bots.form.summaryCap", formatCap(read.capUsd))
+    return newBotSummary({
+      runner: runnerById(runner()).label,
+      model: model() ? readableModelName(model()) : t("bots.defaultModel"),
+      ...(capWords ? { cap: capWords } : {}),
+      where: scope() === "project" ? t("bots.form.summaryProject") : t("bots.form.summaryGlobal"),
+    })
+  }
 
   let nameField: HTMLInputElement | undefined
   onMount(() => nameField?.focus())
@@ -2175,6 +2445,11 @@ function BotForm(props: {
     <form data-slot="bots-form" onSubmit={(e) => void submit(e)}>
       <h2 data-slot="bots-form-title">{t("bots.form.title")}</h2>
 
+      <div data-slot="bots-field">
+        <span data-slot="bots-label">{t("bots.form.logo")}</span>
+        <FacePicker identifier={name() || "?"} value={avatar()} onChange={setAvatar} />
+      </div>
+
       <label data-slot="bots-field">
         <span data-slot="bots-label">{t("bots.form.name")}</span>
         <input
@@ -2194,11 +2469,6 @@ function BotForm(props: {
         </span>
       </label>
 
-      <div data-slot="bots-field">
-        <span data-slot="bots-label">{t("bots.form.logo")}</span>
-        <FacePicker identifier={name() || "?"} value={avatar()} onChange={setAvatar} />
-      </div>
-
       <label data-slot="bots-field">
         <span data-slot="bots-label">{t("bots.form.description")}</span>
         <input
@@ -2212,23 +2482,19 @@ function BotForm(props: {
         />
       </label>
 
-      <EngineFields
-        listId="bots-new"
-        runner={runner()}
-        model={model()}
-        effort={effort()}
-        raguModels={props.models}
-        {...(props.catalog ? { catalog: props.catalog } : {})}
-        onStale={setStaleEffort}
-        onRunner={(id) => {
-          setRunner(id)
-          setModel("")
-          setEffort("")
-        }}
-        onModel={setModel}
-        onEffort={setEffort}
-      />
+      {/* What «Avanzate» holds, in a line; a press opens it. */}
+      <button
+        type="button"
+        data-slot="bots-form-summary"
+        aria-expanded={advanced()}
+        aria-controls="bots-new-advanced"
+        title={t("bots.form.summaryTip")}
+        onClick={() => setAdvanced(true)}
+      >
+        {summary()}
+      </button>
 
+      {/* Out of «Avanzate»: a bot that spends money asks its cap by itself (choice 5 of the first page). */}
       <NewBotCapField
         runner={runner()}
         model={model() || undefined}
@@ -2240,43 +2506,70 @@ function BotForm(props: {
         }}
       />
 
-      <label data-slot="bots-field">
-        <span data-slot="bots-label">{t("bots.form.where")}</span>
-        <select
-          data-slot="bots-input"
-          value={scope()}
-          onChange={(event) => setScope(event.currentTarget.value === "project" ? "project" : "global")}
-        >
-          <option value="project" disabled={!props.hasProject}>
-            {t("bots.form.scopeProject")}
-          </option>
-          <option value="global">{t("bots.form.scopeGlobal")}</option>
-        </select>
-      </label>
+      <details
+        data-slot="bots-advanced"
+        id="bots-new-advanced"
+        open={advanced()}
+        onToggle={(event) => setAdvanced(event.currentTarget.open)}
+      >
+        <summary>{t("bots.form.advanced")}</summary>
+        <div data-slot="bots-advanced-body">
+          <EngineFields
+            listId="bots-new"
+            runner={runner()}
+            model={model()}
+            effort={effort()}
+            raguModels={props.models}
+            {...(props.catalog ? { catalog: props.catalog } : {})}
+            onStale={setStaleEffort}
+            onRunner={(id) => {
+              setRunner(id)
+              setModel("")
+              setEffort("")
+            }}
+            onModel={setModel}
+            onEffort={setEffort}
+          />
 
-      <label data-slot="bots-field">
-        <span data-slot="bots-label">{t("bots.form.objectives")}</span>
-        <textarea
-          data-slot="bots-input"
-          data-multiline="true"
-          rows="3"
-          value={objectives()}
-          placeholder={t("bots.form.objectivesPlaceholder")}
-          onInput={(event) => setObjectives(event.currentTarget.value)}
-        />
-      </label>
+          <label data-slot="bots-field">
+            <span data-slot="bots-label">{t("bots.form.where")}</span>
+            <select
+              data-slot="bots-input"
+              value={scope()}
+              onChange={(event) => setScope(event.currentTarget.value === "project" ? "project" : "global")}
+            >
+              <option value="project" disabled={!props.hasProject}>
+                {t("bots.form.scopeProject")}
+              </option>
+              <option value="global">{t("bots.form.scopeGlobal")}</option>
+            </select>
+          </label>
 
-      <label data-slot="bots-field">
-        <span data-slot="bots-label">{t("bots.form.persona")}</span>
-        <textarea
-          data-slot="bots-input"
-          data-multiline="true"
-          rows="6"
-          value={persona()}
-          onInput={(event) => setPersona(event.currentTarget.value)}
-          placeholder={t("bots.form.personaPlaceholder")}
-        />
-      </label>
+          <label data-slot="bots-field">
+            <span data-slot="bots-label">{t("bots.form.objectives")}</span>
+            <textarea
+              data-slot="bots-input"
+              data-multiline="true"
+              rows="3"
+              value={objectives()}
+              placeholder={t("bots.form.objectivesPlaceholder")}
+              onInput={(event) => setObjectives(event.currentTarget.value)}
+            />
+          </label>
+
+          <label data-slot="bots-field">
+            <span data-slot="bots-label">{t("bots.form.persona")}</span>
+            <textarea
+              data-slot="bots-input"
+              data-multiline="true"
+              rows="6"
+              value={persona()}
+              onInput={(event) => setPersona(event.currentTarget.value)}
+              placeholder={t("bots.form.personaPlaceholder")}
+            />
+          </label>
+        </div>
+      </details>
 
       <Show when={problem()}>{(text) => <p data-slot="bots-problem">{text()}</p>}</Show>
 

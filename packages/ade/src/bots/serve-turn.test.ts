@@ -284,6 +284,32 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(fake.calls.connect).toEqual([{ directory: "C:/progetto", interactive: true }])
   })
 
+  test("files sent with the message: checked again, then file parts beside the words (design/ade-bot-2, scelta 5)", async () => {
+    const events = turnOf(fixture("conversazione"), 0)
+    const fake = server({ events, session: sessionIdOf(events) })
+    const note = { path: "C:/progetto/docs/nota.md", relative: "docs/nota.md", mime: "text/plain" }
+    const checked: string[] = []
+    const checkAttachment = async (root: string, path: string) => {
+      checked.push(`${root}|${path}`)
+      return "ok" as const
+    }
+    await runServeTurn(panel({ attachments: [note] }), { ...fake.deps, checkAttachment }).result
+    expect(checked).toEqual(["C:/progetto|C:/progetto/docs/nota.md"])
+    expect(fake.calls.prompts[0]?.files).toEqual([
+      { type: "file", mime: "text/plain", url: "file:///C:/progetto/docs/nota.md", filename: "nota.md" },
+    ])
+
+    // A file no longer the project's, or no check to ask: nothing goes, not even a session.
+    for (const deps of [{ checkAttachment: async () => "outside" as const }, {}]) {
+      const refused = server({ events, session: sessionIdOf(events) })
+      const result = await runServeTurn(panel({ attachments: [note] }), { ...refused.deps, ...deps }).result
+      expect(result.status).toBe("error")
+      expect(result.problem).toBe(t("bots.attach.outside", note.path))
+      expect(refused.calls.connect).toEqual([])
+      expect(refused.calls.prompts).toEqual([])
+    }
+  })
+
   test("a new session has the profile's rules; one that has them goes on; one of `ragu run` or the Chat starts over, said once", async () => {
     const fake = server({ events: FIRST, session: FIRST_SESSION })
     const fresh = thread()

@@ -71,6 +71,21 @@
   left: 56%;
 }
 
+/* A picture the user loaded: round, cut to fill, and no eyes drawn over it. */
+[data-slot="bots-face-image"] {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+[data-slot="bots-face"][data-shape="image"]::before,
+[data-slot="bots-face"][data-shape="image"]::after {
+  display: none;
+}
+
 [data-slot="bots-face"][data-shape="circle"] [data-slot="bots-face-shape"] {
   border-radius: 50%;
 }
@@ -287,50 +302,6 @@
   gap: var(--ade-space-3);
 }
 
-/* The three at the top, large. A row of portraits, names under them. */
-[data-slot="bots-pinned"] {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--ade-space-2);
-  padding: var(--ade-space-2) var(--ade-space-4) var(--ade-space-5);
-  border-bottom: 1px solid var(--ade-border-subtle);
-}
-
-[data-slot="bots-pin"] {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--ade-space-4);
-  min-width: 0;
-  padding: var(--ade-space-4) var(--ade-space-2);
-  border: 0;
-  border-radius: var(--ade-radius-lg);
-  background: transparent;
-  color: var(--ade-text-soft);
-  font-family: inherit;
-  cursor: pointer;
-}
-
-[data-slot="bots-pin"]:hover {
-  background: var(--ade-hover);
-}
-[data-slot="bots-pin"][data-active="true"] {
-  background: var(--ade-active);
-  color: var(--ade-text);
-}
-[data-slot="bots-pin"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
-}
-
-[data-slot="bots-pin-name"] {
-  max-width: 100%;
-  font-size: var(--ade-font-sm);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 [data-slot="bots-list"] {
   display: flex;
   flex-direction: column;
@@ -406,6 +377,30 @@
   font-size: var(--ade-font-xs);
   color: var(--ade-text-weak);
   white-space: nowrap;
+}
+
+/* The time, and under it the «unread» dot. */
+[data-slot="bots-row-end"] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  align-self: start;
+  gap: var(--ade-space-2);
+}
+
+[data-slot="bots-row-unread"] {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ade-accent);
+}
+
+/* Unread: the name in bold and the last line in the text's own colour, until the bot is opened. */
+[data-slot="bots-row"][data-unread="true"] [data-slot="bots-row-name"] {
+  font-weight: var(--ade-weight-bold);
+}
+[data-slot="bots-row"][data-unread="true"] [data-slot="bots-row-line"] {
+  color: var(--ade-text);
 }
 
 [data-slot="bots-row"][data-status="working"] [data-slot="bots-row-when"] {
@@ -702,6 +697,81 @@
   field-sizing: content;
 }
 
+/* The «+» of the composer: files of the project and pictures for the bot (design/ade-bot-2, scelta 5). */
+[data-slot="bots-attach"] {
+  flex: 0 0 auto;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-surface);
+  color: var(--ade-text-soft);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-lg);
+  line-height: 1;
+  cursor: pointer;
+}
+
+[data-slot="bots-attach"]:hover:not(:disabled) {
+  border-color: var(--ade-border-strong);
+  color: var(--ade-text);
+}
+
+[data-slot="bots-attach"]:disabled {
+  color: var(--ade-text-weak);
+  cursor: default;
+}
+
+[data-slot="bots-attach"]:focus-visible,
+[data-slot="bots-attachment-remove"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+/* What goes with the next message, over the composer. */
+[data-slot="bots-attachments"] {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: var(--ade-space-3);
+  margin: 0;
+  padding: var(--ade-space-3) var(--ade-space-8) 0;
+  list-style: none;
+  font-size: var(--ade-font-md);
+}
+
+[data-slot="bots-attachment"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ade-space-2);
+  max-width: 100%;
+  padding: var(--ade-space-1) var(--ade-space-3);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-raised);
+}
+
+[data-slot="bots-attachment-name"] {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-slot="bots-attachment-remove"] {
+  padding: 0 var(--ade-space-1);
+  border: 0;
+  border-radius: var(--ade-radius-sm);
+  background: none;
+  color: var(--ade-text-soft);
+  font: inherit;
+  cursor: pointer;
+}
+
+[data-slot="bots-attachment-remove"]:hover {
+  color: var(--ade-text);
+}
+
 /* The composer draws the ring around the field: the global :focus-visible
    drew a second one inside it (bot-sforzo, A occhio). */
 [data-slot="bots-composer-field"]:focus {
@@ -843,6 +913,31 @@
   font-size: var(--ade-font-sm);
   color: var(--ade-text-weak);
   overflow-wrap: anywhere;
+}
+
+/* The next routine: a line of the head that is a link to the Routines tab. */
+[data-slot="bots-page-routine"] {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ade-text-weak);
+  font: inherit;
+  font-size: var(--ade-font-sm);
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+[data-slot="bots-page-routine"]:hover {
+  color: var(--ade-text);
+  text-decoration: underline;
+}
+
+[data-slot="bots-page-routine"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
 }
 
 [data-slot="bots-page-actions"] {
@@ -1019,6 +1114,47 @@
 [data-slot="bots-form"][data-compact="true"] {
   padding-top: var(--ade-space-5);
   border-top: 1px solid var(--ade-border-subtle);
+}
+
+/* The new bot's summary line: what «Avanzate» holds, a press away. */
+[data-slot="bots-form-summary"] {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ade-text-soft);
+  font: inherit;
+  font-size: var(--ade-font-sm);
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+[data-slot="bots-form-summary"]:hover {
+  color: var(--ade-text);
+  text-decoration: underline;
+}
+
+[data-slot="bots-form-summary"]:focus-visible,
+[data-slot="bots-advanced"] > summary:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="bots-advanced"] > summary {
+  align-self: flex-start;
+  font-size: var(--ade-font-md);
+  font-weight: var(--ade-weight-medium);
+  color: var(--ade-text);
+  cursor: pointer;
+}
+
+[data-slot="bots-advanced-body"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-5);
+  padding-top: var(--ade-space-5);
 }
 
 [data-slot="bots-form-title"] {
@@ -1489,6 +1625,20 @@
   margin-top: 3px;
 }
 
+[data-slot="bots-mute"] {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--ade-space-2);
+  font-size: var(--ade-font-md);
+  color: var(--ade-text);
+  line-height: var(--ade-leading);
+  cursor: pointer;
+}
+
+[data-slot="bots-mute"] input {
+  margin-top: 3px;
+}
+
 [data-slot="routine-item"] [data-slot="gateway-row"] [data-slot="bots-link"] {
   margin-left: 0;
 }
@@ -1620,6 +1770,13 @@
 [data-slot="bots-picker-swatch"]:focus-visible {
   outline: none;
   box-shadow: var(--ade-focus-ring);
+}
+
+/* «A caso» and «Carica un'immagine», under the colours. */
+[data-slot="bots-face-actions"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ade-space-2);
 }
 
 /* Inside the card the picker is narrow: the face above the rows, not beside them. */

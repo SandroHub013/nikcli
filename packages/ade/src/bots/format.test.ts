@@ -48,7 +48,7 @@ describe("nothing in the bot's screens writes them by hand any more", () => {
 
   test("lint: the page, the room and the gateway panel use the formats", () => {
     const page = read("bots.tsx")
-    expect(page).toContain('import { formatCount } from "./format"')
+    expect(page).toContain('import { formatCap, formatCount } from "./format"')
     expect(page).not.toContain("toFixed(n >= 10_000 ? 0 : 1)")
     const room = read("room-panel.tsx")
     expect(room).toContain("formatCap(")

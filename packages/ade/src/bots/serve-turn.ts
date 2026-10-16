@@ -26,6 +26,7 @@
  */
 
 import type { Agent, ConfigProviders, RaguClient, ProviderList } from "@ragu/sdk/client"
+import type { FilePartInput } from "@ragu/sdk/httpapi"
 import { t } from "../i18n"
 import {
   appChatConnectionDeps,
@@ -69,6 +70,11 @@ import {
   type TurnResult,
 } from "./turn"
 import type { PermissionRule } from "../chat/rules"
+import { tauriAttachmentCheck, type AttachmentCheck } from "../chat/store"
+import { checkedFileParts } from "./attach"
+
+/** No check to ask: no file goes. */
+const refuseFile = async (): Promise<AttachmentCheck> => "outside"
 
 /** What a turn asks of the server: the SDK's calls it makes, and nothing else. */
 export interface ServeClient {
@@ -97,6 +103,8 @@ export interface ServeClient {
     readonly agent?: string
     readonly model?: { readonly providerID: string; readonly modelID: string }
     readonly variant?: string
+    /** Files of the project sent with the words, each checked first (`attach.ts`). */
+    readonly files?: readonly FilePartInput[]
   }) => Promise<void>
   readonly abort: (sessionID: string) => Promise<void>
   readonly reply: (requestID: string, reply: "once" | "reject") => Promise<void>
@@ -154,6 +162,8 @@ export interface ServeTurnDeps {
   readonly reloadTimeoutMs?: number
   /** A diagnostic line, never a message's text: `console.warn` when absent. */
   readonly warn?: (line: string) => void
+  /** Rust's check of an attached file, links followed (`tauriAttachmentCheck`); absent, every file is refused. */
+  readonly checkAttachment?: (root: string, path: string) => Promise<AttachmentCheck>
 }
 
 /** An error as one short line: the reason, not a body to dump. */
@@ -300,6 +310,9 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
     // The server answers for a folder: a turn without one has nowhere to run.
     const cwd = request.cwd
     if (!cwd) return finish("error", t("bots.serve.noFolder"))
+    // ragu reads a file part as the user, with no question: each file is the project's, checked again now, or nothing goes.
+    const files = await checkedFileParts(cwd, request.attachments ?? [], deps.checkAttachment ?? refuseFile)
+    if ("problem" in files) return finish("error", files.problem)
     const slot = acquireTurn("ragu", "ragu")
     if ("problem" in slot) return finish("error", slot.problem)
     const timeoutMs = request.timeoutMs ?? TURN_TIMEOUT_MS
@@ -632,6 +645,7 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
           ...(bot.identifier ? { agent: bot.identifier } : {}),
           ...(model ? { model } : {}),
           ...(effort.variant ? { variant: effort.variant } : {}),
+          ...(files.parts.length > 0 ? { files: files.parts } : {}),
         }),
       )
       if ("kind" in prompt) return settled(prompt)
@@ -744,11 +758,11 @@ export function serveClientOf(client: RaguClient, catalogTimeoutMs = CATALOG_TIM
     },
     create: async ({ title, permission }) =>
       ((await client.session.create({ title, permission: [...permission] })).data as unknown as { id: string }).id,
-    prompt: async ({ sessionID, text, agent, model, variant }) => {
+    prompt: async ({ sessionID, text, agent, model, variant, files }) => {
       // Never `tools`: it would replace the session's rules (`prompt.ts`).
       await client.session.promptAsync({
         sessionID,
-        parts: [{ type: "text", text }],
+        parts: [{ type: "text", text }, ...(files ?? [])],
         ...(agent ? { agent } : {}),
         ...(model ? { model } : {}),
         ...(variant ? { variant } : {}),
@@ -784,6 +798,7 @@ export function appServeTurnDeps(
       admitted.ok ? admitted : { ok: false as const, problem: t("bots.serve.notAdmitted", directory) },
     )
   return {
+    checkAttachment: tauriAttachmentCheck,
     projectHasAgent: async (directory, identifier) => {
       const exists = (path: string) => projectFs.readDir(path).then(() => true, () => false)
       for (const folder of agentDirs(directory, "project", await projectConfigDir(directory, exists))) {

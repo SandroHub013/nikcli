@@ -29,6 +29,7 @@ import type { BotAccount } from "./account"
 import { codexVersion } from "./codex-version"
 import { formatCap, formatUsd } from "./format"
 import type { AgentFile } from "./ragu"
+import type { Attachment } from "../chat/attachments"
 import {
   applyRunnerLine,
   codexMcpNames,
@@ -126,6 +127,11 @@ export interface TurnRequest {
   readonly onPermission?: (asked: PendingPermission) => void
   /** Someone is in front of the screen: a project not admitted yet is asked about, not refused (B8d). */
   readonly interactive?: boolean
+  /**
+   * ragu on ADE's server: files of the project sent with the message, as file parts (design/ade-bot-2, scelta 5;
+   * `attach.ts`). Claude Code and Codex get them by their path in the message instead.
+   */
+  readonly attachments?: readonly Attachment[]
 }
 
 /**

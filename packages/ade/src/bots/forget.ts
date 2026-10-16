@@ -11,6 +11,7 @@ import type { AlwaysStore } from "./approval"
 import { EMPTY_MEMORY, type MemoryStore } from "./memory"
 import { forgetTurnFailuresOf } from "./gateway/failures"
 import { REMOTE_OFF, remoteKey, type RemoteStore } from "./gateway/remote"
+import { forgetNotice, type NoticeBook } from "./notice"
 import { removeRoutinesOf, type RoutineBook } from "./routine"
 import { SPEND_STORAGE_KEY } from "./spend"
 import { TALK_KEY_PREFIX } from "./talk"
@@ -35,6 +36,8 @@ export function forgetBotTraces(
     remote: RemoteStore
     /** Applies a change to the routines book, as the panel does. */
     routines: (change: (book: RoutineBook) => RoutineBook) => void
+    /** And to the «unread» book: its mute and last look go with it (`notice.ts`). */
+    notices?: (change: (book: NoticeBook) => NoticeBook) => void
     /** The «Sempre» given to its dangerous commands: kept by path, so a bot made again would inherit them (S5, S9). */
     always?: AlwaysStore
     /** The renderer's storage, for the sessions and threads kept under the bot's path (S9). */
@@ -42,6 +45,7 @@ export function forgetBotTraces(
   },
 ): void {
   stores.routines((book) => removeRoutinesOf(book, path))
+  stores.notices?.((book) => forgetNotice(book, path))
   stores.memory.set(path, EMPTY_MEMORY)
   stores.account.set(path, ACCOUNT_PLAN)
   for (const platform of GATEWAY_PLATFORMS) stores.remote.set(remoteKey(path, platform), REMOTE_OFF)

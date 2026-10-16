@@ -73,6 +73,46 @@ export function avatarFor(identifier: string): Avatar {
   return { shape, color }
 }
 
+/** «A caso»: a shape and a colour, two draws, written down like a face the user chose. */
+export function randomAvatar(random: () => number = Math.random): Avatar {
+  const shape = SHAPES[Math.min(SHAPES.length - 1, Math.floor(random() * SHAPES.length))]!
+  const color = COLORS[Math.min(COLORS.length - 1, Math.floor(random() * COLORS.length))]!
+  return { shape, color }
+}
+
+/*
+ * «Carica un'immagine» (design/ade-bot-2, scelta 2). The picture is cut to a small square and written in the bot's own
+ * file, as the `avatar` key, so whoever copies the bot has its face too and nothing is fetched from anywhere. Only a
+ * raster image of three kinds is drawn: never an SVG (it can hold a script), never an address.
+ */
+
+/** The side of the square kept: twice the largest face drawn, for a sharp one on a dense screen. */
+export const FACE_IMAGE_SIDE = 96
+/** The longest `avatar` image kept in a file, in characters: a few kilobytes, so the file stays a text one reads. */
+export const FACE_IMAGE_MAX_URL = 24_000
+
+const FACE_IMAGE = /^data:image\/(?:webp|png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/
+
+/** The picture a file names as its face, or nothing: a shape, an address or anything but a small raster image. */
+export function parseFaceImage(value: string | undefined): string | undefined {
+  if (!value || value.length > FACE_IMAGE_MAX_URL) return undefined
+  return FACE_IMAGE.test(value) ? value : undefined
+}
+
+/** A PNG or a JPG, by its first bytes and not by its name; anything else is not taken. */
+export function sniffFaceImage(bytes: Uint8Array): "png" | "jpeg" | undefined {
+  const png = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+  if (bytes.length >= png.length && png.every((byte, index) => bytes[index] === byte)) return "png"
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "jpeg"
+  return undefined
+}
+
+/** The largest square in the middle of a picture. */
+export function squareCrop(width: number, height: number): { x: number; y: number; side: number } {
+  const side = Math.min(width, height)
+  return { x: Math.floor((width - side) / 2), y: Math.floor((height - side) / 2), side }
+}
+
 /**
  * What the eyes do.
  *
