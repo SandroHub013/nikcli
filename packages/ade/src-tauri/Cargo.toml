@@ -55,6 +55,8 @@ tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-clipboard-manager = "2"
+# The QR of a bot's pairing link (gateway/pairing_link.rs): an SVG made here, so the page needs no library for it.
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 tauri-plugin-notification = "2"
 # One ADE per identity: a second start brings the first one's window forward,
 # out of the tray too, instead of a second gateway on the same bots (G11).
