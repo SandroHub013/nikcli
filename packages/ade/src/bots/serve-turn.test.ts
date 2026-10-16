@@ -16,6 +16,7 @@ import {
   type ServeConnection,
 } from "./serve-turn"
 import { decide } from "./approval"
+import { answerSoFar } from "./runners"
 import { emptyTalk, type PendingPermission, type Talk } from "./talk"
 import type { TurnRequest } from "./turn"
 
@@ -222,9 +223,20 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(result.text.length).toBeGreaterThan(0)
   })
 
-  test("streams partial text tokens through onUpdate (talk.streaming) and clears when message completes", async () => {
+  test("a turn with real server order (message.updated then parts) does not duplicate text in answerSoFar", async () => {
     const events: ChatEvent[] = [
       busyOf(),
+      {
+        type: "message.updated",
+        properties: {
+          info: {
+            id: "msg_1",
+            sessionID: SESSION,
+            role: "assistant",
+            time: { created: 1000 },
+          },
+        },
+      },
       {
         type: "message.part.updated",
         properties: {
@@ -252,27 +264,16 @@ describe("B8d: a bot's turn on ADE's server", () => {
         },
       },
       {
-        type: "message.updated",
-        properties: {
-          info: {
-            id: "msg_1",
-            sessionID: SESSION,
-            role: "assistant",
-            time: { created: 1000, completed: 2000 },
-          },
-        },
-      },
-      {
         type: "session.status",
         properties: { sessionID: SESSION, status: { type: "idle" } },
       },
     ]
     const fake = server({ session: SESSION, events })
-    const updates: (string | undefined)[] = []
+    const updates: string[] = []
     const turn = runServeTurn(
       panel({
         partial: true,
-        onUpdate: (talk) => updates.push(talk.streaming),
+        onUpdate: (talk) => updates.push(answerSoFar(talk)),
       }),
       fake.deps,
     )
@@ -280,7 +281,12 @@ describe("B8d: a bot's turn on ADE's server", () => {
     expect(result.status).toBe("done")
     expect(updates).toContain("Prima parte di testo...")
     expect(updates).toContain("Prima parte di testo... continua con altro testo.")
-    expect(updates.at(-1)).toBeUndefined()
+    for (const update of updates) {
+      if (update.includes("Prima parte di testo...")) {
+        const occurrences = update.split("Prima parte di testo...").length - 1
+        expect(occurrences).toBe(1)
+      }
+    }
   })
 
   // Full review 2026-10-06, bots 18: a turn that fails at once goes busy → idle on the stream before the HTTP answer of the prompt.

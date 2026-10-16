@@ -80,7 +80,7 @@ export interface TurnRequest {
    * is refused before any session.
    */
   readonly freeModels?: readonly string[]
-  /** The answer as it is written, through `onUpdate` (`Talk.streaming`). */
+  /** The answer as it is written, through `onUpdate` (`Talk.streaming`). For ragu, text grows in messages instead. */
   readonly partial?: boolean
   /** Every change to the turn as it happens: tool calls, partial text, a permission question. */
   readonly onUpdate?: (talk: Talk) => void
