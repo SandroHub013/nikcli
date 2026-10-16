@@ -1,7 +1,8 @@
 /*
- * The bot section: three columns.
+ * The bot section: the roster, and the bot's page.
  *
- * Roster on the left, the conversation in the middle, the card on the right.
+ * Roster on the left, the bot's page in the middle (the conversation and the
+ * five other tabs, each at the whole width: no column on the right).
  * The roster is drawn like a contact list — a face, a name, the last line,
  * the time — because that is the layout people already read at a glance.
  * Nothing here invents a colour: faces use the ANSI palette, everything else
@@ -731,60 +732,190 @@
   }
 }
 
-/* ── the card ────────────────────────────────────────────────────────────── */
+/* ── the page ────────────────────────────────────────────────────────────── */
 
-[data-slot="bots-card"] {
+/*
+ * The bot's page: a head, six tabs, and the tab's section at the whole width of
+ * the middle. No column on the right (scelta 1): at any width of the window
+ * every section, Modifica and Elimina included, is one press away.
+ */
+[data-slot="bots-page"] {
   display: flex;
   flex-direction: column;
-  flex: 0 0 auto;
-  width: 260px;
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
-  border-left: 1px solid var(--ade-border);
-  background: var(--ade-surface);
-  overflow-y: auto;
 }
 
-[data-slot="bots-card-body"] {
+[data-slot="bots-page-head"] {
   display: flex;
-  flex-direction: column;
-  gap: var(--ade-space-6);
-  padding: var(--ade-space-7) var(--ade-space-6);
-}
-
-[data-slot="bots-card-head"] {
-  display: flex;
-  flex-direction: column;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--ade-space-3);
-  text-align: center;
+  gap: var(--ade-space-5);
+  padding: var(--ade-space-5) var(--ade-space-8);
 }
 
-[data-slot="bots-card-name"] {
-  margin: var(--ade-space-3) 0 0;
+[data-slot="bots-page-id"] {
+  display: flex;
+  flex: 1 1 14rem;
+  flex-direction: column;
+  gap: var(--ade-space-2);
+  min-width: 0;
+}
+
+[data-slot="bots-page-name"] {
+  margin: 0;
   font-size: var(--ade-font-xl);
   font-weight: var(--ade-weight-semibold);
   overflow-wrap: anywhere;
 }
 
-[data-slot="bots-card-desc"] {
-  margin: 0;
-  color: var(--ade-text-soft);
-  font-size: var(--ade-font-body);
-  line-height: var(--ade-leading);
-}
-
-[data-slot="bots-card-meta"] {
-  font-family: var(--ade-mono);
-  font-size: var(--ade-font-xs);
+[data-slot="bots-page-meta"] {
+  font-size: var(--ade-font-sm);
   color: var(--ade-text-weak);
   overflow-wrap: anywhere;
 }
 
-[data-slot="bots-card-actions"] {
+[data-slot="bots-page-actions"] {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: var(--ade-space-3);
+}
+
+/* The tabs wrap rather than scroll: none is ever out of sight. */
+[data-slot="bots-tabs"] {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: var(--ade-space-2);
+  padding: 0 var(--ade-space-8);
+  border-bottom: 1px solid var(--ade-border);
+}
+
+[data-slot="bots-tab"] {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ade-space-2);
+  padding: 10px 12px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--ade-text-weak);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-lg);
+  font-weight: var(--ade-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+[data-slot="bots-tab"]:hover {
+  color: var(--ade-text);
+}
+
+[data-slot="bots-tab"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="bots-tab"][data-active="true"] {
+  color: var(--ade-accent);
+  /* Not the accent: no accent contour without an accent fill (contorni.test.ts). */
+  border-bottom-color: var(--ade-text);
+  font-weight: var(--ade-weight-semibold);
+}
+
+[data-slot="bots-tab-badge"] {
+  min-width: 18px;
+  padding: 0 var(--ade-space-2);
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-raised);
+  color: var(--ade-text);
+  font-size: var(--ade-font-xs);
+  text-align: center;
+}
+
+[data-slot="bots-tabpanel"] {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* `display: flex` above would otherwise win over the attribute. */
+[data-slot="bots-tabpanel"][hidden] {
+  display: none;
+}
+
+[data-slot="bots-tabpanel"][data-scroll="true"] {
+  overflow-y: auto;
+}
+
+/* A tab's body: the whole width of the middle, up to a line length that reads. */
+[data-slot="bots-tab-body"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-7);
+  width: 100%;
+  max-width: 760px;
+  padding: var(--ade-space-7) var(--ade-space-8);
+}
+
+[data-slot="bots-section"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-3);
+}
+
+/* A section's title is a heading for the screen reader; it looks like the labels of the cards before it. */
+[data-slot="bots-section-title"] {
+  margin: 0;
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  font-weight: var(--ade-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ade-text-weak);
+}
+
+[data-slot="bots-section"] > [data-slot="bots-form"][data-compact="true"] {
+  padding-top: 0;
+  border-top: none;
+}
+
+[data-slot="bots-details"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-2);
+  font-size: var(--ade-font-md);
+  color: var(--ade-text-soft);
+}
+
+[data-slot="bots-details"] > summary {
+  cursor: pointer;
+}
+
+/* The bar over the conversation: how many messages, and starting over. */
+[data-slot="bots-talk-bar"] {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ade-space-5);
+  padding: var(--ade-space-2) var(--ade-space-8);
+  border-bottom: 1px solid var(--ade-border-subtle);
+}
+
+[data-slot="bots-rules-more"] {
+  display: block;
+  margin-top: var(--ade-space-2);
+}
+
+[data-slot="bots-confirm-question"] {
+  flex: 1 1 18rem;
+  overflow-wrap: anywhere;
 }
 
 [data-slot="bots-card-section"] {
@@ -793,14 +924,6 @@
   gap: var(--ade-space-2);
   padding-top: var(--ade-space-5);
   border-top: 1px solid var(--ade-border-subtle);
-}
-
-[data-slot="bots-card-objectives"] {
-  margin: 0;
-  padding-left: 16px;
-  color: var(--ade-text-soft);
-  font-size: var(--ade-font-md);
-  line-height: var(--ade-leading);
 }
 
 [data-slot="bots-card-stat"] {
@@ -1177,15 +1300,12 @@
 
 /* ── narrow ──────────────────────────────────────────────────────────────── */
 
-@media (max-width: 1100px) {
-  [data-slot="bots-card"] {
-    width: 220px;
-  }
-}
-
 @media (max-width: 860px) {
-  [data-slot="bots-card"] {
-    display: none;
+  [data-slot="bots-page-head"],
+  [data-slot="bots-tabs"],
+  [data-slot="bots-tab-body"],
+  [data-slot="bots-talk-bar"] {
+    padding-inline: var(--ade-space-6);
   }
   [data-slot="bots-row-fields"] {
     grid-template-columns: 1fr;
