@@ -1,5 +1,6 @@
 import { t } from "../i18n"
 import type { WaitingApproval } from "./approvals"
+import { visibleText } from "./visible-text"
 
 /**
  * How ADE tells the user that a bot waits for them (the user's choice 4): the badge on the Bot section, a line in the
@@ -35,9 +36,21 @@ export function sourcesText(sources: readonly string[]): string {
     .join(" · ")
 }
 
+/**
+ * What the request wants to do, in everyday words with ragu's name for it in brackets (the user's choice 6): «eseguire un
+ * comando (bash)», not «usare "bash"». A permission this version has no words for is named as ragu names it.
+ */
+export function approvalAction(waiting: Pick<WaitingApproval, "permission" | "patterns">): string {
+  const patterns = visibleText(waiting.patterns.trim()) || "?"
+  if (waiting.permission === "bash") return t("bots.waiting.actionBash", patterns)
+  if (waiting.permission === "external_directory") return t("bots.waiting.actionOutside", patterns)
+  if (waiting.permission === "edit") return t("bots.waiting.actionEdit", patterns)
+  return t("bots.waiting.actionTool", waiting.permission, patterns)
+}
+
 /** The bell's line: whose bot, and what it wants to do. */
 export function approvalLine(waiting: Pick<WaitingApproval, "botName" | "permission" | "patterns">): string {
-  return t("bots.waiting.notice", waiting.botName, waiting.permission, waiting.patterns.trim() || "?")
+  return t("bots.waiting.notice", waiting.botName, approvalAction(waiting))
 }
 
 /** The window flashes in the taskbar only when the user is not looking at ADE: the bell and the badge are enough when they are. */

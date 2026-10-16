@@ -65,7 +65,7 @@ describe("«Aspettano te»", () => {
     const item = host.querySelector('[data-slot="bots-waiting-item"]')!
     expect(host.querySelector('[data-slot="bots-waiting-title"]')?.textContent).toBe("Aspettano te")
     expect(item.textContent).toContain("alfa")
-    expect(item.textContent).toContain("Vuole usare «bash» su «git push --force»")
+    expect(item.textContent).toContain("Vuole eseguire un comando (bash): «git push --force»")
     expect(item.textContent).toContain("riscrive la storia")
     expect(item.textContent).toContain("ADE · restano 4:00")
     expect([...item.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["alfa", "Consenti", "Nega"])
@@ -107,6 +107,18 @@ describe("«Aspettano te»", () => {
     const host = mount(() => [request({ room: "uno" })], { onOpen: (bot: string, room?: string) => void opened.push([bot, room]) })
     ;[...host.querySelectorAll("button")].find((button) => button.textContent === "alfa")!.click()
     expect(opened).toEqual([["C:/p/a.md", "uno"]])
+  })
+
+  test("P2-6: at 0:00 the buttons are off and the line says it expired", () => {
+    const host = mount(() => [request({ expiresAt: 61_000 })])
+    expect(host.querySelector('[data-slot="bots-waiting-item"]')!.textContent).toContain("scaduta: vale come Nega")
+    expect(host.querySelector('[data-slot="bots-waiting-item"]')!.textContent).not.toContain("restano")
+    const buttons = [...host.querySelectorAll("button")].filter((button) => button.textContent === "Consenti" || button.textContent === "Nega")
+    expect(buttons).toHaveLength(2)
+    expect(buttons.every((button) => button.disabled)).toBe(true)
+    // One second before, they work.
+    const live = mount(() => [request({ expiresAt: 62_000 })])
+    expect(live.textContent).toContain("restano 0:01")
   })
 
   test("it follows the list as requests come and go", () => {

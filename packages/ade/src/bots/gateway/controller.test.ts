@@ -839,6 +839,8 @@ describe("the tools of a turn from a chat", () => {
       botName: "aiuto",
       permission: "bash",
       patterns: "rm -rf build",
+      // The project the gateway runs in: the same command from the panel in another project is another request (P2-1).
+      cwd: PROJECT,
       sources: ["telegram"],
       // A standing «Sempre» is not the phone's to give, nor ADE's for the phone.
       choices: ["once", "reject"],
@@ -853,7 +855,7 @@ describe("the tools of a turn from a chat", () => {
     expect(turn.ids).toEqual(["per_rm -rf build"])
     expect(registry.list()).toEqual([])
     // The phone is told who answered.
-    await until("l'esito", () => b.sent.some((line) => line.text === t("gateway.approve.byAdeOnce")))
+    await until("l'esito", () => b.sent.some((line) => line.text === t("gateway.approve.byAdeOnce", "rm -rf build")))
 
     // The button still on the phone no longer counts, and a second answer from ADE does nothing.
     b.emit(b.questions[0]!.buttons[1]!.data, { button: true })
@@ -861,7 +863,12 @@ describe("the tools of a turn from a chat", () => {
     expect(turn.keys).toEqual(["once"])
     expect(decideApproval(listed!, "reject")).toBe(true)
     expect(turn.keys).toEqual(["once"])
-    expect(b.sent.filter((line) => line.text === t("gateway.approve.byAdeNo"))).toEqual([])
+    expect(b.sent.filter((line) => line.text === t("gateway.approve.byAdeNo", "rm -rf build"))).toEqual([])
+    // P2-4: the press that came too late is told so, once; the phone still has the buttons, and a second press says nothing more.
+    await until("il già deciso", () => b.sent.some((line) => line.text === t("gateway.approve.alreadyAde")))
+    b.emit(b.questions[0]!.buttons[0]!.data, { button: true })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(b.sent.filter((line) => line.text === t("gateway.approve.alreadyAde"))).toHaveLength(1)
   })
 
   test("a no from ADE reaches the phone as a no; a press on the phone closes the entry too", async () => {
@@ -884,7 +891,7 @@ describe("the tools of a turn from a chat", () => {
     decideApproval(mergeApprovals(registry.list())[0]!, "reject")
     await until("il no", () => turn.keys.length === 1)
     expect(turn.keys).toEqual(["reject"])
-    await until("l'esito", () => b.sent.some((line) => line.text === t("gateway.approve.byAdeNo")))
+    await until("l'esito", () => b.sent.some((line) => line.text === t("gateway.approve.byAdeNo", "rm -rf build")))
 
     turn.request.onPermission!(asking("bash", "npm publish"))
     await until("la seconda domanda", () => b.questions.length === 2)

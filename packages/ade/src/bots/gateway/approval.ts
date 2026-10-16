@@ -26,6 +26,7 @@
 
 import { t } from "../../i18n"
 import { decide } from "../approval"
+import { visibleText } from "../visible-text"
 import type { PendingPermission } from "../talk"
 import type { Choice } from "./controller"
 
@@ -46,7 +47,7 @@ export interface AskDetail {
 
 /** The command as the phone shows it: whole, as ragu asked about it. */
 function shown(patterns: string): string {
-  return patterns.trim() || "?"
+  return visibleText(patterns.trim()) || "?"
 }
 
 /** The phone's answer to one question. */
