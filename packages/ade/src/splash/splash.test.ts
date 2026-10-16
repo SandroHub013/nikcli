@@ -83,12 +83,12 @@ describe("splash component (step 3)", () => {
       handle.dispose()
     }
 
-    // 2. CSS check: status has position absolute and row 76 positioning (top: calc(76 / 90 * 100%))
+    // 2. CSS check: status has position relative and is grouped with scene
     const css = readFileSync(join(import.meta.dir, "splash.css"), "utf8")
-    expect(css).toMatch(/\[data-slot="splash-status"\]\s*\{[^}]*position:\s*absolute;/)
-    expect(css).toMatch(/\[data-slot="splash-status"\]\s*\{[^}]*top:\s*calc\(76\s*\/\s*90\s*\*\s*100%\);/)
+    expect(css).toMatch(/\[data-slot="splash-status"\]\s*\{[^}]*position:\s*relative;/)
+    expect(css).toMatch(/\[data-slot="splash-scene-container"\]\s*\{[^}]*display:\s*flex;/)
 
-    // 3. Viewport containment: verify status bottom stays within innerHeight for 1366x720, 1920x1080, 1536x826, 1280x720
+    // 3. Viewport containment: verify stage and status stay within innerHeight for 1366x720, 1920x1080, 1536x826, 1280x720
     const viewports = [
       { w: 1366, h: 720 },
       { w: 1920, h: 1080 },
@@ -101,20 +101,20 @@ describe("splash component (step 3)", () => {
       splash.setAttribute("data-component", "ade-splash")
       const sceneBox = document.createElement("div")
       sceneBox.setAttribute("data-slot", "splash-scene-container")
+      const stageBox = document.createElement("div")
+      stageBox.setAttribute("data-slot", "splash-stage")
       const cv = document.createElement("canvas")
-      sceneBox.appendChild(cv)
+      cv.setAttribute("data-slot", "splash-canvas")
+      stageBox.appendChild(cv)
+      sceneBox.appendChild(stageBox)
       splash.appendChild(sceneBox)
 
-      const scale = layoutSceneContainer(cv, w, h, 1)
-      const containerHeight = parseFloat(sceneBox.style.height)
-      const containerTop = parseFloat(sceneBox.style.top)
-      const statusTop = containerTop + (76 / 90) * containerHeight // row 76
+      layoutSceneContainer(cv, w, h, 1)
+      const stageHeight = parseFloat(stageBox.style.height)
       const statusNominalHeight = 16
-      const statusBottom = statusTop + statusNominalHeight
-      expect(statusBottom).toBeLessThanOrEqual(h)
-      // Also verify it sits 3 logical pixels below wordmark (which ends at row 73)
-      const wordmarkBottom = containerTop + 73 * scale
-      expect(statusTop - wordmarkBottom).toBe(3 * scale)
+      const gap = 10
+      const totalHeight = stageHeight + gap + statusNominalHeight
+      expect(totalHeight).toBeLessThanOrEqual(h)
     }
   })
 
@@ -131,18 +131,16 @@ describe("splash component (step 3)", () => {
       try {
         const containerEl = container.querySelector<HTMLElement>('[data-slot="splash-scene-container"]')
         expect(containerEl).not.toBeNull()
-        // Container must be positioned and sized immediately on mount at t=0
-        expect(containerEl?.style.position).toBe("absolute")
-        expect(containerEl?.style.width).toBe("1280px")
-        expect(containerEl?.style.height).toBe("720px")
-        expect(containerEl?.style.top).toBe("0px")
-        expect(containerEl?.style.left).toBe("0px")
+        // Container must be sized immediately on mount at t=0
+        expect(containerEl?.style.width).toBe("1194px")
+
+        const stageEl = container.querySelector<HTMLElement>('[data-slot="splash-stage"]')
+        expect(stageEl?.style.width).toBe("1194px")
+        expect(stageEl?.style.height).toBe("672px")
 
         const canvas = container.querySelector<HTMLCanvasElement>('[data-slot="splash-canvas"]')
-        expect(canvas?.width).toBe(160)
-        expect(canvas?.height).toBe(90)
-        expect(canvas?.style.width).toBe("1280px")
-        expect(canvas?.style.height).toBe("720px")
+        expect(canvas?.width).toBe(1672)
+        expect(canvas?.height).toBe(941)
       } finally {
         handle.dispose()
       }

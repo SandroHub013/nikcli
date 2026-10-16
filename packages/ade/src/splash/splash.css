@@ -30,27 +30,52 @@
   pointer-events: none;
 }
 
-/* Canvas container: perfectly centered in viewport */
+/* Scene container / group: holds the stage and the status directly below */
 [data-slot="splash-scene-container"] {
   position: relative;
-  display: inline-block;
-  line-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: min(94vw, calc((100vh - 48px) * 1672 / 941));
+  max-width: 94vw;
   z-index: 1;
 }
 
-/* Pixel-art canvas: strict nearest-neighbor integer scaling */
+/* Stage: holds the reference image and overlay fx canvas with exact 1672/941 aspect ratio */
+[data-slot="splash-stage"] {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1672 / 941;
+}
+
+[data-slot="splash-stage"] img,
+[data-slot="splash-stage"] canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Reference artwork: auto rendering for smooth high-res scaling */
+[data-slot="splash-image"] {
+  image-rendering: auto;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Effects overlay canvas: pixelated rendering for crisp 8px blocks */
 [data-slot="splash-canvas"] {
   display: block;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
 
-/* Status message under the cooking scene, grouped with wordmark */
+/* Status message under the cooking scene, grouped with the stage */
 [data-slot="splash-status"] {
-  position: absolute;
-  top: calc(76 / 90 * 100%);
-  left: 0;
-  right: 0;
+  position: relative;
   line-height: normal;
   font-family: var(--ade-mono, monospace);
   font-size: var(--ade-font-xs);
@@ -59,7 +84,6 @@
   text-align: center;
   user-select: none;
   pointer-events: none;
-  z-index: 2;
   white-space: nowrap;
 }
 

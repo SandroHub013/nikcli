@@ -3,6 +3,7 @@ import { t } from "../i18n"
 import { layoutSceneContainer, startPixelScene, type SceneController } from "./scene"
 import "./splash.css"
 import { SPLASH_SCENE_DELAY_MS, sceneIsWorthBuilding } from "./timing"
+import scenaUrl from "./art/scena.png"
 
 export interface SplashProps {
   /** Hidden when this goes false. The fade is handled here. */
@@ -98,8 +99,8 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
   onMount(() => {
     const canvas = canvasRef
     if (!canvas) return
-    canvas.width = 160
-    canvas.height = 90
+    canvas.width = 1672
+    canvas.height = 941
     handleResize()
     const appearedAt = performance.now()
 
@@ -198,7 +199,21 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
       aria-modal="true"
     >
       <div data-slot="splash-scene-container">
-        <canvas ref={canvasRef} data-slot="splash-canvas" aria-hidden="true" />
+        <div data-slot="splash-stage">
+          <img
+            data-slot="splash-image"
+            src={scenaUrl}
+            alt=""
+            draggable={false}
+          />
+          <canvas
+            ref={canvasRef}
+            data-slot="splash-canvas"
+            width={1672}
+            height={941}
+            aria-hidden="true"
+          />
+        </div>
         <Show when={displayedStatus()}>
           <div data-slot="splash-status" aria-live="polite">
             {displayedStatus()}

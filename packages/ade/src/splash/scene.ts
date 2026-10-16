@@ -297,6 +297,56 @@ export interface SceneController {
 
 /**
  * Computes integer scale and positions the scene container within the viewport.
+ */
+export const REF_WIDTH = 1672
+export const REF_HEIGHT = 941
+export const REF_ASPECT_RATIO = 1672 / 941
+
+export interface StageDimensions {
+  width: number
+  height: number
+  scale: number
+  left: number
+  top: number
+}
+
+/**
+ * Computes responsive stage dimensions for the reference scene (1672x941)
+ * within the given viewport, ensuring the entire stage and the status message below it
+ * fit comfortably inside the window across all viewports from 800px to 4K.
+ */
+export function computeStageDimensions(
+  viewportWidth: number,
+  viewportHeight: number,
+  dpr: number = 1,
+): StageDimensions {
+  const statusSpace = 48
+  const maxW = Math.max(1, viewportWidth * 0.94)
+  const maxH = Math.max(1, viewportHeight - statusSpace)
+
+  let width = maxW
+  let height = (width * REF_HEIGHT) / REF_WIDTH
+  if (height > maxH) {
+    height = maxH
+    width = (height * REF_WIDTH) / REF_HEIGHT
+  }
+
+  width = Math.round(width)
+  height = Math.round(height)
+  const left = Math.round((viewportWidth - width) / 2)
+  const top = Math.round((viewportHeight - (height + 26)) / 2)
+
+  return {
+    width,
+    height,
+    scale: width / REF_WIDTH,
+    left: Math.max(0, left),
+    top: Math.max(0, top),
+  }
+}
+
+/**
+ * Computes stage dimensions and positions the scene container within the viewport.
  * Callable immediately on mount so the status text is positioned correctly before the scene starts.
  */
 export function layoutSceneContainer(
@@ -305,6 +355,23 @@ export function layoutSceneContainer(
   viewportHeight: number,
   dpr: number = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
 ): number {
+  const stage = (canvas.closest?.('[data-slot="splash-stage"]') ?? (canvas.parentElement?.getAttribute("data-slot") === "splash-stage" ? canvas.parentElement : null)) as HTMLElement | null
+  const container = (canvas.closest?.('[data-slot="splash-scene-container"]') ?? canvas.parentElement) as HTMLElement | null
+
+  if (stage) {
+    const dims = computeStageDimensions(viewportWidth, viewportHeight, dpr)
+    canvas.width = REF_WIDTH
+    canvas.height = REF_HEIGHT
+    stage.style.width = `${dims.width}px`
+    stage.style.height = `${dims.height}px`
+    if (container && container.getAttribute("data-slot") === "splash-scene-container") {
+      container.style.width = `${dims.width}px`
+      container.style.maxWidth = `${dims.width}px`
+    }
+    return dims.scale
+  }
+
+  // Legacy layout support for old test suite until Step 5
   const scale = calculateIntegerScale(viewportWidth, viewportHeight, dpr)
   const cssWidth = (SCENE_WIDTH * scale) / dpr
   const cssHeight = (SCENE_HEIGHT * scale) / dpr
@@ -315,7 +382,6 @@ export function layoutSceneContainer(
   canvas.style.height = `${cssHeight}px`
 
   const scanlinePeriod = `${(2 * scale) / dpr}px`
-  const container = canvas.parentElement
   if (container && container.getAttribute("data-slot") === "splash-scene-container") {
     container.style.position = "absolute"
     container.style.left = `${left}px`
