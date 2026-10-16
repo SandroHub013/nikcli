@@ -242,6 +242,10 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     }
   }
 
+  /** Why a turn failed, for ADE's own log; never for the chat. */
+  const failure = (message: GatewayMessage, problem: string) =>
+    warn(`ADE: turno del gateway non riuscito (${message.platform}): ${problem}`)
+
   const command = async (message: GatewayMessage, key: string, which: string) => {
     const state = stateOf(key)
     const running = state.turn !== undefined || state.starting
@@ -344,10 +348,15 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       }
       // A stopped turn was already answered by `/ferma`.
       if (result.status === "stopped") return
-      if (result.status === "error") return void (await reply(message, t("gateway.failed", result.problem ?? "?")))
+      // The chat reads a fixed text: the detail (local paths, the server's words) stays in ADE (S10).
+      if (result.status === "error") {
+        failure(message, result.problem ?? "?")
+        return void (await reply(message, t("gateway.failed")))
+      }
       await reply(message, text.trim() ? text : t("gateway.empty"))
     } catch (error) {
-      await reply(message, t("gateway.failed", error instanceof Error ? error.message : String(error)))
+      failure(message, error instanceof Error ? error.message : String(error))
+      await reply(message, t("gateway.failed"))
     } finally {
       ended.abort()
       if (typing) clearInterval(typing)

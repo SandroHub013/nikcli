@@ -801,7 +801,7 @@ export const en: Messages = {
     "On Discord the bot holds a connection open, and the client that speaks it cannot go through a proxy: if this computer only reaches the internet through a proxy, the Discord bot will not get there. Telegram has no such problem.",
   "gateway.ownerOnly": (runner) => `This bot runs on ${runner} with the owner's account: it answers the owner only.`,
   "gateway.empty": "The turn ended without an answer.",
-  "gateway.failed": (problem) => `The turn did not work: ${problem}`,
+  "gateway.failed": "The turn did not work. The detail is in ADE.",
   "gateway.selfGrant": (name, what) =>
     `The bot «${name}» grants itself «${what}» in its file, and from a chat that permission cannot be taken away: not started from here. Remove it from the file to use the bot from your phone.`,
   "gateway.configGrant": (name, key, file) =>

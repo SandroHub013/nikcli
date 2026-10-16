@@ -187,7 +187,8 @@ describe("the gateways' controller", () => {
     expect(turns.started[1]!.request.message.endsWith("seconda domanda")).toBe(true)
     turns.started[1]!.finish({ status: "error", problem: "rete giù" })
     await until("il motivo", () => b.sent.length === 3)
-    expect(b.sent[2]!.text).toBe(t("gateway.failed", "rete giù"))
+    expect(b.sent[2]!.text).toBe(t("gateway.failed"))
+    expect(b.sent[2]!.text).not.toContain("rete giù")
     expect(sessions.get(sessionKey(BOT.path, "telegram", "c42"))).toEqual({
       project: PROJECT,
       runner: "claude",
@@ -887,5 +888,48 @@ describe("the remote commands saved per bot", () => {
     expect(offersRemoteCommands(undefined)).toBe(true)
     expect(offersRemoteCommands("claude")).toBe(false)
     expect(offersRemoteCommands("codex")).toBe(false)
+  })
+})
+
+describe("what a failed turn says in the chat (S10)", () => {
+  const LEAK = "ENOENT: C:/Users/mario/progetto/.ragu/token.json (server 10.0.0.5:4096)"
+
+  test("a failed turn says a fixed text; the detail goes to ADE's own log", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    const warned: string[] = []
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      warn: (line) => void warned.push(line),
+    })
+    b.emit("ciao")
+    await until("il turno", () => turns.started.length === 1)
+    turns.started[0]!.finish({ status: "error", problem: LEAK })
+    await until("la risposta", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe(t("gateway.failed"))
+    expect(b.sent[0]!.text).not.toContain("mario")
+    expect(b.sent[0]!.text).not.toContain("10.0.0.5")
+    expect(warned.some((line) => line.includes(LEAK))).toBe(true)
+  })
+
+  test("a turn that throws says the same fixed text", async () => {
+    const b = bridge()
+    const warned: string[] = []
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: () => {
+        throw new Error(LEAK)
+      },
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      warn: (line) => void warned.push(line),
+    })
+    b.emit("ciao")
+    await until("la risposta", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe(t("gateway.failed"))
+    expect(warned.some((line) => line.includes(LEAK))).toBe(true)
   })
 })
