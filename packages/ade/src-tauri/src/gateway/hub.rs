@@ -52,6 +52,7 @@ pub struct GatewayMessage {
 const MAX_BUTTONS: usize = 12;
 const MAX_BUTTON_DATA: usize = 64;
 const MAX_BUTTON_LABEL: usize = 64;
+const PENDING_CAP: usize = 1_000;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct MessageSender {
@@ -1115,7 +1116,13 @@ impl Task {
             recovered,
         };
         let cursor = message.cursor.clone().or_else(|| self.adapter.cursor());
-        self.pending.lock().unwrap().push_back(PendingEntry { msg: msg.clone(), cursor, acked: false });
+        let mut pending = self.pending.lock().unwrap();
+        if pending.len() >= PENDING_CAP {
+            self.env.log(&format!("{tag}: coda dei messaggi in attesa piena ({PENDING_CAP}): messaggio scartato"));
+            return;
+        }
+        pending.push_back(PendingEntry { msg: msg.clone(), cursor, acked: false });
+        drop(pending);
         self.env.message(&msg);
         self.report(|live| live.last_message_ms = Some(at));
     }
@@ -2439,5 +2446,43 @@ mod tests {
         feed.send(Ok(vec![message("2", "c7", "7", "di nuovo")])).unwrap();
         eventually("il codice", || adapter.sent.lock().unwrap().len() == 1).await;
         assert_eq!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().pending.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn when_pending_queue_reaches_cap_messages_are_dropped_and_logged() {
+        let s = setup("pending-cap");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        {
+            let links = s.hub.links();
+            let running = links.get(&(BOT.to_string(), Platform::Fake)).unwrap();
+            let mut pending = running.pending.lock().unwrap();
+            for i in 0..PENDING_CAP {
+                pending.push_back(PendingEntry {
+                    msg: GatewayMessage {
+                        bot: BOT.to_string(),
+                        platform: Platform::Fake,
+                        chat: "c42".into(),
+                        sender: MessageSender { id: "42".into(), name: "utente".into() },
+                        text: format!("msg {i}"),
+                        id: format!("m{i}"),
+                        redacted: false,
+                        button: false,
+                        private: true,
+                        recovered: false,
+                    },
+                    cursor: None,
+                    acked: false,
+                });
+            }
+        }
+        feed.send(Ok(vec![message("overflow", "c42", "42", "troppo")])).unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let links = s.hub.links();
+        let running = links.get(&(BOT.to_string(), Platform::Fake)).unwrap();
+        assert_eq!(running.pending.lock().unwrap().len(), PENDING_CAP);
+        let logs = s.env.log.lock().unwrap();
+        assert!(logs.iter().any(|line| line.contains("coda dei messaggi in attesa piena") && line.contains("messaggio scartato")));
     }
 }
