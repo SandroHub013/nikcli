@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  approvalSignature,
   createApprovalRegistry,
   decideApproval,
   mergeApprovals,
@@ -38,7 +39,7 @@ describe("merging", () => {
       request({ key: "ade:1" }),
     ])
     expect(merged).toHaveLength(1)
-    expect(merged[0]).toMatchObject({ id: "ade:1", sources: ["ade", "telegram"], askedAt: 1000, expiresAt: 301_000 })
+    expect(merged[0]).toMatchObject({ id: approvalSignature(request()), sources: ["ade", "telegram"], askedAt: 1000, expiresAt: 301_000 })
     // «Sempre» is the panel's only: it is not offered when a phone's question is in the same request.
     expect(merged[0]!.choices).toEqual(["once", "reject"])
     expect(merged[0]!.members).toHaveLength(2)
@@ -51,7 +52,7 @@ describe("merging", () => {
       request({ key: "c", patterns: "git reset --hard" }),
       request({ key: "d", permission: "external_directory" }),
     ])
-    expect(merged.map((one) => one.id)).toEqual(["a", "b", "c", "d"])
+    expect(merged.map((one) => one.members[0]!.key)).toEqual(["a", "b", "c", "d"])
   })
 
   test("the same command with a stray space is the same; the earliest expiry decides", () => {
@@ -65,7 +66,7 @@ describe("merging", () => {
 
   test("oldest first", () => {
     const merged = mergeApprovals([request({ key: "late", bot: "x", askedAt: 9 }), request({ key: "early", bot: "y", askedAt: 1 })])
-    expect(merged.map((one) => one.id)).toEqual(["early", "late"])
+    expect(merged.map((one) => one.members[0]!.key)).toEqual(["early", "late"])
   })
 })
 

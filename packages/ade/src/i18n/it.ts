@@ -843,6 +843,11 @@ export const it = {
   "gateway.approve.danger": (reason: string) => `Attenzione: questo comando ${reason}.`,
   "gateway.approve.blocked": (what: string, reason: string) =>
     `Ho bloccato «${what}»: ${reason}. Questo comando non parte mai, nemmeno con un sì.`,
+  "bots.waiting.fromAde": "ADE",
+  "bots.waiting.notice": (bot: string, permission: string, patterns: string) =>
+    `«${bot}» aspetta te: vuole usare «${permission}» su «${patterns}»`,
+  "bots.waiting.systemTitle": (bot: string) => `ADE: «${bot}» aspetta te`,
+  "bots.waiting.open": "Apri il bot",
   "gateway.approve.byAdeOnce": "Consentito da ADE.",
   "gateway.approve.byAdeNo": "Negato da ADE.",
   "gateway.approve.no": "No",

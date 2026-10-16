@@ -39,6 +39,7 @@ export interface ApprovalRequest {
  * answers every member, so the phone gets its answer as if it had been given there.
  */
 export interface WaitingApproval {
+  /** The signature of the request: the same while it is open, whichever source asked first. */
   readonly id: string
   readonly bot: string
   readonly botName: string
@@ -54,8 +55,11 @@ export interface WaitingApproval {
   readonly members: readonly ApprovalRequest[]
 }
 
-const sameThing = (a: ApprovalRequest, b: ApprovalRequest) =>
-  a.bot === b.bot && a.permission === b.permission && a.patterns.trim() === b.patterns.trim()
+/** What makes two requests one: the same bot asking for the same thing. Stable while the request is open. */
+export const approvalSignature = (request: Pick<ApprovalRequest, "bot" | "permission" | "patterns">) =>
+  [request.bot, request.permission, request.patterns.trim()].join("\n")
+
+const sameThing = (a: ApprovalRequest, b: ApprovalRequest) => approvalSignature(a) === approvalSignature(b)
 
 /** The open requests as the user sees them: merged, the oldest first. */
 export function mergeApprovals(requests: readonly ApprovalRequest[]): WaitingApproval[] {
@@ -72,7 +76,7 @@ export function mergeApprovals(requests: readonly ApprovalRequest[]): WaitingApp
     )
     const reason = members.find((member) => member.reason !== undefined)?.reason
     return {
-      id: first.key,
+      id: approvalSignature(first),
       bot: first.bot,
       botName: first.botName,
       permission: first.permission,

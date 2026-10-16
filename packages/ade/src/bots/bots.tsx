@@ -840,6 +840,13 @@ const shared = createRoot(() => {
   }
 })
 
+/** Opens the bot at `path` in the main area: from the bell, for a request that waits for the user. */
+export function openBotByPath(path: string) {
+  shared.openRoom(undefined)
+  shared.setOpenId(path)
+  shared.setComposing(false)
+}
+
 export interface BotsRosterProps {
   /** The open project, when there is one. Decides whether project bots exist. */
   projectRoot?: string
