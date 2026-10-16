@@ -4,6 +4,8 @@ import {
   answerSoFar,
   applyRunnerLine,
   codexMcpNames,
+  CODEX_PROFILES_SINCE,
+  codexKnowsProfiles,
   codexOptionsRefused,
   codexSandboxCannotRead,
   enforcesDisabledTools,
@@ -882,6 +884,26 @@ describe("why a Codex turn from a chat or a routine failed", () => {
       expect([said, codexOptionsRefused(said)]).toEqual([said, true])
     expect(codexOptionsRefused("stream disconnected before completion")).toBe(false)
     expect(codexOptionsRefused(undefined)).toBe(false)
+  })
+
+  /*
+   * bot-lettura-3: the profile's `:workspace_roots` is read from codex-cli 0.131.0 (`codex-rs/core/src/config/
+   * permissions.rs`: 0.130.0 knew only `:project_roots`). An older Codex would ignore or refuse the profile.
+   */
+  test("only a Codex that reads the project-only profile starts from a chat or a routine", () => {
+    for (const [said, knows] of [
+      ["codex-cli 0.162.1", true],
+      ["codex-cli 0.131.0", true],
+      ["codex-cli 1.0.0", true],
+      ["codex-cli 0.130.0", false],
+      ["codex-cli 0.113.0", false],
+      ["codex-cli 0.99.9", false],
+      ["boh", false],
+      ["", false],
+      [null, false],
+    ] as const)
+      expect([said, codexKnowsProfiles(said)]).toEqual([said, knows])
+    expect(CODEX_PROFILES_SINCE).toEqual([0, 131, 0])
   })
 
   /* The line codex-cli 0.162.1 prints on the `unelevated` sandbox, before any model call; `turn.ts` keeps 300 characters. */

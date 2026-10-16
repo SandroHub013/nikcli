@@ -2201,6 +2201,10 @@ export const it = {
     "Codex non ha accettato le opzioni con cui ADE gli spegne i server MCP e il web da chat e nelle routine. Succede con una versione di Codex troppo vecchia, o se Codex legge un config.toml diverso da ~/.codex/config.toml (CODEX_HOME): aggiorna Codex o togli CODEX_HOME.",
   "bots.codex.sandboxCannotRead":
     "Il turno non è partito. Da chat e nelle routine Codex parte solo con un sandbox che legge soltanto il progetto, e su questo computer il suo sandbox (unelevated) non ci riesce. Serve uno di questi due: l'isolamento MXC di Windows 11 24H2 o 25H2 aggiornato, che ADE usa da solo quando c'è; oppure il sandbox elevated di Codex, che si prepara una volta con «codex sandbox setup --elevated --current-user» e chiede l'amministratore.",
+  "bots.codex.tooOld": (since: string, found: string) =>
+    `Il turno non è partito. Da chat e nelle routine Codex parte solo dalla versione ${since}, la prima che sa leggere soltanto il progetto; qui c'è la ${found}. Aggiorna Codex, per esempio con «npm install -g @openai/codex».`,
+  "bots.codex.versionUnknown":
+    "Il turno non è partito: ADE non è riuscito a leggere la versione di Codex («codex --version»). Da chat e nelle routine Codex parte solo con una versione che sa leggere soltanto il progetto.",
   "bots.codex.projectConfig":
     "Il progetto ha un .codex/config.toml, che Codex legge nei progetti fidati con i suoi server MCP. Per tenerli spenti questo turno è partito senza la tua configurazione di Codex: anche senza il provider e i profili del tuo ~/.codex/config.toml.",
   "bots.codex.withoutUserConfig":

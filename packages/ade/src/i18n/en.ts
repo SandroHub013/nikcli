@@ -2138,6 +2138,10 @@ export const en: Messages = {
     "Codex refused the options ADE uses to switch off its MCP servers and web access from a chat and in routines. This happens with a Codex version that's too old, or when Codex reads a config.toml other than ~/.codex/config.toml (CODEX_HOME): update Codex or unset CODEX_HOME.",
   "bots.codex.sandboxCannotRead":
     "The turn didn't start. From a chat and in routines Codex starts only with a sandbox that reads the project alone, and its sandbox on this computer (unelevated) can't do that. You need one of these two: the MXC isolation of an up-to-date Windows 11 24H2 or 25H2, which ADE uses by itself when it's there; or Codex's elevated sandbox, set up once with “codex sandbox setup --elevated --current-user”, which asks for an administrator.",
+  "bots.codex.tooOld": (since, found) =>
+    `The turn didn't start. From a chat and in routines Codex starts only from version ${since}, the first that can read the project alone; this one is ${found}. Update Codex, for example with “npm install -g @openai/codex”.`,
+  "bots.codex.versionUnknown":
+    "The turn didn't start: ADE couldn't read Codex's version (“codex --version”). From a chat and in routines Codex starts only with a version that can read the project alone.",
   "bots.codex.projectConfig":
     "The project has a .codex/config.toml, which Codex reads in trusted projects along with its MCP servers. To keep them off, this turn ran without your Codex configuration: also without the provider and profiles in your ~/.codex/config.toml.",
   "bots.codex.withoutUserConfig":

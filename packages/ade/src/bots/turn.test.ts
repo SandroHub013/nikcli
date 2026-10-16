@@ -279,8 +279,12 @@ describe("le opzioni di avvio arrivano all'host", () => {
 describe("a Codex turn nobody watches reads the user's MCP servers", () => {
   const CONFIG = "C:/Users/u/.codex/config.toml"
 
-  function codexMachine(config: { text?: string; unreadable?: boolean } = {}, others: readonly string[] = []) {
+  function codexMachine(
+    config: { text?: string; unreadable?: boolean; version?: string | null } = {},
+    others: readonly string[] = [],
+  ) {
     const argv: (readonly string[])[] = []
+    let versionAsked = 0
     const exits: ((code: number | null) => void)[] = []
     const lines: ((line: string) => void)[] = []
     const reads: string[] = []
@@ -304,7 +308,13 @@ describe("a Codex turn nobody watches reads the user's MCP servers", () => {
         return { kill: () => {}, write: () => {}, resize: () => {} }
       },
     }
-    const deps: TurnDeps = { host: async () => host as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>> }
+    const deps: TurnDeps = {
+      host: async () => host as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>>,
+      codexVersion: async () => {
+        versionAsked++
+        return config.version === undefined ? "codex-cli 0.162.1" : config.version
+      },
+    }
     return {
       deps,
       argv,
@@ -312,6 +322,7 @@ describe("a Codex turn nobody watches reads the user's MCP servers", () => {
       exit: (code: number | null) => exits.at(-1)?.(code),
       say: (line: string) => lines.at(-1)?.(line),
       spawned: () => argv.length,
+      versionAsked: () => versionAsked,
     }
   }
 
@@ -363,6 +374,41 @@ describe("a Codex turn nobody watches reads the user's MCP servers", () => {
     m.exit(1)
     const result = await turn.result
     expect(result.problem).toContain(t("bots.codex.optionsRefused"))
+  })
+
+  /*
+   * bot-lettura-3: a Codex older than 0.131.0 does not read the project-only profile, and would run with the read-only
+   * sandbox, which reads the whole disk. Such a turn, or one whose version could not be read, does not start.
+   */
+  test("a Codex too old for the project-only profile: the turn does not start, and says which version it needs", async () => {
+    const m = codexMachine({ text: '[mcp_servers.docs]\nurl = "x"\n', version: "codex-cli 0.130.0" })
+    const result = await runTurn({ runner: "codex", message: "ciao", remote: { commands: false } }, m.deps).result
+    expect(result.status).toBe("error")
+    expect(result.problem).toContain(t("bots.codex.tooOld", "0.131.0", "0.130.0"))
+    expect(m.spawned()).toBe(0)
+  })
+
+  test("a Codex whose version could not be read: the routine does not start either", async () => {
+    const m = codexMachine({ version: null })
+    const result = await runTurn({ runner: "codex", message: "ciao", unattended: true }, m.deps).result
+    expect(result.status).toBe("error")
+    expect(result.problem).toContain(t("bots.codex.versionUnknown"))
+    expect(m.spawned()).toBe(0)
+  })
+
+  test("in the panel the version is not asked, and a recent Codex from a chat starts", async () => {
+    const panel = codexMachine({ version: "codex-cli 0.100.0" })
+    const turn = runTurn({ runner: "codex", message: "ciao" }, panel.deps)
+    await until(() => panel.spawned() > 0)
+    expect(panel.versionAsked()).toBe(0)
+    panel.exit(0)
+    await turn.result
+    const chat = codexMachine()
+    const remote = runTurn({ runner: "codex", message: "ciao", remote: { commands: false } }, chat.deps)
+    await until(() => chat.spawned() > 0)
+    expect(chat.versionAsked()).toBe(1)
+    chat.exit(0)
+    await remote.result
   })
 
   /*

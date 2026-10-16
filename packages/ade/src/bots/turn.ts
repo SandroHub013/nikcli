@@ -26,10 +26,13 @@ import { registerSender, unregisterSender } from "../session/senders"
 import { t } from "../i18n"
 import { acquireTurn, scrubSecrets } from "./terms"
 import type { BotAccount } from "./account"
+import { codexVersion } from "./codex-version"
 import type { AgentFile } from "./ragu"
 import {
   applyRunnerLine,
   codexMcpNames,
+  CODEX_PROFILES_SINCE,
+  codexKnowsProfiles,
   codexOptionsRefused,
   codexSandboxCannotRead,
   enforcesDisabledTools,
@@ -158,6 +161,8 @@ export function timeoutProblem(label: string, timeoutMs: number): string {
 /** What a turn needs from the app; the machine, passed in so a test can run one. */
 export interface TurnDeps {
   readonly host?: () => ReturnType<typeof getHost>
+  /** `codex --version`, for a Codex turn from a chat or a routine; by default asked once per start (`codex-version.ts`). */
+  readonly codexVersion?: () => Promise<string | null>
 }
 
 export interface TurnResult {
@@ -318,6 +323,21 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
      * (the user's choice 7, `TurnSpec.codexMcpServers`). Unreadable, the turn leaves the whole file out.
      */
     const unwatchedCodex = runner.id === "codex" && (request.remote !== undefined || request.unattended === true)
+    if (unwatchedCodex) {
+      /*
+       * Only a Codex that reads the project-only profile (bot-lettura-3): an older one would run with the read-only
+       * sandbox, which reads the whole disk. A version that could not be read does not start either.
+       */
+      const version = await (deps.codexVersion ?? (() => codexVersion(host, runner.command)))()
+      if (!codexKnowsProfiles(version)) {
+        const found = /\d+\.\d+\.\d+/.exec(version ?? "")?.[0]
+        const problem = found
+          ? t("bots.codex.tooOld", CODEX_PROFILES_SINCE.join("."), found)
+          : t("bots.codex.versionUnknown")
+        update(applyProblem(talk, problem, Date.now()))
+        return finish("error", problem)
+      }
+    }
     const codexMcp: CodexMcp = unwatchedCodex ? await codexMcpOf(host, request.cwd) : {}
     const codexMcpServers = codexMcp.servers
     // The same mailbox mailbox.rs uses, per worktree in ADE Test (`ADE_MAILBOX_ROOT`).
