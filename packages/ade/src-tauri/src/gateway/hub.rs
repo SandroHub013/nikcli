@@ -858,17 +858,30 @@ impl Hub {
     }
 
     /// Wakes up all enabled gateways immediately: called when the computer wakes up from sleep or network returns.
+    /// Only notifies active links waiting for backoff; never relaunches stopped links or missing bots.
     pub fn wake_all(&self) {
-        let enabled_links: Vec<(String, Platform)> = self
-            .store
-            .read()
-            .links
+        let store = self.store.read();
+        let links = self.links();
+        let wakes: Vec<Arc<tokio::sync::Notify>> = links
             .iter()
-            .filter(|l| l.enabled)
-            .map(|l| (l.bot.clone(), l.platform))
+            .filter_map(|((bot, platform), r)| {
+                let enabled = store
+                    .links
+                    .iter()
+                    .any(|l| l.bot == *bot && l.platform == *platform && l.enabled);
+                if !enabled {
+                    return None;
+                }
+                let live = r.live.lock().ok()?;
+                if !live.stopped {
+                    Some(r.wake.clone())
+                } else {
+                    None
+                }
+            })
             .collect();
-        for (bot, platform) in enabled_links {
-            let _ = self.retry(&bot, platform);
+        for wake in wakes {
+            wake.notify_one();
         }
     }
 
@@ -894,6 +907,16 @@ impl Hub {
         if let Some(wake) = running_active {
             wake.notify_one();
         } else {
+            let enabled = self.store.link(bot, platform).map_or(false, |l| l.enabled);
+            if !enabled {
+                return Err("il collegamento non è attivo".to_string());
+            }
+            if !self.env.bot_exists(bot) {
+                let error = "il file del bot non c'è più".to_string();
+                self.env.log(&format!("gateway {} {}: non riparte: {error}", platform.id(), &bot_key(bot)[..8]));
+                self.failed().insert((bot.to_string(), platform), error.clone());
+                return Err(error);
+            }
             self.relaunch(bot, platform);
         }
         Ok(())
@@ -3426,6 +3449,62 @@ mod tests {
 
         feed.send(Ok(vec![message("2", "c42", "42", "dopo wake")])).unwrap();
         eventually("ricevuto subito dopo wake", || s.env.messages.lock().unwrap().len() == 2).await;
+    }
+
+    #[tokio::test]
+    async fn wake_all_does_not_relaunch_stopped_link() {
+        let s = setup("wake-stopped");
+        let (_adapter, feed) = start(&s);
+        let count_before = s.made.lock().unwrap().len();
+        assert_eq!(count_before, 1);
+
+        feed.send(Err(AdapterError::Fatal("fatal error".into()))).unwrap();
+        eventually("gateway fermato", || {
+            s.hub.links().get(&(BOT.to_string(), Platform::Fake)).is_some_and(|r| r.live.lock().unwrap().stopped)
+        }).await;
+
+        s.hub.wake_all();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let count_after = s.made.lock().unwrap().len();
+        assert_eq!(count_after, count_before, "wake_all non deve rilanciare un link fermato");
+    }
+
+    #[tokio::test]
+    async fn wake_all_and_retry_do_not_relaunch_when_bot_missing() {
+        let s = setup("wake-bot-missing");
+        let (_adapter, feed) = start(&s);
+        feed.send(Err(AdapterError::Fatal("fatal error".into()))).unwrap();
+        eventually("gateway fermato", || {
+            s.hub.links().get(&(BOT.to_string(), Platform::Fake)).is_some_and(|r| r.live.lock().unwrap().stopped)
+        }).await;
+
+        s.env.gone.lock().unwrap().push(BOT.to_string());
+        let count_before = s.made.lock().unwrap().len();
+
+        s.hub.wake_all();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(s.made.lock().unwrap().len(), count_before, "wake_all non deve rilanciare se il bot è cancellato");
+
+        let retry_res = s.hub.retry(BOT, Platform::Fake);
+        assert!(retry_res.is_err(), "retry deve fallire se il bot è cancellato");
+        assert_eq!(s.made.lock().unwrap().len(), count_before, "retry non deve rilanciare se il bot è cancellato");
+    }
+
+    #[tokio::test]
+    async fn wake_all_and_retry_do_not_relaunch_switched_off_link() {
+        let s = setup("wake-switched-off");
+        let (_adapter, _feed) = start(&s);
+        s.hub.stop(BOT, Platform::Fake).unwrap();
+        let count_before = s.made.lock().unwrap().len();
+
+        s.hub.wake_all();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(s.made.lock().unwrap().len(), count_before, "wake_all non deve rilanciare un link spento");
+
+        let retry_res = s.hub.retry(BOT, Platform::Fake);
+        assert!(retry_res.is_err(), "retry deve fallire se il link è spento");
+        assert_eq!(s.made.lock().unwrap().len(), count_before, "retry non deve rilanciare un link spento");
     }
 }
 
