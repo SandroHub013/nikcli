@@ -242,6 +242,52 @@ describe("splash component (step 3)", () => {
     }
   })
 
+  test("retains last status during fade-out when props.visible flips to false (P3)", async () => {
+    let setVisibleSignal!: (v: boolean) => void
+    let setStatusSignal!: (s: string | undefined) => void
+    let disposeFn: (() => void) | undefined
+
+    createRoot((dispose) => {
+      disposeFn = dispose
+      const [visible, setVisible] = createSignal(true)
+      const [status, setStatus] = createSignal<string | undefined>("Inizializzazione...")
+      setVisibleSignal = setVisible
+      setStatusSignal = setStatus
+      render(
+        () => createComponent(Splash, {
+          get visible() { return visible() },
+          get status() { return status() },
+        }),
+        container,
+      )
+    })
+
+    try {
+      const statusEl = container.querySelector('[data-slot="splash-status"]')
+      expect(statusEl).not.toBeNull()
+      expect(statusEl?.textContent).toBe("Inizializzazione...")
+
+      // Boot finishes: visible flips to false, status becomes undefined simultaneously
+      setVisibleSignal(false)
+      setStatusSignal(undefined)
+
+      // Status must stay visible in DOM during fade-out
+      const statusElDuringFade = container.querySelector('[data-slot="splash-status"]')
+      expect(statusElDuringFade).not.toBeNull()
+      expect(statusElDuringFade?.textContent).toBe("Inizializzazione...")
+
+      const splash = container.querySelector('[data-component="ade-splash"]')
+      expect(splash?.hasAttribute("data-leaving")).toBe(true)
+
+      // After fade completes (650ms), entire splash is unmounted
+      await new Promise((resolve) => setTimeout(resolve, 650))
+      expect(container.querySelector('[data-slot="splash-status"]')).toBeNull()
+      expect(container.querySelector('[data-component="ade-splash"]')).toBeNull()
+    } finally {
+      disposeFn?.()
+    }
+  })
+
   test("dismiss during fade-out does not trigger onDismiss", () => {
     let dismissed = false
     let setVisibleSignal!: (v: boolean) => void

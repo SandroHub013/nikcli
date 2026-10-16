@@ -58,6 +58,16 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
   let startingFired = false
   let restartScene: ((opts?: { prefersReducedMotion?: boolean }) => void) | undefined
 
+  // Retain last known status message so it does not vanish prematurely during fade-out
+  const [displayedStatus, setDisplayedStatus] = createSignal(props.status)
+  createEffect(() => {
+    if (props.visible) {
+      setDisplayedStatus(props.status)
+    } else if (props.status) {
+      setDisplayedStatus(props.status)
+    }
+  })
+
   const dismiss = () => {
     if (props.visible) props.onDismiss?.()
   }
@@ -189,9 +199,9 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
     >
       <div data-slot="splash-scene-container">
         <canvas ref={canvasRef} data-slot="splash-canvas" aria-hidden="true" />
-        <Show when={props.status}>
+        <Show when={displayedStatus()}>
           <div data-slot="splash-status" aria-live="polite">
-            {props.status}
+            {displayedStatus()}
           </div>
         </Show>
       </div>
