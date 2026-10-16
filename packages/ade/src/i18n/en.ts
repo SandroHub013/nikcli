@@ -2136,6 +2136,8 @@ export const en: Messages = {
   "bots.spend.unreported": "cost not reported by the CLI",
   "bots.codex.optionsRefused":
     "Codex refused the options ADE uses to switch off its MCP servers and web access from a chat and in routines. This happens with a Codex version that's too old, or when Codex reads a config.toml other than ~/.codex/config.toml (CODEX_HOME): update Codex or unset CODEX_HOME.",
+  "bots.codex.sandboxCannotRead":
+    "The turn didn't start. From a chat and in routines Codex starts only with a sandbox that reads the project alone, and its sandbox on this computer (unelevated) can't do that. You need one of these two: the MXC isolation of an up-to-date Windows 11 24H2 or 25H2, which ADE uses by itself when it's there; or Codex's elevated sandbox, set up once with “codex sandbox setup --elevated --current-user”, which asks for an administrator.",
   "bots.codex.projectConfig":
     "The project has a .codex/config.toml, which Codex reads in trusted projects along with its MCP servers. To keep them off, this turn ran without your Codex configuration: also without the provider and profiles in your ~/.codex/config.toml.",
   "bots.codex.withoutUserConfig":
@@ -2209,8 +2211,8 @@ export const en: Messages = {
     `Delete “${name}”? Its memory goes with it, ${routines === 0 ? "no routines" : routines === 1 ? "one routine" : `${routines} routines`}, the conversations saved in ADE, the messaging apps bot codes and who was paired. The file ${file} is deleted.`,
   "bots.permissions.phone": "From your phone",
   "bots.permissions.phoneText": "It reads and searches the project. It uses no MCP servers and opens no web pages or web searches, even with the commands on. It runs commands only if you turn on “Remote commands”: then you are asked every time.",
-  "bots.permissions.phoneTextClaude": "It reads and searches the project. It uses no MCP servers, opens no web pages or web searches, and never runs commands: Claude Code cannot ask you for permission from here.",
-  "bots.permissions.phoneTextCodex": "It reads and searches the project, and runs, without asking, only commands that read (a read-only sandbox). Codex's own MCP servers and web search stay as its settings have them: ADE does not shut them.",
+  "bots.permissions.phoneTextClaude": "It reads and searches only in the project folder: outside it Claude Code refuses. It uses no MCP servers, opens no web pages or web searches, never runs commands and doesn't write to other sessions: Claude Code cannot ask you for permission from here.",
+  "bots.permissions.phoneTextCodex": "It starts only with a sandbox that reads the project folder alone: if this computer's can't, the turn doesn't start and tells you why. It runs, without asking, only commands that read, and uses no MCP servers or web search.",
   "bots.permissions.edits": "It can edit the project's files.",
   "bots.permissions.noEdits": "It edits no files.",
   "bots.permissions.remoteOn": (platform) => `${platform}: remote commands on`,
@@ -2219,11 +2221,11 @@ export const en: Messages = {
   "bots.permissions.remoteHow": "They are turned on and off in Platforms.",
   "bots.permissions.routines": "In routines",
   "bots.permissions.routinesText": "It only reads and searches the project. It edits no files, runs no commands and uses neither MCP servers nor the web.",
-  "bots.permissions.routinesTextCodex": "Read-only: it edits no files and runs, without asking, only commands that read. Codex's own MCP servers and web search stay as its settings have them.",
+  "bots.permissions.routinesTextCodex": "Read-only: it starts with a sandbox that reads the project folder alone, or doesn't start. It edits no files, runs, without asking, only commands that read, and uses no MCP servers or web search.",
   "bots.permissions.panel": "In the Conversation",
   "bots.permissions.panelTextRagu": "It asks before every command and every step outside the project: Allow, Deny or “Always for this bot”. It uses MCP servers and the web without asking.",
   "bots.permissions.panelTextRaguNoShell": "It runs no commands. It asks before every step outside the project: Allow, Deny or “Always for this bot”. It uses MCP servers and the web without asking.",
-  "bots.permissions.panelTextClaude": "It runs commands without asking you: Claude Code cannot ask. It refuses the dangerous ones, and the thread offers them to you with “Always for this bot”. It can use the web too.",
+  "bots.permissions.panelTextClaude": "It runs commands without asking you: Claude Code cannot ask. It refuses the dangerous ones, and the thread offers them to you with “Always for this bot”. It can use the web too, and a command can reach outside the project.",
   "bots.permissions.panelTextClaudeNoShell": "It runs no commands: Claude Code cannot ask you for permission, so it refuses them. It can use the web too.",
   "bots.permissions.panelTextCodexWrite": "It runs commands without asking you, and writes only in the working folder: Codex cannot ask.",
   "bots.permissions.panelTextCodexRead": "It runs, without asking, only commands that read (a read-only sandbox): Codex cannot ask you for permission.",
