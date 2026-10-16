@@ -11,11 +11,33 @@ const ASSETS_DIR: &str = "nikverse-assets";
 fn main() {
     build_raguverse_world();
     write_raguverse_manifest();
-    tauri_build::build()
+    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(app_manifest())).unwrap_or_else(|error| panic!("{error:#}"));
 }
 
 #[path = "src/bun_lookup.rs"]
 mod bun_lookup;
+
+// The commands of the app, read from the list lib.rs gives Tauri; the tests in the same file check the capability grants them.
+#[path = "src/handler_list.rs"]
+#[allow(dead_code)]
+mod handler_list;
+
+/// The app's own commands declared as its ACL manifest (S7), so a command that is not granted to the main window in
+/// capabilities/default.json is refused, and a page that is not the main window's, or is loaded from a web address, cannot
+/// reach them. Every command is declared, not only the sensitive ones: once there is a manifest, Tauri refuses any command
+/// of the app that is not in it (see src/handler_list.rs).
+fn app_manifest() -> tauri_build::AppManifest {
+    println!("cargo:rerun-if-changed=src/lib.rs");
+    println!("cargo:rerun-if-changed=src/handler_list.rs");
+    let source = fs::read_to_string(PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR")).join("src/lib.rs"))
+        .unwrap_or_else(|error| panic!("src/lib.rs: {error}"));
+    // `AppManifest` keeps the names for the whole build, and this process ends with it.
+    let commands: Vec<&'static str> = handler_list::handler_commands(&source)
+        .into_iter()
+        .map(|command| &*Box::leak(command.into_boxed_str()))
+        .collect();
+    tauri_build::AppManifest::new().commands(Box::leak(commands.into_boxed_slice()))
+}
 
 /// Bundles RaguVerse's 3D city into `nikverse-assets/world/city.js` (`scripts/build-raguverse-world.ts`),
 /// before the folder is listed, so the bundle is hashed into the manifest like every other asset.

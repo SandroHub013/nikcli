@@ -20,6 +20,7 @@ import { formatClock } from "../format"
 import type { AgentFile } from "../ragu"
 import { runnerById } from "../runners"
 import { PairLink } from "./pair-link"
+import { StateAsideNotice } from "./state-aside-notice"
 import { createGatewayPanel, type GatewayPanelDeps, type ProblemArea } from "./panel-state"
 import { CREATE_LINK, STEP_IDS, type PlatformId, type StepId, type TileState } from "./steps"
 
@@ -137,6 +138,9 @@ export function GatewaySection(props: {
       <h3 data-slot="bots-section-title" id="gateway-heading">
         {t("gateway.panel.heading")}
       </h3>
+
+      {/* The saved state that could not be read, put aside: said once, above the platforms (N-A11a). */}
+      <StateAsideNotice />
 
       {/* Which platform: every link is kept, so this only chooses what is shown below. */}
       <div data-slot="gateway-tiles" role="group" aria-label={t("gateway.panel.platform")}>

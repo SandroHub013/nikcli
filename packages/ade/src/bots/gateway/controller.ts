@@ -66,9 +66,8 @@ export interface GatewayMessage {
   /** A one-to-one chat with the bot. Anything else is a channel others read. */
   readonly private: boolean
   /**
-   * The sender is the owner of the account the bot runs on. Rust does not send
-   * it yet, and only the owner's own accounts are paired (D92), so a message
-   * that says nothing counts as the owner's; `false` is refused on a plan (S16).
+   * The sender is the owner of the account the bot runs on: Rust says it with every message, from who paired the
+   * account in ADE. A message that does not say counts as not the owner's, and is refused on a plan (S16).
    */
   readonly owner?: boolean
   /** The message was recovered after an ADE restart or reload. */
@@ -610,7 +609,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       }
       const bot = botForChat(loaded.bot, deps.chatModels?.get(key))
       const runner = runnerById(bot.runner).id
-      const allowed = mayRun(runner, message.owner !== false)
+      const allowed = mayRun(runner, message.owner === true)
       if (!allowed.ok) return void (await reply(message, allowed.problem))
       // `/ferma` while the bot was being read: nothing starts.
       if (closed || state.cancelled) return

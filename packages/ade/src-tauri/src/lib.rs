@@ -13,6 +13,8 @@
 /// explicit path wins over the environment. So `open_main_window` reads the
 /// variable and forwards it, which is what makes the escape hatch real.
 mod ade_prune;
+#[cfg(test)]
+mod handler_list;
 mod ask;
 mod agent_link;
 mod app_folder;
@@ -2749,6 +2751,7 @@ pub fn run() {
             gateway::gateway_edit,
             gateway::gateway_typing,
             gateway::gateway_set_commands,
+            gateway::gateway_state_set_aside,
             gateway::gateway_preview,
             gateway::gateway_preview_end,
             gateway::gateway_pairing_list,
