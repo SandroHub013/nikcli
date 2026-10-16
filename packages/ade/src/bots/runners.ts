@@ -428,6 +428,13 @@ const UNWATCHED_ALLOWED: Readonly<Record<string, readonly string[]>> = {
 const UNWATCHED_SETTINGS = '{"autoMemoryEnabled":false,"permissions":{"blockReadsOutsideWorkingDirectories":true}}'
 
 /*
+ * Claude Code's messages to the other Claude sessions on the machine: `ListAgents` and `SendMessage` run in `-p` with
+ * no question (2.1.301, the same fake provider), so a turn from a chat could ask another session, one in
+ * `bypassPermissions` say, to do what it may not. Refused from a chat and in a routine; they have no ragu name.
+ */
+const UNWATCHED_CLAUDE_REFUSED: readonly string[] = ["ListAgents", "SendMessage"]
+
+/*
  * A bot from the open project's `.nikcli/agent/` (B3, audit A4): its persona
  * and settings were written by whoever wrote the repository. It runs only
  * once the user trusted that file (`trust.ts`), and even then with nothing
@@ -565,7 +572,10 @@ export function turnCommand(
         for (const name of READ_ONLY_REFUSED.flatMap((tool) => CLAUDE_TOOLS[tool] ?? []))
           if (!disallowed.includes(name)) disallowed.push(name)
       if (unwatched)
-        for (const name of UNWATCHED_REFUSED.flatMap((tool) => CLAUDE_TOOLS[tool] ?? []))
+        for (const name of [
+          ...UNWATCHED_REFUSED.flatMap((tool) => CLAUDE_TOOLS[tool] ?? []),
+          ...UNWATCHED_CLAUDE_REFUSED,
+        ])
           if (!disallowed.includes(name)) disallowed.push(name)
       // A refusal beats an allow, `acceptEdits` included.
       if ((repository || remote) && canWrite(bot)) disallowed.push(...EXECUTES_LATER_RULES)

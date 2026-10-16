@@ -658,6 +658,22 @@ describe("un turno da chat non ha la shell", () => {
   })
 
   /*
+   * `ListAgents` e `SendMessage` di Claude Code girano in `-p` senza domanda (claude 2.1.301, finto provider): da
+   * telefono un turno poteva scrivere a un'altra sessione Claude della macchina, magari in `bypassPermissions`.
+   */
+  test("Claude: da chat e in una routine niente messaggi alle altre sessioni", () => {
+    const own: AgentFile = { ...mine, runner: "claude" }
+    for (const spec of [{ remote: off }, { remote: on }, { unattended: true }, { unattended: true, lean: true }]) {
+      const { args } = turnCommand(runnerById("claude"), { bot: own, message: "x", ...spec })
+      for (const name of ["ListAgents", "SendMessage"])
+        expect([spec, name, disallowedOf(args).includes(name)]).toEqual([spec, name, true])
+    }
+    // Nel pannello resta com'è.
+    const panel = turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true }).args
+    expect(disallowedOf(panel)).not.toContain("SendMessage")
+  })
+
+  /*
    * Scelta 7 anche per Codex. Verificato su codex-cli 0.162.1 senza turni di modello, leggendo gli strumenti che un
    * turno offre al modello da un provider finto: 21 con il server MCP dell'utente, le app di ChatGPT e `web_search`;
    * 8 con queste opzioni, nessuno di quelli. `-c mcp_servers={}` non basta: si fonde con la tabella dell'utente. Ogni
