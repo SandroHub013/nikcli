@@ -125,11 +125,11 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
       }
     })
 
-    // P3-1: Live listener for prefers-reduced-motion changes
+    // P3-1 / P3-10: Live listener for prefers-reduced-motion changes
     if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
       const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)")
       const handleMotionChange = (e: MediaQueryListEvent | MediaQueryList) => {
-        if (e.matches) {
+        if (e.matches && startingFired) {
           restartScene?.({ prefersReducedMotion: true })
         }
       }
@@ -154,12 +154,13 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
       if (!props.visible) return
       if (!sceneIsWorthBuilding(appearedAt, performance.now())) return
 
+      controller?.stop()
       controller = startPixelScene(canvas, { prefersReducedMotion: getPrefersReducedMotion() })
       handleResize()
     }, SPLASH_SCENE_DELAY_MS)
 
     restartScene = (opts) => {
-      if (!disposed && canvas) {
+      if (!disposed && canvas && startingFired) {
         controller?.stop()
         controller = startPixelScene(canvas, opts)
         handleResize()

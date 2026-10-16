@@ -377,7 +377,13 @@ describe("splash component (step 3)", () => {
     }
   })
 
-  test("dynamically responds to prefers-reduced-motion media query changes (P3-1)", () => {
+  test("dynamically responds to prefers-reduced-motion media query changes (P3-1, P3-10)", () => {
+    let currentTime = 1000
+    let nextTimerId = 1
+    let timers: { id: number; due: number; cb: () => void }[] = []
+    const rafs = new Map<number, FrameRequestCallback>()
+    let nextRafId = 1
+
     let changeHandler: ((e: any) => void) | undefined
     const mockMql = {
       matches: false,
@@ -389,20 +395,91 @@ describe("splash component (step 3)", () => {
         if (evt === "change" && changeHandler === fn) changeHandler = undefined
       },
     }
+
+    const origSetTimeout = globalThis.setTimeout
+    const origClearTimeout = globalThis.clearTimeout
+    const origRAF = window.requestAnimationFrame
+    const origCancelRAF = window.cancelAnimationFrame
+    const origPerfNow = performance.now
     const origMatchMedia = window.matchMedia
+
+    performance.now = () => currentTime
+    globalThis.setTimeout = ((cb: any, ms: number = 0) => {
+      const id = nextTimerId++
+      timers.push({ id, due: currentTime + ms, cb })
+      return id as any
+    }) as any
+    globalThis.clearTimeout = ((id: any) => {
+      timers = timers.filter((t) => t.id !== id)
+    }) as any
+    window.requestAnimationFrame = (cb: FrameRequestCallback) => {
+      const id = nextRafId++
+      rafs.set(id, cb)
+      return id
+    }
+    window.cancelAnimationFrame = (id: number) => {
+      rafs.delete(id)
+    }
     window.matchMedia = ((query: string) => {
       if (query.includes("prefers-reduced-motion")) return mockMql as any
       return { matches: false, addEventListener: () => {}, removeEventListener: () => {} } as any
     }) as any
 
-    const handle = mountSplash({ visible: true })
+    const advance = (ms: number) => {
+      currentTime += ms
+      let firedAny = true
+      while (firedAny) {
+        firedAny = false
+        const dueTimers = timers.filter((t) => t.due <= currentTime)
+        if (dueTimers.length > 0) {
+          dueTimers.sort((a, b) => a.due - b.due)
+          const t = dueTimers[0]!
+          timers = timers.filter((x) => x.id !== t.id)
+          t.cb()
+          firedAny = true
+        }
+      }
+    }
+
+    // Case A: reduce changes BEFORE 300ms delay -> builds 0 scenes early, 1 static scene at 300ms
+    const handleA = mountSplash({ visible: true })
     try {
       expect(typeof changeHandler).toBe("function")
-      // Trigger media query change to reduce
+      advance(150)
+      expect(rafs.size).toBe(0)
+
       mockMql.matches = true
       changeHandler!({ matches: true })
+      expect(rafs.size).toBe(0)
+
+      advance(150) // reaches 300ms delay
+      expect(rafs.size).toBe(0) // static scene, 0 rAF
     } finally {
-      handle.dispose()
+      handleA.dispose()
+    }
+
+    // Case B: reduce changes AFTER 300ms while loop is actively running
+    mockMql.matches = false
+    timers = []
+    rafs.clear()
+    const handleB = mountSplash({ visible: true })
+    try {
+      advance(300)
+      expect(rafs.size).toBe(1) // loop active
+
+      mockMql.matches = true
+      changeHandler!({ matches: true })
+      expect(rafs.size).toBe(0) // loop stopped immediately
+
+      advance(200)
+      expect(rafs.size).toBe(0)
+    } finally {
+      handleB.dispose()
+      globalThis.setTimeout = origSetTimeout
+      globalThis.clearTimeout = origClearTimeout
+      window.requestAnimationFrame = origRAF
+      window.cancelAnimationFrame = origCancelRAF
+      performance.now = origPerfNow
       window.matchMedia = origMatchMedia
     }
   })
