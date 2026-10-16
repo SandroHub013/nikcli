@@ -204,6 +204,72 @@ export function renderScene(
   // 6. Developer (left, stirring into pot / tasting)
   const devPose = DEVELOPER_POSES[devPoseIndex] ?? DEVELOPER_POSES[0]!
   drawSpriteGrid(ctx, devPose, SCENE_LAYOUT.developer.x, SCENE_LAYOUT.developer.y)
+
+  // 7. Stirring ladle in scene coordinates (reaches over pot rim into sauce)
+  drawLadle(ctx, devPoseIndex, SCENE_LAYOUT.pot.x, SCENE_LAYOUT.pot.y)
+}
+
+/**
+ * Draws the stirring ladle in scene coordinates during mescola poses.
+ * Passes over the pot crema rim into the sauce:
+ * - mescola_sinistra (pose 1): ladle dips in left side of sauce [pot.x + 9, pot.y + 18] (scene x=75, y=34)
+ * - mescola_destra (pose 2): ladle reaches across to right side of sauce [pot.x + 19, pot.y + 18] (scene x=85, y=34)
+ */
+export function drawLadle(
+  ctx: CanvasRenderingContext2D,
+  devPoseIndex: number,
+  potX: number,
+  potY: number,
+): { tipX: number; tipY: number } | null {
+  if (devPoseIndex !== 1 && devPoseIndex !== 2) return null
+
+  const woodColor = SPLASH_PALETTE.k
+  const sauceColor = SPLASH_PALETTE.f
+
+  if (devPoseIndex === 1) {
+    // Mescola sinistra: handle passes over left rim (x=68..71) into left sauce (x=75)
+    ctx.fillStyle = woodColor
+    const handle = [
+      [64, 29], [65, 29],
+      [66, 30], [67, 30],
+      [68, 30], [69, 31],
+      [70, 31], [71, 32],
+      [72, 32], [73, 33],
+      [74, 33], [75, 33],
+    ]
+    for (const [x, y] of handle) {
+      ctx.fillRect(x!, y!, 1, 1)
+    }
+
+    ctx.fillStyle = woodColor
+    ctx.fillRect(74, 34, 1, 1)
+    ctx.fillStyle = sauceColor
+    ctx.fillRect(75, 34, 1, 1)
+
+    return { tipX: 75, tipY: 34 }
+  }
+
+  // Mescola destra: handle reaches across pot into right sauce (x=85)
+  ctx.fillStyle = woodColor
+  const handle = [
+    [66, 29], [67, 29],
+    [68, 30], [69, 30],
+    [70, 30], [72, 31],
+    [74, 31], [76, 31],
+    [78, 32], [80, 32],
+    [82, 32], [83, 33],
+    [84, 33], [85, 33],
+  ]
+  for (const [x, y] of handle) {
+    ctx.fillRect(x!, y!, 1, 1)
+  }
+
+  ctx.fillStyle = woodColor
+  ctx.fillRect(84, 34, 1, 1)
+  ctx.fillStyle = sauceColor
+  ctx.fillRect(85, 34, 1, 1)
+
+  return { tipX: 85, tipY: 34 }
 }
 
 export interface SceneController {

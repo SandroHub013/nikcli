@@ -64,7 +64,7 @@ describe("splash sprite data (step 1)", () => {
       }
     })
 
-    test("pot base and handles match the iconic Ragu pot silhouette at 32x32", () => {
+    test("pot base and handles match the iconic Ragu pot silhouette at 32x32 and are symmetric (P2-4)", () => {
       for (const frame of POT_FRAMES) {
         expect(frame[30]).toBe(".........dddddddddddd...........")
         expect(frame[29]).toBe(".......dddddddddddddddd.........")
@@ -72,6 +72,11 @@ describe("splash sprite data (step 1)", () => {
         expect(frame[13]).toContain("i")
         expect(frame[17]![0]).toBe("d")
         expect(frame[17]![31]).toBe("d")
+        // Row 11 ends symmetrically without right-side bastoncino
+        expect(frame[11]!.endsWith("dddd....")).toBe(true)
+        // Crema rim rows 12 and 13 end symmetrically at col 27 with 4 dots
+        expect(frame[12]!.endsWith("id....")).toBe(true)
+        expect(frame[13]!.endsWith("id....")).toBe(true)
       }
     })
   })
@@ -141,23 +146,30 @@ describe("splash sprite data (step 1)", () => {
       expect(pronto[10]![12]).toBe("h")
     })
 
-    test("mescola poses enter the pot and stir left and right", () => {
+    test("mescola poses reach hands toward pot for scene-space stirring (P2-4)", () => {
       const mescolaSinistra = DEVELOPER_POSES[1]!
       const mescolaDestra = DEVELOPER_POSES[2]!
-      // In mescola sinistra, ladle enters left rim (cols 24..25)
-      expect(mescolaSinistra[18]![24]).toBe("k")
-      expect(mescolaSinistra[18]![25]).toBe("f") // dipping in sauce
+      // In mescola sinistra, hand reaches toward pot
+      expect(mescolaSinistra[16]![21]).toBe("h")
 
-      // In mescola destra, ladle stirs further to the right rim (cols 26..27)
-      expect(mescolaDestra[18]![26]).toBe("k")
-      expect(mescolaDestra[18]![27]).toBe("f") // dipping in sauce right
+      // In mescola destra, hand reaches toward pot
+      expect(mescolaDestra[15]![21]).toBe("h")
     })
 
-    test("assaggia pose brings spoon to developer mouth", () => {
+    test("assaggia pose brings spoon to developer mouth (P2-4)", () => {
       const assaggia = DEVELOPER_POSES[4]!
-      // Mouth row 13: spoon bowl touches mouth at cols 11..12
-      expect(assaggia[13]![11]).toBe("k")
-      expect(assaggia[13]![12]).toBe("k")
+      // Row 14: spoon bowl touches mouth at cols 11..12
+      expect(assaggia[14]![11]).toBe("k")
+      expect(assaggia[14]![12]).toBe("k")
+    })
+
+    test("pollice_su has distinct raised thumb (P2-4)", () => {
+      const polliceSu = DEVELOPER_POSES[6]!
+      // Row 13 has raised thumb at col 3 above fist at row 15
+      expect(polliceSu[13]![3]).toBe("h")
+      expect(polliceSu[14]![3]).toBe("h")
+      expect(polliceSu[15]![2]).toBe("h")
+      expect(polliceSu[15]![3]).toBe("h")
     })
   })
 
@@ -173,9 +185,19 @@ describe("splash sprite data (step 1)", () => {
       expect(text).toContain("k") // amber code
     })
 
-    test("counter tomato and basil have valid dimensions", () => {
+    test("counter tomato and basil have valid dimensions and no invisible outlines (P2-4, P3-3, P3-5)", () => {
       expect(TOMATO_SPRITE.length).toBe(TOMATO_SIZE.height)
+      expect(TOMATO_SIZE.width).toBe(5)
+      for (const row of TOMATO_SPRITE) {
+        expect(row.length).toBe(5)
+        expect(row).not.toContain("a")
+      }
       expect(BASIL_SPRITE.length).toBe(BASIL_SIZE.height)
+      expect(BASIL_SIZE.width).toBe(4)
+      for (const row of BASIL_SPRITE) {
+        expect(row.length).toBe(4)
+        expect(row).not.toContain("a")
+      }
     })
   })
 

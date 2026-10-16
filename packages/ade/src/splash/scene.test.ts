@@ -8,6 +8,7 @@ import {
   SCENE_WIDTH,
   calculateIntegerScale,
   createStaticBackground,
+  drawLadle,
   getActiveFrames,
   renderScene,
   startPixelScene,
@@ -261,6 +262,33 @@ describe("splash scene renderer (step 2)", () => {
       } finally {
         window.requestAnimationFrame = origRAF
       }
+    })
+
+    test("ladle reaches into pot sauce in scene coordinates between [pot.x+7, pot.x+25] (P2-4)", () => {
+      const drawnPixels: { x: number; y: number; color: string }[] = []
+      const fakeCtx = {
+        fillStyle: "",
+        fillRect: (x: number, y: number, w: number, h: number) => {
+          drawnPixels.push({ x, y, color: String(fakeCtx.fillStyle) })
+        },
+      } as unknown as CanvasRenderingContext2D
+
+      // Test mescola sinistra (pose 1)
+      const tipSinistra = drawLadle(fakeCtx, 1, SCENE_LAYOUT.pot.x, SCENE_LAYOUT.pot.y)
+      expect(tipSinistra).not.toBeNull()
+      expect(tipSinistra!.tipX).toBeGreaterThanOrEqual(SCENE_LAYOUT.pot.x + 7)
+      expect(tipSinistra!.tipX).toBeLessThanOrEqual(SCENE_LAYOUT.pot.x + 25)
+      expect(tipSinistra!.tipY).toBeGreaterThanOrEqual(SCENE_LAYOUT.pot.y + 14) // in sauce
+
+      // Test mescola destra (pose 2)
+      const tipDestra = drawLadle(fakeCtx, 2, SCENE_LAYOUT.pot.x, SCENE_LAYOUT.pot.y)
+      expect(tipDestra).not.toBeNull()
+      expect(tipDestra!.tipX).toBeGreaterThanOrEqual(SCENE_LAYOUT.pot.x + 7)
+      expect(tipDestra!.tipX).toBeLessThanOrEqual(SCENE_LAYOUT.pot.x + 25)
+      expect(tipDestra!.tipY).toBeGreaterThanOrEqual(SCENE_LAYOUT.pot.y + 14) // in sauce
+
+      // Verify tip moved to the right between sinistra and destra (stirring motion)
+      expect(tipDestra!.tipX).toBeGreaterThan(tipSinistra!.tipX)
     })
   })
 
