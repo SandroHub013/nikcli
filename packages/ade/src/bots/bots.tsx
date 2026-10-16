@@ -936,6 +936,11 @@ export function openBotByPath(path: string, room?: string, tab?: BotTab) {
   if (tab) shared.setTargetTab(tab)
 }
 
+/** Resolves the identifier of a bot by its path from the current roster, if loaded. */
+export function botNameFromRoster(path: string): string | undefined {
+  return shared.roster()?.find((b) => b.path === path)?.identifier
+}
+
 export interface BotsRosterProps {
   /** The open project, when there is one. Decides whether project bots exist. */
   projectRoot?: string

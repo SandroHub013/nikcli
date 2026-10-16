@@ -161,7 +161,9 @@ export function appGatewayPanelDeps(project: () => string | undefined): Omit<Gat
 }
 
 /** Starts listening for the chats' messages; the gateways read from then on. */
-export async function startAppGatewayController(): Promise<GatewayController> {
+export async function startAppGatewayController(options?: {
+  readonly botName?: (botPath: string) => string
+}): Promise<GatewayController> {
   const controller = await startGatewayController({
     bridge: tauriGatewayBridge(),
     // Within the bot's money a day (`spend.ts`, the user's choice 5).
@@ -199,6 +201,7 @@ export async function startAppGatewayController(): Promise<GatewayController> {
   const attentionSync = syncGatewayAttention({
     approvals: appApprovals,
     api: tauriGatewayPanelApi(),
+    botName: options?.botName,
   })
   // The menu of commands on Telegram, in ADE's language, once the bot's gateway is up.
   const stopMenus = await startMenuSync({

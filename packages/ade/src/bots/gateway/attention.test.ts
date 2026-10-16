@@ -70,4 +70,35 @@ describe("syncGatewayAttention", () => {
 
     syncer.stop()
   })
+
+  test("uses custom botName resolver from roster instead of raw filename (P2-3)", async () => {
+    const registry = createApprovalRegistry()
+    const mockApi = {
+      status: async () => [
+        {
+          bot: "C:/bots/revisore-pr.md",
+          platform: "telegram",
+          enabled: true,
+          running: true,
+          connected: false,
+          needsAttention: true,
+          attentionReason: "token non valido",
+          hasToken: true,
+          authorized: [],
+        } as GatewayStatus,
+      ],
+      listen: async () => () => {},
+    }
+
+    const syncer = syncGatewayAttention({
+      approvals: registry,
+      api: mockApi,
+      botName: (path) => (path.endsWith("revisore-pr.md") ? "Revisore dei PR" : path),
+    })
+    await new Promise((r) => setTimeout(r, 10))
+
+    expect(registry.listAttentions()).toHaveLength(1)
+    expect(registry.listAttentions()[0].botName).toBe("Revisore dei PR")
+    syncer.stop()
+  })
 })

@@ -263,7 +263,7 @@ import {
 import { Chat } from "../chat/chat"
 import { appChatStore } from "../chat/store"
 import { barSessionCount } from "./bar-sessions"
-import { BotsMain, BotsRoster, openBotByPath } from "../bots/bots"
+import { BotsMain, BotsRoster, botNameFromRoster, openBotByPath } from "../bots/bots"
 import { approvalBadge, approvalLine, attentionLine, freshApprovals, freshAttentions, shouldNotifySystem } from "../bots/approval-signal"
 import { waitingApprovals, waitingAttentions } from "../bots/approvals-app"
 import { forgetSystemNotice, notifySystem, windowInFront } from "../bots/system-notify"
@@ -6859,7 +6859,11 @@ export function Workbench() {
         gateway?.stop()
       })
       void import("../bots/gateway/bridge")
-        .then(({ startAppGatewayController }) => startAppGatewayController())
+        .then(({ startAppGatewayController }) =>
+          startAppGatewayController({
+            botName: (path) => botNameFromRoster(path) ?? path.split(/[/\\]/).pop()?.replace(/\.md$/, "") ?? path,
+          }),
+        )
         .then((started) => (gatewayGone ? started.stop() : (gateway = started)))
         .catch((error) => console.warn("ADE: gateway dei bot non avviato", error))
     }
