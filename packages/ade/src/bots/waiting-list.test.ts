@@ -65,7 +65,7 @@ describe("«Aspettano te»", () => {
     const item = host.querySelector('[data-slot="bots-waiting-item"]')!
     expect(host.querySelector('[data-slot="bots-waiting-title"]')?.textContent).toBe("Aspettano te")
     expect(item.textContent).toContain("alfa")
-    expect(item.textContent).toContain("Vuole usare «bash» su «git push --force»")
+    expect(item.textContent).toContain("Vuole eseguire un comando (bash): «git push --force»")
     expect(item.textContent).toContain("riscrive la storia")
     expect(item.textContent).toContain("ADE · restano 4:00")
     expect([...item.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["alfa", "Consenti", "Nega"])
