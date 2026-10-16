@@ -366,6 +366,26 @@ describe("a Codex turn nobody watches reads the user's MCP servers", () => {
   })
 
   /*
+   * bot-lettura-2: from a chat Codex starts only with a sandbox that reads the project alone. Windows' `unelevated`
+   * fallback cannot hold it, and Codex stops before any model call with this line (codex-cli 0.162.1, fake provider).
+   * The turn says it did not start and how to get a sandbox that can, and is not tried again with a wider one.
+   */
+  test("a sandbox that cannot keep reads in the project: the turn says why, and is not retried", async () => {
+    const m = codexMachine({ text: '[mcp_servers.docs]\nurl = "x"\n' })
+    const turn = runTurn({ runner: "codex", message: "ciao", remote: { commands: false } }, m.deps)
+    await until(() => m.spawned() > 0)
+    m.say(
+      "Error: thread/start: thread/start failed: error creating thread: failed to load AGENTS.md instructions for environment `local`: failed to prepare fs sandbox: failed to prepare windows sandbox wrapper: windows unelevated restricted-token sandbox cannot enforce split filesystem read restrictions directly; refusing to run unsandboxed (code -32603)",
+    )
+    m.exit(1)
+    const result = await turn.result
+    expect(result.status).toBe("error")
+    expect(result.problem).toContain(t("bots.codex.sandboxCannotRead"))
+    expect(result.problem).not.toContain(t("bots.codex.optionsRefused"))
+    expect(m.spawned()).toBe(1)
+  })
+
+  /*
    * Codex 0.162.1 reads a project's `.codex/config.toml` too, in a trusted project, from its git root down to the
    * turn's folder (checked with `codex mcp list` and a fake provider, no model turn). A server switched off by name in
    * a project Codex does not trust stops the turn (`invalid transport`), and ADE cannot see the trust: with such a

@@ -2136,6 +2136,8 @@ export const en: Messages = {
   "bots.spend.unreported": "cost not reported by the CLI",
   "bots.codex.optionsRefused":
     "Codex refused the options ADE uses to switch off its MCP servers and web access from a chat and in routines. This happens with a Codex version that's too old, or when Codex reads a config.toml other than ~/.codex/config.toml (CODEX_HOME): update Codex or unset CODEX_HOME.",
+  "bots.codex.sandboxCannotRead":
+    "The turn didn't start. From a chat and in routines Codex starts only with a sandbox that reads the project alone, and its sandbox on this computer (unelevated) can't do that. You need one of these two: the MXC isolation of an up-to-date Windows 11 24H2 or 25H2, which ADE uses by itself when it's there; or Codex's elevated sandbox, set up once with “codex sandbox setup --elevated --current-user”, which asks for an administrator.",
   "bots.codex.projectConfig":
     "The project has a .codex/config.toml, which Codex reads in trusted projects along with its MCP servers. To keep them off, this turn ran without your Codex configuration: also without the provider and profiles in your ~/.codex/config.toml.",
   "bots.codex.withoutUserConfig":

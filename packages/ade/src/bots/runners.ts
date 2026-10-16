@@ -356,6 +356,32 @@ export function codexOptionsRefused(said: string | undefined): boolean {
   )
 }
 
+/*
+ * From a chat and in a routine Codex reads the project only (bot-lettura-2, the Master's choice): its `read-only`
+ * sandbox reads the whole disk, ~/.ssh included. A permissions profile of ADE's own reads the project and the paths
+ * common tools need (`:minimal`), and `prefer_mxc` runs it in Windows' MXC isolation where the device has it, with no
+ * administrator setup. `sandbox_mode` stays beside it, for a Codex that does not know profiles. No spaces: these go
+ * through npm's `.cmd` shim. Checked on codex-cli 0.162.1 with a fake provider: inside read, outside «not found».
+ */
+const CODEX_PROJECT_ONLY = [
+  "-c",
+  'permissions.ade_project.filesystem={":minimal"="read",":workspace_roots"={"."="read"}}',
+  "-c",
+  'default_permissions="ade_project"',
+  "-c",
+  "features.prefer_mxc=true",
+]
+
+/**
+ * Whether Codex would not start with that profile: Windows' `unelevated` sandbox cannot keep reads in the project, and
+ * Codex says so before any model call. The turn fails closed, never tried again with a wider sandbox.
+ */
+export function codexSandboxCannotRead(said: string | undefined): boolean {
+  return /cannot enforce split filesystem read restrictions|requires the elevated Windows sandbox backend/i.test(
+    said ?? "",
+  )
+}
+
 /**
  * What a turn from a chat may run (G5, D93). With `commands` off, the
  * default, no shell at all. With it on (the bot's «Comandi da remoto», the
@@ -635,6 +661,7 @@ export function turnCommand(
               "features.apps=false",
               "-c",
               "features.plugins=false",
+              ...CODEX_PROJECT_ONLY,
             ]
           : []
       if (sessionId) {

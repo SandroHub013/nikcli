@@ -31,6 +31,7 @@ import {
   applyRunnerLine,
   codexMcpNames,
   codexOptionsRefused,
+  codexSandboxCannotRead,
   enforcesDisabledTools,
   finalText,
   runnerById,
@@ -453,14 +454,19 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       }
       update(applyExit(talk, code, Date.now(), runner.label, lastWords))
       if (talk.status === "error" && unwatchedCodex) {
-        /* Why, when it is ADE's doing: options Codex refused, or its config.toml left out (choice 7). */
-        const why = codexOptionsRefused(lastWords)
-          ? t("bots.codex.optionsRefused")
-          : codexMcp.projectConfig
-            ? t("bots.codex.projectConfig")
-            : codexMcpServers === undefined
-              ? t("bots.codex.withoutUserConfig")
-              : undefined
+        /*
+         * Why, when it is ADE's doing: a sandbox that cannot keep reads in the project (bot-lettura-2), options Codex
+         * refused, or its config.toml left out (choice 7).
+         */
+        const why = codexSandboxCannotRead(lastWords)
+          ? t("bots.codex.sandboxCannotRead")
+          : codexOptionsRefused(lastWords)
+            ? t("bots.codex.optionsRefused")
+            : codexMcp.projectConfig
+              ? t("bots.codex.projectConfig")
+              : codexMcpServers === undefined
+                ? t("bots.codex.withoutUserConfig")
+                : undefined
         if (why) {
           const said = talk.messages.at(-1)?.text
           update(appendMessage(talk, { role: "error", text: why }, Date.now()))

@@ -5,6 +5,7 @@ import {
   applyRunnerLine,
   codexMcpNames,
   codexOptionsRefused,
+  codexSandboxCannotRead,
   enforcesDisabledTools,
   finalText,
   formatUsd,
@@ -729,6 +730,43 @@ describe("un turno da chat non ha la shell", () => {
       expect(options(args).join(" ")).not.toContain("mcp_servers.")
     }
   })
+
+  /*
+   * bot-lettura-2, la scelta di Master: da chat e nelle routine Codex legge solo il progetto, o non parte. Il sandbox
+   * `read-only` legge tutto il disco, ~/.ssh compreso. Un profilo di permessi di ADE legge il progetto e i percorsi che
+   * servono agli strumenti (`:minimal`), e `prefer_mxc` lo fa girare nell'isolamento MXC di Windows dove c'è, senza
+   * setup da amministratore. Provato su codex-cli 0.162.1 con un provider finto: dentro legge, fuori «non trovato».
+   */
+  test("Codex: da chat e nelle routine il profilo che legge solo il progetto, in ogni forma del comando", () => {
+    const own: AgentFile = { ...mine, runner: "codex" }
+    const project = [
+      'permissions.ade_project.filesystem={":minimal"="read",":workspace_roots"={"."="read"}}',
+      'default_permissions="ade_project"',
+      "features.prefer_mxc=true",
+    ]
+    for (const spec of [{ remote: off }, { remote: on }, { unattended: true }]) {
+      for (const codexMcpServers of [["docs"], undefined]) {
+        for (const sessionId of [undefined, "s1"]) {
+          const { args } = turnCommand(runnerById("codex"), {
+            bot: own,
+            message: "x",
+            ...spec,
+            ...(codexMcpServers ? { codexMcpServers } : {}),
+            ...(sessionId ? { sessionId } : {}),
+          })
+          const at = [spec, codexMcpServers, sessionId]
+          for (const setting of project) expect([...at, setting, setBy(args, setting)]).toEqual([...at, setting, "-c"])
+          // Un Codex che non conosce i profili resta almeno in sola lettura.
+          expect([...at, setBy(args, 'sandbox_mode="read-only"')]).toEqual([...at, "-c"])
+          // Nessuno spazio: passa per lo shim .cmd di npm.
+          expect([...at, options(args).filter((arg) => /\s/.test(arg))]).toEqual([...at, []])
+        }
+      }
+    }
+    // Nel pannello no.
+    const panel = turnCommand(runnerById("codex"), { bot: own, message: "x" }).args
+    for (const setting of project) expect(panel).not.toContain(setting)
+  })
 })
 
 /*
@@ -782,6 +820,22 @@ describe("why a Codex turn from a chat or a routine failed", () => {
       expect([said, codexOptionsRefused(said)]).toEqual([said, true])
     expect(codexOptionsRefused("stream disconnected before completion")).toBe(false)
     expect(codexOptionsRefused(undefined)).toBe(false)
+  })
+
+  /* The line codex-cli 0.162.1 prints on the `unelevated` sandbox, before any model call; `turn.ts` keeps 300 characters. */
+  test("a sandbox that cannot keep reads in the project is told apart from refused options", () => {
+    const line =
+      "Error: thread/start: thread/start failed: error creating thread: failed to load AGENTS.md instructions for environment `local`: failed to prepare fs sandbox: failed to prepare windows sandbox wrapper: windows unelevated restricted-token sandbox cannot enforce split filesystem read restrictions directly; refusing to run unsandboxed (code -32603)"
+    expect(codexSandboxCannotRead(line.slice(0, 300))).toBe(true)
+    expect(codexOptionsRefused(line.slice(0, 300))).toBe(false)
+    // `codex sandbox` says it this way.
+    expect(
+      codexSandboxCannotRead(
+        "windows sandbox failed: Restricted read-only access requires the elevated Windows sandbox backend",
+      ),
+    ).toBe(true)
+    expect(codexSandboxCannotRead("stream disconnected before completion")).toBe(false)
+    expect(codexSandboxCannotRead(undefined)).toBe(false)
   })
 })
 
