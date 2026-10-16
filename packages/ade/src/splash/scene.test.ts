@@ -295,25 +295,67 @@ describe("splash scene renderer (step 2)", () => {
       }
     })
 
-    test("calling stop cancels active animation frame and stops tick", () => {
-      let cancelled = false
+    test("calling stop cancels active animation frame, cleans visibility listener, and halts tick (P2-3)", () => {
+      const rAFQueue = new Map<number, FrameRequestCallback>()
+      let nextId = 1
+      const origRAF = window.requestAnimationFrame
       const origCancel = window.cancelAnimationFrame
-      window.cancelAnimationFrame = () => {
-        cancelled = true
+
+      window.requestAnimationFrame = (cb: FrameRequestCallback) => {
+        const id = nextId++
+        rAFQueue.set(id, cb)
+        return id
+      }
+      window.cancelAnimationFrame = (id: number) => {
+        rAFQueue.delete(id)
       }
 
-      try {
-        const canvas = document.createElement("canvas")
-        const controller = startPixelScene(canvas)
+      let visibilityChangeListeners = 0
+      const origAddDocListener = document.addEventListener
+      const origRemoveDocListener = document.removeEventListener
 
-        controller.resize(1920, 1080)
-        expect(canvas.style.width).toBe(`${160 * 12}px`)
-        expect(canvas.style.height).toBe(`${90 * 12}px`)
+      document.addEventListener = (event: string, cb: any, opts?: any) => {
+        if (event === "visibilitychange") visibilityChangeListeners++
+        return origAddDocListener.call(document, event, cb, opts)
+      }
+      document.removeEventListener = (event: string, cb: any, opts?: any) => {
+        if (event === "visibilitychange") visibilityChangeListeners--
+        return origRemoveDocListener.call(document, event, cb, opts)
+      }
+
+      let drawCalls = 0
+      const canvas = document.createElement("canvas")
+      const mockCtx = {
+        fillStyle: "",
+        fillRect: () => { drawCalls++ },
+        drawImage: () => { drawCalls++ },
+        imageSmoothingEnabled: false,
+      }
+      canvas.getContext = (() => mockCtx) as any
+
+      try {
+        const controller = startPixelScene(canvas)
+        expect(visibilityChangeListeners).toBe(1)
+        expect(rAFQueue.size).toBe(1)
+
+        const [id, cb] = Array.from(rAFQueue.entries())[0]!
 
         controller.stop()
-        expect(cancelled).toBe(true)
+        // 1. cancelAnimationFrame was called and removed the frame from queue
+        expect(rAFQueue.size).toBe(0)
+        // 2. visibilitychange event listener was cleanly removed
+        expect(visibilityChangeListeners).toBe(0)
+
+        // 3. Even if a stale callback were invoked after stop, tick exits immediately without drawing or re-queueing
+        const drawsBefore = drawCalls
+        cb(1500)
+        expect(drawCalls).toBe(drawsBefore)
+        expect(rAFQueue.size).toBe(0)
       } finally {
+        window.requestAnimationFrame = origRAF
         window.cancelAnimationFrame = origCancel
+        document.addEventListener = origAddDocListener
+        document.removeEventListener = origRemoveDocListener
       }
     })
   })
