@@ -226,3 +226,20 @@ describe("P2-4: a muted bot says so in the list", () => {
     expect(ruleOf('[data-slot="bots-row-muted"]')).toContain("flex: none;")
   })
 })
+
+describe("P2-6: the face's help stays closed in the short form", () => {
+  const picker = tsx.slice(tsx.indexOf("function FacePicker("), tsx.indexOf("/* ── the conversation"))
+
+  test("lint: the upload help is the button's tip, and shows as words only after a problem or outside the short form", () => {
+    expect(picker).toContain('data-face="upload"\n            title={t("bots.face.uploadHint")}')
+    expect(picker).toContain('<Show when={!props.compact || problem()}>')
+    // «Forma e colore vengono dal nome…» only where there is room for it.
+    expect(picker).toContain("<Show when={!props.compact || props.value}>")
+  })
+
+  test("lint: the short form asks for it, the bot's settings do not", () => {
+    const form = tsx.slice(tsx.indexOf("function BotForm("), tsx.indexOf("/* ── the settings, in the card"))
+    expect(form).toContain('<FacePicker identifier={name() || "?"} value={avatar()} onChange={setAvatar} compact />')
+    expect(tsx).toContain("<FacePicker identifier={props.bot.identifier} value={avatar()} onChange={setAvatar} />")
+  })
+})

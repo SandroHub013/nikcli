@@ -1338,8 +1338,16 @@ function Face(props: { identifier: string; avatar?: string; expression?: Express
  * the user makes their own. "Torna a quella del nome" clears the choice
  * rather than resetting to the default: an absent key is a different file
  * from a key that happens to equal the hash.
+ *
+ * `compact`, in the short form to make a bot (bot-ui-4, P2-6): the help on the picture is the button's tip, and
+ * shows as words only after a problem; the line on the name's face is left out.
  */
-function FacePicker(props: { identifier: string; value?: string; onChange: (value: string | undefined) => void }) {
+function FacePicker(props: {
+  identifier: string
+  value?: string
+  onChange: (value: string | undefined) => void
+  compact?: boolean
+}) {
   const chosen = createMemo(() => faceOf(props.identifier, props.value))
   // A picture: no shape or colour is the chosen one.
   const image = () => parseFaceImage(props.value) !== undefined
@@ -1405,7 +1413,13 @@ function FacePicker(props: { identifier: string; value?: string; onChange: (valu
           >
             {t("bots.face.random")}
           </button>
-          <button type="button" data-slot="bots-btn" data-face="upload" onClick={() => fileField?.click()}>
+          <button
+            type="button"
+            data-slot="bots-btn"
+            data-face="upload"
+            title={t("bots.face.uploadHint")}
+            onClick={() => fileField?.click()}
+          >
             {t("bots.face.upload")}
           </button>
           {/* The page's own file field: the WebView reads the one file picked, with no permission of ADE's. */}
@@ -1422,15 +1436,19 @@ function FacePicker(props: { identifier: string; value?: string; onChange: (valu
           />
         </div>
         <Show when={problem()}>{(text) => <span data-slot="bots-problem">{text()}</span>}</Show>
-        <span data-slot="bots-hint">
-          <Show when={props.value} fallback={<>{t("bots.face.fromName")}</>}>
-            {image() ? t("bots.face.imageChosen") : t("bots.face.custom")}{" "}
-            <button type="button" data-slot="bots-link" onClick={() => props.onChange(undefined)}>
-              {t("bots.face.reset")}
-            </button>
-          </Show>
-        </span>
-        <span data-slot="bots-hint">{t("bots.face.uploadHint")}</span>
+        <Show when={!props.compact || props.value}>
+          <span data-slot="bots-hint">
+            <Show when={props.value} fallback={<>{t("bots.face.fromName")}</>}>
+              {image() ? t("bots.face.imageChosen") : t("bots.face.custom")}{" "}
+              <button type="button" data-slot="bots-link" onClick={() => props.onChange(undefined)}>
+                {t("bots.face.reset")}
+              </button>
+            </Show>
+          </span>
+        </Show>
+        <Show when={!props.compact || problem()}>
+          <span data-slot="bots-hint">{t("bots.face.uploadHint")}</span>
+        </Show>
       </div>
     </div>
   )
@@ -2621,7 +2639,7 @@ function BotForm(props: {
 
       <div data-slot="bots-field">
         <span data-slot="bots-label">{t("bots.form.logo")}</span>
-        <FacePicker identifier={name() || "?"} value={avatar()} onChange={setAvatar} />
+        <FacePicker identifier={name() || "?"} value={avatar()} onChange={setAvatar} compact />
       </div>
 
       <label data-slot="bots-field">
