@@ -116,6 +116,49 @@ describe("splash sprite data (step 1)", () => {
         }
       }
     })
+
+    test("developer is dressed in visible attire (basil hoodie and cream apron)", () => {
+      for (const pose of DEVELOPER_POSES) {
+        const bodyStr = pose.slice(15, 27).join("")
+        expect(bodyStr).toContain("c") // basil green hoodie
+        expect(bodyStr).toContain("i") // cream apron
+        // No invisible dark body tones
+        expect(bodyStr).not.toContain("l")
+        expect(bodyStr).not.toContain("m")
+      }
+    })
+
+    test("developer face has 1px eyes separated by 1px without dark mask", () => {
+      const pronto = DEVELOPER_POSES[0]!
+      // Row 10 is the eye row: cols 8..10 are eye (b), skin space (h), eye (b)
+      expect(pronto[10]![8]).toBe("b")
+      expect(pronto[10]![9]).toBe("h")
+      expect(pronto[10]![10]).toBe("b")
+      // Surrounding face pixels on eye row are peach skin 'h' (no dark band)
+      expect(pronto[10]![6]).toBe("h")
+      expect(pronto[10]![7]).toBe("h")
+      expect(pronto[10]![11]).toBe("h")
+      expect(pronto[10]![12]).toBe("h")
+    })
+
+    test("mescola poses enter the pot and stir left and right", () => {
+      const mescolaSinistra = DEVELOPER_POSES[1]!
+      const mescolaDestra = DEVELOPER_POSES[2]!
+      // In mescola sinistra, ladle enters left rim (cols 24..25)
+      expect(mescolaSinistra[18]![24]).toBe("k")
+      expect(mescolaSinistra[18]![25]).toBe("f") // dipping in sauce
+
+      // In mescola destra, ladle stirs further to the right rim (cols 26..27)
+      expect(mescolaDestra[18]![26]).toBe("k")
+      expect(mescolaDestra[18]![27]).toBe("f") // dipping in sauce right
+    })
+
+    test("assaggia pose brings spoon to developer mouth", () => {
+      const assaggia = DEVELOPER_POSES[4]!
+      // Mouth row 13: spoon bowl touches mouth at cols 11..12
+      expect(assaggia[13]![11]).toBe("k")
+      expect(assaggia[13]![12]).toBe("k")
+    })
   })
 
   describe("props: laptop, tomato, basil", () => {

@@ -39,11 +39,11 @@ export const COUNTER_COLOR = SPLASH_PALETTE.l! // #241e1b
 
 /** Layout coordinates within the 160x90 logical canvas. */
 export const SCENE_LAYOUT = {
-  developer: { x: 30, y: 15 },
-  tomato: { x: 62, y: 44 },
-  basil: { x: 68, y: 45 },
+  developer: { x: 44, y: 15 },
+  tomato: { x: 24, y: 44 },
+  basil: { x: 32, y: 45 },
   pot: { x: 64, y: 17 },
-  laptop: { x: 96, y: 35 },
+  laptop: { x: 98, y: 35 },
   counter: { y: 49 },
   wordmark: { x: (SCENE_WIDTH - WORDMARK_WIDTH) / 2, y: 62 },
 } as const
