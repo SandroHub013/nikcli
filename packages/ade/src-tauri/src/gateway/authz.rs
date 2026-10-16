@@ -18,6 +18,14 @@
 //! silence rather than a code — no requests to wade through, and nothing that
 //! says the bot is there.
 //!
+//! A link or QR (scelta 3) is the second way in, from ADE to the owner's own phone: ADE makes a token, shows it as a
+//! `t.me/<bot>?start=<token>` link and a QR, and the owner's account that opens it is paired without typing a code. The
+//! token is 192 random bits in the characters a link takes, kept only as a salted hash, good for 10 minutes and once, one
+//! per link (a new one replaces the old). A wrong or expired one counts for nothing and touches no limit: 192 bits are not
+//! guessed, so counting the failures would protect nothing and would hand a stranger who knows the bot's name a way to shut
+//! the owner's link out (and the codes' count is not theirs to move either). The stranger is told the link no longer holds,
+//! and gets the way of a plain `/start`, the code. Where the token never was: in a log, in a thread, in a chat.
+//!
 //! Hygiene (S12): an account the user refused gets no code for a day; a
 //! request whose code could not be sent is taken back (`undo`); when the
 //! waiting requests are all taken, a new one replaces the oldest instead of
@@ -43,6 +51,13 @@ pub const REJECT_UNDO_MS: u64 = 10 * 60 * 1000;
 /// How many pushed-out requests are remembered, to tell their owner so (N5).
 pub const MAX_EVICTED: usize = 50;
 pub const MAX_FAILURES: u32 = 5;
+/// How long a link's token (the QR) lasts, once.
+pub const LINK_TTL_MS: u64 = 10 * 60 * 1000;
+/// Random bytes in a link's token (192 bits) and its length in characters: 24 bytes make exactly 32 of the 64.
+const LINK_TOKEN_BYTES: usize = 24;
+pub const LINK_TOKEN_LEN: usize = 32;
+/// What a link may carry: Telegram's `start` parameter takes `A-Z a-z 0-9 _ -`, up to 64.
+const LINK_ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 pub const LOCKOUT_MS: u64 = 60 * 60 * 1000;
 /// How long pairing stays open when the user opens it from ADE.
 pub const OPEN_MS: u64 = 10 * 60 * 1000;
@@ -76,6 +91,29 @@ pub struct Pairing {
     /// is not a wrong code, it is the answer «this request was replaced» (N5).
     #[serde(default)]
     pub evicted: Vec<Evicted>,
+    /// The token of the link or QR ADE is showing: one at a time, as a hash.
+    #[serde(default)]
+    pub link: Option<LinkToken>,
+}
+
+/// A link's token, kept as the codes are: a salt and a hash, never the token.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkToken {
+    pub salt: String,
+    pub token_hash: String,
+    pub expires_ms: u64,
+}
+
+/// What became of a link token that arrived in a private chat.
+#[derive(Debug, PartialEq, Eq)]
+pub enum LinkUse {
+    /// The token was right: its sender is the owner's account, to be authorized now.
+    Paired,
+    /// Not shaped like a token: a plain `/start` text, which counts for nothing.
+    NotAToken,
+    /// Shaped like one, and wrong, expired or already used: nothing is counted, and the stranger is told.
+    Wrong,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -157,6 +195,23 @@ fn same(a: &[u8], b: &[u8]) -> bool {
     a.iter().zip(b).fold(0u8, |diff, (x, y)| diff | (x ^ y)) == 0
 }
 
+/// 24 bytes as 32 characters of `LINK_ALPHABET`: base64 for a URL, without the padding a whole number of groups does not need.
+fn link_text(bytes: &[u8]) -> String {
+    let mut out = String::with_capacity(bytes.len() / 3 * 4);
+    for group in bytes.chunks_exact(3) {
+        let n = (u32::from(group[0]) << 16) | (u32::from(group[1]) << 8) | u32::from(group[2]);
+        for shift in [18, 12, 6, 0] {
+            out.push(LINK_ALPHABET[((n >> shift) & 63) as usize] as char);
+        }
+    }
+    out
+}
+
+/// Whether `text` has the shape of a link's token, which is all that makes it worth checking.
+pub fn is_link_token(text: &str) -> bool {
+    text.len() == LINK_TOKEN_LEN && text.bytes().all(|b| LINK_ALPHABET.contains(&b))
+}
+
 /// `ABCD-EFGH`: easier to read off a phone and type.
 pub fn show(code: &str) -> String {
     format!("{}-{}", &code[..4], &code[4..])
@@ -199,6 +254,50 @@ impl Pairing {
         if self.open_until_ms.is_some_and(|until| until <= now) {
             self.open_until_ms = None;
         }
+        if self.link.as_ref().is_some_and(|link| link.expires_ms <= now) {
+            self.link = None;
+        }
+    }
+
+    /// ADE makes the token of a link or QR: returned once, to be shown, and kept as a hash for ten minutes. A new one
+    /// replaces the old, so there is one link at a time.
+    pub fn issue_link(&mut self, now: u64, random: Random) -> Result<(String, u64), String> {
+        self.prune(now);
+        let mut bytes = [0u8; LINK_TOKEN_BYTES + 16];
+        random(&mut bytes)?;
+        let token = link_text(&bytes[..LINK_TOKEN_BYTES]);
+        let salt = hex(&bytes[LINK_TOKEN_BYTES..]);
+        let expires_ms = now + LINK_TTL_MS;
+        self.link = Some(LinkToken { token_hash: code_hash(&salt, &token), salt, expires_ms });
+        Ok((token, expires_ms))
+    }
+
+    /// `typed` arrived as the token of a link, from `sender` in a private chat. Right: the link is used up, the sender's
+    /// own request for a code (if they made one) and any refusal of them go, and the caller authorizes them. Wrong or
+    /// expired: nothing changes, not even a count: no number of them can touch the live link or the limits of the codes.
+    pub fn use_link(&mut self, typed: &str, sender: &str, now: u64) -> LinkUse {
+        self.prune(now);
+        if !is_link_token(typed) {
+            return LinkUse::NotAToken;
+        }
+        // With no live link the token is still hashed (against nothing real), so the time says nothing of whether one is.
+        let matched = match &self.link {
+            Some(link) => same(code_hash(&link.salt, typed).as_bytes(), link.token_hash.as_bytes()),
+            None => {
+                let _ = same(code_hash("0", typed).as_bytes(), b"0");
+                false
+            }
+        };
+        if matched {
+            self.link = None;
+            // The link was the opening: one account per opening, as with a typed code.
+            self.open_until_ms = None;
+            self.pending.retain(|pending| pending.sender != sender);
+            self.asked.retain(|asked| asked.sender != sender);
+            self.rejected.retain(|rejected| rejected.sender != sender);
+            return LinkUse::Paired;
+        }
+        LinkUse::Wrong
     }
 
     /// Whether a stranger writing gets a code: with nobody paired, for two hours
@@ -676,5 +775,145 @@ mod tests {
         pairing.reject_at(&pending.request, pressed).unwrap();
         pairing.open(pressed + 5 * 60 * 1000);
         assert!(pairing.rejected.is_empty());
+    }
+
+    /* ── the link or QR (scelta 3) ─────────────────────────────────────── */
+
+    #[test]
+    fn a_link_token_is_192_random_bits_in_the_characters_a_link_takes() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        let (token, expires) = pairing.issue_link(1_000, &mut random).unwrap();
+        assert_eq!(token.len(), LINK_TOKEN_LEN);
+        assert!(token.len() <= 64, "Telegram takes up to 64 characters");
+        assert!(token.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'), "{token}");
+        assert!(is_link_token(&token));
+        assert_eq!(LINK_TOKEN_BYTES * 8, 192);
+        assert_eq!(expires, 1_000 + LINK_TTL_MS);
+        // Every one is different, and none of them is a code.
+        let (other, _) = pairing.issue_link(1_000, &mut random).unwrap();
+        assert_ne!(token, other);
+        assert!(normalize(&token).is_none());
+    }
+
+    #[test]
+    fn the_token_text_covers_the_whole_alphabet_in_order() {
+        // Three bytes make four characters: the first characters of the alphabet are the first values.
+        assert_eq!(link_text(&[0, 0, 0]), "AAAA");
+        assert_eq!(link_text(&[0xff, 0xff, 0xff]), "____");
+        assert_eq!(link_text(&[0, 0, 1]), "AAAB");
+        assert_eq!(link_text(&[0xfb, 0xef, 0xbe]), "----");
+    }
+
+    #[test]
+    fn only_the_hash_of_a_link_token_is_kept() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        let (token, _) = pairing.issue_link(0, &mut random).unwrap();
+        let saved = serde_json::to_string(&pairing).unwrap();
+        assert!(!saved.contains(&token), "{saved}");
+        let link = pairing.link.as_ref().unwrap();
+        assert_eq!(link.token_hash, code_hash(&link.salt, &token));
+        // And it survives a restart as it was saved.
+        let again: Pairing = serde_json::from_str(&saved).unwrap();
+        assert_eq!(again, pairing);
+    }
+
+    #[test]
+    fn a_link_token_pairs_once_and_only_once() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        let (token, _) = pairing.issue_link(0, &mut random).unwrap();
+        assert_eq!(pairing.use_link(&token, "42", 1), LinkUse::Paired);
+        assert!(pairing.link.is_none());
+        // The same token again, from anyone: used up, and a wrong one now.
+        assert_eq!(pairing.use_link(&token, "7", 2), LinkUse::Wrong);
+    }
+
+    #[test]
+    fn a_link_token_lasts_ten_minutes() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        let (token, _) = pairing.issue_link(0, &mut random).unwrap();
+        assert_eq!(pairing.use_link(&token, "42", LINK_TTL_MS), LinkUse::Wrong, "at ten minutes it is over");
+        let (token, _) = pairing.issue_link(0, &mut random).unwrap();
+        assert_eq!(pairing.use_link(&token, "42", LINK_TTL_MS - 1), LinkUse::Paired);
+    }
+
+    #[test]
+    fn a_new_link_token_cancels_the_old_one() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        let (old, _) = pairing.issue_link(0, &mut random).unwrap();
+        let (new, _) = pairing.issue_link(5, &mut random).unwrap();
+        assert_eq!(pairing.use_link(&old, "42", 6), LinkUse::Wrong);
+        assert_eq!(pairing.use_link(&new, "42", 7), LinkUse::Paired);
+    }
+
+    #[test]
+    fn a_text_that_is_not_a_token_counts_for_nothing() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        pairing.issue_link(0, &mut random).unwrap();
+        let shapes: Vec<String> = vec![
+            String::new(),
+            "ciao".into(),
+            "ABCD-EFGH".into(),
+            "a".repeat(31),
+            "a".repeat(33),
+            format!("{} ", "a".repeat(31)),
+            "é".repeat(16),
+        ];
+        for typed in &shapes {
+            assert_eq!(pairing.use_link(typed, "42", 1), LinkUse::NotAToken, "{typed:?}");
+        }
+    }
+
+    #[test]
+    fn no_number_of_wrong_tokens_touches_the_live_link_or_the_limits_of_the_codes() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        let (token, _) = pairing.issue_link(0, &mut random).unwrap();
+        let before = pairing.clone();
+        for round in 0..50u64 {
+            let wrong = format!("{:0>width$}", round, width = LINK_TOKEN_LEN);
+            assert_eq!(pairing.use_link(&wrong, "9", 10 + round), LinkUse::Wrong);
+        }
+        // Nothing moved: the live link is the same, the codes' count and lock are as they were.
+        assert_eq!(pairing, before);
+        assert_eq!(pairing.failures, 0);
+        assert!(!pairing.locked(100));
+        assert_eq!(pairing.attempts_left(100), MAX_FAILURES);
+        // The owner's token still works, and a new one can be made at once.
+        assert_eq!(pairing.use_link(&token, "42", 200), LinkUse::Paired);
+        let (fresh, _) = pairing.issue_link(201, &mut random).unwrap();
+        assert_eq!(pairing.use_link(&fresh, "7", 202), LinkUse::Paired);
+    }
+
+    #[test]
+    fn a_right_token_clears_the_sender_requests_and_refusals() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        // 42 had asked for a code and the user had refused 7.
+        pairing.request("42", "Ale", "c42", false, 0, &mut random).unwrap();
+        pairing.request("7", "Altro", "c7", false, 0, &mut random).unwrap();
+        pairing.reject_at(&pairing.pending.iter().find(|p| p.sender == "7").unwrap().request.clone(), 1).unwrap();
+        let (token, _) = pairing.issue_link(2, &mut random).unwrap();
+        assert_eq!(pairing.use_link(&"b".repeat(LINK_TOKEN_LEN), "9", 3), LinkUse::Wrong);
+        assert_eq!(pairing.use_link(&token, "42", 4), LinkUse::Paired);
+        assert!(pairing.pending.iter().all(|p| p.sender != "42"), "their code request is moot");
+        assert!(pairing.asked.iter().all(|a| a.sender != "42"));
+        assert_eq!(pairing.rejected.len(), 1, "another account's refusal stays");
+        let (token, _) = pairing.issue_link(5, &mut random).unwrap();
+        assert_eq!(pairing.use_link(&token, "7", 6), LinkUse::Paired);
+        assert!(pairing.rejected.is_empty(), "the owner showing the link to a refused account decides");
+    }
+
+    #[test]
+    fn an_old_saved_pairing_without_link_fields_still_loads() {
+        let old = r#"{"pending":[],"asked":[],"failures":2}"#;
+        let pairing: Pairing = serde_json::from_str(old).unwrap();
+        assert!(pairing.link.is_none());
+        assert_eq!(pairing.failures, 2);
     }
 }

@@ -19,6 +19,7 @@ import { remoteNeverKey } from "../permissions-facts"
 import { formatClock } from "../format"
 import type { AgentFile } from "../ragu"
 import { runnerById } from "../runners"
+import { PairLink } from "./pair-link"
 import { createGatewayPanel, type GatewayPanelDeps, type ProblemArea } from "./panel-state"
 import { CREATE_LINK, STEP_IDS, type PlatformId, type StepId, type TileState } from "./steps"
 
@@ -514,8 +515,19 @@ export function GatewaySection(props: { bot: AgentFile; deps: Omit<GatewayPanelD
                           )}
                         </p>
                       </Show>
-                      {/* The place of the link or QR that comes later (scelta 3): nothing is drawn here until it exists. */}
-                      <div data-slot="gateway-pair-link" />
+                      {/* The link or QR (scelta 3): Telegram only; the others keep the code, and the place stays empty. */}
+                      <div data-slot="gateway-pair-link">
+                        <Show when={panel.platform() === "telegram"}>
+                          <PairLink
+                            link={panel.pairLink}
+                            paired={panel.linked}
+                            live={panel.live}
+                            busy={panel.busy}
+                            onMake={() => void panel.makeLink()}
+                            onOpen={props.deps.openLink}
+                          />
+                        </Show>
+                      </div>
                       <Show when={panel.pairing().pending.length > 0}>
                         <ul data-slot="gateway-list">
                           <For each={panel.pairing().pending}>

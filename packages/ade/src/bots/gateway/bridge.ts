@@ -74,6 +74,7 @@ export function tauriGatewayPanelApi(): GatewayPanelApi {
       activeController?.revoke(bot, platform, sender)
     },
     pairingOpen: (bot, platform) => invoke("gateway_pairing_open", { bot, platform }),
+    pairingLink: (bot, platform) => invoke("gateway_pairing_link", { bot, platform }),
     async listen(handlers) {
       const { listen } = await import("@tauri-apps/api/event")
       const stops = await Promise.all([

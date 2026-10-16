@@ -1015,6 +1015,17 @@ export const it = {
   "gateway.panel.moveProject": (from: string, to: string) =>
     `Il bot su questa app di messaggi girava in:\n${from}\n\nSe lo accendi adesso, i turni da chat gireranno in:\n${to}\n\nAccendo in questo progetto?`,
   "gateway.panel.pairingOpenUntil": (time: string) => `Chi scrive al bot fino alle ${time} riceve un codice.`,
+  "gateway.panel.linkMake": "Mostra il QR",
+  "gateway.panel.linkNeedsOn": "Accendi prima l'app di messaggi: solo da accesa il bot sente l'abbinamento.",
+  "gateway.panel.linkAnother": "Un altro QR",
+  "gateway.panel.linkOpen": (address: string) => `Apri ${address} su questo computer`,
+  "gateway.panel.linkHow": "Inquadra il QR con la fotocamera del telefono: Telegram si apre sul bot, tocca Avvia e sei abbinato. Vale 10 minuti e una volta sola.",
+  "gateway.panel.linkLeft": (clock: string) => `restano ${clock}`,
+  "gateway.panel.linkExpired": "Il QR è scaduto: fanne un altro.",
+  "gateway.panel.linkDone": (name: string) => `Abbinato: ${name}.`,
+  "gateway.panel.linkFallback": "Non riesci? Scrivi al bot e inserisci qui il codice che ti risponde.",
+  "gateway.panel.linkQrAlt": "QR per abbinare il telefono al bot su Telegram",
+  "gateway.panel.linkMissing": "Questa versione di ADE non sa fare il QR: usa il codice.",
   "gateway.panel.remote": "Comandi da remoto",
   "gateway.panel.remoteNeverCodex": (runner: string) =>
     `Da chat questo bot esegue solo comandi che leggono, senza chiedere: ${runner} non può chiederti il permesso comando per comando.`,

@@ -19,7 +19,7 @@ setLocalePreference("it")
  * Scelta 2: the Platforms tab, rendered with a fake Rust side. Three tiles with
  * their state and the pairings waiting; opening one starts the five steps, with
  * the instructions before the field, the failure by the button that caused it, and
- * the place of the QR left empty (scelta 3 comes later).
+ * the QR's place filled for Telegram (scelta 3).
  */
 
 const BOT: AgentFile = {
@@ -72,6 +72,7 @@ function fake(statuses: GatewayStatus[], pending: Record<string, number> = {}, f
     pairingReject: async () => {},
     pairingRevoke: async () => {},
     pairingOpen: async () => 1,
+    pairingLink: async () => ({ url: "https://t.me/mio_bot?start=SEGRETO", svg: "<svg></svg>", expiresMs: Date.now() + 600_000 }),
     listen: async () => () => {},
   }
   return { api, opened }
@@ -222,7 +223,7 @@ describe("opening a tile starts the five steps", () => {
     expect(problems[0]!.textContent).toBe("Telegram ha rifiutato il codice")
   })
 
-  test("the pairing step keeps today's code form, and leaves the place of the QR empty without a text or a button", async () => {
+  test("the pairing step keeps today's code form, and in the place of the QR Telegram has the button and the code as the reserve", async () => {
     // Already on, so already open: a press on its tile would close it.
     const { press, step } = await mount([link("telegram", { hasToken: true, enabled: true, running: true })], {
       pending: { telegram: 1 },
@@ -231,8 +232,17 @@ describe("opening a tile starts the five steps", () => {
     const body = step("pair").querySelector('[data-slot="gateway-step-body"]')!
     expect(body.querySelector("form[data-secrets] input")).not.toBeNull()
     const slot = body.querySelector('[data-slot="gateway-pair-link"]')!
-    expect(slot).not.toBeNull()
-    expect(slot.childNodes.length).toBe(0)
-    expect(slot.textContent).toBe("")
+    expect([...slot.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["Mostra il QR"])
+    expect(slot.textContent).toContain("Non riesci? Scrivi al bot e inserisci qui il codice")
+  })
+
+  test("«Mostra il QR» draws the QR of the link Rust made, and nothing of it is text", async () => {
+    const { press, step } = await mount([link("telegram", { hasToken: true, enabled: true, running: true })])
+    await press(step("pair").querySelector('[data-slot="gateway-step-head"]'))
+    const slot = step("pair").querySelector('[data-slot="gateway-pair-link"]')!
+    await press([...slot.querySelectorAll("button")].find((button) => button.textContent === "Mostra il QR"))
+    expect(slot.querySelector("img")?.getAttribute("src")).toContain("data:image/svg+xml")
+    expect(slot.textContent).toContain("Apri t.me/mio_bot su questo computer")
+    expect(slot.textContent).not.toContain("SEGRETO")
   })
 })

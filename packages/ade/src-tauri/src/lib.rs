@@ -2753,6 +2753,7 @@ pub fn run() {
             gateway::gateway_pairing_reject,
             gateway::gateway_pairing_revoke,
             gateway::gateway_pairing_open,
+            gateway::gateway_pairing_link,
             gateway::gateway_slack_manifest,
             gateway::gateway_ack,
             serve::ragu_serve_start,

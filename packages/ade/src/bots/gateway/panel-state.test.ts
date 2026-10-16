@@ -47,6 +47,7 @@ function fakeApi(initial: Partial<GatewayStatus> = {}) {
     ...initial,
   }
   let pairing: PairingInfo = { open: true, pending: [], authorized: [], attemptsLeft: 5 }
+  let linkCount = 0
   const handlers: {
     status?: (status: LinkStatus) => void
     pairing?: (request: PairingRequest) => void
@@ -82,6 +83,11 @@ function fakeApi(initial: Partial<GatewayStatus> = {}) {
     pairingOpen: async () => {
       calls.push("open")
       return 1
+    },
+    pairingLink: async (bot, platform) => {
+      calls.push(`link ${bot} ${platform}`)
+      linkCount += 1
+      return { url: `https://t.me/mio_bot?start=TOKEN${linkCount}`, svg: "<svg></svg>", expiresMs: Date.UTC(2026, 8, 25, 10, 40) }
     },
     listen: async (on) => {
       Object.assign(handlers, on)
@@ -127,6 +133,7 @@ function panelWith(
         return options.confirm ?? false
       },
       now: () => Date.UTC(2026, 8, 25, 10, 30),
+      linkPollMs: 5,
     }),
   )
   return { panel, remote, asked, confirmed }
@@ -768,5 +775,76 @@ describe("the Gateway section of a bot's card", () => {
         panel.dispose()
       }
     })
+  })
+})
+
+describe("the link or QR of a pairing (scelta 3)", () => {
+  const wait = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms))
+
+  test("«Mostra il QR» asks Rust for a link of this bot and platform and keeps it; another one replaces it", async () => {
+    const fake = fakeApi({ enabled: true, running: true, hasToken: true })
+    const { panel } = panelWith(fake)
+    await panel.ready
+    expect(panel.pairLink()).toBeUndefined()
+    await panel.makeLink()
+    expect(fake.calls).toContain(`link ${BOT.path} telegram`)
+    expect(panel.pairLink()?.url).toBe("https://t.me/mio_bot?start=TOKEN1")
+    await panel.makeLink()
+    expect(panel.pairLink()?.url).toBe("https://t.me/mio_bot?start=TOKEN2")
+    panel.dispose()
+  })
+
+  test("the account that appears among the authorized while it is shown is the one it paired: the QR goes and the name is said", async () => {
+    const fake = fakeApi({ enabled: true, running: true, hasToken: true })
+    const { panel } = panelWith(fake)
+    await panel.ready
+    await panel.makeLink()
+    expect(panel.pairLink()).toBeDefined()
+    expect(panel.linked()).toBeUndefined()
+    // The owner scans it: Rust has a new authorized account, and the panel finds it while it waits.
+    fake.setPairing({ open: false, pending: [], authorized: [{ id: "42", name: "Ale", addedMs: 1 }], attemptsLeft: 5 })
+    await wait()
+    expect(panel.pairLink()).toBeUndefined()
+    expect(panel.linked()).toBe("Ale")
+    panel.dispose()
+  })
+
+  test("an account that was already paired does not end it; a new link starts again without the old name", async () => {
+    const fake = fakeApi({ enabled: true, running: true, hasToken: true })
+    fake.setPairing({ open: false, pending: [], authorized: [{ id: "1", name: "Prima", addedMs: 1 }], attemptsLeft: 5 })
+    const { panel } = panelWith(fake)
+    await panel.ready
+    await panel.refresh()
+    await panel.makeLink()
+    await wait()
+    expect(panel.pairLink()).toBeDefined()
+    expect(panel.linked()).toBeUndefined()
+    panel.dispose()
+  })
+
+  test("another platform, or closing the card, ends it and the asking", async () => {
+    const fake = fakeApi({ enabled: true, running: true, hasToken: true })
+    const { panel } = panelWith(fake)
+    await panel.ready
+    await panel.makeLink()
+    panel.choose("discord")
+    expect(panel.pairLink()).toBeUndefined()
+    panel.choose("telegram")
+    await panel.makeLink()
+    panel.dispose()
+    const before = fake.calls.length
+    await wait(40)
+    expect(fake.calls.length).toBe(before)
+  })
+
+  test("a Rust side without the command says so instead of failing silently", async () => {
+    const fake = fakeApi({ enabled: true, running: true, hasToken: true })
+    delete (fake.api as { pairingLink?: unknown }).pairingLink
+    const { panel } = panelWith(fake)
+    await panel.ready
+    await panel.makeLink()
+    expect(panel.pairLink()).toBeUndefined()
+    expect(panel.problemIn("pair")).toBe(t("gateway.panel.linkMissing"))
+    panel.dispose()
   })
 })

@@ -5,7 +5,8 @@
 //! the bot in a group channel (or a button press), from a person and not a
 //! bot. Anything else stops here, so a stranger's text never becomes a turn: a
 //! stranger gets a pairing code instead (`authz.rs`), and becomes authorized
-//! only when the user types it in ADE. The page answers with `send`, which goes
+//! only when the user types it in ADE, or opens the link or QR ADE itself showed
+//! (`/start <token>`, which only the owner's window can make). The page answers with `send`, which goes
 //! only to chats an authorized sender wrote from and loses every known secret
 //! on the way out.
 //!
@@ -14,7 +15,8 @@
 //! with a fake adapter and no token of any real service.
 
 use super::adapter::{admits, Adapter, AdapterError, Button, Capabilities, Inbound, Platform};
-use super::authz::{self, Request};
+use super::authz::{self, LinkUse, Request};
+use super::pairing_link;
 use super::redact::redact;
 use super::store::{Authorized, LinkState, Store};
 use crate::secrets::Vault;
@@ -122,6 +124,24 @@ pub struct PairingInfo {
     pub attempts_left: u32,
 }
 
+/// The link and QR the panel shows to pair the owner's phone: the address, the picture of it, and when it stops
+/// working. The token is in both and is never kept or logged in the clear.
+#[derive(Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PairingLink {
+    pub url: String,
+    /// The QR as a standalone SVG, to draw as an image.
+    pub svg: String,
+    pub expires_ms: u64,
+}
+
+// Not `Debug`: a stray `{:?}` must not put the token in a log.
+impl std::fmt::Debug for PairingLink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PairingLink").field("expires_ms", &self.expires_ms).finish_non_exhaustive()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthorizedInfo {
@@ -137,6 +157,10 @@ fn code_message(code: &str) -> String {
         "Codice di abbinamento: {code}\nPer collegare questo account al bot, inseriscilo in ADE, nella scheda del bot, alla voce Gateway. Scade tra un'ora.\n\nPairing code: {code}\nTo link this account to the bot, enter it in ADE, in the bot's Gateway section. It expires in one hour."
     )
 }
+
+/// What a stranger reads when the link they opened no longer holds (wrong, expired or used): a new QR comes from ADE, and
+/// the way of a plain `/start`, the code, follows if pairing is open.
+const LINK_STALE_MESSAGE: &str = "Questo link non vale più: chiedine uno nuovo a chi gestisce il bot in ADE.\nThis link is no longer valid: ask for a new QR in ADE.";
 
 const PAIRED_MESSAGE: &str = "Abbinamento fatto: ora questo bot ti risponde.\nPaired: this bot now answers you.";
 
@@ -914,6 +938,31 @@ impl Hub {
         Ok(AuthorizedInfo { id: pending.sender, name: pending.name, added_ms: now })
     }
 
+    /// A link and a QR for the owner's phone: a token only ADE's window can ask for, shown as `t.me/<bot>?start=<token>`
+    /// and as its picture. It lasts ten minutes and works once; asking again makes a new one and cancels the old. Only
+    /// Telegram has one; the others keep the code (`pairing_link.rs`). The bot's username comes from the platform, with
+    /// the saved token, so the link is the one of the bot that is really there.
+    pub async fn pairing_link(&self, bot: &str, platform: Platform) -> Result<PairingLink, String> {
+        check_bot(bot)?;
+        // The platform is checked before anything is asked of it or saved.
+        pairing_link::has_link(platform)?;
+        let adapter = self.connect(bot, platform)?;
+        let whoami = adapter.whoami().await.map_err(|error| redact(&error.message(), &self.secrets()))?;
+        // The username first: with none, no token is made for nothing.
+        pairing_link::telegram_username(&whoami)?;
+        let (token, expires_ms) = self.issue_link_token(bot, platform)?;
+        let url = pairing_link::link_url(platform, &whoami, &token)?;
+        let svg = pairing_link::qr_svg(&url)?;
+        self.env.log(&format!("gateway {} {}: link di abbinamento creato in ADE", platform.id(), &bot_key(bot)[..8]));
+        Ok(PairingLink { url, svg, expires_ms })
+    }
+
+    /// A new link token for the bot's link, saved as a hash; the old one is gone.
+    fn issue_link_token(&self, bot: &str, platform: Platform) -> Result<(String, u64), String> {
+        let now = self.env.now_ms();
+        self.store.update(bot, platform, |link, _| link.pairing.issue_link(now, &mut authz::os_random))
+    }
+
     /// Takes `sender` off the authorized: their messages stop reaching the
     /// page, and their chats can no longer be answered. Nothing is sent to them.
     pub fn pairing_revoke(&self, bot: &str, platform: Platform, sender: &str) -> Result<(), String> {
@@ -1165,6 +1214,15 @@ impl Task {
             self.env.log(&format!("{tag}: ignorato un bottone premuto da un non autorizzato"));
             return;
         }
+        // The token of a pairing link (`/start <token>`) never goes on as a message, whoever sends it: it is a secret
+        // of ADE's window for ten minutes, and a page's thread is no place for it.
+        if !message.button {
+            if let Some(token) = link_token_of(&message.text) {
+                if self.link_arrived(&message, token, authorized).await {
+                    return;
+                }
+            }
+        }
         if !authorized {
             self.pair(message).await;
             return;
@@ -1218,6 +1276,66 @@ impl Task {
         self.report(|live| live.last_message_ms = Some(at));
     }
 
+    /// `/start <token>` arrived. True when it is dealt with here (the message goes no further).
+    ///
+    /// - from someone already paired: said again that they are, and nothing else (the token is not spent);
+    /// - from a stranger in a private chat: a right token pairs them as a typed code would (same owner check: the token
+    ///   only exists because the owner asked for it in ADE); a wrong, expired or used one counts for nothing (192 bits are
+    ///   not guessed, and a count would only let a stranger shut the owner's link), the stranger is told the link no
+    ///   longer holds and goes on to the ordinary way, a code if pairing is open: the code is the reserve;
+    /// - in a group or channel the token is worth nothing, and nothing happens.
+    ///
+    /// The log has the fact and never the token.
+    async fn link_arrived(&self, message: &Inbound, token: &str, authorized: bool) -> bool {
+        let tag = self.tag();
+        if authorized {
+            self.env.log(&format!("{tag}: un link di abbinamento da un account già abbinato: non va avanti"));
+            if message.private {
+                if let Err(error) = self.adapter.send(&message.chat, PAIRED_MESSAGE).await {
+                    self.env.log(&format!("{tag}: conferma non mandata: {}", redact(&error.message(), &self.secrets)));
+                }
+            }
+            return true;
+        }
+        if !message.private {
+            self.env.log(&format!("{tag}: un link di abbinamento in un canale non vale: ignorato"));
+            return false;
+        }
+        let now = self.env.now_ms();
+        let name = authz::clean_name(&redact(&message.sender.name, &self.secrets));
+        let outcome = self.store.update(&self.bot, self.platform, |link, _| {
+            let used = link.pairing.use_link(token, &message.sender.id, now);
+            if used == LinkUse::Paired {
+                if !link.is_authorized(&message.sender.id) {
+                    link.authorized.push(Authorized { id: message.sender.id.clone(), name: name.clone(), added_ms: now });
+                }
+                link.remember_chat(&message.chat, &message.sender.id);
+            }
+            Ok(used)
+        });
+        match outcome {
+            Ok(LinkUse::Paired) => {
+                self.env.log(&format!("{tag}: abbinamento fatto con il link di ADE"));
+                if let Err(error) = self.adapter.send(&message.chat, PAIRED_MESSAGE).await {
+                    self.env.log(&format!("{tag}: conferma dell'abbinamento non mandata: {}", redact(&error.message(), &self.secrets)));
+                }
+                true
+            }
+            Ok(LinkUse::Wrong) => {
+                self.env.log(&format!("{tag}: link di abbinamento sbagliato, scaduto o già usato"));
+                if let Err(error) = self.adapter.send(&message.chat, LINK_STALE_MESSAGE).await {
+                    self.env.log(&format!("{tag}: avviso del link non mandato: {}", redact(&error.message(), &self.secrets)));
+                }
+                false
+            }
+            Ok(LinkUse::NotAToken) => false,
+            Err(error) => {
+                self.env.log(&format!("{tag}: link di abbinamento non verificato, stato non salvato: {error}"));
+                false
+            }
+        }
+    }
+
     /// A stranger wrote in private: a code in their chat, and a request in ADE.
     /// Their text goes nowhere. While they wait, past the limits, and anywhere
     /// but a private chat, silence.
@@ -1263,6 +1381,19 @@ impl Task {
         self.env.log(&format!("{tag}: codice di abbinamento mandato a un mittente non autorizzato"));
         self.env.pairing(&pairing_request(&self.bot, self.platform, &pending));
     }
+}
+
+/// The token in `/start <token>` (also `/start@name <token>`), when it has the shape of one. Telegram sends the payload
+/// of a `t.me/<bot>?start=<payload>` link this way, to the private chat of whoever opened it.
+fn link_token_of(text: &str) -> Option<&str> {
+    let rest = text.trim().strip_prefix("/start")?;
+    let payload = match rest.chars().next()? {
+        c if c.is_whitespace() => rest,
+        '@' => rest.split_once(char::is_whitespace)?.1,
+        _ => return None,
+    };
+    let payload = payload.trim();
+    authz::is_link_token(payload).then_some(payload)
 }
 
 /// The part of a token that says which bot it is: Telegram's token is `<bot id>:<secret>`, the others have no colon and
@@ -2479,6 +2610,182 @@ mod tests {
         assert_eq!(list.authorized.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), vec!["43"]);
         // Only the one reply to 43 went out; nothing told 42 of the revocation.
         assert!(adapter.sent.lock().unwrap().iter().all(|(chat, text)| chat != "c42" || text.starts_with("Codice di abbinamento")));
+    }
+
+    /* ── the link or QR (scelta 3) ─────────────────────────────────────── */
+
+    #[test]
+    fn the_token_of_a_link_is_read_out_of_a_start_command_and_nothing_else() {
+        let token = "AbCdEfGhIjKlMnOpQrStUvWxYz012345";
+        assert_eq!(link_token_of(&format!("/start {token}")), Some(token));
+        assert_eq!(link_token_of(&format!("  /start   {token}\n")), Some(token));
+        assert_eq!(link_token_of(&format!("/start@mio_bot {token}")), Some(token));
+        for text in [
+            "/start",
+            "/start ",
+            "/start ciao",
+            "/start@mio_bot",
+            &format!("/starting {token}"),
+            &format!("start {token}"),
+            &format!("/start {token} altro"),
+            &format!("ecco /start {token}"),
+            token,
+        ] {
+            assert_eq!(link_token_of(text), None, "{text:?}");
+        }
+    }
+
+    fn token_of(s: &Setup) -> String {
+        s.hub.issue_link_token(BOT, Platform::Fake).unwrap().0
+    }
+
+    #[tokio::test]
+    async fn the_link_pairs_the_owner_who_opens_it_without_a_code_and_the_token_is_nowhere() {
+        let s = setup("link-pairs");
+        let (adapter, feed) = start(&s);
+        let token = token_of(&s);
+        feed.send(Ok(vec![message("1", "c7", "7", &format!("/start {token}"))])).unwrap();
+        eventually("l'abbinamento", || s.hub.pairing_list(BOT, Platform::Fake).unwrap().authorized.iter().any(|a| a.id == "7")).await;
+        // The same answer as a right code, and no code was made.
+        eventually("la conferma", || adapter.sent.lock().unwrap().len() == 1).await;
+        assert_eq!(adapter.sent.lock().unwrap()[0], ("c7".to_string(), PAIRED_MESSAGE.to_string()));
+        assert!(s.env.pairings.lock().unwrap().is_empty());
+        assert!(s.env.messages.lock().unwrap().is_empty(), "the token is not a message for the page");
+        // From now on their messages arrive and ADE can answer them.
+        feed.send(Ok(vec![message("2", "c7", "7", "eccomi")])).unwrap();
+        eventually("il messaggio arriva", || s.env.messages.lock().unwrap().len() == 1).await;
+        assert_eq!(s.env.messages.lock().unwrap()[0].text, "eccomi");
+        s.hub.send(BOT, Platform::Fake, "c7", "benvenuto").await.unwrap();
+        // The token is in no log, no saved state and no event.
+        let saved = std::fs::read_to_string(&s.path).unwrap();
+        let log = s.env.log.lock().unwrap().join("\n");
+        let events = serde_json::to_string(&*s.env.messages.lock().unwrap()).unwrap();
+        for (place, text) in [("stato", &saved), ("log", &log), ("eventi", &events)] {
+            assert!(!text.contains(&token), "il token in {place}: {text}");
+        }
+        assert!(log.contains("abbinamento fatto con il link"), "{log}");
+        // Used once: the same link from another account is a wrong one (and silence now: someone is in).
+        feed.send(Ok(vec![message("3", "c9", "9", &format!("/start {token}"))])).unwrap();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        assert!(!s.hub.pairing_list(BOT, Platform::Fake).unwrap().authorized.iter().any(|a| a.id == "9"));
+    }
+
+    #[tokio::test]
+    async fn a_link_in_a_group_or_a_channel_is_worth_nothing_and_counts_for_nothing() {
+        let s = setup("link-group");
+        let (adapter, feed) = start(&s);
+        let token = token_of(&s);
+        let group = Inbound { private: false, mentioned: true, ..message("1", "gruppo9", "9", &format!("/start {token}")) };
+        feed.send(Ok(vec![group])).unwrap();
+        tokio::time::sleep(Duration::from_millis(40)).await;
+        let list = s.hub.pairing_list(BOT, Platform::Fake).unwrap();
+        assert!(list.authorized.is_empty() && list.pending.is_empty());
+        assert!(adapter.sent.lock().unwrap().is_empty(), "no code and no answer in a channel");
+        let state = s.hub.store.link(BOT, Platform::Fake).unwrap();
+        assert!(state.pairing.link.is_some(), "the token is still there for the owner's phone");
+        // And the owner's own private chat still works with it.
+        feed.send(Ok(vec![message("2", "c7", "7", &format!("/start {token}"))])).unwrap();
+        eventually("l'abbinamento", || s.hub.pairing_list(BOT, Platform::Fake).unwrap().authorized.iter().any(|a| a.id == "7")).await;
+    }
+
+    #[tokio::test]
+    async fn an_expired_token_is_told_it_no_longer_holds_and_the_stranger_gets_the_code_as_before() {
+        let s = setup("link-expired");
+        let (adapter, feed) = start(&s);
+        let token = token_of(&s);
+        s.env.later.store(authz::LINK_TTL_MS, std::sync::atomic::Ordering::SeqCst);
+        feed.send(Ok(vec![message("1", "c7", "7", &format!("/start {token}"))])).unwrap();
+        // Expired: not paired; they are told, and then the code that is the way in when the link does not work arrives.
+        eventually("l'avviso e il codice di riserva", || adapter.sent.lock().unwrap().len() == 2).await;
+        assert_eq!(adapter.sent.lock().unwrap()[0], ("c7".to_string(), LINK_STALE_MESSAGE.to_string()));
+        let code = code_sent_to(&adapter, "c7");
+        assert!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().authorized.is_empty());
+        // The typed code is unaffected, and has all its attempts.
+        assert_eq!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().attempts_left, 5);
+        s.hub.pairing_approve(BOT, Platform::Fake, &code).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn ten_wrong_starts_of_a_stranger_leave_the_owner_qr_and_the_limits_of_the_codes_as_they_were() {
+        let s = setup("link-ten-wrong");
+        let (adapter, feed) = start(&s);
+        let token = token_of(&s);
+        for round in 0..10 {
+            let wrong = format!("{:0>width$}", round, width = authz::LINK_TOKEN_LEN);
+            feed.send(Ok(vec![message(&format!("w{round}"), "c9", "9", &format!("/start {wrong}"))])).unwrap();
+        }
+        eventually("l'avviso almeno una volta", || {
+            adapter.sent.lock().unwrap().iter().any(|(to, text)| to == "c9" && text == LINK_STALE_MESSAGE)
+        })
+        .await;
+        tokio::time::sleep(Duration::from_millis(60)).await;
+        // Every wrong one was told; none counted: the codes have all their attempts and nothing is locked.
+        let list = s.hub.pairing_list(BOT, Platform::Fake).unwrap();
+        assert_eq!(list.attempts_left, 5);
+        assert!(list.locked_until_ms.is_none());
+        assert!(list.authorized.is_empty());
+        // The stranger is no one: no message reached the page, and the live token is the one ADE made.
+        assert!(s.env.messages.lock().unwrap().is_empty());
+        assert!(s.hub.store.link(BOT, Platform::Fake).unwrap().pairing.link.is_some());
+        // And the owner's phone, opening the same QR now, pairs.
+        feed.send(Ok(vec![message("o1", "c7", "7", &format!("/start {token}"))])).unwrap();
+        eventually("l'abbinamento del proprietario", || {
+            s.hub.pairing_list(BOT, Platform::Fake).unwrap().authorized.iter().any(|a| a.id == "7")
+        })
+        .await;
+        assert!(!s.hub.pairing_list(BOT, Platform::Fake).unwrap().authorized.iter().any(|a| a.id == "9"));
+        // The log has the facts and not one token.
+        let log = s.env.log.lock().unwrap().join("\n");
+        assert!(!log.contains(&token), "{log}");
+    }
+
+    #[tokio::test]
+    async fn a_plain_start_from_a_stranger_does_what_it_always_did() {
+        let s = setup("link-plain-start");
+        let (adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c7", "7", "/start")])).unwrap();
+        eventually("il codice", || adapter.sent.lock().unwrap().len() == 1).await;
+        assert_eq!(code_sent_to(&adapter, "c7").len(), 9);
+    }
+
+    #[tokio::test]
+    async fn the_token_from_someone_already_paired_is_not_a_message_and_is_not_spent() {
+        let s = setup("link-already");
+        let (adapter, feed) = start(&s);
+        authorize(&s, "7");
+        let token = token_of(&s);
+        feed.send(Ok(vec![message("1", "c7", "7", &format!("/start {token}"))])).unwrap();
+        eventually("la conferma", || adapter.sent.lock().unwrap().len() == 1).await;
+        assert_eq!(adapter.sent.lock().unwrap()[0].1, PAIRED_MESSAGE);
+        assert!(s.env.messages.lock().unwrap().is_empty(), "the token never reaches the page's thread");
+        assert!(s.hub.store.link(BOT, Platform::Fake).unwrap().pairing.link.is_some(), "not spent");
+        let log = s.env.log.lock().unwrap().join("\n");
+        assert!(!log.contains(&token), "{log}");
+    }
+
+    #[tokio::test]
+    async fn only_telegram_has_a_link_and_a_new_one_cancels_the_old() {
+        let s = setup("link-platforms");
+        for platform in [Platform::Discord, Platform::Slack, Platform::Fake] {
+            let error = s.hub.pairing_link(BOT, platform).await.unwrap_err();
+            assert!(error.contains("solo per Telegram") && error.contains("codice"), "{error}");
+        }
+        assert!(s.hub.store.link(BOT, Platform::Discord).is_none_or(|link| link.pairing.link.is_none()));
+        let old = token_of(&s);
+        let new = token_of(&s);
+        let (adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c7", "7", &format!("/start {old}"))])).unwrap();
+        // Told the link no longer holds, then the code that is the reserve.
+        eventually("l'avviso e il codice di riserva", || adapter.sent.lock().unwrap().len() == 2).await;
+        assert!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().authorized.is_empty(), "the old token is dead");
+        feed.send(Ok(vec![message("2", "c7", "7", &format!("/start {new}"))])).unwrap();
+        eventually("l'abbinamento", || s.hub.pairing_list(BOT, Platform::Fake).unwrap().authorized.iter().any(|a| a.id == "7")).await;
+    }
+
+    #[test]
+    fn the_debug_of_a_link_does_not_print_the_token() {
+        let link = PairingLink { url: "https://t.me/mio_bot?start=SEGRETO".into(), svg: "<svg>SEGRETO</svg>".into(), expires_ms: 5 };
+        assert!(!format!("{link:?}").contains("SEGRETO"));
     }
 
     #[tokio::test]

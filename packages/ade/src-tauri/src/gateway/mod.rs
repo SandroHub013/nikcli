@@ -17,6 +17,7 @@ mod hub;
 pub use hub::forget_all_tokens;
 mod known;
 mod markdown_v2;
+mod pairing_link;
 mod redact;
 mod slack;
 mod store;
@@ -24,7 +25,7 @@ mod telegram;
 
 pub use adapter::Platform;
 use adapter::Adapter;
-use hub::{AuthorizedInfo, Env, GatewayMessage, Hub, LinkStatus, PairingInfo, PairingRequest, StatusInfo, TokenKind, Tokens};
+use hub::{AuthorizedInfo, Env, GatewayMessage, Hub, LinkStatus, PairingInfo, PairingLink, PairingRequest, StatusInfo, TokenKind, Tokens};
 use std::sync::{Arc, OnceLock};
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -244,6 +245,13 @@ pub async fn gateway_pairing_list(app: AppHandle, bot: String, platform: Platfor
 #[tauri::command]
 pub async fn gateway_pairing_approve(app: AppHandle, bot: String, platform: Platform, code: String) -> Result<AuthorizedInfo, String> {
     hub(&app)?.pairing_approve(&bot, platform, &code).await
+}
+
+/// A link and a QR for the owner's phone, good for ten minutes and once (Telegram only; the others keep the code).
+/// The token is in the link and the QR the page draws, and nowhere else.
+#[tauri::command]
+pub async fn gateway_pairing_link(app: AppHandle, bot: String, platform: Platform) -> Result<PairingLink, String> {
+    hub(&app)?.pairing_link(&bot, platform).await
 }
 
 /// Takes an account off the authorized: the bot stops hearing and answering it.
