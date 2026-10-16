@@ -133,7 +133,7 @@ export function RoutineSection(props: {
             {t("bots.routine.source")}
           </button>
           <Show when={offer().checked}>
-            {(date) => <span data-slot="gateway-meta">{t("bots.routine.checked", date())}</span>}
+            {(date) => <span data-slot="bots-hint">{t("bots.routine.checked", date())}</span>}
           </Show>
         </div>
       )}
@@ -250,15 +250,17 @@ export function RoutineSection(props: {
                 onInput={(event) => setPrompt(event.currentTarget.value)}
               />
             </label>
-            <select
-              data-slot="bots-input"
-              aria-label={t("bots.routine.kind.label")}
-              value={kind()}
-              onChange={(event) => setKind(event.currentTarget.value === "daily" ? "daily" : "hours")}
-            >
-              <option value="hours">{t("bots.routine.kind.hours")}</option>
-              <option value="daily">{t("bots.routine.kind.daily")}</option>
-            </select>
+            <label data-slot="bots-field">
+              <span data-slot="bots-label">{t("bots.routine.kind.label")}</span>
+              <select
+                data-slot="bots-input"
+                value={kind()}
+                onChange={(event) => setKind(event.currentTarget.value === "daily" ? "daily" : "hours")}
+              >
+                <option value="hours">{t("bots.routine.kind.hours")}</option>
+                <option value="daily">{t("bots.routine.kind.daily")}</option>
+              </select>
+            </label>
             <Show
               when={kind() === "hours"}
               fallback={

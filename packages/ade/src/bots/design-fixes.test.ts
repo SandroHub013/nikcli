@@ -130,7 +130,10 @@ describe("D22: the screen reader can follow", () => {
   test("lint: the message field, the routine's kind and the memory's fields have a name", () => {
     expect(view).toContain('aria-label={t("bots.composer.label", props.bot.identifier)}')
     expect(rooms).toContain('aria-label={t("bots.room.composerLabel", current().name)}')
-    expect(routines).toContain('aria-label={t("bots.routine.kind.label")}')
+    // A visible label wraps the select: its name is the text the user reads (P2-4), not an aria-label only they cannot see.
+    expect(routines).toContain('<span data-slot="bots-label">{t("bots.routine.kind.label")}</span>')
+    expect(routines).not.toContain('aria-label={t("bots.routine.kind.label")}')
+    expect(routines).toContain('<span data-slot="bots-hint">{t("bots.routine.checked", date())}</span>')
     expect(memory).toContain('aria-label={t("bots.memory.fieldLabel"')
   })
 
