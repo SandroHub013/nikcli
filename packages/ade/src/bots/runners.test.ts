@@ -604,6 +604,40 @@ describe("un turno da chat non ha la shell", () => {
       "WebFetch",
     )
   })
+
+  /*
+   * Scelta 7 anche per Codex. Verificato su codex-cli 0.162.1 senza turni di modello, leggendo gli strumenti che un
+   * turno offre al modello da un provider finto: 21 con il server MCP dell'utente, le app di ChatGPT e `web_search`;
+   * 8 con queste opzioni, nessuno di quelli. `-c mcp_servers={}` non basta: si fonde con la tabella dell'utente.
+   */
+  test("Codex: niente server MCP del config.toml, app di ChatGPT né ricerca web, da chat e in una routine", () => {
+    const own: AgentFile = { ...mine, runner: "codex" }
+    for (const spec of [{ remote: off }, { remote: on }, { unattended: true }]) {
+      for (const sessionId of [undefined, "s1"]) {
+        const { args } = turnCommand(runnerById("codex"), {
+          bot: own,
+          message: "x",
+          ...spec,
+          ...(sessionId ? { sessionId } : {}),
+        })
+        // Options, before the `--` that ends them.
+        const options = args.slice(0, args.indexOf("--"))
+        expect([spec, sessionId, options.includes("--ignore-user-config")]).toEqual([spec, sessionId, true])
+        for (const setting of ['web_search="disabled"', "features.apps=false", "features.plugins=false"])
+          expect([spec, sessionId, setting, options[options.indexOf(setting) - 1]]).toEqual([
+            spec,
+            sessionId,
+            setting,
+            "-c",
+          ])
+        expect(options.join(" ")).not.toContain("mcp_servers={}")
+      }
+    }
+    // Nel pannello resta la configurazione dell'utente.
+    const panel = turnCommand(runnerById("codex"), { bot: own, message: "x" }).args
+    expect(panel).not.toContain("--ignore-user-config")
+    expect(panel).not.toContain('web_search="disabled"')
+  })
 })
 
 describe("abbonamento o chiave", () => {

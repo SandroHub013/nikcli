@@ -492,6 +492,27 @@ export function turnCommand(
       if (bot.effort && SAFE_EFFORT.test(bot.effort)) config.push("-c", `model_reasoning_effort="${bot.effort}"`)
       const model = bot.model && SAFE_MODEL.test(bot.model) ? ["-m", bot.model] : []
       const where = inOutbox ? { cwd: spec.outbox } : {}
+      /*
+       * From a chat and in a routine: no MCP server and no web, as ragu and Claude Code there (the user's choice 7).
+       * `-c mcp_servers={}` does not do it: Codex merges it into the user's table, which stays whole (`codex mcp
+       * list`). `--ignore-user-config` leaves the user's config.toml out, its MCP servers with it; the login stays.
+       * The ChatGPT apps are MCP servers of their own (`features.apps`), plugins can bring more, and the web search is
+       * on by default. Checked on codex-cli 0.162.1 with no model turn, by the tools a turn offers the model, read
+       * from a fake provider: 21 with the user's server, the apps and `web_search`; 8 with these, none of those.
+       * A feature goes through `-c`: `--disable` refuses a name an older Codex does not know.
+       */
+      const unwatched =
+        spec.remote !== undefined || spec.unattended === true
+          ? [
+              "--ignore-user-config",
+              "-c",
+              'web_search="disabled"',
+              "-c",
+              "features.apps=false",
+              "-c",
+              "features.plugins=false",
+            ]
+          : []
       if (sessionId) {
         return {
           command: runner.command,
@@ -501,6 +522,7 @@ export function turnCommand(
             "resume",
             "--json",
             "--skip-git-repo-check",
+            ...unwatched,
             ...model,
             ...config,
             "--",
@@ -517,6 +539,7 @@ export function turnCommand(
           "exec",
           "--json",
           "--skip-git-repo-check",
+          ...unwatched,
           ...model,
           ...config,
           "--",
