@@ -120,16 +120,19 @@ fn hub(app: &AppHandle) -> Result<Arc<Hub>, String> {
     let store = store::Store::new(path).on_set_aside(move |copy| {
         let _ = told.emit("gateway:state-aside", copy.display().to_string());
     });
-    let made = Hub::new(
-        Arc::new(AppEnv { app: app.clone() }),
-        Arc::new(crate::secrets::SystemVault),
-        service,
-        Arc::new(store),
-        Arc::new(adapter_for),
-    );
-    let hub_arc = Arc::new(made);
-    hub::spawn_time_jump_monitor(hub_arc.clone());
-    Ok(state.0.get_or_init(|| hub_arc).clone())
+    let hub_arc = state.0.get_or_init(|| {
+        let made = Hub::new(
+            Arc::new(AppEnv { app: app.clone() }),
+            Arc::new(crate::secrets::SystemVault),
+            service,
+            Arc::new(store),
+            Arc::new(adapter_for),
+        );
+        let hub_arc = Arc::new(made);
+        hub::spawn_time_jump_monitor(hub_arc.clone());
+        hub_arc
+    });
+    Ok(hub_arc.clone())
 }
 
 /// The adapter for `platform`, reading on from `cursor`.
