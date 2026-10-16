@@ -2078,6 +2078,10 @@ export const en: Messages = {
   "bots.spend.free": "free",
   "bots.spend.metered": "usage-based (depends on the model)",
   "bots.spend.unreported": "cost not reported by the CLI",
+  "bots.codex.optionsRefused":
+    "Codex refused the options ADE uses to switch off its MCP servers and web access from a chat and in routines. This happens with a Codex version that's too old, or when Codex reads a config.toml other than ~/.codex/config.toml (CODEX_HOME): update Codex or unset CODEX_HOME.",
+  "bots.codex.withoutUserConfig":
+    "ADE couldn't read the MCP servers in ~/.codex/config.toml, so this turn ran without your Codex configuration: no MCP servers, but also no provider or profiles set there.",
   "bots.daily.capLabel": "Daily spending cap",
   "bots.daily.capPlaceholder": "no cap",
   "bots.daily.capHint":

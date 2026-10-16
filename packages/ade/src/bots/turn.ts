@@ -29,6 +29,8 @@ import type { BotAccount } from "./account"
 import type { AgentFile } from "./ragu"
 import {
   applyRunnerLine,
+  codexMcpNames,
+  codexOptionsRefused,
   enforcesDisabledTools,
   finalText,
   runnerById,
@@ -37,7 +39,15 @@ import {
   type RemoteTools,
   type RunnerId,
 } from "./runners"
-import { applyExit, applyProblem, emptyTalk, sendMessage, type PendingPermission, type Talk } from "./talk"
+import {
+  appendMessage,
+  applyExit,
+  applyProblem,
+  emptyTalk,
+  sendMessage,
+  type PendingPermission,
+  type Talk,
+} from "./talk"
 
 export interface TurnRequest {
   readonly runner: RunnerId
@@ -191,6 +201,24 @@ export function markTurn(mark: string, detail?: string): void {
   if (Array.isArray(timeline)) timeline.push({ at: Date.now(), mark, ...(detail ? { detail } : {}) })
 }
 
+/**
+ * The MCP servers in the user's Codex config.toml (`~/.codex`), for a turn that switches them off by name: none when
+ * there is no file, undefined when it cannot be read or said for sure (`codexMcpNames`). `CODEX_HOME` is not seen
+ * from here: a Codex that reads another file refuses a server it does not have, and the turn says why.
+ */
+async function codexMcpServersOf(host: NonNullable<Awaited<ReturnType<typeof getHost>>>) {
+  try {
+    const home = await host.homeDir?.()
+    if (!home || !host.readTextFile) return undefined
+    const path = `${home.replace(/[\\/]+$/, "")}/.codex/config.toml`
+    if (host.exists && !(await host.exists(path))) return []
+    const read = await host.readTextFile(path)
+    return read.truncated ? undefined : codexMcpNames(read.text)
+  } catch {
+    return undefined
+  }
+}
+
 export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
   const runner = runnerById(request.runner)
   let stopped = false
@@ -250,6 +278,12 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       update(applyProblem(talk, problem, Date.now()))
       return finish("error", problem)
     }
+    /*
+     * Codex from a chat or in a routine: the user's MCP servers, read from its config.toml to be switched off by name
+     * (the user's choice 7, `TurnSpec.codexMcpServers`). Unreadable, the turn leaves the whole file out.
+     */
+    const unwatchedCodex = runner.id === "codex" && (request.remote !== undefined || request.unattended === true)
+    const codexMcpServers = unwatchedCodex ? await codexMcpServersOf(host) : undefined
     // The same mailbox mailbox.rs uses, per worktree in ADE Test (`ADE_MAILBOX_ROOT`).
     const mailbox = request.mailbox ? await host.mailboxDir?.().catch(() => undefined) : undefined
     const outbox = mailbox ? `${mailbox.replace(/[\\/]+$/, "")}/outbox` : undefined
@@ -267,6 +301,7 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       ...(request.always ? { always: request.always } : {}),
       ...(request.unattended ? { unattended: true } : {}),
       ...(request.maxCostUsd !== undefined ? { maxBudgetUsd: request.maxCostUsd } : {}),
+      ...(codexMcpServers ? { codexMcpServers } : {}),
     })
     const spawnCwd = cwd ?? request.cwd
 
@@ -382,6 +417,21 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
         return finish("error", problem)
       }
       update(applyExit(talk, code, Date.now(), runner.label, lastWords))
+      if (talk.status === "error" && unwatchedCodex) {
+        /* Why, when it is ADE's doing: options Codex refused, or its config.toml left out (choice 7). */
+        const why = codexOptionsRefused(lastWords)
+          ? t("bots.codex.optionsRefused")
+          : codexMcpServers === undefined
+            ? t("bots.codex.withoutUserConfig")
+            : undefined
+        if (why) {
+          const said = talk.messages.at(-1)?.text
+          update(appendMessage(talk, { role: "error", text: why }, Date.now()))
+          // The panel's thread shows a turn's end from its last words: the reason goes with them.
+          lastWords = lastWords ? `${lastWords} ${why}` : why
+          return finish("error", said ? `${said} ${why}` : why, code)
+        }
+      }
       return talk.status === "error"
         ? finish("error", talk.messages.at(-1)?.text, code)
         : finish("done", undefined, code)
