@@ -12,8 +12,14 @@ import {
   SPLASH_PALETTE,
   TOMATO_SIZE,
   TOMATO_SPRITE,
-  WORDMARK_MATRIX,
+  WORDMARK_COLORS,
+  WORDMARK_GRID,
+  WORDMARK_HEIGHT,
+  WORDMARK_NATIVE_HEIGHT,
+  WORDMARK_NATIVE_WIDTH,
+  WORDMARK_SCALE,
   WORDMARK_SIZE,
+  WORDMARK_WIDTH,
 } from "./sprites"
 
 describe("splash sprite data (step 1)", () => {
@@ -125,82 +131,86 @@ describe("splash sprite data (step 1)", () => {
   })
 
   describe("wordmark (Ragù Code)", () => {
-    test("every row in the wordmark has identical length matching WORDMARK_SIZE (100x14)", () => {
-      expect(WORDMARK_MATRIX.length).toBe(WORDMARK_SIZE.height)
-      for (const row of WORDMARK_MATRIX) {
-        expect(row.length).toBe(WORDMARK_SIZE.width)
+    test("wordmark grid has native dimensions matching WORDMARK_NATIVE_WIDTH and WORDMARK_NATIVE_HEIGHT (40x10)", () => {
+      expect(WORDMARK_GRID.length).toBe(WORDMARK_NATIVE_HEIGHT)
+      for (const row of WORDMARK_GRID) {
+        expect(row.length).toBe(WORDMARK_NATIVE_WIDTH)
       }
-      expect(WORDMARK_SIZE.width).toBe(100)
-      expect(WORDMARK_SIZE.height).toBe(14)
+      expect(WORDMARK_NATIVE_WIDTH).toBe(40)
+      expect(WORDMARK_NATIVE_HEIGHT).toBe(10)
     })
 
-    test("every pixel in the wordmark belongs to the approved palette", () => {
-      const allowedKeys = new Set(Object.keys(SPLASH_PALETTE))
-      for (const row of WORDMARK_MATRIX) {
-        for (const char of row) {
-          expect(allowedKeys.has(char)).toBe(true)
+    test("scaled wordmark occupies 80x20 pixels (50% of canvas width)", () => {
+      expect(WORDMARK_WIDTH).toBe(80)
+      expect(WORDMARK_HEIGHT).toBe(20)
+      expect(WORDMARK_SCALE).toBe(2)
+      expect(WORDMARK_SIZE.width).toBe(80)
+      expect(WORDMARK_SIZE.height).toBe(20)
+    })
+
+    test("every pixel in the wordmark belongs to the CLI brand palette without dark outlines", () => {
+      const allowedColors = new Set([
+        "",
+        WORDMARK_COLORS.ragu,
+        WORDMARK_COLORS.raguShadow,
+        WORDMARK_COLORS.code,
+        WORDMARK_COLORS.codeShadow,
+      ])
+      for (const row of WORDMARK_GRID) {
+        for (const pixel of row) {
+          expect(allowedColors.has(pixel)).toBe(true)
+          // Explicitly confirm no dark outline #120d0b
+          expect(pixel).not.toBe("#120d0b")
         }
       }
     })
 
-    test("uppercase R and C are at least 7 pixels high", () => {
-      // Uppercase letters span from row 3 to row 9 (7 rows)
-      const rUpper = WORDMARK_MATRIX[3]!.slice(1, 10)
-      const cUpper = WORDMARK_MATRIX[3]!.slice(52, 62)
-      expect(rUpper).toContain("a")
-      expect(cUpper).toContain("a")
-
-      const rBase = WORDMARK_MATRIX[9]!.slice(1, 10)
-      const cBase = WORDMARK_MATRIX[9]!.slice(52, 62)
-      expect(rBase).toContain("f")
-      expect(cBase).toContain("c")
+    test("letter d has an ascender on line 0", () => {
+      // Line 0 bottom pixel row (row 1 in grid), col 21 + 13 = 34
+      expect(WORDMARK_GRID[1]![34]).toBe(WORDMARK_COLORS.code)
     })
 
-    test("letter d has an ascender extending above the lowercase x-height", () => {
-      // Row 3 contains the ascender of 'd' (cols 75..84)
-      const row3D = WORDMARK_MATRIX[3]!.slice(75, 85)
-      expect(row3D).toContain("a")
-
-      // Lowercase 'a' on row 3 has no ascender (it is empty)
-      const row3A = WORDMARK_MATRIX[3]!.slice(13, 22)
-      expect(row3A.replaceAll(".", "")).toBe("")
+    test("letter g has a descender reaching down to line 4", () => {
+      // Line 4 (rows 8 and 9 in grid) contains g descender
+      const gRow8 = WORDMARK_GRID[8]!.slice(10, 14)
+      expect(gRow8).toContain(WORDMARK_COLORS.ragu)
     })
 
-    test("letter g has a descender reaching below the baseline", () => {
-      // Baseline is row 9. Rows 11 and 12 contain the descender loop of 'g' (cols 24..32)
-      const row11G = WORDMARK_MATRIX[11]!.slice(24, 33)
-      const row12G = WORDMARK_MATRIX[12]!.slice(24, 33)
-      expect(row11G).toContain("f")
-      expect(row12G).toContain("f")
+    test("the grave accent on ù consists of 2 diagonal pixels detached from the u", () => {
+      // Row 0 col 16 (top pixel) and Row 1 col 17 (bottom pixel) form '\' diagonal
+      expect(WORDMARK_GRID[0]![16]).toBe(WORDMARK_COLORS.ragu)
+      expect(WORDMARK_GRID[1]![17]).toBe(WORDMARK_COLORS.ragu)
 
-      // Other letters like 'a' have no descender on row 11
-      const row11A = WORDMARK_MATRIX[11]!.slice(13, 22)
-      expect(row11A.replaceAll(".", "")).toBe("")
+      // Detached space: row 1 col 16 and row 0 col 17 are empty
+      expect(WORDMARK_GRID[1]![16]).toBe("")
+      expect(WORDMARK_GRID[0]![17]).toBe("")
+
+      // The interior top of the u (rows 2 and 3 at cols 16-17) is empty
+      expect(WORDMARK_GRID[2]![16]).toBe("")
+      expect(WORDMARK_GRID[2]![17]).toBe("")
+      expect(WORDMARK_GRID[3]![16]).toBe("")
+      expect(WORDMARK_GRID[3]![17]).toBe("")
     })
 
-    test("the grave accent on the letter ù is well-detached above the letter", () => {
-      const row0 = WORDMARK_MATRIX[0]!
-      const row1 = WORDMARK_MATRIX[1]!
-      const row2 = WORDMARK_MATRIX[2]!
+    test("Ragù uses pomodoro/tinted shadow and Code uses basil/tinted shadow with gap", () => {
+      // Ragù cols (0..18)
+      const raguPixels = WORDMARK_GRID.flatMap((row) => row.slice(0, 19)).filter(Boolean)
+      expect(raguPixels).toContain(WORDMARK_COLORS.ragu)
+      expect(raguPixels).toContain(WORDMARK_COLORS.raguShadow)
+      expect(raguPixels).not.toContain(WORDMARK_COLORS.code)
 
-      // Accent pixels on rows 0 and 1 around col 38..40
-      expect(row0.slice(37, 41)).toContain("j")
-      expect(row1.slice(38, 42)).toContain("i")
+      // Gap cols (19..20) are completely empty
+      for (const row of WORDMARK_GRID) {
+        expect(row[19]).toBe("")
+        expect(row[20]).toBe("")
+      }
 
-      // Row 2 is empty space separating the accent from the letter body
-      expect(row2.slice(35, 45).replaceAll(".", "")).toBe("")
-    })
-
-    test("Ragù is styled in tomato red/cream and Code in basil green", () => {
-      const raguChars = WORDMARK_MATRIX.map((r) => r.slice(0, 48)).join("")
-      expect(raguChars).toContain("f") // pomodoro vivo
-      expect(raguChars).toContain("e") // pomodoro medio
-      expect(raguChars).toContain("j") // panna highlight
-      expect(raguChars).not.toContain("c") // no basilico in Ragù
-
-      const codeChars = WORDMARK_MATRIX.map((r) => r.slice(50)).join("")
-      expect(codeChars).toContain("c") // basilico chiaro
-      expect(codeChars).not.toContain("f") // no pomodoro in Code
+      // Code cols (21..39)
+      const codePixels = WORDMARK_GRID.flatMap((row) => row.slice(21)).filter(Boolean)
+      expect(codePixels).toContain(WORDMARK_COLORS.code)
+      expect(codePixels).toContain(WORDMARK_COLORS.codeShadow)
+      expect(codePixels).not.toContain(WORDMARK_COLORS.ragu)
     })
   })
 })
+

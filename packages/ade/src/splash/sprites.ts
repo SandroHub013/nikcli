@@ -567,45 +567,102 @@ export const BASIL_SIZE = {
 } as const
 
 /**
- * Large pixel art wordmark for "Ragù Code" (100 columns x 14 rows, ~60% of canvas):
- * - Uppercase R and C (height 7-8 px);
- * - Lowercase a, g, d, e (ascender on d, descender on g);
- * - Clearly detached grave accent '\' over ù;
- * - Dark outlines 'a', glossy highlights 'j' / 'i';
- * - "Ragù" in tomato red ('f', 'e') and "Code" in basil green ('c', 'b').
+ * CLI Home wordmark letters from `packages/tui/src/component/logo.tsx`.
+ * Each character in the string represents a 1-pixel wide by 2-pixel tall cell:
+ *   █ = both upper and lower pixels filled
+ *   ▀ = upper pixel filled, lower empty
+ *   ▄ = upper empty, lower pixel filled
+ *   _ = both upper and lower pixels in shadow tone
+ *   ^ = upper pixel filled, lower in shadow tone
+ *   ~ = upper pixel in shadow tone, lower empty
+ *
+ * Line 0: Ascender of 'd' in code, and grave accent '\' over 'ù' (2 diagonal pixels).
+ * Line 4: Descender of 'g' in ragù.
  */
-export const WORDMARK_MATRIX: readonly string[] = [
-  // Row 0: grave accent top on ù (\ slant at cols 38..39)
-  "......................................jj............................................................",
-  // Row 1: grave accent bottom on ù (\ slant at cols 39..40)
-  ".......................................ii...........................................................",
-  // Row 2: empty breathing space under accent
-  "....................................................................................................",
-  // Row 3: caps top line (R, C) & ascender top of d
-  ".aaaaaaa.............................................aaaaaaa................aaaaaa..................",
-  // Row 4: caps upper body & ascender stem of d
-  "aajjffffa...........................................aajjcccca..............aajjccca.................",
-  // Row 5: lowercase tops (a, g, ù, o, e)
-  "aaff..ffa......aaaaa......aaaaa......aaaa.aaaa......aacc...ca....aaaaa.....aacc...a......aaaaa......",
-  // Row 6: upper letter bodies
-  "aaffffffa.....aajfffa....aajfffa.....aaff.fffa......aacc........aajccca....aacc..cca....aajccca.....",
-  // Row 7: crossbars of R, bowls of a, g, ù, C, o, d, e
-  "aajjffffa.....aaffffa....aaffffa.....aaff.fffa......aacc........aacc.cca...aacc..cca....aaccccca....",
-  // Row 8: lower letter bodies
-  "aaff.fffa.....aa..ffa....aa..ffa.....aaff.fffa......aacc........aacc.cca...aacc..cca....aacc........",
-  // Row 9: baseline with shadow tones e (Ragù) and b (Code)
-  "aafe..eea.....aafeeea....aafeeea.....aajfeeeea......aajcbbca....aajcbca....aajcbbcca....aajcbca.....",
-  // Row 10: bottom letter outline & top of g descender
-  ".aaaaaaa......aaaaaaa....aaaaaaa.....aaaaaaa........aaaaaaa......aaaaa......aaaaaaa......aaaaa......",
-  // Row 11: g descender stem
-  "...........................afffa....................................................................",
-  // Row 12: g descender loop
-  ".........................aajfffa....................................................................",
-  // Row 13: g descender bottom outline
-  "..........................aaaaa.....................................................................",
+export const CLI_LOGO_RAGU = [
+  "                ▀▄ ", // row 0: grave accent over ù (col 16 top, col 17 bottom)
+  "█▀▀▀ ▀▀▀█ █▀▀█ █  █", // row 1
+  "█    █^^█ █__█ █__█", // row 2
+  "▀    ▀▀▀▀ ▀▀▀█ ▀▀▀▀", // row 3
+  "          ▀▀▀▀     ", // row 4
 ] as const
 
+export const CLI_LOGO_CODE = [
+  "             ▄     ", // row 0: ascender of 'd' (col 13 bottom)
+  "█▀▀▀ █▀▀█ █▀▀█ █▀▀█", // row 1
+  "█___ █__█ █__█ █^^^", // row 2
+  "▀▀▀▀ ▀▀▀▀ ▀▀▀▀ ▀▀▀▀", // row 3
+  "                   ", // row 4
+] as const
+
+/** Brand wordmark colors with 25% background-tinted shadow tones (from logo.tsx). */
+export const WORDMARK_COLORS = {
+  ragu: "#df4a2b",
+  raguShadow: "#451c13", // 25% tint with ink #120d0b
+  code: "#4f8a2e",
+  codeShadow: "#212c14", // 25% tint with ink #120d0b
+} as const
+
+export const WORDMARK_NATIVE_WIDTH = 40 // 19 + 2 (gap) + 19
+export const WORDMARK_NATIVE_HEIGHT = 10 // 5 lines * 2
+export const WORDMARK_SCALE = 2
+export const WORDMARK_WIDTH = WORDMARK_NATIVE_WIDTH * WORDMARK_SCALE // 80 px (50% of 160)
+export const WORDMARK_HEIGHT = WORDMARK_NATIVE_HEIGHT * WORDMARK_SCALE // 20 px
+
+function decodeCell(char: string, fg: string, shadow: string): [string, string] {
+  switch (char) {
+    case "█":
+      return [fg, fg]
+    case "▀":
+      return [fg, ""]
+    case "▄":
+      return ["", fg]
+    case "_":
+      return [shadow, shadow]
+    case "^":
+      return [fg, shadow]
+    case "~":
+      return [shadow, ""]
+    default:
+      return ["", ""]
+  }
+}
+
+/** Decodes the CLI logo into a 40x10 matrix of color hexes (or empty string for transparent). */
+export function decodeCliWordmark(): string[][] {
+  const grid: string[][] = Array.from({ length: WORDMARK_NATIVE_HEIGHT }, () =>
+    Array.from({ length: WORDMARK_NATIVE_WIDTH }, () => ""),
+  )
+
+  for (let r = 0; r < 5; r++) {
+    const yTop = r * 2
+    const yBottom = r * 2 + 1
+    const raguLine = CLI_LOGO_RAGU[r]!
+    const codeLine = CLI_LOGO_CODE[r]!
+
+    // Ragù (cols 0..18)
+    for (let c = 0; c < 19; c++) {
+      const [top, bottom] = decodeCell(raguLine[c]!, WORDMARK_COLORS.ragu, WORDMARK_COLORS.raguShadow)
+      grid[yTop]![c] = top
+      grid[yBottom]![c] = bottom
+    }
+
+    // Gap (cols 19..20) stays empty ""
+
+    // Code (cols 21..39)
+    for (let c = 0; c < 19; c++) {
+      const [top, bottom] = decodeCell(codeLine[c]!, WORDMARK_COLORS.code, WORDMARK_COLORS.codeShadow)
+      grid[yTop]![21 + c] = top
+      grid[yBottom]![21 + c] = bottom
+    }
+  }
+
+  return grid
+}
+
+export const WORDMARK_GRID = decodeCliWordmark()
+
 export const WORDMARK_SIZE = {
-  width: WORDMARK_MATRIX[0]!.length,
-  height: WORDMARK_MATRIX.length,
+  width: WORDMARK_WIDTH,
+  height: WORDMARK_HEIGHT,
 } as const

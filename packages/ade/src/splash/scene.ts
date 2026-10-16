@@ -19,8 +19,12 @@ import {
   POT_SPRITE_SIZE,
   SPLASH_PALETTE,
   TOMATO_SPRITE,
-  WORDMARK_MATRIX,
-  WORDMARK_SIZE,
+  WORDMARK_GRID,
+  WORDMARK_HEIGHT,
+  WORDMARK_NATIVE_HEIGHT,
+  WORDMARK_NATIVE_WIDTH,
+  WORDMARK_SCALE,
+  WORDMARK_WIDTH,
 } from "./sprites"
 
 /** Logical resolution of the scene in pixels (exact 16:9 aspect ratio). */
@@ -41,7 +45,7 @@ export const SCENE_LAYOUT = {
   pot: { x: 74, y: 33 },
   laptop: { x: 96, y: 35 },
   counter: { y: 49 },
-  wordmark: { x: 30, y: 62 },
+  wordmark: { x: (SCENE_WIDTH - WORDMARK_WIDTH) / 2, y: 62 },
 } as const
 
 /** Cadence timings in milliseconds. */
@@ -97,6 +101,27 @@ export function drawSpriteGrid(
 }
 
 /**
+ * Draws the CLI-derived wordmark at 2x scale (80x20 pixels).
+ * Uses half-block decoded colors directly with zero dark outline.
+ */
+export function drawWordmark(
+  ctx: CanvasRenderingContext2D,
+  offsetX: number,
+  offsetY: number,
+): void {
+  for (let r = 0; r < WORDMARK_NATIVE_HEIGHT; r++) {
+    const row = WORDMARK_GRID[r]!
+    const y = offsetY + r * WORDMARK_SCALE
+    for (let c = 0; c < WORDMARK_NATIVE_WIDTH; c++) {
+      const color = row[c]!
+      if (!color) continue
+      ctx.fillStyle = color
+      ctx.fillRect(offsetX + c * WORDMARK_SCALE, y, WORDMARK_SCALE, WORDMARK_SCALE)
+    }
+  }
+}
+
+/**
  * Renders the entire splash cooking scene for a given developer pose and pot frame.
  */
 export function renderScene(
@@ -127,8 +152,8 @@ export function renderScene(
   const devPose = DEVELOPER_POSES[devPoseIndex] ?? DEVELOPER_POSES[0]!
   drawSpriteGrid(ctx, devPose, SCENE_LAYOUT.developer.x, SCENE_LAYOUT.developer.y)
 
-  // 7. Wordmark "Ragù Code" (centered bottom, ~60% width)
-  drawSpriteGrid(ctx, WORDMARK_MATRIX, SCENE_LAYOUT.wordmark.x, SCENE_LAYOUT.wordmark.y)
+  // 7. Wordmark "Ragù Code" (centered bottom, 50% width / 80px, CLI half-block)
+  drawWordmark(ctx, SCENE_LAYOUT.wordmark.x, SCENE_LAYOUT.wordmark.y)
 }
 
 export interface SceneController {

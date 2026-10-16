@@ -58,15 +58,14 @@ describe("splash scene renderer (step 2)", () => {
       expect(SCENE_LAYOUT.wordmark.y + WORDMARK_SIZE.height).toBeLessThanOrEqual(SCENE_HEIGHT)
     })
 
-    test("wordmark spans roughly 60% of the canvas width and is centered horizontally", () => {
+    test("wordmark spans 50% of the canvas width (80px) and is centered horizontally", () => {
       const ratio = WORDMARK_SIZE.width / SCENE_WIDTH
-      expect(ratio).toBeGreaterThanOrEqual(0.55)
-      expect(ratio).toBeLessThanOrEqual(0.65)
+      expect(ratio).toBe(0.5)
 
       const leftMargin: number = SCENE_LAYOUT.wordmark.x
       const rightMargin: number = SCENE_WIDTH - (SCENE_LAYOUT.wordmark.x + WORDMARK_SIZE.width)
       expect(leftMargin).toBe(rightMargin)
-      expect(leftMargin).toBe(30 as number)
+      expect(leftMargin).toBe(40)
     })
   })
 
