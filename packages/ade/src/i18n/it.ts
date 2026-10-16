@@ -832,6 +832,14 @@ export const it = {
   "gateway.sessions.other": (title: string) =>
     `«${title}» è di un altro progetto o di un altro programma del bot: da qui non la riprendo.`,
   "gateway.sessions.resumed": (title: string) => `Riprendo «${title}»: scrivi pure da dove eri rimasto.`,
+  "gateway.menu.new": "Ricomincia la conversazione",
+  "gateway.menu.stop": "Ferma il turno in corso",
+  "gateway.menu.status": "Dice cosa sto facendo",
+  "gateway.menu.retry": "Rifà l'ultima domanda",
+  "gateway.menu.cost": "Dice la spesa di oggi",
+  "gateway.menu.model": "Mostra e cambia il modello",
+  "gateway.menu.sessions": "Riprende una conversazione",
+  "gateway.menu.help": "Mostra i comandi",
   "gateway.cost.none": "Oggi non c'è nessuna spesa da contare: questo bot usa un abbonamento o un modello gratuito.",
   "gateway.help":
     "Comandi: /nuova ricomincia la conversazione, /ferma ferma il turno in corso e svuota la coda, /stato dice cosa sto facendo, /riprova rifà l'ultima domanda, /costo dice la spesa di oggi, /modello mostra il modello e lascia scegliere fra quelli del bot, /sessioni elenca le ultime conversazioni di questa chat e ne riprende una, /aiuto mostra questo elenco.",
@@ -976,7 +984,7 @@ export const it = {
   "gateway.panel.switchOn": "Accendi",
   "gateway.panel.switchOff": "Spegni",
   "gateway.panel.authorized": "Chi può scrivere",
-  "gateway.panel.nobody": "Nessuno. Scrivi al bot da Telegram: ricevi un codice, e lo inserisci qui.",
+  "gateway.panel.nobody": "Nessuno ancora: abbina il tuo account qui sotto.",
   "gateway.panel.nobodyDiscord":
     "Nessuno. Scrivi al bot in un messaggio privato su Discord: ricevi un codice, e lo inserisci qui.",
   "gateway.panel.nobodySlack":

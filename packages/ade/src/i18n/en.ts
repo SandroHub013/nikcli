@@ -813,6 +813,14 @@ export const en: Messages = {
   "gateway.sessions.other": (title: string) =>
     `“${title}” belongs to another project or to another program of the bot: I can't resume it from here.`,
   "gateway.sessions.resumed": (title: string) => `Resuming “${title}”: write on from where you left off.`,
+  "gateway.menu.new": "Start the conversation over",
+  "gateway.menu.stop": "Stop the running turn",
+  "gateway.menu.status": "Say what I'm doing",
+  "gateway.menu.retry": "Ask the last question again",
+  "gateway.menu.cost": "Say today's spend",
+  "gateway.menu.model": "Show and change the model",
+  "gateway.menu.sessions": "Resume a conversation",
+  "gateway.menu.help": "Show the commands",
   "gateway.cost.none": "There is no spend to count today: this bot uses a subscription or a free model.",
   "gateway.help":
     "Commands: /new starts the conversation over, /stop stops the running turn and clears the queue, /status says what I'm doing, /retry asks the last question again, /cost says today's spend, /model shows the model and lets you choose among the bot's own, /sessions lists the last conversations of this chat and resumes one, /help shows this list.",
@@ -956,7 +964,7 @@ export const en: Messages = {
   "gateway.panel.switchOn": "Switch on",
   "gateway.panel.switchOff": "Switch off",
   "gateway.panel.authorized": "Who may write",
-  "gateway.panel.nobody": "Nobody. Write to the bot from Telegram: you get a code, and you enter it here.",
+  "gateway.panel.nobody": "Nobody yet: pair your account below.",
   "gateway.panel.nobodyDiscord":
     "Nobody. Write to the bot in a direct message on Discord: you get a code, and you enter it here.",
   "gateway.panel.nobodySlack":

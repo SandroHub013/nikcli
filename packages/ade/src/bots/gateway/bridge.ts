@@ -4,7 +4,8 @@
  * a bot's card (G6).
  */
 
-import { t } from "../../i18n"
+import { createEffect, createRoot, on } from "solid-js"
+import { locale, t } from "../../i18n"
 import { askDialog } from "../../host/ask"
 import { openExternally } from "../../browser/host-bridge"
 import { readAgentFile, type AgentFile } from "../ragu"
@@ -21,6 +22,7 @@ import { localRemoteStore, remoteKey } from "./remote"
 import { appMemoryStore } from "../memory-app"
 import { localHistoryStore, localSessionStore } from "./session"
 import { localChatModelStore } from "./chat-model"
+import { startMenuSync } from "./menu"
 import { spendStatus, spendTerms, withDailyCap } from "../spend"
 import { appSpendStore } from "../spend-app"
 import { appApprovals } from "../approvals-app"
@@ -183,10 +185,26 @@ export async function startAppGatewayController(): Promise<GatewayController> {
     },
   })
   activeController = controller
+  // The menu of commands on Telegram, in ADE's language, once the bot's gateway is up.
+  const stopMenus = await startMenuSync({
+    statuses: () => invoke<LiveStatus[]>("gateway_status"),
+    onStatus: async (handler) => {
+      const { listen } = await import("@tauri-apps/api/event")
+      return listen<LiveStatus>("gateway:status", (event) => handler(event.payload))
+    },
+    set: (bot, platform, commands) => invoke<void>("gateway_set_commands", { bot, platform, commands }),
+    language: locale,
+    watchLanguage: (changed) =>
+      createRoot((dispose) => {
+        createEffect(on(locale, changed, { defer: true }))
+        return dispose
+      }),
+  }).catch(() => () => {})
   return {
     ...controller,
     stop: () => {
       if (activeController === controller) activeController = undefined
+      stopMenus()
       controller.stop()
     },
   }

@@ -893,6 +893,18 @@ impl Hub {
             .map_err(|error| redact(&error.message(), &secrets))
     }
 
+    /// Puts the menu of commands on the platform's app (Telegram's `/`), for a gateway that is running. The same list is
+    /// not sent twice; a platform with no menu does nothing.
+    pub async fn set_commands(&self, bot: &str, platform: Platform, commands: &[(String, String)]) -> Result<(), String> {
+        check_bot(bot)?;
+        let adapter = self
+            .links()
+            .get(&(bot.to_string(), platform))
+            .map(|running| running.adapter.clone())
+            .ok_or_else(|| "il gateway di questo bot è spento".to_string())?;
+        adapter.set_commands(commands).await.map_err(|error| redact(&error.message(), &self.secrets()))
+    }
+
     pub async fn typing(&self, bot: &str, platform: Platform, chat: &str) -> Result<(), String> {
         let adapter = self.reply_target(bot, platform, chat)?;
         adapter.typing(chat).await.map_err(|error| redact(&error.message(), &self.secrets()))
@@ -2833,6 +2845,17 @@ mod tests {
         // A new link forgets it.
         token_of(&s);
         assert_eq!(s.hub.pairing_list(BOT, Platform::Fake).unwrap().linked_by, None);
+    }
+
+    #[tokio::test]
+    async fn the_menu_of_commands_reaches_a_running_gateway_and_not_one_that_is_off() {
+        let s = setup("menu");
+        let list = vec![("nuova".to_string(), "Ricomincia".to_string())];
+        assert!(s.hub.set_commands(BOT, Platform::Fake, &list).await.unwrap_err().contains("spento"));
+        let (adapter, _feed) = start(&s);
+        s.hub.set_commands(BOT, Platform::Fake, &list).await.unwrap();
+        assert_eq!(*adapter.menus.lock().unwrap(), vec![list]);
+        assert!(s.hub.set_commands("", Platform::Fake, &[]).await.is_err());
     }
 
     #[tokio::test]
