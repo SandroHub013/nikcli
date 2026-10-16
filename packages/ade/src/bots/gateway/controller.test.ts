@@ -36,6 +36,7 @@ function bridge(project: string | null = PROJECT) {
   const sent: { chat: string; text: string }[] = []
   const questions: { chat: string; text: string; buttons: readonly { label: string; data: string }[] }[] = []
   const typing: string[] = []
+  const acks: { bot: string; platform: string; chat: string; id: string }[] = []
   const fake: GatewayBridge = {
     listen: async (on) => {
       handler = on
@@ -46,6 +47,7 @@ function bridge(project: string | null = PROJECT) {
       }
     },
     ready: async () => void calls.push("ready"),
+    ack: async (bot, platform, chat, id) => void acks.push({ bot, platform, chat, id }),
     send: async (_bot, _platform, chat, text) => {
       sent.push({ chat, text })
       return String(sent.length)
@@ -70,7 +72,7 @@ function bridge(project: string | null = PROJECT) {
       private: true,
       ...extra,
     })
-  return { fake, calls, sent, typing, questions, emit }
+  return { fake, calls, sent, typing, questions, acks, emit }
 }
 
 /** Turns that end when the test says so. */
@@ -154,6 +156,18 @@ describe("the gateways' controller", () => {
     expect(b.calls).toEqual(["listen", "ready"])
     controller.stop()
     expect(b.calls).toEqual(["listen", "ready", "unlisten"])
+  })
+
+  test("a message is explicitly acknowledged to the bridge (A3)", async () => {
+    const b = bridge()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: fakeTurns().runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("ciao", { id: "m42", bot: BOT.path, platform: "telegram" })
+    expect(b.acks).toEqual([{ bot: BOT.path, platform: "telegram", chat: "c42", id: "m42" }])
   })
 
   test("two messages in a row make one turn, then the other, in the same conversation", async () => {

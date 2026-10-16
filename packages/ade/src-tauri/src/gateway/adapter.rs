@@ -82,6 +82,8 @@ pub struct Inbound {
     /// A button under one of the bot's messages was pressed. Whoever pressed
     /// it is checked like a sender; a stranger's press gets no pairing code.
     pub button: bool,
+    /// The stream cursor corresponding to this message, if the platform provides one.
+    pub cursor: Option<String>,
 }
 
 /// Whether the hub hands a message to the page.

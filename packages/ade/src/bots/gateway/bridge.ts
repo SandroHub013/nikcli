@@ -36,6 +36,7 @@ export function tauriGatewayBridge(): GatewayBridge {
       return listen<GatewayMessage>("gateway:message", (event) => onMessage(event.payload))
     },
     ready: () => invoke<void>("gateway_ready"),
+    ack: (bot, platform, chat, id) => invoke<void>("gateway_ack", { bot, platform, chat, id }),
     send: (bot, platform, chat, text) => invoke<string>("gateway_send", { bot, platform, chat, text, buttons: null }),
     sendButtons: (bot, platform, chat, text, buttons) =>
       invoke<string>("gateway_send", { bot, platform, chat, text, buttons }),

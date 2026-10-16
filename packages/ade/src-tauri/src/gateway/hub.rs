@@ -18,7 +18,7 @@ use super::store::{Authorized, LinkState, Store};
 use crate::secrets::Vault;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::watch;
@@ -162,6 +162,7 @@ struct Running {
     adapter: Arc<dyn Adapter>,
     stop: watch::Sender<bool>,
     live: Arc<Mutex<Live>>,
+    pending: Arc<Mutex<VecDeque<(GatewayMessage, Option<String>)>>>,
 }
 
 /// Which of a link's secrets: the bot's token, or Slack's App-Level Token.
@@ -536,6 +537,16 @@ impl Hub {
     /// The page listens for `gateway:message`: the gateways may read.
     pub fn ready(&self) {
         self.ready.send_replace(true);
+        let pending: Vec<GatewayMessage> = {
+            let links = self.links();
+            links
+                .values()
+                .flat_map(|r| r.pending.lock().unwrap().iter().map(|(msg, _)| msg.clone()).collect::<Vec<_>>())
+                .collect()
+        };
+        for msg in pending {
+            self.env.message(&msg);
+        }
     }
 
     /// The page is loading again (a reload, a renderer that crashed): its
@@ -570,6 +581,7 @@ impl Hub {
         self.failed().remove(&(bot.to_string(), platform));
         let (stop, stopped) = watch::channel(false);
         let live = Arc::new(Mutex::new(Live::default()));
+        let pending = Arc::new(Mutex::new(VecDeque::new()));
         let task = Task {
             env: self.env.clone(),
             store: self.store.clone(),
@@ -577,11 +589,12 @@ impl Hub {
             bot: bot.to_string(),
             platform,
             live: live.clone(),
+            pending: pending.clone(),
             secrets: self.secrets(),
             backoff: self.backoff,
         };
         tokio::spawn(task.run(stopped, self.ready.subscribe()));
-        self.links().insert((bot.to_string(), platform), Running { adapter, stop, live });
+        self.links().insert((bot.to_string(), platform), Running { adapter, stop, live, pending });
     }
 
     /// Switches the gateway off, and remembers it is off.
@@ -612,6 +625,37 @@ impl Hub {
         for (_, running) in self.links().drain() {
             let _ = running.stop.send(true);
         }
+    }
+
+    /// The webview acknowledged receipt of a message: advance the cursor up to this message in state.json.
+    pub fn ack(&self, bot: &str, platform: Platform, chat: &str, id: &str) -> Result<(), String> {
+        check_bot(bot)?;
+        let running = self.links().get(&(bot.to_string(), platform)).map(|r| r.pending.clone());
+        let Some(pending_lock) = running else {
+            return Ok(());
+        };
+        let mut cursor_to_save = None;
+        {
+            let mut pending = pending_lock.lock().unwrap();
+            if let Some(pos) = pending.iter().position(|(m, _)| m.chat == chat && m.id == id) {
+                for _ in 0..=pos {
+                    if let Some((_, c)) = pending.pop_front() {
+                        if c.is_some() {
+                            cursor_to_save = c;
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(cursor) = cursor_to_save {
+            let written_at = self.env.now_ms();
+            self.store.update(bot, platform, |link, _| {
+                link.cursor = Some(cursor.clone());
+                link.cursor_saved_ms = Some(written_at);
+                Ok(())
+            })?;
+        }
+        Ok(())
     }
 
     /* ── replies ───────────────────────────────────────────────────────── */
@@ -829,6 +873,7 @@ struct Task {
     bot: String,
     platform: Platform,
     live: Arc<Mutex<Live>>,
+    pending: Arc<Mutex<VecDeque<(GatewayMessage, Option<String>)>>>,
     /// Taken at start; an error or a text holding one of these is cleaned before it is shown.
     secrets: Vec<String>,
     backoff: (Duration, Duration),
@@ -898,7 +943,9 @@ impl Task {
                     for message in batch {
                         self.deliver(message).await;
                     }
-                    self.save_cursor();
+                    if self.pending.lock().unwrap().is_empty() {
+                        self.save_cursor();
+                    }
                 }
                 Err(AdapterError::Transient(error)) => {
                     let error = redact(&error, &self.secrets);
@@ -1002,7 +1049,7 @@ impl Task {
         let redacted = name != message.sender.name || text != message.text;
         // Whoever writes chose that name: no control or direction characters, not too long.
         let name = authz::clean_name(&name);
-        self.env.message(&GatewayMessage {
+        let msg = GatewayMessage {
             bot: self.bot.clone(),
             platform: self.platform,
             chat: message.chat,
@@ -1012,7 +1059,10 @@ impl Task {
             redacted,
             button: message.button,
             private: message.private,
-        });
+        };
+        let cursor = message.cursor.clone().or_else(|| self.adapter.cursor());
+        self.pending.lock().unwrap().push_back((msg.clone(), cursor));
+        self.env.message(&msg);
         self.report(|live| live.last_message_ms = Some(at));
     }
 
@@ -1250,6 +1300,7 @@ mod tests {
             sender: Sender { id: sender.into(), name: format!("utente {sender}"), is_bot: false },
             text: text.into(),
             button: false,
+            cursor: None,
         }
     }
 
@@ -1994,6 +2045,7 @@ mod tests {
         *adapter.position.lock().unwrap() = Some("501".into());
         feed.send(Ok(vec![message("500", "c42", "42", "uno")])).unwrap();
         eventually("il messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+        s.hub.ack(BOT, Platform::Fake, "c42", "500").unwrap();
         eventually("la posizione salvata", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("501")).await;
         // Made again (a new token, ADE reopened): from where it was.
         s.hub.set_token(BOT, Platform::Fake, "123456789:ALTRO-token-di-prova_ZyXwVuTsRqPoNm").unwrap();
@@ -2008,6 +2060,8 @@ mod tests {
         let (adapter, feed) = start(&s);
         *adapter.position.lock().unwrap() = Some("501".into());
         feed.send(Ok(vec![message("500", "c42", "42", "uno")])).unwrap();
+        eventually("il messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+        s.hub.ack(BOT, Platform::Fake, "c42", "500").unwrap();
         eventually("la posizione salvata", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("501")).await;
         // The same bot with a new secret (revoked and made again): from where it was.
         s.hub.set_token(BOT, Platform::Fake, "123456789:RUOTATO-token-di-prova_ZyXwVuTsRqPoNm").unwrap();
@@ -2025,6 +2079,8 @@ mod tests {
         let (adapter, feed) = start(&s);
         *adapter.position.lock().unwrap() = Some("501".into());
         feed.send(Ok(vec![message("500", "c42", "42", "uno")])).unwrap();
+        eventually("il messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+        s.hub.ack(BOT, Platform::Fake, "c42", "500").unwrap();
         eventually("la posizione salvata", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("501")).await;
         s.hub.clear_token(BOT, Platform::Fake).unwrap();
         assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor, None);
@@ -2038,6 +2094,7 @@ mod tests {
         *adapter.position.lock().unwrap() = Some("11".into());
         feed.send(Ok(vec![message("10", "c42", "42", "prima del ricaricamento")])).unwrap();
         eventually("il primo messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+        s.hub.ack(BOT, Platform::Fake, "c42", "10").unwrap();
         eventually("la posizione", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("11")).await;
         // The page reloads while the long poll is out: the batch that comes back waits.
         s.hub.unready();
@@ -2051,6 +2108,7 @@ mod tests {
         s.hub.ready();
         eventually("il messaggio dopo il ricaricamento", || s.env.messages.lock().unwrap().len() == 2).await;
         assert_eq!(s.env.messages.lock().unwrap()[1].text, "durante il ricaricamento");
+        s.hub.ack(BOT, Platform::Fake, "c42", "11").unwrap();
         eventually("la nuova posizione", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("12")).await;
         // And no new read went out while nobody listened.
         s.hub.unready();
@@ -2059,6 +2117,55 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(30)).await;
         assert_eq!(adapter.receives.load(std::sync::atomic::Ordering::SeqCst), quiet);
         assert!(quiet >= reads);
+    }
+
+    #[tokio::test]
+    async fn cursor_is_not_saved_until_explicit_gateway_ack_from_page() {
+        let s = setup("ack-cursor");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        *adapter.position.lock().unwrap() = Some("501".into());
+        feed.send(Ok(vec![message("500", "c42", "42", "uno")])).unwrap();
+        eventually("il messaggio emesso", || s.env.messages.lock().unwrap().len() == 1).await;
+
+        // Before ack, cursor MUST NOT be saved to store:
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor, None, "cursor must not be saved before ack");
+
+        // Now page sends ack:
+        s.hub.ack(BOT, Platform::Fake, "c42", "500").expect("ack riuscito");
+        eventually("la posizione salvata dopo ack", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("501")).await;
+    }
+
+    #[tokio::test]
+    async fn unacknowledged_messages_are_redelivered_after_page_reloads() {
+        let s = setup("reemit-after-reload");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        *adapter.position.lock().unwrap() = Some("501".into());
+        feed.send(Ok(vec![message("500", "c42", "42", "prima del ricaricamento")])).unwrap();
+        eventually("il primo messaggio emesso", || s.env.messages.lock().unwrap().len() == 1).await;
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor, None);
+
+        // Page reloads without sending ack:
+        s.hub.unready();
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        // Now page comes back ready:
+        s.hub.ready();
+
+        // The unacknowledged message MUST be re-emitted in order:
+        eventually("il messaggio riemesso", || s.env.messages.lock().unwrap().len() == 2).await;
+        assert_eq!(s.env.messages.lock().unwrap()[1].id, "500");
+        assert_eq!(s.env.messages.lock().unwrap()[1].chat, "c42");
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor, None);
+
+        // Mismatched chat or unknown id does not save cursor:
+        s.hub.ack(BOT, Platform::Fake, "other-chat", "500").unwrap();
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor, None);
+        s.hub.ack(BOT, Platform::Fake, "c42", "unknown-id").unwrap();
+        assert_eq!(s.hub.store.link(BOT, Platform::Fake).unwrap().cursor, None);
+
+        s.hub.ack(BOT, Platform::Fake, "c42", "500").expect("ack riuscito");
+        eventually("la posizione salvata dopo ack", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("501")).await;
     }
 
     #[tokio::test]

@@ -28,6 +28,7 @@
 //! without it, and the hub hides it again anyway.
 
 use super::adapter::{Adapter, AdapterError, Button, Capabilities, Inbound, Sender};
+use super::authz;
 use super::chunk;
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
@@ -43,8 +44,24 @@ use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::Message;
 
 pub const API: &str = "https://discord.com/api/v10";
+pub const GATEWAY_URL: &str = "wss://gateway.discord.gg/?v=10&encoding=json";
 /// Discord counts characters, not UTF-16 units: an emoji is one.
 pub const MAX_LEN: usize = 2000;
+
+/// Appends Discord gateway protocol parameters (?v=10&encoding=json) if not already present.
+fn with_gateway_params(url: &str) -> String {
+    if url.contains("v=") && url.contains("encoding=") {
+        return url.to_string();
+    }
+    let sep = if url.contains('?') {
+        "&"
+    } else if url.ends_with('/') {
+        "?"
+    } else {
+        "/?"
+    };
+    format!("{url}{sep}v=10&encoding=json")
+}
 
 /// Discord's message flag that keeps a message's links from being embedded.
 const SUPPRESS_EMBEDS: u64 = 1 << 2;
@@ -225,7 +242,8 @@ impl Failure {
 /// Discord's own word for "this text is too long": code 50035, and its message
 /// names the limit. The count this adapter made is a guess; this is the truth.
 fn is_too_long(description: &str) -> bool {
-    description.contains("50035") || description.contains("2000 or fewer")
+    description.contains("2000 or fewer")
+        || (description.contains("50035") && description.to_lowercase().contains("content"))
 }
 
 /// Discord counts characters; a piece is this many of them.
@@ -279,8 +297,8 @@ fn cut_in_half(text: &str) -> (String, String) {
 
 /// A nonce, the same for every try at the same message, so that a send
 /// repeated after a timeout returns the message already posted.
-fn nonce(seed: u64, attempt: u64) -> String {
-    format!("{seed:016x}{attempt:016x}")
+fn nonce(seed: u64, seq: u64) -> String {
+    format!("{:012x}{:08x}", seed & 0x0000_ffff_ffff_ffff, seq & 0xffff_ffff)
 }
 
 /// Locks a mutex, taking a poisoned one rather than panicking: a thread that
@@ -307,6 +325,10 @@ struct Shared {
     /// the identify budget: a socket that started is not a failed attempt, and
     /// the flag is what says so across the inner loop that set it.
     ready: AtomicBool,
+    /// Random seed chosen when the adapter is born, to prevent nonce collisions after restarts.
+    nonce_seed: u64,
+    /// Monotonic sequence for message nonces to guarantee uniqueness across messages.
+    nonce_counter: AtomicU64,
 }
 
 impl Shared {
@@ -425,10 +447,18 @@ fn real_now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+fn random_nonce_seed() -> u64 {
+    let mut buf = [0u8; 8];
+    let _ = authz::os_random(&mut buf);
+    let random_val = u64::from_le_bytes(buf);
+    let ms = real_now_ms();
+    ms.wrapping_mul(0x517c_c1b7_2722_0a95) ^ random_val
+}
+
 impl Discord {
     /// The adapter for the bot with `token`, reading on from `cursor`.
     pub fn new(token: &str, cursor: Option<String>) -> Result<Arc<Discord>, String> {
-        Discord::at("wss://gateway.discord.gg", API, token, cursor)
+        Discord::at(GATEWAY_URL, API, token, cursor)
     }
 
     fn at(socket: &str, api: &str, token: &str, cursor: Option<String>) -> Result<Arc<Discord>, String> {
@@ -454,6 +484,8 @@ impl Discord {
                 preview: Mutex::new(HashMap::new()),
                 epoch: AtomicU64::new(0),
                 ready: AtomicBool::new(false),
+                nonce_seed: random_nonce_seed(),
+                nonce_counter: AtomicU64::new(0),
             }),
             inbox: tokio::sync::Mutex::new(inbox),
             sender,
@@ -571,19 +603,19 @@ impl Core {
     /// Sends `text` in pieces, stopping at the ceiling, and returns the id of
     /// the message that now holds the end of it.
     async fn send_all(&self, chat: &str, text: &str, extra: Option<&Value>) -> Result<String, AdapterError> {
-        let seed = self.shared.epoch.load(Ordering::SeqCst);
+        let seed = self.shared.nonce_seed.wrapping_add(self.shared.epoch.load(Ordering::SeqCst));
         let mut queue: VecDeque<String> = pieces(text).into();
         if queue.is_empty() {
             return Err(AdapterError::Fatal("il messaggio è vuoto".into()));
         }
-        let mut attempt = 0u64;
         let mut last = String::new();
         while let Some(piece) = queue.pop_front() {
             let mut body = Core::body(&piece);
+            let seq = self.shared.nonce_counter.fetch_add(1, Ordering::SeqCst);
             // The same nonce for every try at one piece: a repeat returns the
             // message already posted instead of posting it twice.
-            body["nonce"] = Value::from(nonce(seed, attempt));
-            attempt += 1;
+            body["nonce"] = Value::from(nonce(seed, seq));
+            body["enforce_nonce"] = json!(true);
             match self.post(chat, &body).await {
                 Ok(id) => last = id,
                 // Discord is the one that says the text is too long. Cut the
@@ -624,7 +656,7 @@ enum Ending {
     /// Stop, and tell the user why.
     Stopped(String),
     /// The socket dropped: go round again.
-    Dropped,
+    Dropped { greeted: bool },
     /// The adapter is gone, the gateway switched off: the socket said goodbye.
     LetGo,
 }
@@ -648,6 +680,7 @@ async fn socket_session(
     alive: &mut watch::Receiver<()>,
 ) -> Ending {
     let mut fresh_identifies = 0usize;
+    let mut greeted = false;
     loop {
         // Read at every turn, not once at the start: a session that lives for
         // days has to age, or a cursor from yesterday still looks resumable.
@@ -656,6 +689,7 @@ async fn socket_session(
         // zero: what the budget is there to stop is a socket that never starts.
         if adapter.shared.take_ready() {
             fresh_identifies = 0;
+            greeted = true;
         }
         if fresh_identifies > MAX_IDENTIFIES_WITHOUT_READY {
             return Ending::Stopped(format!(
@@ -663,11 +697,11 @@ async fn socket_session(
             ));
         }
         let (address, resume) = match adapter.shared.resumable(now) {
-            Some(session) => (session.resume_url.clone(), Some(session)),
+            Some(session) => (with_gateway_params(&session.resume_url), Some(session)),
             // Nothing to resume with, so this turn spends an identify.
             None => {
                 fresh_identifies += 1;
-                (first.to_string(), None)
+                (with_gateway_params(first), None)
             }
         };
         let connected = tokio::select! {
@@ -679,7 +713,7 @@ async fn socket_session(
             Ok((socket, _handshake)) => socket.split(),
             Err(error) => {
                 let _ = sender.send(Err(AdapterError::Transient(format!("Discord non raggiungibile: {error}")))).await;
-                return Ending::Dropped;
+                return Ending::Dropped { greeted };
             }
         };
 
@@ -718,7 +752,7 @@ async fn socket_session(
             } }),
         };
         if sink.send(Message::Text(announce.to_string().into())).await.is_err() {
-            return Ending::Dropped;
+            return Ending::Dropped { greeted };
         }
 
         // The first heartbeat waits a share of the interval, since a client
@@ -757,9 +791,9 @@ async fn socket_session(
                                 // be refused the same way.
                                 Verdict::Fresh => {
                                     adapter.shared.forget_session();
-                                    Ending::Dropped
+                                    Ending::Dropped { greeted }
                                 }
-                                Verdict::Again => Ending::Dropped,
+                                Verdict::Again => Ending::Dropped { greeted },
                             };
                         }
                         Message::Ping(payload) => {
@@ -800,17 +834,27 @@ async fn socket_session(
                                                 });
                                             }
                                             adapter.shared.mark_ready();
+                                            greeted = true;
                                         }
-                                        "RESUMED" => adapter.shared.mark_ready(),
+                                        "RESUMED" => {
+                                            adapter.shared.mark_ready();
+                                            greeted = true;
+                                        }
                                         "MESSAGE_CREATE" => {
-                                            if let Some(inbound) = to_inbound(&frame.d, &adapter.shared) {
+                                            if let Some(inbound) = to_inbound(&frame.d, &adapter.shared, frame.s) {
                                                 if sender.send(Ok(inbound)).await.is_err() {
                                                     break;
                                                 }
                                             }
                                         }
                                         "INTERACTION_CREATE" => {
-                                            if let Some(press) = to_press(&frame.d) {
+                                            let cursor = frame.s.and_then(|s| {
+                                                hold(&adapter.shared.session).clone().and_then(|mut sess| {
+                                                    sess.seq = s;
+                                                    serde_json::to_string(&sess).ok()
+                                                })
+                                            });
+                                            if let Some(press) = to_press(&frame.d, cursor) {
                                                 // Answered here, on the spot: Discord
                                                 // wants the confirmation within three
                                                 // seconds, and the hub may be busy.
@@ -890,7 +934,10 @@ async fn run_socket(
                 let _ = sender.send(Err(AdapterError::Fatal(why))).await;
                 return;
             }
-            Ending::Dropped => {
+            Ending::Dropped { greeted } => {
+                if greeted {
+                    backoff = Duration::from_secs(1);
+                }
                 tokio::select! {
                     _ = alive.changed() => return,
                     _ = tokio::time::sleep(backoff) => {}
@@ -902,7 +949,7 @@ async fn run_socket(
 }
 
 /// A message as the hub sees it, or `None` for what the gateway does not take.
-fn to_inbound(d: &Value, shared: &Shared) -> Option<Inbound> {
+fn to_inbound(d: &Value, shared: &Shared, seq: Option<i64>) -> Option<Inbound> {
     let text = d["content"].as_str().unwrap_or_default();
     if text.is_empty() {
         return None;
@@ -914,6 +961,12 @@ fn to_inbound(d: &Value, shared: &Shared) -> Option<Inbound> {
         .or_else(|| author["username"].as_str())
         .unwrap_or_default()
         .to_string();
+    let cursor = seq.and_then(|s| {
+        hold(&shared.session).clone().and_then(|mut sess| {
+            sess.seq = s;
+            serde_json::to_string(&sess).ok()
+        })
+    });
     Some(Inbound {
         id: id_text(&d["id"])?,
         chat,
@@ -930,6 +983,7 @@ fn to_inbound(d: &Value, shared: &Shared) -> Option<Inbound> {
         },
         text: text.to_string(),
         button: false,
+        cursor,
     })
 }
 
@@ -949,7 +1003,7 @@ fn confirm_press(d: &Value) -> Option<(String, Value)> {
 }
 
 /// A button press: not a message, and the data comes back as the text.
-fn to_press(d: &Value) -> Option<Inbound> {
+fn to_press(d: &Value, cursor: Option<String>) -> Option<Inbound> {
     // 3 is MESSAGE_COMPONENT, the only interaction a button under a message
     // makes; the others (a slash command, a modal) are not a press.
     if d["type"].as_i64() != Some(3) {
@@ -968,6 +1022,7 @@ fn to_press(d: &Value) -> Option<Inbound> {
         sender: Sender { id: id_text(&who["id"])?, name, is_bot: false },
         text: data.to_string(),
         button: true,
+        cursor,
     })
 }
 
@@ -1006,13 +1061,14 @@ impl Adapter for Discord {
 
     async fn send_buttons(&self, chat: &str, text: &str, buttons: &[Button]) -> Result<String, AdapterError> {
         let components: Vec<Value> = buttons
-            .chunks(2)
+            .chunks(5)
+            .take(5)
             .map(|row| {
                 let row: Vec<Value> = row
                     .iter()
                     .map(|button| json!({ "type": 2, "style": 1, "label": button.label, "custom_id": button.data }))
                     .collect();
-                json!([{ "type": 1, "components": row }])
+                json!({ "type": 1, "components": row })
             })
             .collect();
         self.send_all(chat, text, Some(&json!({ "components": components }))).await
@@ -1242,7 +1298,7 @@ mod tests {
                     // one before it is gone.
                     runtime.block_on(async move {
                         let Ok(stream) = tokio::net::TcpStream::from_std(stream) else { return };
-                        let Ok(mut socket) = tokio_tungstenite::accept_async(stream).await else { return };
+                        let Ok(socket) = tokio_tungstenite::accept_async(stream).await else { return };
                         let (mut sink, mut source) = socket.split();
                         // One list per connection: the frames for the next one
                         // are still waiting for the next one.
@@ -1396,6 +1452,8 @@ mod tests {
             preview: Mutex::new(HashMap::new()),
             epoch: AtomicU64::new(0),
             ready: AtomicBool::new(false),
+            nonce_seed: 0,
+            nonce_counter: AtomicU64::new(0),
         }
     }
 
@@ -1437,7 +1495,7 @@ mod tests {
             "id": "c1", "channel_id": "ch1", "guild_id": "9001",
             "content": "ciao <@42>", "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
-        let named = to_inbound(&named, &shared).expect("messaggio");
+        let named = to_inbound(&named, &shared, None).expect("messaggio");
         assert!(named.mentioned, "una menzione in un canale abilita il canale");
         assert!(!named.private);
         assert!(admits(&named));
@@ -1446,7 +1504,7 @@ mod tests {
             "id": "c2", "channel_id": "ch1", "guild_id": "9001",
             "content": "si parla di altro", "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
-        let quiet = to_inbound(&quiet, &shared).expect("messaggio");
+        let quiet = to_inbound(&quiet, &shared, None).expect("messaggio");
         assert!(!quiet.mentioned);
         assert!(!admits(&quiet), "senza menzione il canale non e' per il bot");
 
@@ -1454,7 +1512,7 @@ mod tests {
             "id": "c3", "channel_id": "d1", "guild_id": Value::Null,
             "content": "ciao", "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
-        let direct = to_inbound(&direct, &shared).expect("messaggio");
+        let direct = to_inbound(&direct, &shared, None).expect("messaggio");
         assert!(direct.private);
         assert!(admits(&direct), "una chat privata non ha bisogno di menzione");
     }
@@ -1470,7 +1528,7 @@ mod tests {
             "mentions": [{ "id": BOT }],
             "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
-        assert!(!to_inbound(&quoted, &shared).expect("messaggio").mentioned);
+        assert!(!to_inbound(&quoted, &shared, None).expect("messaggio").mentioned);
     }
 
     #[test]
@@ -1480,12 +1538,12 @@ mod tests {
             "id": "b1", "channel_id": "d1", "content": "ciao",
             "author": { "id": "u2", "username": "robot", "bot": true },
         });
-        assert!(to_inbound(&from_bot, &shared).expect("messaggio").sender.is_bot);
+        assert!(to_inbound(&from_bot, &shared, None).expect("messaggio").sender.is_bot);
         let from_hook: Value = json!({
             "id": "b2", "channel_id": "d1", "content": "ciao",
             "webhook_id": "w1", "author": { "id": "u3", "username": "hook", "bot": false },
         });
-        assert!(to_inbound(&from_hook, &shared).expect("messaggio").sender.is_bot);
+        assert!(to_inbound(&from_hook, &shared, None).expect("messaggio").sender.is_bot);
     }
 
     #[test]
@@ -1497,7 +1555,7 @@ mod tests {
             "id": "m2", "channel_id": "ch1", "guild_id": "9001", "content": "",
             "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
-        assert!(to_inbound(&empty, &shared).is_none());
+        assert!(to_inbound(&empty, &shared, None).is_none());
     }
 
     /* Sending. */
@@ -1613,6 +1671,60 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn nonce_is_under_twenty_five_chars_enforces_nonce_and_differs_across_messages() {
+        let rest = FakeRest::start(vec![
+            ok(&json!({ "id": "1" }).to_string()),
+            ok(&json!({ "id": "2" }).to_string()),
+        ]);
+        let gateway = FakeGateway::start(vec![]);
+        let discord = adapter(&rest, &gateway);
+        discord.send("ch1", "msg1").await.expect("inviato 1");
+        discord.send("ch1", "msg2").await.expect("inviato 2");
+
+        let body1 = rest.body_of(0);
+        let body2 = rest.body_of(1);
+
+        let nonce1 = body1["nonce"].as_str().expect("nonce1 presente");
+        let nonce2 = body2["nonce"].as_str().expect("nonce2 presente");
+
+        assert!(nonce1.len() <= 25, "nonce1 length {} <= 25", nonce1.len());
+        assert!(nonce2.len() <= 25, "nonce2 length {} <= 25", nonce2.len());
+        assert_eq!(body1["enforce_nonce"], json!(true));
+        assert_eq!(body2["enforce_nonce"], json!(true));
+        assert_ne!(nonce1, nonce2, "nonces must differ across separate messages");
+    }
+
+    #[tokio::test]
+    async fn two_adapters_simulating_a_restart_generate_different_nonces_on_first_message() {
+        let rest1 = FakeRest::start(vec![ok(&json!({ "id": "1" }).to_string())]);
+        let gateway1 = FakeGateway::start(vec![]);
+        let discord1 = adapter(&rest1, &gateway1);
+        discord1.send("ch1", "msg").await.expect("inviato 1");
+        let nonce1 = rest1.body_of(0)["nonce"].as_str().unwrap().to_string();
+
+        let rest2 = FakeRest::start(vec![ok(&json!({ "id": "2" }).to_string())]);
+        let gateway2 = FakeGateway::start(vec![]);
+        let discord2 = adapter(&rest2, &gateway2);
+        discord2.send("ch1", "msg").await.expect("inviato 2");
+        let nonce2 = rest2.body_of(0)["nonce"].as_str().unwrap().to_string();
+
+        assert_ne!(nonce1, nonce2, "due adapter che simulano un riavvio devono produrre nonce diversi al primo messaggio");
+    }
+
+    #[test]
+    fn gateway_url_and_resume_url_include_v10_and_json_encoding() {
+        let discord = Discord::new(TOKEN, None).expect("discord");
+        assert!(discord.core.socket.contains("v=10"), "initial gateway URL must specify API v10");
+        assert!(discord.core.socket.contains("encoding=json"), "initial gateway URL must specify json encoding");
+
+        let formatted = with_gateway_params("wss://us-east1.gateway.discord.gg");
+        assert_eq!(formatted, "wss://us-east1.gateway.discord.gg/?v=10&encoding=json");
+
+        let already_formatted = with_gateway_params("wss://gateway.discord.gg/?v=10&encoding=json");
+        assert_eq!(already_formatted, "wss://gateway.discord.gg/?v=10&encoding=json");
+    }
+
+    #[tokio::test]
     async fn no_message_the_bot_writes_lets_discord_embed_its_links() {
         // Security review, ALTO A1: an embed is Discord fetching the URL as the message is posted, no click needed.
         let rest = FakeRest::start(vec![
@@ -1694,7 +1806,7 @@ mod tests {
         let gateway = FakeGateway::start(vec![]);
         let discord = adapter(&rest, &gateway);
         // A press in a private chat: no guild, the author at the top level.
-        let press = to_press(&interaction(false)).expect("pressione");
+        let press = to_press(&interaction(false), None).expect("pressione");
         assert!(press.private, "una interazione privata non ha guild_id");
         assert!(admits(&press), "una pressione in privato deve passare: e' il caso di G5");
         // And it is confirmed, with the deferred type, on the documented path.
@@ -1712,7 +1824,7 @@ mod tests {
 
         // In a server the press has a guild, so it is not a private chat: it
         // gets through because the hub checks the author and the code.
-        let in_server = to_press(&interaction(true)).expect("pressione");
+        let in_server = to_press(&interaction(true), None).expect("pressione");
         assert!(!in_server.private, "una pressione in un canale ha guild_id");
         assert!(admits(&in_server), "una pressione arriva comunque: e' ADE ad averla messa");
     }
@@ -1725,12 +1837,12 @@ mod tests {
             // A direct message: no guild. There is no channel type to read.
             "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
-        assert!(to_inbound(&direct, &shared).expect("messaggio").private);
+        assert!(to_inbound(&direct, &shared, None).expect("messaggio").private);
         let in_server: Value = json!({
             "id": "m2", "channel_id": "ch1", "guild_id": "9001",
             "content": "ciao <@42>", "author": { "id": "u1", "username": "qualcuno", "bot": false },
         });
-        let in_server = to_inbound(&in_server, &shared).expect("messaggio");
+        let in_server = to_inbound(&in_server, &shared, None).expect("messaggio");
         assert!(!in_server.private, "in un canale di un server non e' privato");
         assert!(in_server.mentioned, "ma la menzione lo abilita");
     }
@@ -1762,10 +1874,58 @@ mod tests {
             .send_buttons("ch1", "vuoi continuare?", &[Button { label: "Si'".into(), data: "continua".into() }])
             .await
             .expect("inviato");
-        let component = &rest.body_of(1)["components"][0][0]["components"][0];
+        let component = &rest.body_of(1)["components"][0]["components"][0];
         assert_eq!(component["custom_id"], "continua");
         assert_eq!(component["label"], "Si'");
     }
+
+    #[tokio::test]
+    async fn button_components_respect_action_row_limits() {
+        let rest = FakeRest::start(vec![
+            ok(&json!({ "id": "1" }).to_string()),
+            ok(&json!({ "id": "1" }).to_string()),
+        ]);
+        let gateway = FakeGateway::start(vec![]);
+        let discord = adapter(&rest, &gateway);
+        let buttons: Vec<Button> = (0..30)
+            .map(|i| Button { label: format!("b{i}"), data: format!("d{i}") })
+            .collect();
+        discord
+            .send_buttons("ch1", "scegli", &buttons)
+            .await
+            .expect("inviato");
+        let body = rest.body_of(1);
+        let rows = body["components"].as_array().expect("array di righe");
+        assert_eq!(rows.len(), 5, "massimo 5 action row");
+        for (r_idx, row) in rows.iter().enumerate() {
+            assert_eq!(row["type"], 1, "tipo ActionRow");
+            let comps = row["components"].as_array().expect("array pulsanti");
+            assert_eq!(comps.len(), 5, "5 pulsanti per riga");
+            for (c_idx, btn) in comps.iter().enumerate() {
+                let expected_idx = r_idx * 5 + c_idx;
+                assert_eq!(btn["type"], 2);
+                assert_eq!(btn["custom_id"], format!("d{expected_idx}"));
+                assert_eq!(btn["label"], format!("b{expected_idx}"));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn socket_session_marks_greeted_on_ready_and_resumed() {
+        let rest = FakeRest::start(vec![]);
+        let gateway = FakeGateway::start(vec![]);
+        gateway.push(vec![hello(60), ready("SESSIONE", &gateway.address), closed(1001)]);
+        let discord = adapter(&rest, &gateway);
+        set_jitter(&discord, 500);
+        let (sender, _receiver) = mpsc::channel(16);
+        let (_alive_tx, mut alive_rx) = watch::channel(());
+        let ending = socket_session(&discord.core, &sender, &gateway.address, &mut alive_rx).await;
+        match ending {
+            Ending::Dropped { greeted } => assert!(greeted, "dovrebbe essere greeted dopo READY"),
+            _ => panic!("atteso Dropped, ottenuto altro"),
+        }
+    }
+
 
     #[test]
     fn a_press_becomes_a_message_with_its_data_and_a_command_does_not() {
@@ -1774,13 +1934,13 @@ mod tests {
             "data": { "custom_id": "continua" },
             "member": { "user": { "id": "u1", "username": "qualcuno" } },
         });
-        let inbound = to_press(&press).expect("pressione");
+        let inbound = to_press(&press, None).expect("pressione");
         assert!(inbound.button);
         assert_eq!(inbound.text, "continua");
         assert_eq!(inbound.sender.id, "u1");
         // A slash command is not a press under a message.
         let command: Value = json!({ "id": "i2", "channel_id": "ch1", "type": 2, "data": { "custom_id": "x" } });
-        assert!(to_press(&command).is_none());
+        assert!(to_press(&command, None).is_none());
     }
 
     #[tokio::test]
