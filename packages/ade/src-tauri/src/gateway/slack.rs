@@ -99,6 +99,7 @@ pub const SLASH_COMMANDS: &[(&str, &str)] = &[
     ("/ferma", "Ferma il turno in corso e svuota la coda"),
     ("/stato", "Dice cosa sta facendo il bot"),
     ("/riprova", "Rifà l'ultima domanda"),
+    ("/costo", "Dice la spesa di oggi"),
     ("/aiuto", "Mostra i comandi del bot"),
 ];
 
@@ -1692,7 +1693,7 @@ mod tests {
         assert!(!scopes.contains(&"channels:history"), "il bot non legge il resto dei canali");
         let commands: Vec<&str> =
             parsed["features"]["slash_commands"].as_array().unwrap().iter().filter_map(|c| c["command"].as_str()).collect();
-        assert_eq!(commands, ["/nuova", "/ferma", "/stato", "/riprova", "/aiuto"]);
+        assert_eq!(commands, ["/nuova", "/ferma", "/stato", "/riprova", "/costo", "/aiuto"]);
         assert_eq!(parsed["settings"]["socket_mode_enabled"], true);
         assert_eq!(parsed["features"]["app_home"]["messages_tab_enabled"], true);
         assert_eq!(parsed["display_information"]["name"], "Aiuto");

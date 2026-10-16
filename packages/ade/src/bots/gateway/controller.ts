@@ -12,7 +12,7 @@
  * - one turn at a time per chat: what arrives meanwhile waits its turn, and
  *   the chat is told it is queued;
  * - `/nuova`, `/ferma`, `/stato`, `/aiuto` act at once, even mid-turn; `/riprova` asks the last question again, once
- *   the turn before it is over;
+ *   the turn before it is over; `/costo` says today's spend, as `/stato` does at its end;
  * - the turn runs in the project fixed when the gateway was switched on, with
  *   the bot's file as it is now and only if the user's trust still holds for
  *   it (`policy.ts`); the plan's places are `runTurn`'s (`terms.ts`);
@@ -413,6 +413,10 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       })
       void reply(message, t("gateway.retry.again"))
       return next(key)
+    }
+    if (which === "cost") {
+      const spent = await deps.spendToday?.(message.bot).catch(() => undefined)
+      return reply(message, spent ?? t("gateway.cost.none"))
     }
     if (which === "status") {
       const said = running ? t("gateway.status.working", state.queue.length) : t("gateway.status.idle")

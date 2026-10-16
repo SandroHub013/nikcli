@@ -811,8 +811,9 @@ export const it = {
   "gateway.retry.none": "Non c'è ancora una domanda da rifare: scrivimene una.",
   "gateway.retry.busy": "Sto ancora lavorando alla domanda di prima: aspetta che finisca, oppure scrivi /ferma.",
   "gateway.retry.again": "Rifaccio l'ultima domanda.",
+  "gateway.cost.none": "Oggi non c'è nessuna spesa da contare: questo bot usa un abbonamento o un modello gratuito.",
   "gateway.help":
-    "Comandi: /nuova ricomincia la conversazione, /ferma ferma il turno in corso e svuota la coda, /stato dice cosa sto facendo, /riprova rifà l'ultima domanda, /aiuto mostra questo elenco.",
+    "Comandi: /nuova ricomincia la conversazione, /ferma ferma il turno in corso e svuota la coda, /stato dice cosa sto facendo, /riprova rifà l'ultima domanda, /costo dice la spesa di oggi, /aiuto mostra questo elenco.",
   "gateway.limit": (count: number) =>
     `Più di ${count} messaggi in un'ora: per un po' non rispondo, così un giro di messaggi non consuma il tuo piano. Riprova più tardi.`,
   "gateway.retrust": (name: string) =>

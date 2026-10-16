@@ -102,6 +102,8 @@ describe("the names of the commands", () => {
     expect(chatCommand("/riprova")).toBe("retry")
     expect(chatCommand("/retry@MioBot")).toBe("retry")
     expect(chatCommand("/riprova adesso")).toBeUndefined()
+    expect(chatCommand("/costo")).toBe("cost")
+    expect(chatCommand("/cost")).toBe("cost")
   })
 })
 
@@ -153,5 +155,55 @@ describe("/riprova", () => {
     await until("il secondo turno", () => turns.started.length === 2)
     expect(turns.started[1]!.request.message).toContain("Bea")
     turns.started[1]!.finish({ text: "ok" })
+  })
+})
+
+describe("/costo", () => {
+  test("it says today's spend, even while a turn runs, and the same line /stato ends with", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      spendToday: async () => "Oggi 0,42 $ di 2,00 $.",
+    })
+    b.emit("una domanda")
+    await until("il turno", () => turns.started.length === 1)
+    b.emit("/costo")
+    await until("la spesa", () => b.sent.at(-1)?.text === "Oggi 0,42 $ di 2,00 $.")
+    b.emit("/stato")
+    await until("lo stato", () => b.sent.at(-1)!.text.endsWith("Oggi 0,42 $ di 2,00 $."))
+    expect(turns.started).toHaveLength(1)
+    turns.started[0]!.finish({ text: "ok" })
+  })
+
+  test("a bot that spends no money says so, and so does one whose spend cannot be read", async () => {
+    const b = bridge()
+    let fail = false
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: fakeTurns().runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      spendToday: async () => {
+        if (fail) throw new Error("illeggibile")
+        return undefined
+      },
+    })
+    b.emit("/costo")
+    await until("niente da contare", () => b.sent.at(-1)?.text === t("gateway.cost.none"))
+    fail = true
+    b.emit("/costo")
+    await until("illeggibile", () => b.sent.length === 2)
+    expect(b.sent[1]!.text).toBe(t("gateway.cost.none"))
+  })
+
+  test("the help lists it, in both languages", () => {
+    expect(t("gateway.help")).toContain("/costo")
+    setLocalePreference("en")
+    expect(t("gateway.help")).toContain("/cost ")
+    setLocalePreference("it")
   })
 })
