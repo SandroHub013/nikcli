@@ -53,6 +53,9 @@ pub const MAX_EVICTED: usize = 50;
 pub const MAX_FAILURES: u32 = 5;
 /// How long a link's token (the QR) lasts, once.
 pub const LINK_TTL_MS: u64 = 10 * 60 * 1000;
+/// How long after a link was made a stranger who opens a dead one is told it no longer holds. Past it, and with no link
+/// ever made, the bot is as silent as for any stranger: nothing that says it is there.
+pub const LINK_STALE_MS: u64 = 60 * 60 * 1000;
 /// Random bytes in a link's token (192 bits) and its length in characters: 24 bytes make exactly 32 of the 64.
 const LINK_TOKEN_BYTES: usize = 24;
 pub const LINK_TOKEN_LEN: usize = 32;
@@ -94,6 +97,12 @@ pub struct Pairing {
     /// The token of the link or QR ADE is showing: one at a time, as a hash.
     #[serde(default)]
     pub link: Option<LinkToken>,
+    /// When ADE last made a link: the dead ones are told so only for an hour after.
+    #[serde(default)]
+    pub link_made_ms: Option<u64>,
+    /// Who was told a link no longer holds, and when: once each ten minutes, like a request for a code.
+    #[serde(default)]
+    pub stale_told: Vec<Asked>,
 }
 
 /// A link's token, kept as the codes are: a salt and a hash, never the token.
@@ -257,6 +266,10 @@ impl Pairing {
         if self.link.as_ref().is_some_and(|link| link.expires_ms <= now) {
             self.link = None;
         }
+        self.stale_told.retain(|told| told.at_ms + REQUEST_EVERY_MS > now);
+        if self.link_made_ms.is_some_and(|at| at + LINK_STALE_MS <= now) {
+            self.link_made_ms = None;
+        }
     }
 
     /// ADE makes the token of a link or QR: returned once, to be shown, and kept as a hash for ten minutes. A new one
@@ -269,6 +282,7 @@ impl Pairing {
         let salt = hex(&bytes[LINK_TOKEN_BYTES..]);
         let expires_ms = now + LINK_TTL_MS;
         self.link = Some(LinkToken { token_hash: code_hash(&salt, &token), salt, expires_ms });
+        self.link_made_ms = Some(now);
         Ok((token, expires_ms))
     }
 
@@ -304,6 +318,20 @@ impl Pairing {
             return LinkUse::Paired;
         }
         LinkUse::Wrong
+    }
+
+    /// Whether a stranger whose link did not hold is told so: only within an hour of a link ADE made (otherwise the bot is
+    /// silent, as for any stranger, and the way of a plain `/start` follows) and once each ten minutes. Records the telling.
+    pub fn may_say_stale(&mut self, sender: &str, now: u64) -> bool {
+        self.prune(now);
+        if self.link_made_ms.is_none() || self.stale_told.iter().any(|told| told.sender == sender) {
+            return false;
+        }
+        self.stale_told.push(Asked { sender: sender.to_string(), at_ms: now });
+        while self.stale_told.len() > MAX_PENDING * 10 {
+            self.stale_told.remove(0);
+        }
+        true
     }
 
     /// Whether a stranger writing gets a code: with nobody paired, for two hours
@@ -844,6 +872,22 @@ mod tests {
         assert_eq!(pairing.use_link(&token, "42", LINK_TTL_MS), LinkUse::Wrong, "at ten minutes it is over");
         let (token, _) = pairing.issue_link(0, &mut random).unwrap();
         assert_eq!(pairing.use_link(&token, "42", LINK_TTL_MS - 1), LinkUse::Paired);
+    }
+
+    #[test]
+    fn a_stale_link_is_told_only_within_an_hour_of_a_link_and_once_each_ten_minutes() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        // No link was ever made: silence, as for any stranger.
+        assert!(!pairing.may_say_stale("9", 0));
+        pairing.issue_link(1_000, &mut random).unwrap();
+        assert!(pairing.may_say_stale("9", 2_000), "after a link: told");
+        assert!(!pairing.may_say_stale("9", 3_000), "once");
+        assert!(pairing.may_say_stale("8", 3_000), "another stranger is told too");
+        assert!(pairing.may_say_stale("9", 2_000 + REQUEST_EVERY_MS), "and again ten minutes later");
+        // An hour after the link, the bot is silent again.
+        assert!(!pairing.may_say_stale("7", 1_000 + LINK_STALE_MS));
+        assert!(pairing.link_made_ms.is_none());
     }
 
     #[test]

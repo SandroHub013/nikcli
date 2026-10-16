@@ -1318,24 +1318,29 @@ impl Task {
                 }
                 link.remember_chat(&message.chat, &message.sender.id);
             }
-            Ok(used)
+            // Told the link no longer holds only after a link ADE made recently, and once each ten minutes: otherwise the
+            // bot is as silent as for any stranger, and the way of a plain `/start` follows.
+            let say = used == LinkUse::Wrong && link.pairing.may_say_stale(&message.sender.id, now);
+            Ok((used, say))
         });
         match outcome {
-            Ok(LinkUse::Paired) => {
+            Ok((LinkUse::Paired, _)) => {
                 self.env.log(&format!("{tag}: abbinamento fatto con il link di ADE"));
                 if let Err(error) = self.adapter.send(&message.chat, PAIRED_MESSAGE).await {
                     self.env.log(&format!("{tag}: conferma dell'abbinamento non mandata: {}", redact(&error.message(), &self.secrets)));
                 }
                 true
             }
-            Ok(LinkUse::Wrong) => {
+            Ok((LinkUse::Wrong, say)) => {
                 self.env.log(&format!("{tag}: link di abbinamento sbagliato, scaduto o già usato"));
-                if let Err(error) = self.adapter.send(&message.chat, LINK_STALE_MESSAGE).await {
-                    self.env.log(&format!("{tag}: avviso del link non mandato: {}", redact(&error.message(), &self.secrets)));
+                if say {
+                    if let Err(error) = self.adapter.send(&message.chat, LINK_STALE_MESSAGE).await {
+                        self.env.log(&format!("{tag}: avviso del link non mandato: {}", redact(&error.message(), &self.secrets)));
+                    }
                 }
                 false
             }
-            Ok(LinkUse::NotAToken) => false,
+            Ok((LinkUse::NotAToken, _)) => false,
             Err(error) => {
                 self.env.log(&format!("{tag}: link di abbinamento non verificato, stato non salvato: {error}"));
                 false
@@ -2721,12 +2726,11 @@ mod tests {
             let wrong = format!("{:0>width$}", round, width = authz::LINK_TOKEN_LEN);
             feed.send(Ok(vec![message(&format!("w{round}"), "c9", "9", &format!("/start {wrong}"))])).unwrap();
         }
-        eventually("l'avviso almeno una volta", || {
-            adapter.sent.lock().unwrap().iter().any(|(to, text)| to == "c9" && text == LINK_STALE_MESSAGE)
-        })
-        .await;
+        eventually("l'avviso", || adapter.sent.lock().unwrap().iter().any(|(to, text)| to == "c9" && text == LINK_STALE_MESSAGE)).await;
         tokio::time::sleep(Duration::from_millis(60)).await;
-        // Every wrong one was told; none counted: the codes have all their attempts and nothing is locked.
+        // Told once, not ten times; none counted: the codes have all their attempts and nothing is locked.
+        let told = adapter.sent.lock().unwrap().iter().filter(|(to, text)| to == "c9" && text == LINK_STALE_MESSAGE).count();
+        assert_eq!(told, 1);
         let list = s.hub.pairing_list(BOT, Platform::Fake).unwrap();
         assert_eq!(list.attempts_left, 5);
         assert!(list.locked_until_ms.is_none());
@@ -2744,6 +2748,35 @@ mod tests {
         // The log has the facts and not one token.
         let log = s.env.log.lock().unwrap().join("\n");
         assert!(!log.contains(&token), "{log}");
+    }
+
+    #[tokio::test]
+    async fn with_no_link_made_a_wrong_token_gets_what_any_stranger_gets_and_nothing_is_written() {
+        let s = setup("link-none-made");
+        authorize(&s, "42");
+        let (adapter, feed) = start(&s);
+        let before = std::fs::read_to_string(&s.path).unwrap();
+        for round in 0..5 {
+            let wrong = format!("{:0>width$}", round, width = authz::LINK_TOKEN_LEN);
+            feed.send(Ok(vec![message(&format!("w{round}"), "c9", "9", &format!("/start {wrong}"))])).unwrap();
+        }
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        // Someone is in and no pairing is open: silence, nothing that says the bot is there, and the file is untouched.
+        assert!(adapter.sent.lock().unwrap().is_empty(), "{:?}", adapter.sent.lock().unwrap());
+        assert!(s.env.pairings.lock().unwrap().is_empty());
+        assert_eq!(std::fs::read_to_string(&s.path).unwrap(), before);
+    }
+
+    #[tokio::test]
+    async fn a_dead_link_is_told_only_within_an_hour_of_the_last_one_made() {
+        let s = setup("link-hour");
+        authorize(&s, "42");
+        let token = token_of(&s);
+        s.env.later.store(authz::LINK_STALE_MS + 1, std::sync::atomic::Ordering::SeqCst);
+        let (adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("1", "c9", "9", &format!("/start {token}"))])).unwrap();
+        tokio::time::sleep(Duration::from_millis(80)).await;
+        assert!(adapter.sent.lock().unwrap().is_empty(), "an hour on, the dead link gets silence: {:?}", adapter.sent.lock().unwrap());
     }
 
     #[tokio::test]
