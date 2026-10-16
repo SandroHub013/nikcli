@@ -185,6 +185,8 @@ describe("B8d: ragu's questions in the panel and a room, by their id", () => {
       botName: "alfa",
       permission: "bash",
       patterns: "git push --force",
+      // The folder the turn was started in (P2-1).
+      cwd: "C:/progetto",
       sources: ["ade"],
       choices: ["once", "always", "reject"],
     })
