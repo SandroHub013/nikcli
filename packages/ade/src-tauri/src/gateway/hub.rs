@@ -1200,6 +1200,10 @@ impl Task {
         };
         let cursor = message.cursor.clone().or_else(|| self.adapter.cursor());
         let mut pending = self.pending.lock().unwrap();
+        if pending.iter().any(|entry| entry.msg.chat == msg.chat && entry.msg.id == msg.id) {
+            self.env.log(&format!("{tag}: ignorato un messaggio già in coda"));
+            return;
+        }
         if pending.len() >= PENDING_CAP {
             self.env.log(&format!("{tag}: coda dei messaggi in attesa piena ({PENDING_CAP}): messaggio scartato"));
             return;
@@ -2663,5 +2667,23 @@ mod tests {
         // forget_bot cancella il file pendente
         s.hub.forget_bot(BOT).unwrap();
         assert!(!pending_path.exists(), "forget_bot deve cancellare il file pendente");
+    }
+
+    #[tokio::test]
+    async fn messages_with_same_chat_and_id_are_deduplicated_in_deliver() {
+        let s = setup("dedup-deliver");
+        authorize(&s, "42");
+        let (_adapter, feed) = start(&s);
+        feed.send(Ok(vec![message("100", "c42", "42", "prima volta")])).unwrap();
+        eventually("primo messaggio", || s.env.messages.lock().unwrap().len() == 1).await;
+
+        // Invio dello stesso messaggio (stessa chat e stesso id) mentre è ancora in pending
+        feed.send(Ok(vec![message("100", "c42", "42", "duplicato")])).unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Deve essere scartato: messages rimane a 1
+        assert_eq!(s.env.messages.lock().unwrap().len(), 1, "il duplicato con stesso chat e id deve essere scartato");
+        let logs = s.env.log.lock().unwrap();
+        assert!(logs.iter().any(|line| line.contains("ignorato un messaggio già in coda")));
     }
 }
