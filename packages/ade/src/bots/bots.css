@@ -1231,6 +1231,137 @@
   border-radius: var(--ade-radius-md);
 }
 
+/* The Platforms tab: three tiles with their state, then the five steps of the one that is open (scelta 2). */
+[data-slot="gateway-tiles"] {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--ade-space-5);
+}
+
+[data-slot="gateway-tile"] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-5);
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-surface);
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+[data-slot="gateway-tile"]:hover {
+  background: var(--ade-raised);
+}
+
+[data-slot="gateway-tile"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+/* The open tile: not the accent, no accent contour without an accent fill (contorni.test.ts). */
+[data-slot="gateway-tile"][aria-pressed="true"] {
+  border-color: var(--ade-text-soft);
+  background: var(--ade-raised);
+}
+
+[data-slot="gateway-tile-name"] {
+  font-size: var(--ade-font-lg);
+  font-weight: var(--ade-weight-semibold);
+}
+
+[data-slot="gateway-badge"] {
+  padding: 0 var(--ade-space-3);
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-raised);
+  color: var(--ade-waiting);
+  font-size: var(--ade-font-xs);
+}
+
+[data-slot="gateway-steps"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-slot="gateway-step"] {
+  border: 1px solid var(--ade-border-subtle);
+  border-radius: var(--ade-radius-md);
+}
+
+[data-slot="gateway-step"][data-state="here"] {
+  border-color: var(--ade-border);
+}
+
+[data-slot="gateway-step-head"] {
+  display: flex;
+  align-items: center;
+  gap: var(--ade-space-3);
+  width: 100%;
+  padding: var(--ade-space-3) var(--ade-space-5);
+  border: none;
+  background: transparent;
+  color: var(--ade-text);
+  font-family: var(--ade-sans);
+  font-size: var(--ade-font-md);
+  text-align: left;
+  cursor: pointer;
+}
+
+[data-slot="gateway-step-head"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="gateway-step-number"] {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-raised);
+  font-size: var(--ade-font-xs);
+}
+
+[data-slot="gateway-step"][data-state="done"] [data-slot="gateway-step-number"] {
+  color: var(--ade-done, var(--ade-text-weak));
+}
+
+[data-slot="gateway-step"][data-state="here"] [data-slot="gateway-step-number"] {
+  background: var(--ade-text);
+  color: var(--ade-bg);
+}
+
+[data-slot="gateway-step-title"] {
+  flex: 1 1 auto;
+  font-weight: var(--ade-weight-semibold);
+}
+
+[data-slot="gateway-step-status"] {
+  font-size: var(--ade-font-xs);
+  color: var(--ade-text-weak);
+}
+
+[data-slot="gateway-step-body"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-3);
+  padding: var(--ade-space-3) var(--ade-space-5) var(--ade-space-5);
+}
+
+/* The place of the pairing link or QR (scelta 3): nothing until there is one. */
+[data-slot="gateway-pair-link"]:empty {
+  display: none;
+}
+
 [data-slot="gateway-list"] li[data-slot="routine-item"] {
   flex-direction: column;
   align-items: stretch;

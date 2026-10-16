@@ -28,6 +28,8 @@ const SAME_IN_BOTH = new Set<string>([
   "gateway.panel.platformTelegram",
   "gateway.panel.platformDiscord",
   "gateway.panel.platformSlack",
+  // «Telegram: On»: the platform's name and the state's word, in the same shape in both.
+  "gateway.tile.aria",
   "gateway.panel.tokenPlaceholderSlack",
   "gateway.panel.appTokenPlaceholder",
   "record.consent.no",

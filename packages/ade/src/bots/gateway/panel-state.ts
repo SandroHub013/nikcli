@@ -22,6 +22,7 @@ import type { AgentFile } from "../ragu"
 import type { GatewayMessage } from "./controller"
 import { onTurnFailure, turnFailureOf } from "./failures"
 import { offersRemoteCommands, REMOTE_OFF, remoteKey, type RemoteStore } from "./remote"
+import { currentStep, PLATFORM_IDS, stepsOf, tileState, type StepId, type TileState } from "./steps"
 
 export interface Sender {
   readonly id: string
@@ -116,6 +117,8 @@ export interface GatewayPanelDeps {
   readonly confirm: (question: string) => Promise<boolean>
   readonly platform?: string
   readonly now?: () => number
+  /** Opens a page (BotFather, the developer portal) in the system browser; absent, the step shows the address. */
+  readonly openLink?: (url: string) => void
 }
 
 const OFF: GatewayStatus = {
@@ -128,6 +131,12 @@ const OFF: GatewayStatus = {
   authorized: [],
 }
 const NO_PAIRING: PairingInfo = { open: false, pending: [], authorized: [], attemptsLeft: 0 }
+
+/**
+ * Where on the screen a failure belongs (D11): the step whose button caused it. A failure shows by that button, not
+ * at the foot of the section; `remote` is the commands' switch below the steps.
+ */
+export type ProblemArea = StepId | "remote"
 
 const reason = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
@@ -156,6 +165,10 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
   const [manifest, setManifest] = createSignal<string>()
   const [busy, setBusy] = createSignal(false)
   const [problem, setProblem] = createSignal<string>()
+  const [problemArea, setProblemArea] = createSignal<ProblemArea>()
+  // Every platform of this bot, for the tiles: what each one is doing and how many requests wait on it.
+  const [links, setLinks] = createSignal<Readonly<Record<string, GatewayStatus>>>({})
+  const [waiting, setWaiting] = createSignal<Readonly<Record<string, number>>>({})
   const [probed, setProbed] = createSignal<string>()
   const [redactedAt, setRedactedAt] = createSignal<number>()
   // The last chat turn that failed (S10): read again whenever one is noted or the platform changes.
@@ -174,22 +187,42 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
         if (open !== undefined && open !== platform()) setPlatform(open)
       }
       setLink(all.find(mine) ?? { ...OFF, bot: path(), platform: platform() })
+      setLinks(Object.fromEntries(all.filter((item) => item.bot === path()).map((item) => [item.platform, item])))
       setPairing(await deps.api.pairingList(path(), platform()))
       setRemote(deps.remote.get(remoteKey(path(), platform())))
+      await refreshWaiting()
     } catch (error) {
       setProblem(reason(error))
+      setProblemArea(undefined)
     }
   }
 
-  /** One action at a time; its failure is the panel's problem line. */
-  const act = async (work: () => Promise<unknown>) => {
+  /** The requests waiting on the platforms the panel is not looking at: a badge on their tiles. */
+  const refreshWaiting = async () => {
+    const counts: Record<string, number> = {}
+    for (const other of PLATFORM_IDS) {
+      if (other === platform()) continue
+      try {
+        counts[other] = (await deps.api.pairingList(path(), other)).pending.length
+      } catch {
+        // A platform that cannot be read has no badge; the tile still shows its state.
+        counts[other] = 0
+      }
+    }
+    setWaiting(counts)
+  }
+
+  /** One action at a time; its failure is the panel's problem line, shown by the button of `area` (D11). */
+  const act = async (work: () => Promise<unknown>, area?: ProblemArea) => {
     if (busy()) return
     setBusy(true)
     setProblem(undefined)
+    setProblemArea(undefined)
     try {
       await work()
     } catch (error) {
       setProblem(reason(error))
+      setProblemArea(area)
     } finally {
       setBusy(false)
       await refresh()
@@ -201,6 +234,17 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
   const ready = deps.api
     .listen({
       status: (status) => {
+        if (status.bot === path()) {
+          setLinks((current) => ({
+            ...current,
+            [status.platform]: {
+              ...(current[status.platform] ?? { ...OFF, bot: status.bot, platform: status.platform }),
+              running: status.running,
+              connected: status.connected,
+              lastError: status.lastError ?? null,
+            },
+          }))
+        }
         if (!mine(status)) return
         setLink((current) => ({
           ...current,
@@ -211,7 +255,8 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
         }))
       },
       pairing: (request) => {
-        if (mine(request)) void refresh()
+        // Another platform's request is a badge on its tile; this one's is the list.
+        if (request.bot === path()) void refresh()
       },
       message: (message) => {
         if (mine(message) && message.redacted) setRedactedAt(now())
@@ -252,6 +297,7 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
       setManifest(undefined)
       setProbed(undefined)
       setProblem(undefined)
+      setProblemArea(undefined)
       setRedactedAt(undefined)
       void refresh()
     },
@@ -266,7 +312,37 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
     tokensReady,
     busy,
     problem,
+    /** The failure, only if it belongs to `area`; the ones without an area are `problemIn(undefined)`. */
+    problemIn: (area: ProblemArea | undefined) => (problemArea() === area ? problem() : undefined),
     probed,
+    /** What a tile shows for `platform`: its state, and the pairing requests waiting on it. */
+    tile: (id: string): { readonly state: TileState; readonly waiting: number } => {
+      const here = id === platform()
+      return {
+        state: tileState(here ? link() : links()[id]),
+        waiting: here ? pairing().pending.length : (waiting()[id] ?? 0),
+      }
+    },
+    /** The five steps and which are done, for the platform shown. */
+    steps: () =>
+      stepsOf({
+        hasToken: link().hasToken,
+        tokensReady: tokensReady(),
+        probed: probed() !== undefined,
+        enabled: link().enabled,
+        authorized: pairing().authorized.length,
+      }),
+    /** The step the user is at. */
+    at: () =>
+      currentStep(
+        stepsOf({
+          hasToken: link().hasToken,
+          tokensReady: tokensReady(),
+          probed: probed() !== undefined,
+          enabled: link().enabled,
+          authorized: pairing().authorized.length,
+        }),
+      ),
     redactedAt,
     turnFailure,
     remote,
@@ -287,7 +363,7 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
       setDraft("")
       if (!token) return Promise.resolve()
       setProbed(undefined)
-      return act(() => deps.api.setToken(path(), platform(), token))
+      return act(() => deps.api.setToken(path(), platform(), token), "paste")
     },
     /** Slack's App-Level Token, the same way: the draft emptied first. */
     saveAppToken: () => {
@@ -295,7 +371,7 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
       setAppDraft("")
       if (!token) return Promise.resolve()
       setProbed(undefined)
-      return act(() => deps.api.setToken(path(), platform(), token, "app"))
+      return act(() => deps.api.setToken(path(), platform(), token, "app"), "paste")
     },
     /** The Slack app's manifest, made by Rust for this bot's name. */
     showManifest: () =>
@@ -303,13 +379,13 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
         const make = deps.api.slackManifest
         if (!make) throw new Error(t("gateway.panel.slackManifestMissing"))
         setManifest(await make(deps.bot().identifier))
-      }),
-    clearToken: () => act(() => deps.api.clearToken(path(), platform())),
+      }, "create"),
+    clearToken: () => act(() => deps.api.clearToken(path(), platform()), "paste"),
     probe: () =>
       act(async () => {
         setProbed(undefined)
         setProbed(await deps.api.probe(path(), platform()))
-      }),
+      }, "test"),
 
     /** On: the trust asked, the project fixed. Off: at once. */
     setEnabled: (on: boolean) =>
@@ -327,12 +403,12 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
           return
         }
         await deps.api.setEnabled(path(), platform(), true, project)
-      }),
+      }, "on"),
 
-    approve: (code: string) => act(() => deps.api.pairingApprove(path(), platform(), code.trim())),
-    reject: (request: string) => act(() => deps.api.pairingReject(path(), platform(), request)),
-    revoke: (sender: string) => act(() => deps.api.pairingRevoke(path(), platform(), sender)),
-    openPairing: () => act(() => deps.api.pairingOpen(path(), platform())),
+    approve: (code: string) => act(() => deps.api.pairingApprove(path(), platform(), code.trim()), "pair"),
+    reject: (request: string) => act(() => deps.api.pairingReject(path(), platform(), request), "pair"),
+    revoke: (sender: string) => act(() => deps.api.pairingRevoke(path(), platform(), sender), "pair"),
+    openPairing: () => act(() => deps.api.pairingOpen(path(), platform()), "pair"),
 
     /** The first step: the panel says what turning them on means, and waits for the yes. */
     askRemote: () => {
@@ -352,12 +428,12 @@ export function createGatewayPanel(deps: GatewayPanelDeps) {
           return
         }
         deps.remote.set(remoteKey(path(), platform()), { commands: true, fingerprint: trusted.fingerprint })
-      }),
+      }, "remote"),
     remoteOff: () =>
       act(async () => {
         setConfirmingRemote(false)
         deps.remote.set(remoteKey(path(), platform()), REMOTE_OFF)
-      }),
+      }, "remote"),
 
     dispose: () => {
       disposed = true

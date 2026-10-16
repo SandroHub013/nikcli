@@ -6,6 +6,7 @@
 
 import { t } from "../../i18n"
 import { askDialog } from "../../host/ask"
+import { openExternally } from "../../browser/host-bridge"
 import type { AgentFile } from "../ragu"
 import { admitProject, projectSurface, PROJECT_TRUST_KEY } from "../project-trust"
 import { runnerById } from "../runners"
@@ -124,6 +125,7 @@ export function appGatewayPanelDeps(project: () => string | undefined): Omit<Gat
     remote: localRemoteStore(),
     approve: approveForChat,
     confirm: (question) => askDialog(question, { ok: t("bots.ask.yes"), cancel: t("bots.ask.no") }),
+    openLink: (url) => void openExternally(url),
   }
 }
 

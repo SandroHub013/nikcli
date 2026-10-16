@@ -602,6 +602,7 @@ describe("the Gateway section of a bot's card", () => {
   test("the authorised list is the one of the platform on show", async () => {
     await createRoot(async () => {
       const asked: string[] = []
+      const revoked: string[] = []
       const api: GatewayPanelApi = {
         status: async () => [
           {
@@ -636,7 +637,7 @@ describe("the Gateway section of a bot's card", () => {
         },
         pairingApprove: async () => ({ id: "u1", name: "qualcuno" }),
         pairingReject: async () => {},
-        pairingRevoke: async () => {},
+        pairingRevoke: async (_bot, platform) => void revoked.push(platform),
         pairingOpen: async () => 0,
         listen: async () => () => {},
       }
@@ -650,7 +651,9 @@ describe("the Gateway section of a bot's card", () => {
       })
       try {
         await panel.refresh()
-        expect(asked).toEqual(["telegram"])
+        // The list shown is the first asked; the other platforms are asked after it, for the badges of their tiles.
+        expect(asked[0]).toBe("telegram")
+        expect(asked.slice().sort()).toEqual(["discord", "slack", "telegram"])
         expect(panel.pairing().authorized.map((who) => who.id)).toEqual(["tg1"])
         expect(panel.pairing().open).toBe(true)
 
@@ -663,7 +666,7 @@ describe("the Gateway section of a bot's card", () => {
 
         // A revoking act goes to the platform it is looking at.
         await panel.revoke("dc1")
-        expect(asked[asked.length - 1]).toBe("discord")
+        expect(revoked).toEqual(["discord"])
       } finally {
         panel.dispose()
       }
