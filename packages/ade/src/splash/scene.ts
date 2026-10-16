@@ -42,7 +42,7 @@ export const SCENE_LAYOUT = {
   developer: { x: 30, y: 15 },
   tomato: { x: 62, y: 44 },
   basil: { x: 68, y: 45 },
-  pot: { x: 74, y: 33 },
+  pot: { x: 64, y: 17 },
   laptop: { x: 96, y: 35 },
   counter: { y: 49 },
   wordmark: { x: (SCENE_WIDTH - WORDMARK_WIDTH) / 2, y: 62 },

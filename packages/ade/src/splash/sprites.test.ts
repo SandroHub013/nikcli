@@ -42,13 +42,15 @@ describe("splash sprite data (step 1)", () => {
       expect(POT_FRAMES.length).toBe(8)
     })
 
-    test("every pot frame has identical dimensions matching POT_SPRITE_SIZE (16x16)", () => {
+    test("every pot frame has identical dimensions matching POT_SPRITE_SIZE (32x32)", () => {
       for (const frame of POT_FRAMES) {
         expect(frame.length).toBe(POT_SPRITE_SIZE.height)
         for (const row of frame) {
           expect(row.length).toBe(POT_SPRITE_SIZE.width)
         }
       }
+      expect(POT_SPRITE_SIZE.width).toBe(32)
+      expect(POT_SPRITE_SIZE.height).toBe(32)
     })
 
     test("every pixel in pot frames belongs to the approved palette", () => {
@@ -62,10 +64,14 @@ describe("splash sprite data (step 1)", () => {
       }
     })
 
-    test("pot base and handles match the iconic Ragu pot silhouette", () => {
+    test("pot base and handles match the iconic Ragu pot silhouette at 32x32", () => {
       for (const frame of POT_FRAMES) {
-        expect(frame[14]).toBe("....aaaaaaaa....")
-        expect(frame[13]).toBe("...adddddddda...")
+        expect(frame[30]).toBe(".........aaaaaaaaaaaa...........")
+        expect(frame[29]).toBe(".......aaddddddddddddaa.........")
+        expect(frame[12]).toContain("i")
+        expect(frame[13]).toContain("i")
+        expect(frame[17]![0]).toBe("a")
+        expect(frame[17]![31]).toBe("a")
       }
     })
   })
@@ -86,9 +92,9 @@ describe("splash sprite data (step 1)", () => {
       ])
     })
 
-    test("developer height is roughly twice the height of the pot (34 vs 16 px)", () => {
+    test("developer height is human-scale alongside the 32x32 pot (34 vs 32 px)", () => {
       expect(DEVELOPER_SPRITE_SIZE.height).toBe(34)
-      expect(DEVELOPER_SPRITE_SIZE.height).toBeGreaterThanOrEqual(POT_SPRITE_SIZE.height * 2)
+      expect(POT_SPRITE_SIZE.height).toBe(32)
     })
 
     test("every developer pose has identical dimensions matching DEVELOPER_SPRITE_SIZE (28x34)", () => {
