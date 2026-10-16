@@ -2749,6 +2749,7 @@ pub fn run() {
             gateway::gateway_edit,
             gateway::gateway_typing,
             gateway::gateway_set_commands,
+            gateway::gateway_state_set_aside,
             gateway::gateway_preview,
             gateway::gateway_preview_end,
             gateway::gateway_pairing_list,

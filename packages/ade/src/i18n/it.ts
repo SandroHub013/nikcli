@@ -840,6 +840,9 @@ export const it = {
   "gateway.menu.model": "Mostra e cambia il modello",
   "gateway.menu.sessions": "Riprende una conversazione",
   "gateway.menu.help": "Mostra i comandi",
+  "gateway.panel.stateAside": (copy: string) =>
+    `Lo stato delle app di messaggi era rovinato ed è stato messo da parte; gli abbinamenti vanno rifatti. La copia è in: ${copy}`,
+  "gateway.panel.stateAsideOk": "Ho capito",
   "gateway.cost.none": "Oggi non c'è nessuna spesa da contare: questo bot usa un abbonamento o un modello gratuito.",
   "gateway.help":
     "Comandi: /nuova ricomincia la conversazione, /ferma ferma il turno in corso e svuota la coda, /stato dice cosa sto facendo, /riprova rifà l'ultima domanda, /costo dice la spesa di oggi, /modello mostra il modello e lascia scegliere fra quelli del bot, /sessioni elenca le ultime conversazioni di questa chat e ne riprende una, /aiuto mostra questo elenco.",

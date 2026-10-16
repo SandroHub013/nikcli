@@ -821,6 +821,9 @@ export const en: Messages = {
   "gateway.menu.model": "Show and change the model",
   "gateway.menu.sessions": "Resume a conversation",
   "gateway.menu.help": "Show the commands",
+  "gateway.panel.stateAside": (copy: string) =>
+    `The state of the messaging apps was damaged and has been set aside; the pairings need to be done again. The copy is in: ${copy}`,
+  "gateway.panel.stateAsideOk": "Got it",
   "gateway.cost.none": "There is no spend to count today: this bot uses a subscription or a free model.",
   "gateway.help":
     "Commands: /new starts the conversation over, /stop stops the running turn and clears the queue, /status says what I'm doing, /retry asks the last question again, /cost says today's spend, /model shows the model and lets you choose among the bot's own, /sessions lists the last conversations of this chat and resumes one, /help shows this list.",

@@ -23,6 +23,7 @@ import { appMemoryStore } from "../memory-app"
 import { localHistoryStore, localSessionStore } from "./session"
 import { localChatModelStore } from "./chat-model"
 import { startMenuSync } from "./menu"
+import { appStateAside } from "./state-aside"
 import { spendStatus, spendTerms, withDailyCap } from "../spend"
 import { appSpendStore } from "../spend-app"
 import { appApprovals } from "../approvals-app"
@@ -200,10 +201,21 @@ export async function startAppGatewayController(): Promise<GatewayController> {
         return dispose
       }),
   }).catch(() => () => {})
+  // The state that could not be read and was put aside: said once in the Platforms tab (N-A11a).
+  const stopAside = await appStateAside
+    .start({
+      take: () => invoke<string[]>("gateway_state_set_aside"),
+      listen: async (heard) => {
+        const { listen } = await import("@tauri-apps/api/event")
+        return listen<string>("gateway:state-aside", (event) => heard(event.payload))
+      },
+    })
+    .catch(() => () => {})
   return {
     ...controller,
     stop: () => {
       if (activeController === controller) activeController = undefined
+      stopAside()
       stopMenus()
       controller.stop()
     },

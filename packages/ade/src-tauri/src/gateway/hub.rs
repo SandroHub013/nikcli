@@ -913,6 +913,12 @@ impl Hub {
         adapter.set_commands(commands).await.map_err(|error| redact(&error.message(), &self.secrets()))
     }
 
+    /// The copies of an unreadable state put aside since the page last asked (N-A11a), as paths; emptied. The page says
+    /// it once and never shows what was in them.
+    pub fn take_state_set_aside(&self) -> Vec<String> {
+        self.store.take_set_aside()
+    }
+
     pub async fn typing(&self, bot: &str, platform: Platform, chat: &str) -> Result<(), String> {
         let adapter = self.reply_target(bot, platform, chat)?;
         adapter.typing(chat).await.map_err(|error| redact(&error.message(), &self.secrets()))
