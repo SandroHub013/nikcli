@@ -237,9 +237,17 @@ fn known_shapes(text: &str) -> String {
 }
 
 /// The words of a variable's name that say its value is a secret.
-const SECRET_WORDS: &[&str] = &["key", "token", "secret", "password", "passwd", "pwd", "credential", "credentials", "apikey", "auth", "authorization"];
-/// And the endings that say it when the name is in camel case or run together (`apiKey`, `accesstoken`).
-const SECRET_ENDINGS: &[&str] = &["apikey", "accesskey", "privatekey", "token", "secret", "password", "passwd"];
+const SECRET_WORDS: &[&str] = &[
+    "key", "token", "secret", "password", "passwd", "pass", "passphrase", "pwd", "credential", "credentials", "apikey", "auth",
+    "authorization",
+];
+/// And the endings that say it when the name is in camel case or run together (`apiKey`, `accesstoken`, Azure's
+/// `AccountKey` and `SharedAccessKey`).
+const SECRET_ENDINGS: &[&str] = &[
+    "apikey", "accesskey", "privatekey", "accountkey", "sharedaccesskey", "token", "secret", "password", "passwd", "passphrase",
+];
+/// The schemes an `Authorization` header puts before its credential.
+const AUTH_SCHEMES: &[&str] = &["basic", "bearer", "digest", "token", "bot"];
 
 fn is_name_byte(byte: u8) -> bool {
     byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.')
@@ -287,21 +295,30 @@ fn hide_assignments(text: &str) -> String {
             let colon_ok = quoted || starts_a_line(text, begin) || (begin > 0 && matches!(bytes[begin - 1], b'"' | b'\''));
             if (separator == b'=' || colon_ok) && begin < end && secret_name(&text[begin..end]) {
                 let query = begin > 0 && matches!(bytes[begin - 1], b'?' | b'&');
+                let name_lower = text[begin..end].to_ascii_lowercase();
+                let connection_string = name_lower.ends_with("accountkey") || name_lower.ends_with("sharedaccesskey");
                 let mut start = at + 1;
                 while start < bytes.len() && bytes[start] == b' ' {
                     start += 1;
                 }
                 // `Authorization: Basic dXNlcjpw`: the secret is what follows the scheme, which stays readable.
+                // Only a word that is a known scheme counts as one: `"Authorization": "abc123"` is the secret itself.
                 if text[begin..end].to_ascii_lowercase().ends_with("authorization") {
-                    let mut after = start;
-                    while after < bytes.len() && !bytes[after].is_ascii_whitespace() {
+                    let word_at = start + usize::from(matches!(bytes.get(start), Some(b'"' | b'\'')));
+                    let mut after = word_at;
+                    while after < bytes.len() && bytes[after].is_ascii_alphabetic() {
                         after += 1;
                     }
+                    let scheme = text[word_at..after].to_ascii_lowercase();
                     let scheme_end = after;
                     while after < bytes.len() && matches!(bytes[after], b' ' | b'\t') {
                         after += 1;
                     }
-                    if scheme_end > start && after > scheme_end && after < bytes.len() && !matches!(bytes[after], b'\n' | b'\r') {
+                    if AUTH_SCHEMES.contains(&scheme.as_str())
+                        && after > scheme_end
+                        && after < bytes.len()
+                        && !matches!(bytes[after], b'\n' | b'\r' | b'"' | b'\'')
+                    {
                         start = after;
                     }
                 }
@@ -316,7 +333,13 @@ fn hide_assignments(text: &str) -> String {
                         Some(quote) => bytes[stop] == quote,
                         // `&` ends a bare value only in a query string (`?pwd=abc&x=1`), whose next field is not the
                         // secret; in a `.env` it is part of the password.
-                        None => bytes[stop].is_ascii_whitespace() || matches!(bytes[stop], b'"' | b'\'') || (query && bytes[stop] == b'&'),
+                        None => {
+                            bytes[stop].is_ascii_whitespace()
+                                || matches!(bytes[stop], b'"' | b'\'')
+                                || (query && bytes[stop] == b'&')
+                                // An Azure connection string separates its fields with `;`, and a key has none inside.
+                                || (connection_string && bytes[stop] == b';')
+                        }
                     };
                     if ends {
                         break;
@@ -569,6 +592,32 @@ mod tests {
     #[test]
     fn a_colon_after_an_ordinary_word_is_still_left_alone() {
         for text in ["monkey: banana", "Note: key rotation planned", "token: ab", "il token: scaduto ieri", "a: b: c"] {
+            assert_eq!(redact(text, &[]), text, "{text}");
+        }
+    }
+
+    /* P2 of the last check: a single-token Authorization, and PASS, PASSPHRASE and Azure's AccountKey. */
+    #[test]
+    fn an_authorization_with_one_token_is_a_secret_not_a_scheme() {
+        let text = "{\"Authorization\": \"abc123secret\", \"x\": 1}\nauthorization: valore9999 # nota\nAuthorization: \"Basic dXNlcjpwYXNz\"\nAuthorization: token ghx-plain-value";
+        let out = redact(text, &[]);
+        for leaked in ["abc123secret", "valore9999", "dXNlcjpwYXNz", "ghx-plain-value"] {
+            assert!(!out.contains(leaked), "{leaked} in {out}");
+        }
+        assert!(out.contains("# nota"), "{out}");
+        assert!(out.contains("\"x\": 1"), "{out}");
+        assert!(out.contains("Basic [nascosto]") && out.contains("token [nascosto]"), "{out}");
+    }
+
+    #[test]
+    fn pass_passphrase_and_azure_account_keys_are_secret_names() {
+        let text = "SMTP_PASS=smtp-s3cret\nDB_PASS: db-s3cret\nSSH_PASSPHRASE=frase-segreta\nDefaultEndpointsProtocol=https;AccountName=conto;AccountKey=Zm9vYmFyLWF6dXJlLWtleQ==;EndpointSuffix=core.windows.net";
+        let out = redact(text, &[]);
+        for leaked in ["smtp-s3cret", "db-s3cret", "frase-segreta", "Zm9vYmFy"] {
+            assert!(!out.contains(leaked), "{leaked} in {out}");
+        }
+        assert!(out.contains("AccountName=conto;AccountKey=[nascosto];EndpointSuffix=core.windows.net"), "{out}");
+        for text in ["bypass=trueish", "compass=north-ish", "passport=ab12"] {
             assert_eq!(redact(text, &[]), text, "{text}");
         }
     }
