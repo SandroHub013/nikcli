@@ -6,7 +6,7 @@
  * - Iconic Ragu pot at center boiling, steaming, and bobbing at 8fps;
  * - Fresh counter tomato and basil sprig;
  * - Open laptop running colorful ADE code at right;
- * - Large 100px "Ragù Code" wordmark centered below (~60% width);
+ * - Centered 80px "Ragù Code" wordmark below (50% width);
  * - Crisp integer pixelated scaling on <canvas> across 800px to 4K.
  */
 
@@ -331,6 +331,17 @@ export function startPixelScene(
       container.style.width = `${cssWidth}px`
       container.style.height = `${cssHeight}px`
     }
+
+    const scanlinePeriod = `${(2 * scale) / dpr}px`
+    const splashRoot = (canvas.closest?.('[data-component="ade-splash"]') ??
+      container?.parentElement) as HTMLElement | null
+    if (splashRoot?.style) {
+      splashRoot.style.setProperty("--splash-scanline-period", scanlinePeriod)
+    }
+    if (container?.style) {
+      container.style.setProperty("--splash-scanline-period", scanlinePeriod)
+    }
+
     return scale
   }
 

@@ -45,9 +45,9 @@ describe("splash component (step 3)", () => {
     // 1. Structural check: status is a child of the scene container under canvas
     const handle = mountSplash({ visible: true, status: "Caricamento estensioni..." })
     try {
-      const sceneContainer = container.querySelector('[data-slot="splash-scene-container"]')
+      const sceneContainer = container.querySelector<HTMLElement>('[data-slot="splash-scene-container"]')
       expect(sceneContainer).not.toBeNull()
-      const statusEl = sceneContainer?.querySelector('[data-slot="splash-status"]')
+      const statusEl = sceneContainer?.querySelector<HTMLElement>('[data-slot="splash-status"]')
       expect(statusEl).not.toBeNull()
       expect(statusEl?.parentElement).toBe(sceneContainer)
     } finally {
@@ -317,8 +317,9 @@ describe("splash component (step 3)", () => {
       runRaf()
       expect(rafs.size).toBe(1)
 
-      // 3. Set visible to false, advance 600 ms (fade duration)
+      // 3. Set visible to false: animation loop stops immediately at the start of fade (P3-8)
       setVisibleSignal(false)
+      expect(rafs.size).toBe(0)
       advance(600)
 
       // All cleaned up: 0 rAF in queue, 0 timers, listeners balanced
@@ -370,6 +371,36 @@ describe("splash component (step 3)", () => {
       document.addEventListener = origDocAdd
       document.removeEventListener = origDocRemove
       performance.now = origPerfNow
+      window.matchMedia = origMatchMedia
+    }
+  })
+
+  test("dynamically responds to prefers-reduced-motion media query changes (P3-1)", () => {
+    let changeHandler: ((e: any) => void) | undefined
+    const mockMql = {
+      matches: false,
+      media: "(prefers-reduced-motion: reduce)",
+      addEventListener: (evt: string, fn: any) => {
+        if (evt === "change") changeHandler = fn
+      },
+      removeEventListener: (evt: string, fn: any) => {
+        if (evt === "change" && changeHandler === fn) changeHandler = undefined
+      },
+    }
+    const origMatchMedia = window.matchMedia
+    window.matchMedia = ((query: string) => {
+      if (query.includes("prefers-reduced-motion")) return mockMql as any
+      return { matches: false, addEventListener: () => {}, removeEventListener: () => {} } as any
+    }) as any
+
+    const handle = mountSplash({ visible: true })
+    try {
+      expect(typeof changeHandler).toBe("function")
+      // Trigger media query change to reduce
+      mockMql.matches = true
+      changeHandler!({ matches: true })
+    } finally {
+      handle.dispose()
       window.matchMedia = origMatchMedia
     }
   })

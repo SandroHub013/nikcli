@@ -15,13 +15,16 @@ import {
 } from "./scene"
 import {
   BASIL_SIZE,
+  BASIL_SPRITE,
   DEVELOPER_POSES,
   DEVELOPER_SPRITE_SIZE,
   LAPTOP_SIZE,
+  LAPTOP_SPRITE,
   POT_FRAMES,
   POT_SPRITE_SIZE,
   SPLASH_PALETTE,
   TOMATO_SIZE,
+  TOMATO_SPRITE,
   WORDMARK_GRID,
   WORDMARK_SIZE,
 } from "./sprites"
@@ -155,6 +158,31 @@ describe("splash scene renderer (step 2)", () => {
         container.remove()
       }
     })
+
+    test("sets --splash-scanline-period to exact 2 * scale in device pixels to prevent moiré (P3-6)", () => {
+      const splash = document.createElement("div")
+      splash.setAttribute("data-component", "ade-splash")
+      const container = document.createElement("div")
+      container.setAttribute("data-slot", "splash-scene-container")
+      const canvas = document.createElement("canvas")
+      container.appendChild(canvas)
+      splash.appendChild(container)
+      document.body.appendChild(splash)
+
+      try {
+        const controller = startPixelScene(canvas)
+        // Scale 5 at DPR 1: 2 * 5 / 1 = 10px
+        controller.resize(800, 600, 1)
+        expect(splash.style.getPropertyValue("--splash-scanline-period")).toBe("10px")
+
+        // Scale 11 at DPR 1.25 (1536x826): 2 * 11 / 1.25 = 17.6px (22 device pixels)
+        controller.resize(1536, 826, 1.25)
+        expect(splash.style.getPropertyValue("--splash-scanline-period")).toBe("17.6px")
+        controller.stop()
+      } finally {
+        splash.remove()
+      }
+    })
   })
 
   describe("timing cadences", () => {
@@ -241,26 +269,33 @@ describe("splash scene renderer (step 2)", () => {
       }
       canvas.getContext = (() => mockCtx) as any
 
+      const origPerf = performance.now
+      let now = 1000
+      performance.now = () => now
+
       try {
         const controller = startPixelScene(canvas)
         expect(rAFCallback).not.toBeNull()
-        rAFCallback!(1000)
+        rAFCallback!(now)
         const initialDraws = drawImageCalls
         expect(initialDraws).toBe(1)
 
         // Second tick at now = 1016 (only 16ms later, same frame indices) -> no redraw
         expect(rAFCallback).not.toBeNull()
-        rAFCallback!(1016)
+        now = 1016
+        rAFCallback!(now)
         expect(drawImageCalls).toBe(initialDraws)
 
         // Third tick at now = 1130 (130ms later, elapsed crossed 125ms threshold) -> redraw
         expect(rAFCallback).not.toBeNull()
-        rAFCallback!(1130)
+        now = 1130
+        rAFCallback!(now)
         expect(drawImageCalls).toBe(initialDraws + 1)
 
         controller.stop()
       } finally {
         window.requestAnimationFrame = origRAF
+        performance.now = origPerf
       }
     })
 
@@ -445,6 +480,22 @@ describe("splash scene renderer (step 2)", () => {
         }
       }
       expect(count).toBeGreaterThan(1000)
+    })
+
+    test("every non-transparent pixel in props (laptop, tomato, basil) has contrast >= 1.5 against ink background (P3-5)", () => {
+      let count = 0
+      for (const sprite of [LAPTOP_SPRITE, TOMATO_SPRITE, BASIL_SPRITE]) {
+        for (const row of sprite) {
+          for (const char of row) {
+            if (char === ".") continue
+            count++
+            const color = SPLASH_PALETTE[char]!
+            const cr = contrastRatio(color, INK_BACKGROUND)
+            expect(cr).toBeGreaterThanOrEqual(1.5)
+          }
+        }
+      }
+      expect(count).toBeGreaterThan(100)
     })
   })
 })

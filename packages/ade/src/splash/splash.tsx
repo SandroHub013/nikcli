@@ -53,18 +53,38 @@ export function Splash(props: SplashProps) {
 
 function SplashView(props: { visible: boolean; status?: string; onDismiss?: () => void }) {
   let canvasRef: HTMLCanvasElement | undefined
+  let controller: SceneController | undefined
+  let disposed = false
+  let startingFired = false
+  let restartScene: ((opts?: { prefersReducedMotion?: boolean }) => void) | undefined
 
   const dismiss = () => {
     if (props.visible) props.onDismiss?.()
   }
 
+  const handleResize = () => {
+    const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1
+    controller?.resize(window.innerWidth, window.innerHeight, dpr)
+  }
+
+  const getPrefersReducedMotion = () =>
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+
+  // P3-8: Stop animation loop immediately when props.visible flips to false (at the start of fade)
+  createEffect(() => {
+    if (!props.visible) {
+      controller?.stop()
+    } else if (startingFired) {
+      restartScene?.({ prefersReducedMotion: getPrefersReducedMotion() })
+    }
+  })
+
   onMount(() => {
     const canvas = canvasRef
     if (!canvas) return
     const appearedAt = performance.now()
-
-    let controller: SceneController | undefined
-    let disposed = false
 
     onCleanup(() => {
       disposed = true
@@ -79,10 +99,6 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
     window.addEventListener("keydown", handleKeyDown)
     onCleanup(() => window.removeEventListener("keydown", handleKeyDown))
 
-    const handleResize = () => {
-      const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1
-      controller?.resize(window.innerWidth, window.innerHeight, dpr)
-    }
     window.addEventListener("resize", handleResize)
     onCleanup(() => window.removeEventListener("resize", handleResize))
 
@@ -109,17 +125,46 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
       }
     })
 
-    const prefersReducedMotion =
-      typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    // P3-1: Live listener for prefers-reduced-motion changes
+    if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+      const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)")
+      const handleMotionChange = (e: MediaQueryListEvent | MediaQueryList) => {
+        if (e.matches) {
+          restartScene?.({ prefersReducedMotion: true })
+        }
+      }
+      if (motionQuery.addEventListener) {
+        motionQuery.addEventListener("change", handleMotionChange)
+      } else if (motionQuery.addListener) {
+        motionQuery.addListener(handleMotionChange)
+      }
+      onCleanup(() => {
+        if (motionQuery.removeEventListener) {
+          motionQuery.removeEventListener("change", handleMotionChange)
+        } else if (motionQuery.removeListener) {
+          motionQuery.removeListener(handleMotionChange)
+        }
+      })
+    }
 
     // Start scene after delay; if boot completes before delay, scene is never built
     const starting = setTimeout(() => {
+      startingFired = true
       if (disposed) return
+      if (!props.visible) return
       if (!sceneIsWorthBuilding(appearedAt, performance.now())) return
 
-      controller = startPixelScene(canvas, { prefersReducedMotion })
+      controller = startPixelScene(canvas, { prefersReducedMotion: getPrefersReducedMotion() })
       handleResize()
     }, SPLASH_SCENE_DELAY_MS)
+
+    restartScene = (opts) => {
+      if (!disposed && canvas) {
+        controller?.stop()
+        controller = startPixelScene(canvas, opts)
+        handleResize()
+      }
+    }
 
     onCleanup(() => clearTimeout(starting))
   })

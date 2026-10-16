@@ -5,13 +5,21 @@
  * from `index.css` and `@ragu/ui/ragu-pot`.
  */
 
-/** Brand color palette tokens used across all splash sprites. */
+/**
+ * Color palette tokens used across all splash sprites.
+ * Sourced from brand tokens in `index.css` and `@ragu/ui/ragu-pot`.
+ *
+ * Note on derived colors (P3-4):
+ * - `d` (#621913) is derived from canonical #5a1712, lightened slightly to guarantee
+ *   WCAG contrast ratio >= 1.5 against ink ground #120d0b (1.44:1 with #5a1712).
+ * - Wordmark shadow tones (#5a2216, #273917) are 25% background-tinted blends as in logo.tsx.
+ */
 export const SPLASH_PALETTE: Record<string, string> = {
   ".": "transparent",
   a: "#120d0b", // inchiostro / dark outline (from --ade-glass-ground / --ade-bg dark)
   b: "#24501a", // basilico scuro (from --ade-done light / ragu-pot)
   c: "#7fb850", // basilico chiaro (from --ade-done dark)
-  d: "#621913", // pomodoro scuro (contrast >= 1.5 vs ink #120d0b)
+  d: "#621913", // pomodoro scuro (derived from #5a1712 to guarantee contrast >= 1.5 vs ink #120d0b)
   e: "#a3271b", // pomodoro medio (from --ade-accent-strong light)
   f: "#df4a2b", // pomodoro vivo (from --ade-accent-strong dark)
   g: "#e8dfcf", // vapore crema (from ragu-pot)
@@ -704,11 +712,11 @@ export const BASIL_SIZE = {
  *   ^ = upper pixel filled, lower in shadow tone
  *   ~ = upper pixel in shadow tone, lower empty
  *
- * Line 0: Ascender of 'd' in code, and grave accent '\' over 'ù' (2 diagonal pixels).
+ * Line 0: Ascender of 'd' in code, and grave accent over 'ù' (single pixel detached by 1 row from u).
  * Line 4: Descender of 'g' in ragù.
  */
 export const CLI_LOGO_RAGU = [
-  "                ▀▄ ", // row 0: grave accent over ù (col 16 top, col 17 bottom)
+  "                ▀  ", // row 0: grave accent over ù (col 16 top, row 1 empty -> detached by 1 row from u)
   "█▀▀▀ ▀▀▀█ █▀▀█ █  █", // row 1
   "█    █^^█ █__█ █__█", // row 2
   "▀    ▀▀▀▀ ▀▀▀█ ▀▀▀▀", // row 3

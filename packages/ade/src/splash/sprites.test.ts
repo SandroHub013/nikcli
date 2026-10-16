@@ -247,20 +247,21 @@ describe("splash sprite data (step 1)", () => {
       expect(gRow8).toContain(WORDMARK_COLORS.ragu)
     })
 
-    test("the grave accent on ù consists of 2 diagonal pixels detached from the u", () => {
-      // Row 0 col 16 (top pixel) and Row 1 col 17 (bottom pixel) form '\' diagonal
+    test("the grave accent on ù is a single pixel detached by 1 row from the u (P3-2)", () => {
+      // Row 0 col 16 (top pixel) is filled with ragù color
       expect(WORDMARK_GRID[0]![16]).toBe(WORDMARK_COLORS.ragu)
-      expect(WORDMARK_GRID[1]![17]).toBe(WORDMARK_COLORS.ragu)
-
-      // Detached space: row 1 col 16 and row 0 col 17 are empty
-      expect(WORDMARK_GRID[1]![16]).toBe("")
       expect(WORDMARK_GRID[0]![17]).toBe("")
 
-      // The interior top of the u (rows 2 and 3 at cols 16-17) is empty
+      // Row 1 (y=1) is completely empty across the u columns, giving a full 1-row detachment
+      for (let col = 15; col <= 18; col++) {
+        expect(WORDMARK_GRID[1]![col]).toBe("")
+      }
+
+      // The top of the u starts on row 2 (y=2)
+      expect(WORDMARK_GRID[2]![15]).toBe(WORDMARK_COLORS.ragu)
       expect(WORDMARK_GRID[2]![16]).toBe("")
       expect(WORDMARK_GRID[2]![17]).toBe("")
-      expect(WORDMARK_GRID[3]![16]).toBe("")
-      expect(WORDMARK_GRID[3]![17]).toBe("")
+      expect(WORDMARK_GRID[2]![18]).toBe(WORDMARK_COLORS.ragu)
     })
 
     test("Ragù uses pomodoro/tinted shadow and Code uses basil/tinted shadow with gap", () => {
