@@ -53,6 +53,14 @@ describe("no column on the right", () => {
     expect(rule('[data-slot="bots-tabs"]')).not.toContain("overflow")
   })
 
+  test("P2-5: below 760 px the tabs are tighter, so six fit in a row, and they still wrap", () => {
+    const narrow = media().find((block) => block.startsWith("@media (max-width: 760px)"))
+    expect(narrow).toBeDefined()
+    expect(narrow).toMatch(/\[data-slot="bots-tab"\][^{}]*\{[^}]*padding-inline:\s*8px/)
+    expect(narrow).toMatch(/\[data-slot="bots-tab"\][^{}]*\{[^}]*font-size:\s*var\(--ade-font-md\)/)
+    expect(narrow).not.toMatch(/overflow|nowrap/)
+  })
+
   test("a tab's body takes the whole width of the middle, up to a line length that reads", () => {
     const body = rule('[data-slot="bots-tab-body"]')
     expect(body).toContain("width: 100%")

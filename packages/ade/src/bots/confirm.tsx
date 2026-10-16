@@ -29,12 +29,18 @@ export function ConfirmAction(props: {
   const slot = () => (props.look === "button" ? "bots-btn" : "bots-link")
   let first: HTMLButtonElement | undefined
   let cancel: HTMLButtonElement | undefined
+  let group: HTMLSpanElement | undefined
 
   // The first button is taken out of the page and the others put in: `autofocus` does not act on an element added
   // after the page loaded, so the focus is moved by hand, and given back when the question is closed (Escape, «Annulla»).
+  // The question can open below the fold (the bot's «Elimina» is at the end of its page): the whole of it is brought into
+  // view, not only the button the focus lands on, or the sentence that says what is lost is read by scrolling.
   const ask = () => {
     setAsking(true)
-    queueMicrotask(() => cancel?.focus())
+    queueMicrotask(() => {
+      cancel?.focus({ preventScroll: true })
+      group?.scrollIntoView?.({ block: "nearest" })
+    })
   }
   const back = () => {
     setAsking(false)
@@ -69,6 +75,7 @@ export function ConfirmAction(props: {
       }
     >
       <span
+        ref={(element) => (group = element)}
         data-slot="bots-confirm"
         role="group"
         aria-label={props.question}

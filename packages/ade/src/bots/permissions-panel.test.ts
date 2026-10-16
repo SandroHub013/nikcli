@@ -89,3 +89,30 @@ describe("Permessi: the web is shut from a phone, with the commands on as well",
     expect(String(en["bots.permissions.phoneText"])).not.toContain("Web pages and commands only")
   })
 })
+
+describe("Permessi: «Da telefono» says once that a program runs no commands from a chat", () => {
+  const hints = (runner: AgentFile["runner"]) => {
+    const host = document.createElement("div")
+    document.body.append(host)
+    dispose = render(
+      () => createComponent(PermissionsSection, { bot: { ...BOT, runner }, remote: remote("abc"), fingerprintOf: async () => "abc" }),
+      host,
+    )
+    return host.querySelector("#bots-permissions-phone")!.parentElement!.textContent ?? ""
+  }
+
+  test("Claude Code and Codex: the text, and no second line about asking command by command", () => {
+    for (const runner of ["claude", "codex"] as const) {
+      const text = hints(runner)
+      expect(text).not.toContain("comando per comando")
+      expect(text).not.toContain("Da chat questo bot")
+      expect(text.length).toBeGreaterThan(40)
+      dispose?.()
+      document.body.innerHTML = ""
+    }
+  })
+
+  test("Ragu Code keeps its switches", () => {
+    expect(hints("ragu")).toContain("comandi da remoto")
+  })
+})

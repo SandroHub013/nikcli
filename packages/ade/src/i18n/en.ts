@@ -2216,9 +2216,9 @@ export const en: Messages = {
   "bots.details.title": "Details",
   "bots.delete.title": "Delete the bot",
   "bots.delete.questionProject": (name, file, routines) =>
-    `Delete “${name}”? Its memory goes with it, ${routines === 0 ? "no routines" : routines === 1 ? "one routine" : `${routines} routines`}, the conversations saved in ADE, the messaging apps bot codes and who was paired. The file ${file} is in the project and is deleted.`,
+    `Delete “${name}”? Its memory goes with it, ${routines === 0 ? "" : routines === 1 ? "one routine, " : `${routines} routines, `}the conversations saved in ADE, the messaging apps' bot codes and who was paired. The file ${file} is in the project and is deleted.`,
   "bots.delete.questionGlobal": (name, file, routines) =>
-    `Delete “${name}”? Its memory goes with it, ${routines === 0 ? "no routines" : routines === 1 ? "one routine" : `${routines} routines`}, the conversations saved in ADE, the messaging apps bot codes and who was paired. The file ${file} is deleted.`,
+    `Delete “${name}”? Its memory goes with it, ${routines === 0 ? "" : routines === 1 ? "one routine, " : `${routines} routines, `}the conversations saved in ADE, the messaging apps' bot codes and who was paired. The file ${file} is deleted.`,
   "bots.permissions.phone": "From your phone",
   "bots.permissions.phoneText": "It reads and searches the project. It uses no MCP servers and opens no web pages or web searches, even with the commands on. It runs commands only if you turn on “Remote commands”: then you are asked every time.",
   "bots.permissions.phoneTextClaude": "It reads and searches only in the project folder: outside it Claude Code refuses. It uses no MCP servers, opens no web pages or web searches, never runs commands and doesn't write to other sessions: Claude Code cannot ask you for permission from here.",

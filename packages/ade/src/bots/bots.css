@@ -1499,6 +1499,21 @@
 
 /* ── narrow ──────────────────────────────────────────────────────────────── */
 
+/*
+ * Six tabs at 12px each side did not fit below this width and «Permessi» went alone on a second row (Review Bot, 700 px).
+ * Tighter padding and the smaller text bring them back to one row; they still wrap if the page is narrower than that,
+ * so none is ever out of sight.
+ */
+@media (max-width: 760px) {
+  [data-slot="bots-tabs"] {
+    gap: 0;
+  }
+  [data-slot="bots-tab"] {
+    padding-inline: 8px;
+    font-size: var(--ade-font-md);
+  }
+}
+
 @media (max-width: 860px) {
   [data-slot="bots-page-head"],
   [data-slot="bots-tabs"],
