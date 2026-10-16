@@ -1,6 +1,7 @@
 import { createEffect, createSignal, For, onCleanup, Show } from "solid-js"
 import { t } from "../i18n"
 import { approvalAction, sourcesText } from "./approval-signal"
+import { visibleText } from "./visible-text"
 import { decideApproval, remainingClock, type ApprovalChoice, type WaitingApproval } from "./approvals"
 
 /**
@@ -43,7 +44,7 @@ export function WaitingList(props: {
                 <button type="button" data-slot="bots-link" onClick={() => props.onOpen(waiting.bot, waiting.room)}>
                   {waiting.botName}
                 </button>
-                <span data-slot="bots-waiting-what" title={`${waiting.permission} ${waiting.patterns}`}>
+                <span data-slot="bots-waiting-what" title={`${waiting.permission} ${visibleText(waiting.patterns)}`}>
                   {t("bots.waiting.what", approvalAction(waiting))}
                 </span>
                 <Show when={waiting.reason}>{(reason) => <span data-slot="bots-hint">{reason()}</span>}</Show>

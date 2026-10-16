@@ -20,6 +20,21 @@ describe("the command shown on the phone", () => {
     expect(t("gateway.approve.question", "bash", "x")).not.toMatch(/incomplet|terminal/)
   })
 
+  test("P2-3: what is hidden in the command is written out on the phone too, and the data is not changed", async () => {
+    let asked = ""
+    let detail = ""
+    const ask = async (question: string, _choices: unknown, _signal: unknown, info?: { patterns: string }) => {
+      asked = question
+      detail = info?.patterns ?? ""
+      return undefined
+    }
+    await approveOnPhone({ permission: "bash", patterns: "rm -rf ‮fsd/", askedAt: 0 }, ask, new AbortController().signal)
+    expect(asked).toContain("⟨U+202E⟩")
+    expect(asked).not.toContain("‮")
+    // The list in ADE gets the command as asked: it is the one that is compared and answered.
+    expect(detail).toContain("‮")
+  })
+
   test("a question with nobody's answer after the turn ended is not answered", () => {
     const answers: string[] = []
     const ended = new AbortController()
