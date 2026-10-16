@@ -1040,6 +1040,7 @@ fn to_inbound(d: &Value, shared: &Shared, seq: Option<i64>) -> Option<Inbound> {
         text: text.to_string(),
         button: false,
         cursor,
+        timestamp_ms: None,
     })
 }
 
@@ -1086,6 +1087,7 @@ fn to_press(d: &Value, cursor: Option<String>) -> Option<Inbound> {
         text: data.to_string(),
         button: true,
         cursor,
+        timestamp_ms: None,
     })
 }
 

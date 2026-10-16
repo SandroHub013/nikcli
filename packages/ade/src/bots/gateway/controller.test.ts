@@ -4,7 +4,7 @@ import type { AgentFile } from "../ragu"
 import { emptyTalk, type PendingPermission } from "../talk"
 import { turnsRunning } from "../terms"
 import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "../turn"
-import { startGatewayController, type GatewayBridge, type GatewayMessage } from "./controller"
+import { startGatewayController, RECOVERED_NOTICE, type GatewayBridge, type GatewayMessage } from "./controller"
 import { forgetTurnFailures, turnFailureOf } from "./failures"
 import { chatHeader } from "./policy"
 import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteKey, remoteTools } from "./remote"
@@ -197,6 +197,23 @@ describe("the gateways' controller", () => {
     await until("il secondo turno", () => turns.started.length === 2)
     // Now turn 2 starts -> m2 is acked:
     expect(b.acks.some((a) => a.id === "m2")).toBe(true)
+  })
+
+  test("a recovered message carries a recovered warning line for the model (A3.8)", async () => {
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("domanda salvata", { id: "m42", bot: BOT.path, platform: "telegram", chat: "c42", recovered: true })
+    await until("il turno è partito", () => turns.started.length === 1)
+    const request = turns.started[0]!.request
+    expect(request.message).toContain(RECOVERED_NOTICE)
+    expect(request.message).toContain("domanda salvata")
+    expect(request.message.startsWith(RECOVERED_NOTICE)).toBe(true)
   })
 
   test("a message with the same (bot, platform, chat, id) is ignored and does not start a second turn (N-A3a)", async () => {

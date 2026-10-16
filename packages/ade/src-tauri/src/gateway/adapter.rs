@@ -84,6 +84,8 @@ pub struct Inbound {
     pub button: bool,
     /// The stream cursor corresponding to this message, if the platform provides one.
     pub cursor: Option<String>,
+    /// When the message was sent on the platform, if known.
+    pub timestamp_ms: Option<u64>,
 }
 
 /// Whether the hub hands a message to the page.

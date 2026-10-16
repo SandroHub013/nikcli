@@ -43,6 +43,8 @@ pub struct GatewayMessage {
     /// A one-to-one chat with the bot. A channel others read is not: no question about a command or a file goes
     /// there, whoever asked in it (review of the bots, S17).
     pub private: bool,
+    #[serde(default)]
+    pub recovered: bool,
 }
 
 /// How many buttons a message may carry, and how long their parts may be:
@@ -555,7 +557,11 @@ impl Hub {
                         .unwrap()
                         .iter()
                         .filter(|entry| !entry.acked)
-                        .map(|entry| entry.msg.clone())
+                        .map(|entry| {
+                            let mut msg = entry.msg.clone();
+                            msg.recovered = true;
+                            msg
+                        })
                         .collect::<Vec<_>>()
                 })
                 .collect()
@@ -599,6 +605,7 @@ impl Hub {
         let (stop, stopped) = watch::channel(false);
         let live = Arc::new(Mutex::new(Live::default()));
         let pending = Arc::new(Mutex::new(VecDeque::new()));
+        let started_at = self.env.now_ms();
         let task = Task {
             env: self.env.clone(),
             store: self.store.clone(),
@@ -609,6 +616,7 @@ impl Hub {
             pending: pending.clone(),
             secrets: self.secrets(),
             backoff: self.backoff,
+            started_at,
         };
         tokio::spawn(task.run(stopped, self.ready.subscribe()));
         self.links().insert((bot.to_string(), platform), Running { adapter, stop, live, pending });
@@ -921,6 +929,7 @@ struct Task {
     /// Taken at start; an error or a text holding one of these is cleaned before it is shown.
     secrets: Vec<String>,
     backoff: (Duration, Duration),
+    started_at: u64,
 }
 
 impl Task {
@@ -1092,6 +1101,7 @@ impl Task {
         let redacted = name != message.sender.name || text != message.text;
         // Whoever writes chose that name: no control or direction characters, not too long.
         let name = authz::clean_name(&name);
+        let recovered = message.timestamp_ms.is_some_and(|ts| ts < self.started_at);
         let msg = GatewayMessage {
             bot: self.bot.clone(),
             platform: self.platform,
@@ -1102,6 +1112,7 @@ impl Task {
             redacted,
             button: message.button,
             private: message.private,
+            recovered,
         };
         let cursor = message.cursor.clone().or_else(|| self.adapter.cursor());
         self.pending.lock().unwrap().push_back(PendingEntry { msg: msg.clone(), cursor, acked: false });
@@ -1349,6 +1360,7 @@ mod tests {
             text: text.into(),
             button: false,
             cursor: None,
+            timestamp_ms: None,
         }
     }
 
@@ -2279,6 +2291,31 @@ mod tests {
         s.hub.ack(BOT, Platform::Fake, "c42", "100").unwrap();
         // Since both 100 and 102 are now confirmed, cursor advances to 103:
         eventually("il cursore avanza a 103", || s.hub.store.link(BOT, Platform::Fake).unwrap().cursor.as_deref() == Some("103")).await;
+    }
+
+    #[tokio::test]
+    async fn a_message_sent_while_ade_was_closed_is_marked_as_recovered() {
+        let s = setup("recovered-notice");
+        authorize(&s, "42");
+        s.env.later.store(100_000, std::sync::atomic::Ordering::SeqCst);
+        let (_adapter, feed) = start(&s);
+
+        // A message timestamped earlier than start:
+        let old_msg = Inbound {
+            timestamp_ms: Some(50_000),
+            ..message("1", "c42", "42", "mentre ADE era chiusa")
+        };
+        // A live message timestamped after start:
+        let live_msg = Inbound {
+            timestamp_ms: Some(150_000),
+            ..message("2", "c42", "42", "in diretta")
+        };
+        feed.send(Ok(vec![old_msg, live_msg])).unwrap();
+        eventually("due messaggi emessi", || s.env.messages.lock().unwrap().len() == 2).await;
+
+        let messages = s.env.messages.lock().unwrap().clone();
+        assert!(messages[0].recovered, "il messaggio prima dell'avvio deve essere contrassegnato come recuperato");
+        assert!(!messages[1].recovered, "il messaggio dopo l'avvio non deve essere contrassegnato come recuperato");
     }
 
     #[tokio::test]

@@ -65,7 +65,15 @@ export interface GatewayMessage {
    * that says nothing counts as the owner's; `false` is refused on a plan (S16).
    */
   readonly owner?: boolean
+  /** The message was recovered after an ADE restart or reload. */
+  readonly recovered?: boolean
 }
+
+/**
+ * Notice prepended to the model prompt when a message was delivered after an ADE restart.
+ */
+export const RECOVERED_NOTICE =
+  "[Messaggio recuperato: ricevuto mentre ADE era chiusa o in riavvio (Recovered message: received while ADE was closed or restarting, may be a duplicate).]"
 
 /** The Rust side, as the controller sees it. Tests pass a fake. */
 export interface GatewayBridge {
@@ -354,7 +362,8 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
               signal: ended.signal,
             })
           : undefined
-      const framed = framedMessage(message.platform, message.sender.name, message.text)
+      const baseFramed = framedMessage(message.platform, message.sender.name, message.text)
+      const framed = message.recovered ? `${RECOVERED_NOTICE}\n\n${baseFramed}` : baseFramed
       const memory = deps.memory?.get(message.bot)
       const sent = memory && !sessionId ? `${memorySnapshot(memory)}\n\n${framed}` : framed
       turn = deps.runTurn({

@@ -180,6 +180,7 @@ fn inbound(update: &Value) -> Option<Inbound> {
     let cursor = update["update_id"].as_i64().map(|id| (id + 1).to_string());
     if let Some(message) = update.get("message") {
         let text = message["text"].as_str().or_else(|| message["caption"].as_str())?;
+        let timestamp_ms = message["date"].as_i64().map(|s| (s * 1000) as u64);
         return Some(Inbound {
             id: id_text(&message["message_id"])?,
             chat: id_text(&message["chat"]["id"])?,
@@ -194,10 +195,12 @@ fn inbound(update: &Value) -> Option<Inbound> {
             },
             button: false,
             cursor,
+            timestamp_ms,
         });
     }
     let press = update.get("callback_query")?;
     let message = press.get("message")?;
+    let timestamp_ms = message["date"].as_i64().map(|s| (s * 1000) as u64);
     Some(Inbound {
         id: id_text(&press["id"])?,
         chat: id_text(&message["chat"]["id"])?,
@@ -207,6 +210,7 @@ fn inbound(update: &Value) -> Option<Inbound> {
         text: press["data"].as_str().unwrap_or_default().to_string(),
         button: true,
         cursor,
+        timestamp_ms,
     })
 }
 
