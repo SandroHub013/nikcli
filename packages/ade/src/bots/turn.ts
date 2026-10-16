@@ -201,21 +201,55 @@ export function markTurn(mark: string, detail?: string): void {
   if (Array.isArray(timeline)) timeline.push({ at: Date.now(), mark, ...(detail ? { detail } : {}) })
 }
 
+/** What a Codex turn nobody watches knows of the MCP servers its config brings. */
+interface CodexMcp {
+  /** The user's servers, to switch off by name; absent, the user's config.toml is left out whole. */
+  readonly servers?: readonly string[]
+  /** A project's `.codex/config.toml`, the reason the user's config is left out. */
+  readonly projectConfig?: string
+}
+
+/** The folders from `cwd` up to its root, with `/`. */
+function foldersUp(cwd: string): string[] {
+  const parts = cwd.replace(/\\/g, "/").replace(/\/+$/, "").split("/")
+  const folders: string[] = []
+  for (let count = parts.length; count > 0; count--) {
+    const folder = parts.slice(0, count).join("/")
+    if (folder) folders.push(folder)
+  }
+  return folders
+}
+
+const samePath = (a: string, b: string) => a.replace(/\\/g, "/").toLowerCase() === b.replace(/\\/g, "/").toLowerCase()
+
 /**
  * The MCP servers in the user's Codex config.toml (`~/.codex`), for a turn that switches them off by name: none when
- * there is no file, undefined when it cannot be read or said for sure (`codexMcpNames`). `CODEX_HOME` is not seen
- * from here: a Codex that reads another file refuses a server it does not have, and the turn says why.
+ * there is no file; left out whole when it cannot be read or said for sure (`codexMcpNames`).
+ *
+ * Codex 0.162.1 also reads a project's `.codex/config.toml`, in a trusted project, in every folder from its git root
+ * down to the turn's, with the MCP servers it names. Whether the project is trusted is not seen from here, and a
+ * server switched off by name that Codex did not read stops the turn (`invalid transport`). So with such a file in
+ * the turn's folder or above it, the user's config is left out, and the list of trusted projects with it: Codex then
+ * reads no project's (both checked with a fake provider, no model turn).
+ *
+ * `CODEX_HOME` is not seen from here either: a Codex that reads another file refuses a server it does not have, and
+ * the turn says why.
  */
-async function codexMcpServersOf(host: NonNullable<Awaited<ReturnType<typeof getHost>>>) {
+async function codexMcpOf(host: NonNullable<Awaited<ReturnType<typeof getHost>>>, cwd: string | undefined) {
   try {
     const home = await host.homeDir?.()
-    if (!home || !host.readTextFile) return undefined
-    const path = `${home.replace(/[\\/]+$/, "")}/.codex/config.toml`
-    if (host.exists && !(await host.exists(path))) return []
-    const read = await host.readTextFile(path)
-    return read.truncated ? undefined : codexMcpNames(read.text)
+    if (!home || !host.readTextFile || !host.exists) return {}
+    const user = `${home.replace(/[\\/]+$/, "")}/.codex/config.toml`
+    for (const folder of cwd ? foldersUp(cwd) : []) {
+      const path = `${folder}/.codex/config.toml`
+      if (!samePath(path, user) && (await host.exists(path))) return { projectConfig: path }
+    }
+    if (!(await host.exists(user))) return { servers: [] }
+    const read = await host.readTextFile(user)
+    const servers = read.truncated ? undefined : codexMcpNames(read.text)
+    return servers ? { servers } : {}
   } catch {
-    return undefined
+    return {}
   }
 }
 
@@ -283,7 +317,8 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
      * (the user's choice 7, `TurnSpec.codexMcpServers`). Unreadable, the turn leaves the whole file out.
      */
     const unwatchedCodex = runner.id === "codex" && (request.remote !== undefined || request.unattended === true)
-    const codexMcpServers = unwatchedCodex ? await codexMcpServersOf(host) : undefined
+    const codexMcp: CodexMcp = unwatchedCodex ? await codexMcpOf(host, request.cwd) : {}
+    const codexMcpServers = codexMcp.servers
     // The same mailbox mailbox.rs uses, per worktree in ADE Test (`ADE_MAILBOX_ROOT`).
     const mailbox = request.mailbox ? await host.mailboxDir?.().catch(() => undefined) : undefined
     const outbox = mailbox ? `${mailbox.replace(/[\\/]+$/, "")}/outbox` : undefined
@@ -421,9 +456,11 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
         /* Why, when it is ADE's doing: options Codex refused, or its config.toml left out (choice 7). */
         const why = codexOptionsRefused(lastWords)
           ? t("bots.codex.optionsRefused")
-          : codexMcpServers === undefined
-            ? t("bots.codex.withoutUserConfig")
-            : undefined
+          : codexMcp.projectConfig
+            ? t("bots.codex.projectConfig")
+            : codexMcpServers === undefined
+              ? t("bots.codex.withoutUserConfig")
+              : undefined
         if (why) {
           const said = talk.messages.at(-1)?.text
           update(appendMessage(talk, { role: "error", text: why }, Date.now()))
