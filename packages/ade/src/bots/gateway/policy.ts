@@ -1,7 +1,8 @@
 /**
  * The rules a message from a chat meets before it becomes a turn (G4).
  *
- * Rust already let through only an authorized sender in a private chat. Here:
+ * Rust already let through only an authorized sender: in a private chat, or in a channel when the message names the
+ * bot (G9), and a button the bot itself put there. Here:
  * - the commands a chat can give (`/nuova`, `/ferma`, `/stato`, `/aiuto`);
  * - how the text is framed for the model: a fixed line with the platform and
  *   the sender's name, quoted and cleaned, marked as a label and not an order;
@@ -122,7 +123,7 @@ export async function recheckTrust(
   path: string,
   project: string,
   deps: RecheckDeps,
-): Promise<{ ok: true; bot: AgentFile; fingerprint: string } | { ok: false; problem: string }> {
+): Promise<{ ok: true; bot: AgentFile; fingerprint: string } | { ok: false; problem: string; detail?: string }> {
   const scope = scopeOf(path, deps.globalRoot)
   let text: string
   try {
@@ -143,8 +144,21 @@ export async function recheckTrust(
     for (const config of await deps.surface()) {
       if (!isConfigFile(config.path)) continue
       const key = configGrant(config.text, bot.identifier)
-      if (key === null) return { ok: false, problem: t("gateway.configUnreadable", bot.identifier, config.path) }
-      if (key !== undefined) return { ok: false, problem: t("gateway.configGrant", bot.identifier, key, config.path) }
+      // The chat reads a text with no path in it; the path goes to the panel as the detail (S10).
+      if (key === null) {
+        return {
+          ok: false,
+          problem: t("gateway.chat.configUnreadable", bot.identifier),
+          detail: t("gateway.configUnreadable", bot.identifier, config.path),
+        }
+      }
+      if (key !== undefined) {
+        return {
+          ok: false,
+          problem: t("gateway.chat.configGrant", bot.identifier, key),
+          detail: t("gateway.configGrant", bot.identifier, key, config.path),
+        }
+      }
     }
   }
   const retrust = t("gateway.retrust", bot.identifier)
@@ -158,8 +172,10 @@ export async function recheckTrust(
    */
   if (runnerById(bot.runner).id === "ragu") {
     const configuration = await admitProject(project, { store: deps.projects, surface: deps.surface, confirm: never })
-    if (!configuration.ok)
-      return { ok: false, problem: scope === "project" ? retrust : t("bots.serve.notAdmitted", project) }
+    if (!configuration.ok) {
+      if (scope === "project") return { ok: false, problem: retrust }
+      return { ok: false, problem: t("gateway.chat.notAdmitted"), detail: t("bots.serve.notAdmitted", project) }
+    }
   }
   // The file as it was read: what the remote commands were turned on for is compared with it.
   return { ok: true, bot, fingerprint: await fileFingerprint(text) }

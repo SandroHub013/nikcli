@@ -468,13 +468,15 @@ describe("kept with the bot", () => {
     expect(bridge).toContain("spendToday:")
   })
 
-  test("the pieces for the bot's Impostazioni are ready, and bots.tsx is not touched", () => {
+  test("the pieces for the bot's Impostazioni are ready, and the page mounts them", () => {
     const pieces = readFileSync(new URL("./spend-panel.tsx", import.meta.url), "utf8")
     expect(pieces).toContain("export function SpendCapField")
     expect(pieces).toContain("export function SpendTodayLine")
     expect(pieces).toContain("parseCap(")
     expect(pieces).toContain("spendTerms(")
     const bots = readFileSync(new URL("./bots.tsx", import.meta.url), "utf8")
-    expect(bots).not.toContain("spend-panel")
+    expect(bots).toContain("<SpendCapField")
+    expect(bots).toContain("<SpendTodayLine")
+    expect(bots).toContain("<NewBotCapField")
   })
 })

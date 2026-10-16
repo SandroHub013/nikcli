@@ -1,0 +1,58 @@
+/**
+ * The settings form is fields over a file, and the file is the truth. When the file changes under the form — a model
+ * picked from the chip of the conversation, a save — the fields follow it, but only the ones the user has not touched:
+ * a persona typed and not saved stays, whatever the chip did to the model (D7). It used to put every field back, the
+ * persona included, with no word.
+ */
+
+import { joinPrompt, splitPrompt } from "./ragu"
+
+export interface FormFields {
+  readonly description: string
+  readonly model: string
+  readonly effort: string
+  readonly runner: string
+  readonly objectives: string
+  readonly persona: string
+  /** The avatar key, or an empty string for the one the name gives. */
+  readonly avatar: string
+}
+
+export const FORM_FIELDS = ["description", "model", "effort", "runner", "objectives", "persona", "avatar"] as const
+
+/**
+ * The fields after the file went from `before` to `after`: a field that still holds what the file had follows the file,
+ * a field the user changed keeps what they wrote.
+ */
+export function syncFields(current: FormFields, before: FormFields, after: FormFields): FormFields {
+  const next: Record<string, string> = {}
+  for (const key of FORM_FIELDS) next[key] = current[key] === before[key] ? after[key] : current[key]
+  return next as unknown as FormFields
+}
+
+export function sameFields(a: FormFields, b: FormFields): boolean {
+  return FORM_FIELDS.every((key) => a[key] === b[key])
+}
+
+/** The objectives as the file keeps them: one per line, without the bullet the user may have typed, no empty line. */
+export function objectiveLines(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.replace(/^[-*•]\s*/, "").trim())
+    .filter((line) => line.length > 0)
+}
+
+/**
+ * The fields as the file will give them back once they are saved: the file trims the description and the persona
+ * and writes the objectives as a list, so «- uno», a blank line or a trailing newline come back different. After a
+ * save the form shows these, or it would go on saying «Modifiche non salvate» for a file that holds what was typed.
+ */
+export function savedFields(fields: FormFields): FormFields {
+  const parts = splitPrompt(joinPrompt({ persona: fields.persona, objectives: objectiveLines(fields.objectives) }))
+  return {
+    ...fields,
+    description: fields.description.trim(),
+    persona: parts.persona,
+    objectives: parts.objectives.join("\n"),
+  }
+}

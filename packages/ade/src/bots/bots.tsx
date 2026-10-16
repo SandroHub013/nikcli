@@ -1,5 +1,5 @@
 /**
- * The bot section: a contact list, a conversation, a card.
+ * The bot section: a contact list and the bot's page.
  *
  * A bot is a ragu agent — a markdown file with frontmatter and a system
  * prompt under `.nikcli/agent/` in the project or in ragu's global
@@ -16,8 +16,10 @@
  *   - in the middle the conversation with the chosen one — what you wrote,
  *     what it answered, what it ran in between, and the question it is
  *     waiting on when it asks permission;
- *   - on the right its card: what it is for, what it runs on, its objectives,
- *     the file, and the form to change any of it.
+ *   - around it the bot's page: a head (who it is, in words) and six tabs,
+ *     each at the whole width, with no column on the right: Conversation,
+ *     Settings (the form, the details, the deletion), Platforms, Routines,
+ *     Memory and Permissions.
  *
  * A ragu bot's conversation is a session on ADE's ragu server
  * (`serve-turn.ts`); Claude Code's and Codex's are one process per turn,
@@ -29,7 +31,18 @@
  * this file.
  */
 
-import { createEffect, createMemo, createResource, createRoot, createSignal, For, on, onMount, Show } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createResource,
+  createRoot,
+  createSignal,
+  For,
+  on,
+  onMount,
+  Show,
+  type JSX,
+} from "solid-js"
 import { t } from "../i18n"
 import { APPROVAL_TIMEOUT_MS, localAlwaysStore } from "./approval"
 import { askDialog, askYesNo } from "../host/ask"
@@ -56,8 +69,11 @@ import {
   type SpendKind,
 } from "./runners"
 import { PLAN_RUNNERS, routineModeOf } from "./terms"
+import { capText, parseCap, spendTerms, withCap } from "./spend"
+import { appSpendStore } from "./spend-app"
+import { NewBotCapField, newBotSpendTerms, SPEND_CAP_PROPOSED_USD, SpendCapField, SpendTodayLine } from "./spend-panel"
 import { createBotTurns } from "./controller"
-import { admit, localTrustStore } from "./trust"
+import { admit, fileFingerprint, localTrustStore } from "./trust"
 import { effortChange, modelChange, runnerModelItems, submitDraft } from "./composer"
 import { admitProject, PROJECT_TRUST_KEY, projectSurface } from "./project-trust"
 import { runBotTurn } from "./serve-turn"
@@ -144,10 +160,18 @@ import "./bots.css"
 import { ModelPicker } from "../chat/model-picker"
 import { EffortPicker } from "../chat/effort-picker"
 import { ChipMenu } from "../chat/chip-menu"
-import { readableModelName } from "../chat/picker"
+import { effortLabel, readableModelName } from "../chat/picker"
 import { createModelSource, stateOf, type ModelRead, type ModelSourceState } from "../chat/model-source"
 import { readBotModels } from "./bot-models"
 import { launchBot } from "./launch"
+import { formatCount } from "./format"
+import { metaWords } from "./page-meta"
+import { createWaitingCount } from "./gateway/waiting"
+import { objectiveLines, sameFields, savedFields, syncFields, type FormFields } from "./settings-sync"
+import { BotTabs } from "./bot-tabs"
+import { ConfirmAction } from "./confirm"
+import { PermissionsSection } from "./permissions-panel"
+import { shownTab, tabButtonId, tabPanelId, tabsOf, type BotTab } from "./tabs"
 
 /*
  * The conversations, outside any component.
@@ -587,11 +611,7 @@ const roomDeps: RoomPanelDeps = {
   remove: async (roomId) => {
     const room = roomStore.get().rooms.find((entry) => entry.id === roomId)
     if (!room) return false
-    const yes = await askYesNo(t("bots.room.deleteAsk", room.name), {
-      ok: t("bots.room.delete"),
-      cancel: t("bots.room.form.cancel"),
-    })
-    if (!yes) return false
+    // Asked before, on the room's own screen (`ConfirmAction`): the user has already said yes.
     await roomRunner.stop(roomId)
     writeRooms((book) => ({ rooms: book.rooms.filter((entry) => entry.id !== roomId) }))
     // Each member's session in the room goes with it.
@@ -831,6 +851,12 @@ export interface BotsRosterProps {
  * The three most recently active at the top, large; the rest in a list, each
  * with the last thing said or done and when. Sized to the sidebar it is in.
  */
+/** The form for a new bot, in the middle: from the «+», and from the empty states that say to press it. */
+function startNewBot() {
+  shared.openRoom(undefined)
+  shared.setComposing(true)
+}
+
 export function BotsRoster(props: BotsRosterProps) {
   createEffect(() => shared.setProjectRoot(props.projectRoot))
 
@@ -848,10 +874,7 @@ export function BotsRoster(props: BotsRosterProps) {
         <button
           type="button"
           data-slot="bots-new"
-          onClick={() => {
-            shared.openRoom(undefined)
-            shared.setComposing(true)
-          }}
+          onClick={startNewBot}
           aria-label={t("bots.newBot")}
           title={t("bots.newBot")}
         >
@@ -883,7 +906,10 @@ export function BotsRoster(props: BotsRosterProps) {
         fallback={
           <p data-slot="bots-roster-empty">
             <Show when={!roster.loading} fallback={<>{t("bots.roster.loading")}</>}>
-              {t("bots.roster.empty")}
+              {t("bots.roster.empty")}{" "}
+              <button type="button" data-slot="bots-link" onClick={startNewBot}>
+                {t("bots.roster.createFirst")}
+              </button>
             </Show>
           </p>
         }
@@ -941,7 +967,7 @@ export function BotsMain(props: BotsMainProps) {
   createEffect(() => shared.setProjectRoot(props.projectRoot))
   createEffect(() => void (roomProject = props.projectRoot))
 
-  const { roster, roots, models, catalog, composing, current, identifiers, expression, reload } = shared
+  const { roster, roots, models, catalog, composing, current, identifiers, expression, reload, ordered, open } = shared
 
   /*
    * One message, one process.
@@ -1030,24 +1056,43 @@ export function BotsMain(props: BotsMainProps) {
 
         <Show when={!composing() && current()}>
           {(bot) => (
-            <Thread
+            <BotPage
               bot={bot()}
               talk={talkOf(bot().path)}
-              others={identifiers().filter((name) => name !== bot().identifier)}
-              expression={expression(bot())}
-              onSend={(text) => send(bot(), text)}
-              onAnswer={(choice, requestID) => answer(bot(), choice, requestID)}
-              onGrant={() => turns.grant(bot())}
-              onStop={() => stop(bot())}
               models={models()}
               catalog={catalog}
-              onSettings={async (changes) => {
-                // The form's save: the file, then the roster read again.
-                const problem = await updateBot(bot(), changes)
-                if (!problem) reload()
-                return problem
+              expression={expression(bot())}
+              {...(gateway ? { gateway } : {})}
+              {...(props.projectRoot ? { projectRoot: props.projectRoot } : {})}
+              {...(props.onLaunch ? { onLaunch: launch } : {})}
+              {...(props.onOpenFile ? { onOpenFile: props.onOpenFile } : {})}
+              {...(props.onOpenKeys ? { onOpenKeys: props.onOpenKeys } : {})}
+              onChanged={() => reload()}
+              onDeleted={() => {
+                shared.setOpenId(undefined)
+                reload()
               }}
-            />
+            >
+              <Thread
+                bot={bot()}
+                talk={talkOf(bot().path)}
+                others={identifiers().filter((name) => name !== bot().identifier)}
+                expression={expression(bot())}
+                onSend={(text) => send(bot(), text)}
+                onAnswer={(choice, requestID) => answer(bot(), choice, requestID)}
+                onGrant={() => turns.grant(bot())}
+                onStop={() => stop(bot())}
+                onForget={() => forget(bot())}
+                models={models()}
+                catalog={catalog}
+                onSettings={async (changes) => {
+                  // The form's save: the file, then the roster read again.
+                  const problem = await updateBot(bot(), changes)
+                  if (!problem) reload()
+                  return problem
+                }}
+              />
+            </BotPage>
           )}
         </Show>
 
@@ -1066,38 +1111,36 @@ export function BotsMain(props: BotsMainProps) {
         </Show>
 
         <Show when={!composing() && !current() && !shared.roomComposing() && !shared.openRoomId()}>
-          <p data-slot="bots-blank">
-            <Show when={(roster() ?? []).length > 0} fallback={<>{t("bots.blank.empty")}</>}>
-              {t("bots.blank.pick")}
+          <div data-slot="bots-blank">
+            <Show
+              when={(roster() ?? []).length > 0}
+              fallback={
+                <>
+                  <p data-slot="bots-blank-text">{t("bots.blank.empty")}</p>
+                  <button type="button" data-slot="bots-btn" data-tone="primary" onClick={startNewBot}>
+                    {t("bots.blank.create")}
+                  </button>
+                </>
+              }
+            >
+              {/* With the sidebar hidden there is nowhere else to choose from: the list is here too. */}
+              <p data-slot="bots-blank-text">{t("bots.blank.pick")}</p>
+              <div data-slot="bots-blank-list">
+                <For each={ordered()}>
+                  {(bot) => (
+                    <button type="button" data-slot="bots-btn" onClick={() => open(bot)}>
+                      {bot.identifier}
+                    </button>
+                  )}
+                </For>
+              </div>
+              <button type="button" data-slot="bots-link" onClick={startNewBot}>
+                {t("bots.blank.createAnother")}
+              </button>
             </Show>
-          </p>
+          </div>
         </Show>
       </div>
-
-      <Show when={!composing() && current()}>
-        {(bot) => (
-          <aside data-slot="bots-card">
-            <BotCard
-              bot={bot()}
-              talk={talkOf(bot().path)}
-              models={models()}
-              catalog={catalog}
-              expression={expression(bot())}
-              {...(gateway ? { gateway } : {})}
-              {...(props.projectRoot ? { projectRoot: props.projectRoot } : {})}
-              {...(props.onLaunch ? { onLaunch: launch } : {})}
-              {...(props.onOpenFile ? { onOpenFile: props.onOpenFile } : {})}
-              {...(props.onOpenKeys ? { onOpenKeys: props.onOpenKeys } : {})}
-              onForget={() => forget(bot())}
-              onChanged={() => reload()}
-              onDeleted={() => {
-                shared.setOpenId(undefined)
-                reload()
-              }}
-            />
-          </aside>
-        )}
-      </Show>
     </section>
   )
 }
@@ -1150,7 +1193,8 @@ function FacePicker(props: { identifier: string; value?: string; onChange: (valu
                 aria-checked={chosen().shape === shape}
                 data-slot="bots-picker-option"
                 data-on={chosen().shape === shape ? "true" : undefined}
-                title={shape}
+                title={t(`bots.face.shape.${shape}`)}
+                aria-label={t(`bots.face.shape.${shape}`)}
                 onClick={() => pick(shape, chosen().color)}
               >
                 <Face identifier={props.identifier} avatar={avatarKey({ shape, color: chosen().color })} size={26} />
@@ -1168,7 +1212,8 @@ function FacePicker(props: { identifier: string; value?: string; onChange: (valu
                 data-slot="bots-picker-swatch"
                 data-on={chosen().color === color ? "true" : undefined}
                 style={{ "--bot-color": `var(--ade-ansi-${color})` }}
-                title={color}
+                title={t(`bots.face.color.${color}`)}
+                aria-label={t(`bots.face.color.${color}`)}
                 onClick={() => pick(chosen().shape, color)}
               />
             )}
@@ -1201,6 +1246,8 @@ function Thread(props: {
   /** «Sempre per questo bot» on a command Claude Code was refused (B8c). */
   onGrant: () => void
   onStop: () => void
+  /** The thread forgotten and the model started over (asked first, in the bar above the messages). */
+  onForget: () => void
   /** The catalog, as the card's form reads it: when the model chip opens. */
   models: readonly ChatModelChoice[]
   catalog?: BotCatalog
@@ -1208,6 +1255,7 @@ function Thread(props: {
   onSettings: (changes: BotChanges) => Promise<string | undefined>
 }) {
   const [draft, setDraft] = createSignal("")
+  const [why, setWhy] = createSignal(false)
   let scroller: HTMLDivElement | undefined
   let field: HTMLTextAreaElement | undefined
 
@@ -1295,20 +1343,43 @@ function Thread(props: {
   return (
     <div data-slot="bots-thread">
       <Show when={runnerById(props.bot.runner).id === "ragu"}>
-        <p data-slot="bots-rules-note">{t("bots.serve.rulesNote")}</p>
+        <p data-slot="bots-rules-note">
+          {t("bots.serve.rulesShort")}{" "}
+          <button type="button" data-slot="bots-link" aria-expanded={why()} onClick={() => setWhy((open) => !open)}>
+            {t("bots.serve.rulesWhy")}
+          </button>
+          <Show when={why()}>
+            <span data-slot="bots-rules-more">{t("bots.serve.rulesNote")}</span>
+          </Show>
+        </p>
       </Show>
-      <div data-slot="bots-messages" ref={(el) => (scroller = el)}>
+      <div data-slot="bots-talk-bar">
+        <span data-slot="bots-card-stat">{t("bots.card.messages", props.talk.messages.length)}</span>
+        <Show when={props.talk.messages.length > 0}>
+          <ConfirmAction
+            label={t("bots.talk.fresh")}
+            question={t("bots.talk.freshQuestion", props.talk.messages.length)}
+            confirm={t("bots.talk.freshConfirm")}
+            onConfirm={() => props.onForget()}
+          />
+        </Show>
+      </div>
+      <div
+        data-slot="bots-messages"
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+        aria-busy={props.talk.status === "working"}
+        aria-label={t("bots.thread.label", props.bot.identifier)}
+        ref={(el) => (scroller = el)}
+      >
         <Show when={props.talk.messages.length === 0 && !props.talk.problem}>
           <div data-slot="bots-thread-empty">
             <Face identifier={props.bot.identifier} avatar={props.bot.avatar} expression={props.expression} size={72} />
             <p data-slot="bots-thread-empty-name">{props.bot.identifier}</p>
             <p data-slot="bots-thread-empty-text">{props.bot.description || t("bots.noDescription")}</p>
             <Show when={subagent()}>
-              <p data-slot="bots-hint">
-                {t("bots.subagent.isA")}
-                <strong>{t("bots.subagent.label")}</strong>
-                {t("bots.subagent.desc")}
-              </p>
+              <p data-slot="bots-hint">{t("bots.subagent.note")}</p>
             </Show>
           </div>
         </Show>
@@ -1324,10 +1395,11 @@ function Thread(props: {
             <div data-slot="bots-permission" role="group" aria-label={t("bots.permission.request")}>
               <Face identifier={props.bot.identifier} avatar={props.bot.avatar} expression="waiting" size={20} />
               <span data-slot="bots-permission-text">
-                {t("bots.permission.wantsToUse")} <code>{asked().permission}</code>
-                <Show when={asked().patterns}>
-                  {" "}
-                  {t("bots.permission.on")} <code>{asked().patterns}</code>
+                <Show
+                  when={asked().patterns}
+                  fallback={t("bots.permission.wants", asked().permission)}
+                >
+                  {(patterns) => t("bots.permission.wantsOn", asked().permission, patterns())}
                 </Show>
                 {/* B8c: why ADE stops it, and that silence is a no. */}
                 <Show when={asked().reason}>
@@ -1425,6 +1497,7 @@ function Thread(props: {
         <textarea
           ref={(el) => (field = el)}
           data-slot="bots-composer-field"
+          aria-label={t("bots.composer.label", props.bot.identifier)}
           rows="1"
           value={draft()}
           placeholder={
@@ -1543,12 +1616,6 @@ function Message(props: { message: TalkMessage; bot: AgentFile; onUndo?: () => v
   )
 }
 
-function formatCount(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}k`
-  return String(n)
-}
-
 function spendKey(kind: SpendKind): "bots.spend.plan" | "bots.spend.api" | "bots.spend.free" | "bots.spend.metered" {
   if (kind === "plan") return "bots.spend.plan"
   if (kind === "free") return "bots.spend.free"
@@ -1646,78 +1713,44 @@ function generationNotice(model: string): string {
   return spend.paid ? t("bots.form.generateCostPaid", spend.model) : t("bots.form.generateCostFree", spend.model)
 }
 
-/* ── the card ───────────────────────────────────────────────────────────── */
+/* ── the page ───────────────────────────────────────────────────────────── */
 
-function BotCard(props: {
+const PAGE_ID = "bots-page"
+
+/** Who the bot is, in words, and the two ways out of ADE's own view (the terminal, the file). */
+function PageHead(props: {
   bot: AgentFile
-  talk: Talk
-  models: readonly ChatModelChoice[]
-  catalog?: BotCatalog
+  account: BotAccount
   expression: Expression
-  /** The Gateway section's dependencies; absent, no section. */
-  gateway?: Omit<GatewayPanelDeps, "bot">
-  /** The open project: where a routine made now runs (B11). */
-  projectRoot?: string
-  onLaunch?: (bot: AgentFile) => void
-  onOpenFile?: (path: string) => void
-  onForget: () => void
-  onChanged: () => void
-  onDeleted: () => void
-  onOpenKeys?: () => void
+  onLaunch: ((bot: AgentFile) => void) | undefined
+  onOpenFile: ((path: string) => void) | undefined
 }) {
-  const [account, setAccount] = createSignal<BotAccount>(accounts.get(props.bot.path))
   const modelIsGone = createGone(() => ({ runner: props.bot.runner, model: props.bot.model ?? "" }))
-  const [editing, setEditing] = createSignal(false)
-  const [confirming, setConfirming] = createSignal(false)
-  const [problem, setProblem] = createSignal<string>()
-  const parts = createMemo(() => splitPrompt(props.bot.prompt))
-
-  createEffect(
-    on(
-      () => props.bot.path,
-      () => {
-        setEditing(false)
-        setConfirming(false)
-        setProblem(undefined)
-        setAccount(accounts.get(props.bot.path))
-      },
-    ),
-  )
-
-  const remove = async () => {
-    const failure = await deleteBot(props.bot)
-    if (failure) {
-      setProblem(failure)
-      setConfirming(false)
-      return
-    }
-    // Its routines, memory and account choice go with the file: a new bot at the same path starts clean.
-    forgetBotTraces(props.bot.path, {
-      memory: memories,
-      account: accounts,
-      remote: localRemoteStore(),
-      routines: writeRoutines,
-      always: localAlwaysStore(),
-      storage: typeof localStorage === "undefined" ? undefined : localStorage,
+  const words = () =>
+    metaWords({
+      runner: runnerById(props.bot.runner).label,
+      model: props.bot.model ?? t("bots.defaultModel"),
+      spend: t(spendKey(spendKind(props.bot.runner, props.bot.model, props.account))),
+      effort: props.bot.effort ? t("bots.card.effortWord", effortLabel(props.bot.effort)) : undefined,
+      subagent: props.bot.mode === "subagent" ? t("bots.card.subagent") : undefined,
+      scope: props.bot.scope === "project" ? t("bots.card.scopeProject") : t("bots.card.scopeGlobal"),
     })
-    props.onDeleted()
-  }
-
   return (
-    <div data-slot="bots-card-body">
-      <header data-slot="bots-card-head">
-        <Face identifier={props.bot.identifier} avatar={props.bot.avatar} expression={props.expression} size={72} />
-        <h2 data-slot="bots-card-name">{props.bot.identifier}</h2>
-        <p data-slot="bots-card-desc">{props.bot.description || t("bots.noDescription")}</p>
-        <span data-slot="bots-card-meta">
-          {runnerById(props.bot.runner).label} ·{" "}
+    <header data-slot="bots-page-head">
+      <Face identifier={props.bot.identifier} avatar={props.bot.avatar} expression={props.expression} size={44} />
+      <div data-slot="bots-page-id">
+        <h2 data-slot="bots-page-name">{props.bot.identifier}</h2>
+        <span data-slot="bots-page-meta">
+          {words().runner}
+          {" · "}
           {/* A model the catalog no longer has: its name in words and why, the id in the tooltip (bot-riquadro, a). */}
           <Show
             when={modelIsGone()}
             fallback={
               <>
-                {props.bot.model ?? t("bots.defaultModel")} ·{" "}
-                {t(spendKey(spendKind(props.bot.runner, props.bot.model, account())))}
+                {words().model}
+                {" · "}
+                {words().spend}
               </>
             }
           >
@@ -1725,12 +1758,10 @@ function BotCard(props: {
               {t("picker.gone", readableModelName(props.bot.model ?? ""))}
             </span>
           </Show>
-          {props.bot.effort ? ` · ${props.bot.effort}` : ""} · {props.bot.mode} ·{" "}
-          {props.bot.scope === "project" ? t("bots.scope.project") : t("bots.scope.global")}
+          {words().rest.map((part) => ` · ${part}`).join("")}
         </span>
-      </header>
-
-      <div data-slot="bots-card-actions">
+      </div>
+      <div data-slot="bots-page-actions">
         <Show when={props.onLaunch}>
           {(launch) => (
             <button
@@ -1751,53 +1782,244 @@ function BotCard(props: {
             </button>
           )}
         </Show>
-        <button
-          type="button"
-          data-slot="bots-btn"
-          data-active={editing() ? "true" : undefined}
-          onClick={() => setEditing((v) => !v)}
-        >
-          {editing() ? t("bots.edit.close") : t("bots.edit.open")}
-        </button>
       </div>
+    </header>
+  )
+}
 
-      <Show when={problem()}>{(text) => <p data-slot="bots-problem">{text()}</p>}</Show>
+/** One tab's panel: named by its tab, hidden (not gone) while another is shown. */
+function TabPanel(props: { tab: BotTab; shown: BotTab; scroll?: boolean; children: JSX.Element }) {
+  return (
+    <div
+      role="tabpanel"
+      id={tabPanelId(PAGE_ID, props.tab)}
+      aria-labelledby={tabButtonId(PAGE_ID, props.tab)}
+      data-slot="bots-tabpanel"
+      data-tab={props.tab}
+      data-scroll={props.scroll ? "true" : undefined}
+      hidden={props.shown !== props.tab}
+    >
+      {props.children}
+    </div>
+  )
+}
 
-      <Show when={!editing()}>
-        <Show when={parts().objectives.length > 0}>
-          <section data-slot="bots-card-section">
-            <span data-slot="bots-label">{t("bots.card.objectives")}</span>
-            <ul data-slot="bots-card-objectives">
-              <For each={parts().objectives}>{(objective) => <li>{objective}</li>}</For>
-            </ul>
-          </section>
-        </Show>
+/**
+ * The bot's page: the head, the six tabs, and the tab's section at the whole width of the middle.
+ * There is no column on the right, so at any width of the window every section is one press away
+ * (D2, D12). A tab's section is drawn the first time it is opened and then only hidden, so what was typed in
+ * it (a bot's code, a routine, a memory) is still there when the user comes back. Permissions is drawn when
+ * shown, so it reads the bot's file again each time. Another bot starts all over.
+ */
+function BotPage(props: {
+  bot: AgentFile
+  talk: Talk
+  models: readonly ChatModelChoice[]
+  catalog?: BotCatalog
+  expression: Expression
+  /** The platforms tab's dependencies; absent, no tab. */
+  gateway?: Omit<GatewayPanelDeps, "bot">
+  /** The open project: where a routine made now runs (B11). */
+  projectRoot?: string
+  onLaunch?: (bot: AgentFile) => void
+  onOpenFile?: (path: string) => void
+  onChanged: () => void
+  onDeleted: () => void
+  onOpenKeys?: () => void
+  /** The conversation. */
+  children: JSX.Element
+}) {
+  const [account, setAccount] = createSignal<BotAccount>(accounts.get(props.bot.path))
+  const [tab, setTab] = createSignal<BotTab>("talk")
+  const [seen, setSeen] = createSignal<ReadonlySet<BotTab>>(new Set<BotTab>(["talk"]))
+  const tabs = createMemo(() => tabsOf(props.bot, { platforms: Boolean(props.gateway) }))
+  const shown = () => shownTab(tabs(), tab())
+  // The requests waiting to pair, as a badge on the Platforms tab, whichever tab is open.
+  const waiting = props.gateway ? createWaitingCount(props.gateway.api, () => props.bot.path) : undefined
+  createEffect(on(shown, () => waiting?.refresh(), { defer: true }))
 
-        <section data-slot="bots-card-section">
-          <span data-slot="bots-label">{t("bots.card.conversation")}</span>
-          <span data-slot="bots-card-stat">
-            {t("bots.card.messages", props.talk.messages.length)}
-            <Show when={hasThreadTotals(props.talk)}>
-              {" · "}
-              {t("bots.conversation.total")}{" "}
-              <ThreadTotals runner={props.bot.runner} model={props.bot.model} talk={props.talk} />
+  createEffect(
+    on(
+      () => props.bot.path,
+      () => {
+        setTab("talk")
+        setSeen(new Set<BotTab>(["talk"]))
+        setAccount(accounts.get(props.bot.path))
+      },
+      { defer: true },
+    ),
+  )
+
+  const select = (next: BotTab) => {
+    setTab(next)
+    setSeen((before) => (before.has(next) ? before : new Set<BotTab>([...before, next])))
+  }
+
+  return (
+    <div data-slot="bots-page">
+      <PageHead
+        bot={props.bot}
+        account={account()}
+        expression={props.expression}
+        onLaunch={props.onLaunch}
+        onOpenFile={props.onOpenFile}
+      />
+      <BotTabs
+        tabs={tabs()}
+        active={shown()}
+        idPrefix={PAGE_ID}
+        badges={{ platforms: waiting?.count() ?? 0 }}
+        mounted={new Set<BotTab>([...seen(), shown()])}
+        onSelect={select}
+      />
+
+      <TabPanel tab="talk" shown={shown()}>
+        {props.children}
+      </TabPanel>
+
+      <Show when={seen().has("settings")}>
+        <TabPanel tab="settings" shown={shown()} scroll>
+          <SettingsTab
+            bot={props.bot}
+            talk={props.talk}
+            models={props.models}
+            {...(props.catalog ? { catalog: props.catalog } : {})}
+            account={account()}
+            onAccount={(next) => {
+              accounts.set(props.bot.path, next)
+              setAccount(accounts.get(props.bot.path))
+            }}
+            {...(props.onOpenKeys ? { onOpenKeys: props.onOpenKeys } : {})}
+            onSaved={() => props.onChanged()}
+            onDeleted={() => props.onDeleted()}
+          />
+        </TabPanel>
+      </Show>
+
+      <Show when={seen().has("platforms") ? props.gateway : undefined}>
+        {(deps) => (
+          <TabPanel tab="platforms" shown={shown()} scroll>
+            <div data-slot="bots-tab-body" data-tab="platforms">
+              <Show when={props.bot.path} keyed>
+                <GatewaySection bot={props.bot} deps={deps()} />
+              </Show>
+            </div>
+          </TabPanel>
+        )}
+      </Show>
+
+      <Show when={seen().has("routines")}>
+        <TabPanel tab="routines" shown={shown()} scroll>
+          <div data-slot="bots-tab-body" data-tab="routines">
+            {/* Keyed on the bot, like the gateway: the routine form and its consent tick belong to one bot (full review 2026-10-06, bots 16). */}
+            <Show when={props.bot.path} keyed>
+              <RoutineSection bot={props.bot} account={account()} projectRoot={props.projectRoot} deps={routineDeps} />
             </Show>
+          </div>
+        </TabPanel>
+      </Show>
+
+      <Show when={seen().has("memory")}>
+        <TabPanel tab="memory" shown={shown()} scroll>
+          <div data-slot="bots-tab-body" data-tab="memory">
+            <Show when={props.bot.path} keyed>
+              <MemorySection bot={props.bot.path} store={memories} />
+            </Show>
+          </div>
+        </TabPanel>
+      </Show>
+
+      <Show when={shown() === "permissions"}>
+        <TabPanel tab="permissions" shown={shown()} scroll>
+          <PermissionsSection
+            bot={props.bot}
+            fingerprintOf={async (bot) => fileFingerprint(await readBotText(bot.path))}
+            {...(props.gateway ? { remote: localRemoteStore() } : {})}
+          />
+        </TabPanel>
+      </Show>
+    </div>
+  )
+}
+
+/**
+ * The Settings tab: the form to change the bot (it is always the form, no «Modifica» to press first),
+ * the details a developer wants and nobody else, and the deletion, asked the way every deletion here is.
+ */
+function SettingsTab(props: {
+  bot: AgentFile
+  talk: Talk
+  models: readonly ChatModelChoice[]
+  catalog?: BotCatalog
+  account: BotAccount
+  onAccount: (account: BotAccount) => void
+  onOpenKeys?: () => void
+  onSaved: () => void
+  onDeleted: () => void
+}) {
+  const [problem, setProblem] = createSignal<string>()
+  const routines = () => routineDeps.book().routines.filter((routine) => routine.bot === props.bot.path).length
+  // The catalog's word on a ragu model, so a free model without the `:free` suffix is not asked for a cap.
+  const [free] = createResource(
+    () => props.bot,
+    (bot) => catalogFreeOf(bot),
+  )
+  const spends = () =>
+    !free.loading && spendTerms(runnerById(props.bot.runner).id, props.account, props.bot.model, free()) !== "none"
+
+  const remove = async () => {
+    setProblem(undefined)
+    const failure = await deleteBot(props.bot)
+    if (failure) {
+      setProblem(failure)
+      return
+    }
+    // Its routines, memory and account choice go with the file: a new bot at the same path starts clean.
+    forgetBotTraces(props.bot.path, {
+      memory: memories,
+      account: accounts,
+      remote: localRemoteStore(),
+      routines: writeRoutines,
+      always: localAlwaysStore(),
+      storage: typeof localStorage === "undefined" ? undefined : localStorage,
+    })
+    props.onDeleted()
+  }
+
+  return (
+    <div data-slot="bots-tab-body" data-tab="settings">
+      <section data-slot="bots-section" aria-labelledby="bots-settings-edit">
+        <h3 data-slot="bots-section-title" id="bots-settings-edit">
+          {t("bots.settings.edit")}
+        </h3>
+        <BotSettings
+          bot={props.bot}
+          models={props.models}
+          {...(props.catalog ? { catalog: props.catalog } : {})}
+          account={props.account}
+          onAccount={props.onAccount}
+          {...(props.onOpenKeys ? { onOpenKeys: props.onOpenKeys } : {})}
+          onSaved={() => props.onSaved()}
+        />
+      </section>
+
+      <Show when={spends()}>
+        <section data-slot="bots-section" aria-labelledby="bots-settings-spend">
+          <h3 data-slot="bots-section-title" id="bots-settings-spend">
+            {t("bots.daily.title")}
+          </h3>
+          <SpendTodayLine bot={props.bot} account={props.account} free={free()} />
+          <SpendCapField bot={props.bot} account={props.account} free={free()} />
+        </section>
+      </Show>
+
+      <section data-slot="bots-section" aria-label={t("bots.details.title")}>
+        <details data-slot="bots-details">
+          <summary>{t("bots.details.title")}</summary>
+          <span data-slot="bots-label">{t("bots.card.file")}</span>
+          <span data-slot="bots-card-path" title={props.bot.path}>
+            {props.bot.path}
           </span>
-          <Show when={props.talk.lastTurn}>
-            {(turn) => (
-              <span data-slot="bots-card-stat">
-                {t("bots.lastTurn.label")} {turn().model || t("bots.lastTurn.unknownModel")}
-                {" · "}
-                <LastFigures
-                  {...(turn().mode ? { mode: turn().mode } : {})}
-                  runner={props.bot.runner}
-                  model={turn().model}
-                  tokens={turn().tokens}
-                  costUsd={turn().costUsd}
-                />
-              </span>
-            )}
-          </Show>
           <Show when={props.talk.sessionId}>
             {(sessionId) => (
               <span data-slot="bots-card-path" title={sessionId()}>
@@ -1805,74 +2027,26 @@ function BotCard(props: {
               </span>
             )}
           </Show>
-          <Show when={props.talk.messages.length > 0}>
-            <button type="button" data-slot="bots-link" onClick={() => props.onForget()}>
-              {t("bots.card.newTalk")}
-            </button>
-          </Show>
-        </section>
+        </details>
+      </section>
 
-        <Show when={props.gateway}>
-          {(deps) => (
-            <Show when={props.bot.path} keyed>
-              <GatewaySection bot={props.bot} deps={deps()} />
-            </Show>
-          )}
-        </Show>
-
-        <Show when={props.bot.mode !== "subagent"}>
-          {/* Keyed on the bot, like the gateway: the routine form and its consent tick belong to one bot (full review 2026-10-06, bots 16). */}
-          <Show when={props.bot.path} keyed>
-            <RoutineSection bot={props.bot} account={account()} projectRoot={props.projectRoot} deps={routineDeps} />
-            <MemorySection bot={props.bot.path} store={memories} />
-          </Show>
-        </Show>
-
-        <section data-slot="bots-card-section">
-          <span data-slot="bots-label">{t("bots.card.file")}</span>
-          <span data-slot="bots-card-path" title={props.bot.path}>
-            {props.bot.path}
-          </span>
-        </section>
-
-        <section data-slot="bots-card-section" data-slot-end="true">
-          <Show
-            when={confirming()}
-            fallback={
-              <button type="button" data-slot="bots-link" data-tone="danger" onClick={() => setConfirming(true)}>
-                {t("bots.delete.button")}
-              </button>
-            }
-          >
-            {/* Confirmed, because this deletes a file: the persona is the bot as
-                much as the name is, and nothing else in ADE holds a copy. */}
-            <span data-slot="bots-confirm">
-              <span>{t("bots.delete.confirm", props.bot.identifier)}</span>
-              <button type="button" data-slot="bots-btn" onClick={() => setConfirming(false)}>
-                {t("bots.delete.cancel")}
-              </button>
-              <button type="button" data-slot="bots-btn" data-tone="danger" onClick={() => void remove()}>
-                {t("bots.delete.confirmBtn")}
-              </button>
-            </span>
-          </Show>
-        </section>
-      </Show>
-
-      <Show when={editing()}>
-        <BotSettings
-          bot={props.bot}
-          models={props.models}
-          {...(props.catalog ? { catalog: props.catalog } : {})}
-          account={account()}
-          onAccount={(next) => {
-            accounts.set(props.bot.path, next)
-            setAccount(accounts.get(props.bot.path))
-          }}
-          {...(props.onOpenKeys ? { onOpenKeys: props.onOpenKeys } : {})}
-          onSaved={() => props.onChanged()}
+      <section data-slot="bots-section" aria-labelledby="bots-settings-delete">
+        <h3 data-slot="bots-section-title" id="bots-settings-delete">
+          {t("bots.delete.title")}
+        </h3>
+        <Show when={problem()}>{(text) => <p data-slot="bots-problem">{text()}</p>}</Show>
+        {/* Confirmed, because this deletes a file: the persona is the bot as much as the name is, and nothing else in ADE holds a copy. */}
+        <ConfirmAction
+          label={t("bots.delete.button")}
+          question={
+            props.bot.scope === "project"
+              ? t("bots.delete.questionProject", props.bot.identifier, props.bot.path, routines())
+              : t("bots.delete.questionGlobal", props.bot.identifier, props.bot.path, routines())
+          }
+          confirm={t("bots.delete.confirmBtn")}
+          onConfirm={() => remove()}
         />
-      </Show>
+      </section>
     </div>
   )
 }
@@ -1912,6 +2086,13 @@ function BotForm(props: {
   const [avatar, setAvatar] = createSignal<string>()
   const [problem, setProblem] = createSignal<string>()
   const [busy, setBusy] = createSignal(false)
+  // A bot that spends money is made with a daily cap: proposed, and the user's to change or to empty.
+  const [cap, setCap] = createSignal(capText(SPEND_CAP_PROPOSED_USD))
+  const [free] = createResource(
+    () => (runner() === "ragu" && model() ? model() : null),
+    (name) => catalogFree(name, loadCatalog),
+  )
+  const asksCap = () => newBotSpendTerms(runner(), model(), model() ? free() : undefined) === "money"
 
   let nameField: HTMLInputElement | undefined
   onMount(() => nameField?.focus())
@@ -1928,6 +2109,12 @@ function BotForm(props: {
     }
     if (!generating() && name().trim().length === 0) {
       setProblem(t("bots.form.problemName"))
+      return
+    }
+
+    const capRead = asksCap() ? parseCap(cap()) : undefined
+    if (capRead && !capRead.ok) {
+      setProblem(capRead.problem)
       return
     }
 
@@ -1951,10 +2138,7 @@ function BotForm(props: {
         ...(effortToSave(effort(), staleEffort()) ? { effort: effortToSave(effort(), staleEffort()) } : {}),
         ...(avatar() ? { avatar: avatar() } : {}),
         ...(runner() !== "ragu" ? { runner: runner() } : {}),
-        objectives: objectives()
-          .split("\n")
-          .map((line) => line.replace(/^[-*•]\s*/, "").trim())
-          .filter((line) => line.length > 0),
+        objectives: objectiveLines(objectives()),
       },
       props.roots,
     )
@@ -1964,6 +2148,8 @@ function BotForm(props: {
       setProblem(result.problem)
       return
     }
+    if (capRead?.ok && capRead.capUsd !== undefined)
+      appSpendStore.set(result.path, withCap(appSpendStore.get(result.path), capRead.capUsd))
     props.onCreated(result.path)
   }
 
@@ -2023,6 +2209,17 @@ function BotForm(props: {
         }}
         onModel={setModel}
         onEffort={setEffort}
+      />
+
+      <NewBotCapField
+        runner={runner()}
+        model={model() || undefined}
+        free={model() ? free() : undefined}
+        value={cap()}
+        onInput={(text) => {
+          setCap(text)
+          setProblem(undefined)
+        }}
       />
 
       <label data-slot="bots-field">
@@ -2321,7 +2518,7 @@ function EngineFields(props: {
         </div>
 
         <div data-slot="bots-field">
-          <span data-slot="bots-label">{t("bots.engine.effort")}</span>
+          <span data-slot="bots-label">{t("bots.engine.effortField")}</span>
           <Show
             when={!efforts().none}
             fallback={
@@ -2381,25 +2578,44 @@ function BotSettings(props: {
   const [failure, setFailure] = createSignal<string>()
   const [saved, setSaved] = createSignal(false)
 
-  /* Re-read when the file changes under the form: these are fields over a
-     file, and the file is the truth. */
+  /*
+   * Re-read when the file changes under the form: these are fields over a file, and the file is the truth. A bot
+   * that is another bot starts the fields over; the same bot changed (a model picked from the chip, a save) moves
+   * only the fields the user has not touched, so a persona typed and not saved stays (D7).
+   */
+  const fileFields = createMemo<FormFields>(() => ({
+    description: props.bot.description,
+    model: props.bot.model ?? "",
+    effort: props.bot.effort ?? "",
+    runner: runnerById(props.bot.runner).id,
+    objectives: parts().objectives.join("\n"),
+    persona: parts().persona,
+    avatar: props.bot.avatar ?? "",
+  }))
   createEffect(
     on(
-      () =>
-        props.bot.path +
-        props.bot.prompt +
-        (props.bot.model ?? "") +
-        (props.bot.effort ?? "") +
-        (props.bot.runner ?? ""),
-      () => {
-        setRunner(runnerById(props.bot.runner).id)
-        setDescription(props.bot.description)
-        setModel(props.bot.model ?? "")
-        setEffort(props.bot.effort ?? "")
-        setObjectives(parts().objectives.join("\n"))
-        setPersona(parts().persona)
-        setAvatar(props.bot.avatar)
-        setSaved(false)
+      () => [props.bot.path, fileFields()] as const,
+      ([path, after], previous) => {
+        const [beforePath, before] = previous ?? [path, after]
+        const current: FormFields = {
+          description: description(),
+          model: model(),
+          effort: effort(),
+          runner: runner(),
+          objectives: objectives(),
+          persona: persona(),
+          avatar: avatar() ?? "",
+        }
+        const next = path === beforePath ? syncFields(current, before, after) : after
+        setRunner(next.runner)
+        setDescription(next.description)
+        setModel(next.model)
+        setEffort(next.effort)
+        setObjectives(next.objectives)
+        setPersona(next.persona)
+        setAvatar(next.avatar || undefined)
+        // «Salvato.» stays when the file only caught up with what was saved.
+        if (!sameFields(current, next)) setSaved(false)
       },
       { defer: true },
     ),
@@ -2431,10 +2647,7 @@ function BotSettings(props: {
       runner: runner() === "ragu" ? undefined : runner(),
       persona: persona(),
       avatar: avatar(),
-      objectives: objectives()
-        .split("\n")
-        .map((line) => line.replace(/^[-*•]\s*/, "").trim())
-        .filter((line) => line.length > 0),
+      objectives: objectiveLines(objectives()),
     })
 
     setBusy(false)
@@ -2442,6 +2655,19 @@ function BotSettings(props: {
       setFailure(problem)
       return
     }
+    // The form shows what the file will give back (trimmed, the objectives as a list), so it is not "unsaved" after.
+    const kept = savedFields({
+      description: description(),
+      model: model(),
+      effort: effort(),
+      runner: runner(),
+      objectives: objectives(),
+      persona: persona(),
+      avatar: avatar() ?? "",
+    })
+    setDescription(kept.description)
+    setPersona(kept.persona)
+    setObjectives(kept.objectives)
     setSaved(true)
     props.onSaved()
   }
@@ -2461,7 +2687,7 @@ function BotSettings(props: {
           onInput={(event) => setDescription(event.currentTarget.value)}
         />
         <span data-slot="bots-hint">
-          {t("bots.settings.whenToUseHint1")} <code>{"description"}</code> {t("bots.settings.whenToUseHint2")}
+          {t("bots.settings.whenToUseHint")}
         </span>
       </label>
 
@@ -2502,7 +2728,7 @@ function BotSettings(props: {
           onInput={(event) => setObjectives(event.currentTarget.value)}
         />
         <span data-slot="bots-hint">
-          {t("bots.settings.objectivesHint")} <code>{OBJECTIVES_HEADING}</code>.
+          {t("bots.settings.objectivesHint", OBJECTIVES_HEADING)}
         </span>
       </label>
 

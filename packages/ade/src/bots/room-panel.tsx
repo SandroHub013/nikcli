@@ -10,6 +10,8 @@
 import { createEffect, createMemo, createResource, createSignal, For, on, Show } from "solid-js"
 import { t } from "../i18n"
 import { APPROVAL_TIMEOUT_MS } from "./approval"
+import { ConfirmAction } from "./confirm"
+import { formatCap } from "./format"
 import type { AgentFile } from "./ragu"
 import {
   MAX_MEMBERS,
@@ -73,6 +75,14 @@ export function RoomsRoster(props: {
           +
         </button>
       </header>
+      <Show when={props.deps.book().rooms.length === 0}>
+        <p data-slot="bots-roster-empty">
+          {t("bots.room.listEmpty")}{" "}
+          <button type="button" data-slot="bots-link" onClick={() => props.onNew()}>
+            {t("bots.room.createFirst")}
+          </button>
+        </p>
+      </Show>
       <div data-slot="bots-list">
         <For each={props.deps.book().rooms}>
           {(room) => (
@@ -157,23 +167,28 @@ export function RoomMain(props: { deps: RoomPanelDeps; roomId: string; onRemoved
             </span>
             <Show when={current().spend}>
               {(spend) => (
-                <span data-slot="room-cap">{t("bots.room.capLine", `${spend().perRoundUsd.toFixed(2)} $`)}</span>
+                <span data-slot="room-cap">{t("bots.room.capLine", formatCap(spend().perRoundUsd))}</span>
               )}
             </Show>
-            <button
-              type="button"
-              data-slot="bots-link"
-              onClick={() => {
-                void props.deps.remove(current().id).then((gone) => {
-                  if (gone) props.onRemoved()
-                })
+            <ConfirmAction
+              label={t("bots.room.delete")}
+              question={t("bots.room.deleteAsk", current().name)}
+              confirm={t("bots.room.delete")}
+              onConfirm={async () => {
+                if (await props.deps.remove(current().id)) props.onRemoved()
               }}
-            >
-              {t("bots.room.delete")}
-            </button>
+            />
           </header>
 
-          <div data-slot="bots-messages" ref={(el) => (scroller = el)}>
+          <div
+            data-slot="bots-messages"
+            role="log"
+            aria-live="polite"
+            aria-relevant="additions"
+            aria-busy={speaking() !== undefined && !asked()}
+            aria-label={t("bots.room.threadLabel", current().name)}
+            ref={(el) => (scroller = el)}
+          >
             <Show when={current().log.entries.length === 0}>
               <p data-slot="bots-thread-empty-text">{t("bots.room.empty")}</p>
             </Show>
@@ -201,10 +216,13 @@ export function RoomMain(props: { deps: RoomPanelDeps; roomId: string; onRemoved
               {(pending) => (
                 <div data-slot="bots-permission" role="group" aria-label={t("bots.permission.request")}>
                   <span data-slot="bots-permission-text">
-                    @{nameOf(speaking()!)} {t("bots.permission.wantsToUse")} <code>{pending().permission}</code>
-                    <Show when={pending().patterns}>
-                      {" "}
-                      {t("bots.permission.on")} <code>{pending().patterns}</code>
+                    <Show
+                      when={pending().patterns}
+                      fallback={t("bots.permission.roomWants", nameOf(speaking()!), pending().permission)}
+                    >
+                      {(patterns) =>
+                        t("bots.permission.roomWantsOn", nameOf(speaking()!), pending().permission, patterns())
+                      }
                     </Show>
                     <Show when={pending().reason}>
                       {(reason) => <span data-slot="bots-permission-why">{t("bots.approval.why", reason())}</span>}
@@ -294,6 +312,7 @@ export function RoomMain(props: { deps: RoomPanelDeps; roomId: string; onRemoved
             <textarea
               ref={(el) => (field = el)}
               data-slot="bots-composer-field"
+              aria-label={t("bots.room.composerLabel", current().name)}
               rows="1"
               value={draft()}
               placeholder={t("bots.room.placeholder")}
@@ -413,7 +432,7 @@ export function RoomForm(props: { deps: RoomPanelDeps; onCreated: (id: string) =
         <Show when={capUsd()}>
           {(usd) => (
             <span data-slot="bots-hint">
-              {t("bots.room.form.capPerMessage", usd().toFixed(2), MAX_ROUNDS, messageSpendMax(usd()).toFixed(2))}
+              {t("bots.room.form.capPerMessage", formatCap(usd()), MAX_ROUNDS, formatCap(messageSpendMax(usd())))}
             </span>
           )}
         </Show>

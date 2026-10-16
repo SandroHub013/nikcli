@@ -297,6 +297,8 @@ fn hide_assignments(text: &str) -> String {
                 let query = begin > 0 && matches!(bytes[begin - 1], b'?' | b'&');
                 let name_lower = text[begin..end].to_ascii_lowercase();
                 let connection_string = name_lower.ends_with("accountkey") || name_lower.ends_with("sharedaccesskey");
+                // A word that is not a known scheme, followed by another word on the line: both go (N4).
+                let mut two_words = false;
                 let mut start = at + 1;
                 while start < bytes.len() && bytes[start] == b' ' {
                     start += 1;
@@ -320,6 +322,13 @@ fn hide_assignments(text: &str) -> String {
                         && !matches!(bytes[after], b'\n' | b'\r' | b'"' | b'\'')
                     {
                         start = after;
+                    } else if !scheme.is_empty()
+                        && !AUTH_SCHEMES.contains(&scheme.as_str())
+                        && after > scheme_end
+                        && after < bytes.len()
+                        && !matches!(bytes[after], b'\n' | b'\r' | b'"' | b'\'')
+                    {
+                        two_words = true;
                     }
                 }
                 // A quoted value runs to its closing quote (it may hold spaces); a bare one, to the next blank.
@@ -345,6 +354,18 @@ fn hide_assignments(text: &str) -> String {
                         break;
                     }
                     stop += 1;
+                }
+                if two_words && opening.is_none() {
+                    let mut second = stop;
+                    while second < bytes.len() && matches!(bytes[second], b' ' | b'\t') {
+                        second += 1;
+                    }
+                    if second < bytes.len() && !matches!(bytes[second], b'\n' | b'\r' | b'"' | b'\'') {
+                        while second < bytes.len() && !bytes[second].is_ascii_whitespace() && !matches!(bytes[second], b'"' | b'\'') {
+                            second += 1;
+                        }
+                        stop = second;
+                    }
                 }
                 let value = &text[start..stop];
                 if value.chars().count() >= 4 && !value.starts_with(HIDDEN) && !value.starts_with('$') {
@@ -604,9 +625,29 @@ mod tests {
         for leaked in ["abc123secret", "valore9999", "dXNlcjpwYXNz", "ghx-plain-value"] {
             assert!(!out.contains(leaked), "{leaked} in {out}");
         }
-        assert!(out.contains("# nota"), "{out}");
         assert!(out.contains("\"x\": 1"), "{out}");
         assert!(out.contains("Basic [nascosto]") && out.contains("token [nascosto]"), "{out}");
+    }
+
+    /* N4 of the third check: a scheme that is not in the list leaves its token readable unless both words go. */
+    #[test]
+    fn an_unknown_authorization_scheme_hides_the_scheme_and_its_token() {
+        let text = "Authorization: Negotiate YIIGhgYJKoZIhvcSAQIC0000\nAuthorization: NTLM TlRMTVNTUAABAAAAB4IIogAA\nauthorization: ApiKey abcd1234efgh5678\nAuthorization: SSWS 00a1b2c3d4e5f6a7b8\nAuthorization: OAuth oauth_token=tok-123456789\nAuthorization: DPoP eyJhbGciOiJFUzI1NiJ9\nProxy-Authorization: Kerberos AbCdEfGh1234";
+        let out = redact(text, &[]);
+        for leaked in ["YIIGhg", "TlRMTV", "abcd1234efgh", "00a1b2c3", "tok-123456789", "eyJhbGci", "AbCdEfGh1234"] {
+            assert!(!out.contains(leaked), "{leaked} in {out}");
+        }
+        for scheme in ["Negotiate", "NTLM", "ApiKey", "SSWS", "OAuth", "DPoP", "Kerberos"] {
+            assert!(!out.contains(scheme), "{scheme} in {out}");
+        }
+        // The lines still say what they were; a known scheme keeps its name; a quoted value is as before.
+        assert_eq!(out.lines().count(), 7, "{out}");
+        assert!(out.starts_with("Authorization: [nascosto]\n"), "{out}");
+        assert!(redact("Authorization: Bearer abcdefgh1234", &[]).contains("Bearer [nascosto]"));
+        let json = redact("{\"Authorization\": \"Negotiate YIIGhgYJKo\", \"x\": 1}", &[]);
+        assert!(!json.contains("YIIGhg") && json.contains("\"x\": 1"), "{json}");
+        // One word only keeps being the secret itself; a trailing note goes with it, as the check allows.
+        assert!(!redact("authorization: valore9999 # nota", &[]).contains("valore9999"));
     }
 
     #[test]

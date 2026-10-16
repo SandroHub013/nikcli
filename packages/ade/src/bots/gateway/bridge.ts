@@ -6,6 +6,7 @@
 
 import { t } from "../../i18n"
 import { askDialog } from "../../host/ask"
+import { openExternally } from "../../browser/host-bridge"
 import { readAgentFile, type AgentFile } from "../ragu"
 import { admitProject, projectSurface, PROJECT_TRUST_KEY } from "../project-trust"
 import { runnerById } from "../runners"
@@ -115,7 +116,7 @@ export async function approveForChat(
     surface: () => projectSurface(project, projectFs),
     globalRoot,
   })
-  return checked.ok ? { ok: true, fingerprint: checked.fingerprint } : { ok: false, problem: checked.problem }
+  return checked.ok ? { ok: true, fingerprint: checked.fingerprint } : { ok: false, problem: checked.detail ?? checked.problem }
 }
 
 /** What the panel needs in the app, but the bot. */
@@ -126,6 +127,7 @@ export function appGatewayPanelDeps(project: () => string | undefined): Omit<Gat
     remote: localRemoteStore(),
     approve: approveForChat,
     confirm: (question) => askDialog(question, { ok: t("bots.ask.yes"), cancel: t("bots.ask.no") }),
+    openLink: (url) => void openExternally(url),
   }
 }
 

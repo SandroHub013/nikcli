@@ -56,9 +56,11 @@ describe("B8b: the room in the Bot section", () => {
     expect(bots).toContain("  payOf,\n}")
   })
 
-  test("a room goes only on the user's yes, with its members' sessions", () => {
-    const remove = bots.slice(bots.indexOf("  remove: async (roomId)"))
-    expect(remove).toContain('askYesNo(t("bots.room.deleteAsk"')
+  test("a room goes only on the user's yes, asked on its own screen the way every deletion is, with its members' sessions", () => {
+    const remove = bots.slice(bots.indexOf("  remove: async (roomId)"), bots.indexOf("  payOf,\n}"))
+    expect(panel).toContain("<ConfirmAction")
+    expect(panel).toContain('question={t("bots.room.deleteAsk", current().name)}')
+    expect(remove).not.toContain("askYesNo")
     expect(remove).toContain("updateTalk(roomThread(roomId, path), () => emptyTalk())")
   })
 

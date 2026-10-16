@@ -6,6 +6,7 @@
 
 import { createSignal, For, Show } from "solid-js"
 import { t } from "../i18n"
+import { ConfirmAction } from "./confirm"
 import {
   applyMemoryOp,
   confirmProposal,
@@ -50,8 +51,10 @@ export function MemorySection(props: { bot: string; store: MemoryStore }) {
   }
 
   return (
-    <section data-slot="bots-card-section">
-      <span data-slot="bots-label">{t("bots.memory.label")}</span>
+    <section data-slot="bots-card-section" aria-labelledby="bots-memory-title">
+      <h3 data-slot="bots-section-title" id="bots-memory-title">
+        {t("bots.memory.label")}
+      </h3>
       <span data-slot="bots-hint">{t("bots.memory.hint")}</span>
       <Show when={(memory().proposals ?? []).length > 0}>
         <div data-slot="gateway-block">
@@ -105,14 +108,12 @@ export function MemorySection(props: { bot: string; store: MemoryStore }) {
                     {(entry, at) => (
                       <li data-slot="memory-entry">
                         <span data-slot="memory-text">{entry}</span>
-                        <button
-                          type="button"
-                          data-slot="bots-link"
-                          data-tone="danger"
-                          onClick={() => drop(block, at())}
-                        >
-                          {t("bots.memory.remove")}
-                        </button>
+                        <ConfirmAction
+                          label={t("bots.memory.remove")}
+                          question={t("bots.memory.removeQuestion", entry)}
+                          confirm={t("bots.memory.removeConfirm")}
+                          onConfirm={() => drop(block, at())}
+                        />
                       </li>
                     )}
                   </For>
@@ -127,6 +128,7 @@ export function MemorySection(props: { bot: string; store: MemoryStore }) {
               >
                 <input
                   data-slot="bots-input"
+                  aria-label={t("bots.memory.fieldLabel", t(block === "notes" ? "bots.memory.notes" : "bots.memory.user"))}
                   value={drafts()[block]}
                   placeholder={t("bots.memory.placeholder")}
                   onInput={(event) => {

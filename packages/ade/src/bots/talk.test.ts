@@ -525,11 +525,11 @@ describe("the thread's totals", () => {
     expect(hasThreadTotals({ ...emptyTalk(), byMode: { free: { tokens: 0, costUsd: 0 } } })).toBe(true)
   })
 
-  test("the composer and the card say the totals only when there are some", () => {
+  test("the composer says the totals only when there are some (the page no longer repeats them)", () => {
     const view = readFileSync(join(import.meta.dir, "bots.tsx"), "utf8")
     const said = view.split('{t("bots.conversation.total")}').length - 1
     const guarded = view.split("<Show when={hasThreadTotals(props.talk)}>").length - 1
-    expect(said).toBe(2)
-    expect(guarded).toBe(2)
+    expect(said).toBe(1)
+    expect(guarded).toBe(1)
   })
 })
