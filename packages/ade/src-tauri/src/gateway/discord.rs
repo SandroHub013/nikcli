@@ -102,6 +102,10 @@ fn check_id<'a>(what: &str, value: &'a str) -> Result<&'a str, AdapterError> {
 
 /// Discord's message flag that keeps a message's links from being embedded.
 const SUPPRESS_EMBEDS: u64 = 1 << 2;
+/// Discord Developer Docs: Resources / Channel / Message / Message Flags:
+/// `SUPPRESS_NOTIFICATIONS` = 1 << 12 (4096).
+/// Do not include any notifications when the message is created (no sound/ping).
+const SUPPRESS_NOTIFICATIONS: u64 = 1 << 12;
 /// How many messages one reply may become. A degenerate turn once produced
 /// 60.698 characters in 31 messages of a row, which is a channel flooded, so
 /// the ceiling keeps the first pieces and the last one says where the rest is.
@@ -663,6 +667,12 @@ impl Core {
         })
     }
 
+    async fn delete(&self, chat: &str, message_id: &str) -> Result<(), Failure> {
+        self.call_patiently(reqwest::Method::DELETE, &format!("/channels/{chat}/messages/{message_id}"), None)
+            .await
+            .map(|_| ())
+    }
+
     /// Sends `text` in pieces, stopping at the ceiling, and returns the id of
     /// the message that now holds the end of it.
     async fn send_all(&self, chat: &str, text: &str, extra: Option<&Value>, final_turn: bool) -> Result<String, AdapterError> {
@@ -672,40 +682,12 @@ impl Core {
         let seed = self.shared.nonce_seed.wrapping_add(self.shared.epoch.load(Ordering::SeqCst));
         if final_turn {
             *hold(&self.shared.chat_generations).entry(chat.to_string()).or_default() += 1;
-            let existing_preview = hold(&self.shared.active_preview).remove(chat);
-            if let Some(msg_id) = existing_preview {
-                let mut all_pieces = pieces(text);
-                if all_pieces.is_empty() {
-                    return Err(AdapterError::Fatal("il messaggio è vuoto".into()));
-                }
-                let first = all_pieces.remove(0);
-                let edited = self.edit(chat, &msg_id, &first).await?;
-                let mut last = edited;
-                for piece in all_pieces {
-                    let mut body = Core::body(&piece);
-                    let seq = self.shared.nonce_counter.fetch_add(1, Ordering::SeqCst);
-                    body["nonce"] = Value::from(nonce(seed, seq));
-                    body["enforce_nonce"] = json!(true);
-                    last = self.post(chat, &body).await.map_err(Failure::for_sending)?;
-                }
-                if let Some(extra) = extra {
-                    check_id("il messaggio", &last)?;
-                    let body = json!({ "components": extra["components"].clone(), "allowed_mentions": { "parse": [] }, "flags": SUPPRESS_EMBEDS });
-                    if let Err(failure) = self
-                        .call_patiently(reqwest::Method::PATCH, &format!("/channels/{chat}/messages/{last}"), Some(&body))
-                        .await
-                    {
-                        let unchanged =
-                            matches!(&failure, Failure::Api { description, .. } if description.contains("not modified"));
-                        if !unchanged {
-                            return Err(failure.for_sending());
-                        }
-                    }
-                }
-                chunk::remember(&mut hold(&self.shared.preview), format!("{chat}/{last}"), text.to_string());
-                return Ok(last);
-            }
         }
+        let existing_preview = if final_turn {
+            hold(&self.shared.active_preview).remove(chat)
+        } else {
+            None
+        };
 
         let mut queue: VecDeque<String> = pieces(text).into();
         if queue.is_empty() {
@@ -749,6 +731,11 @@ impl Core {
                 if !unchanged {
                     return Err(failure.for_sending());
                 }
+            }
+        }
+        if let Some(preview_id) = existing_preview {
+            if self.delete(chat, &preview_id).await.is_err() {
+                let _ = self.edit(chat, &preview_id, "(risposta inviata sotto)").await;
             }
         }
         chunk::remember(&mut hold(&self.shared.preview), format!("{chat}/{last}"), text.to_string());
@@ -1262,7 +1249,12 @@ impl Adapter for Discord {
         let lock = self.chat_lock(chat);
         let _guard = lock.lock().await;
         *hold(&self.shared.chat_generations).entry(chat.to_string()).or_default() += 1;
-        let _ = hold(&self.shared.active_preview).remove(chat);
+        let existing = hold(&self.shared.active_preview).remove(chat);
+        if let Some(msg_id) = existing {
+            if self.delete(chat, &msg_id).await.is_err() {
+                let _ = self.edit(chat, &msg_id, "(interrotto)").await;
+            }
+        }
         Ok(())
     }
 
@@ -1297,6 +1289,10 @@ impl Adapter for Discord {
                     return Err(AdapterError::Fatal("il messaggio è vuoto".into()));
                 };
                 let mut body = Core::body(first);
+                // Discord Developer Docs: Resources / Channel / Message / Message Flags:
+                // SUPPRESS_NOTIFICATIONS = 1 << 12 (4096).
+                // "Do not include any notifications when the message is created (no sound/ping)."
+                body["flags"] = json!(SUPPRESS_EMBEDS | SUPPRESS_NOTIFICATIONS);
                 let seed = self.shared.nonce_seed.wrapping_add(self.shared.epoch.load(Ordering::SeqCst));
                 let seq = self.shared.nonce_counter.fetch_add(1, Ordering::SeqCst);
                 body["nonce"] = Value::from(nonce(seed, seq));
@@ -2718,22 +2714,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn preview_sends_first_message_then_edits_and_final_message_modifies_with_overflow() {
+    async fn preview_sends_silent_message_then_edits_and_final_message_posts_new_and_deletes_preview() {
         let rest = FakeRest::start(vec![
-            ok(r#"{"id": "111"}"#),
-            ok(r#"{"id": "111"}"#),
-            ok(r#"{"id": "111"}"#),
-            ok(r#"{"id": "222"}"#),
+            ok(r#"{"id": "111"}"#), // preview 1 POST
+            ok(r#"{"id": "111"}"#), // preview 2 PATCH
+            ok(r#"{"id": "222"}"#), // final piece 1 POST
+            ok(r#"{"id": "333"}"#), // final piece 2 POST
+            ok(r#""#),              // DELETE preview 111
         ]);
         let gateway = FakeGateway::start(vec![]);
         let d = adapter(&rest, &gateway);
 
-        // 1. First preview: sends new message
+        // 1. First preview: sends new silent message (SUPPRESS_NOTIFICATIONS | SUPPRESS_EMBEDS = 4100)
         d.preview("123", "prima anteprima").await.unwrap();
         assert_eq!(rest.count(), 1);
         let req1 = rest.requests();
         assert!(req1[0].0.starts_with("POST /channels/123/messages"));
         assert_eq!(rest.body_of(0)["content"], "prima anteprima");
+        assert_eq!(rest.body_of(0)["flags"], json!(4100), "anteprima deve avere SUPPRESS_NOTIFICATIONS | SUPPRESS_EMBEDS (4100)");
 
         // 2. Second preview: edits that message in-place
         d.preview("123", "seconda anteprima più lunga").await.unwrap();
@@ -2745,11 +2743,36 @@ mod tests {
         // 3. Final message: long enough to have 2 pieces (> 2000 chars)
         let long_final = format!("{}\n\n{}", "A".repeat(1990), "B".repeat(500));
         let last_id = d.send_with("123", &long_final, true).await.unwrap();
+        assert_eq!(last_id, "333");
+        assert_eq!(rest.count(), 5);
+        let reqs = rest.requests();
+        assert!(reqs[2].0.starts_with("POST /channels/123/messages"));
+        assert_eq!(rest.body_of(2)["flags"], json!(4), "finale non deve silenziare le notifiche (solo SUPPRESS_EMBEDS 4)");
+        assert!(reqs[3].0.starts_with("POST /channels/123/messages"));
+        assert!(reqs[4].0.starts_with("DELETE /channels/123/messages/111"), "anteprima deve essere cancellata dopo il finale");
+        assert_eq!(hold(&d.shared.active_preview).get("123"), None);
+    }
+
+    #[tokio::test]
+    async fn preview_deletion_failure_falls_back_to_editing_notice() {
+        let rest = FakeRest::start(vec![
+            ok(r#"{"id": "111"}"#), // preview 1 POST
+            ok(r#"{"id": "222"}"#), // final message POST
+            refused(r#"{"message": "cannot delete"}"#), // DELETE fails
+            ok(r#"{"id": "111"}"#), // PATCH fallback notice
+        ]);
+        let gateway = FakeGateway::start(vec![]);
+        let d = adapter(&rest, &gateway);
+
+        d.preview("123", "anteprima").await.unwrap();
+        let last_id = d.send_with("123", "risposta finale", true).await.unwrap();
         assert_eq!(last_id, "222");
         assert_eq!(rest.count(), 4);
         let reqs = rest.requests();
-        assert!(reqs[2].0.starts_with("PATCH /channels/123/messages/111"));
-        assert!(reqs[3].0.starts_with("POST /channels/123/messages"));
+        assert!(reqs[2].0.starts_with("DELETE /channels/123/messages/111"));
+        assert!(reqs[3].0.starts_with("PATCH /channels/123/messages/111"));
+        assert_eq!(rest.body_of(3)["content"], "(risposta inviata sotto)");
+        assert_eq!(hold(&d.shared.active_preview).get("123"), None);
     }
 
     #[tokio::test]
@@ -2793,6 +2816,7 @@ mod tests {
         let rest = FakeRest::start(vec![
             ok(r#"{"id": "111"}"#), // preview 1
             ok(r#"{"id": "222"}"#), // final turn send
+            ok(r#""#),              // delete preview 111
         ]);
         let gateway = FakeGateway::start(vec![]);
         let d = adapter(&rest, &gateway);
@@ -2829,7 +2853,7 @@ mod tests {
 
         // It must succeed without making any REST call (rest has no responses left)
         handle.await.unwrap().unwrap();
-        assert_eq!(rest.count(), 2);
+        assert_eq!(rest.count(), 3);
         assert_eq!(hold(&d.shared.active_preview).get("123"), None);
     }
 }
