@@ -28,6 +28,7 @@
 //! without it, and the hub hides it again anyway.
 
 use super::adapter::{Adapter, AdapterError, Button, Capabilities, Inbound, Sender};
+use super::authz;
 use super::chunk;
 use async_trait::async_trait;
 use futures_util::{SinkExt, StreamExt};
@@ -324,6 +325,8 @@ struct Shared {
     /// the identify budget: a socket that started is not a failed attempt, and
     /// the flag is what says so across the inner loop that set it.
     ready: AtomicBool,
+    /// Random seed chosen when the adapter is born, to prevent nonce collisions after restarts.
+    nonce_seed: u64,
     /// Monotonic sequence for message nonces to guarantee uniqueness across messages.
     nonce_counter: AtomicU64,
 }
@@ -444,6 +447,14 @@ fn real_now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+fn random_nonce_seed() -> u64 {
+    let mut buf = [0u8; 8];
+    let _ = authz::os_random(&mut buf);
+    let random_val = u64::from_le_bytes(buf);
+    let ms = real_now_ms();
+    ms.wrapping_mul(0x517c_c1b7_2722_0a95) ^ random_val
+}
+
 impl Discord {
     /// The adapter for the bot with `token`, reading on from `cursor`.
     pub fn new(token: &str, cursor: Option<String>) -> Result<Arc<Discord>, String> {
@@ -473,6 +484,7 @@ impl Discord {
                 preview: Mutex::new(HashMap::new()),
                 epoch: AtomicU64::new(0),
                 ready: AtomicBool::new(false),
+                nonce_seed: random_nonce_seed(),
                 nonce_counter: AtomicU64::new(0),
             }),
             inbox: tokio::sync::Mutex::new(inbox),
@@ -591,7 +603,7 @@ impl Core {
     /// Sends `text` in pieces, stopping at the ceiling, and returns the id of
     /// the message that now holds the end of it.
     async fn send_all(&self, chat: &str, text: &str, extra: Option<&Value>) -> Result<String, AdapterError> {
-        let seed = self.shared.epoch.load(Ordering::SeqCst);
+        let seed = self.shared.nonce_seed.wrapping_add(self.shared.epoch.load(Ordering::SeqCst));
         let mut queue: VecDeque<String> = pieces(text).into();
         if queue.is_empty() {
             return Err(AdapterError::Fatal("il messaggio è vuoto".into()));
@@ -1286,7 +1298,7 @@ mod tests {
                     // one before it is gone.
                     runtime.block_on(async move {
                         let Ok(stream) = tokio::net::TcpStream::from_std(stream) else { return };
-                        let Ok(mut socket) = tokio_tungstenite::accept_async(stream).await else { return };
+                        let Ok(socket) = tokio_tungstenite::accept_async(stream).await else { return };
                         let (mut sink, mut source) = socket.split();
                         // One list per connection: the frames for the next one
                         // are still waiting for the next one.
@@ -1440,6 +1452,7 @@ mod tests {
             preview: Mutex::new(HashMap::new()),
             epoch: AtomicU64::new(0),
             ready: AtomicBool::new(false),
+            nonce_seed: 0,
             nonce_counter: AtomicU64::new(0),
         }
     }
@@ -1681,6 +1694,23 @@ mod tests {
         assert_ne!(nonce1, nonce2, "nonces must differ across separate messages");
     }
 
+    #[tokio::test]
+    async fn two_adapters_simulating_a_restart_generate_different_nonces_on_first_message() {
+        let rest1 = FakeRest::start(vec![ok(&json!({ "id": "1" }).to_string())]);
+        let gateway1 = FakeGateway::start(vec![]);
+        let discord1 = adapter(&rest1, &gateway1);
+        discord1.send("ch1", "msg").await.expect("inviato 1");
+        let nonce1 = rest1.body_of(0)["nonce"].as_str().unwrap().to_string();
+
+        let rest2 = FakeRest::start(vec![ok(&json!({ "id": "2" }).to_string())]);
+        let gateway2 = FakeGateway::start(vec![]);
+        let discord2 = adapter(&rest2, &gateway2);
+        discord2.send("ch1", "msg").await.expect("inviato 2");
+        let nonce2 = rest2.body_of(0)["nonce"].as_str().unwrap().to_string();
+
+        assert_ne!(nonce1, nonce2, "due adapter che simulano un riavvio devono produrre nonce diversi al primo messaggio");
+    }
+
     #[test]
     fn gateway_url_and_resume_url_include_v10_and_json_encoding() {
         let discord = Discord::new(TOKEN, None).expect("discord");
@@ -1896,32 +1926,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn backoff_resets_to_one_second_when_session_was_greeted() {
-        let mut backoff = Duration::from_secs(300);
-        let ending = Ending::Dropped { greeted: true };
-        match ending {
-            Ending::Dropped { greeted } => {
-                if greeted {
-                    backoff = Duration::from_secs(1);
-                }
-            }
-            _ => {}
-        }
-        assert_eq!(backoff, Duration::from_secs(1));
-
-        let mut backoff_ungreeted = Duration::from_secs(16);
-        let ending_ungreeted = Ending::Dropped { greeted: false };
-        match ending_ungreeted {
-            Ending::Dropped { greeted } => {
-                if greeted {
-                    backoff_ungreeted = Duration::from_secs(1);
-                }
-            }
-            _ => {}
-        }
-        assert_eq!(backoff_ungreeted, Duration::from_secs(16));
-    }
 
     #[test]
     fn a_press_becomes_a_message_with_its_data_and_a_command_does_not() {
