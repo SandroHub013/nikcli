@@ -645,33 +645,46 @@ describe("un turno da chat non ha la shell", () => {
    * scrivevano da telefono anche fuori dal progetto, per esempio negli hook di ~/.claude/settings.json. Nel progetto
    * scrive `acceptEdits` da solo (provato su claude 2.1.301 con un finto provider).
    */
-  test("Claude: da chat un bot che scrive scrive solo nella cartella del progetto", () => {
+  /*
+   * bot-lettura-2, la scelta di Master: anche nel pannello, dove la lettura resta libera, si scrive solo nel progetto.
+   */
+  test("Claude: da chat e nel pannello un bot che scrive scrive solo nella cartella del progetto", () => {
     const own: AgentFile = { ...mine, runner: "claude" }
-    for (const remote of [off, on]) {
-      const { args } = turnCommand(runnerById("claude"), { bot: own, message: "x", remote })
+    for (const spec of [{ remote: off }, { remote: on }, { lean: true }, {}, { lean: true, approvals: true }]) {
+      const { args } = turnCommand(runnerById("claude"), { bot: own, message: "x", ...spec })
       for (const name of ["Edit", "NotebookEdit", "Write"])
-        expect([remote, name, allowedOf(args).includes(name)]).toEqual([remote, name, false])
-      expect(args[args.indexOf("--permission-mode") + 1]).toBe("acceptEdits")
+        expect([spec, name, allowedOf(args).includes(name)]).toEqual([spec, name, false])
+      expect([spec, args[args.indexOf("--permission-mode") + 1]]).toEqual([spec, "acceptEdits"])
     }
-    // Nel pannello resta com'è.
+    // Nel pannello `ade-msg` resta.
     const panel = turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true }).args
-    for (const name of ["Edit", "NotebookEdit", "Write"]) expect(allowedOf(panel)).toContain(name)
+    expect(allowedOf(panel)).toContain("Bash(ade-msg *)")
+    const noShell = { ...own, disabledTools: ["bash"] }
+    expect(allowedOf(turnCommand(runnerById("claude"), { bot: noShell, message: "x", lean: true }).args)).toContain(
+      "PowerShell(ade-msg *)",
+    )
   })
 
   /*
    * `ListAgents` e `SendMessage` di Claude Code girano in `-p` senza domanda (claude 2.1.301, finto provider): da
-   * telefono un turno poteva scrivere a un'altra sessione Claude della macchina, magari in `bypassPermissions`.
+   * telefono un turno poteva scrivere a un'altra sessione Claude della macchina, magari in `bypassPermissions`. Nel
+   * pannello pure (bot-lettura-2): i bot parlano alle sessioni con `ade-msg`, che passa da ADE.
    */
-  test("Claude: da chat e in una routine niente messaggi alle altre sessioni", () => {
+  test("Claude: da chat, in una routine e nel pannello niente messaggi alle altre sessioni", () => {
     const own: AgentFile = { ...mine, runner: "claude" }
-    for (const spec of [{ remote: off }, { remote: on }, { unattended: true }, { unattended: true, lean: true }]) {
+    const specs = [
+      { remote: off },
+      { remote: on },
+      { unattended: true },
+      { unattended: true, lean: true },
+      { lean: true },
+      {},
+    ]
+    for (const spec of specs) {
       const { args } = turnCommand(runnerById("claude"), { bot: own, message: "x", ...spec })
       for (const name of ["ListAgents", "SendMessage"])
         expect([spec, name, disallowedOf(args).includes(name)]).toEqual([spec, name, true])
     }
-    // Nel pannello resta com'è.
-    const panel = turnCommand(runnerById("claude"), { bot: own, message: "x", lean: true }).args
-    expect(disallowedOf(panel)).not.toContain("SendMessage")
   })
 
   /*
