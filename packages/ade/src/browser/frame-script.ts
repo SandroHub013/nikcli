@@ -85,11 +85,19 @@ export function frameGuard(win: any, bridge: (shim: any) => void): void {
   /*
    * A frame that has become ADE itself (navigated onto the window's origin
    * or tauri.localhost) can read the window. Blank it. A cross-origin page
-   * cannot read `top.location`, and that throw is the all-clear.
+   * cannot read `top.origin` or `top.location`, and that throw is the all-clear.
+   *
+   * The document's own origin is `win.origin`: for `about:srcdoc`, `location.origin` says «null» even when the
+   * document inherited ADE's origin, so it alone let such a frame through (H1). A real origin only: an opaque one
+   * says «null» too, and two of those are not the same.
    */
   try {
-    const here = String((win.location && win.location.origin) || "")
-    const topOrigin = String((win.top && win.top.location && win.top.location.origin) || "")
+    const real = (value: unknown) => {
+      const text = String(value || "")
+      return text === "null" ? "" : text
+    }
+    const here = real(win.origin) || real(win.location && win.location.origin)
+    const topOrigin = real(win.top && win.top.origin) || real(win.top && win.top.location && win.top.location.origin)
     const host = String((win.location && win.location.hostname) || "").toLowerCase()
     if (host === "tauri.localhost" || (here && topOrigin && here === topOrigin)) {
       try {
