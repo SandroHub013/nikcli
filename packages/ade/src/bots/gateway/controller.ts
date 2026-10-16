@@ -121,6 +121,11 @@ export interface ChatTarget {
   readonly bot: string
   readonly platform: string
   readonly chat: string
+  /**
+   * The sender the question is for: only that person's press answers it (S13).
+   * Absent, any sender of the chat may answer.
+   */
+  readonly asker?: string
 }
 
 export interface Choice {
@@ -145,12 +150,19 @@ export interface GatewayController {
     choices: readonly Choice[],
     timeoutMs?: number,
   ) => Promise<string | undefined>
+  /**
+   * `sender` was revoked: their queued messages are dropped, their turn is
+   * stopped without a word to them, and their questions close with no answer.
+   */
+  revoke: (bot: string, platform: string, sender: string) => void
   /** Chats with a turn running, for tests and the panel. */
   busy: () => string[]
 }
 
 interface ChatState {
   readonly queue: GatewayMessage[]
+  /** The message the running (or starting) turn answers. */
+  current?: GatewayMessage
   turn?: Turn
   /** Set while a turn is being prepared, before `turn` exists. */
   starting: boolean
@@ -171,6 +183,7 @@ const TYPING_EVERY_MS = 4_000
 
 interface Question {
   readonly key: string
+  readonly target: ChatTarget
   readonly choices: readonly Choice[]
   readonly answer: (value: string | undefined) => void
 }
@@ -193,6 +206,8 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     const [id, index] = message.text.split(":")
     const question = id ? questions.get(id) : undefined
     if (!question || question.key !== sessionKey(message.bot, message.platform, message.chat)) return
+    // A question made for a person is answered by that person (S13).
+    if (question.target.asker !== undefined && question.target.asker !== message.sender.id) return
     const choice = question.choices[Number(index)]
     if (!choice || String(Number(index)) !== index) return
     question.answer(choice.value)
@@ -219,7 +234,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       }
       const ended = () => answer(undefined)
       signal?.addEventListener("abort", ended)
-      questions.set(id, { key: sessionKey(target.bot, target.platform, target.chat), choices, answer })
+      questions.set(id, { key: sessionKey(target.bot, target.platform, target.chat), target, choices, answer })
       const buttons = choices.map((choice, index) => ({ label: choice.label, data: `${id}:${index}` }))
       deps.bridge.sendButtons(target.bot, target.platform, target.chat, question, buttons).catch((error) => {
         warn(
@@ -282,6 +297,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     if (!message) return
     state.starting = true
     state.cancelled = false
+    state.current = message
     const fresh = state.fresh
     let typing: ReturnType<typeof setInterval> | undefined
     const ended = new AbortController()
@@ -315,7 +331,13 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         runner === "ragu"
           ? permissionAnswerer({
               ask: (question, choices, signal) =>
-                ask(message, question, choices, deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS, signal),
+                ask(
+                  { bot: message.bot, platform: message.platform, chat: message.chat, asker: message.sender.id },
+                  question,
+                  choices,
+                  deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS,
+                  signal,
+                ),
               refuse: !remote.commands,
               publicChat,
               answer: (requestID, reply) => {
@@ -368,6 +390,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       if (typing) clearInterval(typing)
       state.turn = undefined
       state.starting = false
+      state.current = undefined
       void next(key)
     }
   }
@@ -447,6 +470,23 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       for (const question of [...questions.values()]) question.answer(undefined)
     },
     ask,
+    revoke: (bot, platform, sender) => {
+      const theirs = (message: GatewayMessage) =>
+        message.bot === bot && message.platform === platform && message.sender.id === sender
+      for (const state of chats.values()) {
+        for (let index = state.queue.length - 1; index >= 0; index--) {
+          if (theirs(state.queue[index]!)) state.queue.splice(index, 1)
+        }
+        if (state.current && theirs(state.current)) {
+          if (state.turn) state.turn.stop()
+          else if (state.starting) state.cancelled = true
+        }
+      }
+      for (const question of [...questions.values()]) {
+        const target = question.target
+        if (target.bot === bot && target.platform === platform && target.asker === sender) question.answer(undefined)
+      }
+    },
     busy: () => [...chats.entries()].filter(([, state]) => state.turn || state.starting).map(([key]) => key),
   }
 }
