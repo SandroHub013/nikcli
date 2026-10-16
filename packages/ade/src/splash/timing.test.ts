@@ -38,13 +38,11 @@ describe("the startup screen's timing", () => {
     expect(sceneIsWorthBuilding(0, 4000)).toBe(false)
   })
 
-  test("the splash asks before building, after three.js has arrived and before anything is made from it", () => {
+  test("the splash asks before building, before anything is made from it", () => {
     const splash = source("splash/splash.tsx")
-    const arrived = splash.indexOf('await import("three")')
     const asked = splash.indexOf("sceneIsWorthBuilding(appearedAt, performance.now())")
-    const built = splash.indexOf("new three.Scene()")
-    expect(arrived).toBeGreaterThan(-1)
-    expect(asked).toBeGreaterThan(arrived)
+    const built = splash.indexOf("controller = startPixelScene")
+    expect(asked).toBeGreaterThan(-1)
     expect(built).toBeGreaterThan(asked)
     // The time counts from when the splash appeared, taken at mount and not when the scene starts.
     expect(splash).toMatch(/const appearedAt = performance\.now\(\)/)
@@ -56,7 +54,6 @@ describe("the startup screen's timing", () => {
     expect(workbench).not.toMatch(/const SPLASH_FLOOR_MS\s*=/)
     const splash = source("splash/splash.tsx")
     expect(splash).toContain("SPLASH_SCENE_DELAY_MS")
-    // Nothing loads three before the delay: the import lives in `startScene`, which only the timer calls.
-    expect(splash).toMatch(/setTimeout\([\s\S]*startScene/)
+    expect(splash).toMatch(/setTimeout\([\s\S]*startPixelScene/)
   })
 })

@@ -1,9 +1,8 @@
 /*
- * Concept 04: Fullscreen 3D ASCII Synaptic Swarm (RAGÙ).
+ * ADE Splash Screen: Pixel-Art Cooking Scene ("Ragù Code").
  *
- * Fullscreen real-time 3D neural swarm with pure ASCII post-processing
- * typography, organic breathing physics, and CRT terminal scanlines.
- * Continuous rotation is disabled: typography faces forward crisply.
+ * Fullscreen ink backdrop with crisp pixel-art canvas centered,
+ * integer scaling, status text, and subtle scanlines vignette.
  */
 
 [data-component="ade-splash"] {
@@ -13,11 +12,12 @@
   height: 100vh;
   z-index: 9999;
   overflow: hidden;
-  background: #07090e;
-  transition: opacity var(--splash-fade, var(--ade-dur-slow)) var(--ade-ease-in-out);
+  background: var(--ade-bg, #120d0b);
+  transition: opacity var(--splash-fade, var(--ade-dur-slow, 280ms)) var(--ade-ease, ease);
   opacity: 1;
   cursor: default;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
 }
@@ -27,49 +27,36 @@
   pointer-events: none;
 }
 
-/* Three.js WebGL canvas: hidden offscreen/zero opacity, purely used as render source for ASCII sampling */
-[data-slot="splash-canvas-container"] {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
+/* Canvas container: perfectly centered in viewport */
+[data-slot="splash-scene-container"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
   z-index: 1;
-  display: block;
-  opacity: 0;
-  pointer-events: none;
 }
 
-[data-slot="splash-canvas-container"] canvas {
-  width: 100% !important;
-  height: 100% !important;
+/* Pixel-art canvas: strict nearest-neighbor integer scaling */
+[data-slot="splash-canvas"] {
   display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
-/* Real-time 3D ASCII Post-Processing Typography Layer (Perfect Centering) */
-[data-slot="ascii-layer"] {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  margin: 0;
-  padding: 0;
-  z-index: 2;
-  pointer-events: none;
-  font-family: var(--ade-mono, "Fira Code", "JetBrains Mono", Consolas, monospace);
-  font-size: var(--ade-font-xs);
-  line-height: 10px;
-  letter-spacing: 1px;
-  white-space: pre;
-  overflow: hidden;
-  background: #07090e;
-  color: #58a6ff;
-  text-shadow: 0 0 5px rgba(88, 166, 255, 0.9);
-  display: block;
-  user-select: none;
+/* Status message under the cooking scene */
+[data-slot="splash-status"] {
+  margin-top: var(--ade-space-6, 16px);
+  font-family: var(--ade-mono, monospace);
+  font-size: var(--ade-font-xs, 10px);
+  color: var(--ade-text-weak, #9a907f);
+  letter-spacing: 0.5px;
   text-align: center;
+  user-select: none;
+  z-index: 2;
+  min-height: 16px;
 }
 
-/* CRT scanlines & vignette for terminal authenticity */
+/* Subtle CRT scanlines & vignette for terminal atmosphere */
 [data-slot="splash-crt"] {
   position: absolute;
   inset: 0;
@@ -83,7 +70,7 @@
   background-size:
     100% 4px,
     100% 100%;
-  opacity: 0.5;
+  opacity: 0.35;
 }
 
 @media (prefers-reduced-motion: reduce) {
