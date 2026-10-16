@@ -20,6 +20,7 @@
  */
 
 import { t } from "../i18n"
+import { formatUsd } from "./format"
 import { stripAnsi } from "../session/stream"
 import type { BotAccount } from "./account"
 import type { AgentFile } from "./ragu"
@@ -134,10 +135,7 @@ export interface SpendLine {
   readonly unreported?: true
 }
 
-/** Dollars of a real charge: three places under a cent, two otherwise. */
-export function formatUsd(usd: number): string {
-  return `$${usd < 0.01 ? usd.toFixed(3) : usd.toFixed(2)}`
-}
+export { formatUsd }
 
 /** What a turn shows for its model and its cost. The dollar amount is omitted when it is not money spent. */
 export function spendLine(input: {
@@ -358,6 +356,49 @@ export function codexOptionsRefused(said: string | undefined): boolean {
   )
 }
 
+/*
+ * From a chat and in a routine Codex reads the project only (bot-lettura-2, the Master's choice): its `read-only`
+ * sandbox reads the whole disk, ~/.ssh included. A permissions profile of ADE's own reads the project and the paths
+ * common tools need (`:minimal`), and `prefer_mxc` runs it in Windows' MXC isolation where the device has it, with no
+ * administrator setup. `sandbox_mode` stays beside it, for a Codex that does not know profiles. No spaces: these go
+ * through npm's `.cmd` shim. Checked on codex-cli 0.162.1 with a fake provider: inside read, outside «not found».
+ */
+const CODEX_PROJECT_ONLY = [
+  "-c",
+  'permissions.ade_project.filesystem={":minimal"="read",":workspace_roots"={"."="read"}}',
+  "-c",
+  'default_permissions="ade_project"',
+  "-c",
+  "features.prefer_mxc=true",
+]
+
+/*
+ * The first Codex that reads that profile (bot-lettura-3). `:workspace_roots` is a special path from codex-cli 0.131.0
+ * (`codex-rs/core/src/config/permissions.rs` at the tag rust-v0.131.0; at rust-v0.130.0 only `:project_roots`);
+ * `default_permissions` and `:minimal` from 0.113.0, and the refusal on Windows' `unelevated` sandbox from 0.117.0.
+ * An older Codex ignores or refuses the profile, and its read-only sandbox reads the whole disk.
+ */
+export const CODEX_PROFILES_SINCE = [0, 131, 0] as const
+
+/** Whether `codex --version` printed a version that reads the project-only profile. Unreadable is no. */
+export function codexKnowsProfiles(versionText: string | null | undefined): boolean {
+  const found = /(\d+)\.(\d+)\.(\d+)/.exec(versionText ?? "")
+  if (!found) return false
+  const version = [Number(found[1]), Number(found[2]), Number(found[3])]
+  for (let i = 0; i < 3; i++) if (version[i] !== CODEX_PROFILES_SINCE[i]) return version[i]! > CODEX_PROFILES_SINCE[i]!
+  return true
+}
+
+/**
+ * Whether Codex would not start with that profile: Windows' `unelevated` sandbox cannot keep reads in the project, and
+ * Codex says so before any model call. The turn fails closed, never tried again with a wider sandbox.
+ */
+export function codexSandboxCannotRead(said: string | undefined): boolean {
+  return /cannot enforce split filesystem read restrictions|requires the elevated Windows sandbox backend/i.test(
+    said ?? "",
+  )
+}
+
 /**
  * What a turn from a chat may run (G5, D93). With `commands` off, the
  * default, no shell at all. With it on (the bot's «Comandi da remoto», the
@@ -386,6 +427,10 @@ export function enforcesDisabledTools(id: RunnerId): boolean {
 /**
  * ragu's tool names, as Claude Code spells them. A bot with a tool turned
  * off in ragu has it refused in Claude Code too.
+ *
+ * In Claude Code 2.1.301 the subagent is `Agent`, and `Task` still its alias, kept for an older version. The todo list
+ * is `TaskCreate`, `TaskGet`, `TaskList` and `TaskUpdate`; `TodoWrite` comes back only with CLAUDE_CODE_ENABLE_TASKS=0
+ * (bot-lettura-2, checked with a fake provider). An unknown name is ignored.
  */
 const CLAUDE_TOOLS: Record<string, readonly string[]> = {
   bash: ["Bash", "PowerShell"],
@@ -396,8 +441,8 @@ const CLAUDE_TOOLS: Record<string, readonly string[]> = {
   glob: ["Glob"],
   webfetch: ["WebFetch"],
   websearch: ["WebSearch"],
-  task: ["Task"],
-  todowrite: ["TodoWrite"],
+  task: ["Agent", "Task"],
+  todowrite: ["TodoWrite", "TaskCreate", "TaskGet", "TaskList", "TaskUpdate"],
 }
 
 /** What a routine's Claude Code turn is refused besides the shell: it reads, it does not write. */
@@ -408,6 +453,49 @@ const READ_ONLY_REFUSED: readonly string[] = ["edit", "write"]
  * (`READ_TOOLS` in `serve-rules.ts`, the user's choice 7). MCP servers are left out by `lean`, which both are.
  */
 const UNWATCHED_REFUSED: readonly string[] = ["webfetch", "websearch"]
+
+/*
+ * What a turn is pre-approved in place of a tool's bare name (review-anteprima-pagina §3). A rule with no path matches
+ * every file on the disk: `Edit` and `Write` with `acceptEdits` wrote anywhere, ~/.claude/settings.json's hooks
+ * included. `acceptEdits` alone writes in the working folder and asks outside it, which `-p` refuses: so on every
+ * turn, the panel's too (bot-lettura-2, the Master's choice), writing is pre-approved by the mode only.
+ */
+const WATCHED_ALLOWED: Readonly<Record<string, readonly string[]>> = {
+  edit: [],
+  write: [],
+}
+
+/*
+ * From a chat and in a routine reading too: `Read`, `Grep` and `Glob` read ~/.ssh or another project's .env with no
+ * question. `Read(./**)` is the project, and Read rules cover Grep and Glob; inside the working folder they need no
+ * approval anyway. The setting below refuses all three outside it in every mode, Claude Code 2.1.257 and later. In the
+ * panel reading stays free: the user is watching.
+ * Checked on 2.1.301 with a fake provider: an absolute path, `..` and a junction out of the project refused.
+ */
+const UNWATCHED_ALLOWED: Readonly<Record<string, readonly string[]>> = {
+  ...WATCHED_ALLOWED,
+  read: ["Read(./**)"],
+  grep: [],
+  glob: [],
+}
+const UNWATCHED_SETTINGS = '{"autoMemoryEnabled":false,"permissions":{"blockReadsOutsideWorkingDirectories":true}}'
+
+/*
+ * From a chat and in a routine Claude Code is offered these tools and no other (`--tools`), so one a new Claude Code
+ * adds does not come in by itself: `Agent`, `CronCreate`, `ScheduleWakeup`, `EnterWorktree`, `Skill` were offered
+ * there (bot-lettura-2). Writing only when the turn writes. Checked on 2.1.301 with a fake provider: only the named
+ * ones are offered, and an unknown name is ignored.
+ */
+const UNWATCHED_TOOLS: readonly string[] = ["read", "grep", "glob", "todowrite"]
+const UNWATCHED_WRITE_TOOLS: readonly string[] = ["edit", "write"]
+
+/*
+ * Claude Code's messages to the other Claude sessions on the machine: `ListAgents` and `SendMessage` run in `-p` with
+ * no question (2.1.301, the same fake provider), so a turn could ask another session, one in `bypassPermissions` say,
+ * to do what it may not. Refused on every turn: a bot talks to the sessions with `ade-msg`, through ADE. They have no
+ * ragu name.
+ */
+const SESSION_MESSAGES: readonly string[] = ["ListAgents", "SendMessage"]
 
 /*
  * A bot from the open project's `.nikcli/agent/` (B3, audit A4): its persona
@@ -527,7 +615,7 @@ export function turnCommand(
          * bot may do is said below, tool by tool.
          */
         args.push("--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--setting-sources", "")
-        args.push("--settings", '{"autoMemoryEnabled":false}')
+        args.push("--settings", unwatched ? UNWATCHED_SETTINGS : '{"autoMemoryEnabled":false}')
       }
       args.push("--permission-mode", canWrite(bot) && !unattended ? "acceptEdits" : "default")
       const allowed = Object.entries(CLAUDE_TOOLS)
@@ -536,7 +624,7 @@ export function turnCommand(
         )
         .filter(([tool]) => !(unattended && READ_ONLY_REFUSED.includes(tool)))
         .filter(([tool]) => !(unwatched && UNWATCHED_REFUSED.includes(tool)))
-        .flatMap(([, names]) => names)
+        .flatMap(([tool, names]) => (unwatched ? UNWATCHED_ALLOWED : WATCHED_ALLOWED)[tool] ?? names)
       if (lean && !repository && !remote && !unattended) allowed.push("Bash(ade-msg *)", "PowerShell(ade-msg *)")
       const disallowed = bot.disabledTools
         .filter((tool) => !(adeMsgOnly && tool === "bash"))
@@ -549,6 +637,7 @@ export function turnCommand(
       if (unwatched)
         for (const name of UNWATCHED_REFUSED.flatMap((tool) => CLAUDE_TOOLS[tool] ?? []))
           if (!disallowed.includes(name)) disallowed.push(name)
+      for (const name of SESSION_MESSAGES) if (!disallowed.includes(name)) disallowed.push(name)
       // A refusal beats an allow, `acceptEdits` included.
       if ((repository || remote) && canWrite(bot)) disallowed.push(...EXECUTES_LATER_RULES)
       /*
@@ -561,6 +650,12 @@ export function turnCommand(
         // Nothing to allow and nothing to refuse: with no tool there is no `ade-msg` to run either.
         args.push("--tools", "")
       } else {
+        if (unwatched) {
+          const offered = [...UNWATCHED_TOOLS, ...(canWrite(bot) && !unattended ? UNWATCHED_WRITE_TOOLS : [])]
+            .filter((tool) => !bot.disabledTools.includes(tool))
+            .flatMap((tool) => CLAUDE_TOOLS[tool] ?? [])
+          args.push("--tools", offered.join(","))
+        }
         if (allowed.length > 0) args.push("--allowedTools", allowed.join(","))
         if (disallowed.length > 0) args.push("--disallowedTools", disallowed.join(","))
       }
@@ -609,6 +704,7 @@ export function turnCommand(
               "features.apps=false",
               "-c",
               "features.plugins=false",
+              ...CODEX_PROJECT_ONLY,
             ]
           : []
       if (sessionId) {
@@ -990,7 +1086,8 @@ export function readLoginStatus(runner: Runner, output: string, code: number | n
     case "codex": {
       const line = text.split("\n").find((l) => /logged in/i.test(l))
       if (line && !/not logged in/i.test(line)) {
-        return { state: "in", detail: line.trim().replace(/^Logged in using /i, t("bots.login.using")) }
+        const using = /^Logged in using (.*)$/i.exec(line.trim())
+        return { state: "in", detail: using ? t("bots.login.usingMethod", using[1] ?? "") : line.trim() }
       }
       return { state: line ? "out" : code === 0 ? "unknown" : "out", detail: first || t("bots.login.out") }
     }

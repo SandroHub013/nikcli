@@ -375,9 +375,9 @@ describe("S1: a turn nobody watches starts from a list, not from everything", ()
 
   test("the gateway panel no longer says a chat uses the user's MCP servers and plugins", () => {
     expect(itDict["gateway.panel.mcp"]).not.toContain("usa anche")
-    expect(itDict["gateway.panel.mcp"]).toContain("niente server MCP")
+    expect(itDict["gateway.panel.mcp"]).toContain("non usa i server MCP")
     expect(enDict["gateway.panel.mcp"]).not.toContain("also uses")
-    expect(enDict["gateway.panel.mcp"]).toContain("no MCP servers")
+    expect(enDict["gateway.panel.mcp"]).toContain("uses no MCP servers")
   })
 
   test("what a read-only turn does with the project still works: read, glob, grep, list, tree, todos, lsp, skills", () => {

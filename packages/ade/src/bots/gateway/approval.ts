@@ -26,15 +26,28 @@
 
 import { t } from "../../i18n"
 import { decide } from "../approval"
+import { visibleText } from "../visible-text"
 import type { PendingPermission } from "../talk"
 import type { Choice } from "./controller"
 
 /** Puts a question with buttons in the chat; `undefined` when nothing valid was pressed in time. */
-export type Ask = (question: string, choices: readonly Choice[], signal: AbortSignal) => Promise<string | undefined>
+export type Ask = (
+  question: string,
+  choices: readonly Choice[],
+  signal: AbortSignal,
+  /** What the question is about, for the list of what waits for the user in ADE (`approvals.ts`). */
+  detail?: AskDetail,
+) => Promise<string | undefined>
+
+export interface AskDetail {
+  readonly permission: string
+  readonly patterns: string
+  readonly reason?: string
+}
 
 /** The command as the phone shows it: whole, as ragu asked about it. */
 function shown(patterns: string): string {
-  return patterns.trim() || "?"
+  return visibleText(patterns.trim()) || "?"
 }
 
 /** The phone's answer to one question. */
@@ -52,6 +65,11 @@ export async function approveOnPhone(
       { label: t("gateway.approve.no"), value: "reject" },
     ],
     signal,
+    {
+      permission: permission.permission,
+      patterns: permission.patterns,
+      ...(danger ? { reason: danger } : {}),
+    },
   )
   return { answer: value === "once" ? "once" : "reject", expired: value === undefined && !signal.aborted }
 }

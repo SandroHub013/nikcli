@@ -28,6 +28,7 @@ mod gateway;
 mod learn;
 mod legacy_cli;
 mod media;
+mod notify;
 mod raguverse;
 mod raguverse_assets;
 mod project_bytes;
@@ -2586,6 +2587,7 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(pty::Registry::default())
         .manage(raguverse_assets::Assets::default())
@@ -2772,6 +2774,7 @@ pub fn run() {
             append::append_text_file,
             ask::ade_ask,
             ask::ade_ask_front,
+            notify::system_notify,
             ade_window_minimize,
             ade_window_toggle_maximize,
             ade_window_close,

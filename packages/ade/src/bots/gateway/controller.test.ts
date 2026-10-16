@@ -4,8 +4,9 @@ import type { AgentFile } from "../ragu"
 import { emptyTalk, type PendingPermission } from "../talk"
 import { turnsRunning } from "../terms"
 import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } from "../turn"
-import { startGatewayController, safePreviewText, RECOVERED_NOTICE, recoveredNotice, type GatewayBridge, type GatewayMessage } from "./controller"
-import { forgetTurnFailures, turnFailureOf } from "./failures"
+import { createApprovalRegistry, decideApproval, mergeApprovals } from "../approvals"
+import { ASK_TIMEOUT_MS, startGatewayController, safePreviewText, RECOVERED_NOTICE, recoveredNotice, type GatewayBridge, type GatewayMessage } from "./controller"
+import { forgetTurnFailures, noteTurnFailure, turnFailureOf } from "./failures"
 import { chatHeader } from "./policy"
 import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteKey, remoteTools } from "./remote"
 import { localSessionStore, memorySessionStore, sessionKey } from "./session"
@@ -1376,6 +1377,94 @@ describe("the tools of a turn from a chat", () => {
     expect(turn.keys[1]).toBe("reject")
   })
 
+  /* The user's choice 4: a question waiting on a phone is in the list of what waits, and ADE can decide it. */
+  test("a question on the phone is listed for ADE, decided from there, and the phone is told and its buttons stop counting", async () => {
+    const registry = createApprovalRegistry()
+    const b = bridge()
+    const turns = typedTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: ragu,
+      sessions: memorySessionStore(),
+      remote: () => on,
+      approvals: registry,
+      now: () => 1_000,
+    })
+    b.emit("pulisci la build")
+    await until("il turno", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+    turn.request.onPermission!(asking("bash", "rm -rf build"))
+    await until("la domanda", () => b.questions.length === 1)
+
+    const [listed] = mergeApprovals(registry.list())
+    expect(listed).toMatchObject({
+      bot: BOT.path,
+      botName: "aiuto",
+      permission: "bash",
+      patterns: "rm -rf build",
+      // The project the gateway runs in: the same command from the panel in another project is another request (P2-1).
+      cwd: PROJECT,
+      sources: ["telegram"],
+      // A standing «Sempre» is not the phone's to give, nor ADE's for the phone.
+      choices: ["once", "reject"],
+      askedAt: 1_000,
+      expiresAt: 1_000 + ASK_TIMEOUT_MS,
+    })
+    expect(listed!.reason).toBe(t("bots.approval.reason.recursiveDelete"))
+
+    expect(decideApproval(listed!, "once")).toBe(true)
+    await until("il sì", () => turn.keys.length === 1)
+    expect(turn.keys).toEqual(["once"])
+    expect(turn.ids).toEqual(["per_rm -rf build"])
+    expect(registry.list()).toEqual([])
+    // The phone is told who answered.
+    await until("l'esito", () => b.sent.some((line) => line.text === t("gateway.approve.byAdeOnce", "rm -rf build")))
+
+    // The button still on the phone no longer counts, and a second answer from ADE does nothing.
+    b.emit(b.questions[0]!.buttons[1]!.data, { button: true })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(turn.keys).toEqual(["once"])
+    expect(decideApproval(listed!, "reject")).toBe(true)
+    expect(turn.keys).toEqual(["once"])
+    expect(b.sent.filter((line) => line.text === t("gateway.approve.byAdeNo", "rm -rf build"))).toEqual([])
+    // P2-4: the press that came too late is told so, once; the phone still has the buttons, and a second press says nothing more.
+    await until("il già deciso", () => b.sent.some((line) => line.text === t("gateway.approve.alreadyAde")))
+    b.emit(b.questions[0]!.buttons[0]!.data, { button: true })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(b.sent.filter((line) => line.text === t("gateway.approve.alreadyAde"))).toHaveLength(1)
+  })
+
+  test("a no from ADE reaches the phone as a no; a press on the phone closes the entry too", async () => {
+    const registry = createApprovalRegistry()
+    const b = bridge()
+    const turns = typedTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: ragu,
+      sessions: memorySessionStore(),
+      remote: () => on,
+      approvals: registry,
+    })
+    b.emit("pulisci la build")
+    await until("il turno", () => turns.started.length === 1)
+    const turn = turns.started[0]!
+    turn.request.onPermission!(asking("bash", "rm -rf build"))
+    await until("la domanda", () => b.questions.length === 1)
+    decideApproval(mergeApprovals(registry.list())[0]!, "reject")
+    await until("il no", () => turn.keys.length === 1)
+    expect(turn.keys).toEqual(["reject"])
+    await until("l'esito", () => b.sent.some((line) => line.text === t("gateway.approve.byAdeNo", "rm -rf build")))
+
+    turn.request.onPermission!(asking("bash", "npm publish"))
+    await until("la seconda domanda", () => b.questions.length === 2)
+    expect(registry.list()).toHaveLength(1)
+    b.emit(b.questions[1]!.buttons[0]!.data, { button: true })
+    await until("il sì dal telefono", () => turn.keys.length === 2)
+    expect(registry.list()).toEqual([])
+  })
+
   test("a press from another person of the chat does not answer the question of the one who asked (S13)", async () => {
     const b = bridge()
     const turns = typedTurns()
@@ -1759,12 +1848,81 @@ describe("the detail of a failed turn stays in ADE, where the panel shows it (S1
     const kept = turnFailureOf(BOT.path, "telegram")!
     expect(kept.detail).not.toContain("a1B2c3D4")
     expect(kept.detail.length).toBeLessThanOrEqual(600)
-    // A turn that goes well leaves what was there: the last failure, not the last turn.
+    // A turn that goes well takes it away (N7).
     b.emit("tre")
     await until("il terzo turno", () => turns.started.length === 3)
     turns.started[2]!.finish({ text: "ok" })
     await until("la terza risposta", () => b.sent.length === 3)
-    expect(turnFailureOf(BOT.path, "telegram")).toEqual(kept)
+    expect(turnFailureOf(BOT.path, "telegram")).toBeUndefined()
+  })
+})
+
+describe("a refusal of the policy tells the chat no local path (S10)", () => {
+  test("the chat reads the text without it; the panel keeps the detail", async () => {
+    forgetTurnFailures()
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: async () => ({
+        ok: false as const,
+        problem: "Il progetto non e' ancora ammesso.",
+        detail: "Il progetto C:/Users/mario/progetto non e' ancora ammesso.",
+      }),
+      sessions: memorySessionStore(),
+      warn: () => {},
+      now: () => 42,
+    })
+    b.emit("ciao")
+    await until("la risposta", () => b.sent.length === 1)
+    expect(b.sent[0]!.text).toBe("Il progetto non e' ancora ammesso.")
+    expect(turnFailureOf(BOT.path, "telegram")).toEqual({
+      at: 42,
+      detail: "Il progetto C:/Users/mario/progetto non e' ancora ammesso.",
+    })
+    // A refusal with nothing more to say leaves the panel as it was.
+    forgetTurnFailures()
+    b.emit("ancora")
+    await until("la seconda risposta", () => b.sent.length === 2)
+    expect(turnFailureOf(BOT.path, "telegram")).toBeDefined()
+  })
+})
+
+describe("the failure shown in the panel goes away when the bot works again (N7)", () => {
+  test("the first turn that goes well clears the bot's failure, whatever the platform, and no other bot's", async () => {
+    forgetTurnFailures()
+    noteTurnFailure("C:/altro.md", "telegram", "di un altro bot", 1)
+    noteTurnFailure(BOT.path, "discord", "su un'altra piattaforma", 2)
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      warn: () => {},
+      now: () => 3,
+    })
+    b.emit("uno")
+    await until("il primo turno", () => turns.started.length === 1)
+    turns.started[0]!.finish({ status: "error", problem: "rete giù" })
+    await until("la risposta", () => b.sent.length === 1)
+    expect(turnFailureOf(BOT.path, "telegram")?.detail).toBe("rete giù")
+    // A turn that was stopped is not a turn that went well.
+    b.emit("due")
+    await until("il secondo turno", () => turns.started.length === 2)
+    turns.started[1]!.finish({ status: "stopped" })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(turnFailureOf(BOT.path, "telegram")).toBeDefined()
+    b.emit("tre")
+    await until("il terzo turno", () => turns.started.length === 3)
+    turns.started[2]!.finish({ text: "ok" })
+    await until("la risposta riuscita", () => b.sent.length === 2)
+    expect(turnFailureOf(BOT.path, "telegram")).toBeUndefined()
+    expect(turnFailureOf(BOT.path, "discord")).toBeUndefined()
+    expect(turnFailureOf("C:/altro.md", "telegram")?.detail).toBe("di un altro bot")
+    forgetTurnFailures()
   })
 
   test("repeats active telegram draft every 20s during tool execution and approval question", async () => {

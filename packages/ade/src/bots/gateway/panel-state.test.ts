@@ -12,7 +12,7 @@ import {
   type PairingInfo,
   type PairingRequest,
 } from "./panel-state"
-import { forgetTurnFailures, noteTurnFailure } from "./failures"
+import { forgetTurnFailures, forgetTurnFailuresOf, noteTurnFailure } from "./failures"
 import { memoryRemoteStore, REMOTE_OFF, remoteKey } from "./remote"
 
 /*
@@ -209,6 +209,9 @@ describe("the Gateway section of a bot's card", () => {
     expect(panel.turnFailure()).toEqual({ at: 4, detail: "dopo" })
     panel.choose("discord")
     expect(panel.turnFailure()).toEqual({ at: 3, detail: "di un'altra piattaforma" })
+    // It goes away when the bot works again (N7).
+    forgetTurnFailuresOf(BOT.path)
+    expect(panel.turnFailure()).toBeUndefined()
     panel.dispose()
     noteTurnFailure(BOT.path, "discord", "a pannello chiuso", 5)
     forgetTurnFailures()
@@ -599,6 +602,7 @@ describe("the Gateway section of a bot's card", () => {
   test("the authorised list is the one of the platform on show", async () => {
     await createRoot(async () => {
       const asked: string[] = []
+      const revoked: string[] = []
       const api: GatewayPanelApi = {
         status: async () => [
           {
@@ -633,7 +637,7 @@ describe("the Gateway section of a bot's card", () => {
         },
         pairingApprove: async () => ({ id: "u1", name: "qualcuno" }),
         pairingReject: async () => {},
-        pairingRevoke: async () => {},
+        pairingRevoke: async (_bot, platform) => void revoked.push(platform),
         pairingOpen: async () => 0,
         listen: async () => () => {},
       }
@@ -647,7 +651,9 @@ describe("the Gateway section of a bot's card", () => {
       })
       try {
         await panel.refresh()
-        expect(asked).toEqual(["telegram"])
+        // The list shown is the first asked; the other platforms are asked after it, for the badges of their tiles.
+        expect(asked[0]).toBe("telegram")
+        expect(asked.slice().sort()).toEqual(["discord", "slack", "telegram"])
         expect(panel.pairing().authorized.map((who) => who.id)).toEqual(["tg1"])
         expect(panel.pairing().open).toBe(true)
 
@@ -660,7 +666,7 @@ describe("the Gateway section of a bot's card", () => {
 
         // A revoking act goes to the platform it is looking at.
         await panel.revoke("dc1")
-        expect(asked[asked.length - 1]).toBe("discord")
+        expect(revoked).toEqual(["discord"])
       } finally {
         panel.dispose()
       }

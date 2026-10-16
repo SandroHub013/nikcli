@@ -56,6 +56,7 @@ import {
   type PendingPermission,
   type Talk,
 } from "./talk"
+import { formatCap, formatUsd } from "./format"
 import { acquireTurn } from "./terms"
 import { effortToSend, modelVariants } from "./effort"
 import {
@@ -664,8 +665,9 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
         case "timeout":
           return finish("error", timeoutProblem("ragu", timeoutMs))
         case "budget": {
-          const usd = (value: number) => `${value.toFixed(2)} $`
-          return finish("error", t("bots.turn.overBudget", "ragu", usd(talk.costUsd), usd(request.maxCostUsd ?? 0)))
+          // In the language of ADE (D32): what it spent, then the cap.
+          const problem = t("bots.turn.overBudget", "ragu", formatUsd(talk.costUsd), formatCap(request.maxCostUsd ?? 0))
+          return finish("error", problem)
         }
         case "lost":
           return finish("error", how.why)

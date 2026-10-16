@@ -225,7 +225,7 @@ describe("B8b: what a room may spend, with fake bots", () => {
   test("lint: the room form says the cap is three rounds' worth, from the same function", () => {
     const panel = readFileSync(new URL("./room-panel.tsx", import.meta.url), "utf8")
     expect(panel).toContain(
-      't("bots.room.form.capPerMessage", usd().toFixed(2), MAX_ROUNDS, messageSpendMax(usd()).toFixed(2))',
+      't("bots.room.form.capPerMessage", formatCap(usd()), MAX_ROUNDS, formatCap(messageSpendMax(usd())))',
     )
   })
 

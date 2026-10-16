@@ -3,12 +3,13 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { memoryAccountStore, ACCOUNT_PLAN } from "./account"
 import { localAlwaysStore } from "./approval"
+import { noteTurnFailure, turnFailureOf } from "./gateway/failures"
 import { forgetBotTraces, forgetStoredKeys, type KeyedStorage } from "./forget"
 import { sessionKey } from "./gateway/session"
 import { gatewayThreadKey } from "./gateway/threads"
 import { talkKey } from "./talk"
 import { memoryRemoteStore, remoteKey } from "./gateway/remote"
-import { EMPTY_MEMORY, type BotMemory, type MemoryStore } from "./memory"
+import { EMPTY_MEMORY, volatileMemoryStore, type BotMemory, type MemoryStore } from "./memory"
 import { memoryRoutineStore, removeRoutinesOf, type Routine, type RoutineBook } from "./routine"
 
 const routine = (id: string, bot: string): Routine =>
@@ -148,5 +149,22 @@ describe("a deleted bot's traces (full review 2026-10-06, bots 17)", () => {
     const at = source.indexOf("<RoutineSection bot={props.bot}")
     const before = source.slice(Math.max(0, at - 400), at)
     expect(before).toContain("<Show when={props.bot.path} keyed>")
+  })
+})
+
+describe("the failure kept for the panel goes with the bot (N7)", () => {
+  test("forgetBotTraces drops the last failed chat turn of the bot, on every platform", () => {
+    noteTurnFailure("C:/a/news.md", "telegram", "x", 1)
+    noteTurnFailure("C:/a/news.md", "slack", "y", 2)
+    noteTurnFailure("C:/a/altro.md", "telegram", "z", 3)
+    forgetBotTraces("C:/a/news.md", {
+      memory: volatileMemoryStore(),
+      account: memoryAccountStore(),
+      remote: memoryRemoteStore(),
+      routines: () => {},
+    })
+    expect(turnFailureOf("C:/a/news.md", "telegram")).toBeUndefined()
+    expect(turnFailureOf("C:/a/news.md", "slack")).toBeUndefined()
+    expect(turnFailureOf("C:/a/altro.md", "telegram")?.detail).toBe("z")
   })
 })

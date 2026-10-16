@@ -7,10 +7,14 @@
 import { createSignal, Show } from "solid-js"
 import { t } from "../i18n"
 import type { BotAccount } from "./account"
+import { ACCOUNT_PLAN } from "./account"
 import type { AgentFile } from "./ragu"
 import { runnerById } from "./runners"
 import { capText, parseCap, spendTerms, spendTodayLine, withCap, type SpendStore } from "./spend"
 import { appSpendStore } from "./spend-app"
+
+/** The cap a new bot that spends money is offered, in dollars: the user can change it or empty it. */
+export const SPEND_CAP_PROPOSED_USD = 1
 
 export interface SpendPieceProps {
   readonly bot: AgentFile
@@ -78,6 +82,12 @@ export function SpendCapField(props: SpendPieceProps) {
               {t("bots.daily.capSave")}
             </button>
           </form>
+          {/* A paid bot with no cap spends without a limit: said here, beside the field that fixes it. */}
+          <Show when={store().get(props.bot.path).capUsd === undefined}>
+            <p data-slot="bots-problem" role="status">
+              {t("bots.daily.missing")}
+            </p>
+          </Show>
           <span data-slot="bots-hint">{t("bots.daily.capHint")}</span>
           <Show when={saved()}>
             <span data-slot="bots-hint">{t("bots.daily.capSaved")}</span>
@@ -85,6 +95,39 @@ export function SpendCapField(props: SpendPieceProps) {
           <Show when={problem()}>{(text) => <p data-slot="bots-problem">{text()}</p>}</Show>
         </Show>
       </section>
+    </Show>
+  )
+}
+
+/** The terms of a bot that is being made: a new bot has the subscription account, so only a paid ragu model is money. */
+export function newBotSpendTerms(runner: string | undefined, model: string | undefined, free?: boolean) {
+  return spendTerms(runner, ACCOUNT_PLAN, model, free)
+}
+
+/**
+ * The cap asked when a bot that spends money is made (the user's choice 5): the field starts with a proposed value,
+ * and empty is a decision too. The form keeps the text and reads it with `parseCap` when it creates the bot.
+ */
+export function NewBotCapField(props: {
+  readonly runner: string | undefined
+  readonly model: string | undefined
+  readonly free?: boolean | undefined
+  readonly value: string
+  readonly onInput: (text: string) => void
+}) {
+  return (
+    <Show when={newBotSpendTerms(props.runner, props.model, props.free) === "money"}>
+      <label data-slot="bots-field">
+        <span data-slot="bots-label">{t("bots.daily.capLabel")}</span>
+        <input
+          data-slot="bots-input"
+          type="text"
+          placeholder={t("bots.daily.capPlaceholder")}
+          value={props.value}
+          onInput={(event) => props.onInput(event.currentTarget.value)}
+        />
+        <span data-slot="bots-hint">{t("bots.daily.newHint")}</span>
+      </label>
     </Show>
   )
 }

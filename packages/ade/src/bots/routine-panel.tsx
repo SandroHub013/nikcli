@@ -8,6 +8,7 @@
 
 import { createMemo, createResource, createSignal, For, Show } from "solid-js"
 import { t } from "../i18n"
+import { ConfirmAction } from "./confirm"
 import type { BotAccount } from "./account"
 import type { AgentFile } from "./ragu"
 import {
@@ -132,7 +133,7 @@ export function RoutineSection(props: {
             {t("bots.routine.source")}
           </button>
           <Show when={offer().checked}>
-            {(date) => <span data-slot="gateway-meta">{t("bots.routine.checked", date())}</span>}
+            {(date) => <span data-slot="bots-hint">{t("bots.routine.checked", date())}</span>}
           </Show>
         </div>
       )}
@@ -140,8 +141,10 @@ export function RoutineSection(props: {
   )
 
   return (
-    <section data-slot="bots-card-section">
-      <span data-slot="bots-label">{t("bots.routine.label")}</span>
+    <section data-slot="bots-card-section" aria-labelledby="bots-routines-title">
+      <h3 data-slot="bots-section-title" id="bots-routines-title">
+        {t("bots.routine.label")}
+      </h3>
       <Show
         when={offer().allowed}
         fallback={
@@ -193,14 +196,12 @@ export function RoutineSection(props: {
                         {t("bots.routine.reconsent")}
                       </button>
                     </Show>
-                    <button
-                      type="button"
-                      data-slot="bots-link"
-                      data-tone="danger"
-                      onClick={() => props.deps.remove(routine.id)}
-                    >
-                      {t("bots.routine.remove")}
-                    </button>
+                    <ConfirmAction
+                      label={t("bots.routine.remove")}
+                      question={t("bots.routine.removeQuestion", Array.from(routine.prompt).slice(0, 60).join(""))}
+                      confirm={t("bots.routine.removeConfirm")}
+                      onConfirm={() => props.deps.remove(routine.id)}
+                    />
                   </span>
                   <Show when={reconsenting() === routine.id}>
                     <div data-slot="gateway-confirm">
@@ -249,14 +250,17 @@ export function RoutineSection(props: {
                 onInput={(event) => setPrompt(event.currentTarget.value)}
               />
             </label>
-            <select
-              data-slot="bots-input"
-              value={kind()}
-              onChange={(event) => setKind(event.currentTarget.value === "daily" ? "daily" : "hours")}
-            >
-              <option value="hours">{t("bots.routine.kind.hours")}</option>
-              <option value="daily">{t("bots.routine.kind.daily")}</option>
-            </select>
+            <label data-slot="bots-field">
+              <span data-slot="bots-label">{t("bots.routine.kind.label")}</span>
+              <select
+                data-slot="bots-input"
+                value={kind()}
+                onChange={(event) => setKind(event.currentTarget.value === "daily" ? "daily" : "hours")}
+              >
+                <option value="hours">{t("bots.routine.kind.hours")}</option>
+                <option value="daily">{t("bots.routine.kind.daily")}</option>
+              </select>
+            </label>
             <Show
               when={kind() === "hours"}
               fallback={

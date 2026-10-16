@@ -6,6 +6,7 @@
 
 import { t } from "../../i18n"
 import { askDialog } from "../../host/ask"
+import { openExternally } from "../../browser/host-bridge"
 import { readAgentFile, type AgentFile } from "../ragu"
 import { admitProject, projectSurface, PROJECT_TRUST_KEY } from "../project-trust"
 import { runnerById } from "../runners"
@@ -21,6 +22,7 @@ import { appMemoryStore } from "../memory-app"
 import { localSessionStore } from "./session"
 import { spendStatus, spendTerms, withDailyCap } from "../spend"
 import { appSpendStore } from "../spend-app"
+import { appApprovals } from "../approvals-app"
 
 interface LinkStatus {
   readonly bot: string
@@ -125,7 +127,7 @@ export async function approveForChat(
     surface: () => projectSurface(project, projectFs),
     globalRoot,
   })
-  return checked.ok ? { ok: true, fingerprint: checked.fingerprint } : { ok: false, problem: checked.problem }
+  return checked.ok ? { ok: true, fingerprint: checked.fingerprint } : { ok: false, problem: checked.detail ?? checked.problem }
 }
 
 /** What the panel needs in the app, but the bot. */
@@ -136,6 +138,7 @@ export function appGatewayPanelDeps(project: () => string | undefined): Omit<Gat
     remote: localRemoteStore(),
     approve: approveForChat,
     confirm: (question) => askDialog(question, { ok: t("bots.ask.yes"), cancel: t("bots.ask.no") }),
+    openLink: (url) => void openExternally(url),
   }
 }
 
@@ -158,6 +161,8 @@ export async function startAppGatewayController(): Promise<GatewayController> {
     remote: (bot, platform) => localRemoteStore().get(remoteKey(bot, platform)),
     account: (bot) => localAccountStore().get(bot),
     memory: appMemoryStore,
+    // A command waiting on a phone is listed in ADE too, and can be decided there.
+    approvals: appApprovals,
     spendToday: async (bot) => {
       try {
         const file = readAgentFile({ path: bot, scope: "global", text: await readBotText(bot) })

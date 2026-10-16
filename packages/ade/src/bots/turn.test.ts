@@ -49,6 +49,19 @@ const start = (m: ReturnType<typeof machine>, timeoutMs?: number) => {
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5))
 
 describe("runTurn", () => {
+  /* D32: the dollars of a turn stopped past its cap, as the language of ADE writes them (Italian in the tests). */
+  test("a turn past its cap says what it spent and the cap in the language of ADE", async () => {
+    const m = machine()
+    const turn = runTurn({ runner: "claude", message: "ciao", maxCostUsd: 0.01 }, m.deps)
+    open.push(turn)
+    await tick()
+    m.say(
+      '{"type":"result","subtype":"success","is_error":false,"result":"ok","session_id":"s","total_cost_usd":0.0234}',
+    )
+    const result = await turn.result
+    expect(result.problem).toBe(t("bots.turn.overBudget", "Claude Code", "0,02 $", "0,01 $"))
+  })
+
   test("a turn that runs past its time is stopped with its children and says so", async () => {
     const m = machine()
     const result = await start(m, 30).result
@@ -279,8 +292,12 @@ describe("le opzioni di avvio arrivano all'host", () => {
 describe("a Codex turn nobody watches reads the user's MCP servers", () => {
   const CONFIG = "C:/Users/u/.codex/config.toml"
 
-  function codexMachine(config: { text?: string; unreadable?: boolean } = {}, others: readonly string[] = []) {
+  function codexMachine(
+    config: { text?: string; unreadable?: boolean; version?: string | null } = {},
+    others: readonly string[] = [],
+  ) {
     const argv: (readonly string[])[] = []
+    let versionAsked = 0
     const exits: ((code: number | null) => void)[] = []
     const lines: ((line: string) => void)[] = []
     const reads: string[] = []
@@ -304,7 +321,13 @@ describe("a Codex turn nobody watches reads the user's MCP servers", () => {
         return { kill: () => {}, write: () => {}, resize: () => {} }
       },
     }
-    const deps: TurnDeps = { host: async () => host as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>> }
+    const deps: TurnDeps = {
+      host: async () => host as unknown as Awaited<ReturnType<NonNullable<TurnDeps["host"]>>>,
+      codexVersion: async () => {
+        versionAsked++
+        return config.version === undefined ? "codex-cli 0.162.1" : config.version
+      },
+    }
     return {
       deps,
       argv,
@@ -312,6 +335,7 @@ describe("a Codex turn nobody watches reads the user's MCP servers", () => {
       exit: (code: number | null) => exits.at(-1)?.(code),
       say: (line: string) => lines.at(-1)?.(line),
       spawned: () => argv.length,
+      versionAsked: () => versionAsked,
     }
   }
 
@@ -363,6 +387,61 @@ describe("a Codex turn nobody watches reads the user's MCP servers", () => {
     m.exit(1)
     const result = await turn.result
     expect(result.problem).toContain(t("bots.codex.optionsRefused"))
+  })
+
+  /*
+   * bot-lettura-3: a Codex older than 0.131.0 does not read the project-only profile, and would run with the read-only
+   * sandbox, which reads the whole disk. Such a turn, or one whose version could not be read, does not start.
+   */
+  test("a Codex too old for the project-only profile: the turn does not start, and says which version it needs", async () => {
+    const m = codexMachine({ text: '[mcp_servers.docs]\nurl = "x"\n', version: "codex-cli 0.130.0" })
+    const result = await runTurn({ runner: "codex", message: "ciao", remote: { commands: false } }, m.deps).result
+    expect(result.status).toBe("error")
+    expect(result.problem).toContain(t("bots.codex.tooOld", "0.131.0", "0.130.0"))
+    expect(m.spawned()).toBe(0)
+  })
+
+  test("a Codex whose version could not be read: the routine does not start either", async () => {
+    const m = codexMachine({ version: null })
+    const result = await runTurn({ runner: "codex", message: "ciao", unattended: true }, m.deps).result
+    expect(result.status).toBe("error")
+    expect(result.problem).toContain(t("bots.codex.versionUnknown"))
+    expect(m.spawned()).toBe(0)
+  })
+
+  test("in the panel the version is not asked, and a recent Codex from a chat starts", async () => {
+    const panel = codexMachine({ version: "codex-cli 0.100.0" })
+    const turn = runTurn({ runner: "codex", message: "ciao" }, panel.deps)
+    await until(() => panel.spawned() > 0)
+    expect(panel.versionAsked()).toBe(0)
+    panel.exit(0)
+    await turn.result
+    const chat = codexMachine()
+    const remote = runTurn({ runner: "codex", message: "ciao", remote: { commands: false } }, chat.deps)
+    await until(() => chat.spawned() > 0)
+    expect(chat.versionAsked()).toBe(1)
+    chat.exit(0)
+    await remote.result
+  })
+
+  /*
+   * bot-lettura-2: from a chat Codex starts only with a sandbox that reads the project alone. Windows' `unelevated`
+   * fallback cannot hold it, and Codex stops before any model call with this line (codex-cli 0.162.1, fake provider).
+   * The turn says it did not start and how to get a sandbox that can, and is not tried again with a wider one.
+   */
+  test("a sandbox that cannot keep reads in the project: the turn says why, and is not retried", async () => {
+    const m = codexMachine({ text: '[mcp_servers.docs]\nurl = "x"\n' })
+    const turn = runTurn({ runner: "codex", message: "ciao", remote: { commands: false } }, m.deps)
+    await until(() => m.spawned() > 0)
+    m.say(
+      "Error: thread/start: thread/start failed: error creating thread: failed to load AGENTS.md instructions for environment `local`: failed to prepare fs sandbox: failed to prepare windows sandbox wrapper: windows unelevated restricted-token sandbox cannot enforce split filesystem read restrictions directly; refusing to run unsandboxed (code -32603)",
+    )
+    m.exit(1)
+    const result = await turn.result
+    expect(result.status).toBe("error")
+    expect(result.problem).toContain(t("bots.codex.sandboxCannotRead"))
+    expect(result.problem).not.toContain(t("bots.codex.optionsRefused"))
+    expect(m.spawned()).toBe(1)
   })
 
   /*

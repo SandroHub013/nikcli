@@ -62,7 +62,7 @@ describe("the bot's composer", () => {
 describe("the Memory section's blocks", () => {
   test("lint: the Memory section's blocks stack, so the count and «Vuoto.» land on one line", () => {
     const memory = readFileSync(join(import.meta.dir, "memory-panel.tsx"), "utf8")
-    expect(memory).toContain('<section data-slot="bots-card-section">')
+    expect(memory).toContain('<section data-slot="bots-card-section"')
     expect(memory).toContain('<div data-slot="gateway-block">')
     const block = /([^{}]*\[data-slot="bots-card-section"\] > \[data-slot="gateway-block"\][^{}]*)\{([^}]*)\}/.exec(css)
     expect(block).not.toBeNull()

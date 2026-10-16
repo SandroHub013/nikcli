@@ -31,14 +31,16 @@
  */
 
 import { t } from "../../i18n"
+import { visibleText } from "../visible-text"
 import type { AgentFile } from "../ragu"
 import { answerSoFar, runnerById } from "../runners"
 import type { Turn, TurnRequest } from "../turn"
 import { BOT_TURN_TIMEOUT_MS } from "../controller"
 import { memorySnapshot, settleMemoryOps, takeMemoryOps, type MemoryOp, type MemoryStore } from "../memory"
 import type { Talk } from "../talk"
-import { permissionAnswerer } from "./approval"
-import { noteTurnFailure } from "./failures"
+import type { ApprovalRegistry } from "../approvals"
+import { permissionAnswerer, type AskDetail } from "./approval"
+import { forgetTurnFailuresOf, noteTurnFailure } from "./failures"
 import { chatCommand, countMessage, CHAT_MESSAGES_PER_HOUR, framedMessage, mayRun } from "./policy"
 import type { BotAccount } from "../account"
 import { offersRemoteCommands, REMOTE_OFF, remoteTools, type RemoteSetting } from "./remote"
@@ -110,7 +112,7 @@ export interface GatewayControllerDeps {
   readonly loadBot: (
     path: string,
     project: string,
-  ) => Promise<{ ok: true; bot: AgentFile; fingerprint?: string } | { ok: false; problem: string }>
+  ) => Promise<{ ok: true; bot: AgentFile; fingerprint?: string } | { ok: false; problem: string; detail?: string }>
   readonly sessions: SessionStore
   /** The chat's thread on disk, apart from the panel's. Absent in a test that does not keep one. */
   readonly threads?: GatewayThreads
@@ -129,6 +131,8 @@ export interface GatewayControllerDeps {
   readonly spendToday?: (bot: string) => Promise<string | undefined>
   /** How long a command waits for the phone before it is refused; `ASK_TIMEOUT_MS` when absent. */
   readonly approvalTimeoutMs?: number
+  /** Where a question waiting on a phone is listed, so ADE can decide it too (`approvals.ts`); absent, only the phone can. */
+  readonly approvals?: ApprovalRegistry
   readonly now?: () => number
   /** How often «sta scrivendo» is sent again: Telegram shows it for 5 s. */
   readonly typingEveryMs?: number
@@ -214,6 +218,13 @@ interface ChatState {
 
 const TYPING_EVERY_MS = 4_000
 
+/** What a question on the phone is about, and whose bot it is: the entry it has in the list of what waits. */
+interface ApprovalDetail extends AskDetail {
+  readonly botName: string
+  /** The project the turn runs in: the same command in another project is another request. */
+  readonly cwd: string
+}
+
 interface Question {
   readonly key: string
   readonly target: ChatTarget
@@ -232,12 +243,22 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
   const warn = deps.warn ?? ((line: string) => console.warn(line))
   const chats = new Map<string, ChatState>()
   const questions = new Map<string, Question>()
+  /**
+   * The questions ADE decided while their buttons were still on the phone, by id: a press on one of them is told it
+   * was decided in ADE, once (the phone cannot take the buttons away; it keeps them). A short list: the oldest go.
+   */
+  const decidedInAde = new Map<string, string>()
   let closed = false
 
   /** A press: the answer to a question still waiting in that chat, or nothing. */
   const press = (message: GatewayMessage) => {
     const [id, index] = message.text.split(":")
     const question = id ? questions.get(id) : undefined
+    if (!question && id && decidedInAde.get(id) === sessionKey(message.bot, message.platform, message.chat)) {
+      decidedInAde.delete(id)
+      deps.bridge.send(message.bot, message.platform, message.chat, t("gateway.approve.alreadyAde")).catch(() => {})
+      return
+    }
     if (!question || question.key !== sessionKey(message.bot, message.platform, message.chat)) return
     // A question made for a person is answered by that person (S13).
     if (question.target.asker !== undefined && question.target.asker !== message.sender.id) return
@@ -253,17 +274,47 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     choices: readonly Choice[],
     timeoutMs = ASK_TIMEOUT_MS,
     signal?: AbortSignal,
+    detail?: ApprovalDetail,
   ) =>
     new Promise<string | undefined>((resolve) => {
       if (closed || choices.length === 0 || signal?.aborted) return resolve(undefined)
       const id = nonce()
       const timer = setTimeout(() => answer(undefined), timeoutMs)
+      let unlist: (() => void) | undefined
       // Once: whichever comes first — a press, the timeout, the stop, the turn's end — ends it.
       const answer = (value: string | undefined) => {
         if (!questions.delete(id)) return
         clearTimeout(timer)
+        unlist?.()
         signal?.removeEventListener("abort", ended)
         resolve(value)
+      }
+      // ADE can answer it too, from the list of what waits: the phone is told, and its buttons stop counting.
+      if (detail && deps.approvals) {
+        const asked = now()
+        unlist = deps.approvals.open({
+          key: `${target.platform}:${target.bot}:${id}`,
+          bot: target.bot,
+          botName: detail.botName,
+          source: target.platform,
+          permission: detail.permission,
+          patterns: detail.patterns,
+          cwd: detail.cwd,
+          ...(detail.reason ? { reason: detail.reason } : {}),
+          askedAt: asked,
+          expiresAt: asked + timeoutMs,
+          choices: ["once", "reject"],
+          answer: (choice) => {
+            if (!questions.has(id)) return
+            const value = choice === "once" ? "once" : "reject"
+            answer(value)
+            const command = visibleText(detail.patterns.trim()) || "?"
+            const told = t(value === "once" ? "gateway.approve.byAdeOnce" : "gateway.approve.byAdeNo", command)
+            decidedInAde.set(id, sessionKey(target.bot, target.platform, target.chat))
+            if (decidedInAde.size > 50) decidedInAde.delete(decidedInAde.keys().next().value!)
+            deps.bridge.send(target.bot, target.platform, target.chat, told).catch(() => {})
+          },
+        })
       }
       const ended = () => answer(undefined)
       signal?.addEventListener("abort", ended)
@@ -351,7 +402,11 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       const project = await deps.bridge.project(message.bot, message.platform)
       if (!project) return void (await reply(message, t("gateway.noProject")))
       const loaded = await deps.loadBot(message.bot, project)
-      if (!loaded.ok) return void (await reply(message, loaded.problem))
+      if (!loaded.ok) {
+        // The chat reads `problem`, which has no local path; the panel keeps `detail` (S10).
+        if (loaded.detail) failure(message, loaded.detail)
+        return void (await reply(message, loaded.problem))
+      }
       const bot = loaded.bot
       const runner = runnerById(bot.runner).id
       const allowed = mayRun(runner, message.owner !== false)
@@ -377,7 +432,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       const onPermission =
         runner === "ragu"
           ? permissionAnswerer({
-              ask: async (question, choices, signal) => {
+              ask: async (question, choices, signal, detail) => {
                 pendingApproval = true
                 try {
                   return await ask(
@@ -386,6 +441,7 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
                     choices,
                     deps.approvalTimeoutMs ?? ASK_TIMEOUT_MS,
                     signal,
+                    detail && { ...detail, botName: bot.identifier, cwd: project },
                   )
                 } finally {
                   pendingApproval = false
@@ -522,6 +578,8 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
         failure(message, result.problem ?? "?")
         return void (await reply(message, t("gateway.failed"), { final: true }))
       }
+      // The bot works: what the panel kept of an earlier failure goes (N7).
+      forgetTurnFailuresOf(message.bot)
       await reply(message, text.trim() ? text : t("gateway.empty"), { final: true })
     } catch (error) {
       failure(message, error instanceof Error ? error.message : String(error))

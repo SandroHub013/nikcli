@@ -825,7 +825,7 @@ describe("B8d: a bot's turn on ADE's server", () => {
     const dear = server({ onPrompt: (stream) => stream.push(busy, spending) })
     const capped = await runServeTurn(panel({ maxCostUsd: 0.2 }), dear.deps).result
     expect(capped.status).toBe("error")
-    expect(capped.problem).toBe(t("bots.turn.overBudget", "ragu", "0.30 $", "0.20 $"))
+    expect(capped.problem).toBe(t("bots.turn.overBudget", "ragu", "0,30 $", "0,20 $"))
     await Promise.resolve()
     expect(dear.calls.aborted).toEqual([SESSION])
   })

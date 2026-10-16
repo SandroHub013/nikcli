@@ -26,11 +26,16 @@ import { registerSender, unregisterSender } from "../session/senders"
 import { t } from "../i18n"
 import { acquireTurn, scrubSecrets } from "./terms"
 import type { BotAccount } from "./account"
+import { codexVersion } from "./codex-version"
+import { formatCap, formatUsd } from "./format"
 import type { AgentFile } from "./ragu"
 import {
   applyRunnerLine,
   codexMcpNames,
+  CODEX_PROFILES_SINCE,
+  codexKnowsProfiles,
   codexOptionsRefused,
+  codexSandboxCannotRead,
   enforcesDisabledTools,
   finalText,
   runnerById,
@@ -157,6 +162,8 @@ export function timeoutProblem(label: string, timeoutMs: number): string {
 /** What a turn needs from the app; the machine, passed in so a test can run one. */
 export interface TurnDeps {
   readonly host?: () => ReturnType<typeof getHost>
+  /** `codex --version`, for a Codex turn from a chat or a routine; by default asked once per start (`codex-version.ts`). */
+  readonly codexVersion?: () => Promise<string | null>
 }
 
 export interface TurnResult {
@@ -317,6 +324,21 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
      * (the user's choice 7, `TurnSpec.codexMcpServers`). Unreadable, the turn leaves the whole file out.
      */
     const unwatchedCodex = runner.id === "codex" && (request.remote !== undefined || request.unattended === true)
+    if (unwatchedCodex) {
+      /*
+       * Only a Codex that reads the project-only profile (bot-lettura-3): an older one would run with the read-only
+       * sandbox, which reads the whole disk. A version that could not be read does not start either.
+       */
+      const version = await (deps.codexVersion ?? (() => codexVersion(host, runner.command)))()
+      if (!codexKnowsProfiles(version)) {
+        const found = /\d+\.\d+\.\d+/.exec(version ?? "")?.[0]
+        const problem = found
+          ? t("bots.codex.tooOld", CODEX_PROFILES_SINCE.join("."), found)
+          : t("bots.codex.versionUnknown")
+        update(applyProblem(talk, problem, Date.now()))
+        return finish("error", problem)
+      }
+    }
     const codexMcp: CodexMcp = unwatchedCodex ? await codexMcpOf(host, request.cwd) : {}
     const codexMcpServers = codexMcp.servers
     // The same mailbox mailbox.rs uses, per worktree in ADE Test (`ADE_MAILBOX_ROOT`).
@@ -437,8 +459,13 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
         return finish("error", problem)
       }
       if (overBudget) {
-        const usd = (value: number) => `${value.toFixed(2)} $`
-        const problem = t("bots.turn.overBudget", runner.label, usd(talk.costUsd), usd(request.maxCostUsd ?? 0))
+        // In the language of ADE (D32): what it spent, then the cap.
+        const problem = t(
+          "bots.turn.overBudget",
+          runner.label,
+          formatUsd(talk.costUsd),
+          formatCap(request.maxCostUsd ?? 0),
+        )
         update(applyProblem(talk, problem, Date.now()))
         return finish("error", problem)
       }
@@ -453,14 +480,19 @@ export function runTurn(request: TurnRequest, deps: TurnDeps = {}): Turn {
       }
       update(applyExit(talk, code, Date.now(), runner.label, lastWords))
       if (talk.status === "error" && unwatchedCodex) {
-        /* Why, when it is ADE's doing: options Codex refused, or its config.toml left out (choice 7). */
-        const why = codexOptionsRefused(lastWords)
-          ? t("bots.codex.optionsRefused")
-          : codexMcp.projectConfig
-            ? t("bots.codex.projectConfig")
-            : codexMcpServers === undefined
-              ? t("bots.codex.withoutUserConfig")
-              : undefined
+        /*
+         * Why, when it is ADE's doing: a sandbox that cannot keep reads in the project (bot-lettura-2), options Codex
+         * refused, or its config.toml left out (choice 7).
+         */
+        const why = codexSandboxCannotRead(lastWords)
+          ? t("bots.codex.sandboxCannotRead")
+          : codexOptionsRefused(lastWords)
+            ? t("bots.codex.optionsRefused")
+            : codexMcp.projectConfig
+              ? t("bots.codex.projectConfig")
+              : codexMcpServers === undefined
+                ? t("bots.codex.withoutUserConfig")
+                : undefined
         if (why) {
           const said = talk.messages.at(-1)?.text
           update(appendMessage(talk, { role: "error", text: why }, Date.now()))

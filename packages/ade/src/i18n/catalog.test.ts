@@ -12,6 +12,8 @@ import { it } from "./it"
 /** Texts that are the same word in both languages, or are names. */
 const SAME_IN_BOTH = new Set<string>([
   "decisions.shortTitle",
+  // The name of the app, in any language.
+  "bots.waiting.fromAde",
   "design.shortTitle",
   // «Sessione 1 — Terminal (2)»: a title and a number, in any language.
   "choices.samePane",
@@ -28,7 +30,14 @@ const SAME_IN_BOTH = new Set<string>([
   "gateway.panel.platformTelegram",
   "gateway.panel.platformDiscord",
   "gateway.panel.platformSlack",
+  // «Telegram: On»: the platform's name and the state's word, in the same shape in both.
+  "gateway.tile.aria",
+  "bots.face.color.magenta",
   "gateway.panel.tokenPlaceholderSlack",
+  "gateway.panel.tokenPlaceholder",
+  "gateway.approve.no",
+  "bots.account.label",
+  "bots.account.option",
   "gateway.panel.appTokenPlaceholder",
   "record.consent.no",
   "bots.ask.no",
@@ -38,7 +47,6 @@ const SAME_IN_BOTH = new Set<string>([
   "settings.tab.voiceDevices",
   "browser.owner.ready",
   "bots.card.file",
-  "bots.form.persona",
   "settings.providers.desc2After",
   "agent.empty.example1",
   "agent.empty.example2",

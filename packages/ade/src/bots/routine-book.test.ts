@@ -82,7 +82,7 @@ describe("B11: the list decides where a routine may exist", () => {
         { ...draft, spend: { perRunUsd: 1, perDayUsd: 2 } },
         routineOffer("claude", claudeKey.account, "sonnet"),
       ),
-    ).toContain("0.1")
+    ).toContain("0,10 $")
     expect(routineProblem(draft, routineOffer("ragu", undefined, raguFree.model))).toBeUndefined()
     expect(routineProblem({ ...draft, prompt: "  " }, routineOffer("ragu", undefined, raguFree.model))).toBeTruthy()
   })
@@ -126,7 +126,7 @@ describe("B11 review, M2: ADE Test spends nothing", () => {
     expect(book.logs[routine.id]?.suspended).toBeUndefined()
     book = recordResult(book, routine, key, { status: "error", costUsd: 0.02 }, at(10, 1))
     expect(book.logs[routine.id]?.suspended).toContain("non è gratuito")
-    expect(book.logs[routine.id]?.suspended).toContain("0.02 $")
+    expect(book.logs[routine.id]?.suspended).toContain("0,02 $")
   })
 })
 
@@ -250,7 +250,7 @@ describe("B11: the caps, checked before every run", () => {
     book = recordStart(book, routine, key, 0, at(10))
     book = recordResult(book, routine, key, { status: "done", costUsd: 0.04 }, at(10, 1))
     const third = checkRoutine(book, routine, { context: claudeKey, consent: routine.consent, busy: false }, at(11, 5))
-    expect(third.kind === "wait" && third.note).toContain("0.10 $")
+    expect(third.kind === "wait" && third.note).toContain("0,10 $")
     // The cap per run goes with the run, to stop it during the turn (review, M1); a plan has none.
     const first = checkRoutine(
       addRoutine(EMPTY_BOOK, routine),
@@ -268,7 +268,7 @@ describe("B11: the caps, checked before every run", () => {
     )
     expect(planRun.kind === "run" && planRun.run).toEqual({})
     book = recordResult(book, routine, key, { status: "done", costUsd: 0.07 }, at(11, 6))
-    expect(book.logs[routine.id]?.suspended).toContain("0.07 $")
+    expect(book.logs[routine.id]?.suspended).toContain("0,07 $")
     expect(checkRoutine(book, routine, { context: claudeKey, consent: routine.consent, busy: false }, at(20))).toEqual({
       kind: "wait",
     })

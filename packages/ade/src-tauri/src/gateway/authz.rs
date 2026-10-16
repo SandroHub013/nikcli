@@ -38,6 +38,10 @@ pub const FIRST_WINDOW_MS: u64 = 2 * 60 * 60 * 1000;
 pub const REJECT_BLOCK_MS: u64 = 24 * 60 * 60 * 1000;
 /// How many refused accounts are remembered: the oldest go first.
 const MAX_REJECTED: usize = 100;
+/// A refusal pressed by mistake is taken back by opening pairing within this long (N6).
+pub const REJECT_UNDO_MS: u64 = 10 * 60 * 1000;
+/// How many pushed-out requests are remembered, to tell their owner so (N5).
+pub const MAX_EVICTED: usize = 50;
 pub const MAX_FAILURES: u32 = 5;
 pub const LOCKOUT_MS: u64 = 60 * 60 * 1000;
 /// How long pairing stays open when the user opens it from ADE.
@@ -68,6 +72,18 @@ pub struct Pairing {
     /// Accounts the user refused, who get no code until `until_ms`.
     #[serde(default)]
     pub rejected: Vec<Rejected>,
+    /// Requests pushed out by newer ones, kept as hashes for the hour their code lasts: a code typed for one of them
+    /// is not a wrong code, it is the answer «this request was replaced» (N5).
+    #[serde(default)]
+    pub evicted: Vec<Evicted>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Evicted {
+    pub salt: String,
+    pub code_hash: String,
+    pub expires_ms: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -75,6 +91,9 @@ pub struct Pairing {
 pub struct Rejected {
     pub sender: String,
     pub until_ms: u64,
+    /// When the refusal was pressed (the request's own time if the caller did not say): `open` takes back the recent ones.
+    #[serde(default)]
+    pub at_ms: u64,
 }
 
 /// A request waiting for the user. Holds the code's hash, never the code.
@@ -173,6 +192,7 @@ impl Pairing {
         self.pending.retain(|pending| pending.expires_ms > now);
         self.asked.retain(|asked| asked.at_ms + REQUEST_EVERY_MS > now);
         self.rejected.retain(|rejected| rejected.until_ms > now);
+        self.evicted.retain(|evicted| evicted.expires_ms > now);
         if self.locked_until_ms.is_some_and(|until| until <= now) {
             self.locked_until_ms = None;
         }
@@ -190,6 +210,8 @@ impl Pairing {
 
     /// The user asked, from ADE, to pair one more account.
     pub fn open(&mut self, now: u64) -> u64 {
+        // A refusal pressed by mistake is taken back by opening pairing soon after (N6); an older one stays.
+        self.rejected.retain(|rejected| now.saturating_sub(rejected.at_ms) >= REJECT_UNDO_MS);
         let until = now + OPEN_MS;
         self.open_until_ms = Some(until);
         until
@@ -240,7 +262,14 @@ impl Pairing {
         while self.pending.len() >= MAX_PENDING {
             let oldest = self.pending.iter().enumerate().min_by_key(|(_, pending)| pending.created_ms).map(|(index, _)| index);
             match oldest {
-                Some(index) => self.pending.remove(index),
+                Some(index) => {
+                    // Its hash is kept for the hour its code lasts, to tell the owner it was replaced (N5).
+                    let gone = self.pending.remove(index);
+                    self.evicted.push(Evicted { salt: gone.salt, code_hash: gone.code_hash, expires_ms: gone.expires_ms });
+                    while self.evicted.len() > MAX_EVICTED {
+                        self.evicted.remove(0);
+                    }
+                }
                 None => break,
             };
         }
@@ -275,6 +304,13 @@ impl Pairing {
                 self.open_until_ms = None;
                 Ok(self.pending.remove(index))
             }
+            None if self.evicted.iter().fold(false, |any, gone| {
+                same(code_hash(&gone.salt, &code).as_bytes(), gone.code_hash.as_bytes()) | any
+            }) =>
+            {
+                // A real code, of a request newer ones pushed out: not a wrong code, nothing counts.
+                Err("questa richiesta è stata sostituita da altre arrivate dopo: scrivi di nuovo al bot per avere un codice nuovo".into())
+            }
             None => {
                 self.failures += 1;
                 if self.failures >= MAX_FAILURES {
@@ -290,6 +326,12 @@ impl Pairing {
     /// The user refused a request from the panel. Not a wrong code: nothing
     /// counts. The account gets no new code for a day from its request (S12).
     pub fn reject(&mut self, request: &str) -> Result<Pending, String> {
+        let at = self.pending.iter().find(|pending| pending.request == request).map_or(0, |pending| pending.created_ms);
+        self.reject_at(request, at)
+    }
+
+    /// `reject`, with the moment the user pressed it, which is what `open` counts the ten minutes from.
+    pub fn reject_at(&mut self, request: &str, now: u64) -> Result<Pending, String> {
         let index = self
             .pending
             .iter()
@@ -297,7 +339,7 @@ impl Pairing {
             .ok_or_else(|| "questa richiesta di abbinamento non c'è più".to_string())?;
         let pending = self.pending.remove(index);
         self.rejected.retain(|rejected| rejected.sender != pending.sender);
-        self.rejected.push(Rejected { sender: pending.sender.clone(), until_ms: pending.created_ms + REJECT_BLOCK_MS });
+        self.rejected.push(Rejected { sender: pending.sender.clone(), until_ms: pending.created_ms + REJECT_BLOCK_MS, at_ms: now });
         while self.rejected.len() > MAX_REJECTED {
             self.rejected.remove(0);
         }
@@ -558,6 +600,81 @@ mod tests {
         let old = r#"{"pending":[],"asked":[],"failures":0}"#;
         let pairing: Pairing = serde_json::from_str(old).unwrap();
         assert_eq!(pairing.first_since_ms, None);
+        assert!(pairing.rejected.is_empty());
+    }
+
+    /* N5 of the third check: a code of a request pushed out a moment ago is not a wrong code. */
+    #[test]
+    fn the_code_of_a_request_pushed_out_says_so_and_does_not_count_as_wrong() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        let (owner_code, _) = code_of(pairing.request("owner", "Ale", "c0", false, 0, &mut random).unwrap());
+        for index in 1..=MAX_PENDING {
+            code_of(pairing.request(&format!("t{index}"), "x", "c", false, index as u64, &mut random).unwrap());
+        }
+        assert!(pairing.pending.iter().all(|pending| pending.sender != "owner"));
+        let error = pairing.approve(&owner_code, 100).unwrap_err();
+        assert!(error.contains("sostituita"), "{error}");
+        assert_eq!(pairing.failures, 0);
+        assert_eq!(pairing.attempts_left(100), MAX_FAILURES);
+        // Said again as many times as it is typed, and never locks approvals.
+        for _ in 0..(MAX_FAILURES + 2) {
+            assert!(pairing.approve(&owner_code, 101).unwrap_err().contains("sostituita"));
+        }
+        assert!(!pairing.locked(101));
+        // A wrong code is still wrong, and the memory of the pushed-out ones goes with the code's hour.
+        let wrong = if owner_code == "AAAAAAAA" { "BBBBBBBB" } else { "AAAAAAAA" };
+        assert!(pairing.approve(wrong, 102).unwrap_err().contains("restano"));
+        assert_eq!(pairing.failures, 1);
+        let late = CODE_TTL_MS + 10;
+        assert!(!pairing.approve(&owner_code, late).unwrap_err().contains("sostituita"));
+        assert!(pairing.evicted.is_empty());
+    }
+
+    #[test]
+    fn the_memory_of_pushed_out_requests_has_a_limit() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        for index in 0..(MAX_PENDING + MAX_EVICTED + 20) {
+            code_of(pairing.request(&format!("s{index}"), "x", "c", false, index as u64, &mut random).unwrap());
+        }
+        assert_eq!(pairing.pending.len(), MAX_PENDING);
+        assert_eq!(pairing.evicted.len(), MAX_EVICTED);
+    }
+
+    /* N6: a refusal pressed by mistake is taken back by opening pairing soon after. */
+    #[test]
+    fn opening_pairing_soon_after_a_refusal_takes_the_refusal_back() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        let (_, pending) = code_of(pairing.request("42", "Ale", "c42", false, 0, &mut random).unwrap());
+        pairing.reject(&pending.request).unwrap();
+        assert_eq!(pairing.request("42", "Ale", "c42", false, REQUEST_EVERY_MS, &mut random).unwrap(), Request::Closed);
+        pairing.open(5 * 60 * 1000);
+        assert!(pairing.rejected.is_empty());
+        code_of(pairing.request("42", "Ale", "c42", false, REQUEST_EVERY_MS, &mut random).unwrap());
+    }
+
+    #[test]
+    fn a_refusal_older_than_ten_minutes_stays_when_pairing_is_opened() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        let (_, spam) = code_of(pairing.request("spam", "x", "c1", false, 0, &mut random).unwrap());
+        pairing.reject(&spam.request).unwrap();
+        pairing.open(REJECT_UNDO_MS + 1);
+        assert_eq!(pairing.rejected.len(), 1);
+        assert_eq!(pairing.request("spam", "x", "c1", false, REJECT_UNDO_MS + 2, &mut random).unwrap(), Request::Closed);
+    }
+
+    #[test]
+    fn a_refusal_counts_from_the_moment_it_was_pressed_when_the_caller_says_so() {
+        let mut random = counter();
+        let mut pairing = Pairing::default();
+        let (_, pending) = code_of(pairing.request("42", "Ale", "c42", false, 0, &mut random).unwrap());
+        // The request waited half an hour; the refusal is pressed now and taken back within ten minutes.
+        let pressed = 30 * 60 * 1000;
+        pairing.reject_at(&pending.request, pressed).unwrap();
+        pairing.open(pressed + 5 * 60 * 1000);
         assert!(pairing.rejected.is_empty());
     }
 }

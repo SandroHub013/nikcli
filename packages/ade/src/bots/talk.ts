@@ -566,7 +566,7 @@ export function formatWhen(at: number | undefined, now: number): string {
   const yesterday = new Date(now - 86_400_000)
   if (date.toDateString() === yesterday.toDateString()) return t("bots.when.yesterday")
   if (diff < 6 * 86_400_000 && diff > 0) return t("bots.when.weekday", date.getDay())
-  return `${date.getDate()} ${t("bots.when.month", date.getMonth())}`
+  return t("bots.when.date", date.getDate(), t("bots.when.month", date.getMonth()))
 }
 
 /**

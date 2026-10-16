@@ -959,7 +959,10 @@ impl Hub {
     /// The user refused a request from the panel. Nothing is sent to the stranger.
     pub fn pairing_reject(&self, bot: &str, platform: Platform, request: &str) -> Result<(), String> {
         check_bot(bot)?;
-        self.store.update(bot, platform, |link, _| link.pairing.reject(request).map(|_| ()))
+        // The moment the user pressed it: `open` counts the ten minutes from there, so a request that waited longer
+        // than that still gets the refusal taken back by opening the pairing again (N6).
+        let now = self.env.now_ms();
+        self.store.update(bot, platform, |link, _| link.pairing.reject_at(request, now).map(|_| ()))
     }
 
     /* ── the panel ─────────────────────────────────────────────────────── */
