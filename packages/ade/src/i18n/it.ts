@@ -2277,9 +2277,9 @@ export const it = {
   "bots.details.title": "Dettagli",
   "bots.delete.title": "Elimina il bot",
   "bots.delete.questionProject": (name: string, file: string, routines: number) =>
-    `Eliminare «${name}»? Con lui spariscono la sua memoria, ${routines === 0 ? "nessuna routine" : routines === 1 ? "una routine" : `${routines} routine`}, le conversazioni salvate in ADE, i codici delle app di messaggi e chi era abbinato. Il file ${file} è nel progetto e viene cancellato.`,
+    `Eliminare «${name}»? Con lui spariscono la sua memoria, ${routines === 0 ? "" : routines === 1 ? "una routine, " : `${routines} routine, `}le conversazioni salvate in ADE, i codici delle app di messaggi e chi era abbinato. Il file ${file} è nel progetto e viene cancellato.`,
   "bots.delete.questionGlobal": (name: string, file: string, routines: number) =>
-    `Eliminare «${name}»? Con lui spariscono la sua memoria, ${routines === 0 ? "nessuna routine" : routines === 1 ? "una routine" : `${routines} routine`}, le conversazioni salvate in ADE, i codici delle app di messaggi e chi era abbinato. Il file ${file} viene cancellato.`,
+    `Eliminare «${name}»? Con lui spariscono la sua memoria, ${routines === 0 ? "" : routines === 1 ? "una routine, " : `${routines} routine, `}le conversazioni salvate in ADE, i codici delle app di messaggi e chi era abbinato. Il file ${file} viene cancellato.`,
   "bots.permissions.phone": "Da telefono",
   "bots.permissions.phoneText": "Legge e cerca nel progetto. Non usa i server MCP e non apre pagine web né fa ricerche sul web, nemmeno con i comandi accesi. I comandi li esegue solo se accendi «Comandi da remoto»: allora ogni volta ti viene chiesto.",
   "bots.permissions.phoneTextClaude": "Legge e cerca nel progetto. Non usa i server MCP, non apre pagine web né fa ricerche sul web, e non esegue mai comandi: Claude Code non può chiederti il permesso da qui.",

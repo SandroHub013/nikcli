@@ -38,6 +38,18 @@ describe("D6 and D9: what is lost is said before it is lost", () => {
     expect(say(en)).toContain("paired")
     expect(say(en)).toContain("in the project")
   })
+
+  test("a bot with no routines does not list them as something that goes; English has the genitive", () => {
+    const say = (catalog: Record<string, unknown>, routines: number) =>
+      (catalog["bots.delete.questionGlobal"] as (a: string, b: string, c: number) => string)("revisore", "f.md", routines)
+    expect(say(it, 0)).not.toContain("routine")
+    expect(say(it, 0)).toContain("la sua memoria, le conversazioni")
+    expect(say(it, 1)).toContain("memoria, una routine, le conversazioni")
+    expect(say(en, 0)).not.toContain("routine")
+    expect(say(en, 0)).toContain("Its memory goes with it, the conversations")
+    expect(say(en, 1)).toContain("one routine, the conversations")
+    expect(say(en, 0)).toContain("messaging apps' bot codes")
+  })
 })
 
 describe("D25: every irreversible action asks the same way", () => {
