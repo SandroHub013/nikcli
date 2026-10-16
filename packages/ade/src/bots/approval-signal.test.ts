@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { setLocalePreference, t } from "../i18n"
 import { addNotice, dismissClosedApprovals, unreadCount } from "../surface/notifications"
-import { approvalBadge, approvalLine, freshApprovals, shouldNotifySystem, sourcesText, systemNotification } from "./approval-signal"
+import { approvalBadge, approvalLine, freshApprovals, shouldNotifySystem, sourcesText } from "./approval-signal"
 import { mergeApprovals, type ApprovalRequest } from "./approvals"
 import { notifySystem, windowInFront } from "./system-notify"
 
@@ -11,7 +11,7 @@ setLocalePreference("it")
 
 /*
  * The signal (choice 4): the badge on the Bot section, a line in the bell for each new request that goes when the
- * request does, and a system notification only when ADE is behind.
+ * request does, and the window flashing in the taskbar only when ADE is behind.
  */
 const request = (over: Partial<ApprovalRequest> = {}): ApprovalRequest => ({
   key: "ade:1",
@@ -56,10 +56,9 @@ describe("the badge", () => {
 })
 
 describe("the words", () => {
-  test("the line says whose bot and what it wants; the system notification has the app and the bot in the title", () => {
+  test("the line says whose bot and what it wants", () => {
     const one = waiting(request())[0]!
     expect(approvalLine(one)).toBe("«alfa» aspetta te: vuole usare «bash» su «git push --force»")
-    expect(systemNotification(one)).toEqual({ title: "ADE: «alfa» aspetta te", body: approvalLine(one) })
     setLocalePreference("en")
     expect(approvalLine(one)).toBe("“alfa” is waiting for you: it wants to use “bash” on “git push --force”")
     setLocalePreference("it")
@@ -90,7 +89,7 @@ describe("the bell", () => {
   })
 })
 
-describe("the system notification", () => {
+describe("the window flash", () => {
   test("only when ADE is behind", () => {
     expect(shouldNotifySystem(true)).toBe(false)
     expect(shouldNotifySystem(false)).toBe(true)
@@ -100,27 +99,22 @@ describe("the system notification", () => {
     expect(windowInFront(undefined)).toBe(true)
   })
 
-  test("it uses the browser's Notification only when it was already allowed, and never asks", () => {
-    const made: [string, NotificationOptions | undefined][] = []
-    class Fake {
-      static permission = "granted"
-      static requested = 0
-      static requestPermission() {
-        Fake.requested += 1
-      }
-      constructor(title: string, options?: NotificationOptions) {
-        made.push([title, options])
-      }
-    }
-    expect(notifySystem("ADE: «alfa» aspetta te", "corpo", "k", { Notification: Fake as unknown as typeof Notification })).toBe(true)
-    expect(made).toEqual([["ADE: «alfa» aspetta te", { body: "corpo", tag: "k" }]])
-    Fake.permission = "default"
-    expect(notifySystem("x", "y", "k", { Notification: Fake as unknown as typeof Notification })).toBe(false)
-    Fake.permission = "denied"
-    expect(notifySystem("x", "y", "k", { Notification: Fake as unknown as typeof Notification })).toBe(false)
-    expect(made).toHaveLength(1)
-    expect(Fake.requested).toBe(0)
-    expect(notifySystem("x", "y", "k", {})).toBe(false)
+  test("the window flashes through the function it is given; a failure is no reason to lose the request", async () => {
+    let flashes = 0
+    expect(await notifySystem(async () => (flashes++, true))).toBe(true)
+    expect(flashes).toBe(1)
+    expect(await notifySystem(async () => false)).toBe(false)
+    expect(await notifySystem(async () => Promise.reject(new Error("no window")))).toBe(false)
+    // Outside the app (here) there is no window to flash, and nothing breaks.
+    expect(await notifySystem()).toBe(false)
+  })
+
+  test("it is the taskbar flash host/ask.ts uses, only when the window has no focus, and the browser's Notification is gone", () => {
+    const source = readFileSync(join(import.meta.dir, "system-notify.ts"), "utf8")
+    expect(source).toContain("requestUserAttention(UserAttentionType.Critical)")
+    expect(source).toContain("win.isFocused()")
+    expect(source).not.toMatch(/new\s+Native|Notification\.permission|requestPermission/)
+    expect(readFileSync(join(import.meta.dir, "../host/ask.ts"), "utf8")).toContain("requestUserAttention(UserAttentionType.Critical)")
   })
 })
 
@@ -134,9 +128,9 @@ describe("the shell draws it", () => {
     expect(shell).toContain("approval: one.id")
   })
 
-  test("lint: a system notification only when the window is not in front, and the row opens the bot", () => {
+  test("lint: the flash only when the window is not in front, and the row opens the bot", () => {
     expect(shell).toContain("shouldNotifySystem(windowInFront())")
-    expect(shell).toContain("notifySystem(note.title, note.body, one.id)")
+    expect(shell).toContain("void notifySystem()")
     expect(shell).toContain("openWaitingBot(bot())")
     expect(shell).toContain('t("bots.waiting.open")')
   })

@@ -829,7 +829,6 @@ export const en: Messages = {
   "bots.waiting.left": (clock) => `${clock} left`,
   "bots.waiting.notice": (bot, permission, patterns) =>
     `“${bot}” is waiting for you: it wants to use “${permission}” on “${patterns}”`,
-  "bots.waiting.systemTitle": (bot) => `ADE: “${bot}” is waiting for you`,
   "bots.waiting.open": "Open the bot",
   "gateway.approve.byAdeOnce": "Allowed from ADE.",
   "gateway.approve.byAdeNo": "Refused from ADE.",

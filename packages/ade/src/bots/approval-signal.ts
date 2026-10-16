@@ -3,7 +3,7 @@ import type { WaitingApproval } from "./approvals"
 
 /**
  * How ADE tells the user that a bot waits for them (the user's choice 4): the badge on the Bot section, a line in the
- * bell, and a system notification when ADE is behind. The rules are here; `workbench.tsx` only draws them.
+ * bell, and the window flashing in the taskbar when ADE is behind. The rules are here; `workbench.tsx` only draws them.
  */
 
 /** The requests in `waiting` that were not in `seen`, and the new `seen`: the ones still open, so a question asked again later is news again. */
@@ -35,17 +35,12 @@ export function sourcesText(sources: readonly string[]): string {
     .join(" · ")
 }
 
-/** The bell's line, and the system notification's body: whose bot, and what it wants to do. */
+/** The bell's line: whose bot, and what it wants to do. */
 export function approvalLine(waiting: Pick<WaitingApproval, "botName" | "permission" | "patterns">): string {
   return t("bots.waiting.notice", waiting.botName, waiting.permission, waiting.patterns.trim() || "?")
 }
 
-/** The system notification: the title says where it comes from, the body what it wants. */
-export function systemNotification(waiting: WaitingApproval): { readonly title: string; readonly body: string } {
-  return { title: t("bots.waiting.systemTitle", waiting.botName), body: approvalLine(waiting) }
-}
-
-/** A system notification only when the user is not looking at ADE: the bell and the badge are enough when they are. */
+/** The window flashes in the taskbar only when the user is not looking at ADE: the bell and the badge are enough when they are. */
 export function shouldNotifySystem(windowInFront: boolean): boolean {
   return !windowInFront
 }

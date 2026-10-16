@@ -264,7 +264,7 @@ import { Chat } from "../chat/chat"
 import { appChatStore } from "../chat/store"
 import { barSessionCount } from "./bar-sessions"
 import { BotsMain, BotsRoster, openBotByPath } from "../bots/bots"
-import { approvalBadge, approvalLine, freshApprovals, shouldNotifySystem, systemNotification } from "../bots/approval-signal"
+import { approvalBadge, approvalLine, freshApprovals, shouldNotifySystem } from "../bots/approval-signal"
 import { waitingApprovals } from "../bots/approvals-app"
 import { notifySystem, windowInFront } from "../bots/system-notify"
 import { scrubSecrets } from "../bots/terms"
@@ -937,10 +937,8 @@ export function Workbench() {
       setNotices((list) =>
         addNotice(list, { kind: "warning", text: approvalLine(one), bot: one.bot, approval: one.id, at: Date.now() }),
       )
-      if (shouldNotifySystem(windowInFront())) {
-        const note = systemNotification(one)
-        notifySystem(note.title, note.body, one.id)
-      }
+      // ADE is behind: the window flashes in the taskbar (`bots/system-notify.ts`).
+      if (shouldNotifySystem(windowInFront())) void notifySystem()
     }
   })
   /** The bell's «Apri il bot»: the Bot section, on that bot. */

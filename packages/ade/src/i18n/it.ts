@@ -849,7 +849,6 @@ export const it = {
   "bots.waiting.left": (clock: string) => `restano ${clock}`,
   "bots.waiting.notice": (bot: string, permission: string, patterns: string) =>
     `«${bot}» aspetta te: vuole usare «${permission}» su «${patterns}»`,
-  "bots.waiting.systemTitle": (bot: string) => `ADE: «${bot}» aspetta te`,
   "bots.waiting.open": "Apri il bot",
   "gateway.approve.byAdeOnce": "Consentito da ADE.",
   "gateway.approve.byAdeNo": "Negato da ADE.",
