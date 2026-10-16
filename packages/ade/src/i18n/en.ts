@@ -789,6 +789,7 @@ export const en: Messages = {
   "gateway.fresh": "New conversation: starting over.",
   "gateway.status.idle": "Free: go ahead.",
   "gateway.status.working": (queued) => `Working on a turn; messages queued: ${queued}.`,
+  "gateway.status.connectedSince": (time) => `Gateway connected since ${time}.`,
   "gateway.help":
     "Commands: /new starts the conversation over, /stop stops the running turn and clears the queue, /status says what I'm doing, /help shows this list.",
   "gateway.limit": (count) =>

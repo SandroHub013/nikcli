@@ -31,6 +31,7 @@
  */
 
 import { t } from "../../i18n"
+import { formatClock } from "../format"
 import { visibleText } from "../visible-text"
 import type { AgentFile } from "../ragu"
 import { answerSoFar, runnerById } from "../runners"
@@ -109,11 +110,15 @@ export interface GatewayBridge {
   previewEnd?: (bot: string, platform: string, chat: string, fallback?: string) => Promise<void>
   /** The project the gateway's turns run in, fixed when it was switched on. */
   project: (bot: string, platform: string) => Promise<string | undefined>
+  /** The connection status of the link, e.g. for `/stato`. */
+  linkStatus?: (bot: string, platform: string) => Promise<{ connected: boolean; connectedAtMs?: number | null } | undefined>
 }
 
 export interface GatewayControllerDeps {
   readonly bridge: GatewayBridge
   readonly runTurn: (request: TurnRequest) => Turn
+  /** The connection status of the link, e.g. for `/stato`; defaults to `bridge.linkStatus`. */
+  readonly linkStatus?: (bot: string, platform: string) => Promise<{ connected: boolean; connectedAtMs?: number | null } | undefined>
   /** The bot at `path` as its file is now, if its trust still holds (`recheckTrust`). */
   readonly loadBot: (
     path: string,
@@ -386,8 +391,17 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
     }
     if (which === "status") {
       const said = running ? t("gateway.status.working", state.queue.length) : t("gateway.status.idle")
+      const link = await (
+        deps.linkStatus?.(message.bot, message.platform) ??
+        deps.bridge.linkStatus?.(message.bot, message.platform)
+      )?.catch(() => undefined)
+      const connectedLine =
+        link?.connected && link.connectedAtMs != null
+          ? t("gateway.status.connectedSince", formatClock(link.connectedAtMs))
+          : undefined
       const spent = await deps.spendToday?.(message.bot).catch(() => undefined)
-      return reply(message, spent ? `${said}\n${spent}` : said)
+      const lines = [said, connectedLine, spent].filter(Boolean).join("\n")
+      return reply(message, lines)
     }
     return reply(message, t("gateway.help"))
   }

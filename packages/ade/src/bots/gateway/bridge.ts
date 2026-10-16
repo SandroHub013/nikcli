@@ -29,6 +29,8 @@ interface LinkStatus {
   readonly bot: string
   readonly platform: string
   readonly project?: string | null
+  readonly connected?: boolean
+  readonly connectedAtMs?: number | null
 }
 
 const invoke = async <T>(command: string, args?: Record<string, unknown>) =>
@@ -61,6 +63,11 @@ export function tauriGatewayBridge(): GatewayBridge {
     async project(bot, platform) {
       const links = await invoke<LinkStatus[]>("gateway_status")
       return links.find((link) => link.bot === bot && link.platform === platform)?.project ?? undefined
+    },
+    async linkStatus(bot, platform) {
+      const links = await invoke<LinkStatus[]>("gateway_status")
+      const l = links.find((link) => link.bot === bot && link.platform === platform)
+      return l ? { connected: l.connected ?? false, connectedAtMs: l.connectedAtMs } : undefined
     },
   }
 }

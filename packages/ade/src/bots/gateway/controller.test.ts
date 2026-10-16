@@ -7,7 +7,7 @@ import { runTurn, type Turn, type TurnDeps, type TurnRequest, type TurnResult } 
 import { createApprovalRegistry, decideApproval, mergeApprovals } from "../approvals"
 import { ASK_TIMEOUT_MS, startGatewayController, safePreviewText, RECOVERED_NOTICE, recoveredNotice, type GatewayBridge, type GatewayMessage } from "./controller"
 import { forgetTurnFailures, noteTurnFailure, turnFailureOf } from "./failures"
-import { chatHeader } from "./policy"
+import { chatCommand, chatHeader } from "./policy"
 import { localRemoteStore, memoryRemoteStore, offersRemoteCommands, REMOTE_OFF, remoteKey, remoteTools } from "./remote"
 import { localSessionStore, memorySessionStore, sessionKey } from "./session"
 import { createGatewayThreads, gatewayThreadKey, type ThreadDisk } from "./threads"
@@ -32,7 +32,10 @@ const BOT: AgentFile = {
   runner: "claude",
 }
 
-function bridge(project: string | null = PROJECT) {
+function bridge(
+  project: string | null = PROJECT,
+  linkStatus?: (bot: string, platform: string) => Promise<{ connected: boolean; connectedAtMs?: number | null } | undefined>,
+) {
   let handler: ((message: GatewayMessage) => void) | undefined
   const calls: string[] = []
   const sent: { chat: string; text: string; final?: boolean; previewFallback?: string }[] = []
@@ -42,6 +45,7 @@ function bridge(project: string | null = PROJECT) {
   const previews: { bot: string; platform: string; chat: string; text: string }[] = []
   const previewEnds: { bot: string; platform: string; chat: string; fallback?: string }[] = []
   const fake: GatewayBridge = {
+    linkStatus: linkStatus ?? (async () => undefined),
     listen: async (on) => {
       handler = on
       calls.push("listen")
@@ -2035,6 +2039,29 @@ describe("the failure shown in the panel goes away when the bot works again (N7)
     // Finish turn
     turn.finish({ text: "Risposta completata dopo approvazione." })
     await until("messaggio finale inviato", () => b.sent.length === 1)
+  })
+
+  test("Point 6: /stato says how long the gateway has been connected, and chat has no restart command", async () => {
+    const b = bridge(PROJECT, async () => ({
+      connected: true,
+      connectedAtMs: new Date(2026, 9, 16, 14, 5).getTime(),
+    }))
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+    })
+    b.emit("/stato")
+    await until("stato ricevuto", () => b.sent.length === 1)
+    const replyText = b.sent[0]!.text
+    expect(replyText).toContain("14:05")
+    expect(replyText).toContain(t("gateway.status.idle"))
+
+    // No restart from chat
+    expect(chatCommand("/riavvia")).toBeUndefined()
+    expect(chatCommand("/restart")).toBeUndefined()
   })
 })
 

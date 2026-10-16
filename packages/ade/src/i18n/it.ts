@@ -808,6 +808,7 @@ export const it = {
   "gateway.fresh": "Nuova conversazione: riparto da zero.",
   "gateway.status.idle": "Libero: scrivimi pure.",
   "gateway.status.working": (queued: number) => `Sto lavorando a un turno; messaggi in coda: ${queued}.`,
+  "gateway.status.connectedSince": (time: string) => `Gateway collegato dalle ${time}.`,
   "gateway.help":
     "Comandi: /nuova ricomincia la conversazione, /ferma ferma il turno in corso e svuota la coda, /stato dice cosa sto facendo, /aiuto mostra questo elenco.",
   "gateway.limit": (count: number) =>
