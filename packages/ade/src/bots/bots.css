@@ -186,6 +186,55 @@
   color: var(--ade-text-weak);
 }
 
+/* «Aspettano te»: the questions the bots wait on, at the top of the roster. */
+[data-slot="bots-waiting"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-2);
+  margin: var(--ade-space-2) var(--ade-space-3);
+  padding: var(--ade-space-3);
+  border: 1px solid var(--ade-warning);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-surface);
+}
+
+[data-slot="bots-waiting-title"] {
+  margin: 0;
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ade-warning);
+}
+
+[data-slot="bots-waiting-list"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+[data-slot="bots-waiting-item"] {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--ade-space-1);
+}
+
+[data-slot="bots-waiting-what"] {
+  /* The whole command can be long: it wraps, and the full text is the tooltip. */
+  overflow-wrap: anywhere;
+  font-size: var(--ade-font-sm);
+  color: var(--ade-text);
+}
+
+[data-slot="bots-waiting-actions"] {
+  display: flex;
+  gap: var(--ade-space-2);
+}
+
 [data-slot="bots-new"] {
   display: grid;
   place-items: center;

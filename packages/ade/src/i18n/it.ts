@@ -844,6 +844,9 @@ export const it = {
   "gateway.approve.blocked": (what: string, reason: string) =>
     `Ho bloccato «${what}»: ${reason}. Questo comando non parte mai, nemmeno con un sì.`,
   "bots.waiting.fromAde": "ADE",
+  "bots.waiting.title": "Aspettano te",
+  "bots.waiting.what": (permission: string, patterns: string) => `Vuole usare «${permission}» su «${patterns}»`,
+  "bots.waiting.left": (clock: string) => `restano ${clock}`,
   "bots.waiting.notice": (bot: string, permission: string, patterns: string) =>
     `«${bot}» aspetta te: vuole usare «${permission}» su «${patterns}»`,
   "bots.waiting.systemTitle": (bot: string) => `ADE: «${bot}» aspetta te`,

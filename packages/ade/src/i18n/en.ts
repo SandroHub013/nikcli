@@ -824,6 +824,9 @@ export const en: Messages = {
   "gateway.approve.privateOnly":
     "This needs your confirmation, and I do not ask for it in a channel. Write to me in private.",
   "bots.waiting.fromAde": "ADE",
+  "bots.waiting.title": "Waiting for you",
+  "bots.waiting.what": (permission, patterns) => `Wants to use “${permission}” on “${patterns}”`,
+  "bots.waiting.left": (clock) => `${clock} left`,
   "bots.waiting.notice": (bot, permission, patterns) =>
     `“${bot}” is waiting for you: it wants to use “${permission}” on “${patterns}”`,
   "bots.waiting.systemTitle": (bot) => `ADE: “${bot}” is waiting for you`,

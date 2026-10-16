@@ -167,6 +167,8 @@ import { launchBot } from "./launch"
 import { formatCount } from "./format"
 import { metaWords } from "./page-meta"
 import { createWaitingCount } from "./gateway/waiting"
+import { waitingApprovals } from "./approvals-app"
+import { WaitingList } from "./waiting-list"
 import { objectiveLines, sameFields, savedFields, syncFields, type FormFields } from "./settings-sync"
 import { BotTabs } from "./bot-tabs"
 import { ConfirmAction } from "./confirm"
@@ -888,6 +890,9 @@ export function BotsRoster(props: BotsRosterProps) {
           +
         </button>
       </header>
+
+      {/* What the bots wait for, first: a yes or a no from here, the phone's questions too. */}
+      <WaitingList waiting={waitingApprovals} onOpen={openBotByPath} />
 
       <Show when={pinned().length > 0}>
         <div data-slot="bots-pinned">
