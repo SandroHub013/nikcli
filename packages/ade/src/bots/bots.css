@@ -801,6 +801,31 @@
   overflow-wrap: anywhere;
 }
 
+/* The next routine: a line of the head that is a link to the Routines tab. */
+[data-slot="bots-page-routine"] {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ade-text-weak);
+  font: inherit;
+  font-size: var(--ade-font-sm);
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+[data-slot="bots-page-routine"]:hover {
+  color: var(--ade-text);
+  text-decoration: underline;
+}
+
+[data-slot="bots-page-routine"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
 [data-slot="bots-page-actions"] {
   display: flex;
   flex-wrap: wrap;

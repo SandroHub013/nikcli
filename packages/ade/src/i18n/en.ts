@@ -1916,6 +1916,12 @@ export const en: Messages = {
   "bots.routine.next": (when: string) => `next: ${when}`,
   "bots.routine.today": (runs: number) => `today: ${runs}`,
   "bots.routine.tomorrow": (time: string) => `tomorrow at ${time}`,
+  "bots.routine.todayAt": (time: string) => `today at ${time}`,
+  "bots.routine.head": (name: string, when: string) => `Next routine: “${name}”, ${when}`,
+  "bots.routine.headCount": (count: number) => (count === 1 ? `${count} routine` : `${count} routines`),
+  "bots.routine.headIdle": (count: number) =>
+    count === 1 ? "1 routine, paused or suspended" : `${count} routines, all paused or suspended`,
+  "bots.routine.headTip": "Open the Routines tab",
   "bots.routine.state.running": "running",
   "bots.routine.state.paused": "paused",
   "bots.routine.state.on": "on",

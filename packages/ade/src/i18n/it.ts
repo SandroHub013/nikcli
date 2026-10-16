@@ -1972,6 +1972,12 @@ export const it = {
   "bots.routine.next": (when: string) => `prossima: ${when}`,
   "bots.routine.today": (runs: number) => `oggi: ${runs}`,
   "bots.routine.tomorrow": (time: string) => `domani alle ${time}`,
+  "bots.routine.todayAt": (time: string) => `oggi alle ${time}`,
+  "bots.routine.head": (name: string, when: string) => `Prossima routine: «${name}», ${when}`,
+  "bots.routine.headCount": (count: number) => `${count} routine`,
+  "bots.routine.headIdle": (count: number) =>
+    count === 1 ? "1 routine, in pausa o sospesa" : `${count} routine, tutte in pausa o sospese`,
+  "bots.routine.headTip": "Apri la scheda Routine",
   "bots.routine.state.running": "in corso",
   "bots.routine.state.paused": "in pausa",
   "bots.routine.state.on": "attiva",

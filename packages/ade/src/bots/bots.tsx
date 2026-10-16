@@ -119,6 +119,8 @@ import {
   reconsent,
   removeRoutine,
   routineConsent,
+  routineHeadline,
+  routineHeadText,
   routineProblem,
   runRoutine,
   type Routine,
@@ -1717,7 +1719,11 @@ function PageHead(props: {
   expression: Expression
   onLaunch: ((bot: AgentFile) => void) | undefined
   onOpenFile: ((path: string) => void) | undefined
+  /** The Routines tab, from the line with the next routine; absent, the bot has no such tab and no line. */
+  onRoutines?: () => void
 }) {
+  const routines = () =>
+    props.onRoutines ? routineHeadline(routineDeps.book(), props.bot.path, routineNow()) : undefined
   const modelIsGone = createGone(() => ({ runner: props.bot.runner, model: props.bot.model ?? "" }))
   const words = () =>
     metaWords({
@@ -1753,6 +1759,19 @@ function PageHead(props: {
           </Show>
           {words().rest.map((part) => ` · ${part}`).join("")}
         </span>
+        {/* The next routine, one press from its tab; no routine, no line (design/ade-bot-2, scelta 4). */}
+        <Show when={routines()}>
+          {(head) => (
+            <button
+              type="button"
+              data-slot="bots-page-routine"
+              title={t("bots.routine.headTip")}
+              onClick={() => props.onRoutines?.()}
+            >
+              {routineHeadText(head(), routineNow())}
+            </button>
+          )}
+        </Show>
       </div>
       <div data-slot="bots-page-actions">
         <Show when={props.onLaunch}>
@@ -1856,6 +1875,7 @@ function BotPage(props: {
         expression={props.expression}
         onLaunch={props.onLaunch}
         onOpenFile={props.onOpenFile}
+        {...(tabs().includes("routines") ? { onRoutines: () => select("routines") } : {})}
       />
       <BotTabs
         tabs={tabs()}

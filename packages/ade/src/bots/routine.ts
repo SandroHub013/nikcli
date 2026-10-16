@@ -796,3 +796,41 @@ export function formatNext(at: number, now: number): string {
   if (dayOf(at) === dayOf(nextDay(now))) return t("bots.routine.tomorrow", time)
   return `${date.getDate()} ${t("bots.when.month", date.getMonth())} ${time}`
 }
+
+/* ── the line in the bot's head ───────────────────────────────────────── */
+
+/** The bot's routines as the head of its page says them (design/ade-bot-2, scelta 4): the soonest, and how many. */
+export interface RoutineHeadline {
+  readonly count: number
+  /** The next to run; absent, every routine of the bot is paused or suspended. */
+  readonly next?: { readonly routine: Routine; readonly at: number }
+}
+
+/** Undefined when the bot has no routine: then the head has no line. */
+export function routineHeadline(book: RoutineBook, bot: string, now: number): RoutineHeadline | undefined {
+  const mine = book.routines.filter((routine) => routine.bot === bot)
+  if (mine.length === 0) return undefined
+  let next: { routine: Routine; at: number } | undefined
+  for (const routine of mine) {
+    const log = logOn(book, routine.id, now)
+    if (routine.paused || log.suspended) continue
+    // One late to run goes at the scheduler's next look: now, not an hour gone by.
+    const at = Math.max(nextRun(routine, log, now), now)
+    if (!next || at < next.at) next = { routine, at }
+  }
+  return next ? { count: mine.length, next } : { count: mine.length }
+}
+
+/** A routine has no name: its prompt's first line stands for it, cut at `max` characters. */
+export function routineName(prompt: string, max = 40): string {
+  const line = prompt.trim().split(/\r?\n/, 1)[0]?.trim() ?? ""
+  return line.length <= max ? line : `${line.slice(0, max - 1).trimEnd()}…`
+}
+
+export function routineHeadText(head: RoutineHeadline, now: number): string {
+  if (!head.next) return t("bots.routine.headIdle", head.count)
+  const at = head.next.at
+  const when = dayOf(at) === dayOf(now) ? t("bots.routine.todayAt", formatClock(at)) : formatNext(at, now)
+  const line = t("bots.routine.head", routineName(head.next.routine.prompt), when)
+  return head.count > 1 ? `${line} · ${t("bots.routine.headCount", head.count)}` : line
+}
