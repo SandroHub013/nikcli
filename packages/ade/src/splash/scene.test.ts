@@ -339,8 +339,8 @@ describe("splash scene renderer (step 2)", () => {
       }
     })
 
-    test("ladle reaches into pot sauce in scene coordinates between [pot.x+7, pot.x+25] (P2-4)", () => {
-      const drawnPixels: { x: number; y: number; color: string }[] = []
+    test("ladle arcs over rim (y <= 25) and reaches into pot sauce behind cream rim (P2-4, P3-9)", () => {
+      let drawnPixels: { x: number; y: number; color: string }[] = []
       const fakeCtx = {
         fillStyle: "",
         fillRect: (x: number, y: number, w: number, h: number) => {
@@ -354,13 +354,28 @@ describe("splash scene renderer (step 2)", () => {
       expect(tipSinistra!.tipX).toBeGreaterThanOrEqual(SCENE_LAYOUT.pot.x + 7)
       expect(tipSinistra!.tipX).toBeLessThanOrEqual(SCENE_LAYOUT.pot.x + 25)
       expect(tipSinistra!.tipY).toBeGreaterThanOrEqual(SCENE_LAYOUT.pot.y + 14) // in sauce
+      // Handle rises over the rim (y <= 25)
+      expect(drawnPixels.some((p) => p.y <= 25)).toBe(true)
+      // Passes behind the cream rim (rows y=26..27 inside the pot rim x=68..91 are not overwritten)
+      const sinistraRimOverlap = drawnPixels.filter(
+        (p) => (p.y === 26 || p.y === 27) && p.x >= SCENE_LAYOUT.pot.x + 4,
+      )
+      expect(sinistraRimOverlap.length).toBe(0)
 
       // Test mescola destra (pose 2)
+      drawnPixels = []
       const tipDestra = drawLadle(fakeCtx, 2, SCENE_LAYOUT.pot.x, SCENE_LAYOUT.pot.y)
       expect(tipDestra).not.toBeNull()
       expect(tipDestra!.tipX).toBeGreaterThanOrEqual(SCENE_LAYOUT.pot.x + 7)
       expect(tipDestra!.tipX).toBeLessThanOrEqual(SCENE_LAYOUT.pot.x + 25)
       expect(tipDestra!.tipY).toBeGreaterThanOrEqual(SCENE_LAYOUT.pot.y + 14) // in sauce
+      // Handle rises over the rim (y <= 25)
+      expect(drawnPixels.some((p) => p.y <= 25)).toBe(true)
+      // Passes behind the cream rim (rows y=26..27 inside the pot rim x=68..91 are not overwritten)
+      const destraRimOverlap = drawnPixels.filter(
+        (p) => (p.y === 26 || p.y === 27) && p.x >= SCENE_LAYOUT.pot.x + 4,
+      )
+      expect(destraRimOverlap.length).toBe(0)
 
       // Verify tip moved to the right between sinistra and destra (stirring motion)
       expect(tipDestra!.tipX).toBeGreaterThan(tipSinistra!.tipX)
