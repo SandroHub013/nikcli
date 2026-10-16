@@ -575,12 +575,13 @@ describe("5. the «+» in the composer: files and pictures for the bot", () => {
       expect(said.text).toContain("nota.md")
     })
 
-    test("Claude Code and Codex: the paths in the message, no file parts", () => {
+    test("Claude Code and Codex: the paths in the message; Codex also gets the files, for its pictures", () => {
       for (const runner of ["claude", "codex"]) {
         const { turns, requests } = capture()
         turns.send(botOf(runner), "guarda", root, [file("docs/nota.md")])
         expect(requests[0]?.message).toContain("- docs/nota.md")
-        expect(requests[0]?.attachments).toBeUndefined()
+        // Codex takes its pictures with `--image` (bot-ui-3, 3; `codex-images.test.ts`); Claude Code reads them by path.
+        expect(requests[0]?.attachments).toEqual(runner === "codex" ? [file("docs/nota.md")] : undefined)
       }
     })
   })

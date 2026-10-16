@@ -111,16 +111,25 @@ export function attachedLine(files: readonly Attachment[]): string {
   return t("bots.attach.line", files.map((file) => file.relative.split("/").at(-1) ?? file.relative).join(", "))
 }
 
+/** A picture Codex takes with `--image` (bot-ui-3, 3); every other file it gets by its path in the message. */
+export function isPicture(file: Attachment): boolean {
+  return file.mime.startsWith("image/")
+}
+
+/** No check to ask: no file goes. */
+export const refuseAttachment = async (): Promise<AttachmentCheck> => "outside"
+
 /**
- * ragu's file parts, each file checked again just before it goes: ragu reads a `file://` part as the user, with no
- * question asked, so a file that is no longer the project's (moved, or a link out of it) stops the whole message.
+ * Each file checked again just before it goes: ragu reads a `file://` part as the user, with no question asked, and
+ * Codex an `--image` the same way, so a file that is no longer the project's (moved, or a link out of it) stops the
+ * whole message.
  */
-export async function checkedFileParts(
+export async function checkedFiles(
   root: string,
   files: readonly Attachment[],
   /** Rust's check with links and junctions followed: the Chat's `tauriAttachmentCheck` in the app. */
   check: (root: string, path: string) => Promise<AttachmentCheck>,
-): Promise<{ readonly parts: FilePartInput[] } | { readonly problem: string }> {
+): Promise<{ readonly files: readonly Attachment[] } | { readonly problem: string }> {
   for (const file of files) {
     if (!insideProject(root, file.path)) return { problem: t("bots.attach.outside", file.path) }
     if (isEnvFile(file.path)) return { problem: t("bots.attach.env", file.path) }
@@ -129,7 +138,17 @@ export async function checkedFileParts(
     if (verdict === "env") return { problem: t("bots.attach.env", file.path) }
     if (verdict !== "ok") return { problem: t("bots.attach.outside", file.path) }
   }
-  return { parts: attachmentParts(files) }
+  return { files }
+}
+
+/** ragu's file parts, the files checked first (`checkedFiles`). */
+export async function checkedFileParts(
+  root: string,
+  files: readonly Attachment[],
+  check: (root: string, path: string) => Promise<AttachmentCheck>,
+): Promise<{ readonly parts: FilePartInput[] } | { readonly problem: string }> {
+  const checked = await checkedFiles(root, files, check)
+  return "problem" in checked ? checked : { parts: attachmentParts(checked.files) }
 }
 
 /**
