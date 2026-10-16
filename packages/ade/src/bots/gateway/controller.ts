@@ -31,6 +31,7 @@
  */
 
 import { t } from "../../i18n"
+import { visibleText } from "../visible-text"
 import type { AgentFile } from "../ragu"
 import { runnerById } from "../runners"
 import type { Turn, TurnRequest } from "../turn"
@@ -225,12 +226,22 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
   const warn = deps.warn ?? ((line: string) => console.warn(line))
   const chats = new Map<string, ChatState>()
   const questions = new Map<string, Question>()
+  /**
+   * The questions ADE decided while their buttons were still on the phone, by id: a press on one of them is told it
+   * was decided in ADE, once (the phone cannot take the buttons away; it keeps them). A short list: the oldest go.
+   */
+  const decidedInAde = new Map<string, string>()
   let closed = false
 
   /** A press: the answer to a question still waiting in that chat, or nothing. */
   const press = (message: GatewayMessage) => {
     const [id, index] = message.text.split(":")
     const question = id ? questions.get(id) : undefined
+    if (!question && id && decidedInAde.get(id) === sessionKey(message.bot, message.platform, message.chat)) {
+      decidedInAde.delete(id)
+      deps.bridge.send(message.bot, message.platform, message.chat, t("gateway.approve.alreadyAde")).catch(() => {})
+      return
+    }
     if (!question || question.key !== sessionKey(message.bot, message.platform, message.chat)) return
     // A question made for a person is answered by that person (S13).
     if (question.target.asker !== undefined && question.target.asker !== message.sender.id) return
@@ -280,7 +291,10 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
             if (!questions.has(id)) return
             const value = choice === "once" ? "once" : "reject"
             answer(value)
-            const told = t(value === "once" ? "gateway.approve.byAdeOnce" : "gateway.approve.byAdeNo")
+            const command = visibleText(detail.patterns.trim()) || "?"
+            const told = t(value === "once" ? "gateway.approve.byAdeOnce" : "gateway.approve.byAdeNo", command)
+            decidedInAde.set(id, sessionKey(target.bot, target.platform, target.chat))
+            if (decidedInAde.size > 50) decidedInAde.delete(decidedInAde.keys().next().value!)
             deps.bridge.send(target.bot, target.platform, target.chat, told).catch(() => {})
           },
         })

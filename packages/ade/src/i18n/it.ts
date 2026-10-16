@@ -854,8 +854,9 @@ export const it = {
   "bots.waiting.notice": (bot: string, action: string) => `«${bot}» aspetta te: vuole ${action}`,
   "bots.waiting.open": "Apri il bot",
   "bots.waiting.openRoom": "Apri la stanza",
-  "gateway.approve.byAdeOnce": "Consentito da ADE.",
-  "gateway.approve.byAdeNo": "Negato da ADE.",
+  "gateway.approve.byAdeOnce": (command: string) => `Consentito da ADE: «${command}».`,
+  "gateway.approve.byAdeNo": (command: string) => `Negato da ADE: «${command}».`,
+  "gateway.approve.alreadyAde": "Già deciso in ADE: i bottoni di quella domanda non servono più.",
   "gateway.approve.no": "No",
   "gateway.approve.expired": "Nessuna risposta in 5 minuti: ho detto di no.",
   "gateway.approve.refused": (permission: string, what: string) =>

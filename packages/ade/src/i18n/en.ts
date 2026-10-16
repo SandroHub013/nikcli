@@ -834,8 +834,9 @@ export const en: Messages = {
   "bots.waiting.notice": (bot, action) => `“${bot}” is waiting for you: it wants to ${action}`,
   "bots.waiting.open": "Open the bot",
   "bots.waiting.openRoom": "Open the room",
-  "gateway.approve.byAdeOnce": "Allowed from ADE.",
-  "gateway.approve.byAdeNo": "Refused from ADE.",
+  "gateway.approve.byAdeOnce": (command) => `Allowed from ADE: “${command}”.`,
+  "gateway.approve.byAdeNo": (command) => `Refused from ADE: “${command}”.`,
+  "gateway.approve.alreadyAde": "Already decided in ADE: the buttons of that question no longer do anything.",
   "gateway.approve.no": "No",
   "gateway.approve.expired": "No answer in 5 minutes: I said no.",
   "gateway.approve.refused": (permission, what) =>
