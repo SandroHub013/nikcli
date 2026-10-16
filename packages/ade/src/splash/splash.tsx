@@ -80,10 +80,34 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
     onCleanup(() => window.removeEventListener("keydown", handleKeyDown))
 
     const handleResize = () => {
-      controller?.resize(window.innerWidth, window.innerHeight)
+      const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1
+      controller?.resize(window.innerWidth, window.innerHeight, dpr)
     }
     window.addEventListener("resize", handleResize)
     onCleanup(() => window.removeEventListener("resize", handleResize))
+
+    let dprMediaQuery: MediaQueryList | undefined
+    let handleDprChange: (() => void) | undefined
+
+    const setupDprListener = () => {
+      if (typeof window === "undefined" || typeof window.matchMedia !== "function") return
+      if (dprMediaQuery && handleDprChange) {
+        dprMediaQuery.removeEventListener?.("change", handleDprChange)
+      }
+      const dpr = window.devicePixelRatio || 1
+      dprMediaQuery = window.matchMedia(`(resolution: ${dpr}dppx)`)
+      handleDprChange = () => {
+        handleResize()
+        setupDprListener()
+      }
+      dprMediaQuery.addEventListener?.("change", handleDprChange)
+    }
+    setupDprListener()
+    onCleanup(() => {
+      if (dprMediaQuery && handleDprChange) {
+        dprMediaQuery.removeEventListener?.("change", handleDprChange)
+      }
+    })
 
     const prefersReducedMotion =
       typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -94,7 +118,7 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
       if (!sceneIsWorthBuilding(appearedAt, performance.now())) return
 
       controller = startPixelScene(canvas, { prefersReducedMotion })
-      controller.resize(window.innerWidth, window.innerHeight)
+      handleResize()
     }, SPLASH_SCENE_DELAY_MS)
 
     onCleanup(() => clearTimeout(starting))

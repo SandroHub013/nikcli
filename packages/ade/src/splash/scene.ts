@@ -54,12 +54,18 @@ export const DEV_POSE_INTERVAL_MS = 1000 // 1 second per developer pose
 
 /**
  * Calculates the integer scale factor so the logical 160x90 canvas fills as much
- * of the viewport as possible without clipping, staying pixel-perfect.
+ * of the viewport as possible without clipping, staying pixel-perfect in physical device pixels.
  */
-export function calculateIntegerScale(viewportWidth: number, viewportHeight: number): number {
-  if (viewportWidth <= 0 || viewportHeight <= 0) return 1
-  const scaleX = Math.floor(viewportWidth / SCENE_WIDTH)
-  const scaleY = Math.floor(viewportHeight / SCENE_HEIGHT)
+export function calculateIntegerScale(
+  viewportWidth: number,
+  viewportHeight: number,
+  dpr: number = 1
+): number {
+  const deviceWidth = Math.round(viewportWidth * dpr)
+  const deviceHeight = Math.round(viewportHeight * dpr)
+  if (deviceWidth <= 0 || deviceHeight <= 0) return 1
+  const scaleX = Math.floor(deviceWidth / SCENE_WIDTH)
+  const scaleY = Math.floor(deviceHeight / SCENE_HEIGHT)
   return Math.max(1, Math.min(scaleX, scaleY))
 }
 
@@ -158,7 +164,7 @@ export function renderScene(
 
 export interface SceneController {
   /** Resizes canvas style dimensions to integer scale matching viewport. */
-  resize: (viewportWidth: number, viewportHeight: number) => number
+  resize: (viewportWidth: number, viewportHeight: number, dpr?: number) => number
   /** Stops the animation loop and frees listeners. */
   stop: () => void
 }
@@ -193,10 +199,28 @@ export function startPixelScene(
   let stopped = false
   const startTime = performance.now()
 
-  const resize = (viewportWidth: number, viewportHeight: number): number => {
-    const scale = calculateIntegerScale(viewportWidth, viewportHeight)
-    canvas.style.width = `${SCENE_WIDTH * scale}px`
-    canvas.style.height = `${SCENE_HEIGHT * scale}px`
+  const resize = (
+    viewportWidth: number,
+    viewportHeight: number,
+    dpr: number = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
+  ): number => {
+    const scale = calculateIntegerScale(viewportWidth, viewportHeight, dpr)
+    const cssWidth = (SCENE_WIDTH * scale) / dpr
+    const cssHeight = (SCENE_HEIGHT * scale) / dpr
+    const left = Math.round((viewportWidth * dpr - SCENE_WIDTH * scale) / 2) / dpr
+    const top = Math.round((viewportHeight * dpr - SCENE_HEIGHT * scale) / 2) / dpr
+
+    canvas.style.width = `${cssWidth}px`
+    canvas.style.height = `${cssHeight}px`
+
+    const container = canvas.parentElement
+    if (container && container.getAttribute("data-slot") === "splash-scene-container") {
+      container.style.position = "absolute"
+      container.style.left = `${left}px`
+      container.style.top = `${top}px`
+      container.style.width = `${cssWidth}px`
+      container.style.height = `${cssHeight}px`
+    }
     return scale
   }
 

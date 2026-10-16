@@ -108,6 +108,51 @@ describe("splash scene renderer (step 2)", () => {
       expect(calculateIntegerScale(0, 0)).toBe(1)
       expect(calculateIntegerScale(-100, -50)).toBe(1)
     })
+
+    test("calculates integer scale in physical device pixels using devicePixelRatio (P2-1)", () => {
+      // 1920x1080 at 125% zoom (1536x826 CSS window):
+      // device pixels: 1920x1032.5 -> floor(1920/160)=12, floor(1032.5/90)=11 -> scale 11
+      expect(calculateIntegerScale(1536, 826, 1.25)).toBe(11)
+
+      // 1366x768 at 125% zoom (1092.8x614.4 CSS window):
+      // device pixels: 1366x768 -> floor(1366/160)=8, floor(768/90)=8 -> scale 8
+      expect(calculateIntegerScale(1092.8, 614.4, 1.25)).toBe(8)
+
+      // 1920x1080 full screen at 150% zoom (1280x720 CSS window):
+      // device pixels: 1920x1080 -> scale 12
+      expect(calculateIntegerScale(1280, 720, 1.5)).toBe(12)
+
+      // 1080p full screen at 100% zoom (1920x1080, dpr 1.0):
+      expect(calculateIntegerScale(1920, 1080, 1.0)).toBe(12)
+    })
+
+    test("resize sets integer-snapped dimensions and positioning for fractional DPR (P2-1)", () => {
+      const canvas = document.createElement("canvas")
+      const container = document.createElement("div")
+      container.setAttribute("data-slot", "splash-scene-container")
+      container.appendChild(canvas)
+      document.body.appendChild(container)
+
+      try {
+        const controller = startPixelScene(canvas)
+        const scale = controller.resize(1536, 826, 1.25)
+        expect(scale).toBe(11)
+
+        // CSS width: 160 * 11 / 1.25 = 1408px
+        expect(canvas.style.width).toBe("1408px")
+        // CSS height: 90 * 11 / 1.25 = 792px
+        expect(canvas.style.height).toBe("792px")
+
+        // Origin snapped to device pixel integer:
+        // left in dev px = round((1536*1.25 - 160*11)/2) = round((1920 - 1760)/2) = 80px -> CSS 80/1.25 = 64px
+        expect(container.style.left).toBe("64px")
+        // top in dev px = round((826*1.25 - 90*11)/2) = round((1032.5 - 990)/2) = round(21.25) = 21px -> CSS 21/1.25 = 16.8px
+        expect(container.style.top).toBe("16.8px")
+        controller.stop()
+      } finally {
+        container.remove()
+      }
+    })
   })
 
   describe("timing cadences", () => {
