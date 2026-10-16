@@ -363,16 +363,15 @@ impl Adapter for Telegram {
         };
         let mut batch = Vec::new();
         for update in updates.as_array().map(Vec::as_slice).unwrap_or_default() {
-            if let Some(id) = update["update_id"].as_i64() {
-                let mut next = self.next.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-                *next = Some(next.map_or(id + 1, |next| next.max(id + 1)));
-            }
             if let Some(press) = update.get("callback_query") {
                 // Stops the button spinning; who pressed it is the hub's to judge.
                 let _ = self.call(&self.calls, "answerCallbackQuery", &json!({ "callback_query_id": press["id"] })).await;
             }
             if let Some(message) = inbound(update) {
                 batch.push(message);
+            } else if let Some(id) = update["update_id"].as_i64() {
+                let mut next = self.next.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                *next = Some(next.map_or(id + 1, |next| next.max(id + 1)));
             }
         }
         Ok(batch)
@@ -434,6 +433,13 @@ impl Adapter for Telegram {
 
     fn cursor(&self) -> Option<String> {
         self.next.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).map(|next| next.to_string())
+    }
+
+    fn ack(&self, cursor: &str) {
+        if let Ok(id) = cursor.parse::<i64>() {
+            let mut next = self.next.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            *next = Some(next.map_or(id, |next| next.max(id)));
+        }
     }
 }
 
@@ -642,6 +648,7 @@ mod tests {
         assert_eq!((batch[0].chat.as_str(), batch[0].sender.id.as_str(), batch[0].sender.name.as_str()), ("42", "42", "Ale B"));
         assert!(batch[0].private && !batch[1].private);
         assert!(!batch[0].button);
+        telegram.ack("13");
         assert_eq!(telegram.cursor().as_deref(), Some("13"));
         telegram.receive().await.unwrap();
         let calls = api.calls.lock().unwrap().clone();
@@ -654,6 +661,37 @@ mod tests {
         assert_eq!(polls[1]["offset"], 13);
         assert_eq!(api.calls_to("getWebhookInfo").len(), 1, "una volta sola");
         assert!(api.calls_to("deleteWebhook").is_empty());
+    }
+
+    #[tokio::test]
+    async fn offset_is_only_confirmed_to_telegram_after_ack() {
+        let api = FakeApi::start();
+        api.then("getUpdates", 200, json!({ "ok": true, "result": [
+            text_update(10, "private", 42, "ciao"),
+        ]}));
+        let telegram = adapter(&api, Some("7"));
+        let batch = telegram.receive().await.unwrap();
+        assert_eq!(batch.len(), 1);
+
+        // Before ack: cursor is still 7, NOT advanced to 11:
+        assert_eq!(telegram.cursor().as_deref(), Some("7"));
+
+        // Next receive before ack polls with old offset 7:
+        api.then("getUpdates", 200, json!({ "ok": true, "result": [] }));
+        telegram.receive().await.unwrap();
+        let polls = api.calls_to("getUpdates");
+        assert_eq!(polls[0]["offset"], 7);
+        assert_eq!(polls[1]["offset"], 7);
+
+        // Now acknowledge the message:
+        telegram.ack("11");
+        assert_eq!(telegram.cursor().as_deref(), Some("11"));
+
+        // Subsequent poll sends the acknowledged offset 11:
+        api.then("getUpdates", 200, json!({ "ok": true, "result": [] }));
+        telegram.receive().await.unwrap();
+        let polls = api.calls_to("getUpdates");
+        assert_eq!(polls[2]["offset"], 11);
     }
 
     #[tokio::test]
