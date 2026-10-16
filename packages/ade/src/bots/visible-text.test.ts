@@ -31,9 +31,10 @@ describe("visibleText", () => {
     expect(one.patterns).toContain("‮")
   })
 
-  test("lint: the card in the thread, the list, the bell and the phone use it", () => {
+  test("lint: the cards in the thread and in a room (through approvalAction), the list, the bell and the phone use it", () => {
     const read = (file: string) => readFileSync(join(import.meta.dir, file), "utf8")
-    expect(read("bots.tsx")).toContain("visibleText(patterns())")
+    expect(read("bots.tsx")).toContain("approvalAction({ permission: asked().permission, patterns: patterns() })")
+    expect(read("room-panel.tsx")).toContain("approvalAction({ permission: pending().permission, patterns: patterns() })")
     expect(read("waiting-list.tsx")).toContain("visibleText(waiting.patterns)")
     expect(read("approval-signal.ts")).toContain("visibleText(waiting.patterns.trim())")
     expect(read("gateway/approval.ts")).toContain("visibleText(patterns.trim())")
