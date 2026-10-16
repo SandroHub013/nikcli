@@ -155,3 +155,20 @@ describe("P2-5: a pasted picture keeps its name and shows what it is", () => {
     expect(rule.slice(0, rule.indexOf("}"))).toMatch(/width: 24px;[\s\S]*height: 24px;[\s\S]*object-fit: cover;/)
   })
 })
+
+/** The rule for `selector` exactly as written in `bots.css`, its body only. */
+const ruleOf = (selector: string) => {
+  const at = css.indexOf(`${selector} {`)
+  return at < 0 ? "" : css.slice(at, css.indexOf("}", at))
+}
+
+describe("P2-1: the summary and the routine line look like what they are, things to press", () => {
+  test("lint: both have the colour of a link and a sign before the words", () => {
+    for (const slot of ["bots-form-summary", "bots-page-routine"]) {
+      expect(ruleOf(`[data-slot="${slot}"]`)).toContain("color: var(--ade-accent);")
+      expect(ruleOf(`[data-slot="${slot}"]::before`)).toMatch(/content: "[^"]+" \/ "";/)
+    }
+    // The summary's sign turns when «Avanzate» is open.
+    expect(ruleOf('[data-slot="bots-form-summary"][aria-expanded="true"]::before')).toMatch(/content: "[^"]+" \/ "";/)
+  })
+})

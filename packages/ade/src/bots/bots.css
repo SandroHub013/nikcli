@@ -924,14 +924,14 @@
   overflow-wrap: anywhere;
 }
 
-/* The next routine: a line of the head that is a link to the Routines tab. */
+/* The next routine: a line of the head that is a link to the Routines tab, and looks it (bot-ui-4, P2-1). */
 [data-slot="bots-page-routine"] {
   align-self: flex-start;
   max-width: 100%;
   padding: 0;
   border: 0;
   background: none;
-  color: var(--ade-text-weak);
+  color: var(--ade-accent);
   font: inherit;
   font-size: var(--ade-font-sm);
   text-align: start;
@@ -939,8 +939,14 @@
   cursor: pointer;
 }
 
+/* The sign is not read aloud: the words say it. */
+[data-slot="bots-page-routine"]::before {
+  content: "⏱" / "";
+  display: inline-block;
+  margin-right: var(--ade-space-1);
+}
+
 [data-slot="bots-page-routine"]:hover {
-  color: var(--ade-text);
   text-decoration: underline;
 }
 
@@ -1125,14 +1131,14 @@
   border-top: 1px solid var(--ade-border-subtle);
 }
 
-/* The new bot's summary line: what «Avanzate» holds, a press away. */
+/* The new bot's summary line: what «Avanzate» holds, a press away, and looks it (bot-ui-4, P2-1). */
 [data-slot="bots-form-summary"] {
   align-self: flex-start;
   max-width: 100%;
   padding: 0;
   border: 0;
   background: none;
-  color: var(--ade-text-soft);
+  color: var(--ade-accent);
   font: inherit;
   font-size: var(--ade-font-sm);
   text-align: start;
@@ -1140,8 +1146,17 @@
   cursor: pointer;
 }
 
+[data-slot="bots-form-summary"]::before {
+  content: "▸" / "";
+  display: inline-block;
+  margin-right: var(--ade-space-1);
+}
+
+[data-slot="bots-form-summary"][aria-expanded="true"]::before {
+  content: "▾" / "";
+}
+
 [data-slot="bots-form-summary"]:hover {
-  color: var(--ade-text);
   text-decoration: underline;
 }
 
