@@ -992,7 +992,8 @@ export const it = {
     "Da chat il bot potrà chiederti di eseguire comandi sul PC. Ogni comando arriva su Slack con Sì o No, e senza risposta in 5 minuti vale no. È un aiuto, non una protezione: approva solo ciò che riconosci per intero. Se il file del bot cambia, i comandi si spengono.",
   "gateway.panel.cancel": "Annulla",
   "gateway.panel.remoteConfirm": "Accendi i comandi",
-  "gateway.panel.mcp": "Da chat il bot usa anche i tuoi server MCP e i plugin della tua configurazione di Ragu Code.",
+  "gateway.panel.mcp":
+    "Da chat il bot legge e cerca nel progetto, e lo modifica dove previsto: niente server MCP, plugin né web.",
   "design.variant.missing": (k: string, variant: number) => `${k} non ha la variante ${variant}.`,
   "browser.forget": "Dimentica questo sito",
   "browser.forget.tip": "Cancella cookie e dati che questo sito ha lasciato nel profilo di ADE.",
@@ -2140,6 +2141,26 @@ export const it = {
   "bots.spend.free": "gratis",
   "bots.spend.metered": "a consumo (dipende dal modello)",
   "bots.spend.unreported": "costo non riportato dalla CLI",
+  "bots.daily.capLabel": "Tetto di spesa al giorno",
+  "bots.daily.capPlaceholder": "nessun tetto",
+  "bots.daily.capHint":
+    "In dollari, per le conversazioni con il bot qui e dal telefono. All'80 % ADE ti avvisa; al 100 % il bot si ferma fino a domani, o finché non alzi il tetto. Routine e stanze hanno i loro tetti. Vuoto: nessun tetto.",
+  "bots.daily.capSave": "Salva il tetto",
+  "bots.daily.capSaved": "Tetto salvato.",
+  "bots.daily.capInvalid": (max: string) =>
+    `Scrivi un importo in dollari, più di 0 e fino a ${max}, con al massimo due decimali. Vuoto vuol dire nessun tetto.`,
+  "bots.daily.today": (spent: string, cap: string) => `Spesa di oggi: ${spent} di ${cap}`,
+  "bots.daily.todayNoCap": (spent: string) => `Spesa di oggi: ${spent}, senza tetto`,
+  "bots.daily.todayStopped": (spent: string, cap: string) =>
+    `Spesa di oggi: ${spent} di ${cap}. Il bot è fermo fino a domani, o finché non alzi il tetto.`,
+  "bots.daily.unreported":
+    "Codex con una chiave API non riporta i dollari: la sua spesa di oggi non si può contare né fermare con un tetto.",
+  "bots.daily.status": (spent: string, cap: string) => `Oggi ${spent} di ${cap}.`,
+  "bots.daily.statusNoCap": (spent: string) => `Oggi ${spent}, senza tetto.`,
+  "bots.daily.notice": (spent: string, cap: string, name: string) =>
+    `Oggi il bot ha speso ${spent} dei ${cap} del suo tetto al giorno: ha passato l'80 %. Al tetto si ferma fino a domani; puoi alzarlo in ADE, nelle Impostazioni del bot${name ? ` «${name}»` : ""}.`,
+  "bots.daily.reached": (spent: string, cap: string, name: string) =>
+    `Oggi il bot ha speso ${spent}, e il suo tetto al giorno è ${cap}: si ferma fino a domani. Per farlo ripartire prima alza il tetto in ADE, nelle Impostazioni del bot${name ? ` «${name}»` : ""} (Tetto di spesa al giorno).`,
   "bots.account.label": "Account",
   "bots.account.plan": "Abbonamento (il login della CLI)",
   "bots.account.key": "Chiave API",

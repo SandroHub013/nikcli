@@ -259,6 +259,7 @@ export interface TurnSpec {
    * the `read-only` rules on ADE's server (B8d), Claude Code and Codex run
    * read-only too (B11 review:
    * Claude Code is refused Bash, Edit and Write, and edits are not accepted).
+   * Claude Code is also lean and refused the web, as from a chat (choice 7).
    */
   readonly unattended?: boolean
   /** Claude Code only: the dollars the turn may spend (`--max-budget-usd`, B11). */
@@ -309,6 +310,12 @@ const CLAUDE_TOOLS: Record<string, readonly string[]> = {
 
 /** What a routine's Claude Code turn is refused besides the shell: it reads, it does not write. */
 const READ_ONLY_REFUSED: readonly string[] = ["edit", "write"]
+
+/**
+ * What a turn from a chat and a routine are refused besides the shell: the web, as ragu's turns there
+ * (`READ_TOOLS` in `serve-rules.ts`, the user's choice 7). MCP servers are left out by `lean`, which both are.
+ */
+const UNWATCHED_REFUSED: readonly string[] = ["webfetch", "websearch"]
 
 /*
  * A bot from the open project's `.nikcli/agent/` (B3, audit A4): its persona
@@ -416,9 +423,10 @@ export function turnCommand(
        */
       const repository = fromRepository(bot)
       const remote = spec.remote
-      // From a chat: lean always, no `ade-msg`, and never a shell, remote commands or not.
-      const lean = spec.lean === true || remote !== undefined
       const unattended = spec.unattended === true
+      // From a chat and in a routine: lean always (no MCP server), no `ade-msg`, and never a shell, remote commands or not.
+      const lean = spec.lean === true || remote !== undefined || unattended
+      const unwatched = remote !== undefined || unattended
       const adeMsgOnly = lean && bot.disabledTools.includes("bash") && !repository && !remote && !unattended
       if (lean) {
         /*
@@ -435,6 +443,7 @@ export function turnCommand(
           ([tool]) => !bot.disabledTools.includes(tool) && !((repository || remote || unattended) && tool === "bash"),
         )
         .filter(([tool]) => !(unattended && READ_ONLY_REFUSED.includes(tool)))
+        .filter(([tool]) => !(unwatched && UNWATCHED_REFUSED.includes(tool)))
         .flatMap(([, names]) => names)
       if (lean && !repository && !remote && !unattended) allowed.push("Bash(ade-msg *)", "PowerShell(ade-msg *)")
       const disallowed = bot.disabledTools
@@ -444,6 +453,9 @@ export function turnCommand(
       // A routine is read-only, like Codex's (B11 review, the Master's decision).
       if (unattended)
         for (const name of READ_ONLY_REFUSED.flatMap((tool) => CLAUDE_TOOLS[tool] ?? []))
+          if (!disallowed.includes(name)) disallowed.push(name)
+      if (unwatched)
+        for (const name of UNWATCHED_REFUSED.flatMap((tool) => CLAUDE_TOOLS[tool] ?? []))
           if (!disallowed.includes(name)) disallowed.push(name)
       // A refusal beats an allow, `acceptEdits` included.
       if ((repository || remote) && canWrite(bot)) disallowed.push(...EXECUTES_LATER_RULES)

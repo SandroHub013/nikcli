@@ -121,6 +121,8 @@ export interface GatewayControllerDeps {
    * text is someone else's. Absent, the bots have none here.
    */
   readonly memory?: MemoryStore
+  /** The bot's money today for `/stato` (`spend.ts`): «Oggi 0,42 $ di 2,00 $.»; absent or undefined, not said. */
+  readonly spendToday?: (bot: string) => Promise<string | undefined>
   /** How long a command waits for the phone before it is refused; `ASK_TIMEOUT_MS` when absent. */
   readonly approvalTimeoutMs?: number
   readonly now?: () => number
@@ -301,7 +303,9 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       return reply(message, t("gateway.stopped"))
     }
     if (which === "status") {
-      return reply(message, running ? t("gateway.status.working", state.queue.length) : t("gateway.status.idle"))
+      const said = running ? t("gateway.status.working", state.queue.length) : t("gateway.status.idle")
+      const spent = await deps.spendToday?.(message.bot).catch(() => undefined)
+      return reply(message, spent ? `${said}\n${spent}` : said)
     }
     return reply(message, t("gateway.help"))
   }

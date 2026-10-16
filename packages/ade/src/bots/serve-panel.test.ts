@@ -507,7 +507,8 @@ describe("B8d: a routine's run and a chat's turn on the server", () => {
    */
   test("lint: the gateway's runTurn is runBotTurn, so a turn from a gateway runs on ADE's server", () => {
     const bridge = readFileSync(new URL("./gateway/bridge.ts", import.meta.url), "utf8")
-    expect(bridge).toContain("runTurn: (request) => runBotTurn(request)")
+    // Within the bot's money a day (`spend.ts`), which hands the request on as it is but for its cap.
+    expect(bridge).toContain("runTurn: withDailyCap((request) => runBotTurn(request), { store: appSpendStore })")
   })
 })
 

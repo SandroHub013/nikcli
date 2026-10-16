@@ -15,6 +15,13 @@
 
 import { t } from "../i18n"
 
+/** The local day of `at`, `YYYY-MM-DD`: what a routine's runs and a bot's money a day are counted under. */
+export function dayOf(at: number): string {
+  const date = new Date(at)
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
 /** Runners that spend the user's Anthropic or ChatGPT plan, rather than keys the user gave ragu. */
 export const PLAN_RUNNERS: readonly string[] = ["claude", "codex"]
 
