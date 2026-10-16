@@ -158,6 +158,13 @@ describe("the bar's layout", () => {
     expect(codeOf(workbench)).not.toContain(codeOf("<Show when={showsNewPane(wb().view)}>"))
   })
 
+  test("under 720 px the project's name gives way before the «i» and the sidebar toggle, and nothing is drawn outside the group", () => {
+    const block = css.slice(css.indexOf("@media (max-width: 719.98px)"))
+    const narrow = block.slice(0, block.indexOf("@media", 10))
+    expect(narrow).toMatch(/\[data-slot="ade-project-name"\]\s*\{[^}]*min-width:\s*0/)
+    expect(narrow).toMatch(/\[data-slot="ade-project"\]\s*\{[^}]*overflow:\s*hidden/)
+  })
+
   test("the left side has two weights and no capitals spaced out", () => {
     expect(rule('[data-slot="ade-project-name"]')).toContain("font-weight: var(--ade-weight-semibold)")
     expect(rule('[data-slot="ade-project-meta"]')).toContain("font-size: var(--ade-font-sm)")

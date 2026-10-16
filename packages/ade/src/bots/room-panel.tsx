@@ -10,6 +10,7 @@
 import { createEffect, createMemo, createResource, createSignal, For, on, Show } from "solid-js"
 import { t } from "../i18n"
 import { APPROVAL_TIMEOUT_MS } from "./approval"
+import { approvalAction } from "./approval-signal"
 import { ConfirmAction } from "./confirm"
 import { formatCap } from "./format"
 import type { AgentFile } from "./ragu"
@@ -221,7 +222,11 @@ export function RoomMain(props: { deps: RoomPanelDeps; roomId: string; onRemoved
                       fallback={t("bots.permission.roomWants", nameOf(speaking()!), pending().permission)}
                     >
                       {(patterns) =>
-                        t("bots.permission.roomWantsOn", nameOf(speaking()!), pending().permission, patterns())
+                        t(
+                          "bots.permission.roomWantsAction",
+                          nameOf(speaking()!),
+                          approvalAction({ permission: pending().permission, patterns: patterns() }),
+                        )
                       }
                     </Show>
                     <Show when={pending().reason}>

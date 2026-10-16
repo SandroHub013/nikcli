@@ -823,6 +823,26 @@
   box-shadow: var(--ade-focus-ring);
 }
 
+/*
+ * Under 720 px the left group has almost nothing left (the middle one keeps its content), and the project's name, held at
+ * 48 px, spilled over the sidebar toggle beside it (Review Bot, 700 px). Now the name is the one that gives way: it is cut
+ * with its ellipsis before the «i» and before the toggle, and nothing of the group is drawn outside it.
+ */
+@media (max-width: 719.98px) {
+  [data-slot="ade-bar-side"][data-side="start"] {
+    gap: var(--ade-space-2);
+  }
+  [data-slot="ade-project"] {
+    gap: var(--ade-space-2);
+    overflow: hidden;
+    /* The room the «i»'s focus ring needs, which the clip would otherwise take. */
+    padding: 2px;
+  }
+  [data-slot="ade-project-name"] {
+    min-width: 0;
+  }
+}
+
 /* The browser's popover, placed under the bar's left side. */
 [data-slot="ade-project-facts"] {
   position: fixed;
