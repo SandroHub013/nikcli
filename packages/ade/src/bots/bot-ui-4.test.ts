@@ -264,3 +264,13 @@ describe("P2-7: a routine's name is never cut in the middle of a word", () => {
     expect(panel).not.toContain("Array.from(routine.prompt).slice(0, 60)")
   })
 })
+
+describe("P2-8: the app's header keeps «Decisioni» whole at 800 px", () => {
+  test("lint: the short label takes the place of the full one only under 800 px", () => {
+    const pills = readFileSync(join(import.meta.dir, "../ui/pill-tabs.css"), "utf8")
+    const narrow = pills.slice(pills.indexOf("@media (max-width: 799.98px)"))
+    expect(narrow).toContain('[data-slot="ade-pill-label-full"] {\n    display: none;')
+    expect(narrow).toContain('[data-slot="ade-pill-label-short"] {\n    display: inline;')
+    expect(pills).not.toContain("@media (max-width: 1099.98px)")
+  })
+})
