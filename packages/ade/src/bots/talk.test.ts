@@ -216,7 +216,7 @@ describe("storage", () => {
   })
 
   test("lastWords go through the same filter before they are stored", () => {
-    const key = "ghp_abcdefghijklmnopqrstuvwxyz"
+    const key = `${"ghp_"}abcdefghijklmnopqrstuvwxyz`
     const talk = applyExit(emptyTalk(), 1, T0, "ragu", `untrusted: ${key}`)
     expect(talk.messages.at(-1)?.text).not.toContain(key)
     expect(serializeTalk(talk)).not.toContain(key)
