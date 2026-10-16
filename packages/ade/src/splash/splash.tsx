@@ -112,13 +112,12 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
     >
       <div data-slot="splash-scene-container">
         <canvas ref={canvasRef} data-slot="splash-canvas" aria-hidden="true" />
+        <Show when={props.status}>
+          <div data-slot="splash-status" aria-live="polite">
+            {props.status}
+          </div>
+        </Show>
       </div>
-
-      <Show when={props.status}>
-        <div data-slot="splash-status" aria-live="polite">
-          {props.status}
-        </div>
-      </Show>
 
       {/* CRT Scanlines & Vignette */}
       <div data-slot="splash-crt" aria-hidden="true" />

@@ -30,10 +30,9 @@
 
 /* Canvas container: perfectly centered in viewport */
 [data-slot="splash-scene-container"] {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   position: relative;
+  display: inline-block;
+  line-height: 0;
   z-index: 1;
 }
 
@@ -44,17 +43,22 @@
   image-rendering: crisp-edges;
 }
 
-/* Status message under the cooking scene */
+/* Status message under the cooking scene, grouped with wordmark */
 [data-slot="splash-status"] {
-  margin-top: var(--ade-space-3, 8px);
+  position: absolute;
+  top: calc(76 / 90 * 100%);
+  left: 0;
+  right: 0;
+  line-height: normal;
   font-family: var(--ade-mono, monospace);
   font-size: var(--ade-font-xs);
   color: #9a907f;
   letter-spacing: 0.5px;
   text-align: center;
   user-select: none;
+  pointer-events: none;
   z-index: 2;
-  min-height: 16px;
+  white-space: nowrap;
 }
 
 /* Subtle CRT scanlines & vignette for terminal atmosphere */
