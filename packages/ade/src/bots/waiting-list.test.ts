@@ -142,6 +142,6 @@ describe("the roster shows it", () => {
     const view = readFileSync(join(import.meta.dir, "bots.tsx"), "utf8")
     const roster = view.slice(view.indexOf("export function BotsRoster"), view.indexOf("export interface BotsMainProps"))
     expect(roster).toContain("<WaitingList waiting={waitingApprovals} onOpen={openBotByPath} />")
-    expect(roster.indexOf("<WaitingList")).toBeLessThan(roster.indexOf('data-slot="bots-pinned"'))
+    expect(roster.indexOf("<WaitingList")).toBeLessThan(roster.indexOf('data-slot="bots-list"'))
   })
 })

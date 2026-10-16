@@ -287,50 +287,6 @@
   gap: var(--ade-space-3);
 }
 
-/* The three at the top, large. A row of portraits, names under them. */
-[data-slot="bots-pinned"] {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--ade-space-2);
-  padding: var(--ade-space-2) var(--ade-space-4) var(--ade-space-5);
-  border-bottom: 1px solid var(--ade-border-subtle);
-}
-
-[data-slot="bots-pin"] {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--ade-space-4);
-  min-width: 0;
-  padding: var(--ade-space-4) var(--ade-space-2);
-  border: 0;
-  border-radius: var(--ade-radius-lg);
-  background: transparent;
-  color: var(--ade-text-soft);
-  font-family: inherit;
-  cursor: pointer;
-}
-
-[data-slot="bots-pin"]:hover {
-  background: var(--ade-hover);
-}
-[data-slot="bots-pin"][data-active="true"] {
-  background: var(--ade-active);
-  color: var(--ade-text);
-}
-[data-slot="bots-pin"]:focus-visible {
-  outline: none;
-  box-shadow: var(--ade-focus-ring);
-}
-
-[data-slot="bots-pin-name"] {
-  max-width: 100%;
-  font-size: var(--ade-font-sm);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 [data-slot="bots-list"] {
   display: flex;
   flex-direction: column;

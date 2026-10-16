@@ -9,8 +9,8 @@
  * messaging app lays out its contacts:
  *
  *   - in the sidebar the bots, where the sessions and files are in the other
- *     views, each a shape and a colour rather than an initial, the three most
- *     recently active pinned large at the top, and under each name the last
+ *     views, each a shape and a colour rather than an initial, every one a
+ *     row alike in the order of last use, and under each name the last
  *     thing said or done and when — with the screenshots and the settings
  *     strip at the foot of the column, as everywhere else;
  *   - in the middle the conversation with the chosen one — what you wrote,
@@ -862,8 +862,8 @@ export interface BotsRosterProps {
 /**
  * The contact list, drawn in the sidebar.
  *
- * The three most recently active at the top, large; the rest in a list, each
- * with the last thing said or done and when. Sized to the sidebar it is in.
+ * Every bot a row alike, whoever spoke last first, each with the last thing said or done and when (the user's choice
+ * 3 of the second page: the three large ones at the top took the room of three rows). Sized to the sidebar it is in.
  */
 /** The form for a new bot, in the middle: from the «+», and from the empty states that say to press it. */
 function startNewBot() {
@@ -875,11 +875,6 @@ export function BotsRoster(props: BotsRosterProps) {
   createEffect(() => shared.setProjectRoot(props.projectRoot))
 
   const { roster, ordered, openId, now, open, expression } = shared
-
-  /* The three at the top, large, only when there are enough for the split to
-     mean something: three portraits over an empty list is a list drawn twice. */
-  const pinned = createMemo(() => (ordered().length >= 4 ? ordered().slice(0, 3) : []))
-  const listed = createMemo(() => (ordered().length >= 4 ? ordered().slice(3) : ordered()))
 
   return (
     <div data-component="ade-bots-roster">
@@ -899,25 +894,6 @@ export function BotsRoster(props: BotsRosterProps) {
       {/* What the bots wait for, first: a yes or a no from here, the phone's questions too. */}
       <WaitingList waiting={waitingApprovals} onOpen={openBotByPath} />
 
-      <Show when={pinned().length > 0}>
-        <div data-slot="bots-pinned">
-          <For each={pinned()}>
-            {(bot) => (
-              <button
-                type="button"
-                data-slot="bots-pin"
-                data-active={bot.path === openId() ? "true" : undefined}
-                onClick={() => open(bot)}
-                title={bot.description}
-              >
-                <Face identifier={bot.identifier} avatar={bot.avatar} expression={expression(bot)} size={56} />
-                <span data-slot="bots-pin-name">{bot.identifier}</span>
-              </button>
-            )}
-          </For>
-        </div>
-      </Show>
-
       <Show
         when={(roster() ?? []).length > 0}
         fallback={
@@ -932,7 +908,7 @@ export function BotsRoster(props: BotsRosterProps) {
         }
       >
         <div data-slot="bots-list">
-          <For each={listed()}>
+          <For each={ordered()}>
             {(bot) => {
               const talk = () => talkOf(bot.path)
               return (
