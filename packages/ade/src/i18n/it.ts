@@ -2390,7 +2390,11 @@ export const it = {
   "bots.permissions.panelTextCodexWrite": "Esegue i comandi senza chiederti il permesso, e scrive solo nella cartella di lavoro: Codex non può chiedere.",
   "bots.permissions.panelTextCodexRead": "Esegue senza chiedere solo comandi che leggono (sandbox in sola lettura): Codex non può chiederti il permesso.",
   "bots.permissions.always": "«Sempre» dati a questo bot",
-  "bots.permissions.alwaysEmpty": "Nessuno: un comando pericoloso non va avanti senza il tuo sì.",
+  "bots.permissions.alwaysEmptyRagu": "Nessuno: ogni comando, e ogni passo fuori dal progetto, ti viene chiesto.",
+  "bots.permissions.alwaysEmptyRaguNoShell": "Nessuno: ogni passo fuori dal progetto ti viene chiesto.",
+  "bots.permissions.alwaysEmptyClaude":
+    "Nessuno: un comando rifiutato resta rifiutato finché non scegli «Sempre per questo bot» nel thread.",
+  "bots.permissions.alwaysEmptyClaudeNoShell": "Nessuno: non esegue comandi, quindi non c'è niente da concedere.",
   "bots.permissions.alwaysHow": "Un «Sempre» vale nella Conversazione, non dal telefono.",
   "bots.permissions.alwaysOutside": (folder: string) => `Scrivere fuori dal progetto, in «${folder}»`,
   "bots.permissions.alwaysTool": (tool: string) => `Usare «${tool}» senza chiedere`,

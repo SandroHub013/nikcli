@@ -9,6 +9,8 @@ import { memoryAccountStore } from "./account"
 import { volatileMemoryStore } from "./memory"
 import { memoryRemoteStore } from "./gateway/remote"
 import { EMPTY_BOOK, type RoutineBook } from "./routine"
+import { alwaysEmptyKey, conversationText } from "./permissions-facts"
+import type { AgentFile } from "./ragu"
 
 /*
  * The second round of captures (results/bot-scatti-2.md), the fixes Master asked for on 2026-10-16. What is layout is held as
@@ -170,5 +172,44 @@ describe("P2-1: the summary and the routine line look like what they are, things
     }
     // The summary's sign turns when «Avanzate» is open.
     expect(ruleOf('[data-slot="bots-form-summary"][aria-expanded="true"]::before')).toMatch(/content: "[^"]+" \/ "";/)
+  })
+})
+
+describe("P2-2: the empty «Sempre» says what happens instead, for each program", () => {
+  const bot = (runner: string, extra: Partial<AgentFile> = {}): AgentFile => ({
+    identifier: "contabile",
+    path: "C:/u/.ragu/agent/contabile.md",
+    scope: "global",
+    description: "",
+    mode: "primary",
+    prompt: "",
+    disabledTools: [],
+    runner,
+    ...extra,
+  })
+
+  test("ragu asks every command, and every step outside; with no shell, every step outside", () => {
+    expect(itText[alwaysEmptyKey(bot("ragu"))]).toBe(
+      "Nessuno: ogni comando, e ogni passo fuori dal progetto, ti viene chiesto.",
+    )
+    expect(itText[alwaysEmptyKey(bot("ragu", { disabledTools: ["bash"] }))]).toBe(
+      "Nessuno: ogni passo fuori dal progetto ti viene chiesto.",
+    )
+  })
+
+  test("Claude Code keeps a refused command refused until «Sempre per questo bot»; with no commands, there is none to give", () => {
+    expect(itText[alwaysEmptyKey(bot("claude"))]).toBe(
+      "Nessuno: un comando rifiutato resta rifiutato finché non scegli «Sempre per questo bot» nel thread.",
+    )
+    for (const one of [bot("claude", { scope: "project" }), bot("claude", { disabledTools: ["bash"] })]) {
+      expect(itText[alwaysEmptyKey(one)]).toBe("Nessuno: non esegue comandi, quindi non c'è niente da concedere.")
+      // The same bot the Conversation says runs no commands.
+      expect(conversationText(one).key).toBe("bots.permissions.panelTextClaudeNoShell")
+    }
+  })
+
+  test("lint: the tab says it, not the one text for all", () => {
+    expect(read("permissions-panel.tsx")).toContain("t(alwaysEmptyKey(props.bot))")
+    expect(Object.keys(itText)).not.toContain("bots.permissions.alwaysEmpty")
   })
 })

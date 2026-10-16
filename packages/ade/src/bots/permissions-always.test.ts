@@ -98,7 +98,7 @@ describe("the list in Permissions", () => {
     expect(view.items()).toEqual(["Riscrive la storia di git o butta via lavoro non salvato"])
     view.take(0)
     expect(always.get(BOT.path)).toEqual([])
-    expect(view.section()!.textContent).toContain(t("bots.permissions.alwaysEmpty"))
+    expect(view.section()!.textContent).toContain(t("bots.permissions.alwaysEmptyRagu"))
     // What `decide` reads is what the list shows: nothing kept, the danger is asked.
     const { decide } = await import("./approval")
     expect(decide("bash", "rm -rf build", always.get(BOT.path)).kind).toBe("ask")

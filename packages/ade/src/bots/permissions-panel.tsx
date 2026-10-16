@@ -3,7 +3,7 @@ import { t } from "../i18n"
 import type { AlwaysStore } from "./approval"
 import { offersRemoteCommands, remoteKey, remoteTools, type RemoteStore } from "./gateway/remote"
 import { alwaysApplies, alwaysText } from "./permissions-always"
-import { conversationText, phoneText, routinesTextKey } from "./permissions-facts"
+import { alwaysEmptyKey, conversationText, phoneText, routinesTextKey } from "./permissions-facts"
 import type { AgentFile } from "./ragu"
 import { runnerById } from "./runners"
 
@@ -111,7 +111,7 @@ export function PermissionsSection(props: {
           </h3>
           <Show
             when={kept().length > 0}
-            fallback={<p data-slot="bots-hint">{t("bots.permissions.alwaysEmpty")}</p>}
+            fallback={<p data-slot="bots-hint">{t(alwaysEmptyKey(props.bot))}</p>}
           >
             <ul data-slot="gateway-list">
               <For each={kept()}>
