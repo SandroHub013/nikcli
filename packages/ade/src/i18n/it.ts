@@ -2143,6 +2143,8 @@ export const it = {
   "bots.spend.unreported": "costo non riportato dalla CLI",
   "bots.codex.optionsRefused":
     "Codex non ha accettato le opzioni con cui ADE gli spegne i server MCP e il web da chat e nelle routine. Succede con una versione di Codex troppo vecchia, o se Codex legge un config.toml diverso da ~/.codex/config.toml (CODEX_HOME): aggiorna Codex o togli CODEX_HOME.",
+  "bots.codex.projectConfig":
+    "Il progetto ha un .codex/config.toml, che Codex legge nei progetti fidati con i suoi server MCP. Per tenerli spenti questo turno è partito senza la tua configurazione di Codex: anche senza il provider e i profili del tuo ~/.codex/config.toml.",
   "bots.codex.withoutUserConfig":
     "ADE non ha potuto leggere i server MCP in ~/.codex/config.toml, così questo turno è partito senza la tua configurazione di Codex: niente server MCP, ma anche niente provider o profili messi lì.",
   "bots.daily.capLabel": "Tetto di spesa al giorno",

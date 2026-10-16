@@ -279,14 +279,15 @@ describe("le opzioni di avvio arrivano all'host", () => {
 describe("a Codex turn nobody watches reads the user's MCP servers", () => {
   const CONFIG = "C:/Users/u/.codex/config.toml"
 
-  function codexMachine(config: { text?: string; unreadable?: boolean } = {}) {
+  function codexMachine(config: { text?: string; unreadable?: boolean } = {}, others: readonly string[] = []) {
     const argv: (readonly string[])[] = []
     const exits: ((code: number | null) => void)[] = []
     const lines: ((line: string) => void)[] = []
     const reads: string[] = []
     const host = {
       homeDir: async () => "C:/Users/u",
-      exists: async (path: string) => path === CONFIG && (config.text !== undefined || config.unreadable === true),
+      exists: async (path: string) =>
+        path === CONFIG ? config.text !== undefined || config.unreadable === true : others.includes(path),
       readTextFile: async (path: string) => {
         reads.push(path)
         if (config.unreadable) throw new Error("accesso negato")
@@ -362,6 +363,39 @@ describe("a Codex turn nobody watches reads the user's MCP servers", () => {
     m.exit(1)
     const result = await turn.result
     expect(result.problem).toContain(t("bots.codex.optionsRefused"))
+  })
+
+  /*
+   * Codex 0.162.1 reads a project's `.codex/config.toml` too, in a trusted project, from its git root down to the
+   * turn's folder (checked with `codex mcp list` and a fake provider, no model turn). A server switched off by name in
+   * a project Codex does not trust stops the turn (`invalid transport`), and ADE cannot see the trust: with such a
+   * file the turn leaves the user's config out, and the list of trusted projects with it, so the project's is not
+   * read either (0 servers, checked the same way).
+   */
+  test("a project's .codex/config.toml, in the turn's folder or above it: the user's config is left out", async () => {
+    for (const project of ["C:/Users/u/progetto/.codex/config.toml", "C:/Users/u/progetto/app/.codex/config.toml"]) {
+      const m = codexMachine({ text: '[mcp_servers.docs]\nurl = "x"\n' }, [project])
+      const turn = runTurn(
+        { runner: "codex", message: "ciao", cwd: "C:\\Users\\u\\progetto\\app", remote: { commands: false } },
+        m.deps,
+      )
+      await until(() => m.spawned() > 0)
+      expect([project, m.argv[0]!.includes("--ignore-user-config")]).toEqual([project, true])
+      expect(m.argv[0]!.join(" ")).not.toContain("mcp_servers.")
+      m.say("Error: model_provider `azure` not found")
+      m.exit(1)
+      expect((await turn.result).problem).toContain(t("bots.codex.projectConfig"))
+    }
+  })
+
+  test("the user's own ~/.codex is not taken for a project's, from a folder under home", async () => {
+    const m = codexMachine({ text: '[mcp_servers.docs]\nurl = "x"\n' })
+    const turn = runTurn({ runner: "codex", message: "ciao", cwd: "C:/Users/u/progetto", unattended: true }, m.deps)
+    await until(() => m.spawned() > 0)
+    expect(m.argv[0]).toContain("mcp_servers.docs.enabled=false")
+    expect(m.argv[0]).not.toContain("--ignore-user-config")
+    m.exit(0)
+    await turn.result
   })
 
   test("a turn in the panel does not read the file and keeps Codex as the user set it", async () => {
