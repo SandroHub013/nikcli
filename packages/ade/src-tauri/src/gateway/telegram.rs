@@ -367,15 +367,16 @@ impl Adapter for Telegram {
         };
         let mut batch = Vec::new();
         for update in updates.as_array().map(Vec::as_slice).unwrap_or_default() {
+            if let Some(id) = update["update_id"].as_i64() {
+                let mut next = self.next.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                *next = Some(next.map_or(id + 1, |next| next.max(id + 1)));
+            }
             if let Some(press) = update.get("callback_query") {
                 // Stops the button spinning; who pressed it is the hub's to judge.
                 let _ = self.call(&self.calls, "answerCallbackQuery", &json!({ "callback_query_id": press["id"] })).await;
             }
             if let Some(message) = inbound(update) {
                 batch.push(message);
-            } else if let Some(id) = update["update_id"].as_i64() {
-                let mut next = self.next.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-                *next = Some(next.map_or(id + 1, |next| next.max(id + 1)));
             }
         }
         Ok(batch)
@@ -437,13 +438,6 @@ impl Adapter for Telegram {
 
     fn cursor(&self) -> Option<String> {
         self.next.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).map(|next| next.to_string())
-    }
-
-    fn ack(&self, cursor: &str) {
-        if let Ok(id) = cursor.parse::<i64>() {
-            let mut next = self.next.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-            *next = Some(next.map_or(id, |next| next.max(id)));
-        }
     }
 }
 
@@ -550,6 +544,7 @@ mod tests {
         /// Every call: the path it went to and its JSON body.
         calls: Arc<Mutex<Vec<(String, Value)>>>,
         script: Arc<Mutex<HashMap<String, VecDeque<Reply>>>>,
+        pending_updates: Arc<Mutex<Vec<Value>>>,
     }
 
     impl FakeApi {
@@ -564,6 +559,10 @@ mod tests {
                 }
             });
             api
+        }
+
+        fn with_updates(&self, updates: Vec<Value>) {
+            *self.pending_updates.lock().unwrap() = updates;
         }
 
         fn then(&self, method: &str, status: u16, body: Value) {
@@ -606,10 +605,23 @@ mod tests {
             let path = head.split_whitespace().nth(1).unwrap_or_default().to_string();
             let body: Value = serde_json::from_slice(&data[head_end..]).unwrap_or(Value::Null);
             let method = path.rsplit('/').next().unwrap_or_default().to_string();
-            self.calls.lock().unwrap().push((path, body));
+            self.calls.lock().unwrap().push((path, body.clone()));
             let scripted = self.script.lock().unwrap().get_mut(&method).and_then(VecDeque::pop_front);
             let (status, reply, delay) = scripted.unwrap_or_else(|| match method.as_str() {
-                "getUpdates" => (200, json!({ "ok": true, "result": [] }).to_string(), 30),
+                "getUpdates" => {
+                    let pending = self.pending_updates.lock().unwrap();
+                    if !pending.is_empty() {
+                        let offset = body["offset"].as_i64();
+                        let filtered: Vec<Value> = pending
+                            .iter()
+                            .filter(|u| offset.map_or(true, |off| u["update_id"].as_i64().unwrap_or(0) >= off))
+                            .cloned()
+                            .collect();
+                        (200, json!({ "ok": true, "result": filtered }).to_string(), 0)
+                    } else {
+                        (200, json!({ "ok": true, "result": [] }).to_string(), 30)
+                    }
+                }
                 "sendMessage" => {
                     let sent = self.calls_to("sendMessage").len();
                     (200, json!({ "ok": true, "result": { "message_id": 100 + sent } }).to_string(), 0)
@@ -652,7 +664,6 @@ mod tests {
         assert_eq!((batch[0].chat.as_str(), batch[0].sender.id.as_str(), batch[0].sender.name.as_str()), ("42", "42", "Ale B"));
         assert!(batch[0].private && !batch[1].private);
         assert!(!batch[0].button);
-        telegram.ack("13");
         assert_eq!(telegram.cursor().as_deref(), Some("13"));
         telegram.receive().await.unwrap();
         let calls = api.calls.lock().unwrap().clone();
@@ -668,34 +679,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn offset_is_only_confirmed_to_telegram_after_ack() {
+    async fn updates_are_confirmed_to_telegram_immediately_so_strangers_and_queued_are_not_reread() {
         let api = FakeApi::start();
-        api.then("getUpdates", 200, json!({ "ok": true, "result": [
-            text_update(10, "private", 42, "ciao"),
-        ]}));
-        let telegram = adapter(&api, Some("7"));
-        let batch = telegram.receive().await.unwrap();
-        assert_eq!(batch.len(), 1);
+        api.with_updates(vec![
+            text_update(10, "private", 99, "messaggio di un estraneo"),
+            text_update(11, "private", 42, "messaggio in coda"),
+        ]);
+        let telegram = adapter(&api, None);
+        let batch1 = telegram.receive().await.unwrap();
+        assert_eq!(batch1.len(), 2);
+        assert_eq!(batch1[0].text, "messaggio di un estraneo");
+        assert_eq!(batch1[1].text, "messaggio in coda");
 
-        // Before ack: cursor is still 7, NOT advanced to 11:
-        assert_eq!(telegram.cursor().as_deref(), Some("7"));
+        let batch2 = telegram.receive().await.unwrap();
+        assert!(batch2.is_empty(), "gli update già letti non devono essere restituiti di nuovo");
 
-        // Next receive before ack polls with old offset 7:
-        api.then("getUpdates", 200, json!({ "ok": true, "result": [] }));
-        telegram.receive().await.unwrap();
         let polls = api.calls_to("getUpdates");
-        assert_eq!(polls[0]["offset"], 7);
-        assert_eq!(polls[1]["offset"], 7);
-
-        // Now acknowledge the message:
-        telegram.ack("11");
-        assert_eq!(telegram.cursor().as_deref(), Some("11"));
-
-        // Subsequent poll sends the acknowledged offset 11:
-        api.then("getUpdates", 200, json!({ "ok": true, "result": [] }));
-        telegram.receive().await.unwrap();
-        let polls = api.calls_to("getUpdates");
-        assert_eq!(polls[2]["offset"], 11);
+        assert_eq!(polls.len(), 2);
+        assert_eq!(polls[0].get("offset"), None);
+        assert_eq!(polls[1]["offset"], 12);
     }
 
     #[tokio::test]
