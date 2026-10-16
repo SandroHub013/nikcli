@@ -126,6 +126,7 @@ export function descendants(paneId: string, parents: ReadonlyMap<string, string>
  *   claude  --model <m>
  *   codex   -m <m>
  *   agy     --model <m>   (ids from `agy models`)
+ *   opencode --model <provider/model>   (`-m, --model` in `opencode --help`, 1.19.2; ids from `opencode models`)
  */
 export function modelArgs(agentId: string, model: string): string[] | { error: string } {
   const value = model.trim()
@@ -133,6 +134,7 @@ export function modelArgs(agentId: string, model: string): string[] | { error: s
   switch (agentId) {
     case "claude-code":
     case "agy":
+    case "opencode":
       return ["--model", value]
     case "codex":
       return ["-m", value]
