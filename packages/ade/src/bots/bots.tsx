@@ -48,7 +48,19 @@ import { APPROVAL_TIMEOUT_MS, localAlwaysStore } from "./approval"
 import { askDialog, askYesNo } from "../host/ask"
 import { getHost } from "../host/shell"
 import { every } from "../host/every"
-import { avatarKey, COLORS, expressionFor, faceOf, SHAPES, type Color, type Expression, type Shape } from "./avatar"
+import {
+  avatarKey,
+  COLORS,
+  expressionFor,
+  faceOf,
+  parseFaceImage,
+  randomAvatar,
+  SHAPES,
+  type Color,
+  type Expression,
+  type Shape,
+} from "./avatar"
+import { browserFaceImage, loadFaceImage } from "./face-image"
 import {
   COMMON_EFFORTS,
   OBJECTIVES_HEADING,
@@ -1184,15 +1196,19 @@ export function BotsMain(props: BotsMainProps) {
  */
 function Face(props: { identifier: string; avatar?: string; expression?: Expression; size: number }) {
   const avatar = createMemo(() => faceOf(props.identifier, props.avatar))
+  // A picture the user loaded (design/ade-bot-2, scelta 2): drawn as it is, without the eyes.
+  const image = createMemo(() => parseFaceImage(props.avatar))
   return (
     <span
       data-slot="bots-face"
-      data-shape={avatar().shape}
+      data-shape={image() ? "image" : avatar().shape}
       data-expression={props.expression ?? "still"}
       style={{ "--bot-color": `var(--ade-ansi-${avatar().color})`, "--bot-size": `${props.size}px` }}
       aria-hidden="true"
     >
-      <b data-slot="bots-face-shape" />
+      <Show when={image()} fallback={<b data-slot="bots-face-shape" />}>
+        {(src) => <img data-slot="bots-face-image" src={src()} alt="" draggable={false} />}
+      </Show>
     </span>
   )
 }
@@ -1208,7 +1224,18 @@ function Face(props: { identifier: string; avatar?: string; expression?: Express
  */
 function FacePicker(props: { identifier: string; value?: string; onChange: (value: string | undefined) => void }) {
   const chosen = createMemo(() => faceOf(props.identifier, props.value))
+  // A picture: no shape or colour is the chosen one.
+  const image = () => parseFaceImage(props.value) !== undefined
   const pick = (shape: Shape, color: Color) => props.onChange(avatarKey({ shape, color }))
+  const [problem, setProblem] = createSignal<string>()
+  let fileField: HTMLInputElement | undefined
+  const upload = async (file: File | undefined) => {
+    setProblem(undefined)
+    if (!file) return
+    const loaded = await loadFaceImage(file, browserFaceImage)
+    if (loaded.ok) props.onChange(loaded.url)
+    else setProblem(loaded.problem)
+  }
   return (
     <div data-slot="bots-picker">
       <Face identifier={props.identifier} avatar={props.value} size={64} />
@@ -1219,9 +1246,9 @@ function FacePicker(props: { identifier: string; value?: string; onChange: (valu
               <button
                 type="button"
                 role="radio"
-                aria-checked={chosen().shape === shape}
+                aria-checked={!image() && chosen().shape === shape}
                 data-slot="bots-picker-option"
-                data-on={chosen().shape === shape ? "true" : undefined}
+                data-on={!image() && chosen().shape === shape ? "true" : undefined}
                 title={t(`bots.face.shape.${shape}`)}
                 aria-label={t(`bots.face.shape.${shape}`)}
                 onClick={() => pick(shape, chosen().color)}
@@ -1237,9 +1264,9 @@ function FacePicker(props: { identifier: string; value?: string; onChange: (valu
               <button
                 type="button"
                 role="radio"
-                aria-checked={chosen().color === color}
+                aria-checked={!image() && chosen().color === color}
                 data-slot="bots-picker-swatch"
-                data-on={chosen().color === color ? "true" : undefined}
+                data-on={!image() && chosen().color === color ? "true" : undefined}
                 style={{ "--bot-color": `var(--ade-ansi-${color})` }}
                 title={t(`bots.face.color.${color}`)}
                 aria-label={t(`bots.face.color.${color}`)}
@@ -1248,14 +1275,45 @@ function FacePicker(props: { identifier: string; value?: string; onChange: (valu
             )}
           </For>
         </div>
+        <div data-slot="bots-face-actions">
+          <button
+            type="button"
+            data-slot="bots-btn"
+            data-face="random"
+            title={t("bots.face.randomTip")}
+            onClick={() => {
+              setProblem(undefined)
+              props.onChange(avatarKey(randomAvatar()))
+            }}
+          >
+            {t("bots.face.random")}
+          </button>
+          <button type="button" data-slot="bots-btn" data-face="upload" onClick={() => fileField?.click()}>
+            {t("bots.face.upload")}
+          </button>
+          {/* The page's own file field: the WebView reads the one file picked, with no permission of ADE's. */}
+          <input
+            ref={(element) => (fileField = element)}
+            type="file"
+            accept="image/png,image/jpeg"
+            data-slot="bots-face-upload"
+            hidden
+            onChange={(event) => {
+              const field = event.currentTarget
+              void upload(field.files?.[0]).finally(() => (field.value = ""))
+            }}
+          />
+        </div>
+        <Show when={problem()}>{(text) => <span data-slot="bots-problem">{text()}</span>}</Show>
         <span data-slot="bots-hint">
           <Show when={props.value} fallback={<>{t("bots.face.fromName")}</>}>
-            {t("bots.face.custom")}{" "}
+            {image() ? t("bots.face.imageChosen") : t("bots.face.custom")}{" "}
             <button type="button" data-slot="bots-link" onClick={() => props.onChange(undefined)}>
               {t("bots.face.reset")}
             </button>
           </Show>
         </span>
+        <span data-slot="bots-hint">{t("bots.face.uploadHint")}</span>
       </div>
     </div>
   )

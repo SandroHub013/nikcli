@@ -1899,6 +1899,17 @@ export const it = {
   "bots.face.fromName": "Forma e colore vengono dal nome finché non li scegli.",
   "bots.face.custom": "Scelta tua.",
   "bots.face.reset": "Torna a quella del nome",
+  "bots.face.random": "A caso",
+  "bots.face.randomTip": "Sceglie a caso una forma e un colore, e li tiene",
+  "bots.face.upload": "Carica un'immagine",
+  "bots.face.uploadHint":
+    "Un'immagine PNG o JPG, fino a 5 MB: la ritaglio al centro in un quadrato piccolo e la scrivo nel file del bot, così chi copia il bot ha anche la faccia. Resta sul tuo computer.",
+  "bots.face.imageChosen": "La tua immagine.",
+  "bots.face.problem.format": "Prendo solo immagini PNG o JPG.",
+  "bots.face.problem.tooBig": (megabytes: number) => `L'immagine supera ${megabytes} MB: scegline una più leggera.`,
+  "bots.face.problem.unreadable": "Non riesco a leggere questa immagine: forse il file è rovinato.",
+  "bots.face.problem.heavy":
+    "Anche ridotta, l'immagine resta troppo pesante per il file del bot: provane una più semplice.",
   "bots.subagent.note": "È un sottoagente: non risponde da solo, lo chiama un altro bot. Puoi comunque scrivergli, ma Ragu Code userà l'agente predefinito al suo posto.",
   "bots.thread.label": (name: string) => `Conversazione con ${name}`,
   "bots.room.threadLabel": (name: string) => `Conversazione della stanza ${name}`,

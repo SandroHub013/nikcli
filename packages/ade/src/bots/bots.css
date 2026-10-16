@@ -71,6 +71,21 @@
   left: 56%;
 }
 
+/* A picture the user loaded: round, cut to fill, and no eyes drawn over it. */
+[data-slot="bots-face-image"] {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+[data-slot="bots-face"][data-shape="image"]::before,
+[data-slot="bots-face"][data-shape="image"]::after {
+  display: none;
+}
+
 [data-slot="bots-face"][data-shape="circle"] [data-slot="bots-face-shape"] {
   border-radius: 50%;
 }
@@ -1611,6 +1626,13 @@
 [data-slot="bots-picker-swatch"]:focus-visible {
   outline: none;
   box-shadow: var(--ade-focus-ring);
+}
+
+/* «A caso» and «Carica un'immagine», under the colours. */
+[data-slot="bots-face-actions"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ade-space-2);
 }
 
 /* Inside the card the picker is narrow: the face above the rows, not beside them. */

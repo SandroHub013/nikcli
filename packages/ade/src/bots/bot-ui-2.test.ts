@@ -20,6 +20,20 @@ import {
 import { appendMessage, emptyTalk, sendMessage, type Talk } from "./talk"
 import { it as itText } from "../i18n/it"
 import { en as enText } from "../i18n/en"
+import {
+  avatarKey,
+  COLORS,
+  faceOf,
+  FACE_IMAGE_MAX_URL,
+  parseAvatar,
+  parseFaceImage,
+  randomAvatar,
+  SHAPES,
+  sniffFaceImage,
+  squareCrop,
+} from "./avatar"
+import { FACE_IMAGE_MAX_INPUT, loadFaceImage, type FaceImageDeps } from "./face-image"
+import { readAgentFile, serializeAgentFile } from "./ragu"
 
 /*
  * The second page of choices (design/ade-bot-2, the user's answers of 2026-10-16). What is layout is held as rules on
@@ -213,5 +227,142 @@ describe("6. the «unread» dot and «Silenzia»", () => {
     }
     expect(itText["bots.notice.muteHint"]).toContain("richiesta di permesso")
     expect(enText["bots.notice.muteHint"]).toContain("permission request")
+  })
+})
+
+describe("2. the face: «A caso» and «Carica un'immagine»", () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13])
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 16])
+  const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"/>')
+  const gif = new TextEncoder().encode("GIF89a")
+  const small = "data:image/webp;base64," + "QUJD".repeat(500)
+
+  test("«A caso» picks a shape and a colour, and the face is written down like a chosen one", () => {
+    const first = randomAvatar(() => 0)
+    expect(first).toEqual({ shape: SHAPES[0], color: COLORS[0] })
+    const last = randomAvatar(() => 0.9999)
+    expect(last).toEqual({ shape: SHAPES[SHAPES.length - 1], color: COLORS[COLORS.length - 1] })
+    // Shape and colour are two draws, not one: they do not move together.
+    const draws = [0.5, 0.1]
+    expect(randomAvatar(() => draws.shift()!)).toEqual({
+      shape: SHAPES[Math.floor(0.5 * SHAPES.length)],
+      color: COLORS[Math.floor(0.1 * COLORS.length)],
+    })
+    expect(parseAvatar(avatarKey(randomAvatar()))).toBeDefined()
+  })
+
+  test("only a PNG or a JPG is taken, read by its first bytes and not by its name: no SVG, no GIF", () => {
+    expect(sniffFaceImage(png)).toBe("png")
+    expect(sniffFaceImage(jpeg)).toBe("jpeg")
+    expect(sniffFaceImage(svg)).toBeUndefined()
+    expect(sniffFaceImage(gif)).toBeUndefined()
+    expect(sniffFaceImage(new Uint8Array())).toBeUndefined()
+  })
+
+  test("the square is cut from the middle", () => {
+    expect(squareCrop(400, 300)).toEqual({ x: 50, y: 0, side: 300 })
+    expect(squareCrop(300, 400)).toEqual({ x: 0, y: 50, side: 300 })
+    expect(squareCrop(64, 64)).toEqual({ x: 0, y: 0, side: 64 })
+  })
+
+  test("the face in the file is a small raster image or nothing: no SVG, no script, no other address", () => {
+    expect(parseFaceImage(small)).toBe(small)
+    expect(parseFaceImage("data:image/png;base64,iVBORw0KGgo=")).toBe("data:image/png;base64,iVBORw0KGgo=")
+    expect(parseFaceImage("data:image/jpeg;base64,/9j/4AAQ")).toBe("data:image/jpeg;base64,/9j/4AAQ")
+    expect(parseFaceImage("data:image/svg+xml;base64,PHN2Zz4=")).toBeUndefined()
+    expect(parseFaceImage("data:text/html;base64,PGI+")).toBeUndefined()
+    expect(parseFaceImage("https://example.com/a.png")).toBeUndefined()
+    expect(parseFaceImage('data:image/png;base64,AAAA" onerror="x')).toBeUndefined()
+    expect(parseFaceImage("data:image/webp;base64," + "A".repeat(FACE_IMAGE_MAX_URL))).toBeUndefined()
+    expect(parseFaceImage("circle/blue")).toBeUndefined()
+    expect(parseFaceImage(undefined)).toBeUndefined()
+    // Wherever only a shape can be drawn, an image falls back to the name's.
+    expect(faceOf("news", small)).toEqual(faceOf("news"))
+  })
+
+  test("the picture travels in the bot's file: written and read back the same", () => {
+    const text = serializeAgentFile({ description: "notizie", mode: "all", prompt: "Sei un bot.", avatar: small })
+    const bot = readAgentFile({ path: "C:/p/.ragu/agent/news.md", scope: "project", text })
+    expect(bot.avatar).toBe(small)
+    expect(bot.prompt).toBe("Sei un bot.")
+  })
+
+  describe("loading a picture", () => {
+    const deps = (urls: (string | undefined)[], fail = false) => {
+      const asked: number[] = []
+      const made: FaceImageDeps = {
+        decode: async () => {
+          if (fail) throw new Error("rotta")
+          return { width: 400, height: 300, close: () => {} }
+        },
+        encode: (_image, crop, side, quality) => {
+          asked.push(quality)
+          expect(crop).toEqual({ x: 50, y: 0, side: 300 })
+          expect(side).toBe(96)
+          return urls.shift()
+        },
+      }
+      return { made, asked }
+    }
+
+    test("a PNG becomes a small square face", async () => {
+      const { made } = deps([small])
+      expect(await loadFaceImage(new Blob([png]), made)).toEqual({ ok: true, url: small })
+    })
+
+    test("too heavy at the first quality, it is tried once more lighter", async () => {
+      const { made, asked } = deps(["data:image/webp;base64," + "A".repeat(FACE_IMAGE_MAX_URL), small])
+      expect(await loadFaceImage(new Blob([jpeg]), made)).toEqual({ ok: true, url: small })
+      expect(asked.length).toBe(2)
+      expect(asked[1]!).toBeLessThan(asked[0]!)
+    })
+
+    test("each refusal says why, in words", async () => {
+      const before = localePreference()
+      setLocalePreference("it")
+      try {
+        const big = { size: FACE_IMAGE_MAX_INPUT + 1, slice: () => new Blob([png]) } as unknown as Blob
+        expect(await loadFaceImage(big, deps([small]).made)).toEqual({
+          ok: false,
+          problem: itText["bots.face.problem.tooBig"](5),
+        })
+        expect(await loadFaceImage(new Blob([svg]), deps([small]).made)).toEqual({
+          ok: false,
+          problem: itText["bots.face.problem.format"],
+        })
+        expect(await loadFaceImage(new Blob([png]), deps([small], true).made)).toEqual({
+          ok: false,
+          problem: itText["bots.face.problem.unreadable"],
+        })
+        const heavy = "data:image/webp;base64," + "A".repeat(FACE_IMAGE_MAX_URL)
+        expect(await loadFaceImage(new Blob([png]), deps([heavy, heavy]).made)).toEqual({
+          ok: false,
+          problem: itText["bots.face.problem.heavy"],
+        })
+      } finally {
+        setLocalePreference(before)
+      }
+    })
+  })
+
+  test("the face shows the picture, without the eyes; the picker has «A caso» and «Carica»", () => {
+    const face = tsx.slice(tsx.indexOf("function Face("), tsx.indexOf("function FacePicker("))
+    expect(face).toContain("parseFaceImage(props.avatar)")
+    expect(face).toContain('<img data-slot="bots-face-image"')
+    expect(css).toMatch(
+      /\[data-slot="bots-face"\]\[data-shape="image"\]::before,\s*\[data-slot="bots-face"\]\[data-shape="image"\]::after \{[^}]*display: none/,
+    )
+    const picker = tsx.slice(tsx.indexOf("function FacePicker("), tsx.indexOf("/* ── the conversation"))
+    expect(picker).toContain('data-face="random"')
+    expect(picker).toContain("props.onChange(avatarKey(randomAvatar()))")
+    expect(picker).toContain('data-slot="bots-face-upload"')
+    expect(picker).toContain('accept="image/png,image/jpeg"')
+    expect(picker).toContain("loadFaceImage(file, browserFaceImage)")
+    for (const text of [itText, enText]) {
+      expect(text["bots.face.random"].length).toBeGreaterThan(0)
+      expect(text["bots.face.upload"].length).toBeGreaterThan(0)
+    }
+    expect(itText["bots.face.uploadHint"]).toContain("PNG o JPG")
+    expect(enText["bots.face.uploadHint"]).toContain("PNG or JPG")
   })
 })
