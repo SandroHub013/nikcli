@@ -663,6 +663,70 @@ describe("the gateways' controller", () => {
     expect(b.previews[1]!.text).toBe(part4)
   })
 
+  test("preview cadence defaults to 2s on Discord and 1s on Telegram", async () => {
+    let now = 10_000
+    const b = bridge()
+    const turns = fakeTurns()
+    await startGatewayController({
+      bridge: b.fake,
+      runTurn: turns.runTurn,
+      loadBot: trusted,
+      sessions: memorySessionStore(),
+      now: () => now,
+    })
+
+    // Discord message
+    b.emit("ciao discord", { platform: "discord", chat: "d1" })
+    await until("turno discord partito", () => turns.started.length === 1)
+    const turnDiscord = turns.started[0]!
+
+    // First update sent immediately
+    const dPart1 = "Testo di anteprima discord con più di ventiquattro caratteri."
+    turnDiscord.request.onUpdate!({ ...emptyTalk(), streaming: dPart1 })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(1)
+
+    // After 1.1s: on Discord (2s cadence) this update is throttled and NOT sent
+    now += 1_100
+    const dPart2 = dPart1 + " Altro testo discord sufficientemente lungo da superare la soglia."
+    turnDiscord.request.onUpdate!({ ...emptyTalk(), streaming: dPart2 })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(1)
+
+    // After total 2.1s: on Discord update is sent
+    now += 1_000
+    const dPart3 = dPart2 + " Ancora altro testo discord lungo abbastanza."
+    turnDiscord.request.onUpdate!({ ...emptyTalk(), streaming: dPart3 })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(2)
+
+    turnDiscord.finish({ text: "Fine discord." })
+    await until("discord finito", () => b.sent.length === 1)
+
+    // Telegram message
+    now += 5_000
+    b.emit("ciao telegram", { platform: "telegram", chat: "t1" })
+    await until("turno telegram partito", () => turns.started.length === 2)
+    const turnTelegram = turns.started[1]!
+
+    // First update sent immediately
+    const tPart1 = "Testo di anteprima telegram con più di ventiquattro caratteri."
+    turnTelegram.request.onUpdate!({ ...emptyTalk(), streaming: tPart1 })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(3)
+
+    // After 1.1s: on Telegram (1s cadence) update IS sent
+    now += 1_100
+    const tPart2 = tPart1 + " Altro testo telegram sufficientemente lungo da superare la soglia."
+    turnTelegram.request.onUpdate!({ ...emptyTalk(), streaming: tPart2 })
+    await Promise.resolve()
+    expect(b.previews).toHaveLength(4)
+
+    turnTelegram.finish({ text: "Fine telegram." })
+    await until("telegram finito", () => b.sent.length === 2)
+  })
+
+
   test("stops previewing after 3 consecutive 429 flood errors on that message", async () => {
     let attempts = 0
     let now = 10_000

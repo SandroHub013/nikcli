@@ -143,6 +143,8 @@ export interface GatewayControllerDeps {
 }
 
 export const PREVIEW_CADENCE_MS = 1_000
+export const PREVIEW_CADENCE_DISCORD_MS = 2_000
+export const PREVIEW_CADENCE_TELEGRAM_MS = 1_000
 export const PREVIEW_MIN_DELTA_CHARS = 24
 export const PREVIEW_FLOOD_LIMIT = 3
 export const TELEGRAM_DRAFT_KEEP_ALIVE_MS = 20_000
@@ -408,7 +410,8 @@ export async function startGatewayController(deps: GatewayControllerDeps): Promi
       let floodErrors = 0
       let previewing = false
 
-      const cadenceMs = deps.previewCadenceMs ?? PREVIEW_CADENCE_MS
+      const defaultCadence = message.platform === "discord" ? PREVIEW_CADENCE_DISCORD_MS : PREVIEW_CADENCE_TELEGRAM_MS
+      const cadenceMs = deps.previewCadenceMs ?? defaultCadence
       const minDeltaChars = deps.previewMinDeltaChars ?? PREVIEW_MIN_DELTA_CHARS
 
       const sendPreview = (text: string) => {
