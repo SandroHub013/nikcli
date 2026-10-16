@@ -1,11 +1,13 @@
 //! The gateways' core: one task per bot and platform that is switched on.
 //!
 //! Each task reads its adapter and decides, here in Rust, what reaches the
-//! page: a message from an authorized sender, in a private chat, from a
-//! person and not a bot. Anything else stops here, so a stranger's text never
-//! becomes a turn: a stranger gets a pairing code instead (`authz.rs`), and
-//! becomes authorized only when the user types it in ADE. The page answers with `send`, which goes only to chats an
-//! authorized sender wrote from and loses every known secret on the way out.
+//! page: a message from an authorized sender, in a private chat or mentioning
+//! the bot in a group channel (or a button press), from a person and not a
+//! bot. Anything else stops here, so a stranger's text never becomes a turn: a
+//! stranger gets a pairing code instead (`authz.rs`), and becomes authorized
+//! only when the user types it in ADE. The page answers with `send`, which goes
+//! only to chats an authorized sender wrote from and loses every known secret
+//! on the way out.
 //!
 //! Nothing here needs the app: the events, the log and the secrets to hide
 //! come through `Env`, the keychain through `Vault`, so the tests drive it
