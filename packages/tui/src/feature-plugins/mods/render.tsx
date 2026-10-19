@@ -139,7 +139,8 @@ export function Replace(props: {
   children: JSX.Element | ((props: Record<string, unknown>) => JSX.Element)
 }) {
   if (!maybeSDK()) {
-    return typeof props.children === "function" ? props.children(props.props ?? {}) : props.children
+    const children = props.children
+    return typeof children === "function" ? children(props.props ?? {}) : children
   }
   return <Asking {...props} />
 }
@@ -165,8 +166,12 @@ function Asking(props: {
     const value = answer()
     return { ...(props.props ?? {}), ...(value && "props" in value ? value.props : {}) }
   }
+  const fallback = () => {
+    const children = props.children
+    return typeof children === "function" ? children(rewritten()) : children
+  }
   return (
-    <Show when={drawn()} fallback={typeof props.children === "function" ? props.children(rewritten()) : props.children}>
+    <Show when={drawn()} fallback={fallback()}>
       {(value) => (
         <Show when={value().tree !== null && value().tree !== undefined ? value().tree : undefined}>
           {(node) => <Tree node={node()} events={events()} />}

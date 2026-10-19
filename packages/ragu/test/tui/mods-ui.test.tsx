@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { JSX } from "solid-js"
 import { testRender } from "@opentui/solid"
 import { ThemeContext, createStandaloneTheme } from "@tui/context/theme"
 import { loadBuiltInTheme } from "@tui/context/theme-catalog"
@@ -13,7 +14,10 @@ const theme = createStandaloneTheme({ document: await loadBuiltInTheme("ragu"), 
  * The terminal side of mods: a tree a mod answered `ui.render` with is drawn, a press goes back to the
  * mods as `ui.press`, and an invalidation draws again. The server is faked at the transport.
  */
-async function mount(render: () => unknown) {
+async function mount(
+  render: () => unknown,
+  children: () => JSX.Element = () => <Site component="AbovePrompt" requestId="band" sessionID="ses_test" />,
+) {
   const requests: { path: string; body: any }[] = []
   let push!: (type: string, properties: Record<string, unknown>) => void
   const transport = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -38,7 +42,7 @@ async function mount(render: () => unknown) {
             },
           }}
         >
-          <Site component="AbovePrompt" requestId="band" sessionID="ses_test" />
+          {children()}
         </SDKProvider>
       </ThemeContext.Provider>
     ),
@@ -86,6 +90,29 @@ describe("mods in the terminal", () => {
     await screen.flush()
     await Bun.sleep(50)
     expect(/[A-Za-z0-9]/.test(screen.captureCharFrame())).toBe(false)
+    screen.renderer.destroy()
+  })
+
+  test("an element child is built once per draw, not once per read", async () => {
+    // The fallback used to read `props.children` twice: `typeof props.children` and then the
+    // arm that returns it. Solid's JSX getter rebuilds the whole subtree on every read, so the
+    // first tree was created and dropped before insertion. It never reached a parent, so it
+    // was never removed and never destroyed: one leaked transcript per Replace, per redraw.
+    let built = 0
+    const Child = () => {
+      built++
+      return <text>once</text>
+    }
+    const screen = await mount(
+      () => ({ kind: "default" }),
+      () => (
+        <Replace component="AbovePrompt" requestId="band">
+          <Child />
+        </Replace>
+      ),
+    )
+    await shows(screen, "once")
+    expect(built).toBe(1)
     screen.renderer.destroy()
   })
 
