@@ -59,6 +59,14 @@ export interface Host {
   /** Runs `command arg` and returns its output, or null when it cannot run. */
   probe: (command: string, arg: string) => Promise<string | null>
   /**
+   * Rereads the PATH a program started now would get, and resolves to whether it changed.
+   *
+   * ADE reads its PATH once, at start; an installer run afterwards writes to the user's environment and not to
+   * this process's. The install panel's «Ricontrolla» calls it before probing again, and the panes started after
+   * inherit the result. Windows reads the registry, elsewhere the login shell is asked again (`pty_refresh_path`).
+   */
+  refreshPath?: () => Promise<boolean>
+  /**
    * Runs a command to completion and hands back everything it said.
    * Used for git, where the answer matters more than the stream, and where a
    * non-zero exit is often information rather than a failure.
@@ -487,6 +495,15 @@ export async function getHost(): Promise<Host | undefined> {
         return await invoke<string | null>("pty_which", { command })
       } catch {
         return null
+      }
+    },
+
+    async refreshPath() {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        return await invoke<boolean>("pty_refresh_path")
+      } catch {
+        return false
       }
     },
 

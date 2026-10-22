@@ -1567,10 +1567,56 @@ pub async fn pty_which(command: String) -> Option<String> {
     // Same gate as `pty_spawn`: the form only ever asks about the catalogue, and
     // answering for anything else would turn this into a way to probe the disk
     // from a page loaded in the browser pane.
-    if !is_allowed_command(&command) {
+    if !is_allowed_command(&command) && !is_install_prerequisite(&command) {
         return None;
     }
     crate::legacy_cli::resolve(&command, which_on_path)
+}
+
+/// The programs an agent's install command may need (`install.ts`'s `requires`).
+///
+/// Looked up, never started: `pty_spawn` does not take them, so the install panel can say «npm manca» without
+/// opening a way to run npm. Keep in step with `Prerequisite` in `src/session-new/install.ts`.
+const INSTALL_PREREQUISITES: &[&str] = &["npm", "winget", "brew"];
+
+fn is_install_prerequisite(command: &str) -> bool {
+    INSTALL_PREREQUISITES.contains(&command)
+}
+
+/// Rereads the PATH a program started now would get, into this process, and says whether it changed.
+///
+/// The new-session form calls it from «Ricontrolla», after the user installed an agent in a terminal pane: that
+/// installer put its directory on the user's PATH, and ADE — started before — never saw it. Setting it here is what
+/// reaches both ends: `pty_which` reads the process PATH, and every pane started afterwards inherits it.
+///
+/// Windows reads the registry (`windows_path.rs`). Elsewhere the login shell is asked again, as at start-up
+/// (`import_login_path`), which may take a few seconds on a slow profile: off the async worker.
+#[tauri::command]
+pub async fn pty_refresh_path() -> bool {
+    tauri::async_runtime::spawn_blocking(refresh_process_path).await.unwrap_or(false)
+}
+
+fn process_path() -> String {
+    std::env::var_os("PATH").map(|path| path.to_string_lossy().into_owned()).unwrap_or_default()
+}
+
+#[cfg(windows)]
+fn refresh_process_path() -> bool {
+    let current = process_path();
+    match crate::windows_path::refreshed(&current) {
+        Some(next) if next != current => {
+            std::env::set_var("PATH", &next);
+            true
+        }
+        _ => false,
+    }
+}
+
+#[cfg(unix)]
+fn refresh_process_path() -> bool {
+    let current = process_path();
+    crate::import_login_path();
+    process_path() != current
 }
 
 /// Whether CreateProcess would accept this file as a program.
@@ -2622,6 +2668,24 @@ mod tests {
         ] {
             assert!(check_args("ssh", &strings(bad)).is_err(), "{bad:?}");
         }
+    }
+
+    /// The install panel looks `npm`, `winget` and `brew` up to say one is missing; none of them may be started.
+    #[test]
+    fn an_install_prerequisite_can_be_looked_up_but_never_started() {
+        for program in INSTALL_PREREQUISITES {
+            assert!(is_install_prerequisite(program));
+            assert!(!is_allowed_command(program), "{program} would be startable from the page");
+        }
+        for other in ["curl", "powershell.exe", "npm.cmd", "..\\npm", "npm "] {
+            assert!(!is_install_prerequisite(other), "{other}");
+        }
+    }
+
+    #[tokio::test]
+    async fn the_lookup_refuses_a_program_that_is_neither_an_agent_nor_a_prerequisite() {
+        assert_eq!(pty_which("curl".into()).await, None);
+        assert_eq!(pty_which("C:\\Windows\\System32\\cmd".into()).await, None);
     }
 
     #[test]

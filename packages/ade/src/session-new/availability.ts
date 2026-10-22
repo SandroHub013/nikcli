@@ -92,3 +92,24 @@ export function defaultAgentId(statuses: AgentStatus[]): string | undefined {
   const unknown = statuses.find((status) => status.availability === "sconosciuto" && isProbeable(status.agent))
   return unknown?.agent.id
 }
+
+/** What the host offers for looking an agent up again. */
+export interface RecheckHost {
+  probe?: Probe
+  refreshPath?: () => Promise<boolean>
+}
+
+/**
+ * The agents again, after the PATH was reread.
+ *
+ * ADE reads its PATH once, when it starts, and an installer writes the new directory somewhere else
+ * (`pty_refresh_path`), so looking up again with the old PATH finds nothing and the user is told, correctly,
+ * that the agent they just installed is still absent. Rereading first is what makes «Ricontrolla» mean something.
+ *
+ * `reread` false skips it: the form uses it only where it is cheap (a registry read on Windows, not a login shell).
+ * A host that cannot reread, or one that fails, is looked up as it is.
+ */
+export async function recheckAgents(host: RecheckHost | undefined, reread = true): Promise<AgentStatus[]> {
+  if (reread) await host?.refreshPath?.().catch(() => false)
+  return detectAgents(host?.probe)
+}

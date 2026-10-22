@@ -35,6 +35,7 @@ mod raguverse;
 mod raguverse_assets;
 mod project_bytes;
 mod pty;
+mod windows_path;
 mod record;
 mod reveal;
 mod secrets;
@@ -2743,6 +2744,7 @@ pub fn run() {
             pty::pty_resize,
             pty::pty_kill,
             pty::pty_which,
+            pty::pty_refresh_path,
             gateway::gateway_ready,
             gateway::gateway_status,
             gateway::gateway_set_token,
