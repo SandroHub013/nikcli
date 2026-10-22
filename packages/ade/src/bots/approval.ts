@@ -356,7 +356,8 @@ const outsideKey = (patterns: string) => `outside:${patterns.trim()}`
  *   with dangers is asked unless `always` has every one of them (M3);
  *   anything else goes.
  * - `external_directory`: asked unless `always` has that folder.
- * - anything else ragu asks about (the user's own «ask» rules): asked.
+ * - `edit` (ragu asks for a `.env` file): asked every time, no «Sempre».
+ * - anything else ragu asks about (ragu's own defaults, the user's «ask» rules): asked.
  */
 export function decide(permission: string, patterns: string, always: Always): Verdict {
   if (permission === "bash") {
@@ -375,6 +376,9 @@ export function decide(permission: string, patterns: string, always: Always): Ve
     if (always.includes(key)) return { kind: "allow", keys: [key] }
     return { kind: "ask", keys: [key], reason: t("bots.approval.reason.outside") }
   }
+  // ragu asks about `edit` only for a `.env` file, and the key is the tool, not the file: a «Sempre» would
+  // let every later `.env` write through. Asked every time, whatever a key kept earlier says.
+  if (permission === "edit") return { kind: "ask", reason: t("bots.approval.reason.tool", permission) }
   const key = `tool:${permission}`
   if (always.includes(key)) return { kind: "allow", keys: [key] }
   return { kind: "ask", keys: [key], reason: t("bots.approval.reason.tool", permission) }

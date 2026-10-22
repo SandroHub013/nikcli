@@ -1055,7 +1055,7 @@ export const it = {
   "chat.status.retrying": "Collegamento perso: riprovo…",
   "chat.status.refused": "La Chat non può lavorare in questo progetto.",
   "chat.rules.always":
-    "La Chat chiede prima di ogni comando e di ogni modifica, ma un «sempre» già dato per questo progetto (per esempio nel terminale di Ragu Code) vale anche qui: quella richiesta non comparirà.",
+    "La Chat chiede prima di ogni comando e di ogni modifica, ma un «sempre» dato nel terminale di Ragu Code resta salvato per questo progetto per sempre e vale anche qui: quella richiesta in ADE non comparirà mai.",
   "chat.question.label": "Domanda del modello",
   "chat.question.typed": "Oppure scrivi la tua risposta",
   "chat.question.send": "Rispondi",
@@ -2008,7 +2008,7 @@ export const it = {
     "fa girare comandi dentro un'altra shell, che la lista non sempre legge per intero",
   "bots.approval.reason.outside": "lavora fuori dalla cartella del progetto",
   "bots.approval.reason.tool": (tool: string) =>
-    `usa ${tool}, che la tua configurazione di Ragu Code chiede di confermare`,
+    `usa ${tool}, che Ragu Code chiede di confermare`,
   "bots.approval.why": (reason: string) => `Si ferma perché ${reason}.`,
   "bots.approval.always": "Sempre per questo bot",
   "bots.approval.timeout": (minutes: number) => `Senza risposta entro ${minutes} minuti vale come Nega.`,
