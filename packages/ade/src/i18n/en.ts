@@ -1036,7 +1036,7 @@ export const en: Messages = {
   "chat.status.retrying": "Connection lost: trying again…",
   "chat.status.refused": "The Chat cannot work in this project.",
   "chat.rules.always":
-    "The Chat asks before every command and every edit, but an «always» already given for this project (in Ragu Code's terminal, say) holds here too: that request will not show up.",
+    "The Chat asks before every command and every edit, but an «always» given in Ragu Code's terminal is saved for this project for good, and it holds here too: that request will not show up in ADE at all.",
   "chat.question.label": "The model's question",
   "chat.question.typed": "Or type your own answer",
   "chat.question.send": "Answer",
@@ -1951,7 +1951,7 @@ export const en: Messages = {
   "bots.approval.reason.opaqueShell": "runs commands no list can read: encoded, taken from a variable or decoded",
   "bots.approval.reason.nestedShell": "runs commands inside another shell, which the list cannot always read whole",
   "bots.approval.reason.outside": "works outside the project folder",
-  "bots.approval.reason.tool": (tool: string) => `uses ${tool}, which your Ragu Code configuration asks to confirm`,
+  "bots.approval.reason.tool": (tool: string) => `uses ${tool}, which Ragu Code asks to confirm`,
   "bots.approval.why": (reason: string) => `It stops because it ${reason}.`,
   "bots.approval.always": "Always for this bot",
   "bots.approval.timeout": (minutes: number) => `No answer within ${minutes} minutes counts as Deny.`,

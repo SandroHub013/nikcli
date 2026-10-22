@@ -103,6 +103,13 @@ describe("what the rules cannot stop", () => {
     expect(translate("en", "chat.rules.always")).toContain("«always»")
   })
 
+  test("the note says the terminal's «always» is saved for good and the request never shows in ADE", () => {
+    expect(translate("it", "chat.rules.always")).toContain("per sempre")
+    expect(translate("it", "chat.rules.always")).toContain("non comparirà mai")
+    expect(translate("en", "chat.rules.always")).toContain("for good")
+    expect(translate("en", "chat.rules.always")).toContain("at all")
+  })
+
   test("lint: RulesNote draws that note from the chat.rules.always key", () => {
     const parts = readFileSync(new URL("./parts.tsx", import.meta.url), "utf8")
     expect(parts).toMatch(/export function RulesNote\(\)[\s\S]*?t\("chat\.rules\.always"\)/)

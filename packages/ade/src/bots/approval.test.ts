@@ -209,6 +209,20 @@ describe("the decision, and «Sempre» per bot", () => {
     expect(decide("webfetch", "https://x.test", []).kind).toBe("ask")
   })
 
+  test("a `.env` write (ragu's `edit` ask) is asked every time: no key to keep, a kept one is ignored", () => {
+    const asked = decide("edit", ".env", [])
+    expect(asked.kind).toBe("ask")
+    expect(asked).not.toHaveProperty("keys")
+    expect(decide("edit", ".env", ["tool:edit"])).toEqual(asked)
+    // The other tools ragu asks about keep their «Sempre».
+    expect(decide("webfetch", "https://x.test", ["tool:webfetch"]).kind).toBe("allow")
+  })
+
+  test("the card of a tool ragu asks about names Ragu Code, not the user's configuration", () => {
+    const asked = decide("webfetch", "https://x.test", [])
+    expect(asked).toMatchObject({ kind: "ask", reason: "usa webfetch, che Ragu Code chiede di confermare" })
+  })
+
   test("«Sempre» is kept for that bot only", () => {
     const data = new Map<string, string>()
     const storage = {
