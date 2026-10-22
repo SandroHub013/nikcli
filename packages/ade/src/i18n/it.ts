@@ -271,7 +271,6 @@ export const it = {
   "new.close": "Chiudi",
   "new.launch": (count: number) => (count === 1 ? "Avvia 1 sessione" : `Avvia ${count} sessioni`),
   "new.agent": "Agente",
-  "new.notInstalled": "non installato",
   "new.missing": "assente",
   "install.cardHint": "non installato: clicca per installarlo",
   "install.title": (agent: string) => `Installa ${agent}`,

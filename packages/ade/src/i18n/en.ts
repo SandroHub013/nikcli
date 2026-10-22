@@ -265,7 +265,6 @@ export const en: Messages = {
   "new.close": "Close",
   "new.launch": (count) => (count === 1 ? "Start 1 session" : `Start ${count} sessions`),
   "new.agent": "Agent",
-  "new.notInstalled": "not installed",
   "new.missing": "missing",
   "install.cardHint": "not installed: click to install it",
   "install.title": (agent) => `Install ${agent}`,
