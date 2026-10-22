@@ -131,7 +131,29 @@ const ALLOWED_AGENTS: &[&str] = &[
     "claude", "codex", "opencode", "ragu", "grok", "agy", "kimi", "prime", "pi", "ohmypi",
     "hermes",
     "freebuff", "cline", "crush", "kilo", "goose", "copilot", "t3", "cursor-agent",
+    // The other names of `ALTERNATIVE_COMMANDS`: what the new-session form looks up when the first name is absent.
+    "prime-agent", "omp",
 ];
+
+/// The other names an agent's program goes by, tried in order after the name the page asks for.
+///
+/// Prime Agent's installer puts `prime-agent` on PATH and oh-my-pi's puts `omp`, while ADE started with `prime` and
+/// `ohmypi`. The page keeps asking for the first name (a key, a hook, the activity extension are all keyed on it) and
+/// the program that starts is the first of these that exists. Keep in step with `alternatives` in
+/// `src/session-new/agents.ts`; `allowlist.test.ts` compares them.
+const ALTERNATIVE_COMMANDS: &[(&str, &[&str])] = &[("prime", &["prime-agent"]), ("ohmypi", &["omp"])];
+
+/// `command` resolved through `which`: itself (`ragu` falling back to the nikcli of before the rename), else the
+/// first of its alternative names that exists.
+fn resolve_command(command: &str, which: impl Fn(&str) -> Option<String>) -> Option<String> {
+    crate::legacy_cli::resolve(command, &which).or_else(|| {
+        let name = command_stem(command.trim());
+        ALTERNATIVE_COMMANDS
+            .iter()
+            .find(|(first, _)| first.eq_ignore_ascii_case(name))
+            .and_then(|(_, others)| others.iter().find_map(|other| which(*other)))
+    })
+}
 
 /// Environment ADE sets for one agent CLI, whatever the user's shell has.
 ///
@@ -891,7 +913,7 @@ pub async fn pty_spawn(
      * in the same directory, and only the one PATHEXT picks can actually run.
      */
     // `ragu` falls back to the nikcli of before the rename (`legacy_cli`).
-    let resolved = crate::legacy_cli::resolve(&command, which_on_path).unwrap_or_else(|| command.clone());
+    let resolved = resolve_command(&command, which_on_path).unwrap_or_else(|| command.clone());
     /*
      * Prime Agent and pi report their turns through an extension ADE passes on
      * the command line, and only to a spawn that has a nonce to report under.
@@ -2686,6 +2708,30 @@ mod tests {
     async fn the_lookup_refuses_a_program_that_is_neither_an_agent_nor_a_prerequisite() {
         assert_eq!(pty_which("curl".into()).await, None);
         assert_eq!(pty_which("C:\\Windows\\System32\\cmd".into()).await, None);
+    }
+
+    #[test]
+    fn a_program_that_goes_by_another_name_is_found_by_it_after_its_own() {
+        let on_path = |names: &'static [&'static str]| move |name: &str| names.contains(&name).then(|| format!("/bin/{name}"));
+        assert_eq!(resolve_command("prime", on_path(&["prime", "prime-agent"])), Some("/bin/prime".into()));
+        assert_eq!(resolve_command("prime", on_path(&["prime-agent"])), Some("/bin/prime-agent".into()));
+        assert_eq!(resolve_command("ohmypi", on_path(&["omp"])), Some("/bin/omp".into()));
+        assert_eq!(resolve_command("prime", on_path(&["omp"])), None);
+        // The other way round is not a thing: an alternative name does not stand for its first.
+        assert_eq!(resolve_command("prime-agent", on_path(&["prime"])), None);
+        // And the lookup that came before still works.
+        assert_eq!(resolve_command("ragu", on_path(&["nikcli"])), Some("/bin/nikcli".into()));
+        assert_eq!(resolve_command("claude", on_path(&["claude"])), Some("/bin/claude".into()));
+    }
+
+    #[test]
+    fn every_alternative_name_may_be_looked_up() {
+        for (first, others) in ALTERNATIVE_COMMANDS {
+            assert!(is_allowed_command(first), "{first}");
+            for other in *others {
+                assert!(is_allowed_command(other), "{other}");
+            }
+        }
     }
 
     #[test]

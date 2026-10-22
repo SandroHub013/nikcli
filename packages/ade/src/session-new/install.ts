@@ -7,8 +7,8 @@
  *
  * Every command was copied from the project's own documentation or README, on the date in `checked`, and `source`
  * says which page. No blog, no third-party package. Where the project's page gives no command a user can run in one
- * line, or its command installs a program ADE does not start, the entry has no command and the panel offers the page
- * alone — a button that installs the wrong thing is worse than no button.
+ * line, the entry has no command and the panel offers the page alone. A command installs a program ADE starts: the
+ * agent's `command` or one of its `alternatives` (`provides` names it, and a test checks it).
  *
  * What a command is run in is the pane's shell: `cmd` on Windows, the login shell elsewhere (`systemShell` in
  * `agents.ts`). A PowerShell command is therefore wrapped by `terminalLine`; the panel still shows the project's own
@@ -37,8 +37,6 @@ export interface InstallCommand {
 
 /** A fact about the install the user should read before pressing the button. */
 export type InstallCaveat =
-  /** The project's installer provides `provides`, and ADE starts a different name: the card would stay absent. */
-  | { kind: "binary"; provides: string }
   | { kind: "subscription" }
   | { kind: "wsl" }
 
@@ -46,6 +44,11 @@ export interface InstallEntry {
   /** An id of `AGENTS`. */
   agentId: string
   commands: Partial<Record<InstallOs, InstallCommand>>
+  /**
+   * The program the commands put on PATH, when it is not the agent's `command` but one of its `alternatives`
+   * (Prime Agent installs `prime-agent`, oh-my-pi `omp`). Without it, the commands put `command` itself.
+   */
+  provides?: string
   /** The project's page: always offered, and the only thing offered when there is no command. */
   page: string
   /** The page the commands were read from. */
@@ -164,13 +167,16 @@ export const INSTALLS: readonly InstallEntry[] = [
     checked: CHECKED,
   },
   {
-    // The README installs `prime-agent`; ADE starts `prime`.
     agentId: "prime",
-    commands: {},
+    commands: {
+      windows: ps("irm https://app.primeintellect.ai/prime-agent/install.ps1 | iex"),
+      macos: sh("curl -fsSL https://app.primeintellect.ai/prime-agent/install.sh | sh"),
+      linux: sh("curl -fsSL https://app.primeintellect.ai/prime-agent/install.sh | sh"),
+    },
+    provides: "prime-agent",
     page: "https://github.com/PrimeIntellect-ai/prime-agent",
     source: "https://github.com/PrimeIntellect-ai/prime-agent",
     checked: CHECKED,
-    caveat: { kind: "binary", provides: "prime-agent" },
   },
   {
     agentId: "pi",
@@ -184,13 +190,16 @@ export const INSTALLS: readonly InstallEntry[] = [
     checked: CHECKED,
   },
   {
-    // The README installs `omp`; ADE starts `ohmypi`.
     agentId: "ohmypi",
-    commands: {},
+    commands: {
+      windows: ps("irm https://omp.sh/install.ps1 | iex"),
+      macos: sh("curl -fsSL https://omp.sh/install | sh"),
+      linux: sh("curl -fsSL https://omp.sh/install | sh"),
+    },
+    provides: "omp",
     page: "https://github.com/can1357/oh-my-pi",
     source: "https://github.com/can1357/oh-my-pi",
     checked: CHECKED,
-    caveat: { kind: "binary", provides: "omp" },
   },
   {
     agentId: "hermes",

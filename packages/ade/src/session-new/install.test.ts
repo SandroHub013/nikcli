@@ -39,6 +39,8 @@ const OFFICIAL_HOSTS = new Set([
   "docs.github.com",
   "cursor.com",
   "t3.codes",
+  "app.primeintellect.ai",
+  "omp.sh",
 ])
 
 const urlsIn = (text: string) => text.match(/https?:\/\/[^\s'"|)]+/g) ?? []
@@ -110,14 +112,19 @@ describe("the install catalogue", () => {
       }
   })
 
-  test("a program the project's installer names differently from ADE's command is offered as a page, not as a button", () => {
+  test("what an installer puts on PATH is a name ADE looks for: the command or one of its alternatives", () => {
     for (const entry of INSTALLS) {
-      if (entry.caveat?.kind !== "binary") continue
-      expect([entry.agentId, Object.keys(entry.commands)]).toEqual([entry.agentId, []])
-      expect(AGENTS.find((agent) => agent.id === entry.agentId)?.command).not.toBe(entry.caveat.provides)
+      const agent = AGENTS.find((candidate) => candidate.id === entry.agentId)!
+      const names = [agent.command, ...(agent.alternatives ?? [])]
+      expect([entry.agentId, names.includes(entry.provides ?? agent.command)]).toEqual([entry.agentId, true])
+      // A different name is said, and only where there is a command that installs it.
+      if (entry.provides) {
+        expect([entry.agentId, entry.provides === agent.command]).toEqual([entry.agentId, false])
+        expect([entry.agentId, Object.keys(entry.commands).length > 0]).toEqual([entry.agentId, true])
+      }
     }
-    expect(installFor("prime")?.caveat).toEqual({ kind: "binary", provides: "prime-agent" })
-    expect(installFor("ohmypi")?.caveat).toEqual({ kind: "binary", provides: "omp" })
+    expect(installFor("prime")?.provides).toBe("prime-agent")
+    expect(installFor("ohmypi")?.provides).toBe("omp")
   })
 
   test("the commands are the ones of the project's page for each system", () => {
@@ -130,6 +137,10 @@ describe("the install catalogue", () => {
     expect(line("crush", "macos")).toBe("brew install charmbracelet/tap/crush")
     expect(line("copilot", "windows")).toBe("winget install GitHub.Copilot")
     expect(line("agy", "windows")).toBe("irm https://antigravity.google/cli/install.ps1 | iex")
+    expect(line("prime", "windows")).toBe("irm https://app.primeintellect.ai/prime-agent/install.ps1 | iex")
+    expect(line("prime", "linux")).toBe("curl -fsSL https://app.primeintellect.ai/prime-agent/install.sh | sh")
+    expect(line("ohmypi", "windows")).toBe("irm https://omp.sh/install.ps1 | iex")
+    expect(line("ohmypi", "macos")).toBe("curl -fsSL https://omp.sh/install | sh")
   })
 
   test("an agent with no command for a system has only its page", () => {

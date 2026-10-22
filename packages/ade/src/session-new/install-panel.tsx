@@ -36,10 +36,8 @@ export interface InstallPanelProps {
 
 const withoutScheme = (url: string) => url.replace(/^https?:\/\//, "")
 
-function caveatText(caveat: InstallCaveat, label: string): string {
+function caveatText(caveat: InstallCaveat): string {
   switch (caveat.kind) {
-    case "binary":
-      return t("install.caveat.binary", label, caveat.provides)
     case "subscription":
       return t("install.caveat.subscription")
     case "wsl":
@@ -85,7 +83,7 @@ export function InstallPanel(props: InstallPanelProps): JSX.Element {
         </button>
       </header>
 
-      <Show when={entry()?.caveat}>{(caveat) => <p data-slot="install-caveat">{caveatText(caveat(), label())}</p>}</Show>
+      <Show when={entry()?.caveat}>{(caveat) => <p data-slot="install-caveat">{caveatText(caveat())}</p>}</Show>
 
       <Show
         when={command()}

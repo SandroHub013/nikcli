@@ -56,6 +56,23 @@ describe("the agent catalogue and the Rust allowlist", () => {
     }
   })
 
+  test("the other names of an agent are the same list in both languages, and every one may be looked up", () => {
+    const declared = /const ALTERNATIVE_COMMANDS: &\[\(&str, &\[&str\]\)\] = &\[([^;]*)\];/.exec(source)
+    expect(declared).not.toBeNull()
+    const rust = [...declared![1]!.matchAll(/\("([^"]+)",\s*&\[([^\]]*)\]\)/g)].map((match) => [
+      match[1]!,
+      [...match[2]!.matchAll(/"([^"]+)"/g)].map((quoted) => quoted[1]!),
+    ])
+    const catalogue = AGENTS.filter((agent) => agent.alternatives?.length).map((agent) => [
+      agent.command,
+      [...agent.alternatives!],
+    ])
+    expect(rust).toEqual(catalogue)
+    expect(rust.length).toBeGreaterThan(0)
+    const allowed = new Set(allowedAgents)
+    for (const [, others] of rust) for (const other of others!) expect([other, allowed.has(other as string)]).toEqual([other, true])
+  })
+
   test("the shells the form can choose are on the list for both platforms", () => {
     // `systemShell()` answers "cmd" on Windows, "zsh" on macOS and "sh"
     // elsewhere, and the test process runs on one of them — so all are asserted
@@ -81,7 +98,9 @@ describe("the agent catalogue and the Rust allowlist", () => {
      * no longer has an agent behind it is a name ADE will still start if
      * anything asks it to — and the browser pane is something that asks.
      */
-    const offered = new Set(AGENTS.map((agent) => agent.command.toLowerCase()))
+    const offered = new Set(
+      AGENTS.flatMap((agent) => [agent.command, ...(agent.alternatives ?? [])]).map((name) => name.toLowerCase()),
+    )
     const orphans = allowedAgents.filter((name) => !offered.has(name.toLowerCase()))
     expect(orphans).toEqual([])
   })

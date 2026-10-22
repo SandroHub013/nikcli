@@ -19,6 +19,11 @@ export interface AgentStatus {
   agent: AgentOption
   availability: Availability
   /**
+   * The name that was found, when it is one of the agent's `alternatives` and not its `command`: the program that
+   * will be started. Absent when `command` itself was found.
+   */
+  foundAs?: string
+  /**
    * Where the binary was found, when it was. Shown as the button's tooltip:
    * with eleven agents and several installed twice over — an npm shim and a
    * native build of the same name — which one a session will actually start is
@@ -64,9 +69,18 @@ export async function detectAgents(probe: Probe | undefined): Promise<AgentStatu
   return Promise.all(
     AGENTS.map(async (agent) => {
       if (!isProbeable(agent)) return { agent, availability: "presente" as const }
-      const answer = await probe(agent.command, "--version").catch(() => null)
-      if (answer === null) return { agent, availability: "assente" as const }
-      return { agent, availability: "presente" as const, path: firstLine(answer) }
+      // The command first, then the other names it goes by, in order: the first that exists is the one.
+      for (const name of [agent.command, ...(agent.alternatives ?? [])]) {
+        const answer = await probe(name, "--version").catch(() => null)
+        if (answer === null) continue
+        return {
+          agent,
+          availability: "presente" as const,
+          ...(name === agent.command ? {} : { foundAs: name }),
+          path: firstLine(answer),
+        }
+      }
+      return { agent, availability: "assente" as const }
     }),
   )
 }

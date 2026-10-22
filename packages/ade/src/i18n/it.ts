@@ -291,8 +291,6 @@ export const it = {
   "install.notFound":
     "Ancora non lo trovo. Quando l'installazione nel terminale è finita, premi di nuovo Ricontrolla.",
   "install.source": (source: string, date: string) => `Fonte: ${source}, controllata il ${date}`,
-  "install.caveat.binary": (agent: string, provides: string) =>
-    `L'installer ufficiale di ${agent} mette il programma «${provides}», ma ADE cerca un altro nome: la card non diventerebbe pronta. Per ora solo la pagina.`,
   "install.caveat.subscription": "Per usarlo serve un abbonamento GitHub Copilot.",
   "install.caveat.wsl": "Su Windows la documentazione consiglia WSL per l'esperienza migliore.",
   "install.caveat.goose-temp":

@@ -285,8 +285,6 @@ export const en: Messages = {
   "install.notFound":
     "Still not found. When the install in the terminal has finished, press Check again.",
   "install.source": (source, date) => `Source: ${source}, checked on ${date}`,
-  "install.caveat.binary": (agent, provides) =>
-    `${agent}'s official installer puts the program «${provides}», but ADE looks for another name: the card would not become ready. For now, the page only.`,
   "install.caveat.subscription": "Using it needs a GitHub Copilot subscription.",
   "install.caveat.wsl": "On Windows the documentation recommends WSL for the best experience.",
   "install.caveat.goose-temp":

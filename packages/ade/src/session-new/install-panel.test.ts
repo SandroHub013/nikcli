@@ -178,13 +178,23 @@ describe("the panel", () => {
     expect(runs).toEqual([])
   })
 
-  test("an agent whose installer puts another program says so and offers the page alone", async () => {
-    const { root } = await mount(fakeHost([]), "windows")
-    for (const id of ["prime", "ohmypi"]) {
+  test("an agent whose installer puts another name on PATH is installed all the same, and found by that name", async () => {
+    const fake = fakeHost(["claude"])
+    const { root, runs } = await mount(fake, "linux")
+    for (const [id, found, line] of [
+      ["prime", "prime-agent", "curl -fsSL https://app.primeintellect.ai/prime-agent/install.sh | sh"],
+      ["ohmypi", "omp", "curl -fsSL https://omp.sh/install | sh"],
+    ] as const) {
       card(root, id).click()
       await settle()
-      expect([id, root.querySelector('[data-slot="install-run"]')]).toEqual([id, null])
-      expect([id, root.querySelector('[data-slot="install-caveat"]')?.textContent?.includes("«")]).toEqual([id, true])
+      button(root, "install-run").click()
+      expect(runs.at(-1)).toEqual({ agentId: id, label: id === "prime" ? "Prime Agent" : "OhMyPi", line })
+
+      fake.registry.add(found)
+      button(root, "install-recheck").click()
+      await settle()
+      expect([id, card(root, id).dataset.availability]).toEqual([id, "presente"])
+      expect([id, card(root, id).dataset.active]).toEqual([id, "true"])
     }
   })
 
