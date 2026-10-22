@@ -124,10 +124,12 @@ export function introArgs(agentId: string, text = INTRO_TEXT): string[] {
  * The opening task, with the notice in front for a CLI that has no flag.
  *
  * Empty stays empty: typing the notice alone would start a turn nobody asked
- * for.
+ * for. A terminal's task is a command for its shell, not a message to a model:
+ * with the notice in front, `npm install …` would be typed as «(Sei una sessione
+ * dentro ADE …) npm install …» and the shell would refuse the line.
  */
 export function withIntro(agentId: string, task: string, text = INTRO_TEXT): string {
-  if (!task.trim() || introArgs(agentId, text).length > 0) return task
+  if (agentId === "terminal" || !task.trim() || introArgs(agentId, text).length > 0) return task
   return `(${text}) ${task}`
 }
 

@@ -21,6 +21,16 @@ export interface AgentOption {
   /** Executable name, resolved on PATH. */
   command: string
   /**
+   * Other names the same program goes by, tried in order after `command`.
+   *
+   * A project's own installer may put a different name on PATH than the one ADE started first with: Prime Agent's
+   * README installs `prime-agent` and oh-my-pi's installs `omp`, while ADE began with `prime` and `ohmypi`. The
+   * first name that exists is the one that is started; everything else keyed on the agent (keys, hooks) stays on
+   * `command`. Keep in step with `ALTERNATIVE_COMMANDS` in `src-tauri/src/pty.rs`, which does the same lookup at
+   * start (`allowlist.test.ts` compares them).
+   */
+  alternatives?: readonly string[]
+  /**
    * Arguments every start of this CLI needs, before any of ADE's own.
    *
    * Cline is the case: bare, with a task, it runs the task headless in act
@@ -56,9 +66,9 @@ export const AGENTS: AgentOption[] = [
   { id: "grok", label: "Grok", command: "grok" },
   { id: "agy", label: "agy", command: "agy" },
   { id: "kimi", label: "Kimi Code", command: "kimi" },
-  { id: "prime", label: "Prime Agent", command: "prime" },
+  { id: "prime", label: "Prime Agent", command: "prime", alternatives: ["prime-agent"] },
   { id: "pi", label: "pi", command: "pi" },
-  { id: "ohmypi", label: "OhMyPi", command: "ohmypi" },
+  { id: "ohmypi", label: "OhMyPi", command: "ohmypi", alternatives: ["omp"] },
   { id: "hermes", label: "Hermes", command: "hermes" },
   /*
    * From `ade-team/results/agenti-mancanti.md` (2026-09-27). Each is looked up
