@@ -9791,6 +9791,11 @@ export function Workbench() {
             <ShotTray
               shots={shotSource.shots()}
               unavailable={shotSource.state() === "none"}
+              folder={shotSource.folder()}
+              network={shotSource.state() === "network"}
+              onChoose={shotSource.canChoose ? () => void shotSource.choose() : undefined}
+              choosing={shotSource.choosing()}
+              notice={shotSource.notice()}
               load={shotSource.load}
               onDismiss={shotSource.dismiss}
               onDelete={(path) => void shotSource.remove(path)}

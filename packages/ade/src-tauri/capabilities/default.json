@@ -134,6 +134,7 @@
     "allow-session-locked",
     "allow-shot-bytes",
     "allow-shot-delete",
+    "allow-shots-choose-folder",
     "allow-shots-dir",
     "allow-shots-recent",
     "allow-shots-watch",

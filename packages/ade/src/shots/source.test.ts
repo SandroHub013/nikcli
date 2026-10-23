@@ -13,6 +13,7 @@ describe("createShotSource without a host", () => {
       const source = createShotSource(false)
       expect(source.shots()).toEqual([])
       expect(source.folder()).toBeUndefined()
+      expect(source.state()).toBe("none")
       dispose()
     })
   })
@@ -58,6 +59,19 @@ describe("createShotSource without a host", () => {
       const source = createShotSource(false)
       await source.remove("C:/Pictures/Screenshots/a.png")
       expect(source.shots()).toEqual([])
+      dispose()
+    })
+  })
+
+  test("choosing a folder without a host does nothing rather than throwing", async () => {
+    await createRoot(async (dispose) => {
+      const source = createShotSource(false)
+      await source.choose()
+      expect(source.folder()).toBeUndefined()
+      expect(source.state()).toBe("none")
+      expect(source.notice()).toBeUndefined()
+      expect(source.choosing()).toBe(false)
+      expect(source.canChoose).toBe(false)
       dispose()
     })
   })

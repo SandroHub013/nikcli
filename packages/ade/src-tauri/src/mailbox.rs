@@ -376,6 +376,14 @@ function Has($path) { try { return [IO.File]::Exists($path) } catch { return $fa
 
 $all = @($args | ForEach-Object { [string]$_ })
 $cmd = if ($all.Count -gt 0) { $all[0] } else { '' }
+# -h/--help anywhere prints the help and posts nothing. An argument that is only
+# an option is never text: a typo must not become a message. After a lone --
+# everything is positional again, so a text that starts with -- can still be sent.
+$wantHelp = $false
+$options = $true
+if ($cmd -eq '-h' -or $cmd -eq '--help') { $wantHelp = $true; $cmd = '' }
+elseif ($cmd -eq '--') { $options = $false; $cmd = '' }
+elseif ($cmd.StartsWith('--')) { Fail "opzione sconosciuta: $cmd" }
 $timeout = 110
 $timeoutSet = $false
 $attendi = $false
@@ -405,9 +413,11 @@ $pos = New-Object System.Collections.Generic.List[string]
 for ($i = 1; $i -lt $all.Count; $i++) {
   $a = $all[$i]
   # Options anywhere: agents write them after the text as often as before it.
-  if ($true) {
+  if ($options) {
     $hasNext = ($i + 1) -lt $all.Count
-    if ($a -eq '--timeout' -and $hasNext) { try { $timeout = [int]$all[$i + 1]; $timeoutSet = $true } catch { Usage }; $i++; continue }
+    if ($a -eq '-h' -or $a -eq '--help') { $wantHelp = $true; continue }
+    elseif ($a -eq '--') { $options = $false; continue }
+    elseif ($a -eq '--timeout' -and $hasNext) { try { $timeout = [int]$all[$i + 1]; $timeoutSet = $true } catch { Usage }; $i++; continue }
     elseif ($a -eq '--file' -and $hasNext) { $file = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--name' -and $hasNext) { $name = $all[$i + 1]; $i++; continue }
     elseif ($a -eq '--model' -and $hasNext) { $model = $all[$i + 1]; $i++; continue }
@@ -429,12 +439,27 @@ for ($i = 1; $i -lt $all.Count; $i++) {
     elseif ($a -eq '--stdin') { $fromStdin = $true; continue }
     elseif ($a -eq '--digita') { $via = 'typed'; continue }
     elseif ($a -eq '--ttl' -and $hasNext) { try { $ttl = [int]$all[$i + 1] } catch { Usage }; $i++; continue }
+    elseif ($a.StartsWith('--')) {
+      # A known option with no value after it is still a usage error, said as such.
+      if (@('--timeout', '--file', '--name', '--model', '--base', '--note', '--effort', '--profile', '--title', '--budget', '--ttl') -contains $a) { Usage }
+      Fail "opzione sconosciuta: $a"
+    }
   }
   $pos.Add($a)
 }
 $head = if ($pos.Count -gt 0) { $pos[0] } else { '' }
 $second = if ($pos.Count -gt 1) { $pos[1] } else { '' }
 $text = if ($pos.Count -gt $lead) { ($pos.GetRange($lead, $pos.Count - $lead)) -join ' ' } else { '' }
+
+# -h/--help: the help of the command it follows, and nothing is posted. It goes
+# through the same `help` branch below, so the text and its fallback stay in one place.
+# --file and --stdin are not read: with --help the answer is the help, not an error.
+if ($wantHelp) {
+  if ($cmd -eq 'design' -or $cmd -eq 'decisioni') { $head = $cmd }
+  $file = $null
+  $fromStdin = $false
+  $cmd = 'help'
+}
 
 # --file: the text is the file. One too big for a message is sent as its path and its beginning.
 if ($file) {
@@ -786,25 +811,36 @@ esc() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/\t/\\t/g' -
 valid_id() { case "$1" in ''|*[!A-Za-z0-9_-]*) return 1 ;; esac; return 0; }
 
 cmd="$1"; [ $# -gt 0 ] && shift
+# -h/--help anywhere prints the help and posts nothing. An argument that is only
+# an option is never text: a typo must not become a message. After a lone --
+# everything is positional again, so a text that starts with -- can still be sent.
+wanthelp=0; options=1
+case "$cmd" in
+  -h|--help) wanthelp=1; cmd="" ;;
+  --) options=0; cmd="" ;;
+  --*) fail "opzione sconosciuta: $cmd" ;;
+esac
 timeout=110; timeout_set=0; attendi=0; nowait=0; any=0; close=false; worktree=false; force=false; fresh=false; fork=false; stdin=0; ttl=0; name=""; model=""; base=""; note=""; effort=""; profile=""; file=""; via=""; budget=""; title=""
 lead=1; case "$cmd" in update|kv|memory|registro|design) lead=2 ;; esac
 n=0; head=""; second=""; text=""; ids=""
 while [ $# -gt 0 ]; do
   a="$1"
   # Options anywhere: agents write them after the text as often as before it.
-  if true; then
+  if [ $options = 1 ]; then
     case "$a" in
-      --timeout) [ $# -ge 2 ] && { timeout="$2"; timeout_set=1; shift 2; continue; } ;;
+      -h|--help) wanthelp=1; shift; continue ;;
+      --) options=0; shift; continue ;;
+      --timeout) [ $# -ge 2 ] || usage; timeout="$2"; timeout_set=1; shift 2; continue ;;
       --attendi) attendi=1; shift; continue ;;
-      --file) [ $# -ge 2 ] && { file="$2"; shift 2; continue; } ;;
-      --name) [ $# -ge 2 ] && { name="$2"; shift 2; continue; } ;;
-      --model) [ $# -ge 2 ] && { model="$2"; shift 2; continue; } ;;
-      --base) [ $# -ge 2 ] && { base="$2"; shift 2; continue; } ;;
-      --note) [ $# -ge 2 ] && { note="$2"; shift 2; continue; } ;;
-      --effort) [ $# -ge 2 ] && { effort="$2"; shift 2; continue; } ;;
-      --profile) [ $# -ge 2 ] && { profile="$2"; shift 2; continue; } ;;
-      --title) [ $# -ge 2 ] && { title="$2"; shift 2; continue; } ;;
-      --budget) [ $# -ge 2 ] && { budget="$2"; shift 2; continue; } ;;
+      --file) [ $# -ge 2 ] || usage; file="$2"; shift 2; continue ;;
+      --name) [ $# -ge 2 ] || usage; name="$2"; shift 2; continue ;;
+      --model) [ $# -ge 2 ] || usage; model="$2"; shift 2; continue ;;
+      --base) [ $# -ge 2 ] || usage; base="$2"; shift 2; continue ;;
+      --note) [ $# -ge 2 ] || usage; note="$2"; shift 2; continue ;;
+      --effort) [ $# -ge 2 ] || usage; effort="$2"; shift 2; continue ;;
+      --profile) [ $# -ge 2 ] || usage; profile="$2"; shift 2; continue ;;
+      --title) [ $# -ge 2 ] || usage; title="$2"; shift 2; continue ;;
+      --budget) [ $# -ge 2 ] || usage; budget="$2"; shift 2; continue ;;
       --no-wait) nowait=1; shift; continue ;;
       --any) any=1; shift; continue ;;
       --close) close=true; shift; continue ;;
@@ -814,13 +850,23 @@ while [ $# -gt 0 ]; do
       --fork) fork=true; shift; continue ;;
       --stdin) stdin=1; shift; continue ;;
       --digita) via=typed; shift; continue ;;
-      --ttl) [ $# -ge 2 ] && { ttl="$2"; shift 2; continue; } ;;
+      --ttl) [ $# -ge 2 ] || usage; ttl="$2"; shift 2; continue ;;
+      --*) fail "opzione sconosciuta: $a" ;;
     esac
   fi
   if [ $n -eq 0 ]; then head="$a"; elif [ $n -eq 1 ] && [ $lead -eq 2 ]; then second="$a"; else text="${text:+$text }$a"; fi
   ids="${ids:+$ids }$a"
   n=$((n+1)); shift
 done
+
+# -h/--help: the help of the command it follows, and nothing is posted. It goes
+# through the same `help` branch below, so the text and its fallback stay in one place.
+# --file and --stdin are not read: with --help the answer is the help, not an error.
+if [ $wanthelp = 1 ]; then
+  case "$cmd" in design|decisioni) head="$cmd" ;; esac
+  file=""; stdin=0
+  cmd=help
+fi
 
 if [ -n "$file" ]; then
   [ -f "$file" ] || fail "file non trovato: $file"
@@ -1285,7 +1331,7 @@ mod tests {
         assert_eq!(posted["path"], sheet.to_str().unwrap());
         assert_eq!(posted["title"], "Il menu");
         // The sh twin: the same fields, the path made absolute in Git Bash's Windows spelling.
-        assert!(SH.contains("--title) [ $# -ge 2 ] && { title=\"$2\"; shift 2; continue; } ;;"));
+        assert!(SH.contains("--title) [ $# -ge 2 ] || usage; title=\"$2\"; shift 2; continue ;;"));
         assert!(SH.contains("pwd -W 2>/dev/null || pwd;"));
         assert!(SH.contains("\\\"kind\\\":\\\"design\\\",\\\"path\\\":"));
     }
@@ -1416,6 +1462,29 @@ mod tests {
         (String::from_utf8_lossy(&out.stdout).into_owned(), started.elapsed(), out.status.code())
     }
 
+    /// Runs the real `ade-msg.ps1` in `base` on `args`: stdout, stderr, exit code.
+    #[cfg(windows)]
+    fn run_ps1_captured(base: &std::path::Path, args: &[&str]) -> (String, String, Option<i32>) {
+        use std::process::{Command, Stdio};
+        let script = base.join("bin").join("ade-msg.ps1");
+        fs::create_dir_all(base.join("bin")).unwrap();
+        fs::write(&script, PS1).unwrap();
+        let out = Command::new("powershell.exe")
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(&script)
+            .args(args)
+            .current_dir(base)
+            .env("ADE_MAILBOX", base)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        (
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+            out.status.code(),
+        )
+    }
+
     /// ADE's part for the one message posted: its receipt, then, after a pause, the answer if there is one.
     #[cfg(windows)]
     fn answer_design(
@@ -1513,6 +1582,64 @@ mod tests {
         assert_eq!(run_ps1_status(&scratch.0, &["help", "design"]).0.trim(), "formato design");
         assert_eq!(run_ps1_status(&scratch.0, &["help", "decisioni"]).0.trim(), "regole decisioni");
         assert_eq!(run_ps1_status(&scratch.0, &["help", "altro"]).0.trim(), "generale");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn help_prints_without_posting_wherever_it_appears() {
+        let scratch = mailbox_scratch("help-flag");
+        fs::write(scratch.0.join("usage.txt"), "generale").unwrap();
+        fs::write(scratch.0.join("usage-design.txt"), "formato design").unwrap();
+        fs::write(scratch.0.join("usage-decisioni.txt"), "regole decisioni").unwrap();
+        let nothing_posted = || fs::read_dir(scratch.0.join("outbox")).unwrap().next().is_none();
+        for args in [
+            vec!["--help"],
+            vec!["-h"],
+            vec!["send", "dest", "testo", "--help"],
+            vec!["send", "dest", "testo", "-h"],
+            vec!["ask", "dest", "--help", "testo"],
+            vec!["wait", "--help", "1790000000000-aaaa"],
+            // The help comes before reading --file, so a missing file is not an error.
+            vec!["send", "dest", "--file", "manca.txt", "--help"],
+        ] {
+            let (out, err, code) = run_ps1_captured(&scratch.0, &args);
+            assert_eq!(code, Some(0), "{args:?}: {out}{err}");
+            assert_eq!(out.trim(), "generale", "{args:?}");
+            assert!(!err.contains("file non trovato"), "{args:?}: {err}");
+            assert!(nothing_posted(), "{args:?} posted a message");
+        }
+        // --stdin is not read either: the help answers at once.
+        let (out, err, code) = run_ps1_captured(&scratch.0, &["registro", "decisioni", "risposta", "--stdin", "--help"]);
+        assert_eq!(code, Some(0), "{out}{err}");
+        assert_eq!(out.trim(), "regole decisioni");
+        assert!(nothing_posted(), "registro --stdin --help posted a message");
+        let (out, err, code) = run_ps1_captured(&scratch.0, &["design", "proponi", r".ade\design\DS-t2", "--help"]);
+        assert_eq!(code, Some(0), "{out}{err}");
+        assert_eq!(out.trim(), "formato design");
+        assert!(nothing_posted(), "design --help posted a message");
+        // The sh twin is read here: no shell can be assumed on this machine.
+        assert!(SH.contains("-h|--help) wanthelp=1; shift; continue ;;"));
+        assert!(SH.contains("if [ $wanthelp = 1 ]; then"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn an_unknown_option_is_an_error_and_never_a_message() {
+        let scratch = mailbox_scratch("unknown-option");
+        let (out, err, code) = run_ps1_captured(&scratch.0, &["send", "dest", "testo", "--x"]);
+        assert_eq!(code, Some(1), "{out}{err}");
+        assert!(err.contains("opzione sconosciuta: --x"), "{err}");
+        assert!(out.trim().is_empty(), "{out}");
+        assert!(fs::read_dir(scratch.0.join("outbox")).unwrap().next().is_none());
+        // A sentence that carries -- inside stays text.
+        let inside = posted_by_ps1("dash-inside", &["send", "dest", "testo con -- dentro"], None);
+        assert_eq!(inside["text"], "testo con -- dentro");
+        // A text that starts with -- is still reachable: after the end-of-options marker.
+        let after = posted_by_ps1("dash-after", &["send", "dest", "--", "--x"], None);
+        assert_eq!(after["text"], "--x");
+        // The sh twin is read here: no shell can be assumed on this machine.
+        assert!(SH.contains(r#"--*) fail "opzione sconosciuta: $a" ;;"#));
+        assert!(SH.contains("--) options=0; shift; continue ;;"));
     }
 
     #[test]
