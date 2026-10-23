@@ -86,12 +86,12 @@ describe("the words", () => {
   test("P2-2: everyday words with the technical name in brackets; a permission with no words is named as ragu names it", () => {
     const one = (permission: string, patterns: string) => ({ permission, patterns })
     expect(approvalAction(one("bash", "ls"))).toBe("eseguire un comando (bash): «ls»")
-    expect(approvalAction(one("external_directory", "C:/altro"))).toBe("scrivere fuori dal progetto (external_directory): «C:/altro»")
+    expect(approvalAction(one("external_directory", "C:/altro"))).toBe("lavorare fuori dal progetto (external_directory): «C:/altro»")
     expect(approvalAction(one("edit", "src/a.ts"))).toBe("modificare un file (edit): «src/a.ts»")
     expect(approvalAction(one("webfetch", "https://x.it"))).toBe("usare «webfetch» su «https://x.it»")
     expect(approvalAction(one("bash", "  "))).toBe("eseguire un comando (bash): «?»")
     setLocalePreference("en")
-    expect(approvalAction(one("external_directory", "C:/other"))).toBe("write outside the project (external_directory): “C:/other”")
+    expect(approvalAction(one("external_directory", "C:/other"))).toBe("work outside the project (external_directory): “C:/other”")
     setLocalePreference("it")
   })
 

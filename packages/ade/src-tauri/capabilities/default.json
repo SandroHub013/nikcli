@@ -100,6 +100,7 @@
     "allow-mailbox-take",
     "allow-path-exists",
     "allow-pty-kill",
+    "allow-pty-refresh-path",
     "allow-pty-resize",
     "allow-pty-spawn",
     "allow-pty-which",

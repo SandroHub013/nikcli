@@ -82,6 +82,10 @@ describe("withIntro", () => {
     expect(withIntro("agy", "  ", "NOTA")).toBe("  ")
     expect(withIntro("claude-code", "sistema il bug", "NOTA")).toBe("sistema il bug")
   })
+
+  test("a terminal's task is a command: it is typed as it is, never with the notice in front", () => {
+    expect(withIntro("terminal", "npm install -g cline", "NOTA")).toBe("npm install -g cline")
+  })
 })
 
 test("the transcript shows a mark instead of the whole notice", () => {

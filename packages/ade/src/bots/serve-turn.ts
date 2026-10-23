@@ -44,7 +44,7 @@ import { localTrustStore } from "./trust"
 import { agentDirs, projectConfigDir, type AgentFile } from "./ragu"
 import { joinPath } from "../host/path"
 import { finalText, isFreeModel, spendKind } from "./runners"
-import { BOT_SESSION_MARK, botPermission, hasBotRules, profileFor } from "./serve-rules"
+import { BOT_SESSION_MARK, botPermission, hasBotMark, hasBotRules, profileFor } from "./serve-rules"
 import {
   appendMessage,
   emptyTalk,
@@ -426,7 +426,8 @@ export function runServeTurn(request: TurnRequest, deps: ServeTurnDeps): Turn {
       const found = request.sessionId ? await orEnd(server.session(request.sessionId)) : { value: undefined }
       if ("kind" in found) return settled(found)
       const previous = found.value
-      if (request.sessionId && hasBotRules(previous, profile)) sessionId = request.sessionId
+      // The mark too: a session made before it would still take the terminal's «always» (ragu 0.2.9, `approvedFor`).
+      if (request.sessionId && hasBotMark(previous) && hasBotRules(previous, profile)) sessionId = request.sessionId
       else {
         // The mark first: `hasBotRules` reads the tail, and «here» in a pane reads the mark.
         const created = await orEnd(

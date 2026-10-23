@@ -9,8 +9,11 @@
 import { For, Show, createMemo, createResource, createSignal, type JSX } from "solid-js"
 import { agentLabel } from "./agents"
 import { AgentMark } from "./agent-mark"
-import { defaultAgentId, detectAgents, type AgentStatus } from "./availability"
-import { getHost } from "../host/shell"
+import { defaultAgentId, recheckAgents, type AgentStatus } from "./availability"
+import { InstallPanel } from "./install-panel"
+import { installOs, type InstallOs } from "./install"
+import { getHost, type Host } from "../host/shell"
+import { openExternally } from "../browser/host-bridge"
 import { willLaunch } from "./launch"
 import { MAX_SESSIONS, MIN_SESSIONS, clampSessions, type PresetId } from "./preset"
 import { t } from "../i18n"
@@ -19,7 +22,15 @@ export interface SessionNewProps {
   workspace: string
   path?: string
   onLaunch?: (input: { preset?: PresetId; agentId: string; count: number; task: string }) => void
+  /** Opens a terminal pane and types the install line into it, for the agent whose card was opened. */
+  onInstall?: (input: { agentId: string; label: string; line: string }) => void
   onClose?: () => void
+  /** The host, when it is not the real one: tests. */
+  loadHost?: () => Promise<Host | undefined>
+  /** Opens a project page in the system browser; tests pass their own. */
+  openPage?: (url: string) => void
+  /** The system the commands are chosen for; the one ADE runs on unless a test says otherwise. */
+  os?: InstallOs
 }
 
 const ROLE_SUFFIX: Readonly<Record<string, string>> = {
@@ -32,11 +43,25 @@ const ROLE_SUFFIX: Readonly<Record<string, string>> = {
 export function SessionNew(props: SessionNewProps): JSX.Element {
   // What is installed decides what can be selected: a list that offers an agent
   // this machine does not have guarantees a first launch that fails.
-  const [agents] = createResource(async () => {
-    const host = await getHost()
-    return detectAgents(host?.probe)
+  const loadHost = () => (props.loadHost ?? getHost)()
+  const os = () => props.os ?? installOs()
+  // On Windows the PATH is reread first, so an agent installed since ADE started is seen without asking: it is a
+  // registry read there, and a login shell elsewhere, which is left to the panel's «Ricontrolla».
+  const [loaded, { mutate }] = createResource(async () => {
+    const host = await loadHost()
+    return { host, statuses: await recheckAgents(host, os() === "windows") }
   })
+  const agents = () => loaded()?.statuses
   const [chosen, setAgentId] = createSignal<string>()
+  // The missing agent whose install panel is open.
+  const [installing, setInstalling] = createSignal<string>()
+  const installingStatus = () => (agents() ?? []).find((status) => status.agent.id === installing())
+  const recheck = async (id: string) => {
+    const host = await loadHost()
+    const statuses = await recheckAgents(host)
+    mutate({ host, statuses })
+    return statuses.find((status) => status.agent.id === id)
+  }
   const agentId = createMemo(() => chosen() ?? defaultAgentId(agents() ?? []) ?? "")
   const [count, setCount] = createSignal(1)
 
@@ -105,9 +130,9 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
                       data-agent-id={status.agent.id}
                       data-active={isSelected() ? "true" : undefined}
                       data-availability={status.availability}
-                      disabled={isAbsent()}
-                      title={status.path ?? (isAbsent() ? t("new.notInstalled") : undefined)}
-                      onClick={() => setAgentId(status.agent.id)}
+                      data-installing={installing() === status.agent.id ? "true" : undefined}
+                      title={status.path ?? (isAbsent() ? t("install.cardHint") : undefined)}
+                      onClick={() => (isAbsent() ? setInstalling(status.agent.id) : setAgentId(status.agent.id))}
                     >
                       <span data-slot="new-agent-glyph" aria-hidden="true">
                         <AgentMark id={status.agent.id} size={22} colored />
@@ -136,6 +161,25 @@ export function SessionNew(props: SessionNewProps): JSX.Element {
                 }}
               </For>
             </div>
+            {/* Keyed by the agent's id, not by its status: a recheck that finds nothing replaces the status, and the
+                panel must keep the «ancora non lo trovo» it is about to show. */}
+            <Show when={installingStatus()?.availability === "assente" ? installing() : undefined} keyed>
+              {(id) => (
+                <InstallPanel
+                  status={installingStatus()!}
+                  os={os()}
+                  recheck={() => recheck(id)}
+                  onClose={() => setInstalling(undefined)}
+                  onFound={() => {
+                    setAgentId(id)
+                    setInstalling(undefined)
+                  }}
+                  onOpenPage={(url) => (props.openPage ?? ((page) => void openExternally(page)))(url)}
+                  {...(props.onInstall ? { onRun: props.onInstall } : {})}
+                  {...(loaded()?.host?.probe ? { probe: loaded()!.host!.probe } : {})}
+                />
+              )}
+            </Show>
           </fieldset>
 
           <fieldset data-slot="new-section">

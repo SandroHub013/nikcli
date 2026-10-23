@@ -21,7 +21,7 @@
  *
  * Two things these rules do not cover, said where it matters: an «always»
  * the user gave earlier in the project (in the TUI too) still wins, since it
- * comes last; and a server started with `--auto` approves every «ask».
+ * comes last, from the next start of the server that reads it; and a server started with `--auto` approves every «ask».
  *
  * A session made elsewhere (the TUI, the web app) has other rules, or none:
  * the chat does not send to it (`hasChatRules`), it offers a new one.

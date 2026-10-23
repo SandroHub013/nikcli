@@ -10147,6 +10147,15 @@ export function Workbench() {
                        back to; on an empty workbench it would lead nowhere. */
                     onClose={gridPanes().length > 0 ? () => setStarting(false) : undefined}
                     onLaunch={(input) => launchSessions(input)}
+                    /* The install line of a missing agent, typed into a terminal the user can see: a shell's task is
+                       the command itself (`withIntro` leaves it alone), run as the user's own, never hidden and never
+                       elevated. */
+                    onInstall={(input) =>
+                      void addAgent(
+                        { agentId: "terminal", count: 1, task: input.line, title: t("install.paneTitle", input.label) },
+                        { index: 1, agentId: "terminal", role: "agent" },
+                      )
+                    }
                   />
                 }
               >

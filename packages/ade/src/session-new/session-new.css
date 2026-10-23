@@ -393,6 +393,24 @@
   filter: grayscale(0.35);
 }
 
+/* …and it is a way in, not a dead end: the card opens the panel that installs it. Dimmer than an installed
+   agent, still clickable, and marked while its panel is open. */
+[data-slot="new-agent"][data-availability="assente"] {
+  opacity: 0.6;
+  filter: grayscale(0.35);
+}
+
+[data-slot="new-agent"][data-availability="assente"]:hover,
+[data-slot="new-agent"][data-installing] {
+  opacity: 1;
+  filter: none;
+}
+
+[data-slot="new-agent"][data-installing] {
+  border-color: var(--cli-border, var(--ade-border-strong));
+  border-style: dashed;
+}
+
 [data-slot="new-agent"]:focus-visible {
   outline: none;
   box-shadow: var(--ade-focus-ring);
@@ -606,9 +624,143 @@
   font-size: var(--ade-font-xs);
 }
 
+/* The panel a missing agent's card opens, under the cards. */
+[data-slot="install"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ade-space-3);
+  margin-top: var(--ade-space-3);
+  padding: var(--ade-space-4);
+  border: 1px solid var(--cli-border, var(--ade-border));
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-surface);
+  color: var(--ade-text);
+  font-size: var(--ade-font-sm);
+}
+
+[data-slot="install-head"] {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ade-space-3);
+}
+
+[data-slot="install-title"] {
+  margin: 0;
+  font-size: var(--ade-font-md, var(--ade-font-sm));
+  font-weight: var(--ade-weight-semibold);
+}
+
+[data-slot="install-close"] {
+  border: 0;
+  background: transparent;
+  color: var(--ade-text-weak);
+  cursor: pointer;
+  font: inherit;
+}
+
+[data-slot="install-command"] {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--ade-space-2) var(--ade-space-3);
+  align-items: center;
+}
+
+[data-slot="install-command-label"] {
+  grid-column: 1 / -1;
+  color: var(--ade-text-weak);
+  font-size: var(--ade-font-xs);
+}
+
+[data-slot="install-line"] {
+  padding: var(--ade-space-2) var(--ade-space-3);
+  border: 1px solid var(--ade-border-subtle);
+  border-radius: var(--ade-radius-sm, var(--ade-radius-md));
+  background: var(--ade-raised);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+[data-slot="install-actions"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ade-space-2);
+}
+
+[data-slot="install-copy"],
+[data-slot="install-run"],
+[data-slot="install-recheck"],
+[data-slot="install-page"],
+[data-slot="install-link"] {
+  padding: 4px 10px;
+  border: 1px solid var(--ade-border);
+  border-radius: var(--ade-radius-md);
+  background: var(--ade-raised);
+  color: var(--ade-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+[data-slot="install-run"] {
+  border-color: var(--cli-color, var(--ade-accent));
+  background: var(--cli-tint, var(--ade-accent-soft));
+  font-weight: var(--ade-weight-semibold);
+}
+
+[data-slot="install-link"] {
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ade-accent);
+  text-decoration: underline;
+}
+
+[data-slot="install-copy"]:disabled,
+[data-slot="install-run"]:disabled,
+[data-slot="install-recheck"]:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+[data-slot="install-run"]:focus-visible,
+[data-slot="install-recheck"]:focus-visible,
+[data-slot="install-page"]:focus-visible,
+[data-slot="install-copy"]:focus-visible,
+[data-slot="install-close"]:focus-visible,
+[data-slot="install-link"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ade-focus-ring);
+}
+
+[data-slot="install-caveat"],
+[data-slot="install-none"],
+[data-slot="install-requires"],
+[data-slot="install-outcome"] {
+  margin: 0;
+}
+
+[data-slot="install-requires"] {
+  color: var(--ade-warning, var(--ade-text));
+}
+
+[data-slot="install-outcome"]:empty {
+  display: none;
+}
+
+[data-slot="install-source"] {
+  margin: 0;
+  color: var(--ade-text-weak);
+  font-family: var(--ade-mono);
+  font-size: var(--ade-font-xs);
+  overflow-wrap: anywhere;
+}
+
 @media (prefers-reduced-motion: reduce) {
   [data-slot="new-preset"],
   [data-slot="new-agent"],
+  [data-slot="install"] button,
   [data-slot="new-agent-glyph"],
   [data-slot="new-agent-check"],
   [data-slot="new-count"],

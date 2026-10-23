@@ -103,11 +103,20 @@ describe("what the rules cannot stop", () => {
     expect(translate("en", "chat.rules.always")).toContain("«always»")
   })
 
-  test("the note says the terminal's «always» is saved for good and the request never shows in ADE", () => {
-    expect(translate("it", "chat.rules.always")).toContain("per sempre")
-    expect(translate("it", "chat.rules.always")).toContain("non comparirà mai")
-    expect(translate("en", "chat.rules.always")).toContain("for good")
-    expect(translate("en", "chat.rules.always")).toContain("at all")
+  test("the note says the terminal's «always» holds from the next start of ADE, per folder without git, and how to remove it", () => {
+    const it = translate("it", "chat.rules.always")
+    const en = translate("en", "chat.rules.always")
+    expect(it).toContain("dopo il prossimo avvio di ADE")
+    expect(it).toContain("questa cartella se non è un repository git")
+    expect(it).toContain("chiudi ADE e Ragu Code")
+    expect(it).toContain("ragu permissions reset")
+    expect(it).not.toContain("per sempre")
+    expect(it).not.toContain("non comparirà mai")
+    expect(en).toContain("after the next start of ADE")
+    expect(en).toContain("this folder if it is not a git repository")
+    expect(en).toContain("close ADE and Ragu Code")
+    expect(en).toContain("ragu permissions reset")
+    expect(en).not.toContain("for good")
   })
 
   test("lint: RulesNote draws that note from the chat.rules.always key", () => {

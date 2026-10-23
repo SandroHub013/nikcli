@@ -65,7 +65,7 @@ describe("the words of a «Sempre»", () => {
   })
 
   test("a folder outside the project, a tool, and a key this version does not know", () => {
-    expect(alwaysText("outside:C:/Users/me/Documents/*")).toBe("Scrivere fuori dal progetto, in «C:/Users/me/Documents/*»")
+    expect(alwaysText("outside:C:/Users/me/Documents/*")).toBe("Lavorare fuori dal progetto, in «C:/Users/me/Documents/*»")
     expect(alwaysText("tool:webfetch")).toBe("Usare «webfetch» senza chiedere")
     expect(alwaysText("domani")).toBe("domani")
   })
@@ -84,7 +84,7 @@ describe("the list in Permissions", () => {
     always.add(BOT.path, "outside:C:/dati/*")
     always.add("C:/u/.nikcli/agent/beta.md", "gitRewrite")
     const view = mount(BOT, always)
-    expect(view.items()).toEqual(["Cancella una cartella con tutto il contenuto", "Scrivere fuori dal progetto, in «C:/dati/*»"])
+    expect(view.items()).toEqual(["Cancella una cartella con tutto il contenuto", "Lavorare fuori dal progetto, in «C:/dati/*»"])
     expect([...view.section()!.querySelectorAll("button")].map((button) => button.textContent)).toEqual(["Togli", "Togli"])
   })
 
