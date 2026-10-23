@@ -265,6 +265,57 @@ fn read_activities(dir: &Path, nonces: &[String]) -> Vec<Option<String>> {
         .collect()
 }
 
+/// How long ADE waits for the plugin to take an interrupt request before it falls back to the keys.
+const INTERRUPT_WAIT: Duration = Duration::from_millis(2500);
+
+/// How often the request file is looked at while waiting: a second plugin poll is a thousand of these.
+const INTERRUPT_POLL: Duration = Duration::from_millis(50);
+
+/// `<nonce>.interrupt`: the request for the plugin of this spawn to abort its session.
+///
+/// Built from the same nonce check as the report, so nothing the frontend sends can leave the
+/// drop directory. The request is a file the plugin takes away: its going is the answer.
+fn interrupt_path(dir: &Path, nonce: &str) -> Result<PathBuf, String> {
+    let name = nonce_file(nonce)?;
+    Ok(dir.join(name).with_extension("interrupt"))
+}
+
+/// Writes the request and waits for the plugin to take it: `true` when it did, `false` when `wait` ran out.
+///
+/// A request nobody took is removed before this answers `false`: left there, a TUI started
+/// later with the plugin on would abort a turn nobody asked it to stop. (The plugin ignores one
+/// older than a few seconds as well, for the case where this removal fails.) A removal that finds the
+/// file gone is the plugin having taken it at the last moment, and counts as taken.
+fn request_interrupt(dir: &Path, nonce: &str, wait: Duration, poll: Duration) -> Result<bool, String> {
+    let path = interrupt_path(dir, nonce)?;
+    let at = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+    write_atomic(&path, format!("{{\"at\":{at}}}").as_bytes())?;
+    let start = std::time::Instant::now();
+    while start.elapsed() < wait {
+        if !path.exists() {
+            return Ok(true);
+        }
+        std::thread::sleep(poll);
+    }
+    match fs::remove_file(&path) {
+        Ok(()) => Ok(false),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
+        Err(error) => Err(format!("richiesta di interruzione non rimossa: {error}")),
+    }
+}
+
+/// Asks the ragu plugin of this spawn to abort its session. `true` when it did within 2.5 s, `false` when it did not
+/// (an older plugin, none, a TUI that is stuck): the caller then sends the keys.
+#[tauri::command]
+pub async fn agent_interrupt(app: tauri::AppHandle, nonce: String) -> Result<bool, String> {
+    let dir = link_dir(&app).ok_or_else(|| "cartella sessioni non disponibile".to_string())?;
+    // Checked before the thread starts, so a bad nonce is an error at once and not after the wait.
+    interrupt_path(&dir, &nonce)?;
+    tauri::async_runtime::spawn_blocking(move || request_interrupt(&dir, &nonce, INTERRUPT_WAIT, INTERRUPT_POLL))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// Forgets a report the frontend has taken.
 #[tauri::command]
 pub async fn agent_link_clear(app: tauri::AppHandle, nonce: String) -> Result<(), String> {
@@ -1261,6 +1312,72 @@ mod tests {
         for bad in ["", "../../../windows/win.ini", "a1b2/c3", "a1b2.json", &"f".repeat(65)] {
             assert!(nonce_file(bad).is_err(), "{bad} was accepted");
         }
+    }
+
+    #[test]
+    fn an_interrupt_request_is_a_file_of_its_own_in_the_drop_directory_and_never_outside_it() {
+        let dir = Path::new("C:\\drop");
+        assert_eq!(interrupt_path(dir, "a1b2c3").unwrap(), dir.join("a1b2c3.interrupt"));
+        // The report and the activity of the same spawn are other files.
+        assert_ne!(interrupt_path(dir, "a1b2c3").unwrap(), dir.join("a1b2c3.json"));
+        assert_ne!(interrupt_path(dir, "a1b2c3").unwrap(), dir.join("a1b2c3.activity"));
+        for bad in ["", "../../x", "a1b2/c3", "a1b2.interrupt", "..\\..\\x", &"f".repeat(65)] {
+            assert!(interrupt_path(dir, bad).is_err(), "{bad} was accepted");
+        }
+    }
+
+    #[test]
+    fn an_interrupt_the_plugin_takes_is_answered_true_and_one_nobody_takes_is_removed() {
+        let (_, _, dir) = hook_scratch("interrupt");
+        let nonce = "a1b2c3d4e5f6a1b2c3d4e5f6";
+        let file = dir.join(format!("{nonce}.interrupt"));
+
+        // The plugin of the TUI: sees the file, takes it away.
+        let taker = {
+            let file = file.clone();
+            std::thread::spawn(move || {
+                for _ in 0..200 {
+                    if let Ok(text) = fs::read_to_string(&file) {
+                        assert!(text.contains("\"at\":"), "{text}");
+                        fs::remove_file(&file).unwrap();
+                        return;
+                    }
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                panic!("the request never appeared");
+            })
+        };
+        let taken = request_interrupt(&dir, nonce, Duration::from_secs(5), Duration::from_millis(5)).unwrap();
+        taker.join().unwrap();
+        assert!(taken);
+        assert!(!file.exists());
+
+        // Nobody takes it: false after the wait, and nothing left to abort a later TUI.
+        let started = std::time::Instant::now();
+        let untaken = request_interrupt(&dir, nonce, Duration::from_millis(60), Duration::from_millis(5)).unwrap();
+        assert!(!untaken);
+        assert!(started.elapsed() >= Duration::from_millis(60), "answered before the wait ran out");
+        assert!(!file.exists(), "a request nobody took was left on disk");
+
+        // Beside the report and the activity, which it does not touch.
+        fs::write(dir.join(format!("{nonce}.json")), "{}").unwrap();
+        fs::write(dir.join(format!("{nonce}.activity")), "{}").unwrap();
+        request_interrupt(&dir, nonce, Duration::from_millis(10), Duration::from_millis(5)).unwrap();
+        assert!(dir.join(format!("{nonce}.json")).exists());
+        assert!(dir.join(format!("{nonce}.activity")).exists());
+
+        assert!(request_interrupt(&dir, "../x", Duration::from_millis(10), Duration::from_millis(5)).is_err());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn the_interrupt_command_is_registered_and_waits_off_the_async_thread() {
+        let lib = include_str!("lib.rs");
+        assert!(lib.contains("agent_link::agent_interrupt,"), "agent_interrupt is not in generate_handler!");
+        let source = include_str!("agent_link.rs");
+        let body = &source[source.find("pub async fn agent_interrupt").unwrap()..];
+        let body = &body[..body.find("pub async fn agent_link_clear").unwrap()];
+        assert!(body.contains("spawn_blocking"), "the wait must not block the async runtime");
     }
 
     #[test]

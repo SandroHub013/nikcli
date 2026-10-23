@@ -386,6 +386,11 @@ export interface Host {
   /** The same for several spawns in one call, in order: what the mail pass reads each round. */
   readAgentActivities?: (nonces: string[]) => Promise<(string | null)[]>
   /**
+   * Asks the ragu plugin of this spawn to abort its session, and waits up to 2.5 s for it to take the request:
+   * `true` when it did, `false` when it did not (no plugin, an older one, a stuck TUI), and the keys go instead.
+   */
+  requestAgentInterrupt?: (nonce: string) => Promise<boolean>
+  /**
    * One CLI's hook configuration, so ADE can show its state and merge into it.
    *
    * `agent` is an id from `HOOK_TARGETS`; anything else is refused by the
@@ -1150,6 +1155,16 @@ export async function getHost(): Promise<Host | undefined> {
       } catch {
         // Unknown for all of them, as for one.
         return nonces.map(() => null)
+      }
+    },
+
+    async requestAgentInterrupt(nonce) {
+      const { invoke } = await import("@tauri-apps/api/core")
+      try {
+        return await invoke<boolean>("agent_interrupt", { nonce })
+      } catch {
+        // Not answered is not taken: the keys go, as they did before the plugin could.
+        return false
       }
     },
 
