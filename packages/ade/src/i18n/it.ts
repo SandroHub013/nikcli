@@ -797,7 +797,7 @@ export const it = {
   "shots.choose": "Scegli cartella…",
   "shots.network": "Cartella di rete: mostrata, non letta",
   "shots.error.notAFolder": "Questa non è una cartella.",
-  "shots.error.tooBroad": "Cartella troppo ampia: scegline una solo per le schermate, non un disco intero o la tua cartella personale.",
+  "shots.error.tooBroad": "Cartella troppo ampia: scegline una dedicata alle schermate, non un disco intero o la tua cartella personale.",
   "shots.error.system": "È una cartella di sistema: scegline un'altra.",
   "shots.error.notSaved": "La scelta non è stata salvata.",
   "browser.adeOrigin": "Questo indirizzo è ADE stessa; non si apre nel pannello.",

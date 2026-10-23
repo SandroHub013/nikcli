@@ -88,7 +88,7 @@
 [data-slot="shot-tray-choose"] {
   flex: 0 0 auto;
   padding: 1px var(--ade-space-4);
-  border: 1px solid var(--ade-border-subtle);
+  border: 1px solid var(--ade-border-strong);
   border-radius: var(--ade-radius-full);
   background: transparent;
   color: var(--ade-text);
@@ -99,7 +99,7 @@
 }
 
 [data-slot="shot-tray-choose"]:hover:not(:disabled) {
-  border-color: var(--ade-text-soft);
+  border-color: var(--ade-text);
 }
 
 [data-slot="shot-tray-choose"]:disabled {
