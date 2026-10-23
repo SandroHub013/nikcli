@@ -34,6 +34,8 @@ pub struct Watch {
      * a second thread" guard below only ever compared the current path.
      */
     generation: Arc<AtomicUsize>,
+    /// The last choice of screenshots folder and when it was made. See `current_dir`.
+    picked: Mutex<Option<(Instant, Option<PathBuf>)>>,
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -42,6 +44,17 @@ pub struct Shot {
     name: String,
     /// Milliseconds since the epoch, so the tray can order without re-reading.
     modified_ms: u64,
+}
+
+/// What the page needs to know about the folder ADE is watching.
+///
+/// Separate from the folder itself because a network share can be named but
+/// not read: the tray says so, rather than showing an empty strip with no
+/// explanation for the rest of the session.
+#[derive(Clone, serde::Serialize)]
+pub struct ShotLocation {
+    dir: String,
+    network: bool,
 }
 
 /// Folders that hold nothing but screenshots, where every image is one.
@@ -191,16 +204,17 @@ fn describe(path: &Path) -> Option<Shot> {
 
 /// Where this machine puts screenshots.
 ///
-/// The folder's *display* name is translated — Italian Windows shows
-/// "Immagini\Schermate" — but the name on disk is not, which is why this looks
-/// for the English one and does not try to guess a localised spelling.
+/// More than one folder can exist, and the one Windows creates first is often
+/// empty while the pictures go somewhere else. The first one found is therefore
+/// not the answer: the newest image decides between the candidates, and the
+/// folder the user chose in the tray, or the one the operating system was told
+/// about, wins outright.
 ///
 /// Which folders to look in is a question about the operating system, not
-/// about ADE: Windows saves under `Pictures\Screenshots` (or the OneDrive
-/// copy of it), while macOS saves on the Desktop unless the user moved it
-/// with `defaults write com.apple.screencapture location`. Only the Windows
-/// pair was ever looked at, so on a Mac there was no folder to watch and the
-/// tray stayed empty with no way to tell why.
+/// about ADE. Windows keeps the real answer in `FOLDERID_Screenshots`, which
+/// follows a moved folder and the localised names OneDrive creates; macOS saves
+/// on the Desktop unless the user moved it with `defaults write
+/// com.apple.screencapture location`.
 /*
  * `async` throughout, for the reason spelled out in `lib.rs`: a synchronous
  * command runs on the thread that draws the window, and every command here
@@ -209,43 +223,120 @@ fn describe(path: &Path) -> Option<Shot> {
  * asks for one per thumbnail.
  */
 #[tauri::command]
-pub async fn shots_dir() -> Option<String> {
-    default_dir()
+pub async fn shots_dir(watch: tauri::State<'_, Watch>) -> Result<Option<ShotLocation>, String> {
+    // The tray asking is the moment to look again: it is opening, or the page
+    // was reloaded, and the answer may have changed since the last look.
+    let dir = current_dir(&watch, true);
+    Ok(dir.map(|dir| ShotLocation {
+        network: crate::is_network_path(&dir.to_string_lossy()),
+        dir: dir.to_string_lossy().into_owned(),
+    }))
 }
 
-/// The same answer, callable from Rust: an `async` command is a future, and
-/// `check_shot` needs the folder now.
-fn default_dir() -> Option<String> {
-    shot_dir_candidates(
+/// How long a choice of folder is trusted before it is made again.
+///
+/// Every thumbnail and every delete asks which folder is the screenshots
+/// folder, and making the choice reads every candidate folder. The tray asking
+/// (`shots_dir`) and the user choosing a folder renew it at once; this covers a
+/// screenshot tool that starts saving somewhere else while ADE stays open.
+const PICK_TTL: Duration = Duration::from_secs(60);
+
+/// The folder the tray should watch, made at most once per `PICK_TTL`.
+///
+/// `fresh` forces the choice to be made again. The result lives in the `Watch`
+/// state, so a test can build its own and no choice leaks between them.
+fn current_dir(watch: &Watch, fresh: bool) -> Option<PathBuf> {
+    cached_pick(&watch.picked, Instant::now(), PICK_TTL, fresh, default_dir)
+}
+
+/// `compute` unless the last answer in `cache` is younger than `ttl`.
+fn cached_pick(
+    cache: &Mutex<Option<(Instant, Option<PathBuf>)>>,
+    now: Instant,
+    ttl: Duration,
+    fresh: bool,
+    compute: impl FnOnce() -> Option<PathBuf>,
+) -> Option<PathBuf> {
+    // A poisoned lock only means a panic elsewhere: choosing again is safe.
+    if let Ok(held) = cache.lock() {
+        if let Some((at, answer)) = held.as_ref() {
+            if !fresh && now.saturating_duration_since(*at) < ttl {
+                return answer.clone();
+            }
+        }
+    }
+    // Computed outside the lock: it reads the disk, and a thumbnail waiting on
+    // another thumbnail's directory listing is what the cache is there to stop.
+    let answer = compute();
+    if let Ok(mut held) = cache.lock() {
+        *held = Some((now, answer.clone()));
+    }
+    answer
+}
+
+/// Forget the last choice, so the next question makes it again.
+fn forget_pick(watch: &Watch) {
+    if let Ok(mut held) = watch.picked.lock() {
+        *held = None;
+    }
+}
+
+/// The folder the tray should watch, or `None` when this machine has none.
+///
+/// Reads the disk on every call: go through `current_dir`.
+fn default_dir() -> Option<PathBuf> {
+    let home = dirs::home_dir();
+    let chosen = chosen_dir();
+    let configured = configured_dir();
+    let candidates = shot_dir_candidates(
         std::env::consts::OS,
-        dirs::home_dir().as_deref(),
+        home.as_deref(),
         dirs::picture_dir().as_deref(),
-        configured_dir().as_deref(),
-    )
-    .into_iter()
-    .find(|p| p.is_dir())
-    .map(|p| p.to_string_lossy().into_owned())
+        chosen.as_deref(),
+        configured.as_deref(),
+        &one_drive_roots(home.as_deref()),
+    );
+    pick_shot_dir(&candidates, chosen.as_deref())
 }
 
 /// The folders this platform may be saving screenshots in, likeliest first.
 ///
 /// `os` is `std::env::consts::OS`, passed in rather than read here so the
-/// order for every platform can be tested from any of them.
+/// order for every platform can be tested from any of them. `chosen` is the
+/// folder the user picked in the tray; `configured` is the one the operating
+/// system was told to use. The rest are fallbacks for installs where neither
+/// can be read.
 pub fn shot_dir_candidates(
     os: &str,
     home: Option<&Path>,
     pictures: Option<&Path>,
+    chosen: Option<&Path>,
     configured: Option<&Path>,
+    one_drive: &[PathBuf],
 ) -> Vec<PathBuf> {
     let mut found: Vec<PathBuf> = Vec::new();
-    // What the user told the operating system wins over any usual place.
-    found.extend(configured.map(PathBuf::from));
+    // The user's choice wins over everything, then the operating system's.
+    found.extend(chosen.map(Path::to_path_buf));
+    found.extend(configured.map(Path::to_path_buf));
     match os {
         "macos" => {
             found.extend(home.map(|h| h.join("Desktop")));
             found.extend(pictures.map(|p| p.join("Screenshots")));
         }
         "windows" => {
+            /*
+             * HEURISTIC, with no source behind the names: the English
+             * `Pictures\Screenshots` under each OneDrive root. The real answers
+             * come from the shell API, not from here: `configured` is
+             * `FOLDERID_Screenshots` and `pictures` is `FOLDERID_Pictures`
+             * (through `dirs`), and both follow a move to OneDrive and any
+             * localised name. These guesses only matter when neither can be
+             * read, and a wrong one costs nothing: it is filtered by existing
+             * and by holding a screenshot.
+             */
+            for root in one_drive {
+                found.push(root.join("Pictures").join("Screenshots"));
+            }
             found.extend(pictures.map(|p| p.join("Screenshots")));
             found.extend(home.map(|h| h.join("OneDrive").join("Pictures").join("Screenshots")));
         }
@@ -257,7 +348,225 @@ pub fn shot_dir_candidates(
             found.extend(home.map(|h| h.join("Desktop")));
         }
     }
-    found
+    let mut unique: Vec<PathBuf> = Vec::new();
+    for path in found {
+        if !unique.iter().any(|known| same_path(known, &path)) {
+            unique.push(path);
+        }
+    }
+    unique
+}
+
+/// The folder the tray should watch: the one the user chose when it exists,
+/// otherwise the candidate with the most recent screenshot, and on a tie (every
+/// candidate empty, or two with the same time) the one listed first.
+///
+/// `candidates` is in order of trust: the folder the operating system was told
+/// about (`FOLDERID_Screenshots`) comes right after the user's, so it decides
+/// a tie and nothing else. An empty folder never beats one with a screenshot in
+/// it, whoever named it: Windows leaves an empty `Pictures\Screenshots` behind
+/// while the pictures go to OneDrive or to a folder a tool was pointed at, and
+/// ADE watched the empty one.
+///
+/// A share is never listed (that would send the user's hash), so it cannot win
+/// on pictures; it is named only when no local folder has any, so that the tray
+/// can say why it is empty instead of looking broken.
+fn pick_shot_dir(candidates: &[PathBuf], chosen: Option<&Path>) -> Option<PathBuf> {
+    // Asked before `is_dir`: on a UNC path the latter talks to the server,
+    // which sends the user's hash before the tray has even named the folder.
+    if let Some(chosen) = chosen {
+        if names_a_folder(chosen) {
+            return Some(chosen.to_path_buf());
+        }
+    }
+    let mut best: Option<(&PathBuf, SystemTime)> = None;
+    for dir in candidates {
+        if crate::is_network_path(&dir.to_string_lossy()) || !dir.is_dir() {
+            continue;
+        }
+        let Some(modified) = newest_image(dir) else { continue };
+        // Strictly newer: on a tie the earlier, more trusted candidate stays.
+        if best.map(|(_, current)| modified > current).unwrap_or(true) {
+            best = Some((dir, modified));
+        }
+    }
+    best.map(|(dir, _)| dir.clone())
+        .or_else(|| candidates.iter().find(|path| names_a_folder(path)).cloned())
+}
+
+/// A folder that exists, or a share that is only named.
+///
+/// Asked in this order because `is_dir` on a UNC path talks to the server and
+/// sends the user's hash; the text says it is a share before the file system
+/// is touched.
+fn names_a_folder(path: &Path) -> bool {
+    crate::is_network_path(&path.to_string_lossy()) || path.is_dir()
+}
+
+/// When the most recent screenshot directly inside `dir` was written, if any.
+///
+/// `is_shot`, not `is_image`: on the macOS Desktop every picture lying about
+/// would otherwise count, and beat a Screenshots folder that really is used.
+fn newest_image(dir: &Path) -> Option<SystemTime> {
+    std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .filter(|entry| entry.file_type().map(|kind| kind.is_file()).unwrap_or(false))
+        .filter(|entry| is_shot(dir, &entry.path()))
+        .filter_map(|entry| entry.metadata().ok()?.modified().ok())
+        .max()
+}
+
+/// Whether two paths name the same folder, as far as a user would say.
+///
+/// Windows paths are case-insensitive and the environment can spell the same
+/// root differently from a directory listing.
+fn same_path(left: &Path, right: &Path) -> bool {
+    if cfg!(windows) {
+        left.to_string_lossy().eq_ignore_ascii_case(&right.to_string_lossy())
+    } else {
+        left == right
+    }
+}
+
+/// Where the folder the user picked is remembered, under the app's config.
+///
+/// A file rather than the page's storage: the choice is made in a native
+/// dialog and must survive a WebView profile, a reload and a second window.
+const CHOSEN_FILE: &str = "screenshots-folder";
+
+/// Same split the identifier makes: ADE Test must not rewrite the official
+/// ADE's choice, and both can be open at once.
+fn config_dir_name() -> &'static str {
+    if cfg!(feature = "test-exe") {
+        "ai.nikcli.ade.test"
+    } else {
+        "ai.nikcli.ade"
+    }
+}
+
+fn chosen_dir_file() -> Option<PathBuf> {
+    dirs::config_dir().map(|base| base.join(config_dir_name()).join(CHOSEN_FILE))
+}
+
+fn read_chosen(path: &Path) -> Option<PathBuf> {
+    let raw = std::fs::read_to_string(path).ok()?;
+    let raw = raw.trim();
+    (!raw.is_empty()).then(|| PathBuf::from(raw))
+}
+
+fn save_chosen(path: &Path, dir: &Path) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| format!("cartella di configurazione: {error}"))?;
+    }
+    std::fs::write(path, dir.to_string_lossy().as_bytes()).map_err(|error| format!("scelta non salvata: {error}"))
+}
+
+/// The remembered choice, unless it is one the tray would refuse today: the
+/// file is plain text, and anything that wrote it is not the dialog.
+fn chosen_dir() -> Option<PathBuf> {
+    chosen_dir_file()
+        .and_then(|path| read_chosen(&path))
+        .filter(|dir| refuse_broad_folder(dir, dirs::home_dir().as_deref()).is_none())
+}
+
+/// Folders that must not become "the screenshots folder", with the code that
+/// says why.
+///
+/// Every image directly inside the screenshots folder is the tray's to show
+/// and `shot_delete` to remove (`check_shot` only asks that it be an image in
+/// the watched folder). A disk root, the home folder or the folder that holds
+/// the user's folders would hand the delete button every picture a person owns,
+/// and a system folder has no business being watched. Textual, like
+/// `is_network_path`: it must not touch the disk, and a share has nothing of
+/// the sort to refuse.
+///
+/// `too-broad`: a disk root, the home folder, or a folder that contains it
+/// (`C:\Users`). `system`: the operating system's folders and anything in them.
+fn refuse_broad_folder(path: &Path, home: Option<&Path>) -> Option<&'static str> {
+    let text = path.to_string_lossy();
+    if crate::is_network_path(&text) {
+        return None;
+    }
+    if path.parent().is_none() {
+        return Some("too-broad");
+    }
+    // Drive roots in the spellings `parent()` does not read as a root: `C:`
+    // alone, or `C:\` on a Unix host (the tests run on every platform).
+    let bare = text.trim_end_matches(['\\', '/']);
+    if bare.len() <= 2 && bare.ends_with(':') {
+        return Some("too-broad");
+    }
+    if home.map(|home| path_within(home, path)).unwrap_or(false) {
+        return Some("too-broad");
+    }
+    let mut system: Vec<PathBuf> = Vec::new();
+    if cfg!(windows) {
+        for key in ["SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData"] {
+            system.extend(std::env::var_os(key).map(PathBuf::from));
+        }
+    } else {
+        system.extend(
+            ["/bin", "/boot", "/dev", "/etc", "/lib", "/proc", "/sbin", "/sys", "/usr", "/var", "/System", "/Library"]
+                .map(PathBuf::from),
+        );
+    }
+    system.iter().any(|dir| path_within(path, dir)).then_some("system")
+}
+
+/// Whether `inner` is `outer` or lies inside it, as a user would say it.
+///
+/// Compared as text with one separator and, on Windows, without case: `Path`'s
+/// own comparison is case-sensitive there, and `C:\users\nik` is `C:\Users\nik`.
+fn path_within(inner: &Path, outer: &Path) -> bool {
+    let normal = |path: &Path| {
+        let text = path.to_string_lossy().replace('\\', "/");
+        let text = text.trim_end_matches('/').to_string();
+        if cfg!(windows) { text.to_lowercase() } else { text }
+    };
+    let (inner, outer) = (normal(inner), normal(outer));
+    inner == outer || inner.starts_with(&format!("{outer}/"))
+}
+
+/// The OneDrive roots this machine actually has.
+///
+/// OneDrive sets `OneDrive`, `OneDriveConsumer` and `OneDriveCommercial` to
+/// the sync roots, and for a work account the folder is `OneDrive - Azienda`
+/// unless an administrator renamed it. The environment is the source; the
+/// home's `OneDrive*` folders cover an install that lost the variables, and a
+/// moved root. Duplicates are harmless and removed by the candidates.
+fn one_drive_roots(home: Option<&Path>) -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    for key in ["OneDrive", "OneDriveConsumer", "OneDriveCommercial"] {
+        if let Some(value) = std::env::var_os(key) {
+            roots.push(PathBuf::from(value));
+        }
+    }
+    if let Some(home) = home {
+        roots.push(home.join("OneDrive"));
+        if let Ok(entries) = std::fs::read_dir(home) {
+            let mut named: Vec<PathBuf> = entries
+                .flatten()
+                .map(|entry| entry.path())
+                .filter(|path| path.is_dir())
+                .filter(|path| {
+                    path.file_name()
+                        .and_then(|name| name.to_str())
+                        .map(|name| name.to_lowercase().starts_with("onedrive"))
+                        .unwrap_or(false)
+                })
+                .collect();
+            named.sort();
+            roots.extend(named);
+        }
+    }
+    let mut unique: Vec<PathBuf> = Vec::new();
+    for path in roots {
+        if !unique.iter().any(|known| same_path(known, &path)) {
+            unique.push(path);
+        }
+    }
+    unique
 }
 
 /// `~` at the start is the shell's, not the filesystem's: expanded here or the path does not exist.
@@ -288,9 +597,72 @@ fn configured_dir() -> Option<PathBuf> {
     expand_tilde(&String::from_utf8_lossy(&output.stdout), dirs::home_dir().as_deref())
 }
 
-#[cfg(not(target_os = "macos"))]
+/// `FOLDERID_Screenshots`: where the Snipping Tool and OneDrive put them now.
+///
+/// The registry value behind it (`User Shell Folders`,
+/// `{B7BEDE81-DF94-4682-A7D8-57A52620B86F}`) is what a move rewrites, and the
+/// shell API is what turns it into a path, follows the redirect, and returns
+/// the localised folder OneDrive provisioned. Reading the registry directly
+/// would miss the last two.
+#[cfg(windows)]
+fn configured_dir() -> Option<PathBuf> {
+    use windows::Win32::System::Com::CoTaskMemFree;
+    use windows::Win32::UI::Shell::{FOLDERID_Screenshots, KF_FLAG_DEFAULT, SHGetKnownFolderPath};
+
+    unsafe {
+        let raw = SHGetKnownFolderPath(&FOLDERID_Screenshots, KF_FLAG_DEFAULT, None).ok()?;
+        let path = raw.to_string().ok();
+        CoTaskMemFree(Some(raw.0 as *const core::ffi::c_void));
+        // A redirected Pictures can be a share: `is_dir` on it would open the
+        // connection, so it is named without being asked about.
+        path.map(PathBuf::from).filter(|path| names_a_folder(path))
+    }
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 fn configured_dir() -> Option<PathBuf> {
     None
+}
+
+/// Asks for a folder and remembers it, then answers with what the tray should
+/// now watch. `None` when the dialog was dismissed.
+///
+/// The folder is picked here rather than in the page: the tray is the only
+/// caller, the choice is a native dialog, and the path never has to travel
+/// through the WebView. A network share is accepted and reported as such —
+/// the tray can name it, and `shots_watch` will not read it.
+///
+/// The errors are codes for the page to translate (`not-a-folder`,
+/// `too-broad`, `system`, `not-saved`), not sentences: the texts are in the
+/// page's i18n, under `shots.error.<code>`.
+#[tauri::command]
+pub async fn shots_choose_folder(
+    app: AppHandle,
+    watch: tauri::State<'_, Watch>,
+) -> Result<Option<ShotLocation>, String> {
+    use tauri_plugin_dialog::DialogExt;
+
+    let picked = tauri::async_runtime::spawn_blocking(move || app.dialog().file().blocking_pick_folder())
+        .await
+        .map_err(|_| "not-saved".to_string())?;
+    let Some(picked) = picked else { return Ok(None) };
+    let path = picked.into_path().map_err(|_| "not-a-folder".to_string())?;
+    if !names_a_folder(&path) {
+        return Err("not-a-folder".into());
+    }
+    if let Some(reason) = refuse_broad_folder(&path, dirs::home_dir().as_deref()) {
+        return Err(reason.into());
+    }
+    let Some(file) = chosen_dir_file() else {
+        return Err("not-saved".into());
+    };
+    save_chosen(&file, &path).map_err(|_| "not-saved".to_string())?;
+    // The next question must see the choice, not the one made a minute ago.
+    forget_pick(&watch);
+    Ok(Some(ShotLocation {
+        network: crate::is_network_path(&path.to_string_lossy()),
+        dir: path.to_string_lossy().into_owned(),
+    }))
 }
 
 /// The images already there, newest first, capped at `limit`.
@@ -300,6 +672,11 @@ fn configured_dir() -> Option<PathBuf> {
 /// to use.
 #[tauri::command]
 pub async fn shots_recent(dir: String, limit: usize) -> Vec<Shot> {
+    // A share is named in the tray but never opened from here: touching one
+    // sends the user's NTLM hash to the server (see `is_network_path`).
+    if crate::refuse_network_path(&dir).is_err() {
+        return Vec::new();
+    }
     let folder = PathBuf::from(&dir);
     let entries = std::fs::read_dir(&folder).into_iter().flatten().flatten().map(|entry| entry.path());
     let mut found: Vec<Shot> = keep_shots(entries, &folder, MAX_KEPT)
@@ -321,8 +698,16 @@ pub async fn shots_watch(
     watch: tauri::State<'_, Watch>,
     dir: String,
 ) -> Result<(), String> {
-    crate::refuse_network_path(&dir)?;
     let path = PathBuf::from(&dir);
+    if crate::is_network_path(&dir) {
+        /*
+         * Retire the watcher before refusing: the tray has just been pointed
+         * at a share, and the old folder's pictures must not keep arriving in
+         * it. Nothing here opens the share.
+         */
+        let _ = claim(&watch, &path);
+        return Err(format!("percorso di rete non consentito: {dir}"));
+    }
     if !path.is_dir() {
         return Err(format!("{dir} non è una cartella"));
     }
@@ -539,8 +924,9 @@ fn shots_root(watch: &Watch, path: &Path) -> Option<(PathBuf, PathBuf)> {
     let resolved = path.canonicalize().ok()?;
 
     let mut roots: Vec<PathBuf> = Vec::new();
-    if let Some(dir) = default_dir() {
-        roots.push(PathBuf::from(dir));
+    // The remembered choice, not a new one: this runs for every thumbnail.
+    if let Some(dir) = current_dir(watch, false) {
+        roots.push(dir);
     }
     if let Ok(current) = watch.dir.lock() {
         if let Some(dir) = current.as_ref() {
@@ -550,6 +936,9 @@ fn shots_root(watch: &Watch, path: &Path) -> Option<(PathBuf, PathBuf)> {
 
     roots
         .iter()
+        // Never touch a share here: canonicalising it sends the user's hash to
+        // the server, and a chosen network folder is otherwise a root.
+        .filter(|root| !crate::is_network_path(&root.to_string_lossy()))
         .filter_map(|root| root.canonicalize().ok())
         .find(|root| resolved.starts_with(root))
         .map(|root| (root, resolved))
@@ -774,9 +1163,27 @@ mod dir_tests {
         PathBuf::from("/Users/nik")
     }
 
+    fn scratch(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("ade-shot-dirs-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("cartella temporanea");
+        dir
+    }
+
+    fn candidates(
+        os: &str,
+        home: Option<&Path>,
+        pictures: Option<&Path>,
+        chosen: Option<&Path>,
+        configured: Option<&Path>,
+        one_drive: &[PathBuf],
+    ) -> Vec<PathBuf> {
+        shot_dir_candidates(os, home, pictures, chosen, configured, one_drive)
+    }
+
     #[test]
     fn macos_looks_on_the_desktop_first() {
-        let found = shot_dir_candidates("macos", Some(&home()), Some(&home().join("Pictures")), None);
+        let found = candidates("macos", Some(&home()), Some(&home().join("Pictures")), None, None, &[]);
         assert_eq!(found[0], home().join("Desktop"));
         assert!(found.contains(&home().join("Pictures").join("Screenshots")));
     }
@@ -784,32 +1191,81 @@ mod dir_tests {
     #[test]
     fn a_folder_the_user_chose_comes_first() {
         let chosen = PathBuf::from("/Volumes/SSD/Shots");
-        let found = shot_dir_candidates("macos", Some(&home()), None, Some(&chosen));
+        let found = candidates("macos", Some(&home()), None, Some(&chosen), None, &[]);
         assert_eq!(found[0], chosen);
     }
 
+    /// `FOLDERID_Screenshots` is the exact path Windows was told to use, so it
+    /// is listed before every guess (and decides a tie between folders).
     #[test]
-    fn windows_keeps_the_pictures_pair_it_had() {
-        let win = PathBuf::from("C:/Users/nik");
-        let found = shot_dir_candidates("windows", Some(&win), Some(&win.join("Pictures")), None);
+    fn the_known_folder_comes_before_the_guesses() {
+        let known = PathBuf::from(r"C:\Users\nik\Cartella\Screenshot");
+        let win = PathBuf::from(r"C:\Users\nik");
+        let found = candidates(
+            "windows",
+            Some(&win),
+            Some(&win.join("Pictures")),
+            None,
+            Some(&known),
+            &[win.join("OneDrive - Azienda")],
+        );
+        assert_eq!(found[0], known);
+    }
+
+    #[test]
+    fn windows_tries_every_onedrive_root_it_was_given() {
+        let win = PathBuf::from(r"C:\Users\nik");
+        let work = win.join("OneDrive - Azienda");
+        let found = candidates(
+            "windows",
+            Some(&win),
+            Some(&win.join("Pictures")),
+            None,
+            None,
+            std::slice::from_ref(&work),
+        );
         assert_eq!(
             found,
             vec![
+                work.join("Pictures").join("Screenshots"),
                 win.join("Pictures").join("Screenshots"),
                 win.join("OneDrive").join("Pictures").join("Screenshots"),
             ]
         );
     }
 
+    /// The environment root and the `OneDrive*` folder in home are the same
+    /// install; two identical candidates would only make the order confusing.
+    #[test]
+    fn the_same_onedrive_root_is_only_looked_at_once() {
+        let win = PathBuf::from(r"C:\Users\nik");
+        let root = win.join("OneDrive");
+        let found = candidates(
+            "windows",
+            Some(&win),
+            Some(&win.join("Pictures")),
+            None,
+            None,
+            std::slice::from_ref(&root),
+        );
+        assert_eq!(
+            found
+                .iter()
+                .filter(|path| **path == root.join("Pictures").join("Screenshots"))
+                .count(),
+            1
+        );
+    }
+
     #[test]
     fn linux_falls_back_to_pictures_itself() {
-        let found = shot_dir_candidates("linux", Some(&home()), Some(&home().join("Pictures")), None);
+        let found = candidates("linux", Some(&home()), Some(&home().join("Pictures")), None, None, &[]);
         assert_eq!(found[1], home().join("Pictures"));
     }
 
     #[test]
     fn nothing_known_means_nowhere_to_look() {
-        assert!(shot_dir_candidates("macos", None, None, None).is_empty());
+        assert!(candidates("macos", None, None, None, None, &[]).is_empty());
     }
 
     #[test]
@@ -818,6 +1274,275 @@ mod dir_tests {
         assert_eq!(expand_tilde("~/Desktop/Shots\n", Some(&home())), Some(home().join("Desktop/Shots")));
         assert_eq!(expand_tilde("/Volumes/SSD/Shots", Some(&home())), Some(PathBuf::from("/Volumes/SSD/Shots")));
         assert_eq!(expand_tilde("  ", Some(&home())), None);
+    }
+
+    fn image_at(dir: &Path, name: &str, seconds: u64) {
+        let file = dir.join(name);
+        std::fs::write(&file, b"not really an image, but it has a time").expect("scrittura");
+        let file = std::fs::File::options().write(true).open(&file).expect("apertura");
+        file.set_modified(UNIX_EPOCH + Duration::from_secs(seconds)).expect("mtime");
+    }
+
+    /// The bug this fixes: Windows leaves an empty `Pictures\Screenshots`
+    /// behind, ADE took the first folder that existed, and watched the empty
+    /// one while the pictures went to OneDrive.
+    #[test]
+    fn the_folder_with_the_newest_image_wins_over_the_first_empty_one() {
+        let root = scratch("newest");
+        let empty = root.join("Pictures").join("Screenshots");
+        let used = root.join("OneDrive").join("Pictures").join("Screenshots");
+        std::fs::create_dir_all(&empty).expect("cartella vuota");
+        std::fs::create_dir_all(&used).expect("cartella usata");
+        image_at(&used, "Screenshot 1.png", 1_700_000_000);
+
+        let found = pick_shot_dir(&[empty.clone(), used.clone()], None);
+        assert_eq!(found, Some(used));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The known folder is trusted first but only decides a tie: a newer
+    /// screenshot elsewhere wins over an older one in it.
+    #[test]
+    fn the_known_folder_loses_to_a_folder_with_a_newer_picture() {
+        let root = scratch("known");
+        let known = root.join("Cartella").join("Screenshot");
+        let used = root.join("OneDrive").join("Pictures").join("Screenshots");
+        std::fs::create_dir_all(&known).expect("cartella nota");
+        std::fs::create_dir_all(&used).expect("cartella recente");
+        image_at(&known, "Screenshot 1.png", 1_600_000_000);
+        image_at(&used, "Screenshot 1.png", 1_700_000_000);
+
+        let found = pick_shot_dir(&[known, used.clone()], None);
+        assert_eq!(found, Some(used));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The case the decision is about: Windows made the known folder, nothing
+    /// is saved there, and the pictures go to another folder.
+    #[test]
+    fn an_empty_known_folder_never_beats_a_folder_with_pictures() {
+        let root = scratch("knownempty");
+        let known = root.join("Pictures").join("Screenshots");
+        let used = root.join("ShareX");
+        std::fs::create_dir_all(&known).expect("cartella nota vuota");
+        std::fs::create_dir_all(&used).expect("cartella usata");
+        image_at(&used, "Screenshot 1.png", 1_700_000_000);
+
+        assert_eq!(pick_shot_dir(&[known, used.clone()], None), Some(used));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// On a tie the earlier candidate stays, which is the known folder: every
+    /// folder empty, or two with the very same time.
+    #[test]
+    fn the_known_folder_decides_a_tie() {
+        let root = scratch("tie");
+        let known = root.join("Known");
+        let other = root.join("Other");
+        std::fs::create_dir_all(&known).expect("cartella nota");
+        std::fs::create_dir_all(&other).expect("altra cartella");
+
+        assert_eq!(pick_shot_dir(&[known.clone(), other.clone()], None), Some(known.clone()));
+
+        image_at(&known, "Screenshot 1.png", 1_700_000_000);
+        image_at(&other, "Screenshot 2.png", 1_700_000_000);
+        assert_eq!(pick_shot_dir(&[known.clone(), other], None), Some(known));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn the_folder_the_user_chose_wins_even_when_another_has_pictures() {
+        let root = scratch("chosen");
+        let empty = root.join("Pictures").join("Screenshots");
+        let used = root.join("OneDrive").join("Pictures").join("Screenshots");
+        let chosen = root.join("Scelte");
+        std::fs::create_dir_all(&empty).expect("cartella vuota");
+        std::fs::create_dir_all(&used).expect("cartella usata");
+        std::fs::create_dir_all(&chosen).expect("cartella scelta");
+        image_at(&used, "Screenshot 1.png", 1_700_000_000);
+
+        let found = pick_shot_dir(&[empty, used, chosen.clone()], Some(&chosen));
+        assert_eq!(found, Some(chosen));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A remembered folder that was deleted or unplugged is not an answer.
+    #[test]
+    fn a_chosen_folder_that_is_gone_falls_back_to_what_exists() {
+        let root = scratch("gone");
+        let used = root.join("OneDrive").join("Pictures").join("Screenshots");
+        std::fs::create_dir_all(&used).expect("cartella usata");
+        image_at(&used, "Screenshot 1.png", 1_700_000_000);
+        let gone = root.join("Non Esiste");
+
+        let found = pick_shot_dir(&[gone, used.clone()], Some(&root.join("Non Esiste")));
+        assert_eq!(found, Some(used));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// None of the folders has an image: something is better than nothing,
+    /// because the watcher will announce the first screenshot that arrives.
+    #[test]
+    fn with_no_images_the_first_existing_folder_is_kept() {
+        let root = scratch("noimages");
+        let empty = root.join("Pictures").join("Screenshots");
+        std::fs::create_dir_all(&empty).expect("cartella vuota");
+
+        assert_eq!(pick_shot_dir(&[empty.clone()], None), Some(empty));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The choice is made once per interval, not once per thumbnail.
+    #[test]
+    fn the_choice_of_folder_is_remembered_until_it_is_old() {
+        let cache = Mutex::new(None);
+        let start = Instant::now();
+        let ttl = Duration::from_secs(60);
+        let mut runs = 0;
+        let mut ask = |at: Instant, fresh: bool| {
+            cached_pick(&cache, at, ttl, fresh, || {
+                runs += 1;
+                Some(PathBuf::from(format!("/cartella/{runs}")))
+            })
+        };
+
+        assert_eq!(ask(start, false), Some(PathBuf::from("/cartella/1")));
+        // Twelve thumbnails a moment later: the same answer, nothing read.
+        for second in 1..13 {
+            assert_eq!(ask(start + Duration::from_secs(second), false), Some(PathBuf::from("/cartella/1")));
+        }
+        // The tray asking, or the user choosing, makes it again at once.
+        assert_eq!(ask(start + Duration::from_secs(13), true), Some(PathBuf::from("/cartella/2")));
+        // And an old answer is made again without being asked.
+        assert_eq!(ask(start + Duration::from_secs(74), false), Some(PathBuf::from("/cartella/3")));
+        assert_eq!(runs, 3);
+    }
+
+    /// "Nothing found" is an answer too: it is not looked for again on every thumbnail.
+    #[test]
+    fn no_folder_is_remembered_as_well() {
+        let cache = Mutex::new(None);
+        let start = Instant::now();
+        let mut runs = 0;
+        for second in 0..5 {
+            let found = cached_pick(&cache, start + Duration::from_secs(second), PICK_TTL, false, || {
+                runs += 1;
+                None
+            });
+            assert_eq!(found, None);
+        }
+        assert_eq!(runs, 1);
+    }
+
+    /// The folder the user picks gets the delete button, so it must not be
+    /// one that holds everything the user owns.
+    #[test]
+    fn broad_folders_are_refused_as_the_screenshots_folder() {
+        let home = PathBuf::from(r"C:\Users\nik");
+        for broad in [r"C:\", r"C:", r"C:\Users", r"C:\Users\nik", r"C:\Users\nik\"] {
+            assert_eq!(refuse_broad_folder(Path::new(broad), Some(&home)), Some("too-broad"), "{broad}");
+        }
+        // Windows paths do not care about case; other systems do.
+        if cfg!(windows) {
+            assert_eq!(refuse_broad_folder(Path::new(r"c:\USERS\Nik"), Some(&home)), Some("too-broad"));
+        }
+        assert_eq!(refuse_broad_folder(Path::new("/"), Some(Path::new("/home/nik"))), Some("too-broad"));
+        assert_eq!(refuse_broad_folder(Path::new("/home"), Some(Path::new("/home/nik"))), Some("too-broad"));
+    }
+
+    #[test]
+    fn a_folder_inside_home_is_fine_and_a_system_folder_is_not() {
+        let home = PathBuf::from(r"C:\Users\nik");
+        for fine in [r"C:\Users\nik\Pictures\Screenshots", r"C:\Users\nik\OneDrive\Immagini", r"D:\Schermate"] {
+            assert_eq!(refuse_broad_folder(Path::new(fine), Some(&home)), None, "{fine}");
+        }
+        // A folder named like home's start is not inside it.
+        assert_eq!(refuse_broad_folder(Path::new(r"C:\Users\nikita\Shots"), Some(&home)), None);
+        if cfg!(windows) {
+            let windir = std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into());
+            assert_eq!(refuse_broad_folder(&Path::new(&windir).join("System32"), None), Some("system"));
+        } else {
+            assert_eq!(refuse_broad_folder(Path::new("/etc/ssh"), Some(Path::new("/home/nik"))), Some("system"));
+        }
+    }
+
+    #[test]
+    fn a_share_is_never_refused_as_broad() {
+        assert_eq!(refuse_broad_folder(Path::new(r"\\server\shots"), Some(Path::new(r"C:\Users\nik"))), None);
+    }
+
+    /// A choice written by hand into the file is not trusted more than the dialog.
+    #[test]
+    fn a_broad_choice_found_in_the_file_is_not_a_choice() {
+        let root = scratch("broadfile");
+        let file = root.join("screenshots-folder");
+        std::fs::write(&file, "/").expect("scrittura");
+        let read = read_chosen(&file).filter(|dir| refuse_broad_folder(dir, Some(Path::new("/home/nik"))).is_none());
+        assert_eq!(read, None);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// A share is a name, not a question to the server.
+    #[test]
+    fn a_share_counts_as_a_folder_without_being_opened() {
+        assert!(names_a_folder(Path::new(r"\\server\shots")));
+        assert!(!names_a_folder(Path::new("/davvero/non/esiste")));
+    }
+
+    /// On the Desktop an unrelated picture is not a screenshot, so it must not
+    /// make the Desktop look more recently used than the Screenshots folder.
+    #[test]
+    fn a_picture_on_the_desktop_does_not_beat_a_used_screenshots_folder() {
+        let root = scratch("desktop");
+        let desktop = root.join("Desktop");
+        let used = root.join("Pictures").join("Screenshots");
+        std::fs::create_dir_all(&desktop).expect("scrivania");
+        std::fs::create_dir_all(&used).expect("cartella usata");
+        image_at(&desktop, "vacanza.png", 1_800_000_000);
+        image_at(&used, "Screenshot 1.png", 1_700_000_000);
+
+        let found = pick_shot_dir(&[desktop, used.clone()], None);
+        assert_eq!(found, Some(used));
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn no_existing_folder_means_no_place_to_watch() {
+        assert_eq!(pick_shot_dir(&[PathBuf::from("/davvero/non/esiste")], None), None);
+    }
+
+    /// The path is never opened: naming it is what lets the tray say the
+    /// folder is on a share, and opening it would leak the user's credentials.
+    #[test]
+    fn a_share_is_named_even_when_it_is_not_read() {
+        let share = PathBuf::from(r"\\server\shots");
+        assert_eq!(pick_shot_dir(&[share.clone()], None), Some(share.clone()));
+        assert_eq!(pick_shot_dir(&[], Some(&share)), Some(share));
+    }
+
+    #[test]
+    fn a_choice_survives_the_file_it_is_written_to() {
+        let root = scratch("saved");
+        let file = root.join("config").join("screenshots-folder");
+        let chosen = root.join("Scelte");
+        std::fs::create_dir_all(&chosen).expect("cartella scelta");
+
+        save_chosen(&file, &chosen).expect("salvataggio");
+        assert_eq!(read_chosen(&file), Some(chosen));
+
+        // An empty file is not a choice that was made.
+        std::fs::write(&file, "  \n").expect("scrittura");
+        assert_eq!(read_chosen(&file), None);
+
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
 

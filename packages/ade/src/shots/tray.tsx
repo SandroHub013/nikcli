@@ -35,6 +35,26 @@ export interface ShotTrayProps {
    * arrive. The strip then says so in one line instead of staying blank.
    */
   unavailable?: boolean
+  /** The folder the host is watching. Shown so a wrong folder is visible. */
+  folder?: string
+  /** A folder on a share: named, but not read without sending credentials. */
+  network?: boolean
+  /** Opens the folder picker. Absent in the browser harness. */
+  onChoose?: () => void
+  /** Why the folder just picked was refused, as the host's code. */
+  notice?: string
+}
+
+const NOTICE_TEXT = {
+  "not-a-folder": "shots.error.notAFolder",
+  "too-broad": "shots.error.tooBroad",
+  system: "shots.error.system",
+  "not-saved": "shots.error.notSaved",
+} as const
+
+function noticeText(code: string | undefined): string | undefined {
+  if (!code) return undefined
+  return t(NOTICE_TEXT[code as keyof typeof NOTICE_TEXT] ?? "shots.error.notSaved")
 }
 
 /** A thumbnail, loaded once and revoked when it leaves the tray. */
@@ -116,9 +136,33 @@ export function ShotTray(props: ShotTrayProps) {
     <Show
       when={props.shots.length > 0}
       fallback={
-        <Show when={props.unavailable}>
+        <Show when={props.unavailable || props.folder}>
           <aside data-component="shot-tray" data-empty="true">
-            <span data-slot="shot-tray-empty">{t("shots.noFolder")}</span>
+            <span data-slot="shot-tray-empty">
+              {props.unavailable ? t("shots.noFolder") : t("shots.emptyFolder")}
+            </span>
+            <Show when={props.folder}>
+              {(folder) => (
+                <span data-slot="shot-tray-folder" title={folder()}>
+                  {folder()}
+                </span>
+              )}
+            </Show>
+            <Show when={props.network}>
+              <span data-slot="shot-tray-network">{t("shots.network")}</span>
+            </Show>
+            <Show when={props.onChoose}>
+              <button type="button" data-slot="shot-tray-choose" onClick={() => props.onChoose?.()}>
+                {t("shots.choose")}
+              </button>
+            </Show>
+            <Show when={noticeText(props.notice)}>
+              {(text) => (
+                <span data-slot="shot-tray-notice" role="alert">
+                  {text()}
+                </span>
+              )}
+            </Show>
           </aside>
         </Show>
       }
@@ -265,6 +309,36 @@ export function ShotTray(props: ShotTrayProps) {
               )}
             </For>
           </div>
+        </Show>
+        {/*
+         * Which folder these came from, always: a tray that watched the wrong
+         * one looked exactly like a tray with nothing new in it, and finding
+         * out meant reading the source. The choice is here too, so moving it
+         * never needs a trip to settings.
+         */}
+        <Show when={props.folder}>
+          {(folder) => (
+            <div data-slot="shot-tray-where">
+              <span data-slot="shot-tray-folder" title={folder()}>
+                {folder()}
+              </span>
+              <Show when={props.network}>
+                <span data-slot="shot-tray-network">{t("shots.network")}</span>
+              </Show>
+              <Show when={props.onChoose}>
+                <button type="button" data-slot="shot-tray-choose" onClick={() => props.onChoose?.()}>
+                  {t("shots.choose")}
+                </button>
+              </Show>
+            </div>
+          )}
+        </Show>
+        <Show when={noticeText(props.notice)}>
+          {(text) => (
+            <span data-slot="shot-tray-notice" role="alert">
+              {text()}
+            </span>
+          )}
         </Show>
       </aside>
 

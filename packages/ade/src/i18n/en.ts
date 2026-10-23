@@ -754,6 +754,13 @@ export const en: Messages = {
   "browser.error.hint": "Make sure the server is running and reachable.",
   "browser.retry": "Try again",
   "shots.noFolder": "No screenshots folder on this computer",
+  "shots.emptyFolder": "No screenshots in this folder yet",
+  "shots.choose": "Choose folder…",
+  "shots.network": "Network folder: named here, not read",
+  "shots.error.notAFolder": "That is not a folder.",
+  "shots.error.tooBroad": "That folder is too broad: pick one just for screenshots, not a whole disk or your home folder.",
+  "shots.error.system": "That is a system folder: pick another one.",
+  "shots.error.notSaved": "The choice could not be saved.",
   "browser.adeOrigin": "That address is ADE itself; it isn't opened in the pane.",
   "bots.trust.new": (name, can) =>
     `The bot “${name}” comes from this project (from the project's bots folder): its instructions were written by whoever wrote the repository, and it will run on your account. ${can} Use it?`,

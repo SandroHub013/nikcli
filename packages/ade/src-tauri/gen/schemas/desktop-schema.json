@@ -1059,6 +1059,12 @@
           "markdownDescription": "Enables the shot_delete command without any pre-configured scope."
         },
         {
+          "description": "Enables the shots_choose_folder command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-shots-choose-folder",
+          "markdownDescription": "Enables the shots_choose_folder command without any pre-configured scope."
+        },
+        {
           "description": "Enables the shots_dir command without any pre-configured scope.",
           "type": "string",
           "const": "allow-shots-dir",
@@ -1909,6 +1915,12 @@
           "type": "string",
           "const": "deny-shot-delete",
           "markdownDescription": "Denies the shot_delete command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the shots_choose_folder command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-shots-choose-folder",
+          "markdownDescription": "Denies the shots_choose_folder command without any pre-configured scope."
         },
         {
           "description": "Denies the shots_dir command without any pre-configured scope.",
