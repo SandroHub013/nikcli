@@ -26,6 +26,8 @@ test("the design help fits in 15 lines and says the folder, the pages and the wa
   expect(USAGE).not.toContain("claude.ai")
   expect(USAGE).toContain("ade-msg design proponi <cartella>")
   expect(USAGE).toContain("ade-msg help decisioni")
+  expect(USAGE).toContain("ade-msg --help")
+  expect(USAGE).toContain("dopo -- è testo")
 })
 
 /* `ade-msg help` says how to write in the registers (polish-aaa, point 3; TEAM.md, «Come si scrive nei registri»). */

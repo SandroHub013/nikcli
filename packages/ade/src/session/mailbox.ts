@@ -1606,6 +1606,7 @@ export function agentsTable(agents: readonly { id: string; label: string }[]): s
 
 export const USAGE =
   "uso:\n" +
+  "  ade-msg --help | ade-msg <comando> --help  l'aiuto (del comando, se c'è) e non manda niente; dopo -- è testo\n" +
   '  ade-msg send   <sessione> "<testo>"       nota, non aspetta risposta\n' +
   '  ade-msg ask    <sessione> "<richiesta>"   aspetta la risposta e la stampa\n' +
   '  ade-msg spawn  <agente> "<compito>"       nuova sessione (subagent), aspetta il risultato\n' +
