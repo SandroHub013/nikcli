@@ -367,14 +367,23 @@ const same = (a: { permission?: unknown; pattern?: unknown; action?: unknown }, 
 export const BOT_SESSION_MARK: PermissionRule = rule("ade.bot", "deny")
 
 /**
+ * Whether a session carries the mark. ragu 0.2.9 drops the project's saved «always» only for a session that has it
+ * (`approvedFor`), so a turn may go on in a session only when it does (`runServeTurn`); one made before the mark ends
+ * with a profile's rules and is `isBotSession` all the same, but the terminal's «always» would reach it.
+ */
+export function hasBotMark(session: { readonly permission?: unknown } | undefined): boolean {
+  const rules = Array.isArray(session?.permission)
+    ? (session.permission as { permission?: unknown; pattern?: unknown; action?: unknown }[])
+    : []
+  return rules.some((found) => found && same(found, BOT_SESSION_MARK))
+}
+
+/**
  * A conversation of the bots' server: it carries the mark, or, made before
  * the mark, it ends with one profile's rules, which no one else writes.
  */
 export function isBotSession(session: { readonly permission?: unknown } | undefined): boolean {
-  const rules = Array.isArray(session?.permission)
-    ? (session.permission as { permission?: unknown; pattern?: unknown; action?: unknown }[])
-    : []
-  if (rules.some((found) => found && same(found, BOT_SESSION_MARK))) return true
+  if (hasBotMark(session)) return true
   return (Object.keys(PROFILE_RULES) as BotProfile[]).some((profile) => hasBotRules(session, profile))
 }
 

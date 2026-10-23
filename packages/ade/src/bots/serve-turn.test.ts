@@ -377,7 +377,7 @@ describe("B8d: a bot's turn on ADE's server", () => {
     }
   })
 
-  test("a new session has the profile's rules; one that has them goes on; one of `ragu run` or the Chat starts over, said once", async () => {
+  test("a new session has the profile's rules; one that has them and the mark goes on; one of `ragu run`, the Chat or from before the mark starts over, said once", async () => {
     const fake = server({ events: FIRST, session: FIRST_SESSION })
     const fresh = thread()
     await runServeTurn(panel({ onChange: fresh.onChange }), fake.deps).result
@@ -390,7 +390,9 @@ describe("B8d: a bot's turn on ADE's server", () => {
         (event) => JSON.parse(JSON.stringify(event).replaceAll(FIRST_SESSION, "ses_mine")) as ChatEvent,
       ),
       existing: {
-        ses_mine: { permission: [{ permission: "*", pattern: "*", action: "allow" }, ...botPermission("ask")] },
+        ses_mine: {
+          permission: [BOT_SESSION_MARK, { permission: "*", pattern: "*", action: "allow" }, ...botPermission("ask")],
+        },
       },
     })
     const going = thread()
@@ -404,6 +406,8 @@ describe("B8d: a bot's turn on ADE's server", () => {
       { ses_old: {} },
       { ses_old: { permission: [...CHAT_PERMISSION] } },
       { ses_old: { permission: [...botPermission("no-shell")] } },
+      // Made before the mark: it ends with this profile's rules, but ragu 0.2.9 lets the terminal's «always» reach it.
+      { ses_old: { permission: [...botPermission("ask")] } },
     ]
     for (const existing of olds) {
       const over = server({ events: FIRST, session: FIRST_SESSION, existing })
