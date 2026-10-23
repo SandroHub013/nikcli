@@ -70,6 +70,8 @@ describe("createShotSource without a host", () => {
       expect(source.folder()).toBeUndefined()
       expect(source.state()).toBe("none")
       expect(source.notice()).toBeUndefined()
+      expect(source.choosing()).toBe(false)
+      expect(source.canChoose).toBe(false)
       dispose()
     })
   })

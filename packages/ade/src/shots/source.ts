@@ -56,6 +56,10 @@ export interface ShotSource {
   choose: () => Promise<void>
   /** Why the last folder picked was not taken, until the next pick. */
   notice: () => ShotNotice | undefined
+  /** The picker is open: asking again would open a second one. */
+  choosing: () => boolean
+  /** Whether there is a host to pick a folder for; false in the browser. */
+  canChoose: boolean
 }
 
 /** Whether `path` is inside `dir`, whatever separator the platform used. */
@@ -76,6 +80,7 @@ export function createShotSource(inTauri: boolean): ShotSource {
   const [folder, setFolder] = createSignal<string>()
   const [state, setState] = createSignal<ShotState>(inTauri ? "asking" : "none")
   const [notice, setNotice] = createSignal<ShotNotice>()
+  const [choosing, setChoosing] = createSignal(false)
   /*
    * Dismissed paths are remembered, because the folder watcher has no idea a
    * screenshot was put away: the file is still there, and the next `shots_recent`
@@ -193,9 +198,12 @@ export function createShotSource(inTauri: boolean): ShotSource {
       return bytes ? new Uint8Array(bytes) : null
     },
     notice,
+    choosing,
+    canChoose: inTauri,
     choose: async () => {
-      if (!inTauri) return
+      if (!inTauri || choosing()) return
       setNotice(undefined)
+      setChoosing(true)
       let location: ShotLocation | null
       try {
         location = await call<ShotLocation | null>("shots_choose_folder")
@@ -203,6 +211,8 @@ export function createShotSource(inTauri: boolean): ShotSource {
         // The host answers with a code; anything else is still a refusal.
         setNotice(NOTICES.includes(String(error)) ? (String(error) as ShotNotice) : "not-saved")
         return
+      } finally {
+        setChoosing(false)
       }
       if (!location || disposed) return
       // The previous folder's pictures are not the new one's, and keeping them

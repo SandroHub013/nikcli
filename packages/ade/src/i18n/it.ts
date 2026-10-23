@@ -772,7 +772,7 @@ export const it = {
   "shots.noFolder": "Nessuna cartella delle schermate su questo computer",
   "shots.emptyFolder": "Nessuna schermata in questa cartella",
   "shots.choose": "Scegli cartella…",
-  "shots.network": "Cartella di rete: la mostro ma non la leggo",
+  "shots.network": "Cartella di rete: mostrata, non letta",
   "shots.error.notAFolder": "Questa non è una cartella.",
   "shots.error.tooBroad": "Cartella troppo ampia: scegline una solo per le schermate, non un disco intero o la tua cartella personale.",
   "shots.error.system": "È una cartella di sistema: scegline un'altra.",

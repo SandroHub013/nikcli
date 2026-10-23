@@ -81,6 +81,55 @@ describe("the empty screenshot tray", () => {
     expect(host.querySelector('[data-slot="shot-tray-notice"]')).toBeNull()
   })
 
+  test("a share is not described as an empty folder: it was not read", () => {
+    const host = mount({ folder: "\\\\server\\shots", network: true, onChoose: () => {} })
+
+    expect(host.querySelector('[data-slot="shot-tray-empty"]')).toBeNull()
+    expect(host.querySelector('[data-slot="shot-tray-network"]')).not.toBeNull()
+  })
+
+  test("the path and the button are the same markup with and without thumbnails", () => {
+    const empty = mount({ folder: "C:/Users/nik/Shots", onChoose: () => {} })
+    const emptyRow = empty.querySelector('[data-slot="shot-tray-where"]')
+    expect(emptyRow?.querySelector('[data-slot="shot-tray-folder"]')?.textContent).toBe("C:/Users/nik/Shots")
+    expect(emptyRow?.querySelector('[data-slot="shot-tray-choose"]')).not.toBeNull()
+    dispose?.()
+    document.body.innerHTML = ""
+
+    const full = mount({
+      shots: [{ path: "C:/Users/nik/Shots/Screenshot 1.png", name: "Screenshot 1.png", modified_ms: 1 }],
+      load: async () => null,
+      folder: "C:/Users/nik/Shots",
+      onChoose: () => {},
+    })
+    const fullRow = full.querySelector('[data-slot="shot-tray-where"]')
+    expect(fullRow?.querySelector('[data-slot="shot-tray-folder"]')?.textContent).toBe("C:/Users/nik/Shots")
+    expect(fullRow?.querySelector('[data-slot="shot-tray-choose"]')).not.toBeNull()
+  })
+
+  test("the path is isolated left to right, so a share keeps its leading separators", () => {
+    const host = mount({ folder: "\\\\server\\shots", network: true })
+
+    expect(host.querySelector('[data-slot="shot-tray-folder"] bdi')?.getAttribute("dir")).toBe("ltr")
+  })
+
+  test("the picker button waits while the picker is open, and works otherwise", () => {
+    let clicks = 0
+    const open = mount({ folder: "C:/x", onChoose: () => clicks++, choosing: true })
+    const waiting = open.querySelector('[data-slot="shot-tray-choose"]') as HTMLButtonElement
+    expect(waiting.disabled).toBe(true)
+    waiting.click()
+    expect(clicks).toBe(0)
+    dispose?.()
+    document.body.innerHTML = ""
+
+    const idle = mount({ folder: "C:/x", onChoose: () => clicks++ })
+    const ready = idle.querySelector('[data-slot="shot-tray-choose"]') as HTMLButtonElement
+    expect(ready.disabled).toBe(false)
+    ready.click()
+    expect(clicks).toBe(1)
+  })
+
   test("with no folder at all, still offers the picker", () => {
     const host = mount({ unavailable: true, onChoose: () => {} })
 

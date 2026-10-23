@@ -41,8 +41,58 @@ export interface ShotTrayProps {
   network?: boolean
   /** Opens the folder picker. Absent in the browser harness. */
   onChoose?: () => void
+  /** The picker is open: the button waits, so a second click cannot open a second one. */
+  choosing?: boolean
   /** Why the folder just picked was refused, as the host's code. */
   notice?: string
+}
+
+/**
+ * Which folder the tray is on, the way to change it and why a choice was
+ * refused: one markup for the tray with thumbnails and the empty one, so the
+ * path and the button look the same in both.
+ *
+ * A tray that watched the wrong folder looked exactly like a tray with nothing
+ * new in it, and finding out meant reading the source. The choice is here too,
+ * so moving it never needs a trip to settings.
+ */
+function Where(props: Pick<ShotTrayProps, "folder" | "network" | "onChoose" | "choosing" | "notice">) {
+  return (
+    <>
+      <Show when={props.folder || props.onChoose}>
+        <div data-slot="shot-tray-where">
+          <Show when={props.folder}>
+            {(folder) => (
+              <span data-slot="shot-tray-folder" title={folder()}>
+                {/* Left to right inside the right-to-left box that truncates the front of the path. */}
+                <bdi dir="ltr">{folder()}</bdi>
+              </span>
+            )}
+          </Show>
+          <Show when={props.network}>
+            <span data-slot="shot-tray-network">{t("shots.network")}</span>
+          </Show>
+          <Show when={props.onChoose}>
+            <button
+              type="button"
+              data-slot="shot-tray-choose"
+              disabled={props.choosing}
+              onClick={() => props.onChoose?.()}
+            >
+              {t("shots.choose")}
+            </button>
+          </Show>
+        </div>
+      </Show>
+      <Show when={noticeText(props.notice)}>
+        {(text) => (
+          <span data-slot="shot-tray-notice" role="alert">
+            {text()}
+          </span>
+        )}
+      </Show>
+    </>
+  )
 }
 
 const NOTICE_TEXT = {
@@ -138,31 +188,19 @@ export function ShotTray(props: ShotTrayProps) {
       fallback={
         <Show when={props.unavailable || props.folder}>
           <aside data-component="shot-tray" data-empty="true">
-            <span data-slot="shot-tray-empty">
-              {props.unavailable ? t("shots.noFolder") : t("shots.emptyFolder")}
-            </span>
-            <Show when={props.folder}>
-              {(folder) => (
-                <span data-slot="shot-tray-folder" title={folder()}>
-                  {folder()}
-                </span>
-              )}
+            {/* A share was not read, so "nothing in this folder" would be a claim about what was not looked at. */}
+            <Show when={!props.network}>
+              <span data-slot="shot-tray-empty">
+                {props.unavailable ? t("shots.noFolder") : t("shots.emptyFolder")}
+              </span>
             </Show>
-            <Show when={props.network}>
-              <span data-slot="shot-tray-network">{t("shots.network")}</span>
-            </Show>
-            <Show when={props.onChoose}>
-              <button type="button" data-slot="shot-tray-choose" onClick={() => props.onChoose?.()}>
-                {t("shots.choose")}
-              </button>
-            </Show>
-            <Show when={noticeText(props.notice)}>
-              {(text) => (
-                <span data-slot="shot-tray-notice" role="alert">
-                  {text()}
-                </span>
-              )}
-            </Show>
+            <Where
+              folder={props.folder}
+              network={props.network}
+              onChoose={props.onChoose}
+              choosing={props.choosing}
+              notice={props.notice}
+            />
           </aside>
         </Show>
       }
@@ -310,36 +348,13 @@ export function ShotTray(props: ShotTrayProps) {
             </For>
           </div>
         </Show>
-        {/*
-         * Which folder these came from, always: a tray that watched the wrong
-         * one looked exactly like a tray with nothing new in it, and finding
-         * out meant reading the source. The choice is here too, so moving it
-         * never needs a trip to settings.
-         */}
-        <Show when={props.folder}>
-          {(folder) => (
-            <div data-slot="shot-tray-where">
-              <span data-slot="shot-tray-folder" title={folder()}>
-                {folder()}
-              </span>
-              <Show when={props.network}>
-                <span data-slot="shot-tray-network">{t("shots.network")}</span>
-              </Show>
-              <Show when={props.onChoose}>
-                <button type="button" data-slot="shot-tray-choose" onClick={() => props.onChoose?.()}>
-                  {t("shots.choose")}
-                </button>
-              </Show>
-            </div>
-          )}
-        </Show>
-        <Show when={noticeText(props.notice)}>
-          {(text) => (
-            <span data-slot="shot-tray-notice" role="alert">
-              {text()}
-            </span>
-          )}
-        </Show>
+        <Where
+          folder={props.folder}
+          network={props.network}
+          onChoose={props.onChoose}
+          choosing={props.choosing}
+          notice={props.notice}
+        />
       </aside>
 
       {/* Opened at full size, over everything, closed by anything: the picture

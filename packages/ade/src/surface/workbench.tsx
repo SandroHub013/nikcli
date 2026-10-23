@@ -9775,7 +9775,8 @@ export function Workbench() {
               unavailable={shotSource.state() === "none"}
               folder={shotSource.folder()}
               network={shotSource.state() === "network"}
-              onChoose={() => void shotSource.choose()}
+              onChoose={shotSource.canChoose ? () => void shotSource.choose() : undefined}
+              choosing={shotSource.choosing()}
               notice={shotSource.notice()}
               load={shotSource.load}
               onDismiss={shotSource.dismiss}

@@ -55,7 +55,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   /* Truncate the drive and keep the folder name, which is what tells two
-     screenshots folders apart. */
+     screenshots folders apart. The path itself is wrapped in a left-to-right
+     `bdi`, or the leading separators of `\server\share` would move to its end. */
   direction: rtl;
   text-align: left;
 }
@@ -65,52 +66,50 @@
   color: var(--ade-warning);
 }
 
-/* Why the folder just picked was not taken: next to the picker, in the
-   warning colour the network line already uses. */
+/*
+ * Why the folder just picked was not taken.
+ *
+ * A message, so the size of the other messages and the text colour: the amber
+ * of `--ade-warning` is on a mark beside it, because small amber text on the
+ * light theme's cream only just reaches the minimum contrast.
+ */
 [data-slot="shot-tray-notice"] {
   display: block;
-  padding: var(--ade-space-2) var(--ade-space-6) 0;
+  margin: var(--ade-space-2) var(--ade-space-6) 0;
+  padding-left: var(--ade-space-4);
+  border-left: 2px solid var(--ade-warning);
   font-family: var(--ade-sans);
-  font-size: var(--ade-font-xs);
-  color: var(--ade-warning);
+  font-size: var(--ade-font-sm);
+  color: var(--ade-text);
 }
 
+/* A small button, like the File and Cartelle pills of the sidebar: a bare
+   line of text in the colour of its neighbours did not read as one. */
 [data-slot="shot-tray-choose"] {
   flex: 0 0 auto;
-  padding: 0;
-  border: 0;
+  padding: 1px var(--ade-space-4);
+  border: 1px solid var(--ade-border-subtle);
+  border-radius: var(--ade-radius-full);
   background: transparent;
-  color: var(--ade-text-soft);
+  color: var(--ade-text);
   font-family: var(--ade-sans);
   font-size: var(--ade-font-xs);
   cursor: pointer;
   white-space: nowrap;
 }
 
-[data-slot="shot-tray-choose"]:hover {
-  color: var(--ade-text);
-  text-decoration: underline;
+[data-slot="shot-tray-choose"]:hover:not(:disabled) {
+  border-color: var(--ade-text-soft);
+}
+
+[data-slot="shot-tray-choose"]:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 [data-slot="shot-tray-choose"]:focus-visible {
   outline: none;
   box-shadow: var(--ade-focus-ring);
-}
-
-/* An empty tray already spaces its lines; the last one owns the bottom. */
-[data-component="shot-tray"][data-empty="true"] [data-slot="shot-tray-where"],
-[data-component="shot-tray"][data-empty="true"] [data-slot="shot-tray-network"] {
-  padding: 0 var(--ade-space-6);
-}
-
-[data-component="shot-tray"][data-empty="true"] [data-slot="shot-tray-folder"] {
-  flex: 0 1 auto;
-  padding: 0 var(--ade-space-6);
-}
-
-[data-component="shot-tray"][data-empty="true"] [data-slot="shot-tray-choose"] {
-  align-self: flex-start;
-  margin: 0 var(--ade-space-6);
 }
 
 [data-slot="shot-tray-head"] {

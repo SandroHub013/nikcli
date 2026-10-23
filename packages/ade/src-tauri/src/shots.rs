@@ -13,7 +13,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use tauri::{AppHandle, Emitter, Manager};
@@ -61,13 +61,28 @@ pub struct ShotLocation {
 ///
 /// True everywhere except the Desktop, which on macOS is where screenshots
 /// land by default — and where everything else the user leaves lying around
-/// lands too. A tray listing every picture on the Desktop, and offering to
-/// delete them, would be answering a question nobody asked.
+/// lands too, and the Pictures folder itself, which on Linux is a candidate
+/// (`Pictures` may be localised, so it is the operating system's answer that
+/// is compared, not the name). A tray listing every picture there, and
+/// offering to delete them, would be answering a question nobody asked.
 fn holds_only_shots(dir: &Path) -> bool {
-    !dir.file_name()
+    holds_only_shots_in(dir, broad_folders())
+}
+
+fn holds_only_shots_in(dir: &Path, broad: &[PathBuf]) -> bool {
+    let desktop = dir
+        .file_name()
         .and_then(|name| name.to_str())
         .map(|name| name.eq_ignore_ascii_case("Desktop"))
-        .unwrap_or(false)
+        .unwrap_or(false);
+    !desktop && !broad.iter().any(|folder| same_path(folder, dir))
+}
+
+/// The folders of a user's pictures, asked once: `holds_only_shots` runs for
+/// every file of a listing.
+fn broad_folders() -> &'static [PathBuf] {
+    static BROAD: OnceLock<Vec<PathBuf>> = OnceLock::new();
+    BROAD.get_or_init(|| pictures_dir().into_iter().collect())
 }
 
 /*
@@ -237,8 +252,10 @@ pub async fn shots_dir(watch: tauri::State<'_, Watch>) -> Result<Option<ShotLoca
 ///
 /// Every thumbnail and every delete asks which folder is the screenshots
 /// folder, and making the choice reads every candidate folder. The tray asking
-/// (`shots_dir`) and the user choosing a folder renew it at once; this covers a
-/// screenshot tool that starts saving somewhere else while ADE stays open.
+/// (`shots_dir`) and the user choosing a folder renew it at once. The expiry
+/// limits the cost, nothing more: the page asks `shots_dir` once, when the tray
+/// mounts, so a tool that starts saving elsewhere while ADE stays open changes
+/// which roots `shot_delete` accepts, not the folder the tray is on.
 const PICK_TTL: Duration = Duration::from_secs(60);
 
 /// The folder the tray should watch, made at most once per `PICK_TTL`.
@@ -291,7 +308,7 @@ fn default_dir() -> Option<PathBuf> {
     let candidates = shot_dir_candidates(
         std::env::consts::OS,
         home.as_deref(),
-        dirs::picture_dir().as_deref(),
+        pictures_dir().as_deref(),
         chosen.as_deref(),
         configured.as_deref(),
         &one_drive_roots(home.as_deref()),
@@ -445,8 +462,10 @@ fn config_dir_name() -> &'static str {
     }
 }
 
+/// Under the local app data, not the roaming config: a folder such as `D:\Shots`
+/// means nothing on another PC, and a roaming profile would carry it there.
 fn chosen_dir_file() -> Option<PathBuf> {
-    dirs::config_dir().map(|base| base.join(config_dir_name()).join(CHOSEN_FILE))
+    dirs::data_local_dir().map(|base| base.join(config_dir_name()).join(CHOSEN_FILE))
 }
 
 fn read_chosen(path: &Path) -> Option<PathBuf> {
@@ -465,9 +484,12 @@ fn save_chosen(path: &Path, dir: &Path) -> Result<(), String> {
 /// The remembered choice, unless it is one the tray would refuse today: the
 /// file is plain text, and anything that wrote it is not the dialog.
 fn chosen_dir() -> Option<PathBuf> {
-    chosen_dir_file()
-        .and_then(|path| read_chosen(&path))
-        .filter(|dir| refuse_broad_folder(dir, dirs::home_dir().as_deref()).is_none())
+    chosen_dir_file().and_then(|file| chosen_dir_from(&file, dirs::home_dir().as_deref()))
+}
+
+/// `chosen_dir` for a given file and home, so a test can call the real filter.
+fn chosen_dir_from(file: &Path, home: Option<&Path>) -> Option<PathBuf> {
+    read_chosen(file).filter(|dir| refuse_broad_folder(dir, home).is_none())
 }
 
 /// Folders that must not become "the screenshots folder", with the code that
@@ -488,44 +510,61 @@ fn refuse_broad_folder(path: &Path, home: Option<&Path>) -> Option<&'static str>
     if crate::is_network_path(&text) {
         return None;
     }
-    if path.parent().is_none() {
+    let clean = clean_text(&text);
+    // A root: nothing left once the separators go, or a bare drive (`c:`).
+    let bare = clean.trim_start_matches('/');
+    if bare.is_empty() || (bare.len() == 2 && bare.ends_with(':')) {
         return Some("too-broad");
     }
-    // Drive roots in the spellings `parent()` does not read as a root: `C:`
-    // alone, or `C:\` on a Unix host (the tests run on every platform).
-    let bare = text.trim_end_matches(['\\', '/']);
-    if bare.len() <= 2 && bare.ends_with(':') {
+    // `path` is the home folder or holds it (`C:\Users`).
+    if home.map(|home| within(&clean_text(&home.to_string_lossy()), &clean)).unwrap_or(false) {
         return Some("too-broad");
     }
-    if home.map(|home| path_within(home, path)).unwrap_or(false) {
-        return Some("too-broad");
-    }
-    let mut system: Vec<PathBuf> = Vec::new();
+    let mut system: Vec<String> = Vec::new();
     if cfg!(windows) {
         for key in ["SystemRoot", "windir", "ProgramFiles", "ProgramFiles(x86)", "ProgramW6432", "ProgramData"] {
-            system.extend(std::env::var_os(key).map(PathBuf::from));
+            system.extend(std::env::var_os(key).map(|dir| clean_text(&dir.to_string_lossy())));
         }
     } else {
         system.extend(
             ["/bin", "/boot", "/dev", "/etc", "/lib", "/proc", "/sbin", "/sys", "/usr", "/var", "/System", "/Library"]
-                .map(PathBuf::from),
+                .map(String::from),
         );
     }
-    system.iter().any(|dir| path_within(path, dir)).then_some("system")
+    system.iter().any(|dir| within(&clean, dir)).then_some("system")
 }
 
-/// Whether `inner` is `outer` or lies inside it, as a user would say it.
+/// A path as text one can compare: one separator, no `.` or `..` segments, no
+/// trailing separator, no `\\?\` prefix on a local path and, on Windows, no case.
 ///
-/// Compared as text with one separator and, on Windows, without case: `Path`'s
-/// own comparison is case-sensitive there, and `C:\users\nik` is `C:\Users\nik`.
-fn path_within(inner: &Path, outer: &Path) -> bool {
-    let normal = |path: &Path| {
-        let text = path.to_string_lossy().replace('\\', "/");
-        let text = text.trim_end_matches('/').to_string();
-        if cfg!(windows) { text.to_lowercase() } else { text }
+/// Lexical on purpose: it must not touch the disk (a share would answer with
+/// the user's hash), and `C:\Users\nik\..\..` must read as `C:`. A junction or
+/// an 8.3 name is not seen through here; `shots_root` asks the same question of
+/// the canonical path, which is.
+fn clean_text(text: &str) -> String {
+    let text = text.replace('\\', "/");
+    let text = match text.strip_prefix("//?/") {
+        Some(rest) if rest.chars().nth(1) == Some(':') => rest.to_string(),
+        _ => text.clone(),
     };
-    let (inner, outer) = (normal(inner), normal(outer));
-    inner == outer || inner.starts_with(&format!("{outer}/"))
+    let mut kept: Vec<&str> = Vec::new();
+    for part in text.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                kept.pop();
+            }
+            other => kept.push(other),
+        }
+    }
+    let lead = if text.starts_with('/') { "/" } else { "" };
+    let joined = format!("{lead}{}", kept.join("/"));
+    if cfg!(windows) { joined.to_lowercase() } else { joined }
+}
+
+/// Whether `inner` is `outer` or lies inside it, both already `clean_text`.
+fn within(inner: &str, outer: &str) -> bool {
+    outer == "/" || inner == outer || inner.starts_with(&format!("{outer}/"))
 }
 
 /// The OneDrive roots this machine actually has.
@@ -544,21 +583,7 @@ fn one_drive_roots(home: Option<&Path>) -> Vec<PathBuf> {
     }
     if let Some(home) = home {
         roots.push(home.join("OneDrive"));
-        if let Ok(entries) = std::fs::read_dir(home) {
-            let mut named: Vec<PathBuf> = entries
-                .flatten()
-                .map(|entry| entry.path())
-                .filter(|path| path.is_dir())
-                .filter(|path| {
-                    path.file_name()
-                        .and_then(|name| name.to_str())
-                        .map(|name| name.to_lowercase().starts_with("onedrive"))
-                        .unwrap_or(false)
-                })
-                .collect();
-            named.sort();
-            roots.extend(named);
-        }
+        roots.extend(one_drive_folders_in(home));
     }
     let mut unique: Vec<PathBuf> = Vec::new();
     for path in roots {
@@ -567,6 +592,33 @@ fn one_drive_roots(home: Option<&Path>) -> Vec<PathBuf> {
         }
     }
     unique
+}
+
+/// The `OneDrive*` folders directly inside `home`, sorted.
+fn one_drive_folders_in(home: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(home) else { return Vec::new() };
+    // The name first, and the entry's own type (no disk access, and a link is
+    // not followed): `is_dir` on every entry of home would follow a link to a
+    // NAS and wait for it.
+    let mut named: Vec<PathBuf> = entries
+        .flatten()
+        .filter(|entry| {
+            entry
+                .file_name()
+                .to_str()
+                .map(|name| name.to_lowercase().starts_with("onedrive"))
+                .unwrap_or(false)
+        })
+        .filter(|entry| {
+            entry
+                .file_type()
+                .map(|kind| kind.is_dir() && !kind.is_symlink())
+                .unwrap_or(false)
+        })
+        .map(|entry| entry.path())
+        .collect();
+    named.sort();
+    named
 }
 
 /// `~` at the start is the shell's, not the filesystem's: expanded here or the path does not exist.
@@ -606,17 +658,48 @@ fn configured_dir() -> Option<PathBuf> {
 /// would miss the last two.
 #[cfg(windows)]
 fn configured_dir() -> Option<PathBuf> {
+    use windows::Win32::UI::Shell::FOLDERID_Screenshots;
+
+    // A redirected Pictures can be a share: `names_a_folder` asks the text
+    // before the disk, so the share is named without being opened.
+    known_folder(&FOLDERID_Screenshots).filter(|path| names_a_folder(path))
+}
+
+/// A known folder's path, without the shell checking that it exists.
+///
+/// `KF_FLAG_DONT_VERIFY`: by default the shell tries to reach the folder, and
+/// when it is redirected to `\\server\share` that opens an SMB connection
+/// (sending the user's hash, and waiting for the server's timeout when it is
+/// off) inside this very call, before any check on the text can run. Without
+/// the flag the path comes back as it is configured, and the callers ask
+/// `names_a_folder`.
+#[cfg(windows)]
+fn known_folder(id: &windows::core::GUID) -> Option<PathBuf> {
     use windows::Win32::System::Com::CoTaskMemFree;
-    use windows::Win32::UI::Shell::{FOLDERID_Screenshots, KF_FLAG_DEFAULT, SHGetKnownFolderPath};
+    use windows::Win32::UI::Shell::{KF_FLAG_DONT_VERIFY, SHGetKnownFolderPath};
 
     unsafe {
-        let raw = SHGetKnownFolderPath(&FOLDERID_Screenshots, KF_FLAG_DEFAULT, None).ok()?;
+        let raw = SHGetKnownFolderPath(id, KF_FLAG_DONT_VERIFY, None).ok()?;
         let path = raw.to_string().ok();
         CoTaskMemFree(Some(raw.0 as *const core::ffi::c_void));
-        // A redirected Pictures can be a share: `is_dir` on it would open the
-        // connection, so it is named without being asked about.
-        path.map(PathBuf::from).filter(|path| names_a_folder(path))
+        path.map(PathBuf::from)
     }
+}
+
+/// `FOLDERID_Pictures`, which follows a move to OneDrive and any localised name.
+///
+/// On Windows through `known_folder` rather than `dirs::picture_dir`, which
+/// verifies the folder and so touches a redirected share.
+#[cfg(windows)]
+fn pictures_dir() -> Option<PathBuf> {
+    use windows::Win32::UI::Shell::FOLDERID_Pictures;
+
+    known_folder(&FOLDERID_Pictures)
+}
+
+#[cfg(not(windows))]
+fn pictures_dir() -> Option<PathBuf> {
+    dirs::picture_dir()
 }
 
 #[cfg(not(any(windows, target_os = "macos")))]
@@ -671,11 +754,21 @@ pub async fn shots_choose_folder(
 /// the one the user took a moment before switching to ADE is the one they came
 /// to use.
 #[tauri::command]
-pub async fn shots_recent(dir: String, limit: usize) -> Vec<Shot> {
+pub async fn shots_recent(
+    watch: tauri::State<'_, Watch>,
+    dir: String,
+    limit: usize,
+) -> Result<Vec<Shot>, String> {
+    // Only the folder the tray is on: the page names it, but whatever it names
+    // is not a folder this command lists (it would show the names and dates of
+    // any picture folder on the disk).
+    if !is_current_dir(&watch, &dir) {
+        return Err("not-current".into());
+    }
     // A share is named in the tray but never opened from here: touching one
     // sends the user's NTLM hash to the server (see `is_network_path`).
     if crate::refuse_network_path(&dir).is_err() {
-        return Vec::new();
+        return Ok(Vec::new());
     }
     let folder = PathBuf::from(&dir);
     let entries = std::fs::read_dir(&folder).into_iter().flatten().flatten().map(|entry| entry.path());
@@ -685,7 +778,20 @@ pub async fn shots_recent(dir: String, limit: usize) -> Vec<Shot> {
         .collect();
     found.sort_by(|a, b| b.modified_ms.cmp(&a.modified_ms));
     found.truncate(limit);
-    found
+    Ok(found)
+}
+
+/// Whether `dir`, as the page spells it, is the folder this process chose.
+///
+/// The page asks for the folder it was told about by `shots_dir` or
+/// `shots_choose_folder`; anything else is not the tray's folder, and must not
+/// become a root that `shot_delete` accepts. Answered from the remembered
+/// choice (no disk read), and `shots_dir` and the picker renew it just before
+/// the page asks.
+fn is_current_dir(watch: &Watch, dir: &str) -> bool {
+    current_dir(watch, false)
+        .map(|current| same_path(&current, Path::new(dir)))
+        .unwrap_or(false)
 }
 
 /// Starts watching `dir`, emitting `shot:new` for each image that appears.
@@ -698,6 +804,11 @@ pub async fn shots_watch(
     watch: tauri::State<'_, Watch>,
     dir: String,
 ) -> Result<(), String> {
+    // The same folder as `shots_recent`: this one becomes a root for
+    // `shot_delete`, so a page cannot name a disk root or the Pictures folder.
+    if !is_current_dir(&watch, &dir) {
+        return Err("not-current".into());
+    }
     let path = PathBuf::from(&dir);
     if crate::is_network_path(&dir) {
         /*
@@ -934,14 +1045,25 @@ fn shots_root(watch: &Watch, path: &Path) -> Option<(PathBuf, PathBuf)> {
         }
     }
 
+    let home = dirs::home_dir();
+    shots_root_among(&roots, &resolved, home.as_deref()).map(|root| (root, resolved))
+}
+
+/// The first of `roots`, canonicalised, that holds `resolved` directly or not.
+///
+/// Split from `shots_root` so a test can hand it roots of its own.
+fn shots_root_among(roots: &[PathBuf], resolved: &Path, home: Option<&Path>) -> Option<PathBuf> {
     roots
         .iter()
         // Never touch a share here: canonicalising it sends the user's hash to
         // the server, and a chosen network folder is otherwise a root.
         .filter(|root| !crate::is_network_path(&root.to_string_lossy()))
         .filter_map(|root| root.canonicalize().ok())
+        // The canonical folder, which sees through a junction or a link to
+        // `C:\` that the text of the choice did not: a root is never a place
+        // the delete button could reach every picture of a person.
+        .filter(|root| refuse_broad_folder(root, home).is_none())
         .find(|root| resolved.starts_with(root))
-        .map(|root| (root, resolved))
 }
 
 fn check_shot(watch: &Watch, path: &str) -> Result<PathBuf, String> {
@@ -1478,15 +1600,202 @@ mod dir_tests {
         assert_eq!(refuse_broad_folder(Path::new(r"\\server\shots"), Some(Path::new(r"C:\Users\nik"))), None);
     }
 
-    /// A choice written by hand into the file is not trusted more than the dialog.
+    /// A choice written by hand into the file is not trusted more than the
+    /// dialog. Calls the reader the app uses, not a copy of its filter: taking
+    /// the refusal out of `chosen_dir_from` turns this red.
     #[test]
     fn a_broad_choice_found_in_the_file_is_not_a_choice() {
         let root = scratch("broadfile");
         let file = root.join("screenshots-folder");
-        std::fs::write(&file, "/").expect("scrittura");
-        let read = read_chosen(&file).filter(|dir| refuse_broad_folder(dir, Some(Path::new("/home/nik"))).is_none());
-        assert_eq!(read, None);
+        let home = PathBuf::from("/home/nik");
+        for broad in [
+            "/",
+            "/home",
+            "/home/nik",
+            "/home/nik/.",
+            "/home/nik/Pictures/../..",
+            "/etc/ssh",
+            r"C:\Users\nik\..\..",
+        ] {
+            std::fs::write(&file, broad).expect("scrittura");
+            assert_eq!(chosen_dir_from(&file, Some(&home)), None, "{broad}");
+        }
+        let good = PathBuf::from("/home/nik/Shots");
+        std::fs::write(&file, good.to_string_lossy().as_bytes()).expect("scrittura");
+        assert_eq!(chosen_dir_from(&file, Some(&home)), Some(good));
+        assert_eq!(chosen_dir_from(&root.join("non-c-e"), Some(&home)), None);
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn dots_and_verbatim_prefixes_do_not_hide_a_broad_folder() {
+        let home = PathBuf::from(r"C:\Users\nik");
+        for broad in [
+            r"C:\Users\nik\.",
+            r"C:\Users\nik\..",
+            r"C:\Users\nik\..\..",
+            r"\\?\C:\Users\nik",
+            r"\\?\C:\",
+            r"C:\Users\nik\Pictures\..\..",
+        ] {
+            assert_eq!(refuse_broad_folder(Path::new(broad), Some(&home)), Some("too-broad"), "{broad}");
+        }
+        assert_eq!(refuse_broad_folder(Path::new(r"C:\Users\nik\Pictures\..\Shots"), Some(&home)), None);
+    }
+
+    fn watch_on(root: &Path) -> Watch {
+        let watch = Watch::default();
+        *watch.dir.lock().expect("lucchetto") = Some(root.to_path_buf());
+        // A choice already made, so nothing here reads this machine's folders.
+        *watch.picked.lock().expect("lucchetto") = Some((Instant::now(), None));
+        watch
+    }
+
+    /// The point of the whole change: what `shot_bytes` and `shot_delete` may
+    /// touch is an image directly inside the watched folder, and nothing else.
+    #[test]
+    fn the_delete_field_is_the_watched_folder_and_nothing_else() {
+        let base = scratch("field");
+        let root = base.join("shots");
+        std::fs::create_dir_all(root.join("sub")).expect("sottocartella");
+        std::fs::write(root.join("Screenshot 1.png"), b"x").expect("scrittura");
+        std::fs::write(root.join("sub").join("Screenshot 2.png"), b"x").expect("scrittura");
+        std::fs::write(root.join("nota.txt"), b"x").expect("scrittura");
+        std::fs::write(base.join("fuori.png"), b"x").expect("scrittura");
+        let watch = watch_on(&root);
+        let ask = |path: PathBuf| check_shot(&watch, &path.to_string_lossy());
+
+        assert!(ask(root.join("Screenshot 1.png")).is_ok());
+        // `..` out of the folder, to a picture next to it.
+        assert!(ask(root.join("..").join("fuori.png")).is_err());
+        // A subfolder, a name that is not an image, a file that is not there.
+        assert!(ask(root.join("sub").join("Screenshot 2.png")).is_err());
+        assert!(ask(root.join("nota.txt")).is_err());
+        assert!(ask(root.join("non-c-e.png")).is_err());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_link_to_a_picture_outside_the_folder_is_not_in_the_delete_field() {
+        let base = scratch("link");
+        let root = base.join("shots");
+        std::fs::create_dir_all(&root).expect("cartella");
+        std::fs::write(base.join("fuori.png"), b"x").expect("scrittura");
+        std::os::unix::fs::symlink(base.join("fuori.png"), root.join("Screenshot 1.png")).expect("link");
+        let watch = watch_on(&root);
+
+        assert!(check_shot(&watch, &root.join("Screenshot 1.png").to_string_lossy()).is_err());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_junction_to_a_folder_outside_is_not_in_the_delete_field() {
+        let base = scratch("junction");
+        let root = base.join("shots");
+        let outside = base.join("fuori");
+        std::fs::create_dir_all(&root).expect("cartella");
+        std::fs::create_dir_all(&outside).expect("cartella fuori");
+        std::fs::write(outside.join("Screenshot 3.png"), b"x").expect("scrittura");
+        let made = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(root.join("giunzione"))
+            .arg(&outside)
+            .output()
+            .expect("cmd");
+        assert!(made.status.success(), "mklink /J: {}", String::from_utf8_lossy(&made.stdout));
+        let watch = watch_on(&root);
+
+        let through = root.join("giunzione").join("Screenshot 3.png");
+        assert!(through.exists(), "la giunzione porta al file");
+        assert!(check_shot(&watch, &through.to_string_lossy()).is_err());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// An NTFS stream name after the file name cannot take a path out of the
+    /// folder: whatever the check answers, the file it names is in the root.
+    #[cfg(windows)]
+    #[test]
+    fn a_stream_name_does_not_take_a_path_out_of_the_folder() {
+        let base = scratch("stream");
+        let root = base.join("shots");
+        std::fs::create_dir_all(&root).expect("cartella");
+        std::fs::write(root.join("Screenshot 1.png"), b"x").expect("scrittura");
+        let watch = watch_on(&root);
+
+        for name in ["Screenshot 1.png::$DATA", "Screenshot 1.png:y.png"] {
+            if let Ok(file) = check_shot(&watch, &root.join(name).to_string_lossy()) {
+                let resolved = file.canonicalize().expect("percorso");
+                assert_eq!(resolved.parent(), root.canonicalize().ok().as_deref(), "{name}");
+            }
+        }
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    /// A root that is a junction to a disk root is not a root, whatever the
+    /// text of the choice said.
+    #[test]
+    fn a_canonical_root_that_is_broad_is_dropped() {
+        let base = scratch("broadroot");
+        std::fs::write(base.join("Screenshot 1.png"), b"x").expect("scrittura");
+        let resolved = base.join("Screenshot 1.png").canonicalize().expect("percorso");
+
+        // With `base` as home, `base` itself is "the home folder".
+        let home = base.canonicalize().expect("percorso");
+        assert_eq!(shots_root_among(&[base.clone()], &resolved, Some(&home)), None);
+        // With another home it is an ordinary folder.
+        assert!(shots_root_among(&[base.clone()], &resolved, Some(Path::new("/home/nik"))).is_some());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn only_the_current_folder_may_be_watched_or_listed() {
+        let watch = Watch::default();
+        let current = PathBuf::from("/home/nik/Shots");
+        *watch.picked.lock().expect("lucchetto") = Some((Instant::now(), Some(current)));
+
+        assert!(is_current_dir(&watch, "/home/nik/Shots"));
+        for other in ["/", "/home/nik", "/home/nik/Pictures", "C:\\", ""] {
+            assert!(!is_current_dir(&watch, other), "{other}");
+        }
+        // Nothing chosen: nothing is current.
+        *watch.picked.lock().expect("lucchetto") = Some((Instant::now(), None));
+        assert!(!is_current_dir(&watch, "/home/nik/Shots"));
+    }
+
+    /// The Pictures folder itself is not a screenshots folder: in it only
+    /// what is named like a screenshot counts, as on the Desktop.
+    #[test]
+    fn the_pictures_folder_and_the_desktop_do_not_hold_only_shots() {
+        let pictures = PathBuf::from("/home/nik/Immagini");
+        assert!(!holds_only_shots_in(&pictures, std::slice::from_ref(&pictures)));
+        assert!(holds_only_shots_in(&pictures.join("Screenshots"), std::slice::from_ref(&pictures)));
+        assert!(!holds_only_shots_in(Path::new("/home/nik/Desktop"), &[]));
+        assert!(holds_only_shots_in(Path::new("/home/nik/Shots"), &[]));
+    }
+
+    /// Only folders of home named `OneDrive…` are roots: not files, not other
+    /// folders (which the old code asked `is_dir` about one by one).
+    #[test]
+    fn only_the_onedrive_folders_of_home_are_roots() {
+        let home = scratch("home");
+        for dir in ["OneDrive", "OneDrive - Azienda", "Documents"] {
+            std::fs::create_dir_all(home.join(dir)).expect("cartella");
+        }
+        std::fs::write(home.join("OneDrive.txt"), b"x").expect("scrittura");
+
+        assert_eq!(
+            one_drive_folders_in(&home),
+            vec![home.join("OneDrive"), home.join("OneDrive - Azienda")]
+        );
+
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     /// A share is a name, not a question to the server.

@@ -756,7 +756,7 @@ export const en: Messages = {
   "shots.noFolder": "No screenshots folder on this computer",
   "shots.emptyFolder": "No screenshots in this folder yet",
   "shots.choose": "Choose folder…",
-  "shots.network": "Network folder: named here, not read",
+  "shots.network": "Network folder: shown, not read",
   "shots.error.notAFolder": "That is not a folder.",
   "shots.error.tooBroad": "That folder is too broad: pick one just for screenshots, not a whole disk or your home folder.",
   "shots.error.system": "That is a system folder: pick another one.",
