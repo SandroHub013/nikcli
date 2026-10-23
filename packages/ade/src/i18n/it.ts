@@ -793,6 +793,13 @@ export const it = {
   "browser.error.hint": "Verifica che il server sia avviato e raggiungibile.",
   "browser.retry": "Riprova",
   "shots.noFolder": "Nessuna cartella delle schermate su questo computer",
+  "shots.emptyFolder": "Nessuna schermata in questa cartella",
+  "shots.choose": "Scegli cartella…",
+  "shots.network": "Cartella di rete: mostrata, non letta",
+  "shots.error.notAFolder": "Questa non è una cartella.",
+  "shots.error.tooBroad": "Cartella troppo ampia: scegline una dedicata alle schermate, non un disco intero o la tua cartella personale.",
+  "shots.error.system": "È una cartella di sistema: scegline un'altra.",
+  "shots.error.notSaved": "La scelta non è stata salvata.",
   "browser.adeOrigin": "Questo indirizzo è ADE stessa; non si apre nel pannello.",
   "bots.trust.new": (name: string, can: string) =>
     `Il bot «${name}» viene da questo progetto (dalla cartella dei bot del progetto): le sue istruzioni le ha scritte chi ha scritto il repository, e girerà con il tuo account. ${can} Lo usi?`,

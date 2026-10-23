@@ -2777,6 +2777,7 @@ pub fn run() {
             serve_proxy::ragu_serve_abort,
             chat_attachment_inside,
             shots::shots_dir,
+            shots::shots_choose_folder,
             shots::shots_recent,
             shots::shots_watch,
             shots::shot_bytes,
