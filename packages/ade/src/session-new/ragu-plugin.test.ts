@@ -43,7 +43,10 @@ async function loadPlugin() {
   return module.default
 }
 
-function fakeTui(sessions: Record<string, { directory: string; parentID?: string }>) {
+function fakeTui(
+  sessions: Record<string, { directory: string; parentID?: string }>,
+  abort: (args: { sessionID: string }) => Promise<unknown> = async () => ({ data: true }),
+) {
   let route: { name: string; params?: Record<string, unknown> } = { name: "home" }
   const api = {
     route: {
@@ -54,6 +57,7 @@ function fakeTui(sessions: Record<string, { directory: string; parentID?: string
     client: {
       session: {
         get: async ({ sessionID }: { sessionID: string }) => ({ data: { id: sessionID, ...sessions[sessionID] } }),
+        abort,
       },
     },
     lifecycle: { onDispose: (fn: () => void) => (disposers.push(fn), () => {}) },
@@ -222,6 +226,149 @@ describe("ragu's TUI plugin", () => {
       await plugin.tui(tui.api, { intervalMs: 5 })
       await settle()
       expect(existsSync(join(drop, "a1b2c3d4e5f6a1b2c3d4e5f6.activity"))).toBe(false)
+    })
+  })
+
+  /*
+   * ragu-pannelli-0211: `ade-msg interrupt` writes `<nonce>.interrupt` (Rust, `agent_interrupt`) and waits for it to go.
+   * The plugin aborts the conversation it reports and takes the file away only after that, idle already written.
+   */
+  describe("the interrupt ADE asks for", () => {
+    const NONCE = "a1b2c3d4e5f6a1b2c3d4e5f6"
+    const request = (drop: string, at: number = Date.now()) => {
+      const file = join(drop, `${NONCE}.interrupt`)
+      writeFileSync(file, JSON.stringify({ at }))
+      return file
+    }
+    const activityOf = (drop: string) => {
+      const file = join(drop, `${NONCE}.activity`)
+      return existsSync(file) ? parseActivity(readFileSync(file, "utf8")) : undefined
+    }
+    function withBusy(abort: (args: { sessionID: string }) => Promise<unknown>) {
+      const status: Record<string, { type: string }> = { ses_one: { type: "busy" } }
+      // An abort that goes through is what turns the TUI's status idle; a failed one leaves the turn running.
+      const stopping = async (args: { sessionID: string }) => {
+        const done = (await abort(args)) as { error?: unknown } | undefined
+        if (!(done && done.error)) status[args.sessionID] = { type: "idle" }
+        return done
+      }
+      const tui = fakeTui({ ses_one: { directory: "C:\\p" }, ses_child: { directory: "C:\\p", parentID: "ses_one" } }, stopping)
+      ;(tui.api as Record<string, unknown>).state = {
+        session: { status: (id: string) => status[id], permission: () => [], question: () => [] },
+      }
+      return { tui, status }
+    }
+
+    test("aborts the conversation on screen, writes idle, then takes the request away", async () => {
+      const aborted: string[] = []
+      const order: string[] = []
+      const { drop } = launchedByAde()
+      const { tui } = withBusy(async ({ sessionID }) => {
+        aborted.push(sessionID)
+        // At the abort the request is still there: its going has to be the answer.
+        order.push(existsSync(join(drop, `${NONCE}.interrupt`)) ? "file-still-there" : "file-gone")
+        return { data: true }
+      })
+      const plugin = await loadPlugin()
+      tui.show("ses_one")
+      await plugin.tui(tui.api, { intervalMs: 5 })
+      await settle()
+      expect(activityOf(drop)?.state).toBe("busy")
+      const asked = Date.now()
+      const file = request(drop, asked)
+      await settle()
+      expect(aborted).toEqual(["ses_one"])
+      expect(order).toEqual(["file-still-there"])
+      expect(existsSync(file)).toBe(false)
+      // idle is written, and it is newer than the request: it is what ADE reads after the file is gone.
+      const idle = activityOf(drop)!
+      expect(idle).toMatchObject({ state: "idle", cwd: "C:\\p" })
+      expect(JSON.parse(readFileSync(join(drop, `${NONCE}.activity`), "utf8")).sessionId).toBe("ses_one")
+      expect(idle.at).toBeGreaterThanOrEqual(asked)
+      // Once, and not again for a request nobody made.
+      await settle()
+      expect(aborted).toEqual(["ses_one"])
+    })
+
+    test("a child conversation on screen does not change which one is aborted: the pane's own", async () => {
+      const aborted: string[] = []
+      const { drop } = launchedByAde()
+      const { tui } = withBusy(async ({ sessionID }) => (aborted.push(sessionID), { data: true }))
+      const plugin = await loadPlugin()
+      tui.show("ses_one")
+      await plugin.tui(tui.api, { intervalMs: 5 })
+      await settle()
+      tui.show("ses_child")
+      await settle()
+      request(drop)
+      await settle()
+      expect(aborted).toEqual(["ses_one"])
+    })
+
+    test("an abort that fails, or answers with an error, leaves the request for ADE to time out and writes no idle", async () => {
+      for (const abort of [
+        async () => Promise.reject(new Error("offline")),
+        async () => ({ error: { name: "NotFound" } }),
+      ]) {
+        const { drop } = launchedByAde()
+        const { tui } = withBusy(abort)
+        const plugin = await loadPlugin()
+        tui.show("ses_one")
+        await plugin.tui(tui.api, { intervalMs: 5 })
+        await settle()
+        const file = request(drop)
+        await settle()
+        expect(existsSync(file)).toBe(true)
+        expect(activityOf(drop)?.state).toBe("busy")
+      }
+    })
+
+    test("a request that is old is dropped without an abort: it is not the moment anybody asked for", async () => {
+      const aborted: string[] = []
+      const { drop } = launchedByAde()
+      const { tui } = withBusy(async ({ sessionID }) => (aborted.push(sessionID), { data: true }))
+      const plugin = await loadPlugin()
+      tui.show("ses_one")
+      await plugin.tui(tui.api, { intervalMs: 5 })
+      await settle()
+      const file = request(drop, Date.now() - 60_000)
+      await settle()
+      expect(aborted).toEqual([])
+      expect(existsSync(file)).toBe(false)
+      // A file that is not even JSON is as stale as it gets.
+      writeFileSync(join(drop, `${NONCE}.interrupt`), "non json")
+      await settle()
+      expect(aborted).toEqual([])
+      expect(existsSync(join(drop, `${NONCE}.interrupt`))).toBe(false)
+    })
+
+    test("with no conversation on screen there is nothing to abort, and the request stays unanswered", async () => {
+      const aborted: string[] = []
+      const { drop } = launchedByAde()
+      const { tui } = withBusy(async ({ sessionID }) => (aborted.push(sessionID), { data: true }))
+      const plugin = await loadPlugin()
+      await plugin.tui(tui.api, { intervalMs: 5 })
+      await settle()
+      const file = request(drop)
+      await settle()
+      expect(aborted).toEqual([])
+      expect(existsSync(file)).toBe(true)
+    })
+
+    test("the TUI's own status goes on being reported after the abort", async () => {
+      const { drop } = launchedByAde()
+      const { tui, status } = withBusy(async () => ({ data: true }))
+      const plugin = await loadPlugin()
+      tui.show("ses_one")
+      await plugin.tui(tui.api, { intervalMs: 5 })
+      await settle()
+      request(drop)
+      await settle()
+      expect(activityOf(drop)?.state).toBe("idle")
+      // A queue that went out as a new turn (0.2.11) is a turn, and is said so.
+      status.ses_one = { type: "busy" }
+      await settle()
+      expect(activityOf(drop)?.state).toBe("busy")
     })
   })
 

@@ -2733,6 +2733,7 @@ pub fn run() {
             mailbox::mailbox_inbox_read,
             agent_link::agent_activity_read,
             agent_link::agent_activity_read_many,
+            agent_link::agent_interrupt,
             agent_link::agent_link_read,
             design_sheet_path,
             design_proposal_read,

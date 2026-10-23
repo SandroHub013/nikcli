@@ -23,6 +23,10 @@ import {
   formatWedged,
   relaunchRefusal,
   interruptPlan,
+  interruptAnswer,
+  performInterrupt,
+  INTERRUPT_GAP_MS,
+  type Activity,
   openDecisions,
   INLINE_MAX,
   MAX_REBELLS,
@@ -933,6 +937,103 @@ describe("stuck sessions, interrupts and relaunch notes", () => {
     expect(interruptPlan("terminal")).toEqual({ keys: [ctrlC] })
   })
 
+  /*
+   * ragu-pannelli-0211: a ragu TUI whose plugin is reporting is asked to abort its own session before any key is sent
+   * (the plugin leaves the 0.2.11 queue where it is, an Esc sends it); the Esc, Esc stay as the way out.
+   */
+  test("interrupt: a reporting ragu is asked through its plugin first, with the keys kept behind it; no other agent is", () => {
+    const esc = String.fromCharCode(27)
+    expect(interruptPlan("ragu", true)).toEqual({ plugin: true, keys: [esc, esc] })
+    // Without a plugin that reports, exactly what it always was.
+    expect(interruptPlan("ragu", false)).toEqual({ keys: [esc, esc] })
+    expect(interruptPlan("ragu")).toEqual({ keys: [esc, esc] })
+    // The plugin is ragu's: nobody else has one, whatever the caller believes.
+    for (const agent of ["opencode", "claude-code", "codex", "agy", "terminal"]) {
+      const plan = interruptPlan(agent, true)
+      expect("plugin" in plan).toBe(false)
+    }
+    expect(interruptPlan("grok", true)).toHaveProperty("refusal")
+  })
+
+  describe("performInterrupt: the plugin's answer decides whether a key is sent", () => {
+    const esc = String.fromCharCode(27)
+    const rig = (answer?: () => Promise<boolean>, alive: () => boolean = () => true) => {
+      const typed: string[] = []
+      const waits: number[] = []
+      const asked: number[] = []
+      return {
+        typed,
+        waits,
+        asked,
+        io: {
+          ...(answer ? { ask: () => (asked.push(1), answer()) } : {}),
+          type: (keys: string) => void typed.push(keys),
+          wait: async (ms: number) => void waits.push(ms),
+          alive,
+        },
+      }
+    }
+    const plan = { plugin: true as const, keys: [esc, esc] }
+
+    test("a plugin that took the request: no key at all, and the way is «plugin»", async () => {
+      const r = rig(async () => true)
+      expect(await performInterrupt(plan, r.io)).toBe("plugin")
+      expect(r.asked).toHaveLength(1)
+      expect(r.typed).toEqual([])
+      expect(r.waits).toEqual([])
+    })
+
+    test("a plugin that did not answer in time, or failed: Esc, Esc with the gap, as today", async () => {
+      for (const answer of [async () => false, async () => Promise.reject(new Error("invoke"))]) {
+        const r = rig(answer)
+        expect(await performInterrupt(plan, r.io)).toBe("keys")
+        expect(r.typed).toEqual([esc, esc])
+        expect(r.waits).toEqual([INTERRUPT_GAP_MS])
+      }
+    })
+
+    test("a plan without a plugin never asks one; a host that cannot ask is the keys too", async () => {
+      const r = rig(async () => true)
+      expect(await performInterrupt({ keys: [esc, esc] }, r.io)).toBe("keys")
+      expect(r.asked).toHaveLength(0)
+      const none = rig()
+      expect(await performInterrupt(plan, none.io)).toBe("keys")
+      expect(none.typed).toEqual([esc, esc])
+    })
+
+    test("a session that closed meanwhile is not written to, and the answer says so", async () => {
+      let open = true
+      const gone = rig(undefined, () => open)
+      gone.io.wait = async (ms) => {
+        gone.waits.push(ms)
+        open = false
+      }
+      expect(await performInterrupt({ keys: [esc, esc] }, gone.io)).toBe("closed")
+      // The first Esc went while it was open; the second never did.
+      expect(gone.typed).toEqual([esc])
+      // Closed during the plugin's wait: nothing sent either.
+      const during = rig(async () => true, () => false)
+      expect(await performInterrupt(plan, during.io)).toBe("closed")
+      expect(during.typed).toEqual([])
+    })
+  })
+
+  test("the sender is told which way stopped the work, and the keys way owns up to the queue on ragu", () => {
+    const viaPlugin = interruptAnswer("Ragu 1", "ragu", "plugin")
+    expect(viaPlugin).toContain('interrotta "Ragu 1"')
+    expect(viaPlugin).toContain("plugin")
+    expect(viaPlugin).toContain("lavori in background fermati")
+    expect(viaPlugin).toContain("in coda lasciati in coda")
+    expect(viaPlugin).not.toContain("sono partiti")
+    const viaKeys = interruptAnswer("Ragu 1", "ragu", "keys")
+    expect(viaKeys).toContain("con i tasti")
+    expect(viaKeys).toContain("ragu 0.2.11 i messaggi che aveva in coda sono partiti")
+    // Other agents have no such queue: nothing is said about it.
+    expect(interruptAnswer("Claude", "claude-code", "keys")).not.toContain("coda")
+    expect(interruptAnswer("OpenCode", "opencode", "keys")).not.toContain("coda")
+    for (const text of [viaPlugin, viaKeys]) expect(text).toContain("ade-msg send")
+  })
+
   test("interrupt never sends Ctrl-C to an agent: an unknown one is refused with the way out", () => {
     for (const agent of ["grok", "kimi", "cline", "kilo", "crush", "goose", "somethingnew", undefined]) {
       const plan = interruptPlan(agent)
@@ -1087,6 +1188,31 @@ describe("an interrupted turn, which Claude Code reports to no hook (fix 1)", ()
     expect(afterInterrupt({ state: "busy", at: 300 }, 200)).toEqual({ state: "busy", at: 300 })
     expect(afterInterrupt({ state: "busy", at: 100 }, undefined)).toEqual({ state: "busy", at: 100 })
     expect(afterInterrupt(undefined, 200)).toBeUndefined()
+  })
+
+  /*
+   * ragu 0.2.11 with a queue: the user's Esc sends the queued messages and a new turn starts at once. The plugin
+   * reports `busy` for it, newer than the Esc: the pane stays at work, and an idle that comes with silence is not given early.
+   */
+  test("an Esc typed by the user followed by the plugin's busy within a second leaves the pane at work", () => {
+    const escAt = 10_000
+    const busyAfter: Activity = { state: "busy", at: escAt + 400, cwd: "C:/w" }
+    // The report newer than the Esc is a new turn: not the one the Esc stopped, and not rewritten as idle.
+    expect(interruptEnds(busyAfter, escAt)).toBe(false)
+    expect(afterInterrupt(busyAfter, escAt)).toEqual(busyAfter)
+    // The quiet timer that the Esc armed finds `busy` and does not settle: it waits for the plugin's idle.
+    const cut = interruptEnds(busyAfter, escAt)
+    expect(quietOutcome({ hooked: true, busy: activityOccupiesPane(busyAfter.state), owesAnswer: false, interrupted: cut })).toBe("wait")
+    // The same Esc with the busy of the turn it stopped (written before): that one is over, and silence settles it.
+    const stopped: Activity = { state: "busy", at: escAt - 3_000 }
+    const stoppedCut = interruptEnds(stopped, escAt)
+    expect(stoppedCut).toBe(true)
+    expect(quietOutcome({ hooked: true, busy: true, owesAnswer: false, interrupted: stoppedCut })).toBe("settle")
+    // And a pane the Esc did not stop is not free for mail.
+    const now = escAt + 1_000
+    expect(
+      isFree({ hooked: true, permissionPending: false, lastOutputAt: now - 300, activity: afterInterrupt(busyAfter, escAt) }, now),
+    ).toBe(false)
   })
 
   test("an interrupted pane is free again, and a new turn after it is not", () => {

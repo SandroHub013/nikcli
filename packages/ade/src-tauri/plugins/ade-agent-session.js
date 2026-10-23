@@ -1,7 +1,8 @@
 // installed by ADE — ade-agent-session
 // ADE overwrites this file when the integration is reinstalled, and removes it when it is switched off.
 // It tells ADE which conversation this ragu TUI shows, and whether that conversation is in a turn, and only when ADE started the TUI.
-import { existsSync, renameSync, writeFileSync } from "node:fs"
+// It also stops that conversation when ADE asks it to (an `ade-msg interrupt`), by the same abort an Esc makes.
+import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 
 async function tui(api, options) {
@@ -68,12 +69,48 @@ async function tui(api, options) {
     state = now
     put(nonce + ".activity", { state: now, sessionId: mine, cwd: sessionDir || "", at: Date.now() })
   }
+  /*
+   * ADE asking this TUI to stop its conversation: `<nonce>.interrupt`, written by ADE (`agent_interrupt`) for an
+   * `ade-msg interrupt` and waited for a few seconds. The abort is the call an Esc makes, without the keys, so the
+   * ragu 0.2.11 queue is left where it is instead of being sent. The file is taken away only after the abort went
+   * through and the idle was written, because its going is ADE's answer; one the abort did not satisfy stays, and ADE
+   * removes it and sends the keys. One older than STALE_MS is somebody else's moment and is dropped unanswered.
+   */
+  const STALE_MS = 10000
+  const requested = join(dir, nonce + ".interrupt")
+  const interrupt = async () => {
+    if (!mine || !existsSync(requested)) return false
+    let at = 0
+    try {
+      at = Number(JSON.parse(readFileSync(requested, "utf8")).at)
+    } catch {}
+    if (!(Date.now() - at < STALE_MS)) {
+      try {
+        unlinkSync(requested)
+      } catch {}
+      return false
+    }
+    try {
+      const done = await api.client.session.abort({ sessionID: mine })
+      if (done && done.error) return false
+    } catch {
+      return false
+    }
+    state = "idle"
+    put(nonce + ".activity", { state: "idle", sessionId: mine, cwd: sessionDir || "", at: Date.now() })
+    try {
+      unlinkSync(requested)
+    } catch {}
+    return true
+  }
   let busy = false
   const tick = () => {
     if (busy) return
     busy = true
     check()
-      .then(turn)
+      .then(interrupt)
+      // The tick that stopped the turn says nothing more about it: the TUI's status has not caught up with the abort yet.
+      .then((stopped) => (stopped ? undefined : turn()))
       .finally(() => {
         busy = false
       })

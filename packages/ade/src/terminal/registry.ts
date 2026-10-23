@@ -41,6 +41,8 @@ export interface SessionTerminal {
   copyBlocked?: () => void
   /** The pane that draws it says a selection was copied, by Ctrl+C as on release. */
   copied?: () => void
+  /** The pane that draws it says whether Ctrl+Enter and Shift+Enter are keys of their own for its program (ragu's). */
+  kittyKeys?: () => boolean
   /** The last size that held still in its cell and was handed to `onResize` (S77). */
   settled?: { cols: number; rows: number }
 }
@@ -413,17 +415,38 @@ export function copyOnRelease(
 }
 
 /**
+ * What Ctrl+Enter and Shift+Enter send to a program that reads the kitty keyboard protocol: `CSI 13 ; <modifier> u`,
+ * the modifier being 1 + shift (1) + ctrl (4). xterm.js has no such protocol, so both keys reach the program as the
+ * plain `\r` of Enter, and ragu's TUI cannot tell a newline (Shift+Enter) or a send-now (Ctrl+Enter) from a send.
+ */
+export function kittyEnter(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "shiftKey" | "altKey" | "metaKey">): string | undefined {
+  if (event.key !== "Enter" || event.altKey || event.metaKey) return undefined
+  if (event.ctrlKey && !event.shiftKey) return "\u001b[13;5u"
+  if (event.shiftKey && !event.ctrlKey) return "\u001b[13;2u"
+  return undefined
+}
+
+/**
  * Key event handler for terminal emulator:
  * - Allows voice shortcuts (Mod+Shift+J/K) to bypass xterm and reach window
  * - When text is selected, intercepts Ctrl+C / Cmd+C / Ctrl+Shift+C to copy without SIGINT and forgets the selection
  * - When no text is selected (or after selection is cleared), allows Ctrl+C to send SIGINT (\x03)
+ * - Where `kittyKeys` says so (ragu's panes only), Ctrl+Enter and Shift+Enter go to the program as their own keys
+ *   (`kittyEnter`), by the way a typed key goes (`terminal.input(…, true)`), and xterm does not also send `\r`
  */
 export function createTerminalKeyHandler(
   terminal: Terminal,
   onCopyBlocked?: () => void,
   onCopied?: () => void,
+  kittyKeys?: () => boolean,
 ): (event: KeyboardEvent) => boolean {
   return (event: KeyboardEvent) => {
+    const enter = kittyKeys?.() && !event.isComposing ? kittyEnter(event) : undefined
+    if (enter) {
+      // keydown sends; keypress and keyup are kept from xterm too, or the keypress of Enter would send its `\r` after it.
+      if (event.type === "keydown") terminal.input(enter, true)
+      return false
+    }
     const isMod = event.ctrlKey || event.metaKey
     if (isMod && event.shiftKey) {
       const k = event.key?.toLowerCase()
@@ -504,6 +527,7 @@ export function getTerminal(id: string): SessionTerminal {
       terminal,
       () => created.copyBlocked?.(),
       () => created.copied?.(),
+      () => created.kittyKeys?.() ?? false,
     ),
   )
 
@@ -569,6 +593,11 @@ export interface AttachOptions {
    * `agent_env`). See `programHasWheelOnly`.
    */
   wheelOnly?: () => boolean
+  /**
+   * Whether Ctrl+Enter and Shift+Enter are sent as `CSI 13;5u` and `CSI 13;2u` instead of `\r`: ragu's TUI reads the
+   * kitty keyboard protocol and gives them their meaning (newline, send now). Other programs keep what they had. See `kittyEnter`.
+   */
+  kittyKeys?: () => boolean
 }
 
 /**
@@ -746,6 +775,7 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
 
   session.copyBlocked = options.onCopyBlocked
   session.copied = options.onCopied
+  session.kittyKeys = options.kittyKeys
 
   // A pane drawn or moved during a take is born covered, with a reader of its own.
   if (covering) cover(session)
@@ -827,6 +857,7 @@ export function attachTerminal(id: string, element: HTMLElement, options: Attach
     session.uncover = undefined
     session.copyBlocked = undefined
     session.copied = undefined
+    session.kittyKeys = undefined
     session.element = undefined
     session.detach = undefined
   }

@@ -46,6 +46,7 @@
     "allow-agent-activity-read-many",
     "allow-agent-hook-read",
     "allow-agent-hook-write",
+    "allow-agent-interrupt",
     "allow-agent-link-clear",
     "allow-agent-link-read",
     "allow-allow-write-root",

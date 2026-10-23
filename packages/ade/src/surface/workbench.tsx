@@ -377,8 +377,9 @@ import {
   HELD_BY_LINE,
   formatUnread,
   formatWedged,
-  INTERRUPT_GAP_MS,
+  interruptAnswer,
   interruptPlan,
+  performInterrupt,
   shellRefusal,
   typesMailInto,
   WEDGE_MS,
@@ -4736,21 +4737,38 @@ export function Workbench() {
         return true
       }
       const pane = wb().panes.find((candidate) => candidate.id === target.pane.id)
-      const plan = interruptPlan(pane?.agent ?? pane?.model)
+      const agentId = pane?.agent ?? pane?.model
+      /*
+       * A ragu TUI whose plugin is reporting is asked to abort its own session: no key, so a queued message of 0.2.11 stays
+       * queued. «Reporting» is an activity read of this spawn: without one the plugin is not there (or is older than
+       * the reports), and the request would only wait its 2.5 s for nothing.
+       */
+      const nonce = paneNonces.get(target.pane.id)
+      const host = await getHost()
+      const pluginReady = Boolean(
+        agentId === "ragu" && nonce && host?.requestAgentInterrupt && hooked(target.pane.id) && activityOf.has(target.pane.id),
+      )
+      const plan = interruptPlan(agentId, pluginReady)
       if ("refusal" in plan) {
         await answer(plan.refusal)
         return true
       }
-      for (const [index, keys] of plan.keys.entries()) {
-        if (index > 0) await new Promise((resolve) => setTimeout(resolve, INTERRUPT_GAP_MS))
+      const via = await performInterrupt(plan, {
+        ...(plan.plugin && nonce && host?.requestAgentInterrupt ? { ask: () => host.requestAgentInterrupt!(nonce) } : {}),
+        type: (keys) => session.write(keys),
+        wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
         // The session may have gone while the gap ran: nothing is written to a closed one.
-        if (running.get(target.pane.id) !== session) break
-        session.write(keys)
-      }
+        alive: () => running.get(target.pane.id) === session,
+      })
       interrupted(target.pane.id)
       // The TUI drops whatever was in the line with the work: so does the count.
       records.typed.forget(target.pane.id)
       tellPane(target.pane.id, t("note.interruptedBy", sender?.title ?? t("note.someSession")))
+      // The plugin's abort has been answered, and its idle written before that: there is nothing to wait for.
+      if (via === "plugin") {
+        await answer(interruptAnswer(target.pane.title, agentId, "plugin"))
+        return true
+      }
       // The point is to stop the work, not the session: say which happened.
       await new Promise((resolve) => setTimeout(resolve, 2000))
       /*
@@ -4767,7 +4785,7 @@ export function Workbench() {
       }
       await answer(
         running.get(target.pane.id) === session
-          ? `ok: interrotta "${target.pane.title}", la sessione resta aperta; mandale una riga correttiva con ade-msg send`
+          ? interruptAnswer(target.pane.title, agentId, "keys")
           : `attenzione: "${target.pane.title}" si è chiusa dopo l'interruzione`,
       )
       return true

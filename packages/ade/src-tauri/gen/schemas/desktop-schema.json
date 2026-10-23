@@ -543,6 +543,12 @@
           "markdownDescription": "Enables the agent_hook_write command without any pre-configured scope."
         },
         {
+          "description": "Enables the agent_interrupt command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-agent-interrupt",
+          "markdownDescription": "Enables the agent_interrupt command without any pre-configured scope."
+        },
+        {
           "description": "Enables the agent_link_clear command without any pre-configured scope.",
           "type": "string",
           "const": "allow-agent-link-clear",
@@ -1405,6 +1411,12 @@
           "type": "string",
           "const": "deny-agent-hook-write",
           "markdownDescription": "Denies the agent_hook_write command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the agent_interrupt command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-agent-interrupt",
+          "markdownDescription": "Denies the agent_interrupt command without any pre-configured scope."
         },
         {
           "description": "Denies the agent_link_clear command without any pre-configured scope.",

@@ -887,6 +887,8 @@ export function SessionPane(props: SessionPaneProps) {
               menuClicks: () => props.agent === "claude-code",
               // ADE starts Claude Code with its clicks off (`pty.rs`): the wheel is Claude's, the left button ADE's.
               wheelOnly: () => props.agent === "claude-code",
+              // ragu's TUI reads Ctrl+Enter and Shift+Enter as kitty keys; no other program is given them.
+              kittyKeys: () => (props.agent ?? props.model) === "ragu",
             })
             onCleanup(detach)
           }}

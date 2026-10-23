@@ -1326,8 +1326,17 @@ export const INTERRUPT_GAP_MS = 300
  * - The shell: Ctrl-C, which is what it expects.
  * - Any other agent: not guessed. Ctrl-C quits most TUIs, so the sender is told
  *   to send a correcting line instead.
+ *
+ * A ragu TUI whose plugin is reporting (`pluginReady`) is asked first, with no key
+ * at all: the plugin aborts the session itself, and the same Esc, Esc stay behind as
+ * the way out when it does not answer. The abort is the call an Esc makes, with one
+ * difference that matters on ragu 0.2.11: the Esc sends what was queued, the plugin
+ * leaves the queue where it is.
  */
-export function interruptPlan(agentId: string | undefined): { keys: string[] } | { refusal: string } {
+export function interruptPlan(
+  agentId: string | undefined,
+  pluginReady = false,
+): { keys: string[]; plugin?: true } | { refusal: string } {
   const esc = String.fromCharCode(27)
   switch (agentId) {
     case "claude-code":
@@ -1335,6 +1344,7 @@ export function interruptPlan(agentId: string | undefined): { keys: string[] } |
     case "agy":
       return { keys: [esc] }
     case "ragu":
+      return pluginReady ? { plugin: true, keys: [esc, esc] } : { keys: [esc, esc] }
     case "opencode":
       return { keys: [esc, esc] }
     case "terminal":
@@ -1344,6 +1354,54 @@ export function interruptPlan(agentId: string | undefined): { keys: string[] } |
         refusal: `errore: ADE non sa come interrompere ${agentId ?? "questa sessione"} senza chiuderla (Ctrl-C la chiuderebbe): mandale una riga correttiva con ade-msg send`,
       }
   }
+}
+
+/** How an interruption was made: the plugin's abort, the keys, or neither because the session closed meanwhile. */
+export type InterruptVia = "plugin" | "keys" | "closed"
+
+/**
+ * Carries out an `interruptPlan`: the plugin first when the plan has one, then the keys.
+ *
+ * `ask` is the plugin's answer within its own time limit (Rust waits 2.5 s for the file
+ * to be taken); `false`, or a throw, is the plugin missing or stuck and the keys go
+ * as they always did. `alive` is asked before every key: a session that closed while
+ * the gap ran is not written to.
+ */
+export async function performInterrupt(
+  plan: { keys: string[]; plugin?: true },
+  io: {
+    ask?: () => Promise<boolean>
+    type: (keys: string) => void
+    wait: (ms: number) => Promise<void>
+    alive: () => boolean
+  },
+): Promise<InterruptVia> {
+  if (plan.plugin && io.ask) {
+    const answered = await io.ask().catch(() => false)
+    if (answered) return io.alive() ? "plugin" : "closed"
+  }
+  for (const [index, keys] of plan.keys.entries()) {
+    if (index > 0) await io.wait(INTERRUPT_GAP_MS)
+    if (!io.alive()) return "closed"
+    io.type(keys)
+  }
+  return "keys"
+}
+
+/**
+ * What the sender is told once the session stayed open, by the way it was stopped.
+ *
+ * The plugin way says that work in the background stopped too and that nothing queued
+ * went out. The keys way, for ragu, owns up to the one thing they do that the plugin
+ * does not: on 0.2.11 the first Esc sends the messages the user had queued.
+ */
+export function interruptAnswer(title: string, agentId: string | undefined, via: "plugin" | "keys"): string {
+  const stay = `la sessione resta aperta; mandale una riga correttiva con ade-msg send`
+  if (via === "plugin") {
+    return `ok: interrotta "${title}" con il plugin di ADE (turno e lavori in background fermati, messaggi in coda lasciati in coda), ${stay}`
+  }
+  const queue = agentId === "ragu" ? "; con ragu 0.2.11 i messaggi che aveva in coda sono partiti" : ""
+  return `ok: interrotta "${title}" con i tasti, ${stay}${queue}`
 }
 
 /** A decision still waiting for an answer, from the specs' event logs. */
