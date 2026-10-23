@@ -1608,13 +1608,18 @@ mod dir_tests {
         let root = scratch("broadfile");
         let file = root.join("screenshots-folder");
         let home = PathBuf::from("/home/nik");
+        let system = if cfg!(windows) {
+            format!("{}{}", std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into()), r"\System32")
+        } else {
+            "/etc/ssh".to_string()
+        };
         for broad in [
             "/",
             "/home",
             "/home/nik",
             "/home/nik/.",
             "/home/nik/Pictures/../..",
-            "/etc/ssh",
+            system.as_str(),
             r"C:\Users\nik\..\..",
         ] {
             std::fs::write(&file, broad).expect("scrittura");
