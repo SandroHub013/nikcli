@@ -31,7 +31,7 @@ CREAM = "#f4e7cd"
 STEAM = "#e8dfcf"
 STEAM_ON_LIGHT = "#f39a6b"
 # The phrase of the README's first lines, the one that says what Ragu Code is.
-TAGLINE = "The open source coding agent, with ADE"
+TAGLINE = "The coding agent for every model"
 
 
 def check_pot() -> None:

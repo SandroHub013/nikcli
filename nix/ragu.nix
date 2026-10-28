@@ -92,7 +92,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   };
 
   meta = {
-    description = "The open source coding agent";
+    description = "The coding agent for every model";
     homepage = "https://github.com/SandroHub013/nikcli";
     license = lib.licenses.mit;
     mainProgram = "ragu";

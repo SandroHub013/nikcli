@@ -1,6 +1,6 @@
 # Ragu Code
 
-> **Ragu Code is a fork of [nikcli](https://github.com/nikcli/nikcli), which is itself a fork of [OpenCode](https://github.com/anomalyco/opencode)** — the open source coding agent, with ADE, the desktop app that runs coding agents side by side.
+> **Ragu Code is a fork of [nikcli](https://github.com/nikcli/nikcli), which is itself a fork of [OpenCode](https://github.com/anomalyco/opencode)** — the coding agent for every model, with ADE, the desktop app that runs coding agents side by side.
 
 Ragu Code is maintained by **Alessandro Boni** ([SandroHub013](https://github.com/SandroHub013)). It is not affiliated with, endorsed by, or supported by nikcli or OpenCode: report Ragu Code issues here, never upstream.
 
