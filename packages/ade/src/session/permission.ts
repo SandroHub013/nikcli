@@ -317,6 +317,12 @@ const NUMBERED_OPTION_RE = /^\s*(?:\[?(\d+)\]?[.)\s])\s*(.+)$/
  */
 const FRAME_RE = /^\s*[│┃║]\s?|\s?[│┃║]\s*$/g
 const CURSOR_RE = /^(\s*)[❯›▶➤>]\s?/
+/*
+ * The cursor a menu draws on the option it has selected. `>` is left out on
+ * purpose: a markdown quote or a shell prompt starts with it, and neither
+ * selects an option.
+ */
+const DRAWN_CURSOR_RE = /^\s*[❯›▶➤]\s?/
 const BOX_EDGE_RE = /^[\s╭╮╰╯┌┐└┘─━═]*$/
 const unframe = (line: string) => line.replace(FRAME_RE, "").replace(CURSOR_RE, "$1")
 const YN_PATTERN_RE = /(?:\[|\()([yYnN](?:\s*\/\s*[yYnN](?:\s*\/\s*[aAcCdD])?)?)(?:\]|\))\s*[:?]?\s*$/
@@ -347,13 +353,18 @@ export const PERMISSION_SCHEMAS: readonly PermissionSchema[] = [
       if (endIndex < 1) return undefined
 
       // Collect numbered options backwards
-      const options: { num: string; text: string }[] = []
+      const options: { num: string; text: string; cursor: boolean }[] = []
       let i = endIndex
       while (i >= 0) {
         const line = lines[i]
         const m = line.match(NUMBERED_OPTION_RE)
         if (!m) break
-        options.unshift({ num: m[1], text: m[2].trim() })
+        options.unshift({
+          num: m[1],
+          text: m[2].trim(),
+          // From the raw line: `unframe` has already taken the cursor away.
+          cursor: DRAWN_CURSOR_RE.test(drawn[i].replace(FRAME_RE, "")),
+        })
         i--
       }
 
@@ -380,8 +391,16 @@ export const PERMISSION_SCHEMAS: readonly PermissionSchema[] = [
         )
       })
 
-      if (!isChoiceList && !whatLine.includes("?")) {
-        return undefined
+      /*
+       * A list of sentences is not a menu unless it is drawn as one: exactly
+       * one option carries the cursor, and the header asks a question. A reply
+       * that ends with numbered steps is prose, not a set of answers.
+       */
+      if (!isChoiceList) {
+        const cursors = options.filter((opt) => opt.cursor).length
+        if (cursors !== 1 || !whatLine.includes("?")) {
+          return undefined
+        }
       }
 
       const contextLines = lines.slice(Math.max(0, questionIndex - 4), questionIndex)

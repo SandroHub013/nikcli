@@ -180,6 +180,12 @@ describe("detectPermission - Numbered Choices", () => {
     expect(req?.answers.map((a) => a.send)).toEqual(["1", "2"])
   })
 
+  test("a non-choice list with a cursor and a question is a menu", () => {
+    const req = detectPermission(["Which file?", "❯ 1. a.ts", "  2. b.ts"], "test-agent")
+    expect(req?.what).toBe("Which file?")
+    expect(req?.answers.map((a) => a.send)).toEqual(["1", "2"])
+  })
+
   test("a menu drawn inside a box is read through its frame", () => {
     const lines = [
       "╭──────────────────────────────────────────╮",
@@ -365,6 +371,23 @@ describe("detectPermission - False Positives (must return undefined)", () => {
       "  2. Next write the accompanying unit tests",
       "  3. Finally verify with bun test",
     ]
+    expect(detectPermission(lines, "test-agent")).toBeUndefined()
+  })
+
+  test("a reply ending with numbered sentences is prose, not a permission menu", () => {
+    // The real case: bypass mode never asks, and the question mark was in the
+    // line above. The options were whole sentences, so they grew a button over
+    // the pane, and a click typed "1" into the session.
+    const lines = [
+      "Is the plan clear?",
+      "1. Now: Codex Study reads their notes and maps every stage of the work.",
+      "2. Only if stage 1 finds a cheap design do we open the second one.",
+    ]
+    expect(detectPermission(lines, "test-agent")).toBeUndefined()
+  })
+
+  test("short numbered sentences under a question, with no cursor, are not a menu", () => {
+    const lines = ["Which one?", "1. Red", "2. Blue"]
     expect(detectPermission(lines, "test-agent")).toBeUndefined()
   })
 

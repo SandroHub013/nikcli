@@ -171,7 +171,7 @@ export interface SessionPaneProps {
    * open so the handover to a real branch never moves the row.
    */
   tree?: PaneTree
-  /** Replaces the prompt when the session needs an answer rather than an instruction. */
+  /** Replaces the prompt when the pane offers actions of its own (resume, retry, close-gone). */
   actions?: PaneAction[]
   /**
    * "Sospendi" in the header (P1-C6), on Claude sessions only. Off, it stays
@@ -379,11 +379,11 @@ export function SessionPane(props: SessionPaneProps) {
   /*
    * Whether the pane needs a row under the terminal at all.
    *
-   * Answers first: a permission question is a set of exact strings the agent
-   * is waiting for, and pressing one is not the same as typing it blind into a
-   * redrawing menu. Otherwise the composer earns its row only when there is no
-   * emulator to type into — with one attached it wrote to the very same pty,
-   * so it was costing every pane a row of terminal to duplicate the keyboard.
+   * A pane's own actions (resume, retry, close-gone) earn it first. Otherwise
+   * the composer earns its row only when there is no emulator to type into —
+   * with one attached it wrote to the very same pty, so it was costing every
+   * pane a row of terminal to duplicate the keyboard. A permission question is
+   * answered in the terminal itself, like in any terminal.
    */
   const showDock = () => (props.actions?.length ?? 0) > 0 || !props.terminalId
 
@@ -948,13 +948,13 @@ export function SessionPane(props: SessionPaneProps) {
         composer wrote to, so under a running session the composer was a second
         keyboard for the same machine — charged in terminal rows, once per pane,
         in a window built to hold six. It is still the only way to talk to a
-        pane that has no terminal, and the answer buttons are still the only way
-        to answer a permission question, so those two cases keep the row.
+        pane that has no terminal, and a pane with actions of its own needs the
+        row for them, so those two cases keep it.
       */}
       <Show when={showDock()}>
         <div data-slot="pane-dock">
-          {/* A session that is asking something needs an answer, not an
-              instruction: the buttons take the prompt's place. */}
+          {/* A pane with actions of its own (resume, retry, close-gone) shows
+              them in place of the prompt. */}
           <Show
             when={props.actions && props.actions.length > 0}
             fallback={

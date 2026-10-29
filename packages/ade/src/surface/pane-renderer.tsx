@@ -10,7 +10,7 @@ import { PluginPane } from "../plugin/pane"
 import type { AdePluginRuntime } from "../plugin/runtime"
 import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
-import { answerLabel, type PermissionAnswer } from "../session/permission"
+import type { PermissionAnswer } from "../session/permission"
 import { typedAfter } from "../session/typed-line"
 import { answersPrompt, isInterruptInput } from "../session/mailbox"
 import { showsSuspendButton, SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
@@ -168,7 +168,7 @@ export interface PaneRendererDeps {
 
 export function createPaneRenderer(deps: PaneRendererDeps) {
   const { wb, setWb, project, records, panels, pluginRuntime } = deps
-  const { buffers, bufferLoading, bufferError, bufferBinary, reports, permissions } = records
+  const { buffers, bufferLoading, bufferError, bufferBinary, reports } = records
   /* Panes of one kind share a panel name; see `panels/stack.ts`. */
   const stacks = {
     video: createPanelStack(panels, "video"),
@@ -550,29 +550,23 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
         }
         actions={
           /*
-           * The buttons exist only when the agent actually asked something:
-           * they are its own choices, in its own order, and pressing one
-           * writes exactly the string it is waiting for.
+           * A permission question is answered in the terminal itself, like in
+           * any terminal: its choices are never drawn as buttons here. These
+           * are the pane's own states, not the agent's question.
            */
-          permissions()[current().id]
-            ? permissions()[current().id].answers.map((answer) => ({
-                label: answerLabel(answer),
-                tone: answer.tone,
-                onClick: () => deps.answerPermission(current().id, answer),
-              }))
-            : current().gone && !deps.isRunning(current().id)
-              ? [{ label: t("pane.closeGone"), tone: "primary" as const, onClick: () => deps.close(current().id) }]
-              : current().suspended && !deps.isRunning(current().id)
-                ? [{ label: t("pane.resume"), tone: "primary" as const, onClick: () => deps.resume(current().id) }]
-                : restartable()
-                  ? [
-                      {
-                        label: current().status === "error" ? t("pane.retry") : t("pane.resume"),
-                        tone: "primary" as const,
-                        onClick: () => deps.restart(current()),
-                      },
-                    ]
-                  : undefined
+          current().gone && !deps.isRunning(current().id)
+            ? [{ label: t("pane.closeGone"), tone: "primary" as const, onClick: () => deps.close(current().id) }]
+            : current().suspended && !deps.isRunning(current().id)
+              ? [{ label: t("pane.resume"), tone: "primary" as const, onClick: () => deps.resume(current().id) }]
+              : restartable()
+                ? [
+                    {
+                      label: current().status === "error" ? t("pane.retry") : t("pane.resume"),
+                      tone: "primary" as const,
+                      onClick: () => deps.restart(current()),
+                    },
+                  ]
+                : undefined
         }
         inputHint={current().suspended && !deps.isRunning(current().id) ? t("pane.input.suspended") : undefined}
         lines={current().lines}
