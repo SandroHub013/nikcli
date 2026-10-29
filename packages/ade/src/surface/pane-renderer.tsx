@@ -10,7 +10,6 @@ import { PluginPane } from "../plugin/pane"
 import type { AdePluginRuntime } from "../plugin/runtime"
 import { AgentMark } from "../session-new/agent-mark"
 import { formatCost, formatTokens } from "../session/metrics"
-import type { PermissionAnswer } from "../session/permission"
 import { typedAfter } from "../session/typed-line"
 import { answersPrompt, isInterruptInput } from "../session/mailbox"
 import { showsSuspendButton, SUSPEND_REASON, type SuspendCheck } from "../session/suspend"
@@ -76,7 +75,6 @@ export interface PaneRendererDeps {
   tellPane: (id: string, text: string) => void
   close: (id: string) => void
   saveFile: (id: string) => void
-  answerPermission: (id: string, answer: PermissionAnswer) => void
   /**
    * A line submitted in the pane, by Enter in the terminal or by the composer:
    * the turn starts now, so the previous turn's Stop does not end it.

@@ -9326,7 +9326,6 @@ export function Workbench() {
     tellPane,
     close,
     saveFile: (id) => void saveFile(id),
-    answerPermission,
     turnSubmitted,
     promptAnswered,
     interrupted,
