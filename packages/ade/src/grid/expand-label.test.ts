@@ -32,10 +32,9 @@ describe("the expanded pane's button says it reduces", () => {
   test("the close button names the pane it closes", async () => {
     expect(actions).toContain('t("pane.close.named", props.title)')
     expect(pane).toMatch(/<PaneActions [^\n]*title=\{props\.title\}/)
-    const it = (await import("../i18n/it")).it as Record<string, (title: string) => string>
-    const en = (await import("../i18n/en")).en as Record<string, (title: string) => string>
-    expect(it["pane.close.named"]!("Claude 2")).toBe("Chiudi Claude 2")
-    expect(en["pane.close.named"]!("Claude 2")).toBe("Close Claude 2")
+    const { translate } = await import("../i18n")
+    expect(translate("it", "pane.close.named", "Claude 2")).toBe("Chiudi Claude 2")
+    expect(translate("en", "pane.close.named", "Claude 2")).toBe("Close Claude 2")
   })
 
   test("a session pane is told when it fills the grid", () => {

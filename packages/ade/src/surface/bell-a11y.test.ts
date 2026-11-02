@@ -43,7 +43,7 @@ describe("the workbench's notices", () => {
   test("the voice notice is a Notice and an alert, with no inline style of its own (DS-16)", () => {
     const at = source.indexOf('data-slot="ade-voice-notice"')
     expect(at).toBeGreaterThan(-1)
-    const block = source.slice(source.lastIndexOf("<Notice", at), source.indexOf("</Notice>", at))
+    const block = source.slice(source.lastIndexOf("<NoticeBanner", at), source.indexOf("</NoticeBanner>", at))
     expect(block).toContain('role="alert"')
     expect(block).toContain('tone="working"')
     expect(block).not.toContain("style={{")

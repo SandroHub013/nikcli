@@ -182,7 +182,7 @@ import type { PresetId } from "../session-new/preset"
 import { defaultPaneTitle } from "./pane-title"
 import { Sidebar } from "../sidebar"
 import { formatDroppedPaths } from "../sidebar/file-drag"
-import { IconButton, Notice } from "../ui/controls"
+import { IconButton, Notice as NoticeBanner } from "../ui/controls"
 import { SessionGrid } from "../grid/session-grid"
 import { requestRename } from "../grid/rename"
 import { focusResizeGrip } from "../grid/focus-input"
@@ -10272,7 +10272,7 @@ export function Workbench() {
       <Show when={voiceNotice()}>
         {/* A Notice, not a hand-styled div: it escaped every stylesheet test with its inline style (DS-16). It stays an
             alert — a voice problem is something to hear at once — in the working tone it always had. */}
-        <Notice
+        <NoticeBanner
           tone="working"
           role="alert"
           data-slot="ade-voice-notice"
@@ -10280,7 +10280,7 @@ export function Workbench() {
           onClose={() => setVoiceNotice(undefined)}
         >
           {voiceNotice()}
-        </Notice>
+        </NoticeBanner>
       </Show>
 
       <div data-slot="ade-body" data-sidebar-hidden={sidebarHidden() ? "true" : undefined}>

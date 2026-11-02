@@ -187,9 +187,9 @@ describe("the stylesheet", () => {
 
 describe("Button", () => {
   test("renders a real, typed button with the markers and its own props", () => {
-    const host = mount(() =>
-      createComponent(Button, { variant: "primary", size: "lg", "data-slot": "mine", children: "Go" }),
-    )
+    // Hyphenated attributes pass in JSX; as an object they are not a fresh literal, so the extra key is allowed.
+    const props = { variant: "primary" as const, size: "lg" as const, "data-slot": "mine", children: "Go" }
+    const host = mount(() => createComponent(Button, props))
     const button = host.querySelector("button")!
     expect(button.type).toBe("button")
     expect(button.getAttribute("data-ui")).toBe("button")
