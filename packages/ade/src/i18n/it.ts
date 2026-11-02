@@ -126,6 +126,10 @@ export const it = {
   "paneState.short.perm": "Permesso",
   "paneState.short.ask": "Attende",
   "paneState.short.limit": "Limite",
+  /* A permission prompt is answered in the terminal itself: the pane has no buttons for it (UX-8). */
+  "paneState.perm.here": "rispondi nel terminale",
+  "paneState.perm.tip":
+    "La sessione ti chiede un permesso: scegli la risposta nel terminale con le frecce e Invio",
   "preset.solo": "Solo",
   "preset.solo.desc": "Un agente in un terminale.",
   "preset.pair": "Coppia",
@@ -194,7 +198,7 @@ export const it = {
   "sidebar.addSpace": "Aggiungi space",
   "sidebar.addRemote": "Aggiungi ambiente remoto (ssh)",
   "sidebar.noSpaces": "Nessuno space aperto.",
-  /** The status dot, `mapAgentStatus`: its word is the Italian one, and the data attribute keeps it. */
+  /** The status icon's name: `status` is the state's word in this language (`paneState.*`), from the one list in `grid/pane-state.ts`. */
   "sidebar.agentStatus": (status: string) => `Stato: ${status}`,
   "sidebar.agents": "Agenti attivi",
   "sidebar.newAgentSession": "Nuova sessione agente",
@@ -241,6 +245,7 @@ export const it = {
   "pane.renameTip": "Doppio clic per rinominare",
   "pane.name": "Nome della sessione",
   "pane.quota": "quota",
+  "pane.details": "Dettagli della sessione",
   "pane.quota.na": "n/d",
   "pane.toBottom": "torna in fondo",
   "pane.input": "Scrivi all'agente…",

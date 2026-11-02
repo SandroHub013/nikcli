@@ -3,17 +3,17 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { deriveWorkspaces } from "../surface/state"
 import type { Pane } from "../surface/state"
-import { mapAgentStatus } from "./workspace-tree"
+import { stateOfSession } from "../grid/pane-state"
 
 /* The sidebar dot of a suspended session (P1-C6): Verifiche found it green, as for a live one. */
 
-test("the sidebar dot of a suspended session is grey and still, not the green of an available one", () => {
-  expect(mapAgentStatus("idle", true)).toBe("sospesa")
-  expect(mapAgentStatus("idle")).toBe("disponibile")
+test("the sidebar icon of a suspended session is grey and still, not the green of an available one", () => {
+  expect(stateOfSession({ status: "idle", suspended: true })).toBe("off")
+  expect(stateOfSession({ status: "idle" })).toBe("idle")
   const css = readFileSync(join(import.meta.dir, "sidebar.css"), "utf-8")
-  const rule = /\[data-slot="agent-status-dot"\]\[data-agent-status="sospesa"\]\s*\{([^}]*)\}/.exec(css)
-  expect(rule?.[1]).toContain("var(--ade-text-weak)")
-  expect(css).not.toMatch(/data-agent-status="sospesa"\][^{]*\{[^}]*animation/)
+  const rule = /\[data-slot="agent-status-dot"\]\[data-state="off"\]\s*\{([^}]*)\}/.exec(css)
+  expect(rule?.[1]).toContain("var(--ade-state-off)")
+  expect(css).not.toMatch(/data-state="off"\][^{]*\{[^}]*animation/)
 })
 
 test("the sidebar is told which sessions are suspended", () => {

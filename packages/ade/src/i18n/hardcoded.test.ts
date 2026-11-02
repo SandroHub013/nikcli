@@ -147,9 +147,6 @@ const EXCLUDED_PROSE_FILES = new Set([
   "brand.ts", // Branding CLI tool
   "plugin/registry.ts", // Internal plugin registry errors
 
-  // Internal data/type mappings:
-  "sidebar/workspace-tree.ts", // AgentDisplayStatus type union mapped via t() in sidebar.tsx
-
   // Decision, design and bot terminal queue dispatching:
   "decisions/delivery.ts", // @ade decisions delivery protocol
   "design/delivery.ts", // @ade design delivery protocol

@@ -11,33 +11,6 @@ import type { PaneStatus } from "../grid/pane"
 
 export type WorkspaceSessionStatus = PaneStatus
 
-export type AgentDisplayStatus =
-  | "disponibile"
-  | "a lavoro"
-  | "in attesa di input"
-  | "task completata"
-  | "errore"
-  | "sospesa"
-
-/** A suspended session (P1-C6) has no process: it is neither available nor at work, whatever its last status. */
-export function mapAgentStatus(status: WorkspaceSessionStatus, suspended?: boolean): AgentDisplayStatus {
-  if (suspended) return "sospesa"
-  switch (status) {
-    case "working":
-      return "a lavoro"
-    case "waiting":
-      return "in attesa di input"
-    case "done":
-      return "task completata"
-    case "error":
-      return "errore"
-    case "idle":
-    case "provisioning":
-    default:
-      return "disponibile"
-  }
-}
-
 export function normalizeAgentId(raw?: string): string {
   if (!raw) return "ragu"
   const s = raw.toLowerCase().trim()

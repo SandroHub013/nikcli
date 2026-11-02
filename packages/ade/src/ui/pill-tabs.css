@@ -106,7 +106,17 @@
   background: var(--ade-warning);
   margin-right: 5px;
   flex: none;
-  animation: ade-pill-pulse 1.2s ease-in-out infinite var(--ade-loops, running);
+}
+
+/*
+ * It pulses three times and then rests (DS-5): a decision can wait for hours,
+ * and a dot that moves for as long as it does runs against the rule that
+ * nothing animates for ever at rest. Reduced motion: it is steady.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  [data-slot="ade-pill-dot"] {
+    animation: ade-pill-pulse var(--ade-loop) var(--ade-loop-ease) 3 var(--ade-loops, running);
+  }
 }
 
 @keyframes ade-pill-pulse {

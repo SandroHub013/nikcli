@@ -121,6 +121,9 @@ export const en: Messages = {
   "paneState.short.perm": "Permission",
   "paneState.short.ask": "Waiting",
   "paneState.short.limit": "Limit",
+  "paneState.perm.here": "answer in the terminal",
+  "paneState.perm.tip":
+    "The session is asking for permission: pick the answer in the terminal with the arrow keys and Enter",
   "preset.solo": "Solo",
   "preset.solo.desc": "One agent in a terminal.",
   "preset.pair": "Pair",
@@ -188,8 +191,7 @@ export const en: Messages = {
   "sidebar.addSpace": "Add a space",
   "sidebar.addRemote": "Add a remote environment (ssh)",
   "sidebar.noSpaces": "No spaces open.",
-  "sidebar.agentStatus": (status) =>
-    `Status: ${({ disponibile: "available", "a lavoro": "working", "in attesa di input": "waiting for input", "task completata": "task done", errore: "error", sospesa: "suspended" } as Record<string, string>)[status] ?? status}`,
+  "sidebar.agentStatus": (status) => `Status: ${status}`,
   "sidebar.agents": "Active agents",
   "sidebar.newAgentSession": "New agent session",
   "sidebar.noAgents": "No active agents.",
@@ -235,6 +237,7 @@ export const en: Messages = {
   "pane.renameTip": "Double-click to rename",
   "pane.name": "Session name",
   "pane.quota": "quota",
+  "pane.details": "Session details",
   "pane.quota.na": "n/a",
   "pane.toBottom": "Jump to bottom",
   "pane.input": "Message the agent…",

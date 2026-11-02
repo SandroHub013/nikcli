@@ -10,11 +10,17 @@ import { normalizeActivity } from "./activity"
 export type PaneStatus = "idle" | "provisioning" | "working" | "waiting" | "done" | "error"
 
 /**
+ * THE list of session states. The sidebar's icon, the pane's chip and their
+ * colours (`--ade-state-*` in index.css) all read it: a state added here needs
+ * its two words in the i18n sheets, its colour token and its shape in
+ * `state-icon.tsx`, and a test (`state-list.test.ts`) fails until it has them.
+ *
  * The canonical session states for Proposal A header, `off`, a suspended
  * session (P1-C6), and `closed`, one whose process ended well. Neither has a
  * process, asks anything or moves.
  */
-export type PaneState = "work" | "perm" | "ask" | "err" | "limit" | "idle" | "off" | "closed"
+export const STATE_IDS = ["work", "perm", "ask", "err", "limit", "idle", "off", "closed"] as const
+export type PaneState = (typeof STATE_IDS)[number]
 
 /* Getters, so each read is in the language of that moment (S41). */
 export const STATE_FULL: Readonly<Record<PaneState, string>> = {
@@ -114,4 +120,48 @@ export function resolvePaneState(props: {
   }
   if (props.quota && !("unavailable" in props.quota) && props.quota.isLimit) return "limit"
   return "idle"
+}
+
+/**
+ * The state of a session as the sidebar knows it: no quota and no pane actions
+ * there, so a waiting session is a permission (or a question to another
+ * session, by its activity) and a suspended one is `off`. The same function
+ * the pane runs, so the two cannot disagree about one session.
+ */
+export function stateOfSession(session: { status: PaneStatus; activity?: string; suspended?: boolean }): PaneState {
+  return resolvePaneState({
+    status: session.status,
+    activity: session.activity,
+    state: session.suspended ? "off" : undefined,
+  })
+}
+
+/*
+ * Spinner glyphs an agent draws in front of its status line (Claude's
+ * asterisks, the braille dots of the others, the bullet and the half moons).
+ */
+const SPINNER_GLYPHS = /[✢-❋⏺●◐-◓⠀-⣿·*]/g
+
+/**
+ * The detail a terminal scraper put in the chip, made readable: spinner glyphs
+ * gone, a line repeated once per frame (`Mustering…Mustering…`) kept once, and
+ * the half-drawn last frame (`3Musterin`) dropped. Empty when nothing real
+ * is left, so the caller falls back to the state's own word.
+ */
+export function cleanStateDetail(raw: string | undefined): string {
+  if (!raw) return ""
+  const pieces = raw
+    .replace(SPINNER_GLYPHS, " ")
+    .split(/(?<=…|\.\.\.)|\n+/)
+    .map((piece) => piece.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+  const kept: string[] = []
+  for (const piece of pieces) {
+    // Progress counters drawn beside the word («3», «12s») are not the word.
+    const bare = piece.replace(/^[\d\s:.,]+/, "")
+    if (!bare) continue
+    if (kept.some((one) => one === bare || one.startsWith(bare))) continue
+    kept.push(bare)
+  }
+  return kept.join(" ")
 }

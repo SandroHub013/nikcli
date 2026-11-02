@@ -1,0 +1,24 @@
+/*
+ * The state icon, shared by the pane's chip and the sidebar's row.
+ *
+ * Its colour is `--st` where a pane sets one (the chip), and the colour of
+ * whatever holds it where none is (the sidebar sets `color` on its own slot).
+ * Nothing here moves: the one animation is the sidebar's.
+ */
+.ic {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--st, currentColor);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  overflow: visible;
+}
+
+.ic .f {
+  fill: currentColor;
+  stroke: none;
+}
