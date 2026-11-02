@@ -9220,8 +9220,8 @@ export function Workbench() {
         // Over the terminal: a pane started again keeps the old one live, and the transcript hidden.
         onRefused: (reason) => {
           refused = true
-          startRefusals.set(paneId, reason)
           tellPane(paneId, t("pane.startFailed", reason))
+          startRefusals.set(paneId, reason)
         },
         ...(nonce ? { link: { pane: paneId, nonce } } : {}),
         pane: paneId,
@@ -9507,8 +9507,8 @@ export function Workbench() {
         },
         onRefused: (reason) => {
           refused = true
-          startRefusals.set(paneId, reason)
           tellPane(paneId, t("pane.connectFailed", reason))
+          startRefusals.set(paneId, reason)
         },
         pane: paneId,
         paneToken,
