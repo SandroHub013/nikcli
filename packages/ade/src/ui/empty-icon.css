@@ -1,0 +1,13 @@
+/* The neutral line icon an empty view carries (DS-17); `empty-icon.tsx` draws it, this gives it its size and colour. */
+[data-slot="empty-icon"] {
+  display: block;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: 0 auto var(--ade-space-4);
+  color: var(--ade-text-weak);
+}
+
+[data-slot="sheet-empty"] > [data-slot="empty-icon"] {
+  margin-inline: 0;
+}

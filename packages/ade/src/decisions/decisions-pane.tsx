@@ -1,4 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
+import { EmptyIcon } from "../ui/empty-icon"
 import { formatDay, formatMoment, togglePick } from "./answer"
 import { submitControl } from "./card"
 import { DecisionCard } from "./decision-card"
@@ -116,6 +117,7 @@ export function DecisionsPane(props: {
       <div data-slot="decisions-body">
         <Show when={!props.hub.register.path()}>
           <div data-slot="sheet-empty">
+            <EmptyIcon name="decisions" />
             <b>{t("decisions.noProject")}</b>
             <span>{t("decisions.noProject.hint")}</span>
           </div>

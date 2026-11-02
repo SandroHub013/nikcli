@@ -1,4 +1,5 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
+import { EmptyIcon } from "../ui/empty-icon"
 import { formatDay, formatMoment } from "./answer"
 import { submitControl } from "./card"
 import { DesignCard } from "./design-card"
@@ -116,6 +117,7 @@ export function DesignPane(props: {
       <div data-slot="design-body">
         <Show when={!props.hub.register.path()}>
           <div data-slot="sheet-empty">
+            <EmptyIcon name="design" />
             <b>{t("design.noProject")}</b>
             <span>{t("design.noProject.hint")}</span>
           </div>

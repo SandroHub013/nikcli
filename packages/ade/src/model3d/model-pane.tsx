@@ -1,4 +1,5 @@
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
+import { EmptyIcon } from "../ui/empty-icon"
 import { every } from "../host/every"
 import type { DirEntry } from "../host/shell"
 import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
@@ -346,6 +347,7 @@ export function ModelPane(props: ModelPaneProps) {
       <div ref={stage} data-slot="model-stage" data-empty={props.path ? undefined : "true"}>
         <Show when={!props.path}>
           <div data-slot="model-empty">
+            <EmptyIcon name="model" />
             <p data-slot="model-empty-text">
               {t("model.empty")}
               <br />
