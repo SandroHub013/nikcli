@@ -372,7 +372,7 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: var(--ade-space-2) var(--ade-space-3);
-  background: var(--ade-sunken);
+  background: var(--ade-terminal-bg, var(--ade-sunken));
   font-family: var(--ade-mono);
   font-size: var(--ade-font-body);
   line-height: var(--ade-leading);

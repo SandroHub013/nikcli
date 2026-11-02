@@ -502,12 +502,12 @@ body[data-theme="glass"] #root,
    * They are not sRGB primaries. An agent printing red should look like it
    * belongs in this window rather than like a screenshot pasted into it, so
    * each hue is retuned for the ground it sits on: the dark values are tuned
-   * for the warm dark terminal, the light ones darkened to stay legible on a
-   * near-white one. A single set cannot do both — at 4.5:1 on dark, the same
+   * for the warm dark terminal (#0d0908, the sunken ink), the light ones darkened to stay legible on a
+   * panna one (#fffaf0), all at 4.5:1 but black. A single set cannot do both — at 4.5:1 on dark, the same
    * pink is 1.9:1 on white.
    */
-  --ade-terminal-bg: light-dark(#fdfcfc, #0e0c0c);
-  --ade-terminal-fg: light-dark(#1a1817, #ecebeb);
+  --ade-terminal-bg: light-dark(#fffaf0, #0d0908);
+  --ade-terminal-fg: light-dark(#120d0b, #f4e7cd);
   /* The selection and the cursor (`--ade-accent`) are the accent's; the emulator's own colours are not touched. */
   --ade-selection: light-dark(rgba(184, 51, 33, 0.2), rgba(232, 110, 72, 0.3));
 
@@ -519,14 +519,14 @@ body[data-theme="glass"] #root,
   --ade-ansi-magenta: light-dark(#7d4b9c, #c79bdc);
   --ade-ansi-cyan: light-dark(#1f7a6c, #7fd6c4);
   --ade-ansi-white: light-dark(#6b6562, #a9a4a4);
-  --ade-ansi-brightBlack: light-dark(#8a8480, #6d6666);
-  --ade-ansi-brightRed: light-dark(#c8475f, #f0a0b0);
-  --ade-ansi-brightGreen: light-dark(#3c9760, #8fd8a8);
-  --ade-ansi-brightYellow: light-dark(#a3711f, #ecbc7c);
-  --ade-ansi-brightBlue: light-dark(#3f74c2, #9cc0ee);
-  --ade-ansi-brightMagenta: light-dark(#9260b4, #d9b5e8);
-  --ade-ansi-brightCyan: light-dark(#2a9184, #9fe3d5);
-  --ade-ansi-brightWhite: light-dark(#1a1817, #ecebeb);
+  --ade-ansi-brightBlack: light-dark(#76716d, #7f7979);
+  --ade-ansi-brightRed: light-dark(#c4465d, #f0a0b0);
+  --ade-ansi-brightGreen: light-dark(#338052, #8fd8a8);
+  --ade-ansi-brightYellow: light-dark(#98691d, #ecbc7c);
+  --ade-ansi-brightBlue: light-dark(#3e72bf, #9cc0ee);
+  --ade-ansi-brightMagenta: light-dark(#8e5eb0, #d9b5e8);
+  --ade-ansi-brightCyan: light-dark(#257f74, #9fe3d5);
+  --ade-ansi-brightWhite: light-dark(#120d0b, #f4e7cd);
 
   /* ── type scale ─────────────────────────────────────────────────────────── */
   --ade-font-xs: 10px;

@@ -108,7 +108,7 @@ function readTheme(): ITheme {
   probe.style.cssText = "position:absolute;width:0;height:0;visibility:hidden;pointer-events:none"
   host.appendChild(probe)
 
-  const theme: ITheme = { selectionBackground: "rgba(232, 110, 72, 0.3)" }
+  const theme: ITheme = {}
   // The first token declared in scope wins. A slot with none keeps xterm's
   // default, where an undeclared var() would hand the probe the text colour.
   const slot = (key: ColourSlot, ...tokens: string[]) => {
