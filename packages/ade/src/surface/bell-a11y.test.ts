@@ -1,0 +1,57 @@
+import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { translate } from "../i18n"
+
+/**
+ * The bell's panel for assistive technology (UX-20), and the close controls that were drawn as a glyph (DS-21).
+ *
+ * The workbench is too large to mount, so these read the source: what is pinned is the markup's contract — a role
+ * that is true of what the panel holds, a name for each discard, an alert for a failure — not a rendering.
+ */
+const source = readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8").replace(/\r\n/g, "\n")
+
+/** The JSX of the notifications panel: from the bell's trigger to the end of the notices list. */
+const panel = source.slice(source.indexOf('data-action="notifications"'), source.indexOf('data-slot="ade-notice-dismiss"') + 400)
+
+describe("the bell", () => {
+  test("its panel is a labelled region with a list, because it holds text, a bar and buttons, not menu items", () => {
+    expect(panel).toContain('role="region"')
+    expect(panel).toContain('role="list"')
+    expect(panel).toContain('role="listitem"')
+    expect(panel).not.toContain('role="menu"')
+  })
+
+  test("the bell no longer announces a menu it does not open", () => {
+    const trigger = panel.slice(0, panel.indexOf("onClick"))
+    expect(trigger).not.toContain('aria-haspopup="menu"')
+    // It still says whether the panel is open.
+    expect(trigger).toContain("aria-expanded={noticesOpen()}")
+  })
+
+  test("a failure is announced as an alert, the others are left to be read", () => {
+    expect(panel).toContain('role={notice.kind === "error" ? "alert" : undefined}')
+  })
+
+  test("each dismiss says which notice it discards", () => {
+    expect(panel).toContain('label={t("bell.dismiss.named", notice.text)}')
+    expect(translate("it", "bell.dismiss.named", "Aggiornamento pronto")).toBe("Togli: Aggiornamento pronto")
+    expect(translate("en", "bell.dismiss.named", "Update ready")).toBe("Dismiss: Update ready")
+  })
+})
+
+describe("the workbench's notices", () => {
+  test("the voice notice is a Notice and an alert, with no inline style of its own (DS-16)", () => {
+    const at = source.indexOf('data-slot="ade-voice-notice"')
+    expect(at).toBeGreaterThan(-1)
+    const block = source.slice(source.lastIndexOf("<Notice", at), source.indexOf("</Notice>", at))
+    expect(block).toContain('role="alert"')
+    expect(block).toContain('tone="working"')
+    expect(block).not.toContain("style={{")
+  })
+
+  test("no close control is drawn as a ✕ or × glyph in a text node (DS-21)", () => {
+    // Between a tag and the next one, so a comment or a string that mentions the glyph is not read as a control.
+    const glyphs = [...source.matchAll(/>\s*([✕×])\s*</g)].map((match) => source.slice(0, match.index).split("\n").length)
+    expect(glyphs).toEqual([])
+  })
+})

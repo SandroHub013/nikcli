@@ -806,7 +806,7 @@ export const it = {
   "tray.hide.notice":
     "ADE resta nell'area di notifica finché un collegamento chat è acceso, così le chat continuano a raggiungere i bot. Il microfono si chiude finché la finestra è nascosta. Per riaprirla: clic sull'icona; per chiudere ADE: Esci, nel menu dell'icona.",
   "bell.title": "Notifiche",
-  "bell.dismiss": "Togli",
+  "bell.dismiss.named": (text: string) => `Togli: ${text}`,
 
   // Export, stuck note
   "record.export.busy": "Un'esportazione è già in corso.",

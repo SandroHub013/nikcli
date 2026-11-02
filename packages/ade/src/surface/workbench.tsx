@@ -182,6 +182,7 @@ import type { PresetId } from "../session-new/preset"
 import { defaultPaneTitle } from "./pane-title"
 import { Sidebar } from "../sidebar"
 import { formatDroppedPaths } from "../sidebar/file-drag"
+import { IconButton, Notice } from "../ui/controls"
 import { SessionGrid } from "../grid/session-grid"
 import { requestRename } from "../grid/rename"
 import { focusResizeGrip } from "../grid/focus-input"
@@ -10269,38 +10270,17 @@ export function Workbench() {
       </header>
 
       <Show when={voiceNotice()}>
-        <div
+        {/* A Notice, not a hand-styled div: it escaped every stylesheet test with its inline style (DS-16). It stays an
+            alert — a voice problem is something to hear at once — in the working tone it always had. */}
+        <Notice
+          tone="working"
           role="alert"
           data-slot="ade-voice-notice"
-          style={{
-            display: "flex",
-            "align-items": "center",
-            "justify-content": "space-between",
-            padding: "var(--ade-space-2) var(--ade-space-6)",
-            background: "var(--ade-working-bg)",
-            color: "var(--ade-working)",
-            "border-bottom": "1px solid var(--ade-border)",
-            "font-size": "var(--ade-font-sm)",
-            "font-family": "var(--ade-sans)",
-          }}
+          closeLabel={t("bar.dismissNotice")}
+          onClose={() => setVoiceNotice(undefined)}
         >
-          <span>{voiceNotice()}</span>
-          <button
-            type="button"
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "inherit",
-              cursor: "pointer",
-              "font-size": "var(--ade-font-sm)",
-              padding: "0 var(--ade-space-2)",
-            }}
-            onClick={() => setVoiceNotice(undefined)}
-            aria-label={t("bar.dismissNotice")}
-          >
-            ✕
-          </button>
-        </div>
+          {voiceNotice()}
+        </Notice>
       </Show>
 
       <div data-slot="ade-body" data-sidebar-hidden={sidebarHidden() ? "true" : undefined}>
@@ -10461,7 +10441,6 @@ export function Workbench() {
                   data-action="notifications"
                   ref={noticesButton}
                   data-tone={bellTone(notices())}
-                  aria-haspopup="menu"
                   aria-expanded={noticesOpen()}
                   onClick={() => {
                     const opening = !noticesOpen()
@@ -10498,7 +10477,7 @@ export function Workbench() {
                   <div
                     data-slot="ade-menu"
                     data-wide="true"
-                    role="menu"
+                    role="region"
                     aria-label={t("bell.title")}
                     ref={(menu) =>
                       onCleanup(bindMenu(menu, { close: () => setNoticesOpen(false), anchor: noticesButton }))
@@ -10517,10 +10496,13 @@ export function Workbench() {
                       {checkingUpdate() ? t("update.checking") : t("palette.update.check")}
                     </button>
                     <Show when={notices().length > 0} fallback={<p data-slot="ade-menu-empty">{t("bell.empty")}</p>}>
+                      <div role="list" aria-label={t("bell.title")}>
                       <For each={notices()}>
                         {(notice) => (
-                          <div data-slot="ade-notice-row" data-kind={notice.kind}>
-                            <span data-slot="ade-notice-text">{notice.text}</span>
+                          <div data-slot="ade-notice-row" data-kind={notice.kind} role="listitem">
+                            <span data-slot="ade-notice-text" role={notice.kind === "error" ? "alert" : undefined}>
+                              {notice.text}
+                            </span>
                             <Show when={notice.restore}>
                               {(copy) => (
                                 <Show
@@ -10612,17 +10594,18 @@ export function Workbench() {
                                 </Show>
                               )}
                             </Show>
-                            <button
-                              type="button"
+                            <IconButton
+                              size="sm"
                               data-slot="ade-notice-dismiss"
+                              label={t("bell.dismiss.named", notice.text)}
                               onClick={() => setNotices((list) => dismissNotice(list, notice.id))}
-                              aria-label={t("bell.dismiss")}
                             >
-                              ×
-                            </button>
+                              <span data-ui="icon-cross" aria-hidden="true" />
+                            </IconButton>
                           </div>
                         )}
                       </For>
+                      </div>
                     </Show>
                   </div>
                 </Show>
@@ -10679,14 +10662,14 @@ export function Workbench() {
                     </button>
                   )}
                 </Show>
-                <button
-                  type="button"
+                <IconButton
+                  size="sm"
                   data-slot="ade-notice-close"
+                  label={t("bar.dismissNotice")}
                   onClick={() => setNotice(undefined)}
-                  aria-label={t("bar.dismissNotice")}
                 >
-                  ✕
-                </button>
+                  <span data-ui="icon-cross" aria-hidden="true" />
+                </IconButton>
               </div>
             )}
           </Show>

@@ -788,7 +788,7 @@ export const en: Messages = {
   "tray.hide.notice":
     "ADE stays in the notification area while a chat connection is on, so the chats still reach their bots. The microphone closes while the window is hidden. To bring it back: click the icon; to close ADE: Exit, in the icon's menu.",
   "bell.title": "Notifications",
-  "bell.dismiss": "Dismiss",
+  "bell.dismiss.named": (text: string) => `Dismiss: ${text}`,
 
   // Export, stuck note
   "record.export.busy": "An export is already running.",
