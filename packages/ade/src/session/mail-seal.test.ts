@@ -1,4 +1,4 @@
-import { followInboxRound, inboxNamesOf, type InboxRound } from "./mail-inbox"
+import { followInboxRound, inboxNamesOf, rearmInbox, type InboxRound } from "./mail-inbox"
 import { MAX_REBELLS, REBELL_AFTER_MS, type InboxEntry } from "./mailbox"
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { createHmac } from "crypto"
@@ -38,6 +38,7 @@ const inboxEntry = (paneId: string, name: string, over: Partial<InboxEntry> = {}
 const inboxRound = (over: Partial<InboxRound<string>> = {}): InboxRound<string> => ({
   restored: () => true,
   paneExists: () => true,
+  stillWanted: () => true,
   session: () => undefined,
   readState: async () => "unread",
   free: async () => true,
@@ -217,7 +218,7 @@ describe("a mail round while a pane has no process", () => {
     expect(pending[0]?.rings).toBe(1)
   })
 
-  test("still ends what ended: read, lost, or rung enough", async () => {
+  test("still ends what ended: read or lost", async () => {
     const running = { session: () => "vivo" }
     const read = [inboxEntry("p1", "letto")]
     await followInboxRound(read, inboxRound({ ...running, readState: async () => "read" }), 1)
@@ -228,12 +229,72 @@ describe("a mail round while a pane has no process", () => {
     await followInboxRound(lost, inboxRound({ ...running, readState: async () => "lost", lost: async (entry) => void told.push(entry.name) }), 1)
     expect(lost).toEqual([])
     expect(told).toEqual(["perso"])
+  })
+})
 
-    const rung = [inboxEntry("p1", "suonato", { rings: MAX_REBELLS })]
+describe("a mail round when the bells have run out", () => {
+  const late = REBELL_AFTER_MS * 10
+  const rungOut = () => {
     const unread: string[] = []
-    await followInboxRound(rung, inboxRound({ ...running, unread: (entry) => unread.push(entry.name) }), REBELL_AFTER_MS * 10)
-    expect(rung).toEqual([])
+    const rung: string[] = []
+    const round = inboxRound({
+      session: () => "vivo",
+      unread: (entry) => unread.push(entry.name),
+      ring: (entry) => rung.push(entry.name),
+    })
+    return { pending: [inboxEntry("p1", "suonato", { rings: MAX_REBELLS })], unread, rung, round }
+  }
+
+  test("the sender is told once, it rings no more, and it stays: the sender was told it is still there", async () => {
+    const { pending, unread, rung, round } = rungOut()
+    await followInboxRound(pending, round, late)
+    await followInboxRound(pending, round, late * 2)
     expect(unread).toEqual(["suonato"])
+    expect(rung).toEqual([])
+    expect(inboxNamesOf(pending, "p1")).toEqual(["suonato"])
+  })
+
+  test("it still ends: read, lost, or its pane closed", async () => {
+    for (const end of [
+      { readState: async () => "read" as const },
+      { readState: async () => "lost" as const },
+      { session: () => undefined, paneExists: () => false },
+    ]) {
+      const { pending, round } = rungOut()
+      await followInboxRound(pending, round, late)
+      await followInboxRound(pending, { ...round, ...end }, late * 2)
+      expect(pending).toEqual([])
+    }
+  })
+
+  test("a new process starts the bells over, and only that pane's", async () => {
+    const { pending, unread, rung, round } = rungOut()
+    const other = inboxEntry("p2", "altro", { rings: MAX_REBELLS, warned: true })
+    pending.push(other)
+    await followInboxRound(pending, round, late)
+    expect(rung).toEqual([])
+    expect(rearmInbox(pending, "p1")).toBe(true)
+    expect(pending[0]).toMatchObject({ rings: 0 })
+    expect(pending[0]?.warned).toBeFalsy()
+    expect(other).toMatchObject({ rings: MAX_REBELLS, warned: true })
+
+    await followInboxRound(pending, round, late * 2)
+    expect(rung).toEqual(["suonato"])
+    expect(unread).toEqual(["suonato"])
+    expect(rearmInbox([inboxEntry("p1", "nuovo")], "p1")).toBe(false)
+  })
+
+  test("a request closed meanwhile rings no more, and nobody is told: its answer would be refused", async () => {
+    for (const rings of [0, MAX_REBELLS]) {
+      const { unread, rung, round } = rungOut()
+      const pending = [inboxEntry("p1", "chiusa", { rings })]
+      const saved: boolean[] = []
+      await followInboxRound(pending, { ...round, stillWanted: () => false, save: () => saved.push(true) }, late)
+      expect(pending).toEqual([])
+      expect(rung).toEqual([])
+      expect(unread).toEqual([])
+      expect(saved).toEqual([true])
+    }
   })
 })
 
@@ -245,6 +306,13 @@ describe("lint: the workbench keeps the mail's keys in order", () => {
     expect(workbench).toContain("followInboxRound(\n      inboxPending,")
     expect(workbench).toContain("const names = inboxNamesOf(inboxPending, paneId)")
     expect(workbench).not.toContain("dropFrom(inboxPending")
+  })
+
+  test("a new token starts the bells over, and only an open request is still wanted", () => {
+    const fresh = workbench.slice(workbench.indexOf("const freshPaneToken = async"))
+    expect(fresh.indexOf("if (rearmInbox(inboxPending, paneId)) saveInbox()")).toBeGreaterThan(0)
+    expect(fresh.indexOf("rearmInbox(")).toBeLessThan(fresh.indexOf("return token"))
+    expect(workbench).toContain('stillWanted: (entry) => (entry.kind !== "ask" && entry.kind !== "spawn") || openRequests.has(entry.id),')
   })
 
   test("a pane's process starts after its unread mail is sealed for it", () => {
@@ -439,6 +507,19 @@ function clientSuite(
         await followInboxRound(pending, inboxRound(), REBELL_AFTER_MS * 10)
         await resealUnread(inboxNamesOf(pending, "p1"), [OLD_TOKEN], inboxFiles)
         expect((await call(["inbox"])).out).toContain("il brief nel varco")
+      },
+      60_000,
+    )
+
+    test(
+      "a brief that rang out and was never read can still be read once the session is started again",
+      async () => {
+        put("inbox/p1/suonato.msg", await seal(OLD_TOKEN, "inbox", "suonato", "il brief mai letto"))
+        const pending = [inboxEntry("p1", "suonato", { rings: MAX_REBELLS })]
+        await followInboxRound(pending, inboxRound({ session: () => "vecchio" }), REBELL_AFTER_MS * 10)
+        rearmInbox(pending, "p1")
+        await resealUnread(inboxNamesOf(pending, "p1"), [OLD_TOKEN], inboxFiles)
+        expect((await call(["inbox"])).out).toContain("il brief mai letto")
       },
       60_000,
     )

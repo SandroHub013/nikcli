@@ -939,6 +939,10 @@ describe("long messages travel through the inbox", () => {
     expect(inboxAction(entry, { running: true, free: true, read: false }, REBELL_AFTER_MS - 1)).toBe("wait")
     expect(inboxAction(entry, { running: true, free: true, read: true }, REBELL_AFTER_MS * 5)).toBe("done")
     expect(inboxAction(entry, { running: false, free: false, read: false }, 0)).toBe("done")
+    const warned = { ...entry, rings: MAX_REBELLS, warned: true }
+    expect(inboxAction(warned, { running: true, free: true, read: false }, REBELL_AFTER_MS * 5)).toBe("wait")
+    expect(inboxAction(warned, { running: true, free: true, read: true }, REBELL_AFTER_MS * 5)).toBe("done")
+    expect(inboxAction(warned, { running: false, free: false, read: false }, REBELL_AFTER_MS * 5)).toBe("done")
   })
 
   test("restored entries keep only well-formed ones", () => {

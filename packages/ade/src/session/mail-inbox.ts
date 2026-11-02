@@ -11,6 +11,8 @@ export interface InboxRound<Session> {
   /** False until what was saved has been read back. Until then no pane exists yet, and none can be called closed. */
   readonly restored: () => boolean
   readonly paneExists: (paneId: string) => boolean
+  /** False for a request closed meanwhile: an answer would be refused, and acting on it costs tokens for nothing. */
+  readonly stillWanted: (entry: InboxEntry) => boolean
   readonly session: (paneId: string) => Session | undefined
   readonly readState: (entry: InboxEntry) => Promise<"unread" | "read" | "lost">
   readonly free: (paneId: string) => Promise<boolean>
@@ -20,7 +22,7 @@ export interface InboxRound<Session> {
   /** Held back from a half-written line: the sender is told, once. */
   readonly held: (entry: InboxEntry) => void
   readonly ring: (entry: InboxEntry, session: Session) => void
-  /** Rung enough and never read: the sender is told. */
+  /** Rung enough and never read: the sender is told, once. */
   readonly unread: (entry: InboxEntry) => void
   readonly save: () => void
 }
@@ -54,17 +56,33 @@ export async function followInboxRound<Session>(
       changed = true
       continue
     }
-    if (action === "ring" && session) {
+    const wanted = action === "done" || round.stillWanted(entry)
+    if (action === "ring" && session && wanted) {
       entry.rings += 1
       entry.ringAt = now
       round.ring(entry, session)
-    } else {
-      if (!dropFrom(pending, entry)) continue
-      if (action === "warn") round.unread(entry)
+    } else if (action === "warn" && wanted) {
+      if (entry.warned || !pending.includes(entry)) continue
+      entry.warned = true
+      round.unread(entry)
+    } else if (!dropFrom(pending, entry)) {
+      continue
     }
     changed = true
   }
   if (changed) round.save()
+}
+
+/** A pane's new process has been rung for nothing yet: what it inherits unread starts its bells over. True if any did. */
+export function rearmInbox(pending: readonly InboxEntry[], paneId: string): boolean {
+  let changed = false
+  for (const entry of pending) {
+    if (entry.paneId !== paneId || (entry.rings === 0 && !entry.warned)) continue
+    entry.rings = 0
+    entry.warned = false
+    changed = true
+  }
+  return changed
 }
 
 /** The messages left for a pane and not read yet, as ADE knows them. */

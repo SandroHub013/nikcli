@@ -675,6 +675,8 @@ export const MAX_REBELLS = 3
 export interface InboxEntry {
   /** The sender has been told, once, that ADE is holding this back. */
   told?: boolean
+  /** The bells ran out and the sender was told. It stays, as the sender was told it does, for the pane's next process. */
+  warned?: boolean
   /** The message or request id, as the sender knows it. */
   id: string
   paneId: string
@@ -723,7 +725,7 @@ export function formatBell(
  * `done` once it was read or its session is gone (a request to a closed
  * session is settled by the request table). A bell rings again only in a
  * session free to act on it and after {@link REBELL_AFTER_MS}; after
- * {@link MAX_REBELLS} the sender is told, once, and the entry is dropped.
+ * {@link MAX_REBELLS} the sender is told, once, and the entry waits.
  */
 export function inboxAction(
   entry: InboxEntry,
@@ -731,6 +733,7 @@ export function inboxAction(
   now: number,
 ): "done" | "wait" | "ring" | "warn" | "tell" {
   if (target.read || !target.running) return "done"
+  if (entry.warned) return "wait"
   if (!target.free) {
     /*
      * Held, not ignored. A pane whose line the user began keeps the mail for

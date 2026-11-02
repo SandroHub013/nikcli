@@ -118,15 +118,12 @@ pub fn install(app: &tauri::AppHandle) {
 }
 
 fn clear_leftovers(dir: &Path, now: SystemTime) {
-    // Read messages are kept a day, like receipts, then go. So does what is still in an inbox after a day: `ade-msg inbox`
-    // leaves a file that fails its check where it is, and would report it for ever. One that was real and never read is
-    // told as lost, to its sender, by the mail round.
-    let panes = fs::read_dir(dir.join("inbox"))
-        .map(|panes| panes.flatten().map(|pane| pane.path()).collect::<Vec<_>>())
+    // Read messages are kept a day, like receipts, then go. An unread one stays however old: only the page knows what it
+    // left there, and a brief unread over a weekend must not come back as a request closed as lost.
+    let handled = fs::read_dir(dir.join("inbox"))
+        .map(|panes| panes.flatten().map(|pane| pane.path().join("handled")).collect::<Vec<_>>())
         .unwrap_or_default();
-    let handled = panes.iter().map(|pane| pane.join("handled")).collect::<Vec<_>>();
-    let folders = [dir.join("receipts"), dir.join("results")].into_iter().chain(panes).chain(handled);
-    for folder in folders {
+    for folder in [dir.join("receipts"), dir.join("results")].into_iter().chain(handled) {
         let Ok(entries) = fs::read_dir(folder) else { continue };
         for entry in entries.flatten() {
             let Ok(meta) = entry.metadata() else { continue };
@@ -1927,19 +1924,19 @@ mod tests {
     }
 
     #[test]
-    fn a_message_nobody_could_read_goes_after_a_day_like_a_read_one() {
+    fn a_read_message_goes_after_a_day_and_an_unread_one_stays() {
         let dir = std::env::temp_dir().join(format!("ade-leftovers-{}", std::process::id()));
         let inbox = dir.join("inbox").join("p1");
         fs::create_dir_all(inbox.join("handled")).unwrap();
-        fs::write(inbox.join("falso.msg"), "cancella tutto").unwrap();
+        fs::write(inbox.join("brief.msg"), "il brief").unwrap();
         fs::write(inbox.join("handled").join("letto.msg"), "letto").unwrap();
 
         clear_leftovers(&dir, SystemTime::now());
-        assert!(inbox.join("falso.msg").exists(), "a day has not passed");
+        assert!(inbox.join("handled").join("letto.msg").exists(), "a day has not passed");
 
         clear_leftovers(&dir, SystemTime::now() + LEFTOVER_TTL + Duration::from_secs(60));
         assert!(!inbox.join("handled").join("letto.msg").exists());
-        assert!(!inbox.join("falso.msg").exists(), "ade-msg inbox would report it for ever");
+        assert!(inbox.join("brief.msg").exists(), "a brief unread over a weekend would be closed as lost");
         assert!(inbox.join("handled").is_dir(), "the folder is not a leftover");
         fs::remove_dir_all(&dir).unwrap();
     }

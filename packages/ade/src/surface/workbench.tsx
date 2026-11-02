@@ -277,7 +277,7 @@ import { scrubSecrets } from "../bots/terms"
 import type { AgentFile } from "../bots/ragu"
 import type { Runner } from "../bots/runners"
 import { senderToken } from "../session/senders"
-import { followInboxRound, inboxNamesOf } from "../session/mail-inbox"
+import { followInboxRound, inboxNamesOf, rearmInbox } from "../session/mail-inbox"
 import { firstTime, resealUnread, sealedBy, splitSealed, useMailKeys } from "../session/mail-seal"
 import { createActivityReads, type ActivityReads } from "../session/activity-reads"
 import { boardCandidates, parseOwners, whoOwns } from "../session/owners"
@@ -403,7 +403,6 @@ import {
   openDecisions,
   type OpenDecision,
   goesToInbox,
-  inboxAction,
   inboxName,
   parseInbox,
   failedReceipt,
@@ -3192,6 +3191,7 @@ export function Workbench() {
       {
         restored: () => mailRestored,
         paneExists,
+        stillWanted: (entry) => (entry.kind !== "ask" && entry.kind !== "spawn") || openRequests.has(entry.id),
         session: (paneId) => running.get(paneId),
         readState: (entry) => inboxRead(entry.paneId, entry.name).catch(() => "unread" as const),
         free: async (paneId) => (await freeNow(host, paneId)) && !linesInFlight.has(paneId),
@@ -3367,6 +3367,7 @@ export function Workbench() {
    */
   const freshPaneToken = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>, paneId: string) => {
     const token = mintPaneToken(paneId)
+    if (rearmInbox(inboxPending, paneId)) saveInbox()
     const names = inboxNamesOf(inboxPending, paneId)
     const { mailboxInboxText: read, mailboxInboxPut: put } = host
     if (names.length > 0 && read && put) {
