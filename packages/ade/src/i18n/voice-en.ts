@@ -548,6 +548,8 @@ export const voiceEn: VoiceMessages = {
   "voice.msg.host.noSession": (paneId) => `No active session for panel '${paneId}'.`,
   "voice.msg.host.typingPending":
     "That panel has a half-typed line: send or clear it first. The text was not sent; you will find it in the panel.",
+  "voice.msg.host.askingHeld": (text) =>
+    `Voice: not sent, the panel is asking a question. Answer it in the terminal, then say it again. The text was: «${text}»`,
   "voice.msg.host.typingHeld": (text) =>
     `Voice: not sent, there is a half-typed line here. Send or clear it, then say it again. The text was: «${text}»`,
   "voice.msg.host.searchDesktopOnly": "searching the project only works in the desktop app",

@@ -566,6 +566,8 @@ export const voiceIt = {
   "voice.msg.host.noSession": (paneId: string) => `Nessuna sessione attiva per il pannello '${paneId}'.`,
   "voice.msg.host.typingPending":
     "In quel pannello c'è una riga scritta a metà: inviala o cancellala prima. Il testo non è stato inviato, lo trovi nel pannello.",
+  "voice.msg.host.askingHeld": (text: string) =>
+    `Voce: non inviato, il pannello sta facendo una domanda. Rispondi nel terminale, poi ripeti. Il testo era: «${text}»`,
   "voice.msg.host.typingHeld": (text: string) =>
     `Voce: non inviato, qui c'è una riga scritta a metà. Inviala o cancellala, poi ripeti. Il testo era: «${text}»`,
   "voice.msg.host.searchDesktopOnly": "la ricerca nel progetto funziona solo nell'app desktop",

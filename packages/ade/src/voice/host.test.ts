@@ -1155,6 +1155,28 @@ describe("no voice text into a pane asking a permission", () => {
     expect(writtenLines).toEqual([])
   })
 
+  /*
+   * Review of invio-giusto, B1: a codex or OpenCode menu is read off the screen and never enters `permissions`. The
+   * voice wrote anyway, the workbench held the write in silence, and the voice said «inviata» over text that was gone.
+   */
+  test("sendPrompt refuses on a question only the screen or the hook knows, and keeps the words over the pane", async () => {
+    const writtenLines: string[] = []
+    const { deps, told } = createMockDeps({
+      isRunning: () => true,
+      getRunningSession: () => ({ write: (line: string) => void writtenLines.push(line) }),
+      permissions: () => ({}),
+      questionOpen: (id) => id === "p1",
+    })
+    const host = createAdeVoiceHost(deps)
+
+    await expect(host.sendPrompt("p1", "rifai la migrazione")).rejects.toThrow("permesso")
+    await expect(host.insertText("p1", "e poi i test")).rejects.toThrow("permesso")
+    expect(writtenLines).toEqual([])
+    expect(told.map((note) => note.paneId)).toEqual(["p1", "p1"])
+    expect(told[0]!.text).toContain("rifai la migrazione")
+    expect(told[1]!.text).toContain("e poi i test")
+  })
+
   test("insertText into the terminal refuses too", async () => {
     const writtenLines: string[] = []
     const { deps } = createMockDeps({
@@ -1174,5 +1196,9 @@ describe("the workbench's voice host", () => {
 
   test("is told when the user has a line pending, by the rule the mail queue uses (MOD-2)", () => {
     expect(call.slice(0, 1500)).toContain(codeOf("isTyping: (id) => isTyping(records.typed.get(id)),"))
+  })
+
+  test("asks the workbench's own question gate, screen and hook included (B1)", () => {
+    expect(call.slice(0, 1500)).toContain(codeOf("questionOpen: (id) => questionOpen(id),"))
   })
 })
