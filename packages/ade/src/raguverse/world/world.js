@@ -204,7 +204,7 @@ const loadCityModule = () => import("./assets/world/city.js")
  *
  * @returns {{ check: boolean, classic: boolean, quality: string | undefined, bench: boolean, shot: number | undefined,
  *   tune: { samples?: number, maxScale?: number, compile?: "async", slowWatch?: true } | undefined, list?: true, lowered?: true,
- *   lang?: "it" | "en" }}
+ *   lang?: "it" | "en", theme?: "light" | "dark" }}
  */
 export function readOptions(search) {
   const params = new URLSearchParams(String(search))
@@ -226,6 +226,8 @@ export function readOptions(search) {
     lowered: params.get("lowered") === "1" ? true : undefined,
     // `?lang=it|en`: the language ADE speaks, for the hint and the kiosk's sign; without it the city follows the system's.
     lang: params.get("lang") === "it" || params.get("lang") === "en" ? params.get("lang") : undefined,
+    // `?theme=light|dark`: the scheme ADE is in, for the page's chrome (DS-25); the city keeps its own colours, and the OS is not asked.
+    theme: params.get("theme") === "light" || params.get("theme") === "dark" ? params.get("theme") : undefined,
   }
 }
 
@@ -248,6 +250,7 @@ export function boot(win, options = {}) {
   const doc = win.document
   const loadCity = options.loadCity ?? loadCityModule
   const query = readOptions(win.location?.search ?? "")
+  if (query.theme && doc.documentElement?.dataset) doc.documentElement.dataset.theme = query.theme
   let state = emptyState()
   let port
   let city
