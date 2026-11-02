@@ -1004,6 +1004,8 @@ export const it = {
   "gateway.panel.connecting": "Acceso · in collegamento",
   "gateway.panel.reconnecting": "Acceso · riconnessione in corso",
   "gateway.panel.attentionTimeout": "Impossibile connettersi da oltre 10 minuti",
+  "gateway.panel.attentionQueueFull":
+    "I messaggi della chat si accumulano più in fretta di quanto ADE li gestisca, e i nuovi vengono scartati. Ricarica la finestra di ADE; se ricapita, spegni e riaccendi il gateway.",
   "gateway.panel.retry": "Riprova",
   "gateway.panel.changeCode": "Cambia il codice",
   "gateway.panel.openPlatforms": "Apri piattaforme",

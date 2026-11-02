@@ -984,6 +984,8 @@ export const en: Messages = {
   "gateway.panel.connecting": "On · connecting",
   "gateway.panel.reconnecting": "On · reconnecting",
   "gateway.panel.attentionTimeout": "Could not connect for over 10 minutes",
+  "gateway.panel.attentionQueueFull":
+    "Chat messages are piling up faster than ADE handles them, and new ones are being dropped. Reload ADE's window; if it comes back, switch the gateway off and on.",
   "gateway.panel.retry": "Retry",
   "gateway.panel.changeCode": "Change code",
   "gateway.panel.openPlatforms": "Open platforms",
