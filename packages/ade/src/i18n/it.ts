@@ -446,6 +446,8 @@ export const it = {
   "decisions.waiting": "Decisioni che aspettano te",
   "workspace.unreadable":
     "Non sono riuscita a leggere le sessioni salvate (forse sono di una versione più nuova di ADE). Ne ho tenuto una copia: aggiorna ADE per riaverle.",
+  "workspace.unreadableBroken": (copy: string) =>
+    `Le sessioni salvate sono danneggiate e nessuna versione di ADE le può leggere: aggiornare non serve. Ne ho tenuto una copia, ma non si ripristina da qui: è nell'archivio di ADE con il nome «${copy}».`,
   "workspace.unreadableNoCopy":
     "Non sono riuscita a leggere le sessioni salvate e non ho potuto tenerne una copia (manca spazio). Finché non se ne libera, le sessioni di questa volta non vengono salvate.",
   "workspace.saveFailed":

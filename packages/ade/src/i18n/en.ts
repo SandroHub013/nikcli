@@ -434,6 +434,8 @@ export const en: Messages = {
   "decisions.waiting": "Decisions waiting for you",
   "workspace.unreadable":
     "I could not read the saved sessions (they may come from a newer version of ADE). I kept a copy: update ADE to get them back.",
+  "workspace.unreadableBroken": (copy) =>
+    `The saved sessions are damaged and no version of ADE can read them: updating will not help. I kept a copy, but it cannot be restored from here: it is in ADE's storage under the name "${copy}".`,
   "workspace.unreadableNoCopy":
     "I could not read the saved sessions and could not keep a copy (no room left). Until there is room, this run's sessions are not saved.",
   "workspace.saveFailed": "I cannot save the sessions: ADE's storage is full. Close the sessions you do not need.",

@@ -6891,7 +6891,15 @@ export function Workbench() {
     }
     if (savedWorkspace.unreadable) {
       workspaceSaveBlocked = savedWorkspace.saveBlocked
-      report(t(savedWorkspace.saveBlocked ? "workspace.unreadableNoCopy" : "workspace.unreadable"), "warning")
+      // Damaged text is not cured by updating ADE (F3): only a newer version's is told to update.
+      report(
+        savedWorkspace.saveBlocked
+          ? t("workspace.unreadableNoCopy")
+          : savedWorkspace.reason === "broken" && savedWorkspace.copyKey
+            ? t("workspace.unreadableBroken", savedWorkspace.copyKey)
+            : t("workspace.unreadable"),
+        "warning",
+      )
     } else {
       // A copy kept by an older build that this one reads: offered back, never put back by itself.
       const copy = restorableCopy(localStorage)
@@ -9853,6 +9861,7 @@ export function Workbench() {
     saveFile: (id) => void saveFile(id),
     turnSubmitted,
     promptAnswered,
+    questionOpen,
     interrupted,
     restart: (pane, line) => void reopen(pane, line),
     suspendCheck: suspendCheckFor,
