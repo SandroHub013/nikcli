@@ -40,7 +40,7 @@
 /* Listening without the name, for a few seconds after an answer. */
 [data-component="listening-indicator"][data-state="follow-up"] {
   border-color: var(--ade-text-weak);
-  color: var(--ade-accent, #1a73e8);
+  color: var(--ade-accent-text, var(--ade-accent, #1a73e8));
 }
 
 [data-component="listening-indicator"][data-state="follow-up"] [data-slot="listening-dot"] {

@@ -55,7 +55,7 @@
 [data-component="voice-button"][data-status="idle"],
 [data-component="voice-button"][data-status="listening"] {
   background: var(--ade-raised);
-  color: var(--ade-accent);
+  color: var(--ade-accent-text, var(--ade-accent));
   border-color: var(--ade-text-weak);
 }
 
@@ -211,7 +211,7 @@
 
 [data-component="voice-overlay"] [data-slot="badge"][data-status="listening"] {
   background: var(--ade-accent-soft);
-  color: var(--ade-accent);
+  color: var(--ade-accent-text, var(--ade-accent));
 }
 
 [data-component="voice-overlay"] [data-slot="badge"][data-status="confirming"] {
@@ -292,7 +292,7 @@
 }
 
 [data-component="voice-overlay"] [data-slot="intent-icon"] {
-  color: var(--ade-accent);
+  color: var(--ade-accent-text, var(--ade-accent));
   flex: 0 0 auto;
 }
 
@@ -320,7 +320,7 @@
 }
 
 [data-component="voice-overlay"] [data-slot="confirm-hint"] strong {
-  color: var(--ade-accent-strong);
+  color: var(--ade-accent-text, var(--ade-accent-strong));
   font-weight: var(--ade-weight-bold);
 }
 
@@ -378,7 +378,7 @@
 [data-component="voice-overlay"] [data-slot="candidate-ordinal"] {
   font-size: var(--ade-font-xs);
   font-weight: var(--ade-weight-bold);
-  color: var(--ade-accent);
+  color: var(--ade-accent-text, var(--ade-accent));
   background: var(--ade-accent-soft);
   padding: var(--ade-space-1) var(--ade-space-2);
   border-radius: var(--ade-radius-sm);

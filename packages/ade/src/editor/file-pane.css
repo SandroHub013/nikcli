@@ -52,7 +52,7 @@
 
 /* The unsaved mark: the one thing a header must never make you hunt for. */
 [data-slot="pane-dirty"] {
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
   font-size: var(--ade-font-xl);
   line-height: 0;
 }

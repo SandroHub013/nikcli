@@ -346,7 +346,7 @@
   margin-right: var(--ade-space-3);
   border: 0;
   background: none;
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
   font: inherit;
   cursor: pointer;
   text-decoration: underline;

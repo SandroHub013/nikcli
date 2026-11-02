@@ -382,7 +382,7 @@ function SessionChildRow(props: {
               {folder()}
             </span>
             <Show when={branch()}>
-              <span data-slot="agent-card-sep">•</span>
+              <span data-slot="agent-card-sep" aria-hidden="true">•</span>
               <svg data-slot="agent-card-icon" viewBox="0 0 14 14" width="11" height="11" aria-hidden="true">
                 <path
                   d="M4 3.5a1.5 1.5 0 1 1 3 0v4a1.5 1.5 0 1 1-1.5 1.5V6a2 2 0 0 1 2-2h1.5M10.5 4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"
@@ -469,7 +469,7 @@ function ActiveAgentRow(props: {
               {folder()}
             </span>
             <Show when={branch()}>
-              <span data-slot="agent-card-sep">•</span>
+              <span data-slot="agent-card-sep" aria-hidden="true">•</span>
               <svg data-slot="agent-card-icon" viewBox="0 0 14 14" width="11" height="11" aria-hidden="true">
                 <path
                   d="M4 3.5a1.5 1.5 0 1 1 3 0v4a1.5 1.5 0 1 1-1.5 1.5V6a2 2 0 0 1 2-2h1.5M10.5 4a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"

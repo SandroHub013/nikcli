@@ -198,7 +198,7 @@
 [data-component="voice-settings-panel"][data-status="live"] [data-slot="header-mark"],
 [data-component="voice-settings-panel"][data-status="ready"] [data-slot="header-mark"] {
   border-color: var(--ade-text-weak);
-  color: var(--ade-accent);
+  color: var(--ade-accent-text, var(--ade-accent));
 }
 
 [data-component="voice-settings-panel"] [data-slot="header-aura"] {
@@ -268,7 +268,7 @@
 [data-component="voice-settings-panel"] [data-slot="status-pill"][data-tone="live"] {
   border-color: var(--ade-accent);
   background: var(--ade-accent-soft);
-  color: var(--ade-accent-strong);
+  color: var(--ade-accent-text, var(--ade-accent-strong));
 }
 
 [data-component="voice-settings-panel"] [data-slot="status-pill"][data-tone="live"] [data-slot="status-dot"] {
@@ -399,7 +399,7 @@
 }
 
 [data-component="voice-settings-panel"] [data-slot="live-line"][data-kind="spoken"] {
-  color: var(--ade-accent-strong);
+  color: var(--ade-accent-text, var(--ade-accent-strong));
 }
 
 [data-component="voice-settings-panel"] [data-slot="live-error"] {
@@ -607,7 +607,7 @@
 
 [data-component="voice-settings-panel"] [data-slot="rail-row"][data-current="true"] {
   background: var(--ade-accent-soft);
-  color: var(--ade-accent);
+  color: var(--ade-accent-text, var(--ade-accent));
   font-weight: var(--ade-weight-semibold);
 }
 
@@ -657,7 +657,7 @@
 }
 
 [data-component="voice-settings-panel"] [data-slot="rail-row"][data-current="true"] [data-slot="rail-value"] {
-  color: var(--ade-accent-strong);
+  color: var(--ade-accent-text, var(--ade-accent-strong));
 }
 
 [data-component="voice-settings-panel"] [data-slot="rail-sep"] {
@@ -763,7 +763,7 @@
   border: 0;
   padding: 0;
   font: inherit;
-  color: var(--ade-accent, currentColor);
+  color: var(--ade-accent-text, currentColor);
   text-decoration: underline;
   cursor: pointer;
 }
@@ -915,7 +915,7 @@
 
 [data-component="voice-settings-panel"] [data-slot="mode-card"][aria-checked="true"] [data-slot="mode-card-icon"] {
   background: var(--ade-accent-soft);
-  color: var(--ade-accent);
+  color: var(--ade-accent-text, var(--ade-accent));
 }
 
 [data-component="voice-settings-panel"] [data-slot="mode-card-title"] {
@@ -933,7 +933,7 @@
   padding: var(--ade-space-1) var(--ade-space-4);
   border-radius: var(--ade-radius-full);
   background: var(--ade-accent-soft);
-  color: var(--ade-accent-strong);
+  color: var(--ade-accent-text, var(--ade-accent-strong));
   flex: none;
 }
 
@@ -1190,7 +1190,7 @@
 [data-component="voice-settings-panel"] [data-slot="select"] {
   width: 100%;
   background: var(--ade-raised);
-  border: 1px solid var(--ade-border);
+  border: 1px solid var(--ade-control-border, var(--ade-border));
   border-radius: var(--ade-radius-md);
   padding: var(--ade-space-4) var(--ade-space-5);
   color: var(--ade-text);
@@ -1299,7 +1299,7 @@
 [data-component="voice-settings-panel"] [data-slot="shortcut-recorder-btn"][data-recording="true"] {
   border-color: var(--ade-accent);
   background: var(--ade-accent-soft);
-  color: var(--ade-accent-strong);
+  color: var(--ade-accent-text, var(--ade-accent-strong));
   box-shadow: var(--ade-focus-ring);
   animation: ade-voice-recording 1.6s var(--ade-ease) infinite var(--ade-loops, running);
 }
@@ -1663,7 +1663,7 @@
 [data-component="voice-settings-panel"] [data-slot="phrase-chip"]:hover {
   background: var(--ade-accent-soft);
   border-color: var(--ade-accent);
-  color: var(--ade-accent-strong);
+  color: var(--ade-accent-text, var(--ade-accent-strong));
 }
 
 [data-component="voice-settings-panel"] [data-slot="phrase-chip"]:active {

@@ -133,7 +133,7 @@
 }
 
 [data-component="palette"] [data-slot="highlight"] {
-  color: var(--ade-accent);
+  color: var(--ade-accent-text);
   font-weight: var(--ade-weight-bold);
 }
 
