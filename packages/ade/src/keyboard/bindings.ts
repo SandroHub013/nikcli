@@ -62,11 +62,47 @@ export const NOT_FROM_TEXT_FIELDS: ReadonlySet<string> = new Set(["pane.close"])
  * Commands a chord runs even while a terminal has the focus.
  *
  * Every other ADE chord goes to the terminal there (see the keydown handler
- * in the workbench): Ctrl+W deletes a word, Ctrl+Shift+V pastes. Hiding the
- * sidebar is asked for from inside a session more than from anywhere else,
- * and its chord is one xterm turns into nothing.
+ * in the workbench): Ctrl+W deletes a word, Ctrl+N walks the history,
+ * Ctrl+Shift+V pastes, F2 is a function key some TUIs read.
+ *
+ * What is here is what xterm turns into nothing: Ctrl+Shift+a letter sends no
+ * byte (no kitty protocol in xterm 6), so these chords take no key from the
+ * program. The terminal is where the user is almost all the time, so a
+ * shortcut that only works outside it is a shortcut that does not work: the
+ * palette, the expanded pane, the theme and the sidebar are asked for from
+ * inside a session more than from anywhere else.
+ *
+ * Ctrl+Shift+V is not here although it is the same shape: it is the paste.
  */
-export const FROM_TERMINALS: ReadonlySet<string> = new Set(["sidebar.toggle"])
+export const FROM_TERMINALS: ReadonlySet<string> = new Set([
+  "palette.open",
+  "pane.expand",
+  "theme.toggle",
+  "sidebar.toggle",
+])
+
+/**
+ * What a Cmd chord may add on a Mac.
+ *
+ * `mod` is Cmd there, and a terminal reads Ctrl and Alt but never Cmd: xterm
+ * sends no byte for Cmd+a letter, so a new session from inside a session
+ * takes nothing from the program. Cmd+W (it ends the agent), Cmd+Shift+V (the
+ * paste, which WebKit reads) and F2 (no Cmd in it at all) stay out.
+ */
+const FROM_TERMINALS_ON_MAC: ReadonlySet<string> = new Set(["session.new"])
+
+/**
+ * Whether the chord bound to `commandId` is ADE's while a terminal has the focus.
+ *
+ * Plain Ctrl+letter, Ctrl+C, Ctrl+V and the Ragu queue's keys (Esc,
+ * Ctrl+Enter) are in no binding, so they never reach this question: they go to
+ * the pane. Only a chord that is bound can be asked about, and only the ones
+ * named above answer yes.
+ */
+export function runsFromTerminal(commandId: string, platform: Platform): boolean {
+  if (FROM_TERMINALS.has(commandId)) return true
+  return platform === "mac" && FROM_TERMINALS_ON_MAC.has(commandId)
+}
 
 /*
  * Moving focus between panes is deliberately absent from this list. The grid

@@ -60,7 +60,7 @@ import { syncOpenRouterKey } from "../host/openrouter-key-sync"
 import { createSttStreamTransport } from "../host/stt-stream"
 import { serializeWorkspace, type WorkspaceState } from "../session/persist"
 import { ignoreRestore, readSavedWorkspace, restorableCopy, restoreCopy, retryUnreadableCopy } from "../session/unreadable"
-import { DEFAULT_BINDINGS, FROM_TERMINALS, NOT_FROM_TEXT_FIELDS, resolveDefaultBindings } from "../keyboard/bindings"
+import { DEFAULT_BINDINGS, NOT_FROM_TEXT_FIELDS, resolveDefaultBindings, runsFromTerminal } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
 import { paletteStep } from "../command/palette-keys"
@@ -6975,7 +6975,7 @@ export function Workbench() {
        * daily occurrence.
        */
       const isTerminal = Boolean(target?.closest?.('[data-slot="pane-terminal"]'))
-      if (isTerminal && resolution.type === "ade" && !FROM_TERMINALS.has(resolution.commandId ?? "")) return
+      if (isTerminal && resolution.type === "ade" && !runsFromTerminal(resolution.commandId ?? "", platform)) return
       // And inside the palette, its Ctrl+N and Ctrl+P walk the list (`paletteStep`).
       if (target?.closest?.('[data-component="palette"]') && paletteStep(e) !== 0) return
 
