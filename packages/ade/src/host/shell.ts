@@ -486,6 +486,9 @@ import { createLineAccumulator } from "./line-stream"
 import { DEFAULT_PTY_COLS, DEFAULT_PTY_ROWS } from "../terminal/pty-defaults"
 import { orderedWrites } from "./ordered-writes"
 import { createAckBatcher, deliverChunk } from "./flow-ack"
+
+/** What a session says to its page, on its channel. Must match `PtyEvent` in `src-tauri/src/pty.rs`. */
+type PtyEvent = { kind: "data"; data: string; bytes: number } | { kind: "exit"; code: number | null }
 import type { TokenUsage } from "../session/shared"
 import type { InstallProgress, PackStatus } from "@ragu/voice/light"
 import { keyError, type KeyDraft, type KeyInfo } from "../secrets/keys"
@@ -645,65 +648,82 @@ export async function getHost(): Promise<Host | undefined> {
       pipe,
       flags,
     }) {
-      const { invoke } = await import("@tauri-apps/api/core")
-      const { listen } = await import("@tauri-apps/api/event")
+      const { invoke, Channel } = await import("@tauri-apps/api/core")
 
-      // The pane already has an id and the listeners are attached before the
-      // spawn call, so a CLI that greets in under a millisecond cannot outrun
-      // them.
+      // The pane already has an id and the channel exists before the spawn
+      // call, so a CLI that greets in under a millisecond cannot outrun it.
       const id = `pty-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
       let dead = false
+      let stopped = false
       // Batched: one call per chunk would be up to 62 a second for a pane that only prints a spinner (review, RS-7).
       const ackBatch = createAckBatcher((bytes) => void invoke("pty_ack", { id, bytes }).catch(() => undefined))
       const lineStream = createLineAccumulator()
-      const unlisten: Array<() => void> = []
 
       const stop = () => {
-        for (const off of unlisten.splice(0)) off()
+        stopped = true
       }
 
-      unlisten.push(
-        /*
-         * This session's own topic, not a shared one every pane filters.
-         *
-         * With six sessions running, `pty:data` woke six listeners for every
-         * chunk so that five of them could compare an id and return — per
-         * chunk, per frame, on the thread that draws. The id is still on the
-         * payload, because the event carries what it is about.
-         *
-         * Must match `data_topic` in `src-tauri/src/pty.rs`.
-         */
-        await listen<{ id: string; data: string; bytes?: number }>(`pty:data:${id}`, (event) => {
-          deliverChunk(event.payload, onData, ackBatch)
-          /*
-           * The second reading of the same bytes. Escape sequences are removed
-           * and the remainder split on newlines, so the parts of ADE that only
-           * want to notice what an agent *said* — a permission question, a token
-           * count — do not have to understand cursor movement to find it.
-           */
-          const read = () => {
-            for (const line of lineStream.push(event.payload.data)) onLine(line, "out")
-          }
-          if (linesTogether) linesTogether(read)
-          else read()
-        }),
-      )
+      // One line that throws costs that line: the rest of the chunk may be the last thing the program said.
+      const hear = (line: string) => {
+        try {
+          onLine(line, "out")
+        } catch (error) {
+          console.error("[ADE] a line of a session could not be read:", error)
+        }
+      }
 
-      unlisten.push(
-        await listen<{ id: string; code: number | null }>("pty:exit", (event) => {
-          if (event.payload.id !== id) return
+      const receive = (event: PtyEvent) => {
+        if (event.kind === "exit") {
           dead = true
           // Whatever was still in flight when the process ended is the last
           // thing it said, and it is usually the reason it ended.
-          for (const line of lineStream.flush()) onLine(line, "out")
+          for (const line of lineStream.flush()) hear(line)
           stop()
-          onExit(event.payload.code ?? null)
-        }),
-      )
+          onExit(event.code ?? null)
+          return
+        }
+        /*
+         * The second reading of the same bytes. Escape sequences are removed
+         * and the remainder split on newlines, so the parts of ADE that only
+         * want to notice what an agent *said* — a permission question, a token
+         * count — do not have to understand cursor movement to find it.
+         */
+        const read = () => {
+          for (const line of lineStream.push(event.data)) hear(line)
+        }
+        try {
+          deliverChunk(event, onData, ackBatch)
+        } finally {
+          if (linesTogether) linesTogether(read)
+          else read()
+        }
+      }
+
+      /*
+       * The session's output and its exit, on a channel of its own.
+       *
+       * Not events. An event reaches the page as a script with the whole chunk as a literal inside, and V8 keeps a
+       * script's source and its literals in the old space, about twice the bytes of a flood, faster than its automatic
+       * collections free them: 2 GB of output took the renderer past 2 GB, with the page perfectly responsive (live test
+       * of 2026-11-02). A channel's message over 8 KB is fetched by a small script, so the output stops being code.
+       *
+       * The exit shares the channel because `Channel` delivers by index: it cannot overtake a chunk still being fetched.
+       * That same counting moves on only when the handler returns, so a handler that threw would hold back every later
+       * message of the session for ever, the exit too. Hence the `catch`.
+       */
+      const events = new Channel<PtyEvent>((event) => {
+        if (stopped) return
+        try {
+          receive(event)
+        } catch (error) {
+          console.error("[ADE] a session's event could not be read:", error)
+        }
+      })
 
       try {
         await invoke("pty_spawn", {
+          events,
           id,
           command,
           args,

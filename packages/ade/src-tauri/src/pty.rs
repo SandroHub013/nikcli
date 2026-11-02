@@ -19,7 +19,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::ipc::Channel;
+use tauri::{AppHandle, Manager};
 
 /// One live pseudo-terminal, kept only so later calls can reach it.
 struct Session {
@@ -216,20 +217,29 @@ fn end_session(mut session: Session) {
     let _ = session.child.wait();
 }
 
+/*
+ * What a session says to its page, on a channel of its own (`host/shell.ts` reads it).
+ *
+ * Not events. An event reaches the page as a script with the whole payload as a literal inside, and V8 keeps a script's
+ * source and its literals in the old space, about twice the bytes of a flood: 2 GB of output took the renderer past
+ * 2 GB (live test of 2026-11-02). A channel's message over 8 KB is fetched by a small script instead.
+ *
+ * The exit shares the channel because a channel delivers by index: it cannot overtake a chunk still being fetched, and
+ * the page stops reading at the exit.
+ */
 #[derive(Clone, serde::Serialize)]
-struct Chunk {
-    id: String,
-    /// Raw terminal output, escape sequences included: the emulator on the other
-    /// side needs them, so nothing here tries to be helpful and strip them.
-    data: String,
-    /// How many bytes `data` is in UTF-8: what the page hands back to `pty_ack` once the terminal has written it.
-    bytes: usize,
-}
-
-#[derive(Clone, serde::Serialize)]
-struct Exit {
-    id: String,
-    code: Option<i32>,
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum PtyEvent {
+    Data {
+        /// Raw terminal output, escape sequences included: the emulator on the other
+        /// side needs them, so nothing here tries to be helpful and strip them.
+        data: String,
+        /// How many bytes `data` is in UTF-8: what the page hands back to `pty_ack` once the terminal has written it.
+        bytes: usize,
+    },
+    Exit {
+        code: Option<i32>,
+    },
 }
 
 /*
@@ -517,14 +527,15 @@ fn is_launcher_colour_switch(key: &str) -> bool {
  *
  * Now the sender counts the bytes it has handed to the page and the page says, from the terminal's own write
  * callback, how many it has written (`pty_ack`). Past `FLOW_HIGH_WATER` in flight the sender waits, the bounded
- * channel in front of it fills, the reader stops reading, and ConPTY applies backpressure to the child. Nothing is
- * dropped anywhere: output waits, it is not thrown away.
+ * channel in front of it fills, the reader stops reading, and ConPTY applies backpressure to the child. While the page
+ * keeps answering nothing is dropped: output waits, it is not thrown away.
  *
  * A page that never answers (a reload in progress, a listener that is gone) must not freeze the pane for ever, so a
- * wait that sees no acknowledgement for `FLOW_STALL` forgets the debt and goes on, as it did before this existed.
+ * wait that sees no acknowledgement for `FLOW_STALL` forgets the debt and goes on, as it did before this existed. What
+ * that lets through can pass xterm's limit, and xterm refuses it (`src/terminal/registry.ts`).
  *
- * The high water mark is also how far behind a key can fall. Events reach the page in order, so the echo of a key in
- * another pane waits behind everything this one has in flight: a median of 172 ms at 4 MiB, 140 ms at 1 MiB and 86 ms
+ * The high water mark is also how far behind a key can fall. A page handles its messages one by one, so the echo of a
+ * key in another pane waits behind everything this one has in flight: a median of 172 ms at 4 MiB, 140 ms at 1 MiB and 86 ms
  * at 512 KiB, with a maximum of 326, 198 and 123 ms, against 32 ms at rest. A flood is no slower for it.
  */
 const FLOW_HIGH_WATER: usize = 512 * 1024;
@@ -596,18 +607,6 @@ const FLUSH_INTERVAL: Duration = Duration::from_millis(16);
 
 /// A burst past this goes out immediately rather than waiting for the tick.
 const MAX_PENDING: usize = 256 * 1024;
-
-/**
- * The event a session's output arrives on.
- *
- * One topic per session rather than one shared `pty:data` that every pane
- * filters. With six sessions running, a shared topic meant every chunk woke
- * six listeners so that five of them could compare an id and return — per
- * chunk, per frame, on the thread that draws.
- */
-pub fn data_topic(id: &str) -> String {
-    format!("pty:data:{id}")
-}
 
 /// The shells a terminal pane may open. Named per platform because the list is
 /// the point: `$SHELL` is attacker-controllable on a machine already lost, and
@@ -1008,7 +1007,7 @@ fn decode_stream_chunk(tail: &mut Vec<u8>) -> String {
     }
 }
 
-/// Starts `command` under a pty and streams it to the window as `pty:data`.
+/// Starts `command` under a pty and streams it to the page on `events`.
 ///
 /// `id` comes from the caller rather than from here because the pane that will
 /// display this session already has one, and matching them means the listener
@@ -1082,6 +1081,8 @@ pub async fn pty_spawn(
      * else. Not an environment: the page cannot set anything through here.
      */
     flags: Option<Vec<String>>,
+    /* Where this session's output and exit go: see `PtyEvent`. */
+    events: Channel<PtyEvent>,
 ) -> Result<(), String> {
     if !is_allowed_command(&command) {
         return Err(format!("comando non consentito: {command}"));
@@ -1377,27 +1378,15 @@ pub async fn pty_spawn(
     // The waiter hands the exit it saw to the sender, which says it after the last output: see `drain_then_exit`.
     let (exit_tx, exit_rx) = std::sync::mpsc::channel::<Option<i32>>();
 
-    let emitter = app.clone();
     let stream_id = id.clone();
     std::thread::spawn(move || {
-        let topic = data_topic(&stream_id);
-        let exit_id = stream_id.clone();
-        let exit_emitter = emitter.clone();
-
         drain_then_exit(
             &chunk_rx,
             |data| {
                 let bytes = data.len();
                 // Waits while the page is far behind (RS-7); the reader then stops reading and the child slows down.
                 sender_flow.admit(bytes, FLOW_HIGH_WATER, FLOW_STALL);
-                let _ = emitter.emit(
-                    &topic,
-                    Chunk {
-                        id: stream_id.clone(),
-                        data,
-                        bytes,
-                    },
-                );
+                let _ = events.send(PtyEvent::Data { data, bytes });
             },
             || {
                 let taken = app
@@ -1411,7 +1400,7 @@ pub async fn pty_spawn(
             &exit_rx,
             EXIT_DRAIN,
             |code| {
-                let _ = exit_emitter.emit("pty:exit", Exit { id: exit_id, code });
+                let _ = events.send(PtyEvent::Exit { code });
             },
         );
         if let Ok(mut map) = flows().lock() {
@@ -1474,7 +1463,7 @@ pub async fn pty_spawn(
  *
  * The exit used to be said by whichever thread saw it first. On Windows that is the waiter, which notices the
  * process is gone up to half a second late and drops the session while the sender still holds up to a frame
- * (16 ms, 256 KB) of the command's last output; the page stops listening at `pty:exit`, so a short command's
+ * (16 ms, 256 KB) of the command's last output; the page stops reading at the exit, so a short command's
  * final lines were lost. Now the exit is only ever said here, after `pump` has returned and the last frame is out.
  *
  * `take_session` removes the session if it is still registered and returns the exit code of its child (the
@@ -3029,11 +3018,18 @@ mod tests {
     }
 
     #[test]
-    fn a_session_listens_on_a_topic_of_its_own() {
-        // The shape `host/shell.ts` builds on the other side. A topic that
-        // did not match would be a pane that draws nothing, with no error
-        // anywhere: the listener simply never fires.
-        assert_eq!(data_topic("n1700000000-1"), "pty:data:n1700000000-1");
+    fn a_session_says_what_the_page_reads() {
+        // The shapes `host/shell.ts` reads on the other side. A name that did
+        // not match would be a pane that draws nothing, with no error anywhere.
+        let data = PtyEvent::Data { data: "ciao".to_string(), bytes: 4 };
+        assert_eq!(
+            serde_json::to_value(&data).unwrap(),
+            serde_json::json!({ "kind": "data", "data": "ciao", "bytes": 4 })
+        );
+        let exit = PtyEvent::Exit { code: Some(3) };
+        assert_eq!(serde_json::to_value(&exit).unwrap(), serde_json::json!({ "kind": "exit", "code": 3 }));
+        let unknown = PtyEvent::Exit { code: None };
+        assert_eq!(serde_json::to_value(&unknown).unwrap(), serde_json::json!({ "kind": "exit", "code": null }));
     }
 
     #[test]
