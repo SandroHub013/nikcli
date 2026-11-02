@@ -1367,7 +1367,7 @@
 
 /* ── Container queries (collapse order, after DS-19) ──
  * The header keeps four things. Narrow, it drops the mouse hint first, then the
- * detail beside the state, and the cost last (below 260px the card lists it); the
+ * detail beside the state, and the cost last (below 300px the card lists it); the
  * buttons are never dropped. Nothing is hidden inside the card. */
 @container (max-width: 720px) {
   .hA .tok {
@@ -1409,8 +1409,12 @@
   }
 }
 
-/* Down to 260px the pill keeps the cost. Below, the card lists it (and the buttons need the room). */
-@container (max-width: 260px) {
+/*
+ * Down to 300px the pill keeps the cost. Below, the card lists it. The pill needs about 263px for its parts
+ * (padding, mark, title, the state word, cost, two buttons, gaps) against the pane's width minus 12, and a longer
+ * cost or word needs more, so 300px leaves room.
+ */
+@container (max-width: 300px) {
   .hA > .cost {
     display: none;
   }

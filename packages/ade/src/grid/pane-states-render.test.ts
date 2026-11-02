@@ -93,6 +93,13 @@ describe("the chip, in every state (DS-18, UX-8)", () => {
     expect(chipText(mount({ status: "error", activity: "startFailed" }))).toBe("Avvio fallito")
   })
 
+  test("a suspended session says «Sospesa» once, not «Sospesa · Sospesa»", () => {
+    const pane = mount({ status: "idle", activity: "suspended" })
+    expect(pane.dataset.state).toBe("off")
+    expect(pane.querySelector(".lbl")?.textContent).toBe("Sospesa")
+    expect(chipText(pane)).toBe("")
+  })
+
   test("the chip is named for assistive technology, as an image with the full sentence", () => {
     const chip = mount({ status: "working" }).querySelector(".a-state")!
     expect(chip.getAttribute("role")).toBe("img")
@@ -205,12 +212,41 @@ describe("the header keeps four things and the card keeps the rest (DS-19)", () 
     expect(hidden).toEqual([])
   })
 
-  test("the cost stays in the pill down to 260px, and only then moves to the card", () => {
+  test("the cost stays in the pill down to 300px, and only then moves to the card", () => {
     const cost = mount(facts).querySelector('[data-slot="pane-cost"]:not([data-slot="pane-cost-card"])')!
     const hiding = rulesFor(paneCss, cost).filter((rule) => /display\s*:\s*none/.test(rule.body))
     const widths = hiding.map((rule) => Number(/max-width:\s*(\d+)px/.exec(rule.at.join(" "))?.[1] ?? Infinity))
     expect(widths.length).toBeGreaterThan(0)
-    expect(Math.max(...widths)).toBeLessThanOrEqual(260)
+    expect(Math.max(...widths)).toBeLessThanOrEqual(300)
+  })
+})
+
+describe("Escape closes the card once and then belongs to the agent again (R2)", () => {
+  test("the first Escape is taken and closes the card; a second one, pointer still on the icon, is not", () => {
+    const pane = mount({ status: "working", mode: "auto", tokens: "1M token" })
+    const info = pane.querySelector<HTMLElement>('[data-slot="pane-info"]')!
+    // happy-dom does not track :hover; the pointer is on the icon.
+    info.matches = () => true
+    const press = () => {
+      const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
+      document.body.dispatchEvent(event)
+      return event
+    }
+    expect(press().defaultPrevented).toBe(true)
+    expect(info.hasAttribute("data-dismissed")).toBe(true)
+    expect(press().defaultPrevented).toBe(false)
+    // The pointer leaves: the card may open again, and the next Escape is taken again.
+    info.dispatchEvent(new Event("pointerleave"))
+    expect(info.hasAttribute("data-dismissed")).toBe(false)
+    expect(press().defaultPrevented).toBe(true)
+  })
+
+  test("with the card closed by nothing but absence of hover, Escape is left alone", () => {
+    const pane = mount({ status: "working", mode: "auto" })
+    pane.querySelector<HTMLElement>('[data-slot="pane-info"]')!.matches = () => false
+    const event = new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
+    document.body.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(false)
   })
 })
 

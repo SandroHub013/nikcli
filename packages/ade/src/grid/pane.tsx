@@ -472,7 +472,7 @@ export function SessionPane(props: SessionPaneProps) {
    * hiding the row would drop it on the page.
    */
   const closeCardOnEscape = (event: KeyboardEvent) => {
-    if (event.key !== "Escape" || !info?.matches(":hover, :has(:focus-visible)")) return
+    if (event.key !== "Escape" || cardDismissed() || !info?.matches(":hover, :has(:focus-visible)")) return
     event.preventDefault()
     event.stopPropagation()
     if (info.contains(document.activeElement) && document.activeElement !== infoTrigger)
@@ -502,7 +502,6 @@ export function SessionPane(props: SessionPaneProps) {
     if (answerInTerminal()) return t("paneState.perm.here")
     const detail = chipDetail({ activity: props.activity })
     if (detail) return detail
-    // "Sospesa" is the label already: said twice it would read "Sospesa · Sospesa".
     const st = state()
     if (st === "limit")
       return reading()?.countdown ? t("pane.limit.window", String(reading()?.bindingKey ?? "")) : t("pane.limit")
