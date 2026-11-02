@@ -54,7 +54,7 @@
   font-weight: var(--ade-weight-semibold);
   color: var(--ade-text-weak);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--ade-track-caps);
   user-select: none;
 }
 

@@ -11,6 +11,10 @@
     "./core": {
       "import": "./src/core.ts",
       "types": "./src/core.ts"
+    },
+    "./light": {
+      "import": "./src/light.ts",
+      "types": "./src/light.ts"
     }
   },
   "main": "./src/index.ts",

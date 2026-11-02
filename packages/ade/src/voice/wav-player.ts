@@ -1,4 +1,5 @@
-import { wavEnvelope, type PlaybackMeter } from "@ragu/voice/core"
+import { wavEnvelope } from "@ragu/voice/light"
+import type { PlaybackMeter } from "@ragu/voice/core"
 import { t } from "../i18n"
 
 /**

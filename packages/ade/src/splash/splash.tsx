@@ -14,7 +14,7 @@ export interface SplashProps {
   onDismiss?: () => void
 }
 
-const FADE_MS = 600
+export const FADE_MS = 400
 
 /**
  * ADE Splash Screen: Authentic Reference Cooking Scene ("Ragù Code").
@@ -36,6 +36,8 @@ export function Splash(props: SplashProps) {
   // Fade out smoothly when props.visible flips to false
   createEffect(() => {
     if (!props.visible) {
+      // The shell is painted under the splash by now. The flag only held the document ink for the first paint, before any theme is set; with it gone the document is `--ade-bg` again (still ink in dark, and the shell paints crema over it in light) (DS-26).
+      document.documentElement.removeAttribute("data-boot")
       const timer = setTimeout(() => setGone(true), FADE_MS)
       onCleanup(() => clearTimeout(timer))
     } else {

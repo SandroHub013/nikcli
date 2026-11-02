@@ -41,7 +41,7 @@ describe("splash component (step 3)", () => {
   test("splash has fixed scene background and dark color-scheme without theme tokens (Passo 1)", () => {
     const css = readFileSync(join(import.meta.dir, "splash.css"), "utf8")
     expect(css).not.toContain("var(--ade-bg")
-    expect(css).not.toContain("var(--ade-text-weak")
+    // The status line reads --ade-text-weak: inside the splash the scheme is dark, so it resolves to the dark value (DS-26).
     expect(css).toMatch(/color-scheme:\s*dark/)
     expect(css).toMatch(/background:\s*#211410/)
   })
@@ -235,7 +235,7 @@ describe("splash component (step 3)", () => {
       // Immediately gets data-leaving attribute
       expect(splash.hasAttribute("data-leaving")).toBe(true)
 
-      // After 650ms (FADE_MS = 600ms), it is unmounted from DOM
+      // After 650ms (FADE_MS = 400ms), it is unmounted from DOM
       await new Promise((resolve) => setTimeout(resolve, 650))
       expect(container.querySelector('[data-component="ade-splash"]')).toBeNull()
     } finally {

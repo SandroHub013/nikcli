@@ -118,13 +118,17 @@ export function createLoweredStore(storage: LoweredStorage | undefined, now: () 
 }
 
 /**
- * The query of the world's address: the test build's bench door, the level ADE lowered it to, and `city=0` for the
- * list the user chose after a failed opening.
+ * The query of the world's address: the test build's bench door, the level ADE lowered it to, `city=0` for the
+ * list the user chose after a failed opening, and the scheme ADE is in.
  */
-export function worldQuery(options: { bench?: string; lowered?: boolean; list?: boolean }): string {
+export function worldQuery(options: { bench?: string; lowered?: boolean; list?: boolean; theme?: "light" | "dark" }): string {
   // The lowered level first: the page reads the first `quality`, and a measuring trial's own (`quality=auto`) comes after.
-  const parts = [options.lowered ? "quality=bassa&lowered=1" : "", options.bench, options.list ? "city=0" : ""].filter(
-    Boolean,
-  )
+  const parts = [
+    options.lowered ? "quality=bassa&lowered=1" : "",
+    options.bench,
+    options.list ? "city=0" : "",
+    // The scheme ADE is in, for the page's chrome (the city keeps its own colours).
+    options.theme ? `theme=${options.theme}` : "",
+  ].filter(Boolean)
   return parts.length ? `?${parts.join("&")}` : ""
 }

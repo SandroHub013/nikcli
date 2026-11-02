@@ -77,3 +77,37 @@ export function holdsFocus(root: ParentNode | undefined | null, active: Element 
   if (!root || !active) return false
   return root === active || (root as ParentNode & Node).contains?.(active) === true
 }
+
+/** The tile a pane sits in: its cell, which also holds the resize grip. */
+const TILE = '[data-slot="grid-cell"]'
+const GRIP = '[data-slot="tile-resize"]'
+
+/**
+ * True when the caret is anywhere in the pane's tile, the resize grip included.
+ *
+ * The grip is a sibling of the pane's root, not inside it, so `holdsFocus(root, grip)` is false: Tab onto the grip of a
+ * pane that was not focused made the cell focus its pane, and the pane's own effect then moved the caret from the grip
+ * into the terminal. The grip never kept the focus, and the arrows on it never arrived.
+ */
+export function holdsFocusInTile(root: (ParentNode & Element) | undefined | null, active: Element | null): boolean {
+  if (!root) return false
+  return holdsFocus(root.closest(TILE) ?? root, active)
+}
+
+/** Puts the focus on the resize grip of a tile, for the keyboard to resize it; whether there was one. */
+export function focusResizeGrip(tileId: string, scope: ParentNode = document): boolean {
+  const cell = [...scope.querySelectorAll<HTMLElement>(TILE)].find((item) => item.dataset.tileId === tileId)
+  const grip = cell?.querySelector<HTMLElement>(GRIP)
+  if (!grip) return false
+  grip.focus({ preventScroll: true })
+  return true
+}
+
+/** Gives the focus back from the grip to the pane's terminal or composer; whether it went anywhere. */
+export function leaveResizeGrip(grip: Element): boolean {
+  const cell = grip.closest(TILE)
+  const target = cell ? findFocusTarget(cell) : undefined
+  if (!target) return false
+  target.focus({ preventScroll: true })
+  return true
+}

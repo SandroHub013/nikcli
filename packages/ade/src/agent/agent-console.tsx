@@ -17,7 +17,9 @@
  */
 
 import { createEffect, createSignal, on, For, Show, onCleanup } from "solid-js"
-import { groupIntoTurns, type AgentEntry, type AgentTurn } from "@ragu/voice"
+import { EmptyIcon } from "../ui/empty-icon"
+import { groupIntoTurns } from "@ragu/voice/light"
+import type { AgentEntry, AgentTurn } from "@ragu/voice/core"
 import { presenceLabel, presenceOf } from "./status"
 import { isVoiceReady, voicePrerequisitesList } from "./onboarding"
 import "./agent-console.css"
@@ -212,6 +214,7 @@ export function AgentConsole(props: AgentConsoleProps) {
           when={turns().length > 0 || props.partial}
           fallback={
             <div data-slot="agent-empty">
+              <EmptyIcon name="agent" />
               <p data-slot="agent-empty-title">{t("agent.empty.title")}</p>
               <p data-slot="agent-empty-body">{t("agent.empty.body")}</p>
               <ul data-slot="agent-examples">

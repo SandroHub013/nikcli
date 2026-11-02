@@ -6,6 +6,8 @@ import { QUALITY_LEVELS, qualityLabel, qualityLevel, sizePerMinute, type RecordQ
 import { LOCALE_PREFERENCES, locale, localePreference, setLocalePreference, t, type LocalePreference } from "../i18n"
 import { DEFAULT_GLASS_OPACITY, GLASS_READABLE_MIN, THEME_CHOICES, isGlassReadable, type Theme } from "../theme"
 import type { GlassStatus } from "../surface/glass-window"
+import { shortcutGroups } from "../keyboard/shortcuts-list"
+import type { Platform } from "../keyboard/keymap"
 import "./sections.css"
 
 /**
@@ -357,6 +359,45 @@ export function GridSection(props: GridSectionProps) {
           )}
         </For>
       </div>
+    </>
+  )
+}
+
+/**
+ * The keys ADE answers to, grouped by where they work.
+ *
+ * Read from the keymap and from `runsFromTerminal` (`keyboard/shortcuts-list`), so the page cannot list a key the
+ * workbench would hand to the terminal.
+ */
+export function ShortcutsSection(props: { platform: Platform }) {
+  return (
+    <>
+      <div data-slot="section-head">
+        <p data-slot="section-desc">{t("shortcuts.desc")}</p>
+      </div>
+      <For each={shortcutGroups(props.platform)}>
+        {(group) => (
+          <Show when={group.rows.length > 0}>
+            <section aria-label={t(group.titleKey)} data-slot="shortcuts-group">
+              <p data-slot="section-desc">
+                <strong>{t(group.titleKey)}</strong>
+                <Show when={group.noteKey}>{(note) => <> {t(note())}</>}</Show>
+              </p>
+              <ul data-slot="settings-list">
+                <For each={group.rows}>
+                  {(row) => (
+                    <li data-slot="settings-row">
+                      <span data-slot="settings-name">{t(row.labelKey)}</span>
+                      <kbd data-slot="ade-kbd">{row.keys}</kbd>
+                    </li>
+                  )}
+                </For>
+              </ul>
+            </section>
+          </Show>
+        )}
+      </For>
+      <p data-slot="section-desc">{t("shortcuts.voice")}</p>
     </>
   )
 }

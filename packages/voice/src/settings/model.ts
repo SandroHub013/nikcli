@@ -1056,3 +1056,14 @@ export function normalizeSettings(
     migrations,
   }
 }
+
+/**
+ * Whether this shortcut is held while speaking, rather than pressed once.
+ *
+ * The assistant's shortcut follows the activation. Dictation is always held:
+ * with the name as the way in, a pressed-once dictation stayed open with no
+ * filter after the key came up, and sent whatever the room said to the pane.
+ */
+export function holdsToTalk(settings: Pick<VoiceSettings, "activation">, mode: VoiceMode): boolean {
+  return settings.activation === "push-to-talk" || mode === "transcription"
+}

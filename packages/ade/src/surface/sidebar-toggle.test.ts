@@ -113,8 +113,8 @@ describe("the chord", () => {
 
   test("works from inside a terminal, since xterm sends nothing for it", () => {
     expect(FROM_TERMINALS.has("sidebar.toggle")).toBe(true)
-    // Only it: every other ADE chord still goes to the terminal.
-    expect([...FROM_TERMINALS]).toEqual(["sidebar.toggle"])
+    // Not every chord: the ones that are a program's keys (see `from-terminals.test.ts`) stay with the terminal.
+    expect(FROM_TERMINALS.has("pane.close")).toBe(false)
   })
 })
 
@@ -155,9 +155,9 @@ describe("the workbench", () => {
     )
   })
 
-  test("lets the chord through from a terminal and no other", () => {
+  test("lets the chord through from a terminal by `runsFromTerminal`", () => {
     expect(source).toContain(
-      codeOf('if (isTerminal && resolution.type === "ade" && !FROM_TERMINALS.has(resolution.commandId ?? "")) return'),
+      codeOf('if (isTerminal && resolution.type === "ade" && !runsFromTerminal(resolution.commandId ?? "", platform)) return'),
     )
   })
 })

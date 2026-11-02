@@ -315,7 +315,7 @@
 [data-slot="sim-guess-command"] {
   grid-column: 1 / -1;
   color: var(--ade-text-weak);
-  font-family: var(--ade-font-mono, ui-monospace, monospace);
+  font-family: var(--ade-mono);
   font-size: var(--ade-font-xs);
 }
 

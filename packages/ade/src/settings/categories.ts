@@ -33,6 +33,7 @@ export const CATEGORIES: readonly CategoryItem[] = [
       { id: "general/appearance", labelKey: "settings.tab.appearance" },
       { id: "general/language", labelKey: "settings.tab.language" },
       { id: "general/grid", labelKey: "settings.tab.grid" },
+      { id: "general/shortcuts", labelKey: "settings.tab.shortcuts" },
     ],
   },
   {

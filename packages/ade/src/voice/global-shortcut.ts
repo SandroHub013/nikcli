@@ -20,7 +20,8 @@
  */
 
 import { normalizeKeyName, parseChord, type Chord, type Platform } from "../keyboard/keymap"
-import { isSystemChord, isWindowsRuntime, type VoiceMode, type VoiceSettings } from "@ragu/voice/core"
+import { isSystemChord, isWindowsRuntime } from "@ragu/voice/light"
+import type { VoiceMode, VoiceSettings } from "@ragu/voice/core"
 import { t } from "../i18n"
 
 /** The event the native side emits for every registered voice hotkey. */

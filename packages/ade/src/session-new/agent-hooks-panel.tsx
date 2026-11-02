@@ -1,5 +1,5 @@
 import { For, Show, createSignal } from "solid-js"
-import { HowItWorks } from "@ragu/voice"
+import { HowItWorks } from "@ragu/voice/light"
 import {
   HOOK_TARGETS,
   hookTargetsFor,
@@ -9,7 +9,7 @@ import {
   type HookHost,
   setHook,
 } from "./agent-hooks"
-import { isWindowsRuntime } from "@ragu/voice/core"
+import { isWindowsRuntime } from "@ragu/voice/light"
 import { t } from "../i18n"
 
 /**

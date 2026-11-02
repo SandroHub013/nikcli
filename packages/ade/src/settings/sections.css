@@ -67,6 +67,18 @@
   font-size: var(--ade-font-xs);
 }
 
+/* The shortcuts page: a label can run to two lines, and the keys stay on one. */
+[data-slot="shortcuts-group"] [data-slot="settings-name"] {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+[data-slot="shortcuts-group"] [data-slot="ade-kbd"] {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 [data-slot="settings-hint"] {
   margin: var(--ade-space-4) 0 0;
   color: var(--ade-text-weak);

@@ -112,7 +112,12 @@ export function keepsPaletteOpen(commandId: string): boolean {
  * close (Esc), as everything behind a modal does.
  */
 export function waitsForSheet(commandId: string): boolean {
-  return commandId === "palette.open" || commandId === "session.new" || commandId === "pane.rename"
+  return (
+    commandId === "palette.open" ||
+    commandId === "session.new" ||
+    commandId === "pane.rename" ||
+    commandId === "pane.resize"
+  )
 }
 
 /** `run`, doing nothing for the commands that `waitsForSheet` while a sheet is open. */
@@ -192,6 +197,14 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       enabled: !!focusedPane,
       disabledReason: focusedPane ? undefined : t("palette.noFocusedPane"),
       shortcut: shortcutFor("pane.rename", platform),
+    },
+    {
+      id: "pane.resize",
+      title: t("palette.pane.resize"),
+      group: t("palette.group.pane"),
+      keywords: ["dimensione", "ridimensiona", "larghezza", "altezza", "frecce", "resize", "size", "arrows"],
+      enabled: !!focusedPane,
+      disabledReason: focusedPane ? undefined : t("palette.noFocusedPane"),
     },
     {
       id: "view.toggle",
@@ -294,6 +307,12 @@ export function buildCommands(ctx: CommandContext): SurfaceCommand[] {
       title: t("palette.settings.open"),
       group: t("palette.group.view"),
       keywords: ["impostazioni", "configurazione", "preferenze", "settings", "preferences", "config"],
+    },
+    {
+      id: "shortcuts.open",
+      title: t("palette.shortcuts.open"),
+      group: t("palette.group.view"),
+      keywords: ["scorciatoie", "tasti", "tastiera", "comandi", "shortcuts", "keys", "keyboard", "hotkeys"],
     },
     {
       id: "voice.settings",

@@ -13,11 +13,11 @@
   inset: 0;
   width: 100vw;
   height: 100vh;
-  z-index: 9999;
+  z-index: var(--ade-z-splash);
   overflow: hidden;
   color-scheme: dark;
   background: #211410;
-  transition: opacity var(--splash-fade, var(--ade-dur-slow, 280ms)) var(--ade-ease, ease);
+  transition: opacity var(--ade-splash-fade) var(--ade-ease, ease);
   opacity: 1;
   cursor: default;
   display: flex;
@@ -41,7 +41,7 @@
   gap: 10px;
   width: min(94vw, calc((100vh - 48px) * 1672 / 941));
   max-width: 94vw;
-  z-index: 1;
+  z-index: var(--ade-z-base);
 }
 
 /* Stage: holds the reference image and overlay fx canvas with exact 1672/941 aspect ratio */
@@ -84,7 +84,7 @@
   line-height: normal;
   font-family: var(--ade-mono, monospace);
   font-size: var(--ade-font-xs);
-  color: #9a907f;
+  color: var(--ade-text-weak);
   letter-spacing: 0.5px;
   text-align: center;
   user-select: none;

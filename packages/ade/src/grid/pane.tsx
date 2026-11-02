@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup, type JSX } from "solid-js"
 import { parseAnsi, type Span } from "../session/stream"
 import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
-import { focusPane, holdsFocus } from "./focus-input"
+import { focusPane, holdsFocusInTile } from "./focus-input"
 import { RENAME_EVENT, commitRename } from "./rename"
 import { attachTerminal } from "../terminal/registry"
 import type { LinkRequest } from "../terminal/links"
@@ -378,8 +378,8 @@ export function SessionPane(props: SessionPaneProps) {
    */
   createEffect(() => {
     if (!props.focused || !root) return
-    // Already inside this pane — a click, or the focus arriving on its own.
-    if (holdsFocus(root, document.activeElement)) return
+    // Already inside this pane's tile — a click, the focus arriving on its own, or Tab onto the resize grip beside it.
+    if (holdsFocusInTile(root, document.activeElement)) return
     focusPane(root)
   })
 

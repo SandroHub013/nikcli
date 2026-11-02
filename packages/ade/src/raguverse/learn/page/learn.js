@@ -485,6 +485,12 @@ export const CATALOGO_GIOCO = {
   },
 }
 
+/** The scheme ADE is in, `&t=light|dark` in the fragment (DS-25); anything else is nothing, and the page keeps the dark ragù default. */
+export function readTheme(hash) {
+  const value = new URLSearchParams(String(hash).replace(/^#/, "")).get("t")
+  return value === "light" || value === "dark" ? value : undefined
+}
+
 /** The language ADE asks for in the address fragment (`#n=…&l=en`): Italian unless it says English, since the frame cannot see ADE's setting. */
 export function readLocale(hash) {
   return new URLSearchParams(String(hash).replace(/^#/, "")).get("l") === "en" ? "en" : "it"
@@ -707,6 +713,8 @@ export async function boot(win) {
   const empty = doc.getElementById("empty")
   const nonce = readNonce(win.location?.hash ?? "")
   const luogo = readPlace(win.location?.hash ?? "")
+  const tema = readTheme(win.location?.hash ?? "")
+  if (tema && doc.documentElement?.dataset) doc.documentElement.dataset.theme = tema
   if (!view || !summary || !empty) return undefined
   if (!nonce) {
     empty.textContent = "Questa pagina va aperta da ADE."

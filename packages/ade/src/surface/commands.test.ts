@@ -139,6 +139,15 @@ describe("surface commands", () => {
     expect(cmds.find((c) => c.id === "pane.expand")?.enabled).toBe(true)
     expect(cmds.find((c) => c.id === "pane.rename")?.enabled).toBe(true)
     expect(cmds.find((c) => c.id === "pane.rename")?.shortcut).toBe("F2")
+    // The way to the resize grip from a terminal, which keeps Tab (UX-22).
+    expect(cmds.find((c) => c.id === "pane.resize")?.enabled).toBe(true)
+  })
+
+  test("resizing by keyboard needs a focused pane to resize", () => {
+    const cmds = buildCommands(context({ workbench: createWorkbench() }))
+    const resize = cmds.find((c) => c.id === "pane.resize")
+    expect(resize?.enabled).toBe(false)
+    expect(resize?.disabledReason).toBeTruthy()
   })
 
   /*
@@ -358,7 +367,7 @@ describe("waitsForSheet (kobalte-overlay, M1)", () => {
    * in Decisioni a digit picked an option and Enter sent the answer.
    */
   test("the palette, the launch screen and a pane's title wait for the sheet to close", () => {
-    for (const id of ["palette.open", "session.new", "pane.rename"]) expect([id, waitsForSheet(id)]).toEqual([id, true])
+    for (const id of ["palette.open", "session.new", "pane.rename", "pane.resize"]) expect([id, waitsForSheet(id)]).toEqual([id, true])
   })
 
   test("what does not open something to type into still runs behind it", () => {

@@ -1,5 +1,6 @@
 import { Show, batch, createSignal, onCleanup, onMount } from "solid-js"
 import { createHandshake, newNonce } from "../handshake"
+import { frameTheme, type FrameTheme } from "../frame-theme"
 import { PORT_OFFER, PROTOCOL_VERSION, worldUrl } from "../protocol"
 import { createLearnLink } from "./link"
 import { locale, t } from "../../i18n"
@@ -36,9 +37,9 @@ export interface LearnFrameApi {
   focus: () => void
 }
 
-/** The address of the lesson page for one load: the nonce, ADE's language, and where to open. */
-export function learnSource(nonce: string, place: LearnOpening, language: string): string {
-  return `${worldUrl()}learn/#n=${nonce}&l=${language}&a=${place}`
+/** The address of the lesson page for one load: the nonce, ADE's language, where to open, and the scheme ADE is in. */
+export function learnSource(nonce: string, place: LearnOpening, language: string, theme: FrameTheme = "dark"): string {
+  return `${worldUrl()}learn/#n=${nonce}&l=${language}&a=${place}&t=${theme}`
 }
 
 export function LearnFrame(props: {
@@ -63,7 +64,7 @@ export function LearnFrame(props: {
    * port (`handshake.ts`). The world's own comment says why the fragment, and it is the same reason here.
    */
   let nonce = newNonce()
-  const [frameSrc, setFrameSrc] = createSignal(learnSource(nonce, props.place, locale()))
+  const [frameSrc, setFrameSrc] = createSignal(learnSource(nonce, props.place, locale(), frameTheme()))
   /*
    * Each load is a new frame element. An address that differs only after the `#` does not reload a frame, so its old document would
    * stay, without its port.
@@ -80,7 +81,7 @@ export function LearnFrame(props: {
     link = undefined
     nonce = newNonce()
     batch(() => {
-      setFrameSrc(learnSource(nonce, props.place, locale()))
+      setFrameSrc(learnSource(nonce, props.place, locale(), frameTheme()))
       setFrameLoad((n) => n + 1)
     })
   }
