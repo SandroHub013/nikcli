@@ -293,12 +293,16 @@ describe("splash component (step 3)", () => {
   test("sets data-leaving when visible flips to false, and unmounts after fade", async () => {
     let setVisibleSignal!: (v: boolean) => void
     let disposeFn: (() => void) | undefined
+    let unmount: (() => void) | undefined
 
     createRoot((dispose) => {
-      disposeFn = dispose
+      disposeFn = () => {
+        unmount?.()
+        dispose()
+      }
       const [visible, setVisible] = createSignal(true)
       setVisibleSignal = setVisible
-      render(() => createComponent(Splash, { get visible() { return visible() } }), container)
+      unmount = render(() => createComponent(Splash, { get visible() { return visible() } }), container)
     })
 
     try {
@@ -323,14 +327,18 @@ describe("splash component (step 3)", () => {
     let setVisibleSignal!: (v: boolean) => void
     let setStatusSignal!: (s: string | undefined) => void
     let disposeFn: (() => void) | undefined
+    let unmount: (() => void) | undefined
 
     createRoot((dispose) => {
-      disposeFn = dispose
+      disposeFn = () => {
+        unmount?.()
+        dispose()
+      }
       const [visible, setVisible] = createSignal(true)
       const [status, setStatus] = createSignal<string | undefined>("Inizializzazione...")
       setVisibleSignal = setVisible
       setStatusSignal = setStatus
-      render(
+      unmount = render(
         () => createComponent(Splash, {
           get visible() { return visible() },
           get status() { return status() },
@@ -369,12 +377,16 @@ describe("splash component (step 3)", () => {
     let dismissed = false
     let setVisibleSignal!: (v: boolean) => void
     let disposeFn: (() => void) | undefined
+    let unmount: (() => void) | undefined
 
     createRoot((dispose) => {
-      disposeFn = dispose
+      disposeFn = () => {
+        unmount?.()
+        dispose()
+      }
       const [visible, setVisible] = createSignal(true)
       setVisibleSignal = setVisible
-      render(
+      unmount = render(
         () => createComponent(Splash, {
           get visible() { return visible() },
           onDismiss: () => { dismissed = true },
@@ -543,10 +555,13 @@ describe("splash component (step 3)", () => {
     try {
       let setVisibleSignal!: (v: boolean) => void
       createRoot((dispose) => {
-        disposeRoot = dispose
         const [visible, setVisible] = createSignal(true)
         setVisibleSignal = setVisible
-        render(() => createComponent(Splash, { get visible() { return visible() } }), container)
+        const unmount = render(() => createComponent(Splash, { get visible() { return visible() } }), container)
+        disposeRoot = () => {
+          unmount()
+          dispose()
+        }
       })
 
       // Active listeners counted upon mount
