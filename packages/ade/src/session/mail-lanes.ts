@@ -37,16 +37,14 @@ export const MAIL_LONG_MS = 15 * 60_000
 export function mailLane(message: Message, paneOf: (to: string) => string | undefined): string | undefined {
   switch (message.kind) {
     case "send":
-    case "ask": {
+    case "ask":
+    // Their keys skip the line queue, and between a line's text and its Enter they would clear the line. A message
+    // held for that turn is no obstacle: it returns false at once. Only a line being typed delays them, by 8 s at most.
+    case "interrupt":
+    case "relaunch": {
       // Typed in the order they were sent, per pane.
       const pane = paneOf(message.to)
       return pane === undefined ? undefined : `pane:${pane}`
-    }
-    case "interrupt":
-    case "relaunch": {
-      // Not in the pane's typing lane: an interrupt must get past a message held for that very turn.
-      const pane = paneOf(message.to)
-      return pane === undefined ? undefined : `control:${pane}`
     }
     case "reply":
     case "update":
@@ -54,17 +52,18 @@ export function mailLane(message: Message, paneOf: (to: string) => string | unde
     case "delivered":
       // Two answers to one request: the second must see the first closed it, not overwrite it.
       return `ref:${message.ref}`
-    // A close takes the descendants too, so two of them must not reclaim one worktree.
+    // A close takes the descendants too, so two of them must not reclaim one worktree. A spawn checks its name and
+    // limits before the awaits and books after them, may need the path a close is removing, and must not open under
+    // a parent being closed.
     case "close":
-      return "close"
-    // The name and the limits are checked before the awaits and booked after them.
     case "spawn":
-      return "spawn"
+      return "sessions"
     // Read, change, write back.
     case "memory":
       return "memory"
+    // Both write `design.jsonl` when the register is the design one.
     case "registro":
-      return "registro"
+      return message.register === "design" ? "design" : "registro"
     case "design":
     case "design-proponi":
     case "design-attendi":
@@ -118,6 +117,10 @@ export function createMailLanes<Item extends { id: string }>(options: MailLanesO
   const inFlight = new Set<string>()
   const abandoned = new Set<string>()
   const walking = new Set<string>()
+  // A walk holds its list from when it started. If `to` then resolves to another pane, the next round runs a message
+  // there, and the first walk must not deliver it a second time when it gets to it.
+  const finished = new WeakSet<Item>()
+  const canStart = (item: Item) => !inFlight.has(item.id) && !abandoned.has(item.id) && !finished.has(item)
 
   const run = (item: Item): Promise<void> =>
     new Promise<void>((resolve) => {
@@ -139,14 +142,17 @@ export function createMailLanes<Item extends { id: string }>(options: MailLanesO
       Promise.resolve()
         .then(() => options.deliver(item))
         .then(
-          (finished) => {
+          (isDone) => {
             if (over) return
             finish()
-            if (finished) options.done(item)
+            if (!isDone) return
+            finished.add(item)
+            options.done(item)
           },
           (error: unknown) => {
             if (over) return
             finish()
+            finished.add(item)
             options.failed(item, error)
           },
         )
@@ -155,7 +161,7 @@ export function createMailLanes<Item extends { id: string }>(options: MailLanesO
   const walk = async (lane: string, items: readonly Item[]) => {
     try {
       for (const item of items) {
-        if (!inFlight.has(item.id) && !abandoned.has(item.id)) await run(item)
+        if (canStart(item)) await run(item)
       }
     } finally {
       walking.delete(lane)
@@ -166,7 +172,7 @@ export function createMailLanes<Item extends { id: string }>(options: MailLanesO
     start(items) {
       const lanes = new Map<string, Item[]>()
       for (const item of items) {
-        if (inFlight.has(item.id) || abandoned.has(item.id)) continue
+        if (!canStart(item)) continue
         const lane = options.laneOf(item)
         if (lane === undefined) {
           void run(item)
@@ -240,7 +246,7 @@ export function dropFrom<T>(list: T[], item: T): boolean {
  * It polls 50 times, 200 ms apart, from after the write, so it stops at 10 s at the
  * earliest. One second less leaves room for the receipt to be written and read.
  */
-export const LOCK_GRANT_WINDOW_MS = 9_000
+export const CLIENT_READS_RECEIPT_MS = 9_000
 
 /** When `ade-msg` made this id: both scripts start it with Unix milliseconds. Undefined for any other id. */
 export function sentAt(id: string): number | undefined {
@@ -258,7 +264,69 @@ export function sentAt(id: string): number | undefined {
  */
 export function lockCameTooLate(id: string, now: number): boolean {
   const at = sentAt(id)
-  return at !== undefined && now - at > LOCK_GRANT_WINDOW_MS
+  return at !== undefined && now - at > CLIENT_READS_RECEIPT_MS
+}
+
+/**
+ * Whether the client of a message may have stopped reading its receipt.
+ *
+ * Its id says how old it is, or, for an id with no time in it, when ADE took it. A
+ * held message's client was answered «in coda» and went away, however young it is.
+ * Every deadline is longer than the client's wait, so a step that hung has always
+ * lost its client; a delivery that throws usually has not.
+ */
+export function clientStoppedReading(input: { id: string; takenAt: number; held: boolean; now: number }): boolean {
+  return input.held || input.now - (sentAt(input.id) ?? input.takenAt) > CLIENT_READS_RECEIPT_MS
+}
+
+export type HangNotice = "nothing" | "tell" | "settle-and-tell"
+
+/**
+ * What else a message ADE gave up on owes its sender, beyond the receipt.
+ *
+ * Most clients stop reading receipts after their 10 s. Left at that, the session
+ * would wait for ever for a reply to a message it believes is on its way, or for a
+ * child that never opened.
+ */
+export function hangNotice(kind: Message["kind"], clientGone: boolean): HangNotice {
+  if (!clientGone) return "nothing"
+  switch (kind) {
+    // Their client has already printed «ADE non ha risposto»: it knows.
+    case "kv":
+    case "whoowns":
+    case "memory":
+    case "registro":
+    // Their wait reads late receipts.
+    case "design-proponi":
+    case "design-attendi":
+      return "nothing"
+    // A later `ade-msg wait` needs the result, and the default wait has usually ended by now.
+    case "ask":
+    case "spawn":
+      return "settle-and-tell"
+    // Told «in coda» with exit 0: nothing else will ever reach it.
+    default:
+      return "tell"
+  }
+}
+
+/**
+ * One writer per request. The result is written first and the request closed after,
+ * so a `reply` and a `close` in one tick both saw it open, and the last rename won:
+ * «richiesta interrotta» over the real answer, with the replier told it was delivered.
+ * A second caller writes nothing and gets false, the same as a write that failed.
+ */
+export function oneSettleAtATime() {
+  const going = new Set<string>()
+  return async (id: string, work: () => Promise<boolean>): Promise<boolean> => {
+    if (going.has(id)) return false
+    going.add(id)
+    try {
+      return await work()
+    } finally {
+      going.delete(id)
+    }
+  }
 }
 
 /** Per round: how long each part of the mail may take before it counts as stuck (`createWatchedStep`). */
@@ -266,3 +334,36 @@ export const MAIL_TAKE_ROUND_MS = 15_000
 export const MAIL_MOVE_ROUND_MS = 60_000
 /** The watch part may run `git status` for several folders, at up to 120 s each. */
 export const MAIL_WATCH_ROUND_MS = 5 * 60_000
+
+export type MailPart = "take" | "move" | "watch"
+
+/**
+ * A round of the mail, in three parts that never wait for each other: what came in,
+ * what moves, and what only keeps watch. Each has its own watchdog, and none is
+ * awaited here, so neither the page timer nor the native signal can be held up by a
+ * step that does not end.
+ *
+ * With no session running, every fourth call runs a round, unless the caller knows
+ * mail is waiting (`mailWaiting`, the native signal).
+ */
+export function createMailRound(options: {
+  sessions: () => number
+  take: () => Promise<unknown>
+  move: () => Promise<unknown>
+  watch: () => Promise<unknown>
+  onStuck: (part: MailPart, afterMs: number) => void
+}): (mailWaiting: boolean) => void {
+  const part = (name: MailPart, deadlineMs: number) =>
+    createWatchedStep(deadlineMs, (afterMs) => options.onStuck(name, afterMs))
+  const take = part("take", MAIL_TAKE_ROUND_MS)
+  const move = part("move", MAIL_MOVE_ROUND_MS)
+  const watch = part("watch", MAIL_WATCH_ROUND_MS)
+  let calls = 0
+  return (mailWaiting) => {
+    calls++
+    if (!mailWaiting && options.sessions() === 0 && calls % 4 !== 0) return
+    take(options.take)
+    move(options.move)
+    watch(options.watch)
+  }
+}

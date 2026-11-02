@@ -422,15 +422,15 @@ import {
 import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
 import { parseQueue, queueToSave, waitsForRestore } from "../session/mail-queue"
 import {
-  MAIL_MOVE_ROUND_MS,
-  MAIL_TAKE_ROUND_MS,
-  MAIL_WATCH_ROUND_MS,
+  clientStoppedReading,
   createMailLanes,
-  createWatchedStep,
+  createMailRound,
   dropFrom,
+  hangNotice,
   lockCameTooLate,
   mailDeadline,
   mailLane,
+  oneSettleAtATime,
 } from "../session/mail-lanes"
 import {
   canSuspend,
@@ -3561,37 +3561,39 @@ export function Workbench() {
   let publishedRequests = ""
 
   /** Ends a request: its waiter gets `result`, and nothing about it is kept. */
-  const settle = async (
+  const settleOnce = oneSettleAtATime()
+  const settle = (
     host: NonNullable<Awaited<ReturnType<typeof getHost>>>,
     id: string,
     result?: string,
-  ): Promise<boolean> => {
-    /*
-     * The answer first, the closing after. Closing first meant a result that
-     * failed to be written left a closed request and, since a closed request
-     * takes no second answer, no way to send it again. Now a failed write
-     * leaves the request open, and the replier is told to try again.
-     */
-    if (result !== undefined && host.mailboxResult) {
-      try {
-        await host.mailboxResult(id, result)
-      } catch {
-        return false
+  ): Promise<boolean> =>
+    settleOnce(id, async () => {
+      /*
+       * The answer first, the closing after. Closing first meant a result that
+       * failed to be written left a closed request and, since a closed request
+       * takes no second answer, no way to send it again. Now a failed write
+       * leaves the request open, and the replier is told to try again.
+       */
+      if (result !== undefined && host.mailboxResult) {
+        try {
+          await host.mailboxResult(id, result)
+        } catch {
+          return false
+        }
       }
-    }
-    const answering = openRequests.get(id)?.to
-    openRequests.delete(id)
-    saveRequests()
-    /*
-     * The answer is what ends the turn for a session without turn hooks: with
-     * the request gone, `holdsForAnswer` stops holding it at work, and the
-     * quiet that follows the reply settles it back to "Disponibile" (S14).
-     */
-    if (answering) settleWhenQuiet(answering)
-    statesWritten.delete(id)
-    await host.mailboxState?.(id, "").catch(() => {})
-    return true
-  }
+      const answering = openRequests.get(id)?.to
+      openRequests.delete(id)
+      saveRequests()
+      /*
+       * The answer is what ends the turn for a session without turn hooks: with
+       * the request gone, `holdsForAnswer` stops holding it at work, and the
+       * quiet that follows the reply settles it back to "Disponibile" (S14).
+       */
+      if (answering) settleWhenQuiet(answering)
+      statesWritten.delete(id)
+      await host.mailboxState?.(id, "").catch(() => {})
+      return true
+    })
 
   /** How deep sessions may start sessions; `ade.mailbox.maxDepth` in localStorage overrides it. */
   const maxDepth = () => {
@@ -3654,7 +3656,8 @@ export function Workbench() {
         continue
       }
       for (const request of [...openRequests.values()]) {
-        if (request.to === id)
+        // Read again: a reply in its own lane may have closed it during the awaits of this loop.
+        if (request.to === id && openRequests.has(request.id))
           await settle(
             host,
             request.id,
@@ -3692,20 +3695,24 @@ export function Workbench() {
     if (next !== undefined) await host.writeTextFile(file, next).catch(() => null)
   }
 
-  /** A message ADE stops waiting for: out of the queue, said in the log and in the bell, and its sender told. */
+  /**
+   * A message ADE stops waiting for: out of the queue, said in the log and in the bell. Its sender hears of it where
+   * it can still hear: the receipt alone reaches nobody once its client has stopped reading (`hangNotice`).
+   */
   const giveUpOnMail = (item: (typeof mailQueue)[number], text: string) => {
     const { id, message } = item
+    const gone = clientStoppedReading({ id, takenAt: item.at, held: held.has(id), now: Date.now() })
     dropFrom(mailQueue, item)
     persistMail()
+    held.delete(id)
     heldStates.delete(id)
     console.error(`ADE: posta ${id}: ${text}`)
     report(t("mail.stuck", message.kind, id))
     void getHost().then((host) => {
       void host?.mailboxReceipt?.(id, text).catch(() => {})
-      // Held: its sender stopped reading receipts when it was told «in coda», and hears of it where it waits.
-      if (!held.delete(id)) return
-      if (message.kind === "ask" && host) void settle(host, id, `[ade-msg] ${text}`)
-      else tellSender(message.from, `[ade-msg] ${text}`)
+      const notice = hangNotice(message.kind, gone)
+      if (notice === "settle-and-tell" && host) void settle(host, id, `[ade-msg] ${text}`)
+      if (notice !== "nothing") tellSender(message.from, `[ade-msg] ${text}`)
     })
   }
 
@@ -3733,27 +3740,22 @@ export function Workbench() {
     failed: (item, error) => giveUpOnMail(item, failedReceipt(error)),
   })
 
-  /*
-   * A round of the mail, in three parts that never wait for each other: what came in, what moves, and what only keeps
-   * watch. Each has its own watchdog, and none is awaited here, so neither the page timer nor the native signal can
-   * be held up by a step that does not end (`createWatchedStep`).
-   */
-  const mailStep = (part: string, deadlineMs: number) =>
-    createWatchedStep(deadlineMs, (afterMs) => {
+  /* A round of the mail, in three parts that never wait for each other (`createMailRound`). */
+  const mailPart =
+    (part: (host: NonNullable<Awaited<ReturnType<typeof getHost>>>) => Promise<unknown>) => async (): Promise<void> => {
+      const host = await getHost()
+      if (host?.mailboxTake && host.mailboxReceipt) await part(host)
+    }
+  const mailRound = createMailRound({
+    sessions: () => running.size,
+    take: mailPart((host) => takeMail(host)),
+    move: mailPart((host) => moveMail(host)),
+    watch: mailPart((host) => watchMail(host)),
+    onStuck: (part, afterMs) => {
       console.error(`ADE: la posta (${part}) non ha finito in ${afterMs} ms`)
       report(t("mail.stepStuck"))
-    })
-  const takeStep = mailStep("take", MAIL_TAKE_ROUND_MS)
-  const moveStep = mailStep("move", MAIL_MOVE_ROUND_MS)
-  const watchStep = mailStep("watch", MAIL_WATCH_ROUND_MS)
-
-  const deliverMail = async () => {
-    const host = await getHost()
-    if (!host?.mailboxTake || !host.mailboxReceipt) return
-    takeStep(() => takeMail(host))
-    moveStep(() => moveMail(host))
-    watchStep(() => watchMail(host))
-  }
+    },
+  })
 
   /** What came in: out of the outbox, on disk, and started, before anything else is awaited. */
   const takeMail = async (host: NonNullable<Awaited<ReturnType<typeof getHost>>>) => {
@@ -3866,6 +3868,8 @@ export function Workbench() {
     await watchFolders(host, now)
     await readDecisions(host, now)
     for (const request of [...openRequests.values()]) {
+      // A reply in its own lane may have closed it during the awaits of this loop: no reminder, and no stale state file.
+      if (!openRequests.has(request.id)) continue
       /*
        * Still in the sender's hands: nothing was typed, so there is nothing to
        * re-ring, and a reminder now would only open a turn in the target
@@ -4024,7 +4028,8 @@ export function Workbench() {
       appendLine(sender.id, t(ask ? "note.askTo" : "note.messageTo", target.title, message.text), "note", "ade")
     heldStates.delete(id)
     // Held before, for a turn that has ended since: its sender was answered then, and stopped listening.
-    if (!held.delete(id)) await host.mailboxReceipt!(id, receipt).catch(() => {})
+    // Past its deadline the sender was told it hung: an «ok» now would overwrite that.
+    if (!held.delete(id) && !mailLanes.abandoned(id)) await host.mailboxReceipt!(id, receipt).catch(() => {})
     if (ask) {
       await host
         .mailboxState?.(
@@ -4946,7 +4951,8 @@ export function Workbench() {
       setWb((w) => updatePane(w, pane.id, { spawnArgs, ...(message.fresh ? { resumeId: undefined } : {}) }))
       if (message.fresh) {
         for (const request of [...openRequests.values()]) {
-          if (request.to === pane.id) {
+          // Read again: a reply in its own lane may have closed it during the awaits of this loop.
+          if (request.to === pane.id && openRequests.has(request.id)) {
             await settle(
               host,
               request.id,
@@ -5501,12 +5507,6 @@ export function Workbench() {
      * and about once a second while the window is hidden (`watch_outbox` in
      * `mailbox.rs`). This timer stays as the fallback.
      */
-    let mailPass = 0
-    const mailRound = (mailWaiting: boolean) => {
-      mailPass++
-      if (!mailWaiting && running.size === 0 && mailPass % 4 !== 0) return
-      void deliverMail()
-    }
     onCleanup(every(700, () => mailRound(false), { whenHidden: 700 }))
     let stopMailSignal: (() => void) | undefined
     let mailSignalGone = false

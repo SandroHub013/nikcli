@@ -1,16 +1,22 @@
 import { afterEach, beforeEach, describe, expect, jest, test } from "bun:test"
 import { readFileSync } from "node:fs"
+import { every } from "../host/every"
 import {
-  LOCK_GRANT_WINDOW_MS,
+  CLIENT_READS_RECEIPT_MS,
   MAIL_LONG_MS,
+  MAIL_MOVE_ROUND_MS,
   MAIL_QUICK_MS,
   MAIL_STEP_MS,
+  clientStoppedReading,
   createMailLanes,
+  createMailRound,
   createWatchedStep,
   dropFrom,
+  hangNotice,
   lockCameTooLate,
   mailDeadline,
   mailLane,
+  oneSettleAtATime,
   sentAt,
 } from "./mail-lanes"
 import { failedReceipt, hungReceipt, lateLockReceipt, type Message } from "./mailbox"
@@ -255,6 +261,35 @@ describe("a hung step hits the watchdog", () => {
     expect(lanes.abandoned("fine")).toBe(false)
   })
 
+  test("a message finished in another lane is not delivered again when the first walk reaches it", async () => {
+    const first = deferred<boolean>()
+    let times = 0
+    const { lanes, started, finished } = harness({
+      m1: () => first.promise,
+      m2: async () => {
+        times++
+        return true
+      },
+    })
+    const m1: Item = { id: "m1", lane: "pane:a" }
+    const m2: Item = { id: "m2", lane: "pane:a" }
+    lanes.start([m1, m2])
+    await flush()
+    expect(started).toEqual(["m1"])
+
+    // A pane closed or was renamed: `to` now resolves elsewhere, and the next round runs m2 there.
+    m2.lane = "pane:b"
+    lanes.start([m1, m2])
+    await flush()
+    expect(finished).toEqual(["m2"])
+    expect(times).toBe(1)
+
+    first.resolve(true)
+    await flush()
+    expect(times).toBe(1)
+    expect(finished).toEqual(["m2", "m1"])
+  })
+
   test("a delivery that throws is reported and does not stop the ones behind it", async () => {
     const boom = new Error("boom")
     const { lanes, failed, finished } = harness({
@@ -364,17 +399,17 @@ describe("a stale lock", () => {
   const id = `${at}-1a9f829b`
 
   test("is refused once the client may have given up", () => {
-    expect(lockCameTooLate(id, at + LOCK_GRANT_WINDOW_MS + 1)).toBe(true)
+    expect(lockCameTooLate(id, at + CLIENT_READS_RECEIPT_MS + 1)).toBe(true)
     expect(lockCameTooLate(id, at + 120_000)).toBe(true)
   })
 
   test("is granted while the client is still reading receipts", () => {
     expect(lockCameTooLate(id, at)).toBe(false)
-    expect(lockCameTooLate(id, at + LOCK_GRANT_WINDOW_MS)).toBe(false)
+    expect(lockCameTooLate(id, at + CLIENT_READS_RECEIPT_MS)).toBe(false)
   })
 
   test("the window closes before the client's 10 s", () => {
-    expect(LOCK_GRANT_WINDOW_MS).toBeLessThan(10_000)
+    expect(CLIENT_READS_RECEIPT_MS).toBeLessThan(10_000)
   })
 
   test("reads the id of both scripts", () => {
@@ -403,20 +438,33 @@ describe("lint: the workbench's round waits for nothing slow", () => {
   test("the timer and the native signal both only start a round", () => {
     expect(source).toContain("every(700, () => mailRound(false), { whenHidden: 700 })")
     expect(source).toContain("host?.onMailboxPending?.(mailRound)")
-    const round = source.slice(source.indexOf("const mailRound = "), source.indexOf("onCleanup(every(700,"))
-    expect(round).toContain("void deliverMail()")
-    expect(round).not.toContain("return deliverMail()")
-  })
-
-  test("the three parts of a round have a watchdog each", () => {
-    for (const part of ["takeStep(() => takeMail(host))", "moveStep(() => moveMail(host))", "watchStep(() => watchMail(host))"]) {
-      expect(source).toContain(part)
-    }
+    expect(source).toContain("const mailRound = createMailRound({")
   })
 
   test("the voice's question is not awaited: it lasts as long as it takes to speak", () => {
     expect(source).not.toContain("await voiceEngine\n            .requestSendConfirmation")
     expect(source).toContain("void voiceEngine\n            .requestSendConfirmation")
+  })
+
+  test("a request closed during a loop's awaits is not closed again, reminded or given a state", () => {
+    expect(source).toContain("settleOnce(id, async () => {")
+    expect(source).toContain("if (request.to === id && openRequests.has(request.id))")
+    expect(source).toContain("if (request.to === pane.id && openRequests.has(request.id))")
+    expect(source).toContain("if (!openRequests.has(request.id)) continue")
+  })
+
+  test("what a message says past its deadline is dropped, on the suspended path too", () => {
+    expect(source).toContain("if (!held.delete(id) && !mailLanes.abandoned(id)) await host.mailboxReceipt!(id, receipt)")
+    expect(source).not.toContain("if (!held.delete(id)) await host.mailboxReceipt!(id, receipt)")
+  })
+
+  test("giving up on a message goes by whether its client can still read, not by whether ADE held it", () => {
+    const start = source.indexOf("const giveUpOnMail = ")
+    const body = source.slice(start, source.indexOf("const mailLanes = createMailLanes", start))
+    expect(start).toBeGreaterThan(0)
+    expect(body).toContain("clientStoppedReading({ id, takenAt: item.at, held: held.has(id), now: Date.now() })")
+    expect(body).toContain("hangNotice(message.kind, gone)")
+    expect(body).not.toContain("if (!held.delete(id)) return")
   })
 
   test("a late lock is refused before the store is touched", () => {
@@ -437,6 +485,226 @@ describe("lint: the workbench's round waits for nothing slow", () => {
     expect(source).toContain("(await freeNow(host, item.paneId)) && !linesInFlight.has(item.paneId)")
     expect(source).toContain("!(await freeNow(host, target.pane.id)) || linesInFlight.has(target.pane.id)")
     expect(source).toContain("linesInFlight.track(paneId, deliverTextNow(")
+  })
+})
+
+describe("who hears of a message ADE gave up on", () => {
+  const at = 1_793_582_382_401
+  const id = `${at}-1a9f829b`
+  const reading = { id, takenAt: at, held: false }
+
+  test("a client within its wait still reads the receipt", () => {
+    expect(clientStoppedReading({ ...reading, now: at + 1000 })).toBe(false)
+  })
+
+  test("every deadline is past the client's wait, so a step that hung has lost its client", () => {
+    for (const ms of [MAIL_QUICK_MS, MAIL_STEP_MS, MAIL_LONG_MS]) {
+      expect(clientStoppedReading({ ...reading, now: at + ms })).toBe(true)
+    }
+  })
+
+  test("a held message's client was answered «in coda», however young the message is", () => {
+    expect(clientStoppedReading({ id, takenAt: at, held: true, now: at + 1000 })).toBe(true)
+  })
+
+  test("an id with no time in it goes by when ADE took it", () => {
+    expect(clientStoppedReading({ id: "voce-1", takenAt: at, held: false, now: at + 1000 })).toBe(false)
+    expect(clientStoppedReading({ id: "voce-1", takenAt: at, held: false, now: at + MAIL_QUICK_MS })).toBe(true)
+  })
+
+  test("a client still reading needs only the receipt, whatever the kind", () => {
+    for (const kind of ["send", "ask", "spawn", "kv", "close"] as const) {
+      expect(hangNotice(kind, false)).toBe("nothing")
+    }
+  })
+
+  test.each([
+    // Their client has already printed «ADE non ha risposto»: it knows.
+    ["kv", "nothing"],
+    ["whoowns", "nothing"],
+    ["memory", "nothing"],
+    ["registro", "nothing"],
+    // Their wait reads late receipts.
+    ["design-proponi", "nothing"],
+    ["design-attendi", "nothing"],
+    // A later `ade-msg wait` needs the result, and the default wait has usually ended by now.
+    ["ask", "settle-and-tell"],
+    ["spawn", "settle-and-tell"],
+    // Told «in coda» with exit 0: nothing else will ever reach it.
+    ["send", "tell"],
+    ["close", "tell"],
+    ["interrupt", "tell"],
+    ["relaunch", "tell"],
+    ["reply", "tell"],
+    ["update", "tell"],
+    ["cancel", "tell"],
+    ["delivered", "tell"],
+    ["design", "tell"],
+  ] as const)("a client gone: %s gets %s", (kind, notice) => {
+    expect(hangNotice(kind, true)).toBe(notice)
+  })
+})
+
+describe("one writer per request", () => {
+  test("a reply and a close in one tick: the second does not overwrite the first", async () => {
+    const settle = oneSettleAtATime()
+    const written: string[] = []
+    const gate = deferred<void>()
+    const write = (text: string) => async () => {
+      await gate.promise
+      written.push(text)
+      return true
+    }
+    const reply = settle("r1", write("la risposta"))
+    const close = settle("r1", write("interrotta"))
+    gate.resolve()
+    expect(await reply).toBe(true)
+    expect(await close).toBe(false)
+    expect(written).toEqual(["la risposta"])
+  })
+
+  test("other requests are not held up, and a failed write can be tried again", async () => {
+    const settle = oneSettleAtATime()
+    const stuck = deferred<boolean>()
+    const first = settle("r1", () => stuck.promise)
+    expect(await settle("r2", async () => true)).toBe(true)
+    stuck.resolve(false)
+    expect(await first).toBe(false)
+    expect(await settle("r1", async () => true)).toBe(true)
+  })
+})
+
+describe("the lanes of what could collide", () => {
+  const base = { from: "p1", text: "" }
+  const paneOf = (to: string) => (to === "1" ? "pane-1" : undefined)
+
+  test("an interrupt is in the pane's lane: it must not land between a line's text and its Enter", () => {
+    const send = mailLane({ ...base, kind: "send", to: "1" }, paneOf)
+    expect(mailLane({ ...base, kind: "interrupt", to: "1" }, paneOf)).toBe(send!)
+    expect(mailLane({ ...base, kind: "relaunch", to: "1", fresh: false, note: "" }, paneOf)).toBe(send!)
+  })
+
+  test("a message held for that very turn does not keep an interrupt back: it runs in the same walk", async () => {
+    const { lanes, started, finished } = harness({ held: async () => false })
+    lanes.start([
+      { id: "held", lane: "pane:a" },
+      { id: "interrupt", lane: "pane:a" },
+    ])
+    await flush()
+    expect(started).toEqual(["held", "interrupt"])
+    expect(finished).toEqual(["interrupt"])
+  })
+
+  test("a close and a spawn go one at a time: a spawn may need the worktree or the parent the close removes", () => {
+    const close = mailLane({ ...base, kind: "close", to: "1", force: false }, paneOf)
+    const spawn = mailLane({ ...base, kind: "spawn", agent: "claude", autoClose: false, worktree: true, fork: false }, paneOf)
+    expect(close).toBe(spawn!)
+    expect(close).not.toBe(mailLane({ ...base, kind: "send", to: "1" }, paneOf)!)
+  })
+
+  test("the design register has one lane, whichever command writes it", () => {
+    const proposal = mailLane({ ...base, kind: "design-proponi", folder: "x", cwd: "c", wait: false, timeout: 1 }, paneOf)
+    expect(mailLane({ ...base, kind: "registro", register: "design", op: "open" }, paneOf)).toBe(proposal!)
+    expect(mailLane({ ...base, kind: "registro", register: "decisioni", op: "open" }, paneOf)).toBe("registro")
+  })
+})
+
+/* The page's timers frozen, as a hidden page's nearly are: the old bug, and that nothing on the kv's way needs a timer. */
+describe("a kv while the page's timers do not fire", () => {
+  const kv: Item = { id: "kv" }
+
+  const setup = (sessions = 1) => {
+    const outbox: Item[] = []
+    const queue: Item[] = []
+    const answered: string[] = []
+    const lanes = createMailLanes<Item>({
+      deliver: (item) => {
+        if (item.lane) return new Promise<boolean>(() => {})
+        answered.push(item.id)
+        return Promise.resolve(true)
+      },
+      laneOf: (item) => item.lane,
+      deadlineOf: () => MAIL_QUICK_MS,
+      done: (item) => dropFrom(queue, item),
+      hung: () => {},
+      failed: () => {},
+    })
+    const round = createMailRound({
+      sessions: () => sessions,
+      take: async () => {
+        queue.push(...outbox.splice(0))
+        lanes.start(queue)
+      },
+      move: async () => lanes.start(queue),
+      watch: async () => {},
+      onStuck: () => {},
+    })
+    const stop = every(700, () => round(false), { whenHidden: 700, isHidden: () => true, onVisible: () => () => {} })
+    return { outbox, answered, round, stop }
+  }
+
+  test("on the timer alone nobody answers: what a page hidden for 5 minutes had", async () => {
+    const { outbox, answered, stop } = setup()
+    outbox.push(kv)
+    await flush()
+    expect(answered).toEqual([])
+    stop()
+  })
+
+  test("the native signal answers it with no timer moving", async () => {
+    const { outbox, answered, round, stop } = setup()
+    outbox.push(kv)
+    round(true)
+    await flush()
+    expect(answered).toEqual(["kv"])
+    stop()
+  })
+
+  test("the signal's pulse does the same while a close holds its lane", async () => {
+    const { outbox, answered, round, stop } = setup()
+    outbox.push({ id: "close", lane: "sessions" })
+    round(false)
+    await flush()
+    outbox.push(kv)
+    round(false)
+    await flush()
+    expect(answered).toEqual(["kv"])
+    stop()
+  })
+
+  test("a part of the round that does not end holds up neither the others nor the next round", async () => {
+    const stuck: string[] = []
+    let takes = 0
+    const round = createMailRound({
+      sessions: () => 1,
+      take: async () => {
+        takes++
+      },
+      move: () => new Promise(() => {}),
+      watch: async () => {},
+      onStuck: (part) => stuck.push(part),
+    })
+    round(true)
+    await flush()
+    round(true)
+    await flush()
+    expect(takes).toBe(2)
+    expect(stuck).toEqual([])
+    jest.advanceTimersByTime(MAIL_MOVE_ROUND_MS)
+    await flush()
+    expect(stuck).toEqual(["move"])
+  })
+
+  test("with no session running only mail known to be waiting skips the wait", async () => {
+    const { outbox, answered, round, stop } = setup(0)
+    outbox.push(kv)
+    round(false)
+    await flush()
+    expect(answered).toEqual([])
+    round(true)
+    await flush()
+    expect(answered).toEqual(["kv"])
+    stop()
   })
 })
 
@@ -488,12 +756,6 @@ describe("which lane and which deadline", () => {
     expect(mailLane({ ...base, kind: "send", to: "nobody" }, paneOf)).toBeUndefined()
   })
 
-  test("an interrupt does not queue behind the mail held for that same turn", () => {
-    const interrupt = mailLane({ ...base, kind: "interrupt", to: "1" }, paneOf)
-    expect(interrupt).toBe("control:pane-1")
-    expect(interrupt).not.toBe(mailLane({ ...base, kind: "send", to: "1" }, paneOf))
-  })
-
   test("two answers to one request go one after the other", () => {
     const reply: Message = { ...base, kind: "reply", ref: "r1" }
     const cancel: Message = { ...base, kind: "cancel", ref: "r1" }
@@ -503,7 +765,7 @@ describe("which lane and which deadline", () => {
   })
 
   test("what reads and writes one file or one list goes one at a time", () => {
-    expect(mailLane({ ...base, kind: "close", to: "1", force: false }, paneOf)).toBe("close")
+    expect(mailLane({ ...base, kind: "close", to: "1", force: false }, paneOf)).toBe("sessions")
     expect(mailLane({ ...base, kind: "memory", op: "show", type: "" }, paneOf)).toBe("memory")
     expect(mailLane({ ...base, kind: "registro", register: "decisioni", op: "open" }, paneOf)).toBe("registro")
     expect(mailLane({ ...base, kind: "design", path: "a.html" }, paneOf)).toBe("design")
