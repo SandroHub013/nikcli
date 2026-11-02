@@ -203,7 +203,7 @@ export function DecisionsPane(props: {
                           <div data-slot="decision-actions">
                             <span data-slot="decision-hint">{deliveryText(props.hub, decision, now())}</span>
                             <Button
-                              data-slot="decision-ghost" size="sm"
+                              data-slot="decision-ghost"
                               disabled={props.hub.busy(decision.k)}
                               onClick={() => setConfirmingReopen(decision.k)}
                             >

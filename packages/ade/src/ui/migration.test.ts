@@ -185,15 +185,20 @@ describe("choices Master made on the review (2026-11-02), kept so a later edit d
     const tags = buttonTags(source, "Button")
     const beside = tags.filter((tag) => tag.includes('data-slot="decision-ghost"'))
     expect(beside.length).toBeGreaterThan(0)
-    // The two ghosts that follow a submit (the reopen and the recipient confirmations) are full height; the two inside a
-    // decision row, with no submit beside them, stay small.
+    // Three are full height: the two that follow a submit (the reopen and the recipient confirmations) and the answered
+    // card's «change», which sits in a card and not in a decision row (26 on the base). Only the one inside a decision
+    // row, beside a title and a pill, stays small.
     const full = beside.filter((tag) => !tag.includes('size="sm"'))
-    expect(full).toHaveLength(2)
-    for (const tag of full) {
+    expect(full).toHaveLength(3)
+    const following = full.filter((tag) => {
       const before = source.slice(0, source.indexOf(tag))
-      expect(before.lastIndexOf('data-slot="decision-submit"')).toBeGreaterThan(before.lastIndexOf('data-slot="decision-ghost"'))
-    }
-    expect(beside.filter((tag) => tag.includes('size="sm"'))).toHaveLength(beside.length - 2)
+      return before.lastIndexOf('data-slot="decision-submit"') > before.lastIndexOf('data-slot="decision-ghost"')
+    })
+    expect(following).toHaveLength(2)
+    const small = beside.filter((tag) => tag.includes('size="sm"'))
+    expect(small).toHaveLength(1)
+    const before = source.slice(0, source.indexOf(small[0]!))
+    expect(before.lastIndexOf('data-slot="decision-row-title"')).toBeGreaterThan(before.lastIndexOf("</Button>"))
   })
 
   test("the decisions and design empty views are centred like every other empty view", () => {

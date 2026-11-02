@@ -41,7 +41,13 @@ describe("the bell", () => {
     expect(report).toContain("setNoticeKind(kind)")
     const at = source.indexOf('<div data-slot="ade-notice"')
     expect(at).toBeGreaterThan(-1)
-    expect(source.slice(at, at + 160)).toContain('role={noticeKind() === "error" ? "alert" : "status"}')
+    expect(source.slice(at, at + 160)).toContain("role={role}")
+    // The element is re-created when its role changes, not just updated: a role changed on a live element is not
+    // reliably announced, so an info that turns into an error would be heard as nothing. Keyed on the role and not on
+    // the text, because a status inserted with its content is often silent, and info after info must still be read.
+    const before = source.slice(source.lastIndexOf("<Show", at), at)
+    expect(before).toContain('when={noticeKind() === "error" ? "alert" : "status"}')
+    expect(before).toContain("keyed")
   })
 
   test("the tooltip of a dismiss is the short word, not the whole notice again", () => {

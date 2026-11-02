@@ -344,6 +344,8 @@ describe("the screenshot tray and viewer, by keyboard and screen reader", () => 
     // The viewer gives the focus back to the tile that opened it; that tile is gone, and a focus on a detached node is
     // a focus on the page, so the keyboard user starts again from the top.
     const other = { path: "C:/Pictures/Screenshots/b.png", name: "b.png", modified_ms: 2 }
+    const realFocus = HTMLElement.prototype.focus
+    const focusOptions: Array<FocusOptions | undefined> = []
     const host = mount({
       shots: [shot, other],
       onDelete: async () => {
@@ -357,11 +359,18 @@ describe("the screenshot tray and viewer, by keyboard and screen reader", () => 
       [...document.querySelectorAll<HTMLButtonElement>('[data-component="shot-viewer"] button')].find((b) => b.textContent === text)!
     byText(t("shots.delete")).click()
     await settle()
+    HTMLElement.prototype.focus = function (this: HTMLElement, options?: FocusOptions) {
+      focusOptions.push(options)
+      return realFocus.call(this, options)
+    }
     byText(t("shots.delete.confirm")).click()
     await settle()
     await settle()
     expect(document.querySelector('[data-component="shot-viewer"]')).toBeNull()
     const active = document.activeElement as HTMLElement
+    // Not `preventScroll`: the first tile can be scrolled out of the strip, and a focus the user cannot see is lost.
+    expect(focusOptions.some((options) => options?.preventScroll === true)).toBe(false)
+    HTMLElement.prototype.focus = realFocus
     expect(active.getAttribute("data-slot")).toBe("shot-open")
     expect(active.getAttribute("aria-label")).toBe(t("shots.open.named", "b.png"))
   })

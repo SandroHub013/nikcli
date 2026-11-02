@@ -10791,24 +10791,31 @@ export function Workbench() {
               read. */}
           <Show when={notice()}>
             {(text) => (
-              <div data-slot="ade-notice" role={noticeKind() === "error" ? "alert" : "status"}>
-                <span data-slot="ade-notice-text">{text()}</span>
-                <Show when={noticeAction()?.text === text() ? noticeAction() : undefined}>
-                  {(action) => (
-                    <button type="button" data-slot="ade-notice-action" onClick={() => action().run()}>
-                      {action().label}
-                    </button>
-                  )}
-                </Show>
-                <IconButton
-                  size="sm"
-                  data-slot="ade-notice-close"
-                  label={t("bar.dismissNotice")}
-                  onClick={() => setNotice(undefined)}
-                >
-                  <span data-ui="icon-cross" aria-hidden="true" />
-                </IconButton>
-              </div>
+              // Keyed on the role: a role changed on a live element is not reliably announced, so going from an info to
+              // an error re-creates the strip and the reader hears the alert inserted. Not keyed on the text: info after
+              // info must still be read.
+              <Show when={noticeKind() === "error" ? "alert" : "status"} keyed>
+                {(role) => (
+                  <div data-slot="ade-notice" role={role}>
+                    <span data-slot="ade-notice-text">{text()}</span>
+                    <Show when={noticeAction()?.text === text() ? noticeAction() : undefined}>
+                      {(action) => (
+                        <button type="button" data-slot="ade-notice-action" onClick={() => action().run()}>
+                          {action().label}
+                        </button>
+                      )}
+                    </Show>
+                    <IconButton
+                      size="sm"
+                      data-slot="ade-notice-close"
+                      label={t("bar.dismissNotice")}
+                      onClick={() => setNotice(undefined)}
+                    >
+                      <span data-ui="icon-cross" aria-hidden="true" />
+                    </IconButton>
+                  </div>
+                )}
+              </Show>
             )}
           </Show>
 

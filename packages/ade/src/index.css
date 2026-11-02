@@ -510,7 +510,8 @@ body[data-theme="glass"] #root,
   /*
    * The three heights a control comes in (DS-8): `sm` for a row of chips, `md` in a panel, `lg` for the confirm of
    * its sheet. The icon-only 20px sits beside them; its hit area is padded to 24 by the primitive (UX-18).
-   * A disabled control is one opacity, not the six the sheets had drifted into (0.35 to 0.6).
+   * A disabled IconButton or Field is one opacity, not the six the sheets had drifted into (0.35 to 0.6); a disabled
+   * Button is the sunken ground with the weak text (ui/controls.css).
    */
   --ade-control-sm: 22px;
   --ade-control-md: 26px;
