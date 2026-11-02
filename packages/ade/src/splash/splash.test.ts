@@ -146,15 +146,14 @@ describe("splash component (step 3)", () => {
     }
   })
 
-  test("renders a busy status with a name, a way to skip, and the canvas", () => {
+  test("renders a status with a name, a way to skip, and the canvas", () => {
     const handle = mountSplash({ visible: true })
     try {
       const splash = container.querySelector('[data-component="ade-splash"]')
       expect(splash).not.toBeNull()
-      // It has nothing to focus, so it is not a modal dialog: a status that is busy until it leaves.
+      // It has nothing to focus, so it is not a modal dialog: a status with a name.
       expect(splash?.getAttribute("role")).toBe("status")
       expect(splash?.getAttribute("aria-modal")).toBeNull()
-      expect(splash?.getAttribute("aria-busy")).toBe("true")
       expect(splash?.getAttribute("aria-label")).toBeTruthy()
       expect(container.querySelector('[data-slot="splash-hint"]')?.textContent).toBe(t("splash.skip"))
 
@@ -204,6 +203,88 @@ describe("splash component (step 3)", () => {
       // Other keys do not dismiss
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }))
       expect(dismissedCount).toBe(3)
+    } finally {
+      handle.dispose()
+    }
+  })
+
+  test("a skipping key is taken by the splash and never reaches what is under it", () => {
+    // The splash covers the workbench but does not hold the focus: a textarea behind it is still the active element,
+    // so an Enter meant to skip would also have typed a newline into the composer, and a Space a space.
+    const field = document.createElement("textarea")
+    document.body.appendChild(field)
+    field.focus()
+    let reached = 0
+    field.addEventListener("keydown", () => reached++)
+    let dismissed = 0
+    const handle = mountSplash({ visible: true, onDismiss: () => { dismissed++ } })
+    try {
+      for (const key of ["Escape", "Enter", " "]) {
+        const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })
+        field.dispatchEvent(event)
+        expect(event.defaultPrevented).toBe(true)
+      }
+      expect(dismissed).toBe(3)
+      expect(reached).toBe(0)
+
+      // A chord is somebody else's (Ctrl+Enter sends, Alt+Space opens a window menu): not taken, not a skip.
+      const chord = new KeyboardEvent("keydown", { key: "Enter", ctrlKey: true, bubbles: true, cancelable: true })
+      field.dispatchEvent(chord)
+      expect(chord.defaultPrevented).toBe(false)
+      expect(dismissed).toBe(3)
+      expect(reached).toBe(1)
+
+      // Any other key goes through.
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true, cancelable: true }))
+      expect(reached).toBe(2)
+    } finally {
+      handle.dispose()
+      field.remove()
+    }
+  })
+
+  test("once the splash is leaving, the keys belong to the workbench again", () => {
+    const field = document.createElement("textarea")
+    document.body.appendChild(field)
+    let reached = 0
+    field.addEventListener("keydown", () => reached++)
+    const [visible, setVisible] = createSignal(true)
+    let disposeFn: (() => void) | undefined
+    createRoot((dispose) => {
+      const unmount = render(() => createComponent(Splash, { get visible() { return visible() } }), container)
+      disposeFn = () => {
+        unmount()
+        dispose()
+      }
+    })
+    try {
+      setVisible(false)
+      const event = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })
+      field.dispatchEvent(event)
+      expect(event.defaultPrevented).toBe(false)
+      expect(reached).toBe(1)
+    } finally {
+      disposeFn?.()
+      field.remove()
+    }
+  })
+
+  test("the skip hint sits on the status line's row, out of the flow, so the scene does not move", () => {
+    const css = readFileSync(join(import.meta.dir, "splash.css"), "utf8").replace(/\r\n/g, "\n")
+    const at = css.indexOf('[data-slot="splash-hint"] {')
+    expect(at).toBeGreaterThan(-1)
+    const body = css.slice(at, css.indexOf("}", at))
+    expect(body).toMatch(/position: absolute;/)
+    expect(body).toMatch(/right: 0;/)
+    expect(body).toMatch(/bottom: 0;/)
+    // Nothing that adds height to the column the approved scene was laid out in.
+    expect(body).not.toMatch(/margin-top|padding-top/)
+  })
+
+  test("the splash is not marked busy itself: a status that is busy is announced as nothing to wait for", () => {
+    const handle = mountSplash({ visible: true })
+    try {
+      expect(container.querySelector('[data-component="ade-splash"]')?.hasAttribute("aria-busy")).toBe(false)
     } finally {
       handle.dispose()
     }

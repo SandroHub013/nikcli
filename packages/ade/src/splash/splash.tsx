@@ -114,13 +114,18 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
     handleResize()
     const appearedAt = performance.now()
 
+    // In the capture phase, and taken: the splash covers the workbench without holding its focus, so a bubbling listener
+    // left the Enter that skipped it to type a newline into the composer behind it. A chord is not a skip.
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!props.visible || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
       if (e.key === "Escape" || e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+        e.preventDefault()
+        e.stopPropagation()
         dismiss()
       }
     }
-    window.addEventListener("keydown", handleKeyDown)
-    onCleanup(() => window.removeEventListener("keydown", handleKeyDown))
+    window.addEventListener("keydown", handleKeyDown, true)
+    onCleanup(() => window.removeEventListener("keydown", handleKeyDown, true))
 
     window.addEventListener("resize", handleResize)
     onCleanup(() => window.removeEventListener("resize", handleResize))
@@ -216,7 +221,6 @@ function SplashView(props: { visible: boolean; status?: string; onDismiss?: () =
       onClick={dismiss}
       role="status"
       aria-label={t("splash.aria")}
-      aria-busy={props.visible ? "true" : "false"}
     >
       <div data-slot="splash-scene-container">
         <div ref={stageRef} data-slot="splash-stage" data-loaded={imageLoaded() ? "" : undefined}>

@@ -93,7 +93,9 @@
 
 /* How to skip it: quieter than the status, on the same dark ground (the scheme is dark inside the splash). */
 [data-slot="splash-hint"] {
-  margin-top: var(--ade-space-3);
+  position: absolute;
+  right: 0;
+  bottom: 0;
   font-family: var(--ade-mono, monospace);
   font-size: var(--ade-font-xs);
   color: var(--ade-text-weak);
