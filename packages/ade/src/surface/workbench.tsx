@@ -8532,6 +8532,12 @@ export function Workbench() {
       else tellPane(paneId, t("resume.noMint", agent.label || agentId))
     }
 
+    /*
+     * Started again during the asks above (a quick `relaunch --fresh`): what follows writes the pane's conversation
+     * id, hook nonce and status, and clears its per-pane records, which by now are the newer session's (review, NB1).
+     */
+    if (!running.starting(paneId, start)) return
+
     const paneTitle = wb().panes.find((pane) => pane.id === paneId)?.title ?? agent.label ?? agentId
     // The pane's own arguments on every start, the first and each restart (`start-args.ts`).
     const extraArgs = startArgsFor(agentId, launched, {

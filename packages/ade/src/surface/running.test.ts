@@ -106,6 +106,20 @@ describe("the workbench's starts", () => {
     expect(closeNow.slice(0, closeNow.indexOf("disposeTerminal"))).toContain(codeOf("running.cancelStart(id)"))
   })
 
+  /*
+   * Review NB1: a start in its conversation ask when a `relaunch --fresh` began went on, after the newer one had
+   * finished, to write the pane's `resumeId`, `linkNonce` and status and clear its records for the live session.
+   */
+  test("a start superseded during its conversation asks writes nothing of the pane's", () => {
+    const body = source.slice(source.indexOf(codeOf("const startProcess = async (")))
+    const asks = body.indexOf(codeOf("const minted = await mintConversation("))
+    const firstWrite = body.indexOf(codeOf("const paneTitle ="))
+    expect(asks).toBeGreaterThan(0)
+    expect(body.slice(asks, firstWrite)).toContain(codeOf("if (!running.starting(paneId, start)) return"))
+    // And nothing after it touches the pane before the check.
+    expect(body.indexOf(codeOf("paneNonces.set(paneId, nonce)"))).toBeGreaterThan(firstWrite)
+  })
+
   test("a spawn becomes the pane's session only through its start", () => {
     expect(source).not.toContain("running.set(")
     expect(source.match(/running\.adopt\(paneId,start,session\)/g)?.length).toBe(2)
