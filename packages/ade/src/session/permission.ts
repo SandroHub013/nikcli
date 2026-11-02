@@ -703,6 +703,23 @@ export const PERMISSION_SCHEMAS: readonly PermissionSchema[] = [
 // Public API
 // ---------------------------------------------------------------------------
 
+/** Kept per agent: this runs for every line a session prints, and the order never changes. */
+const schemasByAgent = new Map<string, typeof PERMISSION_SCHEMAS>()
+
+function schemasInOrder(agentId: string, screen: boolean): typeof PERMISSION_SCHEMAS {
+  const key = `${screen ? "screen" : "lines"}:${agentId}`
+  const known = schemasByAgent.get(key)
+  if (known) return known
+  const sorted = PERMISSION_SCHEMAS.filter((schema) => !schema.screen || screen).sort((a, b) => {
+    const aAgent = a.agentId === agentId ? 1 : 0
+    const bAgent = b.agentId === agentId ? 1 : 0
+    if (aAgent !== bAgent) return bAgent - aAgent
+    return (b.priority ?? 0) - (a.priority ?? 0)
+  })
+  schemasByAgent.set(key, sorted)
+  return sorted
+}
+
 /**
  * Guarda le ultime righe di output e dice se l'agente sta aspettando.
  * Nessuna euristica inventata: ogni schema riconosciuto deve corrispondere a
@@ -733,16 +750,8 @@ export function detectPermission(
     return undefined
   }
 
-  // 4. Sort schemas prioritizing those specifically defined for this agentId
-  const sortedSchemas = PERMISSION_SCHEMAS.filter((schema) => !schema.screen || options.screen).sort((a, b) => {
-    const aAgent = a.agentId === agentId ? 1 : 0
-    const bAgent = b.agentId === agentId ? 1 : 0
-    if (aAgent !== bAgent) return bAgent - aAgent
-    return (b.priority ?? 0) - (a.priority ?? 0)
-  })
-
-  // 5. Apply pattern schemas
-  for (const schema of sortedSchemas) {
+  // 4. Schemas in order, those specifically defined for this agentId first; then apply them
+  for (const schema of schemasInOrder(agentId, options.screen === true)) {
     const result = schema.match(activeLines)
     if (result) {
       return result

@@ -216,7 +216,13 @@ async function start(): Promise<void> {
   const startedAt = Date.now()
   const child = spawn(
     process.execPath,
-    tauriDevArgs(plan.configPath, readFileSync(join(adeDir, "src-tauri", "Cargo.toml"), "utf8"), { watch: wantWatch }),
+    // `detached` makes Windows ignore Ctrl+C here and in every pane's shell, so the flag is cleared first: see the script.
+    [
+      join(adeDir, "scripts", "ctrl-c-normal.ts"),
+      ...tauriDevArgs(plan.configPath, readFileSync(join(adeDir, "src-tauri", "Cargo.toml"), "utf8"), {
+        watch: wantWatch,
+      }),
+    ],
     {
       cwd: adeDir,
       detached: true,

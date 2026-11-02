@@ -677,9 +677,11 @@ import {
   startOnCleanScreen,
   writeToTerminal,
 } from "../terminal/registry"
+import { createDiscardNotes } from "../terminal/discard-notes"
 import type { LinkRequest } from "../terminal/links"
 import { OPENING_QUIET_MS, decideOpening } from "../session/opening"
 import { cleanTranscriptLine } from "../session/transcript-line"
+import { createLineWriter, withLines } from "./pane-lines"
 import { createRawWindows } from "../session/raw-window"
 import { NEW_PANE_ITEMS, showsNewPane, type NewPaneItem } from "./new-pane"
 import {
@@ -6772,7 +6774,7 @@ export function Workbench() {
   // Proactive alerts: session completed work
   createEffect(
     on(
-      () => wb().panes.map((p) => ({ id: p.id, title: p.title, status: p.status, lines: p.lines })),
+      () => wb().panes.map((p) => ({ id: p.id, title: p.title, status: p.status })),
       (currentPanes, previousPanes) => {
         if (!previousPanes) return
         for (const pane of currentPanes) {
@@ -6783,7 +6785,9 @@ export function Workbench() {
             continue
           }
           if (prev.status === "working" && pane.status === "idle") {
-            proactiveAlerts.notifyCompletion(pane.id, pane.title, pane.lines, completionTurns.get(pane.id) ?? 0)
+            // Read here, not in the source above: a pane's lines change with every chunk it prints.
+            const lines = wb().panes.find((p) => p.id === pane.id)?.lines ?? []
+            proactiveAlerts.notifyCompletion(pane.id, pane.title, lines, completionTurns.get(pane.id) ?? 0)
           }
         }
       },
@@ -7937,7 +7941,8 @@ export function Workbench() {
   }
 
   /** `written` is called once the terminal has parsed the chunk, or at once when there is none: the host's flow control waits for it (RS-7). */
-  const discardNoted = new Set<string>()
+  const discardNotes = createDiscardNotes((paneId) => report(t("terminal.outputDiscarded"), "warning", paneId))
+  onCleanup(() => discardNotes.dispose())
   const feedTerminal = (paneId: string, chunk: string, written?: () => void) => {
     /*
      * Nothing is written to a pane that no longer exists.
@@ -7959,11 +7964,8 @@ export function Workbench() {
     else if (hooked(paneId) && interruptEnds(activityOf.get(paneId), interruptedAt.get(paneId))) settleWhenQuiet(paneId)
     else if (pane.status === "idle") noticeWorkFromOutput(pane)
 
-    // xterm refused the data (50 MB unparsed): said once in the pane, not for every chunk after it.
-    if (!writeToTerminal(paneId, chunk, written) && !discardNoted.has(paneId)) {
-      discardNoted.add(paneId)
-      report(t("terminal.outputDiscarded"), "warning", paneId)
-    }
+    // xterm refused the data (50 MB unparsed): said in the pane, not for every chunk after it.
+    if (!writeToTerminal(paneId, chunk, written)) discardNotes.refused(paneId)
     screenRequests.fed(paneId)
     if (!liveTerminals().has(paneId)) {
       setLiveTerminals((ids) => new Set(ids).add(paneId))
@@ -8496,6 +8498,29 @@ export function Workbench() {
   const dismissNotices = (id: string) => setWb((w) => updatePane(w, id, { notices: undefined }))
 
   /*
+   * The one write that happens thousands of times a minute, so it is the one
+   * that does not rebuild the workbench.
+   *
+   * `produce` sets the one array that grew. Going through the pure reducers
+   * instead would copy the pane, the pane list and the workbench, and then hand
+   * `reconcile` the whole thing to diff. Once per chunk: see `pane-lines.ts`.
+   */
+  const paneLines = createLineWriter<Pane["lines"][number]>(
+    (id, lines) => {
+      setWbStore(
+        produce((w) => {
+          const pane = w.panes.find((p) => p.id === id)
+          if (!pane) return
+          const next = withLines(unwrap(pane.lines), lines, MAX_PANE_LINES)
+          if (next) pane.lines = next
+        }),
+      )
+      setRevision((n) => n + 1)
+    },
+    (id, raw) => watchForPermission(id, raw),
+  )
+
+  /*
    * `from` says who wrote the line. ADE's own notes go in the transcript like
    * the rest, but they are not the agent: read as its report, «Cerco l'ultima
    * conversazione…» became the pane's activity and stayed in its header after
@@ -8517,32 +8542,9 @@ export function Workbench() {
      * and only the transcript is trimmed.
      */
     const shown = cleanTranscriptLine(text)
-    if (shown !== undefined) {
-      /*
-       * The one write that happens thousands of times a minute, so it is the
-       * one that does not rebuild the workbench.
-       *
-       * `produce` pushes onto the one array that grew. Going through the pure
-       * reducers instead would copy the pane, the pane list and the workbench
-       * for every line, and then hand `reconcile` the whole thing to diff —
-       * per line, per agent.
-       */
-      setWbStore(
-        produce((w) => {
-          const pane = w.panes.find((p) => p.id === id)
-          if (!pane) return
-          // A frame redrawn is the same line again; one entry says as much.
-          if (pane.lines.at(-1)?.text === shown) return
-          pane.lines.push({ kind, text: shown })
-          if (pane.lines.length > MAX_PANE_LINES) {
-            pane.lines.splice(0, pane.lines.length - MAX_PANE_LINES)
-          }
-        }),
-      )
-      setRevision((n) => n + 1)
-    }
+    if (shown !== undefined) paneLines.add(id, { kind, text: shown })
     if (from === "ade") return
-    watchForPermission(id, text)
+    paneLines.watch(id, text)
 
     // Agents print what they are spending in among everything else. Reading it
     // here is the only way the pane's counters are real rather than decorative.
@@ -8559,8 +8561,8 @@ export function Workbench() {
   /*
    * An agent that stops to ask something looks, from the outside, exactly like
    * one that is thinking: the process is alive and the output has stopped. The
-   * difference is in the last few lines, which is why every line is read for a
-   * question before it scrolls away.
+   * difference is in the last few lines, which is why the lines are read for a
+   * question before they scroll away (`paneLines.watch`: in a long chunk, its tail).
    */
   const watchForPermission = (paneId: string, text: string) => {
     const pane = wb().panes.find((p) => p.id === paneId)
@@ -9292,6 +9294,7 @@ export function Workbench() {
 
       // A restart reuses the pane's terminal; the new process starts at 1;1.
       startOnCleanScreen(paneId)
+      discardNotes.started(paneId)
       modeTracker.forget(paneId)
       paneClasses.delete(paneId)
       // A conversation reopened is drawn again, requests and all: those were acted on.
@@ -9323,6 +9326,7 @@ export function Workbench() {
           // The terminal answers the host when it has written the chunk (RS-7).
           return true
         },
+        linesTogether: paneLines.together,
         onLine: (line, stream) => {
           appendLine(paneId, line, stream === "err" ? "note" : "step")
           /*
@@ -9617,6 +9621,7 @@ export function Workbench() {
     try {
       if (!running.starting(paneId, start)) return
       startOnCleanScreen(paneId)
+      discardNotes.started(paneId)
       // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
       const bornAt = ptySize(paneId)
       const paneToken = await freshPaneToken(host, paneId)
@@ -9634,6 +9639,7 @@ export function Workbench() {
           feedTerminal(paneId, chunk, written)
           return true
         },
+        linesTogether: paneLines.together,
         onLine: (line, stream) => appendLine(paneId, line, stream === "err" ? "note" : "step"),
         onExit: (code) => {
           if (superseded) return

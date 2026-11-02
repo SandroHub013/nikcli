@@ -77,7 +77,11 @@ describe("createSizeSettler", () => {
  * acknowledgement, and the output was lost without a word.
  */
 describe("writeToTerminal when xterm refuses the data", () => {
-  it("does not throw, pays the chunk and says the output was discarded", async () => {
+  /*
+   * Not paid: paying a refused chunk told the host the page was keeping up, so the child ran at full speed and all it
+   * printed was thrown away until the window came back. Unpaid, the host waits and forgives on its own clock.
+   */
+  it("does not throw, does not pay the chunk and says the output was discarded", async () => {
     const { disposeTerminal, getTerminal, writeToTerminal } = await import("./registry")
     const { terminal } = getTerminal("rs7-discard")
     const real = terminal.write.bind(terminal)
@@ -90,7 +94,7 @@ describe("writeToTerminal when xterm refuses the data", () => {
       result = writeToTerminal("rs7-discard", "x", () => void paid++)
     }).not.toThrow()
     expect(result).toBe(false)
-    expect(paid).toBe(1)
+    expect(paid).toBe(0)
     terminal.write = real
     expect(writeToTerminal("rs7-discard", "y")).toBe(true)
     disposeTerminal("rs7-discard")

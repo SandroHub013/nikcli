@@ -35,7 +35,7 @@ afterAll(() => {
   delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
 })
 
-;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {}
+;(window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = { transformCallback: () => 1 }
 // A fresh copy: another test file may have asked for the host before there was a Tauri window, and getHost keeps that answer.
 const fresh = "./shell.ts?binary"
 const { getHost } = (await import(fresh)) as typeof import("./shell")

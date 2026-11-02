@@ -83,13 +83,12 @@ describe("the agent catalogue and the Rust allowlist", () => {
     expect(allowed.has("sh")).toBe(true)
   })
 
-  test("the event topic the host listens on is the one Rust emits", () => {
+  test("the channel the page passes is the one the command takes", () => {
     /*
-     * `host/shell.ts` builds `pty:data:${id}` and `pty.rs` builds it with
-     * `format!`. A mismatch is a pane that draws nothing at all, with no
-     * error anywhere: the listener is simply never called.
+     * `host/shell.ts` passes `events` to `pty_spawn`. A mismatch is a launch refused with a missing argument, so
+     * no terminal opens at all.
      */
-    expect(source).toContain(`format!("pty:data:{id}")`)
+    expect(source).toContain("events: Channel<PtyEvent>,")
   })
 
   test("nothing is on the allowlist that the form cannot offer", () => {

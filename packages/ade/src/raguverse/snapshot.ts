@@ -90,7 +90,7 @@ type WorldPane = Pick<
 
 /** A pane the world draws: a session with an agent, not a file, a browser or another panel. */
 export function isWorldSession(pane: WorldPane): boolean {
-  return !isPanelPane({ ...pane, mode: pane.mode ?? "" }) && Boolean(pane.agent ?? pane.model)
+  return !isPanelPane(pane) && Boolean(pane.agent ?? pane.model)
 }
 
 export interface SnapshotInput {

@@ -560,15 +560,15 @@ export function hasTerminal(id: string): boolean {
  * `written` is called once xterm has parsed the chunk: the page's answer to the host's flow control (RS-7).
  *
  * Returns false when xterm refused the data: its `write` throws once 50 MB are waiting to be parsed (a hidden page
- * parses on throttled timers), and the output is gone. The chunk is paid anyway, so the host is not left waiting for
- * an answer that will never come; the caller says so, since output must not be lost silently.
+ * parses on throttled timers), and the output is gone. The caller says so, since output must not be lost silently.
+ * The chunk is not paid: that would tell the host the page is keeping up, and the child would run at full speed with
+ * all it prints thrown away. Unpaid, the host waits and forgives on its own clock (`FLOW_STALL` in `pty.rs`).
  */
 export function writeToTerminal(id: string, chunk: string, written?: () => void): boolean {
   try {
     getTerminal(id).terminal.write(chunk, written)
     return true
   } catch {
-    written?.()
     return false
   }
 }
