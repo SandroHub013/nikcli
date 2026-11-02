@@ -463,7 +463,7 @@ describe("lint: the workbench's round waits for nothing slow", () => {
     const body = source.slice(start, source.indexOf("const mailLanes = createMailLanes", start))
     expect(start).toBeGreaterThan(0)
     expect(body).toContain("clientStoppedReading({ id, takenAt: item.at, held: held.has(id), now: Date.now() })")
-    expect(body).toContain("hangNotice(message.kind, gone)")
+    expect(body).toContain("hangNotice(message, gone)")
     expect(body).not.toContain("if (!held.delete(id)) return")
   })
 
@@ -514,8 +514,14 @@ describe("who hears of a message ADE gave up on", () => {
 
   test("a client still reading needs only the receipt, whatever the kind", () => {
     for (const kind of ["send", "ask", "spawn", "kv", "close"] as const) {
-      expect(hangNotice(kind, false)).toBe("nothing")
+      expect(hangNotice({ kind }, false)).toBe("nothing")
     }
+  })
+
+  test("design proponi: only --attendi leaves a client waiting, and that wait reads late receipts", () => {
+    expect(hangNotice({ kind: "design-proponi", wait: true }, true)).toBe("nothing")
+    // Without it both scripts printed «in coda» and exited 0: nothing else will ever reach that sender.
+    expect(hangNotice({ kind: "design-proponi", wait: false }, true)).toBe("tell")
   })
 
   test.each([
@@ -524,8 +530,7 @@ describe("who hears of a message ADE gave up on", () => {
     ["whoowns", "nothing"],
     ["memory", "nothing"],
     ["registro", "nothing"],
-    // Their wait reads late receipts.
-    ["design-proponi", "nothing"],
+    // Its wait reads late receipts.
     ["design-attendi", "nothing"],
     // A later `ade-msg wait` needs the result, and the default wait has usually ended by now.
     ["ask", "settle-and-tell"],
@@ -541,7 +546,7 @@ describe("who hears of a message ADE gave up on", () => {
     ["delivered", "tell"],
     ["design", "tell"],
   ] as const)("a client gone: %s gets %s", (kind, notice) => {
-    expect(hangNotice(kind, true)).toBe(notice)
+    expect(hangNotice({ kind }, true)).toBe(notice)
   })
 })
 

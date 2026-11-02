@@ -288,18 +288,20 @@ export type HangNotice = "nothing" | "tell" | "settle-and-tell"
  * would wait for ever for a reply to a message it believes is on its way, or for a
  * child that never opened.
  */
-export function hangNotice(kind: Message["kind"], clientGone: boolean): HangNotice {
+export function hangNotice(message: { kind: Message["kind"]; wait?: boolean }, clientGone: boolean): HangNotice {
   if (!clientGone) return "nothing"
-  switch (kind) {
+  switch (message.kind) {
     // Their client has already printed «ADE non ha risposto»: it knows.
     case "kv":
     case "whoowns":
     case "memory":
     case "registro":
-    // Their wait reads late receipts.
-    case "design-proponi":
+    // Its wait reads late receipts.
     case "design-attendi":
       return "nothing"
+    // The same with `--attendi`. Without it there is no wait: the client printed «in coda» with exit 0.
+    case "design-proponi":
+      return message.wait ? "nothing" : "tell"
     // A later `ade-msg wait` needs the result, and the default wait has usually ended by now.
     case "ask":
     case "spawn":

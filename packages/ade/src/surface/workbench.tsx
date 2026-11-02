@@ -3710,7 +3710,7 @@ export function Workbench() {
     report(t("mail.stuck", message.kind, id))
     void getHost().then((host) => {
       void host?.mailboxReceipt?.(id, text).catch(() => {})
-      const notice = hangNotice(message.kind, gone)
+      const notice = hangNotice(message, gone)
       if (notice === "settle-and-tell" && host) void settle(host, id, `[ade-msg] ${text}`)
       if (notice !== "nothing") tellSender(message.from, `[ade-msg] ${text}`)
     })
