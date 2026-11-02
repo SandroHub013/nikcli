@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
+import { codeOf } from "../test-support/source-text"
 
-import { isTyping, submittedSince, typedAfter, type TypedLine } from "./typed-line"
+import { isAnswerKey, isTyping, questionOpened, submittedSince, typedAfter, type TypedLine } from "./typed-line"
 
 const typeAll = (chunks: string[], from: TypedLine | undefined = undefined): TypedLine | undefined =>
   chunks.reduce((line, chunk, index) => typedAfter(line, chunk, 1_000 + index), from)
@@ -136,4 +139,108 @@ describe("submittedSince", () => {
     expect(submittedSince(line, 150)).toBe(line)
     expect(submittedSince(undefined, 150)).toBeUndefined()
   })
+})
+
+/*
+ * Live test 2026-11-02, F2: «q» typed with no Enter into a menu on screen counted as a line begun, so every message to
+ * the pane was held until the user pressed Enter, three minutes later.
+ */
+describe("a key typed into a menu on screen", () => {
+  test("answers the menu: it is not a line begun, and mail is not held for it", () => {
+    for (const key of ["q", "y", "2", " "]) {
+      const line = typedAfter(undefined, key, 1_000, true)
+      expect(isTyping(line)).toBe(false)
+    }
+  })
+
+  test("the same key with no menu is a line begun, as before", () => {
+    expect(isTyping(typedAfter(undefined, "q", 1_000, false))).toBe(true)
+    expect(isTyping(typedAfter(undefined, "q", 1_000))).toBe(true)
+  })
+
+  /*
+   * Review B1: xterm delivers typing one key at a time, so «every single key» was «every key»: the instruction typed
+   * ahead during a long tool run, with the hook still saying `permission`, was all uncounted and the mail landed in it.
+   */
+  test("only the first key before an Enter is an answer: the second is a draft", () => {
+    const first = typedAfter(undefined, "1", 1_000, true)
+    expect(isTyping(first)).toBe(false)
+    const typedAhead = ["c", "o", "n", "t"].reduce((line, key, index) => typedAfter(line, key, 2_000 + index, true), first)
+    expect(isTyping(typedAhead)).toBe(true)
+    expect(typedAhead?.pending).toBe(4)
+  })
+
+  test("a key on top of a draft begun before the menu counts, and the mail stays held", () => {
+    const draft = typedAfter(undefined, "ciao come", 1_000)
+    const after = typedAfter(draft, "y", 2_000, true)
+    expect(isTyping(after)).toBe(true)
+    expect(after?.pending).toBe(10)
+  })
+
+  test("an Enter after the answer clears it, and the next key is an answer again", () => {
+    const answered = typedAfter(undefined, "y", 1_000, true)
+    const sent = typedAfter(answered, String.fromCharCode(13), 2_000, true)
+    expect(isTyping(typedAfter(sent, "n", 3_000, true))).toBe(false)
+  })
+
+  test("what counts as a key to read the screen for is one printable character", () => {
+    for (const key of ["1", "y", " ", "é"]) expect([key, isAnswerKey(key)]).toEqual([key, true])
+    const esc = String.fromCharCode(27)
+    const cr = String.fromCharCode(13)
+    const lf = String.fromCharCode(10)
+    for (const data of ["", cr, lf, "ab", esc, `${esc}[A`, `${esc}[<0;10;5M`, String.fromCharCode(127), String.fromCharCode(3)])
+      expect([data, isAnswerKey(data)]).toEqual([data, false])
+  })
+
+  test("only a single key is an answer: a paste or several characters into the menu count as typed", () => {
+    expect(isTyping(typedAfter(undefined, "hello", 1_000, true))).toBe(true)
+    expect(isTyping(typedAfter(undefined, "\u001b[200~pasted\u001b[201~", 1_000, true))).toBe(true)
+  })
+
+  test("an Enter into a menu still sends, and clears what was there", () => {
+    const draft = typedAfter(undefined, "abc", 1_000)
+    expect(typedAfter(draft, "\r", 2_000, true)).toBeUndefined()
+  })
+})
+
+/*
+ * Re-review B7: `answered` outlived the menu it answered, so the second one-key menu of the same turn counted as a draft and
+ * every message to the pane was held, with a note about a line nobody had begun.
+ */
+describe("a new question", () => {
+  test("is answered by its own first key, even when the last one was answered with no Enter between", () => {
+    const first = typedAfter(undefined, "1", 1_000, true)
+    expect(isTyping(first)).toBe(false)
+    const second = typedAfter(questionOpened(first), "1", 2_000, true)
+    expect(isTyping(second)).toBe(false)
+    expect(isTyping(typedAfter(questionOpened(second), "2", 3_000, true))).toBe(false)
+  })
+
+  test("without a new question the second key is still a draft", () => {
+    const first = typedAfter(undefined, "1", 1_000, true)
+    expect(isTyping(typedAfter(first, "1", 2_000, true))).toBe(true)
+  })
+
+  test("leaves a real draft alone", () => {
+    const draft = typedAfter(undefined, "ciao", 1_000)
+    expect(questionOpened(draft)).toBe(draft)
+    expect(questionOpened(undefined)).toBeUndefined()
+  })
+})
+
+test("lint: a question opening, by the hook or by the screen, drops the last answer", () => {
+  const workbench = codeOf(readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf-8"))
+  const hook = workbench.slice(workbench.indexOf(codeOf('if (next === "waiting") {')))
+  expect(hook.slice(0, 300)).toContain(codeOf("records.typed.update(paneId, questionOpened)"))
+  const screen = workbench.slice(workbench.indexOf(codeOf("permissions.set(paneId, request)")))
+  expect(screen.slice(0, 200)).toContain(codeOf("records.typed.update(paneId, questionOpened)"))
+})
+
+test("lint: the terminal asks whether a question is open before it counts a key", () => {
+  const renderer = readFileSync(join(import.meta.dir, "../surface/pane-renderer.tsx"), "utf-8")
+    expect(renderer).toContain("typedAfter(line, data, Date.now(), menuOpen)")
+  const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf-8")
+  // Re-review N16: a line that already has typing in it ignores the answer, so the screen is not read for it.
+  expect(renderer).toContain("isAnswerKey(data) && !isTyping(deps.records.typed.get(current().id)) && deps.menuOpen(current().id)")
+  expect(workbench).toMatch(/promptAnswered,\r?\n\s+menuOpen: menuOnScreen,/)
 })

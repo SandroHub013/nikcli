@@ -59,6 +59,25 @@ function setup(load: () => Promise<unknown>, save: (json: string) => Promise<voi
   return { link, sent, saved, ignored, loads, closes, isClosed, unreadable: () => unreadable }
 }
 
+describe("ADE's theme, told to the page that is open (V4)", () => {
+  test("goes down the port as `theme`, one message per change, with nothing else in it", () => {
+    const t = setup(async () => null)
+    t.link.theme("light")
+    t.link.theme("dark")
+    expect(t.sent).toEqual([
+      { type: "theme", theme: "light" },
+      { type: "theme", theme: "dark" },
+    ])
+  })
+
+  test("once the link is closed the old page hears nothing", () => {
+    const t = setup(async () => null)
+    t.link.close()
+    t.link.theme("light")
+    expect(t.sent).toEqual([])
+  })
+})
+
 describe("readFromPage", () => {
   test("only `ready`, `learn-save` and `close` are messages", () => {
     expect(readFromPage({ type: "ready" })).toEqual({ type: "ready" })

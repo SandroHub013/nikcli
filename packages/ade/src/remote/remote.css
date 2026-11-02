@@ -106,7 +106,13 @@
   transform: var(--ade-press);
 }
 
+/*
+ * Not the accent at half opacity: the light text on the faded red was nowhere near legible (live test V5). A disabled
+ * primary is the sunken ground with the weak text, which the text-contrast test holds to 4.5:1 on every theme.
+ */
 [data-component="remote-space"] [data-slot="primary"]:disabled {
-  opacity: 0.5;
+  background: var(--ade-sunken);
+  border-color: var(--ade-border);
+  color: var(--ade-text-weak);
   cursor: default;
 }

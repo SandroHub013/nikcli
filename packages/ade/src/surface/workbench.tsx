@@ -455,7 +455,9 @@ import {
   type DeliveryResult,
   type LineOutcome,
 } from "../session/enter"
-import { isTyping, submittedSince, typedAfter } from "../session/typed-line"
+import { watchLongTasks } from "../session/long-task-log"
+import { formatSpawnFailed, spawnOutcome } from "../session/spawn-outcome"
+import { isTyping, questionOpened, submittedSince, typedAfter } from "../session/typed-line"
 import { parseQueue, queueToSave, waitsForRestore } from "../session/mail-queue"
 import {
   clientStoppedReading,
@@ -2534,8 +2536,12 @@ export function Workbench() {
   // The surface going away without the page (a hot update of this file) ends them too: see `RunningSessions`.
   const running = new RunningSessions()
   onCleanup(() => running.endAll())
+  // A page held for seconds is what the mail waits behind, whoever held it: said in the log, with the time.
+  onCleanup(watchLongTasks((text) => console.error(text)))
   // The panes being started back (`reopen`, the restore): recorded before their awaits, not after (ALTO 3).
   const reopening = oneAtATime()
+  /** Why the host refused each pane's last start (`onRefused`), so `ade-msg spawn` can tell its sender. Cleared when a start begins. */
+  const startRefusals = new Map<string, string>()
   const [runningTick, setRunningTick] = createSignal(0)
   const touchRunning = () => setRunningTick((n) => n + 1)
   const isRunning = (id: string) => {
@@ -2765,6 +2771,8 @@ export function Workbench() {
   const held = new Set<string>()
   /** The state last written for a queued request, so a waiter hears about changes only. */
   const heldStates = new Map<string, string>()
+  /** Panes told, in their own terminal, that a message waits for the line typed in them. */
+  const heldByLineNoted = new Set<string>()
 
   /*
    * The sessions Claude Code lists (`claude agents --json`, documented), so a
@@ -3374,6 +3382,18 @@ export function Workbench() {
     isQuestionOpen(permissions()[paneId], activityOf.get(paneId)) || modeTracker.heldOpen(paneId) || screenAsks(paneId)
 
   /*
+   * Whether a key typed now is the answer to a menu: for `typedAfter`, which then does not count the first key as a draft.
+   * Narrower than `questionOpen`, which holds mail: the hook's `permission` stays in the file until the turn ends (the
+   * hook writes nothing at the answer), so it counts only while the pane is still `waiting`, which the first key
+   * (`promptAnswered`) turns off. The screen reading and the dialog window are live, and stand as they are (review B1).
+   */
+  const menuOnScreen = (paneId: string) => {
+    const waiting = wb().panes.find((candidate) => candidate.id === paneId)?.status === "waiting"
+    const byHook = waiting && isQuestionOpen(permissions()[paneId], activityOf.get(paneId))
+    return byHook || modeTracker.heldOpen(paneId) || screenAsks(paneId)
+  }
+
+  /*
    * A menu drawn with the cursor (codex, OpenCode, ragu without its plugin, a trust dialog), which the line stream
    * never sees whole: read off the pane's screen whenever typing is weighed (`session/screen-question.ts`, SES-3). It
    * holds the Enter; it is not offered to the voice to answer, its keys are arrows.
@@ -3474,6 +3494,7 @@ export function Workbench() {
   const targetOf = (request: OpenRequest) => ({
     running: running.has(request.to),
     suspended: isSuspendedPane(request.to),
+    relaunching: running.relaunching(request.to),
     permissionPending: questionOpen(request.to),
     lastOutputAt: lastOutputAt.get(request.to),
     activity: activityOf.get(request.to),
@@ -3642,6 +3663,8 @@ export function Workbench() {
         ? statusFromActivity(pane.status, activity, workingSince.get(paneId), questionSeenAt.get(paneId))
         : undefined
       if (next === "waiting") {
+        // A new question: the key that answered the last one is not this one's answer (re-review B7).
+        records.typed.update(paneId, questionOpened)
         setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
       } else if (next === "working") {
         panels.newTurn(paneId, activity.at)
@@ -4001,10 +4024,14 @@ export function Workbench() {
       // A request whose answerer is gone will never be answered; the caller is told, not left waiting.
       if (state === "sessione chiusa") {
         const title = wb().panes.find((pane) => pane.id === request.to)?.title ?? request.to
+        // A start that did not happen says why (review N2); a session that simply closed has no reason on record.
+        const refusal = startRefusals.get(request.to)
         await settle(
           host,
           request.id,
-          `[ade-msg] errore: la sessione "${title}" si è chiusa senza rispondere alla richiesta ${request.id}`,
+          refusal
+            ? `[ade-msg] errore: la sessione "${title}" non è ripartita (${refusal}) e la richiesta ${request.id} resta senza risposta`
+            : `[ade-msg] errore: la sessione "${title}" si è chiusa senza rispondere alla richiesta ${request.id}`,
         )
         continue
       }
@@ -4896,6 +4923,22 @@ export function Workbench() {
         saveSpawned()
       }
       if (sender) appendLine(sender.id, t("note.subagent", created.title), "note", "ade")
+      /*
+       * The receipt waits for the start (a few seconds at most): a program that is not there, a key the host refused or a
+       * folder gone is said to the sender, who would otherwise wait on a session that never began (live test, item 4).
+       */
+      const outcome = await spawnOutcome(created.started, () => startRefusals.get(created.id))
+      if (outcome.kind === "failed") {
+        /*
+         * Nobody will answer it, so it is settled with the truth: a waiter that has gone past its 10 s hears the refusal
+         * as the result, and the receipt carries the same text (review B5: a bare delete left that waiter with nothing).
+         * The pane stays with its «Riprova».
+         */
+        const failed = formatSpawnFailed(created.title, created.id, outcome.reason)
+        await settle(host, id, `[ade-msg] ${failed}`)
+        await answer(failed)
+        return true
+      }
       await answer(
         `ok: avviata la sessione "${created.title}" (${agent.id}, id ${created.id}, livello ${depth})` +
           (worktree ? ` nella worktree ${worktree.path} sul branch ${worktree.branch} (da ${worktreeBase})` : "") +
@@ -5065,7 +5108,14 @@ export function Workbench() {
        * the pane, and then the new spawn's.
        */
       const old = running.get(pane.id)
+      /*
+       * Marked before the old process goes: a pane being relaunched is not a closed one, and its open requests stay
+       * open (live test, F1). Taken off when the new start is over, so one that fails closes them with the truth.
+       */
+      const relaunch = running.beginRelaunch(pane.id)
       running.delete(pane.id)
+      // What the user typed went with the old process: a count left from it would hold every message for a line that is gone (review B6).
+      records.typed.forget(pane.id)
       touchRunning()
       void closeSuspendedTree(old)
       setWb((w) => updatePane(w, pane.id, { spawnArgs, ...(message.fresh ? { resumeId: undefined } : {}) }))
@@ -5080,10 +5130,11 @@ export function Workbench() {
             )
           }
         }
-        void startProcess(pane.id, agentId, "")
+        void startProcess(pane.id, agentId, "").finally(() => running.endRelaunch(pane.id, relaunch))
       } else {
         const updated = wb().panes.find((candidate) => candidate.id === pane.id)
-        if (updated) void reopen(updated)
+        if (updated) void reopen(updated).finally(() => running.endRelaunch(pane.id, relaunch))
+        else running.endRelaunch(pane.id, relaunch)
       }
       tellPane(
         pane.id,
@@ -5152,6 +5203,15 @@ export function Workbench() {
     // Read back from the saved queue before its session was started again: it waits for the process, not for ever.
     if (!session && waitsForRestore({ replayed: replayedMail.has(id), paneExists: paneExists(target.pane.id), sinceBoot: Date.now() - loadedAt }))
       return false
+    // Between the old process and the new one of a relaunch: not a closed pane, so what was held for it waits (review B4).
+    if (!session && running.relaunching(target.pane.id)) {
+      // Fresh mail too: the sender hears now, and `held` makes the branch below tell the truth if the start then fails (re-review B8).
+      if (!held.has(id)) {
+        held.add(id)
+        await answer(`ok: in coda, "${target.pane.title}" sta ripartendo: arriva appena è su`)
+      }
+      return false
+    }
     if (!session) {
       // Its sender stopped reading receipts when it was held: an ask is answered where the caller waits.
       if (held.delete(id)) {
@@ -5270,6 +5330,14 @@ export function Workbench() {
     // Read again after the await: the round's held lines may have started one for this pane in the meantime.
     if (!(await freeNow(host, target.pane.id)) || linesInFlight.has(target.pane.id)) {
       const byLine = isTyping(records.typed.get(target.pane.id))
+      /*
+       * Said to the user too, once for as long as the line stands: the pane waits for the line and the user sees nothing
+       * of why (review B6). The sender already has its receipt.
+       */
+      if (byLine && !heldByLineNoted.has(target.pane.id)) {
+        heldByLineNoted.add(target.pane.id)
+        tellPane(target.pane.id, t("note.mailHeldByLine"))
+      }
       if (!held.has(id)) {
         held.add(id)
         await answer(
@@ -5293,6 +5361,14 @@ export function Workbench() {
       return false
     }
     heldStates.delete(id)
+    if (heldByLineNoted.delete(target.pane.id)) {
+      // The line has gone and the mail is on its way: the note about it goes too (re-review N12).
+      const note = t("note.mailHeldByLine")
+      setWb((w) => {
+        const pane = w.panes.find((candidate) => candidate.id === target.pane.id)
+        return pane?.notices?.includes(note) ? updatePane(w, pane.id, { notices: pane.notices.filter((n) => n !== note) }) : w
+      })
+    }
 
     const targetDepth = depthOf(target.pane.id, parentOf)
     const context = {
@@ -6899,7 +6975,15 @@ export function Workbench() {
     }
     if (savedWorkspace.unreadable) {
       workspaceSaveBlocked = savedWorkspace.saveBlocked
-      report(t(savedWorkspace.saveBlocked ? "workspace.unreadableNoCopy" : "workspace.unreadable"), "warning")
+      // Damaged text is not cured by updating ADE (F3): only a newer version's is told to update.
+      report(
+        savedWorkspace.saveBlocked
+          ? t("workspace.unreadableNoCopy")
+          : savedWorkspace.reason === "broken" && savedWorkspace.copyKey
+            ? t("workspace.unreadableBroken", savedWorkspace.copyKey)
+            : t("workspace.unreadable"),
+        "warning",
+      )
     } else {
       // A copy kept by an older build that this one reads: offered back, never put back by itself.
       const copy = restorableCopy(localStorage)
@@ -7984,6 +8068,8 @@ export function Workbench() {
     modeTracker.forget(id)
     forgetQuiet(id)
     screenRequests.forget(id)
+    startRefusals.delete(id)
+    heldByLineNoted.delete(id)
     // Per-pane bookkeeping kept in plain maps, which nothing else clears: a
     // long day of opening and closing sessions used to keep every one of them.
     lastOutputAt.delete(id)
@@ -8487,6 +8573,7 @@ export function Workbench() {
     if (!request) return
 
     permissions.set(paneId, request)
+    records.typed.update(paneId, questionOpened)
     questionSeenAt.set(paneId, Date.now())
     setWb((w) => updatePane(w, paneId, { status: "waiting", activity: "permission" }))
     if (voiceEngine.isRunning()) {
@@ -8903,6 +8990,7 @@ export function Workbench() {
   ) => {
     // First of all: closing the pane, or starting it again, takes it away (`RunningSessions.adopt`).
     const start = running.beginStart(paneId)
+    startRefusals.delete(paneId)
     const agent = agentById(agentId)
     // An app's pane is its server's console: a task typed there is a line the server does not read.
     if (agent?.kind === "app") task = ""
@@ -8923,6 +9011,7 @@ export function Workbench() {
     if (gone) {
       setWb((w) => updatePane(w, paneId, { status: "error", activity: "folderGone", gone }))
       appendLine(paneId, t("project.missing", gone), "note", "ade")
+      startRefusals.set(paneId, t("project.missing", gone))
       return
     }
     if (wb().panes.some((pane) => pane.id === paneId && pane.gone))
@@ -9237,6 +9326,7 @@ export function Workbench() {
         onRefused: (reason) => {
           refused = true
           tellPane(paneId, startFailureText(reason, agent))
+          startRefusals.set(paneId, reason)
         },
         ...(nonce ? { link: { pane: paneId, nonce } } : {}),
         pane: paneId,
@@ -9445,6 +9535,7 @@ export function Workbench() {
     } catch (e) {
       // Over the terminal: a pane started again keeps the old one live, and the transcript hidden.
       tellPane(paneId, startFailureText(String(e), agent))
+      startRefusals.set(paneId, String(e))
       setWb((w) => updatePane(w, paneId, { status: "error", activity: "startFailed" }))
     }
   }
@@ -9524,6 +9615,7 @@ export function Workbench() {
         onRefused: (reason) => {
           refused = true
           tellPane(paneId, connectFailureText(reason))
+          startRefusals.set(paneId, reason)
         },
         pane: paneId,
         paneToken,
@@ -9596,6 +9688,7 @@ export function Workbench() {
       openingPolls.add(poll)
     } catch (e) {
       tellPane(paneId, connectFailureText(String(e)))
+      startRefusals.set(paneId, String(e))
       setWb((w) => updatePane(w, paneId, { status: "error", activity: "connectFailed" }))
     }
   }
@@ -9703,12 +9796,13 @@ export function Workbench() {
     )
     setStarting(false)
     // A fork opens as a resumed conversation, and the task is typed into it all the same.
-    if (input.fork)
-      void startProcess(id, entry.agentId, task, { kind: "resume", via: "id", args: input.fork.args }, undefined, true)
-    else void startProcess(id, entry.agentId, task)
+    const started = input.fork
+      ? startProcess(id, entry.agentId, task, { kind: "resume", via: "id", args: input.fork.args }, undefined, true)
+      : startProcess(id, entry.agentId, task)
+    void started.catch(() => {})
     // Handed back for the callers that need to keep talking to the pane they
-    // just made; `launchSessions` ignores it.
-    return { id, title }
+    // just made; `launchSessions` ignores it. `started` settles when the start is over, however it went.
+    return { id, title, started }
   }
 
   /**
@@ -9898,6 +9992,7 @@ export function Workbench() {
     saveFile: (id) => void saveFile(id),
     turnSubmitted,
     promptAnswered,
+    menuOpen: menuOnScreen,
     interrupted,
     restart: (pane, line) => void reopen(pane, line),
     suspendCheck: suspendCheckFor,

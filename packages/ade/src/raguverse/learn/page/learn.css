@@ -134,6 +134,11 @@ h2 {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
+/* The review button and the first lesson under it were touching (V8). */
+.principale + .lesson {
+  margin-top: 0.75rem;
+}
+
 .lesson {
   display: flex;
   align-items: center;

@@ -1459,3 +1459,19 @@ describe("spawn: no cap on the number of sessions, the depth stays", () => {
     expect(spawnDepthRefusal(3, DEFAULT_MAX_DEPTH)).toContain("livello 2")
   })
 })
+
+describe("a request to a pane being relaunched", () => {
+  const request: OpenRequest = { id: "171-ab", kind: "spawn", from: "n1-0", to: "n2-1", at: 0, brief: "x" }
+
+  test("is not closed however old it is: the pane is between two processes, not closed (F1)", () => {
+    const gap = { running: false, relaunching: true, permissionPending: false }
+    expect(requestState(request, gap, 60_000)).toBe("in avvio")
+    expect(requestState(request, gap, 3_600_000)).toBe("in avvio")
+  })
+
+  test("once the relaunch is over and nothing runs, it closes as before", () => {
+    expect(requestState(request, { running: false, relaunching: false, permissionPending: false }, 60_000)).toBe(
+      "sessione chiusa",
+    )
+  })
+})

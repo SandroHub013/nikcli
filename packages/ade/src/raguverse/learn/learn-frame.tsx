@@ -111,6 +111,8 @@ export function LearnFrame(props: {
       close: () => props.onClose?.(),
     })
     link = current
+    // The theme may have changed between the address the page was loaded with and this port (review N9).
+    current.theme(frameTheme())
     channel.port1.onmessage = (event) => current.receive(event.data)
     // "*" because the frame's origin is opaque and no target origin can name it. What decides who gets the port is the nonce the
     // page just sent back from this frame's window (`handshake.hello`), not the address.
@@ -133,6 +135,17 @@ export function LearnFrame(props: {
 
   onMount(() => {
     window.addEventListener("message", onHello)
+    /*
+     * ADE's theme changed with the page open: it is told on its port, and keeps the lesson it is on. The address it was loaded
+     * with is only what it opens in; a frame told nothing stayed in the old scheme under new chrome until the learner left and
+     * came back (live test 2026-11-02, V4).
+     */
+    const shell = document.querySelector('[data-component="ade-shell"]')
+    if (shell && typeof MutationObserver !== "undefined") {
+      const watch = new MutationObserver(() => link?.theme(frameTheme()))
+      watch.observe(shell, { attributes: true, attributeFilter: ["data-theme"] })
+      onCleanup(() => watch.disconnect())
+    }
     if (props.autofocus) focus()
     onCleanup(() => {
       window.removeEventListener("message", onHello)

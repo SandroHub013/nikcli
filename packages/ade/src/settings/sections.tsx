@@ -381,8 +381,9 @@ export function ShortcutsSection(props: { platform: Platform }) {
             <section aria-label={t(group.titleKey)} data-slot="shortcuts-group">
               <p data-slot="section-desc">
                 <strong>{t(group.titleKey)}</strong>
-                <Show when={group.noteKey}>{(note) => <> {t(note())}</>}</Show>
               </p>
+              {/* Its own line, like the groups that have none: the title ran on into the note (V9). */}
+              <Show when={group.noteKey}>{(note) => <p data-slot="section-desc">{t(note())}</p>}</Show>
               <ul data-slot="settings-list">
                 <For each={group.rows}>
                   {(row) => (

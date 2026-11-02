@@ -237,9 +237,8 @@
   max-width: var(--ade-surface-max, 560px);
   outline: none;
   /*
-   * The panel inside is rounded, and the focus ring drawn on this frame when
-   * the sheet opens followed a square corner around it (Verifiche,
-   * kobalte-overlay-scatti). The same radius as a surface's.
+   * The panel inside is rounded: the same radius as a surface's, so the frame has no square corner around it (Verifiche,
+   * kobalte-overlay-scatti). The frame draws no focus ring of its own any more: `index.css` takes it off (V3).
    */
   border-radius: var(--ade-radius-xl);
 }

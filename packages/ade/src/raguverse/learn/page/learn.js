@@ -1424,6 +1424,11 @@ export async function boot(win) {
         disegna()
         return
       }
+      // ADE's theme changed while the page is open: only the two schemes there are, set on the page's own root (V4).
+      if (data.type === "theme") {
+        if ((data.theme === "light" || data.theme === "dark") && doc.documentElement?.dataset) doc.documentElement.dataset.theme = data.theme
+        return
+      }
       console.warn(`[impara] da ADE: messaggio non previsto «${String(data.type).slice(0, 40)}», ignorato`)
     }
     port.postMessage({ type: "ready" })

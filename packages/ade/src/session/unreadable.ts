@@ -13,7 +13,7 @@
  * not save over the original: `keepUnreadable` says so by returning `false`.
  */
 
-import { parseWorkspace, type WorkspaceState } from "./persist"
+import { parseWorkspace, unreadableReason, type WorkspaceState } from "./persist"
 
 /** The storage the copies go to: the part of `Storage` this file uses. */
 export interface UnreadableStore {
@@ -80,6 +80,10 @@ export interface SavedWorkspace {
   state: WorkspaceState | undefined
   /** The saved text exists and did not parse: the bell tells the user. */
   unreadable: boolean
+  /** Why it did not parse: a newer version (updating helps) or damage (it does not). Set with `unreadable`. */
+  reason?: "newer" | "broken"
+  /** The key its copy is kept under, when there is one: the user is told where it is. */
+  copyKey?: string
   /** The unreadable text has no copy: the autosave must not write over it. */
   saveBlocked: boolean
 }
@@ -96,7 +100,26 @@ export function readSavedWorkspace(store: UnreadableStore, now: number): SavedWo
   if (!text) return { state: undefined, unreadable: false, saveBlocked: false }
   const state = parseWorkspace(text)
   if (state) return { state, unreadable: false, saveBlocked: false }
-  return { state: undefined, unreadable: true, saveBlocked: !keepUnreadable(store, WORKSPACE_KEY, text, now) }
+  const kept = keepUnreadable(store, WORKSPACE_KEY, text, now)
+  const copyKey = kept ? copyOfText(store, WORKSPACE_KEY, text) : undefined
+  return {
+    state: undefined,
+    unreadable: true,
+    reason: unreadableReason(text),
+    saveBlocked: !kept,
+    ...(copyKey ? { copyKey } : {}),
+  }
+}
+
+/** The newest copy of `key` holding exactly `text`. */
+function copyOfText(store: UnreadableStore, key: string, text: string): string | undefined {
+  try {
+    return unreadableCopies(store, key)
+      .reverse()
+      .find((name) => store.getItem(name) === text)
+  } catch {
+    return undefined
+  }
 }
 
 /**
