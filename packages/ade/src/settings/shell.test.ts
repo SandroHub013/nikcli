@@ -52,6 +52,7 @@ const calls = {
   mic: [] as boolean[],
   folder: 0,
   export: 0,
+  cancelExport: 0,
   check: 0,
   install: 0,
 }
@@ -63,6 +64,7 @@ afterEach(() => {
   calls.mic = []
   calls.folder = 0
   calls.export = 0
+  calls.cancelExport = 0
   calls.check = 0
   calls.install = 0
   gridColumns = 1
@@ -76,6 +78,10 @@ function renderSettingsSheet(
     version?: string
     /** Voice props on top of the defaults: the settings, MAI's state, the engine. */
     voice?: Record<string, unknown>
+    /** An export in progress, 0 to 1; absent when none is running. */
+    exporting?: number
+    /** The export is waiting for the window to come back. */
+    exportWaiting?: boolean
   } = {},
 ) {
   const host = document.createElement("div")
@@ -131,6 +137,12 @@ function renderSettingsSheet(
           },
           onExport: () => {
             calls.export++
+          },
+          exporting: () => options.exporting !== undefined,
+          exportProgress: () => options.exporting ?? 0,
+          exportWaiting: () => options.exportWaiting === true,
+          onCancelExport: () => {
+            calls.cancelExport++
           },
         },
         updates: {
@@ -508,6 +520,29 @@ describe("settings shell", () => {
     expect(exportBtn).not.toBeNull()
     exportBtn!.click()
     expect(calls.export).toBe(1)
+  })
+
+  /*
+   * Audit 2026-11-02, MOD-4: the promo export ran as long as the take with no way out and no sign of progress.
+   */
+  test("MOD-4: while an export runs the button gives way to its progress and to «Annulla»", () => {
+    renderSettingsSheet({ initialTarget: "record/video", exporting: 0.42 })
+
+    expect(document.body.querySelector('[data-action="record.export"]')).toBeNull()
+    expect(document.body.querySelector('[data-export="progress"]')?.textContent).toContain("42")
+    const cancel = document.body.querySelector<HTMLButtonElement>('[data-action="record.export.cancel"]')
+    expect(cancel).not.toBeNull()
+    cancel!.click()
+    expect(calls.cancelExport).toBe(1)
+  })
+
+  // Review of ade/residui-gravi, B3: a hidden window holds the export, and the progress says so.
+  test("MOD-6: an export held because the window is hidden says it is waiting, and Annulla stays", () => {
+    renderSettingsSheet({ initialTarget: "record/video", exporting: 0.3, exportWaiting: true })
+
+    const line = document.body.querySelector('[data-export="progress"]')
+    expect(line?.getAttribute("data-waiting")).toBe("true")
+    expect(document.body.querySelector('[data-action="record.export.cancel"]')).not.toBeNull()
   })
 
   test("M2: Aggiornamenti mostra la versione e controlla lo stesso flusso del menu", () => {
