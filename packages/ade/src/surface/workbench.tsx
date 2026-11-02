@@ -934,6 +934,12 @@ export function Workbench() {
   /** The kept copy of the saved sessions put back as the workspace, and the page reloaded to read it. After the user's yes only. */
   const restoreSessions = (copyKey: string) => {
     setRestoreAsking(undefined)
+    // The browser's «leave this page?» no longer appears on this path (it would come after the data changed), so what it
+    // protected is checked here: a file with unsaved changes would be lost with the reload.
+    if (Object.values(buffers()).some((buffer) => buffer.dirty)) {
+      report(t("workspace.restore.saveFirst"))
+      return
+    }
     // Nothing may write the current workbench over it, on the way out either (`pagehide`).
     workspaceRestoring = true
     persistMail()
@@ -6803,7 +6809,8 @@ export function Workbench() {
      * running agent (`mustConfirmLeaving`).
      */
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (closingConfirmed) return
+      // A restore asked its own question first; a second one would come after the saved sessions were put back.
+      if (closingConfirmed || workspaceRestoring) return
       const unsavedBuffers = Object.values(buffers()).filter((buffer) => buffer.dirty).length
       if (!mustConfirmLeaving({ unsavedBuffers, runningSessions: running.size })) return
       event.preventDefault()

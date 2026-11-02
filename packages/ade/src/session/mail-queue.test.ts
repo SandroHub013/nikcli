@@ -145,6 +145,23 @@ describe("the data-safety wiring in the workbench", () => {
     expect(source).toContain("if (updating()) return\n          mailPass++")
   })
 
+  test("the reload prompt does not come after a restore, and a restore refuses an unsaved file first", () => {
+    const leaving = source.indexOf("const handleBeforeUnload = (event: BeforeUnloadEvent) => {")
+    expect(source.indexOf("if (closingConfirmed || workspaceRestoring) return", leaving)).toBeGreaterThan(leaving)
+    const restore = source.indexOf("const restoreSessions = (copyKey: string) => {")
+    const dirty = source.indexOf("buffer.dirty", restore)
+    const written = source.indexOf("restoreCopy(localStorage, copyKey)", restore)
+    expect(dirty).toBeGreaterThan(restore)
+    expect(written).toBeGreaterThan(dirty)
+    expect(source.slice(dirty, written)).toContain('report(t("workspace.restore.saveFirst"))')
+  })
+
+  test("the question says running agents stop, in both languages", () => {
+    const text = readFileSync(new URL("../i18n/en.ts", import.meta.url), "utf8") + readFileSync(new URL("../i18n/it.ts", import.meta.url), "utf8")
+    expect(text).toContain("running agents stop")
+    expect(text).toContain("gli agenti in corso si fermano")
+  })
+
   test("the autosave never throws, never writes over a restore, and respects the block", () => {
     const write = source.indexOf("write: () => {\n      if (workspaceRestoring) return")
     expect(write).toBeGreaterThan(0)

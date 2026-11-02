@@ -420,7 +420,9 @@ export function ShotTray(props: ShotTrayProps) {
                     data-slot="shot-viewer-close"
                     data-tone="danger"
                     disabled={deleting()}
-                    onClick={async () => {
+                    onClick={async (event) => {
+                      // The second click of a double click on «Elimina» lands here: it is not a yes.
+                      if (event.detail > 1) return
                       const path = shot().path
                       setDeleting(true)
                       const done = (await props.onDelete?.(path)) ?? false

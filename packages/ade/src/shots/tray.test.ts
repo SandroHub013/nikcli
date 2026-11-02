@@ -197,6 +197,20 @@ describe("deleting a screenshot from the viewer", () => {
     expect(host.querySelector('[data-slot="shot-viewer-error"]')?.textContent).toBe(t("shots.delete.failed"))
   })
 
+  test("the second click of a double click does not confirm", async () => {
+    const deleted: string[] = []
+    const host = open(async (path) => (deleted.push(path), true))
+    byText(host, t("shots.delete"))!.click()
+    const confirm = byText(host, t("shots.delete.confirm"))!
+    confirm.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 2 }))
+    await settle()
+    expect(deleted).toEqual([])
+    expect(host.querySelector('[data-component="shot-viewer"]')).not.toBeNull()
+    confirm.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }))
+    await settle()
+    expect(deleted).toEqual([shot.path])
+  })
+
   test("the buttons are capitalised in both languages", () => {
     expect(t("shots.delete")).toBe("Elimina")
     expect(t("shots.close")).toBe("Chiudi")
