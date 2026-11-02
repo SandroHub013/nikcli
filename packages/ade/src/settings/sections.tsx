@@ -9,6 +9,7 @@ import type { GlassStatus } from "../surface/glass-window"
 import { shortcutGroups } from "../keyboard/shortcuts-list"
 import type { Platform } from "../keyboard/keymap"
 import { Button } from "../ui/controls"
+import { PillTabs } from "../ui/pill-tabs"
 import "./sections.css"
 
 /**
@@ -208,21 +209,20 @@ export function ThemeSection(props: ThemeSectionProps) {
         <p data-slot="section-desc">{t("settings.theme.desc")}</p>
       </div>
 
-      <div data-slot="settings-choices" role="group" aria-label={t("settings.theme.group")}>
-        <For each={THEME_CHOICES}>
-          {(choice) => (
-            <button
-              type="button"
-              data-slot="settings-choice"
-              data-theme-choice={choice}
-              data-active={value() === choice ? "true" : undefined}
-              aria-pressed={value() === choice}
-              onClick={() => choose(choice)}
-            >
-              {label(choice)}
-            </button>
-          )}
-        </For>
+      <div data-slot="settings-choices">
+        <PillTabs
+          role="button"
+          popup={false}
+          dataSlot="ade-pill-tabs"
+          ariaLabel={t("settings.theme.group")}
+          items={THEME_CHOICES.map((choice) => ({
+            id: choice,
+            label: label(choice),
+            active: value() === choice,
+            attrs: { "data-theme-choice": choice },
+          }))}
+          onSelect={(id) => choose(id as (typeof THEME_CHOICES)[number])}
+        />
       </div>
 
       <Show when={status() && status()!.supported === false}>
@@ -298,22 +298,20 @@ export function LanguageSection(props: LanguageSectionProps) {
         <p data-slot="section-desc">{t("settings.language.desc")}</p>
       </div>
 
-      <div data-slot="settings-choices" role="group" aria-label={t("settings.language.group")}>
-        <For each={LOCALE_PREFERENCES}>
-          {(choice) => (
-            <button
-              type="button"
-              data-slot="settings-choice"
-              data-locale={choice}
-              data-active={value() === choice ? "true" : undefined}
-              aria-pressed={value() === choice}
-              lang={choice === "system" ? undefined : choice}
-              onClick={() => choose(choice)}
-            >
-              {label(choice)}
-            </button>
-          )}
-        </For>
+      <div data-slot="settings-choices">
+        <PillTabs
+          role="button"
+          popup={false}
+          dataSlot="ade-pill-tabs"
+          ariaLabel={t("settings.language.group")}
+          items={LOCALE_PREFERENCES.map((choice) => ({
+            id: choice,
+            label: label(choice),
+            active: value() === choice,
+            attrs: { "data-locale": choice, lang: choice === "system" ? undefined : choice },
+          }))}
+          onSelect={(id) => choose(id as LocalePreference)}
+        />
       </div>
     </>
   )
@@ -345,20 +343,19 @@ export function GridSection(props: GridSectionProps) {
         <p data-slot="section-desc">{t("settings.grid.desc")}</p>
       </div>
 
-      <div data-slot="settings-choices" role="group" aria-label={t("settings.grid.columns")}>
-        <For each={GRID_COLUMN_CHOICES}>
-          {(value) => (
-            <button
-              type="button"
-              data-slot="settings-choice"
-              data-active={props.columns === value ? "true" : undefined}
-              aria-pressed={props.columns === value}
-              onClick={() => props.onChange(value)}
-            >
-              {value === undefined ? t("settings.grid.auto") : value}
-            </button>
-          )}
-        </For>
+      <div data-slot="settings-choices">
+        <PillTabs
+          role="button"
+          popup={false}
+          dataSlot="ade-pill-tabs"
+          ariaLabel={t("settings.grid.columns")}
+          items={GRID_COLUMN_CHOICES.map((value) => ({
+            id: value === undefined ? "auto" : String(value),
+            label: value === undefined ? t("settings.grid.auto") : String(value),
+            active: props.columns === value,
+          }))}
+          onSelect={(id) => props.onChange(id === "auto" ? undefined : Number(id))}
+        />
       </div>
     </>
   )
@@ -438,45 +435,35 @@ export function RecordVideoSection(props: RecordVideoSectionProps) {
         <p data-slot="section-desc">{t("settings.category.record.desc")}</p>
       </div>
 
-      <div data-slot="settings-choices" role="group" aria-label={t("settings.record.quality")}>
-        <For each={QUALITY_LEVELS}>
-          {(level) => (
-            <button
-              type="button"
-              data-slot="settings-choice"
-              data-quality={level.id}
-              data-active={props.quality() === level.id ? "true" : undefined}
-              aria-pressed={props.quality() === level.id}
-              onClick={() => props.onQuality(level.id)}
-            >
-              {qualityLabel(level)}
-            </button>
-          )}
-        </For>
+      <div data-slot="settings-choices">
+        <PillTabs
+          role="button"
+          popup={false}
+          dataSlot="ade-pill-tabs"
+          ariaLabel={t("settings.record.quality")}
+          items={QUALITY_LEVELS.map((level) => ({
+            id: level.id,
+            label: qualityLabel(level),
+            active: props.quality() === level.id,
+            attrs: { "data-quality": level.id },
+          }))}
+          onSelect={(id) => props.onQuality(id as RecordQuality)}
+        />
       </div>
       <p data-slot="settings-meta">{sizePerMinute(qualityLevel(props.quality()))}</p>
 
-      <div data-slot="settings-choices" role="group" aria-label={t("settings.record.mic")}>
-        <button
-          type="button"
-          data-slot="settings-choice"
-          data-mic="on"
-          data-active={props.mic() ? "true" : undefined}
-          aria-pressed={props.mic()}
-          onClick={() => props.onMic(true)}
-        >
-          {t("settings.record.mic.on")}
-        </button>
-        <button
-          type="button"
-          data-slot="settings-choice"
-          data-mic="off"
-          data-active={!props.mic() ? "true" : undefined}
-          aria-pressed={!props.mic()}
-          onClick={() => props.onMic(false)}
-        >
-          {t("settings.record.mic.off")}
-        </button>
+      <div data-slot="settings-choices">
+        <PillTabs
+          role="button"
+          popup={false}
+          dataSlot="ade-pill-tabs"
+          ariaLabel={t("settings.record.mic")}
+          items={[
+            { id: "on", label: t("settings.record.mic.on"), active: props.mic(), attrs: { "data-mic": "on" } },
+            { id: "off", label: t("settings.record.mic.off"), active: !props.mic(), attrs: { "data-mic": "off" } },
+          ]}
+          onSelect={(id) => props.onMic(id === "on")}
+        />
       </div>
 
       <ul data-slot="settings-list">
