@@ -677,6 +677,7 @@ import {
   startOnCleanScreen,
   writeToTerminal,
 } from "../terminal/registry"
+import { createDiscardNotes } from "../terminal/discard-notes"
 import type { LinkRequest } from "../terminal/links"
 import { OPENING_QUIET_MS, decideOpening } from "../session/opening"
 import { cleanTranscriptLine } from "../session/transcript-line"
@@ -7940,7 +7941,8 @@ export function Workbench() {
   }
 
   /** `written` is called once the terminal has parsed the chunk, or at once when there is none: the host's flow control waits for it (RS-7). */
-  const discardNoted = new Set<string>()
+  const discardNotes = createDiscardNotes((paneId) => report(t("terminal.outputDiscarded"), "warning", paneId))
+  onCleanup(() => discardNotes.dispose())
   const feedTerminal = (paneId: string, chunk: string, written?: () => void) => {
     /*
      * Nothing is written to a pane that no longer exists.
@@ -7962,11 +7964,8 @@ export function Workbench() {
     else if (hooked(paneId) && interruptEnds(activityOf.get(paneId), interruptedAt.get(paneId))) settleWhenQuiet(paneId)
     else if (pane.status === "idle") noticeWorkFromOutput(pane)
 
-    // xterm refused the data (50 MB unparsed): said once in the pane, not for every chunk after it.
-    if (!writeToTerminal(paneId, chunk, written) && !discardNoted.has(paneId)) {
-      discardNoted.add(paneId)
-      report(t("terminal.outputDiscarded"), "warning", paneId)
-    }
+    // xterm refused the data (50 MB unparsed): said in the pane, not for every chunk after it.
+    if (!writeToTerminal(paneId, chunk, written)) discardNotes.refused(paneId)
     screenRequests.fed(paneId)
     if (!liveTerminals().has(paneId)) {
       setLiveTerminals((ids) => new Set(ids).add(paneId))
@@ -9292,6 +9291,7 @@ export function Workbench() {
 
       // A restart reuses the pane's terminal; the new process starts at 1;1.
       startOnCleanScreen(paneId)
+      discardNotes.started(paneId)
       modeTracker.forget(paneId)
       paneClasses.delete(paneId)
       // A conversation reopened is drawn again, requests and all: those were acted on.
@@ -9618,6 +9618,7 @@ export function Workbench() {
     try {
       if (!running.starting(paneId, start)) return
       startOnCleanScreen(paneId)
+      discardNotes.started(paneId)
       // Born at the pane's size, not the host's 120x30 (S77); undefined for a pane not yet fitted.
       const bornAt = ptySize(paneId)
       const paneToken = await freshPaneToken(host, paneId)
