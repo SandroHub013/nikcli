@@ -386,6 +386,8 @@ export const en: Messages = {
   "design.reopened.delivered": (key) => `Reopening of ${key} delivered`,
   "design.waiter.taken": (key) => `Choice on ${key} delivered to the ade-msg command waiting for it`,
   "decisions.waiting": "Decisions waiting for you",
+  "workspace.unreadable":
+    "I could not read the saved sessions (they may come from a newer version of ADE). I kept a copy: update ADE to get them back.",
   "update.desktopOnly": "Updates are checked from the desktop app.",
   "update.alreadyShown": (version) => `Already in your notifications: ADE ${version} is available.`,
   "update.openFailed": (problem) => `Couldn't open the page: ${problem}`,

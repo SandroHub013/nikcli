@@ -58,7 +58,8 @@ import {
 } from "../record/prefs"
 import { syncOpenRouterKey } from "../host/openrouter-key-sync"
 import { createSttStreamTransport } from "../host/stt-stream"
-import { serializeWorkspace, parseWorkspace, type WorkspaceState } from "../session/persist"
+import { serializeWorkspace, type WorkspaceState } from "../session/persist"
+import { readSavedWorkspace } from "../session/unreadable"
 import { DEFAULT_BINDINGS, FROM_TERMINALS, NOT_FROM_TEXT_FIELDS, resolveDefaultBindings } from "../keyboard/bindings"
 import { formatChord, parseChord } from "../keyboard/keymap"
 import { CommandPalette } from "../command/palette"
@@ -6476,6 +6477,9 @@ export function Workbench() {
     void pluginRuntime.dispose()
   })
 
+  // True while the saved workspace could not be read and has no copy: the autosave leaves it alone (`session/unreadable.ts`).
+  let workspaceSaveBlocked = false
+
   // Load recents and workspace on mount
   onMount(async () => {
     const startedAt = Date.now()
@@ -6503,17 +6507,19 @@ export function Workbench() {
     setBooting(t("boot.restore"))
 
     // Load workspace
-    const savedWs = localStorage.getItem("ade.workspace")
+    // A save that does not parse is copied aside before the autosave can write (`session/unreadable.ts`).
+    const savedWorkspace = readSavedWorkspace(localStorage, Date.now())
     let restored: WorkspaceState | undefined
-    if (savedWs) {
-      const state = parseWorkspace(savedWs)
-      if (state) {
-        restored = state
-        setWb(fromWorkspaceState(state))
-        // The suspended sessions' queues, now that their panes are back (P1-C6).
-        // Also for a pane resumed just before ADE closed: its mail waits for the session to start again.
-        heldLines.push(...parseSuspendedMail(readStored(SUSPENDED_MAIL_KEY)).filter((line) => paneExists(line.paneId)))
-      }
+    if (savedWorkspace.state) {
+      restored = savedWorkspace.state
+      setWb(fromWorkspaceState(savedWorkspace.state))
+      // The suspended sessions' queues, now that their panes are back (P1-C6).
+      // Also for a pane resumed just before ADE closed: its mail waits for the session to start again.
+      heldLines.push(...parseSuspendedMail(readStored(SUSPENDED_MAIL_KEY)).filter((line) => paneExists(line.paneId)))
+    }
+    if (savedWorkspace.unreadable) {
+      workspaceSaveBlocked = savedWorkspace.saveBlocked
+      report(t("workspace.unreadable"), "warning")
     }
     // The messages held for a busy session when ADE closed, and the lines held for one that was running (`restoreMail`).
     await restoreMail(host)
@@ -6636,11 +6642,14 @@ export function Workbench() {
     // because a store is tracked per property and the save cares about all of
     // them.
     changed: revision,
-    write: () =>
+    write: () => {
+      // The save that could not be read has no copy: it stays as it is rather than become an empty one.
+      if (workspaceSaveBlocked) return
       // Unwrapped: serialising walks every pane and every line, and doing that
       // through the store's proxy would subscribe whatever happens to be
       // tracking to the entire workbench.
-      localStorage.setItem("ade.workspace", serializeWorkspace(toWorkspaceState(unwrap(wbStore)))),
+      localStorage.setItem("ade.workspace", serializeWorkspace(toWorkspaceState(unwrap(wbStore))))
+    },
   })
 
   // Keydown listener

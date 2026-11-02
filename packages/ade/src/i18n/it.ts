@@ -395,6 +395,8 @@ export const it = {
   "design.reopened.delivered": (key: string) => `Riapertura di ${key} consegnata`,
   "design.waiter.taken": (key: string) => `Scelta su ${key} consegnata al comando ade-msg che la aspettava`,
   "decisions.waiting": "Decisioni che aspettano te",
+  "workspace.unreadable":
+    "Non sono riuscita a leggere le sessioni salvate (forse sono di una versione più nuova di ADE). Ne ho tenuto una copia: aggiorna ADE per riaverle.",
   "update.desktopOnly": "Gli aggiornamenti si controllano dall'app desktop.",
   "update.alreadyShown": (version: string) => `Già segnalato: ADE ${version} è disponibile.`,
   "update.openFailed": (problem: string) => `Impossibile aprire la pagina: ${problem}`,
