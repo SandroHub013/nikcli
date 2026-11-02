@@ -399,7 +399,15 @@ describe("dispatch", () => {
           if (id === "browser.new")
             host.panes = [
               ...host.panes,
-              { id: "b-new", title: "Browser", status: "working", index: 2, hasLiveProcess: false, isBrowser: true, isFile: false },
+              {
+                id: "b-new",
+                title: "Browser",
+                status: "working",
+                index: 2,
+                hasLiveProcess: false,
+                isBrowser: true,
+                isFile: false,
+              },
             ]
         }
         return host

@@ -345,7 +345,8 @@ describe("a dictation goes to the pane it was started for", () => {
     return { host, visible }
   }
 
-  const sent = (host: ChangingHost) => host.calls.filter((call) => call.method === "sendPrompt").map((call) => call.args)
+  const sent = (host: ChangingHost) =>
+    host.calls.filter((call) => call.method === "sendPrompt").map((call) => call.args)
 
   test("pane 1 closed meanwhile: the text goes to the pane that was 2, not to the one that is 2 now", async () => {
     const { host } = await dictate("inizia dettatura pannello 2", (host) => {

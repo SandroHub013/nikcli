@@ -427,7 +427,9 @@ export async function dispatch(
         const notFound = {
           success: false,
           spoken:
-            lang === "en" ? "Could not find browser panel to navigate." : "Non ho trovato il pannello browser da far navigare.",
+            lang === "en"
+              ? "Could not find browser panel to navigate."
+              : "Non ho trovato il pannello browser da far navigare.",
           error: "pane_not_found",
         } as const
         /*
@@ -437,7 +439,13 @@ export async function dispatch(
          */
         let target: PaneSummary | undefined
         if (hasExplicitPane || browsers.length > 0) {
-          const resolved = resolveTargetPane(slots, hasExplicitPane ? panes : browsers, ctx.focusedPaneId, isDestructive, lang)
+          const resolved = resolveTargetPane(
+            slots,
+            hasExplicitPane ? panes : browsers,
+            ctx.focusedPaneId,
+            isDestructive,
+            lang,
+          )
           if (resolved.error) {
             return { success: false, spoken: resolved.error, error: "pane_not_found" }
           }
