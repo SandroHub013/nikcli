@@ -119,7 +119,7 @@ describe("the sidebar's names, when the column is narrow", () => {
   test("lint: under 279px a project's count gives its right margin to the open-project button", () => {
     const narrow = sidebar.slice(sidebar.indexOf("@container ade-sidebar (max-width: 279px)"))
     expect(narrow).not.toBe(sidebar)
-    expect(narrow).toMatch(/\[data-slot="workspace-count"\] \{[^}]*margin-right: calc\(18px/)
+    expect(narrow).toMatch(/\[data-slot="workspace-count"\] \{[^}]*margin-right: calc\(var\(--ade-control-icon-sm\)/)
     expect(sidebar).toMatch(/aside\[data-component="ade-sidebar"\] \{[^}]*container: ade-sidebar \/ inline-size/)
   })
 

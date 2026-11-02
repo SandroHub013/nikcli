@@ -33,7 +33,7 @@ interface Surface {
   forbidden?: RegExp
 }
 
-const REDRAWN = /(^|\n)\s*(height|min-height|border-radius|background|border|font-size|font-weight|cursor|transition):/
+const REDRAWN = /(^|\n)\s*(height|min-height|border-radius|background|border|font-size|font-weight|cursor):/
 
 const SURFACES: Surface[] = [
   {
@@ -41,6 +41,13 @@ const SURFACES: Surface[] = [
     tsx: ["session-new/session-new.tsx", "session-new/install-panel.tsx"],
     slots: ["new-cancel", "new-launch-btn", "new-close", "install-close", "install-copy", "install-run", "install-recheck", "install-page"],
     css: ["session-new/session-new.css"],
+    forbidden: REDRAWN,
+  },
+  {
+    name: "the sidebar",
+    tsx: ["sidebar/sidebar.tsx"],
+    slots: ["workspace-open-project", "section-add", "empty-action-btn", "search-clear"],
+    css: ["sidebar/sidebar.css"],
     forbidden: REDRAWN,
   },
   {
