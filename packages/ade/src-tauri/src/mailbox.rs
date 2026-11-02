@@ -138,8 +138,9 @@ pub struct Outgoing {
 /// Takes every complete message out of the outbox.
 ///
 /// Only `*.json`: the scripts write `*.part` and rename, so a file with the
-/// final name is always whole. Each one is removed as it is read, which is
-/// what makes a message delivered at most once.
+/// final name is always whole. Each one is claimed by a rename before it is
+/// read, and removed once read, which is what makes a message delivered at
+/// most once; a read that failed for a passing reason leaves it for the next pass.
 #[tauri::command]
 pub async fn mailbox_take(app: tauri::AppHandle) -> Result<Vec<Outgoing>, String> {
     let dir = mailbox_path(&app).ok_or("casella non disponibile")?;
@@ -161,33 +162,71 @@ fn too_big_receipt(size: Option<u64>) -> String {
     format!("errore: {why}: mandalo come file con --file o scrivilo in un file e manda il percorso")
 }
 
+/// How old a `.taking` claim must be before it is cleared as a leftover.
+const STALE_CLAIM: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Takes the files of the outbox, one claimed at a time.
+///
+/// A file is claimed by renaming `<id>.json` to `<id>.taking`: the rename either
+/// happens or it does not, and a file that is not `.json` is never taken again.
+/// That is what lets a failed delete leave a harmless file instead of a message
+/// delivered twice, and a transient read error leave the message for the next
+/// pass instead of being answered as if it were damaged (RS-10).
 fn take_outbox(outbox: &std::path::Path, receipts: &std::path::Path) -> Result<Vec<Outgoing>, String> {
     let mut out = Vec::new();
     let entries = fs::read_dir(outbox).map_err(|e| format!("casella non leggibile: {e}"))?;
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("json") {
-            continue;
+        match path.extension().and_then(|e| e.to_str()) {
+            Some("json") => {}
+            // A claim left by a pass that was cut short, or whose delete failed: never delivered, only cleared away.
+            Some("taking") => {
+                let old = entry.metadata().and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).is_some_and(|age| age > STALE_CLAIM);
+                if old {
+                    let _ = fs::remove_file(&path);
+                }
+                continue;
+            }
+            _ => continue,
         }
         let Some(id) = path.file_stem().and_then(|s| s.to_str()).map(str::to_string) else {
             continue;
         };
-        let size = entry.metadata().map(|m| m.len()).ok();
-        let too_big = size.map_or(true, |len| len > MAX_MESSAGE_BYTES);
-        let body = if too_big { None } else { fs::read_to_string(&path).ok() };
-        let _ = fs::remove_file(&path);
         if !valid_id(&id) {
+            let _ = fs::remove_file(&path);
             continue;
         }
-        match body {
-            Some(body) => out.push(Outgoing { id, body }),
-            None if too_big => {
-                let said = too_big_receipt(size);
-                let _ = write_whole(receipts.to_path_buf(), &format!("{id}.txt"), &said);
+        // Held open by a scanner or the indexer: it is still there, so the next pass takes it.
+        let claim = path.with_extension("taking");
+        if fs::rename(&path, &claim).is_err() {
+            continue;
+        }
+        // Nothing below deletes the message unless it has been read, or can never be.
+        let give_back = || {
+            let _ = fs::rename(&claim, &path);
+        };
+        let Ok(meta) = fs::metadata(&claim) else {
+            give_back();
+            continue;
+        };
+        if meta.len() > MAX_MESSAGE_BYTES {
+            let said = too_big_receipt(Some(meta.len()));
+            let _ = write_whole(receipts.to_path_buf(), &format!("{id}.txt"), &said);
+            let _ = fs::remove_file(&claim);
+            continue;
+        }
+        match fs::read_to_string(&claim) {
+            Ok(body) => {
+                out.push(Outgoing { id, body });
+                // If this fails the claim stays, and is not a `.json`: the message is not delivered again.
+                let _ = fs::remove_file(&claim);
             }
-            None => {
+            // Bytes that are not UTF-8 will never be: the sender is told. Any other error may pass.
+            Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
                 let _ = write_whole(receipts.to_path_buf(), &format!("{id}.txt"), "errore: messaggio non leggibile (non è UTF-8)");
+                let _ = fs::remove_file(&claim);
             }
+            Err(_) => give_back(),
         }
     }
     Ok(out)
@@ -1195,6 +1234,43 @@ mod tests {
         let receipt = fs::read_to_string(receipts.join("1757860000000-bbbb.txt")).unwrap();
         assert!(receipt.starts_with("errore: messaggio troppo grande"));
         assert!(!receipts.join("1757860000000-aaaa.txt").exists());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_read_that_fails_for_a_passing_reason_leaves_the_message_and_answers_nothing() {
+        let base = std::env::current_dir().unwrap().join("target").join("mailbox-take-transient");
+        let _ = fs::remove_dir_all(&base);
+        let (outbox, receipts) = (base.join("outbox"), base.join("receipts"));
+        fs::create_dir_all(&outbox).unwrap();
+        fs::create_dir_all(&receipts).unwrap();
+        // A folder with the name of a message cannot be read as text, and is not invalid UTF-8: a read error of the other kind.
+        fs::create_dir_all(outbox.join("1757860000000-cccc.json")).unwrap();
+
+        assert!(take_outbox(&outbox, &receipts).unwrap().is_empty());
+        assert!(outbox.join("1757860000000-cccc.json").exists(), "given back for the next pass");
+        assert!(!outbox.join("1757860000000-cccc.taking").exists());
+        assert!(!receipts.join("1757860000000-cccc.txt").exists(), "no error receipt over a message that may pass");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn bytes_that_are_not_utf8_are_answered_once_and_a_claim_is_never_delivered() {
+        let base = std::env::current_dir().unwrap().join("target").join("mailbox-take-claim");
+        let _ = fs::remove_dir_all(&base);
+        let (outbox, receipts) = (base.join("outbox"), base.join("receipts"));
+        fs::create_dir_all(&outbox).unwrap();
+        fs::create_dir_all(&receipts).unwrap();
+        fs::write(outbox.join("1757860000000-dddd.json"), [0xff, 0xfe, 0xfd]).unwrap();
+        // What a failed delete leaves behind: it must not come out a second time.
+        fs::write(outbox.join("1757860000000-eeee.taking"), "{\"kind\":\"send\"}").unwrap();
+
+        assert!(take_outbox(&outbox, &receipts).unwrap().is_empty());
+        let receipt = fs::read_to_string(receipts.join("1757860000000-dddd.txt")).unwrap();
+        assert!(receipt.contains("non è UTF-8"));
+        assert!(!outbox.join("1757860000000-dddd.json").exists());
+        assert!(!outbox.join("1757860000000-dddd.taking").exists());
+        assert!(take_outbox(&outbox, &receipts).unwrap().is_empty(), "the leftover claim is not delivered on a later pass");
         let _ = fs::remove_dir_all(&base);
     }
 
