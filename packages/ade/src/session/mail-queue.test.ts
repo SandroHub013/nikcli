@@ -82,11 +82,17 @@ describe("a replayed message waits for its pane's process instead of being dropp
 describe("lint: the workbench writes the queue and reads it back", () => {
   const source = readFileSync(new URL("../surface/workbench.tsx", import.meta.url), "utf8")
 
-  test("written at the end of the pass that delivers it, and nothing before it was read back", () => {
-    const delivered = source.indexOf("const done = await deliverOne(host, item.id, item.message)")
-    const written = source.indexOf("persistMail()", delivered)
-    expect(delivered).toBeGreaterThan(0)
-    expect(written).toBeGreaterThan(delivered)
+  test("written before any delivery starts and again when one ends, and nothing before it was read back", () => {
+    // WB-6: the take deleted it from the outbox, so a crash during a long `close` must not lose what was told «in coda».
+    const taken = source.indexOf("mailQueue.push({ id, message, at: Date.now() })")
+    const written = source.indexOf("persistMail()", taken)
+    const started = source.indexOf("mailLanes.start(mailQueue)", taken)
+    expect(taken).toBeGreaterThan(0)
+    expect(written).toBeGreaterThan(taken)
+    expect(started).toBeGreaterThan(written)
+    const done = source.indexOf("done: (item) => {")
+    expect(done).toBeGreaterThan(0)
+    expect(source.indexOf("persistMail()", done)).toBeLessThan(source.indexOf("hung: (item, afterMs)", done))
     expect(source).toContain("if (!mailRestored) return")
   })
 

@@ -1660,6 +1660,9 @@ export const en: Messages = {
   "note.replySentTo": (to, ref) => `Reply sent to ${to} (request ${ref})`,
   "note.replyFrom": (from, text) => `Reply from ${from}: ${text}`,
   "note.keptOpen": (problem) => `Kept open: ${problem}`,
+  "mail.stuck": (kind, id) =>
+    `Mail between sessions: ${kind} ${id} gave no result. ADE moved on; the sender will hear of it if still open`,
+  "mail.stepStuck": "Mail between sessions: a step does not finish. ADE keeps trying; if mail stays stuck, restart ADE",
   "note.closedAfterReply": (closed) => `Closed after replying: ${closed}`,
   "note.updateFrom": (from, state, text) => `Update from ${from}: ${state} — ${text}`,
   "note.memory": (line) => `Memory: ${line}`,
