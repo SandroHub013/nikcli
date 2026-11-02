@@ -85,6 +85,7 @@ import { SessionNew } from "../session-new/session-new"
 import { isSavedInstallPane } from "../session-new/install"
 import { watchInstall, installExit, typedInstallLine, type InstallWatch } from "../session-new/install-follow"
 import { recheckAgents } from "../session-new/availability"
+import { connectFailureText, errorMessage, startFailureText } from "../session-new/start-failure"
 import { AGENTS, agentById, agentLabel } from "../session-new/agents"
 import { oneAtATime } from "./one-at-a-time"
 import { RunningSessions } from "./running"
@@ -166,7 +167,7 @@ import {
   type HookStatus,
 } from "../session-new/agent-hooks"
 import { applyNativeGlass, checkNativeGlassStatus, type GlassStatus } from "./glass-window"
-import { locale, refreshSystemLocale, syncDocumentLanguage, t, translate } from "../i18n"
+import { locale, refreshSystemLocale, syncDocumentLanguage, t, translate, bcp47 } from "../i18n"
 import {
   formatMb,
   parseUpdateProgress,
@@ -1486,7 +1487,7 @@ export function Workbench() {
       await host.recordWrite(out, result.bytes)
       report(t("record.export.done", out), "info")
     } catch (failure) {
-      report(t("record.export.failed", failure instanceof Error ? failure.message : String(failure)))
+      report(t("record.export.failed", errorMessage(failure).replace(/\.+$/, "")))
     } finally {
       exportAbort = undefined
       setExportWaiting(false)
@@ -2220,7 +2221,7 @@ export function Workbench() {
     setWb((w) => ({
       ...addPane(w, {
         id: newPaneId("nv"),
-        title: "RaguVerse",
+        title: "RagùVerse",
         status: "working",
         model: "—",
         mode: "raguverse",
@@ -5497,7 +5498,7 @@ export function Workbench() {
       const { invoke } = await import("@tauri-apps/api/core")
       await invoke("ade_open_release", { url: href })
     } catch (error) {
-      report(t("update.openFailed", String(error)))
+      report(t("update.openFailed", errorMessage(error)))
     }
   }
 
@@ -5622,9 +5623,9 @@ export function Workbench() {
       setUpdating(false)
       setInstallingUpdate(false)
       setUpdateProgress(undefined)
-      setUpdateError(String(error))
+      setUpdateError(errorMessage(error))
       showUpdate()
-      report(t("update.installFailed", String(error)))
+      report(t("update.installFailed", errorMessage(error)))
     }
   }
 
@@ -5933,7 +5934,7 @@ export function Workbench() {
   const playbackMeter = createPlaybackMeter()
   const webSpeaker =
     typeof window !== "undefined" && "speechSynthesis" in window
-      ? createWebSpeechSpeaker({ lang: () => (locale() === "en" ? "en-US" : "it-IT") })
+      ? createWebSpeechSpeaker({ lang: () => (bcp47()) })
       : createFakeSpeaker()
   const systemSpeaker = {
     ...webSpeaker,
@@ -7638,7 +7639,7 @@ export function Workbench() {
       )
     } else if (id === "recents.forgetGone") {
       const count = recents().filter((entry) => isMissingRecent(missingRoots(), entry.root)).length
-      if (count > 0 && (await askYesNo(t("confirm.forgetGone", count)))) {
+      if (count > 0 && (await askYesNo(t("confirm.forgetGone", count), { ok: t("confirm.forgetGone.ok"), cancel: t("confirm.forgetGone.cancel") }))) {
         const next = withoutMissing(recents(), missingRoots())
         setRecents(next)
         localStorage.setItem("ade.recents", serializeRecents(next))
@@ -8003,6 +8004,19 @@ export function Workbench() {
     sheetWatch.forget(id)
   }
 
+  /** The two buttons of a close question, named for what each does (UX-10). */
+  const closeLabels = {
+    running: () => ({ ok: t("pane.closeRunning.ok"), cancel: t("pane.closeRunning.cancel") }),
+    worktree: () => ({ ok: t("pane.closeWorktree.ok"), cancel: t("pane.closeWorktree.cancel") }),
+    dirty: () => ({ ok: t("editor.closeDirty.ok"), cancel: t("editor.closeDirty.cancel") }),
+  }
+  /** The question for a running agent; only one that can be resumed may promise its conversation is kept. */
+  const closeRunningMessage = (title: string, id: string): string => {
+    const pane = wb().panes.find((candidate) => candidate.id === id)
+    const resumable = Boolean(pane?.agent && RESUME[pane.agent])
+    return `${t("pane.closeRunning", title)}${resumable ? ` ${t("pane.closeRunning.saved")}` : ""}`
+  }
+
   /*
    * An unsaved file is not closed without asking.
    *
@@ -8017,20 +8031,20 @@ export function Workbench() {
       const buffer = buffers()[id]
       return buffer?.dirty ? buffer.path : undefined
     },
-    ask: (path) => askYesNo(t("editor.closeDirty", path)),
+    ask: (path) => askYesNo(t("editor.closeDirty", path), closeLabels.dirty()),
     closeNow: (id) => closeNow(id),
     exists: (id) => wb().panes.some((pane) => pane.id === id),
     running: (id) => {
       const pane = wb().panes.find((candidate) => candidate.id === id)
       return pane && running.has(id) ? pane.title || agentLabel(pane.agent ?? pane.model) : undefined
     },
-    askRunning: (agent) => askYesNo(t("pane.closeRunning", agent)),
+    askRunning: (agent, id) => askYesNo(closeRunningMessage(agent, id), closeLabels.running()),
     hasWorktree: (id) => Boolean(wb().panes.find((candidate) => candidate.id === id)?.worktree),
     worktreeWork: async (id) => {
       const host = await getHost()
       return host ? unintegrated(host, id) : undefined
     },
-    askWorktree: (reason) => askYesNo(t("pane.closeWorktree", reason)),
+    askWorktree: (reason) => askYesNo(t("pane.closeWorktree", reason), closeLabels.worktree()),
     // A second ✕ while the question is open brings it back, even from the icon.
     remind: () => void remindQuestion(),
   })
@@ -8312,13 +8326,19 @@ export function Workbench() {
       }
 
       if (unreadable !== undefined) {
-        const anyway = await askYesNo(t("editor.saveUnreadable", buffer.path, String(unreadable)))
+        const anyway = await askYesNo(t("editor.saveUnreadable", buffer.path, String(unreadable)), {
+          ok: t("editor.saveUnreadable.ok"),
+          cancel: t("editor.saveUnreadable.cancel"),
+        })
         if (!anyway) {
           report(t("editor.saveCancelled.unreadable", String(unreadable)), "warning")
           return
         }
       } else if (onDisk && !onDisk.truncated && toLf(onDisk.text) !== buffer.saved) {
-        const overwrite = await askYesNo(t("editor.saveChanged", buffer.path))
+        const overwrite = await askYesNo(t("editor.saveChanged", buffer.path), {
+          ok: t("editor.saveChanged.ok"),
+          cancel: t("editor.saveChanged.cancel"),
+        })
         if (!overwrite) {
           report(t("editor.saveCancelled.changed"), "warning")
           return
@@ -8333,7 +8353,7 @@ export function Workbench() {
     // The file keeps the line ending it had: the editor holds LF, the disk gets CRLF back.
     const error = await host.writeTextFile(buffer.path, withEol(written, buffer.eol))
     if (error) {
-      report(t("editor.saveFailed", String(error)))
+      report(t("editor.saveFailed", errorMessage(error)))
       return
     }
 
@@ -9216,7 +9236,7 @@ export function Workbench() {
         // Over the terminal: a pane started again keeps the old one live, and the transcript hidden.
         onRefused: (reason) => {
           refused = true
-          tellPane(paneId, t("pane.startFailed", reason))
+          tellPane(paneId, startFailureText(reason, agent))
         },
         ...(nonce ? { link: { pane: paneId, nonce } } : {}),
         pane: paneId,
@@ -9424,7 +9444,7 @@ export function Workbench() {
       }
     } catch (e) {
       // Over the terminal: a pane started again keeps the old one live, and the transcript hidden.
-      tellPane(paneId, t("pane.startFailed", String(e)))
+      tellPane(paneId, startFailureText(String(e), agent))
       setWb((w) => updatePane(w, paneId, { status: "error", activity: "startFailed" }))
     }
   }
@@ -9503,7 +9523,7 @@ export function Workbench() {
         },
         onRefused: (reason) => {
           refused = true
-          tellPane(paneId, t("pane.connectFailed", reason))
+          tellPane(paneId, connectFailureText(reason))
         },
         pane: paneId,
         paneToken,
@@ -9575,7 +9595,7 @@ export function Workbench() {
       }, 150)
       openingPolls.add(poll)
     } catch (e) {
-      tellPane(paneId, t("pane.connectFailed", String(e)))
+      tellPane(paneId, connectFailureText(String(e)))
       setWb((w) => updatePane(w, paneId, { status: "error", activity: "connectFailed" }))
     }
   }
@@ -10741,7 +10761,7 @@ export function Workbench() {
                 when={gridPanes().length > 0 && !starting()}
                 fallback={
                   <SessionNew
-                    workspace={project()?.name || "workspace"}
+                    workspace={project()?.name || t("new.unnamedProject")}
                     path={project()?.root || ""}
                     /* Cancelling is only offered when there is something to go
                        back to; on an empty workbench it would lead nowhere. */

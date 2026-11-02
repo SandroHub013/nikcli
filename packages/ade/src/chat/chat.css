@@ -284,7 +284,7 @@
   font-family: var(--ade-sans);
   font-size: var(--ade-font-sm);
   font-weight: var(--ade-weight-semibold);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--ade-track-caps);
   text-transform: uppercase;
   color: var(--ade-text-weak);
 }
@@ -403,7 +403,7 @@
 [data-slot="chat-code-lang"] {
   font-family: var(--ade-mono);
   font-size: var(--ade-font-xs);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--ade-track-caps);
   text-transform: uppercase;
   color: var(--ade-text-weak);
 }

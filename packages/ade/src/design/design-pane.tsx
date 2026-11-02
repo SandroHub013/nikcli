@@ -1,4 +1,5 @@
 import { For, Show, createMemo, createSignal } from "solid-js"
+import { EmptyIcon } from "../ui/empty-icon"
 import { designAnswerByline, formatDay, formatMoment } from "./answer"
 import { isUsersOwnAnswer } from "../decisions/answer"
 import { submitControl } from "./card"
@@ -10,6 +11,7 @@ import { projectRootFromRegisterPath, type DesignHub } from "./hub"
 import { bucketProposals, describeProblems, type DesignProposal } from "./state"
 import "./design.css"
 import { t } from "../i18n"
+import { errorMessage } from "../session-new/start-failure"
 import { askerName } from "../choices/list"
 
 export function DesignPane(props: {
@@ -117,6 +119,7 @@ export function DesignPane(props: {
       <div data-slot="design-body">
         <Show when={!props.hub.register.path()}>
           <div data-slot="sheet-empty">
+            <EmptyIcon name="design" />
             <b>{t("design.noProject")}</b>
             <span>{t("design.noProject.hint")}</span>
           </div>
@@ -124,7 +127,7 @@ export function DesignPane(props: {
 
         <Show when={props.hub.register.error()}>
           <div data-slot="design-problem" role="alert">
-            {t("design.unreadable", String(props.hub.register.error()))}
+            {t("design.unreadable", errorMessage(props.hub.register.error()))}
           </div>
         </Show>
 

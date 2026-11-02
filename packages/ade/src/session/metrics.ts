@@ -11,7 +11,7 @@
  * them on a permission prompt is a two-minute session, not a twenty-minute one.
  */
 
-import { locale } from "../i18n"
+import { locale, bcp47 } from "../i18n"
 
 // ---------------------------------------------------------------------------
 // Duration
@@ -61,7 +61,7 @@ export function formatTokens(n: number): string {
 
   if (n < 1_000) return String(Math.round(n))
 
-  const loc = locale() === "it" ? "it-IT" : "en-US"
+  const loc = bcp47()
   if (n < 1_000_000) {
     const k = n / 1_000
     return `${new Intl.NumberFormat(loc, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(k)}k`
@@ -81,7 +81,7 @@ export function formatTokens(n: number): string {
  * Always two decimals: "$0,42", "$12,00".
  */
 export function formatCost(usd: number): string {
-  const loc = locale() === "it" ? "it-IT" : "en-US"
+  const loc = bcp47()
   if (!Number.isFinite(usd) || usd < 0) {
     return `$${new Intl.NumberFormat(loc, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(0)}`
   }

@@ -218,9 +218,9 @@ describe("the decision, and «Sempre» per bot", () => {
     expect(decide("webfetch", "https://x.test", ["tool:webfetch"]).kind).toBe("allow")
   })
 
-  test("the card of a tool ragu asks about names Ragu Code, not the user's configuration", () => {
+  test("the card of a tool ragu asks about names Ragù Code, not the user's configuration", () => {
     const asked = decide("webfetch", "https://x.test", [])
-    expect(asked).toMatchObject({ kind: "ask", reason: "usa webfetch, che Ragu Code chiede di confermare" })
+    expect(asked).toMatchObject({ kind: "ask", reason: "usa webfetch, che Ragù Code chiede di confermare" })
   })
 
   test("«Sempre» is kept for that bot only", () => {

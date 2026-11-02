@@ -22,7 +22,7 @@
 }
 
 [data-slot="space-notice"][data-failed] {
-  color: var(--ade-danger, var(--ade-text));
+  color: var(--ade-error);
 }
 
 [data-slot="space-group"] {

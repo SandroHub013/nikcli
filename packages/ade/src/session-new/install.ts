@@ -14,6 +14,7 @@
  * `agents.ts`). A PowerShell command is therefore wrapped by `terminalLine`; the panel still shows the project's own
  * line, which is what the user would copy into PowerShell.
  */
+import { bcp47, locale, type Locale } from "../i18n/locale"
 import { AGENTS } from "./agents"
 import type { Probe } from "./availability"
 
@@ -62,6 +63,13 @@ export const PREREQUISITES: Readonly<Record<Prerequisite, { page: string }>> = {
   npm: { page: "https://nodejs.org/en/download" },
   winget: { page: "https://learn.microsoft.com/windows/package-manager/winget/" },
   brew: { page: "https://brew.sh" },
+}
+
+/** The day a source was read, as the language writes dates: «22 ottobre 2026», "October 22, 2026" (UX-15). */
+export function checkedOn(day: string, language: Locale = locale()): string {
+  const date = new Date(`${day}T00:00:00Z`)
+  if (Number.isNaN(date.getTime())) return day
+  return new Intl.DateTimeFormat(bcp47(language), { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(date)
 }
 
 const CHECKED = "2026-10-22"

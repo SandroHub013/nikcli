@@ -15,6 +15,11 @@ describe("defaultPaneTitle", () => {
     resetLocaleForTests("en")
     expect(defaultPaneTitle("agent", 1, "Claude Code")).toBe("Session 1 — Claude Code")
     expect(defaultPaneTitle("reviewer", 2, "Codex")).toBe("Review 2 — Codex")
-    expect(defaultPaneTitle("shell", 3, "Terminal")).toBe("Terminal 3 — Terminal")
+    expect(defaultPaneTitle("shell", 3, "Terminal")).toBe("Terminal 3")
+  })
+
+  test("a terminal is «Terminale 3», not «Terminale 3 — Terminale» (UX-24)", () => {
+    resetLocaleForTests("it")
+    expect(defaultPaneTitle("shell", 3, "Terminale")).toBe("Terminale 3")
   })
 })

@@ -387,3 +387,8 @@
   background: var(--ade-working-bg);
   color: var(--ade-working);
 }
+
+[data-slot="settings-path"] {
+  overflow-wrap: anywhere;
+  user-select: text;
+}

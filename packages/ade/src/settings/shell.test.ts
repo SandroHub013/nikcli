@@ -441,6 +441,7 @@ describe("settings shell", () => {
       { tab: "general/grid", probe: '[data-slot="settings-choice"]' },
       { tab: "record/video", probe: "[data-quality]" },
       { tab: "system/updates", probe: '[data-action="update.check"]' },
+      { tab: "system/about", probe: '[data-about="folder"]' },
     ]
     for (const item of cases) {
       renderSettingsSheet({ initialTarget: item.tab, version: "1.406.0" })
@@ -452,6 +453,18 @@ describe("settings shell", () => {
       dispose?.()
       document.body.innerHTML = ""
     }
+  })
+
+  test("Informazioni: il nome con l'accento, la frase, la versione e la cartella dei dati (DS-29)", () => {
+    renderSettingsSheet({ initialTarget: "system/about", version: "0.18.0" })
+    const about = (what: string) => document.body.querySelector(`[data-about="${what}"]`)?.textContent
+    expect(about("name")).toBe("Ragù Code ADE")
+    expect(about("tagline")).toBe("The coding agent for every model")
+    expect(about("version")).toContain("0.18.0")
+    // Fuori dall'app desktop non c'è una cartella: la riga lo dice, non resta vuota.
+    expect(about("folder")).toContain("Cartella dei dati")
+    dispose?.()
+    document.body.innerHTML = ""
   })
 
   test("M2: le tre schede Estensioni mostrano tre viste distinte della stessa pagina", () => {

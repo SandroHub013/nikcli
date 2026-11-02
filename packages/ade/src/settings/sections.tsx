@@ -1,4 +1,5 @@
-import { For, Show, createMemo, createSignal, onMount } from "solid-js"
+import { For, Show, createMemo, createResource, createSignal, onMount } from "solid-js"
+import { BRAND } from "../brand"
 import type { AgentFile } from "../bots/ragu"
 import { listBots, resolveRoots } from "../bots/store"
 import { QUALITY_LEVELS, qualityLabel, qualityLevel, sizePerMinute, type RecordQuality } from "../record/recording"
@@ -591,6 +592,47 @@ export function UpdatesSection(props: UpdatesSectionProps) {
           </div>
         )}
       </Show>
+    </>
+  )
+}
+
+/**
+ * The folder ADE keeps its own data in, as the desktop app knows it. Outside the
+ * desktop app (the browser, the tests) there is none: the row says so.
+ */
+async function appDataFolder(): Promise<string | undefined> {
+  try {
+    return await (await import("@tauri-apps/api/path")).appLocalDataDir()
+  } catch {
+    return undefined
+  }
+}
+
+export interface AboutSectionProps {
+  readonly version?: string | undefined
+  /** Where the data folder comes from; tests give their own. */
+  readonly dataFolder?: () => Promise<string | undefined>
+}
+
+/** About: the name people read, the tagline, the version and the data folder, as plain rows. */
+export function AboutSection(props: AboutSectionProps) {
+  const [folder] = createResource(() => (props.dataFolder ?? appDataFolder)())
+  return (
+    <>
+      <div data-slot="section-head">
+        <p data-slot="section-desc" data-about="name">
+          {BRAND.title}
+        </p>
+        <p data-slot="settings-meta" data-about="tagline">
+          {BRAND.tagline}
+        </p>
+      </div>
+      <p data-slot="settings-meta" data-about="version">
+        {t("settings.about.version")}: {props.version ?? t("settings.about.unknown")}
+      </p>
+      <p data-slot="settings-meta" data-about="folder">
+        {t("settings.about.folder")}: <span data-slot="settings-path">{folder.loading ? "…" : (folder() ?? t("settings.about.unknown"))}</span>
+      </p>
     </>
   )
 }

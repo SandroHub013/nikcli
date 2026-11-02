@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { AGENTS } from "./agents"
 import {
   INSTALLS,
+  checkedOn,
   PREREQUISITES,
   commandFor,
   installFor,
@@ -195,5 +196,17 @@ describe("missingPrerequisite", () => {
     const script = commandFor(installFor("claude-code"), "linux")!
     expect(await missingPrerequisite(script, async () => null)).toBeUndefined()
     expect(await missingPrerequisite(undefined, async () => null)).toBeUndefined()
+  })
+})
+
+describe("the day a source was read (UX-15)", () => {
+  test("is written as the language writes dates, never as an ISO string", () => {
+    expect(checkedOn("2026-10-22", "it")).toBe("22 ottobre 2026")
+    expect(checkedOn("2026-10-22", "en")).toBe("October 22, 2026")
+    expect(checkedOn("2026-01-01", "it")).toBe("1 gennaio 2026")
+  })
+
+  test("a day it cannot read is shown as it came, not as «Invalid Date»", () => {
+    expect(checkedOn("ieri", "it")).toBe("ieri")
   })
 })

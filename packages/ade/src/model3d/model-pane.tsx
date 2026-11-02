@@ -1,4 +1,5 @@
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js"
+import { EmptyIcon } from "../ui/empty-icon"
 import { every } from "../host/every"
 import type { DirEntry } from "../host/shell"
 import { dragCarriesPaths, readDraggedPaths } from "../sidebar/file-drag"
@@ -22,7 +23,7 @@ import {
 } from "./model"
 import type { ModelViewer } from "./viewer"
 import "./model-pane.css"
-import { locale, t } from "../i18n"
+import { locale, t, bcp47 } from "../i18n"
 
 /**
  * A 3D model, in the grid, with the same chrome as every other pane.
@@ -346,6 +347,7 @@ export function ModelPane(props: ModelPaneProps) {
       <div ref={stage} data-slot="model-stage" data-empty={props.path ? undefined : "true"}>
         <Show when={!props.path}>
           <div data-slot="model-empty">
+            <EmptyIcon name="model" />
             <p data-slot="model-empty-text">
               {t("model.empty")}
               <br />
@@ -388,7 +390,7 @@ export function ModelPane(props: ModelPaneProps) {
           </For>
           <span data-slot="model-stats" title={describeModelState(state())}>
             {stats()
-              ? t("model.triangles", stats()!.triangles.toLocaleString(locale() === "en" ? "en-US" : "it-IT"))
+              ? t("model.triangles", stats()!.triangles.toLocaleString(bcp47()))
               : ""}
           </span>
           <button

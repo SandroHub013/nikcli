@@ -235,7 +235,7 @@
 }
 
 [data-slot="agent-onboarding-row"][data-done="true"] {
-  border-color: var(--ade-done-border, var(--ade-border-subtle));
+  border-color: color-mix(in srgb, var(--ade-done) 35%, var(--ade-border-subtle));
   opacity: 0.9;
 }
 

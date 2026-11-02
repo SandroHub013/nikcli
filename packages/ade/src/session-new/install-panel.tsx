@@ -11,6 +11,7 @@ import { t } from "../i18n"
 import type { AgentStatus, Probe } from "./availability"
 import {
   PREREQUISITES,
+  checkedOn,
   commandFor,
   installFor,
   missingPrerequisite,
@@ -155,7 +156,7 @@ export function InstallPanel(props: InstallPanelProps): JSX.Element {
 
       <Show when={entry()}>
         {(current) => (
-          <p data-slot="install-source">{t("install.source", withoutScheme(current().source), current().checked)}</p>
+          <p data-slot="install-source">{t("install.source", withoutScheme(current().source), checkedOn(current().checked))}</p>
         )}
       </Show>
     </section>

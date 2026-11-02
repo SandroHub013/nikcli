@@ -381,7 +381,7 @@ describe("/modello", () => {
     })
     empty.b.emit("/modello")
     await until("niente", () => empty.b.sent.length === 1)
-    expect(empty.b.sent[0]!.text).toBe(t("gateway.model.nothing", t("gateway.model.default", "Ragu Code")))
+    expect(empty.b.sent[0]!.text).toBe(t("gateway.model.nothing", t("gateway.model.default", "Ragù Code")))
     const bare = bridge()
     await startGatewayController({
       bridge: bare.fake,

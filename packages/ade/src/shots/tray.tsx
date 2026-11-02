@@ -227,7 +227,7 @@ export function ShotTray(props: ShotTrayProps) {
       <aside
         data-component="shot-tray"
         data-collapsed={collapsed() ? "true" : undefined}
-        aria-label={`Schermate recenti (${props.shots.length})`}
+        aria-label={t("shots.tray.aria", props.shots.length)}
       >
         {/*
          * No heading, and nothing to collapse.
@@ -285,7 +285,7 @@ export function ShotTray(props: ShotTrayProps) {
                     draggable={true}
                     role="button"
                     tabindex={0}
-                    aria-label={`Apri ${shot.name}`}
+                    aria-label={t("shots.open.named", shot.name)}
                     onClick={() => openViewer(shot)}
                     onKeyDown={(event) => {
                       if (event.key !== "Enter" && event.key !== " ") return

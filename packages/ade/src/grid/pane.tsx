@@ -445,7 +445,8 @@ export function SessionPane(props: SessionPaneProps) {
 
   const missing = () => {
     const q = quota()
-    return isQuotaUnavailable(q) ? q : undefined
+    // With no report or file on this machine there is nothing to say: no chip, rather than a permanent «n/d».
+    return isQuotaUnavailable(q) && !q.sourceless ? q : undefined
   }
 
   const state = createMemo<PaneState>(() =>
@@ -518,8 +519,8 @@ export function SessionPane(props: SessionPaneProps) {
 
   const tipAll = createMemo(() => {
     const q = quota()
-    const quotaLines = q ? `\n${q.tooltip}` : ""
-    const branchLine = props.tree ? `\nBranch ${props.tree.branch}` : ""
+    const quotaLines = q && !(isQuotaUnavailable(q) && q.sourceless) ? `\n${q.tooltip}` : ""
+    const branchLine = props.tree ? `\n${t("pane.tree.branch", props.tree.branch)}` : ""
     const tokLine = props.tokens ? `\n${props.tokens}` : ""
     return `${props.title}\n${props.agent ?? props.model ?? t("pane.session")} · ${STATE_FULL[state()]}\n${stateDetail()}${quotaLines}${branchLine}${tokLine}`
   })
@@ -823,8 +824,8 @@ export function SessionPane(props: SessionPaneProps) {
                     data-slot="pane-tree"
                     data-fidelity={tree().fidelity}
                     tabIndex={0}
-                    title={`Branch ${tree().branch}\n${tree().note ?? FIDELITY_TITLE[tree().fidelity]}`}
-                    data-tip={`Branch ${tree().branch}\n${tree().note ?? FIDELITY_TITLE[tree().fidelity]}`}
+                    title={`${t("pane.tree.branch", tree().branch)}\n${tree().note ?? FIDELITY_TITLE[tree().fidelity]}`}
+                    data-tip={`${t("pane.tree.branch", tree().branch)}\n${tree().note ?? FIDELITY_TITLE[tree().fidelity]}`}
                   >
                     {tree().fidelity === "project" ? <FolderGlyph /> : <BranchGlyph />}
                     <span class="a-brt trunc">{tree().branch}</span>

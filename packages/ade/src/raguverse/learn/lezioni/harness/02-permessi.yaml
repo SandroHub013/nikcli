@@ -29,7 +29,7 @@ obiettivi:
 fonti:
   - id: F5
     titolo: "ragu docs, Permissions"
-    url: "https://github.com/nikcli/nikcli/blob/live-main/packages/web/src/pages/docs/permissions.astro"
+    url: "https://github.com/SandroHub013/nikcli/blob/live-main/packages/web/src/pages/docs/permissions.astro"
   - id: F6
     titolo: "Configure permissions"
     url: "https://code.claude.com/docs/en/permissions"

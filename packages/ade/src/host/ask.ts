@@ -16,6 +16,7 @@
  * the «Yes» button answering yes. Elsewhere the default is the system's own and
  * the plugin's `ask` is what there is.
  */
+import { BRAND } from "../brand"
 import { t } from "../i18n"
 
 export interface AskOptions {
@@ -157,7 +158,7 @@ export async function askDialog(
     if (native) {
       return (
         (await deps.nativeAsk(question, {
-          title: "ADE",
+          title: BRAND.title,
           yes: labels.ok ?? t("ask.yes"),
           no: labels.cancel ?? t("ask.no"),
         })) === true
@@ -165,7 +166,7 @@ export async function askDialog(
     }
     return (
       (await plugin!.ask(question, {
-        title: "ADE",
+        title: BRAND.title,
         kind: "warning",
         ...(labels.ok ? { okLabel: labels.ok } : {}),
         ...(labels.cancel ? { cancelLabel: labels.cancel } : {}),

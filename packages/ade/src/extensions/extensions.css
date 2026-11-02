@@ -250,7 +250,7 @@
   margin: var(--ade-space-4) 0 var(--ade-space-2);
   font-size: var(--ade-font-xs);
   font-weight: var(--ade-weight-medium);
-  letter-spacing: 0.07em;
+  letter-spacing: var(--ade-track-caps);
   text-transform: uppercase;
   color: var(--ade-text-weak);
 }
@@ -284,7 +284,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--ade-font-mono, ui-monospace, monospace);
+  font-family: var(--ade-mono);
   font-size: var(--ade-font-sm);
   color: var(--ade-text-weak);
 }

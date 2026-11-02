@@ -1848,7 +1848,7 @@
             {
               "id": "F6",
               "titolo": "Documentazione di ragu: pagina dei permessi (allow, ask, deny)",
-              "url": "https://github.com/nikcli/nikcli/blob/live-main/packages/web/src/pages/docs/permissions.astro"
+              "url": "https://github.com/SandroHub013/nikcli/blob/live-main/packages/web/src/pages/docs/permissions.astro"
             },
             {
               "id": "F7",
@@ -6867,7 +6867,7 @@
             {
               "id": "F4",
               "titolo": "ragu docs, Tools",
-              "url": "https://github.com/nikcli/nikcli/blob/live-main/packages/web/src/pages/docs/tools.astro"
+              "url": "https://github.com/SandroHub013/nikcli/blob/live-main/packages/web/src/pages/docs/tools.astro"
             }
           ],
           "teoria": [
@@ -7329,7 +7329,7 @@
             {
               "id": "F5",
               "titolo": "ragu docs, Permissions",
-              "url": "https://github.com/nikcli/nikcli/blob/live-main/packages/web/src/pages/docs/permissions.astro"
+              "url": "https://github.com/SandroHub013/nikcli/blob/live-main/packages/web/src/pages/docs/permissions.astro"
             },
             {
               "id": "F6",
@@ -8258,7 +8258,7 @@
             {
               "id": "F10",
               "titolo": "ragu docs, Sessions",
-              "url": "https://github.com/nikcli/nikcli/blob/live-main/packages/web/src/pages/docs/sessions.astro"
+              "url": "https://github.com/SandroHub013/nikcli/blob/live-main/packages/web/src/pages/docs/sessions.astro"
             },
             {
               "id": "F11",

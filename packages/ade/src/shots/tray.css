@@ -139,7 +139,7 @@
   font-size: var(--ade-font-xs);
   font-weight: var(--ade-weight-medium);
   text-transform: uppercase;
-  letter-spacing: 0.07em;
+  letter-spacing: var(--ade-track-caps);
   cursor: pointer;
   transition: color var(--ade-dur-fast) var(--ade-ease);
 }
@@ -365,7 +365,7 @@
 }
 
 [data-slot="shot-dismiss"]:active {
-  transform: scale(0.88);
+  background: var(--ade-active);
 }
 
 [data-slot="shot-dismiss"]:focus-visible {
@@ -385,7 +385,7 @@
 [data-component="shot-viewer"] {
   position: fixed;
   inset: 0;
-  z-index: 120;
+  z-index: var(--ade-z-viewer);
   display: grid;
   place-items: center;
   padding: var(--ade-space-6);

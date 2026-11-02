@@ -19,7 +19,7 @@ export interface CloserDeps {
   /** The agent alive in the pane, by name, when there is one. */
   readonly running?: (id: string) => string | undefined
   /** The user's answer: true ends the agent. */
-  readonly askRunning?: (agent: string) => Promise<boolean>
+  readonly askRunning?: (agent: string, id: string) => Promise<boolean>
   /** The session works in a worktree of its own (`session/worktree-close.ts`). */
   readonly hasWorktree?: (id: string) => boolean
   /** Why that worktree holds work that closing would strand (changes, or commits not yet integrated), or nothing. */
@@ -72,7 +72,7 @@ export function createCloser(deps: CloserDeps): Closer {
     const path = deps.unsaved(id)
     if (path !== undefined) return () => deps.ask(path)
     const agent = how?.confirmRunning ? deps.running?.(id) : undefined
-    if (agent !== undefined && deps.askRunning) return () => deps.askRunning!(agent)
+    if (agent !== undefined && deps.askRunning) return () => deps.askRunning!(agent, id)
     // Work in the session's worktree is not lost by closing (the folder stays), but the user is told before it is left behind.
     if (!how?.decided && deps.hasWorktree?.(id) && deps.worktreeWork && deps.askWorktree)
       return async () => {

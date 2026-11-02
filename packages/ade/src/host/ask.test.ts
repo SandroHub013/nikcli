@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { askDialog, askYesNo, remindQuestion, type AskDeps, type AskOptions, type NativeAskOptions } from "./ask"
+import { BRAND } from "../brand"
 import { t } from "../i18n"
 
 /*
@@ -62,7 +63,7 @@ describe("una domanda sì/no in ADE", () => {
   test("passa dal comando ask del plugin dialog, con il titolo ADE e le etichette date", async () => {
     const d = deps()
     expect(await askYesNo("Chiudo?", { ok: "Chiudi", cancel: "Annulla" }, d)).toBe(true)
-    expect(d.asked).toEqual([["Chiudo?", { title: "ADE", kind: "warning", okLabel: "Chiudi", cancelLabel: "Annulla" }]])
+    expect(d.asked).toEqual([["Chiudo?", { title: BRAND.title, kind: "warning", okLabel: "Chiudi", cancelLabel: "Annulla" }]])
   })
 
   test("il no resta no", async () => {
@@ -219,14 +220,14 @@ describe("su Windows la domanda è ade_ask, con No predefinito", () => {
   test("chiede a ade_ask con Sì e No di default, e non passa dal plugin", async () => {
     const d = windows()
     expect(await askYesNo("Chiudo?", {}, d)).toBe(true)
-    expect(d.native).toEqual([["Chiudo?", { title: "ADE", yes: t("ask.yes"), no: t("ask.no") }]])
+    expect(d.native).toEqual([["Chiudo?", { title: BRAND.title, yes: t("ask.yes"), no: t("ask.no") }]])
     expect(d.asked).toEqual([])
   })
 
   test("le etichette di chi chiede sostituiscono quelle di default", async () => {
     const d = windows()
     await askYesNo("Chiudo?", { ok: "Chiudi", cancel: "Annulla" }, d)
-    expect(d.native[0]![1]).toEqual({ title: "ADE", yes: "Chiudi", no: "Annulla" })
+    expect(d.native[0]![1]).toEqual({ title: BRAND.title, yes: "Chiudi", no: "Annulla" })
   })
 
   test("le etichette di default sono Sì e No, in italiano come in inglese il No resta No", () => {
@@ -292,7 +293,7 @@ describe("su Windows la domanda è ade_ask, con No predefinito", () => {
       },
     })
     expect(await askYesNo("Chiudo?", { ok: "Chiudi", cancel: "Annulla" }, d)).toBe(true)
-    expect(d.asked).toEqual([["Chiudo?", { title: "ADE", kind: "warning", okLabel: "Chiudi", cancelLabel: "Annulla" }]])
+    expect(d.asked).toEqual([["Chiudo?", { title: BRAND.title, kind: "warning", okLabel: "Chiudi", cancelLabel: "Annulla" }]])
   })
 
   test("l'attenzione parte prima della domanda e si spegne dopo, anche su Windows", async () => {

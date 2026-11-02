@@ -124,7 +124,6 @@ export const voiceEn: VoiceMessages = {
   "vui.codexFallback.off.desc": "Reports the limit without switching to Codex (default)",
   "vui.engine.note":
     "The agent uses your CLI account, for personal use: ADE doesn't read your credentials, keeps only a few turns together and doesn't retry when you hit the limit. It doesn't edit files or run commands in the project: it hands the work to the sessions. For heavy use, sign in to the CLI with an API key.",
-  "vui.trial.noEngine": "Couldn't start the voice: command not sent.",
   "vui.shortcut.conflicting": "Conflicting shortcut.",
   "vui.shortcut.shadowed": (message) => `${message} ADE takes precedence: this shortcut doesn't turn on voice.`,
   "vui.shortcut.recording": "Press keys… (Esc cancels)",
@@ -197,7 +196,6 @@ export const voiceEn: VoiceMessages = {
   "vui.reply.mai.it-IT-Rosa": "Rosa",
   "vui.reply.mai.it-IT-Rosa.desc": "Female, Italian, paid (OpenRouter)",
   "vui.reply.mai.licence": "Microsoft MAI-Voice, through OpenRouter.",
-  "vui.replies.maiEnglish": "MAI only reads Italian: a reply in another language is read by the local voice.",
   // Reply voice on Microsoft MAI, in the OpenRouter card
   "vui.mai.title": "Microsoft MAI",
   "vui.mai.offer": "New default voice: Rosa (Microsoft)",
@@ -317,10 +315,7 @@ export const voiceEn: VoiceMessages = {
   "vui.load.failed": "The voice did not load. Try again in a moment.",
   "vui.backend.title": "Recognition",
   "vui.backend.desc": "How your voice becomes text",
-  "vui.backend.readyLocal": "Ready (local)",
   "vui.backend.ready": "Ready",
-  "vui.backend.available": "Available (~640 MB)",
-  "vui.backend.unsupported": "Not supported",
   "vui.backend.needsKey": "Key needed",
   "vui.backend.openrouter.desc": "High-accuracy cloud transcription (microsoft/mai-transcribe-2)",
   "vui.key.title": "OpenRouter API key",
@@ -355,7 +350,7 @@ export const voiceEn: VoiceMessages = {
   "vui.stream.how":
     "With Grok the words arrive while you speak, over a connection to xAI opened for each sentence. The xAI key stays in the keychain and only ADE reads it, never the page. When streaming cannot write the sentence (no key, key refused, credit used up, today's cap reached, network down), the sentence goes to MAI-Transcribe-2 with the OpenRouter key, and no word is lost. The cap counts streamed seconds only, at $0.20 an hour; what OpenRouter spends is on the line below, apart.",
   "vui.intent.session.new": "New session",
-  "vui.intent.palette.open": "Open the command palette",
+  "vui.intent.palette.open": "Open Search commands",
   "vui.intent.project.open": "Open a project",
   "vui.intent.project.recent": "Open a recent project",
   "vui.intent.pane.close": "Close the pane",
@@ -391,7 +386,7 @@ export const voiceEn: VoiceMessages = {
   "vui.intent.dialog.repeat": "Repeat",
   "vui.commands.title": "Voice commands",
   "vui.commands.desc": "The recognized vocabulary. Type one to try it without speaking",
-  "vui.commands.trial.placeholder": "E.g. “apri la tavolozza”",
+  "vui.commands.trial.placeholder": "E.g. “apri cerca comandi”",
   "vui.commands.trial": "Try a command by typing it",
   "vui.commands.sending": "Sending…",
   "vui.commands.run": "Run",
@@ -408,7 +403,6 @@ export const voiceEn: VoiceMessages = {
   "vui.live.start": "Start listening",
   "vui.footer.keys": "Arrows to choose · Enter to confirm · Esc to close",
   "vui.footer.done": "Done",
-  "vui.asr.noRuntime": "Neither WebGPU nor WebAssembly is supported in this browser or environment.",
   "vui.asr.noKey": "OpenRouter API key missing.",
   "vui.asr.keyCheck": "Checking the OpenRouter key failed.",
 
@@ -434,7 +428,6 @@ export const voiceEn: VoiceMessages = {
   "vui.fix.noMainKey": "A main key is missing.",
   "vui.fix.defaults": "Settings invalid or missing: defaults restored.",
   "vui.fix.noVersion": "Settings version missing: set to version 1.",
-  "vui.fix.migrated": (from, to) => `Settings migrated from version ${from} to ${to}.`,
   "vui.fix.wakeDefault":
     "The assistant now answers only when called by name: you can change this in the voice settings.",
   "vui.fix.mode": (value, fallback) => `Unknown mode '${value}': restored '${fallback}'.`,
@@ -459,7 +452,7 @@ export const voiceEn: VoiceMessages = {
   "vui.fix.streamCap": (value, fallback) =>
     `Invalid daily cap '${value}' for live transcription: used $${fallback}.`,
   "vui.fix.codexFallback": "Invalid Codex fallback setting: turned back off.",
-  "vui.command.palette": "Command palette",
+  "vui.command.palette": "Search commands",
   "vui.command.sessionNew": "New session",
   "vui.command.paneClose": "Close panel",
   "vui.command.paneExpand": "Expand panel",

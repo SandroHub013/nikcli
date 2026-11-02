@@ -182,7 +182,7 @@
 :where([data-layout="overlay"]) {
   position: absolute;
   inset: 0;
-  z-index: 100;
+  z-index: var(--ade-z-overlay);
   display: flex;
   justify-content: center;
   align-items: flex-start;
@@ -270,7 +270,7 @@
   border-radius: var(--ade-radius-full);
   font-size: var(--ade-font-xs);
   font-weight: var(--ade-weight-semibold);
-  letter-spacing: 0.04em;
+  letter-spacing: var(--ade-track-caps);
   text-transform: uppercase;
   white-space: nowrap;
   color: var(--ade-badge-fg, var(--ade-text-soft));

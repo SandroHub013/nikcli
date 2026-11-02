@@ -5,6 +5,7 @@ import { createHandshake, newNonce } from "./handshake"
 import { createLink } from "./link"
 import { createPlayerStore, type SpotStorage } from "./player"
 import { createLoweredStore, createOpenWatch, worldQuery } from "./opening"
+import { frameTheme } from "./frame-theme"
 import { PORT_OFFER, PROTOCOL_VERSION, worldUrl, type Command, type LearnPlace, type Snapshot } from "./protocol"
 import type { ForwardedChord } from "./chords"
 import { LearnLayer } from "./learn/learn-layer"
@@ -90,7 +91,7 @@ export function RaguversePane(props: {
     return tune !== undefined && !/(^|&)slowwatch=1(&|$)/.test(tune)
   }
   const sourceFor = (secret: string) =>
-    `${worldUrl()}${worldQuery({ bench: benchQuery(), lowered: !tuned() && lowering.lowered(), list })}#n=${secret}`
+    `${worldUrl()}${worldQuery({ bench: benchQuery(), lowered: !tuned() && lowering.lowered(), list, theme: frameTheme() })}#n=${secret}`
   const [frameSrc, setFrameSrc] = createSignal(sourceFor(nonce))
   /*
    * Each reload is a new frame element. The address of a retry differs from the last one only after the `#` (the

@@ -1,4 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
+import { EmptyIcon } from "../ui/empty-icon"
 import { answerByline, formatDay, formatMoment, isUsersOwnAnswer, togglePick } from "./answer"
 import { submitControl } from "./card"
 import { DecisionCard } from "./decision-card"
@@ -8,6 +9,7 @@ import type { DecisionsHub } from "./hub"
 import { bucketDecisions, describeProblems, type Decision } from "./state"
 import "./decisions.css"
 import { t } from "../i18n"
+import { errorMessage } from "../session-new/start-failure"
 import { askerName } from "../choices/list"
 
 /**
@@ -116,13 +118,14 @@ export function DecisionsPane(props: {
       <div data-slot="decisions-body">
         <Show when={!props.hub.register.path()}>
           <div data-slot="sheet-empty">
+            <EmptyIcon name="decisions" />
             <b>{t("decisions.noProject")}</b>
             <span>{t("decisions.noProject.hint")}</span>
           </div>
         </Show>
         <Show when={props.hub.register.error()}>
           <div data-slot="decision-problem" role="alert">
-            {t("decisions.unreadable", String(props.hub.register.error()))}
+            {t("decisions.unreadable", errorMessage(props.hub.register.error()))}
           </div>
         </Show>
         <Show when={problems().length > 0}>

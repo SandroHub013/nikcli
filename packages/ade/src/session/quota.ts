@@ -746,6 +746,8 @@ export interface QuotaUnavailable {
   readonly unavailable: true
   readonly providerName: string
   readonly tooltip: string
+  /** No report or file exists on this machine at all: the pane has nothing to show, so it shows no chip (UX-13). */
+  readonly sourceless?: true
 }
 
 export type SessionQuota = SessionQuotaView | QuotaUnavailable
@@ -874,29 +876,35 @@ export function currentReading(
   id: string,
   snapshot: QuotaSnapshot | undefined,
   now: number,
-): { reading: QuotaReading } | { missing: string } {
+): { reading: QuotaReading } | { missing: string; sourceless: boolean } {
   const found: QuotaReading[] = []
   const reasons: string[] = []
+  // A reason that is not «there is no file or report at all» means a source exists and cannot be used.
+  let broken = 0
+  const why = (reason: string, absent = false) => {
+    reasons.push(reason)
+    if (!absent) broken++
+  }
 
   if (QUOTA_AXI_PROVIDERS.has(id)) {
     const quota = snapshot?.providers[id]
     const at = snapshot?.generatedAt
-    if (!snapshot || snapshot.axiMissing) reasons.push(t("quota.na.noReport"))
-    else if (!quota || quota.metrics.length === 0) reasons.push(t("quota.na.noWindows"))
-    else if (at === undefined) reasons.push(t("quota.na.noTime"))
-    else if (at > now) reasons.push(t("quota.na.future", clock(at)))
+    if (!snapshot || snapshot.axiMissing) why(t("quota.na.noReport"), true)
+    else if (!quota || quota.metrics.length === 0) why(t("quota.na.noWindows"))
+    else if (at === undefined) why(t("quota.na.noTime"))
+    else if (at > now) why(t("quota.na.future", clock(at)))
     else found.push({ quota, readAt: at, stale: quota.stale === true || now - at > QUOTA_STALE_MS, source: "axi" })
   }
 
   const line = id === "agy" ? snapshot?.agy : id === "claude" ? snapshot?.claude : undefined
   if (id === "agy" || id === "claude") {
     const at = line?.capturedAt
-    if (!line) reasons.push(id === "agy" ? t("quota.na.agy.noFile") : t("quota.na.claude.noFile"))
+    if (!line) why(id === "agy" ? t("quota.na.agy.noFile") : t("quota.na.claude.noFile"), true)
     else if (line.quota.metrics.length === 0)
-      reasons.push(id === "agy" ? t("quota.na.agy.noBuckets") : t("quota.na.claude.noWindows"))
-    else if (at === undefined) reasons.push(id === "agy" ? t("quota.na.agy.noTime") : t("quota.na.claude.noTime"))
+      why(id === "agy" ? t("quota.na.agy.noBuckets") : t("quota.na.claude.noWindows"))
+    else if (at === undefined) why(id === "agy" ? t("quota.na.agy.noTime") : t("quota.na.claude.noTime"))
     else if (at > now)
-      reasons.push(id === "agy" ? t("quota.na.agy.future", clock(at)) : t("quota.na.future", clock(at)))
+      why(id === "agy" ? t("quota.na.agy.future", clock(at)) : t("quota.na.future", clock(at)))
     else {
       // The plan is only in quota-axi's report: borrow it for the name.
       const name = id === "claude" ? (snapshot?.providers.claude?.name ?? line.quota.name) : line.quota.name
@@ -909,7 +917,8 @@ export function currentReading(
     }
   }
 
-  if (found.length === 0) return { missing: reasons.join("\n") || t("quota.na.noSource") }
+  if (found.length === 0)
+    return { missing: reasons.join("\n") || t("quota.na.noSource"), sourceless: broken === 0 }
   // Newest first; at equal times quota-axi, which also has the per-model windows.
   found.sort((a, b) => b.readAt - a.readAt)
   return { reading: found[0]! }
@@ -932,14 +941,15 @@ export function quotaForAgent(
   const id = normalizeProviderId(agentId)
   const vendor = VENDOR_NAMES[id]
   if (!vendor) return undefined
-  const unavailable = (why: string): QuotaUnavailable => ({
+  const unavailable = (reason: string, sourceless: boolean): QuotaUnavailable => ({
     unavailable: true,
     providerName: vendor,
-    tooltip: t("quota.na.tooltip", vendor, why),
+    tooltip: t("quota.na.tooltip", vendor, reason),
+    ...(sourceless ? { sourceless: true as const } : {}),
   })
 
   const current = currentReading(id, snapshot, now)
-  if ("missing" in current) return unavailable(current.missing)
+  if ("missing" in current) return unavailable(current.missing, current.sourceless)
   const { quota, readAt, stale, source } = current.reading
   const view = formatSessionQuota(quota, now)
   const time = clock(readAt)

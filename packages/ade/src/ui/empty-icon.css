@@ -1,0 +1,21 @@
+/* The neutral line icon an empty view carries (DS-17), as the approved mock draws it (DS-audit-vuoti/B): a soft circle, the icon in it. `empty-icon.tsx` draws it. */
+[data-slot="empty-icon"] {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto var(--ade-space-2);
+  border-radius: var(--ade-radius-full);
+  background: var(--ade-active);
+  color: var(--ade-text-weak);
+}
+
+[data-slot="empty-icon"] svg {
+  width: 22px;
+  height: 22px;
+}
+
+[data-slot="sheet-empty"] > [data-slot="empty-icon"] {
+  margin-inline: 0;
+}

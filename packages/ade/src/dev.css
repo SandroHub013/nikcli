@@ -100,11 +100,11 @@
   padding: 0;
   border: none;
   background: transparent;
-  color: var(--ade-text-subtle);
+  color: var(--ade-text-weak);
   cursor: pointer;
   transition:
-    background 120ms ease,
-    color 120ms ease;
+    background var(--ade-dur-fast) ease,
+    color var(--ade-dur-fast) ease;
 }
 
 [data-slot="ade-win-btn"]:hover {
@@ -147,7 +147,7 @@
   position: absolute;
   top: calc(100% + var(--ade-space-2));
   right: 0;
-  z-index: 40;
+  z-index: var(--ade-z-dropdown);
   display: flex;
   flex-direction: column;
   min-width: 220px;
@@ -1032,15 +1032,12 @@
   text-align: center;
 }
 
+/* The pixel pot at 40px (a multiple of its 16 grid), with no tile around it: the mock's first-start mark (DS-17). */
 [data-slot="empty-mark"] {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: var(--ade-radius-lg);
-  background: var(--ade-surface);
-  border: 1px solid var(--ade-border);
-  color: var(--ade-text-weak);
+  width: 40px;
+  height: 40px;
 }
 
 [data-slot="empty-title"] {
@@ -1137,7 +1134,7 @@
   background: var(--ade-surface);
   color: var(--ade-text-soft);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--ade-track-caps);
   user-select: none;
 }
 
@@ -1162,7 +1159,7 @@
   left: 50%;
   bottom: var(--ade-space-6);
   transform: translateX(-50%);
-  z-index: 110;
+  z-index: var(--ade-z-toast);
   max-width: min(90vw, 560px);
   padding: var(--ade-space-2) var(--ade-space-3);
   border: 1px solid var(--ade-border);
