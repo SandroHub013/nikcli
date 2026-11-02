@@ -1065,10 +1065,16 @@ export function isFree(
      * hooks, or one whose hook has said nothing (a plugin not yet current) — a hook's word is not a guess.
      */
     quarantined?: boolean
+    /**
+     * The pane's screen cannot be read (no terminal yet). Without hooks the screen is the only place a menu drawn with
+     * the cursor shows (SES-3), so a pane whose screen is unread is not taken as free on its silence alone.
+     */
+    screenUnread?: boolean
   },
   now: number,
 ): boolean {
   if (target.permissionPending || target.typing) return false
+  if (!target.hooked && target.screenUnread) return false
   if (target.quarantined && !target.activity) return true
   const quietFor = target.lastOutputAt === undefined ? Infinity : now - target.lastOutputAt
   if (target.hooked) {

@@ -313,6 +313,7 @@ import {
   permissionIdentity,
   type PermissionAnswer,
 } from "../session/permission"
+import { screenQuestion } from "../session/screen-question"
 import { readReportLine } from "../session/report"
 import { asOneLine, asSubmittedLine, confirmDeadline, pasteSettled, submitCheck } from "../session/typing"
 import { searchPaths, walkProject } from "../search"
@@ -2931,6 +2932,8 @@ export function Workbench() {
         typing: isTyping(records.typed.get(paneId)),
         // A turn only output declared and ADE gave up: a TUI that repaints is not busy for that (`OUTPUT_CLAIM_MAX_MS`).
         quarantined: claims.quarantined(paneId),
+        // Where a menu drawn with the cursor would show (`screenAsks`): unread, a quiet pane without hooks is not free.
+        screenUnread: !hasTerminal(paneId),
         ...(activity ? { activity } : {}),
         ...(lastOutputAt.has(paneId) ? { lastOutputAt: lastOutputAt.get(paneId)! } : {}),
       },
@@ -3307,7 +3310,18 @@ export function Workbench() {
    * missed the rest here too on the first pass.
    */
   const questionOpen = (paneId: string) =>
-    isQuestionOpen(permissions()[paneId], activityOf.get(paneId)) || modeTracker.heldOpen(paneId)
+    isQuestionOpen(permissions()[paneId], activityOf.get(paneId)) || modeTracker.heldOpen(paneId) || screenAsks(paneId)
+
+  /*
+   * A menu drawn with the cursor (codex, OpenCode, ragu without its plugin, a trust dialog), which the line stream
+   * never sees whole: read off the pane's screen whenever typing is weighed (`session/screen-question.ts`, SES-3). It
+   * holds the Enter; it is not offered to the voice to answer, its keys are arrows.
+   */
+  const screenAsks = (paneId: string) => {
+    if (!running.has(paneId) || !hasTerminal(paneId)) return false
+    const pane = wb().panes.find((candidate) => candidate.id === paneId)
+    return pane !== undefined && screenQuestion(getTerminal(paneId).terminal, pane.agent ?? pane.model) !== undefined
+  }
 
   /*
    * One secret per spawn, in that process tree's environment only. A pane id
