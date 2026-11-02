@@ -1808,6 +1808,7 @@ export const it = {
   "note.updateFrom": (from: string, state: string, text: string) => `Aggiornamento da ${from}: ${state} — ${text}`,
   "note.memory": (line: string) => `Memoria: ${line}`,
   "note.subagent": (title: string) => `Subagent avviato: ${title}`,
+  "note.mailHeldByLine": "Un messaggio per questa sessione aspetta: hai una riga a metà. Invia o cancella la riga e arriva.",
   "note.interruptedBy": (from: string) => `Interrotta da ${from}`,
   "note.restarted": (from: string, model: string) => `Riavviata da ${from}${model ? ` con il modello ${model}` : ""}`,
   "note.restartedFresh": (from: string, model: string) =>

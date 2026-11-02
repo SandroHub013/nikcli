@@ -2771,6 +2771,8 @@ export function Workbench() {
   const held = new Set<string>()
   /** The state last written for a queued request, so a waiter hears about changes only. */
   const heldStates = new Map<string, string>()
+  /** Panes told, in their own terminal, that a message waits for the line typed in them. */
+  const heldByLineNoted = new Set<string>()
 
   /*
    * The sessions Claude Code lists (`claude agents --json`, documented), so a
@@ -5106,6 +5108,8 @@ export function Workbench() {
        */
       const relaunch = running.beginRelaunch(pane.id)
       running.delete(pane.id)
+      // What the user typed went with the old process: a count left from it would hold every message for a line that is gone (review B6).
+      records.typed.forget(pane.id)
       touchRunning()
       void closeSuspendedTree(old)
       setWb((w) => updatePane(w, pane.id, { spawnArgs, ...(message.fresh ? { resumeId: undefined } : {}) }))
@@ -5313,6 +5317,14 @@ export function Workbench() {
     // Read again after the await: the round's held lines may have started one for this pane in the meantime.
     if (!(await freeNow(host, target.pane.id)) || linesInFlight.has(target.pane.id)) {
       const byLine = isTyping(records.typed.get(target.pane.id))
+      /*
+       * Said to the user too, once for as long as the line stands: the pane waits for the line and the user sees nothing
+       * of why (review B6). The sender already has its receipt.
+       */
+      if (byLine && !heldByLineNoted.has(target.pane.id)) {
+        heldByLineNoted.add(target.pane.id)
+        tellPane(target.pane.id, t("note.mailHeldByLine"))
+      }
       if (!held.has(id)) {
         held.add(id)
         await answer(
@@ -5336,6 +5348,7 @@ export function Workbench() {
       return false
     }
     heldStates.delete(id)
+    heldByLineNoted.delete(target.pane.id)
 
     const targetDepth = depthOf(target.pane.id, parentOf)
     const context = {
@@ -8035,6 +8048,8 @@ export function Workbench() {
     modeTracker.forget(id)
     forgetQuiet(id)
     screenRequests.forget(id)
+    startRefusals.delete(id)
+    heldByLineNoted.delete(id)
     // Per-pane bookkeeping kept in plain maps, which nothing else clears: a
     // long day of opening and closing sessions used to keep every one of them.
     lastOutputAt.delete(id)

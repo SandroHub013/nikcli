@@ -1764,6 +1764,7 @@ export const en: Messages = {
   "note.updateFrom": (from, state, text) => `Update from ${from}: ${state} — ${text}`,
   "note.memory": (line) => `Memory: ${line}`,
   "note.subagent": (title) => `Subagent started: ${title}`,
+  "note.mailHeldByLine": "A message for this session is waiting: you have a line half written. Send or clear the line and it arrives.",
   "note.interruptedBy": (from) => `Interrupted by ${from}`,
   "note.restarted": (from, model) => `Restarted by ${from}${model ? ` with model ${model}` : ""}`,
   "note.restartedFresh": (from, model) => `Restarted from scratch by ${from}${model ? ` with model ${model}` : ""}`,

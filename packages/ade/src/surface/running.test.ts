@@ -314,3 +314,25 @@ describe("mail held for a pane being relaunched", () => {
     expect(waits).toBeLessThan(closes)
   })
 })
+
+/*
+ * Review B6: a pane holding mail for a half-written line said nothing to the user, and a relaunch left the count of the
+ * old process's line behind, so the new one held every message for a line that was gone.
+ */
+describe("mail held by a line", () => {
+  const source = codeOf(readFileSync(new URL("./workbench.tsx", import.meta.url), "utf8"))
+
+  test("the pane tells its user once, and says it again only after the line has gone", () => {
+    expect(source).toContain(codeOf("tellPane(target.pane.id, t(\"note.mailHeldByLine\"))"))
+    expect(source).toContain(codeOf("if (byLine && !heldByLineNoted.has(target.pane.id)) {"))
+    expect(source).toContain(codeOf("heldStates.delete(id)\n    heldByLineNoted.delete(target.pane.id)"))
+    expect(source).toContain(codeOf("startRefusals.delete(id)\n    heldByLineNoted.delete(id)"))
+  })
+
+  test("a relaunch forgets what was typed into the old process", () => {
+    const body = source.slice(source.indexOf(codeOf("running.beginRelaunch(pane.id)")))
+    const cut = body.slice(0, body.indexOf(codeOf("void closeSuspendedTree(old)")))
+    expect(cut).toContain(codeOf("running.delete(pane.id)\n      // "))
+    expect(cut).toContain(codeOf("records.typed.forget(pane.id)"))
+  })
+})
