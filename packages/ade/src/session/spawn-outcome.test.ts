@@ -74,3 +74,32 @@ describe("the workbench's spawn", () => {
     expect(body.slice(0, body.indexOf("await")).includes(codeOf("startRefusals.delete(paneId)"))).toBe(true)
   })
 })
+
+/*
+ * Review N2 and N3: a start that threw (not one the host refused) was told to the pane and recorded nowhere, so a spawn
+ * waiting on it said «ok», and a relaunch that failed closed its requests with «si è chiusa» and no reason.
+ */
+describe("every way a start can fail is recorded, and heard by whoever waits", () => {
+  const source = codeOf(readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf-8"))
+
+  test("the catch of a local and of a remote start record the reason as the refusals do", () => {
+    expect(source).toContain(
+      codeOf("tellPane(paneId, startFailureText(String(e), agent))\n      startRefusals.set(paneId, String(e))"),
+    )
+    expect(source).toContain(
+      codeOf("tellPane(paneId, connectFailureText(String(e)))\n      startRefusals.set(paneId, String(e))"),
+    )
+  })
+
+  test("a pane that is gone forgets what its start said", () => {
+    const forget = source.slice(source.indexOf(codeOf("const forgetPane = (id: string) => {")))
+    expect(forget.slice(0, 1500)).toContain(codeOf("startRefusals.delete(id)"))
+  })
+
+  test("a request closed because its session is gone says why it did not start, when it is known", () => {
+    const closing = source.slice(source.indexOf(codeOf('if (state === "sessione chiusa") {')))
+    const text = closing.slice(0, closing.indexOf("continue"))
+    expect(text).toContain(codeOf("startRefusals.get(request.to)"))
+    expect(text).toContain(codeOf("non è ripartita (${refusal})"))
+  })
+})

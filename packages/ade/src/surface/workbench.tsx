@@ -4022,10 +4022,14 @@ export function Workbench() {
       // A request whose answerer is gone will never be answered; the caller is told, not left waiting.
       if (state === "sessione chiusa") {
         const title = wb().panes.find((pane) => pane.id === request.to)?.title ?? request.to
+        // A start that did not happen says why (review N2); a session that simply closed has no reason on record.
+        const refusal = startRefusals.get(request.to)
         await settle(
           host,
           request.id,
-          `[ade-msg] errore: la sessione "${title}" si è chiusa senza rispondere alla richiesta ${request.id}`,
+          refusal
+            ? `[ade-msg] errore: la sessione "${title}" non è ripartita (${refusal}) e la richiesta ${request.id} resta senza risposta`
+            : `[ade-msg] errore: la sessione "${title}" si è chiusa senza rispondere alla richiesta ${request.id}`,
         )
         continue
       }
@@ -9514,6 +9518,7 @@ export function Workbench() {
     } catch (e) {
       // Over the terminal: a pane started again keeps the old one live, and the transcript hidden.
       tellPane(paneId, startFailureText(String(e), agent))
+      startRefusals.set(paneId, String(e))
       setWb((w) => updatePane(w, paneId, { status: "error", activity: "startFailed" }))
     }
   }
@@ -9666,6 +9671,7 @@ export function Workbench() {
       openingPolls.add(poll)
     } catch (e) {
       tellPane(paneId, connectFailureText(String(e)))
+      startRefusals.set(paneId, String(e))
       setWb((w) => updatePane(w, paneId, { status: "error", activity: "connectFailed" }))
     }
   }
