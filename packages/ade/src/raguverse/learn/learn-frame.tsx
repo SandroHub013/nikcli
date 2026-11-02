@@ -111,6 +111,8 @@ export function LearnFrame(props: {
       close: () => props.onClose?.(),
     })
     link = current
+    // The theme may have changed between the address the page was loaded with and this port (review N9).
+    current.theme(frameTheme())
     channel.port1.onmessage = (event) => current.receive(event.data)
     // "*" because the frame's origin is opaque and no target origin can name it. What decides who gets the port is the nonce the
     // page just sent back from this frame's window (`handshake.hello`), not the address.

@@ -123,3 +123,10 @@ describe("V9: the shortcuts' group notes", () => {
     expect(sections).toContain('<Show when={group.noteKey}>{(note) => <p data-slot="section-desc">{t(note())}</p>}</Show>')
   })
 })
+
+describe("V4, review N9: the theme chosen between the load and the port", () => {
+  test("is told on the port as soon as it opens, not only on the next change", () => {
+    const frame = read("raguverse/learn/learn-frame.tsx").replace(/^\s*\/\/.*$/gm, "").replace(/\s+/g, " ")
+    expect(frame).toContain("link = current current.theme(frameTheme())")
+  })
+})
