@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { readFileSync } from "node:fs"
+import { join } from "node:path"
 
 import { isTyping, submittedSince, typedAfter, type TypedLine } from "./typed-line"
 
@@ -136,4 +138,47 @@ describe("submittedSince", () => {
     expect(submittedSince(line, 150)).toBe(line)
     expect(submittedSince(undefined, 150)).toBeUndefined()
   })
+})
+
+/*
+ * Live test 2026-11-02, F2: «q» typed with no Enter into a menu on screen counted as a line begun, so every message to
+ * the pane was held until the user pressed Enter, three minutes later.
+ */
+describe("a key typed into a menu on screen", () => {
+  test("answers the menu: it is not a line begun, and mail is not held for it", () => {
+    for (const key of ["q", "y", "2", " "]) {
+      const line = typedAfter(undefined, key, 1_000, true)
+      expect(isTyping(line)).toBe(false)
+    }
+  })
+
+  test("the same key with no menu is a line begun, as before", () => {
+    expect(isTyping(typedAfter(undefined, "q", 1_000, false))).toBe(true)
+    expect(isTyping(typedAfter(undefined, "q", 1_000))).toBe(true)
+  })
+
+  test("never uncounts a real half-typed line: a draft begun before the menu stays, and keeps holding the mail", () => {
+    const draft = typedAfter(undefined, "ciao come", 1_000)
+    const after = typedAfter(draft, "y", 2_000, true)
+    expect(after).toEqual(draft)
+    expect(isTyping(after)).toBe(true)
+  })
+
+  test("only a single key is an answer: a paste or several characters into the menu count as typed", () => {
+    expect(isTyping(typedAfter(undefined, "hello", 1_000, true))).toBe(true)
+    expect(isTyping(typedAfter(undefined, "\u001b[200~pasted\u001b[201~", 1_000, true))).toBe(true)
+  })
+
+  test("an Enter into a menu still sends, and clears what was there", () => {
+    const draft = typedAfter(undefined, "abc", 1_000)
+    expect(typedAfter(draft, "\r", 2_000, true)).toBeUndefined()
+  })
+})
+
+test("lint: the terminal asks whether a question is open before it counts a key", () => {
+  const renderer = readFileSync(join(import.meta.dir, "../surface/pane-renderer.tsx"), "utf-8")
+  expect(renderer).toContain("const menuOpen = deps.questionOpen(current().id)")
+  expect(renderer).toContain("typedAfter(line, data, Date.now(), menuOpen)")
+  const workbench = readFileSync(join(import.meta.dir, "../surface/workbench.tsx"), "utf-8")
+  expect(workbench).toMatch(/promptAnswered,\r?\n\s+questionOpen,/)
 })

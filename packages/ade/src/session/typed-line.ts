@@ -58,13 +58,28 @@ export function isTyping(line: TypedLine | undefined): boolean {
   return (line?.pending ?? 0) > 0
 }
 
-/** The count after `data` reached the session as the user's input. */
-export function typedAfter(line: TypedLine | undefined, data: string, now: number): TypedLine | undefined {
+/**
+ * The count after `data` reached the session as the user's input.
+ *
+ * `menuOpen`: a question or a menu was on the pane's screen when the key arrived. A single key there is the menu's
+ * answer («y», «q», «2») and goes into no input line, so it is not a draft: counting it left the pane looking
+ * half-written for ever after a one-key answer with no Enter, and every message to it held without limit (live test
+ * 2026-11-02, F2). The line is left as it was: a draft the user had begun before the menu opened stays counted, and a
+ * delivery never types over it. Several characters at once are not taken for an answer (a paste into a text field of
+ * the menu is a draft), and nor is an Enter, which sends.
+ */
+export function typedAfter(
+  line: TypedLine | undefined,
+  data: string,
+  now: number,
+  menuOpen = false,
+): TypedLine | undefined {
   const pending = line?.pending ?? 0
   if (data.length === 0) return line
 
   if (data === INTERRUPT) return undefined
   if (data === ESC) return line?.escape ? undefined : { pending, at: now, escape: true }
+  if (menuOpen && isOneKey(data)) return line
 
   /*
    * A declared paste never submits, whatever it contains: the newline inside
@@ -107,6 +122,11 @@ export function typedAfter(line: TypedLine | undefined, data: string, now: numbe
   }
   if (count === 0) return undefined
   return data.endsWith("\\") ? { pending: count, at: now, backslash: true } : { pending: count, at: now }
+}
+
+/** One printable character: not an Enter (which sends), not a sequence, not a paste. */
+function isOneKey(data: string): boolean {
+  return [...data].length === 1 && data !== "\r" && data !== "\n" && data >= " " && data !== "\u007f"
 }
 
 /** The line as it was, minus a pending Escape, with the clock moved on. */

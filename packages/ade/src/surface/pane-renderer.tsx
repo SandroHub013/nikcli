@@ -98,6 +98,8 @@ export interface PaneRendererDeps {
   turnSubmitted: (id: string) => void
   /** A key typed in the pane that answers a prompt standing there (`answersPrompt`). */
   promptAnswered: (id: string) => void
+  /** Whether a question or a menu is open in the pane now, from the hook or the screen. */
+  questionOpen: (id: string) => boolean
   /** An Esc or a Ctrl-C typed in the pane, which Claude Code reports to no hook. */
   interrupted: (id: string) => void
   /** "Riprova" on a session that failed. */
@@ -504,7 +506,9 @@ export function createPaneRenderer(deps: PaneRendererDeps) {
            * for every agent in the catalogue and for a plain shell, since it
            * never asks what is running: see `session/typing.ts`.
            */
-          deps.records.typed.update(current().id, (line) => typedAfter(line, data, Date.now()))
+          // Asked before the key is written: a key that answers a menu on screen is not a line begun (F2).
+          const menuOpen = deps.questionOpen(current().id)
+          deps.records.typed.update(current().id, (line) => typedAfter(line, data, Date.now(), menuOpen))
           // Enter typed straight into the terminal submits a turn, exactly as
           // the composer does; the quiet timer brings the pane back to idle.
           // …and a turn of its own, after which a repeated `@ade` line is a new request.
